@@ -474,6 +474,24 @@ export function seedInvoice(
 }
 
 /**
+ * Moves one Invoice's raising and due date back by `days` past its terms,
+ * so it reads as overdue today (#1994's demo Practice). An Invoice's
+ * due_at is written once, from the Practice's payment terms at the moment
+ * it is raised (payments.invoiceDueAt), and no endpoint can raise one in
+ * the past -- the same reason seedInvoice above writes its row directly.
+ * Everything else about the Invoice came through the API; this moves only
+ * the two instants, keeping their 30-day gap.
+ */
+export function backdateInvoice(invoiceId: string, days: number): void {
+	if (!Number.isSafeInteger(days) || days <= 0) {
+		throw new Error(`stack: invalid day count ${days}`);
+	}
+	execSQL(
+		`UPDATE invoices SET created_at = created_at - interval '${days + 30} days', due_at = due_at - interval '${days + 30} days' WHERE id = ${sqlLiteral(invoiceId)}`
+	);
+}
+
+/**
  * Clears every rate-limit counter the BFF is holding (#1138), so a
  * repeated batch can keep spending budgets a person never would.
  *

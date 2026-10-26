@@ -8,6 +8,7 @@
 		"dev:full": "bun scripts/development-full.ts",
 		"seed:staff-session": "bun scripts/seed-staff-session.ts",
 		"seed:founder-session": "bun scripts/seed-founder-session.ts",
+		"seed:demo": "bun scripts/seed-demo-practice.ts",
 		"sync-icons": "bun scripts/sync-icons.ts",
 		"sync-fonts": "bun scripts/sync-fonts.ts",
 		"sync-common-passwords": "bun scripts/sync-common-passwords.ts",
