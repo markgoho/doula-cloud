@@ -14,7 +14,7 @@
 			senderId: 's1',
 			senderName: 'Persephone Adeyemi-Wollstonecraft',
 			body:
-				'Looking forward to our next visit! Your birth plan is at https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake -- have a read before Thursday.',
+				'Looking forward to our next visit! Your birth plan is at https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake — have a read before Thursday.',
 			createdAt: '2026-01-01T12:00:00Z'
 		},
 		{
@@ -60,7 +60,7 @@
 	</section>
 
 	<section>
-		<h2>With an inline image preview</h2>
+		<h2>Read by the Client, with an inline image preview</h2>
 		<MessageThread
 			{messages}
 			error=""
@@ -69,6 +69,7 @@
 			{onLoadOlder}
 			onSend={didSend}
 			{onDownloadAttachment}
+			readerSenderType="client"
 			attachmentPreviewURLs={{ m2: previewImage }}
 		/>
 	</section>

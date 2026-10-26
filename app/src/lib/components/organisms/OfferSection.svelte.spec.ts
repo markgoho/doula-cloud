@@ -78,7 +78,7 @@ function danglingSummaryTargets(container: HTMLElement): string[] {
  * opens with nothing chosen (#1914), so a send to a Doula answers it.
  */
 async function chooseSomeoneHere() {
-	await page.getByLabelText('Someone already at this practice').click();
+	await page.getByLabelText('Someone already at this Practice').click();
 }
 
 /**
@@ -224,10 +224,10 @@ describe('OfferSection.svelte', () => {
 
 		await page.getByLabelText('Someone new, by email').click();
 
+		// The reason is the Fee field's own hint, not a loose line (#2023).
 		await expect
-			.element(page.getByText('A doula invited by email joins the practice as a contractor, so this offer carries a fee.'))
-			.toBeVisible();
-		await expect.element(page.getByLabelText('Fee (USD)')).toBeVisible();
+			.element(page.getByLabelText('Fee (USD)'))
+			.toHaveAccessibleDescription('Someone you invite by email joins as a contractor, so this Offer pays a fee.');
 	});
 
 	it('refuses a zero fee without calling onCreate', async () => {
@@ -378,7 +378,7 @@ describe('OfferSection.svelte', () => {
 			await expect
 				.element(
 					page.getByText(
-						'There is no one at this practice to offer this work to, so it can only be offered to someone new, by email.'
+						'There is no one at this Practice to offer this work to, so offer it by email.'
 					)
 				)
 				.toBeVisible();
@@ -431,7 +431,7 @@ describe('OfferSection.svelte', () => {
 			await expect
 				.element(
 					page.getByText(
-						'We could not load who is at this practice, so this work can only be offered to someone new, by email. To pick someone already here, reload the page.'
+						'We could not load who is at this Practice. Offer this work by email, or reload the page to choose someone here.'
 					)
 				)
 				.toBeVisible();
@@ -463,7 +463,7 @@ describe('OfferSection.svelte', () => {
 			await setup();
 
 			await expect.element(page.getByRole('group', { name: 'Offer this work to' })).toBeVisible();
-			for (const name of ['Someone already at this practice', 'Someone new, by email']) {
+			for (const name of ['Someone already at this Practice', 'Someone new, by email']) {
 				await expect.element(page.getByRole('radio', { name })).not.toBeChecked();
 			}
 			expect(page.getByRole('group', { name: 'Doula', exact: true }).elements()).toHaveLength(0);
@@ -507,7 +507,7 @@ describe('OfferSection.svelte', () => {
 			await page.getByRole('button', { name: 'Send Offer' }).click();
 
 			await expect.element(page.getByLabelText('General area')).toHaveValue('');
-			await expect.element(page.getByRole('radio', { name: 'Someone already at this practice' })).not.toBeChecked();
+			await expect.element(page.getByRole('radio', { name: 'Someone already at this Practice' })).not.toBeChecked();
 			expect(page.getByRole('group', { name: 'Doula', exact: true }).elements()).toHaveLength(0);
 		});
 	});

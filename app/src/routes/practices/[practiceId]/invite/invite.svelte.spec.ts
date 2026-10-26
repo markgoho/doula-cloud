@@ -56,7 +56,7 @@ interface Answers {
 // through answers both questions the way an Owner would. Leaving one out
 // is how a test asks for that refusal.
 async function fillAndSubmit(email: string, { role = 'Doula', employmentType = 'Employee' }: Answers = {}) {
-	await testPage.getByLabelText('Their email').fill(email);
+	await testPage.getByLabelText('Email address').fill(email);
 	if (role) await testPage.getByRole('checkbox', { name: role }).click();
 	if (employmentType) await testPage.getByRole('radio', { name: employmentType }).click();
 	await testPage.getByRole('button', { name: 'Send invite' }).click();

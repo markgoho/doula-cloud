@@ -16,7 +16,7 @@
 			-->
 			<Badge variant="info" label="Stripe onboarding incomplete" />
 			<Badge variant="success" label="Active" />
-			<Badge variant="warning" label="Expired -- invite again or revoke" />
+			<Badge variant="warning" label="Expired — invite again or revoke" />
 			<Badge variant="error" label="Email could not be delivered" />
 			<Badge variant="neutral" label="Draft" />
 		</stack-l>

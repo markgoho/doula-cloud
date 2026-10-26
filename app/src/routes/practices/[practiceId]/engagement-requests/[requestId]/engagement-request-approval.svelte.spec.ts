@@ -111,7 +111,7 @@ describe('the approval screen', () => {
 	it('shows every fact the approver decides on, including the balance after the Credit', async () => {
 		await setup();
 
-		await expect.element(testPage.getByText(`${clientName} -- new to this practice`)).toBeVisible();
+		await expect.element(testPage.getByText(`${clientName} — new to this Practice`)).toBeVisible();
 		await expect.element(testPage.getByText(`${baseDetail.requestedByName} on Aug 1, 2026`)).toBeVisible();
 		await expect.element(testPage.getByText('Birth', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText('Mar 1, 2027')).toBeVisible();
@@ -132,9 +132,9 @@ describe('the approval screen', () => {
 			}
 		});
 
-		await expect.element(testPage.getByText(`${clientName} -- already known here`)).toBeVisible();
+		await expect.element(testPage.getByText(`${clientName} — already known here`)).toBeVisible();
 		await expect
-			.element(testPage.getByRole('link', { name: /^Postpartum work, started .+ -- completed$/ }))
+			.element(testPage.getByRole('link', { name: /^Postpartum work, started .+ — Completed$/ }))
 			.toHaveAttribute('href', `/practices/${practiceId}/engagements/engagement-1`);
 	});
 
@@ -203,7 +203,7 @@ describe('the approval screen', () => {
 
 		await testPage.getByRole('button', { name: 'Approve and start the work' }).click();
 
-		await expect.element(testPage.getByText("There are no credits left on this practice's balance.")).toBeVisible();
+		await expect.element(testPage.getByText("There are no credits left on this Practice's balance.")).toBeVisible();
 		await expect.element(testPage.getByText(`${baseDetail.requestedByName} on Aug 1, 2026`)).toBeVisible();
 		expect(goto).not.toHaveBeenCalled();
 	});

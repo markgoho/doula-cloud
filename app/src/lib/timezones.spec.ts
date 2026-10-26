@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { US_TIMEZONES, detectTimezone, timezoneOptions } from './timezones.js';
+import { US_TIMEZONES, detectTimezone, timezoneOptions, zoneLabel } from './timezones.js';
 
 describe('the zones a person is offered (#1166)', () => {
 	it('offers seven US zones, each a real IANA name', () => {
@@ -39,8 +39,23 @@ describe('timezoneOptions', () => {
 		expect(options).toHaveLength(US_TIMEZONES.length + 1);
 		expect(options.at(-1)).toEqual({
 			value: 'America/Indiana/Indianapolis',
-			label: 'America/Indiana/Indianapolis'
+			label: 'Eastern time (Indianapolis)'
 		});
+	});
+});
+
+describe('zoneLabel', () => {
+	it('names a zone outside the seven the way the seven are named, by its common name and city', () => {
+		expect(zoneLabel('America/Indiana/Indianapolis')).toBe('Eastern time (Indianapolis)');
+		expect(zoneLabel('America/Argentina/Buenos_Aires')).toBe('Argentina Standard time (Buenos Aires)');
+	});
+
+	it('shows the IANA name when Intl has no common name for the zone', () => {
+		expect(zoneLabel('Etc/GMT+5')).toBe('Etc/GMT+5');
+	});
+
+	it('shows the IANA name when Intl does not know the zone at all', () => {
+		expect(zoneLabel('Not/A_Zone')).toBe('Not/A_Zone');
 	});
 });
 

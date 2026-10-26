@@ -25,6 +25,7 @@
 	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import Details from '#lib/components/atoms/Details.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -80,7 +81,19 @@
 			message={`Practice name changed to ${savedName}. Your Clients see it from now on.`}
 		/>
 	{/if}
-	<LabeledField id={nameId} label="Practice name" error={submission.errorFor(nameId)}>
+	<!--
+		GOV.UK's rule for a consequence a person can still act on: say it
+		before the press. Where a Client meets the name is the field's one
+		hint; where the old name stays (a sent Contract, Stripe's own copy)
+		is behind a Details under the box, rather than three paragraphs
+		between the field and Save (#2023).
+	-->
+	<LabeledField
+		id={nameId}
+		label="Practice name"
+		hint="Your Clients see it on the portal, your Practice Page, your emails and new Contracts."
+		error={submission.errorFor(nameId)}
+	>
 		{#snippet children({ id, describedBy, invalid })}
 			<TextInput
 				{id}
@@ -95,21 +108,16 @@
 			/>
 		{/snippet}
 	</LabeledField>
-	<!--
-		GOV.UK's rule for a consequence a person can still act on: say it
-		before the press. The name reaches the places a Client meets it, and
-		stays where a Client has already seen the old one or Stripe holds
-		its own copy.
-	-->
-	<Text
-		text="Your Clients see this name on their portal, on your Practice Page, in the email they get from you, and on every Contract you have not sent yet."
-	/>
-	<Text
-		text="A Contract that is already sent or signed keeps the name it was sent with. Your Practice Page keeps its web address."
-	/>
-	<Text
-		text="The name on your Stripe statement does not change with this. You change it in your Stripe dashboard."
-	/>
+	<Details summary="What keeps the old name">
+		<stack-l space="var(--space-2)">
+			<Text
+				text="A Contract that is already sent or signed keeps the name it was sent with. Your Practice Page keeps its web address."
+			/>
+			<Text
+				text="The name on your Stripe statement does not change with this. You change it in your Stripe dashboard."
+			/>
+		</stack-l>
+	</Details>
 {/snippet}
 
 {#snippet actions()}

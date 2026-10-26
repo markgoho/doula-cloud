@@ -10,6 +10,7 @@
 import { apiErrorMessage } from './apiErrorMessage.js';
 import { formatInstantWithClock } from './dates.js';
 import { kindOptions, type Kind } from './feedback.js';
+import { rolesLabel } from './roles.js';
 import type { Fetcher } from './fetcher.js';
 import type { CursorPage } from './paginatedList.svelte.js';
 
@@ -151,7 +152,7 @@ export function pieceFacts(piece: FeedbackPiece): { label: string; value: string
 			value: piece.sender.kind === 'client' ? 'A Client, named by her sign-in address' : (piece.sender.name ?? 'No name on record')
 		},
 		{ label: 'Email', value: piece.sender.email || 'No address on record' },
-		{ label: 'Role', value: piece.role || 'No role assigned' },
+		{ label: 'Role', value: piece.role ? rolesLabel(piece.role.split(', ')) : 'No role assigned' },
 		{ label: 'Practice', value: piece.practiceName ?? 'None: sent from a screen outside any Practice' },
 		{ label: 'Page', value: piece.pageUrl },
 		{ label: 'Route', value: piece.routeId },

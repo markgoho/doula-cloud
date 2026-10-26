@@ -45,7 +45,7 @@
 	<h1>Client field template editor</h1>
 
 	<section>
-		<h2>Default -- active and archived fields, and a locked type on existing ones</h2>
+		<h2>Default — active and archived fields, and a locked type on existing ones</h2>
 		<ClientFieldTemplateEditor
 			{fields}
 			existingIds={savedIds}
@@ -63,7 +63,7 @@
 	</section>
 
 	<section>
-		<h2>Empty -- a new Practice's field list</h2>
+		<h2>Empty — a new Practice's field list</h2>
 		<ClientFieldTemplateEditor
 			fields={[]}
 			existingIds={new Set()}

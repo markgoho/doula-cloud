@@ -77,7 +77,9 @@ const STAFF_ACTIVITY_PHRASES: Record<string, Phrase> = {
 	visit_reassigned: (name) => `Visit for ${client(name)} given to another doula`,
 	visit_scheduled: (name) => `Visit time for ${client(name)} updated`,
 	visit_notes_edited: (name) => `Visit notes for ${client(name)} updated`,
-	plan_instance_edited: (name) => `Birth Plan for ${client(name)} updated`,
+	// The Practice-wide feed carries no diff, so it cannot tell the two
+	// plans apart; the Engagement page reads `planType` (`staffPlanPhrase`).
+	plan_instance_edited: (name) => `Care Plan or Birth Plan for ${client(name)} changed`,
 	birth_plan_acknowledged: (name) => `Birth Plan marked as read by ${client(name)}`,
 
 	// Offers of the work to a doula.
@@ -162,6 +164,20 @@ export function staffActivityPhrase(action: string, subjectName?: string): strin
 	const phrase = STAFF_ACTIVITY_PHRASES[action];
 	if (!phrase) throw new Error(`staffActivityPhrases: no Staff wording for activity action "${action}"`); // voice:ignore: a developer-facing error, never rendered
 	return sentenceCase(phrase(subjectName || undefined));
+}
+
+/**
+ * The plan a `plan_instance_edited` row changed, named (#2023). The write
+ * side records `planType` in the row's diff (`plans/instance.go`), which
+ * only the Engagement page's ledger reads, so the table's own phrase is
+ * the fallback for a reader with no diff. `undefined` for a plan type this
+ * build has not met, which falls back the same way.
+ */
+const PLAN_NAMES: Record<string, string> = { care_plan: 'Care Plan', birth_plan: 'Birth Plan' };
+
+export function staffPlanPhrase(planType: unknown, subjectName?: string): string | undefined {
+	const plan = typeof planType === 'string' ? PLAN_NAMES[planType] : undefined;
+	return plan ? `${plan} for ${client(subjectName || undefined)} changed` : undefined;
 }
 
 /**

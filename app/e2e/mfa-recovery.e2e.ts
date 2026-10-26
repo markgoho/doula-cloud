@@ -192,7 +192,7 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 	 */
 	async function inviteAndAcceptDoula(): Promise<string> {
 		await page.goto(`/practices/${practiceId}/invite`);
-		await page.getByLabel('Their email').fill(doulaEmail);
+		await page.getByLabel('Email address').fill(doulaEmail);
 		await page.getByRole('checkbox', { name: 'Doula' }).check();
 		await page.getByRole('radio', { name: 'Employee' }).check();
 		const [inviteResponse] = await Promise.all([

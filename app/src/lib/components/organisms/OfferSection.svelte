@@ -83,7 +83,7 @@
 	const areaFieldId = 'offer-area';
 	const dueDateFieldId = 'offer-due-date';
 
-	// #1432: "Someone already at this practice" is a question only while
+	// #1432: "Someone already at this Practice" is a question only while
 	// there is somebody to pick. With nobody -- a Practice with no Doula,
 	// or (since #1598 took the sender out of the list) a solo Owner whose
 	// only Doula is the person at the screen -- the form has one answer
@@ -245,21 +245,20 @@
 		<ErrorSummary errors={offerSubmission.errors} />
 	{/if}
 	{#if doulas === undefined}
-		<p>
-			We could not load who is at this practice, so this work can only be offered to someone new, by email. To
-			pick someone already here, reload the page.
-		</p>
+		<!-- The section's one line of context (#2023): it says why the form
+		     below asks only for an email address. -->
+		<p>We could not load who is at this Practice. Offer this work by email, or reload the page to choose someone here.</p>
 	{:else if firstDoula === undefined}
 		<!-- True for a Practice with no Doula, and for a reader who is its
 		     only Doula, whom the Engagement page leaves out (#1598): the words
 		     say nothing about whether the person at the screen is a Doula. -->
-		<p>There is no one at this practice to offer this work to, so it can only be offered to someone new, by email.</p>
+		<p>There is no one at this Practice to offer this work to, so offer it by email.</p>
 	{:else}
 		<RadioGroup
 			legend="Offer this work to"
 			name={targetGroupName}
 			options={[
-				{ value: 'staff', label: 'Someone already at this practice' },
+				{ value: 'staff', label: 'Someone already at this Practice' },
 				{ value: 'email', label: 'Someone new, by email' }
 			]}
 			value={target}
@@ -292,7 +291,6 @@
 				/>
 			{/snippet}
 		</LabeledField>
-		<p>A doula invited by email joins the practice as a contractor, so this offer carries a fee.</p>
 	{/if}
 
 	{#if isFeeRequired}
@@ -302,8 +300,17 @@
 			says again for a screen reader; one letter at the smallest step; an
 			area is a town's name, so GOV.UK's 20; the due date sizes to its
 			own control.
+
+			The hint says why there is a fee at all, and only on the email
+			path: a roster doula who is a contractor already knows (#2023).
 		-->
-		<LabeledField id={feeFieldId} label="Fee (USD)" error={offerSubmission.errorFor(feeFieldId)} width={10}>
+		<LabeledField
+			id={feeFieldId}
+			label="Fee (USD)"
+			hint={isByEmail ? 'Someone you invite by email joins as a contractor, so this Offer pays a fee.' : undefined}
+			error={offerSubmission.errorFor(feeFieldId)}
+			width={10}
+		>
 			{#snippet children({ id, describedBy, invalid, width })}
 				<TextInput
 					{id}

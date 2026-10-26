@@ -26,7 +26,7 @@
 <!--
 	Asked at onboarding on every path a person joins by (#415). The reason
 	is stated because we are asking a personal question for a reason that
-	is not obvious, and the last sentence closes off the question it
+	is not obvious, and the hint closes off the question it
 	invites -- no, we do not want your address.
 
 	A native <select> over 51 fixed options: the Rule of Least Power answer,
@@ -41,7 +41,7 @@
 	{id}
 	{error}
 	label="Which state do you work from?"
-	hint="Sales tax on your practice's credits is worked out from where its team works — so this needs to be right, and needs updating if you move. We only need the state, not your address."
+	hint="We need the state for sales tax on your practice's credits, not your address."
 	width={20}
 >
 	<!-- 20 characters: the longest of the 51 names, "District of Columbia", and the placeholder (#1216). -->

@@ -863,7 +863,7 @@ describe('payments settings screen: billing mode (#271)', () => {
 		await setup({ roles: ['owner'], billingModeBody: {} });
 
 		await expect
-			.element(testPage.getByText('Not chosen yet -- this is asked the first time Staff raises an Invoice.'))
+			.element(testPage.getByText('Not chosen yet. This is asked the first time an Invoice is raised.'))
 			.toBeVisible();
 		// #1922: nothing is chosen, because the question is not asked here
 		// at all -- no radio, Stripe or otherwise, and no Save.

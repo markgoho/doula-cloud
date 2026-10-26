@@ -101,10 +101,9 @@ describe('the Client portal Notifications settings screen', () => {
 		// the fixture's own response.
 		await setup({ respond: toApiResponder(fixture) });
 
-		await expect
-			.element(page.getByText(/never shows who sent it or what the message says/))
-			.toBeVisible();
-		await expect.element(page.getByText(/not a phone call/)).toBeVisible();
+		await expect.element(page.getByText(/Do not rely on it for anything urgent/)).toBeVisible();
+		await page.getByText('What a notification shows').click();
+		await expect.element(page.getByText(/Never who sent the message or what it says/)).toBeVisible();
 	});
 
 	it('reports notifications as off when the Client has never decided', async () => {

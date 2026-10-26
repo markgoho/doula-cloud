@@ -45,6 +45,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Details from '#lib/components/atoms/Details.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import ReauthPrompt from '#lib/components/molecules/ReauthPrompt.svelte';
@@ -381,26 +382,6 @@
 	}
 </script>
 
-{#snippet intro()}
-	<!--
-		The consequence, stated before the choice and not after it. A work
-		state moves money: sales tax on a Practice's credits is apportioned
-		over where its people work (TB-ST-128), so this field is the input
-		to a bill somebody else pays. Someone changing it deserves to know
-		that before she changes it, not in a confirmation dialog after.
-
-		The second sentence closes off the question the first one opens.
-		"Does correcting this claw back what I was charged last year?" No:
-		#420 records the tax actually charged on each purchase row, so past
-		receipts stand exactly as issued. A correction applies from today
-		forward. Saying so here is cheaper than answering it in support.
-	-->
-	<Text
-		text="Where you work sets how much sales tax your practice pays on the credits it buys. Changing it here changes that from today forward &mdash; purchases you have already made are not re-priced, and no receipt you have already been sent changes."
-		tone="variant"
-	/>
-{/snippet}
-
 {#snippet nameSection()}
 	<!--
 		Its own <form>, so Enter in a name field submits the name natively
@@ -432,6 +413,19 @@
 			bind:value={selectedState}
 			error={saveSubmission.errorFor(workStateId)}
 		/>
+		<!--
+			The consequence sits on the field's own hint (WorkStateField), and
+			the question it invites -- "does correcting this claw back what I
+			was charged last year?" -- is answered here, beside the control,
+			rather than as a page intro three sections away (#2023). No: #420
+			records the tax actually charged on each purchase row, so past
+			receipts stand exactly as issued.
+		-->
+		<Details summary="If you change it">
+			<Text
+				text="The change applies from today. Purchases you have already made are not re-priced, and no receipt you have been sent changes."
+			/>
+		</Details>
 		<!--
 			Saving the same state again is a re-assertion, not a no-op -- see
 			the comment on handleSubmit. Hence no `disabled` on an unchanged
@@ -654,7 +648,6 @@
 -->
 <FormPage
 	title="Your account"
-	{intro}
 	fieldsets={isLoaded
 		? [
 				{ legend: 'Your name', content: nameSection },

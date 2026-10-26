@@ -30,6 +30,7 @@
 	import FormPage from '#lib/components/templates/FormPage.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Details from '#lib/components/atoms/Details.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 
 	// The durable preference ("wants notifications") and this device's
@@ -120,9 +121,13 @@
 
 {#snippet intro()}
 	<Text
-		text="When you get a message, this device can show a notification to let you know one is waiting. A notification never shows who sent it or what the message says &mdash; you open the app to read it. It is not a phone call, and you should not rely on it if something is urgent."
+		text="This device can tell you when a message is waiting. Do not rely on it for anything urgent."
 		tone="variant"
 	/>
+	<!-- What a notification leaves out is behind a Details, so the intro stays one line (#2023). -->
+	<Details summary="What a notification shows">
+		<Text text="Never who sent the message or what it says. You open the app to read it." />
+	</Details>
 {/snippet}
 
 {#snippet status()}

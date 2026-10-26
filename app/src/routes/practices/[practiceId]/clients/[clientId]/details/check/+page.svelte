@@ -151,7 +151,7 @@
 <ConfirmDialog
 	bind:open={isConflictOpen}
 	title="Possible duplicate Client"
-	consequence={`This name exactly matches an existing Client at this Practice: ${matches.map((match) => displayName(match)).join(', ')}. Saving keeps this as its own separate record -- nothing here is merged.`}
+	consequence={`This name exactly matches an existing Client at this Practice: ${matches.map((match) => displayName(match)).join(', ')}. Saving keeps this as its own separate record. Nothing is merged.`}
 	confirmLabel="Yes, a different person"
 	error={overrideError}
 	onConfirm={handleOverrideConfirm}

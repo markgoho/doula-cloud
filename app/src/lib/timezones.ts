@@ -32,7 +32,7 @@ import type { LabeledValue } from './roles.js';
  * Visit counts as birth or postpartum work.
  */
 export const TIMEZONE_HINT =
-	'DoulaCloud works out which day a Visit falls on in this timezone — which is what decides whether a Visit counts as birth or postpartum work.';
+	'We use it to work out which day a Visit falls on.';
 
 /**
  * What a person reads when she has chosen no zone at all. GOV.UK's rule
@@ -93,12 +93,40 @@ export function detectTimezone(): string {
  * `America/Indiana/Indianapolis` -- or a browser reporting
  * `America/Detroit` -- would meet a select whose value matches no option,
  * which renders as blank and silently rewrites her zone the moment she
- * saves. Showing the name she actually holds is the honest answer, even
- * though it is not one of the seven.
+ * saves. Showing the zone actually held is the honest answer, even
+ * though it is not one of the seven -- labeled the way the seven are
+ * (`zoneLabel`), with the IANA name as the stored value (#2023).
  */
 export function timezoneOptions(current: string): readonly LabeledValue[] {
 	if (current === '' || US_TIMEZONES.some((zone) => zone.value === current)) {
 		return US_TIMEZONES;
 	}
-	return [...US_TIMEZONES, { value: current, label: current }];
+	return [...US_TIMEZONES, { value: current, label: zoneLabel(current) }];
+}
+
+/**
+ * A zone outside the seven, in the seven's own shape: its common name and
+ * its city, "Eastern time (Indianapolis)" for `America/Indiana/Indianapolis`
+ * (#2023). The name is `Intl`'s generic one, which does not change with
+ * daylight saving, so the label reads the same all year and needs no
+ * clock. No offset: a zone's offset does change, and a label that moved
+ * twice a year would need the current instant to draw.
+ *
+ * Falls back to the IANA name itself when `Intl` has no generic name for
+ * the zone, or does not know it at all (a `RangeError`): the BFF's own
+ * check is what decides whether a zone is real, and a raw name is still
+ * the true answer.
+ */
+export function zoneLabel(zone: string): string {
+	let name: string | undefined;
+	try {
+		name = new Intl.DateTimeFormat('en-US', { timeZone: zone, timeZoneName: 'longGeneric' })
+			.formatToParts(0)
+			.find((part) => part.type === 'timeZoneName')?.value;
+	} catch {
+		return zone;
+	}
+	if (!name || name.startsWith('GMT')) return zone;
+	const city = zone.split('/').at(-1)!.replaceAll('_', ' ');
+	return `${name.replace(/ Time$/, ' time')} (${city})`;
 }

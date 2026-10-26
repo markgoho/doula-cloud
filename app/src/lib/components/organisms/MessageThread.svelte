@@ -47,6 +47,14 @@
 		onSend: (body: string, attachment: File | undefined) => Promise<void>;
 		onDownloadAttachment: (messageId: string, filename: string) => void;
 		attachmentPreviewURLs: Record<string, string>;
+		/**
+		 * Who is reading the thread (#2023). A message from that side reads
+		 * "You" in place of the sender's name; every other message reads its
+		 * sender's name alone, never a role. Left out where the reader is
+		 * one of several people on the same side, such as a Staff member
+		 * among a Practice's Staff, so every message keeps its name.
+		 */
+		readerSenderType?: Message['senderType'];
 	}
 
 	let {
@@ -57,7 +65,8 @@
 		onLoadOlder,
 		onSend,
 		onDownloadAttachment,
-		attachmentPreviewURLs
+		attachmentPreviewURLs,
+		readerSenderType
 	}: Properties = $props();
 
 	// The style guide mounts this organism several times on one page, so
@@ -119,9 +128,9 @@
 				<li>
 					<stack-l space="var(--space-1)">
 						<cluster-l space="var(--space-2)" align="baseline">
-							<strong>{message.senderName}</strong>
-							<!-- v8 ignore start: Svelte's compiled null-guard on these text nodes is unreachable -- senderType is a required union member and formatInstantWithClock always returns a string -->
-							<span class="meta">({message.senderType}) — {formatInstantWithClock(message.createdAt)}</span>
+							<strong>{message.senderType === readerSenderType ? 'You' : message.senderName}</strong>
+							<!-- v8 ignore start: Svelte's compiled null-guard on this text node is unreachable -- formatInstantWithClock always returns a string -->
+							<span class="meta">{formatInstantWithClock(message.createdAt)}</span>
 							<!-- v8 ignore stop -->
 						</cluster-l>
 						{#if message.body}

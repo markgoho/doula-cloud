@@ -40,7 +40,7 @@ test('An invitation arrives as readable mail, and a complaint stops the next one
 	await enterPractice(context, page, ownerHeaders, practiceId);
 
 	await page.goto(`/practices/${practiceId}/invite`);
-	await page.getByLabel('Their email').fill(doulaEmail);
+	await page.getByLabel('Email address').fill(doulaEmail);
 	await page.getByRole('checkbox', { name: 'Doula' }).check();
 	await page.getByRole('radio', { name: 'Employee' }).check();
 	await page.getByRole('button', { name: 'Send invite' }).click();
@@ -98,7 +98,7 @@ test('An invitation arrives as readable mail, and a complaint stops the next one
 
 	await enterPractice(context, page, ownerHeaders, practiceId);
 	await page.goto(`/practices/${practiceId}/invite`);
-	await page.getByLabel('Their email').fill(complainerEmail);
+	await page.getByLabel('Email address').fill(complainerEmail);
 	await page.getByRole('checkbox', { name: 'Doula' }).check();
 	await page.getByRole('radio', { name: 'Employee' }).check();
 	await page.getByRole('button', { name: 'Send invite' }).click();

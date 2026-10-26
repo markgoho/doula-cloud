@@ -22,7 +22,7 @@
 	 */
 	const clients: Client[] = [
 		{ name: 'Persephone Adeyemi-Wollstonecraft', status: 'Stripe onboarding incomplete' },
-		{ name: 'Anne-Marie Ochieng-Whitfield', status: 'Expired -- invite again or revoke' }
+		{ name: 'Anne-Marie Ochieng-Whitfield', status: 'Expired — invite again or revoke' }
 	];
 
 	interface CreditRow {
@@ -203,7 +203,7 @@
 				'Postpartum Engagement awaiting a contract, with Anne-Marie Ochieng-Whitfield',
 				'Refused: https://highland-midwifery-group.example.org/policies/scheduling-and-availability#postpartum-capacity-window'
 			],
-			note: 'Undeliverable -- the address bounced',
+			note: 'Undeliverable — the address bounced',
 			noteHref: '#blocked-email-addresses'
 		},
 		{

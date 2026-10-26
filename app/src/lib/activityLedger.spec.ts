@@ -193,6 +193,18 @@ describe('activityLedgerColumns: an Engagement fact, from what to what (#1423)',
 		);
 	});
 
+	// #2023: a plan save says which plan, from the `planType` its diff
+	// carries, and keeps the table's own words when the diff is absent.
+	it('names the plan a save changed', () => {
+		expect(what.accessor(entry({ action: 'plan_instance_edited', diff: { planType: 'care_plan' } }))).toBe(
+			'Care Plan for the Client changed'
+		);
+		expect(
+			what.accessor(entry({ action: 'plan_instance_edited', subjectName: 'Amara', diff: { planType: 'birth_plan' } }))
+		).toBe('Birth Plan for Amara changed');
+		expect(what.accessor(entry({ action: 'plan_instance_edited' }))).toBe(staffActivityPhrase('plan_instance_edited'));
+	});
+
 	it('never puts the ending note in the sentence', () => {
 		const diff = { statusBefore: 'active', statusAfter: 'completed', endingNoteAfter: 'private words' };
 

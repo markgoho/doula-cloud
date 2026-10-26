@@ -485,7 +485,7 @@
 	{:else if !isBillingModeLoaded}
 		<Text text="Loading billing mode…" />
 	{:else if billingMode === undefined}
-		<Text text="Not chosen yet -- this is asked the first time Staff raises an Invoice." />
+		<Text text="Not chosen yet. This is asked the first time an Invoice is raised." />
 	{:else}
 		<Text
 			text={billingMode === 'by_hand'

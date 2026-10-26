@@ -180,9 +180,9 @@ describe('the Timezone screen, as a Doula', () => {
 			.toBeVisible();
 	});
 
-	it('shows a stored zone outside the seven-entry list by its own name', async () => {
+	it('shows a stored zone outside the seven-entry list by its common name (#2023)', async () => {
 		await setup(jsonResponse({ timezone: 'America/Indiana/Indianapolis' }));
 
-		await expect.element(testPage.getByText('America/Indiana/Indianapolis')).toBeVisible();
+		await expect.element(testPage.getByText('Eastern time (Indianapolis)')).toBeVisible();
 	});
 });

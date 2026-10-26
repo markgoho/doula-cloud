@@ -42,6 +42,7 @@ interface SetupOptions {
 	isLoadingOlder?: boolean;
 	onSend?: (body: string, attachment: File | undefined) => Promise<void>;
 	attachmentPreviewURLs?: Record<string, string>;
+	readerSenderType?: Message['senderType'];
 }
 
 async function setup({
@@ -50,7 +51,8 @@ async function setup({
 	hasMore = false,
 	isLoadingOlder = false,
 	onSend = vi.fn().mockResolvedValue(undefined),
-	attachmentPreviewURLs = {}
+	attachmentPreviewURLs = {},
+	readerSenderType
 }: SetupOptions = {}) {
 	const onLoadOlder = vi.fn();
 	const onDownloadAttachment = vi.fn();
@@ -62,7 +64,8 @@ async function setup({
 		onLoadOlder,
 		onSend,
 		onDownloadAttachment,
-		attachmentPreviewURLs
+		attachmentPreviewURLs,
+		readerSenderType
 	});
 	return { container, onLoadOlder, onSend, onDownloadAttachment };
 }
@@ -82,10 +85,19 @@ describe('MessageThread.svelte', () => {
 	it('prints when each message was sent through dates.ts, month first', async () => {
 		await setup();
 
-		await expect
-			.element(page.getByText(`(staff) — ${formatInstantWithClock(messages[0]!.createdAt)}`))
-			.toBeVisible();
-		await expect.element(page.getByText(/\(staff\) — Jan 1, 2026, \d{1,2}:00(am|pm)/)).toBeVisible();
+		await expect.element(page.getByText(formatInstantWithClock(messages[0]!.createdAt))).toBeVisible();
+		await expect.element(page.getByText(/^Jan 1, 2026, \d{1,2}:00(am|pm)$/)).toBeVisible();
+	});
+
+	// #2023: a message is labeled by who sent it, never by a role in
+	// brackets, and the reader's own messages read "You".
+	it('names each sender with no role, and the reader as "You"', async () => {
+		const { container } = await setup({ readerSenderType: 'client' });
+
+		await expect.element(page.getByText('Ada Lovelace')).toBeVisible();
+		await expect.element(page.getByText('You', { exact: true })).toBeVisible();
+		expect(page.getByText('Grace Hopper').elements()).toHaveLength(0);
+		expect(container.textContent).not.toMatch(/\((client|staff)\)/);
 	});
 
 	it('omits the body paragraph for an attachment-only message with no body text', async () => {

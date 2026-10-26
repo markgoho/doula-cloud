@@ -97,7 +97,7 @@
 	// name by that word). They are DoulaCloud's own obligation to
 	// retain, not the Practice's to delete out from under.
 	let deleteConsequence = $derived(
-		`This starts a 30-day countdown to delete ${session.practiceName}. During it, no Staff member or Client can sign in to this Practice, except that any Owner can return here to restore it. If the countdown finishes, every Client on file has their personal data erased the same way a single Client's own erasure works, any unspent Credit balance is forfeited, and this cannot be undone. DoulaCloud's own billing records -- the Credit ledger, the Stripe Connect account and its payouts -- are kept regardless.`
+		`This starts a 30-day countdown to delete ${session.practiceName}. During it, no Staff member or Client can sign in to this Practice, except that any Owner can return here to restore it. If the countdown finishes, every Client's personal data is erased the same way a single Client's own erasure works, any unspent Credit balance is forfeited, and this cannot be undone. DoulaCloud's own billing records (the Credit ledger, the Stripe Connect account and its payouts) are kept regardless.`
 	);
 
 	let loading = $derived(isOwner && status === undefined ? 'Loading this setting' : undefined);
@@ -129,7 +129,7 @@
 	{:else if status?.hasUnsettledInvoices}
 		<Notice
 			variant="info"
-			message="This Practice can't be deleted yet -- it has an unsettled Invoice. Settle or void it first."
+			message="This Practice has an unsettled Invoice, so it can't be deleted yet. Settle or void it first."
 		/>
 	{:else if status && !hasSecondFactor}
 		<SecondFactorNeeded

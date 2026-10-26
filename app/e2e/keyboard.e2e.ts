@@ -134,7 +134,7 @@ test('Renata signs in and invites a Doula, with no pointer at any step', async (
 	await page.keyboard.press('Enter');
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/invite$`));
 
-	await tabTo(page, page.getByLabel('Their email'), 'the email field on the invite form');
+	await tabTo(page, page.getByLabel('Email address'), 'the email field on the invite form');
 	await page.keyboard.type(invited);
 
 	// The form opens with nothing chosen (#1912), so both questions are
