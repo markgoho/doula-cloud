@@ -252,6 +252,8 @@ func TestStaffingActions_ContainsExactlyTheRosterSet(t *testing.T) {
 		activity.ActionEngagementReopened,
 		activity.ActionKindChanged,
 		activity.ActionBirthOutcomeRecorded,
+		// #2013: the due date is one more of ADR-0015's mutable facts.
+		activity.ActionDueDateChanged,
 		// #2066: the Care Plan is staff-only, never shown in the portal.
 		activity.ActionCarePlanEdited,
 	}

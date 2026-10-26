@@ -30,6 +30,11 @@ const (
 	// caller that sent its own body, the same reasoning MsgStatusUnknown
 	// gives for its own control.
 	MsgKindUnknown = "Choose whether this Engagement is for birth or postpartum care"
+	// MsgDueDateMalformed is the dueDate field on the due-date change
+	// (#2013): empty, not a real day, or not YYYY-MM-DD. The Engagement
+	// page composes the date from three boxes and checks it first, so this
+	// is for a caller that sent its own body.
+	MsgDueDateMalformed = "Enter the due date as a real date, like 2027-04-23"
 	// MsgEndedOnNeeded answers a birth outcome of 'live_birth' or 'loss'
 	// sent with no date: those two say the pregnancy ended, and when it
 	// ended is the other half of that fact.

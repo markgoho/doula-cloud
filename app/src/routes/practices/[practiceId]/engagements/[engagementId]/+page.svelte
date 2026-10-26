@@ -11,6 +11,7 @@
 	import { triggerBlobDownload } from '#lib/blobDownload.js';
 	import {
 		attachSelf,
+		changeEngagementDueDate,
 		changeEngagementKind,
 		changeEngagementStatus,
 		createVisit,
@@ -115,6 +116,15 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
+	import DateFields from '#lib/components/molecules/DateFields.svelte';
+	import {
+		EMPTY_DATE_PARTS,
+		dateFieldId,
+		dateGroupRefusal,
+		joinCalendarDay,
+		splitDate,
+		type DateParts
+	} from '#lib/intakeDate.js';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import type { FormError } from '#lib/formErrors.js';
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
@@ -215,10 +225,11 @@
 	// open at a time. A save closes it and says what changed in a status
 	// that takes focus, because the control she pressed goes with the
 	// form; a refusal leaves it open, beside the refusal.
-	type SummaryChange = 'care' | 'carePhase' | 'doula';
+	type SummaryChange = 'care' | 'due' | 'carePhase' | 'doula';
 	type EngagementSummaryRow = SummaryListRow & { change?: SummaryChange };
 	const changeWords: Record<SummaryChange, string> = {
 		care: 'care',
+		due: 'due date',
 		carePhase: 'care phase',
 		doula: 'Doula'
 	};
@@ -230,6 +241,8 @@
 		statusChangedMessage = '';
 		kindChangedMessage = '';
 		selfAttachedMessage = '';
+		dueChangedMessage = '';
+		if (openChange === 'due') openDueForm();
 	}
 
 	function closeChange(message: string) {
@@ -357,6 +370,54 @@
 			openChange = undefined;
 			kindChangedMessage = `Now set to ${kindLabel(result.kind)}.`;
 		}, 'Failed to change what the Practice sold');
+	}
+
+	// #2013: the due date, overlaid on the load-time read once a change
+	// succeeds -- the kindOverride shape above. A dating scan or a
+	// midwife's revised estimate moves it in real care. It is a question,
+	// not a command, so it is a form: GOV.UK's date input (DateFields),
+	// with the boxes starting on the date held now. The role gate is
+	// canWriteFact, the one every mutable fact shares; the endpoint
+	// refuses a contractor Doula whatever is drawn. Unlike kind, a
+	// recorded birth outcome does not take the Change away: ADR-0015
+	// freezes the outcome and its date, not the due date.
+	let dueDateOverride = $state<string | undefined>();
+	const displayDueDate = $derived(dueDateOverride ?? detail?.dueDate);
+	let dueChangedMessage = $state('');
+	let dueParts = $state<DateParts>({ ...EMPTY_DATE_PARTS });
+	const dueSubmission = new FormSubmission();
+	const DUE_DATE_NAME = 'due-date';
+	// Keyed by engagement.DueDateChangeRequest's json tag (#488), aimed at
+	// the first box: a <fieldset> is not focusable.
+	const dueFieldIds = { dueDate: dateFieldId(DUE_DATE_NAME, 'month') };
+	const dueRefusal = $derived(dateGroupRefusal(dueSubmission.errors, DUE_DATE_NAME));
+
+	function openDueForm() {
+		dueParts = displayDueDate === undefined ? { ...EMPTY_DATE_PARTS } : splitDate(displayDueDate);
+		dueSubmission.errors = [];
+	}
+
+	async function handleDueSubmit(event: SubmitEvent) {
+		event.preventDefault();
+		let isSaved = false;
+		await dueSubmission.run(async () => {
+			const date = joinCalendarDay(dueParts, 'The due date');
+			if (!date.ok) return [{ message: date.message, targetId: dateFieldId(DUE_DATE_NAME, date.field) }];
+			if (date.value === '') {
+				return [{ message: 'Enter the due date', targetId: dateFieldId(DUE_DATE_NAME, 'month') }];
+			}
+			const result = await changeEngagementDueDate(apiFetchWithSession, reference, date.value);
+			dueDateOverride = result.dueDate;
+			openChange = undefined;
+			dueChangedMessage = `The due date is now ${formatCalendarDay(result.dueDate)}.`;
+			isSaved = true;
+		}, orThrownErrors(dueFieldIds));
+		if (!isSaved) return;
+		// The On-call window is drawn from the due date, and the ledger has
+		// a new entry: both sections are read again, each with its own
+		// error state, the same pair handleAttachSelf re-reads.
+		await loadOnCall();
+		await loadActivity();
 	}
 
 	// #1598: who is on this Engagement, overlaid on the load-time read the
@@ -788,14 +849,15 @@
 	 * "Created", the "how did this come to be" every feature answers.
 	 *
 	 * `dueDate` is left out entirely when null (#538): ADR-0017's
-	 * postpartum-only Engagement has none. "Due" has no Change: no write
-	 * sets an Engagement's due date after its request is approved (#2013).
+	 * postpartum-only Engagement has none. Its Change (#2013) opens the
+	 * date form, and the row reads the overlaid date once it is saved.
 	 *
 	 * A row carries `changes` -- and so a Change -- only where this reader
 	 * may change it, from the same flags that drew the old buttons:
-	 * canChangeKind, the BFF's statusMoves, and the BFF's canAttachSelf. A
-	 * contractor Doula holds none of the three, so her summary has no
-	 * Change at all, and the endpoints refuse her whatever is drawn.
+	 * canChangeKind, canWriteFact for the due date, the BFF's statusMoves,
+	 * and the BFF's canAttachSelf. A contractor Doula holds none of the
+	 * four, so her summary has no Change at all, and the endpoints refuse
+	 * her whatever is drawn.
 	 */
 	const summaryRows = $derived.by((): EngagementSummaryRow[] => {
 		const rows: EngagementSummaryRow[] = [
@@ -803,8 +865,8 @@
 			// gives it.
 			{ label: 'Care', value: kindLabel(displayKind), ...changeable('care', canChangeKind) }
 		];
-		if (detail.dueDate) {
-			rows.push({ label: 'Due', value: formatCalendarDay(detail.dueDate) });
+		if (displayDueDate) {
+			rows.push({ label: 'Due', value: formatCalendarDay(displayDueDate), ...changeable('due', canWriteFact) });
 		}
 		rows.push({
 			label: 'Care phase',
@@ -1689,6 +1751,41 @@
 							<Notice variant="error" message={kindChange.error} />
 						{/if}
 					</stack-l>
+				{:else if row.change === 'due'}
+					<!--
+						#2013: GOV.UK's date input, the boxes starting on the date
+						held now. A refused date is a refused form, so the summary
+						lists it and the box it is about is marked.
+					-->
+					<StackedForm onSubmit={handleDueSubmit}>
+						{#if dueSubmission.errors.length > 0}
+							<ErrorSummary errors={dueSubmission.errors} />
+						{/if}
+						<DateFields
+							legend="New due date"
+							hint="For example, 4 23 2027 for April 23, 2027."
+							name={DUE_DATE_NAME}
+							parts={dueParts}
+							onChange={(next) => (dueParts = next)}
+							error={dueRefusal?.message}
+							invalidField={dueRefusal?.field}
+						/>
+						<cluster-l space="var(--space-3)">
+							<Button
+								label="Save the due date"
+								type="submit"
+								size="sm"
+								loading={dueSubmission.isSubmitting}
+							/>
+							<Button
+								label="Cancel"
+								type="button"
+								size="sm"
+								variant="secondary"
+								onClick={() => (openChange = undefined)}
+							/>
+						</cluster-l>
+					</StackedForm>
 				{:else if row.change === 'carePhase'}
 					<!--
 						#253: exactly the moves ADR-0015's role table admits from
@@ -1788,6 +1885,8 @@
 			<Notice variant="status" message={selfAttachedMessage} isFocusedOnAppear />
 		{:else if kindChangedMessage}
 			<Notice variant="status" message={kindChangedMessage} isFocusedOnAppear />
+		{:else if dueChangedMessage}
+			<Notice variant="status" message={dueChangedMessage} isFocusedOnAppear />
 		{:else if statusChangedMessage}
 			<Notice variant="status" message={statusChangedMessage} isFocusedOnAppear />
 		{/if}

@@ -126,11 +126,53 @@ export function joinDate(
 	label = 'Date of birth',
 	today: Date = new Date()
 ): DateResult {
+	const composed = composeDay(parts, label, [2, 4], (year) => resolveYear(year, today));
+	if (!composed.ok) return composed;
+	if (composed.value === '') return { ok: true, value: '' };
+
+	if (composed.day.getTime() > today.getTime()) {
+		return { ok: false, message: `${label} must be in the past`, field: 'year' };
+	}
+
+	return { ok: true, value: composed.value };
+}
+
+/**
+ * Composes the three boxes into a `"YYYY-MM-DD"` calendar day that may
+ * fall on either side of today -- a due date (#2013), which is usually
+ * ahead and, for an overdue birth, sometimes just behind.
+ *
+ * Two things differ from `joinDate`, and both are about the year. There
+ * is no "must be in the past", and the year must be typed as four
+ * digits: `joinDate`'s two-digit window resolves a year above this one
+ * to the last century, which is right for a birthday and would turn a
+ * due date of `27` into 1927. A due date sits a year or so either side
+ * of today, so no window reads a two-digit year safely in both
+ * directions, and asking for all four is the honest refusal.
+ */
+export function joinCalendarDay(parts: DateParts, label: string): DateResult {
+	const composed = composeDay(parts, label, [4], Number);
+	if (!composed.ok) return composed;
+	return { ok: true, value: composed.value };
+}
+
+/**
+ * The checks the two composers share: blank boxes compose to `''`, a
+ * missing box is named, each box holds digits of an allowed width, and
+ * the day exists. `yearWidths` and `resolve` are the one place they
+ * differ.
+ */
+function composeDay(
+	parts: DateParts,
+	label: string,
+	yearWidths: number[],
+	resolve: (typedYear: string) => number
+): { ok: true; value: string; day: Date } | { ok: false; message: string; field: DateField } {
 	const month = parts.month.trim();
 	const day = parts.day.trim();
 	const year = parts.year.trim();
 
-	if (month === '' && day === '' && year === '') return { ok: true, value: '' };
+	if (month === '' && day === '' && year === '') return { ok: true, value: '', day: new Date(NaN) };
 
 	const typedParts: [DateField, string][] = [
 		['month', month],
@@ -142,7 +184,7 @@ export function joinDate(
 	}
 
 	for (const [field, typed] of typedParts) {
-		const widths = field === 'year' ? [2, 4] : [1, 2];
+		const widths = field === 'year' ? yearWidths : [1, 2];
 		if (!DIGITS.test(typed) || !widths.includes(typed.length)) {
 			return { ok: false, message: `${label} must be a real date`, field };
 		}
@@ -150,7 +192,7 @@ export function joinDate(
 
 	const monthNumber = Number(month);
 	const dayNumber = Number(day);
-	const yearNumber = resolveYear(year, today);
+	const yearNumber = resolve(year);
 
 	/*
 	 * Round-tripping through Date is what catches 31 April and 29
@@ -171,12 +213,9 @@ export function joinDate(
 		};
 	}
 
-	if (composed.getTime() > today.getTime()) {
-		return { ok: false, message: `${label} must be in the past`, field: 'year' };
-	}
-
 	return {
 		ok: true,
-		value: `${String(yearNumber).padStart(4, '0')}-${pad(monthNumber)}-${pad(dayNumber)}`
+		value: `${String(yearNumber).padStart(4, '0')}-${pad(monthNumber)}-${pad(dayNumber)}`,
+		day: composed
 	};
 }

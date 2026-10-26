@@ -271,15 +271,14 @@ describe('Staff Engagement detail summary', () => {
 		]);
 	});
 
-	it('gives an Owner who is a Doula a Change on each row she may change, and none on Due', async () => {
+	it('gives an Owner who is a Doula a Change on each row she may change, Due among them (#2013)', async () => {
 		await testPage.viewport(3200, 900);
 		apiFetchWithSession.mockResolvedValue(jsonResponse('not available', 403));
 		await render(Page, { data: { ...fixtureDetail, session: sessionFor(['owner', 'doula']) }, params: fixture.params });
 
 		await vi.waitFor(() => expect(changeButton('care')).toBeDefined());
 		expect(changeButton('care phase')).toBeDefined();
-		const dueRow = [...document.querySelectorAll('dl.bordered dt')].find((node) => node.textContent === 'Due')!;
-		expect(dueRow.parentElement?.querySelector(':scope button')).toBeNull();
+		expect(changeButton('due date')).toBeDefined();
 	});
 
 	// A contractor Doula may change none of these facts, and the BFF
@@ -333,6 +332,128 @@ describe('Staff Engagement detail summary', () => {
 
 		await expect.element(testPage.getByText('Active', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText('Due', { exact: true })).not.toBeInTheDocument();
+	});
+});
+
+// #2013: the page as a reader with roles sees it, every read answered by
+// the fixture and the due-date write answered by `dueResponse`.
+async function setupDueDate(roles: string[], dueResponse: Response = jsonResponse({ engagementId: 'x', dueDate: '2027-03-15' })) {
+	await testPage.viewport(3200, 900);
+	const respond = toApiResponder(fixture);
+	apiFetchWithSession.mockImplementation((path: string) =>
+		path.endsWith('/due-date') ? Promise.resolve(dueResponse) : respond(path)
+	);
+	await render(Page, { data: { ...fixtureDetail, session: sessionFor(roles) }, params: fixture.params });
+}
+
+function dueDateGroup() {
+	return testPage.getByRole('group', { name: 'New due date' });
+}
+
+function callsTo(suffix: string) {
+	return apiFetchWithSession.mock.calls.filter(([path]) => String(path).endsWith(suffix));
+}
+
+describe("the due date's Change (#2013)", () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('gives an employee Doula the Change too, the same role table as the other facts', async () => {
+		await setupDueDate(['doula']);
+
+		await vi.waitFor(() => expect(changeButton('due date')).toBeDefined());
+	});
+
+	it('opens the date in three boxes holding the date there now', async () => {
+		await setupDueDate(['owner']);
+		await openChange('due date');
+
+		await expect.element(dueDateGroup()).toBeVisible();
+		await expect.element(dueDateGroup().getByLabelText('Month')).toHaveValue('03');
+		await expect.element(dueDateGroup().getByLabelText('Day')).toHaveValue('01');
+		await expect.element(dueDateGroup().getByLabelText('Year')).toHaveValue('2027');
+		await expect.element(testPage.getByRole('button', { name: 'Save the due date' })).toBeVisible();
+	});
+
+	it('saves the new date, closes the form and shows the new date on the card', async () => {
+		await setupDueDate(['owner']);
+		await openChange('due date');
+		await dueDateGroup().getByLabelText('Day').fill('15');
+		const onCallReads = callsTo('/on-call').length;
+		const activityReads = apiFetchWithSession.mock.calls.filter(([path]) => String(path).includes('/activity')).length;
+
+		await testPage.getByRole('button', { name: 'Save the due date' }).click();
+
+		await expect.element(testPage.getByText('The due date is now Mar 15, 2027.')).toBeVisible();
+		await expect.element(testPage.getByText('Mar 15, 2027', { exact: true })).toBeVisible();
+		await expect.element(dueDateGroup()).not.toBeInTheDocument();
+		expect(callsTo('/due-date').at(-1)?.[1]).toEqual({
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ dueDate: '2027-03-15' })
+		});
+		// The On-call window and the ledger both follow the new date.
+		await vi.waitFor(() => expect(callsTo('/on-call').length).toBeGreaterThan(onCallReads));
+		await vi.waitFor(() =>
+			expect(apiFetchWithSession.mock.calls.filter(([path]) => String(path).includes('/activity')).length).toBeGreaterThan(
+				activityReads
+			)
+		);
+	});
+
+	it('refuses a date with a box left empty before anything is sent', async () => {
+		await setupDueDate(['owner']);
+		await openChange('due date');
+		await dueDateGroup().getByLabelText('Year').fill('');
+
+		await testPage.getByRole('button', { name: 'Save the due date' }).click();
+
+		await expect.element(testPage.getByRole('link', { name: 'The due date must include a year' })).toBeVisible();
+		expect(callsTo('/due-date')).toHaveLength(0);
+	});
+
+	it('asks for a date when all three boxes are emptied', async () => {
+		await setupDueDate(['owner']);
+		await openChange('due date');
+		await dueDateGroup().getByLabelText('Month').fill('');
+		await dueDateGroup().getByLabelText('Day').fill('');
+		await dueDateGroup().getByLabelText('Year').fill('');
+
+		await testPage.getByRole('button', { name: 'Save the due date' }).click();
+
+		await expect.element(testPage.getByRole('link', { name: 'Enter the due date' })).toBeVisible();
+		expect(callsTo('/due-date')).toHaveLength(0);
+	});
+
+	it("puts the BFF's own refusal on the boxes and leaves the form open", async () => {
+		const refusal = jsonResponse(
+			{
+				code: 'INVALID_ARGUMENT',
+				message: 'The due date must be a calendar day, YYYY-MM-DD',
+				details: { dueDate: 'Enter the due date as a real date, like 2027-04-23' }
+			},
+			400
+		);
+		await setupDueDate(['owner'], refusal);
+		await openChange('due date');
+
+		await testPage.getByRole('button', { name: 'Save the due date' }).click();
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Enter the due date as a real date, like 2027-04-23' }))
+			.toBeVisible();
+		await expect.element(dueDateGroup()).toBeVisible();
+	});
+
+	it('closes the form on Cancel, leaving the date as it was', async () => {
+		await setupDueDate(['owner']);
+		await openChange('due date');
+
+		await testPage.getByRole('button', { name: 'Cancel' }).click();
+
+		await expect.element(dueDateGroup()).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('Mar 1, 2027')).toBeVisible();
 	});
 });
 

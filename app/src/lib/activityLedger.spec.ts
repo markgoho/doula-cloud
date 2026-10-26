@@ -141,6 +141,16 @@ describe('activityLedgerColumns: an Engagement fact, from what to what (#1423)',
 		],
 		['kind_changed', { kindBefore: 'birth', kindAfter: 'postpartum' }, 'Type of care changed for the Client: Birth to Postpartum'],
 		[
+			'due_date_changed',
+			{ dueDateBefore: '2027-03-01', dueDateAfter: '2027-03-15' },
+			`Due date changed for the Client: ${formatCalendarDay('2027-03-01')} to ${formatCalendarDay('2027-03-15')}`
+		],
+		[
+			'due_date_changed',
+			{ dueDateBefore: recordedNull, dueDateAfter: '2027-03-15' },
+			`Due date changed for the Client: Not recorded to ${formatCalendarDay('2027-03-15')}`
+		],
+		[
 			'birth_outcome_recorded',
 			{
 				birthOutcomeBefore: recordedNull,
