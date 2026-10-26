@@ -433,20 +433,32 @@ async function scheduleVisit(
 	});
 }
 
-// A Plan from the Practice's template, with its first text question
-// answered and saved by whoever `headers` signs in as.
+// A Plan from the Practice's template, started and saved by whoever
+// `headers` signs in as, with each answer in `answers` keyed by the
+// question it answers, worded as the template words it (#2137). An answer
+// keyed by its position put "Iron supplements from 28 weeks." under "Who
+// will be present for support?", so a label the template does not hold
+// stops the seed rather than putting an answer beside the wrong question.
 async function startAndSavePlan(
 	request: APIRequestContext,
 	roster: Roster,
 	engagement: NamedEngagement,
 	planType: 'care_plan' | 'birth_plan',
 	headers: Record<string, string>,
-	answer: string
+	answers: Record<string, string | string[] | boolean>
 ): Promise<void> {
 	const planPath = `/api/practices/${roster.practiceId}/engagements/${engagement.engagementId}/plans/${planType}`;
-	const { fields } = await send<{ fields: { id: string; type: string }[] }>(request, 'POST', planPath, headers);
-	const question = fields.find((field) => field.type === 'short_text' || field.type === 'long_text');
-	await send(request, 'PUT', planPath, headers, { answers: question ? { [question.id]: answer } : {} });
+	const { fields } = await send<{ fields: { id: string; label: string }[] }>(request, 'POST', planPath, headers);
+	const byId: Record<string, string | string[] | boolean> = {};
+	for (const [label, answer] of Object.entries(answers)) {
+		const field = fields.find((candidate) => candidate.label === label);
+		if (!field) {
+			const asked = fields.map((candidate) => `"${candidate.label}"`).join(', ');
+			throw new Error(`demo seed: the ${planType} template has no question "${label}"; it asks ${asked}`);
+		}
+		byId[field.id] = answer;
+	}
+	await send(request, 'PUT', planPath, headers, { answers: byId });
 }
 
 // Priya's four. Camille Boyd is the demo's portal Client: her Contract is
@@ -469,9 +481,19 @@ async function seedPriyaBook(request: APIRequestContext, roster: Roster, today: 
 	// Her Birth Plan, from the Practice's own template, so the portal's
 	// Birth plan screen has one to show -- and both Plans saved once, by
 	// two different people, so the Engagement page's "Last edited" rows
-	// have a save to name (#2104).
-	await startAndSavePlan(request, roster, camille, 'birth_plan', priya.headers, 'Low lights, music, and her partner beside her.');
-	await startAndSavePlan(request, roster, camille, 'care_plan', roster.owner, 'Iron supplements from 28 weeks.');
+	// have a save to name (#2104). Her Birth Plan is in her own words, as
+	// Priya took them down at the first visit; the Care Plan is the
+	// doulas' own notes (#2137).
+	await startAndSavePlan(request, roster, camille, 'birth_plan', priya.headers, {
+		'Planned birth location': 'Hospital',
+		'Preferences for atmosphere (music, lighting, etc.)':
+			'Lights down low, my own playlist on quietly, and Marcus right beside me the whole time.'
+	});
+	await startAndSavePlan(request, roster, camille, 'care_plan', roster.owner, {
+		'Who will be present for support?': 'Marcus, her partner, all the way through. Her sister Dana until it is time to push.',
+		'Special requests or concerns':
+			'Iron was low at 28 weeks, so she is on supplements. Wants to labor at home for as long as it feels safe.'
+	});
 	const { visitId } = await send<{ visitId: string }>(
 		request,
 		'POST',
