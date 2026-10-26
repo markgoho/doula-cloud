@@ -62,13 +62,13 @@ describe('plan-templates settings screen: the plan-type switcher (#866)', () => 
 		const { careTab, birthTab } = await setup();
 
 		await expect
-			.element(testPage.getByLabelText('Field label').first())
+			.element(testPage.getByLabelText('Question', { exact: true }).first())
 			.toHaveValue(careTemplate.fields[0].label);
 
 		await birthTab.click();
 
 		await expect
-			.element(testPage.getByLabelText('Field label').first())
+			.element(testPage.getByLabelText('Question', { exact: true }).first())
 			.toHaveValue(birthTemplate.fields[0].label);
 		await expect.element(birthTab).toHaveAttribute('aria-selected', 'true');
 		await expect.element(birthTab).toHaveAttribute('tabindex', '0');

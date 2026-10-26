@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import DynamicFieldEditor from '#lib/components/organisms/DynamicFieldEditor.svelte';
+	import PracticeQuestionsEditor from '#lib/components/organisms/PracticeQuestionsEditor.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -152,7 +152,7 @@
 {/snippet}
 
 {#snippet editor()}
-	<div role="tabpanel" id={panelId(planType)} aria-labelledby={tabId(planType)} tabindex="0"> <!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
+	<stack-l space="var(--space-5)" role="tabpanel" id={panelId(planType)} aria-labelledby={tabId(planType)} tabindex="0"> <!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
 		{#if error}
 			<Notice variant="error" message={error} />
 		{/if}
@@ -160,8 +160,10 @@
 			<Text text="Saved." />
 		{/if}
 
-		<DynamicFieldEditor
-			{fields}
+		<PracticeQuestionsEditor
+			questions={fields}
+			emptyMessage="No questions yet. Add one below."
+			removeLabel="Remove"
 			onAdd={(type: FieldType) => (fields = addField(fields, crypto.randomUUID(), type))}
 			onRemove={(id: string) => (fields = removeField(fields, id))}
 			onMoveUp={(id: string) => (fields = moveField(fields, id, 'up'))}
@@ -170,7 +172,7 @@
 			onTypeChange={(id: string, type: FieldType) => updateField(id, { type })}
 			onOptionsChange={(id: string, options: string[]) => updateField(id, { options })}
 		/>
-	</div>
+	</stack-l>
 {/snippet}
 
 {#snippet actions()}

@@ -1,34 +1,25 @@
 <script lang="ts">
-	import { tick } from 'svelte';
-	import { FIELD_TYPES, isSelectType, type Field, type FieldType } from '#lib/clientFieldTemplate.js';
-	import { focusAfterMove, moveAnnouncement } from '#lib/fieldMoveFocus.js';
+	import type { Field, FieldType } from '#lib/clientFieldTemplate.js';
 	import Button from '../atoms/Button.svelte';
 	import Heading from '../atoms/Heading.svelte';
-	import Select from '../atoms/Select.svelte';
-	import Text from '../atoms/Text.svelte';
-	import Textarea from '../atoms/Textarea.svelte';
-	import TextInput from '../atoms/TextInput.svelte';
-	import LabeledField from '../molecules/LabeledField.svelte';
 	import ConfirmDialog from '../molecules/ConfirmDialog.svelte';
-	import EmptyState from '../molecules/EmptyState.svelte';
+	import SummaryList, { type SummaryListRow } from '../molecules/SummaryList.svelte';
+	import PracticeQuestionsEditor from './PracticeQuestionsEditor.svelte';
 
 	/**
-	 * Sibling of DynamicFieldEditor.svelte for ADR-0017's Client Field
-	 * Template -- not that component reused, because "remove" and
-	 * "archive" are different acts with different affordances: this
-	 * editor never offers a delete, only Archive/Unarchive, and it locks
-	 * the type select on a field that already existed when the template
-	 * was loaded (existingIds), since the Go BFF refuses a type change on
-	 * an existing field once its values are live-read against it.
+	 * ADR-0017's Client Field Template, on `PracticeQuestionsEditor`
+	 * (#2024). This holds only what a Client field does that a Plan
+	 * Template field does not: removing a field archives it, never deletes
+	 * it, and a field that existed when the template was loaded
+	 * (existingIds) keeps its kind of answer, since the Go BFF refuses a
+	 * type change once its values are read live against it.
 	 *
-	 * Active and archived fields render as two separate lists (#461):
-	 * an archived field is not part of the form an Owner is building, it
-	 * is a record of a question this Practice no longer asks, so it reads
-	 * as a distinct "Archived fields" list rather than an inline row among
-	 * the ones still live. Archiving itself is gated behind ConfirmDialog
-	 * -- the one destructive/irreversible act this screen offers -- so an
-	 * Owner reads the consequence before it happens; restoring is not
-	 * gated the same way, since it only adds the question back.
+	 * An archived field is not part of the form an Owner is building but a
+	 * record of a question this Practice no longer asks (#461), so it is a
+	 * separate list under its own heading, with "Collect again" to restore
+	 * it. Archiving is gated behind ConfirmDialog, the one destructive act
+	 * this screen offers, so the consequence is read before it happens;
+	 * collecting again is not, since it only adds the question back.
 	 */
 	let {
 		fields,
@@ -52,170 +43,68 @@
 		onOptionsChange: (id: string, options: string[]) => void;
 	} = $props();
 
-	let newFieldType = $state<FieldType>(FIELD_TYPES[0]);
-	/** The id of the field whose archive confirmation is open, or '' for
-	 * none -- the same per-row confirm-id pattern staff/+page.svelte uses
-	 * for its End sessions/Remove from Practice dialogs, so only one row's
-	 * ConfirmDialog is ever open at a time. */
+	/**
+	The id of the field whose archive confirmation is open, or '' for none.
+	*/
 	let confirmArchiveId = $state('');
-	let activeList: HTMLUListElement;
-	let announcement = $state('');
 
-	// A moved row drops focus to the page (#1920); `focusAfterMove` says
-	// where it goes back to, once the consumer has reordered `fields`.
-	// The position is counted in the active list, the one being
-	// reordered, so an archived field is not counted. The region is
-	// emptied first so that a text identical to the last one (two
-	// "Untitled field" rows) is still a change, and is read (#1955).
-	async function move(id: string, direction: 'up' | 'down') {
-		announcement = '';
-		if (direction === 'up') {
-			onMoveUp(id);
-		} else {
-			onMoveDown(id);
-		}
-		await tick();
-		focusAfterMove(activeList, id, direction);
-		announcement = moveAnnouncement(activeFields, id, rowName);
-	}
-
+	// Move up and Move down walk the active list only (clientFieldTemplate's
+	// moveField), so the editor is given that list, and a position it
+	// announces is counted in it.
 	let activeFields = $derived(fields.filter((f) => !f.archived));
-	let archivedFields = $derived(fields.filter((f) => f.archived));
+	let archivedRows = $derived(
+		fields
+			.filter((f) => f.archived)
+			.map((f) => ({ id: f.id, label: fieldName(f), value: 'No longer asked', changes: fieldName(f) }))
+	);
+	let fieldToArchive = $derived(fields.find((f) => f.id === confirmArchiveId));
 
-	function optionsText(field: Field): string {
-		return (field.options ?? []).join('\n');
-	}
-
-	function handleOptionsInput(id: string, value: string) {
-		onOptionsChange(
-			id,
-			value.split('\n').map((line) => line.trim())
-		);
-	}
-
-	// "Move up", "Move down" and "Archive"/"Unarchive" read as the same bare
-	// word across every row that shares a state (#515) -- a screen-reader
-	// user tabbing through, or scanning a rotor's controls list, hears
-	// "Archive, Archive, Archive" with no row context. This names the row a
-	// visually-hidden sibling joins each Button to. Also the one fallback
-	// name for an unlabeled field everywhere else in this component wants
-	// to display one -- the archived row's aria-label/text and the archive
-	// confirmation's title.
-	function rowName(field: Field): string {
-		return field.label || 'Untitled field';
+	function fieldName(field: Field): string {
+		return field.label || 'Untitled question';
 	}
 </script>
 
-<!-- Every Practice starts here (#2015, F-B-21). No action of its own: the
-     add control is the next thing on the page. The list stays mounted,
-     hidden, because the move focus reads it. -->
-{#if activeFields.length === 0}
-	<EmptyState message="No extra questions yet. Add one below." />
-{/if}
-<ul bind:this={activeList} hidden={activeFields.length === 0}>
-	{#each activeFields as field, index (field.id)}
-		<li>
-			<!--
-				No wrapping label or LabeledField: this row's visible name is
-				`field.label`'s own value, so a LabeledField would put the
-				thing the field types beside the box that types it. ariaLabel
-				is the recorded exception, the same one the Select right after
-				it takes for the same reason (#492).
-			-->
-			<TextInput ariaLabel="Field label" value={field.label} onInput={(value) => onLabelChange(field.id, value)} />
-			<Select
-				ariaLabel="Field type"
-				value={field.type}
-				options={FIELD_TYPES}
-				disabled={existingIds.has(field.id)}
-				onChange={(value) => onTypeChange(field.id, value as FieldType)}
-			/>
-			{#if isSelectType(field.type)}
-				<Textarea
-					ariaLabel="Options, one per line"
-					value={optionsText(field)}
-					onInput={(next) => handleOptionsInput(field.id, next)}
-					rows={2}
-				/>
-			{/if}
-			<!-- v8 ignore start: Svelte-compiled attribute-diffing branches for the
-			     dynamic id/describedBy strings below aren't reachable from
-			     app-level interaction tests (no test renames a field mid-test),
-			     only from Svelte's own reactivity internals -- the same
-			     exception the select/option pair above takes. -->
-			<Button
-				label="Move up"
-				variant="secondary"
-				describedBy="{field.id}-move-up-name"
-				onClick={() => move(field.id, 'up')}
-				ariaDisabled={index === 0}
-			/>
-			<span class="visually-hidden" id="{field.id}-move-up-name">{rowName(field)}</span>
-			<Button
-				label="Move down"
-				variant="secondary"
-				describedBy="{field.id}-move-down-name"
-				onClick={() => move(field.id, 'down')}
-				ariaDisabled={index === activeFields.length - 1}
-			/>
-			<span class="visually-hidden" id="{field.id}-move-down-name">{rowName(field)}</span>
-			<Button label="Archive" variant="secondary" describedBy="{field.id}-archive-name" onClick={() => (confirmArchiveId = field.id)} />
-			<span class="visually-hidden" id="{field.id}-archive-name">{rowName(field)}</span>
-			<!-- v8 ignore stop -->
-			<!-- v8 ignore start: the setter half of this get/set bind:open only
-			     ever runs with value=false (Dialog closes itself, it never
-			     reopens itself), so the branch guarding the true case is
-			     Svelte-internal plumbing no app-level test can reach -- the
-			     same class of exception the select/option pair above takes. -->
-			<ConfirmDialog
-				bind:open={
-					() => confirmArchiveId === field.id,
-					(value) => {
-						if (!value) confirmArchiveId = '';
-					}
-				}
-				title={`Archive "${rowName(field)}"?`}
-				consequence="A Client who already answered this keeps that answer, read-only on the Client's record. New Clients will not be asked this question, and you can restore it later from the Archived fields list."
-				confirmLabel="Archive field"
-				onConfirm={() => onArchiveToggle(field.id)}
-			/>
-			<!-- v8 ignore stop -->
-		</li>
-	{/each}
-</ul>
-<!-- In the page from the first render, empty, so the first move is read (#1955). -->
-<p class="visually-hidden" role="status">{announcement}</p>
+<stack-l space="var(--space-6)">
+	<PracticeQuestionsEditor
+		questions={activeFields}
+		emptyMessage="No extra questions yet. Add one below."
+		removeLabel="Archive"
+		lockedTypeIds={existingIds}
+		{onAdd}
+		onRemove={(id) => (confirmArchiveId = id)}
+		{onMoveUp}
+		{onMoveDown}
+		{onLabelChange}
+		{onTypeChange}
+		{onOptionsChange}
+	/>
 
-<LabeledField label="New field type">
-	{#snippet children({ id, describedBy, invalid })}
-		<Select
-			{id}
-			{describedBy}
-			{invalid}
-			bind:value={() => newFieldType, (v) => (newFieldType = v as FieldType)}
-			options={[...FIELD_TYPES]}
-		/>
-	{/snippet}
-</LabeledField>
-<Button label="Add field" variant="secondary" onClick={() => onAdd(newFieldType)} />
+	<!-- v8 ignore start: the setter half of this get/set bind:open only ever
+	     runs with value=false (Dialog closes itself, it never reopens itself),
+	     so the branch guarding the true case is Svelte-internal plumbing no
+	     app-level test can reach. -->
+	<ConfirmDialog
+		bind:open={
+			() => fieldToArchive !== undefined,
+			(value) => {
+				if (!value) confirmArchiveId = '';
+			}
+		}
+		title={`Archive "${fieldToArchive ? fieldName(fieldToArchive) : ''}"?`}
+		consequence="A Client who already answered this keeps that answer, read-only on the Client's record. New Clients will not be asked this question, and you can collect it again later from the archived questions."
+		confirmLabel="Archive question"
+		onConfirm={() => onArchiveToggle(confirmArchiveId)}
+	/>
+	<!-- v8 ignore stop -->
 
-{#if archivedFields.length > 0}
-	<Heading level={2} text="Archived fields" />
-	<ul>
-		{#each archivedFields as field (field.id)}
-			<!-- v8 ignore start: same attribute-diffing exception as the active list's describedBy strings above -->
-			<li aria-label="{rowName(field)}, archived">
-				<Text text={rowName(field)} />
-				<span>Archived -- no longer collected</span>
-				<Button
-					label="Unarchive"
-					variant="secondary"
-					describedBy="{field.id}-unarchive-name"
-					onClick={() => onArchiveToggle(field.id)}
-				/>
-				<span class="visually-hidden" id="{field.id}-unarchive-name">{rowName(field)}</span>
-				<!-- v8 ignore stop -->
-			</li>
-		{/each}
-	</ul>
-{/if}
+	{#if archivedRows.length > 0}
+		<stack-l space="var(--space-3)">
+			<Heading level={2} text="Archived questions" />
+			<SummaryList rows={archivedRows}>
+				{#snippet action(row: SummaryListRow & { id: string }, describedBy: string)}
+					<Button label="Collect again" variant="link" {describedBy} onClick={() => onArchiveToggle(row.id)} />
+				{/snippet}
+			</SummaryList>
+		</stack-l>
+	{/if}
+</stack-l>
