@@ -198,6 +198,36 @@ describe('StepRail.svelte', () => {
 		frame.remove();
 	});
 
+	/*
+	 * #1633: a caption that wraps squeezed the caret's box in Firefox and
+	 * Safari (Chrome kept it whole), so the 16px icon spilled 3px out of
+	 * the rail on the left and the words moved in over it. Measured on
+	 * the icon itself, not only its box, with the longest caption a step
+	 * can carry: a Client's full name. Same query exception as above.
+	 */
+	it('keeps the whole caret inside the rail when the caption wraps', async () => {
+		const frame = document.createElement('div');
+		frame.style.inlineSize = '320px';
+		document.body.append(frame);
+		const longSteps = steps.map((step) =>
+			step.status === 'current' ? { ...step, label: 'How to reach Anne-Marie Ochieng-Whitfield' } : step
+		);
+		const { container } = await render(StepRail, {
+			props: { journey: 'Adding a client', steps: longSteps },
+			target: frame
+		});
+
+		const rail = container.querySelector('nav')!.getBoundingClientRect();
+		const marker = container.querySelector('.marker')!.getBoundingClientRect();
+		const icon = container.querySelector(':scope .marker svg')!.getBoundingClientRect();
+		const words = container.querySelector('.summary')!.getBoundingClientRect();
+		expect(words.height).toBeGreaterThan(marker.height);
+		expect(marker.width).toBeGreaterThanOrEqual(icon.width);
+		expect(icon.left).toBeGreaterThanOrEqual(rail.left);
+		expect(icon.right).toBeLessThanOrEqual(words.left);
+		frame.remove();
+	});
+
 	it('turns its marker when the list is opened', async () => {
 		const { container } = await setup();
 		const summary = page.getByText('Step 2 of 3 · How to reach Sarah');
