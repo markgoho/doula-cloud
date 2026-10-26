@@ -1,5 +1,25 @@
+<script module lang="ts">
+	import type { DemoVariant } from '../drag-surface/dragSurface.js';
+
+	interface Properties {
+		isStepShown?: boolean;
+	}
+
+	/*
+	 * The step heading that takes focus when it appears (#2018) is its
+	 * own subject: mounting it is the moment it appears, so loading this
+	 * variant shows focus land on it, the way "Before you continue"
+	 * replaces a sign-in form.
+	 */
+	export const variants: readonly DemoVariant<Properties>[] = [
+		{ name: 'Heading, a step heading that took focus', props: { isStepShown: true } }
+	];
+</script>
+
 <script lang="ts">
 	import Heading from '#lib/components/atoms/Heading.svelte';
+
+	let { isStepShown = false }: Properties = $props();
 </script>
 
 <stack-l space="var(--space-6)">
@@ -33,5 +53,18 @@
 			<Heading level={2} variant="section" text="Section — Engagement with Highland Midwifery &amp; Birth Support" />
 			<Heading level={2} variant="card" text="Card — Contract signed Sep 14, 2027" />
 		</stack-l>
+	</section>
+
+	<section>
+		<h2>Taking focus when it appears</h2>
+		<p>
+			<code>focusOnAppearing</code> gives the heading <code>tabindex="-1"</code> and moves focus to
+			it the moment it renders, the GOV.UK pattern for a step that replaces a form. The sign-in
+			pages' "Before you continue" step uses it. Choose the "step heading that took focus" state
+			on the drag surface to see it land.
+		</p>
+		{#if isStepShown}
+			<Heading level={2} text="Before you continue" focusOnAppearing />
+		{/if}
 	</section>
 </stack-l>

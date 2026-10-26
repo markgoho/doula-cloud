@@ -230,20 +230,6 @@
 	}
 
 	/*
-	 * Moves focus to step two's heading the moment step two mounts.
-	 *
-	 * Replacing the form under a keyboard or screen reader user without
-	 * moving her focus leaves her tabbing forward through a page she was
-	 * never told had changed -- and on this page the change is the whole
-	 * point, since what step two asks depends on what step one found out.
-	 * The heading takes tabindex="-1" so it can hold focus without ever
-	 * joining the tab order, which is the GOV.UK pattern for exactly this.
-	 */
-	function focusOnAppearing(element: HTMLElement) {
-		element.focus();
-	}
-
-	/*
 	 * The POST every accept attempt runs, first unconfirmed and then --
 	 * if #816's cross-population check refuses it -- again with
 	 * X-Confirmed. Split out of handleAccept so the confirmed retry
@@ -448,7 +434,7 @@
 			Her form is already accepted, so there is nothing to re-render
 			here but the consequence and the two ways out of it.
 		-->
-		<h2 tabindex="-1" {@attach focusOnAppearing}>Before you continue</h2>
+		<Heading level={2} text="Before you continue" focusOnAppearing />
 		<WarningText message={signOutWarning ?? ''} />
 		<Button
 			type="button"
@@ -459,9 +445,17 @@
 		<Button type="button" label="Cancel" variant="secondary" onClick={handleCancelSignOut} />
 	{:else}
 		<StackedForm onSubmit={handleAccept}>
-			<h2 tabindex="-1" {@attach focusOnAppearing}>
-				{existing ? 'Check your details' : 'Tell us about yourself'}
-			</h2>
+			<!--
+				Step two's heading takes focus the moment step two mounts: on
+				this page the change is the whole point, since what step two
+				asks depends on what step one found out (`Heading`'s
+				`focusOnAppearing`, #2018).
+			-->
+			<Heading
+				level={2}
+				text={existing ? 'Check your details' : 'Tell us about yourself'}
+				focusOnAppearing
+			/>
 
 			{#if existing}
 				<!--

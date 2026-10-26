@@ -3,6 +3,7 @@
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
+	import Heading from '#lib/components/atoms/Heading.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
@@ -51,7 +52,7 @@
 
 {#if !isDisclosureAffirmed}
 	<section aria-labelledby="esign-disclosure-heading"> <!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
-		<h2 id="esign-disclosure-heading">Electronic signature disclosure</h2>
+		<Heading level={2} id="esign-disclosure-heading" text="Electronic signature disclosure" />
 		<p>By choosing to sign electronically, you consent to sign this Contract using an electronic signature.</p>
 		<p>
 			You have the right to receive a paper copy of this Contract instead. Contact your Practice if you'd

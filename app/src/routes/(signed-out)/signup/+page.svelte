@@ -14,6 +14,7 @@
 	import { formatCalendarDay } from '#lib/dates.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
+	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
@@ -305,8 +306,9 @@
 		await signOut(getFirebaseAuth());
 	}
 
-	// Moves focus to #816's warning the moment it replaces the form -- see
-	// the sign-in page's own copy of this comment for why.
+	// Moves focus to #1790's first line the moment it replaces the form.
+	// It is a paragraph, not a heading, so it cannot take `Heading`'s own
+	// `focusOnAppearing` (#2018); the reason is the same as the atom gives.
 	function focusOnAppearing(element: HTMLElement) {
 		element.focus();
 	}
@@ -324,7 +326,7 @@
 			Her form is already accepted, so there is nothing to re-render
 			here but the consequence and the two ways out of it.
 		-->
-		<h2 tabindex="-1" {@attach focusOnAppearing}>Before you continue</h2>
+		<Heading level={2} text="Before you continue" focusOnAppearing />
 		<WarningText message={signOutWarning ?? ''} />
 		<Button
 			type="button"

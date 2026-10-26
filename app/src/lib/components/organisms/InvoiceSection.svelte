@@ -51,6 +51,7 @@
 	import RefundPaymentForm from '#lib/components/organisms/RefundPaymentForm.svelte';
 	import { RefusalError, type FormError } from '#lib/formErrors.js';
 	import Button from '#lib/components/atoms/Button.svelte';
+	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
@@ -619,7 +620,7 @@
 	     that race. -->
 	{#if invoice}
 		<section aria-label="Record a payment">
-			<h3>Record a payment of {formatAmount(invoice.amountCents)}</h3>
+			<Heading level={3} text="Record a payment of {formatAmount(invoice.amountCents)}" />
 			<!--
 				Above the step switch, not inside the form branch: a refusal
 				that names no field (applyPaymentRefusal's untargeted
@@ -695,7 +696,7 @@
 	     that race. -->
 	{#if invoice}
 		<section aria-label="Reverse this payment">
-			<h3>Reverse a payment of {formatAmount(invoice.amountCents)}</h3>
+			<Heading level={3} text="Reverse a payment of {formatAmount(invoice.amountCents)}" />
 			{#if reversalStep === 'form'}
 				<StackedForm onSubmit={reviewReversal}>
 					<LabeledField label="Reason" error={reversalReasonError || undefined}>

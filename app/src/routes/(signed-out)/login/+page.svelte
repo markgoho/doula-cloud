@@ -18,6 +18,7 @@
 	import { didSessionEnd } from '#lib/sessionEnded.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
+	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
@@ -213,21 +214,6 @@
 	}
 
 	/*
-	 * Moves focus to #610's warning the moment it replaces the form.
-	 *
-	 * The button she just pressed unmounts with the form, so without this
-	 * a keyboard or screen reader user is left on `<body>`, tabbing
-	 * forward through a page she was never told had changed -- and here
-	 * the change is a consequence she is being asked to accept. The
-	 * heading takes tabindex="-1" so it can hold focus without joining
-	 * the tab order, the same GOV.UK pattern `/accept-invite`'s own
-	 * step-two heading uses.
-	 */
-	function focusOnAppearing(element: HTMLElement) {
-		element.focus();
-	}
-
-	/*
 	 * Backing out of #610's warning. The credential is discarded rather
 	 * than parked: nothing was minted, so the only way back in is to sign
 	 * in again -- and the portal session she chose to keep is untouched.
@@ -413,9 +399,12 @@
 			of its own. Her password is already accepted, so there is no form
 			to re-render here -- only the consequence and the two ways out of
 			it. "Cancel" is a real outcome: staying signed in to the portal
-			is a thing she may prefer once she knows the price.
+			is a thing she may prefer once she knows the price. The button she
+			just pressed unmounts with the form, so the heading takes focus as
+			it appears, or she is left on `<body>` (`Heading`'s
+			`focusOnAppearing`, #2018).
 		-->
-		<h2 tabindex="-1" {@attach focusOnAppearing}>Before you continue</h2>
+		<Heading level={2} text="Before you continue" focusOnAppearing />
 		<WarningText message={signOutWarning ?? ''} />
 		<Button
 			type="button"
@@ -450,7 +439,7 @@
 		a screen about her state rather than an empty list.
 	-->
 	{#if picker}
-		<h2>Choose a Practice</h2>
+		<Heading level={2} text="Choose a Practice" />
 		<ul>
 			{#each picker as membership (membership.practiceId)}
 				<li>

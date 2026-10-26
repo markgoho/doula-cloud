@@ -419,3 +419,30 @@ describe('TOTP enrollment -- leaving the JS SDK signed out (#167)', () => {
 		expect(signOut).toHaveBeenCalled();
 	});
 });
+
+/*
+ * #816: finishing enrollment over a live portal session ends that session,
+ * so the BFF refuses the first finish and says what continuing costs. The
+ * form unmounts with the button she pressed, so the warning's heading takes
+ * focus (#2018 moved it onto the `Heading` atom).
+ */
+describe('TOTP enrollment -- finishing over a live portal session (#816)', () => {
+	it('moves focus to the warning, since the button she pressed unmounted with the form', async () => {
+		globalFetch.mockResolvedValue(
+			jsonResponse(
+				{
+					code: 'SESSION_EVICTION_UNCONFIRMED',
+					message: 'Continuing signs you out of the client portal in this browser.'
+				},
+				409
+			)
+		);
+		await goToSetupStep();
+
+		await confirmCode();
+
+		await expect
+			.element(testPage.getByRole('heading', { level: 2, name: 'Before you continue' }))
+			.toHaveFocus();
+	});
+});

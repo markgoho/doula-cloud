@@ -74,6 +74,68 @@ const fieldRestrictions = [
 
 const gitignorePath = path.resolve(import.meta.dirname, '.gitignore');
 
+/*
+ * #2018: the type scale reaches a heading only through the `Heading` atom,
+ * so a raw heading renders at the browser's own size. The two Templates
+ * own a heading `Heading` cannot draw: `QuestionPage`'s <h1> sits inside a
+ * <legend> or wraps a <label>, and `OverviewHub`'s is the `display` step
+ * the atom deliberately does not offer. The style guide's and the demo's
+ * own page chrome (a page title and one heading per state) is not product
+ * UI, and every one of its pages would otherwise have to wrap its own
+ * outline in the thing it is documenting; the scaffolded Vitest example is
+ * not product UI either.
+ */
+const headingOwners = [
+	'src/lib/components/atoms/Heading.svelte',
+	'src/lib/components/templates/QuestionPage.svelte',
+	'src/lib/components/templates/OverviewHub.svelte',
+	'src/routes/style-guide/**',
+	'src/routes/demo/**',
+	'src/lib/vitest-examples/**'
+];
+
+const headingRestrictions = [
+	{
+		elements: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'],
+		message:
+			'Use the Heading atom (#lib/components/atoms/Heading.svelte) instead of a raw heading, so it is on the type scale (#2018). A heading that must take focus when it appears passes `focusOnAppearing`.'
+	}
+];
+
+/*
+ * `svelte/no-restricted-html-elements` is one rule, and a later flat-config
+ * block that matches a file replaces an earlier block's options for it
+ * rather than adding to them. An `ignores` entry exempts a file from every
+ * element in the block, and owning <label> is no reason for LabeledField to
+ * hold a raw <button> (#2017). So every `.svelte` file gets every group
+ * below, and each owner gets a block of its own holding every group it
+ * does not own -- RadioGroup owns controls and fields but still answers to
+ * headings, QuestionPage owns fields and headings but still answers to
+ * controls. The owner patterns never overlap one another, so the order of
+ * those blocks does not matter.
+ */
+const restrictionGroups = [
+	{ owners: controlOwners, restrictions: controlRestrictions },
+	{ owners: fieldOwners, restrictions: fieldRestrictions },
+	{ owners: headingOwners, restrictions: headingRestrictions }
+];
+
+const everyRestriction = restrictionGroups.flatMap((group) => group.restrictions);
+
+const ownerRestrictionBlocks = [...new Set(restrictionGroups.flatMap((group) => group.owners))].map(
+	(pattern) => ({
+		files: [pattern],
+		rules: {
+			'svelte/no-restricted-html-elements': [
+				'error',
+				...restrictionGroups
+					.filter((group) => !group.owners.includes(pattern))
+					.flatMap((group) => group.restrictions)
+			]
+		}
+	})
+);
+
 export default defineConfig(
 	includeIgnoreFile(gitignorePath),
 	js.configs.recommended,
@@ -156,26 +218,14 @@ export default defineConfig(
 		}
 	},
 	{
+		// Every Svelte file: every restriction. The owners' own blocks
+		// follow and replace this for them (see `restrictionGroups`).
 		files: ['**/*.svelte'],
-		ignores: controlOwners,
 		rules: {
-			'svelte/no-restricted-html-elements': ['error', ...controlRestrictions]
+			'svelte/no-restricted-html-elements': ['error', ...everyRestriction]
 		}
 	},
-	{
-		// #2017: a field's label and a group's fieldset belong to the
-		// molecules and Templates that draw them, the way a <button> belongs
-		// to Button. Its own block, not more `ignores` on the block above:
-		// an ignored file there is exempt from every element in it, and
-		// LabeledField owning <label> is no reason for it to hold a raw
-		// <button>. A flat-config rule set later replaces the earlier one,
-		// so the owners below still answer to the block above.
-		files: ['**/*.svelte'],
-		ignores: [...controlOwners, ...fieldOwners],
-		rules: {
-			'svelte/no-restricted-html-elements': ['error', ...controlRestrictions, ...fieldRestrictions]
-		}
-	},
+	...ownerRestrictionBlocks,
 	{
 		// #1232: app/ is single-quoted (see docs/testing/gates.md's "Formatting"
 		// section for the decision and why indentation is gated by
