@@ -340,12 +340,20 @@ const (
 	// ledger.
 	ActionVisitScheduled EngagementAction = "visit_scheduled"
 
-	ActionPlanInstanceEdited EngagementAction = "plan_instance_edited"
+	// ActionCarePlanEdited and ActionBirthPlanEdited record a Staff save of
+	// an Engagement's Care Plan or Birth Plan (plans.PutInstanceHandler).
+	// Two actions, not one with the plan in its diff (#2066): a Care Plan
+	// is "never shown in the Client portal" (GLOSSARY.md), so its save has
+	// to be left out of her ledger by the portal reader's own SQL, which
+	// excludes by action and reads no diff -- see staffingActions below.
+	// The Birth Plan's save stays on her ledger: it is her document.
+	ActionCarePlanEdited  EngagementAction = "care_plan_edited"
+	ActionBirthPlanEdited EngagementAction = "birth_plan_edited"
 
 	// ActionVisitNotesEdited records a Visit's free-text notes being
 	// written or re-written (#251) -- staff-only content (ADR-0006), but
 	// the action itself is not: deliberately absent from staffingActions
-	// below, the same footing ActionPlanInstanceEdited already stands on.
+	// below, the same footing ActionBirthPlanEdited already stands on.
 	// A Client may see that her Visit's notes were updated; she does not
 	// see what they say, since Diff never carries the text (see notes.go).
 	ActionVisitNotesEdited EngagementAction = "visit_notes_edited"
@@ -356,7 +364,7 @@ const (
 	// own act, never Staff's on her behalf. A Staff edit that changes the
 	// Plan Instance's stored answers clears the acknowledgment itself
 	// (plans.PutInstanceHandler) but records no activity row of its own --
-	// that edit already fires ActionPlanInstanceEdited.
+	// that edit already fires ActionBirthPlanEdited.
 	ActionBirthPlanAcknowledged EngagementAction = "birth_plan_acknowledged"
 
 	ActionOfferSent       EngagementAction = "offer_sent"
@@ -539,6 +547,10 @@ func MoneyActions() []EngagementAction {
 // -> active move are not here: a Client already reads that her care began
 // and ended, and the portal's read carries no diff, so the ending reason
 // those rows now hold never reaches her.
+//
+// ActionCarePlanEdited is here by a third rule (#2066): the Care Plan is
+// staff-only and "never shown in the Client portal" (GLOSSARY.md,
+// ADR-0006), so even the fact that it changed stays off her ledger.
 var staffingActions = map[EngagementAction]bool{
 	ActionOfferSent:             true,
 	ActionOfferAccepted:         true,
@@ -560,6 +572,8 @@ var staffingActions = map[EngagementAction]bool{
 	ActionEngagementReopened:   true,
 	ActionKindChanged:          true,
 	ActionBirthOutcomeRecorded: true,
+	// #2066: the Care Plan is staff-only.
+	ActionCarePlanEdited: true,
 }
 
 // StaffingActions returns every action GLOSSARY.md's Activity entry keeps

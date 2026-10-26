@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+	clientsResultSummary,
 	createClient,
 	editClient,
 	loadClients,
@@ -268,5 +269,15 @@ describe('mergeClient', () => {
 		await expect(
 			mergeClient(fetcher, 'practice-1', 'client-1', editFields, 'client-2')
 		).rejects.toThrow('this client record has already been merged into another');
+	});
+});
+
+describe('clientsResultSummary (#2068)', () => {
+	it('counts the Clients the filter shows', () => {
+		expect(clientsResultSummary(0, false, false)).toBe('No Clients with work.');
+		expect(clientsResultSummary(0, false, true)).toBe('No Clients.');
+		expect(clientsResultSummary(1, false, false)).toBe('Showing 1 Client with work.');
+		expect(clientsResultSummary(3, false, true)).toBe('Showing 3 Clients.');
+		expect(clientsResultSummary(25, true, true)).toBe('Showing 25 Clients so far. More remain.');
 	});
 });

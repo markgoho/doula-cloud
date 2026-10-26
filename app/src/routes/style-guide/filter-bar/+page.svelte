@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Select from '#lib/components/atoms/Select.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
@@ -38,7 +39,7 @@
 <stack-l space="var(--space-6)">
 	<Heading level={2} variant="section" text="Filter bar" />
 	<Text
-		text="The bar that narrows a list: a GET form with a quiet legend, its fields at their own width in a row that wraps, one Apply beside the last field, and the result as its status line, read out when it changes."
+		text="The bar that narrows a list: a GET form with a quiet legend, its fields at their own width in a row that wraps, one Apply beside the last field (none where every control acts at once), and the result as its status line, read out when it changes."
 		tone="variant"
 	/>
 
@@ -56,6 +57,27 @@
 			<LabeledField label="Doula" width={20}>
 				{#snippet children({ id, describedBy, invalid, width })}
 					<Select {id} {describedBy} {invalid} {width} name="staffId" options={doulas} value="staff-1" />
+				{/snippet}
+			</LabeledField>
+		</FilterBar>
+	</stack-l>
+
+	<stack-l space="var(--space-4)">
+		<h2>A toggle that acts at once</h2>
+		<Text
+			text="Every control takes effect the moment it changes, so there is no Apply. The Clients list's See everyone."
+			tone="variant"
+		/>
+		<FilterBar
+			{action}
+			onSubmit={stay}
+			legend="Choose who to show"
+			status="Showing 12 Clients with work."
+			isAppliedOnChange
+		>
+			<LabeledField label="See everyone" orientation="inline">
+				{#snippet children(control)}
+					<Checkbox variant="toggle" checked={false} onChange={ignore} {...control} />
 				{/snippet}
 			</LabeledField>
 		</FilterBar>

@@ -193,16 +193,12 @@ describe('activityLedgerColumns: an Engagement fact, from what to what (#1423)',
 		);
 	});
 
-	// #2023: a plan save says which plan, from the `planType` its diff
-	// carries, and keeps the table's own words when the diff is absent.
+	// #2066: a plan save says which plan from its action alone.
 	it('names the plan a save changed', () => {
-		expect(what.accessor(entry({ action: 'plan_instance_edited', diff: { planType: 'care_plan' } }))).toBe(
-			'Care Plan for the Client changed'
+		expect(what.accessor(entry({ action: 'care_plan_edited' }))).toBe('Care Plan for the Client changed');
+		expect(what.accessor(entry({ action: 'birth_plan_edited', subjectName: 'Amara' }))).toBe(
+			'Birth Plan for Amara changed'
 		);
-		expect(
-			what.accessor(entry({ action: 'plan_instance_edited', subjectName: 'Amara', diff: { planType: 'birth_plan' } }))
-		).toBe('Birth Plan for Amara changed');
-		expect(what.accessor(entry({ action: 'plan_instance_edited' }))).toBe(staffActivityPhrase('plan_instance_edited'));
 	});
 
 	it('never puts the ending note in the sentence', () => {
@@ -269,7 +265,7 @@ describe('clientActivityLedgerColumns (#708)', () => {
 	it('says the register phrase, not the raw action, for the row the ticket names', () => {
 		const what = clientActivityLedgerColumns()[1];
 
-		expect(what.accessor(entry({ action: 'plan_instance_edited' }))).toBe('Your Birth Plan was updated.');
+		expect(what.accessor(entry({ action: 'birth_plan_edited' }))).toBe('Your Birth Plan was updated.');
 	});
 
 	it("ignores a detail sentence, which is the staff register's own prose", () => {
@@ -286,7 +282,7 @@ describe('clientActivityLedgerColumns (#708)', () => {
 		const what = clientActivityLedgerColumns()[1];
 
 		expect(
-			what.accessor(entry({ action: 'plan_instance_edited', subjectName: 'Renata Alvarez' }))
+			what.accessor(entry({ action: 'birth_plan_edited', subjectName: 'Renata Alvarez' }))
 		).toBe('Your Birth Plan was updated.');
 	});
 

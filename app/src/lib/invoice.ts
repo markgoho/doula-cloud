@@ -474,6 +474,21 @@ export function invoiceStatusLabel(status: string): string {
 	return invoiceStatusLabels[status] ?? status;
 }
 
+/** Which Badge variant each status wears (#2059), kept beside the labels
+ * so a status and its color are decided in one place. Open waits on the
+ * Client, so it is the information; Uncollectible is money the Practice
+ * will not see, so it is the warning; Draft and Void are settled with no
+ * money moving, so they are neutral. An unknown status is neutral too. */
+const invoiceStatusVariants: Record<string, 'info' | 'success' | 'warning' | 'neutral'> = {
+	open: 'info',
+	paid: 'success',
+	uncollectible: 'warning'
+};
+
+export function invoiceStatusVariant(status: string): 'info' | 'success' | 'warning' | 'neutral' {
+	return invoiceStatusVariants[status] ?? 'neutral';
+}
+
 /** The one Contract status an Invoice may be raised against -- mirrors
  * the Go BFF's one declaration of the precondition
  * (contracts.TransitionBill, api/internal/contracts/lifecycle.go, #275).

@@ -27,6 +27,21 @@ describe('PracticeChooser.svelte', () => {
 		await expect.element(hilltop).toHaveAccessibleDescription('Doula');
 	});
 
+	// #2070: SvelteKit reads the nearest preload attribute above a link. A
+	// door that preloads on hover reads that Practice's session, which the
+	// BFF records as her last-used Practice, so a pointer at rest would
+	// choose for her.
+	it('loads no door ahead of the click', async () => {
+		await setup();
+
+		for (const name of ['Riverside Doulas', 'Hilltop Doulas']) {
+			const door = page.getByRole('link', { name, exact: true }).element();
+			expect(door.closest<HTMLElement>('[data-sveltekit-preload-data]')?.dataset.sveltekitPreloadData).toBe(
+				'false'
+			);
+		}
+	});
+
 	// A list, so a screen reader hears how many there are to choose from.
 	it('is one list with an item per Practice', async () => {
 		await setup();

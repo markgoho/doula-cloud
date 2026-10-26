@@ -4,6 +4,7 @@ import {
 	createInvoice,
 	formatAmount,
 	invoiceStatusLabel,
+	invoiceStatusVariant,
 	loadBillingMode,
 	loadInvoices,
 	loadPracticeInvoices,
@@ -416,6 +417,17 @@ describe('formatAmount', () => {
 
 	it('formats a non-whole-dollar amount', () => {
 		expect(formatAmount(1050)).toBe('$10.50');
+	});
+});
+
+describe('invoiceStatusVariant (#2059)', () => {
+	it('wears each status as a Badge variant, an unknown one neutral', () => {
+		expect(invoiceStatusVariant('open')).toBe('info');
+		expect(invoiceStatusVariant('paid')).toBe('success');
+		expect(invoiceStatusVariant('uncollectible')).toBe('warning');
+		expect(invoiceStatusVariant('void')).toBe('neutral');
+		expect(invoiceStatusVariant('draft')).toBe('neutral');
+		expect(invoiceStatusVariant('something_new')).toBe('neutral');
 	});
 });
 

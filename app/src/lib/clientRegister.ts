@@ -208,9 +208,10 @@ const CLIENT_ACTIVITY_PHRASES: Record<string, string> = {
 	visit_scheduled: "A visit's timing was updated.",
 	visit_notes_edited: 'Notes on a visit were updated.',
 
-	// The Plan Instance, which she calls her Birth Plan (GLOSSARY.md's Plan
-	// Instance entry: she never meets the concept itself).
-	plan_instance_edited: 'Your Birth Plan was updated.',
+	// Her Birth Plan. A Care Plan save (`care_plan_edited`) never reaches
+	// her: the portal reader leaves it out, since a Care Plan is never
+	// shown in the Client portal (GLOSSARY.md, #2066).
+	birth_plan_edited: 'Your Birth Plan was updated.',
 	birth_plan_acknowledged: 'You marked your Birth Plan as read.',
 
 	// Her money. `invoice_voided` and `invoice_written_off` share one

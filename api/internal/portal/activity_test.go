@@ -192,6 +192,32 @@ func TestActivityHandler_HidesStaffingEntries(t *testing.T) {
 	}
 }
 
+// TestActivityHandler_HidesTheCarePlan proves #2066 at the reader: a Care
+// Plan is "never shown in the Client portal" (GLOSSARY.md), so its save is
+// left out of her ledger, while a Birth Plan save, her own document, stays.
+func TestActivityHandler_HidesTheCarePlan(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "portal-activity-care-plan"
+	practiceID, engagementID := seedEngagementForActivity(t, db, identityUID, "Activity Care Plan Practice")
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "portal-activity-care-plan-staff", []string{ownerRole}, "employee")
+
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionCarePlanEdited), activity.StaffActor(staffID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionBirthPlanEdited), activity.StaffActor(staffID))
+
+	srv, session := activityServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
+	defer resp.Body.Close()
+	var got activityfeed.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got.Items) != 1 || got.Items[0].Action != string(activity.ActionBirthPlanEdited) {
+		t.Fatalf("Items = %+v, want only the birth_plan_edited row (the Care Plan hidden)", got.Items)
+	}
+}
+
 // TestActivityHandler_HidesVoidDeliberation proves #1096 at the reader
 // rather than only at the set -- the SQL clause staffingActionsNotIn
 // builds, for the two actions GLOSSARY.md's Activity entry now names as

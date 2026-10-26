@@ -134,6 +134,18 @@ export async function hasAnyClient(fetcher: Fetcher, practiceId: string): Promis
 	return first.items.length > 0;
 }
 
+/**
+ * The Clients list's result, as its filter bar's status line (#2068): read
+ * out when "See everyone" changes what the list holds. The same shape as
+ * the Schedule's `scheduleResultSummary`.
+ */
+export function clientsResultSummary(count: number, hasMore: boolean, isShowingEveryone: boolean): string {
+	const kind = isShowingEveryone ? '' : ' with work';
+	if (count === 0) return `No Clients${kind}.`;
+	const clients = count === 1 ? `1 Client${kind}` : `${count} Clients${kind}`;
+	return hasMore ? `Showing ${clients} so far. More remain.` : `Showing ${clients}.`;
+}
+
 /** One Client ADR-0017's match query turned up against a create or an
  * edit's values -- her record plus her Engagement history, unrestricted
  * inside the Practice -- mirrors the Go BFF's client.Match. Declared

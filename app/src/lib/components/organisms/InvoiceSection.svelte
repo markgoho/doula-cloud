@@ -39,6 +39,7 @@
 		formatAmount,
 		invoiceCreatedMessage,
 		invoiceStatusLabel,
+		invoiceStatusVariant,
 		paymentMethodLabels,
 		paymentMethodOptions,
 		unbillableContractMessage,
@@ -50,18 +51,19 @@
 	import { formatCalendarDay } from '#lib/dates.js';
 	import RefundPaymentForm from '#lib/components/organisms/RefundPaymentForm.svelte';
 	import { RefusalError, type FormError } from '#lib/formErrors.js';
+	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
-	import EmptyState from '#lib/components/molecules/EmptyState.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import RadioGroup, { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
+	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 
 	let {
 		invoices,
@@ -489,6 +491,24 @@
 	/**
 	Whether any money is still left to return on a paid Invoice.
 	*/
+	/*
+	 * The Invoices as a table (#2059): the amount first, since it titles
+	 * each Invoice's card at a narrow width, then the status as a Badge, the
+	 * day it was paid, and the money returned on it. A Paid Invoice stays
+	 * Paid after a Refund, as Stripe's own does (#1009), so Returned is
+	 * where that money is said at all. A blank cell is left out of a card.
+	 */
+	const invoiceColumns = [
+		{ label: 'Amount', accessor: (invoice: Invoice) => formatAmount(invoice.amountCents), numeric: true },
+		{ label: 'Status', accessor: (invoice: Invoice) => invoiceStatusLabel(invoice.status), content: invoiceStatus },
+		{ label: 'Paid', accessor: (invoice: Invoice) => (invoice.paidOn ? formatCalendarDay(invoice.paidOn) : '') },
+		{
+			label: 'Returned',
+			accessor: (invoice: Invoice) => (invoice.refundedCents > 0 ? formatAmount(invoice.refundedCents) : ''),
+			numeric: true
+		}
+	];
+
 	function hasMoneyLeftToReturn(invoice: Invoice): boolean {
 		return invoice.amountCents > invoice.refundedCents;
 	}
@@ -524,87 +544,105 @@
 	}
 </script>
 
+{#snippet invoiceStatus(invoice: Invoice)}
+	<Badge label={invoiceStatusLabel(invoice.status)} variant={invoiceStatusVariant(invoice.status)} />
+{/snippet}
+
+<!--
+	An Invoice's actions (#2059): the row's own, never a field inside a list
+	item. DataTable draws this into both of its trees, so the name span's id
+	carries the view (#666). The buttons read the same words on every row,
+	so each is described by the Invoice it acts on.
+-->
+{#snippet invoiceActionButtons(invoice: Invoice, describedBy: string)}
+	{#if invoice.status === 'open' && isOwnerOrAdmin}
+		<Button
+			label="Record payment"
+			variant="secondary"
+			size="sm"
+			{describedBy}
+			onClick={() => startRecordingPayment(invoice.id)}
+		/>
+		{#if invoice.billingMode === 'by_hand'}
+			<Button
+				label="Void"
+				variant="secondary"
+				size="sm"
+				{describedBy}
+				loading={transitioningInvoiceId === invoice.id}
+				onClick={() => handleVoid(invoice.id)}
+			/>
+			<Button
+				label="Write off"
+				variant="secondary"
+				size="sm"
+				{describedBy}
+				loading={transitioningInvoiceId === invoice.id}
+				onClick={() => handleWriteOff(invoice.id)}
+			/>
+		{/if}
+	{/if}
+	{#if invoice.status === 'paid' && isOwnerOrAdmin && invoice.activePaymentId}
+		{@const activePaymentId = invoice.activePaymentId}
+		{#if hasMoneyLeftToReturn(invoice)}
+			<Button
+				label="Return money"
+				variant="secondary"
+				size="sm"
+				{describedBy}
+				onClick={() => startRefundingPayment(invoice.id, activePaymentId)}
+			/>
+		{/if}
+		<!-- Reverse is by-hand only (#945), and never once money has
+		     gone back: the BFF refuses a refunded Payment
+		     (MsgRefundedPaymentCannotBeReversed), so the button that
+		     would only earn that refusal is not offered. -->
+		{#if invoice.billingMode === 'by_hand' && invoice.refundedCents === 0}
+			<Button
+				label="Reverse payment"
+				variant="secondary"
+				size="sm"
+				{describedBy}
+				onClick={() => startReversingPayment(invoice.id, activePaymentId)}
+			/>
+		{/if}
+	{/if}
+{/snippet}
+
+{#snippet invoiceActions(invoice: Invoice, view: DataTableView)}
+	{@const nameId = `invoice-${view}-${invoice.id}`}
+	<!-- v8 ignore start: Svelte's compiled null-guard on this text node is unreachable -- reference is required and formatAmount always returns a string -->
+	<span class="visually-hidden" id={nameId}>Invoice {invoice.reference}, {formatAmount(invoice.amountCents)}</span>
+	<!-- v8 ignore stop -->
+	<!-- The record view already sets a card's actions in a cluster; the
+	     table's cell is the one that needs its own. -->
+	{#if view === 'table'}
+		<cluster-l space="var(--space-related)">
+			{@render invoiceActionButtons(invoice, nameId)}
+		</cluster-l>
+	{:else}
+		{@render invoiceActionButtons(invoice, nameId)}
+	{/if}
+{/snippet}
+
 {#if !canReadInvoices}
 	<Notice variant="info" message={contractorInvoicesMessage} />
 	{#if hasCreatedUnseen}
 		<Notice variant="status" message={invoiceCreatedMessage} isFocusedOnAppear />
 	{/if}
-{:else if invoices.length === 0}
-	<EmptyState message="No Invoices yet." />
 {:else}
-	<ul>
-		{#each invoices as invoice (invoice.id)}
-			<li>
-				<!-- v8 ignore start: Svelte's compiled null-guard on these text nodes is unreachable -- formatAmount and invoiceStatusLabel always return a string -->
-				{formatAmount(invoice.amountCents)} — {invoiceStatusLabel(invoice.status)}
-				<!-- v8 ignore stop -->
-				{#if invoice.paidOn}
-					<!-- v8 ignore start: Svelte's compiled null-guard on this text node is unreachable -- formatCalendarDay always returns a string -->
-					(paid {formatCalendarDay(invoice.paidOn)})
-					<!-- v8 ignore stop -->
-				{/if}
-				{#if invoice.refundedCents > 0}
-					<!-- The status stays "Paid" after a Refund, as Stripe's own does
-					     (#1009), so this line is where the money that went back is
-					     said at all. -->
-					<!-- v8 ignore start: Svelte's compiled null-guard on this text node is unreachable -- formatAmount always returns a string -->
-					— {formatAmount(invoice.refundedCents)} returned
-					<!-- v8 ignore stop -->
-				{/if}
-				{#if invoice.status === 'open' && isOwnerOrAdmin}
-					<cluster-l space="var(--space-2)">
-						<Button
-							label="Record payment"
-							variant="secondary"
-							size="sm"
-							onClick={() => startRecordingPayment(invoice.id)}
-						/>
-						{#if invoice.billingMode === 'by_hand'}
-							<Button
-								label="Void"
-								variant="secondary"
-								size="sm"
-								loading={transitioningInvoiceId === invoice.id}
-								onClick={() => handleVoid(invoice.id)}
-							/>
-							<Button
-								label="Write off"
-								variant="secondary"
-								size="sm"
-								loading={transitioningInvoiceId === invoice.id}
-								onClick={() => handleWriteOff(invoice.id)}
-							/>
-						{/if}
-					</cluster-l>
-				{/if}
-				{#if invoice.status === 'paid' && isOwnerOrAdmin && invoice.activePaymentId}
-					{@const activePaymentId = invoice.activePaymentId}
-					<cluster-l space="var(--space-2)">
-						{#if hasMoneyLeftToReturn(invoice)}
-							<Button
-								label="Return money"
-								variant="secondary"
-								size="sm"
-								onClick={() => startRefundingPayment(invoice.id, activePaymentId)}
-							/>
-						{/if}
-						<!-- Reverse is by-hand only (#945), and never once money has
-						     gone back: the BFF refuses a refunded Payment
-						     (MsgRefundedPaymentCannotBeReversed), so the button that
-						     would only earn that refusal is not offered. -->
-						{#if invoice.billingMode === 'by_hand' && invoice.refundedCents === 0}
-							<Button
-								label="Reverse payment"
-								variant="secondary"
-								size="sm"
-								onClick={() => startReversingPayment(invoice.id, activePaymentId)}
-							/>
-						{/if}
-					</cluster-l>
-				{/if}
-			</li>
-		{/each}
-	</ul>
+	<!--
+		#2059: one row per Invoice, its status a Badge and its actions the
+		row's own, in place of a list item holding a sentence and buttons
+		(#2017: no list item holds a control). At a narrow width DataTable
+		draws each Invoice as a card with its actions at the foot.
+	-->
+	<DataTable
+		columns={invoiceColumns}
+		rows={invoices}
+		rowActions={isOwnerOrAdmin ? { label: 'Actions', content: invoiceActions } : undefined}
+		emptyMessage="No Invoices yet."
+	/>
 {/if}
 
 {#if transitionError}

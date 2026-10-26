@@ -358,12 +358,12 @@ describe('the Activity disclosure (#486)', () => {
 	});
 
 	// #708's own acceptance criterion, on the row the ticket names: the
-	// staff surfaces render `plan_instance_edited` as "Plan instance
-	// edited", which puts an internal system noun in front of a Client.
+	// staff surfaces rendered the plan save as "Plan instance edited",
+	// which puts an internal system noun in front of a Client.
 	// Asserted through the opened disclosure's own table view, the same
 	// scoping the two tests above take and for the same #508 reason.
 	it("speaks the Client register, not the write side's action name", async () => {
-		const { container } = await setupActivity({ activity: [activityEntry('plan_instance_edited')] });
+		const { container } = await setupActivity({ activity: [activityEntry('birth_plan_edited')] });
 
 		await page.getByText('Show what has happened').click();
 		const tableView = page.elementLocator(container.querySelector(':scope details .table-view')!);
