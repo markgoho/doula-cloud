@@ -427,6 +427,24 @@ describe('the status-move controls (#253)', () => {
 		await expect.element(testPage.getByText('The care phase is now Completed.')).toHaveFocus();
 	});
 
+	// #1998: the completion question now sits inside the summary card's
+	// Care phase row, the narrowest room it has had. No sweep presses a
+	// Change, so this is where that open form is measured at 320px, with
+	// its error summary on screen.
+	it('never scrolls the document sideways at 320px with the completion question open', async () => {
+		await renderWithFixtureResponder();
+		await testPage.viewport(320, 800);
+
+		await openChange('care phase');
+		await testPage.getByRole('button', { name: 'Mark care complete' }).click();
+		await testPage.getByRole('button', { name: 'Confirm completion' }).click();
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Select why this Engagement is ending' }))
+			.toBeVisible();
+		expect(document.documentElement.scrollWidth).toBe(document.documentElement.clientWidth);
+	});
+
 	it('shows the refusal when the BFF rejects the move', async () => {
 		await renderWithFixtureResponder((path, init) => {
 			if (!init || init.method !== 'PATCH' || !path.endsWith('/status')) return;
