@@ -1439,10 +1439,14 @@
 
 	/* The smallest step of #1216's scale that holds a picker's longest
 	   option, which is the count `Select` asks for (a narrower box cuts the
-	   chosen name off), or the whole column where none does. */
-	function widthToHold(options: readonly { label: string }[]): InputWidth | undefined {
+	   chosen name off). Past the scale's top it is the top step, never the
+	   whole column (#1999): a step counts `ch`, the width of a digit, and
+	   a name in a proportional face is narrower than that, so the 37
+	   characters of "Trish Halvorsen (cannot be named yet)" still show
+	   whole in the 30 step, as the walk of 2026-10-26 saw. */
+	function widthToHold(options: readonly { label: string }[]): InputWidth {
 		const longest = Math.max(0, ...options.map((option) => option.label.length));
-		return INPUT_WIDTHS.find((width) => width >= longest);
+		return INPUT_WIDTHS.find((width) => width >= longest) ?? 30;
 	}
 
 	/* Closes the add form blank. Back to untouched, not to empty: the next
@@ -2553,10 +2557,16 @@
 		   founder's answer of 2026-10-25 on #1981: a very long name or
 		   address wraps one more line, and it does not change the layout.
 		   Re-measured 2026-10-26 (#1999), once the Actions column held one
-		   Change link instead of three forms (it was 76.75rem): the
-		   typical screen's table needs 935px of a 912px column on
-		   macOS/Chromium and fits from 944px, the floor below; the route
-		   floor check's minimal half holds it to CI's Linux/Chromium.
+		   Change link instead of three forms (it was 76.75rem), and with
+		   the typical screen holding a two-sentence note, as the demo
+		   Practice's Visits do. A note is prose, and its cell caps it at
+		   `--measure`, so this is the width at which any note fits beside
+		   the four bounded columns: 1161px of a 1135px column on
+		   macOS/Chromium, fitting from 1168px; the route floor check's
+		   minimal half holds it to CI's Linux/Chromium. A one-line-notes
+		   screen fits at 59rem, and a lower floor than this one broke
+		   "Prenatal" and "Change" mid-word on the demo Practice at a 1440px
+		   window, so there the Visits are records.
 		   `DataTable.svelte`'s floor comment says why the floor is the
 		   route's own. */
 		.visits-table {
@@ -2569,7 +2579,7 @@
 			--data-table-records-display: block;
 		}
 
-		@container visits-table (min-width: 59rem) {
+		@container visits-table (min-width: 73rem) {
 			.visits-table > :global(*) {
 				--data-table-table-display: table;
 				--data-table-records-display: none;

@@ -472,7 +472,11 @@ const typicalRoster = TYPICAL_STAFF.map((member) => ({
 const typicalNotes = [
 	'Talked through comfort measures and what to pack.',
 	'',
-	'Walked through the birth plan draft with her partner.',
+	// Two sentences, as a Doula writes up a Visit that covered something
+	// (the demo Practice's are this long, #1999): longer than `--measure`,
+	// the Notes cell's cap, so the floor below is measured on the widest
+	// the column gets rather than on one short line.
+	'Walked through the birth plan draft with her partner. She wants the lights low and music on in early labor, and her partner calls us when the contractions are five minutes apart.',
 	'Feeding is going well.',
 	''
 ];
