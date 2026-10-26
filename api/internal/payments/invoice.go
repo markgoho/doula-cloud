@@ -13,6 +13,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/contracts"
+	"doula-cloud/api/internal/overdue"
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/practicetimezone"
@@ -98,7 +99,7 @@ type InvoiceView struct {
 	RefundedCents int64 `json:"refundedCents"`
 	// DaysOverdue (#2122) is how many whole Practice days this Invoice is
 	// past DueOn, and 0 when it is not overdue or not open: counted by
-	// daysOverdue at the request's one instant, the same rule and the
+	// overdue.Days at the request's one instant, the same rule and the
 	// same count PracticeInvoiceView.DaysOverdue and a contractor's row
 	// carry, so one Invoice reads Overdue on every Staff screen or on
 	// none. A screen reads Overdue from it and never judges lateness
@@ -886,7 +887,7 @@ func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *i
 		}
 		it.PaidOn = invoicePaidOn(paidAt, activePaymentKind.String == paymentKindManual, days.zone)
 		it.DueOn = practiceDay(dueAt, days.zone)
-		it.DaysOverdue = daysOverdue(it.Status, dueAt, days.now, days.zone)
+		it.DaysOverdue = overdue.Days(it.Status, dueAt, days.now, days.zone)
 		if activePaymentID.Valid {
 			it.ActivePaymentID = &activePaymentID.String
 			it.ActivePaymentKind = activePaymentKind.String

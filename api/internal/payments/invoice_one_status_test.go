@@ -16,7 +16,7 @@ import (
 // Invoice is late by the same count on every Staff read of it -- the
 // Engagement's Invoice list as an Owner, an Admin, an employee Doula and
 // a contractor Doula, and the Practice-wide list -- because each one is
-// counted by daysOverdue at the one request instant. The Client portal
+// counted by overdue.Days at the one request instant. The Client portal
 // reads the same stored status, open, and no lateness at all: ADR-0038
 // keeps Overdue off the portal, so no daysOverdue key reaches her.
 func TestAnOverdueInvoiceReadsOverdueInEveryView(t *testing.T) {

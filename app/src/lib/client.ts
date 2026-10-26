@@ -63,6 +63,11 @@ export interface OpenEngagement {
 	 * attached to this Engagement. */
 	invoiceStatus?: string;
 	invoiceAmountCents?: number;
+	/** How many whole Practice days that Invoice is past its due day, and 0
+	 * when it is not late (#2130): the count every Staff read of an Invoice
+	 * carries (`Invoice.daysOverdue`, #2122), present wherever
+	 * `invoiceStatus` is. */
+	daysOverdue?: number;
 	/** The reader's own agreed fee (ADR-0008) -- present only when she is
 	 * a contractor Doula attached to this Engagement. */
 	feeCents?: number;
