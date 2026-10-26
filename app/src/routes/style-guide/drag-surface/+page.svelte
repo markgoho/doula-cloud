@@ -99,6 +99,7 @@
 		const fixture = selected?.fixture;
 		if (!fixture) return;
 		overridePage(toPageState(fixture));
+		fixture.beforeMount?.();
 		/*
 		 * Assigning the global is the mechanism, not an oversight: a route
 		 * reaches the network through `#lib/api.js`, which closes over the

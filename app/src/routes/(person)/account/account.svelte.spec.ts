@@ -5,7 +5,7 @@ import { workStateReportedOn } from '#lib/workStates.js';
 import { jsonResponse as buildResponse } from '#lib/testResponse.js';
 import { expectFieldError } from '#lib/components/molecules/LabeledField.testing.js';
 import { gotoWithOutcome } from '#lib/outcome.js';
-import { toPageState } from '../../routeFixture.js';
+import { toApiResponder, toPageState, toSweptFixtures } from '../../routeFixture.js';
 import Page from './+page.svelte';
 import { resetAccountSession } from '../session.svelte.js';
 import { fixture, session, soleOwnerSession } from './page.fixture.js';
@@ -650,5 +650,27 @@ describe('recovery codes for a sole Owner (#615)', () => {
 		await expect
 			.element(testPage.getByText("saved recovery codes are only issued to a practice's sole owner"))
 			.toBeVisible();
+	});
+});
+
+/*
+ * #2050: the sweep and the drag surface mount the base screen, then the
+ * second-factor variant, in one module, with no spec `beforeEach` between
+ * them. The memoized session read kept the first mount's answer, so the
+ * variant drew the base screen; the fixture's `beforeMount` is what makes
+ * each mount ask its own `respond`.
+ */
+describe('the account fixture, as the sweep mounts it', () => {
+	it('draws the Recovery codes section on the second-factor variant mounted after the base', async () => {
+		const [base, withSecondFactor] = toSweptFixtures(fixture);
+		for (const subject of [base!, withSecondFactor!]) {
+			subject.beforeMount?.();
+			apiFetchWithSession.mockImplementation(toApiResponder(subject));
+			const { unmount } = await render(Page, {});
+			await expect.element(testPage.getByRole('heading', { level: 1, name: subject.readyText })).toBeVisible();
+			if (subject === base) unmount();
+		}
+
+		await expect.element(testPage.getByText('Recovery codes', { exact: true })).toBeVisible();
 	});
 });

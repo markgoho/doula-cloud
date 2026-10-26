@@ -80,6 +80,39 @@ export function doulaOptions(doulas: RequestDoula[], selfStaffId: string): { val
 	];
 }
 
+/**
+ * The most Doulas "Who is the Doula?" asks as radios (#2034). Past it the
+ * question is a select: the brief's Miller's Law and Choice Overload rule
+ * is nothing past about seven before it is broken up, and GOV.UK's Radios
+ * guidance sends a long list to a select. Fifteen radios, the typical
+ * Practice, made the form a 2,000px page.
+ */
+export const DOULA_RADIOS_MAX = 7;
+
+/**
+ * Whether the roster is long enough for the select (#2034).
+ */
+export function isDoulaSelect(doulas: RequestDoula[]): boolean {
+	return doulas.length > DOULA_RADIOS_MAX;
+}
+
+/**
+ * The select's options (#2034): the person at the form, then "No Doula
+ * yet", then everybody else. The radios keep "No Doula yet" last because
+ * every radio is on screen; a select folds the list behind a control, so
+ * the two answers the pre-selection departure rests on (her own name and
+ * "No Doula yet", docs/design/govuk-alignment.md) come first, where the
+ * list opens. An Admin who is not a Doula has no "(you)" row.
+ */
+export function doulaSelectOptions(doulas: RequestDoula[], selfStaffId: string): { value: string; label: string }[] {
+	const options = doulaOptions(doulas, selfStaffId);
+	const noDoula = options.at(-1)!;
+	const people = options.slice(0, -1);
+	const self = people.filter((option) => option.value === selfStaffId);
+	const others = people.filter((option) => option.value !== selfStaffId);
+	return [...self, noDoula, ...others];
+}
+
 /** The answer selected when the form opens: the reader herself where she
  * is the only Doula at the Practice, and nothing in every other case. */
 export function initialDoulaAnswer(doulas: RequestDoulas, selfStaffId: string): string {

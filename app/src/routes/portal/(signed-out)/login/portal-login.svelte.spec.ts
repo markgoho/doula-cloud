@@ -4,7 +4,8 @@ import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 import { toApiResponder, toPageState } from '../../../routeFixture.js';
-import { afterSessionEnded, fixture, session } from './page.fixture.js';
+import type { PortalSessionInfo } from '#lib/portalLanding.js';
+import { afterSessionEnded, fixture } from './page.fixture.js';
 
 /*
  * The screen reads its own URL for #757's `sessionEnded` flag, through
@@ -67,6 +68,29 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
+/*
+ * A live portal session, which is never this screen (#2050): the probe
+ * sends her on, so the fixture answers with none and this is the spec's
+ * own content. Two Engagements, the one that goes to `/` (#312); the
+ * Practice name is #530's URL.
+ */
+const session: PortalSessionInfo = {
+	engagements: [
+		{
+			engagementId: 'engagement-1',
+			practiceName: 'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake',
+			status: 'active',
+			createdAt: '2026-01-15T20:00:00Z'
+		},
+		{
+			engagementId: 'engagement-2',
+			practiceName: 'Anne-Marie Ochieng-Whitfield Doula Care',
+			status: 'active',
+			createdAt: '2026-03-12T20:00:00Z'
+		}
+	]
+};
+
 const [firstEngagement, secondEngagement] = session.engagements;
 
 async function setup() {
@@ -93,9 +117,7 @@ describe('Client-portal login -- on-load session probe (#283)', () => {
 	// which already probes both populations and renders the same list, so
 	// a signed-in visitor with several Engagements is sent there instead.
 	it('sends a signed-in visitor with several Engagements to the portal root, without rendering a picker of its own', async () => {
-		// The fixture's own session already has two Engagements -- it is
-		// this test's happy path, not a reason to invent a second one.
-		apiFetch.mockImplementation(toApiResponder(fixture));
+		apiFetch.mockResolvedValue(jsonResponse(session));
 
 		await setup();
 
@@ -104,7 +126,7 @@ describe('Client-portal login -- on-load session probe (#283)', () => {
 	});
 
 	it('renders the ordinary login form for a signed-out visitor, with no session-ended messaging', async () => {
-		apiFetch.mockResolvedValue(jsonResponse('no matching portal session', 404));
+		apiFetch.mockImplementation(toApiResponder(fixture));
 
 		await setup();
 
@@ -117,7 +139,7 @@ describe('Client-portal login -- on-load session probe (#283)', () => {
 		// probeSession itself swallows a thrown fetch and every non-OK
 		// response (see its own tests in api.spec.ts); from this screen's
 		// side, that failure is indistinguishable from "not signed in".
-		apiFetch.mockResolvedValue(jsonResponse('no matching portal session', 404));
+		apiFetch.mockRejectedValue(new TypeError('Failed to fetch'));
 
 		await setup();
 
@@ -127,7 +149,7 @@ describe('Client-portal login -- on-load session probe (#283)', () => {
 	});
 
 	it('never probes the Staff session', async () => {
-		apiFetch.mockResolvedValue(jsonResponse('no matching portal session', 404));
+		apiFetch.mockImplementation(toApiResponder(fixture));
 
 		await setup();
 
@@ -149,7 +171,7 @@ describe('Client-portal login -- on-load session probe (#283)', () => {
  * because it closes over nothing the describe owns.
  */
 async function setupSessionEnded({ hasSessionEnded = true } = {}) {
-	apiFetch.mockResolvedValue(jsonResponse('no matching portal session', 404));
+	apiFetch.mockImplementation(toApiResponder(fixture));
 	if (hasSessionEnded) Object.assign(pageState, toPageState({ ...fixture, ...afterSessionEnded }));
 
 	await render(Page, {});

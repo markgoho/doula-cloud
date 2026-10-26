@@ -275,6 +275,7 @@ async function mountRoute(fixture: RouteFixture): Promise<Mounted> {
 	// it gets installed is each half's own business, since only this
 	// half has a module to mock.
 	Object.assign(pageState, toPageState(fixture));
+	fixture.beforeMount?.();
 	// And how a fixture's fetches get answered is `toApiResponder`'s
 	// to say, for the same reason: since #596 every route spec that
 	// fetches installs the same implementation, so unwrapping

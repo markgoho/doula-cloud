@@ -3,6 +3,7 @@ import {
 	displayName,
 	loadClientDetail,
 	pendingRequests,
+	resolvedFieldGroups,
 	resolvedFieldValueText,
 	type HistoryEntry
 } from './clientDetail.js';
@@ -81,6 +82,32 @@ describe('resolvedFieldValueText', () => {
 		expect(resolvedFieldValueText({ fieldId: 'f1', label: 'Notes', type: 'short_text', value: 'Prefers texts' })).toBe(
 			'Prefers texts'
 		);
+	});
+});
+
+function header(label: string) {
+	return { fieldId: label, label, type: 'section_header' };
+}
+
+function text(label: string) {
+	return { fieldId: label, label, type: 'short_text' };
+}
+
+describe('resolvedFieldGroups', () => {
+	it('groups the fields between two headers under the first, with the fields before any header untitled', () => {
+		expect(
+			resolvedFieldGroups([text('Pets'), header('Health'), text('Allergies'), text('Medications'), header('Birth'), text('Place')])
+		).toEqual([
+			{ fields: [text('Pets')] },
+			{ heading: 'Health', fields: [text('Allergies'), text('Medications')] },
+			{ heading: 'Birth', fields: [text('Place')] }
+		]);
+	});
+
+	it('drops a header with no field under it', () => {
+		expect(resolvedFieldGroups([header('Empty'), header('Health'), text('Allergies'), header('Trailing')])).toEqual([
+			{ heading: 'Health', fields: [text('Allergies')] }
+		]);
 	});
 });
 

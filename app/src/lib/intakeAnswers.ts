@@ -14,15 +14,15 @@
  * what else was asked -- the Change link on an empty row is how the rest
  * of the sequence stays reachable from the end of it.
  *
- * ## The headings and the rows are the journey's own
+ * ## The rows are the journey's own
  *
- * Both come from `intakeJourney.ts`'s `STRUCTURAL_STEPS`, so a section
- * heading here is the same string the rail shows for that step and a
+ * They come from `intakeJourney.ts`'s `STRUCTURAL_STEPS`, so the address
+ * row's label is the same string the rail shows for that step and a
  * Change link goes to the same slug the rail links to. They were typed
  * out twice until a review of this ticket noticed.
  */
 
-import type { AnswerSection } from './components/templates/CheckAnswers.svelte';
+import type { Answer, AnswerSection } from './components/templates/CheckAnswers.svelte';
 import type { Field } from './clientFieldTemplate.js';
 import { formatCalendarDay } from './dates.js';
 import {
@@ -68,12 +68,43 @@ function changeHref(basePath: string, slug: string): string {
 	return `${basePath}/${slug}?${CHANGE_QUERY}`;
 }
 
+/*
+ * The address is one answer to a person, asked as five boxes: GOV.UK's
+ * Check answers shows it as one row with its lines joined, and one
+ * Change, rather than five rows that each say "Address line 2: Not
+ * answered" (#2033). Joined with a comma, the way the Client hub's own
+ * Address row already reads it.
+ */
+const ADDRESS_SLUG = 'address';
+
+function stepAnswers(answers: IntakeAnswers, step: StructuralStep, basePath: string): Answer[] {
+	const href = changeHref(basePath, step.slug);
+	if (step.slug === ADDRESS_SLUG) {
+		const lines = step.questions.map((question) => answers[question.key].trim()).filter(Boolean);
+		return [
+			{
+				label: step.label,
+				value: lines.length > 0 ? lines.join(', ') : NOT_ANSWERED,
+				changes: step.label.toLowerCase(),
+				changeHref: href
+			}
+		];
+	}
+	return step.questions.map((question) => ({
+		label: question.label,
+		value: answerText(question.key, answers[question.key]),
+		changes: question.changes,
+		changeHref: href
+	}));
+}
+
 /**
  * The whole summary.
  *
- * Section headings are the rail's own step labels, so the summary reads
- * as the journey it summarizes rather than as a second grouping of the
- * same facts.
+ * The built-in questions are one group with no heading of its own (#2033):
+ * each is one row, so a heading over each repeated its only row's label.
+ * A Practice's own sections each keep their heading, the rail's own step
+ * label for that page, because those rows do form groups.
  */
 export function answerSections(
 	answers: IntakeAnswers,
@@ -81,15 +112,9 @@ export function answerSections(
 	basePath: string,
 	structuralSteps: readonly StructuralStep[] = STRUCTURAL_STEPS
 ): AnswerSection[] {
-	const structural: AnswerSection[] = structuralSteps.map((step) => ({
-		heading: step.label,
-		answers: step.questions.map((question) => ({
-			label: question.label,
-			value: answerText(question.key, answers[question.key]),
-			changes: question.changes,
-			changeHref: changeHref(basePath, step.slug)
-		}))
-	}));
+	const structural: AnswerSection = {
+		answers: structuralSteps.flatMap((step) => stepAnswers(answers, step, basePath))
+	};
 
 	const practiceDefined: AnswerSection[] = sections.map((section, index) => ({
 		heading: section.heading,
@@ -101,5 +126,5 @@ export function answerSections(
 		}))
 	}));
 
-	return [...structural, ...practiceDefined];
+	return [structural, ...practiceDefined];
 }

@@ -214,6 +214,16 @@ export interface RouteFixture<RouteParameters extends Record<string, string> = R
 	*/
 	readonly readyText: string;
 	/**
+	Run before each mount, by both halves (#2050), for a route that keeps
+	state in a module across mounts. Your account memoizes its session read
+	(`(person)/session.svelte.ts`), so a second mount -- the next variant
+	in the sweep, the next pick on the drag surface -- read the first
+	mount's answer and never asked its own `respond`: the second-factor
+	variant drew the base screen. Set on the base fixture, so every variant
+	inherits it through the spread.
+	*/
+	readonly beforeMount?: () => void;
+	/**
 	Whether this screen holds typical pilot data rather than hostile data
 	(#1981), which makes it a screen a table route's floor is measured on.
 	Set only by a variant; see `RouteVariant.typical`.

@@ -20,10 +20,11 @@
 	 * that selects an answer when the form opens: she is the only Doula at
 	 * the Practice. In every other case nothing is selected and the submit
 	 * is refused until she chooses. That pre-selection is a recorded
-	 * departure from GOV.UK (docs/design/govuk-alignment.md). Radios and
-	 * not a select, at any roster size: the departure rests on "No Doula
-	 * yet" being on screen beside her own name and one press away, and a
-	 * select would fold both behind a control.
+	 * departure from GOV.UK (docs/design/govuk-alignment.md). Radios up to
+	 * seven Doulas, so "No Doula yet" is on screen beside her own name and
+	 * one press away. Past seven it is a select (#2034, `DOULA_RADIOS_MAX`):
+	 * fifteen radios made a 2,000px page, and the select lists her own name
+	 * and "No Doula yet" first, where it opens.
 	 *
 	 * Two button labels, not one, read from the signed-in Staff member's
 	 * own roles -- practices/[practiceId]/+layout.ts's already-resolved
@@ -57,7 +58,9 @@
 	import {
 		NO_DOULA_YET,
 		doulaOptions,
+		doulaSelectOptions,
 		initialDoulaAnswer,
+		isDoulaSelect,
 		loadRequestDoulas,
 		requestEngagement,
 		type NewEngagementRequest,
@@ -71,6 +74,7 @@
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import RadioGroup, { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
+	import Select from '#lib/components/atoms/Select.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import { FormSubmission, orThrownErrors, type FormError } from '#lib/formSubmission.svelte.js';
@@ -106,11 +110,14 @@
 
 	const isApprover = $derived(isOwnerOrAdmin(session));
 	const doulaChoices = $derived(doulas ? doulaOptions(doulas.items, session.staffId) : []);
-	// A refusal about the question points at its first option, which is
-	// where GOV.UK sends an error link for a radio group. The first option
-	// is the first person in the list, or "No Doula yet" at a Practice
-	// with nobody to name.
-	const doulaFieldId = $derived(radioFieldId(DOULA_NAME, doulaChoices[0]?.value ?? NO_DOULA_YET));
+	const isDoulaSelectShown = $derived(doulas ? isDoulaSelect(doulas.items) : false);
+	// A refusal about the question points at the select, or at the radios'
+	// first option, which is where GOV.UK sends an error link for a radio
+	// group. The first option is the first person in the list, or "No
+	// Doula yet" at a Practice with nobody to name.
+	const doulaFieldId = $derived(
+		isDoulaSelectShown ? DOULA_NAME : radioFieldId(DOULA_NAME, doulaChoices[0]?.value ?? NO_DOULA_YET)
+	);
 	// The BFF's own field names (engagementrequest.RequestBody's json
 	// tags) mapped onto this form's controls, so a refusal it names lands
 	// on the right one (#488).
@@ -373,14 +380,32 @@
 			/>
 		{/snippet}
 	</LabeledField>
-	<RadioGroup
-		legend="Who is the Doula?"
-		name={DOULA_NAME}
-		error={submission.errorFor(doulaFieldId)}
-		options={doulaChoices}
-		value={doula}
-		onChange={(value: string) => (doula = value)}
-	/>
+	{#if isDoulaSelectShown}
+		<!-- #2034: past DOULA_RADIOS_MAX, a select (engagementRequest.ts). -->
+		<LabeledField id={doulaFieldId} label="Who is the Doula?" error={submission.errorFor(doulaFieldId)}>
+			{#snippet children({ id, describedBy, invalid })}
+				<Select
+					{id}
+					{describedBy}
+					{invalid}
+					options={doulaSelectOptions(doulas!.items, session.staffId)}
+					placeholder="Choose a Doula"
+					value={doula}
+					onChange={(value: string) => (doula = value)}
+					required
+				/>
+			{/snippet}
+		</LabeledField>
+	{:else}
+		<RadioGroup
+			legend="Who is the Doula?"
+			name={DOULA_NAME}
+			error={submission.errorFor(doulaFieldId)}
+			options={doulaChoices}
+			value={doula}
+			onChange={(value: string) => (doula = value)}
+		/>
+	{/if}
 	<!--
 		#1512: an Owner or an Admin approves her own request in the same
 		act, so nobody else reads the note and the field says nothing about

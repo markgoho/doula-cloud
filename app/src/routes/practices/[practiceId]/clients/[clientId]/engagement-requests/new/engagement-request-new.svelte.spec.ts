@@ -10,7 +10,7 @@ import type { LedgerEntry } from '#lib/billing.js';
 import { knownAsFrom } from '#lib/intakeJourney.js';
 import { gotoWithOutcome } from '#lib/outcome.js';
 import { captureLanding } from '#lib/testOutcome.js';
-import { agencyRoster, detail as baseDetail, fixture, ownDoula, soloRoster } from './page.fixture.js';
+import { agencyRoster, detail as baseDetail, fixture, ownDoula, soloRoster, teamRoster } from './page.fixture.js';
 
 /*
  * The Client this Request is about, and the `page` it reads, both come
@@ -398,8 +398,9 @@ describe('the Engagement Request screen', () => {
 
 	/*
 	 * "Who is the Doula?" (#1596, ADR-0017's amendment on #1515). The
-	 * three lists are the route fixture's own: the one-Doula Practice, the
-	 * fourteen-Doula agency as its Owner reads it, and a plain Doula's.
+	 * lists are the route fixture's own: the one-Doula Practice, the
+	 * seven-Doula team and the fourteen-Doula agency as their Owners read
+	 * them (radios, then a select, #2034), and a plain Doula's.
 	 */
 	describe('Who is the Doula?', () => {
 		it('opens answered where the person at the form is the only Doula at the Practice', async () => {
@@ -437,18 +438,31 @@ describe('the Engagement Request screen', () => {
 		});
 
 		it('lists every Doula the BFF answers for an Owner, herself first and No Doula yet last, with nothing selected', async () => {
-			await setup({ roles: ['owner', 'admin', 'doula'], doulas: agencyRoster });
+			await setup({ roles: ['owner', 'admin', 'doula'], doulas: teamRoster });
 
 			const group = testPage.getByRole('group', { name: 'Who is the Doula?' });
 			const radios = group.getByRole('radio');
 			await expect.element(radios.first()).toHaveAccessibleName(selfLabel);
 			await expect.element(radios.last()).toHaveAccessibleName('No Doula yet');
-			expect(radios.elements()).toHaveLength(agencyRoster.items.length + 1);
+			expect(radios.elements()).toHaveLength(teamRoster.items.length + 1);
 			for (const radio of radios.elements()) {
 				expect((radio as HTMLInputElement).checked).toBe(false);
 			}
 			// A colleague carries her name alone: "(you)" marks one person.
 			await expect.element(group.getByLabelText('Hana Kim', { exact: true })).toBeVisible();
+		});
+
+		// #2034: past seven Doulas, a select with her and No Doula yet first.
+		it('asks with a select past seven Doulas, herself and No Doula yet first, with nothing selected', async () => {
+			await setup({ roles: ['owner', 'admin', 'doula'], doulas: agencyRoster });
+
+			const select = testPage.getByRole('combobox', { name: 'Who is the Doula?' });
+			await expect.element(select).toBeVisible();
+			await expect.element(select).toHaveValue('');
+			const labels = [...(select.element() as HTMLSelectElement).options].map((option) => option.label);
+			expect(labels.slice(0, 3)).toEqual(['Choose a Doula', selfLabel, 'No Doula yet']);
+			expect(labels).toHaveLength(agencyRoster.items.length + 2);
+			expect(testPage.getByRole('radio', { name: selfLabel }).elements()).toHaveLength(0);
 		});
 
 		it('refuses the submit until she chooses, at a Practice with several Doulas', async () => {
@@ -460,7 +474,7 @@ describe('the Engagement Request screen', () => {
 			// GOV.UK's two places: the summary link, and the question itself.
 			await expect
 				.element(testPage.getByRole('link', { name: 'Select who the Doula is, or select No Doula yet' }))
-				.toBeVisible();
+				.toHaveAttribute('href', '#engagement-request-doula');
 			await expect
 				.element(testPage.getByRole('alert').last())
 				.toHaveTextContent('Select who the Doula is, or select No Doula yet');
@@ -474,7 +488,7 @@ describe('the Engagement Request screen', () => {
 			await setup({ roles: ['owner', 'admin', 'doula'], doulas: agencyRoster });
 
 			await testPage.getByLabelText('Postpartum').click();
-			await testPage.getByLabelText('Hana Kim', { exact: true }).click();
+			await testPage.getByRole('combobox', { name: 'Who is the Doula?' }).selectOptions('Hana Kim');
 			await testPage.getByRole('button', { name: `Start work with ${clientName}` }).click();
 
 			await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
@@ -501,7 +515,7 @@ describe('the Engagement Request screen', () => {
 		it('puts a refusal the endpoint names on doulaStaffId against the question', async () => {
 			await setup({
 				roles: ['owner', 'admin', 'doula'],
-				doulas: agencyRoster,
+				doulas: teamRoster,
 				requestStatus: 400,
 				requestOutcome: {
 					code: 'INVALID_ARGUMENT',
@@ -526,7 +540,7 @@ describe('the Engagement Request screen', () => {
 				JSON.stringify({ kind: 'postpartum', dueDate: '', note: '', doula: 'staff-7' })
 			);
 
-			await setup({ roles: ['owner', 'admin', 'doula'], doulas: agencyRoster });
+			await setup({ roles: ['owner', 'admin', 'doula'], doulas: teamRoster });
 
 			await expect.element(testPage.getByLabelText('Hana Kim', { exact: true })).toBeChecked();
 		});

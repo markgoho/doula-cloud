@@ -86,6 +86,14 @@ describe('CheckAnswers.svelte', () => {
 		]);
 	});
 
+	// #2033: the built-in questions are one group under the page's title.
+	it('draws no heading over a group that has none', async () => {
+		await setup({ sections: [{ answers: sections[1].answers }, sections[0]] });
+
+		await expect.element(page.getByText('sarah@example.com')).toBeVisible();
+		expect(page.getByRole('heading', { level: 2 }).elements().map((node) => node.textContent)).toEqual(['Who Sarah is']);
+	});
+
 	/*
 	 * Every row's link reads "Change", so on its own the page's link list is
 	 * the same word repeated. GOV.UK answers that with visually-hidden text

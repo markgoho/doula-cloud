@@ -9,7 +9,7 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ClientDetail } from '#lib/clientDetail.js';
-import type { RequestDoulas } from '#lib/engagementRequest.js';
+import { DOULA_RADIOS_MAX, type RequestDoulas } from '#lib/engagementRequest.js';
 import { practiceSession, type RouteFixture, type RouteVariant } from '../../../../../../routeFixture.js';
 import Page from './+page.svelte';
 
@@ -45,8 +45,8 @@ const DOULAS_PATH = '/engagement-request-doulas';
  * double-barreled one, the widest label a two-option question gets.
  *
  * `agencyRoster` is the pilot agency (fourteen Doulas) as its Owner reads
- * it: fifteen options, nothing selected. It is the busy state, and the
- * one a 320px column has to hold. The names are a real roster's spread,
+ * it: fifteen options in a select, nothing selected. It is the busy
+ * state, and the one a 320px column has to hold. The names are a real roster's spread,
  * with the two shapes that wrap a radio label: the double-barreled
  * surname, and a long name with no hyphen to break on.
  *
@@ -75,6 +75,16 @@ export const agencyRoster: RequestDoulas = {
 		{ staffId: 'staff-13', name: 'Wilhelmina Schwarzenberger' },
 		{ staffId: 'staff-14', name: 'Zora Bell' }
 	],
+	callerIsOnlyDoula: false
+};
+
+/*
+ * #2034: past `DOULA_RADIOS_MAX` the question is a select, so the agency
+ * above draws one. `teamRoster` is the most radios the question draws:
+ * the agency's first seven, the double-barreled surname among them.
+ */
+export const teamRoster: RequestDoulas = {
+	items: agencyRoster.items.slice(0, DOULA_RADIOS_MAX),
 	callerIsOnlyDoula: false
 };
 
@@ -147,6 +157,24 @@ export const asSoloOwner: RouteVariant = {
 	readyText: 'Start work with Persephone Ochieng-Whitfield'
 };
 
+/*
+ * An Owner of a seven-Doula Practice (#2034): the radios at their longest,
+ * one short of the select `asApprover` draws. Its own `respond` for the
+ * reason `asApprover` has one.
+ */
+export const asTeamOwner: RouteVariant = {
+	name: 'Requesting a new Engagement, as an Owner of seven Doulas',
+	pageData: practiceSession(['owner']),
+	respond: (path) => {
+		if (path.includes('/billing')) {
+			return jsonResponse({ balance: 1284, ledger: { items: [], hasMore: false } });
+		}
+		if (path.includes(DOULAS_PATH)) return jsonResponse(teamRoster);
+		return jsonResponse(detail);
+	},
+	readyText: 'Start work with Persephone Ochieng-Whitfield'
+};
+
 export const fixture: RouteFixture = {
 	name: 'Requesting a new Engagement, as a Doula',
 	component: Page,
@@ -155,5 +183,5 @@ export const fixture: RouteFixture = {
 	pageData: practiceSession(['doula']),
 	respond: (path) => jsonResponse(path.includes(DOULAS_PATH) ? ownDoula : detail),
 	readyText: 'Ask to start work with Persephone Ochieng-Whitfield',
-	variants: [asApprover, asSoloOwner]
+	variants: [asApprover, asTeamOwner, asSoloOwner]
 };

@@ -37,12 +37,21 @@ describe('fieldValueText', () => {
 	});
 });
 
+function rowLabels(answers: ReturnType<typeof answerSections>[number]['answers']): string[] {
+	return answers.map((answer) => answer.label);
+}
+
 describe('answerSections', () => {
-	it('lists every structural question, answered or not', () => {
+	// #2033: one row each, so a heading over each repeated its only row.
+	it('puts every built-in question in one group with no heading, answered or not', () => {
 		const sections = answerSections({ ...blankAnswers(), givenName: 'Sarah' }, [], basePath);
 
-		expect(sections.map((section) => section.heading)).toEqual([
-			'Name',
+		expect(sections).toHaveLength(1);
+		expect(sections[0].heading).toBeUndefined();
+		expect(rowLabels(sections[0].answers)).toEqual([
+			'Given name',
+			'Family name',
+			'Preferred name',
 			'Date of birth',
 			'Email address',
 			'Phone number',
@@ -61,42 +70,65 @@ describe('answerSections', () => {
 	it('lists only the steps a details journey asks', () => {
 		const sections = answerSections(blankAnswers(), [], basePath, DETAILS_STEPS);
 
-		expect(sections.map((section) => section.heading)).not.toContain('Name');
+		expect(rowLabels(sections[0].answers)).toEqual(['Date of birth', 'Email address', 'Phone number', 'Address']);
 		expect(sections[0].answers[0].changeHref).toBe(`${basePath}/date-of-birth?from=check`);
 	});
 
-	it('reaches all twelve structural columns but the id', () => {
-		const rows = answerSections(blankAnswers(), [], basePath).flatMap((section) => section.answers);
+	// #2033: GOV.UK shows an address as one row with its lines joined.
+	it('reads the address as one row, its answered lines joined, with one Change', () => {
+		const sections = answerSections(
+			{
+				...blankAnswers(),
+				addressLine1: '12 Lake Avenue',
+				addressLocality: 'Rochester',
+				addressRegion: 'NY',
+				addressPostalCode: '14608'
+			},
+			[],
+			basePath,
+			DETAILS_STEPS
+		);
 
-		expect(rows).toHaveLength(11);
+		expect(sections[0].answers.at(-1)).toEqual({
+			label: 'Address',
+			value: '12 Lake Avenue, Rochester, NY, 14608',
+			changes: 'address',
+			changeHref: `${basePath}/address?from=check`
+		});
+	});
+
+	it('reads an address with no line answered as unanswered', () => {
+		const sections = answerSections(blankAnswers(), [], basePath, DETAILS_STEPS);
+
+		expect(sections[0].answers.at(-1)?.value).toBe(NOT_ANSWERED);
 	});
 
 	// GOV.UK's Check answers shows a date the way a person says it, and
 	// `dates.ts` is where every other screen in the app formats one.
 	it('reads the date of birth back in words, not as it is stored', () => {
-		const sections = answerSections(
-			{ ...blankAnswers(), dateOfBirth: '1988-02-09' },
-			[],
-			basePath
-		);
+		const sections = answerSections({ ...blankAnswers(), dateOfBirth: '1988-02-09' }, [], basePath, DETAILS_STEPS);
 
-		expect(sections[1].answers[0].value).toBe('Feb 9, 1988');
+		expect(sections[0].answers[0].value).toBe('Feb 9, 1988');
 	});
 
 	it('leaves an unanswered date of birth unanswered rather than formatting a blank', () => {
-		const sections = answerSections(blankAnswers(), [], basePath);
+		const sections = answerSections(blankAnswers(), [], basePath, DETAILS_STEPS);
 
-		expect(sections[1].answers[0].value).toBe(NOT_ANSWERED);
+		expect(sections[0].answers[0].value).toBe(NOT_ANSWERED);
 	});
 
 	it('sends each Change link back to the question that asked it', () => {
-		const sections = answerSections(blankAnswers(), [], basePath);
+		const sections = answerSections(blankAnswers(), [], basePath, DETAILS_STEPS);
 
-		expect(sections[4].answers[4].changeHref).toBe(`${basePath}/address?from=check`);
-		expect(sections[1].answers[0].changeHref).toBe(`${basePath}/date-of-birth?from=check`);
+		expect(sections[0].answers.map((answer) => answer.changeHref)).toEqual([
+			`${basePath}/date-of-birth?from=check`,
+			`${basePath}/email?from=check`,
+			`${basePath}/phone?from=check`,
+			`${basePath}/address?from=check`
+		]);
 	});
 
-	it('adds a section per Practice-named page, each Change link its own', () => {
+	it('adds a headed group per Practice-named page, each Change link its own', () => {
 		const sections = answerSections(
 			{ ...blankAnswers(), fieldValues: { allergies: 'Peanuts' } },
 			[
@@ -106,8 +138,8 @@ describe('answerSections', () => {
 			basePath
 		);
 
-		expect(sections).toHaveLength(7);
-		expect(sections[5]).toEqual({
+		expect(sections).toHaveLength(3);
+		expect(sections[1]).toEqual({
 			heading: 'Health',
 			answers: [
 				{
@@ -118,6 +150,6 @@ describe('answerSections', () => {
 				}
 			]
 		});
-		expect(sections[6].answers[0].changeHref).toBe(`${basePath}/sections/1?from=check`);
+		expect(sections[2].answers[0].changeHref).toBe(`${basePath}/sections/1?from=check`);
 	});
 });

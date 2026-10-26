@@ -10,6 +10,7 @@
 import { jsonResponse } from '#lib/testResponse.js';
 import type { SessionInfo } from '#lib/landing.js';
 import type { RouteFixture, RouteVariant } from '../../routeFixture.js';
+import { resetAccountSession } from '../session.svelte.js';
 import Page from './+page.svelte';
 
 export const session: SessionInfo = {
@@ -48,6 +49,9 @@ export const fixture: RouteFixture = {
 	component: Page,
 	params: {},
 	url: 'https://example.test/account',
+	// The session read is memoized across mounts, so each mount forgets it
+	// and asks this fixture's own `respond` (#2050).
+	beforeMount: resetAccountSession,
 	respond: () => jsonResponse(session),
 	readyText: 'Your account'
 };

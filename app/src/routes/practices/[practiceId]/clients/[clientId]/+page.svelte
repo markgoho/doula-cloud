@@ -8,6 +8,7 @@
 		displayName,
 		loadClientDetail,
 		pendingRequests,
+		resolvedFieldGroups,
 		resolvedFieldValueText,
 		type ClientDetail,
 		type EngagementRequestSummary,
@@ -496,7 +497,8 @@
 {/snippet}
 
 {#snippet practiceDefinedFieldsSection()}
-	{#if detail!.resolvedFields.length === 0}
+	{@const fieldGroups = resolvedFieldGroups(detail!.resolvedFields)}
+	{#if fieldGroups.length === 0}
 		<!-- #2015: the Owner is the one who can add the questions, so only
 		     the Owner is sent to the editor. -->
 		<EmptyState
@@ -511,20 +513,25 @@
 				: undefined}
 		/>
 	{:else}
-		<stack-l space="var(--space-3)">
-			{#each detail!.resolvedFields as field (field.fieldId)}
-				{#if field.type === 'section_header'}
-					<Heading level={3} variant="card" text={field.label} />
-				{:else}
+		<!--
+			One SummaryList per section, not per field (#2051): a list per
+			field gave each its own key column, so the values zig-zagged down
+			the page. Keyed on index: a Practice can name two sections alike.
+			#2008's Change links go on these rows.
+		-->
+		<stack-l space="var(--space-6)">
+			{#each fieldGroups as group, groupIndex (groupIndex)}
+				<stack-l space="var(--space-3)">
+					{#if group.heading}
+						<Heading level={3} variant="card" text={group.heading} />
+					{/if}
 					<SummaryList
-						rows={[
-							{
-								label: field.label,
-								value: field.note ? `${resolvedFieldValueText(field) || '—'} (${field.note})` : resolvedFieldValueText(field) || '—'
-							}
-						]}
+						rows={group.fields.map((field) => ({
+							label: field.label,
+							value: field.note ? `${resolvedFieldValueText(field) || '—'} (${field.note})` : resolvedFieldValueText(field) || '—'
+						}))}
 					/>
-				{/if}
+				</stack-l>
 			{/each}
 		</stack-l>
 	{/if}
