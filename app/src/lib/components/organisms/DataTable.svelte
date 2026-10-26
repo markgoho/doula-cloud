@@ -201,6 +201,43 @@
 	}: Properties<T> = $props();
 
 	/*
+	 * Where focus goes after "Load more" (#2105): to the first row it
+	 * added, in whichever tree is displayed. Left alone, focus stays on
+	 * the button, and when the last page removes the button it falls to
+	 * the document, so the next Tab starts again at the top of the page.
+	 * A row is not a control, so it takes `tabindex="-1"` only when it is
+	 * focused this way, and Tab moves on from it through the rows'
+	 * own links.
+	 */
+	let frame = $state<HTMLElement>();
+	let firstNewRowIndex = $state<number>();
+
+	function loadMore() {
+		firstNewRowIndex = rows.length;
+		onLoadMore?.();
+	}
+
+	$effect(() => {
+		if (firstNewRowIndex === undefined || isLoadingMore) return;
+		const index = firstNewRowIndex;
+		// Until the rows arrive, or the load says it failed.
+		if (rows.length <= index) {
+			if (loadMoreError) firstNewRowIndex = undefined;
+			return;
+		}
+		firstNewRowIndex = undefined;
+		// Both trees hold the row; the container query displays one.
+		const candidates = frame!.querySelectorAll<HTMLElement>(
+			`.table-view > tbody > tr:nth-child(${index + 1}), .record-view > .record:nth-child(${index + 1})`
+		);
+		for (const candidate of candidates) {
+			if (!candidate.checkVisibility()) continue;
+			candidate.setAttribute('tabindex', '-1');
+			candidate.focus();
+		}
+	});
+
+	/*
 	 * Whether a given cell actually renders its column's snippet (#740),
 	 * spent as a class on the `<td>` so the cell's geometry follows from
 	 * the COLUMN rather than from a class name the caller's markup had to
@@ -278,7 +315,7 @@
 {/snippet}
 
 {#snippet ledgerContent()}
-<stack-l class="frame">
+<stack-l class="frame" bind:this={frame}>
 	<!-- One empty state, not one per tree (#2015): the container query
 	     below picks which tree shows, and both would draw it. An empty
 	     message draws nothing: the portal's owed list says nothing when
@@ -393,7 +430,7 @@
 	{/if}
 
 	{#if hasMore && onLoadMore}
-		<Button label="Load more" variant="secondary" loading={isLoadingMore} onClick={onLoadMore} />
+		<Button label="Load more" variant="secondary" loading={isLoadingMore} onClick={loadMore} />
 	{/if}
 </stack-l>
 {/snippet}

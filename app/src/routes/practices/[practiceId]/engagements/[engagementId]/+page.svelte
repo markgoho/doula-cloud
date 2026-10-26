@@ -55,7 +55,12 @@
 	} from '#lib/portalInvite.js';
 	import type { PageProps as PageProperties } from './$types';
 	import { formatCalendarDay, formatInstant, formatScheduledVisit, toDatetimeLocalValue } from '#lib/dates.js';
-	import { activityLedgerColumns, loadEngagementActivityPage, type ActivityEntry } from '#lib/activityLedger.js';
+	import {
+		activityLedgerColumns,
+		loadEngagementActivityPage,
+		RECENT_ACTIVITY_ROWS,
+		type ActivityEntry
+	} from '#lib/activityLedger.js';
 	import { subscribeToThreadPushMessages } from '#lib/pushRefresh.js';
 	import PlanInstanceForm from '#lib/components/organisms/PlanInstanceForm.svelte';
 	import {
@@ -527,6 +532,27 @@
 	});
 	const activityLoad = new SectionState<void>(undefined);
 	const activityError = $derived(activityLoad.error);
+
+	// #2105: the newest eight entries, as the Overview's Recent activity
+	// shows (#2006), because every entry stacked as a record card made
+	// this section about 3,000px of an 8,815px page at 390px. "Load more"
+	// shows the rest in place: no screen holds one Engagement's whole
+	// ledger, and the Practice's Activity screen cannot narrow to one. The
+	// first press shows the entries already read, and the next press reads
+	// the next page, as it did before.
+	let isWholeLedgerShown = $state(false);
+	const shownActivity = $derived(
+		isWholeLedgerShown ? activity.items : activity.items.slice(0, RECENT_ACTIVITY_ROWS)
+	);
+	const hasMoreActivity = $derived(activity.hasMore || shownActivity.length < activity.items.length);
+
+	function showMoreActivity() {
+		if (isWholeLedgerShown) {
+			activity.loadMore();
+			return;
+		}
+		isWholeLedgerShown = true;
+	}
 
 	const portalInvite = new SectionState('');
 	const portalInviteLink = $derived(portalInvite.value);
@@ -2758,9 +2784,9 @@
 	     window instead of sizing itself to its longest sentence. -->
 	<DataTable
 		columns={activityLedgerColumns(undefined, { whatWraps: true })}
-		rows={activity.items}
-		hasMore={activity.hasMore}
-		onLoadMore={() => activity.loadMore()}
+		rows={shownActivity}
+		hasMore={hasMoreActivity}
+		onLoadMore={showMoreActivity}
 		isLoadingMore={activity.isLoadingMore}
 		loadMoreError={activity.loadMoreError}
 		emptyMessage="Nothing has happened yet."

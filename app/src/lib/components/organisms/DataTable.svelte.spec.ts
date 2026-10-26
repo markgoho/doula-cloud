@@ -316,6 +316,52 @@ describe('DataTable.svelte', () => {
 		expect(onLoadMore).toHaveBeenCalledOnce();
 	});
 
+	// #2105: focus follows the rows "Load more" added, in the tree on
+	// screen, so it is not lost when the last page removes the button.
+	it.each([
+		{ width: 'wide', viewport: WIDE },
+		{ width: 'narrow', viewport: NARROW }
+	])('moves focus to the first row "Load more" added, $width', async ({ viewport }) => {
+		const added: Row = { name: 'Katherine Johnson', status: 'Active' };
+		const onLoadMore = vi.fn();
+		await page.viewport(viewport[0], viewport[1]);
+		const { rerender } = await render(DataTable<Row>, {
+			columns,
+			rows,
+			hasMore: true,
+			onLoadMore,
+			emptyMessage: 'No records yet.'
+		});
+		onLoadMore.mockImplementation(() => void rerender({ rows: [...rows, added], hasMore: false }));
+
+		await page.getByRole('button', { name: 'Load more' }).click();
+
+		await expect.poll(() => document.activeElement?.getAttribute('tabindex')).toBe('-1');
+		expect(document.activeElement?.textContent).toContain('Katherine Johnson');
+		expect(document.activeElement?.textContent).not.toContain('Ada Lovelace');
+	});
+
+	it('moves focus to no row when the load adds none', async () => {
+		const onLoadMore = vi.fn();
+		await page.viewport(...WIDE);
+		const { rerender } = await render(DataTable<Row>, {
+			columns,
+			rows,
+			hasMore: true,
+			onLoadMore,
+			emptyMessage: 'No records yet.'
+		});
+		onLoadMore.mockImplementation(() => {
+			void rerender({ isLoadingMore: true });
+			void rerender({ isLoadingMore: false, loadMoreError: 'Failed to load more records' });
+		});
+
+		await page.getByRole('button', { name: 'Load more' }).click();
+
+		await expect.element(page.getByRole('alert')).toHaveTextContent('Failed to load more records');
+		expect(document.activeElement?.closest('tr, .record')).toBeNull();
+	});
+
 	it('renders no load-more button when hasMore is false', async () => {
 		await setup();
 

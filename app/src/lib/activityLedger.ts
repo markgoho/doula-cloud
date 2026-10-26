@@ -266,6 +266,14 @@ export function clientActivityLedgerColumns(): LedgerColumn[] {
 }
 
 /**
+ * How many of the newest entries a ledger shows on a page that is not
+ * the ledger's own: the Overview's Recent activity (#2006, the drawing's
+ * eight) and the Engagement page's Activity (#2105). One number, so the
+ * two read alike.
+ */
+export const RECENT_ACTIVITY_ROWS = 8;
+
+/**
  * One page of the Practice-wide feed (#486 AC1), newest first.
  */
 export async function loadPracticeActivityPage(

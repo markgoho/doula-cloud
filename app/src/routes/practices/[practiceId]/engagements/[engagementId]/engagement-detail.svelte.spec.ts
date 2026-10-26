@@ -650,6 +650,16 @@ describe('the status-move controls (#253)', () => {
 	});
 });
 
+// #2105: `count` ledger entries told apart by their actor, "Doula 1" up.
+function ledgerEntries(count: number, firstActor = 1) {
+	return Array.from({ length: count }, (_, index) => ({
+		action: 'visit_logged',
+		actorKind: 'staff',
+		actorName: `Doula ${firstActor + index}`,
+		createdAt: new Date().toISOString()
+	}));
+}
+
 // #486 AC4: the same ledger treatment reused on the staff Engagement page,
 // through the record-scoped read engagement.ListActivityHandler already
 // exposes at /activity -- last in the page's own sections.
@@ -712,6 +722,40 @@ describe('the Activity ledger section (#486)', () => {
 		await setup(fixtureDetail, jsonResponse('nope', 403));
 
 		await expect.element(testPage.getByText('nope')).toBeVisible();
+	});
+
+	// #2105: the newest eight, as the Overview's Recent activity shows, and
+	// "Load more" for the rest in place.
+	it('shows the newest eight entries, and the rest after "Load more"', async () => {
+		await setup(fixtureDetail, jsonResponse({ items: ledgerEntries(9), hasMore: false }));
+
+		await expect.element(testPage.getByRole('cell', { name: 'Doula 8', exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Doula 9', exact: true })).not.toBeInTheDocument();
+
+		await testPage.getByRole('button', { name: 'Load more' }).click();
+
+		await expect.element(testPage.getByRole('cell', { name: 'Doula 9', exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+	});
+
+	it('reads the next page once every entry already read is shown', async () => {
+		apiFetchWithSession.mockImplementation((path: string) => {
+			if (path.includes('/activity?cursor=next')) {
+				return Promise.resolve(jsonResponse({ items: ledgerEntries(1, 10), hasMore: false }));
+			}
+			if (path.includes('/activity')) {
+				return Promise.resolve(jsonResponse({ items: ledgerEntries(9), hasMore: true, nextCursor: 'next' }));
+			}
+			return Promise.resolve(jsonResponse('not available', 403));
+		});
+		await testPage.viewport(3200, 900);
+		await render(Page, { data: { ...fixtureDetail, session: sessionFor() }, params: fixture.params });
+
+		await testPage.getByRole('button', { name: 'Load more' }).click();
+		await expect.element(testPage.getByRole('cell', { name: 'Doula 9', exact: true })).toBeVisible();
+
+		await testPage.getByRole('button', { name: 'Load more' }).click();
+		await expect.element(testPage.getByRole('cell', { name: 'Doula 10', exact: true })).toBeVisible();
 	});
 });
 
