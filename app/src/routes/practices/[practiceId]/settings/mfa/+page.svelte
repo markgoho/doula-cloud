@@ -36,6 +36,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import SecondFactorNeeded from '#lib/components/molecules/SecondFactorNeeded.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
 	import type { PracticeSession } from '../../+layout.js';
@@ -113,17 +114,9 @@
 		}
 	}
 
-	// Singular/plural verbs, not just nouns ("has" vs "have") -- the same
-	// distinction payments/+page.svelte's "Stripe needs 1 more detail" vs
-	// "N more details" makes, but this sentence also conjugates the verb,
-	// so it is spelled out per branch rather than built from one suffix.
-	// Plain if/else, not a nested ternary (unicorn/no-nested-ternary), for
-	// both this and requireConsequence below.
-	function staffCountSentence(count: number): string {
-		if (count === 1) return '1 Staff member currently has no second factor set up.';
-		return `${count} Staff members currently have no second factor set up.`;
-	}
-
+	// Singular/plural verbs, not just nouns ("has" vs "have"), spelled out
+	// per branch rather than built from one suffix. Plain if/else, not a
+	// nested ternary (unicorn/no-nested-ternary).
 	function requireConsequence(count: number): string {
 		if (count === 0) {
 			return 'Every Staff member already has a second factor set up, so nobody will be signed out.';
@@ -133,8 +126,6 @@
 		}
 		return `${count} Staff members have no second factor, and will not be able to sign in to this Practice until they set one up.`;
 	}
-
-	let staffCountText = $derived(impact === undefined ? '' : staffCountSentence(impact.withoutSecondFactor));
 
 	let confirmConsequence = $derived(
 		impact === undefined ? '' : requireConsequence(impact.withoutSecondFactor)
@@ -170,16 +161,26 @@
 			deliberately picks a synonym rather than becoming an inline
 			exception to a rule the rest of the app holds absolutely.
 		-->
-		<cluster-l>
-			<Text text="Second factor:" />
-			<Badge
-				label={impact!.required
-					? 'Mandatory for every Staff member'
-					: 'Optional for every Staff member'}
-				variant={impact!.required ? 'success' : 'neutral'}
-			/>
-		</cluster-l>
-		<Text text={staffCountText} />
+		<!--
+			A status is a row (#2046): the key and its badge on one line of a
+			summary list, and the count a row of its own, where a label
+			sentence with a colon and a pill beside it dropped the pill
+			under its label at 320px.
+		-->
+		<SummaryList
+			rows={[
+				{ label: 'Second factor', value: impact!.required ? 'Mandatory for every Staff member' : 'Optional for every Staff member' },
+				{ label: 'Staff without a second factor', value: String(impact!.withoutSecondFactor) }
+			]}
+		>
+			{#snippet value(row, index)}
+				{#if index === 0}
+					<Badge label={row.value} variant={impact!.required ? 'success' : 'neutral'} />
+				{:else}
+					{row.value}
+				{/if}
+			{/snippet}
+		</SummaryList>
 		{#if !hasSecondFactor && !impact!.required}
 			<SecondFactorNeeded
 				message="You need two-factor authentication yourself before you can require it for every Staff member."

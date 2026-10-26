@@ -9,6 +9,7 @@ import {
 	CONNECT_STATUS_CHECK_FAILED_MESSAGE,
 	CONNECT_STATUS_POLL_DELAYS_MS
 } from '#lib/payments.js';
+import { gotoWithOutcome } from '#lib/outcome.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../../routeFixture.js';
 import { fixture } from './page.fixture.js';
@@ -41,6 +42,9 @@ vi.mock('#lib/api.js', () => ({
 	apiFetchWithSession
 }));
 
+const goto = vi.hoisted(() => vi.fn());
+vi.mock('$app/navigation', () => ({ goto }));
+
 interface MockOptions {
 	status?: string;
 	roles?: string[];
@@ -62,8 +66,19 @@ interface MockOptions {
 	   Practice that has already chosen Stripe, because that is the
 	   established state every other assertion here is made against; `{}`
 	   is a Practice that has raised no Invoice yet and so has never been
-	   asked. */
+	   asked. `'refused'` is a read the BFF refuses. */
 	billingModeBody?: unknown;
+	/*
+	#768's read: the default terms, or `'refused'`.
+	*/
+	paymentTermsBody?: unknown;
+}
+
+/**
+A body, or the refusal a `'refused'` option stands for.
+*/
+function answer(body: unknown): Response {
+	return body === 'refused' ? new Response('the read was refused', { status: 500 }) : jsonResponse(body);
 }
 
 function mockApi({
@@ -73,7 +88,8 @@ function mockApi({
 	websiteMode = 'own',
 	pageState: websitePageState = 'pending',
 	nudgeRefusal,
-	billingModeBody = { billingMode: 'stripe' }
+	billingModeBody = { billingMode: 'stripe' },
+	paymentTermsBody = { netDays: 30, isDefault: true }
 }: MockOptions = {}) {
 	// The Membership (roles) comes off page.data.session (#835), not a
 	// fetch this mock has to answer.
@@ -94,13 +110,13 @@ function mockApi({
 		// this mock's connect-status sequencing, nor trip the not-permitted
 		// tripwire the Doula tests below rely on.
 		if (path.endsWith('/payments/billing-mode')) {
-			return Promise.resolve(jsonResponse(billingModeBody));
+			return Promise.resolve(answer(billingModeBody));
 		}
 		// #768: payment terms are read by any Staff member too, for the
 		// same reason, and are outside the connect-status sequencing
 		// below in exactly the same way.
 		if (path.endsWith('/payments/payment-terms')) {
-			return Promise.resolve(jsonResponse({ netDays: 30, isDefault: true }));
+			return Promise.resolve(answer(paymentTermsBody));
 		}
 		if (!isOwnerOrAdmin) {
 			return Promise.resolve(new Response('not permitted to read this', { status: 403 }));
@@ -269,7 +285,7 @@ describe('payments settings screen', () => {
 	it('shows a Connect Stripe button for an Owner when not connected', async () => {
 		await setup({ status: 'not_connected', roles: ['owner'] });
 
-		await expect.element(testPage.getByText('Stripe Connect status:')).toBeVisible();
+		await expect.element(testPage.getByText('Stripe status', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText('Not connected')).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).toBeVisible();
 	});
@@ -280,7 +296,7 @@ describe('payments settings screen', () => {
 	it('shows an Admin the status and who connects it, with no button', async () => {
 		await setup({ status: 'not_connected', roles: ['admin'] });
 
-		await expect.element(testPage.getByText('Stripe Connect status:')).toBeVisible();
+		await expect.element(testPage.getByText('Stripe status', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText('Not connected')).toBeVisible();
 		await expect.element(testPage.getByText('A Practice Owner has to connect Stripe.')).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).not.toBeInTheDocument();
@@ -313,9 +329,9 @@ describe('payments settings screen', () => {
 		// #271: billing mode is the one exception -- readable by any Staff
 		// member, so this is the only call a Doula's session makes here.
 		expect(connectCallCount()).toBe(0);
-		await expect.element(testPage.getByText('This Practice bills Clients through Stripe.')).toBeVisible();
+		await expect.element(testPage.getByText('By card, through Stripe', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText('not permitted to read this')).not.toBeInTheDocument();
-		await expect.element(testPage.getByText('Stripe Connect status:')).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('Stripe status', { exact: true })).not.toBeInTheDocument();
 		await expect.element(testPage.getByText('Loading your Stripe Connect status')).not.toBeInTheDocument();
 		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).not.toBeInTheDocument();
 	});
@@ -327,7 +343,7 @@ describe('payments settings screen', () => {
 		async (status) => {
 			await setup({ status, roles: ['owner'] });
 
-			await expect.element(testPage.getByText('Stripe Connect status:')).toBeVisible();
+			await expect.element(testPage.getByText('Stripe status', { exact: true })).toBeVisible();
 			await expect
 				.element(testPage.getByText(CONNECT_STATUS_BADGES[status].label, { exact: true }))
 				.toBeVisible();
@@ -337,7 +353,7 @@ describe('payments settings screen', () => {
 	it('hides the connect button once the account is active, even for an Owner', async () => {
 		await setup({ status: 'active', roles: ['owner'] });
 
-		await expect.element(testPage.getByText('Stripe Connect status:')).toBeVisible();
+		await expect.element(testPage.getByText('Stripe status', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText('Taking payments', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: /Stripe/ })).not.toBeInTheDocument();
 		await expect.element(testPage.getByText('A Practice Owner has to connect Stripe.')).not.toBeInTheDocument();
@@ -476,7 +492,7 @@ describe('payments settings screen: the states Accounts v1 could not report', ()
 			requirementsDue: ['configuration.merchant.mcc', 'configuration.merchant.support.phone']
 		});
 
-		await expect.element(testPage.getByText('Stripe needs 2 more details from you.')).toBeVisible();
+		await expect.element(testPage.getByText('2 more details from you', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText('configuration.merchant.mcc')).not.toBeInTheDocument();
 		await expect.element(testPage.getByRole('button', { name: 'Continue Stripe onboarding' })).toBeVisible();
 	});
@@ -492,9 +508,9 @@ describe('payments settings screen: the states Accounts v1 could not report', ()
 		});
 
 		await expect
-			.element(testPage.getByText('Stripe needs 1 more detail from a Practice Owner.'))
+			.element(testPage.getByText('1 more detail from a Practice Owner', { exact: true }))
 			.toBeVisible();
-		await expect.element(testPage.getByText('Stripe needs 1 more detail from you.')).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('1 more detail from you', { exact: true })).not.toBeInTheDocument();
 	});
 
 	it('offers no onboarding button when payouts are held up with nothing to supply', async () => {
@@ -781,7 +797,7 @@ describe('payments settings screen: re-reading Connect status on return from Str
 
 		// Still the same status -- not blanked, and not replaced by
 		// FormPage's whole-page loadError, which would drop this text.
-		await expect.element(testPage.getByText('Stripe Connect status:')).toBeVisible();
+		await expect.element(testPage.getByText('Stripe status', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText('Awaiting Stripe review')).toBeVisible();
 		await expect.element(testPage.getByText(CONNECT_STATUS_CHECK_FAILED_MESSAGE)).toBeVisible();
 	});
@@ -810,83 +826,113 @@ describe('payments settings screen: re-reading Connect status on return from Str
 });
 
 // #271: a Practice-level billing rail choice, readable by any Staff
-// member and changeable only by an Owner -- a second fact this screen
-// carries alongside Stripe Connect status, not gated by it.
-describe('payments settings screen: billing mode (#271)', () => {
-	it('shows the current mode with no change control for an Admin', async () => {
+// member and changeable only by an Owner -- a row of Getting paid's
+// summary (#2046), whose Change opens the question in place.
+describe('payments settings screen: billing mode (#271, #2046)', () => {
+	it('shows the current mode with no Change for an Admin', async () => {
 		await setup({ roles: ['admin'] });
 
-		await expect.element(testPage.getByText('This Practice bills Clients through Stripe.')).toBeVisible();
-		await expect.element(testPage.getByRole('radio', { name: 'By hand' })).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('By card, through Stripe', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Change', exact: true })).not.toBeInTheDocument();
 	});
 
-	it('lets an Owner submit a change to an already-established mode', async () => {
+	it('lets an Owner change an already-established mode in place, and says what was saved', async () => {
 		await setup({ roles: ['owner'] });
 
-		await expect.element(testPage.getByText('This Practice bills Clients through Stripe.')).toBeVisible();
-		await testPage.getByLabelText('By hand').click();
-		await testPage.getByRole('button', { name: 'Save' }).click();
+		await testPage.getByRole('button', { name: 'Change', exact: true }).click();
+		await expect.element(testPage.getByRole('button', { name: 'Change', exact: true })).toHaveAttribute('aria-expanded', 'true');
+		await testPage.getByRole('radio', { name: /By hand/ }).click();
+		apiFetchWithSession.mockImplementationOnce(() => Promise.resolve(jsonResponse({ billingMode: 'by_hand' })));
+		await testPage.getByRole('button', { name: 'Save billing mode' }).click();
 
+		// The control that saved is gone, so the message takes focus (#1598).
 		await expect
-			.poll(() =>
-				apiFetchWithSession.mock.calls.some(
-					(call: unknown[]) =>
-						call[0] === '/api/practices/practice-1/payments/billing-mode' &&
-						(call[1] as RequestInit | undefined)?.method === 'PUT'
-				)
-			)
-			.toBe(true);
+			.element(testPage.getByRole('status').filter({ hasText: 'Billing mode saved. This Practice bills Clients by hand.' }))
+			.toHaveFocus();
+		await expect.element(testPage.getByText('By hand', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('radio', { name: /By hand/ })).not.toBeInTheDocument();
 	});
 
-	it('reports a failed billing mode change through the same Notice error pattern as the load failure', async () => {
+	it('reports a failed billing mode change under the question, which stays open', async () => {
 		await setup({ roles: ['owner'] });
 
-		await expect.element(testPage.getByText('This Practice bills Clients through Stripe.')).toBeVisible();
-		await testPage.getByLabelText('By hand').click();
+		await testPage.getByRole('button', { name: 'Change', exact: true }).click();
+		apiFetchWithSession.mockImplementationOnce(() =>
+			Promise.resolve(new Response('could not save billing mode', { status: 500 }))
+		);
+		await testPage.getByRole('button', { name: 'Save billing mode' }).click();
 
-		apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
-			if (path.endsWith('/payments/billing-mode') && init?.method === 'PUT') {
-				return Promise.resolve(new Response('could not save billing mode', { status: 500 }));
-			}
-			return Promise.resolve(jsonResponse({ billingMode: 'stripe' }));
-		});
-		await testPage.getByRole('button', { name: 'Save' }).click();
-
-		await expect.element(testPage.getByRole('alert')).toBeVisible();
+		await expect.element(testPage.getByText('could not save billing mode')).toBeVisible();
+		await expect.element(testPage.getByRole('radio', { name: /By card, through Stripe/ })).toBeVisible();
 	});
 
-	it('names the not-yet-chosen state rather than a raw null', async () => {
+	it('closes the question unsaved when Change is pressed again', async () => {
+		await setup({ roles: ['owner'] });
+
+		await testPage.getByRole('button', { name: 'Change', exact: true }).click();
+		await testPage.getByRole('button', { name: 'Change', exact: true }).click();
+
+		await expect.element(testPage.getByRole('radio', { name: /By hand/ })).not.toBeInTheDocument();
+	});
+
+	it('names the not-yet-chosen state rather than a raw null, with no Change', async () => {
 		// A Practice that has raised no Invoice yet: the billing-mode read
-		// answers with no `billingMode` field at all rather than a chosen
-		// rail. Every other endpoint answers exactly as it does for the
-		// rest of this block, which is what `mockApi`'s own defaults say.
+		// answers with no `billingMode` field at all. #1922: the question
+		// is not asked here at all; the first Invoice asks it.
 		await setup({ roles: ['owner'], billingModeBody: {} });
 
 		await expect
-			.element(testPage.getByText('Not chosen yet. This is asked the first time an Invoice is raised.'))
+			.element(testPage.getByText('Not chosen yet. You are asked the first time an Invoice is raised.'))
 			.toBeVisible();
-		// #1922: nothing is chosen, because the question is not asked here
-		// at all -- no radio, Stripe or otherwise, and no Save.
-		await expect.element(testPage.getByRole('radio', { name: 'Stripe' })).not.toBeInTheDocument();
-		await expect.element(testPage.getByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('button', { name: 'Change', exact: true })).not.toBeInTheDocument();
 	});
 
-	it('offers Save with nothing changed, and says Saved after a press (#1968)', async () => {
+	it('says the mode could not be loaded, in its row', async () => {
+		await setup({ roles: ['owner'], billingModeBody: 'refused' });
+
+		await expect.element(testPage.getByText(/^Could not load this: /)).toBeVisible();
+	});
+});
+
+// #768 and #2046: the payment terms are a row too, and their Change is a
+// question page of their own.
+describe('payments settings screen: payment terms (#768, #2046)', () => {
+	it('names the default as a default', async () => {
 		await setup({ roles: ['owner'] });
 
-		await expect.element(testPage.getByText('This Practice bills Clients through Stripe.')).toBeVisible();
-		await expect.element(testPage.getByRole('button', { name: 'Save' })).toBeEnabled();
-		await testPage.getByRole('button', { name: 'Save' }).click();
+		await expect.element(testPage.getByText('Due 30 days after an invoice is raised. This is the default.')).toBeVisible();
+	});
 
-		await expect.element(testPage.getByText('Saved.')).toBeVisible();
-		await expect.element(testPage.getByText('This Practice bills Clients through Stripe.')).toBeVisible();
-		const puts = apiFetchWithSession.mock.calls.filter(
-			(call: unknown[]) =>
-				call[0] === '/api/practices/practice-1/payments/billing-mode' &&
-				(call[1] as RequestInit | undefined)?.method === 'PUT'
-		);
-		expect(puts).toHaveLength(1);
-		expect(JSON.parse(String((puts[0]![1] as RequestInit).body))).toEqual({ billingMode: 'stripe' });
+	it.each([['owner'], ['admin']])('gives %s a Change that goes to the question', async (role) => {
+		await setup({ roles: [role] });
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Change', exact: true }))
+			.toHaveAttribute('href', '/practices/practice-1/settings/payments/payment-terms');
+	});
+
+	it('shows a Doula the terms with no Change', async () => {
+		await setup({ roles: ['doula'] });
+
+		await expect.element(testPage.getByText('Due 30 days after an invoice is raised. This is the default.')).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: 'Change', exact: true })).not.toBeInTheDocument();
+	});
+
+	it('says the terms could not be loaded, with no Change', async () => {
+		await setup({ roles: ['owner'], paymentTermsBody: 'refused' });
+
+		await expect.element(testPage.getByText(/^Could not load this: /)).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: 'Change', exact: true })).not.toBeInTheDocument();
+	});
+
+	it('says what the question saved, before the heading, focused, once', async () => {
+		const outcome = 'Payment terms saved. The next invoice raised is due 15 days after it is raised.';
+		goto.mockImplementationOnce(async () => {
+			await setup({ roles: ['owner'] });
+		});
+		await gotoWithOutcome(fixture.url, outcome);
+
+		await expect.element(testPage.getByRole('status').filter({ hasText: outcome })).toHaveFocus();
 	});
 });
 

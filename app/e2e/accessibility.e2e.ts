@@ -840,6 +840,13 @@ const STAFF_ROUTES: SeededRoute<StaffSeed>[] = [
 		url: (s) => `/practices/${s.practiceId}/settings/payments`,
 		h1: 'Getting paid'
 	},
+	// #2046: Getting paid's payment terms, a question page of its own.
+	{
+		key: 'practices/[practiceId]/settings/payments/payment-terms',
+		archetype: 'E',
+		url: (s) => `/practices/${s.practiceId}/settings/payments/payment-terms`,
+		h1: 'How many days does a Client have to pay an invoice?'
+	},
 	{
 		key: 'practices/[practiceId]/settings/contract-template',
 		archetype: 'F',

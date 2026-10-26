@@ -51,7 +51,7 @@ describe('the Settings index values', () => {
 				// eslint-disable-next-line unicorn/no-null -- a real API response's JSON null, for a kind with no rate set
 				{ kind: 'postpartum', amountCents: null }
 			])
-		).toBe('Birth: $1,800.00. Postpartum: not set');
+		).toBe('Birth: $1,800.00. Postpartum: no rate');
 		expect(blockedAddressesValue(0)).toBe('None');
 		expect(blockedAddressesValue(1)).toBe('1 address');
 	});

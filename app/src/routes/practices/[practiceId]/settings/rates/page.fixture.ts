@@ -12,7 +12,7 @@ import type { RatesResponse } from '#lib/rates.js';
 import type { RouteFixture } from '../../../../routeFixture.js';
 import Page from './+page.svelte';
 
-const rates: RatesResponse = {
+export const rates: RatesResponse = {
 	rates: [
 		{ kind: 'birth', amountCents: 250_000 },
 		// eslint-disable-next-line unicorn/no-null -- a real API response's JSON null, for a kind with no rate set

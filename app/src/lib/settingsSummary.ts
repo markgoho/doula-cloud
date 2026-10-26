@@ -137,7 +137,7 @@ const KIND_NAMES: Readonly<Record<Rate['kind'], string>> = { birth: 'Birth', pos
 
 export function ratesValue(rates: readonly Rate[]): string {
 	return rates
-		.map((rate) => `${KIND_NAMES[rate.kind]}: ${rate.amountCents === null ? 'not set' : formatAmount(rate.amountCents)}`)
+		.map((rate) => `${KIND_NAMES[rate.kind]}: ${rate.amountCents === null ? 'no rate' : formatAmount(rate.amountCents)}`)
 		.join('. ');
 }
 
