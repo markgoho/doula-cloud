@@ -90,7 +90,7 @@ test('The first Client in three presses, then the Visits section', async ({ page
 	// #1999: "Add a Visit" opens the form; "Save Visit" sends it.
 	await page.getByRole('button', { name: 'Add a Visit' }).click();
 	await page.getByRole('button', { name: 'Save Visit' }).click();
-	await expect(page.getByText('The Visit for Jamie Owner is added.')).toBeVisible();
+	await expect(page.getByText('Your Visit is added.')).toBeVisible();
 
 	// Scoped to the Visits table, and exact: true within it. Two things
 	// name the same Staff member on this screen: the Actions cell's own

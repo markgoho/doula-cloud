@@ -1479,7 +1479,8 @@
 		) {
 			closeAddVisit();
 			await loadVisits();
-			visitsSavedMessage = staffId ? `The Visit for ${staffName(staffId)} is added.` : 'Your Visit is added.';
+			visitsSavedMessage =
+				staffId && staffId !== callerStaffId ? `The Visit for ${staffName(staffId)} is added.` : 'Your Visit is added.';
 			await refreshStatusAfterScheduling(scheduledAt);
 			await refreshWhoIsOn();
 		}

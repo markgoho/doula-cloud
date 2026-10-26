@@ -1629,6 +1629,8 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 					body: JSON.stringify({ scheduledAt: undefined, staffId: 'staff-1' })
 				})
 			);
+			// Her own Visit is hers, however the request named her (#1999).
+			await expect.element(testPage.getByText('Your Visit is added.')).toHaveFocus();
 		});
 
 		// The other two thirds of the split. An Admin who is not on the
