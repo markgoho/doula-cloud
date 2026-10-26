@@ -26,9 +26,10 @@
 // gone -- with only 9 offsets on the machine, that is how "no usable
 // port offset" happens. groupStackProjects/pickReapProjects below decide
 // which compose stacks are orphaned; discoverPidfiles/pickReapPidfiles
-// answer the same question for pidfiles, under the same two-clock rule
-// (liveOffsets, REAP_THRESHOLD_MS) so a live worktree or a fresh
-// heartbeat protects both the same way. Killing a pidfile's pid is the
+// answer the same question for pidfiles, under the same rule
+// (liveOffsets, REAP_THRESHOLD_MS) so a live worktree, a fresh heartbeat
+// or a host process still attached to the run that started it protects
+// both the same way. Killing a pidfile's pid is the
 // one step that is not just cleanup: looksLikeOurProcess below is what
 // keeps a dead-and-recycled pid from ever being handed to `kill` just
 // because a stale pidfile still names it.
@@ -38,9 +39,12 @@
 // latter are exported for direct unit testing -- pickReapProjects/
 // pickReapPidfiles are pure, discoverPidfiles reads the filesystem the
 // same way recentlyTouched/liveWorktreeOffsets already do below. main()
-// -- the engine invocation, the compose teardown, the pidfile kills, the
-// fail-open catch -- is exercised as a subprocess
+// -- the engine invocation, the compose teardown, the pidfile kills,
+// `--dry-run`, the fail-open catch -- is exercised as a subprocess
 // instead; see scripts/e2e-stack-reap.test.ts.
+//
+// `--dry-run` prints what a real run would tear down and kill, from the
+// same plan the real run executes, and changes nothing.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -55,7 +59,7 @@ import {
   type E2EPidfileKind,
 } from '../../app/e2e/ports.ts';
 import {
-  engineInvocation,
+  execEngine,
   parseContainers,
   type ReapCandidate,
 } from './container-engine.ts';
@@ -131,11 +135,25 @@ const WORKTREE_PROJECT_PATTERN = new RegExp(
  * writing the heartbeat, so an orphaned stack still ages into
  * reapability once both clocks below run out.
  *
- * Deliberately NOT used as a liveness signal: whether the stack's host
- * BFF is up. app/e2e/stack.ts spawns it `detached` and `unref`s it, so it
+ * The heartbeat has a gap of its own (#1687): it is a wall-clock mtime
+ * written by a timer, and a Mac that sleeps with `dev:full` running
+ * wakes with the file hours old until the next tick. A session started
+ * in that window would read a quiet worktree and a stale heartbeat, and
+ * find the stack older than 15 minutes. attachedOffsets below is the
+ * third signal, and it closes that gap without any writer's help: the
+ * stack's host processes (the BFF, the mailbox, the emulator) are
+ * children of the `dev:full` or Playwright process that started them,
+ * and the kernel reparents a child to launchd (pid 1) the moment its
+ * parent dies. So a host process that is alive, is the process its
+ * pidfile names, and still has a parent other than pid 1 is proof that
+ * the run which owns the stack is still alive -- kernel state, read
+ * fresh, with no timer to fall behind.
+ *
+ * Whether the stack's host BFF is up, on its own, is still NOT a liveness
+ * signal. app/e2e/stack.ts spawns it `detached` and `unref`s it, so it
  * outlives the session that started it -- an orphaned stack's BFF is
  * still listening on its port, which would make every orphan look alive
- * and this hook a no-op.
+ * and this hook a no-op. The parent is what tells the two apart.
  */
 export const REAP_THRESHOLD_MS = 15 * 60 * 1000;
 export const QUIET_MS = 30 * 60 * 1000;
@@ -316,19 +334,76 @@ export function heartbeatLiveOffsets(
   );
 }
 
-// The one place both signals are combined: an offset is live if EITHER
-// its worktree has been touched recently OR its heartbeat is still
-// fresh (#1193) -- in addition to the quiet check, never in place of
-// it. This is what main() passes to pickReapProjects as `liveOffsets`.
+// What `ps` says a pid is: its parent, and its full command line.
+export interface ProcessInfo {
+  ppid: number;
+  command: string;
+}
+
+export type ProcessInspector = (pid: number) => ProcessInfo | undefined;
+
+// launchd, which every orphan on macOS is reparented to. (Linux can
+// reparent to a subreaper instead; this hook only ever runs on the Mac
+// the worktrees live on, and CI never meets it.)
+const ORPHAN_PARENT_PID = 1;
+
+/*
+ * Offsets that a host process still attached to its run keeps live
+ * (#1687; see the block above REAP_THRESHOLD_MS). For each worktree
+ * pidfile: the pid must be alive, must be the process its pidfile names
+ * (looksLikeOurProcess, the same check the kill path uses), and must
+ * still have a parent other than pid 1. A pid `ps` cannot read is
+ * treated as nothing to add, never as an error: this can only ever ADD
+ * liveness, so "cannot tell" falls back to the other two signals.
+ *
+ * A pid the OS has recycled onto another worktree's own mailbox or
+ * emulator could pass the weaker identity markers those two kinds have;
+ * that keeps a stack, never removes one.
+ */
+export function attachedOffsets(
+  pidfileDir: string,
+  inspect: ProcessInspector = inspectProcess
+): Set<number> {
+  const offsets = new Set<number>();
+  for (const entry of discoverPidfiles(pidfileDir)) {
+    const pid = readPid(entry.path);
+    if (pid === undefined) continue;
+    const info = inspect(pid);
+    if (info === undefined || info.ppid === ORPHAN_PARENT_PID) continue;
+    if (!looksLikeOurProcess(entry.kind, entry.offset, info.command)) continue;
+    offsets.add(entry.offset);
+  }
+  return offsets;
+}
+
+export interface LivenessSources {
+  quietMs?: number;
+  staleMs?: number;
+  // Where the host-process pidfiles live; os.tmpdir() unless a spec
+  // points it at a fixture directory.
+  pidfileDir?: string;
+  inspect?: ProcessInspector;
+}
+
+// The one place the three signals are combined: an offset is live if
+// its worktree has been touched recently, OR its heartbeat is still
+// fresh (#1193), OR one of its host processes is still attached to the
+// run that started it (#1687). Each only ever adds liveness. This is
+// what main() passes to pickReapProjects as `liveOffsets`.
 export function liveOffsets(
   worktreesRoot: string,
   nowMs: number,
-  quietMs: number = QUIET_MS,
-  staleMs: number = HEARTBEAT_STALE_MS
+  {
+    quietMs = QUIET_MS,
+    staleMs = HEARTBEAT_STALE_MS,
+    pidfileDir = tmpdir(),
+    inspect = inspectProcess,
+  }: LivenessSources = {}
 ): Set<number> {
   return new Set([
     ...liveWorktreeOffsets(worktreesRoot, nowMs, quietMs),
     ...heartbeatLiveOffsets(worktreesRoot, nowMs, staleMs),
+    ...attachedOffsets(pidfileDir, inspect),
   ]);
 }
 
@@ -458,21 +533,81 @@ export function looksLikeOurProcess(
   return commandLine.includes(IDENTITY_MARKER[kind](offset));
 }
 
-// `ps`'s own view of what a pid is actually running, not what the
-// pidfile claims. `-ww` asks for the untruncated line -- os.tmpdir()
-// paths on macOS routinely run past a terminal-width default. Returns
-// undefined on any failure (pid gone between isProcessAlive and this
-// call, `ps` missing, anything else): looksLikeOurProcess treats that
-// the same as "does not match" and this hook fails open around it.
-function processCommandLine(pid: number): string | undefined {
+// Reads `ps -o ppid=,command=` output: the parent pid, then the command
+// line after it. Undefined for anything else (an empty line from a pid
+// that is gone, or output this does not recognize).
+export function parseProcessInfo(output: string): ProcessInfo | undefined {
+  const match = /^\s*(\d+)\s+(\S.*)$/s.exec(output.trim());
+  const [, ppid, command] = match ?? [];
+  if (ppid === undefined || command === undefined) return undefined;
+  return { ppid: Number(ppid), command };
+}
+
+// `ps`'s own view of what a pid is actually running and who its parent
+// is, not what the pidfile claims. `-ww` asks for the untruncated line --
+// os.tmpdir() paths on macOS routinely run past a terminal-width default.
+// Returns undefined on any failure (pid gone, `ps` missing, anything
+// else): looksLikeOurProcess treats that the same as "does not match",
+// attachedOffsets as "nothing to add", and this hook fails open around it.
+export function inspectProcess(pid: number): ProcessInfo | undefined {
   try {
-    return execFileSync('ps', ['-p', String(pid), '-o', 'command=', '-ww'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
+    return parseProcessInfo(
+      execFileSync('ps', ['-p', String(pid), '-o', 'ppid=,command=', '-ww'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      })
+    );
   } catch {
     return undefined;
   }
+}
+
+// The pid a pidfile names, or undefined when the file is gone or does
+// not hold a plain positive integer.
+function readPid(pidfilePath: string): number | undefined {
+  try {
+    const pid = Number(fs.readFileSync(pidfilePath, 'utf8').trim());
+    return Number.isInteger(pid) && pid > 0 ? pid : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export interface PidfileAction {
+  entry: PidfileEntry;
+  // `kill`: the pid is alive and is the process its pidfile names, so
+  // it is killed and its pidfile removed. `forget`: the pidfile names
+  // nothing that is running (or nothing at all), so only the file goes.
+  action: 'kill' | 'forget';
+  pid?: number;
+}
+
+/*
+ * What a real run does to each pidfile pickReapPidfiles chose -- and what
+ * a dry run prints, from the same function, so the two cannot disagree.
+ * A pid that is alive but is not the process its pidfile names gets no
+ * action at all: almost certainly a pid the OS has recycled onto
+ * something unrelated since. Killing the pid is the one irreversible
+ * step here, and "cannot confirm" must resolve to "do nothing" (see
+ * #1212 on what a wrong reclaim costs).
+ */
+export function planPidfiles(
+  doomed: PidfileEntry[],
+  isAlive: (pid: number) => boolean = isProcessAlive,
+  inspect: ProcessInspector = inspectProcess
+): PidfileAction[] {
+  const actions: PidfileAction[] = [];
+  for (const entry of doomed) {
+    const pid = readPid(entry.path);
+    if (pid === undefined || !isAlive(pid)) {
+      actions.push({ entry, action: 'forget' });
+      continue;
+    }
+    if (!looksLikeOurProcess(entry.kind, entry.offset, inspect(pid)?.command))
+      continue;
+    actions.push({ entry, action: 'kill', pid });
+  }
+  return actions;
 }
 
 // Both reapComposeStacks and reapPidfiles end the same way: name what
@@ -489,7 +624,34 @@ function logReaped(
 ): void {
   const minutes = Math.round(QUIET_MS / 60000);
   console.log(
-    `e2e-stack-reap: ${action} ${names.length} orphaned e2e ${noun}(s) -- ${names.join(', ')}${detail ? ` -- ${detail}` : ''} (no worktree touched, and no fresh heartbeat, in the last ${minutes}m claims their port offset)`
+    `e2e-stack-reap: ${action} ${names.length} orphaned e2e ${noun}(s) -- ${names.join(', ')}${detail ? ` -- ${detail}` : ''} (no worktree touched in the last ${minutes}m, no fresh heartbeat and no attached host process claims their port offset)`
+  );
+}
+
+const DRY_RUN_FLAG = '--dry-run';
+const DRY_RUN_PREFIX = 'e2e-stack-reap (dry run):';
+
+// The compose stacks a real run would tear down, read through
+// execEngine: the `--url $DOCKER_HOST` form first, then the engine's own
+// default connection, so a login profile's DOCKER_HOST for another
+// engine (#1687) no longer leaves this hook unable to see a single stack.
+export function planStacks(
+  live: ReadonlySet<number>,
+  now: number,
+  exec: (args: string[]) => string = execEngine
+): StackProject[] {
+  const psOutput = exec([
+    'ps',
+    '-a',
+    '--filter',
+    `label=${COMPOSE_PROJECT_LABEL}`,
+    '--format',
+    'json',
+  ]);
+  return pickReapProjects(
+    groupStackProjects(parseContainers(psOutput)),
+    live,
+    now
   );
 }
 
@@ -500,27 +662,21 @@ function logReaped(
 function reapComposeStacks(
   mainCheckout: string,
   live: ReadonlySet<number>,
-  now: number
+  now: number,
+  dryRun: boolean
 ): void {
   try {
-    const ps = engineInvocation([
-      'ps',
-      '-a',
-      '--filter',
-      `label=${COMPOSE_PROJECT_LABEL}`,
-      '--format',
-      'json',
-    ]);
-    const psOutput = execFileSync(ps.binary, ps.argv, {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    const doomed = pickReapProjects(
-      groupStackProjects(parseContainers(psOutput)),
-      live,
-      now
-    );
+    const doomed = planStacks(live, now);
+    if (dryRun) {
+      console.log(
+        `${DRY_RUN_PREFIX} would tear down ${doomed.length} orphaned e2e stack(s)`
+      );
+      for (const project of doomed)
+        console.log(
+          `  ${project.project} (${project.containerIds.length} container(s), newest created ${new Date(project.newestCreatedAtMs).toISOString()})`
+        );
+      return;
+    }
     if (doomed.length === 0) return;
 
     /* `compose down -v` rather than `rm -f` on the container ids: the
@@ -535,7 +691,7 @@ function reapComposeStacks(
     const removed: string[] = [];
     for (const project of doomed) {
       try {
-        const down = engineInvocation([
+        execEngine([
           'compose',
           '-p',
           project.project,
@@ -546,9 +702,6 @@ function reapComposeStacks(
           '-t',
           '2',
         ]);
-        execFileSync(down.binary, down.argv, {
-          stdio: ['ignore', 'pipe', 'pipe'],
-        });
         removed.push(project.project);
       } catch {
         // One project's teardown failing must not stop the others.
@@ -560,6 +713,10 @@ function reapComposeStacks(
   } catch {
     // Engine unreachable, binary missing, malformed output --
     // none of it may ever surface as a blocked or slowed SessionStart.
+    if (dryRun)
+      console.log(
+        `${DRY_RUN_PREFIX} the container engine could not be read; no stack judged`
+      );
     return;
   }
 }
@@ -567,42 +724,36 @@ function reapComposeStacks(
 // Kills every orphaned host-process pidfile in os.tmpdir() (#1194). Needs
 // no container engine at all, so it runs and fails open independently of
 // reapComposeStacks above.
-function reapPidfiles(live: ReadonlySet<number>, now: number): void {
+function reapPidfiles(
+  live: ReadonlySet<number>,
+  now: number,
+  dryRun: boolean
+): void {
   try {
-    const doomed = pickReapPidfiles(discoverPidfiles(tmpdir()), live, now);
-    if (doomed.length === 0) return;
+    const actions = planPidfiles(
+      pickReapPidfiles(discoverPidfiles(tmpdir()), live, now)
+    );
+    if (dryRun) {
+      const kills = actions.filter((a) => a.action === 'kill');
+      console.log(
+        `${DRY_RUN_PREFIX} would kill ${kills.length} orphaned e2e host process(es) and forget ${actions.length - kills.length} stale pidfile(s)`
+      );
+      for (const { entry, action, pid } of actions)
+        console.log(
+          `  ${action} ${entry.kind}-${entry.offset}${pid === undefined ? '' : ` (pid ${pid})`}`
+        );
+      return;
+    }
+    if (actions.length === 0) return;
 
     const killed: string[] = [];
-    for (const entry of doomed) {
+    for (const { entry, action, pid } of actions) {
       try {
-        const pidText = fs.readFileSync(entry.path, 'utf8').trim();
-        const pid = Number(pidText);
-        if (!Number.isInteger(pid) || pid <= 0) {
-          fs.rmSync(entry.path, { force: true }); // unreadable pidfile -- nothing it could name
-          continue;
+        if (action === 'kill' && pid !== undefined) {
+          process.kill(pid);
+          killed.push(`${entry.kind}-${entry.offset}`);
         }
-        if (!isProcessAlive(pid)) {
-          fs.rmSync(entry.path, { force: true }); // already gone -- just stale bookkeeping
-          continue;
-        }
-        if (
-          !looksLikeOurProcess(
-            entry.kind,
-            entry.offset,
-            processCommandLine(pid)
-          )
-        ) {
-          // Alive, but not running what this pidfile claims -- almost
-          // certainly a pid the OS has recycled onto something
-          // unrelated since. Leave both the process and its stale
-          // pidfile alone: killing the pid is the one irreversible step
-          // here, and "cannot confirm" must resolve to "do nothing" (see
-          // #1212 on what a wrong reclaim costs).
-          continue;
-        }
-        process.kill(pid);
         fs.rmSync(entry.path, { force: true });
-        killed.push(`${entry.kind}-${entry.offset}`);
       } catch {
         // One pidfile's teardown failing must not stop the others.
       }
@@ -624,7 +775,8 @@ function reapPidfiles(live: ReadonlySet<number>, now: number): void {
  * reaper that errors must never block or slow a session from starting.
  * Do not "fix" this into failing closed.
  */
-function main(): void {
+function main(argv: string[]): void {
+  const dryRun = argv.includes(DRY_RUN_FLAG);
   let mainCheckout: string;
   let now: number;
   let live: Set<number>;
@@ -637,8 +789,12 @@ function main(): void {
     return;
   }
 
-  reapComposeStacks(mainCheckout, live, now);
-  reapPidfiles(live, now);
+  if (dryRun)
+    console.log(
+      `${DRY_RUN_PREFIX} live port offsets: ${[...live].sort((a, b) => a - b).join(', ') || 'none'}`
+    );
+  reapComposeStacks(mainCheckout, live, now, dryRun);
+  reapPidfiles(live, now, dryRun);
 }
 
-if (import.meta.main) main();
+if (import.meta.main) main(process.argv.slice(2));

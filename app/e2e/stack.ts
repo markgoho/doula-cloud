@@ -191,6 +191,32 @@ export const MAILBOX_URL = `http://${MAILBOX_HOST}:${MAILBOX_PORT}`;
 export const MAILBOX_DOMAIN = MAILGUN_SIM_DOMAIN;
 export const WORKER_SECRET = NOTIFICATION_WORKER_SECRET;
 
+// The two SessionStart reapers, run once more just before a stack comes
+// up (#1687). A long-lived session starts seldom, so orphans a killed
+// session left -- Go test containers, other worktrees' e2e stacks and
+// their host processes -- could sit on the shared Podman machine for
+// days, and this is the moment the space matters: `compose up` under a
+// starved machine is what timed out in #889. Each reaper keeps whatever
+// a live owner still holds, fails open and exits 0, so a failure here
+// only ever costs the cleanup, never the stack. Skipped in CI, whose
+// runner holds no other session's leftovers.
+const REAPER_HOOKS = ['testdb-reap.ts', 'e2e-stack-reap.ts'];
+const REAPER_TIMEOUT_MS = 60_000;
+
+function reapOrphans(): void {
+	if (process.env.CI) return;
+	for (const hook of REAPER_HOOKS) {
+		try {
+			execFileSync('bun', [path.join(REPO_ROOT, '.claude', 'hooks', hook)], {
+				stdio: ['ignore', 'inherit', 'ignore'],
+				timeout: REAPER_TIMEOUT_MS
+			});
+		} catch {
+			// bun missing, a timeout -- the stack still comes up.
+		}
+	}
+}
+
 // Brings up the whole e2e stack: the Firebase Auth emulator, the db-only
 // compose stack (see compose.e2e.yaml), the goose migrations and the
 // app_e2e login role against it, and finally the Go BFF -- all but
@@ -205,6 +231,7 @@ export const WORKER_SECRET = NOTIFICATION_WORKER_SECRET;
 // BFF's csrf.Wrap (api/internal/csrf) is configured for the one origin
 // that's really going to call it, not a hardcoded union of both.
 export async function startStack(appOrigin: string) {
+	reapOrphans();
 	await startEmulator();
 	await startDatabase();
 	installSimClock();

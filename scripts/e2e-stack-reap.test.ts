@@ -27,17 +27,23 @@ import {
   HEARTBEAT_STALE_MS,
   QUIET_MS,
   REAP_THRESHOLD_MS,
+  attachedOffsets,
   discoverPidfiles,
   groupStackProjects,
   heartbeatLiveOffsets,
+  inspectProcess,
   isHeartbeatFresh,
   isProcessAlive,
   liveOffsets,
   liveWorktreeOffsets,
   looksLikeOurProcess,
+  parseProcessInfo,
   pickReapPidfiles,
   pickReapProjects,
+  planPidfiles,
+  planStacks,
   recentlyTouched,
+  type ProcessInfo,
   type StackProject,
 } from '../.claude/hooks/e2e-stack-reap.ts';
 import type { ReapCandidate } from '../.claude/hooks/container-engine.ts';
@@ -46,10 +52,11 @@ const REPO_ROOT = path.resolve(import.meta.dir, '..');
 const HOOK = path.join(REPO_ROOT, '.claude', 'hooks', 'e2e-stack-reap.ts');
 
 function invoke(
-  env: Record<string, string | undefined>
+  env: Record<string, string | undefined>,
+  args: string[] = []
 ): Promise<{ exitCode: number; stdout: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn('bun', [HOOK], {
+    const child = spawn('bun', [HOOK, ...args], {
       stdio: ['ignore', 'pipe', 'inherit'],
       env,
     });
@@ -443,13 +450,26 @@ describe('heartbeatLiveOffsets', () => {
   });
 });
 
+// A `ps` stand-in: answers only for the pids it was given.
+function fakeInspector(
+  table: Record<number, ProcessInfo>
+): (pid: number) => ProcessInfo | undefined {
+  return (pid) => table[pid];
+}
+
 describe('liveOffsets', () => {
   const now = Date.now();
+  // Never this machine's real os.tmpdir(): other worktrees' real pidfiles
+  // are there, and would make every expected set below nondeterministic.
+  const noPidfiles = () => ({
+    pidfileDir: temporaryPidfileDir(),
+    inspect: fakeInspector({}),
+  });
 
   test('live: worktree touched, no heartbeat at all', () => {
     const root = temporaryWorktreesRoot();
     worktreeWithOffset(root, 'agent-touched', '1', 0, now);
-    expect(liveOffsets(root, now)).toEqual(new Set([1]));
+    expect(liveOffsets(root, now, noPidfiles())).toEqual(new Set([1]));
   });
 
   test('live: worktree quiet, but heartbeat fresh -- the case #1193 is about', () => {
@@ -464,7 +484,7 @@ describe('liveOffsets', () => {
     fs.writeFileSync(e2eHeartbeatPath(worktree), String(now));
     restampWorktreeQuiet(worktree, now);
     expect(recentlyTouched(worktree, now)).toBe(false); // the worktree itself really is quiet
-    expect(liveOffsets(root, now)).toEqual(new Set([2]));
+    expect(liveOffsets(root, now, noPidfiles())).toEqual(new Set([2]));
   });
 
   test('not live: worktree quiet and heartbeat stale -- augments the quiet check, never replaces it', () => {
@@ -482,7 +502,219 @@ describe('liveOffsets', () => {
     fs.utimesSync(heartbeat, stale, stale);
     restampWorktreeQuiet(worktree, now);
     expect(recentlyTouched(worktree, now)).toBe(false); // the worktree itself really is quiet
-    expect(liveOffsets(root, now)).toEqual(new Set());
+    expect(liveOffsets(root, now, noPidfiles())).toEqual(new Set());
+  });
+
+  /*
+   * The case #1687 is about: a `dev:full` left running in a worktree
+   * nobody has touched for hours, on a Mac that has just woken from
+   * sleep, so its heartbeat timer has not yet caught up. The worktree is
+   * quiet, the heartbeat is stale, and the stack is old -- and its BFF
+   * is still the child of the live `dev:full` that started it.
+   */
+  test('live: worktree quiet and heartbeat stale, but its BFF is still attached to dev:full (#1687)', () => {
+    const root = temporaryWorktreesRoot();
+    const worktree = worktreeWithOffset(
+      root,
+      '1941-pen-dates',
+      '2',
+      QUIET_MS + 60_000,
+      now
+    );
+    const heartbeat = e2eHeartbeatPath(worktree);
+    fs.writeFileSync(heartbeat, String(now));
+    const stale = new Date(now - 8 * 60 * 60 * 1000);
+    fs.utimesSync(heartbeat, stale, stale);
+    restampWorktreeQuiet(worktree, now);
+
+    const pidfileDir = temporaryPidfileDir();
+    writePidfile(pidfileDir, 'api', 2, 34217, 13 * 60 * 60 * 1000, now);
+    const inspect = fakeInspector({
+      34217: { ppid: 32867, command: e2eApiBinaryPath(2) },
+    });
+
+    expect(liveOffsets(root, now, { pidfileDir, inspect })).toEqual(
+      new Set([2])
+    );
+    // And so neither the stack nor its host processes are picked.
+    expect(
+      pickReapProjects(
+        [stack('doula-cloud-e2e-2', 2, now - 13 * 60 * 60 * 1000)],
+        liveOffsets(root, now, { pidfileDir, inspect }),
+        now
+      )
+    ).toEqual([]);
+  });
+});
+
+describe('attachedOffsets', () => {
+  const now = Date.now();
+
+  test('claims the offset of a host process whose parent is alive', () => {
+    const dir = temporaryPidfileDir();
+    writePidfile(dir, 'api', 2, 500, 0, now);
+    writePidfile(dir, 'mailbox', 3, 501, 0, now);
+    writePidfile(dir, 'firebase-emulator', 5, 502, 0, now);
+    const inspect = fakeInspector({
+      500: { ppid: 400, command: e2eApiBinaryPath(2) },
+      501: { ppid: 401, command: 'bun /wt/app/e2e/mailbox.ts' },
+      502: { ppid: 402, command: 'node firebase emulators:start --only auth' },
+    });
+    expect(attachedOffsets(dir, inspect)).toEqual(new Set([2, 3, 5]));
+  });
+
+  test('claims nothing for a host process reparented to launchd: its run is gone', () => {
+    const dir = temporaryPidfileDir();
+    writePidfile(dir, 'api', 2, 500, 0, now);
+    const inspect = fakeInspector({
+      500: { ppid: 1, command: e2eApiBinaryPath(2) },
+    });
+    expect(attachedOffsets(dir, inspect)).toEqual(new Set());
+  });
+
+  test('claims nothing for a pid that is gone', () => {
+    const dir = temporaryPidfileDir();
+    writePidfile(dir, 'api', 2, 500, 0, now);
+    expect(attachedOffsets(dir, fakeInspector({}))).toEqual(new Set());
+  });
+
+  test('claims nothing for a pid recycled onto an unrelated process', () => {
+    const dir = temporaryPidfileDir();
+    writePidfile(dir, 'api', 2, 500, 0, now);
+    const inspect = fakeInspector({
+      500: { ppid: 400, command: '/usr/bin/some-other-thing' },
+    });
+    expect(attachedOffsets(dir, inspect)).toEqual(new Set());
+  });
+
+  test("claims nothing for another offset's BFF binary", () => {
+    const dir = temporaryPidfileDir();
+    writePidfile(dir, 'api', 2, 500, 0, now);
+    const inspect = fakeInspector({
+      500: { ppid: 400, command: e2eApiBinaryPath(3) },
+    });
+    expect(attachedOffsets(dir, inspect)).toEqual(new Set());
+  });
+
+  test('claims nothing for a pidfile that does not hold a pid', () => {
+    const dir = temporaryPidfileDir();
+    fs.writeFileSync(path.join(dir, 'doula-cloud-e2e-api-2.pid'), 'nope');
+    const inspect = () => ({ ppid: 400, command: e2eApiBinaryPath(2) });
+    expect(attachedOffsets(dir, inspect)).toEqual(new Set());
+  });
+});
+
+describe('parseProcessInfo', () => {
+  test("reads ps's ppid and command columns", () => {
+    expect(
+      parseProcessInfo('32867 /var/folders/T/doula-cloud-e2e-api-2\n')
+    ).toEqual({ ppid: 32867, command: '/var/folders/T/doula-cloud-e2e-api-2' });
+  });
+
+  test('keeps the spaces inside a command line', () => {
+    expect(parseProcessInfo('    1 bun /wt/app/e2e/mailbox.ts')).toEqual({
+      ppid: 1,
+      command: 'bun /wt/app/e2e/mailbox.ts',
+    });
+  });
+
+  test('undefined for empty or unrecognized output', () => {
+    expect(parseProcessInfo('')).toBeUndefined();
+    expect(parseProcessInfo('PPID COMMAND')).toBeUndefined();
+  });
+});
+
+describe('inspectProcess', () => {
+  test('reads this process: its real parent, and bun in its command line', () => {
+    const info = inspectProcess(process.pid);
+    expect(info?.ppid).toBe(process.ppid);
+    expect(info?.command).toContain('bun');
+  });
+
+  test('undefined for a pid nothing on this machine plausibly holds', () => {
+    expect(inspectProcess(999_999)).toBeUndefined();
+  });
+});
+
+describe('planPidfiles', () => {
+  const now = Date.now();
+  const alive = (pid: number) => pid === 500 || pid === 501;
+  const inspect = fakeInspector({
+    500: { ppid: 1, command: e2eApiBinaryPath(4) },
+    501: { ppid: 1, command: '/usr/bin/unrelated' },
+  });
+
+  test('kills an orphan that is still the process its pidfile names', () => {
+    const dir = temporaryPidfileDir();
+    writePidfile(dir, 'api', 4, 500, 0, now);
+    const entry = discoverPidfiles(dir)[0]!;
+    expect(planPidfiles([entry], alive, inspect)).toEqual([
+      { entry, action: 'kill', pid: 500 },
+    ]);
+  });
+
+  test('only forgets a pidfile whose pid is gone', () => {
+    const dir = temporaryPidfileDir();
+    writePidfile(dir, 'api', 4, 777, 0, now);
+    const entry = discoverPidfiles(dir)[0]!;
+    expect(planPidfiles([entry], alive, inspect)).toEqual([
+      { entry, action: 'forget' },
+    ]);
+  });
+
+  test('only forgets a pidfile that holds no pid', () => {
+    const dir = temporaryPidfileDir();
+    fs.writeFileSync(path.join(dir, 'doula-cloud-e2e-api-4.pid'), '');
+    const entry = discoverPidfiles(dir)[0]!;
+    expect(planPidfiles([entry], alive, inspect)).toEqual([
+      { entry, action: 'forget' },
+    ]);
+  });
+
+  test('does nothing to a live pid that is not the process its pidfile names', () => {
+    const dir = temporaryPidfileDir();
+    writePidfile(dir, 'api', 4, 501, 0, now);
+    expect(planPidfiles(discoverPidfiles(dir), alive, inspect)).toEqual([]);
+  });
+});
+
+describe('planStacks', () => {
+  const now = Date.now();
+  const old = Math.floor((now - REAP_THRESHOLD_MS * 4) / 1000);
+  const ps = JSON.stringify([
+    {
+      Id: 'orphan',
+      Names: ['doula-cloud-e2e-1_db_1'],
+      Labels: { 'com.docker.compose.project': 'doula-cloud-e2e-1' },
+      Created: old,
+    },
+    {
+      Id: 'live',
+      Names: ['doula-cloud-e2e-2_db_1'],
+      Labels: { 'com.docker.compose.project': 'doula-cloud-e2e-2' },
+      Created: old,
+    },
+  ]);
+
+  test('asks the engine for compose containers and picks only the dead offset', () => {
+    const calls: string[][] = [];
+    const exec = (args: string[]) => {
+      calls.push(args);
+      return ps;
+    };
+    expect(
+      planStacks(new Set([2]), now, exec).map((project) => project.project)
+    ).toEqual(['doula-cloud-e2e-1']);
+    expect(calls).toEqual([
+      [
+        'ps',
+        '-a',
+        '--filter',
+        'label=com.docker.compose.project',
+        '--format',
+        'json',
+      ],
+    ]);
   });
 });
 
@@ -655,12 +887,14 @@ describe('e2e-stack-reap hook (subprocess, fail-open behavior)', () => {
   });
 
   /*
-   * DOCKER_HOST unset is the ordinary case for a hook, not an exotic
-   * one: docs/testing/api.md has it set by hand on the command that
-   * runs the tests, never from a login profile, so a SessionStart hook
-   * never inherits it. It must still reach the engine (container-engine
-   * .ts drops `--url` rather than giving up) and must still fail open
-   * when there is no engine to reach.
+   * DOCKER_HOST unset is an ordinary case for a hook, not an exotic one:
+   * docs/testing/api.md has it set by hand on the command that runs the
+   * tests, and a SessionStart hook inherits the login environment, not
+   * that shell's. (A login profile can export one of its own, for
+   * another engine; the fake-engine tests below drive that case.) The
+   * hook must still reach the engine (container-engine.ts drops `--url`
+   * rather than giving up) and must still fail open when there is no
+   * engine to reach.
    */
   test('fails open with no DOCKER_HOST rather than giving up on the engine', async () => {
     const env: Record<string, string | undefined> = {
@@ -672,5 +906,100 @@ describe('e2e-stack-reap hook (subprocess, fail-open behavior)', () => {
     const { exitCode, stdout } = await invoke(env);
     expect(exitCode).toBe(0);
     expect(stdout).toBe('');
+  });
+});
+
+/*
+ * main() against a fake engine binary: a shell script that refuses every
+ * `--url` call -- the way `podman --url <a Colima Docker socket>` fails
+ * with `ping response was 404` -- answers a bare `ps` with canned JSON,
+ * and logs every call. So no real container is touched here.
+ *
+ * main() reads this machine's real `.claude/worktrees` (it finds the
+ * main checkout from the hook's own path), so the canned stack sits at
+ * offset 77: no worktree can hold it, since only 9 offsets exist, and no
+ * live worktree can make it look alive. TMPDIR is a fixture dir, for the
+ * reason the block above gives.
+ */
+describe('e2e-stack-reap hook (subprocess, fake engine, #1687)', () => {
+  const ORPHAN_PROJECT = 'doula-cloud-e2e-77';
+
+  function fakeEngine(): { binary: string; log: string } {
+    const dir = temporaryPidfileDir();
+    const psFile = path.join(dir, 'ps.json');
+    const log = path.join(dir, 'calls.log');
+    const created = Math.floor((Date.now() - REAP_THRESHOLD_MS * 4) / 1000);
+    fs.writeFileSync(
+      psFile,
+      JSON.stringify([
+        {
+          Id: 'orphan0000000077',
+          Names: [`${ORPHAN_PROJECT}_db_1`],
+          Labels: { 'com.docker.compose.project': ORPHAN_PROJECT },
+          Created: created,
+        },
+      ])
+    );
+    const binary = path.join(dir, 'engine');
+    fs.writeFileSync(
+      binary,
+      `#!/bin/sh\necho "$@" >> '${log}'\ncase "$1" in --url) exit 1;; ps) cat '${psFile}';; esac\n`,
+      { mode: 0o755 }
+    );
+    return { binary, log };
+  }
+
+  function envFor(binary: string): Record<string, string | undefined> {
+    return {
+      ...process.env,
+      DOCKER_HOST: 'unix:///Users/me/.colima/default/docker.sock',
+      CONTAINER_ENGINE: binary,
+      TMPDIR: temporaryPidfileDir(),
+    };
+  }
+
+  test('--dry-run reaches the engine past a non-Podman DOCKER_HOST, lists the orphan and changes nothing', async () => {
+    const engine = fakeEngine();
+    const { exitCode, stdout } = await invoke(envFor(engine.binary), [
+      '--dry-run',
+    ]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('would tear down 1 orphaned e2e stack(s)');
+    expect(stdout).toContain(`  ${ORPHAN_PROJECT} (1 container(s)`);
+    expect(stdout).toContain('would kill 0 orphaned e2e host process(es)');
+    const calls = fs.readFileSync(engine.log, 'utf8').trim().split('\n');
+    expect(calls).toEqual([
+      '--url unix:///Users/me/.colima/default/docker.sock ps -a --filter label=com.docker.compose.project --format json',
+      'ps -a --filter label=com.docker.compose.project --format json',
+    ]);
+  });
+
+  test('a real run tears the orphan down through the default connection', async () => {
+    const engine = fakeEngine();
+    const { exitCode, stdout } = await invoke(envFor(engine.binary));
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain(
+      `tore down 1 orphaned e2e stack(s) -- ${ORPHAN_PROJECT}`
+    );
+    const calls = fs.readFileSync(engine.log, 'utf8').trim().split('\n');
+    expect(calls).toHaveLength(4);
+    expect(calls[2]).toStartWith(
+      `--url unix:///Users/me/.colima/default/docker.sock compose -p ${ORPHAN_PROJECT} `
+    );
+    expect(calls[3]).toStartWith(`compose -p ${ORPHAN_PROJECT} -f `);
+    expect(calls[3]).toEndWith(' down -v -t 2');
+  });
+
+  test('--dry-run says so when the engine cannot be read at all', async () => {
+    const { exitCode, stdout } = await invoke(
+      {
+        ...process.env,
+        CONTAINER_ENGINE: '/nonexistent-binary-e2e-stack-reap-test',
+        TMPDIR: temporaryPidfileDir(),
+      },
+      ['--dry-run']
+    );
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('the container engine could not be read');
   });
 });
