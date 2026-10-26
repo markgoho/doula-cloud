@@ -7,19 +7,25 @@
 package portal
 
 import (
+	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/engagement"
+	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/payments"
+	"doula-cloud/api/internal/plans"
 )
 
 // Detail is an Engagement's basic detail as seen from the Client portal:
-// the Practice it's at, its status, and when it is due.
+// the Practice it's at, when it is due, and one line each about her
+// money, her documents and her thread.
 type Detail struct {
 	EngagementID string `json:"engagementId"`
 	PracticeName string `json:"practiceName"`
@@ -34,13 +40,14 @@ type Detail struct {
 	// family_name is optional, so the two are joined with concat_ws rather
 	// than `||`, which would null the entire expression.
 	ClientName string `json:"clientName"`
-	// Status is the care phase. Absent, with DueDate, once the Engagement
-	// has no living or expected baby (#2003, as #293 decided): after a
-	// loss "Your care" shows neither a phase nor a due date. The outcome
-	// itself never crosses (ADR-0015); only these two absences do.
-	Status *string `json:"status,omitempty"`
+	// No care phase crosses (#2007): the drawings state none at any
+	// width, and #293 found none true after a loss.
+	//
 	// DueDate is ADR-0017's `engagements.due_date`, nullable because a
-	// postpartum-only Engagement has none (#505).
+	// postpartum-only Engagement has none (#505). Absent too once the
+	// Engagement has no living or expected baby (#2003, as #293 decided):
+	// after a loss "Your care" shows no due date. The outcome itself never
+	// crosses (ADR-0015); only this absence does.
 	DueDate *string `json:"dueDate,omitempty"`
 	// CreatedAt is when the Engagement itself began (#310): the portal's
 	// authenticated chrome names the Engagement she is in by it, the one
@@ -64,6 +71,16 @@ type Detail struct {
 	// total comes from, so the hub and the money screen cannot disagree.
 	// Additive: 0 when nothing is owed.
 	TotalToPayCents int64 `json:"totalToPayCents"`
+	// Contract, BirthPlan and LastMessage are the one line each that
+	// "Your care" says about her documents and her thread (#2007), read
+	// by the package that owns each, so the hub carries no prose, no
+	// answers and no page of Messages to say one sentence. Each is absent
+	// when there is nothing yet; BirthPlan is also absent wherever
+	// OffersBirthPlan is false, so it never mentions a plan she cannot
+	// have.
+	Contract    *contracts.ClientGlance `json:"contract,omitempty"`
+	BirthPlan   *plans.ClientGlance     `json:"birthPlan,omitempty"`
+	LastMessage *message.Message        `json:"lastMessage,omitempty"`
 }
 
 // DetailHandler views the caller's Engagement's basic detail. Must be
@@ -80,7 +97,6 @@ func DetailHandler() http.Handler {
 		engagementID, _ := clientauth.EngagementID(r.Context())
 
 		var d Detail
-		var status string
 		var dueDate sql.NullString
 		var kind string
 		// Both selected only to answer engagement.OffersBirthPlan, and
@@ -91,13 +107,13 @@ func DetailHandler() http.Handler {
 		err := tx.QueryRowContext(r.Context(),
 			`SELECT e.id, p.name,
 			        trim(concat_ws(' ', coalesce(c.preferred_name, c.given_name), c.family_name)),
-			        e.status, e.due_date::text, e.created_at, e.kind::text, e.birth_outcome::text
+			        e.due_date::text, e.created_at, e.kind::text, e.birth_outcome::text
 			 FROM engagements e
 			 JOIN practices p ON p.id = e.practice_id
 			 JOIN clients c ON c.id = e.client_id
 			 WHERE e.id = $1 AND e.client_id = $2`,
 			engagementID, clientID,
-		).Scan(&d.EngagementID, &d.PracticeName, &d.ClientName, &status, &dueDate, &d.CreatedAt, &kind, &birthOutcome)
+		).Scan(&d.EngagementID, &d.PracticeName, &d.ClientName, &dueDate, &d.CreatedAt, &kind, &birthOutcome)
 		if errors.Is(err, sql.ErrNoRows) {
 			// coverage:ignore reason: clientauth.Middleware already confirmed ownership; unreachable in practice
 			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
@@ -108,11 +124,8 @@ func DetailHandler() http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if engagement.HasLivingOrExpectedBaby(birthOutcome) {
-			d.Status = &status
-			if dueDate.Valid {
-				d.DueDate = &dueDate.String
-			}
+		if dueDate.Valid && engagement.HasLivingOrExpectedBaby(birthOutcome) {
+			d.DueDate = &dueDate.String
 		}
 		d.OffersBirthPlan = engagement.OffersBirthPlan(engagement.BirthPlanInputs{
 			Kind: engagement.Kind(kind), BirthOutcome: birthOutcome,
@@ -125,6 +138,44 @@ func DetailHandler() http.Handler {
 			return
 		}
 
+		if err := readGlances(r.Context(), tx, engagementID, &d); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
 		apierr.WriteJSON(w, http.StatusOK, d)
 	})
+}
+
+// readGlances fills Detail's three one-line facts (#2007) from the
+// packages that own them.
+func readGlances(ctx context.Context, tx *sql.Tx, engagementID string, d *Detail) error {
+	contract, found, err := contracts.ClientContractGlance(ctx, tx, engagementID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("portal: contract glance: %w", err)
+	}
+	if found {
+		d.Contract = &contract
+	}
+	if d.OffersBirthPlan {
+		birthPlan, found, err := plans.ClientBirthPlanGlance(ctx, tx, engagementID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return fmt.Errorf("portal: birth plan glance: %w", err)
+		}
+		if found {
+			d.BirthPlan = &birthPlan
+		}
+	}
+	latest, found, err := message.ClientLatest(ctx, tx, engagementID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("portal: last message: %w", err)
+	}
+	if found {
+		d.LastMessage = &latest
+	}
+	return nil
 }

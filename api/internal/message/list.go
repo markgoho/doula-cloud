@@ -181,17 +181,49 @@ const listMessagesAfterQuery = `SELECT m.id, m.sender_type, m.sender_id,
 // same word listPortalVisits already stands in with for the identical
 // gap on the Client-portal side.
 func listMessages(ctx context.Context, tx *sql.Tx, engagementID string, after *messageCursor, unresolvedStaffSenderName string) ([]Message, bool, error) {
+	items, err := queryMessages(ctx, tx, engagementID, after, unresolvedStaffSenderName, pageSize+1)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, false, err
+	}
+	hasMore := len(items) > pageSize
+	if hasMore {
+		items = items[:pageSize]
+	}
+	return items, hasMore, nil
+}
+
+// ClientLatest is the newest Message on her own Engagement's thread, for
+// the one line the portal's "Your care" page quotes (#2007); found is
+// false when nobody has written yet. The same read and the same names as
+// ClientListHandler's first row, so the hub and the thread cannot name a
+// sender two ways. tx must be a Client-portal transaction.
+func ClientLatest(ctx context.Context, tx *sql.Tx, engagementID string) (latest Message, found bool, err error) {
+	items, err := queryMessages(ctx, tx, engagementID, nil, activity.StaffActorDisplayName, 1)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return Message{}, false, err
+	}
+	if len(items) == 0 {
+		return Message{}, false, nil
+	}
+	return items[0], true, nil
+}
+
+// queryMessages is listMessages' read with the row count the caller
+// asks for: a page and its one-row lookahead, or ClientLatest's one.
+func queryMessages(ctx context.Context, tx *sql.Tx, engagementID string, after *messageCursor, unresolvedStaffSenderName string, limit int) ([]Message, error) {
 	var rows *sql.Rows
 	var err error
 	if after != nil {
 		rows, err = tx.QueryContext(ctx, listMessagesAfterQuery,
-			senderTypeStaff, senderTypeClient, engagementID, after.createdAt, after.messageID, pageSize+1)
+			senderTypeStaff, senderTypeClient, engagementID, after.createdAt, after.messageID, limit)
 	} else {
-		rows, err = tx.QueryContext(ctx, listMessagesQuery, senderTypeStaff, senderTypeClient, engagementID, pageSize+1)
+		rows, err = tx.QueryContext(ctx, listMessagesQuery, senderTypeStaff, senderTypeClient, engagementID, limit)
 	}
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
-		return nil, false, fmt.Errorf("message: list messages: %w", err)
+		return nil, fmt.Errorf("message: list messages: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -203,7 +235,7 @@ func listMessages(ctx context.Context, tx *sql.Tx, engagementID string, after *m
 			&staffName, &clientGivenName, &clientPreferredName, &it.Body,
 			&it.AttachmentContentType, &it.AttachmentFilename, &it.CreatedAt); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
-			return nil, false, fmt.Errorf("message: scan message row: %w", err)
+			return nil, fmt.Errorf("message: scan message row: %w", err)
 		}
 		switch {
 		case staffName.Valid:
@@ -217,14 +249,10 @@ func listMessages(ctx context.Context, tx *sql.Tx, engagementID string, after *m
 	}
 	if err := rows.Err(); err != nil {
 		// coverage:ignore reason: row iteration failure, not exercised by unit tests
-		return nil, false, fmt.Errorf("message: iterate message rows: %w", err)
+		return nil, fmt.Errorf("message: iterate message rows: %w", err)
 	}
 
-	hasMore := len(items) > pageSize
-	if hasMore {
-		items = items[:pageSize]
-	}
-	return items, hasMore, nil
+	return items, nil
 }
 
 // messageCursor is a page boundary: the (created_at, id) tuple of the

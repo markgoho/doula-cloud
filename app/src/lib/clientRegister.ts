@@ -80,6 +80,10 @@ export function contractVoidedNotice(practiceName: string): string {
  * and renders the PDF before it answers (`api/internal/contracts/
  * sign.go`), so both halves are true the moment this shows. It claims no
  * message to the Practice: signing sends none. */
+/** What the Contract page and the "Your care" card both say before any
+ * Contract reaches her (#2007): one sentence, so the two cannot drift. */
+export const NO_CONTRACT_MESSAGE = 'No Contract has been sent for your care yet.';
+
 export function contractSignedNotice(practiceName: string): string {
 	return `You signed this Contract. ${practiceName} can see it is signed, and your copy is ready to download.`;
 }

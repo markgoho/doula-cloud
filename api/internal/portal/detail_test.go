@@ -81,7 +81,7 @@ func seedClientAtPracticeWithDueDateAndKind(t *testing.T, db *testdb.DB, identit
 func TestDetailHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "portal-detail-uid"
-	engagementID, status := seedClientAtPracticeWithDueDate(t, db, identityUID, "Riverside Doulas", "2027-06-15")
+	engagementID, _ := seedClientAtPracticeWithDueDate(t, db, identityUID, "Riverside Doulas", "2027-06-15")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -115,9 +115,6 @@ func TestDetailHandler_Success(t *testing.T) {
 	}
 	if out.PracticeName != "Riverside Doulas" {
 		t.Fatalf("practiceName = %q, want %q", out.PracticeName, "Riverside Doulas")
-	}
-	if out.Status == nil || *out.Status != status {
-		t.Fatalf("status = %v, want %q", out.Status, status)
 	}
 	// #505: the portal reads the Engagement's due date.
 	if out.DueDate == nil || *out.DueDate != "2027-06-15" {

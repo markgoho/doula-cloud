@@ -84,7 +84,10 @@
 			overflow-wrap: anywhere;
 		}
 
+		/* A line can quote a person's own words (#2007's last Message),
+		   which may be one long link with nowhere to break. */
 		.description {
+			overflow-wrap: anywhere;
 			font-size: var(--text-body-size);
 			font-weight: var(--text-body-weight);
 			line-height: var(--text-body-leading);

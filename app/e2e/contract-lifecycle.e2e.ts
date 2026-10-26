@@ -59,9 +59,9 @@ test('A Contract can be built, sent, signed by the Client, and its Signed PDF re
 	await signInPortalClient(clientPage, clientPage.request, clientEmail);
 	await expect(clientPage).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
 
-	// Scoped to #main: the shell's own nav carries a same-named "Contract"
-	// link too.
-	await clientPage.locator('#main').getByRole('link', { name: 'Contract' }).click();
+	// The hub's Contract card (#2007), which asks her to sign one that
+	// waits on her. Scoped to #main beside the shell's own nav.
+	await clientPage.locator('#main').getByRole('link', { name: 'Read and sign your contract' }).click();
 	// #212: the Client register's own label, not the Staff ContractStatus
 	// component's raw "Status: sent".
 	await expect(clientPage.getByText('Ready for your signature')).toBeVisible();

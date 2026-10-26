@@ -22,7 +22,8 @@ const NAV_ITEMS = [
 async function setup({
 	practiceName = 'Riverside Doula Collective',
 	switcherLabel = 'Riverside Doula Collective, started Mar 12, 2026',
-	width = 1440
+	width = 1440,
+	navItems = NAV_ITEMS
 } = {}) {
 	// Pinned rather than left to the runner's default: the nav renders twice
 	// with one copy display:none, so which one is visible is a fact about
@@ -32,7 +33,7 @@ async function setup({
 	await render(PortalTopBar, {
 		practiceName,
 		switcherLabel,
-		navItems: NAV_ITEMS,
+		navItems,
 		name: 'Tasha Bell',
 		signOut
 	});
@@ -139,6 +140,64 @@ describe('PortalTopBar', () => {
 		for (const { label } of NAV_ITEMS) {
 			await expect.element(page.getByRole('link', { name: label, exact: true })).toBeVisible();
 		}
+	});
+});
+
+/**
+The visible nav's items, grouped into the lines they sit on.
+*/
+function navLines(): HTMLElement[][] {
+	const nav = page
+		.getByRole('navigation')
+		.all()
+		.map((each) => each.element() as HTMLElement)
+		.find((each) => each.checkVisibility())!;
+	const lines = new Map<number, HTMLElement[]>();
+	for (const link of nav.querySelectorAll<HTMLElement>(':scope > a')) {
+		const top = Math.round(link.getBoundingClientRect().top);
+		lines.set(top, [...(lines.get(top) ?? []), link]);
+	}
+	return lines.values().toArray();
+}
+
+/*
+ * #2007: the tabs stretched across the whole 1440px bar, and at 390px
+ * Notifications wrapped onto a line by itself, centered, which read as
+ * broken. Each tab is its label's width where the row fits, and where it
+ * does not, no line is left holding one tab. Line geometry has no
+ * accessible signal, so this reads the rendered boxes.
+ */
+describe('PortalTopBar tabs (#2007)', () => {
+	it('sizes each tab to its label at 1440px, not to a share of the bar', async () => {
+		await setup({ width: 1440 });
+
+		const lines = navLines();
+		expect(lines).toHaveLength(1);
+		const [line] = lines;
+		for (const link of line!) {
+			expect(link.getBoundingClientRect().width).toBeLessThan(200);
+		}
+	});
+
+	// Every 4px from 320px across the band where the row starts and stops
+	// wrapping, so a width where the switch comes too late cannot slip
+	// between two samples.
+	const widths = Array.from({ length: 81 }, (_, step) => 320 + step * 4);
+	const sets = [
+		{ name: 'five', items: NAV_ITEMS },
+		{ name: 'four', items: NAV_ITEMS.filter((item) => item.label !== 'Birth plan') }
+	];
+	describe.each(sets)('with $name tabs', ({ items }) => {
+		it.each(widths)('leaves no tab alone on a line at %ipx', async (width) => {
+			await setup({ width, navItems: items });
+
+			const lines = navLines();
+			expect(lines.flat()).toHaveLength(items.length);
+			const sizes = lines.map((line) => line.length);
+			expect(sizes.length === 1 || sizes.every((size) => size > 1), `lines of ${sizes.join(', ')}`).toBe(true);
+			const header = page.getByRole('banner').element();
+			expect(header.scrollWidth).toBeLessThanOrEqual(header.clientWidth);
+		});
 	});
 });
 

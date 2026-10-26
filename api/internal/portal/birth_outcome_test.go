@@ -113,10 +113,12 @@ func TestDetailHandler_NoCarePhaseOrDueDateAfterALoss(t *testing.T) {
 			if err := json.NewDecoder(resp.Body).Decode(&fields); err != nil {
 				t.Fatalf("decode response: %v", err)
 			}
-			for _, key := range []string{"status", "dueDate"} {
-				if _, present := fields[key]; present != tt.wantKeys {
-					t.Fatalf("%q present = %v, want %v with birth outcome %q", key, present, tt.wantKeys, tt.outcome)
-				}
+			if _, present := fields["dueDate"]; present != tt.wantKeys {
+				t.Fatalf("dueDate present = %v, want %v with birth outcome %q", present, tt.wantKeys, tt.outcome)
+			}
+			// #2007: no care phase crosses on any Engagement, whatever its outcome.
+			if _, present := fields["status"]; present {
+				t.Fatalf("status present with birth outcome %q, want it absent on every Engagement", tt.outcome)
 			}
 		})
 	}

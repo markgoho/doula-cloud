@@ -10,7 +10,12 @@
 		type Contract
 	} from '#lib/contract.js';
 	import { triggerBlobDownload } from '#lib/blobDownload.js';
-	import { contractSignedNotice, contractStatusLabel, contractVoidedNotice } from '#lib/clientRegister.js';
+	import {
+		NO_CONTRACT_MESSAGE,
+		contractSignedNotice,
+		contractStatusLabel,
+		contractVoidedNotice
+	} from '#lib/clientRegister.js';
 	import ContractView from '#lib/components/molecules/ContractView.svelte';
 	import SignContract from '#lib/components/organisms/SignContract.svelte';
 	import Badge from '#lib/components/atoms/Badge.svelte';
@@ -73,7 +78,7 @@
 	backHref={resolve('/portal/(authenticated)/engagements/[engagementId]', { engagementId: page.params.engagementId! })}
 	loadError={error || undefined}
 	loading={contract === undefined ? 'Loading Contract' : undefined}
-	empty={contract === null ? 'No Contract has been sent for your care yet.' : undefined}
+	empty={contract === null ? NO_CONTRACT_MESSAGE : undefined}
 >
 	{#snippet content()}
 		<!-- `content` renders only once the Template's own states are past,

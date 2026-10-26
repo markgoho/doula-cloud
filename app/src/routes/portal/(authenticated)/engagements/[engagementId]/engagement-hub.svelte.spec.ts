@@ -107,14 +107,78 @@ async function setupHeading({ record = detail }: { record?: unknown } = {}) {
 }
 
 describe('Client portal Engagement hub', () => {
-	// The happy path: the fixture's own detail already carries a due date
-	// (2027-03-01), so this is the fixture's content unmodified.
-	it("shows the due date under its own label, not 'Created' (#505)", async () => {
+	// #2007: the drawing's sections, in one order at every width -- the
+	// ticket's own list, with the ledger last as the drawing has it.
+	it('shows her care in the order the drawing gives it (#2007)', async () => {
 		await setupHub();
 
-		await expect.element(page.getByText('Due date')).toBeVisible();
-		await expect.element(page.getByText('Mar 1, 2027')).toBeVisible();
+		await expect.element(page.getByRole('heading', { name: 'What you still owe' })).toBeVisible();
+		const headings = page
+			.getByRole('heading', { level: 2 })
+			.all()
+			.map((heading) => heading.element().textContent?.trim());
+		expect(headings).toEqual([
+			'What happens next',
+			'Your visits',
+			'Your birth plan',
+			'Your contract',
+			'Messages',
+			'What you still owe',
+			'Everything that has happened'
+		]);
+	});
+
+	// #2007: the Practice's name under the heading, and no care phase.
+	it('names her Practice and states no care phase (#2007)', async () => {
+		await setupHub();
+
+		await expect.element(page.getByText(practiceName, { exact: true })).toBeVisible();
+		await expect.element(page.getByText('Status')).not.toBeInTheDocument();
+		await expect.element(page.getByText('Ongoing')).not.toBeInTheDocument();
+	});
+
+	// The happy path: the fixture's next Visit and its due date.
+	it('says what happens next: who is coming, when, and the due date (#2007, #505)', async () => {
+		await setupHub();
+
+		const next = page.getByRole('region', { name: 'What happens next' });
+		await expect.element(next.getByText(`${visits[0]!.doulaName} is coming to you on`, { exact: false })).toBeVisible();
+		await expect.element(next.getByText('Your due date is Mar 1, 2027.')).toBeVisible();
 		await expect.element(page.getByText('Created')).not.toBeInTheDocument();
+	});
+
+	it('promises nothing in what happens next when nothing is booked (CB-G5)', async () => {
+		mockFetch(detail, [], []);
+		await render(Hub);
+
+		const next = page.getByRole('region', { name: 'What happens next' });
+		await expect.element(next.getByText('No visit is booked yet.')).toBeVisible();
+	});
+
+	// #2007: one card per document, its state as the line under the way
+	// to it.
+	it('carries a card for her birth plan, her contract and her messages (#2007)', async () => {
+		await setupHub();
+
+		await expect
+			.element(page.getByRole('link', { name: 'Read your birth plan' }))
+			.toHaveAttribute('href', '/portal/engagements/engagement-1/birth-plan');
+		await expect
+			.element(page.getByRole('link', { name: 'Read what you signed' }))
+			.toHaveAttribute('href', '/portal/engagements/engagement-1/contract');
+		await expect
+			.element(page.getByRole('link', { name: 'Open your messages' }))
+			.toHaveAttribute('href', '/portal/engagements/engagement-1/messages');
+		await expect
+			.element(page.getByRole('link', { name: 'Open your messages' }))
+			.toHaveAccessibleDescription(new RegExp(`^From ${detail.lastMessage.senderName} on `));
+	});
+
+	it('offers no contract link before one is sent (#2007)', async () => {
+		await setupHub({ record: { ...detail, contract: undefined } });
+
+		await expect.element(page.getByText('No Contract has been sent for your care yet.')).toBeVisible();
+		await expect.element(page.getByRole('link', { name: /contract|signed/i })).not.toBeInTheDocument();
 	});
 
 	// #983: the hub's money -- the figure, and a way through. Since #2038
@@ -145,7 +209,7 @@ describe('Client portal Engagement hub', () => {
 	it('titles the tab with the same distinguishing label the switcher uses (#310)', async () => {
 		await setupHub();
 
-		await expect.element(page.getByText('Due date')).toBeVisible();
+		await expect.element(page.getByText('Your due date is Mar 1, 2027.')).toBeVisible();
 		expect(document.title).toContain(engagementLabel({ practiceName, createdAt }));
 	});
 
@@ -158,24 +222,19 @@ describe('Client portal Engagement hub', () => {
 	it('shows nothing for a null due date -- no blank label, no placeholder', async () => {
 		await setupHub({ record: { ...detail, dueDate: undefined } });
 
-		// #212: the register's own label ("Ongoing" for `active`), not the
-		// raw enum value -- this is also this suite's own assertion for
-		// #212's AC4 (the portal shows the register's word for a status
-		// value).
-		await expect.element(page.getByText('Ongoing')).toBeVisible();
+		await expect.element(page.getByRole('region', { name: 'What happens next' })).toBeVisible();
 		await expect.element(page.getByText(/due date/i)).not.toBeInTheDocument();
 	});
 
-	// #311: a postpartum-only Engagement offers no Birth Plan link on the
-	// hub, alongside the layout's own nav-item test. Not the happy path --
-	// the fixture's own detail offers one (see the first test above) -- so
-	// this is a departure from it, spread rather than restated.
-	it('offers no Birth plan link when the Engagement does not call for one', async () => {
-		await setupHub({ record: { ...detail, offersBirthPlan: false } });
+	// #311: a postpartum-only Engagement offers no Birth Plan on the hub,
+	// alongside the layout's own nav-item test. Not the happy path -- the
+	// fixture's own detail offers one -- so this is a departure from it,
+	// spread rather than restated.
+	it('mentions no birth plan when the Engagement does not call for one', async () => {
+		await setupHub({ record: { ...detail, offersBirthPlan: false, birthPlan: undefined } });
 
-		await expect.element(page.getByText('Ongoing')).toBeVisible();
-		await expect.element(page.getByRole('link', { name: 'Birth plan' })).not.toBeInTheDocument();
-		await expect.element(page.getByRole('link', { name: 'Contract' })).toBeVisible();
+		await expect.element(page.getByRole('link', { name: 'Read what you signed' })).toBeVisible();
+		await expect.element(page.getByText(/birth plan/i)).not.toBeInTheDocument();
 	});
 });
 
@@ -511,24 +570,28 @@ describe('Your visits (#478)', () => {
 	});
 });
 
-// #2003, as #293 decided: after a loss the BFF leaves out the care phase
-// and the due date (portal.Detail omits both keys), and the hub draws no
-// row, no label and no placeholder for either. The record is the
-// fixture's own Engagement with both keys gone, the shape the BFF sends.
+// #2003, as #293 decided: after a loss the BFF leaves out the due date
+// and offers no Birth Plan, and since #2007 no Engagement carries a care
+// phase at all. The record is the fixture's own Engagement in that shape.
 describe('the hub after a loss (#2003)', () => {
-	it('shows no care phase and no due date', async () => {
-		await setupHub({ record: { ...detail, status: undefined, dueDate: undefined, offersBirthPlan: false } });
+	it('shows no care phase, no due date and no birth plan, and still what happens next', async () => {
+		await setupHub({ record: { ...detail, dueDate: undefined, offersBirthPlan: false, birthPlan: undefined } });
 
 		await expect.element(page.getByRole('heading', { name: 'Your care', level: 1 })).toBeVisible();
+		await expect.element(page.getByRole('region', { name: 'What happens next' })).toBeVisible();
 		await expect.element(page.getByRole('definition').filter({ hasText: '$3,350.00' })).toBeVisible();
 		await expect.element(page.getByText('Status')).not.toBeInTheDocument();
 		await expect.element(page.getByText(/due date/i)).not.toBeInTheDocument();
 		await expect.element(page.getByText('Mar 1, 2027')).not.toBeInTheDocument();
+		await expect.element(page.getByText(/birth plan/i)).not.toBeInTheDocument();
 	});
 
-	it('still shows the care phase when only the due date is absent', async () => {
-		await setupHub({ record: { ...detail, dueDate: undefined } });
+	// The Contract page's own voided notice: it claims nothing about money.
+	it('says the Practice ended a voided Contract, and nothing about what is owed', async () => {
+		await setupHub({ record: { ...detail, offersBirthPlan: false, contract: { status: 'voided' } } });
 
-		await expect.element(page.getByText('Status')).toBeVisible();
+		await expect
+			.element(page.getByRole('link', { name: 'Read your contract' }))
+			.toHaveAccessibleDescription(`${practiceName} ended this Contract.`);
 	});
 });

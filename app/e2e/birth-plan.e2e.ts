@@ -65,9 +65,9 @@ test('Staff fills a Birth Plan, and the Client portal shows the matching read-on
 	await signInPortalClient(page, request, clientEmail);
 	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
 
-	// Scoped to the page: since the shell landed (#452) the portal nav
-	// carries a Birth plan link too, and both are correct.
-	await page.getByRole('main').getByRole('link', { name: 'Birth plan' }).click();
+	// The hub's own Birth Plan card (#2007), scoped to the page: the
+	// portal nav carries a Birth plan link too (#452).
+	await page.getByRole('main').getByRole('link', { name: 'Read your birth plan' }).click();
 	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}/birth-plan$`));
 	await expect(page.getByText('Soft lighting, calm music')).toBeVisible();
 
