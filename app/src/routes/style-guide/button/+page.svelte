@@ -1,5 +1,24 @@
+<script module lang="ts">
+	import type { DemoVariant } from '../drag-surface/dragSurface.js';
+
+	interface Properties {
+		isOpenerReturned?: boolean;
+	}
+
+	/*
+	 * The opener that takes focus back after its form's Cancel (#2103) is
+	 * its own subject: mounting it is the moment it is drawn again, so
+	 * loading this variant shows focus land on it.
+	 */
+	export const variants: readonly DemoVariant<Properties>[] = [
+		{ name: 'Button, an opener that took focus back after Cancel', props: { isOpenerReturned: true } }
+	];
+</script>
+
 <script lang="ts">
 	import Button from '#lib/components/atoms/Button.svelte';
+
+	let { isOpenerReturned = false }: Properties = $props();
 
 	const noop = () => {};
 </script>
@@ -57,5 +76,18 @@
 	<section>
 		<h2>Focus</h2>
 		<p>Tab to any button on this page to see its focus outline.</p>
+	</section>
+
+	<section>
+		<h2>Taking focus when it appears</h2>
+		<p>
+			<code>focusOnAppearing</code> moves focus to the button the moment it renders, or the moment it
+			turns true on a button already on screen. A record page's opener uses it after Cancel, so focus
+			goes back to where the change was asked from. Choose the "opener that took focus back" state on
+			the drag surface to see it land.
+		</p>
+		{#if isOpenerReturned}
+			<div><Button label="Offer this work" variant="secondary" onClick={noop} focusOnAppearing /></div>
+		{/if}
 	</section>
 </stack-l>

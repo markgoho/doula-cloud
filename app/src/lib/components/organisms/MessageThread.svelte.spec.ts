@@ -310,6 +310,8 @@ describe('MessageThread.svelte compose behind an opener (#2004)', () => {
 
 		expect(page.getByLabelText('Message').elements()).toHaveLength(0);
 		expect(page.getByText('There is a problem').elements()).toHaveLength(0);
+		// #2103: back on the opener, not on the page.
+		await expect.element(page.getByRole('button', { name: 'Write a message' })).toHaveFocus();
 	});
 
 	it('closes the form once a message is away, and says so, focused', async () => {

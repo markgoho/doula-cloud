@@ -948,6 +948,8 @@ describe('the Visits section Date column and schedule control (#250)', () => {
 		await testPage.getByRole('button', { name: 'Cancel' }).click();
 
 		await expect.element(testPage.getByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+		// #2103: back on the row's Change that opened it, not on the page.
+		await expect.element(visitsTable().getByRole('button', { name: 'Change' }).nth(0)).toHaveFocus();
 	});
 
 	it('says what was refused, keeps the form open, and reads the rows again for what was already written', async () => {
@@ -1043,6 +1045,8 @@ describe('the Visits section Date column and schedule control (#250)', () => {
 		await expect.element(testPage.getByText('visits are down')).toBeVisible();
 		await testPage.getByRole('button', { name: 'Cancel' }).click();
 		await expect.element(testPage.getByText('visits are down')).not.toBeInTheDocument();
+		// #2103: back on the opener, not on the page.
+		await expect.element(testPage.getByRole('button', { name: 'Add a Visit' })).toHaveFocus();
 	});
 
 	it('lists the scheduled Visits by date, newest first, then the unscheduled ones (#1999)', async () => {
@@ -1453,6 +1457,8 @@ describe('the Contract read first, and its change only when asked (#2004)', () =
 		await expect.element(testPage.getByRole('heading', { level: 3, name: 'Change the Draft Contract' })).toHaveFocus();
 		await testPage.getByLabelText('Scope of service').fill('Something else');
 		await testPage.getByRole('button', { name: 'Cancel' }).click();
+		// #2103: back on the opener, not on the page.
+		await expect.element(testPage.getByRole('button', { name: 'Change the Draft Contract' })).toHaveFocus();
 		await testPage.getByRole('button', { name: 'Change the Draft Contract' }).click();
 
 		await expect
@@ -1932,6 +1938,8 @@ describe('the Care Plan and Birth Plan sections (#2004)', () => {
 		await testPage.getByRole('button', { name: 'Cancel' }).click();
 
 		await expect.element(planSection('Care Plan').getByText('1 of 2 questions answered')).toBeVisible();
+		// #2103: back on the opener, not on the page.
+		await expect.element(planSection('Care Plan').getByRole('button', { name: 'Change the Care Plan' })).toHaveFocus();
 		await planSection('Care Plan').getByRole('button', { name: 'Change the Care Plan' }).click();
 		await expect.element(testPage.getByLabelText('Lighting')).toHaveValue('');
 	});

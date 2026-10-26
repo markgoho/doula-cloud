@@ -340,6 +340,8 @@ describe('ContractStatus.svelte', () => {
 
 			await expect.element(page.getByLabelText('Reason')).not.toBeInTheDocument();
 			expect(onRequestVoid).not.toHaveBeenCalled();
+			// #2103: back on the opener, not on the page.
+			await expect.element(page.getByRole('button', { name: 'Request void' })).toHaveFocus();
 		});
 
 		it('shows an error message if onRequestVoid rejects', async () => {
@@ -464,6 +466,8 @@ describe('ContractStatus.svelte', () => {
 
 			await expect.element(page.getByLabelText('Reason for declining')).not.toBeInTheDocument();
 			expect(onDeclineVoidRequest).not.toHaveBeenCalled();
+			// #2103: back on the opener, not on the page.
+			await expect.element(page.getByRole('button', { name: 'Decline' })).toHaveFocus();
 		});
 
 		it('shows an error message if onDeclineVoidRequest rejects', async () => {

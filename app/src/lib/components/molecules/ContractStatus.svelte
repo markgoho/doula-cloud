@@ -131,11 +131,19 @@
 	let requestError = $state('');
 	let isRequestingVoid = $state(false);
 
+	// #2103: Cancel hands focus back to the opener, drawn again once the
+	// form has gone: "Request void", or the Decline of the request whose
+	// form it was. Only Cancel sets them; opening a form clears them.
+	let isRequestOpenerRefocused = $state(false);
+	let declineOpenerRefocusedId = $state('');
+
 	function openRequestForm() {
+		isRequestOpenerRefocused = false;
 		isRequestFormShown = true;
 	}
 
 	function cancelRequestForm() {
+		isRequestOpenerRefocused = true;
 		isRequestFormShown = false;
 		requestReason = '';
 		requestError = '';
@@ -168,12 +176,14 @@
 	let decliningRequestId = $state('');
 
 	function openDeclineForm(requestId: string) {
+		declineOpenerRefocusedId = '';
 		declineFormRequestId = requestId;
 		declineReason = '';
 		declineError = '';
 	}
 
 	function cancelDeclineForm() {
+		declineOpenerRefocusedId = declineFormRequestId;
 		declineFormRequestId = '';
 		declineReason = '';
 		declineError = '';
@@ -296,7 +306,12 @@
 		<Button label="Send request" onClick={handleRequestVoid} loading={isRequestingVoid} />
 		<Button label="Cancel" variant="secondary" onClick={cancelRequestForm} />
 	{:else}
-		<Button label="Request void" variant="secondary" onClick={openRequestForm} />
+		<Button
+			label="Request void"
+			variant="secondary"
+			onClick={openRequestForm}
+			focusOnAppearing={isRequestOpenerRefocused}
+		/>
 	{/if}
 {/if}
 
@@ -365,6 +380,7 @@
 					variant="secondary"
 					describedBy="void-request-{request.id}-name"
 					onClick={() => openDeclineForm(request.id)}
+					focusOnAppearing={declineOpenerRefocusedId === request.id}
 				/>
 			{/if}
 			<span class="visually-hidden" id="void-request-{request.id}-name"

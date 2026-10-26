@@ -150,7 +150,17 @@
 		// has typed in yet.
 		submission.errors = [];
 		clearState.error = '';
+		isOpenerRefocused = false;
 		isFormShown = true;
+	}
+
+	// #2103: Cancel hands focus back to the opener, drawn again once the
+	// form has gone. Only Cancel sets it: a save's answer is read instead.
+	let isOpenerRefocused = $state(false);
+
+	function cancelForm() {
+		isOpenerRefocused = true;
+		isFormShown = false;
 	}
 
 	/**
@@ -269,7 +279,13 @@
 	-->
 	{#if !isFormShown && canRecord && (!isRecorded || canCorrect)}
 		<cluster-l space="var(--space-3)">
-			<Button label={recordLabel} size="sm" variant="secondary" onClick={openForm} />
+			<Button
+				label={recordLabel}
+				size="sm"
+				variant="secondary"
+				onClick={openForm}
+				focusOnAppearing={isOpenerRefocused}
+			/>
 			{#if isRecorded}
 				<Button
 					label="Remove this record"
@@ -327,7 +343,7 @@
 					type="button"
 					size="sm"
 					variant="secondary"
-					onClick={() => (isFormShown = false)}
+					onClick={cancelForm}
 				/>
 			</cluster-l>
 		</StackedForm>
