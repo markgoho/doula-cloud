@@ -20,7 +20,7 @@
 	 * answered #440's question, and PostConnectHandler refuses to mint an
 	 * Account Link in that state whatever this screen does.
 	 */
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy, onMount, tick } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
@@ -46,13 +46,11 @@
 		loadBillingMode,
 		setBillingMode,
 		loadPaymentTerms,
-		setPaymentTerms,
-		MIN_PAYMENT_TERMS_DAYS,
-		MAX_PAYMENT_TERMS_DAYS,
-		netDaysOutOfRangeMessage,
 		type BillingMode,
 		type PaymentTerms
 	} from '#lib/invoice.js';
+	import { takeOutcome } from '#lib/outcome.js';
+	import { billingModeOptions, billingModeSavedMessage, billingModeValue, paymentTermsValue } from './gettingPaid.js';
 	import type { PracticeSession } from '../../+layout.js';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
@@ -61,9 +59,7 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
-	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
-	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
-	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
 
 	let status = $state<ConnectStatusResult | undefined>();
@@ -114,20 +110,27 @@
 	// Connect status fetch below uses. billingMode undefined is
 	// ambiguous on its own -- still loading, or loaded and never
 	// chosen -- so isBillingModeLoaded tells the two apart.
+	/*
+	 * What a save said (#2046, #1710): the payment terms question hands its
+	 * message here across the navigation, and the billing mode's in-place
+	 * Change writes its own. Read once while the page renders, so a reload
+	 * says nothing; a `$state` so a later save on this page replaces it.
+	 */
+	let outcome = $state(takeOutcome(page.url));
+
 	let billingMode = $state<BillingMode | undefined>();
 	let isBillingModeLoaded = $state(false);
 	let billingModeLoadError = $state('');
 	// No fallback (#1922): with no mode stored nothing is chosen, and the
-	// question is not drawn at all -- #271 asks it on the first Invoice.
+	// row has no Change at all -- #271 asks it on the first Invoice.
 	let chosenBillingMode = $state<BillingMode | undefined>();
+	let isBillingModeOpen = $state(false);
 	let isSavingBillingMode = $state(false);
 	let billingModeSaveError = $state('');
-	let isBillingModeSaved = $state(false);
 
 	onMount(async () => {
 		try {
 			billingMode = await loadBillingMode(apiFetchWithSession, page.params.practiceId!);
-			chosenBillingMode = billingMode;
 			isBillingModeLoaded = true;
 		} catch (error_) {
 			billingModeLoadError = error_ instanceof Error ? error_.message : 'Failed to load billing mode';
@@ -137,66 +140,27 @@
 	/*
 	 * #768: how many days after an Invoice is raised it falls due, and so
 	 * what this Practice's own book calls late. Every Staff member reads
-	 * it; an Owner or an Admin sets it. A Practice that has never set one
-	 * runs on 30 days, and the screen says so rather than showing an
-	 * empty field a reader has to interpret.
+	 * it; an Owner or an Admin changes it, on its own question page
+	 * (#2046). A Practice that has never set one runs on 30 days, and the
+	 * row says so.
 	 */
 	let paymentTerms = $state<PaymentTerms | undefined>();
 	let paymentTermsLoadError = $state('');
-	let typedNetDays = $state('');
-	let isSavingPaymentTerms = $state(false);
-	let paymentTermsError = $state('');
-	let isPaymentTermsSaved = $state(false);
-
-	/*
-	 * GOV.UK's Recover from validation errors pattern (ADR-0021,
-	 * docs/design/govuk-alignment.md): a refused value is said twice --
-	 * once at the top of the page, where ErrorSummary takes focus and
-	 * announces it, and once beside the field itself. This is the first
-	 * field on this screen a person can get wrong, so the summary is
-	 * earned here and was not before. The id is fixed rather than
-	 * generated so the summary's own `<a href="#id">` can reach the input
-	 * -- an anchor, not a click handler, per the Rule of Least Power.
-	 */
-	const netDaysFieldId = 'payment-terms-net-days';
-	const paymentTermsErrors = $derived(
-		paymentTermsError ? [{ message: paymentTermsError, targetId: netDaysFieldId }] : []
-	);
 
 	onMount(async () => {
 		try {
 			paymentTerms = await loadPaymentTerms(apiFetchWithSession, page.params.practiceId!);
-			typedNetDays = String(paymentTerms.netDays);
 		} catch (error_) {
 			paymentTermsLoadError = error_ instanceof Error ? error_.message : 'Failed to load payment terms';
 		}
 	});
 
-	async function handleSavePaymentTerms() {
-		// Refused client-side before it is refused at the boundary, so the
-		// reader is told what is wrong in the words of the field rather
-		// than in the words of an API. The BFF refuses the same range.
-		isPaymentTermsSaved = false;
-		const netDays = Number(typedNetDays);
-		if (
-			!Number.isSafeInteger(netDays) ||
-			netDays < MIN_PAYMENT_TERMS_DAYS ||
-			netDays > MAX_PAYMENT_TERMS_DAYS
-		) {
-			paymentTermsError = netDaysOutOfRangeMessage;
-			return;
-		}
-		isSavingPaymentTerms = true;
-		paymentTermsError = '';
-		try {
-			paymentTerms = await setPaymentTerms(apiFetchWithSession, page.params.practiceId!, netDays);
-			typedNetDays = String(paymentTerms.netDays);
-			isPaymentTermsSaved = true;
-		} catch (error_) {
-			paymentTermsError = error_ instanceof Error ? error_.message : 'Failed to save payment terms';
-		} finally {
-			isSavingPaymentTerms = false;
-		}
+	// The billing mode's Change opens the question in place, from what is
+	// saved, so a choice abandoned earlier is not carried in.
+	function toggleBillingMode() {
+		isBillingModeOpen = !isBillingModeOpen;
+		chosenBillingMode = billingMode;
+		billingModeSaveError = '';
 	}
 
 	// Owner-only (#271, by analogy to Connect onboarding) -- changing an
@@ -205,18 +169,22 @@
 	//
 	// Save is always offered (#1968, ADR-0055: no disabled submit
 	// button). A press with nothing changed sends the stored mode back;
-	// the BFF writes nothing and records nothing for it, and the screen
-	// says "Saved." as Timezone and Rates do.
+	// the BFF writes nothing and records nothing for it, and the page
+	// says what the mode is, as any save does.
 	async function handleChangeBillingMode() {
 		isSavingBillingMode = true;
 		billingModeSaveError = '';
-		isBillingModeSaved = false;
 		try {
-			// A non-null assertion, not a guard: the question is drawn only
-			// once a mode is stored, and `chosenBillingMode` starts as it,
-			// so a guard would be a branch that never runs.
+			// A non-null assertion, not a guard: the Change is drawn only
+			// once a mode is stored, and opening it sets `chosenBillingMode`
+			// to that mode, so a guard would be a branch that never runs.
 			billingMode = await setBillingMode(apiFetchWithSession, page.params.practiceId!, chosenBillingMode!);
-			isBillingModeSaved = true;
+			isBillingModeOpen = false;
+			// Cleared first, so a message already showing (the payment terms') is
+			// drawn again and takes focus, rather than changing its words in place.
+			outcome = undefined;
+			await tick();
+			outcome = billingModeSavedMessage(billingMode);
 		} catch (error_) {
 			billingModeSaveError = error_ instanceof Error ? error_.message : 'Failed to change billing mode';
 		} finally {
@@ -385,11 +353,9 @@
 	   reading it. The Owner is the one Stripe will ask, so hers is second
 	   person; the Admin is reading the state of the Practice's account,
 	   which is not an errand she can run. */
-	function requirementsSentence(count: number, isOwner: boolean): string {
+	function requirementsValue(count: number, isOwner: boolean): string {
 		const detail = count === 1 ? '1 more detail' : `${count} more details`;
-		return isOwner
-			? `Stripe needs ${detail} from you.`
-			: `Stripe needs ${detail} from a Practice Owner.`;
+		return isOwner ? `${detail} from you` : `${detail} from a Practice Owner`;
 	}
 
 	let canStartOnboarding = $derived(
@@ -413,19 +379,6 @@
 	   minutes between publishing and the deploy finishing, and every
 	   Practice passes through it on the way to `live`. */
 	let isPageFailed = $derived(website?.pageState === 'failed');
-
-	/*
-	 * The Connect button is the third of three mutually exclusive branches
-	 * `body` renders when `canStartOnboarding`: blocked on no website,
-	 * blocked on a failed page, or -- only once neither block applies --
-	 * the checklist with the button under it. `actions` is a separate
-	 * region from `body` now that both are `FormPage` fieldsets/actions
-	 * rather than one `{#if}` chain, so it needs its own name for exactly
-	 * the branch that shows the button, or it would render the button
-	 * during the two blocked states too (caught by
-	 * payments-settings.svelte.spec.ts).
-	 */
-	let canConnect = $derived(canStartOnboarding && hasDeclaredWebsite && !isPageFailed);
 
 	let websiteHref = $derived(
 		resolve('/practices/[practiceId]/settings/website', { practiceId: page.params.practiceId! })
@@ -471,110 +424,64 @@
 	let isBackFromStripeRestricted = $derived(
 		connectParameter === 'return' && status !== undefined && status.status === 'onboarding_incomplete'
 	);
+
+	/*
+	 * #2046: the page is its facts, one summary row each, with a Change on
+	 * a row the reader may change -- the billing mode for an Owner once
+	 * one is chosen, the payment terms for an Owner or an Admin. The
+	 * Stripe status and what Stripe still needs are rows too, for those
+	 * who may read them, where they were a label sentence with a pill
+	 * beside it.
+	 */
+	type Fact = 'billingMode' | 'paymentTerms' | 'stripeStatus' | 'stripeNeeds';
+	interface FactRow extends SummaryListRow {
+		fact: Fact;
+	}
+
+	const paymentTermsHref = $derived(
+		resolve('/practices/[practiceId]/settings/payments/payment-terms', { practiceId: page.params.practiceId! })
+	);
+
+	function readFailed(message: string): string {
+		return `Could not load this: ${message}`;
+	}
+
+	const factRows = $derived.by((): FactRow[] => {
+		const rows: FactRow[] = [
+			{
+				fact: 'billingMode',
+				label: 'Billing mode',
+				value: billingModeLoadError ? readFailed(billingModeLoadError) : billingModeValue(billingMode),
+				...(isPracticeOwner && billingMode !== undefined && { changes: 'the billing mode', isDetailShown: isBillingModeOpen })
+			},
+			{
+				fact: 'paymentTerms',
+				label: 'Payment terms',
+				value: paymentTermsLoadError ? readFailed(paymentTermsLoadError) : paymentTermsValue(paymentTerms!),
+				...(isPracticeOwnerOrAdmin && !paymentTermsLoadError && { changes: 'the payment terms' })
+			}
+		];
+		if (status !== undefined) {
+			rows.push({ fact: 'stripeStatus', label: 'Stripe status', value: CONNECT_STATUS_BADGES[status.status].label });
+			if (status.requirementsDue.length > 0) {
+				rows.push({
+					fact: 'stripeNeeds',
+					label: 'Stripe still needs',
+					value: requirementsValue(status.requirementsDue.length, isPracticeOwner)
+				});
+			}
+		}
+		return rows;
+	});
+
+	// Every read this page shows before it draws: the two any Staff member
+	// reads, and the Connect status for those who may read it.
+	const isLoading = $derived(
+		(!isBillingModeLoaded && !billingModeLoadError) ||
+			(paymentTerms === undefined && !paymentTermsLoadError) ||
+			(isPracticeOwnerOrAdmin && !error && status === undefined)
+	);
 </script>
-
-{#snippet billingModeSection()}
-	<!--
-		#271: a Practice-level choice between Stripe-hosted Invoicing and
-		billing by hand -- readable by any Staff member, changeable only by
-		an Owner, and never asked here for the first time (that rides
-		InvoiceSection's own inline ask on the first Invoice raised).
-	-->
-	{#if billingModeLoadError}
-		<Notice variant="error" message={billingModeLoadError} />
-	{:else if !isBillingModeLoaded}
-		<Text text="Loading billing mode…" />
-	{:else if billingMode === undefined}
-		<Text text="Not chosen yet. This is asked the first time an Invoice is raised." />
-	{:else}
-		<Text
-			text={billingMode === 'by_hand'
-				? 'This Practice bills Clients by hand.'
-				: 'This Practice bills Clients through Stripe.'}
-		/>
-		{#if isPracticeOwner}
-			<RadioGroup
-				legend="Change billing mode"
-				options={[
-					{ value: 'stripe' as const, label: 'Stripe' },
-					{ value: 'by_hand' as const, label: 'By hand' }
-				]}
-				value={chosenBillingMode}
-				onChange={(value) => (chosenBillingMode = value)}
-			/>
-			<Button
-				label="Save"
-				onClick={handleChangeBillingMode}
-				loading={isSavingBillingMode}
-			/>
-			{#if billingModeSaveError}
-				<Notice variant="error" message={billingModeSaveError} />
-			{:else if isBillingModeSaved}
-				<Text text="Saved." />
-			{/if}
-		{/if}
-	{/if}
-{/snippet}
-
-{#snippet errorSummary()}
-	<ErrorSummary errors={paymentTermsErrors} />
-{/snippet}
-
-{#snippet paymentTermsSection()}
-	<!--
-		#768: an Invoice falls due this many days after it is raised, on
-		both rails. Changing it never moves an Invoice already raised --
-		each one keeps the terms it was billed under -- so the sentence
-		below says "the next invoice", not "invoices".
-	-->
-	{#if paymentTermsLoadError}
-		<Notice variant="error" message={paymentTermsLoadError} />
-	{:else if paymentTerms === undefined}
-		<Text text="Loading payment terms…" />
-	{:else}
-		<Text
-			text={paymentTerms.isDefault
-				? 'Invoices are due 30 days after they are raised. That is the default; this Practice has not set terms of its own.'
-				: `Invoices are due ${paymentTerms.netDays} days after they are raised.`}
-		/>
-		{#if isPracticeOwnerOrAdmin}
-			<LabeledField
-				id={netDaysFieldId}
-				label="Days to pay"
-				hint="Applies to the next invoice raised. An invoice already raised keeps the terms it was billed under."
-				error={paymentTermsError || undefined}
-				width={3}
-			>
-				<!-- Up to 365 days, so three characters (#1216); the label says "days" for a screen reader. -->
-				{#snippet children({ id, describedBy, invalid, width })}
-					<TextInput
-						{id}
-						{describedBy}
-						{invalid}
-						{width}
-						suffix="days"
-						type="number"
-						min={MIN_PAYMENT_TERMS_DAYS}
-						inputmode="numeric"
-						value={typedNetDays}
-						onInput={(value) => (typedNetDays = value)}
-					/>
-				{/snippet}
-			</LabeledField>
-			<Button
-				label="Update payment terms"
-				onClick={handleSavePaymentTerms}
-				loading={isSavingPaymentTerms}
-			/>
-			<!-- Always offered (#1968, ADR-0055). The same number again is a
-			     save with no effect: the BFF writes nothing for it, and the
-			     screen says "Saved." as Timezone and Rates do. -->
-			{#if isPaymentTermsSaved}
-				<Text text="Saved." />
-			{/if}
-		{/if}
-	{/if}
-{/snippet}
 
 {#snippet intro()}
 	<!--
@@ -592,46 +499,8 @@
 	<Text text="Credits is a separate screen, where this Practice buys Credits from DoulaCloud." />
 {/snippet}
 
-{#snippet body()}
-	{#if !isPracticeOwnerOrAdmin}
-		<!--
-			A plain sentence about whose screen this is, never the BFF's own
-			refusal wording (#267). She is told what the screen is for and
-			who holds it, which is the whole of what there is to say -- the
-			status itself is not hers to see, so there is nothing further
-			here and no button to explain the absence of.
-		-->
-		<Notice
-			variant="status"
-			message="Only a Practice Owner or Admin can see how this Practice gets paid."
-		/>
-	{:else}
-		<!--
-			A non-null assertion, not another `{#if status}`: `body` is one of
-			`FormPage`'s `fieldsets`, which only render once neither `loadError`
-			nor `loading` is active below, and `loading` is exactly `status ===
-			undefined` for an Owner or Admin -- so `status` is always defined by
-			the time this branch runs. A second guard here would compile to a
-			branch that never takes its false path, which the coverage gate
-			would then refuse.
-		-->
-		<!--
-			aria-live="polite" on both regions below (#259): a re-read, from
-			the poll or from the on-demand button, replaces status wholesale,
-			and the badge, the explanation and the requirement count have to
-			be announced as the update they are rather than sit there
-			silently changed. Two regions, not one, so the return/refresh
-			banner between them -- which carries its own role via Notice --
-			is never nested inside another live region.
-		-->
-		<cluster-l aria-live="polite">
-			<Text text="Stripe Connect status:" />
-			<Badge
-				label={CONNECT_STATUS_BADGES[status!.status].label}
-				variant={CONNECT_STATUS_BADGES[status!.status].variant}
-			/>
-		</cluster-l>
-
+{#snippet facts()}
+	{#if isPracticeOwnerOrAdmin}
 		{#if isBackFromStripeRestricted}
 			<Notice
 				variant="error"
@@ -653,28 +522,84 @@
 		{:else if connectParameter === 'refresh'}
 			<Notice variant="status" message="The Stripe onboarding link expired. Start again below." />
 		{/if}
+	{/if}
 
-		<stack-l space="var(--space-2)" aria-live="polite">
-			<Text text={statusCopy[status!.status].explanation} />
+	<SummaryList rows={factRows}>
+		{#snippet value(row)}
+			{#if row.fact === 'stripeStatus'}
+				<!--
+					aria-live="polite" (#259): a re-read, from the poll or from
+					the on-demand button, replaces the status wholesale, and the
+					badge and what it means have to be announced as the update
+					they are. On the value, not round the list, so opening the
+					billing mode's Change is not announced as an update.
 
-			<!-- The count, not the list. requirementsDue holds Stripe's own
-			machine-readable field paths ("configuration.merchant.mcc"), which
-			name nothing an Owner recognizes. The place those get asked in words
-			is Stripe's hosted form, which the button below opens; the paths stay
-			in the database for the audit trail.
-
-			"from you" is only true of the Owner: she is the one Stripe will ask,
-			and PostConnectHandler refuses anybody else. An Admin reads the same
-			count as a fact about the Practice's account rather than as an errand
-			of her own -- the same reason the branch below tells her who connects
-			Stripe instead of handing her the checklist. -->
-			{#if status!.requirementsDue.length > 0}
-				<Text
-					text={requirementsSentence(status!.requirementsDue.length, isPracticeOwner)}
+					A non-null assertion, not another `{#if status}`: this row
+					exists only once `status` does.
+				-->
+				<stack-l space="var(--space-2)" aria-live="polite">
+					<span>
+						<Badge
+							label={CONNECT_STATUS_BADGES[status!.status].label}
+							variant={CONNECT_STATUS_BADGES[status!.status].variant}
+						/>
+					</span>
+					<Text text={statusCopy[status!.status].explanation} />
+				</stack-l>
+			{:else if row.fact === 'stripeNeeds'}
+				<!-- The count, not the list. requirementsDue holds Stripe's own
+				machine-readable field paths ("configuration.merchant.mcc"), which
+				name nothing an Owner recognizes. The place those get asked in words
+				is Stripe's hosted form; the paths stay in the database for the
+				audit trail. "from you" is only true of the Owner: she is the one
+				Stripe will ask, and PostConnectHandler refuses anybody else. -->
+				<span aria-live="polite">{row.value}</span>
+			{:else}
+				{row.value}
+			{/if}
+		{/snippet}
+		{#snippet action(row, describedBy)}
+			{#if row.fact === 'paymentTerms'}
+				<!-- Its own question page (#2046): one thing per page, at the
+				     width of a three-digit answer. -->
+				<Link href={paymentTermsHref} label="Change" {describedBy} />
+			{:else}
+				<!-- The billing mode is two answers, so it opens in place under
+				     its row, as the Engagement page's Changes do (#1998). -->
+				<Button
+					label="Change"
+					variant="link"
+					expanded={isBillingModeOpen}
+					{describedBy}
+					onClick={toggleBillingMode}
 				/>
 			{/if}
-		</stack-l>
+		{/snippet}
+		{#snippet detail()}
+			<stack-l space="var(--space-field)">
+				<RadioGroup
+					legend="How does this Practice bill Clients?"
+					options={billingModeOptions}
+					value={chosenBillingMode}
+					onChange={(value) => (chosenBillingMode = value)}
+				/>
+				{#if billingModeSaveError}
+					<Notice variant="error" message={billingModeSaveError} />
+				{/if}
+				<cluster-l space="var(--space-3)">
+					<Button
+						label="Save billing mode"
+						variant="secondary"
+						size="sm"
+						onClick={handleChangeBillingMode}
+						loading={isSavingBillingMode}
+					/>
+				</cluster-l>
+			</stack-l>
+		{/snippet}
+	</SummaryList>
 
+	{#if isPracticeOwnerOrAdmin}
 		<!--
 			The on-demand half of #259. Always offered, whatever `status` is
 			and whatever the poll above is doing -- "at any time" per the
@@ -688,166 +613,170 @@
 		{#if refreshError}
 			<Notice variant="error" message={refreshError} />
 		{/if}
+	{:else}
+		<!--
+			A plain sentence about whose screen this is, never the BFF's own
+			refusal wording (#267). The Stripe status is not hers to see, so
+			there is no row for it and no button to explain the absence of.
+		-->
+		<Notice
+			variant="status"
+			message="Only a Practice Owner or Admin can see how this Practice gets paid."
+		/>
+	{/if}
+{/snippet}
 
-		{#if canStartOnboarding && !isPracticeOwner}
-			<!--
-				A fact about the Practice and the role that clears it (#270),
-				not a refusal aimed at her: PostConnectHandler is Owner-only
-				(staffauth.RequireOwner), so she gets the one sentence that is
-				true for her instead of a checklist she cannot act on. #267
-				gave her the *state* of the rail her Invoices are paid on, not
-				the Owner's half-finished errand.
-			-->
-			<Text text="A Practice Owner has to connect Stripe." />
-			<!--
-				#917 (ADR-0035). Two different true things, and which one she
-				reads turns on whether anything else in the product can reach
-				an Owner about this at all.
+{#snippet onboarding()}
+	{#if isPracticeOwnerOrAdmin && canStartOnboarding}
+		<!--
+			#2046: Stripe onboarding is its own headed section, and its
+			button is the screen's one primary.
+		-->
+		<section>
+			<stack-l space="var(--space-related)">
+				<Heading level={2} variant="section" text="Connect Stripe" />
+				{#if !isPracticeOwner}
+					<!--
+						A fact about the Practice and the role that clears it (#270),
+						not a refusal aimed at her: PostConnectHandler is Owner-only
+						(staffauth.RequireOwner), so she gets the one sentence that is
+						true for her instead of a checklist she cannot act on. #267
+						gave her the *state* of the rail her Invoices are paid on, not
+						the Owner's half-finished errand.
+					-->
+					<Text text="A Practice Owner has to connect Stripe." />
+					<!--
+						#917 (ADR-0035). Two different true things, and which one she
+						reads turns on whether anything else in the product can reach
+						an Owner about this at all.
 
-				`not_connected` is the one status that produces no Stripe
-				webhook, so #343's payout Notification can never fire for it
-				and ADR-0038 rules out a sweep that would notice it. Nobody
-				has been told, and nobody will be, so she is offered the ask.
+						`not_connected` is the one status that produces no Stripe
+						webhook, so #343's payout Notification can never fire for it
+						and ADR-0038 rules out a sweep that would notice it. Nobody
+						has been told, and nobody will be, so she is offered the ask.
 
-				Every other status on this branch has an account behind it,
-				which means Stripe raised requirements, which means #343
-				already mailed every Owner once for this episode. A second
-				control there would be a duplicate she has no way to know she
-				is sending, so she is told what already happened instead.
-			-->
-			{#if status!.status === 'not_connected'}
-				{#if wasNudgeSent}
-					<Notice variant="status" message={CONNECT_NUDGE_SENT_MESSAGE} />
+						Every other status on this branch has an account behind it,
+						which means Stripe raised requirements, which means #343
+						already mailed every Owner once for this episode. A second
+						control there would be a duplicate she has no way to know she
+						is sending, so she is told what already happened instead.
+					-->
+					{#if status!.status === 'not_connected'}
+						{#if wasNudgeSent}
+							<Notice variant="status" message={CONNECT_NUDGE_SENT_MESSAGE} />
+						{:else}
+							<Text text={CONNECT_NUDGE_OFFER_MESSAGE} />
+							<cluster-l space="var(--space-3)">
+								<Button
+									label="Email the Practice Owners"
+									variant="secondary"
+									onClick={handleNudgeOwners}
+									loading={isNudging}
+								/>
+							</cluster-l>
+						{/if}
+						{#if nudgeError}
+							<Notice variant="error" message={nudgeError} />
+						{/if}
+					{:else}
+						<!-- `info`, not `status`: `status` renders a check, which
+						     belongs to something the reader just did. Nothing here is
+						     hers; this is a standing fact about how the product
+						     behaves (ADR-0021 -- GOV.UK reserves success for a
+						     completed action). The confirmation above, after she
+						     presses, is the one that earns the check. -->
+						<Notice variant="info" message={CONNECT_OWNERS_ALREADY_EMAILED_MESSAGE} />
+					{/if}
+				{:else if !hasDeclaredWebsite}
+					<!--
+						Block, do not warn. A disabled button with a tooltip would leave
+						her guessing what unlocks it; this names the missing thing and
+						links to where she supplies it. PostConnectHandler refuses the
+						request as well, which is what actually holds the line.
+					-->
+					<Notice
+						variant="info"
+						message="Stripe will not process Client payments until it can see this Practice online. The website question needs an answer before Stripe can be connected."
+					/>
+					<Link href={websiteHref} label="Answer the website question" variant="start" />
+				{:else if isPageFailed}
+					<!--
+						Block again, and name it as our problem rather than hers: she
+						wrote the words and we failed to put them anywhere. Same shape
+						as the gate above, and PostConnectHandler refuses the request
+						too, which is what actually holds the line.
+					-->
+					<Notice
+						variant="error"
+						message="The page published for this Practice is not loading, so Stripe would find nothing at its web address. Publish the website again."
+					/>
+					<Link href={websiteHref} label="Go to website settings" />
 				{:else}
-					<Text text={CONNECT_NUDGE_OFFER_MESSAGE} />
+					<Heading level={3} text="What Stripe will ask you for" />
+					<Text
+						text="This takes about fifteen minutes. Have your phone and your bank details with you before you start — Stripe does not save a half-finished form for long."
+					/>
+					<ul class="prose-list">
+						{#each stripeAsksFor as item (item)}
+							<li>{item}</li>
+						{/each}
+						{#if willAskForProductDescription}
+							<li>A short description of what your Practice offers, for Stripe's own records.</li>
+						{/if}
+					</ul>
+					<!--
+						#1592 (decided on #1495). What comes after the form. Stripe
+						publishes no time for its review of a new account, so the
+						first sentence gives none; #1591 replaces it when the pilot
+						gives a number. The 7 to 14 days is Stripe's own, from its
+						Payouts page (https://docs.stripe.com/payouts): "After you
+						successfully receive your first live payment, Stripe
+						typically schedules your initial payout to complete within
+						7-14 days". Check the number there before changing it.
+					-->
+					<Text text="After you finish, Stripe reviews your details. Stripe does not say how long this takes." />
+					<Text
+						text="Your first card payment takes longer to reach your bank than the ones after it: typically 7 to 14 days."
+					/>
+					<!--
+						#421 watched Stripe put FACEBOOK.COM/ROCHESTER onto a walked
+						account's Clients' card statements, because it derives the
+						descriptor from the website URL when it is not told one. It is
+						told one now -- the Practice's own name, set when the account is
+						created (#442) -- so what she needs to know is not a warning but
+						where to change it.
+					-->
+					<Text
+						text="Stripe puts a short version of your Practice's name on your Clients' card statements. It shows you that text near the end, and you can change it there."
+					/>
+					<!-- The screen's one primary (#2019), under what it opens. -->
 					<cluster-l space="var(--space-3)">
 						<Button
-							label="Email the Practice Owners"
-							variant="secondary"
-							onClick={handleNudgeOwners}
-							loading={isNudging}
+							label={status!.status === 'not_connected' ? 'Connect Stripe' : 'Continue Stripe onboarding'}
+							onClick={handleConnect}
+							loading={isConnecting}
 						/>
 					</cluster-l>
-				{/if}
-				{#if nudgeError}
-					<Notice variant="error" message={nudgeError} />
-				{/if}
-			{:else}
-				<!-- `info`, not `status`: `status` renders a check, which
-				     belongs to something the reader just did. Nothing here is
-				     hers; this is a standing fact about how the product
-				     behaves (ADR-0021 -- GOV.UK reserves success for a
-				     completed action). The confirmation above, after she
-				     presses, is the one that earns the check. -->
-				<Notice variant="info" message={CONNECT_OWNERS_ALREADY_EMAILED_MESSAGE} />
-			{/if}
-		{:else if canStartOnboarding && !hasDeclaredWebsite}
-			<!--
-				Block, do not warn. A disabled button with a tooltip would leave
-				her guessing what unlocks it; this names the missing thing and
-				links to where she supplies it. PostConnectHandler refuses the
-				request as well, which is what actually holds the line.
-			-->
-			<Notice
-				variant="info"
-				message="Stripe will not process Client payments until it can see this Practice online. The website question needs an answer before Stripe can be connected."
-			/>
-			<Link href={websiteHref} label="Answer the website question" variant="start" />
-		{:else if canStartOnboarding && isPageFailed}
-			<!--
-				Block again, and name it as our problem rather than hers: she
-				wrote the words and we failed to put them anywhere. Same shape
-				as the gate above, and PostConnectHandler refuses the request
-				too, which is what actually holds the line.
-			-->
-			<Notice
-				variant="error"
-				message="The page published for this Practice is not loading, so Stripe would find nothing at its web address. Publish the website again."
-			/>
-			<Link href={websiteHref} label="Go to website settings" />
-		{:else if canStartOnboarding}
-			<!-- A heading and a list, with no <section> around them: the
-			     heading already puts this in the screen-reader outline, and a
-			     landmark that only repeats the heading is one more thing to
-			     skip past. -->
-			<stack-l space="var(--space-4)">
-				<Heading level={2} text="What Stripe will ask you for" />
-				<Text
-					text="This takes about fifteen minutes. Have your phone and your bank details with you before you start — Stripe does not save a half-finished form for long."
-				/>
-				<ul class="prose-list">
-					{#each stripeAsksFor as item (item)}
-						<li>{item}</li>
-					{/each}
-					{#if willAskForProductDescription}
-						<li>A short description of what your Practice offers, for Stripe's own records.</li>
+					{#if connectError}
+						<Notice variant="error" message={connectError} />
 					{/if}
-				</ul>
-				<!--
-					#1592 (decided on #1495). What comes after the form. Stripe
-					publishes no time for its review of a new account, so the
-					first sentence gives none; #1591 replaces it when the pilot
-					gives a number. The 7 to 14 days is Stripe's own, from its
-					Payouts page (https://docs.stripe.com/payouts): "After you
-					successfully receive your first live payment, Stripe
-					typically schedules your initial payout to complete within
-					7-14 days". Check the number there before changing it.
-				-->
-				<Text text="After you finish, Stripe reviews your details. Stripe does not say how long this takes." />
-				<Text
-					text="Your first card payment takes longer to reach your bank than the ones after it: typically 7 to 14 days."
-				/>
-				<!--
-					#421 watched Stripe put FACEBOOK.COM/ROCHESTER onto a walked
-					account's Clients' card statements, because it derives the
-					descriptor from the website URL when it is not told one. It is
-					told one now -- the Practice's own name, set when the account is
-					created (#442) -- so what she needs to know is not a warning but
-					where to change it.
-				-->
-				<Text
-					text="Stripe puts a short version of your Practice's name on your Clients' card statements. It shows you that text near the end, and you can change it there."
-				/>
+				{/if}
 			</stack-l>
-		{/if}
+		</section>
 	{/if}
 {/snippet}
 
-{#snippet actions()}
-	<!--
-		The Owner's half only. "Ask a Practice Owner to connect Stripe."
-		used to live here as the `{:else}`, which meant an Admin saw it in
-		exactly one of the four onboarding states and nothing at all in the
-		three blocked ones. It now sits in `body`, on `canStartOnboarding`
-		alone, so she is told the same thing whatever is holding the Owner
-		up -- and it is written once rather than in two regions that could
-		disagree.
-	-->
-	{#if canConnect && isPracticeOwner}
-		<Button
-			label={status!.status === 'not_connected' ? 'Connect Stripe' : 'Continue Stripe onboarding'}
-			onClick={handleConnect}
-			loading={isConnecting}
-		/>
-		{#if connectError}
-			<Notice variant="error" message={connectError} />
-		{/if}
-	{/if}
-{/snippet}
+<!-- Nothing here: the one primary is inside the onboarding section it
+     belongs to, and `FormPage` draws no region for an empty snippet. -->
+{#snippet actions()}{/snippet}
 
 <FormPage
 	title="Getting paid"
 	{intro}
-	errorSummary={paymentTermsErrors.length > 0 ? errorSummary : undefined}
-	fieldsets={[
-		{ legend: 'Billing mode', content: billingModeSection },
-		{ legend: 'Payment terms', content: paymentTermsSection },
-		{ content: body }
-	]}
+	{outcome}
+	fieldsets={[{ content: facts }, { content: onboarding }]}
 	{actions}
-	loading={isPracticeOwnerOrAdmin && !error && status === undefined
-		? 'Loading your Stripe Connect status'
-		: undefined}
+	loading={isLoading ? 'Loading how this Practice gets paid' : undefined}
 	loadError={error || undefined}
 />
 

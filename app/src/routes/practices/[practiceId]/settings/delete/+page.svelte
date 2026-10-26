@@ -15,7 +15,7 @@
 	 */
 	import { onMount } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
-	import { apiFetchWithSession } from '#lib/api.js';
+	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
 	import { hasSecondFactor as checkHasSecondFactor, isOwner as checkIsOwner } from '#lib/roles.js';
 	import {
 		loadDeletionStatus,
@@ -25,6 +25,9 @@
 	} from '#lib/practiceDeletion.js';
 	import { formatInstant } from '#lib/dates.js';
 	import Badge from '#lib/components/atoms/Badge.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
+	import Text from '#lib/components/atoms/Text.svelte';
+	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
@@ -100,6 +103,10 @@
 		`This starts a 30-day countdown to delete ${session.practiceName}. During it, no Staff member or Client can sign in to this Practice, except that any Owner can return here to restore it. If the countdown finishes, every Client's personal data is erased the same way a single Client's own erasure works, any unspent Credit balance is forfeited, and this cannot be undone. DoulaCloud's own billing records (the Credit ledger, the Stripe Connect account and its payouts) are kept regardless.`
 	);
 
+	// #288: a download the browser fetches on its own, so the BFF's own
+	// address, as the Settings index draws it.
+	const exportHref = $derived(`${apiBaseURL()}/api/practices/${page.params.practiceId}/export`);
+
 	let loading = $derived(isOwner && status === undefined ? 'Loading this setting' : undefined);
 </script>
 
@@ -108,10 +115,28 @@
 		<!-- Notice renders in body below; intro stays generic here. -->
 	{:else if status?.pending}
 		<Badge label="Deletion pending" variant="warning" />
+	{:else}
+		<Text text="Delete this Practice only when you are closing it for good." />
 	{/if}
 {/snippet}
 
 {#snippet body()}
+	{#if isOwner && !status?.pending}
+		<!--
+			#2029: the consequence before the button, GOV.UK's Warning text,
+			and what can be taken first. The confirm dialog says it again in
+			full; a destructive act is never offered bare (the brief's
+			Fitts's Law row). The export is a download the BFF refuses
+			without a second factor, so the link is drawn only with one;
+			without one, the notice below says what deleting needs.
+		-->
+		<WarningText
+			message="Deleting starts a 30-day countdown. After it, every Client's records are erased and cannot be recovered."
+		/>
+		{#if hasSecondFactor}
+			<Link href={exportHref} label="Download this Practice's data first" />
+		{/if}
+	{/if}
 	{#if !isOwner}
 		{#if session.pendingDeletion}
 			<Notice

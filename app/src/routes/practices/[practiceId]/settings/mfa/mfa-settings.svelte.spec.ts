@@ -76,9 +76,13 @@ describe('MFA settings screen', () => {
 		await setup();
 
 		await expect.element(testPage.getByText('Optional for every Staff member')).toBeVisible();
+		// #2046: a status is a summary row, key then value, and the count
+		// is a row of its own.
+		await expect.element(testPage.getByRole('term').filter({ hasText: 'Second factor' }).first()).toBeVisible();
 		await expect
-			.element(testPage.getByText('6 Staff members currently have no second factor set up.'))
+			.element(testPage.getByRole('term').filter({ hasText: 'Staff without a second factor' }))
 			.toBeVisible();
+		await expect.element(testPage.getByRole('definition').filter({ hasText: /^6$/ })).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Require MFA for all Staff' })).toBeVisible();
 	});
 
@@ -128,7 +132,7 @@ describe('MFA settings screen', () => {
 	it('uses singular wording for one affected Staff member', async () => {
 		await setup({ impact: { required: false, withoutSecondFactor: 1 } });
 
-		await expect.element(testPage.getByText('1 Staff member currently has no second factor set up.')).toBeVisible();
+		await expect.element(testPage.getByRole('definition').filter({ hasText: /^1$/ })).toBeVisible();
 
 		await testPage.getByRole('button', { name: 'Require MFA for all Staff' }).click();
 		const dialog = testPage.getByRole('dialog', { name: 'Require a second factor for every Staff member' });
