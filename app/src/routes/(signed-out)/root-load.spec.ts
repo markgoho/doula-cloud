@@ -67,7 +67,7 @@ describe('/+page.ts load', () => {
 
 	// The other half of #745: a live credential that resolves to no staff
 	// row at all -- a signup whose second half failed. It is not "signed
-	// out", and offering her the sign-up and log-in links is offering the
+	// out", and offering her the sign-up and sign-in links is offering the
 	// two things that have already stopped working for her.
 	it('sends a signed-in identity that belongs to neither population to the no-Practice screen', async () => {
 		const { load } = await import('./+page.js');

@@ -96,7 +96,7 @@
 			variant="status"
 			message="Your password has been reset. Every device you were signed in on has been signed out."
 		/>
-		<Link href={resolve('/(signed-out)/login')} label="Continue to log in" />
+		<Link href={resolve('/(signed-out)/login')} label="Continue to sign in" />
 	{:else if !token}
 		<UnusableLink
 			message={LINK_EXPIRED_OR_USED}

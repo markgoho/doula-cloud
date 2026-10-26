@@ -52,7 +52,7 @@ test('a Client signs out and can no longer reach their Engagement', async ({ pag
 	// And a fresh navigation to the Engagement is refused the same way.
 	await page.goto(`/portal/engagements/${engagementId}`);
 	await expect(page).toHaveURL(/\/portal\/login\?sessionEnded=true$/);
-	await expect(page.getByRole('heading', { name: 'Log in' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Your care' })).toHaveCount(0);
 });
 

@@ -8,7 +8,7 @@
 	 * pieces of text. So it is the second atom allowed a raw `<a>` (see
 	 * `eslint.config.js`). When an `<a>` holds both pieces, the browser
 	 * builds its accessible name from both, so a screen reader would
-	 * announce "Staff log in For doulas and practice owners." as the name.
+	 * announce "Staff sign in For doulas and practice owners." as the name.
 	 * Here the name points at the name span alone, and the line is the
 	 * link's description (`aria-describedby`), so the line is still heard,
 	 * after the name.

@@ -52,7 +52,7 @@
 					/>
 				{/snippet}
 			</LabeledField>
-			<Button type="submit" label="Log in" onClick={noop} />
+			<Button type="submit" label="Sign in" onClick={noop} />
 		</StackedForm>
 	</section>
 </stack-l>

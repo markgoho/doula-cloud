@@ -55,8 +55,8 @@ describe('/+page.svelte', () => {
 		// `exact`: each door's accessible name is its name alone, not its
 		// name run together with the line under it (#1645).
 		for (const [name, href] of [
-			['Staff log in', '/login'],
-			['Client portal log in', '/portal/login'],
+			['Staff sign in', '/login'],
+			['Client portal sign in', '/portal/login'],
 			['Set up a Practice', '/signup']
 		] as const) {
 			const door = testPage.getByRole('link', { name, exact: true });
@@ -64,10 +64,10 @@ describe('/+page.svelte', () => {
 			await expect.element(door).toHaveAttribute('href', href);
 		}
 		await expect
-			.element(testPage.getByRole('link', { name: 'Staff log in', exact: true }))
+			.element(testPage.getByRole('link', { name: 'Staff sign in', exact: true }))
 			.toHaveAccessibleDescription('For doulas and practice owners.');
 		await expect
-			.element(testPage.getByRole('link', { name: 'Client portal log in', exact: true }))
+			.element(testPage.getByRole('link', { name: 'Client portal sign in', exact: true }))
 			.toHaveAccessibleDescription('Your contract, your birth plan, and your invoices.');
 		await expect
 			.element(testPage.getByRole('link', { name: 'Set up a Practice', exact: true }))

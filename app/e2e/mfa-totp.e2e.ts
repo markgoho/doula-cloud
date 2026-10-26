@@ -44,7 +44,7 @@ test('An Owner sets up an authenticator app and lands on the Practice she was se
 	await page.goto('/login');
 	await page.getByLabel('Email').fill(email);
 	await page.getByLabel('Password').fill(password);
-	await page.getByRole('button', { name: 'Log in' }).click();
+	await page.getByRole('button', { name: 'Sign in' }).click();
 
 	// #1531: an Owner with no second factor lands on her own Practice,
 	// and enrolls when she chooses to, from a link that carries where to
@@ -84,7 +84,7 @@ test('An enrolled Owner answers the code challenge at sign-in and is admitted', 
 	await page.goto('/login');
 	await page.getByLabel('Email').fill(email);
 	await page.getByLabel('Password').fill(password);
-	await page.getByRole('button', { name: 'Log in' }).click();
+	await page.getByRole('button', { name: 'Sign in' }).click();
 
 	// The password is already proven, so the challenge step asks for one
 	// thing and shows no email or password field to re-answer.

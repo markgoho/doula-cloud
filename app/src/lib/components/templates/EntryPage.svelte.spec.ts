@@ -14,7 +14,7 @@ type SetupOptions = Partial<ComponentProps<typeof EntryPage>>;
 async function setup(overrides: SetupOptions = {}) {
 	return render(EntryPage, {
 		props: {
-			title: 'Log in',
+			title: 'Sign in',
 			content: textSnippet('The credentials form'),
 			...overrides
 		}
@@ -25,7 +25,7 @@ describe('EntryPage.svelte', () => {
 	it('renders the title as the page h1', async () => {
 		await setup();
 
-		await expect.element(page.getByRole('heading', { level: 1, name: 'Log in' })).toBeVisible();
+		await expect.element(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
 	});
 
 	it('always renders the content region', async () => {
@@ -53,7 +53,7 @@ describe('EntryPage.svelte', () => {
 		});
 
 		const summary = page.getByText('There is a problem').element();
-		const title = page.getByRole('heading', { level: 1, name: 'Log in' }).element();
+		const title = page.getByRole('heading', { level: 1, name: 'Sign in' }).element();
 		const content = page.getByText('The credentials form').element();
 
 		expect(summary.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -65,7 +65,7 @@ describe('EntryPage.svelte', () => {
 	it('renders the lede under the title and above the content', async () => {
 		await setup({ lede: 'For clients of a doula practice.' });
 
-		const title = page.getByRole('heading', { level: 1, name: 'Log in' }).element();
+		const title = page.getByRole('heading', { level: 1, name: 'Sign in' }).element();
 		const lede = page.getByText('For clients of a doula practice.').element();
 		const content = page.getByText('The credentials form').element();
 

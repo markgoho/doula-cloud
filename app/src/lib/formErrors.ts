@@ -365,7 +365,7 @@ export function authRefusal(
 		}
 		case 'auth/email-already-in-use': {
 			return {
-				message: 'This email address already has an account. Log in instead.',
+				message: 'This email address already has an account. Sign in instead.',
 				targetId: fields.emailId
 			};
 		}

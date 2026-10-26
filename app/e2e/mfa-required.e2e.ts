@@ -92,7 +92,7 @@ test('a Doula with no second factor is barred once the Practice requires MFA for
 	await page.goto('/login');
 	await page.getByLabel('Email').fill(doula.email);
 	await page.getByLabel('Password').fill(PORTAL_CLIENT_PASSWORD);
-	await page.getByRole('button', { name: 'Log in' }).click();
+	await page.getByRole('button', { name: 'Sign in' }).click();
 	const returnTo = encodeURIComponent(`/practices/${practiceId}`);
 	await expect(page).toHaveURL(new RegExp(String.raw`/mfa/enroll\?returnTo=${returnTo}$`));
 });

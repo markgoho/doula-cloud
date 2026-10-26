@@ -26,10 +26,10 @@ describe('+error.svelte (root catch-all)', () => {
 		await expect.element(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
 	});
 
-	it('offers the way out to log in', async () => {
+	it('offers the way out to sign in', async () => {
 		await setup();
 
-		const link = page.getByRole('link', { name: 'Log in' });
+		const link = page.getByRole('link', { name: 'Sign in' });
 		await expect.element(link).toBeVisible();
 		expect(link.element()).toHaveAttribute('href', '/login');
 	});

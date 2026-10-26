@@ -4,7 +4,7 @@
  *
  * With no route matched, SvelteKit renders the root `+error.svelte`
  * outside every layout, so a signed-in Staff member following an old
- * link lost her navigation and was offered "Log in". Matching the rest
+ * link lost her navigation and was offered "Sign in". Matching the rest
  * of the path here instead puts the refusal under
  * `practices/+error.svelte`, inside `practices/+layout.svelte`, with
  * the way out to her Practice overview. A more specific route always

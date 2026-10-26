@@ -35,7 +35,7 @@
 	<ErrorPage
 		kind={errorKindForStatus(page.status, page.error?.code)}
 		wayOutHref={resolve('/(signed-out)/login')}
-		wayOutLabel="Log in"
+		wayOutLabel="Sign in"
 	/>
 </main>
 {#if isPortalPath}

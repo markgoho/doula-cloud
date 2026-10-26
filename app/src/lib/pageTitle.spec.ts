@@ -13,10 +13,10 @@ describe('formatPageTitle', () => {
 	});
 
 	it('prefixes Error: for a genuinely refused page', () => {
-		expect(formatPageTitle('Log in', { isError: true })).toBe('Error: Log in — DoulaCloud');
+		expect(formatPageTitle('Sign in', { isError: true })).toBe('Error: Sign in — DoulaCloud');
 	});
 
 	it('does not prefix Error: by default', () => {
-		expect(formatPageTitle('Log in', { isError: false })).toBe('Log in — DoulaCloud');
+		expect(formatPageTitle('Sign in', { isError: false })).toBe('Sign in — DoulaCloud');
 	});
 });

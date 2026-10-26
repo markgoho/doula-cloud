@@ -25,7 +25,7 @@
 	let status = $state<'checking' | 'verified' | 'unusable' | 'failed'>('checking');
 	let errorMessage = $state('');
 	// #1504: the link is spent in whatever browser she opens it in. In the
-	// one she signed up in she is still signed in, and "Continue to log in"
+	// one she signed up in she is still signed in, and "Continue to sign in"
 	// would misname where the link goes.
 	let isSignedIn = $state(false);
 
@@ -87,13 +87,13 @@
 			{#if isSignedIn}
 				<Link href={resolve('/(signed-out)')} label="Go to your Practice" />
 			{:else}
-				<Link href={resolve('/(signed-out)/login')} label="Continue to log in" />
+				<Link href={resolve('/(signed-out)/login')} label="Continue to sign in" />
 			{/if}
 		{:else if status === 'unusable'}
 			<!-- #2025: a signed-in person asks for a new link from the account screen. -->
 			<UnusableLink
 				message={errorMessage}
-				next={{ label: 'Log in to get a new link', href: resolve('/(signed-out)/login') }}
+				next={{ label: 'Sign in to get a new link', href: resolve('/(signed-out)/login') }}
 			/>
 		{:else}
 			<Notice variant="error" message={errorMessage} />

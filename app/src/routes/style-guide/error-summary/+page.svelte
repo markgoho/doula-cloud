@@ -102,7 +102,7 @@
 	<ErrorSummary
 		errors={[
 			{
-				message: 'This email address already has an account. Log in instead.',
+				message: 'This email address already has an account. Sign in instead.',
 				targetId: emailId,
 				href: '/style-guide/question-page'
 			}

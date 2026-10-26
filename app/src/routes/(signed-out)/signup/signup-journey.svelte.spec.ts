@@ -165,7 +165,7 @@ describe('the first page: about you', () => {
 	it("says what the check page's button was refused for, beside the box it is about", async () => {
 		signupDraft.refusals = [
 			{
-				message: 'This email address already has an account. Log in instead.',
+				message: 'This email address already has an account. Sign in instead.',
 				targetId: 'signup-email',
 				href: '/signup?from=check'
 			},
@@ -176,11 +176,11 @@ describe('the first page: about you', () => {
 		// Its own refusal, in its summary linking to its own box, and not
 		// the refusal that belongs to another page.
 		await expect
-			.element(testPage.getByRole('link', { name: 'This email address already has an account. Log in instead.' }))
+			.element(testPage.getByRole('link', { name: 'This email address already has an account. Sign in instead.' }))
 			.toHaveAttribute('href', '#signup-email');
 		await expect
 			.element(testPage.getByLabelText('Email'))
-			.toHaveAccessibleDescription('This email address already has an account. Log in instead.');
+			.toHaveAccessibleDescription('This email address already has an account. Sign in instead.');
 		expect(testPage.getByText('Choose the state you work from').elements()).toHaveLength(0);
 
 		await fillYou();

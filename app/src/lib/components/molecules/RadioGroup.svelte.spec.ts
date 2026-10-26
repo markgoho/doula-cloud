@@ -15,7 +15,7 @@ type Mode = 'signup' | 'login';
 
 const options: { value: Mode; label: string }[] = [
 	{ value: 'signup', label: "I'm new here -- create an account" },
-	{ value: 'login', label: 'I already have an account -- log in' }
+	{ value: 'login', label: 'I already have an account -- sign in' }
 ];
 
 interface SetupOptions {
@@ -41,20 +41,20 @@ describe('RadioGroup.svelte', () => {
 		await setup();
 
 		await expect.element(page.getByLabelText("I'm new here -- create an account")).toBeInTheDocument();
-		await expect.element(page.getByLabelText('I already have an account -- log in')).toBeInTheDocument();
+		await expect.element(page.getByLabelText('I already have an account -- sign in')).toBeInTheDocument();
 	});
 
 	it('reflects the given value as the checked option', async () => {
 		await setup({ value: 'login' });
 
-		await expect.element(page.getByLabelText('I already have an account -- log in')).toBeChecked();
+		await expect.element(page.getByLabelText('I already have an account -- sign in')).toBeChecked();
 		await expect.element(page.getByLabelText("I'm new here -- create an account")).not.toBeChecked();
 	});
 
 	it('calls onChange with the selected option value when clicked', async () => {
 		const { onChange } = await setup({ value: 'signup' });
 
-		await page.getByLabelText('I already have an account -- log in').click();
+		await page.getByLabelText('I already have an account -- sign in').click();
 
 		expect(onChange).toHaveBeenCalledWith('login');
 	});
@@ -63,7 +63,7 @@ describe('RadioGroup.svelte', () => {
 		await setup();
 
 		const firstName = page.getByLabelText("I'm new here -- create an account").element().getAttribute('name');
-		const secondName = page.getByLabelText('I already have an account -- log in').element().getAttribute('name');
+		const secondName = page.getByLabelText('I already have an account -- sign in').element().getAttribute('name');
 
 		expect(firstName).not.toBeNull();
 		expect(firstName).toBe(secondName);
@@ -179,17 +179,17 @@ describe('RadioGroup.svelte', () => {
 			name: 'mode',
 			options: [
 				{ value: 'signup' as Mode, label: 'Sign up' },
-				{ value: 'login' as Mode, label: 'Log in' }
+				{ value: 'login' as Mode, label: 'Sign in' }
 			],
 			value: '' as Mode,
 			onChange: vi.fn(),
-			error: 'Select whether you are signing up or logging in'
+			error: 'Select whether you are signing up or signing in'
 		});
 
-		await expect.element(page.getByRole('alert')).toHaveTextContent('Select whether you are signing up or logging in');
+		await expect.element(page.getByRole('alert')).toHaveTextContent('Select whether you are signing up or signing in');
 		const fieldset = container.querySelector('fieldset')!;
 		expect(container.querySelector(`#${fieldset.getAttribute('aria-describedby')}`)?.textContent).toBe(
-			'Select whether you are signing up or logging in'
+			'Select whether you are signing up or signing in'
 		);
 	});
 
@@ -207,7 +207,7 @@ describe('RadioGroup.svelte', () => {
 		});
 
 		await expect.element(page.getByLabelText("I'm new here -- create an account")).not.toBeChecked();
-		await expect.element(page.getByLabelText('I already have an account -- log in')).not.toBeChecked();
+		await expect.element(page.getByLabelText('I already have an account -- sign in')).not.toBeChecked();
 		await expect.element(page.getByText('You answer this one time.')).toBeVisible();
 		await expect
 			.element(page.getByRole('group', { name: 'Mode' }))
@@ -222,7 +222,7 @@ describe('RadioGroup.svelte', () => {
 		await render(RadioGroup<Mode>, {
 			options: [
 				{ value: 'signup' as Mode, label: 'Sign up' },
-				{ value: 'login' as Mode, label: 'Log in' }
+				{ value: 'login' as Mode, label: 'Sign in' }
 			],
 			value: '' as Mode,
 			onChange: vi.fn(),

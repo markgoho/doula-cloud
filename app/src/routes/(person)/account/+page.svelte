@@ -207,7 +207,7 @@
 	 * (api/internal/staffauth/reauth.go). Success ends every live session
 	 * for the identity, this one included (`authn.EndAllSessions` keys on
 	 * identity, not on the cookie that asked), so there is nothing left to
-	 * show on this screen -- she is signed out and sent to log in again,
+	 * show on this screen -- she is signed out and sent to sign in again,
 	 * the same shape `handleExpiredSession` (#lib/api.js) uses for any
 	 * other session that has just ended out from under her.
 	 *

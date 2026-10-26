@@ -97,7 +97,7 @@ afterEach(() => {
  * link has to be findable from the screen a locked-out person is
  * actually stuck on, and coming back from having spent a code has to say
  * what just happened -- the spend mints no session, so without a word
- * here she lands on an unchanged log-in form with nothing to show for it.
+ * here she lands on an unchanged sign-in form with nothing to show for it.
  */
 // Shared by both blocks below: each test's own construction is the
 // `apiFetch`/`pageState` staging done before this call, not any argument
@@ -124,7 +124,7 @@ describe('Staff login -- the way back from a lost authenticator app (#694)', () 
 
 		await testPage.getByLabelText('Email').fill('anne-marie@example.test');
 		await testPage.getByLabelText('Password').fill('correct horse');
-		await testPage.getByRole('button', { name: 'Log in' }).click();
+		await testPage.getByRole('button', { name: 'Sign in' }).click();
 
 		await expect.element(testPage.getByLabelText('Authenticator app code')).toBeVisible();
 		await expect
@@ -185,7 +185,7 @@ describe('Staff login -- on-load session probe (#283)', () => {
 		// and takes focus from the form that has gone.
 		await expect.element(heading).toHaveFocus();
 		await expect.element(testPage.getByLabelText('Email')).not.toBeInTheDocument();
-		await expect.element(testPage.getByRole('button', { name: 'Log in' })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('button', { name: 'Sign in' })).not.toBeInTheDocument();
 	});
 
 	it('renders the ordinary login form for a signed-out visitor, with no session-ended messaging', async () => {
@@ -206,7 +206,7 @@ describe('Staff login -- on-load session probe (#283)', () => {
 
 		await setup();
 
-		await expect.element(testPage.getByRole('button', { name: 'Log in' })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Sign in' })).toBeVisible();
 	});
 
 	it('never probes the Client-portal session', async () => {
@@ -235,7 +235,7 @@ async function signIn() {
 	await render(Page, {});
 	await testPage.getByLabelText('Email').fill('priya@example.com');
 	await testPage.getByLabelText('Password').fill('correct horse');
-	await testPage.getByRole('button', { name: 'Log in' }).click();
+	await testPage.getByRole('button', { name: 'Sign in' }).click();
 }
 
 describe('Staff login -- a credential that resolves to no Practice (#745)', () => {
@@ -314,7 +314,7 @@ describe('Staff login -- the TOTP sign-in challenge (#606)', () => {
 		await render(Page, {});
 		await testPage.getByLabelText('Email').fill('priya@example.com');
 		await testPage.getByLabelText('Password').fill('correct horse');
-		await testPage.getByRole('button', { name: 'Log in' }).click();
+		await testPage.getByRole('button', { name: 'Sign in' }).click();
 
 		await expect
 			.element(testPage.getByLabelText('Authenticator app code'))
@@ -412,7 +412,7 @@ describe('Staff login -- signing in over a live portal session (#610)', () => {
 		await render(Page, {});
 		await testPage.getByLabelText('Email').fill('priya@example.com');
 		await testPage.getByLabelText('Password').fill('correct horse');
-		await testPage.getByRole('button', { name: 'Log in' }).click();
+		await testPage.getByRole('button', { name: 'Sign in' }).click();
 
 		await expect.element(testPage.getByText(WARNING)).toBeVisible();
 		return exchange;
@@ -459,7 +459,7 @@ describe('Staff login -- signing in over a live portal session (#610)', () => {
 
 		await testPage.getByRole('button', { name: 'Cancel' }).click();
 
-		await expect.element(testPage.getByRole('button', { name: 'Log in' })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Sign in' })).toBeVisible();
 		expect(testPage.getByText(WARNING).elements()).toHaveLength(0);
 		// Nothing further asked of the BFF, so the portal session stands.
 		expect(exchange).toHaveBeenCalledTimes(1);
@@ -490,7 +490,7 @@ async function setupSessionEnded({ hasSessionEnded = true } = {}) {
 }
 
 describe('Staff login -- the session-ended notice (#757)', () => {
-	const NOTICE = 'For your security, we signed you out. Log in again to continue.';
+	const NOTICE = 'For your security, we signed you out. Sign in again to continue.';
 
 	it('says why she is back here when the URL carries the flag', async () => {
 		await setupSessionEnded();
@@ -503,13 +503,13 @@ describe('Staff login -- the session-ended notice (#757)', () => {
 
 		await expect.element(testPage.getByLabelText('Email')).toBeVisible();
 		await expect.element(testPage.getByLabelText('Password')).toBeVisible();
-		await expect.element(testPage.getByRole('button', { name: 'Log in' })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Sign in' })).toBeVisible();
 	});
 
 	it('says nothing on an ordinary visit', async () => {
 		await setupSessionEnded({ hasSessionEnded: false });
 
-		await expect.element(testPage.getByRole('button', { name: 'Log in' })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Sign in' })).toBeVisible();
 		expect(testPage.getByText(NOTICE).elements()).toHaveLength(0);
 	});
 
@@ -522,7 +522,7 @@ describe('Staff login -- the session-ended notice (#757)', () => {
 		await setupSessionEnded();
 		await testPage.getByLabelText('Email').fill('priya@example.com');
 		await testPage.getByLabelText('Password').fill('correct horse');
-		await testPage.getByRole('button', { name: 'Log in' }).click();
+		await testPage.getByRole('button', { name: 'Sign in' }).click();
 
 		await expect.element(testPage.getByLabelText('Authenticator app code')).toBeVisible();
 		expect(testPage.getByText(NOTICE).elements()).toHaveLength(0);

@@ -217,14 +217,14 @@ describe('signing up when the account half-landed (#745)', () => {
 		expect(createUserWithEmailAndPassword).toHaveBeenCalledTimes(2);
 	});
 
-	it('still tells someone whose address belongs to another account to log in instead', async () => {
+	it('still tells someone whose address belongs to another account to sign in instead', async () => {
 		await setup();
 		createUserWithEmailAndPassword.mockRejectedValueOnce(emailTaken);
 		signInWithEmailAndPassword.mockRejectedValueOnce({ code: 'auth/invalid-credential' });
 		await create();
 
 		await expect
-			.element(testPage.getByRole('link', { name: 'This email address already has an account. Log in instead.' }))
+			.element(testPage.getByRole('link', { name: 'This email address already has an account. Sign in instead.' }))
 			.toHaveAttribute('href', '/signup?from=check');
 		expect(globalFetch).not.toHaveBeenCalled();
 		expect(goto).not.toHaveBeenCalled();
