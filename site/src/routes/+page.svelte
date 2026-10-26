@@ -81,6 +81,9 @@ none, and docs/copy/support-page.md follows it.
 		flex-wrap: wrap;
 		gap: var(--space-10);
 		align-items: flex-start;
+		/* tokens:ignore -- the card's own share of the row beside the
+		   letter's measure, which belongs to this one teaser and is no
+		   length the system reuses. */
 		max-inline-size: calc(var(--measure) + 24rem);
 		margin-inline: auto;
 	}

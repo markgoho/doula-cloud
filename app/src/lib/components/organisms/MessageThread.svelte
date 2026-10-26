@@ -250,6 +250,38 @@
 		input[type='file'] {
 			display: block;
 			max-inline-size: 100%;
+			/* "No file chosen" and the chosen file's name take the input's
+			   own color, which is the browser's until it is set here. */
+			color: var(--color-on-surface);
+			font-family: var(--font-family-base);
+			font-size: var(--text-body-size);
+		}
+
+		/* The browser's gray "Choose File" button, drawn as the secondary
+		   Button (#2017): the same tokens `Button.svelte`'s `secondary`
+		   and `size-md` rules spend, with CSS alone, so the native control
+		   and its keyboard and screen-reader behavior stay as they are. */
+		input[type='file']::file-selector-button {
+			min-block-size: var(--hit-target-min);
+			margin-inline-end: var(--space-3);
+			padding: var(--space-2) var(--space-4);
+			font-family: var(--font-family-base);
+			font-size: var(--text-body-size);
+			font-weight: var(--font-weight-medium);
+			color: var(--color-on-surface);
+			background-color: transparent;
+			border: var(--border-thin) solid var(--color-outline);
+			border-radius: var(--radius);
+			cursor: pointer;
+		}
+
+		input[type='file']:hover::file-selector-button {
+			background-color: var(--color-outline-variant);
+		}
+
+		input[type='file']:focus-visible {
+			outline: var(--focus-ring-width) solid var(--color-primary);
+			outline-offset: var(--focus-ring-offset);
 		}
 	}
 </style>

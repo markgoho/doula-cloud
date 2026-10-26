@@ -470,7 +470,7 @@
 		{#if data.coming.length > 0}
 			<div id={comingId}>
 				<p>You also agree to:</p>
-				<ul>
+				<ul class="prose-list">
 					{#each data.coming as version (`${version.document}-${version.version}`)}
 						<li>
 							<Link

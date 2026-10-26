@@ -8,6 +8,7 @@
 	import Text from '../atoms/Text.svelte';
 	import Textarea from '../atoms/Textarea.svelte';
 	import TextInput from '../atoms/TextInput.svelte';
+	import LabeledField from '../molecules/LabeledField.svelte';
 	import ConfirmDialog from '../molecules/ConfirmDialog.svelte';
 	import EmptyState from '../molecules/EmptyState.svelte';
 
@@ -122,21 +123,13 @@
 				it takes for the same reason (#492).
 			-->
 			<TextInput ariaLabel="Field label" value={field.label} onInput={(value) => onLabelChange(field.id, value)} />
-			<!-- v8 ignore start: Svelte-compiled attribute-diffing branches for the
-			     bound <select>/<option> pair below aren't reachable from app-level
-			     interaction tests, only from Svelte's own reactivity internals -->
-			<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- this row has no wrapping <label>, so aria-label is its only accessible name; the Select atom has no aria-label/passthrough prop, so swapping it in would silently drop the field's name -->
-			<select
-				aria-label="Field type"
+			<Select
+				ariaLabel="Field type"
 				value={field.type}
+				options={FIELD_TYPES}
 				disabled={existingIds.has(field.id)}
-				onchange={(event_) => onTypeChange(field.id, event_.currentTarget.value as FieldType)}
-			>
-				{#each FIELD_TYPES as type (type)}
-					<option value={type}>{type}</option>
-				{/each}
-			</select>
-			<!-- v8 ignore stop -->
+				onChange={(value) => onTypeChange(field.id, value as FieldType)}
+			/>
 			{#if isSelectType(field.type)}
 				<Textarea
 					ariaLabel="Options, one per line"
@@ -191,13 +184,17 @@
 <!-- In the page from the first render, empty, so the first move is read (#1955). -->
 <p class="visually-hidden" role="status">{announcement}</p>
 
-<label>
-	New field type
-	<Select
-		bind:value={() => newFieldType, (v) => (newFieldType = v as FieldType)}
-		options={[...FIELD_TYPES]}
-	/>
-</label>
+<LabeledField label="New field type">
+	{#snippet children({ id, describedBy, invalid })}
+		<Select
+			{id}
+			{describedBy}
+			{invalid}
+			bind:value={() => newFieldType, (v) => (newFieldType = v as FieldType)}
+			options={[...FIELD_TYPES]}
+		/>
+	{/snippet}
+</LabeledField>
 <Button label="Add field" onClick={() => onAdd(newFieldType)} />
 
 {#if archivedFields.length > 0}

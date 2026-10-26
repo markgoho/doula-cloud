@@ -37,7 +37,7 @@
 
 	<section>
 		<h2>Toggle variant</h2>
-		<label><Checkbox variant="toggle" checked={isToggleOff} onChange={(value) => (isToggleOff = value)} /> Off</label>
-		<label><Checkbox variant="toggle" checked={isToggleOn} onChange={(value) => (isToggleOn = value)} /> On</label>
+		<LabeledField label="Off" orientation="inline">{#snippet children(control)}<Checkbox variant="toggle" checked={isToggleOff} onChange={(value) => (isToggleOff = value)} {...control} />{/snippet}</LabeledField>
+		<LabeledField label="On" orientation="inline">{#snippet children(control)}<Checkbox variant="toggle" checked={isToggleOn} onChange={(value) => (isToggleOn = value)} {...control} />{/snippet}</LabeledField>
 	</section>
 </stack-l>

@@ -57,6 +57,7 @@
 	<section>
 		<h2>Disabled</h2>
 		<p>No caller disables a radio. A disabled fieldset around a form still reaches one, and this is how it looks.</p>
+		<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- the demo IS a disabled fieldset around the group, the one way a caller's form reaches a disabled radio -->
 		<fieldset disabled class="plain-fieldset">
 			<RadioGroup legend="Are you creating an account?" options={modeOptions} value="signup" onChange={() => {}} />
 		</fieldset>

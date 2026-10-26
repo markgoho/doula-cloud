@@ -241,7 +241,8 @@
 			   `appearance: none` has no size of its own, so a page that
 			   somehow lacked the tokens -- a unit spec mounting this
 			   without tokens.css is one -- would get a circle of nothing
-			   that nobody could see or press. */
+			   that nobody could see or press. tokens:ignore -- `1em` is the
+			   text's own size, a floor and not a design value. */
 			min-inline-size: 1em;
 			min-block-size: 1em;
 			margin: 0;

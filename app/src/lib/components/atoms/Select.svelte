@@ -25,6 +25,14 @@
 		invalid?: boolean;
 		describedBy?: string;
 		/*
+		 * The only accessible name when a row has no wrapping LabeledField
+		 * -- the two field editors' "Field type" in each row, whose visible
+		 * name belongs to the row (#2017). The same recorded exception
+		 * `TextInput` and `Textarea` take (#492); LabeledField remains the
+		 * default.
+		 */
+		ariaLabel?: string;
+		/*
 		 * What was chosen, reported. `bind:value` remains how most callers
 		 * read this atom; a caller rendering one select per entry in a
 		 * loop -- a Practice's own field list (#466) -- has no separate
@@ -64,6 +72,7 @@
 		required = false,
 		invalid = false,
 		describedBy,
+		ariaLabel,
 		onChange,
 		autocomplete,
 		width
@@ -86,6 +95,7 @@
 	{autocomplete}
 	aria-invalid={invalid}
 	aria-describedby={describedBy}
+	aria-label={ariaLabel}
 	class:sized={width !== undefined}
 	style:--input-chars={width}
 >

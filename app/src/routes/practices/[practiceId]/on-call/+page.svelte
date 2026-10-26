@@ -151,6 +151,7 @@
 	{#snippet content()}
 		<!-- stacked-form:ignore: #1093 -- a `method="get"` narrowing control, not a run of fields. Its two dates sit side by side and wrap on their own, and `StackedForm` would both stack them and take away the GET submission this form is built on. -->
 		<form method="get" action={basePath} onsubmit={applyRange}>
+			<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- a route-owned filter bar, copied from Schedule; the FilterBar molecule that will own this fieldset is #2026 -->
 			<fieldset>
 				<legend>Choose the days</legend>
 				<div class="controls">

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { MERGE_FIELDS } from '#lib/contractTemplate.js';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 
 	let {
 		prose,
@@ -11,10 +12,11 @@
 	} = $props();
 </script>
 
-<label>
-	Contract template prose
-	<Textarea value={prose} onInput={onProseChange} rows={12} />
-</label>
+<LabeledField label="Contract template prose">
+	{#snippet children({ id, describedBy, invalid })}
+		<Textarea {id} {describedBy} {invalid} value={prose} onInput={onProseChange} rows={12} />
+	{/snippet}
+</LabeledField>
 
 <section>
 	<h2>Merge-field placeholders</h2>

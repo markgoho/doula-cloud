@@ -128,6 +128,43 @@ describe('components spend tokens, not raw values', () => {
 	});
 
 	/*
+	 * The same rule in `rem` and `em` (#2017). A px-only scan let
+	 * `min-height: 2.5rem` sit in `TextInput` beside the
+	 * `--control-height` that says 2.5rem, and a 3rem `Button` height
+	 * that no token named. Three uses of a literal are allowed, because
+	 * none of them is a design value a token could hold:
+	 *
+	 * - an `@container` condition, which a custom property cannot be
+	 *   (CSS reads no `var()` in a query), and each one is a measured
+	 *   floor its own comment documents;
+	 * - a `flex` or `flex-basis` value, the width an item wraps at, which
+	 *   is a property of that one row's content and not of the system;
+	 * - a zero (`0rem` as a `calc()` fallback), which is not a length.
+	 *
+	 * Anything else -- a panel width, an atom's drawn geometry -- carries
+	 * `tokens:ignore` with its reason.
+	 */
+	it('uses no raw rem or em length outside its allowances', () => {
+		const length = /(?<![\w.-])-?\d*\.?\d+r?em(?![\w-])/g;
+		const allowance = /@container\b|(?:^|[\s;{])flex(?:-basis)?\s*:/;
+		const zero = /^-?0*\.?0+r?em$/;
+		const offenses: Offense[] = componentStyleLines.flatMap(({ file, lines }) =>
+			lines.flatMap(({ line, text }) =>
+				allowance.test(text)
+					? []
+					: text
+							.matchAll(length)
+							.map((match) => match[0])
+							.filter((value) => !zero.test(value))
+							.map((found) => ({ file, line, text: text.trim(), found }))
+							.toArray()
+			)
+		);
+
+		expect(report(offenses)).toEqual([]);
+	});
+
+	/*
 	 * Color is the one axis where a raw value is never defensible: the
 	 * whole point of authoring in OKLCH in one file is that the dark theme
 	 * is a derivation rather than a second hand-tuned palette, and a hex

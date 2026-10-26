@@ -213,7 +213,7 @@
 
 		button.size-lg {
 			--button-inset: var(--space-6);
-			min-block-size: 3rem;
+			min-block-size: var(--control-height-lg);
 			padding: var(--space-3) var(--button-inset);
 			font-size: var(--text-subheading-size);
 		}
@@ -374,6 +374,8 @@
 		   the ring is still drawn, and `button:disabled` still dims the whole
 		   control, so a pressed button still looks pressed. See #418. */
 		.spinner {
+			/* tokens:ignore -- `1em` is the label's own size, so the ring
+			   is as tall as the words it stands in for. */
 			inline-size: 1em;
 			block-size: 1em;
 			/* tokens:ignore -- the ring's own stroke. Not --border-active,

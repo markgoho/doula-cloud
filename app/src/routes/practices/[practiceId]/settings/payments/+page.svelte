@@ -775,7 +775,7 @@
 				<Text
 					text="This takes about fifteen minutes. Have your phone and your bank details with you before you start — Stripe does not save a half-finished form for long."
 				/>
-				<ul>
+				<ul class="prose-list">
 					{#each stripeAsksFor as item (item)}
 						<li>{item}</li>
 					{/each}

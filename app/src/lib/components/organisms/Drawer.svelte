@@ -225,6 +225,8 @@
 			   it -- the viewport's width when the panel itself is 28rem,
 			   which is not the same number. */
 			font-size: var(--text-body-size);
+			/* tokens:ignore -- the panel's width is this one organism's
+			   decision, as Dialog's is its own; no other surface shares it. */
 			inline-size: min(28rem, 100%);
 			block-size: 100%;
 			max-inline-size: none;

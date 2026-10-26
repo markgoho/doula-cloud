@@ -39,6 +39,8 @@
 <style>
 	@layer components {
 		dialog {
+			/* tokens:ignore -- the panel's width is this one molecule's
+			   decision, as Drawer's is its own; no other surface shares it. */
 			max-inline-size: min(32rem, calc(100dvw - var(--space-8)));
 			padding: var(--space-6);
 			border: 0;
