@@ -46,7 +46,10 @@
 		engagementId: string;
 		practiceName: string;
 		clientName: string;
-		status: string;
+		/** Absent after a loss, with dueDate (#2003, as #293 decided): the
+		 * BFF leaves out the care phase and the due date once the
+		 * Engagement has no living or expected baby. */
+		status?: string;
 		dueDate?: string;
 		offersBirthPlan: boolean;
 		/** What she still owes on this care -- the one figure the hub carries
@@ -116,9 +119,13 @@
 	 * array entirely, rather than shown with a placeholder, when null --
 	 * ADR-0017's postpartum-only Engagement genuinely has none, and a
 	 * "Due date" row reading "Not given" would tell a Client something is
-	 * missing from her own record rather than that nothing was ever due. */
+	 * missing from her own record rather than that nothing was ever due.
+	 * #2003: `status` is left out the same way, after a loss. */
 	function summaryItems(d: Detail): { label: string; value: string }[] {
-		const items = [{ label: 'Status', value: engagementStatusLabel(d.status) }];
+		const items: { label: string; value: string }[] = [];
+		if (d.status) {
+			items.push({ label: 'Status', value: engagementStatusLabel(d.status) });
+		}
 		if (d.dueDate) {
 			items.push({ label: 'Due date', value: formatCalendarDay(d.dueDate) });
 		}
@@ -127,7 +134,10 @@
 </script>
 
 {#snippet summary()}
-	<DescriptionList items={summaryItems(detail!)} />
+	{@const items = summaryItems(detail!)}
+	{#if items.length > 0}
+		<DescriptionList {items} />
+	{/if}
 	<!--
 		#983: the hub keeps one line for money -- the amount and a way
 		through. The figure is always written, $0.00 included: it is true

@@ -9,8 +9,10 @@
 package engagement
 
 import (
+	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -87,6 +89,49 @@ type Detail struct {
 	// on this Engagement" off it and holds no copy of the rule, the same
 	// arrangement StatusMoves has with TransitionHandler.
 	CanAttachSelf bool `json:"canAttachSelf"`
+
+	// YourFee (#2003) is the reader's own agreed fee on this Engagement:
+	// the fee an accepted Offer copied onto her open, granted Attachment
+	// (ADR-0008's `fee_amount_cents`). ADR-0008's money row, as amended
+	// on #282, gives a contractor "her own agreed fee only, on her
+	// Engagements -- never the Practice's price", and this is that fee.
+	// It is keyed on the reader's own Attachment, never on a role: an
+	// employee is never offered a fee (the Offer's CHECK forbids one), so
+	// she gets none, and an Owner reads no other Doula's fee here. Absent
+	// when the reader holds no open Attachment with a fee.
+	YourFee *AgreedFee `json:"yourFee,omitempty"`
+}
+
+// AgreedFee is a Doula's own agreed fee and the Practice's calendar day
+// she accepted it on (ADR-0036: a day means the Practice's day).
+type AgreedFee struct {
+	AmountCents int64  `json:"amountCents"`
+	AcceptedOn  string `json:"acceptedOn"`
+}
+
+// readOwnFee reads staffID's own open, granted Attachment on
+// engagementID for a fee. The partial unique index allows one open
+// Attachment per pair at most, so this is one row or none.
+func readOwnFee(ctx context.Context, tx *sql.Tx, engagementID, staffID string) (*AgreedFee, error) {
+	var fee AgreedFee
+	err := tx.QueryRowContext(ctx,
+		`SELECT ea.fee_amount_cents, (ea.attached_at AT TIME ZONE p.timezone)::date::text
+		   FROM engagement_attachments ea
+		   JOIN engagements e ON e.id = ea.engagement_id
+		   JOIN practices p ON p.id = e.practice_id
+		  WHERE ea.engagement_id = $1 AND ea.staff_id = $2
+		    AND ea.origin = 'granted' AND ea.ended_at IS NULL
+		    AND ea.fee_amount_cents IS NOT NULL`,
+		engagementID, staffID,
+	).Scan(&fee.AmountCents, &fee.AcceptedOn)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil //nolint:nilnil // no fee is an answer, not a failure
+	}
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, fmt.Errorf("engagement: read own fee: %w", err)
+	}
+	return &fee, nil
 }
 
 // DetailHandler views one Engagement's basic detail: every Staff role
@@ -175,6 +220,12 @@ func DetailHandler() http.Handler {
 		}
 		staffID, _ := staffauth.StaffID(r.Context())
 		d.CanAttachSelf = canAttachSelf(reader, staffID, d.Status, d.Doulas)
+		d.YourFee, err = readOwnFee(r.Context(), tx, engagementID, staffID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
 
 		apierr.WriteJSON(w, http.StatusOK, d)
 	})

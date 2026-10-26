@@ -30,11 +30,10 @@
  * `asDoula` below.
  *
  * Everything else is the base with things taken away. An Admin loses the
- * InvoiceSection's Owner link and her own Visit default; a contractor
- * Doula loses what `asDoula` has plus the Contract's PDF download and the
- * birth-outcome control, so she is a strict subset of that variant rather
- * than a third screen. A strict subset realizes nothing the sweep has
- * already measured (svelte-tests.md, ADR-0025).
+ * InvoiceSection's Owner link and her own Visit default. A contractor
+ * Doula loses the Contract's PDF download and the birth-outcome control,
+ * and since #2002 reads one information line in place of the Invoice
+ * list, which no other session draws, so she is `asContractor` below.
  */
 import type { Contract } from '#lib/contract.js';
 import { jsonResponse } from '#lib/testResponse.js';
@@ -225,7 +224,13 @@ export const detail = {
 		{ staffId: 'staff-1', name: 'Persephone Vandermeulen-Achterberg, CD(DONA)' },
 		{ staffId: 'staff-2', name: 'Bo Ng' }
 	],
-	canAttachSelf: false
+	canAttachSelf: false,
+	// #2003: the reader's own agreed fee. She is an Owner who is a
+	// contractor Doula on this Engagement, the person ADR-0008's amendment
+	// on #1625 still offers work with a fee, so the Contract section's
+	// "Your fee" row is drawn on the base. A four-figure fee, the widest
+	// the row gets.
+	yourFee: { amountCents: 1_262_000, acceptedOn: '2026-07-22' }
 };
 
 /*
@@ -363,10 +368,8 @@ export const session = {
  * Button, and the reason form behind it, which needs a click the sweep
  * never makes.
  *
- * An employee Doula rather than a contractor one, because she is the
- * wider of the two: `isAmbientContractor` would take away the Contract's
- * PDF download and the birth-outcome controls and add nothing, so the
- * contractor is a strict subset of this branch.
+ * An employee Doula rather than a contractor one: the contractor's own
+ * screen is `asContractor`, below.
  *
  * `props`, not `pageData`: this route reads `data.session`, handed to it
  * by its own `+page.ts` (#695), and `props` is restated whole -- so the
@@ -395,6 +398,24 @@ export const asDoula: RouteVariant<RouteParameters> = {
 			doulas: [],
 			canAttachSelf: true,
 			session: { ...session, roles: ['doula'], isContractor: false }
+		}
+	}
+};
+
+/*
+ * The contractor Doula's own reading (#2002). Since #2002 she is no
+ * longer a strict subset of `asDoula`: her Invoices section is one
+ * information line in place of the list, which no other session draws.
+ * `props` for the same reason `asDoula` gives. `respond` is inherited:
+ * the page no longer asks for the Invoice list for her, so the base's
+ * answer to that path is never read.
+ */
+export const asContractor: RouteVariant<RouteParameters> = {
+	name: 'The Staff-side Engagement detail hub, as a contractor Doula',
+	props: {
+		data: {
+			...detail,
+			session: { ...session, roles: ['doula'], isContractor: true }
 		}
 	}
 };
@@ -615,5 +636,5 @@ export const fixture: RouteFixture<RouteParameters> = {
 		throw new Error(`engagements/[engagementId] fixture: unmatched fetch path ${path}`);
 	},
 	readyText: clientName,
-	variants: [asDoula, withNoRate, typical]
+	variants: [asDoula, asContractor, withNoRate, typical]
 };

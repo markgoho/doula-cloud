@@ -18,6 +18,7 @@ interface SetupOptions {
 	hasClientEmail?: boolean;
 	isOwner?: boolean;
 	isOwnerOrAdmin?: boolean;
+	canReadInvoices?: boolean;
 	practiceTimezone?: string;
 	onCreate?: (billingMode?: BillingMode) => Promise<void>;
 	onRecordPayment?: (
@@ -96,6 +97,7 @@ async function setup({
 	hasClientEmail = true,
 	isOwner = false,
 	isOwnerOrAdmin = false,
+	canReadInvoices = true,
 	// America/New_York, the same fixture zone the repo's other timezone
 	// tests use (ADR-0036) -- a zone behind UTC, which is the case the
 	// future-date boundary tests below exercise.
@@ -115,6 +117,7 @@ async function setup({
 		hasClientEmail,
 		isOwner,
 		isOwnerOrAdmin,
+		canReadInvoices,
 		practiceTimezone,
 		paymentsSettingsHref,
 		onCreate,
@@ -1030,5 +1033,61 @@ describe('InvoiceSection.svelte', () => {
 			await page.getByRole('button', { name: 'Cancel' }).click();
 			await expect.element(refundForm).not.toBeInTheDocument();
 		});
+	});
+});
+
+// #2002: a contractor Doula reads no Invoice history and no Practice price
+// (ADR-0008, as amended on #282), and may still raise an Invoice (its write
+// table). The section says so once, as information, and never pretends the
+// list is empty.
+describe('InvoiceSection.svelte for a reader who cannot see Invoices (#2002)', () => {
+	it('says what she can and cannot see, as information and not as an error', async () => {
+		await setup({ canReadInvoices: false });
+
+		const statement = page.getByRole('status').filter({ hasText: 'You contract for this Practice' });
+		await expect.element(statement).toBeVisible();
+		await expect
+			.element(statement)
+			.toHaveTextContent(
+				'You contract for this Practice, so you do not see its Invoices or what the Client pays. Your own fee is in the Contract section.'
+			);
+		await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
+	});
+
+	it('never says "No Invoices yet." and lists no Invoice, even when some exist', async () => {
+		await setup({ canReadInvoices: false, invoices: [invoiceOpen, invoicePaid] });
+
+		await expect.element(page.getByText('No Invoices yet.')).not.toBeInTheDocument();
+		await expect.element(page.getByText(/\$150\.00/)).not.toBeInTheDocument();
+		await expect.element(page.getByRole('listitem')).not.toBeInTheDocument();
+	});
+
+	it('still offers Create Invoice, which ADR-0008 lets her raise, and says when it worked', async () => {
+		const { onCreate } = await setup({ canReadInvoices: false });
+
+		await page.getByRole('button', { name: 'Create Invoice' }).click();
+
+		expect(onCreate).toHaveBeenCalledWith();
+		const created = page.getByText('Invoice created.');
+		await expect.element(created).toBeVisible();
+		await expect.element(created).toHaveFocus();
+	});
+
+	it('says nothing was created when the create is refused', async () => {
+		await setup({
+			canReadInvoices: false,
+			onCreate: vi.fn().mockRejectedValue(new Error('This Contract is not signed.'))
+		});
+
+		await page.getByRole('button', { name: 'Create Invoice' }).click();
+
+		await expect.element(page.getByText('This Contract is not signed.')).toBeVisible();
+		await expect.element(page.getByText('Invoice created.')).not.toBeInTheDocument();
+	});
+
+	it('asks the billing-mode question on the first Invoice, as for anyone who raises it', async () => {
+		await setup({ canReadInvoices: false, billingMode: 'unset' });
+
+		await expect.element(page.getByRole('group', { name: /How does this Practice bill Clients/ })).toBeVisible();
 	});
 });

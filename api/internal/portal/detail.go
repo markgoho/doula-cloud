@@ -34,7 +34,11 @@ type Detail struct {
 	// family_name is optional, so the two are joined with concat_ws rather
 	// than `||`, which would null the entire expression.
 	ClientName string `json:"clientName"`
-	Status     string `json:"status"`
+	// Status is the care phase. Absent, with DueDate, once the Engagement
+	// has no living or expected baby (#2003, as #293 decided): after a
+	// loss "Your care" shows neither a phase nor a due date. The outcome
+	// itself never crosses (ADR-0015); only these two absences do.
+	Status *string `json:"status,omitempty"`
 	// DueDate is ADR-0017's `engagements.due_date`, nullable because a
 	// postpartum-only Engagement has none (#505).
 	DueDate *string `json:"dueDate,omitempty"`
@@ -76,6 +80,7 @@ func DetailHandler() http.Handler {
 		engagementID, _ := clientauth.EngagementID(r.Context())
 
 		var d Detail
+		var status string
 		var dueDate sql.NullString
 		var kind string
 		// Both selected only to answer engagement.OffersBirthPlan, and
@@ -92,7 +97,7 @@ func DetailHandler() http.Handler {
 			 JOIN clients c ON c.id = e.client_id
 			 WHERE e.id = $1 AND e.client_id = $2`,
 			engagementID, clientID,
-		).Scan(&d.EngagementID, &d.PracticeName, &d.ClientName, &d.Status, &dueDate, &d.CreatedAt, &kind, &birthOutcome)
+		).Scan(&d.EngagementID, &d.PracticeName, &d.ClientName, &status, &dueDate, &d.CreatedAt, &kind, &birthOutcome)
 		if errors.Is(err, sql.ErrNoRows) {
 			// coverage:ignore reason: clientauth.Middleware already confirmed ownership; unreachable in practice
 			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
@@ -103,8 +108,11 @@ func DetailHandler() http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if dueDate.Valid {
-			d.DueDate = &dueDate.String
+		if engagement.HasLivingOrExpectedBaby(birthOutcome) {
+			d.Status = &status
+			if dueDate.Valid {
+				d.DueDate = &dueDate.String
+			}
 		}
 		d.OffersBirthPlan = engagement.OffersBirthPlan(engagement.BirthPlanInputs{
 			Kind: engagement.Kind(kind), BirthOutcome: birthOutcome,

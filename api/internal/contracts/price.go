@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 
 	"doula-cloud/api/internal/staffauth"
 
@@ -83,6 +84,66 @@ func priceForReader(reader staffauth.Reader, mergeFields []string, values MergeF
 	out := make(MergeFieldValues, len(values))
 	maps.Copy(out, values)
 	delete(out, priceMergeKey)
+	return out
+}
+
+// withoutPriceLines is prose with every line that names the price merge
+// field left out (#2003): a Contract shown to a reader who may not read
+// the Practice's price must not render "Price:" with nothing after it,
+// which reads as a defect in the document rather than as something kept
+// from her. The whole line goes, not only the placeholder, because the
+// line exists to state the price. A blank line that the removal would
+// leave doubled is dropped with it, so the paragraphs around it keep
+// their one blank line between them.
+func withoutPriceLines(prose string) string {
+	lines := strings.Split(prose, "\n")
+	kept := make([]string, 0, len(lines))
+	removedLast := false
+	for _, line := range lines {
+		if namesPrice(line) {
+			removedLast = true
+			continue
+		}
+		if removedLast && strings.TrimSpace(line) == "" && (len(kept) == 0 || strings.TrimSpace(kept[len(kept)-1]) == "") {
+			continue
+		}
+		removedLast = false
+		kept = append(kept, line)
+	}
+	return strings.Join(kept, "\n")
+}
+
+// namesPrice reports whether line carries the price merge field.
+func namesPrice(line string) bool {
+	for _, match := range mergeFieldPattern.FindAllStringSubmatch(line, -1) {
+		if match[1] == priceMergeKey {
+			return true
+		}
+	}
+	return false
+}
+
+// shapeForReader is the last step every Staff-side Contract response
+// takes (writeContract calls it), so no route can hand an ambient
+// contractor the Practice's price by forgetting to: ADR-0008's money row
+// as amended on #282 gives her "her own agreed fee only -- never the
+// Practice's price". For her, the price line leaves the prose, "price"
+// leaves the merge fields, its value leaves Values, and amountChangedAt
+// (the fact that the price moved) is withheld. A request with no Staff
+// Reader on it -- the Client portal's own Contract read -- passes
+// through unchanged: the Client reads what she agreed to pay.
+func shapeForReader(reader staffauth.Reader, hasReader bool, out ContractResponse) ContractResponse {
+	if !hasReader || !reader.IsAmbientContractor() {
+		return out
+	}
+	out.Prose = withoutPriceLines(out.Prose)
+	out.MergeFields = slices.DeleteFunc(slices.Clone(out.MergeFields), func(key string) bool { return key == priceMergeKey })
+	if _, present := out.Values[priceMergeKey]; present {
+		values := maps.Clone(out.Values)
+		delete(values, priceMergeKey)
+		out.Values = values
+	}
+	out.AmountChangedAt = nil
 	return out
 }
 

@@ -32,6 +32,8 @@ import { apiErrorMessage } from './apiErrorMessage.js';
 import { NO_DOULA_YET_LABEL } from './engagementRequest.js';
 import { refusalError, refusalOrConfirmable, type Refusal } from './formErrors.js';
 import type { CursorPage } from './paginatedList.svelte.js';
+import { formatCalendarDay } from './dates.js';
+import { formatMoney } from './money.js';
 
 /** Which Engagement, at which Practice. Passed as one value because every
  * function here needs both and neither is ever meaningful alone. */
@@ -96,6 +98,29 @@ export interface EngagementSummary {
 	 * "Put me on this Engagement" off this and holds no copy of the rule,
 	 * the arrangement `statusMoves` has with the status endpoint. */
 	canAttachSelf: boolean;
+	/** The reader's own agreed fee on this Engagement (#2003): the fee an
+	 * accepted Offer copied onto her Attachment, and the Practice's day she
+	 * accepted it. Absent when she holds none -- an employee, an Owner, and
+	 * anyone not on the Engagement. ADR-0008 gives a contractor this and
+	 * never the Practice's price. */
+	yourFee?: AgreedFee;
+}
+
+/**
+A Doula's own agreed fee. Mirrors the Go BFF's engagement.AgreedFee.
+*/
+export interface AgreedFee {
+	amountCents: number;
+	/**
+	`YYYY-MM-DD`, the Practice's calendar day (ADR-0036).
+	*/
+	acceptedOn: string;
+}
+
+/** The "Your fee" row's value (#2003), in the drawing's words: the fee,
+ * then the day she accepted it, so she can tell which Offer it was. */
+export function yourFeeValue(fee: AgreedFee): string {
+	return `${formatMoney(fee.amountCents, 'USD')}, the fee you accepted on ${formatCalendarDay(fee.acceptedOn)}`;
 }
 
 /** One Doula on an Engagement. Mirrors the Go BFF's
