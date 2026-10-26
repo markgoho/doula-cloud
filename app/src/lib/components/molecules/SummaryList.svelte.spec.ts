@@ -88,31 +88,39 @@ describe('SummaryList.svelte', () => {
 	 * drawing marks it under its label and says, where a Change would be,
 	 * why there is none.
 	 */
-	it('marks a row with its tag under the label', async () => {
+	it('marks a row with its tag on a line under the label, in that row', async () => {
 		const { container } = await render(SummaryList, {
 			props: { rows: [...rows, { label: 'Doula on call at booking', value: 'Priya Raman', tag: 'No longer collected' }] }
 		});
 
 		await expect.element(page.getByText('No longer collected')).toBeVisible();
-		const lastKey = [...container.querySelectorAll(':scope dt')].at(-1);
-		expect(lastKey?.textContent).toContain('No longer collected');
-		expect(lastKey?.textContent).toContain('Doula on call at booking');
+		const notes = [...container.querySelectorAll(':scope .row')].map(
+			(row) => row.querySelector(':scope .note')?.textContent?.trim() ?? ''
+		);
+		expect(notes).toEqual(['', '', '', 'No longer collected']);
 	});
 
-	it("draws a row's status where its action would be, with no action, on a row nobody may change", async () => {
+	it("draws a row's status, and no action, on a row nobody may change", async () => {
 		const { container } = await render(SummaryList, {
 			props: {
-				rows: [rows[0]!, { label: 'Doula on call at booking', value: 'Priya Raman', status: 'Kept, not collected' }],
+				rows: [
+					{ ...rows[0]!, status: 'never drawn beside a Change' },
+					{ label: 'Doula on call at booking', value: 'Priya Raman', status: 'Kept, not collected' }
+				],
 				action: changeLink
 			}
 		});
 
 		await expect.element(page.getByText('Kept, not collected')).toBeVisible();
-		const actions = [...container.querySelectorAll(':scope .row')].map(
-			(row) => row.querySelector(':scope .action')?.textContent?.trim() ?? ''
-		);
-		expect(actions).toEqual(['Change care', 'Kept, not collected']);
+		await expect.element(page.getByText('never drawn beside a Change')).not.toBeInTheDocument();
+		expect(container.querySelectorAll(':scope .row')[1]!.querySelector(':scope .action')).toBeNull();
 		expect(page.getByRole('link', { name: 'Change' }).elements()).toHaveLength(1);
+	});
+
+	it("draws a row's status in a list with no action at all", async () => {
+		await render(SummaryList, { props: { rows: [{ label: 'Old', value: 'kept', status: 'Kept, not collected' }] } });
+
+		await expect.element(page.getByText('Kept, not collected')).toBeVisible();
 	});
 
 	it('draws no action cell at all without an action', async () => {
