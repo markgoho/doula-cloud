@@ -19,6 +19,14 @@
 	 * other link in the app -- underlined, in the link color -- because a
 	 * thing that is a link should look like one (the brief's Law of
 	 * Similarity).
+	 *
+	 * `menu` is a row in a menu button's panel (#2141): the Practice
+	 * switcher's Practices, each one's name with its roles under it. The
+	 * whole row is the target, as the drawing had it, where a `Link` with
+	 * the roles beside it left the roles line dead to a press. Not
+	 * underlined, for the reason `Link`'s own `menu` gives. `current`
+	 * marks the Practice she is in: `aria-current`, a fill, and a tick, so
+	 * color is not the only signal.
 	 */
 	import Icon from './Icon.svelte';
 
@@ -26,23 +34,26 @@
 		href: string;
 		label: string;
 		description: string;
-		variant?: 'primary' | 'secondary';
+		variant?: 'primary' | 'secondary' | 'menu';
+		current?: boolean;
 	}
 
-	let { href, label, description, variant = 'secondary' }: Properties = $props();
+	let { href, label, description, variant = 'secondary', current = false }: Properties = $props();
 
 	const id = $props.id();
 	const nameId = `${id}-name`;
 	const descriptionId = `${id}-description`;
 </script>
 
-<a {href} class={variant} aria-labelledby={nameId} aria-describedby={descriptionId}><!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
+<a {href} class={variant} aria-current={current ? 'page' : undefined} aria-labelledby={nameId} aria-describedby={descriptionId}><!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
 	<span class="text">
 		<span id={nameId} class="name">{label}</span>
 		<span id={descriptionId} class="description">{description}</span>
 	</span>
 	{#if variant === 'primary'}
 		<Icon name="arrow-right" size={24} weight="light" />
+	{:else if current}
+		<span class="tick"><Icon name="check" size={16} /></span>
 	{/if}
 </a>
 
@@ -134,6 +145,42 @@
 
 		.secondary:hover .name {
 			color: var(--color-primary-hover);
+		}
+
+		.menu {
+			gap: var(--space-3);
+			min-block-size: var(--nav-row-height);
+			padding: var(--space-2) var(--space-4);
+			border: 0;
+			border-radius: 0;
+			color: var(--color-on-surface);
+		}
+
+		.menu:hover,
+		.menu[aria-current='page'] {
+			background-color: var(--color-surface-container);
+		}
+
+		.menu:focus-visible {
+			outline-offset: calc(-1 * var(--focus-ring-width));
+		}
+
+		.menu .name {
+			font-size: var(--text-body-sm-size);
+		}
+
+		.menu[aria-current='page'] .name {
+			font-weight: var(--font-weight-semibold);
+		}
+
+		.menu .description {
+			color: var(--color-on-surface-muted);
+			font-size: var(--text-meta-size);
+		}
+
+		.tick {
+			display: flex;
+			color: var(--color-primary);
 		}
 	}
 </style>

@@ -127,7 +127,9 @@
 			<BrandLockup />
 		{/if}
 		<PracticeSwitcher {practices} {currentPracticeId} />
-		<AvatarMenu {firstName} {lastName} {email} {accountHref} {signOut} />
+		<div class="end">
+			<AvatarMenu {firstName} {lastName} {email} {accountHref} {signOut} />
+		</div>
 	</div>
 </header>
 
@@ -136,7 +138,9 @@
 		<div class="sheet-bar">
 			<Button label="Close menu" icon="x" iconOnly variant="bare" onClick={closeSheet} />
 			<BrandLockup />
-			<AvatarMenu {firstName} {lastName} {email} {accountHref} {signOut} />
+			<div class="end">
+				<AvatarMenu {firstName} {lastName} {email} {accountHref} {signOut} />
+			</div>
 		</div>
 		<nav aria-label="Practice">
 			{#each navItems as item (item.href)}
@@ -220,12 +224,25 @@
 			column-gap: var(--space-10);
 		}
 
+		/* The Practice's name sits at the start, beside the Menu button, and
+		   the avatar is pinned to the far edge by `.end` (#2141). Not
+		   centered between the two: a name that wraps would wrap centered,
+		   ragged on both sides, and would sit somewhere different for every
+		   length of name, where at the start it is always where the wide
+		   bar's lockup is and where GOV.UK's header puts a service's name. */
 		.narrow {
 			display: flex;
 			gap: var(--space-1);
-			/* The Practice name takes the room the nav does not need here, so
-			   the hamburger and the avatar stay pinned to the two edges. */
-			justify-content: space-between;
+		}
+
+		/* The avatar, at the inline end of the narrow bar and of the sheet's
+		   bar. Stretched to the row, so the avatar's menu box -- which
+		   stretches to whatever row holds it -- still opens below the bar
+		   however tall a wrapped name made it (#1573). */
+		.end {
+			display: flex;
+			align-self: stretch;
+			margin-inline-start: auto;
 		}
 
 		/* Unavoidable (#564): the wide nav row and the menu-button sheet
@@ -358,10 +375,11 @@
 			color: var(--color-on-surface);
 		}
 
+		/* The lockup beside the close button, at the start, for the reason
+		   `.narrow` gives (#2141): it stays where it is in every bar. */
 		.sheet-bar {
 			display: flex;
 			align-items: center;
-			justify-content: space-between;
 			gap: var(--space-1);
 			block-size: var(--top-bar-height);
 			padding-inline: var(--space-2);

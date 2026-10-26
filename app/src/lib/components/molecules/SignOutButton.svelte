@@ -12,9 +12,15 @@
 		 * through.
 		 */
 		signOut: () => Promise<SignOutOutcome>;
+		/*
+		 * `menu`: a row in the avatar menu's panel (#2141), at the weight of
+		 * the Account row above it. `secondary` is the button a screen with
+		 * no menu draws, the signed-out pages' own way out.
+		 */
+		variant?: 'secondary' | 'menu';
 	}
 
-	let { signOut }: Properties = $props();
+	let { signOut, variant = 'secondary' }: Properties = $props();
 
 	let isSigningOut = $state(false);
 	let error = $state('');
@@ -31,7 +37,7 @@
 	}
 </script>
 
-<Button label="Sign out" variant="secondary" size="sm" loading={isSigningOut} onClick={handleClick} />
+<Button label="Sign out" {variant} size="sm" loading={isSigningOut} onClick={handleClick} />
 {#if error}
 	<Notice message={error} variant="error" />
 {/if}

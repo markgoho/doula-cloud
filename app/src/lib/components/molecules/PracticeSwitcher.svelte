@@ -33,8 +33,7 @@
 </script>
 
 <script lang="ts">
-	import Icon from '#lib/components/atoms/Icon.svelte';
-	import Link from '#lib/components/atoms/Link.svelte';
+	import DoorLink from '#lib/components/atoms/DoorLink.svelte';
 	import MenuButton from './MenuButton.svelte';
 	import { rolesLabel } from '#lib/roles.js';
 
@@ -57,6 +56,13 @@
 	// a promise the product cannot keep, so the caret and the panel appear
 	// only at two or more.
 	const isSwitchable = $derived(practices.length > 1);
+
+	// The Practice she is in first, then the others in the order they
+	// arrive (#2141): the top of the list answers "where am I" before it
+	// offers anywhere else, as the drawing had it.
+	function currentFirst(currentPractice: PracticeOption): PracticeOption[] {
+		return [currentPractice, ...practices.filter((practice) => practice !== currentPractice)];
+	}
 </script>
 
 {#if current}
@@ -66,19 +72,15 @@
 			<!-- No preload (#2070): a hover would load that Practice's session,
 			     which the BFF records as her last-used Practice. -->
 			<ul data-sveltekit-preload-data="false">
-				{#each practices as practice (practice.practiceId)}
-					{@const isCurrent = practice.practiceId === currentPracticeId}
-					<li class:current={isCurrent}>
-						<Link
+				{#each currentFirst(current) as practice (practice.practiceId)}
+					<li>
+						<DoorLink
 							href={practice.href}
 							label={practice.practiceName}
-							variant="secondary"
-							current={isCurrent}
+							description={rolesLabel(practice.roles)}
+							variant="menu"
+							current={practice === current}
 						/>
-						<span class="roles">{rolesLabel(practice.roles)}</span>
-						{#if isCurrent}
-							<span class="tick"><Icon name="check" size={16} label="Current practice" /></span>
-						{/if}
 					</li>
 				{/each}
 			</ul>
@@ -105,28 +107,8 @@
 		}
 
 		li {
-			display: grid;
-			grid-template-columns: 1fr auto;
-			align-items: center;
-			gap: 0 var(--space-3);
-			min-block-size: var(--nav-row-height);
-			padding: var(--space-2) var(--space-4);
-		}
-
-		li.current {
-			background-color: var(--color-surface-container);
-		}
-
-		.roles {
-			grid-column: 1;
-			color: var(--color-on-surface-muted);
-			font-size: var(--text-meta-size);
-		}
-
-		.tick {
-			grid-row: 1 / span 2;
-			grid-column: 2;
-			color: var(--color-primary);
+			display: flex;
+			flex-direction: column;
 		}
 
 		/* The name alone when there is nothing to switch to. Same weight and

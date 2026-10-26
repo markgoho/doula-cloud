@@ -12,8 +12,12 @@
 		 * sentence rather than beside one. `size` has no effect on it: a
 		 * link-in-a-sentence takes exactly the room its own words need,
 		 * never the sm/md/lg padding scale the other variants share.
+		 *
+		 * `menu`: a row in a menu button's panel, the avatar menu's Sign out
+		 * (#2141). The full width of the panel and the same weight as the
+		 * `Link` rows beside it, which is why it takes no size scale either.
 		 */
-		variant?: 'primary' | 'secondary' | 'destructive' | 'bare' | 'link';
+		variant?: 'primary' | 'secondary' | 'destructive' | 'bare' | 'link' | 'menu';
 		size?: 'sm' | 'md' | 'lg';
 		type?: 'button' | 'submit' | 'reset';
 		disabled?: boolean;
@@ -136,10 +140,11 @@
 	}
 
 	const iconSize = $derived(size === 'sm' ? 16 : (size === 'lg' ? 24 : 20));
-	// `link` carries no size scale of its own (see the prop comment above),
-	// so the `size-*` class -- and the padding/min-height it sets -- is
-	// left off rather than fought with a second, higher-specificity rule.
-	const buttonClass = $derived(variant === 'link' ? 'link' : `${variant} size-${size}`);
+	// `link` and `menu` carry no size scale of their own (see the prop
+	// comment above), so the `size-*` class -- and the padding/min-height
+	// it sets -- is left off rather than fought with a second,
+	// higher-specificity rule.
+	const buttonClass = $derived(variant === 'link' || variant === 'menu' ? variant : `${variant} size-${size}`);
 </script>
 
 <button
@@ -429,6 +434,33 @@
 
 		button.bare:not(:disabled, [aria-disabled='true']):hover {
 			color: var(--color-primary);
+		}
+
+		/* A row in a menu button's panel (#2141): the width of the panel,
+		   words at the start, no box of its own, and the 44px floor from the
+		   base rule. It reads as one of the panel's items rather than as a
+		   control set down inside it. The focus ring is drawn inside the
+		   row, since the panel clips what is drawn outside it. */
+		button.menu {
+			--button-inset: var(--space-4);
+			justify-content: flex-start;
+			inline-size: 100%;
+			padding: var(--space-2) var(--button-inset);
+			border: 0;
+			border-radius: 0;
+			background-color: transparent;
+			color: var(--color-on-surface);
+			font-size: var(--text-body-sm-size);
+			font-weight: var(--font-weight-normal);
+			text-align: start;
+		}
+
+		button.menu:not(:disabled, [aria-disabled='true']):hover {
+			background-color: var(--color-surface-container);
+		}
+
+		button.menu:focus-visible {
+			outline-offset: calc(-1 * var(--focus-ring-width));
 		}
 
 		/* The brief keeps this spinner rather than replacing it: a small
