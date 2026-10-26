@@ -66,6 +66,18 @@ export async function saveRate(
 	return response.json();
 }
 
+/** Removes one kind's rate, so the kind has no rate again (#2080) --
+ * #966's valid "no rate yet" state. The Go BFF's DeleteRateHandler holds
+ * the same Owner-or-Admin gate as saveRate, records who removed it, and
+ * treats removing an unset rate as a no-op. */
+export async function removeRate(fetcher: Fetcher, practiceId: string, kind: EngagementKind): Promise<Rate> {
+	const response = await fetcher(ratePath(practiceId, kind), { method: 'DELETE' });
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	return response.json();
+}
+
 /** Parses a dollars-and-cents string typed into a form field into the
  * integer cents PutRateHandler requires, or undefined if dollars is not a
  * finite, positive number -- mirrored client-side purely for early UX

@@ -6,7 +6,8 @@ import (
 )
 
 // Mount registers a Practice's rate card (#966): the GET every Staff
-// member reads, and the per-kind PUT only an Owner or Admin may reach.
+// member reads, and the per-kind PUT and DELETE only an Owner or Admin
+// may reach.
 // #990 moved that Owner-or-Admin rule from an in-handler check
 // (staffauth.RequireOwnerOrAdmin) to this ir.ExemptGated declaration, the
 // same move #970 made for Contract writes.
@@ -15,4 +16,9 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router) {
 	ir.ExemptGated("PUT /api/practices/{practiceId}/rates/{kind}",
 		"full-replace UPDATE of one kind's rate; re-sending the same body is a no-op that records nothing new (see PutRateHandler's own doc comment)",
 		false, staffauth.OwnerAndAdmin, PutRateHandler())
+	// #2080: removing a rate sits behind the same Owner-and-Admin gate
+	// as setting one.
+	ir.ExemptGated("DELETE /api/practices/{practiceId}/rates/{kind}",
+		"DELETE is naturally idempotent per docs/api-design.md section 3; removing a rate that is not set writes and records nothing (see DeleteRateHandler's own doc comment)",
+		false, staffauth.OwnerAndAdmin, DeleteRateHandler())
 }

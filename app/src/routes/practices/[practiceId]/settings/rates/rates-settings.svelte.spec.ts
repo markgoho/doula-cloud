@@ -1,7 +1,8 @@
 /*
  * #2030: Rates is a form. Enter saves, a refused value is said in the
  * error summary and beside its box, and a save says what was saved,
- * read back from the server, "no rate" included.
+ * read back from the server, "no rate" included. #2080: an emptied box
+ * over a stored rate removes it.
  */
 import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -28,12 +29,21 @@ interface SetupOptions {
 	isPutRefused?: boolean;
 }
 
-/** A rate card the PUTs write into, so the read after a save answers with
- * what was stored, as the BFF does. */
+/** A rate card the PUTs and DELETEs write into, so the read after a save
+ * answers with what was stored, as the BFF does. */
 async function setup({ isLoadRefused = false, isPutRefused = false }: SetupOptions = {}) {
 	const stored: Rate[] = rates.rates.map((rate) => ({ ...rate }));
 	const puts: { kind: string; amountCents: number }[] = [];
+	const removals: string[] = [];
 	apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
+		if (init?.method === 'DELETE') {
+			const kind = path.split('/').at(-1)!;
+			removals.push(kind);
+			// eslint-disable-next-line unicorn/no-null -- the BFF's JSON null for a kind with no rate
+			stored.find((rate) => rate.kind === kind)!.amountCents = null;
+			// eslint-disable-next-line unicorn/no-null -- the BFF's JSON null for a kind with no rate
+			return Promise.resolve(jsonResponse({ kind, amountCents: null }));
+		}
 		if (init?.method === 'PUT') {
 			if (isPutRefused) return Promise.resolve(jsonResponse({ message: 'amountCents must be a positive integer' }, 400));
 			const kind = path.split('/').at(-1)!;
@@ -46,7 +56,7 @@ async function setup({ isLoadRefused = false, isPutRefused = false }: SetupOptio
 		return Promise.resolve(jsonResponse({ rates: stored }));
 	});
 	await render(Page, {});
-	return { puts };
+	return { puts, removals };
 }
 
 beforeEach(() => {
@@ -87,17 +97,19 @@ describe('Rates settings screen (#2030)', () => {
 		expect(document.title).toMatch(/^Error: /);
 	});
 
-	it('keeps a stored rate whose box was emptied, and says so rather than claiming it was removed', async () => {
-		const { puts } = await setup();
+	it('removes a stored rate whose box was emptied, and says "no rate" for it (#2080)', async () => {
+		const { puts, removals } = await setup();
 
 		await testPage.getByLabelText('Birth rate').fill('');
 		await testPage.getByRole('button', { name: 'Save' }).click();
 
 		await expect
-			.element(testPage.getByRole('status').filter({ hasText: 'Rates saved. Birth: $2,500.00. Postpartum: no rate.' }))
+			.element(testPage.getByRole('status').filter({ hasText: 'Rates saved. Birth: no rate. Postpartum: no rate.' }))
 			.toBeVisible();
-		await expect.element(testPage.getByLabelText('Birth rate')).toHaveValue(2500);
+		await expect.element(testPage.getByLabelText('Birth rate')).toHaveDisplayValue('');
 		expect(puts).toEqual([]);
+		// Postpartum had no rate to remove, so nothing is sent for it.
+		expect(removals).toEqual(['birth']);
 	});
 
 	it("reports the server's refusal in the summary", async () => {

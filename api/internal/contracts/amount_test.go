@@ -12,6 +12,11 @@ import (
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
+	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/objectstore"
+	"doula-cloud/api/internal/practicerate"
+	"doula-cloud/api/internal/push"
+	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -69,6 +74,54 @@ func TestPostContractHandler_NoRateSet(t *testing.T) {
 		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeFailedPrecondition)
 	}
 	// #1885: the full sentence, so a reword is a deliberate test change.
+	const want = "Your Practice has no birth rate yet. Set one on the Rates page in Settings before you create a Contract."
+	if out.Message != want {
+		t.Fatalf("message = %q, want %q", out.Message, want)
+	}
+}
+
+// TestPostContractHandler_RemovedRateRefusedLikeNoRate proves #2080's AC
+// that a new Contract of a kind whose rate an Owner removed is refused
+// exactly as it is for a Practice that never set one -- through the real
+// DELETE, not a hand-deleted row, so the two packages agree on what "no
+// rate" means.
+func TestPostContractHandler_RemovedRateRefusedLikeNoRate(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "post-removed-rate"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedContractTemplate(t, db, practiceID, mergeFieldProse)
+	testdb.SeedPracticeRate(t, db, practiceID, "birth", 240000)
+
+	mux := http.NewServeMux()
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	contracts.Mount(g, ir, db.App, objectstore.NewMemoryStore(), push.NewFakePusher())
+	practicerate.Mount(g, ir)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	session := authntest.SeedSession(t, db.App, uid)
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, srv.URL+"/api/practices/"+practiceID+"/rates/birth", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	authntest.AddSessionCookie(req, session)
+	del, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer del.Body.Close()
+	if del.StatusCode != http.StatusOK {
+		t.Fatalf("DELETE status = %d, want %d", del.StatusCode, http.StatusOK)
+	}
+
+	resp := postContract(t, srv, session, practiceID, engagementID)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
+	}
+	out := apierrtest.Decode(t, resp)
 	const want = "Your Practice has no birth rate yet. Set one on the Rates page in Settings before you create a Contract."
 	if out.Message != want {
 		t.Fatalf("message = %q, want %q", out.Message, want)
