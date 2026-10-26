@@ -46,17 +46,17 @@ test('Staff fills a Birth Plan, and the Client portal shows the matching read-on
 	await page.goto(`/practices/${practiceId}/engagements/${engagementId}`);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/engagements/${engagementId}$`));
 
-	await page.getByRole('button', { name: 'Create Birth Plan' }).click();
+	// #2004: starting the Birth Plan opens its questions at once.
+	await page.getByRole('button', { name: 'Start the Birth Plan' }).click();
 	await page
 		.getByLabel('Preferences for atmosphere (music, lighting, etc.)')
 		.fill('Soft lighting, calm music');
-	const saveButton = page.getByRole('button', { name: 'Save Birth Plan' });
-	await saveButton.click();
+	await page.getByRole('button', { name: 'Save Birth Plan' }).click();
 	// The click only dispatches the event -- handleSavePlan's PUT is async,
-	// and the button stays disabled (planBusy) until it resolves. Wait for
-	// it to re-enable so the save has actually round-tripped before this
-	// test switches to the Client-portal session below.
-	await expect(saveButton).toBeEnabled();
+	// and the status that says so appears only once it resolves. Wait for
+	// it so the save has actually round-tripped before this test switches
+	// to the Client-portal session below.
+	await expect(page.getByText('Birth Plan saved.')).toBeVisible();
 
 	// Client side: a Portal Account (#617) linked to the same Client via
 	// client_portal_users, viewing the read-only Birth Plan.

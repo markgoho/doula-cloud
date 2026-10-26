@@ -115,4 +115,41 @@
 			attachmentPreviewURLs={{}}
 		/>
 	</section>
+
+	<!--
+		#2004: on the Staff Engagement page the thread is one section among
+		many, so the form is behind one opener (its open form is the
+		Default's), or not offered at all where the Client cannot read a
+		Message yet.
+	-->
+	<section>
+		<h2>Read first, with the form behind its opener</h2>
+		<MessageThread
+			{messages}
+			error=""
+			hasMore={false}
+			isLoadingOlder={false}
+			{onLoadOlder}
+			onSend={didSend}
+			{onDownloadAttachment}
+			attachmentPreviewURLs={{}}
+			composeOpener="Write a message"
+		/>
+	</section>
+
+	<section>
+		<h2>No message can be sent yet</h2>
+		<MessageThread
+			messages={[]}
+			error=""
+			hasMore={false}
+			isLoadingOlder={false}
+			{onLoadOlder}
+			onSend={didSend}
+			{onDownloadAttachment}
+			attachmentPreviewURLs={{}}
+			composeOpener="Write a message"
+			cannotSendReason="Anne-Marie Ochieng-Whitfield reads messages in the portal, so send the portal invite first. The thread opens once Anne-Marie Ochieng-Whitfield has accepted it."
+		/>
+	</section>
 </stack-l>

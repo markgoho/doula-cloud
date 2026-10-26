@@ -48,6 +48,35 @@ func TestDetailHandler_Success(t *testing.T) {
 	}
 }
 
+// TestDetailHandler_ClientDisplayName proves the page's title carries her
+// family name, as her own Client record's title does, while clientName
+// stays the conversation name (#2004).
+func TestDetailHandler_ClientDisplayName(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-viewing-display-name"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	clientID, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Amara", "amara@example.com", engagement.StatusActive)
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE clients SET family_name = 'Okafor' WHERE id = $1`, clientID,
+	); err != nil {
+		t.Fatalf("seed family_name: %v", err)
+	}
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
+	defer resp.Body.Close()
+
+	var d engagement.Detail
+	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if d.ClientDisplayName != "Amara Okafor" || d.ClientName != "Amara" {
+		t.Fatalf("clientDisplayName = %q, clientName = %q, want %q and %q", d.ClientDisplayName, d.ClientName, "Amara Okafor", "Amara")
+	}
+}
+
 // TestDetailHandler_DueDate proves the Staff side reads the same
 // engagements.due_date column the Client portal's page already reads
 // (#505), so a Doula can see when the Engagement she's working is due

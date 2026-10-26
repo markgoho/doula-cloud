@@ -45,7 +45,12 @@ export interface EngagementReference {
 export interface EngagementSummary {
 	engagementId: string;
 	clientId: string;
+	/** The conversation name the page's sentences use: preferred, else
+	 * given. */
 	clientName: string;
+	/** The page's title (#2004): her own Client record's title, preferred
+	 * name or else given and family names together. */
+	clientDisplayName: string;
 	status: string;
 	createdAt: string;
 	/** ADR-0015's own fact (#874): what the Practice sold, 'birth' or

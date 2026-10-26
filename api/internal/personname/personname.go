@@ -19,6 +19,18 @@ func Legal(givenName, familyName string) string {
 	return givenName + " " + familyName
 }
 
+// Display is the name a Client's own record is titled with: her preferred
+// name when she has one, otherwise her given and family names together.
+// It is the app's `displayName` (clientDetail.ts), so the Client record and
+// the Engagement page carry one title for one person (#2004); a bare given
+// name ("Amara") reads as a first name only, not as whose record it is.
+func Display(givenName, familyName, preferredName string) string {
+	if preferredName != "" {
+		return preferredName
+	}
+	return Legal(givenName, familyName)
+}
+
 // Preferred is the conversation name every screen, the Clients sort, and
 // the Message thread read: preferred_name when she has one, falling back
 // to given_name -- the one column that's never empty.

@@ -19,6 +19,8 @@ test('A Message attachment uploads and downloads through the real object store',
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	await page.goto(`/practices/${practiceId}/engagements/${engagementId}`);
+	// #2004: the thread is read first; its form opens when asked.
+	await page.getByRole('button', { name: 'Write a message' }).click();
 
 	// A minimal valid 1x1 PNG -- the same bytes api/internal/message's own
 	// pngBytes fixture uses, so a corrupted round trip through the real
@@ -75,6 +77,8 @@ test('A file whose bytes are not an image is refused by the server against the a
 	const { practiceId, engagementId, staffHeaders } = await seedPortalClient(page.request, 'Riverside Doulas');
 	await enterPractice(page.context(), page, staffHeaders, practiceId);
 	await page.goto(`/practices/${practiceId}/engagements/${engagementId}`);
+	// #2004: the thread is read first; its form opens when asked.
+	await page.getByRole('button', { name: 'Write a message' }).click();
 
 	const attachment = page.getByLabel('Attachment', { exact: true });
 	await attachment.setInputFiles({
@@ -103,6 +107,8 @@ test('An iPhone HEIC photo is refused before sending, naming the accepted types'
 	const { practiceId, engagementId, staffHeaders } = await seedPortalClient(page.request, 'Riverside Doulas');
 	await enterPractice(page.context(), page, staffHeaders, practiceId);
 	await page.goto(`/practices/${practiceId}/engagements/${engagementId}`);
+	// #2004: the thread is read first; its form opens when asked.
+	await page.getByRole('button', { name: 'Write a message' }).click();
 
 	let wasPosted = false;
 	page.on('request', (request) => {

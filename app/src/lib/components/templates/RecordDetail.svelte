@@ -109,16 +109,7 @@
 	     tables, not prose, and past the ramp's plateau more room buys more
 	     content (#531, #541). -->
 	<center-l max="none" gutters="var(--page-gutter)">
-		{#snippet recordContent()}
-			<!--
-				The stack is the snippet's own, not each caller's (#1711): a
-				record with no contents rail used to render the header and the
-				sections as bare siblings, so the summary's last block touched
-				the first section heading. Every record now puts the same
-				--space-section between its header and its first section as between
-				two sections.
-			-->
-			<stack-l space="var(--space-section)">
+		{#snippet recordHeader()}
 				<!--
 					A plain div, not <header>: a <header> outside article/aside/main/
 					nav/section maps to the `banner` landmark, and the banner is the
@@ -141,7 +132,9 @@
 						<div class="summary">{@render summary()}</div>
 					{/if}
 				</div>
+		{/snippet}
 
+		{#snippet recordSections()}
 				<div class="sections">
 					<stack-l space="var(--space-section)">
 						{#each sections as section (section.heading)}
@@ -159,6 +152,20 @@
 						{/each}
 					</stack-l>
 				</div>
+		{/snippet}
+
+		{#snippet recordContent()}
+			<!--
+				The stack is the snippet's own, not each caller's (#1711): a
+				record with no contents rail used to render the header and the
+				sections as bare siblings, so the summary's last block touched
+				the first section heading. Every record now puts the same
+				--space-section between its header and its first section as between
+				two sections.
+			-->
+			<stack-l space="var(--space-section)">
+				{@render recordHeader()}
+				{@render recordSections()}
 			</stack-l>
 		{/snippet}
 
@@ -167,7 +174,7 @@
 		{:else if loading}
 			{#if isContentsShown}
 				<!-- sidebar-l (#564), side="end" (like OverviewHub's own
-				     secondary), same as the loaded state below. The rail
+				     secondary), as the loaded state's wide arrangement. The rail
 				     slot holds an empty placeholder rather than
 				     placeholder links, because `sections` -- and so the
 				     links -- do not exist yet, and a second "loading"
@@ -188,69 +195,56 @@
 			{/if}
 		{:else if isContentsShown}
 			<!--
-				sidebar-l, side="end" (#564): DOM order keeps the record's
-				own title before its contents nav -- a screen reader or
-				keyboard user meets "Ada Lovelace" before "Jump to" -- so
-				`side="end"` is what OverviewHub's own comment already
-				explains, not the "no reordering needed" this comment used
-				to claim: that claim was wrong, caught by a test asserting
-				DOM order (RecordDetail.svelte.spec.ts), and `side="start"`
-				visually matched DOM order too, putting the rail on the
-				RIGHT where it had always been on the LEFT. `flex-direction:
-				row-reverse` (below) is what restores the left placement
-				without moving the rail back to the front of the DOM --
-				visual order and reading order deliberately differ here,
-				each for its own reason. Wraps to a stack on its own once
-				the record content cannot keep --measure, the same intent
-				the removed @container threshold measured.
-				content-min="min(var(--measure), 100%)", not a bare
-				var(--measure) -- see OverviewHub's own comment for the
-				overflow that plain form measurably caused once wrapped.
+				#2004: the contents sit between the record's header and its
+				sections, in reading order as on the page: a screen reader or
+				keyboard user meets the title, then what is on the page, then
+				the sections -- GOV.UK's contents list, after the title. Where
+				the sections column can hold a reading measure beside it, the
+				contents are the drawing's "On this page" rail to the left of
+				the header and the sections; below that, the drawing's narrow
+				"Jump to" strip under the header, where a Doula reading at
+				arm's length in a corridor finds it (PR-G5). Before #2004 the
+				narrow page stacked the rail under the last section, the full
+				height of the page away from the title.
+
+				One query decides both the arrangement and which list
+				renders, so the two cannot disagree: a strip beside the
+				sections, or a rail above them, is a state no width reaches.
+				The same list twice, and exactly one of them rendered at a
+				time -- `display: none` takes the other out of the
+				accessibility tree entirely, so nothing is announced twice.
 			-->
-			<sidebar-l
-				side="end"
-				space="var(--space-12)"
-				basis="var(--page-rail)"
-				content-min="min(var(--measure), 100%)"
-			>
-				{@render recordContent()}
+			<div class="record">
+				<div class="record-grid">
+					{@render recordHeader()}
 
-				<!--
-					The same list twice, and exactly one of them rendered at a
-					time -- `display: none` takes the other out of the
-					accessibility tree entirely, so nothing is announced twice.
-					The switch is `(pointer: coarse)` now, not a width
-					threshold (#564): the chip row exists for "read at arm's
-					length in a hospital corridor" (PR-G5) -- a touch
-					ergonomics decision, not a room one, since the rail variant
-					itself reads fine at any width (`inline-size: 100%`). A
-					stated input preference is exactly what ADR-0024 rule 3
-					reserves a media query for.
-				-->
-				<div class="contents">
-					<div class="contents-strip">
-						<stack-l space="var(--space-2)">
-							<p class="contents-heading">Jump to</p>
-							<cluster-l space="var(--space-2)">
-								{#each sections as section (section.heading)}
-									<Link href="#{anchorId(section.heading)}" label={section.heading} variant="chip" />
-								{/each}
-							</cluster-l>
-						</stack-l>
+					<div class="contents">
+						<div class="contents-strip">
+							<stack-l space="var(--space-2)">
+								<p class="contents-heading">Jump to</p>
+								<cluster-l space="var(--space-2)">
+									{#each sections as section (section.heading)}
+										<Link href="#{anchorId(section.heading)}" label={section.heading} variant="chip" />
+									{/each}
+								</cluster-l>
+							</stack-l>
+						</div>
+
+						<div class="contents-rail">
+							<stack-l space="var(--space-3)">
+								<p class="contents-heading">On this page</p>
+								<div class="contents-links">
+									{#each sections as section (section.heading)}
+										<Link href="#{anchorId(section.heading)}" label={section.heading} variant="rail" />
+									{/each}
+								</div>
+							</stack-l>
+						</div>
 					</div>
 
-					<div class="contents-rail">
-						<stack-l space="var(--space-3)">
-							<p class="contents-heading">On this page</p>
-							<div class="contents-links">
-								{#each sections as section (section.heading)}
-									<Link href="#{anchorId(section.heading)}" label={section.heading} variant="rail" />
-								{/each}
-							</div>
-						</stack-l>
-					</div>
+					{@render recordSections()}
 				</div>
-			</sidebar-l>
+			</div>
 		{:else}
 			{@render recordContent()}
 		{/if}
@@ -313,94 +307,89 @@
 		}
 
 		/*
-		 * No @container query, and no .body wrapper (#564): the rail split
-		 * is `sidebar-l` (markup above), which wraps to a stack on its own
-		 * once `.sections` cannot keep --measure -- the same tension
-		 * OverviewHub's own equivalent floor hit (a measured pixel drifting
-		 * by platform) side-stepped the same way, by reading --measure
-		 * itself instead of a number written down for it.
-		 *
-		 * `flex-direction: row-reverse`, paired with `side="end"` in the
-		 * markup: DOM order is content then rail (reading order), but the
-		 * rail has always been the LEFT-hand column visually, and
-		 * `side="end"` alone only changes which child gets which flex
-		 * role, not where either one sits on the line -- reversing the
-		 * line is what puts the DOM-last rail back on the left without
-		 * moving it in the DOM.
+		 * The loading state's reserved rail (#480, #564): `sidebar-l`,
+		 * `side="end"` with the line reversed, so the DOM-last placeholder
+		 * sits on the left where the loaded rail does.
 		 */
 		sidebar-l {
 			flex-direction: row-reverse;
 		}
 
-		/*
-		 * The contents block asks its own question, so it needs its own
-		 * containment context -- named, so that losing this declaration
-		 * cannot silently resolve the query below against the page
-		 * (#533). Nothing above it can answer for it: `sidebar-l` decides
-		 * whether this sits beside the record or above it, and that
-		 * decision is the browser's, with no selector that reports it.
-		 */
-		.contents {
-			container: record-contents / inline-size;
-		}
-
-		/* The base size re-resolved against the context (#544): a `cqi`
-		   resolves against the nearest ANCESTOR container, so `.contents`
-		   cannot answer its own. */
-		.contents > * {
-			font-size: var(--text-body-size);
-		}
-
-		/*
-		 * Structural, and therefore a query: `.contents-strip` is a row of
-		 * chips and `.contents-rail` is a vertical list of links -- two
-		 * DOM trees with one rendered at a time, not one tree rearranged,
-		 * and no intrinsic mechanism swaps markup. `display: none` keeps
-		 * the other out of the accessibility tree so nothing is announced
-		 * twice.
-		 *
-		 * The vertical list is the narrow state and the chip row the wide
-		 * one, which is the inverse of the usual reading: a vertical list
-		 * of full-width links is correct at any width, so it is the chip
-		 * row that has to earn its place, and it earns it by fitting on
-		 * one line. That is the whole content question here, and it is
-		 * answered entirely from this block's own width -- it never has to
-		 * distinguish "beside the record" from "above it", which is what
-		 * makes it derivable at all. Measured 2026-09-01 on
-		 * /style-guide/record-detail's own fixture: the four Jump to chips
-		 * wrap onto a second line below 388px and sit on one line from
-		 * 388px up. 24.25rem is that width. A fifth chip, or a longer
-		 * section name, moves it.
-		 *
-		 * Re-measured 2026-10-24 (#1851). 388px was the floor check's
-		 * frame, and the frame held the style-guide page around this block,
-		 * so the block itself had less: the query reads `.contents`' own
-		 * width, and the check now sizes the frame until that is the floor.
-		 * Measured that way, the four chips sit on one line at 352px on
-		 * macOS, and CI's Linux/Chromium draws them wider: they wrapped
-		 * there at 352px. 22.25rem (356px) is the next step of the sweep's
-		 * 4px resolution, measured in CI, with no margin added beyond it.
-		 *
-		 * Re-measured 2026-10-25 (#1943), when the type floors moved to
-		 * 16px (ADR-0060): the four chips wrapped at 376px on macOS and in
-		 * CI's Linux/Chromium at 400px. 26rem (416px) is the floor, checked
-		 * in CI.
-		 */
-		.contents-rail {
+		/* The placeholder holds its column whatever the width: the query
+		   below that hides a rail asks about the loaded record. */
+		sidebar-l > .contents-rail {
 			display: block;
 		}
 
-		.contents-strip {
+		/*
+		 * The record asks one question of its own width, so it is its own
+		 * containment context -- named, so that losing this declaration
+		 * cannot silently resolve the query below against the page (#533).
+		 */
+		.record {
+			container: record-detail / inline-size;
+		}
+
+		/* The base size re-resolved against the context (#544): a `cqi`
+		   resolves against the nearest ANCESTOR container. */
+		.record > * {
+			font-size: var(--text-body-size);
+		}
+
+		/* Narrow: one column -- the header, the Jump to strip, the
+		   sections -- with the gap between sections between each. */
+		.record-grid {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr);
+			row-gap: var(--space-section);
+		}
+
+		.contents-rail {
 			display: none;
 		}
 
-		@container record-contents (min-width: 26rem) {
+		/*
+		 * #2004: wide, the rail beside the header and the sections, from the
+		 * width at which the sections column holds a reading measure beside
+		 * it -- the content question `sidebar-l` answered here before, asked
+		 * once so the arrangement and the list that renders flip together.
+		 * Structural, and therefore a query: the strip and the rail are two
+		 * DOM trees, and no intrinsic mechanism swaps markup. The rail
+		 * column is `--page-rail` (16.25rem) and the gap `--space-12`
+		 * (3rem), so the floor is those plus the measure, checked by the
+		 * floor check's measure criterion. Measured 2026-10-26: the measure
+		 * is 631px on macOS and 650px in CI's Linux/Chromium, the canonical
+		 * environment, where the sections column reaches it from a 968px
+		 * record: 60.5rem.
+		 */
+		@container record-detail (min-width: 60.5rem) {
+			.record-grid {
+				grid-template-columns: var(--page-rail) minmax(0, 1fr);
+				grid-template-areas:
+					'contents header'
+					'contents sections';
+				column-gap: var(--space-12);
+			}
+
+			.record-grid > .record-header {
+				grid-area: header;
+			}
+
+			.record-grid > .sections {
+				grid-area: sections;
+			}
+
+			.contents {
+				grid-area: contents;
+				align-self: start;
+			}
+
 			.contents-rail {
-				display: none;
+				display: block;
 			}
 
 			.contents-strip {
-				display: block;
+				display: none;
 			}
 		}
 	}

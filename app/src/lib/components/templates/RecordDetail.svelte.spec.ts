@@ -160,22 +160,21 @@ describe('RecordDetail.svelte', () => {
 		expect(hrefs).toEqual(['#visits', '#invoices']);
 	});
 
-	// DOM order deliberately differs from visual order here (#564): the
-	// rail sits visually on the left (`sidebar-l`'s own `flex-direction:
-	// row-reverse`, side="end" in the markup), but the record's own title
-	// and sections stay first in READING order, so a screen reader or
-	// keyboard user meets "Ada Lovelace" and her sections before "Jump
-	// to" -- the opposite of source order matching visual order, and
-	// deliberately so.
-	it('reads the title and every section before the contents nav', async () => {
+	// #2004: the contents come after the record's own title and before its
+	// sections, in reading order as on the narrow page -- GOV.UK's
+	// contents list, after the title -- so a screen reader or keyboard
+	// user meets "Ada Lovelace", then what is on the page, then the
+	// sections. Before, they came after the last section, which is where
+	// the narrow page drew them too.
+	it('reads the title, then the contents, then the sections', async () => {
 		const { container } = await setup({ isContentsShown: true });
 
 		const title = page.getByRole('heading', { level: 1, name: 'Ada Lovelace' }).element();
-		const lastSection = page.getByRole('heading', { level: 2, name: 'Invoices' }).element();
+		const firstSection = page.getByRole('heading', { level: 2, name: 'Visits' }).element();
 		const strip = container.querySelector('.contents-strip')!;
 
-		expect(title.compareDocumentPosition(lastSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-		expect(lastSection.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(title.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(strip.compareDocumentPosition(firstSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 	});
 
 	it('reserves the page frame for a skeleton while loading, instead of rendering the record (#480)', async () => {

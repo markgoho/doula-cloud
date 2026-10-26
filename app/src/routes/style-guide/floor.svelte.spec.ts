@@ -206,14 +206,15 @@ const CRITERIA: Readonly<Record<string, Criterion>> = {
 			'wide tree waits until the Practice name fits on one line beside the nav.'
 	},
 	'templates/RecordDetail.svelte#1': {
-		kind: 'single-row',
-		selector: '.contents-strip cluster-l',
+		kind: 'measure',
+		target: '.record-grid > .sections',
+		cap: 'measure',
 		justification:
-			'A chip row versus a vertical list of links is a different DOM tree, one always display:none so ' +
-			'nothing is announced twice -- no intrinsic mechanism swaps markup. The vertical list is correct ' +
-			'at any width, so it is the chip row that earns its place, and it earns it by fitting on one ' +
-			'line. Answered entirely from this block own containment context, so it never has to know ' +
-			'whether sidebar-l put it beside the record or above it.'
+			'A Jump to chip strip under the header versus an On this page rail beside the header and the ' +
+			'sections is a different DOM tree, one always display:none so nothing is announced twice -- no ' +
+			'intrinsic mechanism swaps markup (#2004). The rail goes beside the record once the sections ' +
+			'column still holds a reading measure next to it, and one query decides both the arrangement ' +
+			'and the list, so a strip beside the sections or a rail above them is a state no width reaches.'
 	},
 	'templates/OverviewHub.svelte#1': {
 		kind: 'measure',

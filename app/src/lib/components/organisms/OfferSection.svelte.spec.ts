@@ -32,6 +32,9 @@ interface SetupOptions {
 	clientName?: string;
 	onCreate?: (offer: NewOffer) => Promise<void>;
 	onWithdraw?: (offerId: string) => Promise<void>;
+	/** The form opens only when asked (#2004); most cases are about the
+	 * form, so setup opens it unless a case is about the rows. */
+	isFormOpened?: boolean;
 }
 
 async function setup(options: SetupOptions = {}) {
@@ -49,7 +52,24 @@ async function setup(options: SetupOptions = {}) {
 		onCreate,
 		onWithdraw
 	});
+	if (options.isFormOpened ?? true) await openForm();
 	return { container, onCreate, onWithdraw };
+}
+
+async function openForm() {
+	await page.getByRole('button', { name: 'Offer this work' }).click();
+}
+
+/**
+ * Whether some copy of `text` is on screen. DataTable draws each Offer
+ * into two trees and CSS shows one (svelte-tests.md, case 1), so a plain
+ * getByText finds both; this asks whether either is visible.
+ */
+function isShown(text: string): boolean {
+	return page
+		.getByText(text, { exact: true })
+		.elements()
+		.some((element) => element.checkVisibility());
 }
 
 // "Withdraw" alone doesn't say which Offer it withdraws (#515); the
@@ -91,26 +111,58 @@ async function fillFacts() {
 }
 
 describe('OfferSection.svelte', () => {
-	it('says so when nobody has been offered the work yet', async () => {
-		await setup();
+	it('says so when nobody has been offered the work yet, and offers the work from there', async () => {
+		await setup({ isFormOpened: false });
 
 		await expect.element(page.getByText('Nobody has been offered this work yet.')).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Offer this work' })).toBeVisible();
+	});
+
+	// #2004: the rows first; the form only when asked.
+	it('shows no form until asked, then opens it with its heading focused', async () => {
+		await setup({ offers: [openOffer], isFormOpened: false });
+
+		expect(page.getByRole('button', { name: 'Send Offer' }).elements()).toHaveLength(0);
+		await openForm();
+
+		await expect.element(page.getByRole('heading', { level: 3, name: 'Offer this work' })).toHaveFocus();
+		expect(page.getByRole('button', { name: 'Offer this work' }).elements()).toHaveLength(0);
+	});
+
+	it('closes the form on Cancel, back to the one opener', async () => {
+		await setup({ offers: [openOffer] });
+
+		await page.getByRole('button', { name: 'Cancel' }).click();
+
+		expect(page.getByRole('button', { name: 'Send Offer' }).elements()).toHaveLength(0);
+		await expect.element(page.getByRole('button', { name: 'Offer this work' })).toBeVisible();
+	});
+
+	it('closes the form once the Offer is away, and says who was offered it, focused', async () => {
+		await setup();
+
+		await chooseSomeoneHere();
+		await page.getByLabelText('Dana Okafor').click();
+		await fillFacts();
+		await page.getByRole('button', { name: 'Send Offer' }).click();
+
+		await expect.element(page.getByRole('status')).toHaveTextContent('Offer sent to Dana Okafor.');
+		await expect.element(page.getByRole('status')).toHaveFocus();
+		expect(page.getByRole('button', { name: 'Send Offer' }).elements()).toHaveLength(0);
 	});
 
 	it('lists who was asked, what state their Offer is in, and the fee', async () => {
-		await setup({ offers: [openOffer] });
+		await setup({ offers: [openOffer], isFormOpened: false });
 
-		await expect.element(page.getByText('Renata Alvarez').first()).toBeVisible();
-		await expect.element(page.getByText('Awaiting a decision')).toBeVisible();
-		await expect.element(page.getByText('$450.00')).toBeVisible();
+		expect(isShown('Renata Alvarez')).toBe(true);
+		expect(isShown('Awaiting a decision')).toBe(true);
+		expect(isShown('$450.00')).toBe(true);
 	});
 
 	it('falls back to the invited address for an Offer nobody has accepted yet', async () => {
-		await setup({ offers: [{ ...openOffer, targetName: '' }], doulas: [] });
+		await setup({ offers: [{ ...openOffer, targetName: '' }], doulas: [], isFormOpened: false });
 
-		// .first() -- #515's hidden sibling naming the Withdraw button falls
-		// back to the same address and duplicates this text.
-		await expect.element(page.getByText('renata@example.test').first()).toBeVisible();
+		expect(isShown('renata@example.test')).toBe(true);
 	});
 
 	it('withdraws an open Offer', async () => {
@@ -131,9 +183,9 @@ describe('OfferSection.svelte', () => {
 	});
 
 	it('offers no withdrawal on an Offer that is already closed', async () => {
-		await setup({ offers: [{ ...openOffer, state: 'declined' }] });
+		await setup({ offers: [{ ...openOffer, state: 'declined' }], isFormOpened: false });
 
-		await expect.element(page.getByText('Declined')).toBeVisible();
+		expect(isShown('Declined')).toBe(true);
 		expect(page.getByRole('button', { name: 'Withdraw' }).elements()).toHaveLength(0);
 	});
 
@@ -255,6 +307,7 @@ describe('OfferSection.svelte', () => {
 		await page.getByLabelText('Fee (USD)').fill('520');
 		await fillFacts();
 		await page.getByRole('button', { name: 'Send Offer' }).click();
+		await openForm();
 
 		await expect.element(page.getByLabelText('Email address')).toHaveValue('');
 		await expect.element(page.getByLabelText('General area')).toHaveValue('');
@@ -505,6 +558,7 @@ describe('OfferSection.svelte', () => {
 			await page.getByLabelText('Dana Okafor').click();
 			await fillFacts();
 			await page.getByRole('button', { name: 'Send Offer' }).click();
+			await openForm();
 
 			await expect.element(page.getByLabelText('General area')).toHaveValue('');
 			await expect.element(page.getByRole('radio', { name: 'Someone already at this Practice' })).not.toBeChecked();

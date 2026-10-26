@@ -22,6 +22,8 @@
 		MESSAGE_OR_FILE
 	} from '../../messageAttachment.js';
 	import Button from '../atoms/Button.svelte';
+	import Heading from '../atoms/Heading.svelte';
+	import Text from '../atoms/Text.svelte';
 	import Textarea from '../atoms/Textarea.svelte';
 	import EmptyState from '../molecules/EmptyState.svelte';
 	import ErrorSummary from '../molecules/ErrorSummary.svelte';
@@ -55,6 +57,20 @@
 		 * among a Practice's Staff, so every message keeps its name.
 		 */
 		readerSenderType?: Message['senderType'];
+		/**
+		 * The label of one secondary button that opens the compose form
+		 * (#2004), for a page where the thread is one section among many:
+		 * the thread is read first, the form appears only when asked, and a
+		 * send closes it with a status that takes focus. Left out, the form
+		 * is always open, as the thread's own page has it.
+		 */
+		composeOpener?: string;
+		/**
+		 * Why no message can be sent here, said in place of the compose
+		 * form (#2004): on the Staff side, a Client with no portal account
+		 * cannot read one. Set, no form is offered at all.
+		 */
+		cannotSendReason?: string;
 	}
 
 	let {
@@ -66,8 +82,24 @@
 		onSend,
 		onDownloadAttachment,
 		attachmentPreviewURLs,
-		readerSenderType
+		readerSenderType,
+		composeOpener,
+		cannotSendReason
 	}: Properties = $props();
+
+	let isComposeOpen = $state(false);
+	let sentMessage = $state('');
+	const isComposeShown = $derived(!cannotSendReason && (composeOpener === undefined || isComposeOpen));
+
+	function openCompose() {
+		sentMessage = '';
+		isComposeOpen = true;
+	}
+
+	function closeCompose() {
+		submission.errors = [];
+		isComposeOpen = false;
+	}
 
 	// The style guide mounts this organism several times on one page, so
 	// the ids the error summary links to are scoped to this instance.
@@ -107,6 +139,10 @@
 			body = '';
 			attachment = undefined;
 			sentCount += 1;
+			if (composeOpener !== undefined) {
+				isComposeOpen = false;
+				sentMessage = 'Message sent.';
+			}
 		}, orThrownErrors(fieldIds));
 	}
 </script>
@@ -179,48 +215,72 @@
 		message also against its control. A refusal the BFF keys to
 		`body` or `attachment` lands on that control too (#1952).
 	-->
-	<ErrorSummary errors={submission.errors} />
-	<StackedForm onSubmit={handleSubmit}>
-		<LabeledField id={fieldIds.body} label="Message" error={submission.errorFor(fieldIds.body)}>
-			{#snippet children({ id, describedBy, invalid })}
-				<Textarea
-					{id}
-					{describedBy}
-					{invalid}
-					value={body}
-					onInput={(next) => (body = next)}
-				/>
-			{/snippet}
-		</LabeledField>
-		<!--
-			A raw input inside LabeledField rather than a file-input atom
-			(#1952): this is the only file input in the app, so an atom would
-			be a tier with one user. LabeledField gives it GOV.UK's label,
-			hint and error, joined by aria-describedby, like every other
-			field.
-		-->
-		<LabeledField
-			id={fieldIds.attachment}
-			label="Attachment"
-			hint={ATTACHMENT_HINT}
-			error={submission.errorFor(fieldIds.attachment)}
-		>
-			{#snippet children({ id, describedBy, invalid })}
-				{#key sentCount}
-					<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- no atom exists for a file input (#492); one user, so none is built (#1952) -->
-					<input
+	{#if cannotSendReason}
+		<Text text={cannotSendReason} />
+	{/if}
+
+	{#if sentMessage}
+		<Notice variant="status" message={sentMessage} isFocusedOnAppear />
+	{/if}
+
+	{#if composeOpener !== undefined && !isComposeOpen && !cannotSendReason}
+		<div><Button label={composeOpener} variant="secondary" onClick={openCompose} /></div>
+	{/if}
+
+	{#if isComposeShown}
+		<ErrorSummary errors={submission.errors} />
+		<StackedForm onSubmit={handleSubmit}>
+			{#if composeOpener !== undefined}
+				<Heading level={3} text={composeOpener} focusOnAppearing />
+			{/if}
+			<LabeledField id={fieldIds.body} label="Message" error={submission.errorFor(fieldIds.body)}>
+				{#snippet children({ id, describedBy, invalid })}
+					<Textarea
 						{id}
-						type="file"
-						accept={ATTACHMENT_ACCEPT}
-						aria-describedby={describedBy}
-						aria-invalid={invalid || undefined}
-						onchange={(event) => (attachment = event.currentTarget.files?.[0])}
+						{describedBy}
+						{invalid}
+						value={body}
+						onInput={(next) => (body = next)}
 					/>
-				{/key}
-			{/snippet}
-		</LabeledField>
-		<Button type="submit" label="Send" loading={submission.isSubmitting} />
-	</StackedForm>
+				{/snippet}
+			</LabeledField>
+			<!--
+				A raw input inside LabeledField rather than a file-input atom
+				(#1952): this is the only file input in the app, so an atom would
+				be a tier with one user. LabeledField gives it GOV.UK's label,
+				hint and error, joined by aria-describedby, like every other
+				field.
+			-->
+			<LabeledField
+				id={fieldIds.attachment}
+				label="Attachment"
+				hint={ATTACHMENT_HINT}
+				error={submission.errorFor(fieldIds.attachment)}
+			>
+				{#snippet children({ id, describedBy, invalid })}
+					{#key sentCount}
+						<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- no atom exists for a file input (#492); one user, so none is built (#1952) -->
+						<input
+							{id}
+							type="file"
+							accept={ATTACHMENT_ACCEPT}
+							aria-describedby={describedBy}
+							aria-invalid={invalid || undefined}
+							onchange={(event) => (attachment = event.currentTarget.files?.[0])}
+						/>
+					{/key}
+				{/snippet}
+			</LabeledField>
+			{#if composeOpener === undefined}
+				<Button type="submit" label="Send" loading={submission.isSubmitting} />
+			{:else}
+				<cluster-l space="var(--space-3)">
+					<Button type="submit" label="Send" loading={submission.isSubmitting} />
+					<Button label="Cancel" variant="secondary" onClick={closeCompose} />
+				</cluster-l>
+			{/if}
+		</StackedForm>
+	{/if}
 </stack-l>
 
 <style>

@@ -47,12 +47,23 @@
 <stack-l space="var(--space-6)">
 	<h1>Offer section</h1>
 
+	<!--
+		#2004: the Offers are read first and the form opens only when asked,
+		so both are drawn here as states of their own -- the sweep never
+		presses the opener (ADR-0025).
+	-->
 	<section>
-		<h2>Offers already made, and the form for another</h2>
+		<h2>Offers already made, read first</h2>
+		<OfferSection {offers} {doulas} onCreate={async () => {}} onWithdraw={async () => {}} />
+	</section>
+
+	<section>
+		<h2>Offers already made, and the form for another, opened</h2>
 		<OfferSection
 			{offers}
 			{doulas}
 			clientName="Anne-Marie Ochieng-Whitfield"
+			isFormOpen
 			onCreate={async () => {}}
 			onWithdraw={async () => {}}
 		/>
@@ -71,11 +82,11 @@
 	-->
 	<section>
 		<h2>No one at the practice to pick</h2>
-		<OfferSection offers={[]} doulas={[]} onCreate={async () => {}} onWithdraw={async () => {}} />
+		<OfferSection offers={[]} doulas={[]} isFormOpen onCreate={async () => {}} onWithdraw={async () => {}} />
 	</section>
 
 	<section>
 		<h2>The roster could not be read</h2>
-		<OfferSection offers={[]} doulas={undefined} onCreate={async () => {}} onWithdraw={async () => {}} />
+		<OfferSection offers={[]} doulas={undefined} isFormOpen onCreate={async () => {}} onWithdraw={async () => {}} />
 	</section>
 </stack-l>

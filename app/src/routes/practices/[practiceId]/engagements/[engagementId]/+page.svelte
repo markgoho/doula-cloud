@@ -63,6 +63,8 @@
 		saveAnswers,
 		setAnswer,
 		toggleMultiSelectOption,
+		planProgress,
+		type Answers,
 		type Instance
 	} from '#lib/planInstance.js';
 	import ContractForm from '#lib/components/molecules/ContractForm.svelte';
@@ -126,6 +128,7 @@
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import EmptyState from '#lib/components/molecules/EmptyState.svelte';
+	import Details from '#lib/components/atoms/Details.svelte';
 	import {
 		clearGap,
 		describeNoWindow,
@@ -491,6 +494,22 @@
 	// requires a local boolean binding to start with "can"/"is"/etc; the
 	// prop it's passed into below is still clientsCanPay.
 	const canClientsPay = $derived(detail?.clientsCanPay ?? true);
+
+	// #2004: a Client reads a Message only through her portal account, so
+	// until she has accepted an invite the thread offers no form and says
+	// why, and what opens it. Drawing only: the same words the drawing's
+	// empty Messages section has.
+	const messageBlock = $derived.by(() => {
+		if (hasAcceptedPortalAccess) return;
+		const name = detail.clientName;
+		if (!hasClientEmailOnFile) {
+			return `${name} has no email address on file, so cannot be invited to the portal to read a message. Add an email address first.`;
+		}
+		if (hasNeverInvitedClient) {
+			return `${name} reads messages in the portal, so send the portal invite first. The thread opens once ${name} has accepted it.`;
+		}
+		return `The thread opens once ${name} has accepted the portal invite.`;
+	});
 
 	// #1999: the Visits are rows of facts, and a form appears only when
 	// asked -- the add form, or one Visit's change, never both, so the
@@ -874,14 +893,14 @@
 		}, 'Failed to load Messages');
 	}
 
-	/** #301's Staff visibility (AC4): whether the Client has read her
-	 * Birth Plan since it last changed. Only ever called for
-	 * planType === 'birth_plan' -- a Care Plan instance never carries
-	 * clientAcknowledgedAt. */
-	function birthPlanReviewStatus(instance: Instance): string {
+	/** #301's Staff visibility (AC4), as the Birth Plan's read view says it
+	 * (#2004): whether the Client has read it since it last changed, by
+	 * her name. A Care Plan instance never carries clientAcknowledgedAt,
+	 * so only the Birth Plan draws this row. */
+	function birthPlanReadText(instance: Instance): string {
 		return instance.clientAcknowledgedAt
-			? `Reviewed by client on ${formatInstant(instance.clientAcknowledgedAt)}`
-			: 'Not yet reviewed by client';
+			? `${detail.clientName} read this on ${formatInstant(instance.clientAcknowledgedAt)}`
+			: `${detail.clientName} has not read this yet`;
 	}
 
 	async function loadPlan(planType: PlanType) {
@@ -892,39 +911,66 @@
 		planLoaded[planType] = true;
 	}
 
-	async function handleCreatePlan(planType: PlanType) {
-		await planState[planType].mutate(
+	/*
+	 * #2004: a Plan is facts first -- how far it is answered and, for the
+	 * Birth Plan, whether the Client has read it -- and its questions
+	 * appear only when asked, the record-page pattern the Visits and On
+	 * call sections already follow. The open form edits a draft, so Cancel
+	 * leaves the Plan as it was; a save returns to the facts with a status
+	 * that takes focus.
+	 */
+	let shownPlanForms = $state<Record<PlanType, boolean>>({ care_plan: false, birth_plan: false });
+	let planDraft = $state<Record<PlanType, Answers>>({ care_plan: {}, birth_plan: {} });
+	let planSavedMessage = $state<Record<PlanType, string>>({ care_plan: '', birth_plan: '' });
+
+	function openPlanForm(planType: PlanType) {
+		planDraft[planType] = { ...planState[planType].value?.answers };
+		planSavedMessage[planType] = '';
+		planState[planType].error = '';
+		shownPlanForms[planType] = true;
+	}
+
+	function closePlanForm(planType: PlanType) {
+		planState[planType].error = '';
+		shownPlanForms[planType] = false;
+	}
+
+	// A new Plan has nothing to read yet, so starting one opens its
+	// questions at once.
+	async function handleStartPlan(planType: PlanType) {
+		const isStarted = await planState[planType].mutate(
 			() => createInstance(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!, planType),
 			'Failed to create plan'
 		);
+		if (isStarted) openPlanForm(planType);
 	}
 
 	function handlePlanAnswerChange(planType: PlanType, fieldId: string, value: unknown) {
-		const instance = planState[planType].value;
-		if (!instance) return;
-		instance.answers = setAnswer(instance.answers, fieldId, value);
+		planDraft[planType] = setAnswer(planDraft[planType], fieldId, value);
 	}
 
 	function handlePlanToggleOption(planType: PlanType, fieldId: string, option: string) {
-		const instance = planState[planType].value;
-		if (!instance) return;
-		instance.answers = toggleMultiSelectOption(instance.answers, fieldId, option);
+		planDraft[planType] = toggleMultiSelectOption(planDraft[planType], fieldId, option);
 	}
 
-	async function handleSavePlan(planType: PlanType) {
-		const instance = planState[planType].value;
-		if (!instance) return;
-		await planState[planType].mutate(
+	// The saved Plan is the BFF's answer, so a Staff edit's cleared
+	// Birth Plan acknowledgment reads back at once.
+	async function handleSavePlan(event: SubmitEvent, planType: PlanType, heading: string) {
+		event.preventDefault();
+		const isSaved = await planState[planType].mutate(
 			() =>
 				saveAnswers(
 					apiFetchWithSession,
 					page.params.practiceId!,
 					page.params.engagementId!,
 					planType,
-					instance.answers
+					planDraft[planType]
 				),
 			'Failed to save plan'
 		);
+		if (!isSaved) return;
+		shownPlanForms[planType] = false;
+		planSavedMessage[planType] = `${heading} saved.`;
 	}
 
 	async function loadContractSection() {
@@ -944,44 +990,80 @@
 		}
 	}
 
+	/*
+	 * #2004: the Contract is facts first -- its status and fee as rows, its
+	 * text behind a disclosure -- and a Draft's merge fields appear only
+	 * when asked, as a form that edits a draft, so Cancel leaves the
+	 * Contract as it was. A save or a send returns to the facts with a
+	 * status that takes focus.
+	 */
+	let isContractFormOpen = $state(false);
+	let contractDraft = $state<Record<string, string>>({});
+	let contractSavedMessage = $state('');
+
+	function openContractForm() {
+		contractDraft = { ...contractState.value?.values };
+		contractSavedMessage = '';
+		contractState.error = '';
+		isContractFormOpen = true;
+	}
+
+	function closeContractForm() {
+		contractState.error = '';
+		isContractFormOpen = false;
+	}
+
+	// A new Draft's merge fields are what is left to do, so creating one
+	// opens them at once -- where it has any to fill.
 	async function handleCreateContract() {
-		await contractState.mutate(
+		const isCreated = await contractState.mutate(
 			() => createContract(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!),
 			'Failed to create contract'
 		);
+		if (isCreated && contractEditableFields.length > 0) openContractForm();
 	}
 
 	function handleContractValueChange(key: string, value: string) {
-		if (!contractState.value) return;
-		contractState.value.values = setMergeFieldValue(contractState.value.values, key, value);
+		contractDraft = setMergeFieldValue(contractDraft, key, value);
 	}
 
-	async function handleSaveContract() {
-		if (!contractState.value) return;
-		await contractState.mutate(
+	async function handleSaveContract(event: SubmitEvent) {
+		event.preventDefault();
+		const isSaved = await contractState.mutate(
 			() =>
 				saveContractValues(
 					apiFetchWithSession,
 					page.params.practiceId!,
 					page.params.engagementId!,
-					editableValues(contractState.value!.values)
+					editableValues(contractDraft)
 				),
 			'Failed to save contract'
 		);
+		if (!isSaved) return;
+		isContractFormOpen = false;
+		contractSavedMessage = 'Contract saved.';
 	}
 
 	async function handleSendContract() {
-		if (!contractState.value) return;
-		await contractState.mutate(
+		contractSavedMessage = '';
+		const isSent = await contractState.mutate(
 			() => sendContract(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!),
 			'Failed to send contract'
 		);
+		if (isSent) contractSavedMessage = 'Contract sent.';
 	}
 
+	/* The fee as this reader may see it (ADR-0008): the Practice's price
+	   where the BFF sends it, or her own agreed fee (#2003). */
+	const contractFeeRows = $derived<SummaryListRow[]>([
+		...(contract?.values.price ? [{ label: 'Fee', value: contract.values.price }] : []),
+		...(data.yourFee ? [{ label: 'Your fee', value: yourFeeValue(data.yourFee) }] : [])
+	]);
+
 	// ContractStatus.svelte owns the error display for Void (it awaits
-	// the onVoid callback prop itself and renders whatever it throws) --
-	// unlike the other Contract handlers above, this one deliberately
-	// doesn't touch contractState.error.
+	// the onVoid callback prop itself and shows whatever it throws in its
+	// confirmation) -- unlike the other Contract handlers above, this one
+	// deliberately doesn't touch contractState.error.
 	async function handleVoidContract() {
 		if (!contractState.value) return;
 		contractState.value = await voidContract(
@@ -2044,25 +2126,58 @@
 	arguments, so each type gets a thin wrapper below rather than the loop.
 -->
 {#snippet planSectionBody(planType: PlanType, heading: string)}
-	{#if planState[planType].error}
-		<Notice variant="error" message={planState[planType].error} />
-	{/if}
-
+	{@const instance = planState[planType].value}
 	{#if planLoaded[planType]}
-		{#if planState[planType].value}
-			{#if planType === 'birth_plan'}
-				<p>{birthPlanReviewStatus(planState[planType].value!)}</p>
-			{/if}
-			<PlanInstanceForm
-				fields={planState[planType].value!.fields}
-				answers={planState[planType].value!.answers}
-				onAnswerChange={(fieldId, value) => handlePlanAnswerChange(planType, fieldId, value)}
-				onToggleOption={(fieldId, option) => handlePlanToggleOption(planType, fieldId, option)}
-			/>
-			<Button label="Save {heading}" onClick={() => handleSavePlan(planType)} loading={planState[planType].isBusy} />
+		{#if instance && shownPlanForms[planType]}
+			<StackedForm onSubmit={(event) => handleSavePlan(event, planType, heading)}>
+				<Heading level={3} text="Change the {heading}" focusOnAppearing />
+				{#if planState[planType].error}
+					<Notice variant="error" message={planState[planType].error} />
+				{/if}
+				<PlanInstanceForm
+					fields={instance.fields}
+					answers={planDraft[planType]}
+					onAnswerChange={(fieldId, value) => handlePlanAnswerChange(planType, fieldId, value)}
+					onToggleOption={(fieldId, option) => handlePlanToggleOption(planType, fieldId, option)}
+				/>
+				<cluster-l space="var(--space-3)">
+					<Button label="Save {heading}" type="submit" loading={planState[planType].isBusy} />
+					<Button label="Cancel" variant="secondary" onClick={() => closePlanForm(planType)} />
+				</cluster-l>
+			</StackedForm>
 		{:else}
-			<Button label="Create {heading}" onClick={() => handleCreatePlan(planType)} loading={planState[planType].isBusy} />
+			{#if planState[planType].error}
+				<Notice variant="error" message={planState[planType].error} />
+			{/if}
+			{#if instance}
+				<SummaryList
+					rows={[
+						{ label: 'Progress', value: planProgress(instance.fields, instance.answers) },
+						...(planType === 'birth_plan' ? [{ label: 'Client', value: birthPlanReadText(instance) }] : [])
+					]}
+				/>
+				{#if planSavedMessage[planType]}
+					<Notice variant="status" message={planSavedMessage[planType]} isFocusedOnAppear />
+				{/if}
+				<cluster-l space="var(--space-3)">
+					<Button label="Change the {heading}" variant="secondary" onClick={() => openPlanForm(planType)} />
+					<!--
+						#280: the reading and taking-away surface -- its own
+						address. Editing stays here.
+					-->
+					{#if planType === 'birth_plan'}
+						<Link href={birthPlanHref} label="Print for the hospital" icon="file-text" variant="secondary" />
+					{/if}
+				</cluster-l>
+			{:else}
+				<EmptyState
+					message="The {heading} is not started yet."
+					action={{ label: `Start the ${heading}`, onClick: () => handleStartPlan(planType) }}
+				/>
+			{/if}
 		{/if}
+	{:else}
+		<Skeleton label="Loading the {heading}" />
 	{/if}
 {/snippet}
 
@@ -2071,99 +2186,107 @@
 {/snippet}
 
 {#snippet birthPlanSection()}
-	<!--
-		#280: the reading and taking-away surface -- its own address,
-		reachable regardless of whether a Birth Plan exists yet (that
-		address says so plainly rather than 404ing). Editing stays here.
-	-->
-	<Link href={birthPlanHref} label="View printable Birth Plan" icon="file-text" variant="secondary" />
 	{@render planSectionBody('birth_plan', 'Birth Plan')}
 {/snippet}
 
 {#snippet contractSection()}
-	<!--
-		#2003: the reader's own agreed fee, where the drawing puts it. ADR-0008
-		gives a contractor this and never the Practice's price; the BFF sends
-		it only to the person whose fee it is, so this reads nothing else.
-	-->
-	{#if data.yourFee}
-		<SummaryList rows={[{ label: 'Your fee', value: yourFeeValue(data.yourFee) }]} />
-	{/if}
-	{#if contractError}
-		<Notice variant="error" message={contractError} />
-	{/if}
-
 	{#if isContractLoaded}
-		{#if contract}
+		{#if contract && isContractFormOpen}
+			<!-- #2004: a Draft's merge fields, only when asked. -->
+			<StackedForm onSubmit={handleSaveContract}>
+				<Heading level={3} text="Change the Draft Contract" focusOnAppearing />
+				{#if contractError}
+					<Notice variant="error" message={contractError} />
+				{/if}
+				<ContractForm
+					mergeFields={contractEditableFields}
+					values={contractDraft}
+					readOnly={false}
+					onValueChange={handleContractValueChange}
+				/>
+				<cluster-l space="var(--space-3)">
+					<Button label="Save Contract" type="submit" loading={isContractBusy} />
+					<Button label="Cancel" variant="secondary" onClick={closeContractForm} />
+				</cluster-l>
+			</StackedForm>
+		{:else if contract}
+			{#if contractError}
+				<Notice variant="error" message={contractError} />
+			{/if}
 			<ContractStatus
 				status={contract.status}
 				hasSignedPdf={contract.hasSignedPdf}
 				amountChangedAt={contract.amountChangedAt}
 				voidRequests={contract.voidRequests}
+				rows={contractFeeRows}
 				onVoid={isPracticeOwnerOrAdmin ? handleVoidContract : undefined}
 				onDownloadPdf={canReadContractMoney ? handleDownloadSignedContractPdf : undefined}
 				onRequestVoid={isPracticeOwnerOrAdmin ? undefined : handleRequestVoidContract}
 				onDeclineVoidRequest={isPracticeOwnerOrAdmin ? handleDeclineVoidRequest : undefined}
-			/>
-			<!--
-				#258: Staff reads the same filled document the Client will,
-				before sending it -- the fill-and-render component used to be
-				mounted only on the Client-portal Contract page, so a Doula
-				sent a document she had never seen.
-			-->
-			<Text text="Contract text" />
-			<ContractView prose={contract.prose} values={contract.values} />
-			<ContractForm
-				mergeFields={contractEditableFields}
-				values={contract.values}
-				readOnly={contract.status !== 'draft'}
-				onValueChange={handleContractValueChange}
-			/>
-			{#if contract.status === 'draft'}
-				{#if contractEditableFields.length > 0}
-					<Button label="Save Contract" onClick={handleSaveContract} loading={isContractBusy} variant="secondary" />
+			>
+				{#if contractSavedMessage}
+					<Notice variant="status" message={contractSavedMessage} isFocusedOnAppear />
 				{/if}
 				<!--
-					#258: block over warn -- a blank merge field is a legal
-					document defect, so the Send control is withheld with the
-					reason and the offending fields stated, rather than
-					reporting the server's refusal after the click.
-					#255: a Contract sent to a never-invited Client would land
-					in 'sent' with nothing able to move it back out -- reachable
-					only through the portal, which is reachable only by
-					accepting an invite. The precondition is the same one
-					PostSendContractHandler enforces server-side; this only
-					prevents the situation rather than reporting the refusal
-					after the click (block over warn). The Notice names the
-					ordering and the way out -- sending the portal invite,
-					this same page's own header action -- removable in one
-					click, which is what lifts the block without a reload
-					(clientPortalOverride above).
+					#258: Staff reads the same filled document the Client will,
+					before sending it. #2004: behind a disclosure, closed, so the
+					section is its facts first and the text is one press away.
 				-->
-				{#if missingMergeFields.length > 0}
-					<Notice
-						variant="info"
-						message={`Fill in every merge field before sending the Contract. Missing: ${missingMergeFields
-							.map((key) => mergeFieldLabel(key))
-							.join(', ')}.`}
-					/>
-					<Button label="Send Contract" disabled loading={isContractBusy} />
-				{:else if hasNeverInvitedClient}
-					<Notice
-						variant="info"
-						message="Send a portal invite to this Client before sending the Contract — the Contract can only be viewed and signed once portal access exists."
-					/>
-					<Button label="Send Contract" disabled loading={isContractBusy} />
-				{:else}
-					<Button label="Send Contract" onClick={handleSendContract} loading={isContractBusy} />
+				<Details summary="Read the Contract text">
+					<ContractView prose={contract.prose} values={contract.values} />
+				</Details>
+				{#if contract.status === 'draft'}
+					<!--
+						#258: block over warn -- a blank merge field is a legal
+						document defect, so Send is withheld with the reason and
+						the fields named, rather than reporting the server's
+						refusal after the click. #255: a Contract sent to a
+						never-invited Client would land in 'sent' with nothing able
+						to move it back out, so Send waits for the portal invite --
+						the same precondition PostSendContractHandler enforces. A
+						withheld Send is absent, never disabled (govuk-alignment.md,
+						the Button row): the Notice is the reason.
+					-->
+					{#if missingMergeFields.length > 0}
+						<Notice
+							variant="info"
+							message={`Fill in every merge field before sending the Contract. Missing: ${missingMergeFields
+								.map((key) => mergeFieldLabel(key))
+								.join(', ')}.`}
+						/>
+					{:else if hasNeverInvitedClient}
+						<Notice
+							variant="info"
+							message="Send a portal invite to this Client before sending the Contract — the Contract can only be viewed and signed once portal access exists."
+						/>
+					{/if}
+					<cluster-l space="var(--space-3)">
+						{#if missingMergeFields.length === 0 && !hasNeverInvitedClient}
+							<Button label="Send Contract" onClick={handleSendContract} loading={isContractBusy} />
+						{/if}
+						{#if contractEditableFields.length > 0}
+							<Button label="Change the Draft Contract" variant="secondary" onClick={openContractForm} />
+						{/if}
+					</cluster-l>
 				{/if}
-			{/if}
+			</ContractStatus>
 		{:else}
 			<!--
-				#1885: block over warn, the shape the Send Contract blocks above
-				have -- the reason before the click, and the way out. Until the
-				rates are known the control stays withheld too: a click then
-				could meet the same refusal.
+				#2003: the reader's own agreed fee, where the drawing puts it,
+				even before a Contract exists. ADR-0008 gives a contractor this
+				and never the Practice's price; the BFF sends it only to the
+				person whose fee it is.
+			-->
+			{#if data.yourFee}
+				<SummaryList rows={[{ label: 'Your fee', value: yourFeeValue(data.yourFee) }]} />
+			{/if}
+			{#if contractError}
+				<Notice variant="error" message={contractError} />
+			{/if}
+			<!--
+				#1885: block over warn -- the reason before the click, and the
+				way out. Until the rates are known the action stays withheld
+				too: a click then could meet the same refusal.
 			-->
 			{#if ratesState.error}
 				<Notice variant="error" message={ratesState.error} />
@@ -2176,12 +2299,13 @@
 					/>
 				{/if}
 			{/if}
-			{#if hasRateForKind}
-				<Button label="Create Draft Contract" onClick={handleCreateContract} loading={isContractBusy} />
-			{:else}
-				<Button label="Create Draft Contract" disabled loading={isContractBusy} />
-			{/if}
+			<EmptyState
+				message="No Contract yet."
+				action={hasRateForKind ? { label: 'Create a Draft Contract', onClick: handleCreateContract } : undefined}
+			/>
 		{/if}
+	{:else}
+		<Skeleton label="Loading the Contract" />
 	{/if}
 {/snippet}
 
@@ -2256,7 +2380,20 @@
 		onSend={sendThreadMessage}
 		onDownloadAttachment={handleDownloadAttachment}
 		{attachmentPreviewURLs}
+		composeOpener="Write a message"
+		cannotSendReason={messageBlock}
 	/>
+	<!-- The way out the block names, beside it (#2004). -->
+	{#if messageBlock && hasNeverInvitedClient && hasClientEmailOnFile}
+		<div>
+			<Button
+				label="Send portal invite"
+				variant="secondary"
+				onClick={handleSendPortalInvite}
+				loading={isSendingPortalInvite}
+			/>
+		</div>
+	{/if}
 {/snippet}
 
 <!--
@@ -2531,7 +2668,7 @@
 <!-- #1611, #1710: a save that leads here says what it did, such as
      "Work with Pat started." at the end of a new Client's flow. -->
 <RecordDetail
-	title={detail.clientName}
+	title={detail.clientDisplayName}
 	{outcome}
 	backHref={clientsHref}
 	backLabel="Clients"

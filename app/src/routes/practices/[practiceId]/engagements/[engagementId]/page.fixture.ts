@@ -187,7 +187,11 @@ export const onCallPanel: EngagementOnCall = {
 export const detail = {
 	engagementId: 'engagement-1',
 	clientId: 'client-1',
-	clientName,
+	// #2004: the conversation name the page's sentences use, and the
+	// title, her record's own: she has no preferred name, so given and
+	// family names together.
+	clientName: clientRecord.givenName,
+	clientDisplayName: clientName,
 	status: 'active',
 	createdAt: '2026-08-01T00:00:00Z',
 	// #874: what the Practice sold. 'birth' agrees with the recorded birth
@@ -327,6 +331,23 @@ export const contract: Contract = {
  * Exported so the route's own spec mounts the same reader the sweep does
  * rather than describing a second one beside it (#885).
  */
+/*
+ * A Birth Plan in progress (#2004): a section header and three questions,
+ * one answered, so the read view's Progress row reads "1 of 3 questions
+ * answered" and its Client row says it has not been read.
+ */
+export const birthPlan = {
+	engagementId: 'engagement-1',
+	planType: 'birth_plan',
+	fields: [
+		{ id: 'bp-header', type: 'section_header', label: 'Labor and birth', order: 0 },
+		{ id: 'bp-atmosphere', type: 'long_text', label: 'Preferences for atmosphere (music, lighting, etc.)', order: 1 },
+		{ id: 'bp-support', type: 'short_text', label: 'Who will be with you', order: 2 },
+		{ id: 'bp-feeding', type: 'single_select', label: 'Feeding plan', options: ['Breast', 'Bottle', 'Both'], order: 3 }
+	],
+	answers: { 'bp-atmosphere': 'Low lights and the playlist her partner made.' }
+};
+
 export const session = {
 	practiceId: 'practice-1',
 	// #909: which roster entry the reader herself is. The type has always
@@ -461,7 +482,11 @@ const typicalClientName = TYPICAL_CLIENTS[0]!.name;
 const typicalDoula = nth(TYPICAL_DOULAS, 2);
 const typicalDetail = {
 	...detail,
-	clientName: typicalClientName,
+	clientName: TYPICAL_CLIENTS[0]!.givenName,
+	clientDisplayName: typicalClientName,
+	// #2004: a Client in care has a portal account, so the Messages
+	// section reads her thread with its form behind one opener.
+	clientPortalInviteStatus: 'accepted',
 	doulas: [{ staffId: typicalDoula.staffId, name: typicalDoula.name }]
 };
 const typicalRoster = TYPICAL_STAFF.map((member) => ({
@@ -499,6 +524,45 @@ export const typical: RouteVariant<RouteParameters> = {
 			});
 		}
 		if (path.endsWith('/staff')) return jsonResponse({ members: typicalRoster, invitations: { items: [] } });
+		// #2004: both Plans started, the Birth Plan answered in full and
+		// read by the Client, and a short thread, as a Client weeks into
+		// care has.
+		if (path.endsWith('/plans/birth_plan')) {
+			return jsonResponse({
+				...birthPlan,
+				answers: {
+					'bp-atmosphere': 'Low lights and music.',
+					'bp-support': 'Her partner',
+					'bp-feeding': 'Breast'
+				},
+				clientAcknowledgedAt: '2026-10-03T15:00:00Z'
+			});
+		}
+		if (path.endsWith('/plans/care_plan')) return jsonResponse({ ...birthPlan, planType: 'care_plan' });
+		if (path.includes('/messages')) {
+			// Newest first, as the BFF sends a page.
+			return jsonResponse({
+				items: [
+					{
+						messageId: 'message-2',
+						senderType: 'client',
+						senderId: 'client-1',
+						senderName: TYPICAL_CLIENTS[0]!.givenName,
+						body: 'Thursday works. See you at 2.',
+						createdAt: '2026-10-08T15:30:00Z'
+					},
+					{
+						messageId: 'message-1',
+						senderType: 'staff',
+						senderId: typicalDoula.staffId,
+						senderName: typicalDoula.name,
+						body: 'Does Thursday at 2 still work for the visit?',
+						createdAt: '2026-10-08T14:00:00Z'
+					}
+				],
+				hasMore: false
+			});
+		}
 		if (path.includes('/visits')) {
 			return jsonResponse({
 				items: typicalNotes.map((notes, index) => ({
@@ -584,6 +648,10 @@ export const fixture: RouteFixture<RouteParameters> = {
 			});
 		}
 		if (path.includes('/messages')) return jsonResponse({ items: [], hasMore: false });
+		// #2004: one Plan of each state the read view draws -- a Birth Plan
+		// started and not yet read by the Client (its rows and its print
+		// link), and a Care Plan not started (its empty state).
+		if (path.endsWith('/plans/birth_plan')) return jsonResponse(birthPlan);
 		if (path.includes('/plans/')) return jsonResponse('not found', 404);
 		if (path.endsWith('/contract/invoices')) return jsonResponse({ items: [] });
 		// #271: read alongside the Invoice list on every mount, whether or

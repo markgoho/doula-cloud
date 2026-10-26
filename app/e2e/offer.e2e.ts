@@ -43,6 +43,8 @@ test('Owner offers an Engagement to a Doula, who accepts it from her own inbox',
 	await page.goto(`/practices/${practiceId}/engagements/${engagementId}`);
 	await expect(page.getByRole('heading', { name: 'Offers' })).toBeVisible();
 	await expect(page.getByText('Nobody has been offered this work yet.')).toBeVisible();
+	// #2004: the form opens only when asked.
+	await page.getByRole('button', { name: 'Offer this work' }).click();
 
 	// #1598: the person at the screen holds the Doula role too (a founding
 	// Owner signs up with it), and she is not offered her own work.
@@ -58,9 +60,11 @@ test('Owner offers an Engagement to a Doula, who accepts it from her own inbox',
 	await page.getByLabel('Terms').fill('Two prenatal visits, on call from 38 weeks.');
 	await page.getByRole('button', { name: 'Send Offer' }).click();
 
-	// The Practice side now names who was asked and what she has said.
-	await expect(page.getByText('Awaiting a decision')).toBeVisible();
-	await expect(page.getByText('$450.00')).toBeVisible();
+	// The Practice side now names who was asked and what she has said, a
+	// row of DataTable, which draws two trees and shows one.
+	await expect(page.getByText('Offer sent to Casey Contractor.')).toBeVisible();
+	await expect(page.getByText('Awaiting a decision').filter({ visible: true })).toBeVisible();
+	await expect(page.getByText('$450.00').filter({ visible: true })).toBeVisible();
 
 	// And the Doula's own inbox carries the four decidable facts, with no
 	// Client name anywhere on it. Her session replaces the Owner's in this
@@ -91,9 +95,11 @@ test('Owner offers an Engagement to a Doula, who accepts it from her own inbox',
 	// query too.
 	await enterPractice(context, page, headers, practiceId);
 	await page.goto(`/practices/${practiceId}/engagements/${engagementId}`);
-	await expect(page.getByText('Accepted', { exact: true })).toBeVisible();
+	// The Offers section's row, drawn into two trees with one shown (#2004).
+	const offers = page.getByRole('region', { name: 'Offers', exact: true });
+	await expect(offers.getByText('Accepted', { exact: true }).filter({ visible: true })).toBeVisible();
 	// Her acceptance put her on the Engagement, and the summary names her.
-	await expect(page.getByText('Casey Contractor', { exact: true }).first()).toBeVisible();
+	await expect(page.getByText('Casey Contractor', { exact: true }).filter({ visible: true }).first()).toBeVisible();
 });
 
 // #1625: the Practice of one whose only Owner is a contractor Doula. The
@@ -205,6 +211,8 @@ test('A solo Owner puts herself on an Engagement that started with no Doula', as
 
 	await expect(page.getByText('No Doula yet', { exact: true })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Offers' })).toBeVisible();
+	// #2004: the form opens only when asked.
+	await page.getByRole('button', { name: 'Offer this work' }).click();
 	await expect(page.getByText(/^There is no one at this Practice to offer this work to/)).toBeVisible();
 	await expect(page.getByLabel('Jamie Owner')).toHaveCount(0);
 

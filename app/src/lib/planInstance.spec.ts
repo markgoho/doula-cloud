@@ -7,6 +7,7 @@ import {
 	createInstance,
 	loadClientBirthPlan,
 	loadInstance,
+	planProgress,
 	saveAnswers,
 	setAnswer,
 	toggleMultiSelectOption,
@@ -214,5 +215,28 @@ describe('answerOptions', () => {
 	it('returns [] when unset or not an array', () => {
 		expect(answerOptions({}, 'f1')).toEqual([]);
 		expect(answerOptions({ f1: 'Partner' }, 'f1')).toEqual([]);
+	});
+});
+
+describe('planProgress', () => {
+	const header = { id: 'h1', type: 'section_header' as const, label: 'Labor', order: 0 };
+	const question = (id: string) => ({ id, type: 'short_text' as const, label: id, order: 1 });
+
+	it('counts the answered questions, never a section header', () => {
+		expect(planProgress([header, question('a'), question('b'), question('c')], { a: 'Yes' })).toBe(
+			'1 of 3 questions answered'
+		);
+	});
+
+	it('says one question in the singular', () => {
+		expect(planProgress([question('a')], {})).toBe('0 of 1 question answered');
+	});
+
+	it('says Complete once every question has an answer', () => {
+		expect(planProgress([header, question('a')], { a: false })).toBe('Complete');
+	});
+
+	it('says so when the Plan asks nothing at all', () => {
+		expect(planProgress([header], {})).toBe('This Plan asks no questions.');
 	});
 });

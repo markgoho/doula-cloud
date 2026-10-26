@@ -177,6 +177,19 @@ export async function downloadBirthPlanPdf(fetcher: Fetcher, practiceId: string,
 	return fetchBlob(fetcher, `${instancePath(practiceId, engagementId, 'birth_plan')}/pdf`);
 }
 
+/** How far a Plan is answered, in the words the Engagement page's read
+ * view shows (#2004): "Complete" once every question has an answer,
+ * otherwise "3 of 14 questions answered". A section header asks nothing,
+ * so it is not counted. */
+export function planProgress(fields: readonly Field[], answers: Answers): string {
+	const questions = fields.filter((field) => field.type !== 'section_header');
+	if (questions.length === 0) return 'This Plan asks no questions.';
+	const answered = questions.filter((field) => answers[field.id] !== undefined).length;
+	if (answered === questions.length) return 'Complete';
+	const noun = questions.length === 1 ? 'question' : 'questions';
+	return `${answered} of ${questions.length} ${noun} answered`;
+}
+
 /** Sets or clears the answer for fieldId within answers, returning a new
  * object (answers is never mutated) -- an empty string or an empty array
  * clears the answer entirely, so a field left blank doesn't round-trip as

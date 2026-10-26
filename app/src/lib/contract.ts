@@ -103,6 +103,20 @@ export function mergeFieldLabel(key: string): string {
 	return entry?.label ?? key;
 }
 
+const STAFF_STATUS_TEXT: Record<string, string> = {
+	draft: 'Draft, not sent yet',
+	sent: 'Sent, waiting for the Client to sign',
+	signed: 'Signed',
+	voided: 'Voided, no longer active'
+};
+
+/** A Contract's status as the Staff Engagement page's Status row says it
+ * (#2004). The Client reads `clientRegister.ts`'s own words, never these.
+ * An unknown status reads as itself, so a new one is visible, not blank. */
+export function contractStatusText(status: string): string {
+	return STAFF_STATUS_TEXT[status] ?? status;
+}
+
 /** Matches a {{merge_field_key}} placeholder in Contract prose -- mirrors
  * the Go BFF's mergeFieldPattern (api/internal/contracts/contract.go). */
 const mergeFieldPattern = /\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g;

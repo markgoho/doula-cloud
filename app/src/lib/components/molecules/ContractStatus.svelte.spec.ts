@@ -1,7 +1,7 @@
 import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import ContractStatus, { PREVIOUS_CONTRACT_PDF_NOTICE } from './ContractStatus.svelte';
+import ContractStatus, { PREVIOUS_CONTRACT_PDF_NOTICE, VOID_CONSEQUENCE } from './ContractStatus.svelte';
 import type { VoidRequestSummary } from '#lib/contract.js';
 
 interface SetupOptions {
@@ -25,7 +25,7 @@ async function setup({
 	onRequestVoid,
 	onDeclineVoidRequest
 }: SetupOptions = {}) {
-	await render(ContractStatus, {
+	return render(ContractStatus, {
 		status,
 		hasSignedPdf,
 		amountChangedAt,
@@ -35,6 +35,12 @@ async function setup({
 		onRequestVoid,
 		onDeclineVoidRequest
 	});
+}
+
+// #2004: Void asks again in a dialog before anything is sent.
+async function confirmVoid() {
+	await page.getByRole('button', { name: 'Void this Contract' }).click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Void this Contract' }).click();
 }
 
 function openVoidRequest(overrides: Partial<VoidRequestSummary> = {}): VoidRequestSummary {
@@ -50,85 +56,120 @@ function openVoidRequest(overrides: Partial<VoidRequestSummary> = {}): VoidReque
 }
 
 describe('ContractStatus.svelte', () => {
-	it('renders the status', async () => {
+	it('renders the status as a row, in the Staff words (#2004)', async () => {
 		await setup({ status: 'sent' });
 
-		await expect.element(page.getByText('Status: sent')).toBeInTheDocument();
+		await expect.element(page.getByRole('term')).toHaveTextContent('Status');
+		await expect.element(page.getByRole('definition')).toHaveTextContent('Sent, waiting for the Client to sign');
 	});
 
-	it('renders a terminal-state indicator when voided', async () => {
+	it('says a voided Contract is no longer active', async () => {
 		await setup({ status: 'voided' });
 
-		await expect.element(page.getByRole('status')).toHaveTextContent('no longer active');
+		await expect.element(page.getByText('Voided, no longer active')).toBeVisible();
 	});
 
-	it('renders no terminal-state indicator for a non-voided status', async () => {
-		await setup({ status: 'signed' });
+	it("adds the caller's own rows after the status", async () => {
+		await render(ContractStatus, {
+			status: 'signed',
+			hasSignedPdf: false,
+			rows: [{ label: 'Fee', value: '$1,850.00' }]
+		});
 
-		await expect.element(page.getByRole('status')).not.toBeInTheDocument();
+		expect(page.getByRole('term').elements().map((term) => term.textContent)).toEqual(['Status', 'Fee']);
 	});
 
-	it('shows no price-changed notice when amountChangedAt is absent', async () => {
+	it('shows no price-changed row when amountChangedAt is absent', async () => {
 		await setup({ status: 'draft' });
 
-		await expect.element(page.getByText('Price changed on')).not.toBeInTheDocument();
+		await expect.element(page.getByText('Price changed')).not.toBeInTheDocument();
 	});
 
-	it('shows a price-changed notice, with the machine-readable instant, when amountChangedAt is set (#968)', async () => {
-		await setup({ status: 'draft', amountChangedAt: '2026-09-08T12:00:00Z' });
+	it('shows a price-changed row, with the machine-readable instant, when amountChangedAt is set (#968)', async () => {
+		const { container } = await setup({ status: 'draft', amountChangedAt: '2026-09-08T12:00:00Z' });
 
-		await expect.element(page.getByText('Price changed on')).toBeInTheDocument();
+		await expect.element(page.getByText('Price changed')).toBeVisible();
+		// A `datetime` attribute has no accessible signal of its own
+		// (svelte-tests.md, querySelector case 3).
+		expect(container.querySelector('time')).toHaveAttribute('datetime', '2026-09-08T12:00:00Z');
 	});
 
 	it('offers no Void action when there is no onVoid callback (Client-portal caller)', async () => {
 		await setup({ status: 'signed' });
 
-		await expect.element(page.getByRole('button', { name: 'Void Contract' })).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Void this Contract' })).not.toBeInTheDocument();
 	});
 
 	it('offers no Void action on a voided Contract (no actions implying it is active)', async () => {
 		await setup({ status: 'voided', onVoid: vi.fn() });
 
-		await expect.element(page.getByRole('button', { name: 'Void Contract' })).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Void this Contract' })).not.toBeInTheDocument();
 	});
 
 	it('offers no Void action on a draft or sent Contract', async () => {
 		await setup({ status: 'sent', onVoid: vi.fn() });
 
-		await expect.element(page.getByRole('button', { name: 'Void Contract' })).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Void this Contract' })).not.toBeInTheDocument();
 	});
 
-	it('offers the Void action on a signed Contract when onVoid is provided (Staff caller)', async () => {
+	// #2004: destructive, so under its own heading, with its consequence
+	// said first, and never the primary.
+	it('offers Void on a signed Contract under its own heading, after its consequence', async () => {
 		await setup({ status: 'signed', onVoid: vi.fn() });
 
-		await expect.element(page.getByRole('button', { name: 'Void Contract' })).toBeInTheDocument();
+		await expect.element(page.getByRole('heading', { level: 3, name: 'Void this Contract' })).toBeVisible();
+		// .first(): the closed confirmation says it again, out of sight.
+		await expect.element(page.getByText(VOID_CONSEQUENCE).first()).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Void this Contract' })).toBeVisible();
 	});
 
-	it('calls onVoid when the Void action is clicked', async () => {
+	it('asks again before voiding, and sends nothing on Cancel', async () => {
 		const onVoid = vi.fn().mockResolvedValue(undefined);
 		await setup({ status: 'signed', onVoid });
 
-		await page.getByRole('button', { name: 'Void Contract' }).click();
+		await page.getByRole('button', { name: 'Void this Contract' }).click();
+		await expect.element(page.getByRole('dialog')).toBeVisible();
+		await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
+
+		expect(onVoid).not.toHaveBeenCalled();
+	});
+
+	it('calls onVoid once the void is confirmed', async () => {
+		const onVoid = vi.fn().mockResolvedValue(undefined);
+		await setup({ status: 'signed', onVoid });
+
+		await confirmVoid();
 
 		expect(onVoid).toHaveBeenCalledOnce();
 	});
 
-	it('shows an error message if onVoid rejects', async () => {
+	it('shows the refusal in the confirmation if onVoid rejects', async () => {
 		const onVoid = vi.fn().mockRejectedValue(new Error('contract is not signed'));
 		await setup({ status: 'signed', onVoid });
 
-		await page.getByRole('button', { name: 'Void Contract' }).click();
+		await confirmVoid();
 
-		await expect.element(page.getByRole('alert')).toHaveTextContent('contract is not signed');
+		await expect.element(page.getByRole('dialog').getByText('contract is not signed')).toBeVisible();
 	});
 
-	it('shows a fallback error message if onVoid rejects with a non-Error value', async () => {
+	it('shows a fallback refusal if onVoid rejects with a non-Error value', async () => {
 		const onVoid = vi.fn().mockRejectedValue('boom');
 		await setup({ status: 'signed', onVoid });
 
-		await page.getByRole('button', { name: 'Void Contract' }).click();
+		await confirmVoid();
 
-		await expect.element(page.getByRole('alert')).toHaveTextContent('Failed to void contract');
+		await expect.element(page.getByRole('dialog').getByText('Failed to void contract')).toBeVisible();
+	});
+
+	it('clears a refusal when the confirmation is canceled', async () => {
+		const onVoid = vi.fn().mockRejectedValue(new Error('contract is not signed'));
+		await setup({ status: 'signed', onVoid });
+
+		await confirmVoid();
+		await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
+		await page.getByRole('button', { name: 'Void this Contract' }).click();
+
+		await expect.element(page.getByRole('dialog').getByText('contract is not signed')).not.toBeInTheDocument();
 	});
 
 	it('offers no PDF download when there is no onDownloadPdf callback (a role the endpoint refuses)', async () => {

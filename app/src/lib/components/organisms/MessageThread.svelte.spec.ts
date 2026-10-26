@@ -43,6 +43,8 @@ interface SetupOptions {
 	onSend?: (body: string, attachment: File | undefined) => Promise<void>;
 	attachmentPreviewURLs?: Record<string, string>;
 	readerSenderType?: Message['senderType'];
+	composeOpener?: string;
+	cannotSendReason?: string;
 }
 
 async function setup({
@@ -52,7 +54,9 @@ async function setup({
 	isLoadingOlder = false,
 	onSend = vi.fn().mockResolvedValue(undefined),
 	attachmentPreviewURLs = {},
-	readerSenderType
+	readerSenderType,
+	composeOpener,
+	cannotSendReason
 }: SetupOptions = {}) {
 	const onLoadOlder = vi.fn();
 	const onDownloadAttachment = vi.fn();
@@ -65,7 +69,9 @@ async function setup({
 		onSend,
 		onDownloadAttachment,
 		attachmentPreviewURLs,
-		readerSenderType
+		readerSenderType,
+		composeOpener,
+		cannotSendReason
 	});
 	return { container, onLoadOlder, onSend, onDownloadAttachment };
 }
@@ -278,5 +284,51 @@ describe('MessageThread.svelte compose form', () => {
 		await expect.element(summary().getByText(SERVICE_PROBLEM)).toBeVisible();
 		await expect.element(summary().getByRole('link')).not.toBeInTheDocument();
 		await expect.element(messageField()).toHaveValue('New message');
+	});
+});
+
+// #2004: on a page where the thread is one section among many, the form
+// opens only when asked, and a send closes it with a focused status.
+describe('MessageThread.svelte compose behind an opener (#2004)', () => {
+	it('reads the thread with no form until the opener is pressed', async () => {
+		await setup({ composeOpener: 'Write a message' });
+
+		expect(page.getByLabelText('Message').elements()).toHaveLength(0);
+		await page.getByRole('button', { name: 'Write a message' }).click();
+
+		await expect.element(page.getByRole('heading', { level: 3, name: 'Write a message' })).toHaveFocus();
+		await expect.element(page.getByLabelText('Message')).toBeVisible();
+	});
+
+	it('closes the form on Cancel, with its refusals gone', async () => {
+		await setup({ composeOpener: 'Write a message' });
+
+		await page.getByRole('button', { name: 'Write a message' }).click();
+		await page.getByRole('button', { name: 'Send', exact: true }).click();
+		await expect.element(page.getByText('There is a problem')).toBeVisible();
+		await page.getByRole('button', { name: 'Cancel' }).click();
+
+		expect(page.getByLabelText('Message').elements()).toHaveLength(0);
+		expect(page.getByText('There is a problem').elements()).toHaveLength(0);
+	});
+
+	it('closes the form once a message is away, and says so, focused', async () => {
+		const { onSend } = await setup({ composeOpener: 'Write a message' });
+
+		await page.getByRole('button', { name: 'Write a message' }).click();
+		await page.getByLabelText('Message').fill('See you Thursday.');
+		await page.getByRole('button', { name: 'Send', exact: true }).click();
+
+		expect(onSend).toHaveBeenCalledWith('See you Thursday.', undefined);
+		await expect.element(page.getByRole('status').filter({ hasText: 'Message sent.' })).toHaveFocus();
+		expect(page.getByLabelText('Message').elements()).toHaveLength(0);
+	});
+
+	it('offers no form at all where no message can be sent, and says why', async () => {
+		await setup({ composeOpener: 'Write a message', cannotSendReason: 'The thread opens once Grace has accepted.' });
+
+		await expect.element(page.getByText('The thread opens once Grace has accepted.')).toBeVisible();
+		expect(page.getByRole('button', { name: 'Write a message' }).elements()).toHaveLength(0);
+		expect(page.getByLabelText('Message').elements()).toHaveLength(0);
 	});
 });

@@ -5,14 +5,24 @@
 	 * that could drift apart. */
 	export const PREVIOUS_CONTRACT_PDF_NOTICE =
 		'This PDF is from an earlier Contract on this Engagement that was signed and later voided.';
+
+	/** What a void costs, said before the button and again in the
+	 * confirmation (#2004). */
+	export const VOID_CONSEQUENCE =
+		'Voiding ends this Contract for good. Nothing more can be invoiced under it, and a new Contract starts again from a Draft.';
 </script>
 
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
+	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
+	import WarningText from '#lib/components/atoms/WarningText.svelte';
+	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 	import { formatActivityTimestamp } from '#lib/dates.js';
-	import type { VoidRequestSummary } from '#lib/contract.js';
+	import { contractStatusText, type VoidRequestSummary } from '#lib/contract.js';
 
 	/**
 	 * Status display for a Contract on the Staff Engagement view: the raw
@@ -69,9 +79,18 @@
 		onVoid,
 		onDownloadPdf,
 		onRequestVoid,
-		onDeclineVoidRequest
+		onDeclineVoidRequest,
+		rows = [],
+		children
 	}: {
+		/** What the caller shows between the facts and the actions: on the
+		 * Engagement page, the Contract's text and a Draft's own actions,
+		 * so Void stays the last thing in the section (#2004). */
+		children?: Snippet;
 		status: string;
+		/** The caller's own facts, after Status and any price change: a
+		 * fee, as this reader may see it (#2004). */
+		rows?: SummaryListRow[];
 		hasSignedPdf: boolean;
 		amountChangedAt?: string;
 		voidRequests?: VoidRequestSummary[];
@@ -81,7 +100,8 @@
 		onDeclineVoidRequest?: (requestId: string, reason: string) => Promise<void>;
 	} = $props();
 
-	let isVoiding = $state(false);
+	let isVoidDialogOpen = $state(false);
+	let voidError = $state('');
 	let isDownloading = $state(false);
 	let error = $state('');
 
@@ -177,20 +197,29 @@
 		}
 	}
 
-	// Only ever wired to the Void button below, which itself only renders
+	// Only ever wired to the Void dialog below, which itself only renders
 	// when onVoid is provided -- the non-null assertion reflects that,
-	// rather than adding an unreachable defensive branch.
+	// rather than adding an unreachable defensive branch. A refusal is the
+	// dialog's own (#804): it stays open with the reason in it, so this
+	// rethrows after saying why.
 	async function handleVoid() {
-		error = '';
-		isVoiding = true;
+		voidError = '';
 		try {
 			await onVoid!();
 		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Failed to void contract';
-		} finally {
-			isVoiding = false;
+			voidError = error_ instanceof Error ? error_.message : 'Failed to void contract';
+			throw error_;
 		}
 	}
+
+	type FactRow = SummaryListRow & { instant?: string };
+	const facts = $derived<FactRow[]>([
+		{ label: 'Status', value: contractStatusText(status) },
+		...(amountChangedAt
+			? [{ label: 'Price changed', value: formatActivityTimestamp(amountChangedAt), instant: amountChangedAt }]
+			: []),
+		...rows
+	]);
 
 	// Same shape as handleVoid above: the page's onDownloadPdf does the
 	// fetch, Blob-to-object-URL conversion and the click that drives the
@@ -209,17 +238,23 @@
 	}
 </script>
 
-<p>Status: {status}</p>
+<!--
+	#2004: the Contract's facts are rows, the record-page pattern
+	(govuk-alignment.md, "Sections of a record page"), with the caller's
+	own rows -- a fee -- after the status.
+-->
+<SummaryList rows={facts}>
+	{#snippet value(row)}
+		<!-- #968: the change's instant stays machine-readable. -->
+		{#if row.instant}
+			<time datetime={row.instant}>{row.value}</time>
+		{:else}
+			{row.value}
+		{/if}
+	{/snippet}
+</SummaryList>
 
-{#if amountChangedAt}
-	<p role="status">
-		Price changed on <time datetime={amountChangedAt}>{formatActivityTimestamp(amountChangedAt)}</time>.
-	</p>
-{/if}
-
-{#if status === 'voided'}
-	<p role="status">Voided — this Contract is no longer active.</p>
-{/if}
+{@render children?.()}
 
 {#if hasSignedPdf && onDownloadPdf}
 	{#if isPreviousContractPdf}
@@ -232,10 +267,6 @@
 		onClick={handleDownloadPdf}
 		loading={isDownloading}
 	/>
-{/if}
-
-{#if status === 'signed' && onVoid}
-	<Button label="Void Contract" onClick={handleVoid} loading={isVoiding} />
 {/if}
 
 <!--
@@ -346,4 +377,29 @@
 
 {#if error}
 	<p role="alert">{error}</p>
+{/if}
+
+<!--
+	#2004: Void is destructive and cannot be undone, so it is last, under
+	its own heading, apart from the download and the void requests: the
+	consequence is stated before the button (`WarningText`), the button is
+	the destructive variant and never the primary, and a press asks again
+	in a `ConfirmDialog` before anything is sent (govuk-alignment.md, the
+	Button and Warning text rows).
+-->
+{#if status === 'signed' && onVoid}
+	<Heading level={3} text="Void this Contract" />
+	<WarningText message={VOID_CONSEQUENCE} />
+	<div>
+		<Button label="Void this Contract" variant="destructive" onClick={() => (isVoidDialogOpen = true)} />
+	</div>
+	<ConfirmDialog
+		bind:open={isVoidDialogOpen}
+		title="Void this Contract?"
+		consequence={VOID_CONSEQUENCE}
+		confirmLabel="Void this Contract"
+		error={voidError}
+		onConfirm={handleVoid}
+		onCancel={() => (voidError = '')}
+	/>
 {/if}
