@@ -89,24 +89,26 @@ type Diff = Record<string, unknown>;
  */
 const NOT_RECORDED = 'Not recorded';
 
-/** One side of a change: the label, `NOT_RECORDED` for a recorded null,
- * and `undefined` when the diff does not carry that side at all. */
-function side(value: unknown, label: (value: string) => string): string | undefined {
-	if (value === null) return NOT_RECORDED;
+/** One side of a change: the label, `absent` for a recorded null, and
+ * `undefined` when the diff does not carry that side at all. */
+function side(value: unknown, label: (value: string) => string, absent = NOT_RECORDED): string | undefined {
+	if (value === null) return absent;
 	return typeof value === 'string' ? label(value) : undefined;
 }
 
 /** Both sides of one fact as "before to after", or `undefined` unless the
  * diff carries both. `labelBefore` differs from `label` only for a birth
- * outcome, whose date belongs to its own side. */
+ * outcome, whose date belongs to its own side; `absent` only for a due
+ * date, whose gap the Engagement page calls "Not given" (#2118). */
 function fromTo(
 	diff: Diff,
 	field: string,
 	label: (value: string) => string,
-	labelBefore: (value: string) => string = label
+	labelBefore: (value: string) => string = label,
+	absent = NOT_RECORDED
 ): string | undefined {
-	const before = side(diff[`${field}Before`], labelBefore);
-	const after = side(diff[`${field}After`], label);
+	const before = side(diff[`${field}Before`], labelBefore, absent);
+	const after = side(diff[`${field}After`], label, absent);
 	return before === undefined || after === undefined ? undefined : `${before} to ${after}`;
 }
 
@@ -150,8 +152,9 @@ const factChanges: Record<string, (diff: Diff) => string | undefined> = {
 		return move && reason ? `${move}. Reason: ${reason}` : move;
 	},
 	kind_changed: (diff) => fromTo(diff, 'kind', kindLabel),
-	// #2013: two calendar days; a first due date's before side is null.
-	due_date_changed: (diff) => fromTo(diff, 'dueDate', formatCalendarDay),
+	// #2013: two calendar days; a first due date's before side is null,
+	// and reads as "Not given", the summary card's own word for it (#2118).
+	due_date_changed: (diff) => fromTo(diff, 'dueDate', formatCalendarDay, formatCalendarDay, 'Not given'),
 	birth_outcome_recorded: (diff) =>
 		fromTo(
 			diff,

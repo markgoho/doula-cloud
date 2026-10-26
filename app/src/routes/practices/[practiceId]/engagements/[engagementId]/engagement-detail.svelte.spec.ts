@@ -239,6 +239,15 @@ async function openChange(changes: string) {
 	await testPage.elementLocator(changeButton(changes)!).click();
 }
 
+// #2118: a birth Engagement with no due date and no birth outcome yet --
+// one approved without a date, or moved from postpartum to birth.
+const noDueDateDetail: Detail = {
+	...fixtureDetail,
+	dueDate: undefined,
+	birthOutcome: undefined,
+	pregnancyEndedOn: undefined
+};
+
 describe('Staff Engagement detail summary', () => {
 	beforeEach(() => {
 		apiFetchWithSession.mockReset();
@@ -328,23 +337,104 @@ describe('Staff Engagement detail summary', () => {
 	// left out of the DescriptionList's own items entirely. The fixture's
 	// Engagement always carries a due date, so a Detail with none is this
 	// test's own -- the fixture has no way to hold the absence (#596).
-	it('shows nothing for a null due date -- no blank label, no placeholder', async () => {
-		await setup({ ...fixtureDetail, dueDate: undefined });
+	it('shows nothing for a postpartum Engagement with no due date -- no blank label, no placeholder', async () => {
+		await setup({ ...fixtureDetail, kind: 'postpartum', dueDate: undefined });
 
 		await expect.element(testPage.getByText('Active', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText('Due', { exact: true })).not.toBeInTheDocument();
+	});
+
+	// #2118: once a birth outcome is recorded the card does not ask for a
+	// first due date. After a loss, or when the Practice never learned what
+	// happened, ADR-0015 standing rule 1 forbids presuming an expected
+	// baby; after a live birth the pregnancy has ended, the On-call window
+	// ends on the date it ended, and a first date would drive nothing (the
+	// reason canChangeKind stops offering postpartum to birth).
+	it.each(['live_birth', 'loss', 'unknown'])('shows no Due row on a birth Engagement with no due date after %s', async (outcome) => {
+		await setup({ ...fixtureDetail, dueDate: undefined, birthOutcome: outcome });
+
+		await expect.element(testPage.getByText('Active', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText('Due', { exact: true })).not.toBeInTheDocument();
+	});
+
+	// A contractor Doula reads the gap, and has no Change to fill it.
+	it('shows a contractor Doula the missing due date as not given, with no Change', async () => {
+		await testPage.viewport(3200, 900);
+		apiFetchWithSession.mockResolvedValue(jsonResponse('not available', 403));
+		await render(Page, {
+			data: {
+				...noDueDateDetail,
+				statusMoves: [],
+				canAttachSelf: false,
+				session: { ...sessionFor(['doula']), isContractor: true }
+			},
+			params: fixture.params
+		});
+
+		await expect.element(testPage.getByText('Not given', { exact: true })).toBeVisible();
+		expect(document.querySelectorAll('dl.bordered button')).toHaveLength(0);
+	});
+});
+
+describe('a birth Engagement with no due date (#2118)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('shows the Due row as not given, in its drawn place', async () => {
+		await setupDueDate(['owner'], undefined, noDueDateDetail);
+
+		await expect.element(testPage.getByText('Not given', { exact: true })).toBeVisible();
+		const list = document.querySelector('dl.bordered')!;
+		expect([...list.querySelectorAll(':scope dt')].map((node) => node.textContent).slice(0, 3)).toEqual([
+			'Care',
+			'Due',
+			'Care phase'
+		]);
+	});
+
+	it('opens the date form with three empty boxes', async () => {
+		await setupDueDate(['doula'], undefined, noDueDateDetail);
+		await openChange('due date');
+
+		await expect.element(dueDateGroup().getByLabelText('Month')).toHaveValue('');
+		await expect.element(dueDateGroup().getByLabelText('Day')).toHaveValue('');
+		await expect.element(dueDateGroup().getByLabelText('Year')).toHaveValue('');
+	});
+
+	it('saves a first date and shows it on the card', async () => {
+		await setupDueDate(['owner'], undefined, noDueDateDetail);
+		await openChange('due date');
+		await dueDateGroup().getByLabelText('Month').fill('3');
+		await dueDateGroup().getByLabelText('Day').fill('15');
+		await dueDateGroup().getByLabelText('Year').fill('2027');
+
+		await testPage.getByRole('button', { name: 'Save the due date' }).click();
+
+		await expect.element(testPage.getByText('The due date is now Mar 15, 2027.')).toBeVisible();
+		await expect.element(testPage.getByText('Mar 15, 2027', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText('Not given', { exact: true })).not.toBeInTheDocument();
+		expect(callsTo('/due-date').at(-1)?.[1]).toEqual({
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ dueDate: '2027-03-15' })
+		});
 	});
 });
 
 // #2013: the page as a reader with roles sees it, every read answered by
 // the fixture and the due-date write answered by `dueResponse`.
-async function setupDueDate(roles: string[], dueResponse: Response = jsonResponse({ engagementId: 'x', dueDate: '2027-03-15' })) {
+async function setupDueDate(
+	roles: string[],
+	dueResponse: Response = jsonResponse({ engagementId: 'x', dueDate: '2027-03-15' }),
+	detail: Detail = fixtureDetail
+) {
 	await testPage.viewport(3200, 900);
 	const respond = toApiResponder(fixture);
 	apiFetchWithSession.mockImplementation((path: string) =>
 		path.endsWith('/due-date') ? Promise.resolve(dueResponse) : respond(path)
 	);
-	await render(Page, { data: { ...fixtureDetail, session: sessionFor(roles) }, params: fixture.params });
+	await render(Page, { data: { ...detail, session: sessionFor(roles) }, params: fixture.params });
 }
 
 function dueDateGroup() {
