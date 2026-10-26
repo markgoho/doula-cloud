@@ -421,6 +421,31 @@ func TestFindViolations_DoesNotMergeABlockThatEndsOnItsIf(t *testing.T) {
 	}
 }
 
+// A comment after the `{` does not hide it: the marker above
+// `if !ok { // note` excuses the body all the same. The range is copied
+// from a Go 1.27.3 profile of this source (8.3,9.1 there, 3.3,4.1 here).
+func TestFindViolations_ExcusesABodyWhoseOpenerHasATrailingComment(t *testing.T) {
+	src := map[string][]string{
+		testFile: lines(
+			`	// coverage:ignore reason: excuses the guard body`, // 1
+			`	if !ok { // note`, // 2
+			`		sink(1)`,         // 3
+			`	}`,                // 4
+		),
+	}
+	blocks := []Block{
+		{File: testFile, StartLine: 3, StartCol: 3, EndLine: 4, EndCol: 1, Count: 0},
+	}
+
+	violations, err := findViolations(blocks, nil, fakeReader(src))
+	if err != nil {
+		t.Fatalf("findViolations: %v", err)
+	}
+	if len(violations) != 0 {
+		t.Fatalf("expected 0 violations, got %+v", violations)
+	}
+}
+
 // The walk back stops at the brace: a marker two lines above a block
 // whose preceding line is ordinary code, not the body's opener, excuses
 // nothing, the same as under 1.26.
