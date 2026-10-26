@@ -1,5 +1,5 @@
 {
-  "version": "2.18",
+  "version": "2.21",
   "children": [
     {
       "type": "frame",
@@ -67,7 +67,7 @@
           "fill": "$color-on-surface-muted",
           "textGrowth": "fixed-width",
           "width": 150,
-          "content": "28 Aug 2026, 9:14am",
+          "content": "Aug 28, 2026, 9:14am",
           "fontFamily": "$font-family-base",
           "fontSize": "$text-meta-size",
           "fontWeight": "normal"
@@ -1695,7 +1695,7 @@
                   "id": "MYBsh",
                   "name": "Intro",
                   "fill": "$color-on-surface-variant",
-                  "content": "Your Doula is Sam Reyes. Your due date is 4 March 2027.",
+                  "content": "Your Doula is Sam Reyes. Your due date is Mar 4, 2027.",
                   "fontFamily": "$font-family-base",
                   "fontSize": 15,
                   "fontWeight": "normal"
@@ -1732,7 +1732,7 @@
                       "id": "HuufE",
                       "name": "Meta",
                       "fill": "$color-on-surface-variant",
-                      "content": "Last edited 12 January",
+                      "content": "Last edited Jan 12",
                       "fontFamily": "$font-family-base",
                       "fontSize": 14,
                       "fontWeight": "normal"
@@ -1771,7 +1771,7 @@
                       "id": "eOb0I",
                       "name": "Meta",
                       "fill": "$color-on-surface-variant",
-                      "content": "Signed 2 December",
+                      "content": "Signed Dec 2",
                       "fontFamily": "$font-family-base",
                       "fontSize": 14,
                       "fontWeight": "normal"
@@ -2007,7 +2007,7 @@
               "fill": "$color-on-surface-variant",
               "textGrowth": "fixed-width",
               "width": "fill_container",
-              "content": "Your Doula is Sam Reyes. Your due date is 4 March 2027.",
+              "content": "Your Doula is Sam Reyes. Your due date is Mar 4, 2027.",
               "fontFamily": "$font-family-base",
               "fontSize": 15,
               "fontWeight": "normal"
@@ -2044,7 +2044,7 @@
                   "id": "BpToP",
                   "name": "Meta",
                   "fill": "$color-on-surface-variant",
-                  "content": "Last edited 12 January",
+                  "content": "Last edited Jan 12",
                   "fontFamily": "$font-family-base",
                   "fontSize": 14,
                   "fontWeight": "normal"
@@ -2083,7 +2083,7 @@
                   "id": "mgeWo",
                   "name": "Meta",
                   "fill": "$color-on-surface-variant",
-                  "content": "Signed 2 December",
+                  "content": "Signed Dec 2",
                   "fontFamily": "$font-family-base",
                   "fontSize": 14,
                   "fontWeight": "normal"
@@ -3924,7 +3924,7 @@
                           "fill": "$color-on-surface-variant",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "Added 4 March 2024 - 2 engagements - most recent ended June 2026",
+                          "content": "Added Mar 4, 2024 - 2 engagements - most recent ended June 2026",
                           "lineHeight": "$text-meta-leading",
                           "fontFamily": "$font-family-base",
                           "fontSize": "$text-meta-size",
@@ -3969,7 +3969,7 @@
                           "fill": "$color-on-surface-variant",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "Added 11 January 2023 - 1 engagement - ended April 2023",
+                          "content": "Added Jan 11, 2023 - 1 engagement - ended April 2023",
                           "lineHeight": "$text-meta-leading",
                           "fontFamily": "$font-family-base",
                           "fontSize": "$text-meta-size",
@@ -9508,7 +9508,7 @@
                               "fill": "$color-on-surface-variant",
                               "textGrowth": "fixed-width",
                               "width": "fill_container",
-                              "content": "Added 4 March 2024 - 2 engagements - most recent ended June 2026",
+                              "content": "Added Mar 4, 2024 - 2 engagements - most recent ended June 2026",
                               "lineHeight": "$text-meta-leading",
                               "fontFamily": "$font-family-base",
                               "fontSize": "$text-meta-size",
@@ -9584,7 +9584,7 @@
                               "fill": "$color-on-surface-variant",
                               "textGrowth": "fixed-width",
                               "width": "fill_container",
-                              "content": "Added 11 January 2023 - 1 engagement - ended April 2023",
+                              "content": "Added Jan 11, 2023 - 1 engagement - ended April 2023",
                               "lineHeight": "$text-meta-leading",
                               "fontFamily": "$font-family-base",
                               "fontSize": "$text-meta-size",
@@ -14101,7 +14101,7 @@
                               "fill": "$color-on-surface",
                               "textGrowth": "fixed-width",
                               "width": "fill_container",
-                              "content": "14 November 2026",
+                              "content": "Nov 14, 2026",
                               "fontFamily": "$font-family-base",
                               "fontSize": "$text-body-size",
                               "fontWeight": "normal"
@@ -14294,7 +14294,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "Signed on 14 August 2026",
+                                  "content": "Signed on Aug 14, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-size",
                                   "fontWeight": "normal"
@@ -14396,7 +14396,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "12 August 2026 by Mark Goho",
+                                  "content": "Aug 12, 2026 by Mark Goho",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-size",
                                   "fontWeight": "normal"
@@ -14601,7 +14601,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": 150,
-                                  "content": "18 Aug 2026",
+                                  "content": "Aug 18, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-sm-size",
                                   "fontWeight": "normal"
@@ -14667,7 +14667,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": 150,
-                                  "content": "04 Aug 2026",
+                                  "content": "Aug 4, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-sm-size",
                                   "fontWeight": "normal"
@@ -14730,7 +14730,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": 150,
-                                  "content": "21 Jul 2026",
+                                  "content": "Jul 21, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-sm-size",
                                   "fontWeight": "normal"
@@ -14972,7 +14972,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "26 August 2026 by Tasha Lin",
+                                  "content": "Aug 26, 2026 by Tasha Lin",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-size",
                                   "fontWeight": "normal"
@@ -15124,7 +15124,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "20 August 2026 by Priya Raman",
+                                  "content": "Aug 20, 2026 by Priya Raman",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-size",
                                   "fontWeight": "normal"
@@ -15341,7 +15341,7 @@
                                   "fill": "$color-on-surface-variant",
                                   "textGrowth": "fixed-width",
                                   "width": 160,
-                                  "content": "12 Aug 2026",
+                                  "content": "Aug 12, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-sm-size",
                                   "fontWeight": "normal"
@@ -15365,7 +15365,7 @@
                                   "fill": "$color-on-surface-variant",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "Paid 14 Aug 2026",
+                                  "content": "Paid Aug 14, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-sm-size",
                                   "fontWeight": "normal"
@@ -15404,7 +15404,7 @@
                                   "fill": "$color-on-surface-variant",
                                   "textGrowth": "fixed-width",
                                   "width": 160,
-                                  "content": "26 Aug 2026",
+                                  "content": "Aug 26, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-sm-size",
                                   "fontWeight": "normal"
@@ -15674,7 +15674,7 @@
                                   "fill": "$color-on-surface-variant",
                                   "textGrowth": "fixed-width",
                                   "width": 170,
-                                  "content": "21 Jul 2026",
+                                  "content": "Jul 21, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-sm-size",
                                   "fontWeight": "normal"
@@ -15698,7 +15698,7 @@
                                   "fill": "$color-on-surface-variant",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "Accepted 22 Jul 2026",
+                                  "content": "Accepted Jul 22, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-sm-size",
                                   "fontWeight": "normal"
@@ -15737,7 +15737,7 @@
                                   "fill": "$color-on-surface-variant",
                                   "textGrowth": "fixed-width",
                                   "width": 170,
-                                  "content": "21 Jul 2026",
+                                  "content": "Jul 21, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-sm-size",
                                   "fontWeight": "normal"
@@ -15879,7 +15879,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "“Thursday works. See you at 2.” — Amara Okafor, 28 Aug",
+                                  "content": "“Thursday works. See you at 2.” — Amara Okafor, Aug 28",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-size",
                                   "fontWeight": "normal"
@@ -16100,7 +16100,7 @@
                               },
                               "descendants": {
                                 "tkrlZ": {
-                                  "content": "16 Aug 2026, 6:00am"
+                                  "content": "Aug 16, 2026, 6:00am"
                                 },
                                 "ic0lj": {
                                   "content": "Payment of $925.00 received against INV-2041"
@@ -16121,7 +16121,7 @@
                               },
                               "descendants": {
                                 "tkrlZ": {
-                                  "content": "14 Aug 2026, 8:12pm"
+                                  "content": "Aug 14, 2026, 8:12pm"
                                 },
                                 "ic0lj": {
                                   "content": "Contract signed"
@@ -16142,7 +16142,7 @@
                               },
                               "descendants": {
                                 "tkrlZ": {
-                                  "content": "12 Aug 2026, 11:06am"
+                                  "content": "Aug 12, 2026, 11:06am"
                                 },
                                 "ic0lj": {
                                   "content": "Portal invite sent to amara.okafor@example.com"
@@ -16163,7 +16163,7 @@
                               },
                               "descendants": {
                                 "tkrlZ": {
-                                  "content": "12 Aug 2026, 11:05am"
+                                  "content": "Aug 12, 2026, 11:05am"
                                 },
                                 "ic0lj": {
                                   "content": "Contract sent"
@@ -16184,7 +16184,7 @@
                               },
                               "descendants": {
                                 "tkrlZ": {
-                                  "content": "23 Jul 2026, 9:04am"
+                                  "content": "Jul 23, 2026, 9:04am"
                                 },
                                 "ic0lj": {
                                   "content": "Offer to Lena Vasquez superseded"
@@ -16205,7 +16205,7 @@
                               },
                               "descendants": {
                                 "tkrlZ": {
-                                  "content": "22 Jul 2026, 8:19am"
+                                  "content": "Jul 22, 2026, 8:19am"
                                 },
                                 "ic0lj": {
                                   "content": "Offer accepted — Priya Raman attached"
@@ -16224,7 +16224,7 @@
                               "strokeWidth": 0,
                               "descendants": {
                                 "tkrlZ": {
-                                  "content": "21 Jul 2026, 5:55pm"
+                                  "content": "Jul 21, 2026, 5:55pm"
                                 },
                                 "ic0lj": {
                                   "content": "Engagement created from an approved request"
@@ -16259,7 +16259,7 @@
                               "fill": "$color-on-surface-variant",
                               "textGrowth": "fixed-width",
                               "width": "fill_container",
-                              "content": "Two rules the drawing is asserting. Actors come in three kinds and only one is a staff member — a person did it, the Client did it (Amara signed, Amara paid), or DoulaCloud did it with nobody asking. And time is relative under seven days and absolute beyond it, on a 12-hour clock — “2 hours ago” is what a person reads and “14 Aug 2026, 8:12pm” is what an audit trail survives on; the exact instant is always carried underneath, never replaced. Only two of these eleven events are recorded at all today.",
+                              "content": "Two rules the drawing is asserting. Actors come in three kinds and only one is a staff member — a person did it, the Client did it (Amara signed, Amara paid), or DoulaCloud did it with nobody asking. And time is relative under seven days and absolute beyond it, on a 12-hour clock — “2 hours ago” is what a person reads and “Aug 14, 2026, 8:12pm” is what an audit trail survives on; the exact instant is always carried underneath, never replaced. Only two of these eleven events are recorded at all today.",
                               "fontFamily": "$font-family-base",
                               "fontSize": "$text-meta-size",
                               "fontWeight": "normal"
@@ -16744,7 +16744,7 @@
                               "fill": "$color-on-surface",
                               "textGrowth": "fixed-width",
                               "width": "fill_container",
-                              "content": "14 November 2026",
+                              "content": "Nov 14, 2026",
                               "fontFamily": "$font-family-base",
                               "fontSize": "$text-body-size",
                               "fontWeight": "normal"
@@ -16937,7 +16937,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "Signed on 14 August 2026",
+                                  "content": "Signed on Aug 14, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-size",
                                   "fontWeight": "normal"
@@ -17005,7 +17005,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "12 August 2026 by Mark Goho",
+                                  "content": "Aug 12, 2026 by Mark Goho",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-size",
                                   "fontWeight": "normal"
@@ -17240,7 +17240,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": 150,
-                                  "content": "18 Aug 2026",
+                                  "content": "Aug 18, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-sm-size",
                                   "fontWeight": "normal"
@@ -17306,7 +17306,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": 150,
-                                  "content": "04 Aug 2026",
+                                  "content": "Aug 4, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-sm-size",
                                   "fontWeight": "normal"
@@ -17369,7 +17369,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": 150,
-                                  "content": "21 Jul 2026",
+                                  "content": "Jul 21, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-sm-size",
                                   "fontWeight": "normal"
@@ -17611,7 +17611,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "26 August 2026 by Tasha Lin",
+                                  "content": "Aug 26, 2026 by Tasha Lin",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-size",
                                   "fontWeight": "normal"
@@ -17763,7 +17763,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "20 August 2026 by Priya Raman",
+                                  "content": "Aug 20, 2026 by Priya Raman",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-size",
                                   "fontWeight": "normal"
@@ -17906,7 +17906,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "“Thursday works. See you at 2.” — Amara Okafor, 28 Aug",
+                                  "content": "“Thursday works. See you at 2.” — Amara Okafor, Aug 28",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-size",
                                   "fontWeight": "normal"
@@ -18085,7 +18085,7 @@
                               },
                               "descendants": {
                                 "tkrlZ": {
-                                  "content": "14 Aug 2026, 8:12pm"
+                                  "content": "Aug 14, 2026, 8:12pm"
                                 },
                                 "ic0lj": {
                                   "content": "Contract signed"
@@ -18106,7 +18106,7 @@
                               },
                               "descendants": {
                                 "tkrlZ": {
-                                  "content": "12 Aug 2026, 11:06am"
+                                  "content": "Aug 12, 2026, 11:06am"
                                 },
                                 "ic0lj": {
                                   "content": "Portal invite sent to amara.okafor@example.com"
@@ -18127,7 +18127,7 @@
                               },
                               "descendants": {
                                 "tkrlZ": {
-                                  "content": "12 Aug 2026, 11:05am"
+                                  "content": "Aug 12, 2026, 11:05am"
                                 },
                                 "ic0lj": {
                                   "content": "Contract sent"
@@ -18148,7 +18148,7 @@
                               },
                               "descendants": {
                                 "tkrlZ": {
-                                  "content": "23 Jul 2026, 9:04am"
+                                  "content": "Jul 23, 2026, 9:04am"
                                 },
                                 "ic0lj": {
                                   "content": "Offer to Lena Vasquez superseded"
@@ -18169,7 +18169,7 @@
                               },
                               "descendants": {
                                 "tkrlZ": {
-                                  "content": "22 Jul 2026, 8:19am"
+                                  "content": "Jul 22, 2026, 8:19am"
                                 },
                                 "ic0lj": {
                                   "content": "Offer accepted — Priya Raman attached"
@@ -18188,7 +18188,7 @@
                               "strokeWidth": 0,
                               "descendants": {
                                 "tkrlZ": {
-                                  "content": "21 Jul 2026, 5:55pm"
+                                  "content": "Jul 21, 2026, 5:55pm"
                                 },
                                 "ic0lj": {
                                   "content": "Engagement created from an approved request"
@@ -18708,7 +18708,7 @@
                               "fill": "$color-on-surface",
                               "textGrowth": "fixed-width",
                               "width": "fill_container",
-                              "content": "14 November 2026",
+                              "content": "Nov 14, 2026",
                               "fontFamily": "$font-family-base",
                               "fontSize": "$text-body-size",
                               "fontWeight": "normal"
@@ -18901,7 +18901,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "Signed on 14 August 2026",
+                                  "content": "Signed on Aug 14, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-size",
                                   "fontWeight": "normal"
@@ -18969,7 +18969,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "12 August 2026 by Mark Goho",
+                                  "content": "Aug 12, 2026 by Mark Goho",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-size",
                                   "fontWeight": "normal"
@@ -19003,7 +19003,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "$620.00 — the fee you accepted on 22 July 2026",
+                                  "content": "$620.00 — the fee you accepted on Jul 22, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-size",
                                   "fontWeight": "normal"
@@ -19238,7 +19238,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": 150,
-                                  "content": "18 Aug 2026",
+                                  "content": "Aug 18, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-sm-size",
                                   "fontWeight": "normal"
@@ -19304,7 +19304,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": 150,
-                                  "content": "04 Aug 2026",
+                                  "content": "Aug 4, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-sm-size",
                                   "fontWeight": "normal"
@@ -19367,7 +19367,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": 150,
-                                  "content": "21 Jul 2026",
+                                  "content": "Jul 21, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-sm-size",
                                   "fontWeight": "normal"
@@ -19609,7 +19609,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "26 August 2026 by Tasha Lin",
+                                  "content": "Aug 26, 2026 by Tasha Lin",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-size",
                                   "fontWeight": "normal"
@@ -19761,7 +19761,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "20 August 2026 by Priya Raman",
+                                  "content": "Aug 20, 2026 by Priya Raman",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-size",
                                   "fontWeight": "normal"
@@ -19904,7 +19904,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "“Thursday works. See you at 2.” — Amara Okafor, 28 Aug",
+                                  "content": "“Thursday works. See you at 2.” — Amara Okafor, Aug 28",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-size",
                                   "fontWeight": "normal"
@@ -20083,7 +20083,7 @@
                               },
                               "descendants": {
                                 "tkrlZ": {
-                                  "content": "14 Aug 2026, 8:12pm"
+                                  "content": "Aug 14, 2026, 8:12pm"
                                 },
                                 "ic0lj": {
                                   "content": "Contract signed"
@@ -20104,7 +20104,7 @@
                               },
                               "descendants": {
                                 "tkrlZ": {
-                                  "content": "12 Aug 2026, 11:06am"
+                                  "content": "Aug 12, 2026, 11:06am"
                                 },
                                 "ic0lj": {
                                   "content": "Portal invite sent to amara.okafor@example.com"
@@ -20125,7 +20125,7 @@
                               },
                               "descendants": {
                                 "tkrlZ": {
-                                  "content": "12 Aug 2026, 11:05am"
+                                  "content": "Aug 12, 2026, 11:05am"
                                 },
                                 "ic0lj": {
                                   "content": "Contract sent"
@@ -20146,7 +20146,7 @@
                               },
                               "descendants": {
                                 "tkrlZ": {
-                                  "content": "23 Jul 2026, 9:04am"
+                                  "content": "Jul 23, 2026, 9:04am"
                                 },
                                 "ic0lj": {
                                   "content": "Offer to Lena Vasquez superseded"
@@ -20167,7 +20167,7 @@
                               },
                               "descendants": {
                                 "tkrlZ": {
-                                  "content": "22 Jul 2026, 8:19am"
+                                  "content": "Jul 22, 2026, 8:19am"
                                 },
                                 "ic0lj": {
                                   "content": "Offer accepted — Priya Raman attached"
@@ -20186,7 +20186,7 @@
                               "strokeWidth": 0,
                               "descendants": {
                                 "tkrlZ": {
-                                  "content": "21 Jul 2026, 5:55pm"
+                                  "content": "Jul 21, 2026, 5:55pm"
                                 },
                                 "ic0lj": {
                                   "content": "Engagement created from an approved request"
@@ -20766,7 +20766,7 @@
                               "fill": "$color-on-surface",
                               "textGrowth": "fixed-width",
                               "width": "fill_container",
-                              "content": "14 November 2026",
+                              "content": "Nov 14, 2026",
                               "fontFamily": "$font-family-base",
                               "fontSize": "$text-body-size",
                               "fontWeight": "normal"
@@ -21589,7 +21589,7 @@
                               "strokeWidth": 0,
                               "descendants": {
                                 "tkrlZ": {
-                                  "content": "21 Jul 2026, 5:55pm"
+                                  "content": "Jul 21, 2026, 5:55pm"
                                 },
                                 "ic0lj": {
                                   "content": "Engagement created from an approved request"
@@ -21945,7 +21945,7 @@
                       "fill": "$color-on-surface",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Priya is coming to you on Thursday 4 September at 2pm.",
+                      "content": "Priya is coming to you on Thu Sep 4, 2:00pm.",
                       "fontFamily": "$font-family-base",
                       "fontSize": "$text-subheading-size",
                       "fontWeight": "600"
@@ -21957,7 +21957,7 @@
                       "fill": "$color-on-surface-variant",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Your baby is due on 14 November 2026.",
+                      "content": "Your baby is due on Nov 14, 2026.",
                       "fontFamily": "$font-family-base",
                       "fontSize": "$text-body-size",
                       "fontWeight": "normal"
@@ -22030,7 +22030,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": 170,
-                                  "content": "Thu 4 Sep, 2pm",
+                                  "content": "Thu Sep 4, 2:00pm",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-sm-size",
                                   "fontWeight": "normal"
@@ -22072,7 +22072,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": 170,
-                                  "content": "18 Aug 2026",
+                                  "content": "Aug 18, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-sm-size",
                                   "fontWeight": "normal"
@@ -22111,7 +22111,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": 170,
-                                  "content": "4 Aug 2026",
+                                  "content": "Aug 4, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-sm-size",
                                   "fontWeight": "normal"
@@ -22210,7 +22210,7 @@
                           "fill": "$color-on-surface",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "Complete. Priya last changed it on 20 August 2026.",
+                          "content": "Complete. Priya last changed it on Aug 20, 2026.",
                           "fontFamily": "$font-family-base",
                           "fontSize": "$text-body-size",
                           "fontWeight": "normal"
@@ -22321,7 +22321,7 @@
                           "fill": "$color-on-surface",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "You signed this on 14 August 2026.",
+                          "content": "You signed this on Aug 14, 2026.",
                           "fontFamily": "$font-family-base",
                           "fontSize": "$text-body-size",
                           "fontWeight": "normal"
@@ -22498,7 +22498,7 @@
                                   "fill": "$color-on-surface-variant",
                                   "textGrowth": "fixed-width",
                                   "width": 150,
-                                  "content": "Due 9 Sep 2026",
+                                  "content": "Due Sep 9, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-sm-size",
                                   "fontWeight": "normal"
@@ -22549,7 +22549,7 @@
                                   "fill": "$color-on-surface-variant",
                                   "textGrowth": "fixed-width",
                                   "width": 150,
-                                  "content": "Paid 16 Aug 2026",
+                                  "content": "Paid Aug 16, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-sm-size",
                                   "fontWeight": "normal"
@@ -22681,7 +22681,7 @@
                           "fill": "$color-on-surface",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "“Thursday works. See you at 2.” — you, 28 August",
+                          "content": "“Thursday works. See you at 2.” — you, Aug 28",
                           "fontFamily": "$font-family-base",
                           "fontSize": "$text-body-size",
                           "fontWeight": "normal"
@@ -23158,7 +23158,7 @@
                       "fill": "$color-on-surface",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Maya is coming to you on Thursday 4 September at 2pm.",
+                      "content": "Maya is coming to you on Thu Sep 4, 2:00pm.",
                       "fontFamily": "$font-family-base",
                       "fontSize": "$text-subheading-size",
                       "fontWeight": "600"
@@ -23243,7 +23243,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": 170,
-                                  "content": "Thu 4 Sep, 2pm",
+                                  "content": "Thu Sep 4, 2:00pm",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-sm-size",
                                   "fontWeight": "normal"
@@ -23285,7 +23285,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": 170,
-                                  "content": "21 Aug 2026",
+                                  "content": "Aug 21, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-sm-size",
                                   "fontWeight": "normal"
@@ -23324,7 +23324,7 @@
                                   "fill": "$color-on-surface",
                                   "textGrowth": "fixed-width",
                                   "width": 170,
-                                  "content": "4 Aug 2026",
+                                  "content": "Aug 4, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-sm-size",
                                   "fontWeight": "normal"
@@ -23423,7 +23423,7 @@
                           "fill": "$color-on-surface",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "You signed this on 14 April 2026. Rooted Birth Collective ended it on 22 August 2026, so nothing more is owed under it.",
+                          "content": "You signed this on Apr 14, 2026. Rooted Birth Collective ended it on Aug 22, 2026, so nothing more is owed under it.",
                           "fontFamily": "$font-family-base",
                           "fontSize": "$text-body-size",
                           "fontWeight": "normal"
@@ -23609,7 +23609,7 @@
                                   "fill": "$color-on-surface-variant",
                                   "textGrowth": "fixed-width",
                                   "width": 150,
-                                  "content": "Paid 16 Apr 2026",
+                                  "content": "Paid Apr 16, 2026",
                                   "fontFamily": "$font-family-base",
                                   "fontSize": "$text-body-sm-size",
                                   "fontWeight": "normal"
@@ -23708,7 +23708,7 @@
                           "fill": "$color-on-surface",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "“Thursday works. See you at 2.” — you, 28 August",
+                          "content": "“Thursday works. See you at 2.” — you, Aug 28",
                           "fontFamily": "$font-family-base",
                           "fontSize": "$text-body-size",
                           "fontWeight": "normal"
@@ -24015,7 +24015,7 @@
               "fill": "$color-on-surface-variant",
               "textGrowth": "fixed-width",
               "width": "fill_container",
-              "content": "Birth · due 14 Nov 2026 · Priya Raman",
+              "content": "Birth · due Nov 14, 2026 · Priya Raman",
               "fontFamily": "$font-family-base",
               "fontSize": "$text-body-sm-size",
               "fontWeight": "normal"
@@ -24174,7 +24174,7 @@
                       "fill": "$color-on-surface",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Complete. Changed 20 Aug by Priya Raman.",
+                      "content": "Complete. Changed Aug 20 by Priya Raman.",
                       "fontFamily": "$font-family-base",
                       "fontSize": "$text-body-sm-size",
                       "fontWeight": "normal"
@@ -24286,7 +24286,7 @@
                       "fill": "$color-on-surface",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Thu 4 Sep, 2pm — you",
+                      "content": "Thu Sep 4, 2:00pm — you",
                       "fontFamily": "$font-family-base",
                       "fontSize": "$text-body-sm-size",
                       "fontWeight": "normal"
@@ -24298,7 +24298,7 @@
                       "fill": "$color-on-surface",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "18 Aug 2026 — you",
+                      "content": "Aug 18, 2026 — you",
                       "fontFamily": "$font-family-base",
                       "fontSize": "$text-body-sm-size",
                       "fontWeight": "normal"
@@ -24310,7 +24310,7 @@
                       "fill": "$color-on-surface",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "4 Aug 2026 — you",
+                      "content": "Aug 4, 2026 — you",
                       "fontFamily": "$font-family-base",
                       "fontSize": "$text-body-sm-size",
                       "fontWeight": "normal"
@@ -24396,7 +24396,7 @@
                       "fill": "$color-on-surface",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Signed 14 Aug 2026 by Amara Okafor.",
+                      "content": "Signed Aug 14, 2026 by Amara Okafor.",
                       "fontFamily": "$font-family-base",
                       "fontSize": "$text-body-sm-size",
                       "fontWeight": "normal"
@@ -24738,7 +24738,7 @@
                   "fill": "$color-on-surface",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Priya is coming to you on Thursday 4 September at 2pm.",
+                  "content": "Priya is coming to you on Thu Sep 4, 2:00pm.",
                   "fontFamily": "$font-family-base",
                   "fontSize": "$text-subheading-size",
                   "fontWeight": "600"
@@ -24750,7 +24750,7 @@
                   "fill": "$color-on-surface-variant",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Your baby is due on 14 November 2026.",
+                  "content": "Your baby is due on Nov 14, 2026.",
                   "fontFamily": "$font-family-base",
                   "fontSize": "$text-body-sm-size",
                   "fontWeight": "normal"
@@ -24797,7 +24797,7 @@
                       "fill": "$color-on-surface",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Thu 4 Sep, 2pm — Priya, at your home",
+                      "content": "Thu Sep 4, 2:00pm — Priya, at your home",
                       "fontFamily": "$font-family-base",
                       "fontSize": "$text-body-sm-size",
                       "fontWeight": "normal"
@@ -24809,7 +24809,7 @@
                       "fill": "$color-on-surface",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "18 Aug 2026 — birth preferences",
+                      "content": "Aug 18, 2026 — birth preferences",
                       "fontFamily": "$font-family-base",
                       "fontSize": "$text-body-sm-size",
                       "fontWeight": "normal"
@@ -24821,7 +24821,7 @@
                       "fill": "$color-on-surface",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "4 Aug 2026 — the birth plan draft",
+                      "content": "Aug 4, 2026 — the birth plan draft",
                       "fontFamily": "$font-family-base",
                       "fontSize": "$text-body-sm-size",
                       "fontWeight": "normal"
@@ -24870,7 +24870,7 @@
                       "fill": "$color-on-surface",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "$925.00 due 9 September 2026",
+                      "content": "$925.00 due Sep 9, 2026",
                       "fontFamily": "$font-family-base",
                       "fontSize": "$text-body-sm-size",
                       "fontWeight": "normal"
@@ -25021,7 +25021,7 @@
                       "fill": "$color-on-surface",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "You signed this on 14 August 2026.",
+                      "content": "You signed this on Aug 14, 2026.",
                       "fontFamily": "$font-family-base",
                       "fontSize": "$text-body-sm-size",
                       "fontWeight": "normal"
@@ -25097,7 +25097,7 @@
                       "fill": "$color-on-surface",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "“Thursday works. See you at 2.” — you, 28 Aug",
+                      "content": "“Thursday works. See you at 2.” — you, Aug 28",
                       "fontFamily": "$font-family-base",
                       "fontSize": "$text-body-sm-size",
                       "fontWeight": "normal"

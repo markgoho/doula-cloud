@@ -10,7 +10,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
 
 ## ActivityEntry (reusable)
 
-- text: "28 Aug 2026, 9:14am" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+- text: "Aug 28, 2026, 9:14am" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
 - text: "Event description" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
 - text: "Actor Name" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
 
@@ -184,13 +184,13 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
 - frame "Page Content"
   - frame "Page Frame"
     - text: "Your care with Riverside Doula Collective" [fill: $color-on-surface; fontFamily: $font-family-base]
-    - text: "Your Doula is Sam Reyes. Your due date is 4 March 2027." [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+    - text: "Your Doula is Sam Reyes. Your due date is Mar 4, 2027." [fill: $color-on-surface-variant; fontFamily: $font-family-base]
     - frame "Card Birth plan" [fill: $color-surface-bright; cornerRadius: $radius; stroke: $color-outline-variant]
       - text: "Birth plan" [fill: $color-on-surface; fontFamily: $font-family-base]
-      - text: "Last edited 12 January" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+      - text: "Last edited Jan 12" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
     - frame "Card Contract" [fill: $color-surface-bright; cornerRadius: $radius; stroke: $color-outline-variant]
       - text: "Contract" [fill: $color-on-surface; fontFamily: $font-family-base]
-      - text: "Signed 2 December" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+      - text: "Signed Dec 2" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
 
 ## Portal Shell - Narrow
 
@@ -211,13 +211,13 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
     - text: "Contract" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
 - frame "Page Content"
   - text: "Your care" [fill: $color-on-surface; fontFamily: $font-family-base]
-  - text: "Your Doula is Sam Reyes. Your due date is 4 March 2027." [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+  - text: "Your Doula is Sam Reyes. Your due date is Mar 4, 2027." [fill: $color-on-surface-variant; fontFamily: $font-family-base]
   - frame "Card Birth plan" [fill: $color-surface-bright; cornerRadius: $radius; stroke: $color-outline-variant]
     - text: "Birth plan" [fill: $color-on-surface; fontFamily: $font-family-base]
-    - text: "Last edited 12 January" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+    - text: "Last edited Jan 12" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
   - frame "Card Contract" [fill: $color-surface-bright; cornerRadius: $radius; stroke: $color-outline-variant]
     - text: "Contract" [fill: $color-on-surface; fontFamily: $font-family-base]
-    - text: "Signed 2 December" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+    - text: "Signed Dec 2" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
 
 ## Signed-out Shell
 
@@ -387,11 +387,11 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
     - frame "Results"
       - frame "Result"
         - text: "Sarah Beck" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
-        - text: "Added 4 March 2024 - 2 engagements - most recent ended June 2026" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - text: "Added Mar 4, 2024 - 2 engagements - most recent ended June 2026" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
       - frame "Rule" [fill: $color-outline-variant]
       - frame "Result"
         - text: "Sara Beck" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
-        - text: "Added 11 January 2023 - 1 engagement - ended April 2023" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - text: "Added Jan 11, 2023 - 1 engagement - ended April 2023" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
       - frame "Rule" [fill: $color-outline-variant]
     - frame "New"
       - text: "None of these is the right Client?" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
@@ -935,13 +935,13 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
         - frame "Radio" [fill: $color-surface-bright; stroke: $color-primary]
         - frame "Option Body"
           - text: "Sarah Beck" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
-          - text: "Added 4 March 2024 - 2 engagements - most recent ended June 2026" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+          - text: "Added Mar 4, 2024 - 2 engagements - most recent ended June 2026" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
           - text: "The existing record is kept. What was just typed is listed as changes to confirm before anything is applied." [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
       - frame "Match 2" [fill: $color-surface-bright; cornerRadius: $radius; stroke: $color-outline-variant]
         - frame "Radio" [fill: $color-surface-bright; stroke: $color-outline]
         - frame "Option Body"
           - text: "Sara Beck" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
-          - text: "Added 11 January 2023 - 1 engagement - ended April 2023" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+          - text: "Added Jan 11, 2023 - 1 engagement - ended April 2023" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
           - text: "The existing record is kept. What was just typed is listed as changes to confirm before anything is applied." [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
       - frame "New person" [fill: $color-surface-bright; cornerRadius: $radius; stroke: $color-outline-variant]
         - frame "Radio" [fill: $color-surface-bright; stroke: $color-outline]
@@ -1310,7 +1310,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
           - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
         - frame "Row - Due" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
           - text: "Due" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
-          - text: "14 November 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Nov 14, 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
           - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
         - frame "Row - Care phase" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
           - text: "Care phase" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
@@ -1326,7 +1326,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
         - frame "Pairs" [gap: $space-3]
           - frame "Status" [gap: $space-4]
             - text: "Status" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
-            - text: "Signed on 14 August 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+            - text: "Signed on Aug 14, 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
           - frame "Signed by" [gap: $space-4]
             - text: "Signed by" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
             - text: "Amara Okafor" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
@@ -1335,7 +1335,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
             - text: "$1,850.00" [fill: $color-on-surface; content: $1,850.00; fontFamily: $font-family-base; fontSize: $text-body-size]
           - frame "Sent" [gap: $space-4]
             - text: "Sent" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
-            - text: "12 August 2026 by Mark Goho" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+            - text: "Aug 12, 2026 by Mark Goho" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
         - frame "Actions" [gap: $space-2]
           - frame "View contract" [stroke: $color-outline; strokeWidth: $border-thin]
             - text: "View contract" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
@@ -1351,17 +1351,17 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
             - text: "Doula" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
             - text: "What we covered" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
           - frame "Row 1" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
-            - text: "18 Aug 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Aug 18, 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Prenatal" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Priya Raman" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Birth preferences, hospital bag, when to call" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
           - frame "Row 2" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
-            - text: "04 Aug 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Aug 4, 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Prenatal" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Priya Raman" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Went through the birth plan draft" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
           - frame "Row 3" [stroke: $color-outline-variant; gap: $space-4]
-            - text: "21 Jul 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Jul 21, 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Intake" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Tasha Lin" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "First meeting, took her history" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
@@ -1381,7 +1381,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
             - text: "12 of 14 questions answered" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
           - frame "Last edited" [gap: $space-4]
             - text: "Last edited" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
-            - text: "26 August 2026 by Tasha Lin" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+            - text: "Aug 26, 2026 by Tasha Lin" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
         - frame "Actions" [gap: $space-2]
           - frame "Open the care plan" [stroke: $color-outline; strokeWidth: $border-thin]
             - text: "Open the care plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
@@ -1394,7 +1394,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
             - text: "Complete" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
           - frame "Last edited" [gap: $space-4]
             - text: "Last edited" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
-            - text: "20 August 2026 by Priya Raman" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+            - text: "Aug 20, 2026 by Priya Raman" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
         - frame "Actions" [gap: $space-2]
           - frame "Open the birth plan" [stroke: $color-outline; strokeWidth: $border-thin]
             - text: "Open the birth plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
@@ -1411,12 +1411,12 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
             - text: "Status" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
           - frame "Row 1" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
             - text: "INV-2041" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
-            - text: "12 Aug 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Aug 12, 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "$925.00" [fill: $color-on-surface-variant; content: $925.00; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
-            - text: "Paid 14 Aug 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Paid Aug 14, 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
           - frame "Row 2" [stroke: $color-outline-variant; gap: $space-4]
             - text: "INV-2052" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
-            - text: "26 Aug 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Aug 26, 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "$925.00" [fill: $color-on-surface-variant; content: $925.00; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Awaiting payment" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
         - frame "Actions" [gap: $space-2]
@@ -1437,12 +1437,12 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
             - text: "Answer" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
           - frame "Row 1" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
             - text: "Priya Raman" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
-            - text: "21 Jul 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Jul 21, 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "$620.00" [fill: $color-on-surface-variant; content: $620.00; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
-            - text: "Accepted 22 Jul 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Accepted Jul 22, 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
           - frame "Row 2" [stroke: $color-outline-variant; gap: $space-4]
             - text: "Lena Vasquez" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
-            - text: "21 Jul 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Jul 21, 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "$620.00" [fill: $color-on-surface-variant; content: $620.00; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Superseded" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
         - frame "Actions" [gap: $space-2]
@@ -1454,7 +1454,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
         - frame "Pairs" [gap: $space-3]
           - frame "Latest" [gap: $space-4]
             - text: "Latest" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
-            - text: "“Thursday works. See you at 2.” — Amara Okafor, 28 Aug" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+            - text: "“Thursday works. See you at 2.” — Amara Okafor, Aug 28" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
           - frame "Unanswered" [gap: $space-4]
             - text: "Unanswered" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
             - text: "No" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
@@ -1482,35 +1482,35 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
             - override What happened (text): content: "Visit logged"
             - override Who (text): content: "Priya Raman"
           - ref "Entry 5" -> component "ActivityEntry"
-            - override When (text): content: "16 Aug 2026, 6:00am"
+            - override When (text): content: "Aug 16, 2026, 6:00am"
             - override What happened (text): content: "Payment of $925.00 received against INV-2041"
             - override Who (text): content: "Amara Okafor"
           - ref "Entry 6" -> component "ActivityEntry"
-            - override When (text): content: "14 Aug 2026, 8:12pm"
+            - override When (text): content: "Aug 14, 2026, 8:12pm"
             - override What happened (text): content: "Contract signed"
             - override Who (text): content: "Amara Okafor"
           - ref "Entry 7" -> component "ActivityEntry"
-            - override When (text): content: "12 Aug 2026, 11:06am"
+            - override When (text): content: "Aug 12, 2026, 11:06am"
             - override What happened (text): content: "Portal invite sent to amara.okafor@example.com"
             - override Who (text): content: "DoulaCloud"
           - ref "Entry 8" -> component "ActivityEntry"
-            - override When (text): content: "12 Aug 2026, 11:05am"
+            - override When (text): content: "Aug 12, 2026, 11:05am"
             - override What happened (text): content: "Contract sent"
             - override Who (text): content: "Mark Goho"
           - ref "Entry 9" -> component "ActivityEntry"
-            - override When (text): content: "23 Jul 2026, 9:04am"
+            - override When (text): content: "Jul 23, 2026, 9:04am"
             - override What happened (text): content: "Offer to Lena Vasquez superseded"
             - override Who (text): content: "DoulaCloud"
           - ref "Entry 10" -> component "ActivityEntry"
-            - override When (text): content: "22 Jul 2026, 8:19am"
+            - override When (text): content: "Jul 22, 2026, 8:19am"
             - override What happened (text): content: "Offer accepted — Priya Raman attached"
             - override Who (text): content: "Priya Raman"
           - ref "Entry 11" -> component "ActivityEntry"
-            - override When (text): content: "21 Jul 2026, 5:55pm"
+            - override When (text): content: "Jul 21, 2026, 5:55pm"
             - override What happened (text): content: "Engagement created from an approved request"
             - override Who (text): content: "Tasha Lin"
         - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
-          - text: "Two rules the drawing is asserting. Actors come in three kinds and only one is a staff member — a person did it, the Client did it (Amara signed, Amara paid), or DoulaCloud did it with nobody asking. And time is relative under seven days and absolute beyond it, on a 12-hour clock — “2 hours ago” is what a person reads and “14 Aug 2026, 8:12pm” is what an audit trail survives on; the exact instant is always carried underneath, never replaced. Only two of these eleven events are recorded at all today." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+          - text: "Two rules the drawing is asserting. Actors come in three kinds and only one is a staff member — a person did it, the Client did it (Amara signed, Amara paid), or DoulaCloud did it with nobody asking. And time is relative under seven days and absolute beyond it, on a 12-hour clock — “2 hours ago” is what a person reads and “Aug 14, 2026, 8:12pm” is what an audit trail survives on; the exact instant is always carried underneath, never replaced. Only two of these eleven events are recorded at all today." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
 
 ## Engagement - Doula (employee)
 
@@ -1550,7 +1550,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
           - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
         - frame "Row - Due" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
           - text: "Due" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
-          - text: "14 November 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Nov 14, 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
           - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
         - frame "Row - Care phase" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
           - text: "Care phase" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
@@ -1566,13 +1566,13 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
         - frame "Pairs" [gap: $space-3]
           - frame "Status" [gap: $space-4]
             - text: "Status" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
-            - text: "Signed on 14 August 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+            - text: "Signed on Aug 14, 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
           - frame "Signed by" [gap: $space-4]
             - text: "Signed by" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
             - text: "Amara Okafor" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
           - frame "Sent" [gap: $space-4]
             - text: "Sent" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
-            - text: "12 August 2026 by Mark Goho" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+            - text: "Aug 12, 2026 by Mark Goho" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
         - frame "Actions" [gap: $space-2]
           - frame "View contract" [stroke: $color-outline; strokeWidth: $border-thin]
             - text: "View contract" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
@@ -1590,17 +1590,17 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
             - text: "Doula" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
             - text: "What we covered" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
           - frame "Row 1" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
-            - text: "18 Aug 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Aug 18, 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Prenatal" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Priya Raman" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Birth preferences, hospital bag, when to call" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
           - frame "Row 2" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
-            - text: "04 Aug 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Aug 4, 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Prenatal" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Priya Raman" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Went through the birth plan draft" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
           - frame "Row 3" [stroke: $color-outline-variant; gap: $space-4]
-            - text: "21 Jul 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Jul 21, 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Intake" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Tasha Lin" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "First meeting, took her history" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
@@ -1620,7 +1620,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
             - text: "12 of 14 questions answered" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
           - frame "Last edited" [gap: $space-4]
             - text: "Last edited" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
-            - text: "26 August 2026 by Tasha Lin" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+            - text: "Aug 26, 2026 by Tasha Lin" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
         - frame "Actions" [gap: $space-2]
           - frame "Open the care plan" [stroke: $color-outline; strokeWidth: $border-thin]
             - text: "Open the care plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
@@ -1633,7 +1633,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
             - text: "Complete" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
           - frame "Last edited" [gap: $space-4]
             - text: "Last edited" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
-            - text: "20 August 2026 by Priya Raman" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+            - text: "Aug 20, 2026 by Priya Raman" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
         - frame "Actions" [gap: $space-2]
           - frame "Open the birth plan" [stroke: $color-outline; strokeWidth: $border-thin]
             - text: "Open the birth plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
@@ -1645,7 +1645,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
         - frame "Pairs" [gap: $space-3]
           - frame "Latest" [gap: $space-4]
             - text: "Latest" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
-            - text: "“Thursday works. See you at 2.” — Amara Okafor, 28 Aug" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+            - text: "“Thursday works. See you at 2.” — Amara Okafor, Aug 28" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
           - frame "Unanswered" [gap: $space-4]
             - text: "Unanswered" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
             - text: "No" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
@@ -1665,27 +1665,27 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
             - override What happened (text): content: "Visit logged"
             - override Who (text): content: "Priya Raman"
           - ref "Entry 6" -> component "ActivityEntry"
-            - override When (text): content: "14 Aug 2026, 8:12pm"
+            - override When (text): content: "Aug 14, 2026, 8:12pm"
             - override What happened (text): content: "Contract signed"
             - override Who (text): content: "Amara Okafor"
           - ref "Entry 7" -> component "ActivityEntry"
-            - override When (text): content: "12 Aug 2026, 11:06am"
+            - override When (text): content: "Aug 12, 2026, 11:06am"
             - override What happened (text): content: "Portal invite sent to amara.okafor@example.com"
             - override Who (text): content: "DoulaCloud"
           - ref "Entry 8" -> component "ActivityEntry"
-            - override When (text): content: "12 Aug 2026, 11:05am"
+            - override When (text): content: "Aug 12, 2026, 11:05am"
             - override What happened (text): content: "Contract sent"
             - override Who (text): content: "Mark Goho"
           - ref "Entry 9" -> component "ActivityEntry"
-            - override When (text): content: "23 Jul 2026, 9:04am"
+            - override When (text): content: "Jul 23, 2026, 9:04am"
             - override What happened (text): content: "Offer to Lena Vasquez superseded"
             - override Who (text): content: "DoulaCloud"
           - ref "Entry 10" -> component "ActivityEntry"
-            - override When (text): content: "22 Jul 2026, 8:19am"
+            - override When (text): content: "Jul 22, 2026, 8:19am"
             - override What happened (text): content: "Offer accepted — Priya Raman attached"
             - override Who (text): content: "Priya Raman"
           - ref "Entry 11" -> component "ActivityEntry"
-            - override When (text): content: "21 Jul 2026, 5:55pm"
+            - override When (text): content: "Jul 21, 2026, 5:55pm"
             - override What happened (text): content: "Engagement created from an approved request"
             - override Who (text): content: "Tasha Lin"
         - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
@@ -1729,7 +1729,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
           - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
         - frame "Row - Due" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
           - text: "Due" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
-          - text: "14 November 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Nov 14, 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
           - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
         - frame "Row - Care phase" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
           - text: "Care phase" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
@@ -1745,16 +1745,16 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
         - frame "Pairs" [gap: $space-3]
           - frame "Status" [gap: $space-4]
             - text: "Status" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
-            - text: "Signed on 14 August 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+            - text: "Signed on Aug 14, 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
           - frame "Signed by" [gap: $space-4]
             - text: "Signed by" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
             - text: "Amara Okafor" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
           - frame "Sent" [gap: $space-4]
             - text: "Sent" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
-            - text: "12 August 2026 by Mark Goho" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+            - text: "Aug 12, 2026 by Mark Goho" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
           - frame "Your fee" [gap: $space-4]
             - text: "Your fee" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
-            - text: "$620.00 — the fee you accepted on 22 July 2026" [fill: $color-on-surface; content: $620.00 — the fee you accepted on 22 July 2026; fontFamily: $font-family-base; fontSize: $text-body-size]
+            - text: "$620.00 — the fee you accepted on Jul 22, 2026" [fill: $color-on-surface; content: $620.00 — the fee you accepted on Jul 22, 2026; fontFamily: $font-family-base; fontSize: $text-body-size]
         - frame "Actions" [gap: $space-2]
           - frame "View contract" [stroke: $color-outline; strokeWidth: $border-thin]
             - text: "View contract" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
@@ -1772,17 +1772,17 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
             - text: "Doula" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
             - text: "What we covered" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
           - frame "Row 1" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
-            - text: "18 Aug 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Aug 18, 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Prenatal" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Priya Raman" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Birth preferences, hospital bag, when to call" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
           - frame "Row 2" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
-            - text: "04 Aug 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Aug 4, 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Prenatal" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Priya Raman" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Went through the birth plan draft" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
           - frame "Row 3" [stroke: $color-outline-variant; gap: $space-4]
-            - text: "21 Jul 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Jul 21, 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Intake" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Tasha Lin" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "First meeting, took her history" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
@@ -1802,7 +1802,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
             - text: "12 of 14 questions answered" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
           - frame "Last edited" [gap: $space-4]
             - text: "Last edited" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
-            - text: "26 August 2026 by Tasha Lin" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+            - text: "Aug 26, 2026 by Tasha Lin" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
         - frame "Actions" [gap: $space-2]
           - frame "Open the care plan" [stroke: $color-outline; strokeWidth: $border-thin]
             - text: "Open the care plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
@@ -1815,7 +1815,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
             - text: "Complete" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
           - frame "Last edited" [gap: $space-4]
             - text: "Last edited" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
-            - text: "20 August 2026 by Priya Raman" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+            - text: "Aug 20, 2026 by Priya Raman" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
         - frame "Actions" [gap: $space-2]
           - frame "Open the birth plan" [stroke: $color-outline; strokeWidth: $border-thin]
             - text: "Open the birth plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
@@ -1827,7 +1827,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
         - frame "Pairs" [gap: $space-3]
           - frame "Latest" [gap: $space-4]
             - text: "Latest" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
-            - text: "“Thursday works. See you at 2.” — Amara Okafor, 28 Aug" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+            - text: "“Thursday works. See you at 2.” — Amara Okafor, Aug 28" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
           - frame "Unanswered" [gap: $space-4]
             - text: "Unanswered" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
             - text: "No" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
@@ -1847,27 +1847,27 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
             - override What happened (text): content: "Visit logged"
             - override Who (text): content: "Priya Raman"
           - ref "Entry 6" -> component "ActivityEntry"
-            - override When (text): content: "14 Aug 2026, 8:12pm"
+            - override When (text): content: "Aug 14, 2026, 8:12pm"
             - override What happened (text): content: "Contract signed"
             - override Who (text): content: "Amara Okafor"
           - ref "Entry 7" -> component "ActivityEntry"
-            - override When (text): content: "12 Aug 2026, 11:06am"
+            - override When (text): content: "Aug 12, 2026, 11:06am"
             - override What happened (text): content: "Portal invite sent to amara.okafor@example.com"
             - override Who (text): content: "DoulaCloud"
           - ref "Entry 8" -> component "ActivityEntry"
-            - override When (text): content: "12 Aug 2026, 11:05am"
+            - override When (text): content: "Aug 12, 2026, 11:05am"
             - override What happened (text): content: "Contract sent"
             - override Who (text): content: "Mark Goho"
           - ref "Entry 9" -> component "ActivityEntry"
-            - override When (text): content: "23 Jul 2026, 9:04am"
+            - override When (text): content: "Jul 23, 2026, 9:04am"
             - override What happened (text): content: "Offer to Lena Vasquez superseded"
             - override Who (text): content: "DoulaCloud"
           - ref "Entry 10" -> component "ActivityEntry"
-            - override When (text): content: "22 Jul 2026, 8:19am"
+            - override When (text): content: "Jul 22, 2026, 8:19am"
             - override What happened (text): content: "Offer accepted — Priya Raman attached"
             - override Who (text): content: "Priya Raman"
           - ref "Entry 11" -> component "ActivityEntry"
-            - override When (text): content: "21 Jul 2026, 5:55pm"
+            - override When (text): content: "Jul 21, 2026, 5:55pm"
             - override What happened (text): content: "Engagement created from an approved request"
             - override Who (text): content: "Tasha Lin"
         - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
@@ -1915,7 +1915,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
           - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
         - frame "Row - Due" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
           - text: "Due" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
-          - text: "14 November 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Nov 14, 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
           - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
         - frame "Row - Care phase" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
           - text: "Care phase" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
@@ -1982,7 +1982,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
       - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
         - frame "Entries"
           - ref "Entry 7" -> component "ActivityEntry"
-            - override When (text): content: "21 Jul 2026, 5:55pm"
+            - override When (text): content: "Jul 21, 2026, 5:55pm"
             - override What happened (text): content: "Engagement created from an approved request"
             - override Who (text): content: "Tasha Lin"
         - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
@@ -2013,27 +2013,27 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
       - text: "Rooted Birth Collective" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-size]
     - frame "What happens next" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-3]
       - text: "What happens next" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
-      - text: "Priya is coming to you on Thursday 4 September at 2pm." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-subheading-size]
-      - text: "Your baby is due on 14 November 2026." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-size]
+      - text: "Priya is coming to you on Thu Sep 4, 2:00pm." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-subheading-size]
+      - text: "Your baby is due on Nov 14, 2026." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-size]
     - frame "Section - Your visits" [gap: $space-4]
       - text: "Your visits" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
       - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
         - frame "Table"
           - frame "Row 1" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
-            - text: "Thu 4 Sep, 2pm" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Thu Sep 4, 2:00pm" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Priya Raman — at your home" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
           - frame "Row 2" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
-            - text: "18 Aug 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Aug 18, 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Priya Raman — birth preferences, hospital bag" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
           - frame "Row 3" [stroke: $color-outline-variant; gap: $space-4]
-            - text: "4 Aug 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Aug 4, 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Priya Raman — went through the birth plan" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
         - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
           - text: "A Visit carries no date, no type and no note today, and no client-facing Visit surface exists at all — CONTEXT.md records that no Client word was settled because there was nothing to name. #250, #251, and a new portal read." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
     - frame "Section - Your birth plan" [gap: $space-4]
       - text: "Your birth plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
       - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
-        - text: "Complete. Priya last changed it on 20 August 2026." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - text: "Complete. Priya last changed it on Aug 20, 2026." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
         - frame "Actions" [gap: $space-2]
           - frame "Read your birth plan" [stroke: $color-outline; strokeWidth: $border-thin]
             - text: "Read your birth plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
@@ -2042,7 +2042,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
     - frame "Section - Your contract" [gap: $space-4]
       - text: "Your contract" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
       - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
-        - text: "You signed this on 14 August 2026." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - text: "You signed this on Aug 14, 2026." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
         - frame "Actions" [gap: $space-2]
           - frame "Read what you signed" [stroke: $color-outline; strokeWidth: $border-thin]
             - text: "Read what you signed" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
@@ -2056,11 +2056,11 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
         - frame "Table"
           - frame "Row 1" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
             - text: "$925.00" [fill: $color-on-surface; content: $925.00; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
-            - text: "Due 9 Sep 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Due Sep 9, 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Invoice INV-2052" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
           - frame "Row 2" [stroke: $color-outline-variant; gap: $space-4]
             - text: "$925.00" [fill: $color-on-surface; content: $925.00; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
-            - text: "Paid 16 Aug 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Paid Aug 16, 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Invoice INV-2041" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
         - frame "Actions" [gap: $space-2]
           - frame "Pay $925.00" [fill: $color-primary]
@@ -2070,7 +2070,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
     - frame "Section - Messages" [gap: $space-4]
       - text: "Messages" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
       - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
-        - text: "“Thursday works. See you at 2.” — you, 28 August" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - text: "“Thursday works. See you at 2.” — you, Aug 28" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
         - frame "Actions" [gap: $space-2]
           - frame "Open your messages" [stroke: $color-outline; strokeWidth: $border-thin]
             - text: "Open your messages" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
@@ -2109,27 +2109,27 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
         - text: "Nothing on this page states a care phase, and that is the decision, not an omission. ADR-0005 binds one fixed Client label per status and #293 records that none is true after a loss — but no client journey ever asks for the phase. Removing it removes the lie without inventing a fourth enum value. What replaces it is the same thing every other Client gets: what happens next. No due date, no birth plan, no greeting." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
     - frame "What happens next" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-3]
       - text: "What happens next" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
-      - text: "Maya is coming to you on Thursday 4 September at 2pm." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-subheading-size]
+      - text: "Maya is coming to you on Thu Sep 4, 2:00pm." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-subheading-size]
       - text: "She has kept the rest of the month free for you." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-size]
     - frame "Section - Your visits" [gap: $space-4]
       - text: "Your visits" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
       - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
         - frame "Table"
           - frame "Row 1" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
-            - text: "Thu 4 Sep, 2pm" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Thu Sep 4, 2:00pm" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Maya Okonkwo — at your home" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
           - frame "Row 2" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
-            - text: "21 Aug 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Aug 21, 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Maya Okonkwo — she came to the hospital" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
           - frame "Row 3" [stroke: $color-outline-variant; gap: $space-4]
-            - text: "4 Aug 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Aug 4, 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Maya Okonkwo — at your home" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
         - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
           - text: "A Visit carries no date, no type and no note today, and no client-facing Visit surface exists at all — CONTEXT.md records that no Client word was settled because there was nothing to name. #250, #251, and a new portal read." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
     - frame "Section - Your contract" [gap: $space-4]
       - text: "Your contract" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
       - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
-        - text: "You signed this on 14 April 2026. Rooted Birth Collective ended it on 22 August 2026, so nothing more is owed under it." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - text: "You signed this on Apr 14, 2026. Rooted Birth Collective ended it on Aug 22, 2026, so nothing more is owed under it." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
         - frame "Actions" [gap: $space-2]
           - frame "Read what you signed" [stroke: $color-outline; strokeWidth: $border-thin]
             - text: "Read what you signed" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
@@ -2144,14 +2144,14 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
         - frame "Table"
           - frame "Row 2" [stroke: $color-outline-variant; gap: $space-4]
             - text: "$925.00" [fill: $color-on-surface; content: $925.00; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
-            - text: "Paid 16 Apr 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Paid Apr 16, 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
             - text: "Invoice INV-1904" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
         - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
           - text: "The portal has no invoice, balance or payment surface at all — #297. Nadia Haddad's journey names this the one question she is most likely to have and least likely to ask out loud." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
     - frame "Section - Messages" [gap: $space-4]
       - text: "Messages" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
       - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
-        - text: "“Thursday works. See you at 2.” — you, 28 August" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - text: "“Thursday works. See you at 2.” — you, Aug 28" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
         - frame "Actions" [gap: $space-2]
           - frame "Open your messages" [stroke: $color-outline; strokeWidth: $border-thin]
             - text: "Open your messages" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
@@ -2177,7 +2177,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
 - frame "Page Content"
   - text: "‹ Clients" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-label-size]
   - text: "Amara Okafor" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
-  - text: "Birth · due 14 Nov 2026 · Priya Raman" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+  - text: "Birth · due Nov 14, 2026 · Priya Raman" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
   - frame "Jump to" [fill: $color-surface-container; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-2]
     - text: "Jump to" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
     - frame "Chips" [gap: $space-2]
@@ -2190,7 +2190,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
   - frame "Section - Birth Plan" [gap: $space-3]
     - text: "Birth Plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-subheading-size]
     - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-3]
-      - text: "Complete. Changed 20 Aug by Priya Raman." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - text: "Complete. Changed Aug 20 by Priya Raman." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
       - frame "Actions" [gap: $space-2]
         - frame "Open the birth plan" [fill: $color-primary]
           - text: "Open the birth plan" [fill: $color-on-primary; fontFamily: $font-family-base; fontSize: $text-label-size]
@@ -2199,16 +2199,16 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
   - frame "Section - Visits" [gap: $space-3]
     - text: "Visits" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-subheading-size]
     - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-3]
-      - text: "Thu 4 Sep, 2pm — you" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
-      - text: "18 Aug 2026 — you" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
-      - text: "4 Aug 2026 — you" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - text: "Thu Sep 4, 2:00pm — you" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - text: "Aug 18, 2026 — you" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - text: "Aug 4, 2026 — you" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
       - frame "Actions" [gap: $space-2]
         - frame "Log a visit" [stroke: $color-outline; strokeWidth: $border-thin]
           - text: "Log a visit" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
   - frame "Section - Contract" [gap: $space-3]
     - text: "Contract" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-subheading-size]
     - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-3]
-      - text: "Signed 14 Aug 2026 by Amara Okafor." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - text: "Signed Aug 14, 2026 by Amara Okafor." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
       - frame "Actions" [gap: $space-2]
         - frame "Read the contract" [stroke: $color-outline; strokeWidth: $border-thin]
           - text: "Read the contract" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
@@ -2237,18 +2237,18 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
   - text: "Rooted Birth Collective" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
   - frame "What happens next" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-2]
     - text: "What happens next" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
-    - text: "Priya is coming to you on Thursday 4 September at 2pm." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-subheading-size]
-    - text: "Your baby is due on 14 November 2026." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+    - text: "Priya is coming to you on Thu Sep 4, 2:00pm." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-subheading-size]
+    - text: "Your baby is due on Nov 14, 2026." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
   - frame "Section - Your visits" [gap: $space-3]
     - text: "Your visits" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-subheading-size]
     - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-3]
-      - text: "Thu 4 Sep, 2pm — Priya, at your home" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
-      - text: "18 Aug 2026 — birth preferences" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
-      - text: "4 Aug 2026 — the birth plan draft" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - text: "Thu Sep 4, 2:00pm — Priya, at your home" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - text: "Aug 18, 2026 — birth preferences" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - text: "Aug 4, 2026 — the birth plan draft" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
   - frame "Section - What you owe" [gap: $space-3]
     - text: "What you owe" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-subheading-size]
     - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-3]
-      - text: "$925.00 due 9 September 2026" [fill: $color-on-surface; content: $925.00 due 9 September 2026; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - text: "$925.00 due Sep 9, 2026" [fill: $color-on-surface; content: $925.00 due Sep 9, 2026; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
       - frame "Pay $925.00" [fill: $color-primary]
         - text: "Pay $925.00" [fill: $color-on-primary; fontFamily: $font-family-base; fontSize: $text-label-size]
   - frame "Section - Your birth plan" [gap: $space-3]
@@ -2260,13 +2260,13 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
   - frame "Section - Your contract" [gap: $space-3]
     - text: "Your contract" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-subheading-size]
     - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-3]
-      - text: "You signed this on 14 August 2026." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - text: "You signed this on Aug 14, 2026." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
       - frame "Read what you signed" [stroke: $color-outline; strokeWidth: $border-thin]
         - text: "Read what you signed" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
   - frame "Section - Messages" [gap: $space-3]
     - text: "Messages" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-subheading-size]
     - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-3]
-      - text: "“Thursday works. See you at 2.” — you, 28 Aug" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - text: "“Thursday works. See you at 2.” — you, Aug 28" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
       - frame "Open your messages" [stroke: $color-outline; strokeWidth: $border-thin]
         - text: "Open your messages" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
   - frame "Details - Everything that has happened" [stroke: $color-outline-variant; strokeWidth.top: $border-thin; gap: $space-2]
