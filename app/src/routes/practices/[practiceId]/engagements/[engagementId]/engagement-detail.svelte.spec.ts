@@ -1912,6 +1912,31 @@ describe('the Care Plan and Birth Plan sections (#2004)', () => {
 		await expect.element(testPage.getByLabelText('Music')).toHaveValue('');
 	});
 
+	// #2133: a Plan started and left unsaved still says who started it.
+	it('says who started a Plan, from the start itself, until its first save', async () => {
+		const started = { at: '2026-10-26T15:00:00Z', by: 'Renata Alvarez' };
+		await setupPlans({}, undefined, (planType) => jsonResponse(planOf(planType, { answers: {}, started })));
+
+		await planSection('Care Plan').getByRole('button', { name: 'Start the Care Plan' }).click();
+		await testPage.getByRole('button', { name: 'Cancel' }).click();
+
+		await expect.element(planSection('Care Plan').getByText('Started', { exact: true })).toBeVisible();
+		await expect.element(planSection('Care Plan').getByText('Oct 26, 2026 by Renata Alvarez')).toBeVisible();
+		expect(planSection('Care Plan').getByText('Last edited').elements()).toHaveLength(0);
+	});
+
+	it('names the last save, not the start, once a Plan is saved', async () => {
+		await setupPlans({
+			care_plan: planOf('care_plan', {
+				started: { at: '2026-10-20T15:00:00Z', by: 'Renata Alvarez' },
+				lastEdited: { at: '2026-10-24T15:00:00Z', by: 'Priya Raman' }
+			})
+		});
+
+		await expect.element(planSection('Care Plan').getByText('Oct 24, 2026 by Priya Raman')).toBeVisible();
+		expect(planSection('Care Plan').getByText('Started', { exact: true }).elements()).toHaveLength(0);
+	});
+
 	it('saves what was typed, returns to the facts, and says so, focused', async () => {
 		let saved: Record<string, unknown> = {};
 		await setupPlans({ birth_plan: planOf('birth_plan', { clientAcknowledgedAt: '2026-10-03T15:00:00Z' }) }, (planType, body) => {

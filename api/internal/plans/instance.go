@@ -45,23 +45,46 @@ type InstanceResponse struct {
 	// PutInstanceHandler records. Staff reads only, and nil until the
 	// first save: starting a Plan records no edit.
 	LastEdited *activitypage.Stamp `json:"lastEdited,omitempty"`
+
+	// Started is when this Plan Instance was started and by whom (#2133),
+	// read from the care_plan_started or birth_plan_started row
+	// PostInstanceHandler records. Staff reads only. Nil for a Plan
+	// started before #2133 recorded the start.
+	Started *activitypage.Stamp `json:"started,omitempty"`
 }
 
-// lastEdited reads planType's newest save on engagementID from the
-// activity ledger, on the Staff caller's own Practice-scoped tx.
-func lastEdited(r *http.Request, tx *sql.Tx, engagementID, planType string) (*activitypage.Stamp, error) {
+// planStamp reads action's newest row on engagementID from the activity
+// ledger, on the Staff caller's own Practice-scoped tx.
+func planStamp(r *http.Request, tx *sql.Tx, engagementID string, action activity.EngagementAction) (*activitypage.Stamp, error) {
 	practiceID, _ := staffauth.PracticeID(r.Context())
 	stamp, err := activitypage.Latest(r.Context(), tx, activitypage.LatestQuery{
 		PracticeID:  practiceID,
 		SubjectKind: activity.SubjectEngagement,
 		SubjectID:   engagementID,
-		Action:      string(editedAction(planType)),
+		Action:      string(action),
 	})
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
-		return nil, fmt.Errorf("plans: read last edited: %w", err)
+		return nil, fmt.Errorf("plans: read %s: %w", action, err)
 	}
 	return stamp, nil
+}
+
+// withTrail fills out's audit stamps -- the Plan's start and its last
+// save -- from the ledger.
+func withTrail(r *http.Request, tx *sql.Tx, out *InstanceResponse) error {
+	started, err := planStamp(r, tx, out.EngagementID, startedAction(out.PlanType))
+	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	if err != nil {
+		return err
+	}
+	edited, err := planStamp(r, tx, out.EngagementID, editedAction(out.PlanType))
+	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	if err != nil {
+		return err
+	}
+	out.Started, out.LastEdited = started, edited
+	return nil
 }
 
 // PutInstanceRequest is the body of a PUT Plan Instance request: a full
@@ -128,7 +151,25 @@ func PostInstanceHandler() http.Handler {
 			return
 		}
 
+		staffID, _ := staffauth.StaffID(r.Context())
+		if err := activity.Record(r.Context(), tx, activity.Entry{
+			PracticeID:  practiceID,
+			SubjectKind: activity.SubjectEngagement,
+			SubjectID:   engagementID,
+			Action:      string(startedAction(planType)),
+			Actor:       activity.StaffActor(staffID),
+		}); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
 		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: Answers{}}
+		if err := withTrail(r, tx, &out); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
 		apierr.WriteJSON(w, http.StatusCreated, out)
 	})
 }
@@ -149,14 +190,12 @@ func GetInstanceHandler() http.Handler {
 			return
 		}
 
-		edited, err := lastEdited(r, tx, engagementID, planType)
-		if err != nil {
+		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: answers, ClientAcknowledgedAt: clientAcknowledgedAt}
+		if err := withTrail(r, tx, &out); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-
-		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: answers, ClientAcknowledgedAt: clientAcknowledgedAt, LastEdited: edited}
 		apierr.WriteJSON(w, http.StatusOK, out)
 	})
 }
@@ -275,14 +314,12 @@ func PutInstanceHandler() http.Handler {
 			return
 		}
 
-		edited, err := lastEdited(r, tx, engagementID, planType)
-		if err != nil {
+		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: req.Answers, ClientAcknowledgedAt: nullTimePtr(clientAcknowledgedAt)}
+		if err := withTrail(r, tx, &out); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-
-		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: req.Answers, ClientAcknowledgedAt: nullTimePtr(clientAcknowledgedAt), LastEdited: edited}
 		apierr.WriteJSON(w, http.StatusOK, out)
 	})
 }
@@ -296,6 +333,15 @@ func editedAction(planType string) activity.EngagementAction {
 		return activity.ActionBirthPlanEdited
 	}
 	return activity.ActionCarePlanEdited
+}
+
+// startedAction is the activity action starting planType records (#2133),
+// one per plan for editedAction's reason.
+func startedAction(planType string) activity.EngagementAction {
+	if planType == birthPlanType {
+		return activity.ActionBirthPlanStarted
+	}
+	return activity.ActionCarePlanStarted
 }
 
 // fetchInstance reads the field snapshot, answers, and Client

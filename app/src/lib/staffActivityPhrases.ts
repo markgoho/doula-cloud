@@ -80,6 +80,8 @@ const STAFF_ACTIVITY_PHRASES: Record<string, Phrase> = {
 	visit_scheduled: (name) => `Visit time for ${client(name)} updated`,
 	visit_notes_edited: (name) => `Visit notes for ${client(name)} updated`,
 	// One action per plan (#2066), so every reader names the plan.
+	care_plan_started: (name) => `Care Plan for ${client(name)} started`,
+	birth_plan_started: (name) => `Birth Plan for ${client(name)} started`,
 	care_plan_edited: (name) => `Care Plan for ${client(name)} changed`,
 	birth_plan_edited: (name) => `Birth Plan for ${client(name)} changed`,
 	birth_plan_acknowledged: (name) => `Birth Plan marked as read by ${client(name)}`,

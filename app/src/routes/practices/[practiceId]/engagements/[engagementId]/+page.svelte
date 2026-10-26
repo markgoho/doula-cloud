@@ -1064,6 +1064,14 @@
 		refocusedPlanOpener = planType;
 	}
 
+	// A Plan's one audit row (#2104, #2133): the last save once there is
+	// one, which also says the Plan was started; until then, the start.
+	function planTrailRows(instance: Instance): SummaryListRow[] {
+		if (instance.lastEdited) return [{ label: 'Last edited', value: stampText(instance.lastEdited) }];
+		if (instance.started) return [{ label: 'Started', value: stampText(instance.started) }];
+		return [];
+	}
+
 	// A new Plan has nothing to read yet, so starting one opens its
 	// questions at once.
 	async function handleStartPlan(planType: PlanType) {
@@ -2360,8 +2368,9 @@
 				<SummaryList
 					rows={[
 						{ label: 'Progress', value: planProgress(instance.fields, instance.answers) },
-						// #2104: who last saved it, from the ledger; none until a first save.
-						...(instance.lastEdited ? [{ label: 'Last edited', value: stampText(instance.lastEdited) }] : []),
+						// One audit row per Plan, as drawn: who last saved it (#2104), or,
+						// until a first save, who started it (#2133).
+						...planTrailRows(instance),
 						...(planType === 'birth_plan' ? [{ label: 'Client', value: birthPlanReadText(instance) }] : [])
 					]}
 				/>

@@ -36,6 +36,9 @@ export interface Instance {
 	/** When this Plan was last saved and by whom (#2104). Absent until the
 	 * first save, and on a Client-portal read. */
 	lastEdited?: Stamp;
+	/** When this Plan was started and by whom (#2133). Absent for a Plan
+	 * started before the start was recorded, and on a Client-portal read. */
+	started?: Stamp;
 }
 
 /** Reads fieldId's raw stored value out of answers as a string, or '' if
