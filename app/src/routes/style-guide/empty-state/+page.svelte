@@ -19,7 +19,7 @@
 	<stack-l space="var(--space-4)">
 		<h2>A line and a link</h2>
 		<EmptyState
-			message="No Practice-defined fields yet."
+			message="Riverside Doula Collective has not added any questions of its own yet."
 			action={{ label: 'Add a question', href: '/style-guide/empty-state' }}
 		/>
 	</stack-l>

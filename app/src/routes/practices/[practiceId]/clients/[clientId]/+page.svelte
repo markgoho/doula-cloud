@@ -61,6 +61,16 @@
 	// server actually opens.
 	const isOwner = $derived(data?.isOwner ?? false);
 	const hasSecondFactor = $derived(data?.hasSecondFactor ?? true);
+	// The Practice's own name, off practices/[practiceId]/+layout.ts's
+	// session (#835), names its questions (#2142), as the details
+	// journey's first section page does (`intakeSections`). "the
+	// Practice" stands in only where a spec renders the route bare.
+	const practiceName = $derived(data?.session?.practiceName || 'the Practice');
+
+	// #2142: back to the Clients list, as the Engagement page does
+	// (#1998). One href for every role: a contractor Doula's Clients list
+	// is the same route, serving her the Clients she is attached to.
+	const clientsHref = $derived(resolve('/practices/[practiceId]/clients', { practiceId: page.params.practiceId! }));
 
 	// What the save that led here did, if one did (#1710): her details
 	// journey (a Change on a row, or its check page), a duplicate page, or a request to start work
@@ -549,13 +559,23 @@
 	/>
 {/snippet}
 
-{#snippet practiceDefinedFieldsSection()}
+<!--
+	The Practice's own questions (ADR-0017's Practice-defined layer),
+	named in the words a person would say (#2142): "What else Riverside
+	Doula Collective asks", where the settings page says "The extra
+	questions this Practice asks". One h2 over them all, each of the
+	Practice's sections an h3 under it, rather than the old drawing's
+	h2 per Practice section: `RecordDetail` keys its sections and their
+	anchors on the heading, and a Practice can name two sections alike,
+	or one "History", which would collide.
+-->
+{#snippet practiceQuestionsSection()}
 	{@const fieldGroups = resolvedFieldGroups(detail!.resolvedFields)}
 	{#if fieldGroups.length === 0}
 		<!-- #2015: the Owner is the one who can add the questions, so only
 		     the Owner is sent to the editor. -->
 		<EmptyState
-			message="No Practice-defined fields yet."
+			message="{practiceName} has not added any questions of its own yet."
 			action={isOwner
 				? {
 						label: 'Add a question',
@@ -705,6 +725,8 @@
 -->
 <RecordDetail
 	{title}
+	backHref={clientsHref}
+	backLabel="Clients"
 	{outcome}
 	{summary}
 	{actions}
@@ -712,7 +734,7 @@
 		{ heading: `Who ${name} is`, content: whoSection },
 		{ heading: `How to reach ${name}`, content: contactSection },
 		{ heading: `Where ${name} lives`, content: addressSection },
-		{ heading: 'Practice-defined fields', content: practiceDefinedFieldsSection },
+		{ heading: `What else ${practiceName} asks`, content: practiceQuestionsSection },
 		{ heading: 'Engagements', content: engagementsSection },
 		{ heading: 'History', content: historySection },
 		...eraseSections

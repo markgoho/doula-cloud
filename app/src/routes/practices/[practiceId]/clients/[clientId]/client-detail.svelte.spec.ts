@@ -58,6 +58,9 @@ const sessionStub = {
 	roles: [],
 	isContractor: false
 };
+// What the section of the Practice's own questions says while it holds
+// none (#2142).
+const emptyQuestionsText = `${sessionStub.practiceName} has not added any questions of its own yet.`;
 // The Address SummaryList row joins the same fields the same way the
 // route does -- an empty addressLine2 is filtered out rather than shown
 // as a bare comma.
@@ -599,12 +602,41 @@ describe('client detail hub', () => {
 			.toHaveAttribute('href', `/practices/${practiceId}/clients/${clientId}/engagement-requests/new`);
 	});
 
-	// #2015: the empty Practice-defined fields section sends the Owner, who
-	// can add the questions, to the editor, and offers a Doula nothing.
+	// #2142: back to the Clients list, above the heading, for every role.
+	it('links back to the Clients list', async () => {
+		await setup();
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Clients', exact: true }))
+			.toHaveAttribute('href', `/practices/${practiceId}/clients`);
+	});
+
+	it('links a contractor back to the same Clients list', async () => {
+		await setup({ isContractor: true });
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Clients', exact: true }))
+			.toHaveAttribute('href', `/practices/${practiceId}/clients`);
+	});
+
+	// #2142: the Practice's own questions are named by the Practice, never
+	// by the data model's word for them.
+	it("heads the Practice's own questions with the Practice's name", async () => {
+		await setup();
+
+		await expect
+			.element(testPage.getByRole('heading', { level: 2, name: `What else ${sessionStub.practiceName} asks` }))
+			.toBeVisible();
+		await expect.element(testPage.getByText(/Practice-defined/)).not.toBeInTheDocument();
+	});
+
+	// #2015: the empty section of the Practice's own questions sends the
+	// Owner, who can add the questions, to the editor, and offers a Doula
+	// nothing.
 	it('sends an Owner to add a question when the Practice asks none', async () => {
 		await setup({ isOwner: true, overrides: { resolvedFields: [] } });
 
-		await expect.element(testPage.getByText('No Practice-defined fields yet.')).toBeVisible();
+		await expect.element(testPage.getByText(emptyQuestionsText)).toBeVisible();
 		await expect
 			.element(testPage.getByRole('link', { name: 'Add a question' }))
 			.toHaveAttribute('href', `/practices/${practiceId}/settings/client-fields`);
@@ -613,7 +645,7 @@ describe('client detail hub', () => {
 	it('offers a Doula no way to add a question', async () => {
 		await setup({ overrides: { resolvedFields: [] } });
 
-		await expect.element(testPage.getByText('No Practice-defined fields yet.')).toBeVisible();
+		await expect.element(testPage.getByText(emptyQuestionsText)).toBeVisible();
 		await expect.element(testPage.getByRole('link', { name: 'Add a question' })).not.toBeInTheDocument();
 	});
 

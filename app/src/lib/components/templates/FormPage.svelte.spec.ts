@@ -27,7 +27,7 @@ async function setup(overrides: SetupOptions = {}) {
 			title: 'New client',
 			fieldsets: [
 				{ legend: 'About the client', content: textSnippet('Name and contact') },
-				{ legend: 'Birth preferences', content: textSnippet('Practice-defined fields') }
+				{ legend: 'Birth preferences', content: textSnippet('Questions the Practice added') }
 			],
 			actions: textSnippet('Save client'),
 			...overrides
@@ -74,7 +74,7 @@ describe('FormPage.svelte', () => {
 
 		expect(container.querySelectorAll('fieldset')).toHaveLength(2);
 		await expect.element(page.getByText('About the client')).toBeVisible();
-		await expect.element(page.getByText('Practice-defined fields')).toBeVisible();
+		await expect.element(page.getByText('Questions the Practice added')).toBeVisible();
 	});
 
 	// #425: `invite` has two groups and no name for either, so an entry
