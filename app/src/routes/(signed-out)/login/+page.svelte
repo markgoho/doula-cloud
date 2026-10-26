@@ -22,6 +22,7 @@
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import PracticeChooser from '#lib/components/molecules/PracticeChooser.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import TotpCodeField from '#lib/components/molecules/TotpCodeField.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
@@ -325,7 +326,25 @@
 		true statement about the field and assistive technology reads it; what
 		it no longer does is block.
 	-->
-	{#if step === 'credentials'}
+	<!--
+		The chooser heads the step chain (#2027): once her password is
+		accepted the form has been answered, so it goes, and the chooser is
+		the screen (Hick's Law). The form she pressed Log in on unmounts, so
+		the heading takes focus as it appears (`focusOnAppearing`, #2018).
+
+		A picker is only ever rendered with something in it: `land` sends a
+		person with no Membership to `/no-practice` instead (#745), which is
+		a screen about her state rather than an empty list.
+	-->
+	{#if picker}
+		<Heading level={2} text="Choose a Practice" focusOnAppearing />
+		<PracticeChooser
+			practices={picker.map((membership) => ({
+				...membership,
+				href: resolve('/practices/[practiceId]', { practiceId: membership.practiceId })
+			}))}
+		/>
+	{:else if step === 'credentials'}
 		<!--
 			#757: the notice sits above the form and never in place of it --
 			signing in again is the whole answer to it, so the fields she
@@ -437,25 +456,6 @@
 			between her and her account is a code she cannot produce.
 		-->
 		<Link href={resolve('/(signed-out)/recovery-code')} label="Use a recovery code" />
-	{/if}
-
-	<!--
-		A picker is only ever rendered with something in it: `land` sends a
-		person with no Membership to `/no-practice` instead (#745), which is
-		a screen about her state rather than an empty list.
-	-->
-	{#if picker}
-		<Heading level={2} text="Choose a Practice" />
-		<ul>
-			{#each picker as membership (membership.practiceId)}
-				<li>
-					<Link
-						href={resolve('/practices/[practiceId]', { practiceId: membership.practiceId })}
-						label={membership.practiceName}
-					/>
-				</li>
-			{/each}
-		</ul>
 	{/if}
 {/snippet}
 

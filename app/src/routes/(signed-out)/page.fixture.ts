@@ -8,24 +8,59 @@
  * invention, since a Practice's registered name is exactly the value
  * that broke a grid track there.
  */
-import { NO_CARE_HEADING } from '#lib/clientRegister.js';
+import { CARE_HEADING, NO_CARE_HEADING } from '#lib/clientRegister.js';
 import type { RootLanding } from './+page.js';
 import type { RouteFixture, RouteVariant } from '../routeFixture.js';
 import Page from './+page.svelte';
 
 // Narrowed to the one shape this fixture describes, rather than the full
-// `RootLanding` union -- the spec spreads this object to build its own
-// "several Practices" variant, and a union type would let that spread
-// merge in a shape (`portal-picker`) that has no `memberships` at all.
+// `RootLanding` union, so a spread of it can only ever be a staff picker.
+//
+// Two Memberships (#2027): `+page.ts` redirects straight through when
+// there is one, so the picker never renders with fewer, and each door's
+// line now prints the roles held there. One row carries #530's name with
+// every role (the longest line), the other a short name with one role; a
+// Membership always holds at least one (GLOSSARY.md).
 export const data: Extract<RootLanding, { type: 'staff-picker' }> = {
 	type: 'staff-picker',
 	memberships: [
 		{
 			practiceId: 'practice-1',
 			practiceName: 'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake',
-			roles: ['owner']
+			roles: ['owner', 'admin', 'doula']
+		},
+		{ practiceId: 'practice-2', practiceName: 'Hilltop Doulas', roles: ['doula'] }
+	]
+};
+
+/*
+ * The portal's Engagement chooser (#2027, the audit's F-A-10): a second
+ * tree the sweep never mounted. Two Engagements, since `+page.ts` goes
+ * straight through with one: a hostile Practice name on an ongoing one,
+ * beside a short one whose care has ended, so both status lines show.
+ */
+export const portalPickerData: Extract<RootLanding, { type: 'portal-picker' }> = {
+	type: 'portal-picker',
+	engagements: [
+		{
+			engagementId: 'engagement-1',
+			practiceName: 'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake',
+			status: 'active',
+			createdAt: '2026-01-15T20:00:00Z'
+		},
+		{
+			engagementId: 'engagement-2',
+			practiceName: 'Hilltop Doulas',
+			status: 'completed',
+			createdAt: '2026-03-12T20:00:00Z'
 		}
 	]
+};
+
+const portalPicker: RouteVariant = {
+	name: 'The root landing screen (portal picker)',
+	props: { data: portalPickerData },
+	readyText: CARE_HEADING
 };
 
 /*
@@ -60,6 +95,7 @@ export const fixture: RouteFixture = {
 			props: { data: { type: 'portal-picker', engagements: [] } satisfies RootLanding },
 			readyText: NO_CARE_HEADING
 		},
+		portalPicker,
 		signedOut
 	]
 };
