@@ -27,7 +27,14 @@
 
 	<section>
 		<h2>Signed, seen by an Owner or Admin &mdash; download and Void are both offered</h2>
-		<ContractStatus status="signed" hasSignedPdf onVoid={async () => {}} onDownloadPdf={async () => {}} />
+		<ContractStatus
+			status="signed"
+			hasSignedPdf
+			amountChangedAt="2026-08-19T00:00:00Z"
+			rows={[{ label: 'Your fee', value: '$12,620.00, the fee you accepted on Jul 22, 2026' }]}
+			onVoid={async () => {}}
+			onDownloadPdf={async () => {}}
+		/>
 	</section>
 
 	<section>

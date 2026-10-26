@@ -29,8 +29,9 @@ test('A Contract can be built, sent, signed by the Client, and its Signed PDF re
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	await page.goto(`/practices/${practiceId}/engagements/${engagementId}`);
-	await page.getByRole('button', { name: 'Create Draft Contract' }).click();
-	await expect(page.getByText('Status: draft')).toBeVisible();
+	// #2004: creating the Draft opens its merge fields at once.
+	await page.getByRole('button', { name: 'Create a Draft Contract' }).click();
+	await expect(page.getByRole('heading', { name: 'Change the Draft Contract' })).toBeVisible();
 
 	// #258: client_name and practice_name are both resolved by
 	// createContract (contract.go's resolveMergeFieldValues) from data the
@@ -47,9 +48,10 @@ test('A Contract can be built, sent, signed by the Client, and its Signed PDF re
 	await page.getByLabel('Engagement start date').fill('2027-01-01');
 	await page.getByLabel('Engagement end date').fill('2027-06-01');
 	await page.getByRole('button', { name: 'Save Contract' }).click();
+	await expect(page.getByText('Contract saved.')).toBeVisible();
 
 	await page.getByRole('button', { name: 'Send Contract' }).click();
-	await expect(page.getByText('Status: sent')).toBeVisible();
+	await expect(page.getByText('Sent, waiting for the Client to sign')).toBeVisible();
 
 	// The Client side: a separate browser context, since the Staff and
 	// Client sessions share the one __session cookie name and would

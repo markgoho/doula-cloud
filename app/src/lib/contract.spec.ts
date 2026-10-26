@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
 	awaitingContractStatusLabel,
+	contractStatusText,
 	createContract,
 	declineContractVoidRequest,
 	downloadClientSignedContractPdf,
@@ -23,6 +24,21 @@ import {
 	voidContract
 } from './contract.js';
 import { jsonResponse } from './testResponse.js';
+
+describe('contractStatusText', () => {
+	it('says each status in the words the Staff page reads (#2004)', () => {
+		expect(['draft', 'sent', 'signed', 'voided'].map((status) => contractStatusText(status))).toEqual([
+			'Draft, not sent yet',
+			'Sent, waiting for the Client to sign',
+			'Signed',
+			'Voided, no longer active'
+		]);
+	});
+
+	it('reads an unknown status as itself rather than blank', () => {
+		expect(contractStatusText('archived')).toBe('archived');
+	});
+});
 
 function blobResponse(): Response {
 	return new Response(new Blob(['%PDF-1.4'], { type: 'application/pdf' }), { status: 200 });

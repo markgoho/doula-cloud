@@ -968,13 +968,15 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 		expect(testPage.getByRole('button', { name: 'Send portal invite' }).elements()).toHaveLength(0);
 	});
 
-	it('disables Send Contract and names the ordering while the Client has never been invited', async () => {
+	// A withheld send is absent, never disabled (govuk-alignment.md, the
+	// Button row): the Notice is the reason (#2004).
+	it('withholds Send Contract and names the ordering while the Client has never been invited', async () => {
 		await setupWithContract(() => mockContract(draftContract));
 
-		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeDisabled();
 		await expect
 			.element(testPage.getByText(/send a portal invite to this client before sending the contract/i))
 			.toBeVisible();
+		expect(testPage.getByRole('button', { name: 'Send Contract' }).elements()).toHaveLength(0);
 	});
 
 	it('enables Send Contract once the Client has a pending or accepted invite', async () => {
@@ -1018,7 +1020,9 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 				return respond(path);
 			});
 		});
-		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeDisabled();
+		await expect
+			.element(testPage.getByText(/send a portal invite to this client before sending the contract/i))
+			.toBeVisible();
 
 		await testPage.getByRole('button', { name: 'Send portal invite' }).click();
 
@@ -1048,6 +1052,11 @@ function mockContract(contract: Contract) {
 	respondFromFixture((path) => (path.endsWith('/contract') ? jsonResponse(contract) : undefined));
 }
 
+// #2004: the Contract's text is behind a disclosure, closed.
+async function openContractText() {
+	await testPage.getByText('Read the Contract text').click();
+}
+
 describe("the Contract's merge-field completeness block and filled-text render (#258)", () => {
 	beforeEach(() => {
 		apiFetchWithSession.mockReset();
@@ -1064,7 +1073,9 @@ describe("the Contract's merge-field completeness block and filled-text render (
 		// The substitution is what is asserted, so the expected text is
 		// built from the fixture's own values rather than restated: the
 		// two placeholders either side of "between … and …" have to have
-		// been replaced by the Practice's name and the Client's.
+		// been replaced by the Practice's name and the Client's. The text is
+		// behind its disclosure, closed (#2004).
+		await openContractText();
 		await expect
 			.element(
 				testPage.getByText(
@@ -1075,18 +1086,18 @@ describe("the Contract's merge-field completeness block and filled-text render (
 			.toBeVisible();
 	});
 
-	it('disables Send Contract and names the blank fields while any merge field is unfilled', async () => {
+	it('withholds Send Contract and names the blank fields while any merge field is unfilled', async () => {
 		await setupWithContract(
 			() => mockContract(draftOf({ values: { ...fixtureContract.values, practice_name: '' } })),
 			{ ...fixtureDetail, clientPortalInviteStatus: 'accepted' }
 		);
 
-		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeDisabled();
 		await expect
 			.element(
 				testPage.getByText(/fill in every merge field before sending the contract\. missing: practice name\./i)
 			)
 			.toBeVisible();
+		expect(testPage.getByRole('button', { name: 'Send Contract' }).elements()).toHaveLength(0);
 	});
 
 	it('enables Send Contract once every merge field has a value', async () => {
@@ -1108,6 +1119,7 @@ describe("the Contract's merge-field completeness block and filled-text render (
 			{ ...fixtureDetail, clientPortalInviteStatus: 'accepted' }
 		);
 
+		await openContractText();
 		await expect.element(testPage.getByText(prose)).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeEnabled();
 		expect(testPage.getByText(/fill in every merge field/i).elements()).toHaveLength(0);
@@ -1145,13 +1157,126 @@ describe('the Save Contract control on a Draft with no editable merge field (#18
 		expect(testPage.getByRole('button', { name: 'Save Contract' }).elements()).toHaveLength(0);
 	});
 
-	it('offers Save Contract when the Draft holds an editable merge field', async () => {
+	it('offers Save Contract when the Draft holds an editable merge field, once its change is opened', async () => {
 		await setupWithContract(
 			() => mockContract(draftOf()),
 			{ ...fixtureDetail, clientPortalInviteStatus: 'accepted' }
 		);
 
+		await testPage.getByRole('button', { name: 'Change the Draft Contract' }).click();
+
 		await expect.element(testPage.getByRole('button', { name: 'Save Contract' })).toBeVisible();
+	});
+});
+
+// #2004: the Contract is facts first; a Draft's merge fields are a form
+// only when asked, which edits a copy, and a save or a send returns to
+// the facts with a status that takes focus.
+describe('the Contract read first, and its change only when asked (#2004)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	const accepted = { ...fixtureDetail, clientPortalInviteStatus: 'accepted' };
+
+	it('shows the status and fee as rows and no field, with the text behind a closed disclosure', async () => {
+		await setupWithContract(() => mockContract(draftOf()), accepted);
+
+		await expect.element(testPage.getByText('Draft, not sent yet')).toBeVisible();
+		await expect
+			.element(testPage.getByRole('definition').filter({ hasText: fixtureContract.values.price! }))
+			.toBeVisible();
+		expect(testPage.getByRole('textbox', { name: 'Scope of service' }).elements()).toHaveLength(0);
+		await expect.element(testPage.getByText('Read the Contract text')).toBeVisible();
+	});
+
+	it('opens the merge fields with the form heading focused, and Cancel keeps what was saved', async () => {
+		await setupWithContract(() => mockContract(draftOf()), accepted);
+
+		await testPage.getByRole('button', { name: 'Change the Draft Contract' }).click();
+		await expect.element(testPage.getByRole('heading', { level: 3, name: 'Change the Draft Contract' })).toHaveFocus();
+		await testPage.getByLabelText('Scope of service').fill('Something else');
+		await testPage.getByRole('button', { name: 'Cancel' }).click();
+		await testPage.getByRole('button', { name: 'Change the Draft Contract' }).click();
+
+		await expect
+			.element(testPage.getByLabelText('Scope of service'))
+			.toHaveValue(fixtureContract.values.scope_of_service!);
+	});
+
+	it('saves only the edited fields, returns to the facts and says so, focused', async () => {
+		await setupWithContract(() => {
+			const respond = toApiResponder(fixture);
+			apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
+				if (path.endsWith('/contract') && init?.method === 'PUT') {
+					return Promise.resolve(jsonResponse(draftOf({ values: { ...fixtureContract.values, scope_of_service: 'Two visits' } })));
+				}
+				if (path.endsWith('/contract')) return Promise.resolve(jsonResponse(draftOf()));
+				return respond(path);
+			});
+		}, accepted);
+
+		await testPage.getByRole('button', { name: 'Change the Draft Contract' }).click();
+		await testPage.getByLabelText('Scope of service').fill('Two visits');
+		await testPage.getByRole('button', { name: 'Save Contract' }).click();
+
+		await expect.element(testPage.getByRole('status').filter({ hasText: 'Contract saved.' })).toHaveFocus();
+		expect(testPage.getByRole('button', { name: 'Save Contract' }).elements()).toHaveLength(0);
+		const put = apiFetchWithSession.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'PUT');
+		const sent = JSON.parse((put![1] as RequestInit).body as string) as { values: Record<string, string> };
+		expect(sent.values.scope_of_service).toBe('Two visits');
+		expect(sent.values).not.toHaveProperty('price');
+	});
+
+	it('keeps the form open beside the refusal when a save is refused', async () => {
+		await setupWithContract(() => {
+			const respond = toApiResponder(fixture);
+			apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
+				if (path.endsWith('/contract') && init?.method === 'PUT') {
+					return Promise.resolve(jsonResponse('contract is no longer a draft', 409));
+				}
+				if (path.endsWith('/contract')) return Promise.resolve(jsonResponse(draftOf()));
+				return respond(path);
+			});
+		}, accepted);
+
+		await testPage.getByRole('button', { name: 'Change the Draft Contract' }).click();
+		await testPage.getByRole('button', { name: 'Save Contract' }).click();
+
+		await expect.element(testPage.getByText('contract is no longer a draft')).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Save Contract' })).toBeVisible();
+	});
+
+	it('sends the Contract and says so, focused', async () => {
+		await setupWithContract(() => {
+			const respond = toApiResponder(fixture);
+			apiFetchWithSession.mockImplementation((path: string) => {
+				if (path.endsWith('/contract/send')) return Promise.resolve(jsonResponse(draftOf({ status: 'sent' })));
+				if (path.endsWith('/contract')) return Promise.resolve(jsonResponse(draftOf()));
+				return respond(path);
+			});
+		}, accepted);
+
+		await testPage.getByRole('button', { name: 'Send Contract' }).click();
+
+		await expect.element(testPage.getByRole('status').filter({ hasText: 'Contract sent.' })).toHaveFocus();
+		await expect.element(testPage.getByText('Sent, waiting for the Client to sign')).toBeVisible();
+	});
+
+	it('opens a new Draft at its merge fields', async () => {
+		await setupWithContract(() => {
+			mockNoContract(birthRateOnly);
+			const fromFixture = apiFetchWithSession.getMockImplementation()!;
+			apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) =>
+				path.endsWith('/contract') && init?.method === 'POST'
+					? Promise.resolve(jsonResponse(draftOf()))
+					: fromFixture(path, init)
+			);
+		}, fixtureDetail, ownerSession);
+
+		await testPage.getByRole('button', { name: 'Create a Draft Contract' }).click();
+
+		await expect.element(testPage.getByRole('heading', { level: 3, name: 'Change the Draft Contract' })).toHaveFocus();
 	});
 });
 
@@ -1193,7 +1318,7 @@ describe('Create Draft Contract with no rate for the Engagement kind (#1885)', (
 		await expect
 			.element(testPage.getByRole('link', { name: 'Set the birth rate' }))
 			.toHaveAttribute('href', '/practices/practice-1/settings/rates');
-		await expect.element(testPage.getByRole('button', { name: 'Create Draft Contract' })).toBeDisabled();
+		expect(testPage.getByRole('button', { name: 'Create a Draft Contract' }).elements()).toHaveLength(0);
 	});
 
 	it('tells a Doula who can set the rate, with no link to a page the Doula cannot use', async () => {
@@ -1207,13 +1332,13 @@ describe('Create Draft Contract with no rate for the Engagement kind (#1885)', (
 			)
 			.toBeVisible();
 		expect(testPage.getByRole('link', { name: 'Set the birth rate' }).elements()).toHaveLength(0);
-		await expect.element(testPage.getByRole('button', { name: 'Create Draft Contract' })).toBeDisabled();
+		expect(testPage.getByRole('button', { name: 'Create a Draft Contract' }).elements()).toHaveLength(0);
 	});
 
 	it('offers Create Draft Contract when the Engagement kind has a rate', async () => {
 		await setupWithContract(() => mockNoContract(birthRateOnly), fixtureDetail, ownerSession);
 
-		await expect.element(testPage.getByRole('button', { name: 'Create Draft Contract' })).toBeEnabled();
+		await expect.element(testPage.getByRole('button', { name: 'Create a Draft Contract' })).toBeVisible();
 		expect(testPage.getByText(/no birth rate yet/i).elements()).toHaveLength(0);
 	});
 
@@ -1231,7 +1356,7 @@ describe('Create Draft Contract with no rate for the Engagement kind (#1885)', (
 			fixtureDetail,
 			ownerSession
 		);
-		await expect.element(testPage.getByRole('button', { name: 'Create Draft Contract' })).toBeEnabled();
+		await expect.element(testPage.getByRole('button', { name: 'Create a Draft Contract' })).toBeVisible();
 
 		await openChange('care');
 		await testPage.getByRole('button', { name: 'Change to Postpartum' }).click();
@@ -1240,7 +1365,7 @@ describe('Create Draft Contract with no rate for the Engagement kind (#1885)', (
 			.element(testPage.getByText('Your Practice has no postpartum rate yet, so you cannot create a Contract.'))
 			.toBeVisible();
 		await expect.element(testPage.getByRole('link', { name: 'Set the postpartum rate' })).toBeVisible();
-		await expect.element(testPage.getByRole('button', { name: 'Create Draft Contract' })).toBeDisabled();
+		expect(testPage.getByRole('button', { name: 'Create a Draft Contract' }).elements()).toHaveLength(0);
 	});
 
 	it('withholds Create Draft Contract and shows the refusal when the rates do not load', async () => {
@@ -1251,7 +1376,7 @@ describe('Create Draft Contract with no rate for the Engagement kind (#1885)', (
 		);
 
 		await expect.element(testPage.getByText('rates are down')).toBeVisible();
-		await expect.element(testPage.getByRole('button', { name: 'Create Draft Contract' })).toBeDisabled();
+		expect(testPage.getByRole('button', { name: 'Create a Draft Contract' }).elements()).toHaveLength(0);
 	});
 });
 
@@ -1280,13 +1405,13 @@ describe("the fixture's own Contract section, as the sweep mounts it (#885)", ()
 		await expect
 			.element(testPage.getByRole('button', { name: 'Download signed Contract (PDF)' }))
 			.toBeVisible();
-		await expect.element(testPage.getByRole('button', { name: 'Void Contract' })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Void this Contract' })).toBeVisible();
 	});
 
 	it("reads back the Contract's price change and both of its void requests", async () => {
 		await mountFixture();
 
-		await expect.element(testPage.getByText(/^Price changed on/)).toBeVisible();
+		await expect.element(testPage.getByText('Price changed', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText(/^Void request declined:/)).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Decline' })).toBeVisible();
 	});
@@ -1328,7 +1453,7 @@ describe('the Contract PDF download is gated on the page (#302, amended by #969)
 	it('does not render the download for a contractor Doula, the role the endpoint still refuses', async () => {
 		await setupWithRoles(['doula'], pdfBlobResponse(), true);
 
-		await expect.element(testPage.getByText('Status: signed')).toBeVisible();
+		await expect.element(testPage.getByText('Signed', { exact: true })).toBeVisible();
 		expect(testPage.getByRole('button', { name: 'Download signed Contract (PDF)' }).elements()).toHaveLength(0);
 	});
 
@@ -1363,7 +1488,7 @@ describe('the Contract PDF download survives a void (#1119)', () => {
 			session
 		);
 
-		await expect.element(testPage.getByText('Status: voided')).toBeVisible();
+		await expect.element(testPage.getByText('Voided, no longer active')).toBeVisible();
 		await expect
 			.element(testPage.getByRole('button', { name: 'Download signed Contract (PDF)' }))
 			.toBeVisible();
@@ -1376,7 +1501,7 @@ describe('the Contract PDF download survives a void (#1119)', () => {
 			session
 		);
 
-		await expect.element(testPage.getByText('Status: voided')).toBeVisible();
+		await expect.element(testPage.getByText('Voided, no longer active')).toBeVisible();
 		expect(testPage.getByRole('button', { name: 'Download signed Contract (PDF)' }).elements()).toHaveLength(0);
 	});
 });
@@ -1398,7 +1523,7 @@ describe('a recreated Draft names the PDF as a previous Contract\'s (#1229)', ()
 			session
 		);
 
-		await expect.element(testPage.getByText('Status: draft')).toBeVisible();
+		await expect.element(testPage.getByText('Draft, not sent yet')).toBeVisible();
 		await expect
 			.element(testPage.getByText(PREVIOUS_CONTRACT_PDF_NOTICE))
 			.toBeVisible();
@@ -1410,61 +1535,159 @@ describe('a recreated Draft names the PDF as a previous Contract\'s (#1229)', ()
 	it('adds no notice on a plain Draft with no signed PDF anywhere on the Engagement', async () => {
 		await setupWithContract(() => mockContract(draftOf()), fixtureDetail, session);
 
-		await expect.element(testPage.getByText('Status: draft')).toBeVisible();
+		await expect.element(testPage.getByText('Draft, not sent yet')).toBeVisible();
 		await expect
 			.element(testPage.getByText(PREVIOUS_CONTRACT_PDF_NOTICE))
 			.not.toBeInTheDocument();
 	});
 });
 
-// #280: the Birth Plan's own address, one level down -- reading and
-// printing move there (see that route's own spec, including the PDF
-// download this file used to own before the move), and this page keeps
-// only the link to it, unconditional on whether a plan exists yet (its
-// own address is what says so).
-// The first test below installs no `apiFetchWithSession` mock of its own
-// on purpose, matching what it always did: this block carries no
-// `beforeEach` reset, so it renders against whatever the previous block
-// (#1119, directly above) left behind -- harmless here, since neither
-// test's assertion depends on the Contract at all.
-async function setupBirthPlanLink(
-	respondOverride?: (path: string) => Promise<Response> | undefined
+/*
+ * #2004: the Care Plan and the Birth Plan are facts first -- how far each
+ * is answered and, for the Birth Plan, whether the Client has read it --
+ * with one action that opens its questions, and the Birth Plan's own
+ * address (#280) beside it, where printing and the PDF live. A save
+ * returns to the facts with a status that takes focus.
+ */
+const planFields = [
+	{ id: 'header', type: 'section_header' as const, label: 'Labor', order: 0 },
+	{ id: 'music', type: 'short_text' as const, label: 'Music', order: 1 },
+	{ id: 'lights', type: 'short_text' as const, label: 'Lighting', order: 2 }
+];
+
+function planOf(planType: string, overrides: Record<string, unknown> = {}) {
+	return {
+		engagementId: fixture.params.engagementId,
+		planType,
+		fields: planFields,
+		answers: { music: 'Quiet' },
+		...overrides
+	};
+}
+
+// Each Plan answered from `plans`, a Plan type with no entry a 404 (not
+// started); `onPut`, where given, answers the save.
+async function setupPlans(
+	plans: Partial<Record<'care_plan' | 'birth_plan', ReturnType<typeof planOf>>>,
+	onPut?: (planType: string, body: { answers: Record<string, unknown> }) => Response,
+	onPost?: (planType: string) => Response
 ) {
 	await testPage.viewport(3200, 900);
-	if (respondOverride) {
-		const respond = toApiResponder(fixture);
-		apiFetchWithSession.mockImplementation((path: string) => respondOverride(path) ?? respond(path));
-	}
+	const respond = toApiResponder(fixture);
+	apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
+		const planType = /\/plans\/(care_plan|birth_plan)$/.exec(path)?.[1] as 'care_plan' | 'birth_plan' | undefined;
+		if (onPut && planType && init?.method === 'PUT') {
+			return Promise.resolve(onPut(planType, JSON.parse(init.body as string)));
+		}
+		if (onPost && planType && init?.method === 'POST') return Promise.resolve(onPost(planType));
+		if (planType) {
+			const plan = plans[planType];
+			return Promise.resolve(plan ? jsonResponse(plan) : jsonResponse('not found', 404));
+		}
+		return respond(path);
+	});
 	await render(Page, { data: { ...fixtureDetail, session: sessionFor() }, params: fixture.params });
 }
 
-describe("the Birth Plan section's link to its own page (#280)", () => {
-	it('links to the Birth Plan page for this Engagement, regardless of whether a plan exists yet', async () => {
-		await setupBirthPlanLink();
+function planSection(heading: string) {
+	return testPage.getByRole('region', { name: heading, exact: true });
+}
+
+describe('the Care Plan and Birth Plan sections (#2004)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('shows how far a Plan is answered, and no question until asked', async () => {
+		await setupPlans({ care_plan: planOf('care_plan') });
+
+		await expect.element(planSection('Care Plan').getByText('1 of 2 questions answered')).toBeVisible();
+		expect(testPage.getByLabelText('Music').elements()).toHaveLength(0);
+		await expect.element(planSection('Care Plan').getByRole('button', { name: 'Change the Care Plan' })).toBeVisible();
+	});
+
+	it("says by the Client's name whether the Birth Plan has been read", async () => {
+		await setupPlans({
+			birth_plan: planOf('birth_plan'),
+			care_plan: planOf('care_plan')
+		});
 
 		await expect
-			.element(testPage.getByRole('link', { name: 'View printable Birth Plan' }))
+			.element(planSection('Birth Plan').getByText(`${fixtureDetail.clientName} has not read this yet`))
+			.toBeVisible();
+		expect(planSection('Care Plan').getByText(/has not read this yet/).elements()).toHaveLength(0);
+	});
+
+	it('says when the Client read the Birth Plan', async () => {
+		await setupPlans({ birth_plan: planOf('birth_plan', { clientAcknowledgedAt: '2026-10-03T15:00:00Z' }) });
+
+		await expect
+			.element(planSection('Birth Plan').getByText(`${fixtureDetail.clientName} read this on Oct 3, 2026`))
+			.toBeVisible();
+	});
+
+	it('links the Birth Plan to its own page, for printing it for the hospital (#280)', async () => {
+		await setupPlans({ birth_plan: planOf('birth_plan') });
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Print for the hospital' }))
 			.toHaveAttribute(
 				'href',
 				`/practices/${fixture.params.practiceId}/engagements/${fixture.params.engagementId}/birth-plan`
 			);
+		expect(testPage.getByRole('button', { name: 'Download Birth Plan (PDF)' }).elements()).toHaveLength(0);
 	});
 
-	it('offers no PDF download control on this page any more', async () => {
-		await setupBirthPlanLink((path) =>
-			path.endsWith('/plans/birth_plan')
-				? Promise.resolve(
-						jsonResponse({
-							engagementId: fixture.params.engagementId,
-							planType: 'birth_plan',
-							fields: [],
-							answers: {}
-						})
-					)
-				: undefined
-		);
+	it('says a Plan is not started, and starts it at its questions', async () => {
+		await setupPlans({}, undefined, (planType) => jsonResponse(planOf(planType, { answers: {} })));
 
-		expect(testPage.getByRole('button', { name: 'Download Birth Plan (PDF)' }).elements()).toHaveLength(0);
+		await expect.element(planSection('Care Plan').getByText('The Care Plan is not started yet.')).toBeVisible();
+		await planSection('Care Plan').getByRole('button', { name: 'Start the Care Plan' }).click();
+
+		await expect.element(testPage.getByRole('heading', { level: 3, name: 'Change the Care Plan' })).toHaveFocus();
+		await expect.element(testPage.getByLabelText('Music')).toHaveValue('');
+	});
+
+	it('saves what was typed, returns to the facts, and says so, focused', async () => {
+		let saved: Record<string, unknown> = {};
+		await setupPlans({ birth_plan: planOf('birth_plan', { clientAcknowledgedAt: '2026-10-03T15:00:00Z' }) }, (planType, body) => {
+			saved = body.answers;
+			return jsonResponse(planOf(planType, { answers: body.answers }));
+		});
+
+		await planSection('Birth Plan').getByRole('button', { name: 'Change the Birth Plan' }).click();
+		await testPage.getByLabelText('Lighting').fill('Low');
+		await testPage.getByRole('button', { name: 'Save Birth Plan' }).click();
+
+		await expect.element(testPage.getByRole('status').filter({ hasText: 'Birth Plan saved.' })).toHaveFocus();
+		expect(saved).toEqual({ music: 'Quiet', lights: 'Low' });
+		await expect.element(planSection('Birth Plan').getByText('Complete')).toBeVisible();
+		// The save's answer carries no acknowledgment: a Staff edit clears it.
+		await expect
+			.element(planSection('Birth Plan').getByText(`${fixtureDetail.clientName} has not read this yet`))
+			.toBeVisible();
+	});
+
+	it('keeps the Plan as it was on Cancel', async () => {
+		await setupPlans({ care_plan: planOf('care_plan') });
+
+		await planSection('Care Plan').getByRole('button', { name: 'Change the Care Plan' }).click();
+		await testPage.getByLabelText('Lighting').fill('Low');
+		await testPage.getByRole('button', { name: 'Cancel' }).click();
+
+		await expect.element(planSection('Care Plan').getByText('1 of 2 questions answered')).toBeVisible();
+		await planSection('Care Plan').getByRole('button', { name: 'Change the Care Plan' }).click();
+		await expect.element(testPage.getByLabelText('Lighting')).toHaveValue('');
+	});
+
+	it('keeps the form open beside the refusal when a save is refused', async () => {
+		await setupPlans({ care_plan: planOf('care_plan') }, () => jsonResponse('answers do not match the plan', 400));
+
+		await planSection('Care Plan').getByRole('button', { name: 'Change the Care Plan' }).click();
+		await testPage.getByRole('button', { name: 'Save Care Plan' }).click();
+
+		await expect.element(testPage.getByText('answers do not match the plan')).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Save Care Plan' })).toBeVisible();
 	});
 });
 
@@ -1797,12 +2020,18 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 	});
 });
 
+// #2004: the Offers form opens only when asked, from its one opener.
+async function openOfferForm() {
+	await testPage.getByRole('button', { name: 'Offer this work' }).click();
+}
+
 // #1432: the Offers form reads the same roster the Visit pickers do, and
 // "nobody is there" and "we could not find out" are two facts. A failed
 // read must not be told to an Owner as a Practice with no Doula on it.
 describe('what the Offers form says when the roster holds nobody (#1432)', () => {
 	it('does not tell an Owner that there is no one to offer the work to when the roster read fails', async () => {
 		await setupWithRoster(jsonResponse('the roster is unavailable', 500), ['owner']);
+		await openOfferForm();
 
 		await expect.element(testPage.getByText(/^We could not load who is at this Practice/)).toBeVisible();
 		expect(testPage.getByText(/^There is no one at this Practice to offer this work to/).elements()).toHaveLength(0);
@@ -1810,6 +2039,7 @@ describe('what the Offers form says when the roster holds nobody (#1432)', () =>
 
 	it('says that there is no one to offer the work to when the roster holds nobody, and asks for an email address', async () => {
 		await setupWithRoster(jsonResponse({ items: [] }), ['owner']);
+		await openOfferForm();
 
 		await expect.element(testPage.getByText(/^There is no one at this Practice to offer this work to/)).toBeVisible();
 		expect(testPage.getByRole('group', { name: 'Offer this work to' }).elements()).toHaveLength(0);
@@ -1823,6 +2053,7 @@ describe('the Offers form does not list the person at the screen (#1598)', () =>
 	it('leaves the reader out of the Doula pick, and keeps her in the Visit picker', async () => {
 		// The fixture's reader is `staff-1`, the roster's first Doula.
 		await setupWithRoster();
+		await openOfferForm();
 		// *Offer this work to* opens with nothing chosen (#1914).
 		await testPage.getByLabelText('Someone already at this Practice').click();
 
@@ -1841,6 +2072,7 @@ describe('the Offers form does not list the person at the screen (#1598)', () =>
 				items: [{ staffId: 'staff-1', name: 'Anne-Marie Ochieng-Whitfield', employmentType: 'employee', nameable: true }]
 			})
 		);
+		await openOfferForm();
 
 		await expect.element(testPage.getByText(/^There is no one at this Practice to offer this work to/)).toBeVisible();
 		expect(testPage.getByRole('group', { name: 'Offer this work to' }).elements()).toHaveLength(0);
@@ -1852,6 +2084,7 @@ describe('the Offers form does not list the person at the screen (#1598)', () =>
 
 	it('still says the roster could not be read, and not that nobody is there, when the read fails', async () => {
 		await setupWithRoster(jsonResponse('the roster is unavailable', 500));
+		await openOfferForm();
 
 		await expect.element(testPage.getByText(/^We could not load who is at this Practice/)).toBeVisible();
 		expect(testPage.getByText(/^There is no one at this Practice to offer this work to/).elements()).toHaveLength(0);
@@ -2421,7 +2654,7 @@ describe('what a reader sees about money (#2002, #2003)', () => {
 	it('draws no fee row for a reader the BFF sends no fee', async () => {
 		await setupMoney(sessionFor(['owner']), { ...fixtureDetail, yourFee: undefined });
 
-		await expect.element(testPage.getByText('Status: signed')).toBeVisible();
+		await expect.element(testPage.getByText('Signed', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText('Your fee')).not.toBeInTheDocument();
 	});
 
@@ -2455,5 +2688,75 @@ describe('what a reader sees about money (#2002, #2003)', () => {
 		await expect.element(testPage.getByText('No Invoices yet.')).toBeVisible();
 		await expect.element(testPage.getByText(/You contract for this Practice/)).not.toBeInTheDocument();
 		expect(invoiceListReads()).toHaveLength(1);
+	});
+});
+
+// #2004: the thread is read first and its form opens only when asked;
+// a Client with no portal account cannot read a Message, so the form is
+// not offered and the section says why and what to do.
+function messagesSection() {
+	return testPage.getByRole('region', { name: 'Messages', exact: true });
+}
+
+describe('the Messages section (#2004)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('offers no form to a Client never invited, says why, and offers the invite', async () => {
+		await setupMoney(sessionFor(['owner']));
+
+		await expect
+			.element(messagesSection().getByText(/reads messages in the portal, so send the portal invite first/))
+			.toBeVisible();
+		expect(messagesSection().getByRole('button', { name: 'Write a message' }).elements()).toHaveLength(0);
+		await expect.element(messagesSection().getByRole('button', { name: 'Send the portal invite' })).toBeVisible();
+	});
+
+	it('says the thread opens once a pending invite is accepted', async () => {
+		await setupMoney(sessionFor(['owner']), { ...fixtureDetail, clientPortalInviteStatus: 'pending' });
+
+		await expect
+			.element(
+				messagesSection().getByText(`The thread opens once ${fixtureDetail.clientName} has accepted the portal invite.`)
+			)
+			.toBeVisible();
+		expect(messagesSection().getByRole('button', { name: 'Send the portal invite' }).elements()).toHaveLength(0);
+	});
+
+	it('says an email address comes first when the Client has none', async () => {
+		await setupMoney(sessionFor(['owner']), { ...fixtureDetail, clientHasEmail: false });
+
+		await expect.element(messagesSection().getByText(/has no email address on file/)).toBeVisible();
+		expect(messagesSection().getByRole('button', { name: 'Send the portal invite' }).elements()).toHaveLength(0);
+	});
+
+	it('opens the form only when asked, for a Client with a portal account, and sends', async () => {
+		await setupMoney(
+			sessionFor(['owner']),
+			{ ...fixtureDetail, clientPortalInviteStatus: 'accepted' },
+			(path, init) =>
+				path.endsWith('/messages') && init?.method === 'POST'
+					? jsonResponse(
+							{
+								messageId: 'message-9',
+								senderType: 'staff',
+								senderId: 'staff-1',
+								senderName: 'Renata Alvarez',
+								body: 'See you Thursday.',
+								createdAt: '2026-10-26T15:00:00Z'
+							},
+							201
+						)
+					: undefined
+		);
+
+		expect(messagesSection().getByLabelText('Message').elements()).toHaveLength(0);
+		await messagesSection().getByRole('button', { name: 'Write a message' }).click();
+		await messagesSection().getByLabelText('Message').fill('See you Thursday.');
+		await messagesSection().getByRole('button', { name: 'Send', exact: true }).click();
+
+		await expect.element(messagesSection().getByRole('status').filter({ hasText: 'Message sent.' })).toHaveFocus();
+		await expect.element(messagesSection().getByText('See you Thursday.')).toBeVisible();
 	});
 });
