@@ -38,6 +38,11 @@ export interface Invoice {
 	 * Practice's payment terms of that moment, so changing the terms later
 	 * never moves an Invoice already billed. */
 	dueOn: string;
+	/** The day this Invoice was raised (#2146), `YYYY-MM-DD`, in the
+	 * Practice's own timezone: the same day a contractor's row carries as
+	 * `ContractorInvoice.raisedOn`, so every Staff reader of one Invoice
+	 * reads one Raised day. */
+	raisedOn: string;
 	/** The Payment currently covering this Invoice (#945), if any --
 	 * present only while status is 'paid' via a Payment nothing has
 	 * reversed. What reversePayment's and refundPayment's own paymentId

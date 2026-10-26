@@ -42,6 +42,9 @@ type PracticeInvoiceView struct {
 	// carries, in the Practice's zone, for the same reasons.
 	PaidOn *string `json:"paidOn,omitempty"`
 	DueOn  string  `json:"dueOn"`
+	// RaisedOn (#2146) is InvoiceView's own: the day CreatedAt falls on in
+	// the Practice's zone.
+	RaisedOn string `json:"raisedOn"`
 	// DaysOverdue (#1965) is how many whole Practice days this Invoice is
 	// past DueOn, and 0 when it is not overdue or not open. It is counted
 	// here, at the same instant and by the same rule as OverdueCount
@@ -335,6 +338,7 @@ func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, af
 		it.ClientName = personname.Full(givenName, preferredName.String, familyName.String)
 		it.PaidOn = invoicePaidOn(paidAt, activePaymentKind.String == paymentKindManual, days.zone)
 		it.DueOn = practiceDay(dueAt, days.zone)
+		it.RaisedOn = practiceDay(it.CreatedAt, days.zone)
 		it.DaysOverdue = overdue.Days(it.Status, dueAt, days.now, days.zone)
 		it.BillingMode = billingModeOf(stripeInvoiceID)
 		items = append(items, it)

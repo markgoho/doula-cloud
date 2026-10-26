@@ -12,6 +12,7 @@ const byHand: Invoice = {
 	amountCents: 50_000,
 	currency: 'usd',
 	createdAt: '2026-01-01T00:00:00Z',
+	raisedOn: '2026-01-01',
 	paidOn: '2026-01-05',
 	dueOn: '2026-01-31',
 	reference: 'INV-0001',

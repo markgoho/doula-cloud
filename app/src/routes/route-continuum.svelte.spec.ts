@@ -531,7 +531,10 @@ function toRouteFloorKey(condition: Condition): string {
  * #2098 the Engagement's Activity ledger and both histories on a Staff
  * member's page wrap their What column the same way, and since #2112
  * every activity ledger does: the hub's keeps a floor of its own, lowered
- * from 48rem to 28.5rem.
+ * from 48rem to 28.5rem. Since #2146 the Invoices on an Engagement are
+ * measured with the typical screen's rows too, with their Invoice and Raised
+ * columns: an Owner's rows need 586px and an employee Doula's 480px
+ * (macOS/Chromium), under 55rem, so they keep DataTable's own floor.
  */
 const ROUTE_FLOORS: Readonly<Record<string, string>> = {
 	'(person)/feedback#unopened-table': 'Issue not opened',
