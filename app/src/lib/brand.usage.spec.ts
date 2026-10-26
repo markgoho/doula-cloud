@@ -12,7 +12,7 @@ import { globFiles } from './globFiles';
  * workflows and Terraform beside them.
  *
  * Identifiers and slugs are not the name, so `doula-cloud` (the repo, the
- * GCP project, the `.pen` file) is never a match: the check is the exact
+ * GCP project) is never a match: the check is the exact
  * two words, capital D and capital C. It also reads a name that a hard
  * wrap split across two lines, "Doula" ending one line and "Cloud" opening
  * the next after any comment leader, since a Go or Svelte comment wraps
@@ -20,11 +20,8 @@ import { globFiles } from './globFiles';
  *
  * Out of the sweep, as #1463 draws it: `docs/research/` (evidence, often a
  * verbatim quotation), `api/db/migrations/` (goose never re-runs an
- * applied file, and its SQL is not in the Go glob anyway). Unlike the
- * spelling gate, this one does read `docs/design/doula-cloud.export.md`,
- * the generated read-back of the `.pen` file: it cannot carry a marker,
- * but it has no reason to, and a two-word name there means the canvas
- * still draws it. The fix is on the canvas. A verbatim quotation anywhere else
+ * applied file, and its SQL is not in the Go glob anyway). A verbatim
+ * quotation anywhere else
  * stays by putting `brand:ignore` and the reason on the line, the same
  * shape as `spelling:ignore`; in Markdown the marker is an HTML comment,
  * `<!-- brand:ignore: the reason -->`.
