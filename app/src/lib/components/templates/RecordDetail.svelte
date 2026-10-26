@@ -8,6 +8,10 @@
 	 * Invoices, Offers and Messages. Named regions cannot express N. It is
 	 * `DataTable.rowActions`'s shape generalized -- the third confirmed use of
 	 * Snippets as an API, after `LabeledField` and `DataTable`.
+	 *
+	 * A section with nothing in it yet keeps its heading and places an
+	 * `EmptyState` in its `content` (#2015), so the contents rail still
+	 * names it and the reader learns it is empty rather than missing.
 	 */
 	import type { Snippet } from 'svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';

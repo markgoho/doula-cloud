@@ -340,17 +340,18 @@
 				isLoadingMore={clients.isLoadingMore}
 				loadMoreError={clients.loadMoreError}
 				{emptyMessage}
+				emptyAction={isContractor
+					? { label: 'How to add Clients of your own', href: searchHref() }
+					: undefined}
 			/>
-		</div>
-		{#if isContractor && clients.items.length === 0}
 			<!--
 				#539, #501 (ADR-0017): hiding "Find or add a Client" above took
-				away this door's only link for a contractor Doula. It only
-				needs to come back here -- once she has an attached Client, the
-				narrowed list above is already her route to it.
+				away this door's only link for a contractor Doula, so it comes
+				back as the empty list's action (#2015) -- once she has an
+				attached Client, the narrowed list is already her route to it.
+				Everyone else has "Find or add a Client" above the list.
 			-->
-			<Link href={searchHref()} label="How to add Clients of your own" />
-		{/if}
+		</div>
 	{:else}
 		<Skeleton variant="row" lines={8} label="Loading Clients" />
 	{/if}

@@ -112,14 +112,15 @@ describe('the Practice-wide schedule (#263)', () => {
 
 		await expect
 			.element(
-				testPage.getByRole('cell', {
-					name: 'No visits are scheduled in this range. Widen the dates, or choose every doula, to see more.'
-				})
+				testPage.getByText('No visits are scheduled in this range. Widen the dates, or choose every doula, to see more.')
 			)
 			.toBeVisible();
+		// #2015: said once on screen. The summary stays a live region for a
+		// screen reader, visually hidden, so it is in the document and not
+		// a second visible sentence.
 		await expect
 			.element(testPage.getByText('No scheduled visits in this range.'))
-			.toBeVisible();
+			.toHaveClass('visually-hidden');
 	});
 
 	it('announces how many Visits the narrowed view is showing', async () => {

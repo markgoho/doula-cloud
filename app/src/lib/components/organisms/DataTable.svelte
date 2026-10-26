@@ -22,6 +22,7 @@
 	import Details from '../atoms/Details.svelte';
 	import Link from '../atoms/Link.svelte';
 	import Notice from '../atoms/Notice.svelte';
+	import EmptyState, { type EmptyStateAction } from '../molecules/EmptyState.svelte';
 
 	interface Column<T> {
 		label: string;
@@ -132,7 +133,14 @@
 		onLoadMore?: () => void;
 		isLoadingMore?: boolean;
 		loadMoreError?: string;
+		/**
+		 * What an empty list shows (#2015): the `EmptyState` line, drawn in
+		 * place of the whole table, so no header row stands over a list with
+		 * nothing in it. `emptyAction` is the one action that makes the first
+		 * row, where the screen has one that is not already beside the list.
+		 */
 		emptyMessage: string;
+		emptyAction?: EmptyStateAction;
 		/**
 		 * Wraps the whole table in a closed-by-default `Details` (#1520),
 		 * named by this string -- the Client portal's own placement for the
@@ -155,7 +163,8 @@
 		isLoadingMore = false,
 		loadMoreError,
 		disclosure,
-		emptyMessage
+		emptyMessage,
+		emptyAction
 	}: Properties<T> = $props();
 
 	/*
@@ -209,26 +218,30 @@
 
 {#snippet ledgerContent()}
 <stack-l class="frame">
-	<table class="table-view">
-		<thead>
-			<tr>
-				{#each columns as column (column.label)}
-					<th scope="col" class:numeric={column.numeric}>{column.label}</th>
-				{/each}
-				{#if rowActions}
-					<!-- `actions` names the column of this table's own controls for
-					     the floor check's table-fit measurement (#1981, `floor.ts`);
-					     no rule here selects it. -->
-					<th scope="col" class="actions">{rowActions.label}</th>
-				{/if}
-			</tr>
-		</thead>
-		<tbody>
-			{#if rows.length === 0}
+	<!-- One empty state, not one per tree (#2015): the container query
+	     below picks which tree shows, and both would draw it. An empty
+	     message draws nothing: the portal's owed list says nothing when
+	     the total above it has said it all (#982). -->
+	{#if rows.length === 0}
+		{#if emptyMessage}
+			<EmptyState message={emptyMessage} action={emptyAction} />
+		{/if}
+	{:else}
+		<table class="table-view">
+			<thead>
 				<tr>
-					<td colspan={columns.length + (rowActions ? 1 : 0)}>{emptyMessage}</td>
+					{#each columns as column (column.label)}
+						<th scope="col" class:numeric={column.numeric}>{column.label}</th>
+					{/each}
+					{#if rowActions}
+						<!-- `actions` names the column of this table's own controls for
+						     the floor check's table-fit measurement (#1981, `floor.ts`);
+						     no rule here selects it. -->
+						<th scope="col" class="actions">{rowActions.label}</th>
+					{/if}
 				</tr>
-			{:else}
+			</thead>
+			<tbody>
 				{#each rows as row, index (index)}
 					<tr>
 						{#each columns as column, columnIndex (column.label)}
@@ -253,26 +266,22 @@
 						{/if}
 					</tr>
 				{/each}
-			{/if}
-		</tbody>
-	</table>
+			</tbody>
+		</table>
 
-	<!--
-		The record view (#508, ADR-0024): the same columns/rows, one <dl> per
-		record instead of one row of a shared column grid, for the container
-		widths too narrow to hold the table without scrolling the whole
-		document sideways. Generated from the same Column config as the
-		<table> above, so no route ever hand-authors this second tree.
-	-->
-	<!-- A plain div, not <stack-l>: an unregistered custom element toggled
-	     between display:block and display:none by this same @container
-	     rule (below) never actually hid, in both the browser this was
-	     built against and the test suite -- a real div doesn't have that
-	     failure mode. -->
-	<div class="record-view">
-		{#if rows.length === 0}
-			<p>{emptyMessage}</p>
-		{:else}
+		<!--
+			The record view (#508, ADR-0024): the same columns/rows, one <dl> per
+			record instead of one row of a shared column grid, for the container
+			widths too narrow to hold the table without scrolling the whole
+			document sideways. Generated from the same Column config as the
+			<table> above, so no route ever hand-authors this second tree.
+		-->
+		<!-- A plain div, not <stack-l>: an unregistered custom element toggled
+		     between display:block and display:none by this same @container
+		     rule (below) never actually hid, in both the browser this was
+		     built against and the test suite -- a real div doesn't have that
+		     failure mode. -->
+		<div class="record-view">
 			{#each rows as row, index (index)}
 				<dl>
 					{#each columns as column, columnIndex (column.label)}
@@ -295,8 +304,8 @@
 					{/if}
 				</dl>
 			{/each}
-		{/if}
-	</div>
+		</div>
+	{/if}
 
 	{#if loadMoreError}
 		<Notice variant="error" message={loadMoreError} />

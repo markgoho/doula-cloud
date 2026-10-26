@@ -23,6 +23,7 @@
 	import { takeOutcome } from '#lib/outcome.js';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import EmptyState from '#lib/components/molecules/EmptyState.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
@@ -475,7 +476,19 @@
 
 {#snippet practiceDefinedFieldsSection()}
 	{#if detail!.resolvedFields.length === 0}
-		<Text text="No Practice-defined fields yet." />
+		<!-- #2015: the Owner is the one who can add the questions, so only
+		     the Owner is sent to the editor. -->
+		<EmptyState
+			message="No Practice-defined fields yet."
+			action={isOwner
+				? {
+						label: 'Add a question',
+						href: resolve('/practices/[practiceId]/settings/client-fields', {
+							practiceId: page.params.practiceId!
+						})
+					}
+				: undefined}
+		/>
 	{:else}
 		<stack-l space="var(--space-3)">
 			{#each detail!.resolvedFields as field (field.fieldId)}

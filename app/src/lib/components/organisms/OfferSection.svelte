@@ -23,6 +23,7 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import EmptyState from '#lib/components/molecules/EmptyState.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import RadioGroup, { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
@@ -205,7 +206,7 @@
 </script>
 
 {#if offers.length === 0}
-	<p>Nobody has been offered this work yet.</p>
+	<EmptyState message="Nobody has been offered this work yet." />
 {:else}
 	<ul>
 		{#each offers as offer (offer.offerId)}

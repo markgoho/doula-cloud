@@ -203,13 +203,39 @@ describe('DataTable.svelte', () => {
 		await expect.element(page.getByRole('cell', { name: 'Inactive' })).toBeVisible();
 	});
 
-	it('renders the empty message spanning all columns when rows is empty', async () => {
-		const { container } = await setup({ rows: [] });
+	// #2015: an empty list is its empty state, once, with no header row
+	// standing over nothing -- at a wide frame and a narrow one alike.
+	it('draws the empty state once, with no table, when rows is empty', async () => {
+		await setup({ rows: [] });
 
-		// getByRole, not getByText: the record view carries the same
-		// message in a hidden <p>, and only a role query excludes it.
-		await expect.element(page.getByRole('cell', { name: 'No records yet.' })).toBeVisible();
-		expect(container.querySelector('td[colspan]')).toHaveAttribute('colspan', '2');
+		await expect.element(page.getByText('No records yet.')).toBeVisible();
+		expect(page.getByText('No records yet.').elements()).toHaveLength(1);
+		expect(page.getByRole('table').elements()).toHaveLength(0);
+		expect(page.getByRole('columnheader').elements()).toHaveLength(0);
+
+		await page.viewport(...NARROW);
+		await expect.element(page.getByText('No records yet.')).toBeVisible();
+	});
+
+	it('draws nothing for an empty list whose message is empty', async () => {
+		await setup({ rows: [], emptyMessage: '' });
+
+		expect(page.getByRole('table').elements()).toHaveLength(0);
+		expect(page.getByRole('paragraph').elements()).toHaveLength(0);
+	});
+
+	it('offers the empty action that makes the first row', async () => {
+		await page.viewport(...WIDE);
+		await render(DataTable<Row>, {
+			columns,
+			rows: [],
+			emptyMessage: 'No records yet.',
+			emptyAction: { label: 'Add a record', href: '/records/new' }
+		});
+
+		await expect
+			.element(page.getByRole('link', { name: 'Add a record' }))
+			.toHaveAttribute('href', '/records/new');
 	});
 
 	it('renders the first cell as a link to rowHref when provided', async () => {
@@ -406,12 +432,6 @@ describe('DataTable.svelte', () => {
 		// vacuous pass -- a snippet that assigned no id would satisfy the line
 		// above too. Two rows, one id per row per tree.
 		expect(container.querySelectorAll('[id]')).toHaveLength(rows.length * 2);
-	});
-
-	it('spans the action column too when rowActions is provided and rows is empty', async () => {
-		const { container } = await setup({ rows: [], rowActions: { label: 'Actions', onRemove: vi.fn() } });
-
-		expect(container.querySelector('td[colspan]')).toHaveAttribute('colspan', '3');
 	});
 
 	it('right-aligns a numeric column, header and body cells alike, and leaves a text column start-aligned', async () => {

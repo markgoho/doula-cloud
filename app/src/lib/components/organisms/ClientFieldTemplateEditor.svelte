@@ -9,6 +9,7 @@
 	import Textarea from '../atoms/Textarea.svelte';
 	import TextInput from '../atoms/TextInput.svelte';
 	import ConfirmDialog from '../molecules/ConfirmDialog.svelte';
+	import EmptyState from '../molecules/EmptyState.svelte';
 
 	/**
 	 * Sibling of DynamicFieldEditor.svelte for ADR-0017's Client Field
@@ -104,7 +105,13 @@
 	}
 </script>
 
-<ul bind:this={activeList}>
+<!-- Every Practice starts here (#2015, F-B-21). No action of its own: the
+     add control is the next thing on the page. The list stays mounted,
+     hidden, because the move focus reads it. -->
+{#if activeFields.length === 0}
+	<EmptyState message="No extra questions yet. Add one below." />
+{/if}
+<ul bind:this={activeList} hidden={activeFields.length === 0}>
 	{#each activeFields as field, index (field.id)}
 		<li>
 			<!--

@@ -563,38 +563,31 @@
 		<Text
 			text="Work states are self-reported by each person and are not verified. They set how much sales tax your practice pays on credits."
 		/>
-		{#if members.length === 0}
-			<Text text="No Staff yet." />
-		{:else}
-			<!-- hasMore is always false: the roster is a bounded population
-			     (server-capped at maxMembers, #446) and never paginates, unlike
-			     Invitations below. -->
-			<div class="members-table">
-				<DataTable
-					columns={memberColumns}
-					rows={members}
-					rowActions={{ label: 'Actions', content: memberActions }}
-					hasMore={false}
-					emptyMessage="No Staff yet."
-				/>
-			</div>
-		{/if}
+		<!-- hasMore is always false: the roster is a bounded population
+		     (server-capped at maxMembers, #446) and never paginates, unlike
+		     Invitations below. Either list's empty state is DataTable's own
+		     (#2015); the invite link above is the action for both. -->
+		<div class="members-table">
+			<DataTable
+				columns={memberColumns}
+				rows={members}
+				rowActions={{ label: 'Actions', content: memberActions }}
+				hasMore={false}
+				emptyMessage="No Staff yet."
+			/>
+		</div>
 
 		<Heading level={2} text="Pending invitations" />
-		{#if invitations.items.length === 0}
-			<Text text="No pending invitations." />
-		{:else}
-			<DataTable
-				columns={invitationColumns}
-				rows={invitations.items}
-				rowActions={{ label: 'Actions', content: invitationActions }}
-				hasMore={invitations.hasMore}
-				onLoadMore={() => invitations.loadMore()}
-				isLoadingMore={invitations.isLoadingMore}
-				loadMoreError={invitations.loadMoreError}
-				emptyMessage="No pending invitations."
-			/>
-		{/if}
+		<DataTable
+			columns={invitationColumns}
+			rows={invitations.items}
+			rowActions={{ label: 'Actions', content: invitationActions }}
+			hasMore={invitations.hasMore}
+			onLoadMore={() => invitations.loadMore()}
+			isLoadingMore={invitations.isLoadingMore}
+			loadMoreError={invitations.loadMoreError}
+			emptyMessage="No pending invitations."
+		/>
 	{/if}
 {/snippet}
 

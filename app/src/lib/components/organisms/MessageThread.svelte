@@ -23,6 +23,7 @@
 	} from '../../messageAttachment.js';
 	import Button from '../atoms/Button.svelte';
 	import Textarea from '../atoms/Textarea.svelte';
+	import EmptyState from '../molecules/EmptyState.svelte';
 	import ErrorSummary from '../molecules/ErrorSummary.svelte';
 	import LabeledField from '../molecules/LabeledField.svelte';
 	import StackedForm from '../molecules/StackedForm.svelte';
@@ -111,7 +112,7 @@
 	{/if}
 
 	{#if messages.length === 0}
-		<p>No messages yet.</p>
+		<EmptyState message="No messages yet." />
 	{:else}
 		<ul>
 			{#each messages as message (message.messageId)}

@@ -81,13 +81,12 @@ test('The first Client in three presses, then the Visits section', async ({ page
 	await expect(page).toHaveURL(engagementUrl);
 	await expect(page.getByRole('heading', { level: 1, name: 'Pat' })).toBeVisible();
 
-	// DataTable renders a <table> and a card-view <dl> together for every
-	// row (#564, responsive layout) -- getByRole('cell', ...) targets the
-	// <table> tree specifically, since a plain getByText match on either
-	// empty message is ambiguous between the two trees. Wider than the
-	// Visits table's own floor (#1945), so the <table> is the tree on screen.
+	// An empty DataTable draws one EmptyState in place of both of its trees
+	// (#2015), so the text is on the page once. Wider than the Visits
+	// table's own floor (#1945), so the <table> is the tree on screen once
+	// the first Visit lands below.
 	await page.setViewportSize({ width: 3200, height: 900 });
-	await expect(page.getByRole('cell', { name: 'No Visits yet.' })).toBeVisible();
+	await expect(page.getByText('No Visits yet.', { exact: true })).toBeVisible();
 	await page.getByRole('button', { name: 'Add a Visit' }).click();
 
 	// Scoped to the Visits table, and exact: true within it. Two things

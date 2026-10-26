@@ -22,7 +22,8 @@ export const iconManifest = [
 	'caret-down',
 	'list',
 	'eye',
-	'eye-slash'
+	'eye-slash',
+	'tray'
 ] as const;
 
 export type IconName = (typeof iconManifest)[number];

@@ -182,7 +182,7 @@ describe('the Practice landing page', () => {
 		await setup();
 
 		await expect
-			.element(testPage.getByRole('cell', { name: 'Nobody is waiting on a reply.' }))
+			.element(testPage.getByText('Nobody is waiting on a reply.'))
 			.toBeVisible();
 	});
 
@@ -704,7 +704,7 @@ describe('the Practice landing page', () => {
 		await testPage.viewport(1440, 900);
 		await setup();
 
-		await expect.element(testPage.getByRole('cell', { name: 'Nothing has happened yet.' })).toBeVisible();
+		await expect.element(testPage.getByText('Nothing has happened yet.')).toBeVisible();
 	});
 
 	it('still registers this device for push once it has landed', async () => {

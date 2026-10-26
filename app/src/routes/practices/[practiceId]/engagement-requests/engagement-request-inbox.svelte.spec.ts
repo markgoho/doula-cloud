@@ -84,10 +84,8 @@ describe('the pending-Request inbox', () => {
 
 		render(Page);
 
-		// getByRole, not getByText: the record view carries the same
-		// message in a hidden <p>, and only a role query excludes it.
 		await expect
-			.element(testPage.getByRole('cell', { name: 'No requests are waiting for a decision.' }))
+			.element(testPage.getByText('No requests are waiting for a decision.'))
 			.toBeVisible();
 	});
 

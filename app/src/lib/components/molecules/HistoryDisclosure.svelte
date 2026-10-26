@@ -23,6 +23,7 @@
 	import Button from '../atoms/Button.svelte';
 	import Details from '../atoms/Details.svelte';
 	import Notice from '../atoms/Notice.svelte';
+	import EmptyState from './EmptyState.svelte';
 	import Text from '../atoms/Text.svelte';
 
 	interface Properties {
@@ -157,7 +158,7 @@
 			<span class="visually-hidden" id={subjectNameId}>{subjectName}</span>
 		{/if}
 	{:else if items}
-		<Text text={emptyMessage} />
+		<EmptyState message={emptyMessage} />
 	{:else if !error}
 		<!--
 			Nothing has come back yet -- but only when nothing went wrong

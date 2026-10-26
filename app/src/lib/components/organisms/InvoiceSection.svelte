@@ -55,6 +55,7 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
+	import EmptyState from '#lib/components/molecules/EmptyState.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import RadioGroup, { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
@@ -528,7 +529,7 @@
 		<Notice variant="status" message={invoiceCreatedMessage} isFocusedOnAppear />
 	{/if}
 {:else if invoices.length === 0}
-	<p>No Invoices yet.</p>
+	<EmptyState message="No Invoices yet." />
 {:else}
 	<ul>
 		{#each invoices as invoice (invoice.id)}
