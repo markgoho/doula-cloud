@@ -4,6 +4,7 @@
  * roster answers "who is on call tonight" across the Practice; this
  * answers it for one birth, and is where a person changes it.
  */
+import type { ComponentProps } from 'svelte';
 import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
@@ -12,7 +13,7 @@ import { jsonResponse } from '#lib/testResponse.js';
 import '#lib/styles/app.css';
 import Page from './+page.svelte';
 import { toApiResponder, toPageState } from '../../../../routeFixture.js';
-import { detail as fixtureDetail, fixture, onCallPanel, session } from './page.fixture.js';
+import { asDoula, detail as fixtureDetail, fixture, onCallPanel, session } from './page.fixture.js';
 
 const pageState = vi.hoisted(() => ({
 	params: {} as Record<string, string>,
@@ -40,17 +41,31 @@ beforeEach(() => {
  * Renders the page with the fixture answering every read, and `extra`
  * answering the writes this section makes on top of them.
  */
-async function setupOnCall(extra: (path: string, init?: RequestInit) => Response | undefined = () => {}) {
+async function setupOnCall(
+	extra: (path: string, init?: RequestInit) => Response | undefined = () => {},
+	data?: ComponentProps<typeof Page>['data']
+) {
 	await testPage.viewport(1440, 900);
 	const respond = toApiResponder(fixture);
 	apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
 		const answer = extra(path, init);
 		return answer ? Promise.resolve(answer) : respond(path);
 	});
-	await render(Page, {
-		data: { ...fixtureDetail, session },
-		params: fixture.params
-	});
+	await render(Page, { data: data ?? { ...fixtureDetail, session }, params: fixture.params });
+}
+
+// The summary card above has Changes of its own, so the section's are
+// asked for inside its region.
+const onCallChanges = () =>
+	testPage.getByRole('region', { name: 'On call' }).getByRole('button', { name: 'Change', exact: true });
+const recordGapOpener = () => testPage.getByRole('button', { name: 'Record a time a doula cannot be reached' });
+
+/**
+ * The page as setupOnCall renders it, with the gap form opened (#2042).
+ */
+async function setupGapForm(extra?: (path: string, init?: RequestInit) => Response | undefined) {
+	await setupOnCall(extra);
+	await recordGapOpener().click();
 }
 
 const gapStaffField = () => testPage.getByRole('combobox', { name: 'Doula who cannot be reached' });
@@ -87,7 +102,7 @@ describe('the on-call section on a birth (#1093)', () => {
 
 	it('records a gap for a doula on the birth, and reads the section back', async () => {
 		const posted: RequestInit[] = [];
-		await setupOnCall((path, init) => {
+		await setupGapForm((path, init) => {
 			if (path === gapsPath && init?.method === 'POST') {
 				posted.push(init);
 				return jsonResponse({ id: 'gap-3' }, 201);
@@ -106,7 +121,10 @@ describe('the on-call section on a birth (#1093)', () => {
 		expect(body.staffId).toBe(onCallPanel.doulas[1]!.staffId);
 		expect(body.reason).toBe('Away overnight');
 		expect(body.coveringStaffId).toBeUndefined();
-		// Blank again for the next gap, with nobody chosen.
+		// Back to the rows with what it did, and blank again for the next
+		// gap, with nobody chosen.
+		await expect.element(testPage.getByText('The time Bo Ng cannot be reached is recorded.')).toBeVisible();
+		await recordGapOpener().click();
 		await expect.element(gapStaffField()).toHaveValue('');
 	});
 
@@ -115,7 +133,7 @@ describe('the on-call section on a birth (#1093)', () => {
 	// question opens with nobody chosen.
 	describe('Doula who cannot be reached', () => {
 		it('opens with nobody chosen', async () => {
-			await setupOnCall();
+			await setupGapForm();
 
 			await expect.element(gapStaffField()).toHaveValue('');
 			await expect.element(gapStaffField().getByRole('option', { name: 'Choose a Doula' })).toBeDisabled();
@@ -123,7 +141,7 @@ describe('the on-call section on a birth (#1093)', () => {
 
 		it('refuses a gap with no Doula chosen, in the summary and against the field, and sends nothing', async () => {
 			const posted: RequestInit[] = [];
-			await setupOnCall((path, init) => {
+			await setupGapForm((path, init) => {
 				if (path === gapsPath && init?.method === 'POST') {
 					posted.push(init);
 					return jsonResponse({ id: 'gap-3' }, 201);
@@ -144,7 +162,7 @@ describe('the on-call section on a birth (#1093)', () => {
 		});
 
 		it('puts the BFF refusal of the Doula against the field', async () => {
-			await setupOnCall((path, init) =>
+			await setupGapForm((path, init) =>
 				path === gapsPath && init?.method === 'POST'
 					? jsonResponse(
 							{
@@ -168,7 +186,7 @@ describe('the on-call section on a birth (#1093)', () => {
 		});
 
 		it('lists every on-call Doula under Who is covering while none is chosen, and leaves out the one chosen', async () => {
-			await setupOnCall();
+			await setupGapForm();
 
 			// An option in a closed <select> is not drawn, so it is counted
 			// rather than asked whether it is visible.
@@ -192,7 +210,7 @@ describe('the on-call section on a birth (#1093)', () => {
 	describe('From and Until', () => {
 		it('refuses every empty question in one summary, in field order, against each field, and sends nothing', async () => {
 			const posted: RequestInit[] = [];
-			await setupOnCall((path, init) => {
+			await setupGapForm((path, init) => {
 				if (path === gapsPath && init?.method === 'POST') {
 					posted.push(init);
 					return jsonResponse({ id: 'gap-3' }, 201);
@@ -220,7 +238,7 @@ describe('the on-call section on a birth (#1093)', () => {
 		});
 
 		it('refuses an empty Until alone, with the Doula and From answered', async () => {
-			await setupOnCall();
+			await setupGapForm();
 
 			await gapStaffField().selectOptions('Bo Ng');
 			await testPage.getByLabelText('From', { exact: true }).fill('2026-10-20T22:00');
@@ -233,7 +251,7 @@ describe('the on-call section on a birth (#1093)', () => {
 
 		it('refuses an Until that is not after From, against Until, and sends nothing', async () => {
 			const posted: RequestInit[] = [];
-			await setupOnCall((path, init) => {
+			await setupGapForm((path, init) => {
 				if (path === gapsPath && init?.method === 'POST') {
 					posted.push(init);
 					return jsonResponse({ id: 'gap-3' }, 201);
@@ -256,7 +274,7 @@ describe('the on-call section on a birth (#1093)', () => {
 		});
 
 		it('puts each field the BFF refuses against its own field, in field order', async () => {
-			await setupOnCall((path, init) =>
+			await setupGapForm((path, init) =>
 				path === gapsPath && init?.method === 'POST'
 					? jsonResponse(
 							{
@@ -288,7 +306,7 @@ describe('the on-call section on a birth (#1093)', () => {
 		});
 
 		it('says a refusal that names no field in the summary, with no link', async () => {
-			await setupOnCall((path, init) =>
+			await setupGapForm((path, init) =>
 				path === gapsPath && init?.method === 'POST'
 					? jsonResponse(
 							{
@@ -326,14 +344,93 @@ describe('the on-call section on a birth (#1093)', () => {
 			return;
 		});
 
-		await testPage
-			.getByRole('button', { name: /Clear the gap for Persephone/ })
-			.click();
+		// Each Clear is described by whose gap it ends; the fixture's first
+		// gap is Persephone's.
+		const clear = testPage.getByRole('button', { name: 'Clear', exact: true }).first();
+		await expect.element(clear).toHaveAccessibleDescription(/the gap for Persephone/);
+		await clear.click();
 
 		await vi.waitFor(() => expect(cleared).toEqual([`${gapsPath}/gap-1`]));
+		await expect
+			.element(testPage.getByText('The gap for Persephone Vandermeulen-Achterberg, CD(DONA) is cleared.'))
+			.toBeVisible();
 	});
 
-	it('states one doula’s own on-call days, and sends only hers', async () => {
+	it('says why a gap was not cleared', async () => {
+		await setupOnCall((path, init) =>
+			init?.method === 'DELETE'
+				? jsonResponse({ code: 'permission_denied', message: 'You cannot clear this gap.' }, 403)
+				: undefined
+		);
+
+		await testPage.getByRole('button', { name: 'Clear', exact: true }).first().click();
+
+		await expect.element(testPage.getByText('You cannot clear this gap.')).toBeVisible();
+	});
+
+	// #2042: the section is rows with one action each, and a form only
+	// when asked, so it never holds more than one primary.
+	describe('one action per row', () => {
+		it('opens with no form and no primary, only the rows and their actions', async () => {
+			await setupOnCall();
+
+			await expect.element(recordGapOpener()).toBeVisible();
+			expect(testPage.getByRole('button', { name: 'Record the gap' }).query()).toBeNull();
+			expect(testPage.getByLabelText('First day on call').query()).toBeNull();
+			await expect
+				.element(onCallChanges().first())
+				.toHaveAccessibleDescription(/on-call days for Persephone/);
+		});
+
+		it('opens one Doula’s two dates under her row, and closes them again', async () => {
+			await setupOnCall();
+			const change = onCallChanges().nth(1);
+
+			await change.click();
+
+			await expect.element(change).toHaveAttribute('aria-expanded', 'true');
+			await expect.element(testPage.getByLabelText('First day on call')).toHaveValue('2026-10-31');
+			await expect.element(testPage.getByLabelText('Last day on call')).toHaveValue('');
+
+			await change.click();
+
+			expect(testPage.getByLabelText('First day on call').query()).toBeNull();
+		});
+
+		it('closes the gap form when a Change opens, so one form is open at a time', async () => {
+			await setupGapForm();
+
+			await onCallChanges().first().click();
+
+			expect(testPage.getByRole('button', { name: 'Record the gap' }).query()).toBeNull();
+			await expect.element(recordGapOpener()).toBeVisible();
+		});
+
+		it('closes the gap form blank on Cancel', async () => {
+			await setupGapForm();
+			await gapStaffField().selectOptions('Bo Ng');
+
+			await testPage.getByRole('button', { name: 'Cancel' }).click();
+			await recordGapOpener().click();
+
+			await expect.element(gapStaffField()).toHaveValue('');
+		});
+
+		it('offers the gap form from the empty state where nobody has recorded a gap', async () => {
+			await setupOnCall((path) =>
+				path.endsWith('/on-call') ? jsonResponse({ ...onCallPanel, gaps: [] }) : undefined
+			);
+
+			await expect
+				.element(testPage.getByText('Nobody has recorded a time they cannot be reached.'))
+				.toBeVisible();
+			await recordGapOpener().click();
+
+			await expect.element(gapStaffField()).toBeVisible();
+		});
+	});
+
+	it('states one doula’s own on-call days, sends only hers, and says it is saved', async () => {
 		const puts: { path: string; body: unknown }[] = [];
 		await setupOnCall((path, init) => {
 			if (path.includes('/attachments/') && init?.method === 'PUT') {
@@ -343,12 +440,36 @@ describe('the on-call section on a birth (#1093)', () => {
 			return;
 		});
 
-		await testPage.getByLabelText(/First day for Bo Ng/).fill('2026-10-20');
-		await testPage.getByRole('button', { name: /Save on-call days for Bo Ng/ }).click();
+		await onCallChanges().nth(1).click();
+		await testPage.getByLabelText('First day on call').fill('2026-10-20');
+		await testPage.getByRole('button', { name: 'Save on-call days' }).click();
 
 		await vi.waitFor(() => expect(puts).toHaveLength(1));
 		expect(puts[0]!.path).toContain('/attachments/staff-2/on-call');
 		expect(puts[0]!.body).toEqual({ from: '2026-10-20', to: undefined });
+		await expect.element(testPage.getByText('The on-call days for Bo Ng are saved.')).toBeVisible();
+		expect(testPage.getByLabelText('First day on call').query()).toBeNull();
+	});
+
+	it('keeps the dates open beside the refusal when the days are not saved', async () => {
+		await setupOnCall((path, init) =>
+			path.includes('/attachments/') && init?.method === 'PUT'
+				? jsonResponse({ code: 'invalid_argument', message: 'The first day must be inside the window.' }, 400)
+				: undefined
+		);
+
+		await onCallChanges().nth(1).click();
+		await testPage.getByRole('button', { name: 'Save on-call days' }).click();
+
+		await expect.element(testPage.getByText('The first day must be inside the window.')).toBeVisible();
+		await expect.element(testPage.getByLabelText('First day on call')).toBeVisible();
+	});
+
+	it('draws no Change for a reader who is not an Owner or an Admin', async () => {
+		await setupOnCall(undefined, asDoula.props!.data as ComponentProps<typeof Page>['data']);
+
+		await expect.element(testPage.getByText(/On call Oct 31, 2026 to Nov 13, 2026/)).toBeVisible();
+		expect(onCallChanges().elements()).toHaveLength(0);
 	});
 
 	it('says plainly why a birth has no window, rather than drawing an empty one', async () => {
