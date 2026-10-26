@@ -136,6 +136,13 @@ type DetailResponse struct {
 	// where the date may already be in the past. Absent means done: it
 	// ran, or she had no Stripe presence to redact.
 	StripeRedactionEligibleAt *time.Time `json:"stripeRedactionEligibleAt,omitempty"`
+	// PortalInviteStatus and EmailSuppressed are her portal-invite state,
+	// the same two facts ListItem carries and through the same
+	// FetchPortalInviteState (#255). The Clients list stopped showing them
+	// on #2022, so her hub is where a Practice reads whether she was
+	// invited and whether her address is blocked (#785).
+	PortalInviteStatus *string `json:"portalInviteStatus,omitempty"`
+	EmailSuppressed    bool    `json:"emailSuppressed,omitempty"`
 }
 
 // DetailHandler views one Client's full record. Access follows
@@ -236,6 +243,13 @@ func DetailHandler() http.Handler {
 			return
 		}
 
+		portalState, err := FetchPortalInviteState(r.Context(), tx, clientID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
 		out := DetailResponse{
 			Record:                    rec,
 			ResolvedFields:            resolvedFields,
@@ -244,6 +258,8 @@ func DetailHandler() http.Handler {
 			MergedFrom:                mergedFrom,
 			ErasedAt:                  erasedAt,
 			StripeRedactionEligibleAt: redactionEligibleAt,
+			PortalInviteStatus:        portalState.Status,
+			EmailSuppressed:           portalState.EmailSuppressed,
 		}
 		apierr.WriteJSON(w, http.StatusOK, out)
 	})

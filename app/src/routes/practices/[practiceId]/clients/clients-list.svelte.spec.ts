@@ -73,10 +73,10 @@ interface Caller {
 }
 
 async function setup(response?: Response, { isContractor = false, hasAnyClient = true }: Caller = {}) {
-	// DataTable's own content floor (#508) stacks it into a <dl> below
-	// 46rem, and this file's assertions are about the <table> specifically.
-	// Above this route's own table floor (#1945, its +page.svelte), so the <table> renders.
-	await testPage.viewport(3200, 900);
+	// DataTable's own content floor (#508) shows its record cards below
+	// 55rem, and this file's assertions are about the <table> specifically.
+	// A desktop window is past it (#2022), so the <table> renders.
+	await testPage.viewport(1440, 900);
 	if (response) {
 		apiFetchWithSession.mockResolvedValue(response);
 	} else {
@@ -128,106 +128,8 @@ describe('clients list screen', () => {
 			.toHaveAttribute('href', `/practices/${practiceId}/clients/search`);
 	});
 
-	it('renders a Portal invite column showing the label for each status', async () => {
-		// Both rows are the fixture's own: its second Client carries no
-		// `portalInviteStatus` at all, which is what "never invited" is.
-		await setup();
-
-		await expect.element(testPage.getByRole('columnheader', { name: 'Portal invite' })).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: 'Invite sent' })).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: 'Never invited' })).toBeVisible();
-	});
-
-	it.each([
-		['pending', 'Invite pending'],
-		['bounced', 'Bounced — needs re-invite'],
-		['dead_lettered', 'Dead-lettered — needs re-invite'],
-		['complained', 'Marked as spam (no action needed)'],
-		['accepted', 'Accepted']
-	])('shows %s as %s', async (portalInviteStatus, label) => {
-		await setup(jsonResponse({ items: [{ ...clients[0], portalInviteStatus }], hasMore: false }));
-
-		await expect.element(testPage.getByRole('cell', { name: label })).toBeVisible();
-	});
-
-	it('distinguishes complained from bounced and dead-lettered as non-actionable', async () => {
-		await setup(
-			jsonResponse({
-				items: [
-					{ ...clients[0], portalInviteStatus: 'complained' },
-					{ ...clients[0], clientId: 'client-2', portalInviteStatus: 'bounced' }
-				],
-				hasMore: false
-			})
-		);
-
-		await expect
-			.element(testPage.getByRole('cell', { name: 'Marked as spam (no action needed)' }))
-			.toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: 'Bounced — needs re-invite' })).toBeVisible();
-	});
-
-	it.each([
-		['bounced', 'Bounced — unblock the address to invite again'],
-		['dead_lettered', 'Not sent — unblock the address to invite again']
-	])(
-		'shows %s on a suppressed address as %s, not a re-invite that cannot succeed',
-		async (portalInviteStatus, label) => {
-			// #785: the send-time guard (#733) refuses a suppressed address
-			// before Mailgun is asked, so a re-invite dead-letters on
-			// arrival. The row has to name the unblock instead.
-			await setup(
-				jsonResponse({
-					items: [{ ...clients[0], portalInviteStatus, emailSuppressed: true }],
-					hasMore: false
-				})
-			);
-
-			await expect.element(testPage.getByRole('cell', { name: label })).toBeVisible();
-		}
-	);
-
-	it('offers Blocked email addresses on a suppressed row, and nowhere else', async () => {
-		await setup(
-			jsonResponse({
-				items: [
-					{ ...clients[0], portalInviteStatus: 'bounced', emailSuppressed: true },
-					{ ...clients[0], clientId: 'client-2', portalInviteStatus: 'bounced' }
-				],
-				hasMore: false
-			})
-		);
-
-		const link = testPage.getByRole('link', { name: 'Blocked email addresses' });
-		await expect.element(link).toBeVisible();
-		await expect
-			.element(link)
-			.toHaveAttribute('href', '/practices/practice-1/settings/blocked-addresses');
-		expect(link.elements()).toHaveLength(1);
-		// The second row's suppression was lifted; its own words, and its
-		// absence of a link, are what says so.
-		await expect.element(testPage.getByRole('cell', { name: 'Bounced — needs re-invite' })).toBeVisible();
-	});
-
-	it('keeps a suppressed address on a state the unblock does not unstick reading as it did', async () => {
-		// 'complained' is never clearable (ADR-0029) and 'sent' is not a
-		// failure, so neither takes the #785 wording even though the
-		// address is suppressed.
-		await setup(
-			jsonResponse({
-				items: [
-					{ ...clients[0], portalInviteStatus: 'complained', emailSuppressed: true },
-					{ ...clients[0], clientId: 'client-2', portalInviteStatus: 'sent', emailSuppressed: true }
-				],
-				hasMore: false
-			})
-		);
-
-		await expect
-			.element(testPage.getByRole('cell', { name: 'Marked as spam (no action needed)' }))
-			.toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: 'Invite sent' })).toBeVisible();
-	});
+	// The Portal invite tests moved to the Client hub with the column
+	// (#2022, `client-detail.svelte.spec.ts`).
 
 	it('shows the empty message when there are no Clients', async () => {
 		await setup(jsonResponse({ items: [], hasMore: false }), { hasAnyClient: false });
@@ -354,41 +256,65 @@ describe('the "see everyone" toggle', () => {
 	});
 });
 
-// #264 (RA-G6): the open-Engagement rollup column.
-describe('the Engagements rollup column (#264)', () => {
-	it('shows one line per open Engagement, dropping none', async () => {
-		// The fixture's first Client already carries three openEngagements
-		// entries (#596: one fully populated, one fully absent; #741 adds
-		// a settled-Contract line, asserted separately below).
+// #264 (RA-G6), #2022: the Status column -- each open Engagement as its
+// kind's link and a badge per fact, then a pending Request. Scoped to the
+// table: the record view draws the same cell, hidden at this width.
+function table() {
+	return testPage.getByRole('table');
+}
+
+describe('the Status column (#264, #2022)', () => {
+	it('lists Name and Status, and no longer Email, Portal invite or Pending request', async () => {
 		await setup();
 
-		await expect
-			.element(
-				testPage.getByRole('cell', {
-					name: 'Contract: Sent · Doula: Yolanda Okonkwo-Fitzgerald · Active · Outstanding ($4,500.00)'
-				})
-			)
-			.toBeVisible();
-		await expect
-			.element(testPage.getByRole('cell', { name: 'Contract: No contract yet · Doula: No Doula yet · Intake' }))
-			.toBeVisible();
+		await expect.element(testPage.getByRole('columnheader', { name: 'Status' })).toBeVisible();
+		for (const gone of ['Email', 'Engagements', 'Portal invite', 'Pending request']) {
+			await expect.element(testPage.getByRole('columnheader', { name: gone })).not.toBeInTheDocument();
+		}
 	});
 
-	// #741: an Invoice that is `open` (billed, unpaid) is what "is anything
-	// outstanding" means, so it gets the "Outstanding" wording asserted
-	// above; anything else -- here, a settled Contract's Invoice reading
-	// `paid` -- keeps the older "Invoice: <status>" wording, since there
-	// is nothing left for the reader to act on.
-	it('reads "Invoice: Paid" rather than "Outstanding" once nothing is outstanding', async () => {
+	it('shows each open Engagement as its own line of badges, dropping none', async () => {
+		// The fixture's first Client carries three open Engagements (#596:
+		// one fully populated, one fully absent; #741 a settled Contract).
 		await setup();
 
-		await expect
-			.element(
-				testPage.getByRole('cell', {
-					name: 'Contract: No contract yet · Doula: No Doula yet · Active · Invoice: Paid ($1,000.00)'
-				})
-			)
-			.toBeVisible();
+		await expect.element(table().getByText('Contract sent')).toBeVisible();
+		await expect.element(table().getByText('Owes $4,500.00')).toBeVisible();
+		await expect.element(table().getByText('Intake', { exact: true })).toBeVisible();
+		await expect.element(table().getByText('No contract yet').first()).toBeVisible();
+	});
+
+	// #741: `open` (billed, unpaid) is what "is anything outstanding"
+	// means; a settled Contract's `paid` reads as paid, with nothing to do.
+	it('reads "Paid" rather than "Owes" once nothing is outstanding', async () => {
+		await setup();
+
+		await expect.element(table().getByText('Paid $1,000.00')).toBeVisible();
+	});
+
+	it('names any other Invoice status in its own word', async () => {
+		await setup(
+			jsonResponse({
+				items: [
+					{
+						...clients[1],
+						openEngagements: [
+							{
+								engagementId: 'engagement-void',
+								kind: 'birth',
+								engagementStatus: 'active',
+								contractStatus: 'voided',
+								invoiceStatus: 'void'
+							}
+						]
+					}
+				],
+				hasMore: false
+			})
+		);
+
+		await expect.element(table().getByText('Contract voided')).toBeVisible();
+		await expect.element(table().getByText('Invoice void')).toBeVisible();
 	});
 
 	// #1511: a new Engagement has no Visit, Contract or Invoice, so its
@@ -402,14 +328,12 @@ describe('the Engagements rollup column (#264)', () => {
 		await expect.element(link).toHaveAccessibleDescription(clients[0]!.name);
 	});
 
-	it('shows no rollup lines for a Client with zero open Engagements', async () => {
-		// The fixture's second Client carries no openEngagements at all.
+	it('draws nothing for a Client with no open Engagement and no pending Request', async () => {
+		// The fixture's second Client carries neither.
 		await setup(jsonResponse({ items: [clients[1]], hasMore: false }));
 
-		await expect
-			.element(testPage.getByRole('columnheader', { name: 'Engagements' }))
-			.toBeVisible();
-		await expect.element(testPage.getByText('Contract:')).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('columnheader', { name: 'Status' })).toBeVisible();
+		await expect.element(table().getByRole('listitem')).not.toBeInTheDocument();
 	});
 
 	it('shows her own fee on a line that carries one, never Invoice money', async () => {
@@ -427,49 +351,18 @@ describe('the Engagements rollup column (#264)', () => {
 			})
 		);
 
-		await expect
-			.element(
-				testPage.getByRole('cell', {
-					name: 'Contract: No contract yet · Doula: No Doula yet · Active · Your fee: $1,200.00'
-				})
-			)
-			.toBeVisible();
+		await expect.element(table().getByText('Your fee $1,200.00')).toBeVisible();
+		await expect.element(table().getByText(/Owes|Paid/)).not.toBeInTheDocument();
 	});
-});
 
-// #499: a pending Engagement Request shows on its Client's row.
-describe('a pending Request on the row', () => {
-	it('shows the kind and "request pending" for a Client with one pending Request', async () => {
-		// The fixture's own Client already carries `pendingRequestKinds:
-		// ['birth']` (#596), so the default fixture response is the whole
-		// case here.
+	// #499: a pending Engagement Request shows on its Client's row, folded
+	// into Status (#2022).
+	it('shows a pending Request, joining both kinds when she holds one of each', async () => {
+		// The fixture's third Client holds a Request of each kind.
 		await setup();
 
-		await expect
-			.element(testPage.getByRole('cell', { name: 'Birth request pending' }))
-			.toBeVisible();
-	});
-
-	it('joins both kinds when a Client holds a pending Request of each', async () => {
-		await setup(
-			jsonResponse({ items: [{ ...clients[0], pendingRequestKinds: ['birth', 'postpartum'] }], hasMore: false })
-		);
-
-		await expect
-			.element(testPage.getByRole('cell', { name: 'Birth & Postpartum request pending' }))
-			.toBeVisible();
-	});
-
-	it('leaves the cell blank for a Client with no pending Request', async () => {
-		// The fixture's second Client has no pending Request. Only she is
-		// listed, because this asserts the absence of the text anywhere on
-		// the page and her neighbor has one.
-		await setup(jsonResponse({ items: [clients[1]], hasMore: false }));
-
-		await expect
-			.element(testPage.getByRole('columnheader', { name: 'Pending request' }))
-			.toBeVisible();
-		await expect.element(testPage.getByText('request pending')).not.toBeInTheDocument();
+		await expect.element(table().getByText('Birth request pending')).toBeVisible();
+		await expect.element(table().getByText('Birth & Postpartum request pending')).toBeVisible();
 	});
 });
 

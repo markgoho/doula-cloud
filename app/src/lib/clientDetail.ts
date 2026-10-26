@@ -140,6 +140,11 @@ export interface ClientDetail extends ClientRecord {
 	 * still in the future: until it passes, the Stripe half of her
 	 * erasure is scheduled, not finished. */
 	stripeRedactionEligibleAt?: string;
+	/** Her portal-invite state, the same two facts a Clients list row
+	 * carried until #2022 moved them here -- absent status is "never
+	 * invited", and `emailSuppressed` is a blocked address (#785). */
+	portalInviteStatus?: string;
+	emailSuppressed?: boolean;
 	/** The survivor's id, present only once this row has been absorbed
 	 * into another Client (ADR-0017's amendment, #814). Every other field
 	 * on this response is meaningless placeholder data when this is set

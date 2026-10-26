@@ -183,6 +183,32 @@ describe('client detail hub', () => {
 		await expect.element(testPage.getByText(baseDetail.dateOfBirth)).toBeVisible();
 	});
 
+	/*
+	 * #2022: the portal-invite state moved here from the Clients list. The
+	 * fixture's Client bounced on an address that is still blocked (#785),
+	 * so the row names the unblock and offers where it happens.
+	 */
+	it('shows her portal invite, offering Blocked email addresses while her address is blocked', async () => {
+		await setup();
+
+		await expect.element(testPage.getByText('Bounced — unblock the address to invite again')).toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Blocked email addresses' }))
+			.toHaveAttribute('href', `/practices/${practiceId}/settings/blocked-addresses`);
+	});
+
+	it.each([
+		[undefined, false, 'Never invited'],
+		['sent', false, 'Invite sent'],
+		['bounced', false, 'Bounced — needs re-invite'],
+		['complained', true, 'Marked as spam (no action needed)']
+	])('reads %s (blocked: %s) as %s, with no link to unblock', async (portalInviteStatus, emailSuppressed, label) => {
+		await setup({ overrides: { portalInviteStatus, emailSuppressed } });
+
+		await expect.element(testPage.getByText(label)).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: 'Blocked email addresses' })).not.toBeInTheDocument();
+	});
+
 	it("groups the structural columns per #432's decision: identity, contact, address", async () => {
 		await setup();
 

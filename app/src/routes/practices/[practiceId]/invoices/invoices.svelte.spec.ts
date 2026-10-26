@@ -177,6 +177,7 @@ describe('the Practice-wide invoice list (#265)', () => {
 						engagementId: 'eng-3',
 						contractId: 'contract-3',
 						clientName: 'Cleo',
+						reference: 'INV-3',
 						status: 'open',
 						amountCents: 100,
 						currency: 'usd',

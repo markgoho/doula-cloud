@@ -43,6 +43,10 @@ export const detail: ClientDetail = {
 	addressRegion: 'NY',
 	addressPostalCode: '14620',
 	dateOfBirth: '1994-03-01',
+	// #2022: the longest invite words there are, and the one branch that
+	// draws a link beside them (#785).
+	portalInviteStatus: 'bounced',
+	emailSuppressed: true,
 	resolvedFields: [
 		{ fieldId: 'field-1', type: 'section_header', label: 'Birth history' },
 		{
@@ -231,6 +235,8 @@ export const typicalDetail: ClientDetail = {
 	givenName: typicalClient.givenName,
 	familyName: typicalClient.familyName,
 	email: typicalClient.email,
+	portalInviteStatus: 'accepted',
+	emailSuppressed: false,
 	resolvedFields: [],
 	history: [
 		{
