@@ -217,7 +217,9 @@
 		tone="variant"
 	/>
 	{#if workStateHistory.entries}
-		<!-- An append-only trail: the newest first, each entry a sentence. -->
+		<!-- An append-only trail: the newest first, each entry a sentence.
+		     The sentence is the one column that wraps (#2098), so the date
+		     beside it stays on one line. -->
 		<DataTable
 			columns={[
 				{
@@ -226,7 +228,7 @@
 					datetimeAccessor: (change: WorkStateEntry) => change.createdAt,
 					variant: 'meta' as const
 				},
-				{ label: 'What', accessor: workStateWhat, variant: 'body' as const }
+				{ label: 'What', accessor: workStateWhat, variant: 'body' as const, wraps: true }
 			]}
 			rows={[...workStateHistory.entries]}
 			hasMore={workStateHistory.hasMore}
@@ -245,7 +247,9 @@
 {#snippet membershipSection()}
 	{#if membershipHistory.entries}
 		<!-- How this person came to hold these roles and this employment
-		     type (#872), and who made each change: the audit trail. -->
+		     type (#872), and who made each change: the audit trail. The
+		     sentence is the one column that wraps (#2098); When and Who stay
+		     on one line. -->
 		<DataTable
 			columns={[
 				{
@@ -254,7 +258,7 @@
 					datetimeAccessor: (change: MembershipChange) => change.createdAt,
 					variant: 'meta' as const
 				},
-				{ label: 'What', accessor: membershipChangeSentence, variant: 'body' as const },
+				{ label: 'What', accessor: membershipChangeSentence, variant: 'body' as const, wraps: true },
 				{ label: 'Who', accessor: (change: MembershipChange) => change.actorName, variant: 'muted' as const }
 			]}
 			rows={[...membershipHistory.entries]}
