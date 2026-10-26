@@ -200,16 +200,21 @@ func MintInvitation(ctx context.Context, tx *sql.Tx, practiceID, invitedBy, addr
 	}
 
 	token = uuid.NewString()
-	expiresAt = clock.Now(ctx).Add(InvitationLifetime)
+	// created_at and expires_at are one instant from clock.Now(ctx)
+	// (#1992), on the insert as well as the re-send, rather than created_at
+	// left to the column's DEFAULT now(): the row's start and its lapse are
+	// read on the same clock listPendingInvitations and acceptInvite read.
+	mintedAt := clock.Now(ctx)
+	expiresAt = mintedAt.Add(InvitationLifetime)
 	if err := tx.QueryRowContext(ctx,
 		`INSERT INTO practice_invitations
-		     (practice_id, address, roles, employment_type, token_digest, invited_by, expires_at)
-		 VALUES ($1, $2, $3::practice_role[], $4::employment_type, $5, $6, $7)
+		     (practice_id, address, roles, employment_type, token_digest, invited_by, expires_at, created_at)
+		 VALUES ($1, $2, $3::practice_role[], $4::employment_type, $5, $6, $7, $8)
 		 ON CONFLICT (practice_id, lower(address)) WHERE status = 'pending'
 		 DO UPDATE SET roles = $3::practice_role[], employment_type = $4::employment_type,
-		               token_digest = $5, invited_by = $6, created_at = now(), expires_at = $7
+		               token_digest = $5, invited_by = $6, created_at = $8, expires_at = $7
 		 RETURNING id`,
-		practiceID, address, rolesLiteral, employmentType, TokenDigest(token), invitedBy, expiresAt,
+		practiceID, address, rolesLiteral, employmentType, TokenDigest(token), invitedBy, expiresAt, mintedAt,
 	).Scan(&invitationID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return "", "", time.Time{}, false, fmt.Errorf("staffauth: mint invitation: %w", err)

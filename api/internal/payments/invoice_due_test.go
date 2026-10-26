@@ -7,7 +7,12 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/payments"
+	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -74,8 +79,7 @@ func TestPostInvoiceHandler_StripeRailSendsTheStoredDueDate(t *testing.T) {
 	}
 	// And it is the default terms out from when the Invoice was raised,
 	// by the one rule the handler itself spends (#1626) -- exactly, since
-	// created_at and the due date are read off the same transaction's
-	// now().
+	// created_at is the instant the due date is counted from (#1992).
 	wantDue := payments.DueAfterTerms(view.CreatedAt, payments.DefaultPaymentTermsDays)
 	if !stored.Equal(wantDue) {
 		t.Fatalf("due date = %v, want %v (%d days of 24 hours after it was raised)", stored, wantDue, payments.DefaultPaymentTermsDays)
@@ -110,6 +114,36 @@ func TestPostInvoiceHandler_ByHandRailStoresTheDueDate(t *testing.T) {
 	wantDue := payments.DueAfterTerms(view.CreatedAt, payments.DefaultPaymentTermsDays)
 	if !stored.Equal(wantDue) {
 		t.Fatalf("due date = %v, want %v", stored, wantDue)
+	}
+}
+
+// TestPostInvoiceHandler_RaisesOnTheRequestClock is #1992's move of
+// invoiceDueAt: with the request's clock fixed, the Invoice's created_at
+// is that instant (cut to timestamptz's microsecond) and its due date is
+// the terms counted from it -- the clock the overdue reads judge due_at
+// against, not the database's own now().
+func TestPostInvoiceHandler_RaisesOnTheRequestClock(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "invoice-due-fixed-clock"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	seedSignedContract(t, db, engagementID)
+	testdb.SeedBillingMode(t, db, practiceID, string(payments.BillingModeByHand))
+
+	now := time.Now().Add(-90 * time.Minute).Truncate(time.Second).Add(123_456_789).UTC()
+	mux := http.NewServeMux()
+	g := staffauth.NewGatedRouter(mux, db.App)
+	payments.Mount(g, idempotency.NewRouter(g, db.App), payments.NewFakeClient(), tasknudge.NoOpEnqueuer{}, db.App, testPublishableKey)
+	srv := httptest.NewServer(clock.Middleware(func() time.Time { return now })(mux))
+	defer srv.Close()
+
+	view := raiseInvoice(t, srv, authntest.SeedSessionAt(t, db.App, uid, now), practiceID, engagementID)
+
+	if want := now.Truncate(time.Microsecond); !view.CreatedAt.Equal(want) {
+		t.Fatalf("createdAt = %v, want the request clock %v", view.CreatedAt, want)
+	}
+	if stored, want := invoiceDueAtOf(t, db, view.ID), payments.DueAfterTerms(now, payments.DefaultPaymentTermsDays); !stored.Equal(want) {
+		t.Fatalf("due date = %v, want %v", stored, want)
 	}
 }
 

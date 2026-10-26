@@ -22,6 +22,7 @@ import (
 	"math/big"
 	"time"
 
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/pagecursor"
 )
 
@@ -61,12 +62,16 @@ func newAccessCode() (string, error) {
 //
 // column is one of the three this package filters Offers by, never
 // caller input -- see the named constants below.
+//
+// The instant is clock.Now(ctx), not SQL now() (#1992): expires_at is
+// written from clock.Now(ctx) by create, so the lapse is read on the same
+// clock it was set on, and decided_at records that same instant.
 func expireOpen(ctx context.Context, tx *sql.Tx, column, value string) error {
 	if _, err := tx.ExecContext(ctx,
 		//nolint:gosec // column is one of three package-local constants, never request input
-		`UPDATE engagement_offers SET state = 'expired', decided_at = now()
-		  WHERE `+column+` = $1 AND state = 'offered' AND expires_at <= now()`,
-		value,
+		`UPDATE engagement_offers SET state = 'expired', decided_at = $2
+		  WHERE `+column+` = $1 AND state = 'offered' AND expires_at <= $2`,
+		value, clock.Now(ctx),
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("offer: expire open offers: %w", err)

@@ -202,6 +202,20 @@ func (w Worker) SendAll(ctx context.Context, tx *sql.Tx, id string, attemptCount
 // immediately after. Every claimQuery this package receives follows that
 // rule; it is enforced by convention in each caller's SQL, not by this
 // function.
+//
+// #1992 weighed moving the claims to w.Now() and kept them here. The
+// reason above still holds for a row's first attempt, which every
+// immediately-due outbox takes from its column's DEFAULT now(); the
+// re-enqueues that reset next_attempt_at = now() keep it for the same
+// reason. Under a simulation run the two clocks agree anyway: sim.now()
+// and the BFF's clock both add sim.offset_row's delta (#1833). Moving
+// would mean every enqueue writing next_attempt_at from the Go clock,
+// every claim and reset taking it as a parameter, and docs/testing/api.md's
+// due-time fixture rule turned round. A retry is the exception: MarkFailed
+// writes next_attempt_at from w.Now() plus at least five minutes, so a
+// retry already meets the database's clock, with a margin far larger than
+// any skew. So does a row whose enqueue sets a later due time itself
+// (payments.QueuePayoutIncompleteNotification's 48 hours).
 func (w Worker) HandlePending[R any](
 	ctx context.Context,
 	tx *sql.Tx,

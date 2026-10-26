@@ -94,6 +94,10 @@ func Wrap(db *sql.DB, endpoint string, rules []Rule) func(http.Handler) http.Han
 			// headers report that one, the same way a multi-dimension limit
 			// is only as generous as its tightest dimension.
 			tightestLimit, tightestRemaining := 0, -1
+			// One instant for the whole request (#1992): every bucket's
+			// window is judged and restarted at it, and Retry-After is
+			// counted from it.
+			now := clock.Now(r.Context())
 
 			for _, rule := range rules {
 				key, ok := rule.Key(r)
@@ -101,7 +105,7 @@ func Wrap(db *sql.DB, endpoint string, rules []Rule) func(http.Handler) http.Han
 					continue
 				}
 
-				count, windowStart, err := touch(r.Context(), db, bucketKey(endpoint, rule.Dimension, key), rule.Window)
+				count, windowStart, err := touch(r.Context(), db, bucketKey(endpoint, rule.Dimension, key), rule.Window, now)
 				if err != nil {
 					// coverage:ignore reason: DB query failure, not exercised by unit tests
 					apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -110,7 +114,7 @@ func Wrap(db *sql.DB, endpoint string, rules []Rule) func(http.Handler) http.Han
 
 				maxRequests := limit(rule)
 				if count > maxRequests {
-					retryAfter := retryAfterSeconds(windowStart, clock.Now(r.Context()), rule.Window)
+					retryAfter := retryAfterSeconds(windowStart, now, rule.Window)
 					// coverage:ignore reason: DB query failure, not exercised by unit tests
 					if err := recordRefusal(r.Context(), db, endpoint, rule.Dimension, key); err != nil {
 						// A failed refusal log must not itself turn a refusal
@@ -160,17 +164,22 @@ func bucketKey(endpoint, dimension, key string) string {
 // bytes, and the CASE above resets it in place the moment anyone does,
 // the same trade idempotency.go's TTL comment documents for
 // idempotency_keys.
-func touch(ctx context.Context, db *sql.DB, key string, window time.Duration) (count int, windowStart time.Time, err error) {
+//
+// The window is judged and restarted at now, Wrap's clock.Now(ctx)
+// (#1992), not SQL now(): window_start is then written and read on the
+// one clock retryAfterSeconds counts from, so a fixed-clock test reaches
+// the window's edge and a moved clock moves the window with it.
+func touch(ctx context.Context, db *sql.DB, key string, window time.Duration, now time.Time) (count int, windowStart time.Time, err error) {
 	err = db.QueryRowContext(ctx,
 		`INSERT INTO rate_limit_buckets (key, window_start, count)
-		 VALUES ($1, now(), 1)
+		 VALUES ($1, $2, 1)
 		 ON CONFLICT (key) DO UPDATE SET
-		     count = CASE WHEN rate_limit_buckets.window_start <= now() - make_interval(secs => $2)
+		     count = CASE WHEN rate_limit_buckets.window_start <= $3
 		                  THEN 1 ELSE rate_limit_buckets.count + 1 END,
-		     window_start = CASE WHEN rate_limit_buckets.window_start <= now() - make_interval(secs => $2)
-		                  THEN now() ELSE rate_limit_buckets.window_start END
+		     window_start = CASE WHEN rate_limit_buckets.window_start <= $3
+		                  THEN $2 ELSE rate_limit_buckets.window_start END
 		 RETURNING count, window_start`,
-		key, window.Seconds(),
+		key, now, now.Add(-window),
 	).Scan(&count, &windowStart)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -195,15 +204,13 @@ func recordRefusal(ctx context.Context, db *sql.DB, endpoint, dimension, key str
 // retryAfterSeconds is how long the caller must wait for windowStart's
 // bucket to roll off, rounded up so a caller retrying at exactly this
 // value never arrives a moment too early. now is #773's Clock seam,
-// read once by Wrap and passed in here rather than called again --
-// windowStart itself is Postgres's own now() (see touch's SQL above),
-// so comparing it against anything but the same simulated instant would
-// read as clock skew under a simulation run even when nothing skewed.
+// read once by Wrap and passed in here rather than called again: touch
+// wrote windowStart from that same instant or kept one later than
+// now - window (#1992), so the two are on one clock.
 func retryAfterSeconds(windowStart, now time.Time, window time.Duration) int {
 	remaining := int(math.Ceil(windowStart.Add(window).Sub(now).Seconds()))
 	if remaining < 1 {
-		// coverage:ignore reason: only reachable on clock skew between this
-		// process and Postgres, not exercised by unit tests
+		// coverage:ignore reason: a floor only: touch keeps a window_start later than now - window, so remaining is always positive and this is never reached
 		return 1
 	}
 	return remaining

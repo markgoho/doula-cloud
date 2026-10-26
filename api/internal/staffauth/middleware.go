@@ -375,13 +375,17 @@ func stampActivity(ctx context.Context, db *sql.DB, staffID, practiceID string) 
 		return fmt.Errorf("staffauth: set current staff id for activity stamp: %w", err)
 	}
 
+	// The stamp and its staleness are both clock.Now(ctx) (#1992), the
+	// instant querySelf judges ActivityStampStale at and dormancy reads
+	// last_active_at against.
+	now := clock.Now(ctx)
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE staff
 		 SET last_practice_id = $1,
 		     last_active_at = CASE
-		         WHEN last_active_at IS NULL OR last_active_at < now() - interval '1 day'
-		         THEN now() ELSE last_active_at END
-		 WHERE id = $2`, practiceID, staffID); err != nil {
+		         WHEN last_active_at IS NULL OR last_active_at < $3
+		         THEN $4 ELSE last_active_at END
+		 WHERE id = $2`, practiceID, staffID, activityStaleBefore(now), now); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("staffauth: stamp activity: %w", err)
 	}

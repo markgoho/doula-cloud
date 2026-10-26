@@ -77,12 +77,14 @@ func (w GapNoticeWorker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
 // is what 00114's engagement_coverage_gaps_notification_worker policy
 // admits under the door this outbox is registered with.
 func (w GapNoticeWorker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r gapNoticeRow, now time.Time) error {
+	// "Has ended" is judged at now, the worker's injected clock that the
+	// send itself stamps sent_at with, not SQL now() (#1992).
 	var stillOpen bool
 	if err := tx.QueryRowContext(ctx,
 		`SELECT EXISTS (
 		   SELECT 1 FROM engagement_coverage_gaps
-		    WHERE id = $1 AND cleared_at IS NULL AND covering_staff_id IS NULL AND ends_at > now())`,
-		r.gapID,
+		    WHERE id = $1 AND cleared_at IS NULL AND covering_staff_id IS NULL AND ends_at > $2)`,
+		r.gapID, now,
 	).Scan(&stillOpen); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("oncall: recheck coverage gap: %w", err)

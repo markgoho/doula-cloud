@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/testdb"
@@ -102,7 +103,11 @@ func TestQueuePayoutIncompleteNotification_InsertsPendingRow(t *testing.T) {
 	}
 	defer tx.Rollback()
 
-	if err := payments.QueuePayoutIncompleteNotification(t.Context(), tx, practiceID); err != nil {
+	// The grace window is counted from clock.Now(ctx) (#1992), so a fixed
+	// clock pins next_attempt_at exactly.
+	queuedAt := time.Now().Add(-time.Hour).Truncate(time.Microsecond).UTC()
+	ctx := clock.Into(t.Context(), func() time.Time { return queuedAt })
+	if err := payments.QueuePayoutIncompleteNotification(ctx, tx, practiceID); err != nil {
 		t.Fatalf("QueuePayoutIncompleteNotification: %v", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -111,23 +116,22 @@ func TestQueuePayoutIncompleteNotification_InsertsPendingRow(t *testing.T) {
 
 	var count int
 	var status string
-	var inGraceWindow bool
+	var nextAttemptAt time.Time
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*), max(status), bool_and(next_attempt_at BETWEEN now() + interval '47 hours' AND now() + interval '49 hours')
-		 FROM payout_outbox WHERE practice_id = $1`, practiceID,
-	).Scan(&count, &status, &inGraceWindow); err != nil {
+		`SELECT count(*), max(status), max(next_attempt_at) FROM payout_outbox WHERE practice_id = $1`, practiceID,
+	).Scan(&count, &status, &nextAttemptAt); err != nil {
 		t.Fatalf("query payout_outbox: %v", err)
 	}
 	if count != 1 || status != testPayoutStatusPending {
 		t.Fatalf("count/status = %d/%q, want 1/%s", count, status, testPayoutStatusPending)
 	}
-	if !inGraceWindow {
-		t.Fatal("next_attempt_at is not ~48 hours out -- the grace window (00034's column default) did not apply")
+	if want := queuedAt.Add(48 * time.Hour); !nextAttemptAt.Equal(want) {
+		t.Fatalf("next_attempt_at = %v, want the 48-hour grace window after the clock, %v", nextAttemptAt, want)
 	}
 }
 
 // TestQueuePayoutIncompleteNotification_GraceWindowDefersTheSend pins the
-// behavioral consequence of that default: a row queued this instant is
+// behavioral consequence of that grace window: a row queued this instant is
 // not due yet, so running the worker immediately after must mail no one
 // and leave the row pending -- the whole point of the grace window (see
 // 00034_payout_outbox.sql's reasoning) is that an Owner mid-onboarding is

@@ -10,6 +10,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
@@ -31,11 +32,18 @@ import (
 // than as nagging, and short enough that a Practice that cannot invoice
 // is not stuck for a month.
 //
-// Counted in days against Postgres's own clock rather than as a Go
-// duration, so a sandbox running compressed time (simclock) moves the
-// cooldown with everything else instead of freezing it at wall-clock
-// speed.
+// Counted against clock.Now(ctx), which a row's created_at is also
+// written from (#1992). It was once Postgres's own clock, so a sandbox
+// running compressed time (simclock) would move the cooldown; since
+// #1833 the Go clock follows sim.offset_row on that stack too, so it
+// moves with everything else either way, and a fixed-clock test can now
+// reach its edge.
 const ConnectNudgeCooldownDays = 7
+
+// connectNudgeCooldown is ConnectNudgeCooldownDays as a duration. A day
+// is 24 hours here, whatever a connection's TimeZone says, which
+// make_interval's calendar days did not promise (#1626).
+const connectNudgeCooldown = ConnectNudgeCooldownDays * 24 * time.Hour
 
 // MsgConnectNudgeAlreadyConnected is the refusal when a Practice's
 // Stripe account already exists. Written for the person who pressed the
@@ -164,13 +172,14 @@ func queueConnectNudge(ctx context.Context, tx *sql.Tx, practiceID, staffID stri
 		return errConnectNudgeAlreadyConnected
 	}
 
+	now := clock.Now(ctx)
 	var recentlyAsked bool
 	if err := tx.QueryRowContext(ctx,
 		`SELECT EXISTS (
 			SELECT 1 FROM connect_nudge_outbox
-			WHERE practice_id = $1 AND created_at > now() - make_interval(days => $2)
+			WHERE practice_id = $1 AND created_at > $2
 		 )`,
-		practiceID, ConnectNudgeCooldownDays,
+		practiceID, now.Add(-connectNudgeCooldown),
 	).Scan(&recentlyAsked); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("payments: check connect nudge cooldown: %w", err)
@@ -180,8 +189,8 @@ func queueConnectNudge(ctx context.Context, tx *sql.Tx, practiceID, staffID stri
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO connect_nudge_outbox (practice_id, requested_by_staff_id) VALUES ($1, $2)`,
-		practiceID, staffID,
+		`INSERT INTO connect_nudge_outbox (practice_id, requested_by_staff_id, created_at) VALUES ($1, $2, $3)`,
+		practiceID, staffID, now,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("payments: queue connect nudge: %w", err)

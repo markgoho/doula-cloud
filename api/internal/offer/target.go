@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -266,12 +267,13 @@ func isOwnAddress(ctx context.Context, tx *sql.Tx, actorStaffID, address string)
 // the token this Invitation just rotated away from under them. One email
 // per open Offer, which is what re-issuing two Offers means; the code
 // has to be new because engagement_offers keeps only its digest, so the
-// old one cannot be re-sent.
+// old one cannot be re-sent. "Still open" is read against
+// clock.Now(ctx), the clock expires_at was written from (#1992).
 func reissueOpenOffers(ctx context.Context, tx *sql.Tx, invitationID, token string) (int, string) {
 	rows, err := tx.QueryContext(ctx,
 		`SELECT id FROM engagement_offers
-		  WHERE invitation_id = $1 AND state = 'offered' AND expires_at > now()`,
-		invitationID,
+		  WHERE invitation_id = $1 AND state = 'offered' AND expires_at > $2`,
+		invitationID, clock.Now(ctx),
 	)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests

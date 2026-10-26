@@ -11,6 +11,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -125,34 +126,35 @@ func fetchPaymentTerms(ctx context.Context, tx *sql.Tx, practiceID string) (netD
 	return stored, true, nil
 }
 
-// invoiceDueAt is the due date an Invoice raised right now carries, from
-// the Practice's own terms. The instant comes from Postgres rather than
-// Go so that it agrees with created_at on the same row -- both are the
-// database's clock, which is also the clock simclock shifts when a
-// sandbox runs compressed time (docs/research/simulated-clock-compression.md).
+// invoiceDueAt is the instant an Invoice raised right now is raised at,
+// and the due date it carries from the Practice's own terms. The instant
+// is clock.Now(ctx) (#1992), and both rails write it as the row's
+// created_at, so the due date still agrees with created_at to the
+// microsecond -- and both are on the clock the overdue reads judge due_at
+// against (#1965's overdueFrom). It was once Postgres's now(), to agree
+// with created_at's DEFAULT and with the clock simclock shifts; since
+// #1833 the Go clock follows sim.offset_row on that stack too.
 //
-// Postgres supplies the instant and nothing else. The terms are added in
-// Go, by DueAfterTerms, because Postgres adds a days interval to a
-// timestamptz as calendar days in the session's TimeZone: the same
-// statement gives an instant one hour different on a connection whose
-// zone has daylight saving time, and nothing in this repo sets that zone
-// (#1626).
+// It is cut to the microsecond, timestamptz's resolution, so the
+// created_at a rail stores is this exact value.
+//
+// The terms are added in Go, by DueAfterTerms, because Postgres adds a
+// days interval to a timestamptz as calendar days in the session's
+// TimeZone: the same statement gives an instant one hour different on a
+// connection whose zone has daylight saving time, and nothing in this
+// repo sets that zone (#1626).
 //
 // One value, computed once: the Stripe rail sends this exact timestamp to
 // Stripe as its due_date and stores the same one, rather than letting
 // Stripe derive a second date of its own from a day count.
-func invoiceDueAt(ctx context.Context, tx *sql.Tx, practiceID string) (time.Time, error) {
+func invoiceDueAt(ctx context.Context, tx *sql.Tx, practiceID string) (raisedAt, dueAt time.Time, err error) {
 	netDays, _, err := fetchPaymentTerms(ctx, tx, practiceID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return time.Time{}, err
+		return time.Time{}, time.Time{}, err
 	}
-	var raisedAt time.Time
-	if err := tx.QueryRowContext(ctx, `SELECT now()`).Scan(&raisedAt); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return time.Time{}, fmt.Errorf("payments: read the instant an invoice is raised: %w", err)
-	}
-	return DueAfterTerms(raisedAt, netDays), nil
+	raisedAt = clock.Now(ctx).Truncate(time.Microsecond)
+	return raisedAt, DueAfterTerms(raisedAt, netDays), nil
 }
 
 // GetPaymentTermsHandler lets any Staff member at the current Practice

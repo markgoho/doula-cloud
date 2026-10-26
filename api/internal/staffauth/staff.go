@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/pagecursor"
 )
 
@@ -188,7 +189,8 @@ func listMembers(ctx context.Context, tx *sql.Tx, practiceID string) ([]StaffSum
 // sweeps expiries: a lapsed Invitation still occupies that address's slot
 // until it is revoked or re-sent, so hiding it would leave the Owner
 // unable to act on the thing blocking her. Whether it has lapsed rides
-// along as Expired instead.
+// along as Expired instead, judged at clock.Now(ctx) (#1992): the clock
+// MintInvitation writes expires_at from, and the one acceptInvite reads.
 //
 // The dead-letter flag is #339's passive Staff-visible signal, whose only
 // read surface is this screen. It is a scalar subquery rather than a join
@@ -200,7 +202,7 @@ func listMembers(ctx context.Context, tx *sql.Tx, practiceID string) ([]StaffSum
 // which a re-invite clears -- rather than a permanent mark.
 func listPendingInvitations(ctx context.Context, tx *sql.Tx, practiceID string, after *pagecursor.Cursor) ([]InvitationSummary, error) {
 	query := `SELECT pi.id, pi.address, array_to_string(pi.roles, ','), pi.employment_type::text,
-		        pi.expires_at, pi.expires_at <= now(),
+		        pi.expires_at, pi.expires_at <= $2,
 		        COALESCE((SELECT o.status = 'dead_lettered'
 		                  FROM staff_invite_outbox o
 		                  WHERE o.invitation_id = pi.id
@@ -209,12 +211,12 @@ func listPendingInvitations(ctx context.Context, tx *sql.Tx, practiceID string, 
 		        pi.created_at
 		 FROM practice_invitations pi
 		 WHERE pi.practice_id = $1 AND pi.status = 'pending'`
-	args := []any{practiceID}
+	args := []any{practiceID, clock.Now(ctx)}
 	if after != nil {
-		query += ` AND (pi.created_at, pi.id) < ($2, $3) ORDER BY pi.created_at DESC, pi.id DESC LIMIT $4`
+		query += ` AND (pi.created_at, pi.id) < ($3, $4) ORDER BY pi.created_at DESC, pi.id DESC LIMIT $5`
 		args = append(args, after.At, after.ID, invitationPageSize+1)
 	} else {
-		query += ` ORDER BY pi.created_at DESC, pi.id DESC LIMIT $2`
+		query += ` ORDER BY pi.created_at DESC, pi.id DESC LIMIT $3`
 		args = append(args, invitationPageSize+1)
 	}
 

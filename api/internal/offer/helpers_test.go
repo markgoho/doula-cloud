@@ -27,6 +27,7 @@ const (
 
 	// The offer_state values these tests assert on, and the two decidable
 	// facts they seed every Offer with.
+	stateOffered   = "offered"
 	stateExpired   = "expired"
 	stateDeclined  = "declined"
 	stateWithdrawn = "withdrawn"

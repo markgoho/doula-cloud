@@ -35,7 +35,7 @@ func TestReadHandler_ServesTheFourFactsAndTerms(t *testing.T) {
 	var got offer.PreAccountOffer
 	decode(t, do(t, http.MethodGet, f.readURL(offerID, token, code), "", nil), http.StatusOK, &got)
 
-	if got.OfferID != offerID || got.State != "offered" {
+	if got.OfferID != offerID || got.State != stateOffered {
 		t.Fatalf("offer = %+v, want the open offer", got)
 	}
 	if got.ClientFirstInitial != "R" || got.ClientArea != testClientArea || got.DueDate == "" {
@@ -211,7 +211,7 @@ func TestDeclineByTokenHandler_RequiresConfirmation(t *testing.T) {
 	}
 
 	state, _ := offerState(t, f.db, offerID)
-	if state != "offered" {
+	if state != stateOffered {
 		t.Fatalf("state = %q, want the unconfirmed request to have declined nothing", state)
 	}
 

@@ -10,6 +10,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/pagecursor"
 )
 
@@ -143,17 +144,18 @@ func VisitsHandler() http.Handler {
 // Furthest-future first is what puts every scheduled Visit ahead of
 // every past one in a single stream, so the consumer groups by
 // `hasHappened` with no second request and no sort of its own.
+// `hasHappened` is judged at clock.Now(ctx), not SQL now() (#1992).
 func listPortalVisits(ctx context.Context, tx *sql.Tx, engagementID string, after *pagecursor.Cursor) ([]Visit, error) {
-	query := `SELECT v.id, v.scheduled_at, coalesce(s.name, $2), v.scheduled_at <= now()
+	query := `SELECT v.id, v.scheduled_at, coalesce(s.name, $2), v.scheduled_at <= $3
 		 FROM visits v
 		 LEFT JOIN staff s ON s.id = v.staff_id
 		 WHERE v.engagement_id = $1 AND v.scheduled_at IS NOT NULL`
-	args := []any{engagementID, activity.StaffActorDisplayName}
+	args := []any{engagementID, activity.StaffActorDisplayName, clock.Now(ctx)}
 	if after != nil {
-		query += ` AND (v.scheduled_at, v.id) < ($3, $4) ORDER BY v.scheduled_at DESC, v.id DESC LIMIT $5`
+		query += ` AND (v.scheduled_at, v.id) < ($4, $5) ORDER BY v.scheduled_at DESC, v.id DESC LIMIT $6`
 		args = append(args, after.At, after.ID, visitPageSize+1)
 	} else {
-		query += ` ORDER BY v.scheduled_at DESC, v.id DESC LIMIT $3`
+		query += ` ORDER BY v.scheduled_at DESC, v.id DESC LIMIT $4`
 		args = append(args, visitPageSize+1)
 	}
 

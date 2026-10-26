@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/outbox"
 )
 
@@ -25,6 +26,11 @@ func payoutText(payoutLink string) string {
 		"If you have questions, reply to this email.\n"
 }
 
+// payoutGraceWindow is how long a payout-account-incomplete Notification
+// waits before it is first sent: 00034's grace window, which gives an
+// Owner who is mid-form time to finish before being nagged.
+const payoutGraceWindow = 48 * time.Hour
+
 // QueuePayoutIncompleteNotification inserts a pending payout_outbox row
 // for practiceID, unless one is already pending for this episode (the
 // partial unique index 00034 added makes the INSERT a no-op in that
@@ -33,11 +39,19 @@ func payoutText(payoutLink string) string {
 // billing.QueueOutOfCreditsNotification, there is no rollback this write
 // needs to survive, so it does not need its own, separately committed
 // write.
+//
+// next_attempt_at is payoutGraceWindow after clock.Now(ctx), written here
+// rather than left to a column DEFAULT (#1992; 00131 drops 00034's
+// DEFAULT now() + interval '48 hours'), so a moved clock moves the grace
+// window. The claim still compares it against the database's now(), as
+// every outbox claim does (outbox.Worker.HandlePending), the way a
+// MarkFailed retry already does: a 48-hour margin is far larger than any
+// skew between the two.
 func QueuePayoutIncompleteNotification(ctx context.Context, tx *sql.Tx, practiceID string) error {
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO payout_outbox (practice_id) VALUES ($1)
+		`INSERT INTO payout_outbox (practice_id, next_attempt_at) VALUES ($1, $2)
 		 ON CONFLICT (practice_id) WHERE status = 'pending' DO NOTHING`,
-		practiceID,
+		practiceID, clock.Now(ctx).Add(payoutGraceWindow),
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("payments: queue payout-incomplete notification: %w", err)
