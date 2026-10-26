@@ -17,6 +17,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import {
   engineBinary,
   engineInvocation,
+  execEngine,
   parseContainers,
 } from '../.claude/hooks/container-engine.ts';
 
@@ -65,6 +66,49 @@ describe('engineInvocation', () => {
   test('treats an empty DOCKER_HOST as unset', () => {
     process.env.DOCKER_HOST = '';
     expect(engineInvocation(['ps', '-a']).argv).toEqual(['ps', '-a']);
+  });
+});
+
+describe('execEngine', () => {
+  function recorder(failWhen: (argv: string[]) => boolean) {
+    const calls: string[][] = [];
+    const run = (_binary: string, argv: string[]) => {
+      calls.push(argv);
+      if (failWhen(argv)) throw new Error('engine refused');
+      return 'ok';
+    };
+    return { calls, run };
+  }
+
+  test('uses DOCKER_HOST first and stops there when it works', () => {
+    process.env.DOCKER_HOST = 'unix:///podman.sock';
+    const { calls, run } = recorder(() => false);
+    expect(execEngine(['ps'], run)).toBe('ok');
+    expect(calls).toEqual([['--url', 'unix:///podman.sock', 'ps']]);
+  });
+
+  test('falls back to the default connection when DOCKER_HOST names another engine (#2096)', () => {
+    process.env.DOCKER_HOST = 'unix:///Users/me/.colima/default/docker.sock';
+    const { calls, run } = recorder((argv) => argv[0] === '--url');
+    expect(execEngine(['ps'], run)).toBe('ok');
+    expect(calls).toEqual([
+      ['--url', 'unix:///Users/me/.colima/default/docker.sock', 'ps'],
+      ['ps'],
+    ]);
+  });
+
+  test('tries once, with no repeat, when DOCKER_HOST is unset', () => {
+    delete process.env.DOCKER_HOST;
+    const { calls, run } = recorder(() => true);
+    expect(() => execEngine(['ps'], run)).toThrow('engine refused');
+    expect(calls).toEqual([['ps']]);
+  });
+
+  test('throws when both forms fail', () => {
+    process.env.DOCKER_HOST = 'unix:///nowhere.sock';
+    const { calls, run } = recorder(() => true);
+    expect(() => execEngine(['ps'], run)).toThrow('engine refused');
+    expect(calls).toHaveLength(2);
   });
 });
 

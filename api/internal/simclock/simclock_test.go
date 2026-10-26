@@ -16,6 +16,7 @@ import (
 
 	"doula-cloud/api/db/migrations"
 	"doula-cloud/api/internal/simclock"
+	"doula-cloud/api/internal/testdb"
 
 	// Registers the "pgx" driver with database/sql; never referenced by name.
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -43,6 +44,9 @@ func TestMain(m *testing.M) {
 		postgres.WithUsername(superuserRole),
 		postgres.WithPassword(superuserRole),
 		postgres.BasicWaitStrategies(),
+		// The labels testdb-reap.ts reads to reap this container if the
+		// process is killed before Terminate below (#2096).
+		testdb.OwnerLabels(),
 	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "simclock: start postgres container: %v\n", err)

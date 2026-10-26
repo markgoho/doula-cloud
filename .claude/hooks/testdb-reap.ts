@@ -1,64 +1,80 @@
 #!/usr/bin/env bun
-// SessionStart hook: reaps orphaned testcontainers Postgres containers
-// left behind by a killed `go test` process. See docs/testing/api.md's
-// "Reaping orphaned testcontainers" section for the full story; the
-// short version is below.
+// SessionStart hook: reaps the containers a killed `go test` process
+// leaves behind. See docs/testing/api.md's "Reaping orphaned
+// testcontainers" section for the full story; the short version is below.
 //
-// api/internal/testdb starts one Postgres container per test *process*
-// and tears it down via testdb.Main at process exit (see
-// api/internal/testdb/setup.go). That teardown only runs on a clean
-// exit -- docs/testing/api.md sets TESTCONTAINERS_RYUK_DISABLED=true for
-// local Podman, so there is no other reaper. A killed process (an
-// interrupted agent, a timeout, a cut-short TDD loop) leaves its
-// container running forever. With several parallel Claude Code sessions
-// on one machine, these accumulate without bound -- 116 containers, 4GB
-// Podman machine down to 133MB free, observed live (#889).
+// api/internal/testdb (and simclock's own TestMain) start one Postgres
+// container per test *process* and terminate it when the process exits
+// cleanly. docs/testing/api.md sets TESTCONTAINERS_RYUK_DISABLED=true for
+// local Podman, so a killed process (an interrupted agent, a timeout, a
+// cut-short TDD loop) leaves its container running forever. With several
+// parallel Claude Code sessions on one Podman machine they accumulate
+// without bound (#889, #2096).
+//
+// Every such container carries two labels, written by testdb.OwnerLabels
+// (api/internal/testdb/labels.go): a marker, and the pid of the test
+// process that started it. A container is an orphan when, and only when,
+// it carries the marker and its pid is gone. No age, no guess: a live run
+// keeps its container however long it takes, and a container this hook
+// cannot read an owner from is kept.
 //
 // The reap decision (pickReapCandidates below) is pure and exported for
-// direct unit testing. main() itself -- the engine invocation and the
-// fail-open catch -- is exercised as a subprocess instead, the same way
-// scripts/gate-bash-write.test.ts covers gate-bash-write.ts; see
-// scripts/testdb-reap.test.ts. How the engine is reached at all lives in
-// container-engine.ts, shared with e2e-stack-reap.ts.
+// direct unit testing. main() -- the engine calls, the dry run and the
+// fail-open catch -- is exercised as a subprocess instead; see
+// scripts/testdb-reap.test.ts. How the engine is reached lives in
+// container-engine.ts, and the pid liveness test in e2e-stack-reap.ts;
+// both are shared, not copied.
 
-import { execFileSync } from 'node:child_process';
 import {
-  engineInvocation,
+  execEngine,
   parseContainers,
   type ReapCandidate,
 } from './container-engine.ts';
+import { isProcessAlive } from './e2e-stack-reap.ts';
 
-// A container backs one `go test` process for one package, so it lives
-// minutes at most -- anything materially older is an orphan, not a slow
-// test. Measured directly on this machine (`go test ./...`, api/, idle
-// otherwise): every package finished in under 91s, the slowest being
-// internal/payments at 90.4s. This threshold is deliberately generous
-// rather than tight to that number -- the brief this shipped under put it
-// plainly: a wrong reap kills a live run, reaping too late only delays
-// cleanup. 15 minutes is roughly 10x the slowest observed single-package
-// run, enough headroom for the exact condition that causes the leak in
-// the first place (several parallel agent sessions competing for the
-// same 4GB Podman machine, which can slow a test process well below its
-// idle-machine time) without ever mistaking a live run for an orphan.
-export const REAP_THRESHOLD_MS = 15 * 60 * 1000;
+// Must match OwnerLabel and OwnerPIDLabel in api/internal/testdb/labels.go.
+export const OWNER_LABEL = 'cloud.doula.test-container';
+export const OWNER_PID_LABEL = 'cloud.doula.test-container.pid';
 
-const TESTCONTAINERS_LABEL = 'org.testcontainers';
-const TESTCONTAINERS_LABEL_VALUE = 'true';
+// An e2e compose stack is never this hook's to remove (e2e-stack-reap.ts
+// owns those). A stack container carries no owner marker today; this is
+// the second lock on the same door.
+const COMPOSE_PROJECT_LABEL = 'com.docker.compose.project';
 
-// The one place that decides what gets `rm -f`'d. Filters on the label
-// itself rather than trusting the engine's own `--filter` flag to have
-// done it -- a destructive command should not depend solely on a filter
+const DRY_RUN_FLAG = '--dry-run';
+
+// The owning pid, or undefined when the label is missing or is not a
+// plain positive decimal -- which pickReapCandidates reads as "keep".
+export function ownerPid(container: ReapCandidate): number | undefined {
+  const raw = container.labels[OWNER_PID_LABEL];
+  if (raw === undefined || !/^[1-9]\d*$/.test(raw)) return undefined;
+  const pid = Number(raw);
+  return Number.isSafeInteger(pid) ? pid : undefined;
+}
+
+// The one place that decides what gets `rm -f`'d. Filters on the labels
+// itself rather than trusting the engine's `--filter` flag to have done
+// it -- a destructive command should not depend solely on a filter
 // string built elsewhere staying correct.
+//
+// A recycled pid -- the test process died and the OS has since handed
+// its pid to something else -- reads as alive, so that container is kept
+// until the pid is free again. That errs toward keeping, never toward
+// removing a live run.
 export function pickReapCandidates(
   containers: ReapCandidate[],
-  nowMs: number,
-  thresholdMs: number = REAP_THRESHOLD_MS
+  isAlive: (pid: number) => boolean = isProcessAlive
 ): ReapCandidate[] {
-  return containers.filter(
-    (container) =>
-      container.labels[TESTCONTAINERS_LABEL] === TESTCONTAINERS_LABEL_VALUE &&
-      nowMs - container.createdAtMs > thresholdMs
-  );
+  return containers.filter((container) => {
+    if (container.labels[OWNER_LABEL] !== 'true') return false;
+    if (container.labels[COMPOSE_PROJECT_LABEL] !== undefined) return false;
+    const pid = ownerPid(container);
+    return pid !== undefined && !isAlive(pid);
+  });
+}
+
+function summarize(container: ReapCandidate): string {
+  return `${container.id.slice(0, 12)} ${container.name} (pid ${container.labels[OWNER_PID_LABEL]} gone)`;
 }
 
 /*
@@ -69,44 +85,35 @@ export function pickReapCandidates(
  * hook is different in kind: it runs on SessionStart, has no decision to
  * make about the tool call that follows, and exists purely to tidy up.
  * A reaper that errors must never block or slow a session from starting
- * -- do not "fix" this into failing closed. gate-shared-index.sh is the
- * existing fail-open precedent, for the same reason: it fires on every
- * Bash command, so a broken instance of it must let the command through
- * rather than halt all shell work.
+ * -- do not "fix" this into failing closed.
+ *
+ * `--dry-run` lists what a real run would remove and removes nothing.
  */
-function main(): void {
+function main(argv: string[]): void {
+  const dryRun = argv.includes(DRY_RUN_FLAG);
   try {
-    const ps = engineInvocation([
+    const psOutput = execEngine([
       'ps',
       '-a',
       '--filter',
-      `label=${TESTCONTAINERS_LABEL}=${TESTCONTAINERS_LABEL_VALUE}`,
+      `label=${OWNER_LABEL}=true`,
       '--format',
       'json',
     ]);
-    const psOutput = execFileSync(ps.binary, ps.argv, {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    const candidates = pickReapCandidates(
-      parseContainers(psOutput),
-      Date.now()
-    );
+    const candidates = pickReapCandidates(parseContainers(psOutput));
+    if (dryRun) {
+      console.log(
+        `testdb-reap (dry run): would remove ${candidates.length} orphaned test container(s)`
+      );
+      for (const container of candidates)
+        console.log(`  ${summarize(container)}`);
+      return;
+    }
     if (candidates.length === 0) return;
 
-    const remove = engineInvocation([
-      'rm',
-      '-f',
-      '-t',
-      '2',
-      ...candidates.map((c) => c.id),
-    ]);
-    execFileSync(remove.binary, remove.argv, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    const minutes = Math.round(REAP_THRESHOLD_MS / 60000);
+    execEngine(['rm', '-f', '-t', '2', ...candidates.map((c) => c.id)]);
     console.log(
-      `testdb-reap: removed ${candidates.length} orphaned testcontainers Postgres container(s) older than ${minutes}m (org.testcontainers=true, no process attached)`
+      `testdb-reap: removed ${candidates.length} orphaned test container(s) whose go test process is gone (${OWNER_LABEL}=true)`
     );
   } catch {
     // Engine unreachable, binary missing, malformed output, rm failed --
@@ -115,4 +122,4 @@ function main(): void {
   }
 }
 
-if (import.meta.main) main();
+if (import.meta.main) main(process.argv.slice(2));
