@@ -357,9 +357,12 @@
 		 * DOM trees, and no intrinsic mechanism swaps markup. The rail
 		 * column is `--page-rail` (16.25rem) and the gap `--space-12`
 		 * (3rem), so the floor is those plus the measure, checked by the
-		 * floor check's measure criterion.
+		 * floor check's measure criterion. Measured 2026-10-26: the measure
+		 * is 631px on macOS and 650px in CI's Linux/Chromium, the canonical
+		 * environment, where the sections column reaches it from a 968px
+		 * record: 60.5rem.
 		 */
-		@container record-detail (min-width: 59.5rem) {
+		@container record-detail (min-width: 60.5rem) {
 			.record-grid {
 				grid-template-columns: var(--page-rail) minmax(0, 1fr);
 				grid-template-areas:
