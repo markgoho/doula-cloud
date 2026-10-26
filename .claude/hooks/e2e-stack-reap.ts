@@ -12,7 +12,8 @@
 // volume sit on the shared 4GB Podman machine indefinitely. That is the
 // same starvation #889 diagnosed and #782 most likely hit, and
 // testdb-reap.ts does nothing about it: it only looks at containers
-// labeled `org.testcontainers=true`, which a compose stack is not.
+// carrying a Go test's owner label (`cloud.doula.test-container=true`),
+// which a compose stack is not.
 //
 // The same file spawns three host processes -- the Firebase Auth
 // emulator, the Go BFF and the sandbox mailbox -- `detached` and
@@ -96,7 +97,7 @@ const WORKTREE_PROJECT_PATTERN = new RegExp(
  * as somebody is working. So age alone must never authorize a reap. It is
  * here to cover the one window the quiet check cannot: a stack brought up
  * seconds ago inside a worktree whose files happen not to have been
- * touched since. 15 minutes, matching testdb-reap.ts, is far longer than
+ * touched since. 15 minutes is far longer than
  * `compose up -d` plus the migrate (<=90s) and `go build` (<=120s) steps
  * that follow it.
  *

@@ -94,6 +94,7 @@ func setup(ctx context.Context) error {
 		postgres.WithUsername("testdb"),
 		postgres.WithPassword("testdb"),
 		postgres.BasicWaitStrategies(),
+		OwnerLabels(),
 	)
 	// coverage:ignore reason: container startup failure, not exercised by the happy-path test
 	if err != nil {

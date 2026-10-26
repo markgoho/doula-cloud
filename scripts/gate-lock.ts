@@ -45,7 +45,7 @@ import path from 'node:path';
 // holder that was killed is caught immediately by the liveness check
 // below, which needs no threshold at all. The same "generously above
 // anything a live run could produce" reasoning as REAP_THRESHOLD_MS in
-// .claude/hooks/testdb-reap.ts; reclaiming too late only delays a commit
+// .claude/hooks/e2e-stack-reap.ts; reclaiming too late only delays a commit
 // that was already waiting, and reclaiming too early runs two gates.
 export const STALE_LOCK_MS = 5 * 60 * 1000;
 
