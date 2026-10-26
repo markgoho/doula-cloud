@@ -26,6 +26,15 @@ For each screen:
 1. **Which law the screen spends and which GOV.UK pattern it follows.** Name the law from the brief's tables and the row from the GOV.UK table.
 2. **Every departure without a recorded reason** from the Laws table or the GOV.UK table: what the page does, which row it breaks, and at which width.
 3. **Whether the task ends in a confirmation** that says what happened and what is next (Peak-End). A task that ends on a blank page, or with no word of what happened, is a finding.
+4. **The audit checks** ([#2001](https://github.com/markgoho/doula-cloud/issues/2001), 2026-10-26). For each screen, whichever of these holds is a finding:
+   - a raw `<select>`, `<fieldset>`, `<label>`, `<h1>`-`<h6>`, `<ul>` of fields or a `<dl>` where the library has `Select`, `CheckboxGroup`, `LabeledField`, `Heading`, `StackedForm` or `SummaryList` (the lint rule catches most; the review catches the rest);
+   - more than one primary button on the screen (one per section on a record page), a destructive button beside a benign one, or a destructive action repeated per row;
+   - a list or section with nothing in it that is not `EmptyState` with its one action, or a totals block drawn over nothing;
+   - a key/value list that is not `SummaryList`, or whose rows do not share a column, or a status written as a bare sentence where a row or a `Badge` would do;
+   - a short answer in a full-width box (the width rule, [#1216](https://github.com/markgoho/doula-cloud/issues/1216));
+   - an edit form rendered open on a record page where no one asked for it, or a form inside a table cell;
+   - a task that ends without a status `Notice` (the confirmation check above), a bad link that lands on a box with no way on, or an entry screen with no line of context under its heading;
+   - a heading at a size that is not the atom's, or a gap that is not one of the named spacing steps.
 
 A departure that the ticket, an ADR or the GOV.UK table records a reason for is not a finding ([ADR-0021](../adr/0021-govuk-is-the-reference-for-service-patterns.md)). Name it and the place the reason is recorded, and move on.
 
