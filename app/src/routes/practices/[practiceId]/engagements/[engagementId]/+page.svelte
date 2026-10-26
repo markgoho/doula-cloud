@@ -2563,8 +2563,10 @@
 		   Practice's Visits do. A note is prose, and its cell caps it at
 		   `--measure`, so this is the width at which any note fits beside
 		   the four bounded columns: 1161px of a 1135px column on
-		   macOS/Chromium, fitting from 1168px; the route floor check's
-		   minimal half holds it to CI's Linux/Chromium. A one-line-notes
+		   macOS/Chromium, fitting from 1168px, and 1170px of a 1168px
+		   column in CI's Linux/Chromium, the canonical environment, so
+		   1176px, the next half-rem step; the route floor check's
+		   minimal half holds it there. A one-line-notes
 		   screen fits at 59rem, and a lower floor than this one broke
 		   "Prenatal" and "Change" mid-word on the demo Practice at a 1440px
 		   window, so there the Visits are records.
@@ -2580,7 +2582,7 @@
 			--data-table-records-display: block;
 		}
 
-		@container visits-table (min-width: 73rem) {
+		@container visits-table (min-width: 73.5rem) {
 			.visits-table > :global(*) {
 				--data-table-table-display: table;
 				--data-table-records-display: none;
