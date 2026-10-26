@@ -31,7 +31,6 @@
 		visitTypeLabel,
 		engagementStatusText,
 		yourFeeValue,
-		type AttachedDoula,
 		type BirthOutcomeFacts,
 		type BirthOutcomeRequest,
 		type Visit,
@@ -112,6 +111,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import type { FormError } from '#lib/formErrors.js';
@@ -139,36 +139,6 @@
 	// once, while the page renders, so a reload says nothing.
 	const outcome = takeOutcome(page.url);
 
-	type Detail = {
-		engagementId: string;
-		clientId: string;
-		clientName: string;
-		status: string;
-		createdAt: string;
-		// #874: what the Practice sold, 'birth' or 'postpartum' -- ADR-0015,
-		// mutable in both directions, never Client-facing as a word.
-		kind: string;
-		dueDate?: string;
-		statusMoves: string[];
-		// #293/#943: ADR-0015's birth outcome and the date the pregnancy
-		// ended, both absent until a Practice records them.
-		birthOutcome?: string;
-		pregnancyEndedOn?: string;
-		// #255: the Client's portal-invite state, mirroring
-		// engagementDetail.ts's own EngagementSummary fields.
-		clientPortalInviteStatus?: string;
-		clientEmailSuppressed?: boolean;
-		clientHasEmail?: boolean;
-		// #270: whether Clients can pay this Practice at all -- a standing
-		// fact InvoiceSection reads before ever showing the Create Invoice
-		// form, never a routed gate discovered after a submit attempt.
-		clientsCanPay?: boolean;
-		// #1598: who is on this Engagement, and whether the BFF would put
-		// the reader on it now.
-		doulas: AttachedDoula[];
-		canAttachSelf: boolean;
-	};
-
 	// The Engagement comes from +page.ts's load now, not an onMount fetch
 	// (#695): a refusal has to reach practices/+error.svelte rather than
 	// sit in a local error string, the same move #471 made for billing.
@@ -191,6 +161,12 @@
 	const isPracticeOwner = $derived(isOwner(data.session));
 	const paymentsSettingsHref = $derived(
 		resolve('/practices/[practiceId]/settings/payments', { practiceId: page.params.practiceId! })
+	);
+
+	// #1998: the drawing's "← Clients" back link, to the Practice's
+	// Clients list, where every Engagement is reached from.
+	const clientsHref = $derived(
+		resolve('/practices/[practiceId]/clients', { practiceId: page.params.practiceId! })
 	);
 
 	// #280: the Birth Plan's own address -- a reading and taking-away
@@ -227,6 +203,35 @@
 	// (reassign, schedule, notes).
 	const directMove = new SectionState<void>(undefined);
 
+	// #1998: the summary card's Change (GOV.UK's Summary list row action).
+	// Each opens an in-place form under its own row, holding the controls
+	// that used to sit in a loose stack under the facts: the care-phase
+	// moves, the kind change, and "Put me on this Engagement". One row is
+	// open at a time. A save closes it and says what changed in a status
+	// that takes focus, because the control she pressed goes with the
+	// form; a refusal leaves it open, beside the refusal.
+	type SummaryChange = 'care' | 'carePhase' | 'doula';
+	type EngagementSummaryRow = SummaryListRow & { change?: SummaryChange };
+	const changeWords: Record<SummaryChange, string> = {
+		care: 'care',
+		carePhase: 'care phase',
+		doula: 'Doula'
+	};
+	let openChange = $state<SummaryChange | undefined>();
+	let statusChangedMessage = $state('');
+
+	function toggleChange(change: SummaryChange) {
+		openChange = openChange === change ? undefined : change;
+		statusChangedMessage = '';
+		kindChangedMessage = '';
+		selfAttachedMessage = '';
+	}
+
+	function closeChange(message: string) {
+		openChange = undefined;
+		statusChangedMessage = message;
+	}
+
 	async function handleStatusMoveClick(move: string) {
 		if (move === 'completed') {
 			isCompleteFormShown = true;
@@ -236,7 +241,9 @@
 		const hasMoved = await directMove.mutate(async () => {
 			statusOverride = await changeEngagementStatus(apiFetchWithSession, reference, move);
 		}, 'Failed to change status');
-		if (hasMoved) await refreshWhoIsOn();
+		if (!hasMoved) return;
+		closeChange(`The care phase is now ${engagementStatusText(displayStatus)}.`);
+		await refreshWhoIsOn();
 	}
 
 	// Completing asks for a reason -- GOV.UK's question-page pattern
@@ -271,6 +278,7 @@
 			isCompleteFormShown = false;
 			completeReasonValue = '';
 			completeNoteValue = '';
+			closeChange(`The care phase is now ${engagementStatusText(displayStatus)}.`);
 			await refreshWhoIsOn();
 		}, orThrownErrors(completeFieldIds));
 	}
@@ -341,6 +349,7 @@
 		await kindChange.mutate(async () => {
 			const result = await changeEngagementKind(apiFetchWithSession, reference, target);
 			kindOverride = result.kind;
+			openChange = undefined;
 			kindChangedMessage = `Now set to ${kindLabel(result.kind)}.`;
 		}, 'Failed to change what the Practice sold');
 	}
@@ -367,6 +376,7 @@
 		selfAttachedMessage = '';
 		const isAttached = await selfAttach.mutate(async () => {
 			whoIsOnOverride = await attachSelf(apiFetchWithSession, reference);
+			openChange = undefined;
 			selfAttachedMessage = 'You are on this Engagement.';
 		}, 'We could not put you on this Engagement. Try again.');
 		if (!isAttached) return;
@@ -736,45 +746,57 @@
 		return `/practices/${page.params.practiceId}/clients/${detail!.clientId}`;
 	}
 
-	/** The summary row's own facts (#538). `dueDate` is left out of the
-	 * array entirely, rather than shown with a placeholder, when null --
-	 * ADR-0017's postpartum-only Engagement genuinely has none, matching
-	 * the portal's own answer to the same null (#505). `Created` stays: on
-	 * this page it is a fact for the Staff working the Engagement, not one
-	 * the record's own subject didn't ask for -- the same "how did this
-	 * come to be" the repo asks every feature to answer.
+	/*
+	 * The summary card (#1998), in the drawing's order: Care, Due, Care
+	 * phase, Doula. The Client's name is the page's h1, so it is not a row.
+	 * Two rows the drawing does not have stay after the drawn four, with no
+	 * Change: "Portal invite" (#255), the Client's invite state as standing
+	 * information in the same word the Clients list column carries, since
+	 * the header's Send control is withheld once she has accepted; and
+	 * "Created", the "how did this come to be" every feature answers.
 	 *
-	 * "Portal invite" (#255) states the Client's portal-invite state as
-	 * standing information, not only as feedback after a Send -- the same
-	 * word the Clients list column carries, via portalInviteStatusText,
-	 * so the two screens never drift into two vocabularies. */
-	function summaryItems(
-		d: Detail,
-		status: string,
-		kind: string,
-		portalState: PortalInviteSubject,
-		hasClientEmail: boolean,
-		doulasOnIt: AttachedDoula[]
-	): { label: string; value: string }[] {
-		// #1598: who is on it, second only to whose it is. No row for a
-		// completed Engagement nobody is on (doulaSummaryItem).
-		const doulaItem = doulaSummaryItem(doulasOnIt, status);
-		const items = [
-			{ label: 'Client', value: d.clientName },
-			...(doulaItem ? [doulaItem] : []),
-			{ label: 'Status', value: engagementStatusText(status) },
+	 * `dueDate` is left out entirely when null (#538): ADR-0017's
+	 * postpartum-only Engagement has none. "Due" has no Change: no write
+	 * sets an Engagement's due date after its request is approved.
+	 *
+	 * A row carries `changes` -- and so a Change -- only where this reader
+	 * may change it, from the same flags that drew the old buttons:
+	 * canChangeKind, the BFF's statusMoves, and the BFF's canAttachSelf. A
+	 * contractor Doula holds none of the three, so her summary has no
+	 * Change at all, and the endpoints refuse her whatever is drawn.
+	 */
+	const summaryRows = $derived.by((): EngagementSummaryRow[] => {
+		const rows: EngagementSummaryRow[] = [
 			// #874: what the Practice sold, in the Staff-only word ADR-0015
-			// gives it -- this row and the Kind section's own control are the
-			// one place the Engagement hub prints 'Birth'/'Postpartum' at all.
-			{ label: 'What the Practice sold', value: kindLabel(kind) },
-			{ label: 'Portal invite', value: portalInviteSummaryText(portalState, hasClientEmail) },
-			// createdAt is an instant (engagement/detail.go).
-			{ label: 'Created', value: formatInstant(d.createdAt) }
+			// gives it.
+			{ label: 'Care', value: kindLabel(displayKind), ...changeable('care', canChangeKind) }
 		];
-		if (d.dueDate) {
-			items.push({ label: 'Due date', value: formatCalendarDay(d.dueDate) });
+		if (detail.dueDate) {
+			rows.push({ label: 'Due', value: formatCalendarDay(detail.dueDate) });
 		}
-		return items;
+		rows.push({
+			label: 'Care phase',
+			value: engagementStatusText(displayStatus),
+			...changeable('carePhase', displayStatusMoves.length > 0)
+		});
+		// #1598: who is on it. No row for a completed Engagement nobody is
+		// on (doulaSummaryItem).
+		const doulaItem = doulaSummaryItem(attachedDoulas, displayStatus);
+		if (doulaItem) rows.push({ ...doulaItem, ...changeable('doula', canAttachSelf) });
+		rows.push(
+			{ label: 'Portal invite', value: portalInviteSummaryText(clientPortalState, hasClientEmailOnFile) },
+			// createdAt is an instant (engagement/detail.go).
+			{ label: 'Created', value: formatInstant(detail.createdAt) }
+		);
+		return rows;
+	});
+
+	/** The fields that give a row its Change, and open its in-place form
+	 * while it is the open one. The visually-hidden words are the row's own
+	 * label, so a screen reader hears "Change, care phase". */
+	function changeable(change: SummaryChange, canChange: boolean): Partial<EngagementSummaryRow> {
+		if (!canChange) return {};
+		return { change, changes: changeWords[change], isDetailShown: openChange === change };
 	}
 
 	/** portalInviteStatusText's own word, plus the one qualifier that word
@@ -1451,128 +1473,148 @@
 
 {#snippet summary()}
 	<stack-l space="var(--space-4)">
-		<DescriptionList
-			items={summaryItems(
-				detail!,
-				displayStatus,
-				displayKind,
-				clientPortalState,
-				hasClientEmailOnFile,
-				attachedDoulas
-			)}
-		/>
-
 		<!--
-			#1598: "Put me on this Engagement", directly under the row that
-			says who is on it, so the control sits beside the fact it
-			changes. Drawn where the BFF says the press would be accepted
-			and nowhere else: not for a contractor Doula, not for an Owner
-			or an Admin who holds no Doula role, not for a person already
-			on it, and not on a completed Engagement. Drawing only -- the
-			endpoint refuses each of them whatever this page drew. The
-			status Notice outlives the button, so a screen reader hears
-			the result of the press, and the Doula row above now names her.
-			It takes focus too: the button she pressed is gone, and focus
-			would otherwise fall to the document (seen on the 320px walk).
+			#1998: GOV.UK's Summary list with row actions, as the drawing
+			has it -- one bordered card, a Change at the end of each row
+			this reader may change. Change is a button, not a link, because
+			it opens a form in place rather than going anywhere; it says
+			whether that form is open (aria-expanded), and the visually-
+			hidden words SummaryList draws name the row it changes.
 		-->
-		{#if canAttachSelf}
-			<cluster-l space="var(--space-3)">
+		<SummaryList rows={summaryRows} isBordered>
+			{#snippet action(row, describedBy)}
 				<Button
-					label="Put me on this Engagement"
-					size="sm"
-					variant="secondary"
-					loading={selfAttach.isBusy}
-					onClick={handleAttachSelf}
+					label="Change"
+					variant="link"
+					expanded={openChange === row.change}
+					{describedBy}
+					onClick={() => toggleChange(row.change!)}
 				/>
-			</cluster-l>
-		{/if}
-		{#if selfAttach.error}
-			<Notice variant="error" message={selfAttach.error} />
-		{:else if selfAttachedMessage}
-			<Notice variant="status" message={selfAttachedMessage} isFocusedOnAppear />
-		{/if}
-
-		<!--
-			#253: exactly the moves ADR-0015's role table admits from the
-			current status for this caller -- the API decides the set
-			(Detail.statusMoves/TransitionResponse.statusMoves), this only
-			renders it. A contractor Doula or a status with no legal move
-			at all sees no controls here, rather than a disabled one.
-		-->
-		{#if displayStatusMoves.length > 0}
-			<cluster-l space="var(--space-3)">
-				{#each displayStatusMoves as move (move)}
-					<Button
-						label={statusMoveLabel(move)}
-						size="sm"
-						variant="secondary"
-						loading={directMove.isBusy}
-						onClick={() => handleStatusMoveClick(move)}
-					/>
-				{/each}
-			</cluster-l>
-		{/if}
-		{#if directMove.error}
-			<Notice variant="error" message={directMove.error} />
-		{/if}
-
-		<!--
-			#874: there is only ever one other kind to offer, so this is a
-			single named button, the same bare-command shape the
-			reopen/activate moves above use, not a form. canChangeKind is
-			canWriteFact narrowed by ADR-0015's own upgrade caveat (see its
-			own declaration); the endpoint refuses her whether or not the
-			control is drawn.
-		-->
-		{#if canChangeKind}
-			<cluster-l space="var(--space-3)">
-				<Button
-					label={`Change to ${kindLabel(otherKind)}`}
-					size="sm"
-					variant="secondary"
-					loading={kindChange.isBusy}
-					onClick={handleChangeKind}
-				/>
-			</cluster-l>
-		{/if}
-		{#if kindChange.error}
-			<Notice variant="error" message={kindChange.error} />
-		{:else if kindChangedMessage}
-			<Notice variant="status" message={kindChangedMessage} />
-		{/if}
-
-		{#if isCompleteFormShown}
-			<StackedForm onSubmit={handleCompleteSubmit}>
-				{#if completeSubmission.errors.length > 0}
-					<ErrorSummary errors={completeSubmission.errors} />
+			{/snippet}
+			{#snippet detail(row)}
+				{#if row.change === 'care'}
+					<!--
+						#874: there is only ever one other kind to offer, so this
+						is a single named button, not a question. canChangeKind
+						is canWriteFact narrowed by ADR-0015's own upgrade caveat
+						(see its declaration); the endpoint refuses her whether
+						or not the control is drawn.
+					-->
+					<stack-l space="var(--space-3)">
+						<cluster-l space="var(--space-3)">
+							<Button
+								label={`Change to ${kindLabel(otherKind)}`}
+								size="sm"
+								variant="secondary"
+								loading={kindChange.isBusy}
+								onClick={handleChangeKind}
+							/>
+						</cluster-l>
+						{#if kindChange.error}
+							<Notice variant="error" message={kindChange.error} />
+						{/if}
+					</stack-l>
+				{:else if row.change === 'carePhase'}
+					<!--
+						#253: exactly the moves ADR-0015's role table admits from
+						the current status for this caller -- the API decides the
+						set (Detail.statusMoves/TransitionResponse.statusMoves),
+						this only renders it. Completing asks why first.
+					-->
+					<stack-l space="var(--space-3)">
+						<cluster-l space="var(--space-3)">
+							{#each displayStatusMoves as move (move)}
+								<Button
+									label={statusMoveLabel(move)}
+									size="sm"
+									variant="secondary"
+									loading={directMove.isBusy}
+									onClick={() => handleStatusMoveClick(move)}
+								/>
+							{/each}
+						</cluster-l>
+						{#if directMove.error}
+							<Notice variant="error" message={directMove.error} />
+						{/if}
+						{#if isCompleteFormShown}
+							<StackedForm onSubmit={handleCompleteSubmit}>
+								{#if completeSubmission.errors.length > 0}
+									<ErrorSummary errors={completeSubmission.errors} />
+								{/if}
+								<RadioGroup
+									legend="Why is this Engagement ending?"
+									name="ending-reason"
+									options={endingReasons}
+									value={completeReasonValue}
+									onChange={(value) => (completeReasonValue = value)}
+									error={completeSubmission.errorFor(endingReasonFieldId)}
+								/>
+								<LabeledField id="ending-note" label="Note (optional)">
+									{#snippet children({ id, describedBy })}
+										<Textarea
+											{id}
+											{describedBy}
+											value={completeNoteValue}
+											onInput={(value) => (completeNoteValue = value)}
+										/>
+									{/snippet}
+								</LabeledField>
+								<Button
+									label="Confirm completion"
+									type="submit"
+									size="sm"
+									loading={completeSubmission.isSubmitting}
+								/>
+								<Button
+									label="Cancel"
+									type="button"
+									size="sm"
+									variant="secondary"
+									onClick={() => (isCompleteFormShown = false)}
+								/>
+							</StackedForm>
+						{/if}
+					</stack-l>
+				{:else}
+					<!--
+						#1598: "Put me on this Engagement", behind the Doula row's
+						Change. The row has a Change only where the BFF says the
+						press would be accepted: not for a contractor Doula, not
+						for an Owner or an Admin who holds no Doula role, not for
+						a person already on it, and not on a completed
+						Engagement. Drawing only -- the endpoint refuses each of
+						them whatever this page drew.
+					-->
+					<stack-l space="var(--space-3)">
+						<cluster-l space="var(--space-3)">
+							<Button
+								label="Put me on this Engagement"
+								size="sm"
+								variant="secondary"
+								loading={selfAttach.isBusy}
+								onClick={handleAttachSelf}
+							/>
+						</cluster-l>
+						{#if selfAttach.error}
+							<Notice variant="error" message={selfAttach.error} />
+						{/if}
+					</stack-l>
 				{/if}
-				<RadioGroup
-					legend="Why is this Engagement ending?"
-					name="ending-reason"
-					options={endingReasons}
-					value={completeReasonValue}
-					onChange={(value) => (completeReasonValue = value)}
-					error={completeSubmission.errorFor(endingReasonFieldId)}
-				/>
-				<LabeledField id="ending-note" label="Note (optional)">
-					{#snippet children({ id, describedBy })}
-						<Textarea
-							{id}
-							{describedBy}
-							value={completeNoteValue}
-							onInput={(value) => (completeNoteValue = value)}
-						/>
-					{/snippet}
-				</LabeledField>
-				<Button label="Confirm completion" type="submit" size="sm" loading={completeSubmission.isSubmitting} />
-				<Button
-					label="Cancel"
-					type="button"
-					size="sm"
-					variant="secondary"
-					onClick={() => (isCompleteFormShown = false)}
-				/>
-			</StackedForm>
+			{/snippet}
+		</SummaryList>
+
+		<!--
+			What a Change did. Each takes focus: the control she pressed
+			went with the form it was in, and focus would otherwise fall to
+			the document (seen on #1598's 320px walk). The row above already
+			shows the new value.
+		-->
+		{#if selfAttachedMessage}
+			<Notice variant="status" message={selfAttachedMessage} isFocusedOnAppear />
+		{:else if kindChangedMessage}
+			<Notice variant="status" message={kindChangedMessage} isFocusedOnAppear />
+		{:else if statusChangedMessage}
+			<Notice variant="status" message={statusChangedMessage} isFocusedOnAppear />
 		{/if}
 
 		<!--
@@ -1591,20 +1633,22 @@
 			Engagement, and reading this Engagement at all already passed
 			ADR-0008's gate.
 		-->
-		<Link href={clientDetailHref()} label="View Client" describedBy="engagement-client-name" />
 		<span class="visually-hidden" id="engagement-client-name">{detail!.clientName}</span>
-		<!--
-			Her other details, added from here as well as from her record
-			(#1610). The journey's first Back and its save return to this
-			page. Absent until her record is read, and for an erased record,
-			whose edit `edit.go` refuses.
-		-->
-		{#if clientRecord && canAddDetails(clientRecord)}
-			<Link
-				href={detailsHref(page.params.practiceId!, detail!.clientId, page.params.engagementId!)}
-				label={detailsLinkLabel(clientRecord)}
-			/>
-		{/if}
+		<cluster-l space="var(--space-4)" align="center">
+			<Link href={clientDetailHref()} label="View Client" describedBy="engagement-client-name" />
+			<!--
+				Her other details, added from here as well as from her record
+				(#1610). The journey's first Back and its save return to this
+				page. Absent until her record is read, and for an erased record,
+				whose edit `edit.go` refuses.
+			-->
+			{#if clientRecord && canAddDetails(clientRecord)}
+				<Link
+					href={detailsHref(page.params.practiceId!, detail!.clientId, page.params.engagementId!)}
+					label={detailsLinkLabel(clientRecord)}
+				/>
+			{/if}
+		</cluster-l>
 
 		<!--
 			The outcome of the header's own action, and the only block-level
@@ -1626,6 +1670,13 @@
 
 {#snippet actions()}
 	<!--
+		#1998: the drawing's header actions. "Message the client" goes to
+		this page's own Messages section, which every reader of the page
+		has. Both are secondary, as drawn: the header names what can be
+		done, and the page's one accent is spent lower down.
+	-->
+	<Link href="#messages" label="Message the client" variant="secondary" />
+	<!--
 		#255: an accepted Client is never offered a second invite -- the
 		"Portal invite" summary row above already says "Accepted", so
 		hiding this action here states the same fact rather than a second,
@@ -1637,7 +1688,12 @@
 	-->
 	{#if !hasAcceptedPortalAccess}
 		{#if hasClientEmailOnFile}
-			<Button label="Send portal invite" onClick={handleSendPortalInvite} loading={isSendingPortalInvite} />
+			<Button
+				label="Send portal invite"
+				variant="secondary"
+				onClick={handleSendPortalInvite}
+				loading={isSendingPortalInvite}
+			/>
 		{:else}
 			<Notice variant="info" message="This Client has no email address on file. Add one before sending a portal invite." />
 		{/if}
@@ -2333,6 +2389,8 @@
 <RecordDetail
 	title={detail.clientName}
 	{outcome}
+	backHref={clientsHref}
+	backLabel="Clients"
 	{summary}
 	{actions}
 	isContentsShown

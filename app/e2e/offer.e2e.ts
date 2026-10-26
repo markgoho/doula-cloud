@@ -130,6 +130,8 @@ test('A solo Owner who is a contractor Doula is named on the Start work form, an
 	await page.goto(`/practices/${practiceId}/engagements/${engagementId}`);
 
 	await expect(page.getByText('No Doula yet', { exact: true })).toBeVisible();
+	// #1998: behind the Doula row's Change in the summary card.
+	await page.locator('dt', { hasText: /^Doulas?$/ }).locator('..').getByRole('button', { name: 'Change', exact: true }).click();
 	await page.getByRole('button', { name: 'Put me on this Engagement' }).click();
 
 	await expect(page.getByText('You are on this Engagement.')).toBeVisible();
@@ -206,6 +208,8 @@ test('A solo Owner puts herself on an Engagement that started with no Doula', as
 	await expect(page.getByText(/^There is no one at this practice to offer this work to/)).toBeVisible();
 	await expect(page.getByLabel('Jamie Owner')).toHaveCount(0);
 
+	// #1998: behind the Doula row's Change in the summary card.
+	await page.locator('dt', { hasText: /^Doulas?$/ }).locator('..').getByRole('button', { name: 'Change', exact: true }).click();
 	await page.getByRole('button', { name: 'Put me on this Engagement' }).click();
 
 	await expect(page.getByText('You are on this Engagement.')).toBeVisible();
