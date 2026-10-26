@@ -274,6 +274,8 @@ gcloud run services update doula-api --region us-central1 --project=doula-cloud 
 
 That is the whole list. No `process-*` endpoint has a job of its own any more, and none needs one: the drain runs every registration in `api/outboxes.go` in turn, each in its own transaction behind its own RLS door, so a fourteenth outbox is backstopped by being registered. Adding an outbox is no longer a console change. See [ADR-0010](adr/0010-notification-email-outbox.md)'s amendment and [#481](https://github.com/markgoho/doula-cloud/issues/481).
 
+Locally there is no Scheduler and no nudge, so `bun run dev:full` calls the same `POST /api/internal/outboxes/drain` itself, every 3 seconds, with the `X-Internal-Secret` header, while it runs ([#2010](https://github.com/markgoho/doula-cloud/issues/2010), [`testing/walk-a-screen-locally.md`](testing/walk-a-screen-locally.md) step 6). The e2e suite does not: each spec drains the outbox it reads.
+
 The drain answers `200` only when every outbox succeeded, and `500` naming the ones that failed, so a single broken outbox turns the job red rather than hiding inside a green tick. Each failure is also logged as `outbox: drain <path>: <error>`.
 
 **Four outboxes have no nudge at all**, so the drain is the only thing that ever runs them: `process-staff-token-mail-outbox` and `process-staff-email-change-outbox` (#613 accepted ADR-0010's plain delay for both rather than wiring a nudge), plus `process-portal-magic-link-outbox` (#617) and `process-portal-address-change-outbox` (#619), which follow the same acceptance — ADR-0026 carves no ADR-0010 exception for either mail. Before #481 the first two had no Scheduler job either, which means they did not run outside a test or a hand invocation.
