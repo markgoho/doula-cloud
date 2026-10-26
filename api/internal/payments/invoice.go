@@ -528,7 +528,7 @@ func GetInvoicesHandler() http.Handler {
 			return
 		}
 		if !canAccess {
-			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
+			apierr.WriteError(w, "Engagement not found", http.StatusNotFound)
 			return
 		}
 
