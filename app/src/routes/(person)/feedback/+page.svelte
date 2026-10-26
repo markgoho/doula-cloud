@@ -140,7 +140,7 @@
 		   founder's answer of 2026-10-25 on #1981: a very long name or
 		   address wraps one more line, and it does not change the layout.
 		   Measured 2026-10-25 on the drag surface: its natural width fits
-		   its column from 1208px on macOS/Chromium with no margin beyond it.
+		   its column from 1208px on macOS/Chromium and from 1209px in CI's Linux/Chromium, the canonical environment, with no margin beyond it.
 		   On the hostile fixture it was 87.5rem.
 		   `DataTable.svelte`'s floor comment says why the floor is the
 		   route's own. */
@@ -154,7 +154,7 @@
 			--data-table-records-display: block;
 		}
 
-		@container feedback-table (min-width: 75.5rem) {
+		@container feedback-table (min-width: 75.75rem) {
 			.feedback-table > :global(*) {
 				--data-table-table-display: table;
 				--data-table-records-display: none;

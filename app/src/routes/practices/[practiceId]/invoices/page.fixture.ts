@@ -125,7 +125,14 @@ export const typical: RouteVariant<RouteParameters> = {
 					dueOn: `2026-09-${String(15 + index * 2).padStart(2, '0')}`,
 					daysOverdue: isOverdue ? 36 : 0
 				};
-			})
+			}),
+			// The totals the eight rows above add up to.
+			outstandingCents: 630_000,
+			outstandingCount: 5,
+			paidCents: 450_000,
+			refundedCents: 0,
+			overdueCents: 90_000,
+			overdueCount: 1
 		} satisfies PracticeInvoiceListData
 	}
 };
