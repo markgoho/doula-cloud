@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { globFiles } from './globFiles';
-import { QUOTED, quotedStringsInSource, regionLines } from './quotedCopy';
+import { copyCandidates, NOT_COPY } from './quotedCopy';
 
 /*
  * #2023: two hyphens are not a dash on a screen. Every other line a person
@@ -47,30 +47,10 @@ const appRoot = fileURLToPath(new URL('../../', import.meta.url));
 
 const GLOBS = ['src/{lib/components,routes}/**/*.svelte', 'src/{lib,routes}/**/*.ts'];
 
-// A spec and a fixture are not a screen: a spec's strings are its own test
-// names, and a fixture's content is hostile test data.
-const NOT_COPY = /\.(spec|fixture)\.ts$|\.svelte\.spec\.ts$|\/page\.fixture\.ts$/;
-
 interface Offense {
 	file: string;
 	line: number;
 	text: string;
-}
-
-function quotedIn(text: string): string[] {
-	return text
-		.matchAll(QUOTED)
-		.map((match) => (match[1] ?? match[2] ?? match[3])!)
-		.toArray();
-}
-
-function copyCandidates(file: string, source: string): { line: number; text: string }[] {
-	if (file.endsWith('.ts')) return quotedStringsInSource(source);
-	return regionLines(source).flatMap(({ line, text, region }) => {
-		if (region === 'style') return [];
-		if (region === 'markup') return [{ line, text }];
-		return quotedIn(text).map((quoted) => ({ line, text: quoted }));
-	});
 }
 
 function findOffensesInSource(file: string, source: string): Offense[] {

@@ -149,7 +149,7 @@ export function pieceFacts(piece: FeedbackPiece): { label: string; value: string
 		{ label: 'Sent', value: formatSentAt(piece.sentAt) },
 		{
 			label: 'Sender',
-			value: piece.sender.kind === 'client' ? 'A Client, named by her sign-in address' : (piece.sender.name ?? 'No name on record')
+			value: piece.sender.kind === 'client' ? 'A Client, named by the sign-in address' : (piece.sender.name ?? 'No name on record')
 		},
 		{ label: 'Email', value: piece.sender.email || 'No address on record' },
 		{ label: 'Role', value: piece.role ? rolesLabel(piece.role.split(', ')) : 'No role assigned' },

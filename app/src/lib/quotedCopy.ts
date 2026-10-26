@@ -149,3 +149,32 @@ export function regionLines(source: string): RegionLine[] {
 export function regionLinesInFile(file: string, appRoot: string): RegionLine[] {
 	return regionLines(readFileSync(new URL(file, `file://${appRoot}`), 'utf8'));
 }
+
+/**
+ * The files a copy spec reads that are not a screen: a spec's strings are
+ * its own test names, and a fixture's content is hostile test data. The
+ * dash and pronoun specs both filter their globs through it.
+ */
+export const NOT_COPY = /\.(spec|fixture)\.ts$|\.svelte\.spec\.ts$|\/page\.fixture\.ts$/;
+
+function quotedIn(text: string): string[] {
+	return text
+		.matchAll(QUOTED)
+		.map((match) => (match[1] ?? match[2] ?? match[3])!)
+		.toArray();
+}
+
+/**
+ * What a person can read in `file`, one entry per candidate: in a `.ts`
+ * module every quoted string; in a component every markup line whole and
+ * every quoted string in its `<script>`; never a `<style>` line or a
+ * comment.
+ */
+export function copyCandidates(file: string, source: string): QuotedLine[] {
+	if (file.endsWith('.ts')) return quotedStringsInSource(source);
+	return regionLines(source).flatMap(({ line, text, region }) => {
+		if (region === 'style') return [];
+		if (region === 'markup') return [{ line, text }];
+		return quotedIn(text).map((quoted) => ({ line, text: quoted }));
+	});
+}

@@ -119,7 +119,7 @@ describe('pieceFacts', () => {
 			sender: { kind: 'client', email: 'priya.signin@example.test' }
 		});
 
-		expect(valueOf(facts, 'Sender')).toBe('A Client, named by her sign-in address');
+		expect(valueOf(facts, 'Sender')).toBe('A Client, named by the sign-in address');
 		expect(valueOf(facts, 'Email')).toBe('priya.signin@example.test');
 	});
 
