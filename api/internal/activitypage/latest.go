@@ -52,7 +52,7 @@ func Latest(ctx context.Context, tx *sql.Tx, q LatestQuery) (*Stamp, error) {
 		q.PracticeID, q.SubjectKind, q.SubjectID, q.Action, q.NotBefore,
 	).Scan(&actorKind, &staffName, &clientGiven, &clientPreferred, &clientFamily, &at)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
+		return nil, nil //nolint:nilnil // nothing happened yet is an answer, not a failure
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
