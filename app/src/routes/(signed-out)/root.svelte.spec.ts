@@ -5,7 +5,7 @@ import { SIGN_OUT_FAILED_MESSAGE } from '#lib/signOut.js';
 import { inReaderZone } from '#lib/testZone.js';
 import type { RootLanding } from './+page.js';
 import Page from './+page.svelte';
-import { data as staffPickerData, fixture, signedOut } from './page.fixture.js';
+import { data as staffPickerData, fixture, portalPickerData, signedOut } from './page.fixture.js';
 
 const SIGNED_OUT = signedOut.props.data;
 
@@ -122,25 +122,20 @@ describe('/+page.svelte', () => {
 		await expect.element(testPage.getByText('Welcome to DoulaCloud.')).not.toBeInTheDocument();
 	});
 
-	it("lists a signed-in Staff visitor's several Practices when there is no single or last-used one", async () => {
-		// The fixture's own Membership carries #530's URL; a second one is
-		// added here rather than invented from scratch, since "several" is
-		// content the fixture -- one Membership -- does not itself hold.
-		await setup({
-			data: {
-				...staffPickerData,
-				memberships: [
-					...staffPickerData.memberships,
-					{ practiceId: 'practice-2', practiceName: 'Hilltop Doulas', roles: ['doula'] }
-				]
-			}
-		});
+	it("offers a signed-in Staff visitor's several Practices as doors, each with the roles held there", async () => {
+		await setup();
 
-		const [firstMembership] = staffPickerData.memberships;
+		// #2027: a door per Practice, the name as the link and the roles
+		// as its description -- `PracticeChooser.svelte.spec.ts` covers
+		// the door itself.
+		const [firstMembership, secondMembership] = staffPickerData.memberships;
 		const link = testPage.getByRole('link', { name: firstMembership.practiceName });
 		await expect.element(link).toBeVisible();
 		expect(link.element()).toHaveAttribute('href', `/practices/${firstMembership.practiceId}`);
-		await expect.element(testPage.getByRole('link', { name: 'Hilltop Doulas' })).toBeVisible();
+		await expect.element(link).toHaveAccessibleDescription('Owner, Admin, Doula');
+		await expect
+			.element(testPage.getByRole('link', { name: secondMembership.practiceName }))
+			.toHaveAccessibleDescription('Doula');
 	});
 
 	// #745 removed this screen's own empty-picker branch: a Staff visitor
@@ -148,48 +143,27 @@ describe('/+page.svelte', () => {
 	// her to `/no-practice` first. `root-load.spec.ts` covers that.
 
 	// #312: the portal root lists every Engagement her Portal Account
-	// reaches, across every Practice, past and present -- so this fixture
+	// reaches, across every Practice, past and present -- so the fixture
 	// deliberately carries one `completed` Engagement, at a different
 	// Practice from the `active` one, rather than two Engagements in the
 	// same status.
-	it("lists a signed-in Client-portal visitor's several Engagements, across Practices and statuses", async () => {
-		await setup({
-			data: {
-				type: 'portal-picker',
-				engagements: [
-					{
-						engagementId: 'engagement-1',
-						practiceName: 'Riverside Doulas',
-						status: 'active',
-						createdAt: '2026-01-15T20:00:00Z'
-					},
-					{
-						engagementId: 'engagement-2',
-						practiceName: 'Hilltop Doulas',
-						status: 'completed',
-						createdAt: '2026-03-12T20:00:00Z'
-					}
-				]
-			}
-		});
+	it("offers a signed-in Client-portal visitor's several Engagements as doors, across Practices and statuses", async () => {
+		await setup({ data: portalPickerData });
 
+		const [ongoing, ended] = portalPickerData.engagements;
 		// engagementLabel (#310): the Practice name plus when the Engagement
 		// began, which is also what tells two Engagements at one Practice
-		// apart -- see clientRegister.spec.ts for that case directly.
-		const link = testPage.getByRole('link', { name: 'Riverside Doulas, started Jan 15, 2026' });
+		// apart -- see clientRegister.spec.ts for that case directly. The
+		// Client register's fixed labels (ADR-0015) are each door's line,
+		// not the raw `active`/`completed` enum values -- a `completed`
+		// Engagement stays listed and reads honestly as "Care ended".
+		const link = testPage.getByRole('link', { name: `${ongoing.practiceName}, started Jan 15, 2026` });
 		await expect.element(link).toBeVisible();
-		expect(link.element()).toHaveAttribute('href', '/portal/engagements/engagement-1');
+		expect(link.element()).toHaveAttribute('href', `/portal/engagements/${ongoing.engagementId}`);
+		await expect.element(link).toHaveAccessibleDescription('Ongoing');
 		await expect
-			.element(testPage.getByRole('link', { name: 'Hilltop Doulas, started Mar 12, 2026' }))
-			.toBeVisible();
-
-		// The Client register's fixed labels (ADR-0015), not the raw
-		// `active`/`completed` enum values -- a `completed` Engagement
-		// stays listed and reads honestly as "Care ended" rather than
-		// dropping off the list or reading as a raw status a Client has no
-		// register entry for.
-		await expect.element(testPage.getByText('Ongoing')).toBeVisible();
-		await expect.element(testPage.getByText('Care ended')).toBeVisible();
+			.element(testPage.getByRole('link', { name: `${ended.practiceName}, started Mar 12, 2026` }))
+			.toHaveAccessibleDescription('Care ended');
 	});
 
 	// #1116: the one state of `/` that offers no destination. Two people

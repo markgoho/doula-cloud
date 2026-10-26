@@ -64,7 +64,7 @@
 	import { unregisterPushSubscription } from '#lib/pushRegistration.js';
 	import { signOutOfSession, type SignOutOutcome } from '#lib/signOut.js';
 	import DoorLink from '#lib/components/atoms/DoorLink.svelte';
-	import Link from '#lib/components/atoms/Link.svelte';
+	import PracticeChooser from '#lib/components/molecules/PracticeChooser.svelte';
 	import SignOutButton from '#lib/components/molecules/SignOutButton.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 	import LandingPage from '#lib/components/templates/LandingPage.svelte';
@@ -131,16 +131,6 @@
 		}
 		return outcome;
 	}
-
-	// Mirrors StepRail's own id-per-row join (#464): the status text sits
-	// beside the link rather than inside its accessible name, so a
-	// keyboard or screen-reader user still hears the status without it
-	// being read as part of the link's own name. Telling two Engagements
-	// at the same Practice apart is the link's own name's job instead
-	// (#310): engagementLabel folds in when each began.
-	function statusId(engagementId: string) {
-		return `engagement-status-${engagementId}`;
-	}
 </script>
 
 {#snippet doors()}
@@ -180,16 +170,12 @@
 			Membership to `/no-practice` rather than handing this an empty list
 			(#745).
 		-->
-		<ul>
-			{#each data.memberships as membership (membership.practiceId)}
-				<li>
-					<Link
-						href={resolve('/practices/[practiceId]', { practiceId: membership.practiceId })}
-						label={membership.practiceName}
-					/>
-				</li>
-			{/each}
-		</ul>
+		<PracticeChooser
+			practices={data.memberships.map((membership) => ({
+				...membership,
+				href: resolve('/practices/[practiceId]', { practiceId: membership.practiceId })
+			}))}
+		/>
 	{:else if hasNoCare}
 		<!--
 			#1116: two people reach this state -- one whose Practice has not
@@ -212,20 +198,24 @@
 			stays openable (ADR-0015). `+page.ts` already redirects straight
 			through when there is only one, so this only ever renders with
 			two or more.
+
+			A door each (#2027), as the Staff chooser above is: the
+			Engagement's label is the door's name and its status the line
+			under it, which `DoorLink` joins as the link's description, so
+			the status is heard after the name and never as part of it.
+			Telling two Engagements at one Practice apart is the name's job
+			(#310): `engagementLabel` folds in when each began.
 		-->
-		<ul>
+		<ul class="doors">
 			{#each data.engagements as engagement (engagement.engagementId)}
 				<li>
-					<Link
+					<DoorLink
 						href={resolve('/portal/(authenticated)/engagements/[engagementId]', {
 							engagementId: engagement.engagementId
 						})}
 						label={engagementLabel(engagement)}
-						describedBy={statusId(engagement.engagementId)}
+						description={engagementStatusLabel(engagement.status)}
 					/>
-					<p class="status" id={statusId(engagement.engagementId)}>
-						{engagementStatusLabel(engagement.status)}
-					</p>
 				</li>
 			{/each}
 		</ul>
@@ -240,10 +230,18 @@
 
 <style>
 	@layer components {
-		.status {
-			margin: 0 0 var(--space-3);
-			color: var(--color-on-surface-muted);
-			font-size: var(--text-body-sm-size);
+		/* `PracticeChooser`'s own stack, for the one chooser that is not
+		   a Practice (#2027, #2020). */
+		.doors {
+			display: flex;
+			flex-direction: column;
+			gap: var(--space-related);
+			margin: 0;
+		}
+
+		.doors > li {
+			display: flex;
+			flex-direction: column;
 		}
 	}
 </style>

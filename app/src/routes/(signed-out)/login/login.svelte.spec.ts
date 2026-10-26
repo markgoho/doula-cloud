@@ -175,11 +175,17 @@ describe('Staff login -- on-load session probe (#283)', () => {
 
 		await setup();
 
-		await expect.element(testPage.getByRole('heading', { name: 'Choose a Practice' })).toBeVisible();
+		const heading = testPage.getByRole('heading', { name: 'Choose a Practice' });
+		await expect.element(heading).toBeVisible();
 		await expect
 			.element(testPage.getByRole('link', { name: secondMembership.practiceName }))
-			.toBeVisible();
+			.toHaveAccessibleDescription('Doula');
 		expect(goto).not.toHaveBeenCalled();
+		// #2027: the chooser replaces the form rather than sitting under it,
+		// and takes focus from the form that has gone.
+		await expect.element(heading).toHaveFocus();
+		await expect.element(testPage.getByLabelText('Email')).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('button', { name: 'Log in' })).not.toBeInTheDocument();
 	});
 
 	it('renders the ordinary login form for a signed-out visitor, with no session-ended messaging', async () => {
@@ -271,6 +277,23 @@ describe('Staff login -- a credential that resolves to no Practice (#745)', () =
 		await signIn();
 
 		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/no-practice'));
+	});
+});
+
+describe('Staff login -- a password accepted for several Practices (#2027)', () => {
+	it('replaces the form with the chooser and moves focus to its heading', async () => {
+		apiFetch.mockResolvedValue(jsonResponse('no matching staff session', 404));
+		apiFetchWithSession.mockResolvedValue(jsonResponse(session));
+
+		await signIn();
+
+		const heading = testPage.getByRole('heading', { name: 'Choose a Practice' });
+		await expect.element(heading).toHaveFocus();
+		await expect
+			.element(testPage.getByRole('link', { name: firstMembership.practiceName }))
+			.toHaveAttribute('href', `/practices/${firstMembership.practiceId}`);
+		await expect.element(testPage.getByLabelText('Password')).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('link', { name: 'Forgot your password?' })).not.toBeInTheDocument();
 	});
 });
 

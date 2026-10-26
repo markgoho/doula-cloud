@@ -41,12 +41,12 @@ import { WCAG_TAGS } from './wcag';
  *   the `(signed-out)` group to get one, closing the gap `/account` used
  *   to share until #484. The two picker states are not separately
  *   scanned because they render the same nodes as the state that is --
- *   `EntryPage`, an `<h1>`, and a list of `Link`s -- while costing a
- *   Staff member with two Memberships and a Portal Account with two
- *   Engagements to provision. The one node they add that the scanned
- *   state has not got is the portal picker's status paragraph, joined to
- *   its link by `aria-describedby`; that join is asserted directly in
- *   this repo's unit suite rather than here, since axe scans the DOM
+ *   an `<h1>` and a stack of `DoorLink`s, each line joined to its link
+ *   by `aria-describedby` (#2027) -- while costing a Staff member with
+ *   two Memberships and a Portal Account with two Engagements to
+ *   provision. What they add is a `<ul>` around the doors and
+ *   `EntryPage` in place of `LandingPage`; the join is asserted directly
+ *   in this repo's unit suite rather than here, since axe scans the DOM
  *   instances it is pointed at and not the pattern behind them.
  */
 
