@@ -370,7 +370,7 @@ describe('staff screen', () => {
 		await setup();
 
 		await expect
-			.element(invitationsTable().getByText('Expired -- invite again or revoke'))
+			.element(invitationsTable().getByText('Expired — invite again or revoke'))
 			.toBeVisible();
 		await expect
 			.element(testPage.getByRole('cell', { name: lapsedInvitation.address, exact: true }))

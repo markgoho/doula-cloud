@@ -212,7 +212,7 @@ describe('the roles statement (#290)', () => {
 		await expect
 			.element(
 				testPage.getByText(
-					"This account will hold every role — Owner, Admin and Doula — because a Practice's founder is usually its only Doula and needs to hold their own Visits. Anyone you invite later holds only the roles you choose for them. Roles are shown and changed on your Practice's staff roster."
+					'You hold every role — Owner, Admin and Doula. Anyone you invite holds only the roles you choose.'
 				)
 			)
 			.toBeVisible();
@@ -238,7 +238,7 @@ describe('the agreement sentence (#1547)', () => {
 		const paragraph = testPage.getByRole('paragraph').filter({ hasText: 'By creating your Practice' });
 		await expect.element(paragraph).toBeVisible();
 
-		const notice = testPage.getByText(/This account will hold every role/).element();
+		const notice = testPage.getByText(/You hold every role/).element();
 		expect(notice.compareDocumentPosition(paragraph.element()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 		expect(paragraph.element().nextElementSibling).toBe(button.element());
 	});
@@ -373,7 +373,7 @@ describe('the optional Practice name (#1536)', () => {
 		await expect
 			.element(field)
 			.toHaveAccessibleDescription(
-				'If you leave this empty, your Practice takes your own name. Clients see this name on a Contract, in the portal and on a card statement.'
+				'Clients see it on Contracts and card statements. Leave it empty to use your own name.'
 			);
 	});
 

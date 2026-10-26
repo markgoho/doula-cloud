@@ -320,7 +320,7 @@ export function findConditionsBelowConformance(sources: Record<string, string>):
 		.map((condition) => ({
 			file: condition.file,
 			line: condition.line,
-			raw: `${condition.raw} -- resolves to ${remToPx(condition.floorRem)}px, below the ${CONFORMANCE_COMMITMENT}px conformance commitment`
+			raw: `${condition.raw} — resolves to ${remToPx(condition.floorRem)}px, below the ${CONFORMANCE_COMMITMENT}px conformance commitment`
 		}));
 }
 
@@ -620,5 +620,5 @@ export function measureWrap(
 export function wrapFloorReport(name: string, measurement: WrapMeasurement): string {
 	return measurement.wrapped.length === 0
 		? `${name}: given ${measurement.given}px, nothing wrapped (no-wrap criterion).`
-		: `${name}: given ${measurement.given}px, wrapped -- ${measurement.wrapped.join('; ')} (no-wrap criterion).`;
+		: `${name}: given ${measurement.given}px, wrapped — ${measurement.wrapped.join('; ')} (no-wrap criterion).`;
 }

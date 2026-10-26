@@ -179,7 +179,7 @@ export function fieldCountWarning(fields: Field[]): string | undefined {
 	if (askedCount <= FIELD_COUNT_WARNING_THRESHOLD) {
 		return undefined;
 	}
-	return `This template asks a Client ${askedCount} questions beyond the standard ones. Every field here adds to how long intake takes -- consider archiving any that are no longer worth asking before adding more.`;
+	return `This template asks a Client ${askedCount} questions beyond the standard ones. Each one makes intake longer, so archive any you no longer need before adding more.`;
 }
 
 /** Validates fields against the same rules the Go BFF enforces
@@ -201,7 +201,7 @@ export function validateFields(fields: Field[]): string | undefined {
 		}
 		const structural = STRUCTURAL_FIELD_NAMES.get(f.label.trim().toLowerCase());
 		if (structural) {
-			return `"${f.label}" is already on every Client record as the structural ${structural} field -- if ${structural} has the wrong shape for what you need, that is a different fix, not a field to add here.`;
+			return `"${f.label}" is already on every Client record as the ${structural} field, so it is not a field to add here.`;
 		}
 
 		if (isSelectType(f.type)) {

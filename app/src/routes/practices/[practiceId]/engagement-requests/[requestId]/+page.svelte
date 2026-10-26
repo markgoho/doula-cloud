@@ -37,6 +37,7 @@
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { formatCalendarDay, formatInstant } from '#lib/dates.js';
+	import { engagementStatusText } from '#lib/engagementDetail.js';
 	import {
 		NO_DOULA_YET_LABEL,
 		approveRequest,
@@ -96,7 +97,7 @@
 		const items = [
 			{
 				label: 'Client',
-				value: `${clientName(request.client)} -- ${request.client.isNewToPractice ? 'new to this practice' : 'already known here'}`
+				value: `${clientName(request.client)} — ${request.client.isNewToPractice ? 'new to this Practice' : 'already known here'}`
 			},
 			{ label: 'Asked by', value: `${request.requestedByName} on ${formatInstant(request.requestedAt)}` },
 			{ label: 'Kind of work', value: kindLabel(request.kind) },
@@ -120,7 +121,7 @@
 
 	function engagementLabel(engagement: ApprovalDetail['engagements'][number]): string {
 		const kind = kindLabel(engagement.kind);
-		return `${kind} work, started ${formatInstant(engagement.createdAt)} -- ${engagement.status}`;
+		return `${kind} work, started ${formatInstant(engagement.createdAt)} — ${engagementStatusText(engagement.status)}`;
 	}
 
 	function clientHref(clientId: string): string {
@@ -200,7 +201,7 @@
 				/>
 			{/if}
 			{#if hasNoCredits || isBalanceEmpty}
-				<Notice variant="error" message="There are no credits left on this practice's balance." />
+				<Notice variant="error" message="There are no credits left on this Practice's balance." />
 				<Link href={billingHref()} label="Buy credits" />
 			{/if}
 			{#if submission.errors.length > 0}
@@ -222,7 +223,7 @@
 			{/each}
 		</ul>
 	{:else}
-		<Text text={`This would be ${clientName(detail!.client)}'s first engagement with this practice.`} />
+		<Text text={`This would be ${clientName(detail!.client)}'s first engagement with this Practice.`} />
 	{/if}
 {/snippet}
 

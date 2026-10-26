@@ -1628,14 +1628,14 @@ describe('what the Offers form says when the roster holds nobody (#1432)', () =>
 	it('does not tell an Owner that there is no one to offer the work to when the roster read fails', async () => {
 		await setupWithRoster(jsonResponse('the roster is unavailable', 500), ['owner']);
 
-		await expect.element(testPage.getByText(/^We could not load who is at this practice/)).toBeVisible();
-		expect(testPage.getByText(/^There is no one at this practice to offer this work to/).elements()).toHaveLength(0);
+		await expect.element(testPage.getByText(/^We could not load who is at this Practice/)).toBeVisible();
+		expect(testPage.getByText(/^There is no one at this Practice to offer this work to/).elements()).toHaveLength(0);
 	});
 
 	it('says that there is no one to offer the work to when the roster holds nobody, and asks for an email address', async () => {
 		await setupWithRoster(jsonResponse({ items: [] }), ['owner']);
 
-		await expect.element(testPage.getByText(/^There is no one at this practice to offer this work to/)).toBeVisible();
+		await expect.element(testPage.getByText(/^There is no one at this Practice to offer this work to/)).toBeVisible();
 		expect(testPage.getByRole('group', { name: 'Offer this work to' }).elements()).toHaveLength(0);
 		await expect.element(testPage.getByLabelText('Email address')).toBeVisible();
 	});
@@ -1648,7 +1648,7 @@ describe('the Offers form does not list the person at the screen (#1598)', () =>
 		// The fixture's reader is `staff-1`, the roster's first Doula.
 		await setupWithRoster();
 		// *Offer this work to* opens with nothing chosen (#1914).
-		await testPage.getByLabelText('Someone already at this practice').click();
+		await testPage.getByLabelText('Someone already at this Practice').click();
 
 		const doulaPick = testPage.getByRole('group', { name: 'Doula', exact: true });
 		await expect.element(doulaPick.getByLabelText('Jordan Reyes')).toBeVisible();
@@ -1665,7 +1665,7 @@ describe('the Offers form does not list the person at the screen (#1598)', () =>
 			})
 		);
 
-		await expect.element(testPage.getByText(/^There is no one at this practice to offer this work to/)).toBeVisible();
+		await expect.element(testPage.getByText(/^There is no one at this Practice to offer this work to/)).toBeVisible();
 		expect(testPage.getByRole('group', { name: 'Offer this work to' }).elements()).toHaveLength(0);
 		await expect.element(testPage.getByLabelText('Email address')).toBeVisible();
 		// The same roster still gives her own Visit its standing answer.
@@ -1675,8 +1675,8 @@ describe('the Offers form does not list the person at the screen (#1598)', () =>
 	it('still says the roster could not be read, and not that nobody is there, when the read fails', async () => {
 		await setupWithRoster(jsonResponse('the roster is unavailable', 500));
 
-		await expect.element(testPage.getByText(/^We could not load who is at this practice/)).toBeVisible();
-		expect(testPage.getByText(/^There is no one at this practice to offer this work to/).elements()).toHaveLength(0);
+		await expect.element(testPage.getByText(/^We could not load who is at this Practice/)).toBeVisible();
+		expect(testPage.getByText(/^There is no one at this Practice to offer this work to/).elements()).toHaveLength(0);
 	});
 });
 

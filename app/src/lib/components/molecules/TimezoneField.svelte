@@ -50,7 +50,7 @@
 	"Mountain time, no daylight saving (Phoenix)", is 43 characters, past
 	GOV.UK's widest step of 30, and a select narrower than its longest
 	option cuts the chosen answer off. A stored zone outside the seven is
-	shown as its raw IANA name, which can be longer still.
+	labeled from its IANA name (zoneLabel), and can be longer still.
 -->
 <LabeledField {id} {error} label="What timezone does this Practice work in?" {hint}>
 	{#snippet children({ id: controlId, describedBy, invalid })}

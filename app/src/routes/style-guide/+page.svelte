@@ -15,12 +15,12 @@
 	<ul>
 		<li>
 			<Link href={componentHref('drag-surface')} label="Drag surface" />
-			-- any component in a frame you resize by dragging, so its behavior is watched rather than
+			— any component in a frame you resize by dragging, so its behavior is watched rather than
 			read about. The per-component entries below stay as they are.
 		</li>
 		<li>
 			<Link href={componentHref('layout-exercise')} label="Layout exercise" />
-			-- a card broken on purpose, a task, and the answer. A session meets it through the continuum
+			— a card broken on purpose, a task, and the answer. A session meets it through the continuum
 			check's failure message rather than through this link; the link is for a person.
 		</li>
 	</ul>

@@ -64,7 +64,7 @@ describe('one piece of Feedback (#1526)', () => {
 			'Something is not working',
 			'Anne-Marie Ochieng-Whitfield',
 			'anne-marie@example.test',
-			'owner, admin, doula',
+			'Owner, Admin, Doula',
 			'Riverside Doula Collective',
 			piece.pageUrl,
 			piece.routeId,

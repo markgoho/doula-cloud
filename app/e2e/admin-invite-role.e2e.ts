@@ -32,7 +32,7 @@ test('An Admin invited via the Staff invite route reaches the Credits and Staff 
 	// The invite form opens with nothing chosen (#1912): tick Admin alone,
 	// so the role plumbing is what decides the membership.
 	await page.goto(`/practices/${practiceId}/invite`);
-	await page.getByLabel('Their email').fill(adminEmail);
+	await page.getByLabel('Email address').fill(adminEmail);
 	await page.getByRole('checkbox', { name: 'Admin' }).check();
 	await page.getByRole('radio', { name: 'Employee' }).check();
 	const [inviteResponse] = await Promise.all([
@@ -88,7 +88,7 @@ test('An Admin invited via the Staff invite route reaches the Credits and Staff 
 	// Jamie refuses Avery, with the sentence the route's own OwnerOnly
 	// declaration names (#1031).
 	await page.goto(`/practices/${practiceId}/invite`);
-	await page.getByLabel('Their email').fill(uniqueEmail('someone-else'));
+	await page.getByLabel('Email address').fill(uniqueEmail('someone-else'));
 	await page.getByRole('checkbox', { name: 'Doula' }).check();
 	await page.getByRole('radio', { name: 'Employee' }).check();
 	await page.getByRole('button', { name: 'Send invite' }).click();

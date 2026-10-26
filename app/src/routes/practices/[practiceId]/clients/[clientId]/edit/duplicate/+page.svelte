@@ -206,7 +206,7 @@
 		{steps}
 		backHref={base}
 		question={{ as: 'legend', text: `Save these changes to ${survivorName(reviewing)}?` }}
-		hint={`Nothing has been saved yet. No new record is created -- ${survivorName(reviewing)}'s record is kept and updated, and the other is closed as a duplicate.`}
+		hint={`Nothing has been saved yet. No new record is created. ${survivorName(reviewing)}'s record is kept and updated, and the other is closed as a duplicate.`}
 		errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 	>
 		{#snippet content()}
@@ -245,7 +245,7 @@
 					<Text
 						step="body-sm"
 						tone="muted"
-						text="Choosing an existing Client combines the two records into one. Engagements, requests and portal access move to the record that is kept, and the record that is absorbed stops appearing anywhere. The one kept is whichever has more history behind it -- never assume which record that is."
+						text="Choosing an existing Client combines the two records into one. Engagements, requests and portal access move to the record that is kept, and the record that is absorbed stops appearing anywhere. The one kept is whichever has more history behind it. Check which record that is before you choose."
 					/>
 					<Notice
 						variant="info"

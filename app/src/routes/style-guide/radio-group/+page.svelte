@@ -2,8 +2,8 @@
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 
 	const modeOptions: { value: 'signup' | 'login'; label: string }[] = [
-		{ value: 'signup', label: "I'm new here -- create an account with this email address" },
-		{ value: 'login', label: 'I already have an account -- log in and add this Practice to it' }
+		{ value: 'signup', label: "I'm new here — create an account with this email address" },
+		{ value: 'login', label: 'I already have an account — log in and add this Practice to it' }
 	];
 
 	/* The longest label the Start work form draws (#1596, #1518): a

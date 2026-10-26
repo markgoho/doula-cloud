@@ -273,7 +273,7 @@
 		const list = invoices
 			.map((invoice) => `${formatAmount(invoice.amountCents)} (${invoice.status}) from ${formattedDate(invoice.createdAt)}`)
 			.join(', ');
-		return `${name}'s data can't be erased yet -- settle or void ${list} first.`;
+		return `${name}'s data can't be erased yet. Settle or void ${list} first.`;
 	}
 
 	// ADR-0027's own content -- what is erased, what stays, Stripe's

@@ -54,7 +54,12 @@ describe('the Practice name screen', () => {
 	it('says where Clients see the name, and what does not change, before the press', async () => {
 		await setup();
 
-		await expect.element(testPage.getByText(/Your Clients see this name on their portal/)).toBeVisible();
+		await expect
+			.element(control())
+			.toHaveAccessibleDescription(
+				'Your Clients see it on the portal, your Practice Page, your emails and new Contracts.'
+			);
+		await testPage.getByText('What keeps the old name').click();
 		await expect
 			.element(testPage.getByText(/already sent or signed keeps the name it was sent with/))
 			.toBeVisible();

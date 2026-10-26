@@ -380,7 +380,7 @@
 		<LabeledField
 			id={practiceNameId}
 			label="Practice name (optional)"
-			hint="If you leave this empty, your Practice takes your own name. Clients see this name on a Contract, in the portal and on a card statement."
+			hint="Clients see it on Contracts and card statements. Leave it empty to use your own name."
 			error={submission.errorFor(practiceNameId)}
 		>
 			{#snippet children({ id, describedBy, invalid })}
@@ -443,7 +443,7 @@
 		-->
 		<Notice
 			variant="info"
-			message={`This account will hold every role — ${roleNames} — because a Practice's founder is usually its only Doula and needs to hold their own Visits. Anyone you invite later holds only the roles you choose for them. Roles are shown and changed on your Practice's staff roster.`}
+			message={`You hold every role — ${roleNames}. Anyone you invite holds only the roles you choose.`}
 		/>
 		<!--
 			#1547 (ADR-0053): the Practice agrees through its Owner by this

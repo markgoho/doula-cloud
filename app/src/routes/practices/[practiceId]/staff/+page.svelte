@@ -510,7 +510,7 @@
 
 {#snippet invitationActions(invitation: InvitationSummary, view: DataTableView)}
 	{#if invitation.expired}
-		<Badge label="Expired -- invite again or revoke" variant="neutral" />
+		<Badge label="Expired — invite again or revoke" variant="neutral" />
 	{/if}
 	{#if invitation.deliveryFailed}
 		<Badge label="Email could not be delivered" variant="warning" />

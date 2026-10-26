@@ -102,7 +102,7 @@ describe('pieceFacts', () => {
 		expect(valueOf(facts, 'Kind')).toBe('Something is not working');
 		expect(valueOf(facts, 'Sender')).toBe('Anne-Marie Ochieng');
 		expect(valueOf(facts, 'Email')).toBe('anne-marie@example.test');
-		expect(valueOf(facts, 'Role')).toBe('owner, admin');
+		expect(valueOf(facts, 'Role')).toBe('Owner, Admin');
 		expect(valueOf(facts, 'Practice')).toBe('Riverside Doula Collective');
 		expect(valueOf(facts, 'Page')).toBe('/practices/practice-1/invoices');
 		expect(valueOf(facts, 'Route')).toBe('/practices/[practiceId]/invoices');

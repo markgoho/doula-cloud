@@ -121,7 +121,7 @@
 
 	<p>
 		Drag the handle to change the space the component below is given. The frame is a containment
-		context, so what you see is the component reacting to its own available space -- not to the
+		context, so what you see is the component reacting to its own available space — not to the
 		window, which never moves.
 	</p>
 

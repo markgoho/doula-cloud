@@ -27,7 +27,7 @@
 			<code>ContactCardStart.svelte</code> has exactly one configuration at every available space: a
 			label track as wide as its widest label, and a value track taking whatever is left. Give it a
 			content floor so that it has more than one, and make a value with no break opportunity in it
-			-- a URL somebody pasted into a free-text field -- fit at 320px anyway.
+			— a URL somebody pasted into a free-text field — fit at 320px anyway.
 		</p>
 		<p>
 			You are done when the continuum check finds no break in it from 320px up. In
@@ -37,7 +37,7 @@
 		</p>
 		<p>
 			<code>ContactCardFinished.svelte</code> is the answer. Diff it against START when you are done,
-			not before -- the diff is the whole of what this exercise says.
+			not before — the diff is the whole of what this exercise says.
 		</p>
 	</section>
 

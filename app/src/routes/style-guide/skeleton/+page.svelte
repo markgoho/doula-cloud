@@ -9,7 +9,7 @@
 
 	const rows = [
 		{ name: 'Anne-Marie Ochieng-Whitfield', status: 'Stripe onboarding incomplete' },
-		{ name: 'Renata Chiamaka Okonkwo-Adeyemi', status: 'Expired -- invite again or revoke' },
+		{ name: 'Renata Chiamaka Okonkwo-Adeyemi', status: 'Expired — invite again or revoke' },
 		{ name: 'dee marchetti', status: 'Active' }
 	];
 </script>

@@ -97,7 +97,7 @@
 <!-- No name field: the Invitation carries an address and a Membership,
      and the person names herself when she accepts. -->
 {#snippet who()}
-	<LabeledField id={emailId} label="Their email" error={submission.errorFor(emailId)}>
+	<LabeledField id={emailId} label="Email address" error={submission.errorFor(emailId)}>
 		{#snippet children({ id, describedBy, invalid })}
 			<TextInput
 				{id}

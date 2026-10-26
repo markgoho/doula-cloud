@@ -31,7 +31,7 @@ test('A Doula invited via the Staff invite route is refused an Owner-only action
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	await page.goto(`/practices/${practiceId}/invite`);
-	await page.getByLabel('Their email').fill(doulaEmail);
+	await page.getByLabel('Email address').fill(doulaEmail);
 	await page.getByRole('checkbox', { name: 'Doula' }).check();
 	await page.getByRole('radio', { name: 'Employee' }).check();
 	const [inviteResponse] = await Promise.all([
@@ -76,7 +76,7 @@ test('A Doula invited via the Staff invite route is refused an Owner-only action
 	// requireAnyRole names the seat from that declaration (#1031), so the
 	// sentence is the one RequireOwner wrote before the move.
 	await page.goto(`/practices/${practiceId}/invite`);
-	await page.getByLabel('Their email').fill(uniqueEmail('someone-else'));
+	await page.getByLabel('Email address').fill(uniqueEmail('someone-else'));
 	await page.getByRole('checkbox', { name: 'Doula' }).check();
 	await page.getByRole('radio', { name: 'Employee' }).check();
 	await page.getByRole('button', { name: 'Send invite' }).click();

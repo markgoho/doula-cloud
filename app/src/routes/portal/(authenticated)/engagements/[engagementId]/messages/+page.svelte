@@ -158,6 +158,7 @@
 		onSend={sendThreadMessage}
 		onDownloadAttachment={handleDownloadAttachment}
 		{attachmentPreviewURLs}
+		readerSenderType="client"
 	/>
 {/snippet}
 
@@ -168,5 +169,5 @@
 <RecordDetail
 	title="Messages"
 	serviceName={page.data.practiceName}
-	sections={[{ heading: 'Your thread', content: thread }]}
+	sections={[{ heading: page.data.practiceName ? `You and ${page.data.practiceName}` : 'You and your doula', content: thread }]}
 />

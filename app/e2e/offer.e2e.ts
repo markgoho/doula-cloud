@@ -48,7 +48,7 @@ test('Owner offers an Engagement to a Doula, who accepts it from her own inbox',
 	// Owner signs up with it), and she is not offered her own work.
 	// *Offer this work to* opens with nothing chosen (#1914), so the Owner
 	// answers it before the Doula question is asked.
-	await page.getByLabel('Someone already at this practice').check();
+	await page.getByLabel('Someone already at this Practice').check();
 	await expect(page.getByRole('group', { name: 'Doula', exact: true })).toBeVisible();
 	await expect(page.getByLabel('Jamie Owner')).toHaveCount(0);
 	await page.getByLabel('Casey Contractor').check();
@@ -205,7 +205,7 @@ test('A solo Owner puts herself on an Engagement that started with no Doula', as
 
 	await expect(page.getByText('No Doula yet', { exact: true })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Offers' })).toBeVisible();
-	await expect(page.getByText(/^There is no one at this practice to offer this work to/)).toBeVisible();
+	await expect(page.getByText(/^There is no one at this Practice to offer this work to/)).toBeVisible();
 	await expect(page.getByLabel('Jamie Owner')).toHaveCount(0);
 
 	// #1998: behind the Doula row's Change in the summary card.

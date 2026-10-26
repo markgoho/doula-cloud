@@ -7,7 +7,7 @@
 	 * The seven US options are labeled, and the longest of those labels is
 	 * Phoenix's; but the option list also grows an entry for a zone the
 	 * Practice already holds that the seven do not carry, and that entry
-	 * is the raw IANA name. "America/Indiana/Indianapolis" is the longest
+	 * is labeled from its IANA name (`zoneLabel`). "America/Indiana/Indianapolis" is the longest
 	 * such name a US Practice can hold, so it is what is selected here.
 	 */
 	let value = $state('America/Indiana/Indianapolis');

@@ -81,12 +81,12 @@ describe('FormPage.svelte', () => {
 	// with no legend must not print an empty one.
 	it('renders a group with no legend as a plain stack, not an unnamed fieldset', async () => {
 		const { container } = await setup({
-			fieldsets: [{ content: textSnippet('Their email') }, { content: textSnippet('Roles') }]
+			fieldsets: [{ content: textSnippet('Email address') }, { content: textSnippet('Roles') }]
 		});
 
 		expect(container.querySelectorAll('fieldset')).toHaveLength(0);
 		expect(container.querySelectorAll('legend')).toHaveLength(0);
-		await expect.element(page.getByText('Their email')).toBeVisible();
+		await expect.element(page.getByText('Email address')).toBeVisible();
 		await expect.element(page.getByText('Roles')).toBeVisible();
 	});
 

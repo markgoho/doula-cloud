@@ -110,13 +110,13 @@ describe('the account screen', () => {
 
 	// The consequence, before the choice rather than in a dialog after it
 	// -- and the answer to the question it invites, which is whether a
-	// correction reaches backwards. It does not (#420).
+	// correction reaches backwards. It does not (#420). Both sit on the
+	// work-state question itself, not in a page intro (#2023).
 	it('states the sales tax consequence and that past purchases are not re-priced', async () => {
 		await setup();
 
-		await expect
-			.element(testPage.getByText(/sets how much sales tax your practice pays/))
-			.toBeVisible();
+		await expect.element(testPage.getByText(/sales tax on your practice's credits/)).toBeVisible();
+		await testPage.getByText('If you change it').click();
 		await expect.element(testPage.getByText(/are not re-priced/)).toBeVisible();
 	});
 
