@@ -10,17 +10,31 @@
 		type Contract
 	} from '#lib/contract.js';
 	import { triggerBlobDownload } from '#lib/blobDownload.js';
-	import { contractStatusLabel, contractVoidedNotice } from '#lib/clientRegister.js';
+	import { contractSignedNotice, contractStatusLabel, contractVoidedNotice } from '#lib/clientRegister.js';
 	import ContractView from '#lib/components/molecules/ContractView.svelte';
 	import SignContract from '#lib/components/organisms/SignContract.svelte';
-	import Text from '#lib/components/atoms/Text.svelte';
+	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
 	import DocumentPage from '#lib/components/templates/DocumentPage.svelte';
+
+	/*
+	 * The status as a Badge, the Tag row's pattern (#2037): "Ready for your
+	 * signature" is the one state that waits on her, so it is info; signed
+	 * is done; a voided or draft Contract is neither, so neutral.
+	 */
+	const STATUS_BADGE_VARIANT: Record<string, 'info' | 'success' | 'neutral'> = {
+		sent: 'info',
+		signed: 'success'
+	};
 
 	let contract = $state<Contract | null | undefined>();
 	let error = $state('');
 	let isDownloadingPdf = $state(false);
 	let downloadError = $state('');
+	// Set only by a signature made on this visit, so the Notice is news
+	// and takes focus; a signed Contract loaded fresh announces nothing.
+	let isSignedHere = $state(false);
 
 	onMount(async () => {
 		try {
@@ -32,6 +46,7 @@
 
 	async function handleSign(fullLegalName: string, isAttestation: boolean) {
 		contract = await signContract(apiFetchWithSession, page.params.engagementId!, fullLegalName, isAttestation);
+		isSignedHere = true;
 	}
 
 	// #302: a fetch that fails here (#305 is the one still live in
@@ -69,13 +84,17 @@
 				component's bare enum -- `clientRegister.ts` is the one place that
 				decides both the status label and the voided notice's wording.
 			-->
-			<Text text={contractStatusLabel(contract.status)} />
+			<Badge label={contractStatusLabel(contract.status)} variant={STATUS_BADGE_VARIANT[contract.status] ?? 'neutral'} />
 			{#if contract.status === 'voided'}
-				<p role="status">{contractVoidedNotice(page.data.practiceName)}</p>
+				<Notice variant="info" message={contractVoidedNotice(page.data.practiceName)} />
 			{/if}
 			<ContractView prose={contract.prose} values={contract.values} />
 			{#if contract.status === 'sent'}
 				<SignContract onSign={handleSign} />
+			{:else if isSignedHere}
+				<!-- Where the form stood, and focused: the Sign button that
+				     caused it is gone (the Notification banner row, #1598). -->
+				<Notice variant="status" message={contractSignedNotice(page.data.practiceName)} isFocusedOnAppear />
 			{/if}
 			<!--
 				#1119: the control is gated on the PDF existing, never on the
@@ -93,7 +112,7 @@
 					loading={isDownloadingPdf}
 				/>
 				{#if downloadError}
-					<p role="alert">{downloadError}</p>
+					<Notice variant="error" message={downloadError} />
 				{/if}
 			{/if}
 		{/if}

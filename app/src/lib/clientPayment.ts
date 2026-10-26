@@ -10,7 +10,14 @@
 
 import type { Fetcher } from './fetcher.js';
 
-import { apiErrorMessage } from './apiErrorMessage.js';
+import { parseRefusal } from './formErrors.js';
+
+/**
+The code the BFF gives the one refusal that is the Practice's setup, not a
+failure (#2039): its Stripe account is not connected or cannot take a card
+yet. The Invoice page states it as a fact, with a way to pay another way.
+*/
+export const CARD_PAYMENTS_NOT_SET_UP = 'CARD_PAYMENTS_NOT_SET_UP';
 
 export interface ClientPayment {
 	clientSecret: string;
@@ -21,14 +28,26 @@ export interface ClientPayment {
 	publishableKey: string;
 }
 
-/** Throws the server's own sentence when it refuses ("Your Practice cannot
- * take this payment yet."), which is written for the Client to read. */
+/**
+What the pay-secret read answers: what the Element mounts with, or the
+Practice's setup standing in the way, which is not an error (#2039).
+*/
+export type ClientPaymentRead = { kind: 'ready'; payment: ClientPayment } | { kind: 'notSetUp' };
+
+/** Answers `notSetUp` for the Practice's own setup, read off the
+ * refusal's code and never its words (#692). Throws the server's own
+ * sentence for every other refusal ("We could not start this payment. Try
+ * again."), which is written for the Client to read. */
 export async function loadClientPayment(
 	fetcher: Fetcher,
 	engagementId: string,
 	invoiceId: string
-): Promise<ClientPayment> {
+): Promise<ClientPaymentRead> {
 	const response = await fetcher(`/api/portal/engagements/${engagementId}/invoices/${invoiceId}/payment`);
-	if (!response.ok) throw new Error(await apiErrorMessage(response));
-	return (await response.json()) as ClientPayment;
+	if (!response.ok) {
+		const refusal = await parseRefusal(response, { opaque5xx: false });
+		if (refusal.code === CARD_PAYMENTS_NOT_SET_UP) return { kind: 'notSetUp' };
+		throw new Error(refusal.message ?? refusal.text);
+	}
+	return { kind: 'ready', payment: (await response.json()) as ClientPayment };
 }

@@ -152,6 +152,18 @@
 		 * page").
 		 */
 		disclosure?: string;
+		/**
+		 * How the table's columns take their widths (#2038). `content`, the
+		 * default, is the shrink-to-fit #542 chose: each column as wide as
+		 * its longest value, so a table stops where its columns are
+		 * satisfied. `even` gives every column an equal share of one width
+		 * the content does not decide, for sibling tables of the same
+		 * columns read one under the next -- the portal's three Invoice
+		 * sections -- so a column starts at the same place in each (Law of
+		 * Similarity). It changes the table only; the record view is
+		 * already one card width.
+		 */
+		columnWidths?: 'content' | 'even';
 	}
 
 	let {
@@ -165,7 +177,8 @@
 		loadMoreError,
 		disclosure,
 		emptyMessage,
-		emptyAction
+		emptyAction,
+		columnWidths = 'content'
 	}: Properties<T> = $props();
 
 	/*
@@ -256,7 +269,7 @@
 			<EmptyState message={emptyMessage} action={emptyAction} />
 		{/if}
 	{:else}
-		<table class="table-view">
+		<table class="table-view" class:even={columnWidths === 'even'}>
 			<thead>
 				<tr>
 					{#each columns as column (column.label)}
@@ -417,6 +430,16 @@
 			   table back its own shrink-to-fit width, so it still stops
 			   where its columns are satisfied. */
 			align-self: start;
+		}
+
+		/* `columnWidths="even"` (#2038): `table-layout: fixed` with no
+		   column widths shares the table's width equally, whatever the
+		   rows hold, so two tables of the same columns line up. The width
+		   is the reading width, --measure, and never past the frame: a
+		   whole-frame width is #542's row that crosses the screen. */
+		.table-view.even {
+			inline-size: min(100%, var(--measure));
+			table-layout: fixed;
 		}
 
 		/* Before the floor's query, which overrides it at the same

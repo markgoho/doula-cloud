@@ -120,10 +120,16 @@ func ClientGetPaymentHandler(client Client, publishableKey string) http.Handler 
 		case status != invoiceStatusOpen:
 			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, msgClientInvoiceNotOpen, nil)
 			return
+		// The Practice's own setup (#2039): a code of its own, so the
+		// portal states it as a fact about the Practice and not as an error.
+		case !accountID.Valid || cardStatus.String != string(CapabilityActive):
+			apierr.Write(w, http.StatusConflict, apierr.CodeCardPaymentsNotSetUp, msgClientCannotPayYet, nil)
+			return
 		// A blank publishable key is a deployment that has not been given
 		// one: the Element cannot be constructed without it, and no blank
-		// key is handed to a browser to find that out.
-		case publishableKey == "" || !accountID.Valid || cardStatus.String != string(CapabilityActive):
+		// key is handed to a browser to find that out. That is ours, not
+		// the Practice's, so it keeps the generic code and reads as an error.
+		case publishableKey == "":
 			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, msgClientCannotPayYet, nil)
 			return
 		}

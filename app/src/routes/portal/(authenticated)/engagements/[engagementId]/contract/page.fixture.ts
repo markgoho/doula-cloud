@@ -11,7 +11,7 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { Contract } from '#lib/contract.js';
-import type { RouteFixture } from '../../../../../routeFixture.js';
+import type { RouteFixture, RouteVariant } from '../../../../../routeFixture.js';
 import Page from './+page.svelte';
 
 export const contract: Contract = {
@@ -27,6 +27,22 @@ export const contract: Contract = {
 	}
 };
 
+/*
+ * The three trees the page branches into (#2037): sent (the disclosure
+ * and the signing form), signed (a success Badge and the download), and
+ * voided after she signed (a neutral Badge, the Practice's info Notice,
+ * and the download she keeps, #1119).
+ */
+export const asSigned: RouteVariant = {
+	name: 'The Client-portal Contract, signed',
+	respond: () => jsonResponse({ ...contract, status: 'signed', hasSignedPdf: true })
+};
+
+export const asVoided: RouteVariant = {
+	name: 'The Client-portal Contract, voided after signing',
+	respond: () => jsonResponse({ ...contract, status: 'voided', hasSignedPdf: true })
+};
+
 export const fixture: RouteFixture = {
 	name: 'The Client-portal Contract',
 	component: Page,
@@ -34,5 +50,6 @@ export const fixture: RouteFixture = {
 	url: 'https://example.test/portal/engagements/engagement-1/contract',
 	pageData: { practiceName: 'Riverside Doula Collective' },
 	respond: () => jsonResponse(contract),
-	readyText: 'Contract'
+	readyText: 'Contract',
+	variants: [asSigned, asVoided]
 };

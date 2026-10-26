@@ -135,6 +135,16 @@ const (
 	// one screen where she agrees, rather than reading it as a role
 	// refusal or a stale Membership.
 	CodeTermsAgreementRequired Code = "TERMS_AGREEMENT_REQUIRED"
+	// CodeCardPaymentsNotSetUp is the portal pay-secret refusal for a
+	// Practice whose Stripe account is not connected or cannot take a
+	// card yet (#2039). Its own code, not CodeFailedPrecondition, which
+	// the same route's by-hand and not-open refusals carry: the Invoice
+	// page states this one to the Client as a fact about the Practice,
+	// with a way to pay another way, and shows the others as errors
+	// (govuk-alignment.md's rule-5 row, "Distinguish missing setup from a
+	// permission refusal"). Telling them apart by their prose is what
+	// #692 forbids.
+	CodeCardPaymentsNotSetUp Code = "CARD_PAYMENTS_NOT_SET_UP"
 )
 
 // ForbiddenCodes is the recorded set of reason codes a 403 may carry

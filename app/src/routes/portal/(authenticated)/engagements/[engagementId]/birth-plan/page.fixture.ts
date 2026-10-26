@@ -22,7 +22,7 @@ import type { Instance } from '#lib/planInstance.js';
 import type { RouteFixture } from '../../../../../routeFixture.js';
 import Page from './+page.svelte';
 
-const instance: Instance = {
+export const instance: Instance = {
 	engagementId: 'engagement-1',
 	planType: 'birth_plan',
 	fields: [

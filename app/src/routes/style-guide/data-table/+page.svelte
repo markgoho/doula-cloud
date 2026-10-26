@@ -349,6 +349,22 @@
 		<DataTable columns={creditColumns} rows={credits} emptyMessage="No credit history yet." />
 	</section>
 
+	<!-- #2038: two tables of the same columns, one under the next, as the
+	     portal's Invoice sections are. `even` shares one width equally, so
+	     Origin and Quantity start at the same place in both. -->
+	<section>
+		<h2>Sibling tables that share one column plan</h2>
+		<stack-l space="var(--space-4)">
+			<DataTable columnWidths="even" columns={creditColumns} rows={credits} emptyMessage="No credit history yet." />
+			<DataTable
+				columnWidths="even"
+				columns={creditColumns}
+				rows={[{ origin: 'Refund', quantity: 2 }]}
+				emptyMessage="No credit history yet."
+			/>
+		</stack-l>
+	</section>
+
 	<section>
 		<h2>Staff's Members table shape, longest realistic values</h2>
 		<DataTable

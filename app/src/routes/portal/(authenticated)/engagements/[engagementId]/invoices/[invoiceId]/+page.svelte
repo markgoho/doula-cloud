@@ -14,9 +14,9 @@
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { invoiceFacts, loadClientInvoice, type ClientInvoice } from '#lib/clientInvoice.js';
-	import { loadClientPayment, type ClientPayment } from '#lib/clientPayment.js';
+	import { loadClientPayment, type ClientPaymentRead } from '#lib/clientPayment.js';
 	import { formatMoney } from '#lib/money.js';
-	import { byHandPaymentNotice, INVOICES_HEADING } from '#lib/clientRegister.js';
+	import { byHandPaymentNotice, cardPaymentsNotSetUpNotice, INVOICES_HEADING } from '#lib/clientRegister.js';
 	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
@@ -25,10 +25,11 @@
 
 	let invoice = $state<ClientInvoice | undefined>();
 	let error = $state('');
-	// What the Payment Element mounts with, or the server's own sentence
-	// for why this Invoice cannot be paid here. Read fresh on every visit:
-	// the secret is a credential for one payment and is never kept.
-	let payment = $state<ClientPayment | undefined>();
+	// What the Payment Element mounts with, or the Practice's setup in the
+	// way (#2039), or the server's own sentence for why this Invoice cannot
+	// be paid here. Read fresh on every visit: the secret is a credential
+	// for one payment and is never kept.
+	let payment = $state<ClientPaymentRead | undefined>();
 	let paymentError = $state('');
 
 	onMount(async () => {
@@ -73,16 +74,20 @@
 			{#if invoice.status === 'open'}
 				{#if invoice.billingMode === 'stripe'}
 					<!--
-						The Payment Element and the pay action (#1020). When the server
-						refuses the secret -- the Practice cannot take a card yet, say --
-						she reads its own sentence and nothing pay-like appears.
+						The Payment Element and the pay action (#1020). A Practice that
+						cannot take a card yet is a fact about the Practice, stated
+						with the way to pay another way (#2039, #2002's rule): info,
+						never an error. Any other refusal is the server's own sentence.
+						Nothing pay-like appears for either.
 					-->
-					{#if payment}
+					{#if payment?.kind === 'ready'}
 						<PayInvoice
-							{payment}
+							payment={payment.payment}
 							amount={formatMoney(invoice.amountCents, invoice.currency)}
 							returnUrl={page.url.href}
 						/>
+					{:else if payment?.kind === 'notSetUp'}
+						<Notice variant="info" message={cardPaymentsNotSetUpNotice(page.data.practiceName)} />
 					{:else if paymentError}
 						<Notice variant="error" message={paymentError} />
 					{/if}

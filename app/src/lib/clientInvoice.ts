@@ -14,7 +14,8 @@ import { apiErrorMessage } from './apiErrorMessage.js';
 import {
 	clientInvoiceStatusLabel,
 	clientPaymentMethodLabel,
-	paidAndReturnedLabel
+	paidAndReturnedLabel,
+	TOTAL_TO_PAY_LABEL
 } from './clientRegister.js';
 import { formatCalendarDay, formatInstant } from './dates.js';
 import { formatMoney } from './money.js';
@@ -104,6 +105,15 @@ export function invoiceStatusText(invoice: ClientInvoice): string {
 	return invoice.status === 'paid' && invoice.refundedCents > 0
 		? paidAndReturnedLabel(formatMoney(invoice.refundedCents, invoice.currency))
 		: clientInvoiceStatusLabel(invoice.status);
+}
+
+/**
+The whole-Engagement "Total to pay", as the one summary-list row the hub
+and the Invoices page both draw (#2038): one treatment, so the figure
+reads the same in both places. Always written, $0.00 included (#982).
+*/
+export function totalToPayFact(totalToPayCents: number, currency: string): { label: string; value: string } {
+	return { label: TOTAL_TO_PAY_LABEL, value: formatMoney(totalToPayCents, currency) };
 }
 
 /**
