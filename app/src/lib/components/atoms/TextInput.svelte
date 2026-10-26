@@ -72,6 +72,10 @@
 	 * this file.
 	 */
 	export type InputWidth = 2 | 3 | 4 | 5 | 10 | 20 | 30;
+
+	/** The scale in order, smallest first, for a caller that picks the
+	 * smallest step that holds a known length (#1999). */
+	export const INPUT_WIDTHS: readonly InputWidth[] = [2, 3, 4, 5, 10, 20, 30];
 </script>
 
 <script lang="ts">

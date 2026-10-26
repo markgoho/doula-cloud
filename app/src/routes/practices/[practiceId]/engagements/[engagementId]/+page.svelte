@@ -28,6 +28,7 @@
 		scheduleVisit,
 		sendMessage,
 		sendPortalInvite,
+		sortVisits,
 		visitTypeLabel,
 		engagementStatusText,
 		yourFeeValue,
@@ -116,7 +117,7 @@
 	import type { FormError } from '#lib/formErrors.js';
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
-	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import TextInput, { INPUT_WIDTHS, type InputWidth } from '#lib/components/atoms/TextInput.svelte';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
@@ -421,13 +422,12 @@
 		return displayStatus === 'completed' ? 'Reopen (correction)' : 'Mark care as active';
 	}
 
-	// Visits are newest-first from the BFF (#446); a further page is
-	// appended to the end of what is already on screen rather than
-	// reversed, since this is a table read top-to-bottom, not a chat
-	// thread. Loading the first page and adding a Visit are separate
-	// SectionState instances (#841) so neither action's busy flag lights
-	// up the other's control; both write the same Notice, so their errors
-	// are read together below.
+	// Visits are newest-logged-first from the BFF (#446); a further page is
+	// appended to what is already loaded, and the table shows them sorted
+	// by date (`sortedVisits`, #1999). Loading the first page and adding a
+	// Visit are separate SectionState instances (#841) so neither action's
+	// busy flag lights up the other's control; a failed load says so above
+	// the table, a refused add in the add form.
 	const visits = new PaginatedList<Visit>({
 		first: { items: [], hasMore: false },
 		loadPage: (cursor) => loadVisitsPage(apiFetchWithSession, reference, cursor),
@@ -435,7 +435,6 @@
 	});
 	const visitsLoad = new SectionState<void>(undefined);
 	const visitsCreate = new SectionState<void>(undefined);
-	const visitsError = $derived(visitsLoad.error || visitsCreate.error);
 	const isCreatingVisit = $derived(visitsCreate.isBusy);
 	// #250: optional at creation, the same as it is afterward -- a Doula
 	// logging a meeting that already happened leaves this blank.
@@ -493,30 +492,43 @@
 	// prop it's passed into below is still clientsCanPay.
 	const canClientsPay = $derived(detail?.clientsCanPay ?? true);
 
-	let reassignStaffId = $state<Record<string, string>>({});
-	// One SectionState per Visit row, created the first time that row is
-	// reassigned (#841) -- reassignError was a Record before this too, but
-	// a per-section instance is the wrong shape for it: two rows reassigned
-	// at once must not share one error or one busy flag, which is exactly
-	// what a single SectionState would do.
-	let reassignSections = $state<Record<string, SectionState<void>>>({});
+	// #1999: the Visits are rows of facts, and a form appears only when
+	// asked -- the add form, or one Visit's change, never both, so the
+	// section holds at most the one primary its open form submits with
+	// (#2019). The same shape as the On call section (#2042).
+	type VisitChange = 'add' | { visit: Visit };
+	let openVisitChange = $state<VisitChange | undefined>();
+	const changingVisit = $derived(typeof openVisitChange === 'object' ? openVisitChange.visit : undefined);
+	// What the last add or change did; it takes focus, because the control
+	// she pressed went with the form it was in.
+	let visitsSavedMessage = $state('');
+	// The open change's drafts, each starting on the Visit's current value
+	// when the change opens, so a field she leaves alone sends nothing.
+	// An empty `changeStaffId` is "keep who it is for".
+	let changeScheduledAt = $state('');
+	let changeNotes = $state('');
+	let changeStaffId = $state('');
+	const visitChange = new SectionState<void>(undefined);
 
-	// #250: a per-row schedule control, the same per-row-state shape
-	// reassign already established just above. scheduleValue holds a
-	// draft only once a row's own field has been touched -- until then
-	// the field's own value falls back to the Visit's current
-	// scheduledAt (see scheduleAction below), so editing one row never
-	// disturbs another's.
-	let scheduleValue = $state<Record<string, string>>({});
-	let scheduleSections = $state<Record<string, SectionState<void>>>({});
+	function openVisitForm(change?: VisitChange) {
+		openVisitChange = change;
+		visitsSavedMessage = '';
+		visitChange.error = '';
+		hasAttemptedChange = false;
+		if (typeof change === 'object') {
+			changeScheduledAt = toDatetimeLocalValue(change.visit.scheduledAt);
+			changeNotes = change.visit.notes ?? '';
+			changeStaffId = '';
+		}
+	}
 
-	// #251: a per-row notes control, the same per-row-state shape schedule
-	// and reassign already established just above. notesValue holds a
-	// draft only once a row's own field has been touched -- until then the
-	// field's own value falls back to the Visit's current notes (see
-	// visitActions below), so editing one row never disturbs another's.
-	let notesValue = $state<Record<string, string>>({});
-	let notesSections = $state<Record<string, SectionState<void>>>({});
+	function toggleVisitChange(visit: Visit) {
+		if (changingVisit?.visitId === visit.visitId) openVisitForm();
+		else openVisitForm({ visit });
+	}
+
+	// The scheduled Visits by date, then the rest (#1999).
+	const sortedVisits = $derived(sortVisits(visits.items));
 
 	let messages = $state<Message[]>([]);
 	let messagesCursor = $state('');
@@ -1349,23 +1361,12 @@
 		);
 	}
 
-	// #1228: the reassign Select's own `required` was the only refusal an
-	// empty pick had; StackedForm's `novalidate` (ADR-0021) takes it away.
-	// Silent until a submit is attempted -- there is no live indicator for
-	// "empty" the way there is for an ineligible pick (#911's own block,
-	// still the live one, below). reassignAttempted is keyed the same way
-	// reassignSections already is: one row's own submit never marks
-	// another's as attempted.
-	let reassignAttempted = $state<Record<string, boolean>>({});
-
-	// The same block the create picker carries, asked per row: the
-	// reassign picker offers the same people from the same list, so it
-	// refuses the same choice with the same words.
-	function reassignBlock(visitId: string): string {
-		const chosen = reassignStaffId[visitId] ?? '';
-		if (!chosen) return reassignAttempted[visitId] ? 'Select who to reassign this Visit to' : '';
-		return assigneeBlock(doulas ?? [], chosen);
-	}
+	// The same block the create picker carries (#911): the change form's
+	// Doula picker offers the same people from the same list, so it refuses
+	// the same choice with the same words. Nothing chosen is no refusal at
+	// all (#1999): it keeps the Visit with the Doula it is for.
+	const reassignBlock = $derived(changeStaffId ? assigneeBlock(doulas ?? [], changeStaffId) : '');
+	let hasAttemptedChange = $state(false);
 
 	async function handleCreateOffer(offer: NewOffer) {
 		await createOffer(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!, offer);
@@ -1432,6 +1433,28 @@
 		}, 'Failed to send portal invite');
 	}
 
+	function staffName(staffId: string): string {
+		return doulas?.find((doula) => doula.staffId === staffId)?.name ?? 'the Doula';
+	}
+
+	/* The smallest step of #1216's scale that holds a picker's longest
+	   option, which is the count `Select` asks for (a narrower box cuts the
+	   chosen name off), or the whole column where none does. */
+	function widthToHold(options: readonly { label: string }[]): InputWidth | undefined {
+		const longest = Math.max(0, ...options.map((option) => option.label.length));
+		return INPUT_WIDTHS.find((width) => width >= longest);
+	}
+
+	/* Closes the add form blank. Back to untouched, not to empty: the next
+	   Visit she logs starts on the same standing answer this one did. */
+	function closeAddVisit() {
+		newVisitScheduledAt = '';
+		newVisitStaffId = undefined;
+		hasAttemptedCreateVisit = false;
+		visitsCreate.error = '';
+		openVisitForm();
+	}
+
 	// #268: an empty picker means "for me", which is what a Doula logging
 	// her own Visit sends -- the same absent assignee this route sent
 	// before the field existed.
@@ -1450,68 +1473,57 @@
 				'Failed to add Visit'
 			)
 		) {
-			newVisitScheduledAt = '';
-			// Back to untouched, not to empty: the next Visit she logs
-			// starts on the same standing answer this one did.
-			newVisitStaffId = undefined;
+			closeAddVisit();
 			await loadVisits();
+			visitsSavedMessage = staffId ? `The Visit for ${staffName(staffId)} is added.` : 'Your Visit is added.';
 			await refreshStatusAfterScheduling(scheduledAt);
 			await refreshWhoIsOn();
 		}
 	}
 
-	async function handleReassign(visitId: string, event: SubmitEvent) {
+	/*
+	 * #1999: one Visit's change, sent as the writes its fields call for --
+	 * a field she left alone sends nothing. The three writes are separate
+	 * endpoints (reassign #268, schedule #250, notes #251), so they go one
+	 * after the other, and a refusal stops the rest: what was already
+	 * written stays written, the rows are read again so they say so, and
+	 * the form stays open on what is left to send.
+	 */
+	async function handleChangeVisit(event: SubmitEvent, visit: Visit) {
 		event.preventDefault();
-		reassignAttempted[visitId] = true;
+		hasAttemptedChange = true;
 		// #911, the same block the create form makes.
-		if (reassignBlock(visitId)) return;
-		const section = (reassignSections[visitId] ??= new SectionState<void>(undefined));
-		const wasReassigned = await section.mutate(
-			() => reassignVisit(apiFetchWithSession, reference, visitId, reassignStaffId[visitId] ?? ''),
-			'Failed to reassign Visit'
-		);
-		if (wasReassigned) {
-			reassignStaffId[visitId] = '';
-			await loadVisits();
-			await refreshWhoIsOn();
-		}
-	}
-
-	// #250: an empty control clears the schedule -- `datetime-local`
-	// reports "" the same way whether the field was never touched or was
-	// deliberately emptied, and `undefined` is scheduleVisit's own way of
-	// saying "clear it" (engagementDetail.ts).
-	async function handleSchedule(visitId: string, event: SubmitEvent) {
-		event.preventDefault();
-		const section = (scheduleSections[visitId] ??= new SectionState<void>(undefined));
-		const raw = scheduleValue[visitId] ?? '';
-		const scheduledAt = raw ? new Date(raw).toISOString() : undefined;
-		const wasScheduled = await section.mutate(
-			() => scheduleVisit(apiFetchWithSession, reference, visitId, scheduledAt),
-			'Failed to update Visit schedule'
-		);
-		if (wasScheduled) {
-			delete scheduleValue[visitId];
-			await loadVisits();
-			await refreshStatusAfterScheduling(scheduledAt);
-		}
-	}
-
-	// #251: the field's own current draft, or "" for a fresh visit not yet
-	// touched -- saveVisitNotes always sends a string, never undefined,
-	// since a Textarea has no separate "unset" state the way an empty
-	// datetime-local control does.
-	async function handleSaveNotes(visitId: string, event: SubmitEvent) {
-		event.preventDefault();
-		const section = (notesSections[visitId] ??= new SectionState<void>(undefined));
-		const wasSaved = await section.mutate(
-			() => saveVisitNotes(apiFetchWithSession, reference, visitId, notesValue[visitId] ?? ''),
-			'Failed to save Visit notes'
-		);
+		if (reassignBlock) return;
+		const scheduledAt = changeScheduledAt ? new Date(changeScheduledAt).toISOString() : undefined;
+		const isRescheduled = changeScheduledAt !== toDatetimeLocalValue(visit.scheduledAt);
+		const hasNewNotes = changeNotes !== (visit.notes ?? '');
+		const newStaffId = changeStaffId;
+		let hasWritten = false;
+		const wasSaved = await visitChange.mutate(async () => {
+			if (newStaffId) {
+				await reassignVisit(apiFetchWithSession, reference, visit.visitId, newStaffId);
+				changeStaffId = '';
+				hasWritten = true;
+			}
+			if (isRescheduled) {
+				// An empty control clears the schedule: `undefined` is
+				// scheduleVisit's own way of saying so (engagementDetail.ts).
+				await scheduleVisit(apiFetchWithSession, reference, visit.visitId, scheduledAt);
+				hasWritten = true;
+			}
+			if (hasNewNotes) {
+				await saveVisitNotes(apiFetchWithSession, reference, visit.visitId, changeNotes);
+				hasWritten = true;
+			}
+		}, 'Failed to save the Visit');
+		if (wasSaved) openVisitForm();
+		if (!hasWritten) return;
+		await loadVisits();
 		if (wasSaved) {
-			delete notesValue[visitId];
-			await loadVisits();
+			visitsSavedMessage = `The Visit for ${newStaffId ? staffName(newStaffId) : visit.staffName} is saved.`;
 		}
+		if (isRescheduled) await refreshStatusAfterScheduling(scheduledAt);
+		if (newStaffId) await refreshWhoIsOn();
 	}
 
 	// Reuses loadMessagesPage rather than re-fetching by hand: the query
@@ -1778,237 +1790,243 @@
 
 {#snippet visitActions(visit: Visit, view: DataTableView)}
 	<!--
-		#666: DataTable renders this snippet into both of its trees, so
-		every id below -- the name span, and each LabeledField's own id,
-		which is what its hint and error ids are derived from -- is scoped
-		by which tree is asking. Two copies of one id would leave every
-		label and every aria reference on this row pointing at the
-		`<table>` copy, whichever view is on screen.
+		#1999: a row holds its facts and the one action that opens its
+		change, never the form itself. #666: DataTable renders this snippet
+		into both of its trees, so the name span's id is scoped by which
+		tree is asking.
 	-->
 	<span class="visually-hidden" id="{view}-visit-{visit.visitId}-name"
 		>{visit.staffName}, {formatScheduledVisit(visit.scheduledAt)}</span
 	>
-	<!--
-		#268: a person is picked by name, never by a staff id typed by hand
-		-- no screen in the product prints one, so the free-text field this
-		replaces could not be filled in. Rendered only where the roster
-		read succeeded, which is the same Owner/Admin rule the BFF applies
-		to the write itself (#274).
-	-->
-	{#if canAssignVisits}
-		<!--
-			#909: the person this Visit already belongs to is not a
-			reassignment, so she is not offered. Once she was the only
-			eligible name, there is no move left to make, and the control
-			says so rather than presenting an empty picker with a
-			placeholder and no explanation.
-			#911: what is left is marked the same way the create picker
-			marks it -- the same derivation, so the two cannot disagree.
-		-->
-		{@const reassignOptions = visitAssigneeOptions(doulas ?? [], {
-			callerStaffId,
-			currentAssigneeStaffId: visit.staffId
-		})}
-		{#if reassignOptions.length === 0}
-			<p>There is nobody else to reassign this Visit to.</p>
-		{:else}
-			{@const refusal = reassignBlock(visit.visitId)}
-			{@const reassignFieldId = `${view}-reassign-staff-${visit.visitId}`}
-			<StackedForm onSubmit={(event) => handleReassign(visit.visitId, event)}>
-				<!--
-					Gated on reassignAttempted, not on refusal alone: #911's own
-					live block (an ineligible pick) fires the instant she chooses
-					a name, well before any submit, and ErrorSummary's own
-					contract ("cannot steal focus from someone who has not
-					submitted") assumes errors only ever arrive from a submit.
-					Without this gate, picking an ineligible name would yank
-					focus to the summary mid-selection (#1228).
-				-->
-				{#if reassignAttempted[visit.visitId] && refusal}
-					<ErrorSummary errors={[{ message: refusal, targetId: reassignFieldId }]} />
-				{/if}
-				<LabeledField id={reassignFieldId} label="Reassign to" hint={assigneeHint} error={refusal}>
-					{#snippet children({ id, describedBy, invalid })}
-						<Select
-							{id}
-							{describedBy}
-							{invalid}
-							options={reassignOptions}
-							placeholder="Choose a Doula"
-							value={reassignStaffId[visit.visitId] ?? ''}
-							onChange={(value) => (reassignStaffId[visit.visitId] = value)}
-							required
-						/>
-					{/snippet}
-				</LabeledField>
-				<Button
-					label="Reassign"
-					type="submit"
-					size="sm"
-					variant="secondary"
-					describedBy="{view}-visit-{visit.visitId}-name"
-				/>
-			</StackedForm>
-		{/if}
-		{#if reassignSections[visit.visitId]?.error}
-			<Notice variant="error" message={reassignSections[visit.visitId]!.error} />
-		{/if}
-	{/if}
+	<Button
+		label="Change"
+		variant="link"
+		expanded={changingVisit?.visitId === visit.visitId}
+		describedBy="{view}-visit-{visit.visitId}-name"
+		onClick={() => toggleVisitChange(visit)}
+	/>
+{/snippet}
 
-	<!--
-		#250: an empty value clears the schedule -- there is no separate
-		"Clear" control, since emptying the field the datetime picker
-		already offers is the plainer way to ask for the same thing.
-	-->
-	<StackedForm onSubmit={(event) => handleSchedule(visit.visitId, event)}>
-		<LabeledField id={`${view}-schedule-visit-${visit.visitId}`} label="Scheduled date and time">
+{#snippet addVisitForm()}
+	<StackedForm onSubmit={handleCreateVisit}>
+		<Heading level={3} text="Add a Visit" focusOnAppearing />
+		<!--
+			Gated on hasAttemptedCreateVisit, not on newVisitBlock alone:
+			#911's own live block (an ineligible pick) fires the instant
+			she chooses a name, well before any submit, and ErrorSummary's
+			own contract ("cannot steal focus from someone who has not
+			submitted") assumes errors only ever arrive from a submit.
+			Without this gate, picking an ineligible name would yank focus
+			to the summary mid-selection (#1228).
+		-->
+		{#if hasAttemptedCreateVisit && newVisitBlock}
+			<ErrorSummary errors={[{ message: newVisitBlock, targetId: 'new-visit-staff' }]} />
+		{/if}
+		{#if visitsCreate.error}
+			<Notice variant="error" message={visitsCreate.error} />
+		{/if}
+		{#if canAssignVisits}
+			<!--
+				#909: this picker opens on the reader herself when she is on
+				the roster, with her own option first and marked "(you)".
+				GOV.UK's Select guidance says not to pre-select an option for
+				a question, and this departs from it on purpose -- the reason
+				is recorded in docs/design/govuk-alignment.md, on the commit
+				that departed.
+				#911: and every name says whether this Engagement can admit
+				her, with the hint explaining the marker and the error
+				refusing the choice before anything is sent.
+			-->
+			<LabeledField
+				id="new-visit-staff"
+				label="Who is this Visit for?"
+				hint={assigneeHint}
+				error={newVisitBlock}
+				width={widthToHold(createAssigneeOptions)}
+			>
+				{#snippet children({ id, describedBy, invalid, width })}
+					<Select
+						{id}
+						{describedBy}
+						{invalid}
+						{width}
+						options={createAssigneeOptions}
+						placeholder="Choose a Doula"
+						value={visitStaffId}
+						onChange={(value) => (newVisitStaffId = value)}
+						required
+					/>
+				{/snippet}
+			</LabeledField>
+		{/if}
+		<!-- A date-time control sizes to its own segments (#1216). -->
+		<LabeledField id="new-visit-scheduled-at" label="Scheduled date and time (optional)">
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput
 					{id}
 					{describedBy}
 					{invalid}
 					type="datetime-local"
-					value={scheduleValue[visit.visitId] ?? toDatetimeLocalValue(visit.scheduledAt)}
-					onInput={(value) => (scheduleValue[visit.visitId] = value)}
+					value={newVisitScheduledAt}
+					onInput={(value) => (newVisitScheduledAt = value)}
 				/>
 			{/snippet}
 		</LabeledField>
-		<Button
-			label="Update schedule"
-			type="submit"
-			size="sm"
-			variant="secondary"
-			describedBy="{view}-visit-{visit.visitId}-name"
-		/>
+		<cluster-l space="var(--space-3)">
+			<Button label="Save Visit" type="submit" loading={isCreatingVisit} />
+			<Button label="Cancel" variant="secondary" onClick={closeAddVisit} />
+		</cluster-l>
 	</StackedForm>
-	{#if scheduleSections[visit.visitId]?.error}
-		<Notice variant="error" message={scheduleSections[visit.visitId]!.error} />
-	{/if}
+{/snippet}
 
-	<!--
-		#251: any Staff member who may read this Visit may also write its
-		notes -- there is no Doula-only restriction on this form the way
-		reassign and schedule carry, matching the read rule.
-	-->
-	<StackedForm onSubmit={(event) => handleSaveNotes(visit.visitId, event)}>
-		<LabeledField id={`${view}-notes-visit-${visit.visitId}`} label="Notes">
+{#snippet changeVisitForm(visit: Visit)}
+	{@const reassignFieldId = `change-visit-staff-${visit.visitId}`}
+	<StackedForm onSubmit={(event) => handleChangeVisit(event, visit)}>
+		{#key visit.visitId}
+			<Heading
+				level={3}
+				text={visit.scheduledAt
+					? `Change the Visit for ${visit.staffName} on ${formatScheduledVisit(visit.scheduledAt)}`
+					: `Change the Visit for ${visit.staffName}, not yet scheduled`}
+				focusOnAppearing
+			/>
+		{/key}
+		<!-- The same gate the add form's summary carries, for #1228's reason. -->
+		{#if hasAttemptedChange && reassignBlock}
+			<ErrorSummary errors={[{ message: reassignBlock, targetId: reassignFieldId }]} />
+		{/if}
+		{#if visitChange.error}
+			<Notice variant="error" message={visitChange.error} />
+		{/if}
+		<!--
+			#268/#274: who a Visit is for is asked only of a reader the
+			roster read admits, the same Owner/Admin rule the BFF applies to
+			the write itself. #909: the Doula it is for now is not a
+			reassignment, so she is kept by the first option rather than
+			offered again; where nobody else is left, the form says so here,
+			where the question would be (#1999), once rather than per row.
+			#911: what is left is marked the way the add picker marks it.
+		-->
+		{#if canAssignVisits}
+			{@const reassignOptions = visitAssigneeOptions(doulas ?? [], {
+				callerStaffId,
+				currentAssigneeStaffId: visit.staffId
+			})}
+			{#if reassignOptions.length === 0}
+				<Text text="There is nobody else to reassign this Visit to." />
+			{:else}
+				{@const options = [{ value: '', label: `Keep ${visit.staffName}` }, ...reassignOptions]}
+				<LabeledField
+					id={reassignFieldId}
+					label="Who is this Visit for?"
+					hint={assigneeHint}
+					error={reassignBlock}
+					width={widthToHold(options)}
+				>
+					{#snippet children({ id, describedBy, invalid, width })}
+						<Select
+							{id}
+							{describedBy}
+							{invalid}
+							{width}
+							{options}
+							value={changeStaffId}
+							onChange={(value) => (changeStaffId = value)}
+						/>
+					{/snippet}
+				</LabeledField>
+			{/if}
+		{/if}
+		<!-- #250: an empty value clears the schedule; emptying the control
+		     is the plainer way to ask for that than a separate Clear. -->
+		<LabeledField
+			id="change-visit-scheduled-at-{visit.visitId}"
+			label="Scheduled date and time"
+			hint="Leave it empty if the Visit is not scheduled."
+		>
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					type="datetime-local"
+					value={changeScheduledAt}
+					onInput={(value) => (changeScheduledAt = value)}
+				/>
+			{/snippet}
+		</LabeledField>
+		<!-- #251: any Staff member who may read this Visit may also write its
+		     notes, so this question is asked of every reader. -->
+		<LabeledField id="change-visit-notes-{visit.visitId}" label="Notes">
 			{#snippet children({ id, describedBy, invalid })}
 				<Textarea
 					{id}
 					{describedBy}
 					{invalid}
-					value={notesValue[visit.visitId] ?? visit.notes ?? ''}
-					onInput={(value) => (notesValue[visit.visitId] = value)}
+					value={changeNotes}
+					onInput={(value) => (changeNotes = value)}
 				/>
 			{/snippet}
 		</LabeledField>
-		<Button
-			label="Save notes"
-			type="submit"
-			size="sm"
-			variant="secondary"
-			describedBy="{view}-visit-{visit.visitId}-name"
-		/>
+		<cluster-l space="var(--space-3)">
+			<Button label="Save changes" type="submit" loading={visitChange.isBusy} />
+			<Button label="Cancel" variant="secondary" onClick={() => openVisitForm()} />
+		</cluster-l>
 	</StackedForm>
-	{#if notesSections[visit.visitId]?.error}
-		<Notice variant="error" message={notesSections[visit.visitId]!.error} />
-	{/if}
 {/snippet}
 
 {#snippet visitsSection()}
-	<!--
-		#268/#274: the form is here for a reader who can actually complete
-		it -- an Owner or Admin, who picks the colleague it is for, or a
-		Doula, who logs her own. A reader who is neither is offered no
-		control rather than a button that 403s.
-	-->
-	{#if canAssignVisits || canLogOwnVisit}
-		<StackedForm onSubmit={handleCreateVisit}>
-			<!--
-				Gated on hasAttemptedCreateVisit, not on newVisitBlock alone:
-				#911's own live block (an ineligible pick) fires the instant
-				she chooses a name, well before any submit, and ErrorSummary's
-				own contract ("cannot steal focus from someone who has not
-				submitted") assumes errors only ever arrive from a submit.
-				Without this gate, picking an ineligible name would yank focus
-				to the summary mid-selection (#1228).
-			-->
-			{#if hasAttemptedCreateVisit && newVisitBlock}
-				<ErrorSummary errors={[{ message: newVisitBlock, targetId: 'new-visit-staff' }]} />
-			{/if}
-			{#if canAssignVisits}
-				<!--
-					#909: this picker opens on the reader herself when she is on
-					the roster, with her own option first and marked "(you)".
-					GOV.UK's Select guidance says not to pre-select an option for
-					a question, and this departs from it on purpose -- the reason
-					is recorded in docs/design/govuk-alignment.md, on the commit
-					that departed.
-					#911: and every name says whether this Engagement can admit
-					her, with the hint explaining the marker and the error
-					refusing the choice before anything is sent.
-				-->
-				<LabeledField
-					id="new-visit-staff"
-					label="Who is this Visit for?"
-					hint={assigneeHint}
-					error={newVisitBlock}
-				>
-					{#snippet children({ id, describedBy, invalid })}
-						<Select
-							{id}
-							{describedBy}
-							{invalid}
-							options={createAssigneeOptions}
-							placeholder="Choose a Doula"
-							value={visitStaffId}
-							onChange={(value) => (newVisitStaffId = value)}
-							required
-						/>
-					{/snippet}
-				</LabeledField>
-			{/if}
-			<LabeledField id="new-visit-scheduled-at" label="Scheduled date and time (optional)">
-				{#snippet children({ id, describedBy, invalid })}
-					<TextInput
-						{id}
-						{describedBy}
-						{invalid}
-						type="datetime-local"
-						value={newVisitScheduledAt}
-						onInput={(value) => (newVisitScheduledAt = value)}
-					/>
-				{/snippet}
-			</LabeledField>
-			<Button label="Add a Visit" type="submit" loading={isCreatingVisit} />
-		</StackedForm>
-	{/if}
-
 	{#if rosterState.error}
 		<Notice variant="error" message={rosterState.error} />
 	{/if}
 
-	{#if visitsError}
-		<Notice variant="error" message={visitsError} />
+	{#if visitsLoad.error}
+		<Notice variant="error" message={visitsLoad.error} />
 	{/if}
 
+	<!--
+		#268/#274: adding is offered to a reader who can actually complete
+		it -- an Owner or Admin, who picks the colleague it is for, or a
+		Doula, who logs her own. A reader who is neither is offered no
+		control rather than a button that 403s. #1999: one secondary
+		opener, as the drawing has its actions under the table; the form,
+		and its one primary, only when asked.
+	-->
+	{@const canAddVisit = canAssignVisits || canLogOwnVisit}
+	{@const addOpener =
+		canAddVisit && openVisitChange !== 'add' ? { label: 'Add a Visit', onClick: () => openVisitForm('add') } : undefined}
 	<div class="visits-table">
 		<DataTable
 			columns={[
-				{ label: 'Staff', accessor: (visit: Visit) => visit.staffName },
-				{ label: 'Type', accessor: (visit: Visit) => visitTypeLabel(visit.type) },
 				{ label: 'Date', accessor: (visit: Visit) => formatScheduledVisit(visit.scheduledAt) },
+				{ label: 'Type', accessor: (visit: Visit) => visitTypeLabel(visit.type) },
+				{ label: 'Doula', accessor: (visit: Visit) => visit.staffName },
 				{ label: 'Notes', accessor: (visit: Visit) => visit.notes || 'No notes yet.' }
 			]}
-			rows={visits.items}
+			rows={sortedVisits}
 			rowActions={{ label: 'Actions', content: visitActions }}
 			hasMore={visits.hasMore}
 			onLoadMore={() => visits.loadMore()}
 			isLoadingMore={visits.isLoadingMore}
 			loadMoreError={visits.loadMoreError}
 			emptyMessage="No Visits yet."
+			emptyAction={addOpener}
 		/>
 	</div>
+
+	{#if visitsSavedMessage}
+		<Notice variant="status" message={visitsSavedMessage} isFocusedOnAppear />
+	{/if}
+
+	{#if addOpener && sortedVisits.length > 0}
+		<div><Button label={addOpener.label} variant="secondary" onClick={addOpener.onClick} /></div>
+	{/if}
+
+	{#if openVisitChange === 'add' && canAddVisit}
+		{@render addVisitForm()}
+	{:else if changingVisit}
+		{@render changeVisitForm(changingVisit)}
+	{/if}
 {/snippet}
 
 <!--
@@ -2534,9 +2552,11 @@
 		   this route's typical pilot screen, not its hostile one -- the
 		   founder's answer of 2026-10-25 on #1981: a very long name or
 		   address wraps one more line, and it does not change the layout.
-		   Measured 2026-10-25 on the drag surface: its natural width fits
-		   its column from 1222px on macOS/Chromium and from 1226px in CI's Linux/Chromium, the canonical environment, with no margin beyond it.
-		   On the hostile fixture it was 130.25rem.
+		   Re-measured 2026-10-26 (#1999), once the Actions column held one
+		   Change link instead of three forms (it was 76.75rem): the
+		   typical screen's table needs 935px of a 912px column on
+		   macOS/Chromium and fits from 944px, the floor below; the route
+		   floor check's minimal half holds it to CI's Linux/Chromium.
 		   `DataTable.svelte`'s floor comment says why the floor is the
 		   route's own. */
 		.visits-table {
@@ -2549,7 +2569,7 @@
 			--data-table-records-display: block;
 		}
 
-		@container visits-table (min-width: 76.75rem) {
+		@container visits-table (min-width: 59rem) {
 			.visits-table > :global(*) {
 				--data-table-table-display: table;
 				--data-table-records-display: none;
