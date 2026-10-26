@@ -19,7 +19,7 @@ func TestParseProfile(t *testing.T) {
 	if len(blocks) != 2 {
 		t.Fatalf("expected 2 blocks, got %d", len(blocks))
 	}
-	if blocks[0].File != "doula-cloud/api/main.go" || blocks[0].StartLine != 10 || blocks[0].EndLine != 12 || blocks[0].NumStmt != 2 || blocks[0].Count != 1 {
+	if blocks[0].File != "doula-cloud/api/main.go" || blocks[0].StartLine != 10 || blocks[0].EndLine != 12 || blocks[0].StartCol != 2 || blocks[0].EndCol != 3 || blocks[0].Count != 1 {
 		t.Fatalf("unexpected block 0: %+v", blocks[0])
 	}
 	if blocks[1].StartLine != 14 || blocks[1].EndLine != 16 || blocks[1].Count != 0 {
@@ -148,16 +148,13 @@ func TestFindViolations_ExcusesGo127BodyBlockAfterALeadingComment(t *testing.T) 
 }
 
 // Go 1.27 also cuts one straight-line block into several ranges at each
-// comment line, where 1.26 ran the block on through it -- every range
-// carrying the whole block's statement count (main.go's 29-statement
-// block came back as thirteen ranges, 185.2,188.1 through 268.2,319.1).
-// One marker excused the 1.26 block; it must excuse all of its pieces.
+// comment line, where 1.26 ran the block on through it (main.go's
+// 29-statement block came back as thirteen ranges, 185.2,188.1 through
+// 268.2,319.1). One marker excused the 1.26 block; it must excuse all of
+// its pieces. The shapes are copied from real 1.27.1 and 1.27.3 profiles
+// of this source: 1.27.1 gave each piece the whole block's statement
+// count, 1.27.3 gives each its own, and both end each piece at column 1.
 func TestFindViolations_ExcusesEveryFragmentOfAGo127SplitBlock(t *testing.T) {
-	blocks := []Block{
-		{File: testFile, StartLine: 3, EndLine: 4, NumStmt: 3, Count: 0},
-		{File: testFile, StartLine: 6, EndLine: 7, NumStmt: 3, Count: 0},
-		{File: testFile, StartLine: 9, EndLine: 9, NumStmt: 3, Count: 0},
-	}
 	src := map[string][]string{
 		testFile: lines(
 			`func main() {`, // 1
@@ -169,7 +166,13 @@ func TestFindViolations_ExcusesEveryFragmentOfAGo127SplitBlock(t *testing.T) {
 			``,                     // 7
 			`	// second comment`,   // 8
 			`	serve(mailer)`,       // 9
+			`}`,                    // 10
 		),
+	}
+	blocks := []Block{
+		{File: testFile, StartLine: 3, StartCol: 2, EndLine: 4, EndCol: 1, Count: 0},
+		{File: testFile, StartLine: 6, StartCol: 2, EndLine: 7, EndCol: 1, Count: 0},
+		{File: testFile, StartLine: 9, StartCol: 2, EndLine: 10, EndCol: 1, Count: 0},
 	}
 
 	violations, err := findViolations(blocks, nil, fakeReader(src))
@@ -181,14 +184,45 @@ func TestFindViolations_ExcusesEveryFragmentOfAGo127SplitBlock(t *testing.T) {
 	}
 }
 
-// Two uncovered blocks separated only by a comment are not one block
-// unless they carry the same statement count: an if-body, a comment, and
-// the next statement are two 1.26 blocks, and the marker above the second
-// must not excuse the first.
-func TestFindViolations_DoesNotMergeBlocksWithDifferentStatementCounts(t *testing.T) {
+// Go 1.27.3 also ends a piece after a statement that spans lines, with
+// no comment between it and the next (#1982): `p := pair{...}` on lines
+// 3-6 came back as 3.2,6.1, and the rest of the block as 7.2,8.1. The
+// piece ends on the literal's own closing brace, which opens no body.
+func TestFindViolations_ExcusesAGo1273BlockCutAfterAMultiLineStatement(t *testing.T) {
+	src := map[string][]string{
+		testFile: lines(
+			`func Literal() {`, // 1
+			`	// coverage:ignore reason: needs a real DATABASE_URL`, // 2
+			`	p := pair{`, // 3
+			`		A: 1,`,     // 4
+			`		B: 2,`,     // 5
+			`	}`,          // 6
+			`	serve(p)`,   // 7
+			`}`,           // 8
+		),
+	}
 	blocks := []Block{
-		{File: testFile, StartLine: 2, EndLine: 3, NumStmt: 1, Count: 0},
-		{File: testFile, StartLine: 5, EndLine: 5, NumStmt: 2, Count: 0},
+		{File: testFile, StartLine: 3, StartCol: 2, EndLine: 6, EndCol: 1, Count: 0},
+		{File: testFile, StartLine: 7, StartCol: 2, EndLine: 8, EndCol: 1, Count: 0},
+	}
+
+	violations, err := findViolations(blocks, nil, fakeReader(src))
+	if err != nil {
+		t.Fatalf("findViolations: %v", err)
+	}
+	if len(violations) != 0 {
+		t.Fatalf("expected 0 violations, got %+v", violations)
+	}
+}
+
+// An if-body, a comment, and the next statement are two 1.26 blocks, and
+// the marker above the second must not excuse the first. Go 1.27.3 gives
+// both one statement and ends the body at column 1 (32.3,33.1 then
+// 35.2,35.7), so it is the column each starts at that keeps them apart.
+func TestFindViolations_DoesNotMergeAnIfBodyWithTheStatementAfterIt(t *testing.T) {
+	blocks := []Block{
+		{File: testFile, StartLine: 2, StartCol: 3, EndLine: 3, EndCol: 1, Count: 0},
+		{File: testFile, StartLine: 5, StartCol: 2, EndLine: 5, EndCol: 7, Count: 0},
 	}
 	src := map[string][]string{
 		testFile: lines(
@@ -212,8 +246,8 @@ func TestFindViolations_DoesNotMergeBlocksWithDifferentStatementCounts(t *testin
 // Nor are two ranges merged across a line of code, whatever their counts.
 func TestFindViolations_DoesNotMergeAcrossCode(t *testing.T) {
 	blocks := []Block{
-		{File: testFile, StartLine: 2, EndLine: 2, NumStmt: 1, Count: 0},
-		{File: testFile, StartLine: 5, EndLine: 5, NumStmt: 1, Count: 0},
+		{File: testFile, StartLine: 2, StartCol: 2, EndLine: 2, EndCol: 1, Count: 0},
+		{File: testFile, StartLine: 5, StartCol: 2, EndLine: 5, EndCol: 10, Count: 0},
 	}
 	src := map[string][]string{
 		testFile: lines(
@@ -231,6 +265,76 @@ func TestFindViolations_DoesNotMergeAcrossCode(t *testing.T) {
 	}
 	if len(violations) != 1 || violations[0].StartLine != 5 {
 		t.Fatalf("expected only the second range flagged, got %+v", violations)
+	}
+}
+
+// Nor does a body join the body after it at the same column: Go 1.27.3
+// ends an if-body at column 1 of its `} else {` (40.3,41.1 then
+// 42.3,43.1) and a case body on the next `case`, and each is its own
+// 1.26 block, so the marker inside the first excuses only the first.
+func TestFindViolations_DoesNotMergeABodyWithTheBodyAfterIt(t *testing.T) {
+	for name, src := range map[string][]string{
+		"else": lines(
+			`	if x {`, // 1
+			`		// coverage:ignore reason: excuses foo only`, // 2
+			`		foo()`,   // 3
+			`	} else {`, // 4
+			`		bar()`,   // 5
+			`	}`,        // 6
+		),
+		"case": lines(
+			`	switch n {`, // 1
+			`	case 1:`,    // 2
+			`		// coverage:ignore reason: excuses foo only`, // 3
+			`		foo()`,  // 4
+			`	case 2:`, // 5
+			`		bar()`,  // 6
+			`	}`,       // 7
+		),
+	} {
+		t.Run(name, func(t *testing.T) {
+			first := Block{File: testFile, StartLine: 3, StartCol: 3, EndLine: 4, EndCol: 1, Count: 0}
+			second := Block{File: testFile, StartLine: 5, StartCol: 3, EndLine: 6, EndCol: 1, Count: 0}
+			if name == "case" {
+				first = Block{File: testFile, StartLine: 4, StartCol: 3, EndLine: 5, EndCol: 1, Count: 0}
+				second = Block{File: testFile, StartLine: 6, StartCol: 3, EndLine: 7, EndCol: 1, Count: 0}
+			}
+
+			violations, err := findViolations([]Block{first, second}, nil, fakeReader(map[string][]string{testFile: src}))
+			if err != nil {
+				t.Fatalf("findViolations: %v", err)
+			}
+			if len(violations) != 1 || violations[0].StartLine != second.StartLine {
+				t.Fatalf("expected only the second body flagged, got %+v", violations)
+			}
+		})
+	}
+}
+
+// A block 1.26 also ended -- on the `{` of the `if` that closes it, not
+// at column 1 -- does not join the block after the `if`, though the two
+// start at the same column.
+func TestFindViolations_DoesNotMergeABlockThatEndsOnItsIf(t *testing.T) {
+	blocks := []Block{
+		{File: testFile, StartLine: 2, StartCol: 2, EndLine: 2, EndCol: 9, Count: 0},
+		{File: testFile, StartLine: 5, StartCol: 2, EndLine: 5, EndCol: 7, Count: 0},
+	}
+	src := map[string][]string{
+		testFile: lines(
+			`	// coverage:ignore reason: excuses the if only`, // 1
+			`	if !ok {`, // 2
+			`		return`,  // 3
+			`	}`,        // 4
+			`	bar()`,    // 5
+		),
+	}
+
+	violations, err := findViolations(blocks, nil, fakeReader(src))
+	if err != nil {
+		t.Fatalf("findViolations: %v", err)
+	}
+	if len(violations) != 1 || violations[0].StartLine != 5 {
+		t.Fatalf("expected only bar() flagged, got %+v", violations)
 	}
 }
 

@@ -18,11 +18,13 @@ type Block struct {
 	File      string
 	StartLine int
 	EndLine   int
-	// NumStmt is what tells two Go 1.27 ranges apart from one block cut in
-	// two: 1.27 splits a block at each comment line and gives every piece
-	// the whole block's count (see coalesceSplitBlocks).
-	NumStmt int
-	Count   int
+	// StartCol and EndCol are what tell the ranges Go 1.27 cut one block
+	// into apart from two blocks (see coalesceSplitBlocks): the pieces of
+	// one block start at the same indentation, and every piece but the
+	// last ends at column 1 of the line after its last statement.
+	StartCol int
+	EndCol   int
+	Count    int
 }
 
 // Violation is a Block with zero coverage that has no coverage:ignore
@@ -76,16 +78,15 @@ func parseProfileLine(line string) (Block, error) {
 		return Block{}, fmt.Errorf("covcheck: malformed profile line: %q", line)
 	}
 
-	startLine, err := lineNumber(positions[0])
+	startLine, startCol, err := linePosition(positions[0])
 	if err != nil {
 		return Block{}, fmt.Errorf("covcheck: malformed profile line: %q: %w", line, err)
 	}
-	endLine, err := lineNumber(positions[1])
+	endLine, endCol, err := linePosition(positions[1])
 	if err != nil {
 		return Block{}, fmt.Errorf("covcheck: malformed profile line: %q: %w", line, err)
 	}
-	numStmt, err := strconv.Atoi(fields[1])
-	if err != nil {
+	if _, err := strconv.Atoi(fields[1]); err != nil {
 		return Block{}, fmt.Errorf("covcheck: malformed profile line: %q: %w", line, err)
 	}
 	count, err := strconv.Atoi(fields[2])
@@ -93,20 +94,24 @@ func parseProfileLine(line string) (Block, error) {
 		return Block{}, fmt.Errorf("covcheck: malformed profile line: %q: %w", line, err)
 	}
 
-	return Block{File: file, StartLine: startLine, EndLine: endLine, NumStmt: numStmt, Count: count}, nil
+	return Block{File: file, StartLine: startLine, EndLine: endLine, StartCol: startCol, EndCol: endCol, Count: count}, nil
 }
 
-// lineNumber extracts the line number from a "line.col" position.
-func lineNumber(pos string) (int, error) {
-	lineStr, _, ok := strings.Cut(pos, ".")
+// linePosition splits a "line.col" position into its two numbers.
+func linePosition(pos string) (line, col int, err error) {
+	lineStr, colStr, ok := strings.Cut(pos, ".")
 	if !ok {
-		return 0, fmt.Errorf("malformed position: %q", pos)
+		return 0, 0, fmt.Errorf("malformed position: %q", pos)
 	}
-	n, err := strconv.Atoi(lineStr)
+	line, err = strconv.Atoi(lineStr)
 	if err != nil {
-		return 0, fmt.Errorf("malformed position: %q: %w", pos, err)
+		return 0, 0, fmt.Errorf("malformed position: %q: %w", pos, err)
 	}
-	return n, nil
+	col, err = strconv.Atoi(colStr)
+	if err != nil {
+		return 0, 0, fmt.Errorf("malformed position: %q: %w", pos, err)
+	}
+	return line, col, nil
 }
 
 // findViolations returns the uncovered blocks that have no coverage:ignore
@@ -152,14 +157,27 @@ func findViolations(blocks []Block, skipPrefixes []string, readLines func(file s
 
 // coalesceSplitBlocks rejoins the ranges Go 1.27 cut one block into.
 // 1.26 ran a straight-line block on through comment lines; 1.27 ends a
-// range at each one and starts the next after it, giving every piece the
-// whole block's statement count (#1409: main.go's 29-statement block came
-// back as thirteen ranges, 185.2,188.1 through 268.2,319.1, each "29 0").
+// range at each one and starts the next after it (#1409: main.go's
+// 29-statement block came back as thirteen ranges, 185.2,188.1 through
+// 268.2,319.1). 1.27.3 cuts after each statement that spans lines too,
+// with no comment between (`p := pair{...}` on 56-59 then `q := p` on 60
+// came back as 56.2,59.1 and 60.2,63.1), and gives each piece its own
+// statement count where 1.27.1 gave every piece the whole block's (#1982).
 // A marker excused the 1.26 block as a whole, so the pieces are judged as
-// one again. Two uncovered ranges join only when they carry the same
-// statement count and nothing but blank lines and comments lies between
-// them -- a real 1.26 block boundary always sits on a line of code (a
-// brace, a statement), so this never merges two blocks 1.26 kept apart.
+// one again.
+//
+// Two uncovered ranges join only when they read as one cut block:
+//
+//   - the first ends at column 1, where 1.27 ends every piece it cut. A
+//     block 1.26 also ended ends on its last statement or on the `{` of
+//     the `if` or `for` that closes it, never at column 1;
+//   - both start at the same column, so the same depth of nesting: an
+//     if-body and the statement after the `if` never join;
+//   - nothing but blank lines and comments lies between them; and
+//   - the line the first ends on opens no body. An if-body ends on its
+//     `} else {` and a case body on the next `case`, and the body after
+//     either is its own block, at the same column.
+//
 // blocks must all be uncovered and from one file.
 func coalesceSplitBlocks(blocks []Block, fileLines []string) []Block {
 	sorted := slices.Clone(blocks)
@@ -169,14 +187,41 @@ func coalesceSplitBlocks(blocks []Block, fileLines []string) []Block {
 	for _, b := range sorted {
 		if n := len(merged); n > 0 {
 			prev := &merged[n-1]
-			if prev.NumStmt == b.NumStmt && onlyCommentsBetween(fileLines, prev.EndLine, b.StartLine) {
+			if isCutFrom(*prev, b, fileLines) {
 				prev.EndLine = max(prev.EndLine, b.EndLine)
+				prev.EndCol = b.EndCol
 				continue
 			}
 		}
 		merged = append(merged, b)
 	}
 	return merged
+}
+
+// isCutFrom reports whether next continues the block prev was cut from;
+// see coalesceSplitBlocks for each condition.
+func isCutFrom(prev, next Block, fileLines []string) bool {
+	if prev.EndCol != 1 || prev.StartCol != next.StartCol || next.StartLine <= prev.EndLine {
+		return false
+	}
+	if !onlyCommentsBetween(fileLines, prev.EndLine, next.StartLine) {
+		return false
+	}
+	if prev.EndLine-1 >= len(fileLines) {
+		return false
+	}
+	return !opensABody(fileLines[prev.EndLine-1])
+}
+
+// opensABody reports whether line begins a new block of its own: an
+// `else`, a `case` or `default`, a label, or any line ending in `{`.
+func opensABody(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	return strings.HasSuffix(trimmed, "{") ||
+		strings.HasSuffix(trimmed, ":") ||
+		strings.HasPrefix(trimmed, "case ") ||
+		strings.HasPrefix(trimmed, "default:") ||
+		strings.HasPrefix(trimmed, "} else")
 }
 
 // onlyCommentsBetween reports whether every line strictly between the
