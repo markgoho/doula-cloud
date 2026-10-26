@@ -226,14 +226,14 @@ describe('hasEveryDetail', () => {
 
 describe('detailsLinkLabel', () => {
 	it('says Add while a fact is missing', () => {
-		expect(detailsLinkLabel(detail())).toBe("Add Anne-Marie Ochieng's details");
+		expect(detailsLinkLabel(detail())).toBe("Add Anne-Marie's details");
 	});
 
-	// The full name for now (#2111's fullName); #2115 gives this link the
-	// first name, as rule 2 says.
+	// The first name, her preferred one where she has one (#2115): the
+	// page's heading already names her in full.
 	it('says Change once each fact is given', () => {
 		expect(detailsLinkLabel(detail({ ...complete, preferredName: 'Annie' }))).toBe(
-			"Change Annie Ochieng's details"
+			"Change Annie's details"
 		);
 	});
 });

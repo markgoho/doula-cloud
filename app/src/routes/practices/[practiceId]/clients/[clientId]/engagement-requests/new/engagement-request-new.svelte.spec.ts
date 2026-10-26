@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import { type ClientDetail, type EngagementSummary } from '#lib/clientDetail.js';
-import { fullName } from '#lib/personName.js';
+import { firstName, fullName } from '#lib/personName.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../../../../routeFixture.js';
 import type { RequestDoulas } from '#lib/engagementRequest.js';
@@ -37,7 +37,10 @@ vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
 const { practiceId, clientId } = fixture.params;
 const clientDetailHref = `/practices/${practiceId}/clients/${clientId}`;
-const clientName = fullName(baseDetail);
+// The heading names her in full; the button and every line under the
+// heading, by her first name (the brief's Voice rule 2, #2115).
+const clientFullName = fullName(baseDetail);
+const clientName = firstName(baseDetail);
 // What every message about her calls her: her preferred name, or her
 // given name (#463).
 const knownAs = knownAsFrom(baseDetail);
@@ -143,6 +146,20 @@ describe('the status message after intake saves the Client (#1710)', () => {
 });
 
 describe('the Engagement Request screen', () => {
+	it('titles the page with her full name and labels the button with her first name (#2115)', async () => {
+		await setup({ roles: ['owner'], balance: 3 });
+
+		await expect
+			.element(testPage.getByRole('heading', { level: 1, name: `Start work with ${clientFullName}`, exact: true }))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('button', { name: `Start work with ${clientName}`, exact: true }))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: `Go to ${clientName}'s record without starting work`, exact: true }))
+			.toBeVisible();
+	});
+
 	it('shows a Doula the "Ask to" phrasing and no Credit preview', async () => {
 		await setup({ roles: ['doula'] });
 

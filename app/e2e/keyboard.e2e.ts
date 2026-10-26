@@ -243,7 +243,7 @@ test('A doula edits a Client and starts new work, with no pointer at any step', 
 	// Stage 4 -- the Engagement Request, whose only door is this hub.
 	await tabTo(
 		page,
-		page.getByRole('main').getByRole('link', { name: 'Start new work with Jane Client' }),
+		page.getByRole('main').getByRole('link', { name: 'Start new work with Jane' }),
 		'the "start new work" link on the Client detail hub'
 	);
 	await page.keyboard.press('Enter');
@@ -267,7 +267,7 @@ test('A doula edits a Client and starts new work, with no pointer at any step', 
 	// message there takes focus, so a keyboard user starts from it.
 	await tabTo(
 		page,
-		page.getByRole('button', { name: 'Start work with Jane Client' }),
+		page.getByRole('button', { name: 'Start work with Jane' }),
 		'the submit button on the Engagement Request form'
 	);
 	await page.keyboard.press('Enter');
@@ -352,10 +352,11 @@ test('An Owner decides a pending Engagement Request, with no pointer at any step
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/engagement-requests$`));
 
 	// Stage 3 -- the inbox row's own link is the door onto the decision;
-	// the row links the Client's name, which is her given name alone.
+	// the row links the Client's full name, as every list of Clients does
+	// (#2114).
 	await tabTo(
 		page,
-		page.getByRole('main').getByRole('link', { name: 'Robin', exact: true }),
+		page.getByRole('main').getByRole('link', { name: 'Robin Waiting', exact: true }),
 		"Robin's row link on the pending-Requests inbox"
 	);
 	await page.keyboard.press('Enter');

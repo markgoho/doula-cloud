@@ -4,7 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import { fullName } from '#lib/personName.js';
+	import { firstName, fullName } from '#lib/personName.js';
 	import {
 		loadClientDetail,
 		pendingRequests,
@@ -93,8 +93,11 @@
 	// Safe with detail undefined (loading): read by the title, the
 	// actions snippet and the sections array below, all of which are
 	// constructed on every render regardless of which branch of
-	// RecordDetail's template is actually showing.
-	const name = $derived(detail ? fullName(detail) : '');
+	// RecordDetail's template is actually showing. The heading names her
+	// in full; every line under it, by her first name (the brief's Voice
+	// rule 2, #2115).
+	const title = $derived(detail ? fullName(detail) : '');
+	const name = $derived(detail ? firstName(detail) : '');
 
 	// The record's last section, and the one guard `eraseSection` relies on
 	// (#1711): Owner-only, absent until the eligibility read answers, and
@@ -701,7 +704,7 @@
 	record says so in the summary and offers nothing here.
 -->
 <RecordDetail
-	title={name}
+	{title}
 	{outcome}
 	{summary}
 	{actions}

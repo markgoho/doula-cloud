@@ -115,6 +115,9 @@ func TestAwaitingSignatureHandler_ListsOnlyOutstandingContractsOldestFirst(t *te
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 
 	draftEngagement, draftClient := seedNamedEngagement(t, db, practiceID, "Jamesina", jamieName)
+	// #2114: the list names each Client in full, her preferred name
+	// followed by the family name.
+	testdb.NameClient(t, db, draftClient, jamieName, "Okafor")
 	seedContract(t, db, draftEngagement, statusDraft, mergeFieldProse)
 	sentEngagement, _ := seedNamedEngagement(t, db, practiceID, "Renata", "")
 	seedContract(t, db, sentEngagement, statusSent, mergeFieldProse)
@@ -140,8 +143,8 @@ func TestAwaitingSignatureHandler_ListsOnlyOutstandingContractsOldestFirst(t *te
 		t.Fatalf("statuses = %q, %q; want the Practice's own unsent work told apart from the Client's",
 			first.Status, second.Status)
 	}
-	if first.ClientID != draftClient || first.ClientName != jamieName {
-		t.Fatalf("client = %s/%q, want the Client named as she is called", first.ClientID, first.ClientName)
+	if first.ClientID != draftClient || first.ClientName != jamieName+" Okafor" {
+		t.Fatalf("client = %s/%q, want the Client named as she is called, in full", first.ClientID, first.ClientName)
 	}
 	if second.ClientName != "Renata" {
 		t.Fatalf("client name = %q, want the legal given name where no preferred one was given", second.ClientName)

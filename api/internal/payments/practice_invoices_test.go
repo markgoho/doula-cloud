@@ -112,7 +112,10 @@ func TestGetPracticeInvoicesHandler_ListsEveryEngagementNewestFirst(t *testing.T
 	const uid = "practice-invoices-list"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	_, engagementA := testdb.SeedNamedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
-	_, engagementB := testdb.SeedNamedEngagement(t, db, practiceID, "Bea Client", "bea@example.com")
+	clientB, engagementB := testdb.SeedNamedEngagement(t, db, practiceID, "Bea Client", "bea@example.com")
+	// #2114: a list of Clients names each in full, so the preferred name
+	// is followed by the family name.
+	testdb.NameClient(t, db, clientB, "Bea", "Okafor")
 	contractA := seedDraftContract(t, db, engagementA)
 	contractB := seedDraftContract(t, db, engagementB)
 	base := time.Now().Add(-time.Hour)
@@ -129,8 +132,8 @@ func TestGetPracticeInvoicesHandler_ListsEveryEngagementNewestFirst(t *testing.T
 	if out.Items[0].ID != newer || out.Items[1].ID != older {
 		t.Fatalf("items = [%q %q], want [%q %q] (newest first)", out.Items[0].ID, out.Items[1].ID, newer, older)
 	}
-	if out.Items[0].ClientName != "Bea Client" || out.Items[1].ClientName != "Ada Client" {
-		t.Fatalf("client names = [%q %q], want [Bea Client Ada Client]", out.Items[0].ClientName, out.Items[1].ClientName)
+	if out.Items[0].ClientName != "Bea Okafor" || out.Items[1].ClientName != "Ada Client" {
+		t.Fatalf("client names = [%q %q], want [Bea Okafor Ada Client]", out.Items[0].ClientName, out.Items[1].ClientName)
 	}
 	if out.Items[0].EngagementID != engagementB || out.Items[1].EngagementID != engagementA {
 		t.Fatalf("engagement ids = [%q %q], want [%q %q]", out.Items[0].EngagementID, out.Items[1].EngagementID, engagementB, engagementA)

@@ -23,8 +23,9 @@ import (
 // "who owes us money" -- ClientName says who, and EngagementID is the way
 // in to her Contract.
 //
-// ClientName is personname.Preferred, the conversation name every screen
-// uses (ADR-0017's read table). The legal name belongs to the documents
+// ClientName is personname.Full: a list that sets Clients side by side
+// names each in full, so two Clients called Quinn read apart (the brief's
+// Voice amendment of 2026-10-26 on #2111, #2114). The legal name belongs to the documents
 // -- the Contract's merge field and the Stripe Invoice itself -- not to a
 // staff-facing list.
 type PracticeInvoiceView struct {
@@ -213,7 +214,7 @@ func GetPracticeInvoicesHandler() http.Handler {
 // activePaymentJoin is the per-Engagement list's own (invoice.go): the
 // covering Payment's kind is what says whether paid_at holds a typed day
 // or Stripe's instant (#1965, invoicePaidOn).
-const practiceInvoiceColumns = `SELECT i.id, e.id, i.contract_id, cl.given_name, cl.preferred_name,
+const practiceInvoiceColumns = `SELECT i.id, e.id, i.contract_id, cl.given_name, cl.preferred_name, cl.family_name,
 		i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ap.kind
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
@@ -328,16 +329,16 @@ func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, af
 	for rows.Next() {
 		var it PracticeInvoiceView
 		var givenName string
-		var preferredName sql.NullString
+		var preferredName, familyName sql.NullString
 		var paidAt sql.NullTime
 		var dueAt time.Time
 		var stripeInvoiceID, activePaymentKind sql.NullString
-		if err := rows.Scan(&it.ID, &it.EngagementID, &it.ContractID, &givenName, &preferredName,
+		if err := rows.Scan(&it.ID, &it.EngagementID, &it.ContractID, &givenName, &preferredName, &familyName,
 			&it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &dueAt, &it.Reference, &stripeInvoiceID, &activePaymentKind); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, false, fmt.Errorf("payments: scan practice invoice row: %w", err)
 		}
-		it.ClientName = personname.Preferred(givenName, preferredName.String)
+		it.ClientName = personname.Full(givenName, preferredName.String, familyName.String)
 		it.PaidOn = invoicePaidOn(paidAt, activePaymentKind.String == paymentKindManual, days.zone)
 		it.DueOn = practiceDay(dueAt, days.zone)
 		it.DaysOverdue = daysOverdue(it.Status, dueAt, days.now, days.zone)

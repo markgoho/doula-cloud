@@ -427,6 +427,33 @@ func TestSeedNamedClient(t *testing.T) {
 	}
 }
 
+// TestNameClient proves both names land beside the given name, and that
+// an empty one is stored as NULL, the way intake stores a name not given.
+func TestNameClient(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Name Client Test Practice")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Rebecca", "bex@example.com")
+	readNames := func() (preferred, family *string) {
+		t.Helper()
+		if err := db.Admin.QueryRowContext(t.Context(),
+			`SELECT preferred_name, family_name FROM clients WHERE id = $1`, clientID,
+		).Scan(&preferred, &family); err != nil {
+			t.Fatalf("read named client: %v", err)
+		}
+		return preferred, family
+	}
+
+	testdb.NameClient(t, db, clientID, "Bex", "Okafor")
+	if preferred, family := readNames(); preferred == nil || *preferred != "Bex" || family == nil || *family != "Okafor" {
+		t.Fatalf("names = %v %v, want Bex Okafor", preferred, family)
+	}
+
+	testdb.NameClient(t, db, clientID, "", "")
+	if preferred, family := readNames(); preferred != nil || family != nil {
+		t.Fatalf("names = %v %v, want NULL for empty arguments", preferred, family)
+	}
+}
+
 // TestSeedNamedEngagement proves the Client's name and email land as
 // given, and the Engagement defaults to the schema's "intake" status.
 func TestSeedNamedEngagement(t *testing.T) {

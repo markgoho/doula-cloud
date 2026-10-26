@@ -44,10 +44,10 @@ test('The first Client in three presses, then the Visits section', async ({ page
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/clients/[^/]+/engagement-requests/new$`));
 	// #1710: the form says the save happened, and the message has focus.
 	await expect(page.getByText('Pat saved as a Client.')).toBeFocused();
-	await expect(page.getByRole('link', { name: "Go to Pat Client's record without starting work" })).toBeVisible();
+	await expect(page.getByRole('link', { name: "Go to Pat's record without starting work" })).toBeVisible();
 	await expect(
 		page.getByText(
-			'Starting work with Pat Client uses 1 Credit. This Practice has 3 Welcome credits. After this, it has 2.',
+			'Starting work with Pat uses 1 Credit. This Practice has 3 Welcome credits. After this, it has 2.',
 			{ exact: true }
 		)
 	).toBeVisible();
@@ -56,7 +56,7 @@ test('The first Client in three presses, then the Visits section', async ({ page
 
 	// Press 3, on the Start work form: an Owner is her own approver, so the
 	// start is approved and the flow ends on the Engagement's page.
-	await page.getByRole('button', { name: 'Start work with Pat Client' }).click();
+	await page.getByRole('button', { name: 'Start work with Pat' }).click();
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/engagements/[^/?]+$`));
 	await expect(page.getByText('Work with Pat started.')).toBeVisible();
 	await expect(page.getByRole('heading', { level: 1, name: 'Pat' })).toBeVisible();

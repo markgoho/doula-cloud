@@ -54,7 +54,7 @@
 	import { isOwnerOrAdmin } from '#lib/roles.js';
 	import { creditCount, loadBalance } from '#lib/billing.js';
 	import { loadClientDetail, type ClientDetail } from '#lib/clientDetail.js';
-	import { fullName } from '#lib/personName.js';
+	import { firstName, fullName } from '#lib/personName.js';
 	import type { PracticeSession } from '../../../../+layout.js';
 	import {
 		NO_DOULA_YET,
@@ -143,11 +143,14 @@
 	);
 	// AC1's two button labels: an Owner or Admin reads as the purchase she
 	// is making (ADR-0017's solo-Practice collapse), a Doula reads as the
-	// ask she is sending.
-	function submitLabelFor(client: ClientDetail): string {
-		return isApprover ? `Start work with ${fullName(client)}` : `Ask to start work with ${fullName(client)}`;
+	// ask she is sending. The heading says the same words with her full
+	// name; the button, like every line under the heading, says her first
+	// name (the brief's Voice rule 2, #2115).
+	function submitLabelFor(name: string): string {
+		return isApprover ? `Start work with ${name}` : `Ask to start work with ${name}`;
 	}
-	const submitLabel = $derived(detail ? submitLabelFor(detail) : '');
+	const title = $derived(detail ? submitLabelFor(fullName(detail)) : 'Start new work');
+	const submitLabel = $derived(detail ? submitLabelFor(firstName(detail)) : '');
 	const hasIntroContent = $derived(hasLiveEngagement || (isApprover && balance !== undefined) || hasNoCredits);
 
 	function detailHref(): string {
@@ -330,7 +333,7 @@
 		{#if hasLiveEngagement}
 			<Notice
 				variant="info"
-				message="{detail ? fullName(detail) : 'This Client'} already has a live Engagement. A second one does not stop this request."
+				message="{detail ? firstName(detail) : 'This Client'} already has a live Engagement. A second one does not stop this request."
 			/>
 		{/if}
 
@@ -345,7 +348,7 @@
 				The balance is read after the Client, so `detail` is here.
 			-->
 			<Text
-				text="Starting work with {fullName(detail!)} uses 1 Credit. This Practice has {balanceCount}. After this, it has {balance - 1}."
+				text="Starting work with {firstName(detail!)} uses 1 Credit. This Practice has {balanceCount}. After this, it has {balance - 1}."
 			/>
 		{/if}
 	</stack-l>
@@ -435,7 +438,7 @@
 	-->
 	<Link
 		href={detailHref()}
-		label="Go to {detail ? `${fullName(detail)}'s` : "the Client's"} record without starting work"
+		label="Go to {detail ? `${firstName(detail)}'s` : "the Client's"} record without starting work"
 		variant="secondary"
 	/>
 {/snippet}
@@ -443,7 +446,7 @@
 <!-- stacked-form:ignore: #1108 -- this form wraps a Template. `FormPage` stacks each fieldset's content itself, so the `<form>` here owns the submit and arranges nothing; a `StackedForm` would put a second, empty stack around one child. -->
 <form onsubmit={handleSubmit} novalidate>
 	<FormPage
-		title={submitLabel || 'Start new work'}
+		{title}
 		intro={hasIntroContent ? formIntro : undefined}
 		{outcome}
 		fieldsets={detail ? [{ content: requestFields }] : []}

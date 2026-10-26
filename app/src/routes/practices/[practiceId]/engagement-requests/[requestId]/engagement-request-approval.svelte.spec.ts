@@ -6,6 +6,7 @@ import type { ApprovalDetail } from '#lib/engagementRequest.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../../routeFixture.js';
 import { detail as baseDetail, fixture } from './page.fixture.js';
+import { firstName, fullName } from '#lib/personName.js';
 
 /*
  * The Request this screen decides on, and the `page` it reads, both come
@@ -32,7 +33,11 @@ const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
 const { practiceId, requestId } = fixture.params;
-const clientName = `${baseDetail.client.givenName} ${baseDetail.client.familyName}`;
+const clientName = fullName(baseDetail.client);
+// Her name in the lines under the heading: the first name (the brief's
+// Voice rule 2, #2115). The heading and the summary's Client row keep the
+// full name.
+const clientFirstName = firstName(baseDetail.client);
 /*
  * A Note is optional on `ApprovalDetail` and the fixture always carries
  * one -- it is the URL #530 measured, and the whole reason the sweep
@@ -201,7 +206,7 @@ describe('the approval screen', () => {
 	it('warns on a second live Engagement without blocking the decision', async () => {
 		await setup({ detail: { ...baseDetail, warning: 'this client already has a live engagement' } });
 
-		await expect.element(testPage.getByText(`${clientName} already has a live engagement.`, { exact: false })).toBeVisible();
+		await expect.element(testPage.getByText(`${clientFirstName} already has a live engagement.`, { exact: false })).toBeVisible();
 		await expect.element(approveRadio()).toBeEnabled();
 	});
 
@@ -335,7 +340,7 @@ describe('the approval screen', () => {
 		await expect.element(reasonField()).toBeVisible();
 		await expect.element(continueButton()).toBeVisible();
 		await expect
-			.element(testPage.getByRole('link', { name: `View ${clientName}'s record` }))
+			.element(testPage.getByRole('link', { name: `View ${clientFirstName}'s record`, exact: true }))
 			.toHaveAttribute('href', `/practices/${practiceId}/clients/${baseDetail.client.clientId}`);
 	});
 });

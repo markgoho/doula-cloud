@@ -78,6 +78,10 @@ func sorted(ids ...string) []string {
 func TestRoster_ContractorReadsOnlyHerOwnEngagements(t *testing.T) {
 	db := testdb.New(t)
 	f := newRosterFixture(t, db, "roster-contractor")
+	// #2114: the roster names each Client in full, her preferred name
+	// followed by the family name.
+	exec(t, db, `UPDATE clients SET preferred_name = 'Addie', family_name = 'Brennan'
+	              WHERE id = (SELECT client_id FROM engagements WHERE id = $1)`, f.adaEngagement)
 
 	srv, session := newServer(t, db, f.contractorUID)
 	defer srv.Close()
@@ -107,7 +111,7 @@ func TestRoster_ContractorReadsOnlyHerOwnEngagements(t *testing.T) {
 	if got := windowIDs(roster); !slices.Equal(got, []string{f.adaEngagement}) {
 		t.Fatalf("windows = %v, want only her own %s", got, f.adaEngagement)
 	}
-	if roster.Windows[0].ClientName != "Ada Whitfield" {
+	if roster.Windows[0].ClientName != "Addie Brennan" {
 		t.Errorf("clientName = %q, want her own Client's name", roster.Windows[0].ClientName)
 	}
 	if len(roster.NoWindow) != 0 {

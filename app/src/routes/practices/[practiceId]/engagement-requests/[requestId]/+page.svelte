@@ -38,7 +38,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { formatCalendarDay, formatInstant } from '#lib/dates.js';
 	import { engagementStatusText } from '#lib/engagementDetail.js';
-	import { fullName } from '#lib/personName.js';
+	import { firstName, fullName } from '#lib/personName.js';
 	import {
 		NO_DOULA_YET_LABEL,
 		approveRequest,
@@ -204,7 +204,7 @@
 			{#if detail.warning}
 				<Notice
 					variant="info"
-					message="{fullName(detail.client)} already has a live engagement. That does not stop this approval."
+					message="{firstName(detail.client)} already has a live engagement. That does not stop this approval."
 				/>
 			{/if}
 			{#if hasNoCredits || isBalanceEmpty}
@@ -215,7 +215,7 @@
 				<ErrorSummary errors={submission.errors} />
 			{/if}
 			<SummaryList rows={facts(detail)} />
-			<Link href={clientHref(detail.client.clientId)} label="View {fullName(detail.client)}'s record" />
+			<Link href={clientHref(detail.client.clientId)} label="View {firstName(detail.client)}'s record" />
 		</stack-l>
 	{/if}
 {/snippet}
@@ -230,7 +230,7 @@
 			{/each}
 		</ul>
 	{:else}
-		<Text text={`This would be ${fullName(detail!.client)}'s first engagement with this Practice.`} />
+		<Text text={`This would be ${firstName(detail!.client)}'s first engagement with this Practice.`} />
 	{/if}
 {/snippet}
 
@@ -279,7 +279,7 @@
 	summary={detail ? summary : undefined}
 	sections={detail
 		? [
-				{ heading: `${fullName(detail.client)}'s engagements`, content: engagementsSection },
+				{ heading: `${firstName(detail.client)}'s engagements`, content: engagementsSection },
 				{ heading: 'Decide', content: decideSection }
 			]
 		: []}
