@@ -145,10 +145,12 @@ describe('activityLedgerColumns: an Engagement fact, from what to what (#1423)',
 			{ dueDateBefore: '2027-03-01', dueDateAfter: '2027-03-15' },
 			`Due date changed for the Client: ${formatCalendarDay('2027-03-01')} to ${formatCalendarDay('2027-03-15')}`
 		],
+		// #2118: a first due date reads from "Not given", the word the
+		// summary card's Due row and the Request pages use for the same gap.
 		[
 			'due_date_changed',
 			{ dueDateBefore: recordedNull, dueDateAfter: '2027-03-15' },
-			`Due date changed for the Client: Not recorded to ${formatCalendarDay('2027-03-15')}`
+			`Due date changed for the Client: Not given to ${formatCalendarDay('2027-03-15')}`
 		],
 		[
 			'birth_outcome_recorded',

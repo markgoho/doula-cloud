@@ -879,9 +879,17 @@
 	 * the header's Send control is withheld once she has accepted; and
 	 * "Created", the "how did this come to be" every feature answers.
 	 *
-	 * `dueDate` is left out entirely when null (#538): ADR-0017's
-	 * postpartum-only Engagement has none. Its Change (#2013) opens the
+	 * Due shows the date when there is one. Its Change (#2013) opens the
 	 * date form, and the row reads the overlaid date once it is saved.
+	 * With no date, a birth Engagement with no birth outcome yet shows the
+	 * row as "Not given", the Request pages' word for the same gap, so the
+	 * same Change can give it a first date and On-call cover (#2118).
+	 * Every other Engagement with no date leaves the row out (#538): a
+	 * postpartum one has none (ADR-0017); after a loss or an unknown
+	 * outcome nothing may presume an expected baby (ADR-0015 standing rule
+	 * 1); and after a live birth the pregnancy has ended, the On-call
+	 * window ends on the day it did, and a first date would drive nothing
+	 * (canChangeKind's own reason).
 	 *
 	 * A row carries `changes` -- and so a Change -- only where this reader
 	 * may change it, from the same flags that drew the old buttons:
@@ -898,6 +906,8 @@
 		];
 		if (displayDueDate) {
 			rows.push({ label: 'Due', value: formatCalendarDay(displayDueDate), ...changeable('due', canWriteFact) });
+		} else if (displayKind === 'birth' && birthOutcome.birthOutcome === undefined) {
+			rows.push({ label: 'Due', value: 'Not given', ...changeable('due', canWriteFact) });
 		}
 		rows.push({
 			label: 'Care phase',
