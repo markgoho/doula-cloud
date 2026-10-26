@@ -34,7 +34,12 @@
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import DoorLink from '#lib/components/atoms/DoorLink.svelte';
 	import { startHref } from './clients/new/intake.js';
-	import { activityLedgerColumns, loadPracticeActivityPage, type ActivityEntry } from '#lib/activityLedger.js';
+	import {
+		activityLedgerColumns,
+		loadPracticeActivityPage,
+		RECENT_ACTIVITY_ROWS,
+		type ActivityEntry
+	} from '#lib/activityLedger.js';
 	import { formatActivityTimestamp } from '#lib/dates.js';
 	import { takeOutcome } from '#lib/outcome.js';
 	import type { PracticeSession } from './+layout.js';
@@ -61,8 +66,8 @@
 	// the feed's first page, and a link to the whole ledger on its own
 	// screen. At 390px the whole page of rows stacked to 6,250px, and the
 	// brief puts the ledger low on every page it appears on -- it is not
-	// what a person comes to the Overview for. Eight is the drawing's.
-	const RECENT_ACTIVITY_ROWS = 8;
+	// what a person comes to the Overview for. Eight is the drawing's
+	// (`RECENT_ACTIVITY_ROWS`, shared with the Engagement page, #2105).
 	let recentActivity = $state<ActivityEntry[]>([]);
 	let activityError = $state('');
 

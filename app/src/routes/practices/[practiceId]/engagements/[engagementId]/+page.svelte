@@ -55,7 +55,12 @@
 	} from '#lib/portalInvite.js';
 	import type { PageProps as PageProperties } from './$types';
 	import { formatCalendarDay, formatInstant, formatScheduledVisit, toDatetimeLocalValue } from '#lib/dates.js';
-	import { activityLedgerColumns, loadEngagementActivityPage, type ActivityEntry } from '#lib/activityLedger.js';
+	import {
+		activityLedgerColumns,
+		loadEngagementActivityPage,
+		RECENT_ACTIVITY_ROWS,
+		type ActivityEntry
+	} from '#lib/activityLedger.js';
 	import { subscribeToThreadPushMessages } from '#lib/pushRefresh.js';
 	import PlanInstanceForm from '#lib/components/organisms/PlanInstanceForm.svelte';
 	import {
@@ -535,7 +540,6 @@
 	// ledger, and the Practice's Activity screen cannot narrow to one. The
 	// first press shows the entries already read, and the next press reads
 	// the next page, as it did before.
-	const RECENT_ACTIVITY_ROWS = 8;
 	let isWholeLedgerShown = $state(false);
 	const shownActivity = $derived(
 		isWholeLedgerShown ? activity.items : activity.items.slice(0, RECENT_ACTIVITY_ROWS)
