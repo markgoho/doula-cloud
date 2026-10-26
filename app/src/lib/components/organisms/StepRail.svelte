@@ -157,8 +157,8 @@
 	`list-style-position: outside` repositions the triangle rather than
 	hiding it, and `details > ol` lays the steps out as a grid. Widening
 	the atom to carry a composed summary and a bespoke marker position
-	would fit one caller and no other; DataTable and HistoryDisclosure are
-	the two real callers a shared shape earns.
+	would fit one caller and no other; DataTable is the real caller the
+	shared shape serves.
 -->
 <nav aria-label={journey}>
 	<details open={expand === 'completed'}>

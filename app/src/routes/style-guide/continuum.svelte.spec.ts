@@ -185,7 +185,7 @@ describe('the sweep, over a closed disclosure (#710)', () => {
 	/*
 	 * A measurement must not be an action. The Staff roster loads both of
 	 * a row's histories -- work state (#459) and Membership (#872), one
-	 * `HistoryDisclosure` each -- from an `ontoggle` handler, so a sweep that left
+	 * disclosure each -- from an `ontoggle` handler, so a sweep that left
 	 * a handler seeing `open` would make measuring a screen issue that
 	 * screen's requests. It does not, and this pins why rather than
 	 * leaving it to a doc comment: a `toggle` event is queued rather than
@@ -308,15 +308,15 @@ describe('the sweep, over a disclosure that loads on open (#1126)', () => {
 	 * That the line runs is not the same as that it worked -- coverage would
 	 * be satisfied either way -- so this reads the mounted DOM instead.
 	 *
-	 * `HistoryDisclosure`'s own demo page is the subject because it is the
-	 * one in the registry built out of closed disclosures, five of them, and
+	 * The Details atom's own demo page is the subject because it is the
+	 * one in the registry built out of disclosures, one of them closed, and
 	 * `querySelectorAll` rather than an accessible query for the reason this
 	 * file's other disclosure assertions give (`.claude/rules/
 	 * svelte-tests.md` case 3): what is asserted is a fact about the
 	 * document, and `open` is the property the instrument writes.
 	 */
 	it('leaves nothing closed behind it when it mounts a subject', async () => {
-		const demo = pageModules['./history-disclosure/+page.svelte'];
+		const demo = pageModules['./details/+page.svelte'];
 		const { frame, remove } = await mountInFrame(demo.default);
 		try {
 			expect(frame.querySelectorAll('details').length).toBeGreaterThan(0);

@@ -362,7 +362,7 @@ async function mountRoute(fixture: RouteFixture): Promise<Mounted> {
 		 * first, before the route had fetched anything, and a route
 		 * keeps its disclosures behind rows that only exist once the
 		 * cascade above has run. The Staff roster was the case that made
-		 * it: two `HistoryDisclosure`s per Member, each fetching its own
+		 * it: two history disclosures per Member, each fetching its own
 		 * history when it opened, none of them in the DOM at mount, until
 		 * #2041 moved both histories onto the Staff member's own page.
 		 *

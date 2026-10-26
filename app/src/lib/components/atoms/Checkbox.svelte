@@ -13,14 +13,6 @@
 		describedBy?: string;
 		variant?: 'checkbox' | 'toggle';
 		/*
-		 * Overrides the accessible name for a checkbox whose wrapping
-		 * <label> text isn't enough to tell it apart -- a multi-select
-		 * option repeated under several different questions, each needing
-		 * its own question name prefixed on (#492). LabeledField remains
-		 * the default; this is the recorded exception to it.
-		 */
-		ariaLabel?: string;
-		/*
 		 * Whose data this is, per docs/design/govuk-alignment.md (#469).
 		 * A checkbox is autofilled the same as any other control, and
 		 * intake collecting a Practice's own questions ABOUT a Client
@@ -41,7 +33,6 @@
 		invalid = false,
 		describedBy,
 		variant = 'checkbox',
-		ariaLabel,
 		autocomplete
 	}: Properties = $props();
 </script>
@@ -59,7 +50,6 @@
 	role={variant === 'toggle' ? 'switch' : undefined}
 	aria-invalid={invalid}
 	aria-describedby={describedBy}
-	aria-label={ariaLabel}
 	onchange={(event_) => onChange(event_.currentTarget.checked)}
 />
 

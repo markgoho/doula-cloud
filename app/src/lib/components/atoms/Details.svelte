@@ -7,11 +7,11 @@
 	 * keyboard handling, focus and the expanded/collapsed announcement do
 	 * the work; nothing here adds an ARIA attribute on top of the element.
 	 *
-	 * `organisms/DataTable.svelte`'s `disclosure` prop and
-	 * `molecules/HistoryDisclosure.svelte` each hand-wrote this shape
-	 * before this atom existed (#1520); both now render through it, which
-	 * is why the summary's sizing, the closed-content-hiding fix and the
-	 * WCAG 2.2 target-size fix live here once instead of twice.
+	 * `organisms/DataTable.svelte`'s `disclosure` prop and the Staff
+	 * roster's per-row history (since deleted, #2085) each hand-wrote this
+	 * shape before this atom existed (#1520), which is why the summary's
+	 * sizing, the closed-content-hiding fix and the WCAG 2.2 target-size
+	 * fix live here once.
 	 * `organisms/StepRail.svelte` keeps its own `<details>` -- see the
 	 * comment at its own element for why.
 	 */
@@ -22,13 +22,6 @@
 		 * The summary's visible text.
 		 */
 		summary: string;
-		/**
-		 * Text appended to the summary's accessible name only, hidden from
-		 * sighted readers. `HistoryDisclosure`'s own need (#667): the Staff
-		 * roster repeats the same summary on every row, and a screen
-		 * reader's list of controls cannot tell them apart without this.
-		 */
-		hiddenSummary?: string;
 		/**
 		 * Whether the disclosure starts open. There is no bindable
 		 * counterpart: a native `<details>` already tracks its own open
@@ -47,11 +40,11 @@
 		children: Snippet;
 	}
 
-	let { summary, hiddenSummary = '', open = false, onToggle, children }: Properties = $props();
+	let { summary, open = false, onToggle, children }: Properties = $props();
 
 	/*
 	 * `open` seeds this once; nothing keeps writing it back from the prop.
-	 * A caller such as `DataTable`/`HistoryDisclosure` rerenders on
+	 * A caller such as `DataTable` rerenders on
 	 * unrelated state (a page arriving, a row's own data changing), and
 	 * `{open}` bound straight to the prop would reassert on every one of
 	 * those passes -- closing a disclosure the reader had just opened,
@@ -70,15 +63,7 @@
 </script>
 
 <details open={isOpen} ontoggle={handleToggle}>
-	<!--
-		{' '} rather than a raw space: a raw space next to a block edge, or
-		at the start of an element's own content, is template whitespace,
-		and Svelte's whitespace trimming removes it either way -- tried
-		both, both collapsed to "Membership historyfor Renata Alvarez" as
-		one run-on word. A mustache-held string is content, not template
-		whitespace, so it survives.
-	-->
-	<summary>{summary}{#if hiddenSummary}<!-- eslint-disable-line svelte/no-useless-mustaches -- {' '} is a literal space, not a useless one; see the comment above -->{' '}<span class="visually-hidden">{hiddenSummary}</span>{/if}</summary>
+	<summary>{summary}</summary>
 	{@render children()}
 </details>
 

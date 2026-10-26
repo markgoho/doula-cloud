@@ -117,7 +117,7 @@ describe('the Practice-wide invoice list (#265)', () => {
 			.toHaveAttribute('href', `/practices/${practiceId}/engagements/${openInvoice.engagementId}`);
 	});
 
-	it('shows what is outstanding across the Practice', async () => {
+	it('shows what Clients owe across the Practice', async () => {
 		await setup();
 
 		// The summary is a description list, so its three values are read
@@ -142,7 +142,7 @@ describe('the Practice-wide invoice list (#265)', () => {
 			)
 			.toBeVisible();
 		// #2015: an empty book has nothing to total and nothing to narrow.
-		await expect.element(testPage.getByText('Outstanding')).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('Clients owe')).not.toBeInTheDocument();
 		await expect.element(testPage.getByRole('link', { name: 'All invoices' })).not.toBeInTheDocument();
 	});
 

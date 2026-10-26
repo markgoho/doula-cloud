@@ -37,19 +37,4 @@
 			</ul>
 		</Details>
 	</section>
-
-	<section>
-		<h2>With a hidden name on the summary</h2>
-		<!--
-			HistoryDisclosure's own need (#667): every row of the Staff
-			roster repeats the same summary, so `hiddenSummary` tells a
-			screen reader's list of controls one row's disclosure from the
-			next. The name is a real-length hyphenated one for the same
-			reason HistoryDisclosure's own style-guide page picks one
-			(ADR-0025, #537).
-		-->
-		<Details summary="Membership history" hiddenSummary="for Anne-Marie Ochieng-Whitfield">
-			<p>Joined as a doula on Aug 28, 2026.</p>
-		</Details>
-	</section>
 </stack-l>
