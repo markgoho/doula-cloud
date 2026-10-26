@@ -48,7 +48,8 @@ function portalScreens(engagementId: string): string[] {
 		`${hub}/contract`,
 		`${hub}/notifications`,
 		`${hub}/invoices`,
-		`${hub}/sign-in-address`
+		`${hub}/sign-in-address`,
+		`${hub}/sign-in-address/change`
 	];
 }
 

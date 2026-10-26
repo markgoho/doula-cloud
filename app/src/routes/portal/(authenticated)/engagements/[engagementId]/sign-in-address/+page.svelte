@@ -1,61 +1,47 @@
 <script lang="ts">
 	/*
-	 * #619, ADR-0026: she changes her own sign-in address, and the change
-	 * is proved by a link sent to the new address.
+	 * #619, ADR-0026: the address she signs in with, and the way to change
+	 * it, which is proved by a link sent to the new address.
 	 *
-	 * Two things about the shape are decisions, not accidents.
-	 *
-	 * The page never reports whether the address she typed is already in
-	 * use. The BFF answers the same way either way (#168's
-	 * account-enumeration class), so a screen that said "that one is
-	 * taken" would be inventing a fact it was deliberately not told. The
-	 * collision surfaces on the confirmation screen instead, where she has
-	 * proved the mailbox and so learns nothing new.
-	 *
-	 * The outcome is announced in place with a Notice and the form stays
-	 * where it is -- docs/design/govuk-alignment.md's second recorded
-	 * departure, "No confirmation pages". A second submit after that is
-	 * not a hazard to design around: asking again supersedes the first
-	 * link outright (authtoken.Mint deletes the prior token and the
-	 * companion row cascades with it), which is what she wants if she
-	 * mistyped the address.
+	 * A summary, not a form (#2045): the address is one SummaryList row
+	 * whose Change opens a question page of its own (./change), which
+	 * sends the link and comes back here with a status Notice that says
+	 * so. "Sign out of every device" is its own last section, apart from
+	 * the row, because it is a separate act with no relation to the
+	 * address. It was one FormPage whose second fieldset was the sign-out,
+	 * so the "Send the link" button landed under the red one.
 	 */
 	import { onMount } from 'svelte';
 	import { goto, refreshAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { page } from '$app/state';
+	import { page } from '#lib/appState.svelte.js';
 	import { apiFetch, apiFetchWithSession } from '#lib/api.js';
 	import { apiErrorMessage } from '#lib/apiErrorMessage.js';
-	import { emailFormatError, refusalErrors, SERVICE_PROBLEM } from '#lib/formErrors.js';
-	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
+	import { SERVICE_PROBLEM } from '#lib/formErrors.js';
+	import { takeOutcome } from '#lib/outcome.js';
 	import { portalPushSubscriptionsPath, unregisterPushSubscription } from '#lib/pushRegistration.js';
 	import { bestEffort, UNREGISTER_TIMEOUT_MS } from '#lib/signOut.js';
 	import Button from '#lib/components/atoms/Button.svelte';
-	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
-	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
-	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
-	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
-	import FormPage from '#lib/components/templates/FormPage.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
+	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 
-	const fieldId = 'new-sign-in-address';
+	// Read while the page renders, before `goto` settles (#1710): what the
+	// change question sent, said once.
+	const outcome = takeOutcome(page.url);
 
 	let currentAddress = $state('');
 	let isLoaded = $state(false);
 	let loadError = $state('');
-	let newAddress = $state('');
-	const submission = new FormSubmission();
-	let sentTo = $state('');
 
-	// #618, ADR-0026: her own "sign out everywhere", a separate action
-	// from the address change above -- its own fieldset, its own
-	// confirmation, no relation to the form's submit.
+	// #618, ADR-0026: her own "sign out everywhere", a separate act from
+	// the address change -- its own section, its own confirmation.
 	let isSignOutEverywhereDialogOpen = $state(false);
 	let isSigningOutEverywhere = $state(false);
 	let signOutEverywhereError = $state('');
-
-	const fieldError = $derived(submission.errorFor(fieldId));
 
 	// onMount, not $effect: this reads once, and an effect would re-run
 	// every time it set `isLoaded` -- the sibling Notifications screen
@@ -75,36 +61,6 @@
 		} catch {
 			loadError = SERVICE_PROBLEM;
 		}
-	}
-
-	// The same two checks the BFF makes, made here first so the common
-	// mistakes never cost a round trip. The BFF still makes them: this is
-	// a convenience, not the enforcement (ADR-0024's client/server split
-	// applied to validation -- prevent on the client, refuse on the
-	// server).
-	function localError(address: string): string {
-		if (address.trim() === '') return 'Enter your new sign-in address';
-		return emailFormatError(address.trim()) ?? '';
-	}
-
-	async function handleSubmit(event: SubmitEvent) {
-		event.preventDefault();
-		await submission.run(async () => {
-			const problem = localError(newAddress);
-			if (problem) {
-				return [{ message: problem, targetId: fieldId }];
-			}
-
-			const response = await apiFetchWithSession('/api/portal/sign-in-address/request', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ email: newAddress.trim() })
-			});
-			if (!response.ok) {
-				return await refusalErrors(response, { email: fieldId });
-			}
-			sentTo = newAddress.trim();
-		}, orServiceProblem);
 	}
 
 	// Ends every session on every device, this one included (#618) -- so
@@ -149,42 +105,36 @@
 	}
 </script>
 
-{#snippet intro()}
-	<Text
-		text={`You sign in with ${currentAddress}. This is your own address, and it is separate from the contact details your Practice holds for you.`}
-	/>
-	<Text
-		text="We will send a link to the new address. Your current address keeps signing you in until you open it."
-		tone="variant"
-	/>
-{/snippet}
-
-{#snippet field()}
-	<LabeledField
-		id={fieldId}
-		label="New sign-in address"
-		hint="You will need to open an email at this address to finish the change."
-		error={fieldError}
-	>
-		{#snippet children({ id, describedBy, invalid })}
-			<TextInput
-				{id}
-				{describedBy}
-				{invalid}
-				type="email"
-				name="email"
-				autocomplete="email"
-				value={newAddress}
-				onInput={(value) => (newAddress = value)}
-			/>
-		{/snippet}
-	</LabeledField>
+{#snippet summary()}
+	<stack-l space="var(--space-3)">
+		<SummaryList
+			isBordered
+			rows={[
+				{
+					label: 'Sign-in address',
+					value: currentAddress,
+					changes: 'sign-in address',
+					href: resolve('/portal/(authenticated)/engagements/[engagementId]/sign-in-address/change', {
+						engagementId: page.params.engagementId!
+					})
+				}
+			]}
+		>
+			{#snippet action(row, describedBy)}
+				<Link href={row.href} label="Change" {describedBy} />
+			{/snippet}
+		</SummaryList>
+		<Text
+			text="This is your own address. It is separate from the contact details your Practice holds for you."
+			step="body-sm"
+			tone="muted"
+		/>
+	</stack-l>
 {/snippet}
 
 {#snippet signOutEverywhere()}
-	<Text
-		text="This ends every session on every device, including this one. You will need to sign in again afterwards."
-		tone="variant"
+	<WarningText
+		message="This ends every session on every device, including this one. You will need to sign in again afterwards."
 	/>
 	<Button
 		type="button"
@@ -203,37 +153,12 @@
 	/>
 {/snippet}
 
-{#snippet errorSummary()}
-	<ErrorSummary errors={submission.errors} />
-{/snippet}
-
-{#snippet actions()}
-	<Button type="submit" label="Send the link" loading={submission.isSubmitting} />
-	{#if sentTo}
-		<Notice
-			variant="status"
-			message={`Check your email. Open the link we sent to ${sentTo} to finish the change. Until you do, ${currentAddress} still signs you in.`}
-		/>
-	{/if}
-{/snippet}
-
-<!--
-	novalidate is GOV.UK's own instruction, not a shortcut past HTML
-	validation: the browser's built-in bubble is announced inconsistently,
-	disappears on the next keystroke, and cannot be summarized at the top
-	of the page. type="email" stays, because it still gets her the right
-	keyboard on a phone; what it no longer does is speak for the service.
--->
-<!-- stacked-form:ignore: #1108 -- this form wraps a Template. `FormPage` stacks each fieldset's content itself, so the `<form>` here owns the submit and arranges nothing; a `StackedForm` would put a second, empty stack around one child. -->
-<form onsubmit={handleSubmit} novalidate>
-	<FormPage
-		title="Sign-in address"
-		serviceName={page.data.practiceName}
-		{intro}
-		fieldsets={[{ content: field }, { legend: 'Sign out of every device', content: signOutEverywhere }]}
-		errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
-		{actions}
-		loading={isLoaded || loadError ? undefined : 'Loading your sign-in address'}
-		{loadError}
-	/>
-</form>
+<RecordDetail
+	title="Sign-in address"
+	serviceName={page.data.practiceName}
+	{outcome}
+	{summary}
+	sections={[{ heading: 'Sign out of every device', content: signOutEverywhere }]}
+	loading={isLoaded || loadError ? undefined : 'Loading your sign-in address'}
+	loadError={loadError || undefined}
+/>

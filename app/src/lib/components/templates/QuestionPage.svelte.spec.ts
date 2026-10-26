@@ -162,6 +162,31 @@ describe('QuestionPage.svelte', () => {
 		);
 	});
 
+	// GOV.UK's error message for a single control: between the hint and the
+	// control, and announced from the control after the hint (#2044).
+	it('says what is wrong with a single input, after its hint, and describes the input by both', async () => {
+		const { container } = await setup({
+			hint: 'We send a link to it.',
+			error: 'Enter your new sign-in address'
+		});
+
+		await expect.element(page.getByRole('alert')).toHaveTextContent('Enter your new sign-in address');
+		const ids = container.querySelector('#client-email')?.getAttribute('aria-describedby')?.split(' ');
+		expect(ids?.map((id) => container.querySelector(`#${id}`)?.textContent)).toEqual([
+			'We send a link to it.',
+			'Enter your new sign-in address'
+		]);
+	});
+
+	it('draws no error message for a legend question, whose controls say their own', async () => {
+		await setup({
+			question: { as: 'legend', text: 'What is her date of birth?' },
+			error: 'Enter a date of birth'
+		});
+
+		expect(page.getByRole('alert').elements()).toHaveLength(0);
+	});
+
 	// The caption is inside the heading and outside the label, so it is part
 	// of the page's title and not part of the control's accessible name.
 	it('puts the section caption inside the h1 and outside the label', async () => {

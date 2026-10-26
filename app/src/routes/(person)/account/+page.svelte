@@ -23,66 +23,96 @@
 	 * other authenticated Staff route in this app -- the whole app is a
 	 * client-side SPA behind auth (`ssr = false` in src/routes/+layout.ts)
 	 * and a load function would buy nothing but a second place to look.
+	 *
+	 * ## A summary of facts, not one long form (#2044)
+	 *
+	 * The page is the facts about her, in one `SummaryList`, and each row
+	 * says how it changes: the name and the work state each open a question
+	 * page of their own that saves and comes back here with a status
+	 * Notice; the second factor is set up on /mfa/enroll or removed in
+	 * place behind a password; the email takes a resend. Deleting the
+	 * login is last and apart. It was five unrelated `FormPage` fieldsets,
+	 * with two primary buttons and the resend landing under the delete
+	 * section (docs/design/govuk-alignment.md, "Sections of a record page").
 	 */
 	import { onMount } from 'svelte';
 	import { signOut, type User } from 'firebase/auth';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '#lib/appState.svelte.js';
 	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
 	import { staffLoginAfterSessionEnded } from '#lib/sessionEnded.js';
 	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { refusalErrors, refusalMessage, SERVICE_PROBLEM } from '#lib/formErrors.js';
-	import {
-		FormSubmission,
-		orServiceProblem,
-		orThrownMessage,
-		type FormError
-	} from '#lib/formSubmission.svelte.js';
+	import { refusalMessage, SERVICE_PROBLEM } from '#lib/formErrors.js';
+	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
+	import type { Membership } from '#lib/landing.js';
 	import { rotateSavedCodes } from '#lib/mfaRecovery.js';
+	import { takeOutcome } from '#lib/outcome.js';
 	import { triggerBlobDownload } from '#lib/blobDownload.js';
-	import { workStateCode, workStateName, workStateReportedOn } from '#lib/workStates.js';
-	import FormPage from '#lib/components/templates/FormPage.svelte';
+	import { workStateName, workStateReportedOn } from '#lib/workStates.js';
+	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
-	import Details from '#lib/components/atoms/Details.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import ReauthPrompt from '#lib/components/molecules/ReauthPrompt.svelte';
-	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
-	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
-	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
-	import StaffNameFields from '#lib/components/molecules/StaffNameFields.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import { deleteOwnLogin } from '#lib/loginDeletion.js';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import { loadAccountSession } from '../session.svelte.js';
 
-	const workStateId = 'account-work-state';
-	const firstNameId = 'account-first-name';
-	const lastNameId = 'account-last-name';
+	// Read while the page renders, before `goto` settles (#1710): what the
+	// name or work-state question page saved, said once.
+	const outcome = takeOutcome(page.url);
 
 	let firstName = $state('');
 	let lastName = $state('');
-	let savedName = $state('');
 	let email = $state('');
 	let reportedAt = $state('');
-	// The full state name the <select> speaks; workStateCode() converts it
-	// back to the USPS code the API stores on the way out.
-	let selectedState = $state('');
+	let workState = $state('');
+	let memberships = $state<Membership[]>([]);
+	let lastPracticeId = $state<string | undefined>();
 	// #606: whether *this session* showed a second factor at sign-in --
 	// see SessionInfo's own doc comment for why that is not the same
 	// question as "is one currently enrolled".
 	let hasSecondFactor = $state(false);
 	let isLoaded = $state(false);
 	let loadError = $state('');
-	const saveSubmission = new FormSubmission();
-	let savedState = $state('');
+
+	/*
+	 * The way back, at the top of the column (#2044). It was a heading at
+	 * the foot of the shell listing every Practice. One Back link names
+	 * one place: the Practice she was last in, which is where she came
+	 * from; any Practice when she has one; the chooser at `/` when she has
+	 * several and none is the last. None at all when she belongs to no
+	 * Practice (#1526's founder): a way back to nowhere.
+	 */
+	const back = $derived.by((): { href: string; label: string } | undefined => {
+		const last = memberships.find((membership) => membership.practiceId === lastPracticeId);
+		const only = memberships.length === 1 ? memberships[0] : undefined;
+		const practice = last ?? only;
+		if (practice) {
+			return {
+				href: resolve('/practices/[practiceId]', { practiceId: practice.practiceId }),
+				label: `Back to ${practice.practiceName}`
+			};
+		}
+		if (memberships.length > 1) return { href: resolve('/(signed-out)'), label: 'Back to your practices' };
+		return undefined;
+	});
 
 	// #606: voluntary removal of a second factor. The step-up Identity
 	// Platform demands of an already-enrolled identity is `ReauthPrompt`'s
 	// (#694), so all this screen holds is whether she has asked for it.
 	let isRemovingSecondFactor = $state(false);
 	const mfaSubmission = new FormSubmission();
+	// A refusal that names no field: the network, or the DELETE itself.
+	const mfaServiceError = $derived(
+		mfaSubmission.errors.length > 0 && !mfaSubmission.errors[0]!.targetId
+			? mfaSubmission.errors[0]!.message
+			: undefined
+	);
 
 	// #615: whether she is the only Owner of some Practice, which is the
 	// whole population that ever holds saved recovery codes. Read off the
@@ -136,7 +166,9 @@
 		lastName = result.session.lastName;
 		email = result.session.email;
 		reportedAt = result.session.workStateReportedAt;
-		selectedState = workStateName(result.session.workState);
+		workState = workStateName(result.session.workState);
+		memberships = result.session.memberships;
+		lastPracticeId = result.session.lastPracticeId;
 		hasSecondFactor = result.session.secondFactor;
 		isSoleOwner = result.session.soleOwner;
 		isLoaded = true;
@@ -154,102 +186,6 @@
 	// Both handlers' own `signOut` calls already cover success and
 	// failure; this is for the exit that skips them.
 	onMount(() => signOutOfMfaFirebaseSDK);
-
-	/*
-	 * The work state form: one deliberate act, choose a state, press Save. No confirmation
-	 * step, and that is a decision rather than an omission (#437).
-	 *
-	 * A confirmation dialog buys its friction with a promise that the act
-	 * is hard to undo. This one is not: picking the previous state again
-	 * puts it back, and both events are recorded either way, so the audit
-	 * trail is richer for the round trip rather than damaged by it. And
-	 * the failure this screen exists to fix is not a doula who changes
-	 * her state carelessly -- it is a doula who moves and never says so,
-	 * leaving her Practice's sales tax quietly wrong for years. Friction
-	 * here pushes towards that failure, not away from it.
-	 *
-	 * If a confirmation is ever warranted, it is warranted on the
-	 * consequence, which is why the consequence is stated above the field
-	 * and before the choice instead.
-	 */
-	async function handleSubmit(event: SubmitEvent) {
-		event.preventDefault();
-		savedState = '';
-		savedName = '';
-
-		await saveSubmission.run(async () => {
-			// The one question this page asks. Nothing else on it is editable.
-			if (selectedState === '') {
-				return [{ message: 'Choose the state you work from', targetId: workStateId }];
-			}
-
-			/*
-			 * Sent every time, including when the state has not changed.
-			 * Saying "yes, still New York, as of today" is a real thing to
-			 * say: the reported date is the only staleness signal the design
-			 * has, so a re-assertion moves it and is worth having. That is
-			 * why the button is never disabled on an unchanged value and the
-			 * request is never skipped -- an "optimization" here would
-			 * silently delete the one thing this screen can tell an Owner
-			 * reading the roster.
-			 *
-			 * There is no staffId in the path or the body. The endpoint
-			 * only ever writes the caller's own row, which is how self-edit
-			 * only is enforced where it can actually be enforced -- an Owner
-			 * reads a work state on the roster and cannot write it (#415).
-			 */
-			const response = await apiFetchWithSession('/api/staff/work-state', {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ workState: workStateCode(selectedState) })
-			});
-			if (!response.ok) {
-				return await refusalErrors(response, { workState: workStateId });
-			}
-
-			const saved: { workState: string; workStateReportedAt: string } = await response.json();
-			reportedAt = saved.workStateReportedAt;
-			selectedState = workStateName(saved.workState);
-			savedState = selectedState;
-		}, orServiceProblem);
-	}
-
-	// Its own form, so Enter in a name field lands here and not on the work state.
-	async function handleSaveName(event: SubmitEvent) {
-		event.preventDefault();
-		savedState = '';
-		savedName = '';
-
-		await saveSubmission.run(saveName, orServiceProblem);
-	}
-
-	/*
-	 * Correcting her name (#1537). Both fields are sent every time and
-	 * both are needed, the same as at signup. There is no staff id in the
-	 * path or the body: the endpoint only ever writes the caller's own
-	 * row, and records who changed it and when.
-	 */
-	async function saveName(): Promise<FormError[] | undefined> {
-		const refusals: FormError[] = [];
-		if (firstName.trim() === '')
-			refusals.push({ message: 'Enter your first name', targetId: firstNameId });
-		if (lastName.trim() === '') refusals.push({ message: 'Enter your last name', targetId: lastNameId });
-		if (refusals.length > 0) return refusals;
-
-		const response = await apiFetchWithSession('/api/staff/name', {
-			method: 'PUT',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ firstName, lastName })
-		});
-		if (!response.ok) {
-			return await refusalErrors(response, { firstName: firstNameId, lastName: lastNameId });
-		}
-
-		const saved: { firstName: string; lastName: string } = await response.json();
-		firstName = saved.firstName;
-		lastName = saved.lastName;
-		savedName = `${saved.firstName} ${saved.lastName}`;
-	}
 
 	function beginMfaRemoval() {
 		mfaSubmission.errors = [];
@@ -337,9 +273,9 @@
 	 * per-Practice frame would be telling the same small lie about its own
 	 * reach that this whole route exists to avoid.
 	 *
-	 * Unlike the work state above, this one does get a ConfirmDialog, and
-	 * for the reason handleSubmit's comment says a confirmation has to
-	 * earn: the act is irreversible. What it destroys and what it keeps is
+	 * Unlike the work state, this one does get a ConfirmDialog, and for
+	 * the reason the work-state question page's comment says a
+	 * confirmation has to earn: the act is irreversible. What it destroys and what it keeps is
 	 * stated in the section itself, before the button, rather than only in
 	 * the dialog -- someone deciding needs it while she decides, not once
 	 * she has already pressed.
@@ -382,118 +318,131 @@
 	}
 </script>
 
-{#snippet nameSection()}
+{#snippet summary()}
 	<!--
-		Its own <form>, so Enter in a name field submits the name natively
-		and the work state below is a separate act with its own button.
+		The facts about her, one row each, and on each row the one way it
+		changes (#2044). A row names its act through SummaryList's hidden
+		text, so a screen reader listing the controls hears "Change, name"
+		rather than four bare words.
 	-->
-	<StackedForm onSubmit={handleSaveName}>
-		<StaffNameFields
-			bind:firstName
-			bind:lastName
-			firstId={firstNameId}
-			lastId={lastNameId}
-			firstError={saveSubmission.errorFor(firstNameId)}
-			lastError={saveSubmission.errorFor(lastNameId)}
-		/>
-		<Button type="submit" label="Save name" loading={saveSubmission.isSubmitting} />
-		{#if savedName}
-			<Notice variant="status" message={`Saved. Your name is ${savedName}.`} />
-		{/if}
-	</StackedForm>
-{/snippet}
+	<SummaryList
+		isBordered
+		rows={[
+			{ key: 'name', label: 'Name', value: `${firstName} ${lastName}`, changes: 'name' },
+			{
+				key: 'work-state',
+				label: 'Where you work',
+				value: workState || 'Not given yet',
+				changes: 'where you work'
+			},
+			{
+				key: 'email',
+				label: 'Email address',
+				value: email,
+				changes: 'to your email address',
+				isDetailShown: Boolean(resendNotice || resendError)
+			},
+			{
+				key: 'second-factor',
+				label: 'Two-factor authentication',
+				value: hasSecondFactor ? 'On' : 'Off',
+				changes: 'two-factor authentication',
+				isDetailShown: isRemovingSecondFactor || mfaServiceError !== undefined
+			}
+		]}
+	>
+		{#snippet value(row)}
+			{row.value}
+			<!-- The reported date is the only staleness signal the design
+			     has (#437), so it stays beside the state it dates. -->
+			{#if row.key === 'work-state' && reportedAt}
+				<Text text={`Last confirmed ${workStateReportedOn(reportedAt)}.`} step="meta" tone="muted" />
+			{/if}
+		{/snippet}
 
-{#snippet workState()}
-	<StackedForm onSubmit={handleSubmit}>
-		{#if reportedAt}
-			<Text text={`Last confirmed ${workStateReportedOn(reportedAt)}.`} step="meta" tone="muted" />
-		{/if}
-		<WorkStateField
-			id={workStateId}
-			bind:value={selectedState}
-			error={saveSubmission.errorFor(workStateId)}
-		/>
-		<!--
-			The consequence sits on the field's own hint (WorkStateField), and
-			the question it invites -- "does correcting this claw back what I
-			was charged last year?" -- is answered here, beside the control,
-			rather than as a page intro three sections away (#2023). No: #420
-			records the tax actually charged on each purchase row, so past
-			receipts stand exactly as issued.
-		-->
-		<Details summary="If you change it">
-			<Text
-				text="The change applies from today. Purchases you have already made are not re-priced, and no receipt you have been sent changes."
-			/>
-		</Details>
-		<!--
-			Saving the same state again is a re-assertion, not a no-op -- see
-			the comment on handleSubmit. Hence no `disabled` on an unchanged
-			value.
-		-->
-		<Button type="submit" label="Save work state" loading={saveSubmission.isSubmitting} />
-		<!--
-			Confirmation sits where she just was -- immediately under the Save
-			button she pressed, not in a banner at the top of a page she would
-			have to scroll back up to read. Notice's status variant carries
-			role="status", so a screen reader announces it politely wherever it
-			is; a sighted reader is looking at the button. The "Last confirmed"
-			line above the field moves to the new date at the same moment,
-			which is the durable half of the same answer.
-		-->
-		{#if savedState}
-			<Notice variant="status" message={`Saved. You work from ${savedState}.`} />
-		{/if}
-	</StackedForm>
-{/snippet}
+		{#snippet action(row, describedBy)}
+			{#if row.key === 'name'}
+				<Link href={resolve('/(person)/account/name')} label="Change" {describedBy} />
+			{:else if row.key === 'work-state'}
+				<Link href={resolve('/(person)/account/work-state')} label="Change" {describedBy} />
+			{:else if row.key === 'email'}
+				<!--
+					#613: no verified-email flag is exposed, so this is offered
+					whatever the address's state; the outbox worker skips mailing
+					an address already verified.
+				-->
+				<Button
+					type="button"
+					variant="link"
+					label="Send a new verification link"
+					loading={isResendingVerification}
+					{describedBy}
+					onClick={handleResendVerification}
+				/>
+			{:else if hasSecondFactor}
+				<!--
+					#606: `hasSecondFactor` is the session-carried fact (see
+					SessionInfo's doc comment), the same one staffauth.Middleware
+					reads. Removing it asks for the password in place, under the
+					row, because ReauthPrompt holds a live Identity Platform
+					sign-in that a page of its own would have to hand across a
+					navigation.
+				-->
+				<Button
+					type="button"
+					variant="link"
+					label="Remove"
+					expanded={isRemovingSecondFactor}
+					{describedBy}
+					onClick={isRemovingSecondFactor ? cancelMfaRemoval : beginMfaRemoval}
+				/>
+			{:else}
+				<!--
+					A link, not a button: this only ever navigates. `returnTo`
+					brings her back here once enrollment finishes.
+				-->
+				<Link
+					href={`${resolve('/(signed-out)/mfa/enroll')}?returnTo=${encodeURIComponent(resolve('/(person)/account'))}`}
+					label="Set up"
+					{describedBy}
+				/>
+			{/if}
+		{/snippet}
 
-{#snippet mfaSection()}
-	<!--
-		#606: reads `hasSecondFactor` as the session-carried fact it is (see
-		SessionInfo's own doc comment) rather than re-deriving it, which
-		matches how staffauth.Middleware reads the same fact server-side.
-
-		The page is not one form: the name and the work state are each their
-		own <form> above, and this fieldset stands outside both.
-	-->
-	{#if hasSecondFactor}
-		{#if isRemovingSecondFactor}
-			<ReauthPrompt
-				idPrefix="account-mfa"
-				{email}
-				prompt="Confirm your password to remove two-factor authentication."
-				confirmLabel="Remove"
-				confirmVariant="destructive"
-				submission={mfaSubmission}
-				onAuthenticated={removeSecondFactor}
-				onCancel={cancelMfaRemoval}
-			/>
-		{:else}
-			<Text text="Turned on. You'll be asked for a code from your authenticator app when you sign in." />
-			<Button type="button" variant="destructive" label="Remove" onClick={beginMfaRemoval} />
-		{/if}
-	{:else}
-		<Text text="Not turned on." />
-		<!--
-			A link, not a button: this only ever navigates, the same reason
-			`DataTable`'s rowHref cells and the practice-picker links are
-			`Link` rather than `Button` + `goto`. `returnTo=/account` brings
-			her back here once enrollment finishes (docs/design's link-text
-			rule is why the label matches /mfa/enroll's own title verbatim).
-		-->
-		<Link href={`${resolve('/(signed-out)/mfa/enroll')}?returnTo=${encodeURIComponent(resolve('/(person)/account'))}`} label="Set up two-factor authentication" />
-	{/if}
-	<!--
-		Field-targeted refusals (a wrong password, a wrong code) already
-		show beside their own control via LabeledField's `error` -- the same
-		"Send a new verification link" precedent below, which shows its own
-		failure as a plain Notice rather than a page-wide ErrorSummary. A
-		service-level failure (the network, the DELETE call itself) names no
-		field, so it is the one case shown here.
-	-->
-	{#if mfaSubmission.errors.length > 0 && !mfaSubmission.errors[0].targetId}
-		<Notice variant="error" message={mfaSubmission.errors[0].message} />
-	{/if}
+		{#snippet detail(row)}
+			{#if row.key === 'email'}
+				{#if resendNotice}
+					<Notice variant="status" message={resendNotice} />
+				{:else}
+					<Notice variant="error" message={resendError} />
+				{/if}
+			{:else}
+				<stack-l space="var(--space-4)">
+					{#if isRemovingSecondFactor}
+						<ReauthPrompt
+							idPrefix="account-mfa"
+							{email}
+							prompt="Confirm your password to remove two-factor authentication."
+							confirmLabel="Remove"
+							confirmVariant="destructive"
+							submission={mfaSubmission}
+							onAuthenticated={removeSecondFactor}
+							onCancel={cancelMfaRemoval}
+						/>
+					{/if}
+					<!--
+						Field-targeted refusals (a wrong password, a wrong code) show
+						beside their own control through LabeledField's `error`. A
+						service-level failure names no field, so it is the one case
+						shown here.
+					-->
+					{#if mfaServiceError}
+						<Notice variant="error" message={mfaServiceError} />
+					{/if}
+				</stack-l>
+			{/if}
+		{/snippet}
+	</SummaryList>
 {/snippet}
 
 {#snippet savedCodesSection()}
@@ -565,14 +514,11 @@
 		/>
 	{/if}
 	<!--
-		A `Notice` beside the control rather than the page-wide
-		`ErrorSummary`, for the same recorded reason the two-factor section
-		above gives: this fieldset's one button is not part of the form the
-		summary is about (the work state), and a summary at the top of the
-		page linking to nothing she can fix would send her away from the
-		thing that failed. Nothing here can produce a field-targeted
-		refusal -- there is no field -- so the guard is only that a refusal
-		exists at all.
+		A `Notice` beside the control rather than an `ErrorSummary`: this
+		page asks no question, and a summary at the top of the page linking
+		to nothing she can fix would send her away from the thing that
+		failed. Nothing here can produce a field-targeted refusal -- there
+		is no field -- so the guard is only that a refusal exists at all.
 	-->
 	{#if savedCodesSubmission.errors.length > 0}
 		<Notice variant="error" message={savedCodesSubmission.errors[0].message} />
@@ -581,17 +527,16 @@
 
 {#snippet deleteLoginSection()}
 	<!--
-		Named in full, and split the way ADR-0033 splits it: what goes, and
-		what stays. The second half matters as much as the first -- someone
-		leaving a Practice has every reason to fear she is taking its record
-		of her work with her, and she is not.
-
-		Plain Text elements rather than a list component: three sentences
-		read as prose here, and the alternative would be introducing a list
-		this page has no other use for (docs/design's own rule about
-		choosing a component being a layout decision).
+		Last and apart (#2044): the one act on this page that cannot be
+		undone, so it is nowhere near the everyday rows above (the brief's
+		Fitts's Law row). Named in full, and split the way ADR-0033 splits
+		it: what goes, and what stays. The second half matters as much as
+		the first -- someone leaving a Practice has every reason to fear she
+		is taking its record of her work with her, and she is not.
 	-->
-	<Text text="Deleting your login ends your access to DoulaCloud everywhere, at once. It cannot be undone." />
+	<WarningText
+		message="Deleting your login ends your access to DoulaCloud everywhere, at once. It cannot be undone."
+	/>
 	<Text
 		text="This deletes your login and your membership of every practice you work at, and signs you out on every device."
 		tone="variant"
@@ -617,50 +562,25 @@
 	/>
 {/snippet}
 
-{#snippet errorSummary()}
-	<ErrorSummary errors={saveSubmission.errors} />
-{/snippet}
-
-{#snippet actions()}
-	<Button
-		type="button"
-		variant="secondary"
-		label="Send a new verification link"
-		loading={isResendingVerification}
-		onClick={handleResendVerification}
-	/>
-	{#if resendNotice}
-		<Notice variant="status" message={resendNotice} />
-	{/if}
-	{#if resendError}
-		<Notice variant="error" message={resendError} />
-	{/if}
-{/snippet}
-
 <!--
 	A 404 `loadError` means the verified identity has no staff row behind
-	it -- signed in, but nobody here yet -- so there is nothing to edit and
-	offering a control whose save could never land would be worse than
-	saying so. `loading`/`loadError` are `FormPage`'s own frame-reserving
-	states (#480), which is why this is one call rather than a branch per
-	state -- `novalidate`: this page refuses the submit, not the browser
-	(#467).
+	it -- signed in, but nobody here yet -- so there is nothing to change,
+	and offering a control whose save could never land would be worse than
+	saying so. `loading`/`loadError` are `RecordDetail`'s own
+	frame-reserving states (#480).
 -->
-<FormPage
+<RecordDetail
 	title="Your account"
-	fieldsets={isLoaded
-		? [
-				{ legend: 'Your name', content: nameSection },
-				{ legend: 'Where you work', content: workState },
-				{ legend: 'Two-factor authentication', content: mfaSection },
-				...(isSoleOwner && hasSecondFactor ? [{ legend: 'Recovery codes', content: savedCodesSection }] : []),
-				{ legend: 'Delete your login', content: deleteLoginSection }
-			]
-		: []}
-	errorSummary={saveSubmission.errors.length > 0 ? errorSummary : undefined}
-	{actions}
+	{outcome}
+	backHref={back?.href}
+	backLabel={back?.label}
+	{summary}
+	sections={[
+		...(isSoleOwner && hasSecondFactor ? [{ heading: 'Recovery codes', content: savedCodesSection }] : []),
+		{ heading: 'Delete your login', content: deleteLoginSection }
+	]}
 	loading={isLoaded || loadError ? undefined : 'Loading your account'}
-	{loadError}
+	loadError={loadError || undefined}
 />
 
 <style>

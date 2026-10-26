@@ -127,45 +127,37 @@ describe('the account route layout', () => {
 		await expect.element(testPage.getByRole('banner').getByText('DoulaCloud').last()).toBeVisible();
 	});
 
-	it('offers a way back to every Practice she belongs to', async () => {
+	// #2044: the way back is Your account's own Back link, at the top of
+	// its column, so the shell draws none at its foot.
+	it('draws no way back of its own', async () => {
 		await renderLayout();
 
-		const back = testPage.getByRole('navigation', { name: 'Your practices' });
-		await expect.element(back.getByRole('link', { name: 'Rochester Doulas' })).toBeVisible();
-	});
-
-	// #1526: the founder holds no Membership at all, and a heading over an
-	// empty list offers a way back to nowhere.
-	it('offers no way back to a person who belongs to no Practice', async () => {
-		await renderLayout({ sessionResponse: jsonResponse({ ...session, memberships: [] }) });
-
 		await expect.element(testPage.getByText('account page content')).toBeVisible();
+		expect(testPage.getByRole('navigation', { name: 'Your practices' }).elements()).toHaveLength(0);
+		expect(testPage.getByRole('link', { name: 'Rochester Doulas' }).elements()).toHaveLength(0);
+	});
+
+	// A save on one of the account's question pages forgets the memoized
+	// session before it goes back; the bar reads it again then.
+	it('names her by the name she has just saved, without a reload', async () => {
+		await renderLayout();
 		await expect.element(testPage.getByRole('button', { name: 'Your account, Priya Sharma' })).toBeVisible();
-		await expect.element(testPage.getByRole('navigation', { name: 'Your practices' })).not.toBeInTheDocument();
+
+		apiFetchWithSession.mockImplementation(() =>
+			Promise.resolve(jsonResponse({ ...session, firstName: 'Priya', lastName: 'Sharma-Okafor' }))
+		);
+		resetAccountSession();
+
+		await expect
+			.element(testPage.getByRole('button', { name: 'Your account, Priya Sharma-Okafor' }))
+			.toBeVisible();
 	});
 
-	it('lists one link per Practice when she works at several', async () => {
-		await renderLayout({
-			sessionResponse: jsonResponse({
-				...session,
-				memberships: [
-					...session.memberships,
-					{ practiceId: 'practice-2', practiceName: 'Finger Lakes Birth', roles: ['doula'] }
-				]
-			})
-		});
-
-		const back = testPage.getByRole('navigation', { name: 'Your practices' });
-		await expect.element(back.getByRole('link', { name: 'Finger Lakes Birth' })).toBeVisible();
-		expect(back.getByRole('link').elements()).toHaveLength(2);
-	});
-
-	it('shows no nav when the session read fails', async () => {
+	it('names no one when the session read fails', async () => {
 		await renderLayout({ sessionResponse: jsonResponse('no matching staff account', 404) });
 
-		expect(testPage.getByRole('navigation', { name: 'Your practices' }).elements()).toHaveLength(
-			0
-		);
+		await expect.element(testPage.getByText('account page content')).toBeVisible();
+		expect(testPage.getByRole('button', { name: /Priya/ }).elements()).toHaveLength(0);
 	});
 
 	it('signs out without an unregister -- /account never carries a Practice', async () => {

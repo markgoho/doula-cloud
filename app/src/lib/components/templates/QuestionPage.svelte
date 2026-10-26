@@ -69,6 +69,14 @@
 		 */
 		hint?: string;
 		/**
+		 * GOV.UK's error message for a `label` question (#2044, #2045):
+		 * what is wrong with the one control, between the hint and the
+		 * control, and joined to the control's `describedBy` after the
+		 * hint. A `legend` question ignores it, because each control in a
+		 * group says its own (`LabeledField`, `RadioGroup`, `DateFields`).
+		 */
+		error?: string;
+		/**
 		 * The one thing the page asks -- a fieldset's controls, a single
 		 * input, a radio group.
 		 *
@@ -93,12 +101,18 @@
 		caption,
 		question,
 		hint,
+		error,
 		content,
 		actions
 	}: Properties = $props();
 
 	const pageId = $props.id();
 	const hintId = $derived(hint ? `${pageId}-hint` : undefined);
+	const errorId = $derived(error ? `${pageId}-error` : undefined);
+	// The hint, then the error: the order they are read on screen, the same
+	// as `LabeledField`'s. Undefined rather than empty, so the attribute is
+	// absent when there is neither.
+	const labelDescribedBy = $derived([hintId, errorId].filter(Boolean).join(' ') || undefined);
 </script>
 
 <PageTitle page={question.text} {serviceName} isError={Boolean(errorSummary)} />
@@ -195,7 +209,12 @@
 								</h1>
 								{@render questionHint()}
 							</div>
-							<div class="thing">{@render content({ describedBy: hintId })}</div>
+							<div class="thing">
+								{#if error}
+									<p class="error" id={errorId} role="alert">{error}</p>
+								{/if}
+								{@render content({ describedBy: labelDescribedBy })}
+							</div>
 						</stack-l>
 					{/if}
 
@@ -306,6 +325,13 @@
 		   stack would push --space-group apart. */
 		fieldset .thing {
 			margin-block-start: var(--space-group);
+		}
+
+		/* `LabeledField`'s error message, and its step to the control. */
+		.error {
+			margin: 0 0 var(--space-label);
+			color: var(--color-error);
+			font-size: var(--text-body-sm-size);
 		}
 
 	}
