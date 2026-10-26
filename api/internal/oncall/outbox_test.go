@@ -49,21 +49,7 @@ func newNoticeFixture(t *testing.T, db *testdb.DB, prefix string) noticeFixture 
 // one pass and commits.
 func runWorker(t *testing.T, db *testdb.DB, sender *mail.FakeSender) {
 	t.Helper()
-	w := oncall.GapNoticeWorker{Sender: sender, Now: time.Now, AppBaseURL: testAppBaseURL, From: "from@example.test", ReplyTo: "reply@example.test"}
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
-		t.Fatalf("set trusted door: %v", err)
-	}
-	if err := w.ProcessPending(t.Context(), tx); err != nil {
-		t.Fatalf("ProcessPending: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+	runWorkerWith(t, db, oncall.GapNoticeWorker{Sender: sender, Now: time.Now, AppBaseURL: testAppBaseURL, From: "from@example.test", ReplyTo: "reply@example.test"})
 }
 
 func noticeStatus(t *testing.T, db *testdb.DB, gapID string) string {

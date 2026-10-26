@@ -9,7 +9,18 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 )
+
+// activityStampInterval is how often, at most, last_active_at is
+// refreshed (#1197): once a day.
+const activityStampInterval = 24 * time.Hour
+
+// activityStaleBefore is the cutoff a last_active_at earlier than is
+// stale at now -- the one line querySelf and stampActivity both draw.
+func activityStaleBefore(now time.Time) time.Time {
+	return now.Add(-activityStampInterval)
+}
 
 // selfStaff is the answer to "which Staff person is calling?" for a
 // route that runs before any Practice is known -- the caller's own
@@ -31,12 +42,13 @@ type selfStaff struct {
 	WorkStateReportedAt time.Time
 	LastPracticeID      sql.NullString
 	// ActivityStampStale answers Middleware's #1197 question ("does
-	// last_active_at need refreshing?") with the database's own now(),
-	// not Go's: this repo's dormancy tests fast-forward Postgres's clock
-	// through internal/simclock's sim.now() shim (a role's search_path
-	// resolves an unqualified now() to it ahead of pg_catalog.now()), so
-	// staleness decided by time.Now() in Go would drift from whatever
-	// day billing/dormancy.go's own now()-based reads believe it is.
+	// last_active_at need refreshing?") at clock.Now(ctx), the instant
+	// stampActivity writes last_active_at from (#1992). It once read the
+	// database's now() so it would agree with dormancy's reads under
+	// sim.now(); dormancy now judges last_active_at against clock.Now(ctx)
+	// (billing.DormantPracticesHandler), and on the e2e stack that clock
+	// follows sim.offset_row (#1833), so the Go clock is the one that
+	// agrees with it.
 	ActivityStampStale bool
 	DeletedAt          sql.NullTime
 }
@@ -83,7 +95,7 @@ func querySelf(ctx context.Context, tx *sql.Tx, identityUID string, forUpdate bo
 	}
 
 	query := `SELECT id, name, first_name, last_name, email, work_state, work_state_reported_at, last_practice_id,
-	                 last_active_at IS NULL OR last_active_at < now() - interval '1 day',
+	                 last_active_at IS NULL OR last_active_at < $2,
 	                 deleted_at
 	            FROM staff WHERE identity_uid = $1`
 	if forUpdate {
@@ -91,7 +103,7 @@ func querySelf(ctx context.Context, tx *sql.Tx, identityUID string, forUpdate bo
 	}
 
 	var self selfStaff
-	err := tx.QueryRowContext(ctx, query, identityUID).Scan(
+	err := tx.QueryRowContext(ctx, query, identityUID, activityStaleBefore(clock.Now(ctx))).Scan(
 		&self.ID, &self.Name, &self.FirstName, &self.LastName, &self.Email, &self.WorkState,
 		&self.WorkStateReportedAt, &self.LastPracticeID, &self.ActivityStampStale, &self.DeletedAt,
 	)

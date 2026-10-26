@@ -106,8 +106,8 @@ func connectNudgeRowCount(t *testing.T, db *testdb.DB, practiceID string) int {
 }
 
 // backdateConnectNudge moves a Practice's existing nudge rows back by
-// days, which is how a test reaches the far side of the cooldown without
-// a clock of its own -- the bound is evaluated against Postgres's now().
+// days, which is how a test on the real clock reaches the far side of the
+// cooldown. The edge itself is TestPostConnectNudgeHandler_CooldownEdgeOnTheRequestClock's.
 func backdateConnectNudge(t *testing.T, db *testdb.DB, practiceID string, days int) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
