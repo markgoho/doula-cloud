@@ -109,6 +109,11 @@ type erasureScope struct {
 	// otherwise could not answer -- "was the other record erased too?" --
 	// asked at exactly the moment both audit trails become unreadable.
 	AbsorbedRecords int `json:"absorbedRecords"`
+	// IdempotencyKeys counts the stored responses (#1987) this erasure
+	// deleted: every one of hers and of her absorbed records', and every
+	// Staff one at her Practice, whose body could hold her data -- see
+	// eraseIdempotencyKeys for why it is every Staff one.
+	IdempotencyKeys int `json:"idempotencyKeys"`
 }
 
 // EraseHandler erases one Client's personal data at the Owner's
@@ -319,7 +324,12 @@ func Erase(ctx context.Context, tx *sql.Tx, practiceID, clientID string, actor a
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return ErasureResponse{}, err
 	}
-	absorbed, absorbedCustomers, absorbedEligibleAt, err := eraseAbsorbedRecords(ctx, tx, practiceID, clientID, now)
+	idempotencyKeys, err := eraseIdempotencyKeys(ctx, tx, clientID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return ErasureResponse{}, err
+	}
+	absorbed, absorbedCustomers, absorbedEligibleAt, absorbedKeys, err := eraseAbsorbedRecords(ctx, tx, practiceID, clientID, now)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return ErasureResponse{}, err
@@ -345,6 +355,7 @@ func Erase(ctx context.Context, tx *sql.Tx, practiceID, clientID string, actor a
 		PaymentNotes:              paymentNotes,
 		PaymentReversalReasons:    paymentReversalReasons,
 		AbsorbedRecords:           absorbed,
+		IdempotencyKeys:           idempotencyKeys + absorbedKeys,
 	}
 	if err := recordErasure(ctx, tx, practiceID, clientID, actor, scope); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -391,11 +402,11 @@ func Erase(ctx context.Context, tx *sql.Tx, practiceID, clientID string, actor a
 // ADR-0027 seals each Client's diffs under her own key, so the absorbed
 // woman's history could never be re-sealed under the survivor's -- it
 // stays a second sealed trail under one name until this shreds it.
-func eraseAbsorbedRecords(ctx context.Context, tx *sql.Tx, practiceID, survivorID string, now time.Time) (records, customers int, eligibleAt *time.Time, err error) {
+func eraseAbsorbedRecords(ctx context.Context, tx *sql.Tx, practiceID, survivorID string, now time.Time) (records, customers int, eligibleAt *time.Time, idempotencyKeys int, err error) {
 	ids, err := absorbedRecordIDs(ctx, tx, survivorID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return 0, 0, nil, err
+		return 0, 0, nil, 0, err
 	}
 	for _, id := range ids {
 		// It takes the record and nothing else. The replacement name and
@@ -407,19 +418,27 @@ func eraseAbsorbedRecords(ctx context.Context, tx *sql.Tx, practiceID, survivorI
 			`SELECT redact_absorbed_client($1)`, id,
 		); err != nil {
 			// coverage:ignore reason: the function's own refusal needs a caller that redacts a tombstone whose destination is not erased, which Erase's ordering and absorbedRecordIDs' own ordering make unreachable
-			return 0, 0, nil, fmt.Errorf("client: redact absorbed record: %w", err)
+			return 0, 0, nil, 0, fmt.Errorf("client: redact absorbed record: %w", err)
 		}
 		// A merge moves no Feedback (00112 lists what it does move), so a
 		// piece she sent from inside an Engagement that then belonged to
 		// this record still names it.
 		if err := eraseFeedback(ctx, tx, id); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return 0, 0, nil, err
+			return 0, 0, nil, 0, err
 		}
+		// Nor any stored response: a portal reply she was sent under this
+		// record still names it.
+		keys, err := eraseIdempotencyKeys(ctx, tx, id)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return 0, 0, nil, 0, err
+		}
+		idempotencyKeys += keys
 		absorbedCustomers, absorbedEligibleAt, err := enqueueStripeErasure(ctx, tx, practiceID, id, now)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return 0, 0, nil, err
+			return 0, 0, nil, 0, err
 		}
 		customers += len(absorbedCustomers)
 		if absorbedEligibleAt != nil && (eligibleAt == nil || absorbedEligibleAt.After(*eligibleAt)) {
@@ -427,10 +446,10 @@ func eraseAbsorbedRecords(ctx context.Context, tx *sql.Tx, practiceID, survivorI
 		}
 		if err := clientkey.Destroy(ctx, tx, id); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return 0, 0, nil, fmt.Errorf("client: destroy absorbed client key: %w", err)
+			return 0, 0, nil, 0, fmt.Errorf("client: destroy absorbed client key: %w", err)
 		}
 	}
-	return len(ids), customers, eligibleAt, nil
+	return len(ids), customers, eligibleAt, idempotencyKeys, nil
 }
 
 // absorbedRecordIDs walks survivorID's merged_into chain outward,
@@ -499,6 +518,30 @@ func eraseFeedback(ctx context.Context, tx *sql.Tx, clientID string) error {
 		return fmt.Errorf("client: erase feedback: %w", err)
 	}
 	return nil
+}
+
+// eraseIdempotencyKeys deletes every stored response (#1987) that could
+// hold her data, and returns how many went: every idempotency_keys row
+// under clientID, and every Staff row at her Practice. A Staff row names
+// no Client and its body is whatever the handler wrote, so the Practice
+// is the one fact that reliably bounds where her data can be; the cost
+// is that a Staff retry in flight at this moment runs again rather than
+// replaying. Another Client's portal row stays, since the portal shows a
+// Client only her own records.
+//
+// The delete is erase_client_idempotency_keys (00130): no Staff
+// transaction can see another Staff member's rows or a Client's, and the
+// Practice-deletion worker's has no Staff id at all. Like
+// erase_client_feedback, it admits only an erased Client of this
+// transaction's Practice, which redactRecord (or redact_absorbed_client)
+// has seen to by the time this runs.
+func eraseIdempotencyKeys(ctx context.Context, tx *sql.Tx, clientID string) (int, error) {
+	var n int
+	if err := tx.QueryRowContext(ctx, `SELECT erase_client_idempotency_keys($1)`, clientID).Scan(&n); err != nil {
+		// coverage:ignore reason: the function's own refusal needs a Client who is not erased or not this Practice's, which Erase's ordering makes unreachable; otherwise a DB query failure, not exercised by unit tests
+		return 0, fmt.Errorf("client: erase idempotency keys: %w", err)
+	}
+	return n, nil
 }
 
 // isErased reports whether clientID has already been erased -- the gate
