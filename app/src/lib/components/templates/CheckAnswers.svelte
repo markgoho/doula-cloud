@@ -110,10 +110,11 @@
 						place and the same shape as on every question page of
 						the journey (#2005), so the step indicator does not
 						move or change form on the last page. It used to sit
-						in a `sidebar-l` column of its own beside the answers.
-						Every completed step expands and the list starts open,
-						so it is still the whole journey at a glance, which is
-						what this page is for (#432).
+						in a `sidebar-l` column of its own beside the answers,
+						open. It starts closed here as everywhere: the answers
+						under it are already the whole journey at a glance
+						(#432). Opened, every completed step lists its
+						questions.
 					-->
 					<StepRail {journey} {steps} expand="completed" />
 

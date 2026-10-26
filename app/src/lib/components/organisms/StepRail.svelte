@@ -86,17 +86,18 @@
 		journey: string;
 		steps: JourneyStep[];
 		/**
-		 * Which steps show their questions, and -- since #585 -- whether the
-		 * list starts disclosed at all. `current` is a question page, where
-		 * the reader is inside one step; `completed` is the summary page,
-		 * where there is no current step and the whole answered journey is
-		 * the point. A closed pair rather than a boolean, because these are
-		 * two behaviors and not one thing switched off.
+		 * Which steps show their questions once the list is opened.
+		 * `current` is a question page, where the reader is inside one step;
+		 * `completed` is the summary page, where there is no current step and
+		 * the whole answered journey is the point. A closed pair rather than
+		 * a boolean, because these are two behaviors and not one thing
+		 * switched off.
 		 *
-		 * There is deliberately no second `open` prop. `expand` already says
-		 * what the page is FOR, which is the only thing the open state turns
-		 * on, and two props would let a host pass `expand="current"` with the
-		 * list open and get a page whose halves disagree.
+		 * There is no `open` prop: the list starts closed on every page
+		 * (#2005). The summary page used to start it open, and with the rail
+		 * in the column that put a list of five to nine steps, each saying
+		 * "Completed", between Back and the title, above the answers that
+		 * already show the whole journey.
 		 */
 		expand?: 'current' | 'completed';
 	}
@@ -142,9 +143,8 @@
 	One <details> inside the one <nav>. The <summary> is what the narrow
 	strip used to be -- the step-or-count line and the progress track --
 	so a reader who never opens it still knows where they are on every
-	page. `open` is derived from `expand` rather than passed: the summary
-	page is where the whole answered journey is the point, and a question
-	page is where the question is.
+	page. It starts closed on every page, so the indicator has one shape
+	through the whole journey (#2005).
 
 	No "Show all steps" link any more (#585). It existed to recover the
 	step list the strip dropped, and nothing is dropped now. It was also
@@ -162,7 +162,7 @@
 	shared shape serves.
 -->
 <nav aria-label={journey}>
-	<details open={expand === 'completed'}>
+	<details>
 		<summary>
 			<!--
 				The marker is an element of the row, not the browser's

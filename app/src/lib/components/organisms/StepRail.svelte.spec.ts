@@ -110,11 +110,11 @@ describe('StepRail.svelte', () => {
 	});
 
 	/*
-	 * #585's whole mechanism, and the two assertions that replace a
-	 * container query: the open state is derived from what the page is
-	 * FOR, never from how much room it was given. A question page asks a
-	 * question, so the journey is one collapsed line above it; the
-	 * summary page IS the answered journey, so it opens.
+	 * #585's mechanism, which replaced a container query: the open state
+	 * never depends on how much room the rail was given. Since #2005 it
+	 * does not depend on the page either: the journey is one collapsed
+	 * line on every page, so the indicator keeps one shape from the first
+	 * question to the check page, and the reader opens it.
 	 */
 	it('starts closed on a question page', async () => {
 		const { container } = await setup();
@@ -122,10 +122,10 @@ describe('StepRail.svelte', () => {
 		expect(container.querySelector('details')?.open).toBe(false);
 	});
 
-	it('starts open on the summary page', async () => {
+	it('starts closed on the summary page too', async () => {
 		const { container } = await setup({ expand: 'completed' });
 
-		expect(container.querySelector('details')?.open).toBe(true);
+		expect(container.querySelector('details')?.open).toBe(false);
 	});
 
 	/*

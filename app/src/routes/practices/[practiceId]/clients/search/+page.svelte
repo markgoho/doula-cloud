@@ -360,7 +360,11 @@
 									duplicate check.
 								-->
 								<stack-l space="var(--space-4)">
-									<Text text="None of these is the right Client?" />
+									<Text
+										text={matches.length === 1
+											? 'Not the right Client?'
+											: 'None of these is the right Client?'}
+									/>
 									<cluster-l space="var(--space-3)" align="center">
 										<Link href={startIntakeHref()} label="Add a new Client" onClick={handOffSearchFields} />
 									</cluster-l>
