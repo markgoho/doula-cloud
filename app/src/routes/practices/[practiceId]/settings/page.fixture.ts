@@ -1,52 +1,105 @@
 /*
- * The Settings hub, as the continuum check sees it (#595).
+ * The Settings index, as the continuum check sees it (#595, #2028).
  *
- * A fixed nav (see the route's own header comment: "a way in, not a
- * settings design") -- no Practice-typed content, every label and
- * description is this repo's own copy. It reads `isOwner` and
- * `isOwnerOrAdmin` (#606, #744) to decide which entries to include, so
- * the list it shows depends on who is looking.
+ * Four headed groups of summary rows, each with the setting's current
+ * value, and deletion set apart. A row is drawn only for someone who may
+ * change it (`MAY_CHANGE`), so the index depends on who is looking.
  *
- * Two of the three lists are declared (#913): the Owner's, which is the
- * widest, and a Doula's, which is the narrowest and the only one that
- * withholds the Getting paid entry. The Admin's sits between them and is
- * a strict subset of the Owner's -- it has the same Getting paid and
- * Blocked email addresses entries and none of the Owner-only three -- so
- * it realizes no entry the two branches below do not already measure,
- * and it is left undeclared rather than swept as a third copy.
+ * Three subjects (#913). The Owner's is the widest. A Doula's is the
+ * narrowest: one group, one row, Plan Templates. An Owner with no second
+ * factor (#1532) draws a tree nobody else does, the export row's notice
+ * and enrollment link in place of a download. The Admin's sits between
+ * the Owner's and the Doula's and is a strict subset of the Owner's (it
+ * drops the Owner-only rows and the deletion section and adds none), so
+ * it is left undeclared rather than swept as a fourth copy.
+ *
+ * `respond` answers every read the Owner's index makes, with each value
+ * at its longest: the hosted page's address is #530's long URL, the
+ * rates are both set and in the thousands, the Connect state is the
+ * longest of its five labels, and the plural forms are all reached. The
+ * Doula's branch asks for the Plan Templates only, which this answers too.
  */
+import { jsonResponse } from '#lib/testResponse.js';
+import type { PracticeWebsite } from '#lib/website.js';
 import { practiceSession, type RouteFixture, type RouteVariant } from '../../../routeFixture.js';
 import Page from './+page.svelte';
 
-/*
- * The hub with the Getting paid entry withheld -- four entries rather
- * than eight, and the branch nothing had ever mounted. Its own longest
- * line is the Client Fields description, which the Owner's list holds
- * too; what differs here is which entries exist, not what any of them
- * says.
- */
+export const pageUrl =
+	'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake';
+
+export const website: PracticeWebsite = {
+	mode: 'hosted',
+	ownUrl: '',
+	serviceDescription: 'Birth and postpartum support across Monroe County.',
+	cancellationPolicy: 'Two weeks notice for a full refund.',
+	updatedBy: 'Anne-Marie Ochieng-Whitfield',
+	updatedAt: '2026-08-01T00:00:00Z',
+	pageState: 'live',
+	pageCheckedAt: '2026-08-01T00:00:00Z',
+	pageCheckDetail: '',
+	pageUrl
+};
+
+const question = (id: string, type = 'short_text') => ({ id, type, label: id, order: 0, archived: false });
+
+export function respond(path: string): Response {
+	const answers: Record<string, unknown> = {
+		website,
+		timezone: { timezone: 'America/Indiana/Indianapolis' },
+		'client-field-template': {
+			fields: [question('a'), question('b', 'section_header'), question('c'), { ...question('d'), archived: true }]
+		},
+		'plan-templates/care_plan': { planType: 'care_plan', fields: [question('a'), question('b'), question('c')] },
+		'plan-templates/birth_plan': { planType: 'birth_plan', fields: [question('a')] },
+		'contract-template': { prose: 'These are the terms.' },
+		'on-call-settings': { startRule: 'attachment_granted', startWeek: 37, graceDays: 14 },
+		'payments/connect': {
+			status: 'payouts_restricted',
+			cardPaymentsStatus: 'active',
+			payoutsStatus: 'restricted',
+			requirementsDue: []
+		},
+		rates: {
+			rates: [
+				{ kind: 'birth', amountCents: 1_234_500 },
+				{ kind: 'postpartum', amountCents: 987_600 }
+			]
+		},
+		billing: {
+			balance: 128,
+			ledger: { items: [], hasMore: false },
+			price: { unitAmountCents: 2500, currency: 'usd' }
+		},
+		'mfa-required/impact': { required: true, withoutSecondFactor: 3 },
+		'email-suppressions': {
+			suppressions: [
+				{ address: 'a@example.test', cause: 'bounce', createdAt: '2026-08-01T00:00:00Z', clearable: true },
+				{ address: 'b@example.test', cause: 'complaint', createdAt: '2026-08-01T00:00:00Z', clearable: false }
+			]
+		}
+	};
+	const key = path.replace(/^\/api\/practices\/[^/]+\//, '');
+	const body = answers[key];
+	return body === undefined ? jsonResponse({ message: `no answer for ${path}` }, 404) : jsonResponse(body);
+}
+
 export const asDoula: RouteVariant = {
-	name: 'The Settings hub, as a Doula',
+	name: 'The Settings index, as a Doula',
 	pageData: practiceSession(['doula'])
 };
 
-/*
- * An Owner with no second factor of her own (#1532). The export entry is
- * an act that needs one, so it gives way to its label, a notice naming
- * what it needs, and a link to enrollment -- the one entry on the hub
- * that is not a single link, and so a tree no other session draws.
- */
 export const ownerWithoutSecondFactor: RouteVariant = {
-	name: 'The Settings hub, as an Owner with no second factor',
+	name: 'The Settings index, as an Owner with no second factor',
 	pageData: practiceSession(['owner'], { secondFactor: false })
 };
 
 export const fixture: RouteFixture = {
-	name: 'The Settings hub, as an Owner',
+	name: 'The Settings index, as an Owner',
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/settings',
 	pageData: practiceSession(['owner']),
+	respond,
 	readyText: 'Settings',
 	variants: [asDoula, ownerWithoutSecondFactor]
 };

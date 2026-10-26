@@ -27,6 +27,7 @@
 	 * under our domain that Stripe reviews and Clients read.
 	 */
 	import { onMount } from 'svelte';
+	import { resolve } from '$app/paths';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { formatInstant } from '#lib/dates.js';
@@ -47,14 +48,23 @@
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
-	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
+	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import type { FormError } from '#lib/formErrors.js';
 
 	type Choice = '' | 'own' | 'hosted';
+	type Fact = 'ownUrl' | 'serviceDescription' | 'cancellationPolicy';
 
+	/* A saved answer as a summary row. `change` is what its Change opens:
+	   one question here, the whole set (`'mode'`), or the Practice name's
+	   own screen, since the business name is that setting. */
+	interface AnswerRow extends SummaryListRow {
+		href?: string;
+		change?: Fact | 'mode' | 'name';
+	}
 	let current = $state<PracticeWebsite | undefined>();
 	// Both come off practices/[practiceId]/+layout.ts's already-resolved
 	// read (#835), not a fetch this page makes itself: the Practice's
@@ -70,6 +80,10 @@
 	   'saved' is the state she lands in after a successful write and the
 	   one she meets on every later visit. */
 	let step = $state<'answers' | 'review' | 'saved'>('answers');
+	/* Which one question a row's Change opened (#2047), or `undefined`
+	   for the whole set: the first answer, and a change of how Clients
+	   find her, which brings its own follow-up question with it. */
+	let editing = $state<Fact | undefined>();
 	let choice = $state<Choice>('');
 	let ownUrl = $state('');
 	let serviceDescription = $state('');
@@ -233,6 +247,58 @@
 		// month first like every other date (#1958).
 		return formatInstant(iso);
 	}
+
+	/* What Change opens (#2047): the one question its row is about, from
+	   what is saved, so a change abandoned earlier is not carried in. */
+	function change(fact?: Fact) {
+		ownUrl = current!.ownUrl;
+		serviceDescription = current!.serviceDescription;
+		cancellationPolicy = current!.cancellationPolicy;
+		choice = current!.mode === 'undeclared' ? '' : current!.mode;
+		fieldErrors = {};
+		submitError = '';
+		editing = fact;
+		step = 'answers';
+	}
+
+	/* Whether the hosted page is actually there (#443), as its row's
+	   value. A page nothing has confirmed reads as "not confirmed yet",
+	   never as a success, because the build can fail and report nothing. */
+	function pageValue(saved: PracticeWebsite): string {
+		if (saved.pageState === 'live') return saved.pageUrl;
+		if (saved.pageState === 'failed') return 'We could not load your page';
+		return 'Being published. This usually takes a few minutes. We say it is live once we have loaded it ourselves.';
+	}
+
+	/* The saved answers, one row each, and a Change on each row an Owner
+	   may change (#2047). The page's own address has no Change: it is made
+	   from the Practice name, and is not an answer. */
+	const answerRows = $derived.by((): AnswerRow[] => {
+		if (!current || current.mode === 'undeclared') return [];
+		const rows: AnswerRow[] =
+			current.mode === 'own'
+				? [
+						{ label: 'How Clients find you', value: 'Your own website or social profile', changes: 'how Clients find you', change: 'mode' },
+						{ label: 'Your page', value: current.ownUrl, href: current.ownUrl, changes: 'your page', change: 'ownUrl' }
+					]
+				: [
+						{ label: 'How Clients find you', value: 'A page we publish for you', changes: 'how Clients find you', change: 'mode' },
+						{
+							label: 'Your page',
+							value: pageValue(current),
+							...(current.pageState === 'live' && { href: current.pageUrl })
+						},
+						{ label: 'Business name', value: practiceName, changes: 'the business name', change: 'name' },
+						{ label: 'What you offer', value: current.serviceDescription, changes: 'what you offer', change: 'serviceDescription' },
+						{ label: 'Cancellation policy', value: current.cancellationPolicy, changes: 'the cancellation policy', change: 'cancellationPolicy' }
+					];
+		// Anybody else reads the same rows with no Change at all (#1968).
+		return isPracticeOwner ? rows : rows.map((row) => ({ ...row, changes: undefined }));
+	});
+
+	const singleQuestion = $derived(
+		editing === undefined ? undefined : { ownUrl: ownWebsite, serviceDescription: descriptionFact, cancellationPolicy: policyFact }[editing]
+	);
 </script>
 
 {#snippet howFound()}
@@ -308,6 +374,11 @@
 {/snippet}
 
 {#snippet hostedFacts()}
+	{@render descriptionFact()}
+	{@render policyFact()}
+{/snippet}
+
+{#snippet descriptionFact()}
 	{@render fact(
 		'serviceDescription',
 		'What your Practice offers',
@@ -316,6 +387,9 @@
 		fieldErrors.serviceDescription ?? '',
 		(next) => (serviceDescription = next)
 	)}
+{/snippet}
+
+{#snippet policyFact()}
 	{@render fact(
 		'cancellationPolicy',
 		'Your cancellation or refund policy',
@@ -368,7 +442,11 @@
 				title="Your website"
 				{intro}
 				errorSummary={summaryErrors.length > 0 ? errorSummary : undefined}
-				fieldsets={choice === '' ? [{ content: howFound }] : [{ content: howFound }, { content: choice === 'own' ? ownWebsite : hostedFacts }]}
+				fieldsets={singleQuestion
+					? [{ content: singleQuestion }]
+					: (choice === ''
+						? [{ content: howFound }]
+						: [{ content: howFound }, { content: choice === 'own' ? ownWebsite : hostedFacts }])}
 				{actions}
 			/>
 		</form>
@@ -414,38 +492,34 @@
 						<!-- Reached only by a non-Owner (onMount above): an Owner
 						     with no answer is on the questions instead. -->
 						<Text text="Not answered yet. A Practice Owner answers this before Stripe can be connected." />
-					{:else if current.mode === 'own'}
-						<SummaryList
-							rows={[
-								{ label: 'What Stripe will be told', value: current.ownUrl },
-								{ label: 'A page published here', value: 'No' }
-							]}
-						/>
 					{:else}
-						<SummaryList
-							rows={[
-								{ label: 'Business name', value: practiceName },
-								{ label: 'What you offer', value: current.serviceDescription },
-								{ label: 'Cancellation policy', value: current.cancellationPolicy }
-							]}
-						/>
-						<!-- Whether the page is actually there (#443). Three states,
-						     and the middle one is the point: a page nothing has
-						     confirmed reads as "not confirmed yet", never as a
-						     success, because the build can fail and report nothing
-						     at all. -->
-						{#if current.pageState === 'live'}
-							<Text text={`Your page is live at ${current.pageUrl}`} />
-						{:else if current.pageState === 'failed'}
+						{#if current.pageState === 'failed'}
 							<Notice
 								variant="error"
-								message={`We could not load your page: ${current.pageCheckDetail}. Choose Change below and save again. If it keeps failing, tell us — Stripe will not let you take payments while your address shows nothing.`}
-							/>
-						{:else}
-							<Text
-								text="Your page is being published. This usually takes a few minutes. Until we have loaded it ourselves we will not say it is live."
+								message={`We could not load your page: ${current.pageCheckDetail}. Change an answer below and publish it again. If it keeps failing, tell us. Stripe will not let you take payments while your page shows nothing.`}
 							/>
 						{/if}
+						<SummaryList rows={answerRows}>
+							{#snippet value(row)}
+								{#if row.href}<Link href={row.href} label={row.value} />{:else}{row.value}{/if}
+							{/snippet}
+							{#snippet action(row, describedBy)}
+								{#if row.change === 'name'}
+									<Link
+										href={resolve('/practices/[practiceId]/settings/name', { practiceId: page.params.practiceId! })}
+										label="Change"
+										{describedBy}
+									/>
+								{:else}
+									<Button
+										variant="link"
+										label="Change"
+										{describedBy}
+										onClick={() => change(row.change === 'mode' || row.change === 'name' ? undefined : row.change)}
+									/>
+								{/if}
+							{/snippet}
+						</SummaryList>
 					{/if}
 
 					<!-- How this came to say what it says: who last wrote it, and
@@ -459,23 +533,12 @@
 						/>
 					{/if}
 
-					{#if isPracticeOwner}
-						<cluster-l space="var(--space-3)" align="center">
-							<Button
-								variant="secondary"
-								label="Change"
-								onClick={() => {
-									fieldErrors = {};
-									submitError = '';
-									step = 'answers';
-								}}
-							/>
-						</cluster-l>
-					{:else}
-						<!-- In the frame, where an Owner's Change button is (#1971):
-						     the name and timezone screens' shape for a fact she can
-						     read but not change. A non-Owner only ever reaches this
-						     step (onMount above), so this is the one place it goes. -->
+					{#if !isPracticeOwner}
+						<!-- In the frame, under the answers an Owner has a Change
+						     on (#1971): the name and timezone screens' shape for a
+						     fact she can read but not change. A non-Owner only ever
+						     reaches this step (onMount above), so this is the one
+						     place it goes. -->
 						<Notice
 							variant="status"
 							message="Only a Practice Owner can change this. Ask an Owner if it needs updating."
