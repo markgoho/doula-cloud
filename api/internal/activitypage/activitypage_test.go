@@ -183,6 +183,26 @@ func TestList_NamesEveryKindOfActorOnce(t *testing.T) {
 	}
 }
 
+// TestActorName_ClientActorForm is #2111: one Client actor, two readers.
+// A subject-scoped ledger reads her first name; the Practice-wide feed,
+// which sets every Client side by side, reads her full name.
+func TestActorName_ClientActorForm(t *testing.T) {
+	given := sql.NullString{String: "Rebecca", Valid: true}
+	preferred := sql.NullString{String: "Bex", Valid: true}
+	family := sql.NullString{String: "Okafor", Valid: true}
+	for _, tc := range []struct {
+		form activitypage.ClientActorForm
+		want string
+	}{
+		{activitypage.ActorFirstName, "Bex"},
+		{activitypage.ActorFullName, "Bex Okafor"},
+	} {
+		if got := activitypage.ActorName(string(activity.ActorClient), sql.NullString{}, given, preferred, family, tc.form); got != tc.want {
+			t.Errorf("ActorName(form %d) = %q, want %q", tc.form, got, tc.want)
+		}
+	}
+}
+
 // TestList_PageSizeZeroReadsEveryRow is the Client history's own read:
 // one screen of a woman's whole record, with no cursor to resume from.
 func TestList_PageSizeZeroReadsEveryRow(t *testing.T) {
