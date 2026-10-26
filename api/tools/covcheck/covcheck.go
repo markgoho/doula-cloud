@@ -231,6 +231,13 @@ func opensABody(line string) bool {
 		(first == token.RBRACE && len(toks) > 1 && toks[1] == token.ELSE)
 }
 
+// endsInOpeningBrace reports whether the code on line ends in `{`, so a
+// comment after the brace (`if !ok { // note`) does not hide it.
+func endsInOpeningBrace(line string) bool {
+	toks := lineTokens(line)
+	return len(toks) > 0 && toks[len(toks)-1] == token.LBRACE
+}
+
 // lineTokens scans one line of Go source and returns its tokens, leaving
 // out comments and the semicolons the scanner inserts at the line's end.
 // A line that is only part of a token, such as the tail of a raw string,
@@ -328,7 +335,7 @@ func hasIgnoreCommentAboveOpeningBrace(fileLines []string, startLine int) bool {
 			break
 		}
 	}
-	if idx < 0 || idx >= len(fileLines) || !strings.HasSuffix(strings.TrimSpace(fileLines[idx]), "{") {
+	if idx < 0 || idx >= len(fileLines) || !endsInOpeningBrace(fileLines[idx]) {
 		return false
 	}
 	return idx > 0 && strings.Contains(fileLines[idx-1], ignoreMarker)
