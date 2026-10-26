@@ -112,18 +112,26 @@
 	 * is, so they are plain text. `concurrentWindows` is absent where the
 	 * reader may not hold it (a contractor reading about a colleague): the
 	 * cell is empty and the record card leaves the row out (#2022).
+	 *
+	 * The values are a count and "Yes" under headers that say what they
+	 * count, not "0 births" and "Available": walked at 320px, the longer
+	 * words broke mid-word ("Avail-able") in a 288px table, and the short
+	 * ones keep all three columns a table at every width. The header is
+	 * "Births", not "Births in these days": the table shares out its
+	 * spare width by each column's widest content, and the longer header
+	 * took the room the names needed, splitting them mid-word at 320px.
+	 * The days are the filter's, and the line above the table names them.
 	 */
 	function birthsText(doula: RosterDoula): string {
-		if (doula.concurrentWindows === undefined) return '';
-		return doula.concurrentWindows === 1 ? '1 birth' : `${doula.concurrentWindows} births`;
+		return doula.concurrentWindows === undefined ? '' : String(doula.concurrentWindows);
 	}
 
 	const doulaColumns = [
 		{ label: 'Doula', accessor: (doula: RosterDoula) => doula.name },
-		{ label: 'Births in these days', accessor: birthsText, content: birthsCell },
+		{ label: 'Births', accessor: birthsText, content: birthsCell, numeric: true },
 		{
 			label: 'Available',
-			accessor: (doula: RosterDoula) => (doula.available ? 'Available' : 'Away'),
+			accessor: (doula: RosterDoula) => (doula.available ? 'Yes' : 'Away'),
 			content: availableCell
 		}
 	];
@@ -158,7 +166,7 @@
 
 {#snippet availableCell(doula: RosterDoula)}
 	{#if doula.available}
-		Available
+		Yes
 	{:else}
 		<Badge label="Away" variant="neutral" />
 	{/if}
@@ -337,6 +345,17 @@
 		.doula-table > :global(*) {
 			--data-table-table-display: table;
 			--data-table-records-display: none;
+		}
+
+		/* `break-word` for the two short columns, not the cells' own
+		   `anywhere` (#2031): `anywhere` lets a word's letters count as
+		   break points when the table works out its column widths, so at
+		   320px the table split "Available" in two. `break-word` sizes a
+		   column to its longest word. The name column keeps `anywhere`, so
+		   a long double-barreled name is what gives way when the room
+		   runs out, and the table still fits its 288px. */
+		.doula-table :global(:is(th, td):not(:first-child)) {
+			overflow-wrap: break-word;
 		}
 
 		/* A narrowed doula's own days sit under her name rather than

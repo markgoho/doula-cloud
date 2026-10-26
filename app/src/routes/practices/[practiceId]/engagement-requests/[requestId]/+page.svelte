@@ -256,20 +256,25 @@
 		shape. The reason is asked only under Refuse, so the destructive
 		answer is no longer a whole second form a hand's width from Approve.
 	-->
-	<StackedForm onSubmit={handleDecide}>
-		<RadioGroup
-			legend="Do you approve this work?"
-			name={decisionName}
-			options={[
-				{ value: 'approve', label: 'Approve and start the work', description: approveHint(detail!) },
-				{ value: 'refuse', label: 'Refuse', conditional: refusalReason }
-			]}
-			value={decision}
-			onChange={(value) => (decision = value)}
-			error={submission.errorFor(decisionFieldId)}
-		/>
-		<Button type="submit" label="Continue" loading={submission.isSubmitting} />
-	</StackedForm>
+	<!-- A form column, as a FormPage would give it: RecordDetail's section
+	     is the page's whole width, and the reason box ran 1,300px wide at
+	     1440 (F-B-11). -->
+	<div class="decide">
+		<StackedForm onSubmit={handleDecide}>
+			<RadioGroup
+				legend="Do you approve this work?"
+				name={decisionName}
+				options={[
+					{ value: 'approve', label: 'Approve and start the work', description: approveHint(detail!) },
+					{ value: 'refuse', label: 'Refuse', conditional: refusalReason }
+				]}
+				value={decision}
+				onChange={(value) => (decision = value)}
+				error={submission.errorFor(decisionFieldId)}
+			/>
+			<Button type="submit" label="Continue" loading={submission.isSubmitting} />
+		</StackedForm>
+	</div>
 {/snippet}
 
 <RecordDetail
@@ -284,3 +289,11 @@
 	loading={detail || loadError ? undefined : 'Loading the request'}
 	loadError={loadError || undefined}
 />
+
+<style>
+	@layer components {
+		.decide {
+			max-inline-size: var(--form-max);
+		}
+	}
+</style>

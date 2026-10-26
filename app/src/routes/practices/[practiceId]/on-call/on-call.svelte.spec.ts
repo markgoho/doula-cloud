@@ -131,10 +131,10 @@ describe('the on-call roster', () => {
 	it('lists the doulas as a table of name, births and availability', async () => {
 		await setup();
 
-		for (const name of ['Doula', 'Births in these days', 'Available'])
+		for (const name of ['Doula', 'Births', 'Available'])
 			await expect.element(testPage.getByRole('columnheader', { name, exact: true })).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: '1 birth', exact: true }).first()).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: '3 births', exact: true }).first()).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: '1', exact: true }).first()).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: '3', exact: true }).first()).toBeVisible();
 	});
 
 	it('marks a doula who cannot be reached as away', async () => {
