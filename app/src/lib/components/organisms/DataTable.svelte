@@ -342,7 +342,7 @@
 					{#if rowActions}
 						<!-- The actions are the card's own, not one more key and
 						     value: GOV.UK's summary card puts them in its frame. -->
-						<cluster-l class="record-actions" space="var(--space-3)" align="center">
+						<cluster-l class="record-actions" space="var(--space-related)" align="center">
 							{@render rowActions.content(row, 'record')}
 						</cluster-l>
 					{/if}
@@ -649,11 +649,10 @@
 			background-color: var(--color-surface-bright);
 		}
 
-		/* Records are a group from the next, so the group step: 28px at
-		   the floor, the brief's "a labeled field group is 28px from the
-		   next" (Density). #2020 names this step in tokens.css. */
+		/* Records are a group from the next, so the group step (#2020):
+		   28px at the floor, never the field step inside one. */
 		.record + .record {
-			margin-block-start: var(--space-7);
+			margin-block-start: var(--space-group);
 		}
 
 		/* The card's title: the subheading step, the brief's "card and

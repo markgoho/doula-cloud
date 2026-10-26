@@ -268,7 +268,7 @@
 		<ul class="status-list">
 			{#each client.openEngagements ?? [] as line (line.engagementId)}
 				<li>
-					<cluster-l space="var(--space-2)" align="center">
+					<cluster-l space="var(--space-related)" align="center">
 						<Link
 							href={engagementHref(line)}
 							label={kindLabel(line.kind)}
