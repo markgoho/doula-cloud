@@ -176,6 +176,26 @@ describe('the search that fronts intake (#498)', () => {
 		expect(document.activeElement?.id).toBe('client-search-results');
 	});
 
+	/*
+	 * #2005: a new Client can share a name with one already on file, so a
+	 * match is never a dead end. The way on is under the matches, after
+	 * the reader has looked at them, as the drawing has it.
+	 */
+	it('offers to add a new Client under the matches when there are any, carrying what was typed', async () => {
+		apiFetchWithSession.mockResolvedValue(jsonResponse({ matches: [adaMatch] }));
+		await setup();
+
+		await testPage.getByLabelText('Name').fill('Ada Byron');
+		await testPage.getByLabelText('Phone').fill('555-0100');
+		await testPage.getByRole('button', { name: 'Search' }).click();
+
+		await expect.element(testPage.getByText('None of these is the right Client?')).toBeVisible();
+		const lastMatch = testPage.getByRole('link', { name: "Open Ada Byron's record" }).element();
+		const addNew = testPage.getByRole('link', { name: 'Add a new Client' }).element();
+		expect(lastMatch.compareDocumentPosition(addNew) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(await followAddNewClient()).toEqual({ ...blankFields, name: 'Ada Byron', phone: '555-0100' });
+	});
+
 	it('offers to start intake on an empty result set, carrying the typed name (#497)', async () => {
 		apiFetchWithSession.mockResolvedValue(jsonResponse({ matches: [] }));
 		await setup();

@@ -38,13 +38,14 @@
 	 * Its key column is a share of the list, so each section's values
 	 * start on the same line down the page.
 	 *
-	 * ## Two widths
+	 * ## One width
 	 *
-	 * GOV.UK's Check answers pattern says a long list of answers may take a
-	 * wider column than a form normally would. The intake summary is
-	 * nineteen rows on a Practice that has added fields, so the wide case is
-	 * real rather than hypothetical -- `isWide` drops the --form-max cap
-	 * and lets the column take whatever is left beside the rail.
+	 * The column is the question pages' column, --form-max, centered, with
+	 * the journey rail inside it (#2005). There was an `isWide` that
+	 * dropped the cap for a long answer list, as GOV.UK allows; it is gone
+	 * because `SummaryList` caps its rows at --measure (#2021), narrower
+	 * than --form-max, so a wider column widened nothing but the space
+	 * beside the answers.
 	 */
 	import type { Snippet } from 'svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
@@ -72,10 +73,6 @@
 		errorSummary?: Snippet;
 		sections: AnswerSection[];
 		/**
-		 * GOV.UK's wider column for a long answer list.
-		 */
-		isWide?: boolean;
-		/**
 		 * GOV.UK's declaration: what pressing the button agrees to, read
 		 * after the answers and directly before the actions (#2049). The
 		 * route writes the words and joins them to its button as the
@@ -94,7 +91,6 @@
 		caption,
 		errorSummary,
 		sections,
-		isWide = false,
 		declaration,
 		actions
 	}: Properties = $props();
@@ -103,32 +99,23 @@
 <PageTitle page={title} {serviceName} isError={Boolean(errorSummary)} />
 
 <container-l>
-	<!-- No cap on the frame: it holds the rail beside the column, and the
-	     column carries its own cap -- or drops it, when `isWide` (#541). -->
+	<!-- No cap on the frame: the column carries its own cap (#541). -->
 	<center-l max="none" gutters="var(--page-gutter)">
-		<!--
-			sidebar-l, side="start" (default) (#564): the rail is FIRST in
-			the DOM. `content-min` tracks the column's own cap -- --form-max
-			normally, --measure when `isWide` drops that cap, matching
-			OverviewHub's own uncapped-column pattern -- so the wrap trigger
-			is always the same quantity the column itself is judged against,
-			never an authored pixel.
-		-->
-		<sidebar-l
-			basis="var(--page-rail)"
-			space="var(--space-12)"
-			content-min={isWide ? 'min(var(--measure), 100%)' : 'min(var(--form-max), 100%)'}
-		>
-			<!--
-				Every completed step expands, so the rail stops being a
-				position marker and becomes the whole journey at a glance --
-				which is what this page is for (#432).
-			-->
-			<StepRail {journey} {steps} expand="completed" />
-
-			<div class="column" class:wide={isWide}>
+		<div class="column">
 				<stack-l space="var(--space-6)">
 					<BackLink href={backHref} />
+
+					<!--
+						In the column, under Back and over the title: the same
+						place and the same shape as on every question page of
+						the journey (#2005), so the step indicator does not
+						move or change form on the last page. It used to sit
+						in a `sidebar-l` column of its own beside the answers.
+						Every completed step expands and the list starts open,
+						so it is still the whole journey at a glance, which is
+						what this page is for (#432).
+					-->
+					<StepRail {journey} {steps} expand="completed" />
 
 					{#if errorSummary}
 						{@render errorSummary()}
@@ -183,8 +170,7 @@
 
 					<cluster-l space="var(--space-4)" align="center">{@render actions()}</cluster-l>
 				</stack-l>
-			</div>
-		</sidebar-l>
+		</div>
 	</center-l>
 </container-l>
 
@@ -195,34 +181,13 @@
 		}
 
 		/*
-		 * sidebar-l wraps at content-min="min(var(--form-max), 100%)" (or
-		 * the --measure equivalent when `isWide` -- markup above), so it
-		 * never fits beside the rail without the column reaching the
-		 * width it is actually judged against (#564). Centered,
-		 * top-aligned, for the same reason `QuestionPage`'s own
-		 * equivalent Sidebar is: a summary of answers has nothing more to
-		 * put in a wider window (#543), and the flex default (stretch)
-		 * would otherwise match the rail and the column to whichever is
-		 * taller.
-		 *
-		 * `min(…, 100%)`, not a bare cap, for the same reason
-		 * `QuestionPage` needs it: `.column` also carries its own
-		 * `max-inline-size` below (--form-max, or none when `isWide`),
-		 * and pinning `min-inline-size` to the SAME length as that cap
-		 * makes the column unable to shrink once wrapped onto its own
-		 * row, overflowing a narrow frame instead of adapting to it.
+		 * Centered and capped at --form-max, as `QuestionPage`'s column
+		 * is: a summary of answers has nothing more to put in a wider
+		 * window (#543).
 		 */
-		sidebar-l {
-			justify-content: center;
-			align-items: start;
-		}
-
 		.column {
 			max-inline-size: var(--form-max);
-		}
-
-		.column.wide {
-			max-inline-size: none;
+			margin-inline: auto;
 		}
 
 		.caption {

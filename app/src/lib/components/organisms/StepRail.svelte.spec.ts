@@ -170,6 +170,46 @@ describe('StepRail.svelte', () => {
 	 * had taken away, and no width takes anything away now -- the list is
 	 * in the page, one disclosure from the reader, on every screen.
 	 */
+	/*
+	 * #2005 (and #1633): the disclosure marker is the only sign the list
+	 * opens, and the browser's own `outside` marker was drawn in the page
+	 * gutter, where 320px cut it in half. The marker is now an element of
+	 * the summary row, so its box is inside the rail's own box at any
+	 * width. Queried by class: it is `aria-hidden` (the <summary> already
+	 * announces its expanded state), so case 2 of the spec rules applies.
+	 */
+	it('draws its marker inside the rail, beside the summary words, at 320px', async () => {
+		const frame = document.createElement('div');
+		frame.style.inlineSize = '320px';
+		document.body.append(frame);
+		const { container } = await render(StepRail, {
+			props: { journey: 'Adding a client', steps },
+			target: frame
+		});
+
+		const rail = container.querySelector('nav')!.getBoundingClientRect();
+		const marker = container.querySelector('.marker')!.getBoundingClientRect();
+		const words = container.querySelector('.summary')!.getBoundingClientRect();
+		expect(marker.width).toBeGreaterThan(0);
+		expect(marker.left).toBeGreaterThanOrEqual(rail.left);
+		expect(marker.right).toBeLessThanOrEqual(words.left);
+		expect(marker.top).toBeLessThan(words.bottom);
+		expect(marker.bottom).toBeGreaterThan(words.top);
+		frame.remove();
+	});
+
+	it('turns its marker when the list is opened', async () => {
+		const { container } = await setup();
+		const summary = page.getByText('Step 2 of 3 · How to reach Sarah');
+
+		const closed = getComputedStyle(container.querySelector(':scope .marker svg')!).transform;
+		await summary.click();
+		const open = getComputedStyle(container.querySelector(':scope .marker svg')!).transform;
+
+		expect(container.querySelector('details')?.open).toBe(true);
+		expect(open).not.toBe(closed);
+	});
+
 	it('offers no link out to a separate step list', async () => {
 		const { container } = await setup();
 

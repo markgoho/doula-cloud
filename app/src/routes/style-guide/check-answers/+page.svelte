@@ -2,17 +2,16 @@
 	import type { DemoVariant } from '../drag-surface/dragSurface.js';
 
 	interface Properties {
-		isWide?: boolean;
 		hasDeclaration?: boolean;
 	}
 
 	/*
-	 * The other state this page renders (#1638, ADR-0025): the answer
-	 * column at the wide cap and not the form-width one. Its own subject
-	 * for the continuum check and the drag surface.
+	 * The other state this page renders (#1638, ADR-0025), its own subject
+	 * for the continuum check and the drag surface. The wide column was a
+	 * state of its own until #2005 put the rail in the column and the
+	 * column at one width.
 	 */
 	export const variants: readonly DemoVariant<Properties>[] = [
-		{ name: 'Check answers, with the wide column', props: { isWide: true } },
 		// #2049: GOV.UK's declaration, the words the button agrees to.
 		{ name: 'Check answers, with a declaration', props: { hasDeclaration: true } }
 	];
@@ -115,7 +114,7 @@
 		}
 	];
 
-	let { isWide = false, hasDeclaration = false }: Properties = $props();
+	let { hasDeclaration = false }: Properties = $props();
 
 	const noop = () => {};
 </script>
@@ -139,7 +138,6 @@
 	title="Check your answers before adding Anne-Marie Ochieng-Whitfield"
 	caption="Adding a Client to Highland Midwifery"
 	{sections}
-	{isWide}
 	declaration={hasDeclaration ? declaration : undefined}
 	{actions}
 />

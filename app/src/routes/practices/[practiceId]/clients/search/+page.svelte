@@ -350,6 +350,21 @@
 										</section>
 									{/each}
 								</stack-l>
+								<!--
+									#2005: a new Client can share a name with one on
+									file, so a match is never a dead end. The way on is
+									under the matches, after they have been read, as
+									the drawing has it. The name question then saves,
+									and a name that matches stops at "Is this the same
+									person?" (#1611), so this is no way round the
+									duplicate check.
+								-->
+								<stack-l space="var(--space-4)">
+									<Text text="None of these is the right Client?" />
+									<cluster-l space="var(--space-3)" align="center">
+										<Link href={startIntakeHref()} label="Add a new Client" onClick={handOffSearchFields} />
+									</cluster-l>
+								</stack-l>
 							{:else}
 								<stack-l space="var(--space-4)">
 									<Text

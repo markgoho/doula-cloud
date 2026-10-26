@@ -76,6 +76,7 @@
 	 * shape here is a typed array, and building it is the route's job
 	 * (#466).
 	 */
+	import Icon from '#lib/components/atoms/Icon.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 
 	interface Properties {
@@ -154,8 +155,8 @@
 	`atoms/Details.svelte` (#1520). Its summary is not text -- it is the
 	composed row above, a caption plus an `aria-hidden` progress track --
 	and its marker and list are their own departure from the plain shape:
-	`list-style-position: outside` repositions the triangle rather than
-	hiding it, and `details > ol` lays the steps out as a grid. Widening
+	the caret is drawn in the row rather than by the browser (#2005), and
+	`details > ol` lays the steps out as a grid. Widening
 	the atom to carry a composed summary and a bespoke marker position
 	would fit one caller and no other; DataTable is the real caller the
 	shared shape serves.
@@ -164,16 +165,21 @@
 	<details open={expand === 'completed'}>
 		<summary>
 			<!--
-				The row is an inner element, not the <summary> itself.
-				`display: flex` on a <summary> removes the native
-				disclosure marker in Chrome -- the marker only renders
-				while the element is `display: list-item` -- and the
-				marker is the only thing telling a reader the list opens
-				at all. So the <summary> keeps its own display and this
-				span does the arranging.
+				The marker is an element of the row, not the browser's
+				own (#2005, #1633). The native marker of an `outside`
+				list item is drawn outside the <summary>'s border box,
+				in the page gutter, and at 320px the page edge cut it in
+				half; an `inside` one puts the block-level row on a line
+				of its own below it. A caret in the row sits in the
+				column, on the first line, beside the words, in every
+				engine. It is `aria-hidden` (Icon draws no label): the
+				<summary> already announces whether the list is open.
 			-->
 			<span class="summary-row">
-				<span class="summary">{summary}</span>
+				<span class="head">
+					<span class="marker"><Icon name="caret-down" size={16} /></span>
+					<span class="summary">{summary}</span>
+				</span>
 				<span class="track" aria-hidden="true">
 					<span class="track-fill" style:inline-size={trackWidth}></span>
 				</span>
@@ -232,26 +238,55 @@
 		}
 
 		/*
-		 * The marker is the only affordance saying the list opens, so it
-		 * stays. That is why nothing here changes `display` or
-		 * `list-style` on the <summary> -- either one removes the marker
-		 * in Chrome, silently, and a check that measures overflow cannot
-		 * see an affordance that is missing. Caught by looking at the
-		 * rendered page, not by a test.
+		 * The browser's marker is off, in both the standard and the WebKit
+		 * form, because the row draws its own (see the markup). The
+		 * <summary> keeps no inline padding: the caret is the first thing
+		 * in the row, so the rail starts at the column's edge.
 		 */
 		summary {
-			/*
-			 * `outside` rather than the browser default: the row inside is
-			 * a block-level flex container, and an inside marker puts that
-			 * block on its own line, dropping the caption below the
-			 * triangle. Outside, the marker sits in the padding beside the
-			 * row's first line, which is where it reads as an affordance
-			 * for the thing next to it. The padding is what gives it room.
-			 */
-			list-style-position: outside;
+			list-style: none;
 			padding-block: var(--space-2);
-			padding-inline-start: var(--space-5);
 			cursor: pointer;
+		}
+
+		summary::-webkit-details-marker {
+			display: none;
+		}
+
+		/* One line tall, with the caret centered in it, so it sits on the
+		   caption's first line however many lines the caption takes. */
+		.marker {
+			display: inline-flex;
+			align-items: center;
+			block-size: 1lh;
+			color: var(--color-on-surface-variant);
+		}
+
+		/*
+		 * Closed, the caret points along the line (to the words); open, it
+		 * points down to the list it opened -- the two states the native
+		 * triangle showed. The icon turns and its box does not, so the turn
+		 * never moves the caret out of its place in the row.
+		 */
+		.marker :global(svg) {
+			transform: rotate(-90deg);
+		}
+
+		details[open] .marker :global(svg) {
+			transform: none;
+		}
+
+		/*
+		 * The caret and the words never part: a caption too long for its
+		 * line wraps inside this pair rather than leaving the caret alone
+		 * on a line above it.
+		 */
+		.head {
+			display: flex;
+			align-items: flex-start;
+			font-size: var(--text-body-sm-size);
+			gap: var(--space-2);
+			min-inline-size: 0;
 		}
 
 		/* The arranging happens one level in, so the marker survives it. */
