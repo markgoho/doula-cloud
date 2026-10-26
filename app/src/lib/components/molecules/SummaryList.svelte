@@ -220,7 +220,7 @@
 		/* The in-place form takes the row's whole width, on a line of its own. */
 		.row > .detail {
 			flex-basis: 100%;
-			padding-block-start: var(--space-2);
+			padding-block-start: var(--space-3);
 		}
 	}
 </style>
