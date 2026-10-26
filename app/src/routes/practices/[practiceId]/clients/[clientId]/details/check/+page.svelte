@@ -28,12 +28,6 @@
 	import { DETAILS_STEPS, journeySteps } from '#lib/intakeJourney.js';
 	import { detailsQuestions, knownAs } from '../details.js';
 
-	/*
-	 * GOV.UK's wider column for a long answer list, from the same count
-	 * intake's own check page uses.
-	 */
-	const WIDE_FROM_ROWS = 14;
-
 	const base = $derived(detailsQuestions.basePath);
 	const steps = $derived(
 		journeySteps(detailsQuestions.steps, base, undefined, clientDetails.draft.visitedSteps)
@@ -44,7 +38,6 @@
 	// The layout renders no step until the record is read, so it is here.
 	const toSave = $derived(detailsToSave(clientDetails.record!, clientDetails.draft.answers, askedFieldIds));
 	const sections = $derived(answerSections(toSave, detailsQuestions.sections, base, DETAILS_STEPS));
-	const rowCount = $derived(sections.reduce((total, section) => total + section.answers.length, 0));
 	const lastStep = $derived(detailsQuestions.steps.at(-1)!);
 
 	const submission = new FormSubmission();
@@ -67,7 +60,6 @@
 	backHref={`${base}/${lastStep.slug}`}
 	title="Check {knownAs()}'s details before saving"
 	{sections}
-	isWide={rowCount >= WIDE_FROM_ROWS}
 	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 >
 	{#snippet actions()}

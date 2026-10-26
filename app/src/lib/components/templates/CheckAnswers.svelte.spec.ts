@@ -128,6 +128,24 @@ describe('CheckAnswers.svelte', () => {
 		await expect.element(page.getByRole('navigation', { name: 'Adding a client' })).toBeVisible();
 	});
 
+	/*
+	 * #2005: the check page draws the journey where every question page
+	 * draws it -- in the column, under Back and over the title -- so the
+	 * step indicator keeps one shape and one place through the journey.
+	 * It used to sit in a column of its own beside the answers. Queried
+	 * by element order: "where in the column" is a fact about the tree,
+	 * not about any one role.
+	 */
+	it('draws the step rail in the column, under the back link and over the title', async () => {
+		const { container } = await setup();
+
+		const column = container.querySelector('.column')!;
+		const order = [...column.querySelectorAll(':scope a, :scope nav, :scope h1')]
+			.filter((node) => node.tagName !== 'A' || node.textContent?.trim() === 'Back')
+			.map((node) => node.tagName);
+		expect(order.slice(0, 3)).toEqual(['A', 'NAV', 'H1']);
+	});
+
 	it('renders a back link above everything else in the column', async () => {
 		const { container } = await setup();
 
@@ -158,30 +176,6 @@ describe('CheckAnswers.svelte', () => {
 		const { container } = await setup();
 
 		expect(container.querySelector('.caption')).toBeNull();
-	});
-
-	// GOV.UK's Check answers pattern allows a wider column for a long answer
-	// list; the intake summary is nineteen rows on a Practice that has added
-	// its own fields, so the wide case is real.
-	//
-	// `.wide` itself, not the grid rule that used to key off it (#564):
-	// that rule -- `.body:has(.column.wide) { grid-template-columns: ... }`
-	// -- is gone, replaced by `sidebar-l`'s own `content-min` reading
-	// `isWide` directly (markup), so there is no CSS mechanism left for
-	// this test to assert against even by class. What is left, and what a
-	// route actually gets, is `.column`'s own `max-inline-size` rule --
-	// `var(--form-max)` normally, `none` under `.wide` -- keyed on this
-	// class; --form-max itself only resolves once real tokens are loaded,
-	// which this isolated component test deliberately does not do, so the
-	// class is the observable result available here. The full rail split
-	// this feeds is exercised end to end with real tokens on
-	// /style-guide/check-answers.
-	it('applies .wide to the column only when isWide is set', async () => {
-		const { container } = await setup();
-		expect(container.querySelector('.column')).not.toHaveClass('wide');
-
-		const { container: wide } = await setup({ isWide: true });
-		expect(wide.querySelector('.column')).toHaveClass('wide');
 	});
 
 	it('renders the actions region', async () => {
