@@ -61,7 +61,7 @@ type nameDiff struct {
 //     where it still equals the old name, so a name Staff typed over it
 //     by hand stays what Staff wrote.
 //   - Not a Sent or Signed Contract. The Client has seen the old name; a
-//     Signed PDF is never re-rendered (CONTEXT.md, Contract).
+//     Signed PDF is never re-rendered (GLOSSARY.md, Contract).
 //   - Not the Practice Page's address, which is assigned once and never
 //     moved (website.Slugify), and not the statement descriptor at
 //     Stripe, which is the Owner's to change in her own Stripe dashboard.
