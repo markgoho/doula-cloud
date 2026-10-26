@@ -291,11 +291,28 @@ func TestFindViolations_DoesNotMergeABodyWithTheBodyAfterIt(t *testing.T) {
 			`		bar()`,  // 6
 			`	}`,       // 7
 		),
+		"else, with a comment": lines(
+			`	if x {`, // 1
+			`		// coverage:ignore reason: excuses foo only`, // 2
+			`		foo()`,                    // 3
+			`	} else { // the other way`, // 4
+			`		bar()`,                    // 5
+			`	}`,                         // 6
+		),
+		"case, with a comment": lines(
+			`	switch n {`, // 1
+			`	case 1:`,    // 2
+			`		// coverage:ignore reason: excuses foo only`, // 3
+			`		foo()`,                     // 4
+			`	case 2: // the other value`, // 5
+			`		bar()`,                     // 6
+			`	}`,                          // 7
+		),
 	} {
 		t.Run(name, func(t *testing.T) {
 			first := Block{File: testFile, StartLine: 3, StartCol: 3, EndLine: 4, EndCol: 1, Count: 0}
 			second := Block{File: testFile, StartLine: 5, StartCol: 3, EndLine: 6, EndCol: 1, Count: 0}
-			if name == "case" {
+			if strings.HasPrefix(name, "case") {
 				first = Block{File: testFile, StartLine: 4, StartCol: 3, EndLine: 5, EndCol: 1, Count: 0}
 				second = Block{File: testFile, StartLine: 6, StartCol: 3, EndLine: 7, EndCol: 1, Count: 0}
 			}
@@ -308,6 +325,72 @@ func TestFindViolations_DoesNotMergeABodyWithTheBodyAfterIt(t *testing.T) {
 				t.Fatalf("expected only the second body flagged, got %+v", violations)
 			}
 		})
+	}
+}
+
+// A label is a 1.26 block boundary even with a comment after it. Go
+// 1.27.3 ends the piece before it at column 1 of the label's line and
+// starts the next piece after it (17.2,18.1 then 19.2,19.9), so the
+// marker above sink(1) excuses sink(1) only, not the jump target.
+func TestFindViolations_DoesNotMergeAcrossALabelWithAComment(t *testing.T) {
+	src := map[string][]string{
+		testFile: lines(
+			`	// coverage:ignore reason: excuses sink(1) only`, // 1
+			`	sink(1)`,                 // 2
+			`done: // the jump target`, // 3
+			`	sink(2)`,                 // 4
+		),
+	}
+	blocks := []Block{
+		{File: testFile, StartLine: 2, StartCol: 2, EndLine: 3, EndCol: 1, Count: 0},
+		{File: testFile, StartLine: 4, StartCol: 2, EndLine: 4, EndCol: 9, Count: 0},
+	}
+
+	violations, err := findViolations(blocks, nil, fakeReader(src))
+	if err != nil {
+		t.Fatalf("findViolations: %v", err)
+	}
+	if len(violations) != 1 || violations[0].StartLine != 4 {
+		t.Fatalf("expected only sink(2) flagged, got %+v", violations)
+	}
+}
+
+// A comment line opens no body, whatever its last character. Go 1.27.3
+// ends a piece at column 1 of each comment line, so a comment ending in
+// `:` or `{` is the line the join reads, and one marker still excuses the
+// whole block. The ranges are copied from a 1.27.3 profile of this
+// source (3.2,4.1, 5.2,6.1, 7.2,9.1 and 10.2,13.1).
+func TestFindViolations_JoinsAcrossACommentThatEndsLikeAnOpener(t *testing.T) {
+	src := map[string][]string{
+		testFile: lines(
+			`func f() {`, // 1
+			`	// coverage:ignore reason: one marker for the whole block`, // 2
+			`	sink(1)`,                  // 3
+			`	// The order matters:`,    // 4
+			`	sink(2)`,                  // 5
+			`	// Shape is {`,            // 6
+			`	p := pair{`,               // 7
+			`		A: 1,`,                   // 8
+			`	}`,                        // 9
+			`	get(`,                     // 10
+			`		"https://example.com:")`, // 11
+			`	sink(p)`,                  // 12
+			`}`,                         // 13
+		),
+	}
+	blocks := []Block{
+		{File: testFile, StartLine: 3, StartCol: 2, EndLine: 4, EndCol: 1, Count: 0},
+		{File: testFile, StartLine: 5, StartCol: 2, EndLine: 6, EndCol: 1, Count: 0},
+		{File: testFile, StartLine: 7, StartCol: 2, EndLine: 9, EndCol: 1, Count: 0},
+		{File: testFile, StartLine: 10, StartCol: 2, EndLine: 13, EndCol: 1, Count: 0},
+	}
+
+	violations, err := findViolations(blocks, nil, fakeReader(src))
+	if err != nil {
+		t.Fatalf("findViolations: %v", err)
+	}
+	if len(violations) != 0 {
+		t.Fatalf("expected 0 violations, got %+v", violations)
 	}
 }
 

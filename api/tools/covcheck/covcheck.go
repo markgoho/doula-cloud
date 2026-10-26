@@ -3,6 +3,8 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"go/scanner"
+	"go/token"
 	"io"
 	"slices"
 	"strconv"
@@ -214,14 +216,42 @@ func isCutFrom(prev, next Block, fileLines []string) bool {
 }
 
 // opensABody reports whether line begins a new block of its own: an
-// `else`, a `case` or `default`, a label, or any line ending in `{`.
+// `else`, a `case` or `default`, a label, or any line whose code ends in
+// `{`. It reads the line's Go tokens, not its text, so a comment opens
+// nothing however it ends (`// The order matters:`), and a comment after
+// the code (`done: // the jump target`) does not hide what the code is.
 func opensABody(line string) bool {
-	trimmed := strings.TrimSpace(line)
-	return strings.HasSuffix(trimmed, "{") ||
-		strings.HasSuffix(trimmed, ":") ||
-		strings.HasPrefix(trimmed, "case ") ||
-		strings.HasPrefix(trimmed, "default:") ||
-		strings.HasPrefix(trimmed, "} else")
+	toks := lineTokens(line)
+	if len(toks) == 0 {
+		return false
+	}
+	first, last := toks[0], toks[len(toks)-1]
+	return last == token.LBRACE || last == token.COLON ||
+		first == token.CASE || first == token.DEFAULT ||
+		(first == token.RBRACE && len(toks) > 1 && toks[1] == token.ELSE)
+}
+
+// lineTokens scans one line of Go source and returns its tokens, leaving
+// out comments and the semicolons the scanner inserts at the line's end.
+// A line that is only part of a token, such as the tail of a raw string,
+// scans to whatever it can; it opens no body either way.
+func lineTokens(line string) []token.Token {
+	src := []byte(line)
+	fset := token.NewFileSet()
+	file := fset.AddFile("", fset.Base(), len(src))
+	var s scanner.Scanner
+	s.Init(file, src, func(token.Position, string) {}, 0)
+	var toks []token.Token
+	for {
+		_, tok, lit := s.Scan()
+		if tok == token.EOF {
+			return toks
+		}
+		if tok == token.SEMICOLON && lit != ";" {
+			continue
+		}
+		toks = append(toks, tok)
+	}
 }
 
 // onlyCommentsBetween reports whether every line strictly between the
