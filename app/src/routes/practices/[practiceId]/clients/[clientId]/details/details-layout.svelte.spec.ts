@@ -7,6 +7,7 @@ import { jsonResponse } from '#lib/testResponse.js';
 import Layout from './+layout.svelte';
 import { clientId, practiceId, record, seedDetails } from './detailsFixture.js';
 import { load } from './+page.js';
+import { detailsSave } from './detailsSave.svelte.js';
 
 /*
  * The layout every question of a Client's details journey sits in, and
@@ -85,6 +86,22 @@ describe('the details layout', () => {
 		await expect.element(testPage.getByText('client not found')).toBeVisible();
 		await expect.element(testPage.getByText('the email question')).not.toBeInTheDocument();
 	});
+
+	// #2048: the save's name-substitution question, asked here for
+	// whichever page saved. What it does is `client-details.svelte.spec.ts`'s.
+	it('clears the substitution question when it is canceled', async () => {
+		await setup();
+		detailsSave.matches = [{ ...record, id: 'client-2', engagements: [], wouldSurvive: true }];
+		detailsSave.overrideError = 'refused before';
+		detailsSave.isConflictOpen = true;
+
+		await expect.element(testPage.getByRole('dialog', { name: 'Possible duplicate Client' })).toBeVisible();
+		await testPage.getByRole('button', { name: 'Cancel' }).click();
+
+		await expect.element(testPage.getByRole('dialog')).not.toBeInTheDocument();
+		expect(detailsSave.matches).toEqual([]);
+		expect(detailsSave.overrideError).toBe('');
+	});
 });
 
 /**
@@ -104,10 +121,27 @@ describe('the door', () => {
 
 		expect(open()).toThrow(expect.objectContaining({
 			status: 307,
-			location: `/practices/${practiceId}/clients/${clientId}/details/date-of-birth`
+			location: `/practices/${practiceId}/clients/${clientId}/details/name`
 		}));
 		expect(clientDetails.draft.answers.phone).toBe('');
 		expect(clientDetails.engagementId).toBeUndefined();
+	});
+
+	// #2048: each Change on her record names its question.
+	it.each([['email'], ['sections/1']])('opens the one question %s a Change on her record names', (slug) => {
+		clientDetails.draft.update({ phone: 'typed on an earlier visit' });
+
+		expect(open(`?step=${encodeURIComponent(slug)}`)).toThrow(expect.objectContaining({
+			status: 307,
+			location: `/practices/${practiceId}/clients/${clientId}/details/${slug}?from=record`
+		}));
+		expect(clientDetails.draft.answers.phone).toBe('');
+	});
+
+	it('opens the first question for a step the journey does not have', () => {
+		expect(open('?step=check')).toThrow(expect.objectContaining({
+			location: `/practices/${practiceId}/clients/${clientId}/details/name`
+		}));
 	});
 
 	it('reads the Engagement whose page opened the journey', () => {

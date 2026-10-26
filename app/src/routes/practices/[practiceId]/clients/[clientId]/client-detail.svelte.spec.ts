@@ -72,6 +72,24 @@ beforeEach(() => {
 	goto.mockReset();
 });
 
+/**
+ * Every row's Change on the page, keyed on what it changes (#2048). Each
+ * is a link named "Change", told apart only by the visually-hidden text
+ * its `aria-describedby` points at -- an accessible description, which no
+ * locator queries by -- so this reads it off the DOM: the first of
+ * `svelte-tests.md`'s three `querySelector` cases, identical role and
+ * name.
+ */
+function changeHrefs(): Map<string, string> {
+	const links = [...document.querySelectorAll('a')].filter((link) => link.textContent?.trim() === 'Change');
+	return new Map(
+		links.map((link) => [
+			document.querySelector(`#${CSS.escape(link.getAttribute('aria-describedby') ?? '')}`)?.textContent ?? '',
+			link.getAttribute('href') ?? ''
+		])
+	);
+}
+
 interface SetupOptions {
 	overrides?: Partial<ClientDetail>;
 	/** The signed-in Staff member's own id, as `/api/staff/session` would
@@ -232,7 +250,8 @@ describe('client detail hub', () => {
 			}
 		});
 
-		await expect.element(testPage.getByText('Doula notes')).toBeVisible();
+		// `.first()`: the row's Change carries the label again, visually hidden.
+		await expect.element(testPage.getByText('Doula notes').first()).toBeVisible();
 		await expect.element(testPage.getByText('she/her')).toBeVisible();
 		await expect.element(testPage.getByText('kept value (No longer collected)')).toBeVisible();
 	});
@@ -452,18 +471,55 @@ describe('client detail hub', () => {
 			.toBeVisible();
 	});
 
-	it('renders an edit link naming whose record it edits', async () => {
-		const { container } = await setup();
+	// #2048: one way to change her record -- a Change on each row, into
+	// the details journey's question for that row, through its door.
+	it.each([
+		['given name', 'name'],
+		['family name', 'name'],
+		['preferred name', 'name'],
+		['date of birth', 'date-of-birth'],
+		['email address', 'email'],
+		['phone number', 'phone'],
+		['address', 'address']
+	])('offers a Change on the %s row into its question', async (changes, slug) => {
+		await setup();
 
-		const link = testPage.getByRole('link', { name: 'Edit' });
-		await expect.element(link).toHaveAttribute('href', `/practices/${practiceId}/clients/${clientId}/edit`);
+		await expect.poll(() => changeHrefs().get(changes)).toBe(
+			`/practices/${practiceId}/clients/${clientId}/details?step=${encodeURIComponent(slug)}`
+		);
+	});
 
-		// "Edit" alone doesn't say whose record it edits (#513); the
-		// distinguishing name is a sibling joined by aria-describedby, the
-		// same pattern CheckAnswers' Change links use, so no accessible
-		// query names it directly.
-		const describedBy = link.element().getAttribute('aria-describedby') ?? '';
-		expect(container.querySelector(`#${describedBy}`)?.textContent).toBe(fixture.readyText);
+	it('offers a Change on each Practice field into its section, and none on a field no longer asked', async () => {
+		await setup({
+			overrides: {
+				resolvedFields: [
+					{ fieldId: 'f1', label: 'Pronouns', type: 'short_text', value: 'she/her' },
+					{ fieldId: 'f2', label: 'Old field', type: 'short_text', value: 'kept', note: 'No longer collected' },
+					{ fieldId: 'f3', label: 'Health', type: 'section_header' },
+					{ fieldId: 'f4', label: 'Allergies', type: 'short_text', value: 'Peanuts' }
+				]
+			}
+		});
+
+		const base = `/practices/${practiceId}/clients/${clientId}/details`;
+		await expect.poll(() => changeHrefs().get('Pronouns')).toBe(`${base}?step=sections%2F0`);
+		expect(changeHrefs().get('Allergies')).toBe(`${base}?step=sections%2F1`);
+		expect(changeHrefs().has('Old field')).toBe(false);
+	});
+
+	it('offers no Change on the portal invite, which no question asks', async () => {
+		await setup();
+
+		await expect.poll(() => changeHrefs().size).toBeGreaterThan(0);
+		expect(changeHrefs().keys().some((changes) => /portal/i.test(changes))).toBe(false);
+	});
+
+	// The header keeps one action (#2048).
+	it('offers no Edit and no link to the whole details journey', async () => {
+		await setup();
+
+		await expect.element(testPage.getByRole('link', { name: 'Edit', exact: true })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('link', { name: /details$/ })).not.toBeInTheDocument();
 	});
 
 	it('offers the Engagement Request as an action naming her', async () => {
@@ -472,34 +528,6 @@ describe('client detail hub', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: `Start new work with ${fixture.readyText}` }))
 			.toHaveAttribute('href', `/practices/${practiceId}/clients/${clientId}/engagement-requests/new`);
-	});
-
-	// #1610: her other details are added from here, as one journey.
-	it('offers to add her details while a fact is missing', async () => {
-		await setup({ overrides: { phone: '' } });
-
-		await expect
-			.element(testPage.getByRole('link', { name: `Add ${fixture.readyText}'s details` }))
-			.toHaveAttribute('href', `/practices/${practiceId}/clients/${clientId}/details`);
-	});
-
-	it('offers to change her details once each fact is given', async () => {
-		await setup({
-			overrides: {
-				email: 'given@example.com',
-				phone: '585 555 0142',
-				addressLine1: '1 Main Street',
-				addressLocality: 'Rochester',
-				addressRegion: 'NY',
-				addressPostalCode: '14607',
-				dateOfBirth: '1988-02-09',
-				resolvedFields: []
-			}
-		});
-
-		await expect
-			.element(testPage.getByRole('link', { name: `Change ${fixture.readyText}'s details` }))
-			.toBeVisible();
 	});
 
 	// #2015: the empty Practice-defined fields section sends the Owner, who
@@ -520,11 +548,11 @@ describe('client detail hub', () => {
 		await expect.element(testPage.getByRole('link', { name: 'Add a question' })).not.toBeInTheDocument();
 	});
 
-	it('offers no details journey on an erased record', async () => {
+	it('offers no Change on an erased record', async () => {
 		await setup({ overrides: { erasedAt: '2026-03-01T00:00:00Z' } });
 
 		await expect.element(testPage.getByText(/This client's data was erased on request/)).toBeVisible();
-		await expect.element(testPage.getByRole('link', { name: /details$/ })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('link', { name: 'Change' })).not.toBeInTheDocument();
 	});
 
 	it('withholds Start new work from a contractor Doula (ADR-0017: she originates nothing)', async () => {
@@ -534,7 +562,7 @@ describe('client detail hub', () => {
 			.element(testPage.getByRole('link', { name: `Start new work with ${fixture.readyText}` }))
 			.not.toBeInTheDocument();
 		// Edit follows read, not the originate rule -- a contractor keeps it.
-		await expect.element(testPage.getByRole('link', { name: 'Edit' })).toBeVisible();
+		await expect.poll(() => changeHrefs().has('given name')).toBe(true);
 	});
 
 	it('shows an error notice when the Client fails to load', async () => {

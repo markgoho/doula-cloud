@@ -12,7 +12,7 @@ import Page from './+page.svelte';
 import { clientId, fields, fixture, matches, practiceId, seedEditMergeDraft } from './page.fixture.js';
 
 /*
- * Gate two's question, on the edit path (#814). Modeled on
+ * Gate two's question, on the details journey's save (#814, #2048). Modeled on
  * `intake-sequence.svelte.spec.ts`'s own "the duplicate check" block --
  * this route has no multi-step sequence around it, so it gets a spec of
  * its own rather than a shared one.
@@ -30,8 +30,7 @@ vi.mock('$app/navigation', () => ({ goto }));
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
-const editHref = `/practices/${practiceId}/clients/${clientId}/edit`;
-const base = `${editHref}/duplicate`;
+const base = `/practices/${practiceId}/clients/${clientId}/details/duplicate`;
 
 function detailHref(id: string): string {
 	return `/practices/${practiceId}/clients/${id}`;
@@ -65,12 +64,12 @@ beforeEach(() => {
 });
 
 describe('a direct load with nothing in the draft', () => {
-	it('sends the reader back to the edit page', async () => {
+	it('sends the reader back to her record', async () => {
 		editMergeDraft.clear();
 
 		await setup();
 
-		expect(goto).toHaveBeenCalledWith(editHref);
+		expect(goto).toHaveBeenCalledWith(detailHref(clientId));
 	});
 });
 

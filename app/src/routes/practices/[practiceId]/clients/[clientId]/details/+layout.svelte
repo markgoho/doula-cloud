@@ -19,17 +19,23 @@
 	 * typing answers the save would refuse: a merged record goes to the
 	 * record it became, an erased one says why nothing can be added, and a
 	 * record she cannot read is the read's own refusal.
+	 *
+	 * It also draws the save's one dialog (#2048), the name-substitution
+	 * question `detailsSave` opens from whichever page saved.
 	 */
 	import { untrack, type Snippet } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
+	import { displayName } from '#lib/clientDetail.js';
 	import { clientDetails } from '#lib/clientDetailsFlow.svelte.js';
 	import { intakeFlow } from '#lib/intakeFlow.svelte.js';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
+	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
+	import { detailsSave } from './detailsSave.svelte.js';
 
 	let { children }: { children: Snippet } = $props();
 
@@ -92,6 +98,19 @@
 		</center-l>
 	</container-l>
 {/if}
+
+<!-- Gate one of the journey's save (`detailsSave.svelte.ts`): drawn here
+     once, because the check page and a question opened from her record
+     both save. -->
+<ConfirmDialog
+	bind:open={detailsSave.isConflictOpen}
+	title="Possible duplicate Client"
+	consequence={`This name exactly matches an existing Client at this Practice: ${detailsSave.matches.map((match) => displayName(match)).join(', ')}. Saving keeps this as its own separate record. Nothing is merged.`}
+	confirmLabel="Yes, a different person"
+	error={detailsSave.overrideError}
+	onConfirm={() => detailsSave.confirmOverride()}
+	onCancel={() => detailsSave.cancel()}
+/>
 
 <style>
 	@layer components {

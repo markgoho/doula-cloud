@@ -6,7 +6,9 @@ import {
 	detailsLinkLabel,
 	detailsToSave,
 	engagementOrigin,
-	hasEveryDetail
+	fieldSectionIndexes,
+	hasEveryDetail,
+	stepOrigin
 } from './clientDetailsJourney.js';
 import { blankAnswers, type IntakeAnswers } from './intakeDraft.svelte.js';
 
@@ -67,10 +69,20 @@ describe('answersOnFile', () => {
 
 describe('detailsToSave', () => {
 	it('saves one fact typed over a blank', () => {
-		const saved = detailsToSave(detail(), typed({ phone: '585 555 0199' }), []);
+		const record = detail();
+		const saved = detailsToSave(record, { ...answersOnFile(record), phone: '585 555 0199' }, []);
 
 		expect(saved.phone).toBe('585 555 0199');
 		expect(saved.givenName).toBe('Anne-Marie');
+	});
+
+	// #2048: the journey is the one way to change her record, so it asks
+	// the name too.
+	it('saves a changed name', () => {
+		const record = detail();
+		const saved = detailsToSave(record, { ...answersOnFile(record), givenName: 'Annie' }, []);
+
+		expect(saved.givenName).toBe('Annie');
 	});
 
 	it('saves a Practice-defined value', () => {
@@ -83,17 +95,23 @@ describe('detailsToSave', () => {
 		expect(saved.fieldValues).toEqual({ referral: 'A sister', photos: true });
 	});
 
-	// #1610: a blank never replaces a value on file. The Edit form is
-	// the path for taking a fact away.
-	it('keeps the value on file where the answer is blank', () => {
+	// #2048: with the Edit form retired, a question cleared on its page is
+	// how a fact is taken away.
+	it('clears the value on file where the answer is blank', () => {
 		const saved = detailsToSave(
 			detail({ ...complete, fieldValues: { referral: 'A sister', attendees: ['Partner'] } }),
-			typed({ email: '  ', fieldValues: { referral: '', attendees: [] } }),
+			typed({ email: '', fieldValues: { referral: '', attendees: [] } }),
 			['referral', 'attendees']
 		);
 
-		expect(saved.email).toBe('anne@example.com');
-		expect(saved.fieldValues).toEqual({ referral: 'A sister', attendees: ['Partner'] });
+		expect(saved.email).toBe('');
+		expect(saved.fieldValues).toEqual({ referral: '', attendees: [] });
+	});
+
+	it('keeps a Practice value the draft holds no answer to', () => {
+		const saved = detailsToSave(detail({ fieldValues: { referral: 'A sister' } }), typed({}), ['referral']);
+
+		expect(saved.fieldValues).toEqual({ referral: 'A sister' });
 	});
 
 	// A ticked box that is unticked is an answer, not a blank.
@@ -107,17 +125,63 @@ describe('detailsToSave', () => {
 		expect(saved.fieldValues).toEqual({ photos: false });
 	});
 
-	// The journey never asks the name or a field the Practice archived,
-	// so a stale draft cannot change either.
-	it('takes every fact the journey does not ask from the record on file', () => {
+	// The journey never asks a field the Practice archived, so a stale
+	// draft cannot change one.
+	it('takes a field the journey does not ask from the record on file', () => {
 		const saved = detailsToSave(
 			detail({ fieldValues: { retired: 'Kept' } }),
-			typed({ givenName: 'Someone else', fieldValues: { retired: 'Changed' } }),
+			typed({ fieldValues: { retired: 'Changed' } }),
 			['referral']
 		);
 
-		expect(saved.givenName).toBe('Anne-Marie');
 		expect(saved.fieldValues).toEqual({ retired: 'Kept' });
+	});
+});
+
+describe('stepOrigin', () => {
+	it.each([['name'], ['date-of-birth'], ['address'], ['sections/2']])('reads the question %s', (slug) => {
+		expect(stepOrigin(new URLSearchParams({ step: slug }))).toBe(slug);
+	});
+
+	it.each([
+		['no question', ''],
+		['an address', 'step=..%2F..%2Flogin'],
+		['a step the journey has not', 'step=check'],
+		['a section that is not a number', 'step=sections%2Fone']
+	])('reads %s as none', (_case, query) => {
+		expect(stepOrigin(new URLSearchParams(query))).toBeUndefined();
+	});
+});
+
+describe('fieldSectionIndexes', () => {
+	// The fields before the first header are a section of their own, a
+	// header over nothing opens none, and a field the Practice archived
+	// is asked by no section.
+	it('counts the sections the journey asks, the way intake does', () => {
+		const indexes = fieldSectionIndexes([
+			resolved({ fieldId: 'referral' }),
+			resolved({ fieldId: 'old', note: 'No longer collected' }),
+			resolved({ fieldId: 'care', type: 'section_header' }),
+			resolved({ fieldId: 'hopes' }),
+			resolved({ fieldId: 'empty', type: 'section_header' }),
+			resolved({ fieldId: 'birth', type: 'section_header' }),
+			resolved({ fieldId: 'place' })
+		]);
+
+		expect([...indexes]).toEqual([
+			['referral', 0],
+			['hopes', 1],
+			['place', 2]
+		]);
+	});
+
+	it('starts at the first section when the first field is a header', () => {
+		const indexes = fieldSectionIndexes([
+			resolved({ fieldId: 'care', type: 'section_header' }),
+			resolved({ fieldId: 'hopes' })
+		]);
+
+		expect(indexes.get('hopes')).toBe(0);
 	});
 });
 

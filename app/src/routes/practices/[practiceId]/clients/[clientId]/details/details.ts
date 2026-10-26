@@ -8,10 +8,11 @@
 import { resolve } from '$app/paths';
 import { page } from '#lib/appState.svelte.js';
 import { clientDetails } from '#lib/clientDetailsFlow.svelte.js';
-import { ENGAGEMENT_PARAMETER } from '#lib/clientDetailsJourney.js';
+import { ENGAGEMENT_PARAMETER, STEP_PARAMETER } from '#lib/clientDetailsJourney.js';
 import { intakeFlow } from '#lib/intakeFlow.svelte.js';
 import { DETAILS_STEPS, intakeStepList, knownAsFrom } from '#lib/intakeJourney.js';
 import type { QuestionJourney } from '../../questions/questionJourney.js';
+import { detailsSave } from './detailsSave.svelte.js';
 
 export function detailsBasePath(practiceId: string, clientId: string): string {
 	return resolve('/practices/[practiceId]/clients/[clientId]/details', { practiceId, clientId });
@@ -25,6 +26,14 @@ export function detailsBasePath(practiceId: string, clientId: string): string {
 export function detailsHref(practiceId: string, clientId: string, engagementId?: string): string {
 	const base = detailsBasePath(practiceId, clientId);
 	return engagementId ? `${base}?${ENGAGEMENT_PARAMETER}=${encodeURIComponent(engagementId)}` : base;
+}
+
+/**
+ * A Change on her record (#2048): the journey's door, naming the one
+ * question it opens, so the door can forget an earlier visit first.
+ */
+export function detailsChangeHref(practiceId: string, clientId: string, slug: string): string {
+	return `${detailsBasePath(practiceId, clientId)}?${STEP_PARAMETER}=${encodeURIComponent(slug)}`;
 }
 
 /** The screen that opened the journey: her Engagement's page, or her
@@ -41,8 +50,8 @@ function currentIds(): { practiceId: string; clientId: string } {
 
 /**
  * What the Client is called on these pages: #463's rule with no pronoun
- * in it, read off the record on file, since the journey never asks the
- * name.
+ * in it, read off the record on file, so a name being changed does not
+ * rename her under the reader's cursor.
  */
 export function knownAs(): string {
 	return knownAsFrom(clientDetails.record);
@@ -50,8 +59,9 @@ export function knownAs(): string {
 
 /**
  * Her details journey, as the shared question pages see it: its own
- * draft, every step but the name, and Back to the screen that opened
- * it. No free save: the journey saves once, at its check page.
+ * draft, every step, and Back to the screen that opened it. The journey
+ * saves once, at its check page, or at the one question a Change on her
+ * record opened (#2048).
  */
 export const detailsQuestions: QuestionJourney = {
 	get label() {
@@ -77,5 +87,8 @@ export const detailsQuestions: QuestionJourney = {
 	},
 	get knownAs() {
 		return knownAs();
+	},
+	save(returnHref: string) {
+		return detailsSave.save(detailsQuestions, returnHref);
 	}
 };
