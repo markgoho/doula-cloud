@@ -22,7 +22,12 @@ test('Practice Owner can view the seeded contract template and edit/save it', as
 	// shell's six-item nav replaced the temporary header of links (#452).
 	await page.getByRole('link', { name: 'Settings' }).first().click();
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/settings$`));
-	await page.getByRole('link', { name: 'Contract Template' }).click();
+	// The index is a summary list (#2028): the row's Change is the way in.
+	await page
+		.locator('dt', { hasText: /^Contract Template$/ })
+		.locator('..')
+		.getByRole('link', { name: 'Change', exact: true })
+		.click();
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/settings/contract-template$`));
 
 	// Seeded default prose renders.
@@ -45,7 +50,12 @@ test('Practice Owner can view the seeded contract template and edit/save it', as
 	// header of links (#452).
 	await page.goBack();
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/settings$`));
-	await page.getByRole('link', { name: 'Contract Template' }).click();
+	// The index is a summary list (#2028): the row's Change is the way in.
+	await page
+		.locator('dt', { hasText: /^Contract Template$/ })
+		.locator('..')
+		.getByRole('link', { name: 'Change', exact: true })
+		.click();
 	await expect(page.getByLabel('Contract template prose')).toHaveValue(
 		'Updated agreement with {{client_name}}'
 	);
