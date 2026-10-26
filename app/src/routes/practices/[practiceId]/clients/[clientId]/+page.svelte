@@ -4,8 +4,8 @@
 	import { resolve } from '$app/paths';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
+	import { fullName } from '#lib/personName.js';
 	import {
-		displayName,
 		loadClientDetail,
 		pendingRequests,
 		resolvedFieldGroups,
@@ -94,7 +94,7 @@
 	// actions snippet and the sections array below, all of which are
 	// constructed on every render regardless of which branch of
 	// RecordDetail's template is actually showing.
-	const name = $derived(detail ? displayName(detail) : '');
+	const name = $derived(detail ? fullName(detail) : '');
 
 	// The record's last section, and the one guard `eraseSection` relies on
 	// (#1711): Owner-only, absent until the eligibility read answers, and

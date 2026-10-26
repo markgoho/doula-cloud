@@ -48,6 +48,13 @@ func TestAwaitingReplyHandler_OnlyEngagementsAwaitingReplyAppear(t *testing.T) {
 	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
 
 	waitingClientID, waitingEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Priya", "priya@example.com")
+	// #2111: the Overview's table sets every waiting Client side by side,
+	// so it names her in full.
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE clients SET family_name = 'Shah' WHERE id = $1`, waitingClientID,
+	); err != nil {
+		t.Fatalf("seed family_name: %v", err)
+	}
 	seedMessage(t, db, waitingEngagementID, "staff", staffID, "How are you feeling?")
 	seedMessage(t, db, waitingEngagementID, "client", waitingClientID, "A little tired today.")
 
@@ -70,8 +77,8 @@ func TestAwaitingReplyHandler_OnlyEngagementsAwaitingReplyAppear(t *testing.T) {
 	if got.Items[0].EngagementID != waitingEngagementID {
 		t.Fatalf("EngagementID = %q, want %q", got.Items[0].EngagementID, waitingEngagementID)
 	}
-	if got.Items[0].ClientName != "Priya" {
-		t.Fatalf("ClientName = %q, want %q", got.Items[0].ClientName, "Priya")
+	if got.Items[0].ClientName != "Priya Shah" {
+		t.Fatalf("ClientName = %q, want %q", got.Items[0].ClientName, "Priya Shah")
 	}
 }
 

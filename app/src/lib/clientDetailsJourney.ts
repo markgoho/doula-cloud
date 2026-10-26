@@ -23,7 +23,7 @@
 
 import type { ClientEditFields } from './client.js';
 import type { ClientDetail, ClientRecord, ResolvedField } from './clientDetail.js';
-import { displayName } from './clientDetail.js';
+import { fullName } from './personName.js';
 import type { FieldValue, IntakeAnswers } from './intakeDraft.svelte.js';
 import { DETAILS_STEPS, type TextColumn } from './intakeJourney.js';
 
@@ -116,7 +116,7 @@ export function hasEveryDetail(record: ClientDetail): boolean {
  * her Engagement's page. It names her, so it reads on its own. */
 export function detailsLinkLabel(record: ClientDetail): string {
 	const verb = hasEveryDetail(record) ? 'Change' : 'Add';
-	return `${verb} ${displayName(record)}'s details`;
+	return `${verb} ${fullName(record)}'s details`;
 }
 
 /** The query a link on an Engagement's page carries, so the journey

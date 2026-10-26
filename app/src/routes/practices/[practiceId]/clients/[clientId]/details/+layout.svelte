@@ -28,7 +28,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import { displayName } from '#lib/clientDetail.js';
+	import { fullName } from '#lib/personName.js';
 	import { clientDetails } from '#lib/clientDetailsFlow.svelte.js';
 	import { intakeFlow } from '#lib/intakeFlow.svelte.js';
 	import Link from '#lib/components/atoms/Link.svelte';
@@ -105,7 +105,7 @@
 <ConfirmDialog
 	bind:open={detailsSave.isConflictOpen}
 	title="Possible duplicate Client"
-	consequence={`This name exactly matches an existing Client at this Practice: ${detailsSave.matches.map((match) => displayName(match)).join(', ')}. Saving keeps this as its own separate record. Nothing is merged.`}
+	consequence={`This name exactly matches an existing Client at this Practice: ${detailsSave.matches.map((match) => fullName(match)).join(', ')}. Saving keeps this as its own separate record. Nothing is merged.`}
 	confirmLabel="Yes, a different person"
 	error={detailsSave.overrideError}
 	onConfirm={() => detailsSave.confirmOverride()}

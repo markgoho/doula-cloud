@@ -2,7 +2,7 @@
  * Requesting a new Engagement, as the continuum check sees it (#595).
  *
  * `title` starts as the static "Start new work" and becomes
- * `submitLabel` (`Ask to start work with ${displayName}` for a Doula)
+ * `submitLabel` (`Ask to start work with ${fullName}` for a Doula)
  * once the Client loads -- the two strings differ, so `readyText`
  * genuinely gates on the fetch. A Doula role keeps the Owner/Admin-only
  * balance preview out of the mount cascade entirely.

@@ -135,6 +135,15 @@ func TestList_NamesEveryKindOfActorOnce(t *testing.T) {
 	ownerID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "activitypage-actor-owner", "Renata Alvarez", []string{ownerRole}, employeeType)
 	departedID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "activitypage-actor-departed", "Marguerite Vandenberg", []string{doulaRole}, employeeType)
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Margaretha", "activitypage-actor-client@example.com")
+	// #2111: a family name on file, so the client_acted row below proves a
+	// subject-scoped ledger -- a page about one Client, whose heading
+	// already names her in full -- keeps the first name and does not
+	// borrow the Practice-wide feed's full name.
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE clients SET family_name = 'Okafor' WHERE id = $1`, clientID,
+	); err != nil {
+		t.Fatalf("seed family_name: %v", err)
+	}
 
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, "staff_acted", activity.StaffActor(ownerID))
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, "departed_acted", activity.StaffActor(departedID))
@@ -170,6 +179,26 @@ func TestList_NamesEveryKindOfActorOnce(t *testing.T) {
 	for action, name := range want {
 		if got[action] != name {
 			t.Errorf("%s actor = %q, want %q", action, got[action], name)
+		}
+	}
+}
+
+// TestActorName_ClientActorForm is #2111: one Client actor, two readers.
+// A subject-scoped ledger reads her first name; the Practice-wide feed,
+// which sets every Client side by side, reads her full name.
+func TestActorName_ClientActorForm(t *testing.T) {
+	given := sql.NullString{String: "Rebecca", Valid: true}
+	preferred := sql.NullString{String: "Bex", Valid: true}
+	family := sql.NullString{String: "Okafor", Valid: true}
+	for _, tc := range []struct {
+		form activitypage.ClientActorForm
+		want string
+	}{
+		{activitypage.ActorFirstName, "Bex"},
+		{activitypage.ActorFullName, "Bex Okafor"},
+	} {
+		if got := activitypage.ActorName(string(activity.ActorClient), sql.NullString{}, given, preferred, family, tc.form); got != tc.want {
+			t.Errorf("ActorName(form %d) = %q, want %q", tc.form, got, tc.want)
 		}
 	}
 }

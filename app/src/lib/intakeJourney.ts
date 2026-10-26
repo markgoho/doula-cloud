@@ -33,6 +33,7 @@ import type { ClientMatch } from './client.js';
 import type { Field } from './clientFieldTemplate.js';
 import type { IntakeAnswers } from './intakeDraft.svelte.js';
 import type { JourneyStep } from './components/organisms/StepRail.svelte';
+import { firstName } from './personName.js';
 
 /** One page of the Practice-defined layer: a heading a reader sees and
  * the fields asked under it. */
@@ -233,10 +234,12 @@ export interface ClientNames {
  * What the Client is called on a question page: #463's rule with no
  * pronoun in it. Her preferred name if she has one, her given name
  * otherwise, and the domain noun before either is known. Both journeys
- * ask it, each of its own names (#1610).
+ * ask it, each of its own names (#1610). The first name is personName.ts's
+ * `firstName` (#2111), read from typed answers, so each is trimmed first.
  */
 export function knownAsFrom(names: ClientNames | undefined): string {
-	return names?.preferredName.trim() || names?.givenName.trim() || 'the Client';
+	if (!names) return 'the Client';
+	return firstName({ givenName: names.givenName.trim(), preferredName: names.preferredName.trim() }) || 'the Client';
 }
 
 function capitalizeFirst(text: string): string {

@@ -20,7 +20,10 @@ const awaitingPageSize = 30
 // AwaitingReplyItem is one Engagement whose thread's latest Message was
 // sent by the Client -- awaiting a staff reply.
 type AwaitingReplyItem struct {
-	EngagementID  string    `json:"engagementId"`
+	EngagementID string `json:"engagementId"`
+	// ClientName is personname.Full (#2111): the Overview's "Clients
+	// waiting on a reply" table sets every waiting Client side by side,
+	// and two who share a first name must read apart.
 	ClientName    string    `json:"clientName"`
 	LastMessageAt time.Time `json:"lastMessageAt"`
 }
@@ -127,7 +130,7 @@ const awaitingReplyLateral = `JOIN LATERAL (
 // Doula -- filtered by practiceID explicitly, on top of the RLS scoping
 // staffauth.Middleware already set up on tx.
 func listAwaitingReply(ctx context.Context, tx *sql.Tx, practiceID string, after *pagecursor.Cursor) ([]AwaitingReplyItem, error) {
-	query := `SELECT e.id, c.given_name, c.preferred_name, m.created_at
+	query := `SELECT e.id, c.given_name, c.preferred_name, c.family_name, m.created_at
 		FROM engagements e
 		JOIN clients c ON c.id = e.client_id
 		` + awaitingReplyLateral + `
@@ -157,7 +160,7 @@ func listAwaitingReply(ctx context.Context, tx *sql.Tx, practiceID string, after
 // rather than a per-row round trip since this list is already homogeneous
 // (Engagement only, unlike #486's cross-subject-kind feed).
 func listAttachedAwaitingReply(ctx context.Context, tx *sql.Tx, practiceID, staffID string, after *pagecursor.Cursor) ([]AwaitingReplyItem, error) {
-	query := `SELECT e.id, c.given_name, c.preferred_name, m.created_at
+	query := `SELECT e.id, c.given_name, c.preferred_name, c.family_name, m.created_at
 		FROM engagements e
 		JOIN clients c ON c.id = e.client_id
 		` + awaitingReplyLateral + `
@@ -190,12 +193,12 @@ func scanAwaitingReplyItems(rows *sql.Rows) ([]AwaitingReplyItem, error) {
 	for rows.Next() {
 		var item AwaitingReplyItem
 		var givenName string
-		var preferredName sql.NullString
-		if err := rows.Scan(&item.EngagementID, &givenName, &preferredName, &item.LastMessageAt); err != nil {
+		var preferredName, familyName sql.NullString
+		if err := rows.Scan(&item.EngagementID, &givenName, &preferredName, &familyName, &item.LastMessageAt); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("message: scan awaiting reply item: %w", err)
 		}
-		item.ClientName = personname.Preferred(givenName, preferredName.String)
+		item.ClientName = personname.Full(givenName, preferredName.String, familyName.String)
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {

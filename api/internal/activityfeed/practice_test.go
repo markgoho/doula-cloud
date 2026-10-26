@@ -66,6 +66,15 @@ func TestPracticeHandler_ResolvesActorNameForEveryActorKind(t *testing.T) {
 	practiceID := testdb.SeedPractice(t, db, "Feed Actor Names Practice")
 	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, employeeType)
 	clientID, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Amara", "feed-actor-names@example.com", "active")
+	// #2111: this feed sets every Client at the Practice side by side, so a
+	// Client actor reads her full name in Who, the same words the row's
+	// own subject name reads (#2095), and two Amaras who both sign read
+	// apart.
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE clients SET family_name = 'Brooks' WHERE id = $1`, clientID,
+	); err != nil {
+		t.Fatalf("seed family_name: %v", err)
+	}
 
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractSigned), activity.ClientActor(clientID))
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionOfferSent), activity.SystemActor())
@@ -86,8 +95,8 @@ func TestPracticeHandler_ResolvesActorNameForEveryActorKind(t *testing.T) {
 	for _, entry := range got.Items {
 		byAction[entry.Action] = entry
 	}
-	if got := byAction[string(activity.ActionContractSigned)]; got.ActorKind != "client" || got.ActorName != "Amara" {
-		t.Fatalf("client actor = %+v, want kind=client name=Amara", got)
+	if got := byAction[string(activity.ActionContractSigned)]; got.ActorKind != "client" || got.ActorName != "Amara Brooks" {
+		t.Fatalf("client actor = %+v, want kind=client name=Amara Brooks", got)
 	}
 	if got := byAction[string(activity.ActionOfferSent)]; got.ActorKind != "system" || got.ActorName != activity.SystemActorName {
 		t.Fatalf("system actor = %+v, want kind=system name=%q", got, activity.SystemActorName)

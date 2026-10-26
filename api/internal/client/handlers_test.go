@@ -699,6 +699,49 @@ func TestListHandler_ClientShapedDefaultFiltersToWork(t *testing.T) {
 	}
 }
 
+// TestListHandler_NamesEachClientInFull is #2111: the Clients list sets
+// every Client side by side, so a row names her by personname.Full -- two
+// Quinns read apart by the family name, and a preferred name leads it.
+func TestListHandler_NamesEachClientInFull(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-listing-full-names"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	quinnBishop, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Quinn", "quinn-bishop@example.com", "active")
+	quinnFalk, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Quinn", "quinn-falk@example.com", "active")
+	bex, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Rebecca", "bex@example.com", "active")
+	for _, seed := range []struct{ id, family, preferred string }{
+		{quinnBishop, "Bishop", ""},
+		{quinnFalk, "Falk", ""},
+		{bex, "Okafor", "Bex"},
+	} {
+		if _, err := db.Admin.ExecContext(t.Context(),
+			`UPDATE clients SET family_name = $2, preferred_name = NULLIF($3, '') WHERE id = $1`,
+			seed.id, seed.family, seed.preferred,
+		); err != nil {
+			t.Fatalf("seed names: %v", err)
+		}
+	}
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients")
+	defer resp.Body.Close()
+	var listResp client.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	got := map[string]string{}
+	for _, item := range listResp.Items {
+		got[item.ClientID] = item.Name
+	}
+	for id, want := range map[string]string{quinnBishop: "Quinn Bishop", quinnFalk: "Quinn Falk", bex: "Bex Okafor"} {
+		if got[id] != want {
+			t.Errorf("Name = %q, want %q", got[id], want)
+		}
+	}
+}
+
 // TestListHandler_PendingRequestKindsOnRow proves ADR-0017's "Refusal, and
 // the Client it leaves behind" and #499's row-level pending indicator
 // together: a pending Request's kind(s) surface on the row, a refused-only

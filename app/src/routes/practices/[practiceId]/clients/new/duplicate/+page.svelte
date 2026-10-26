@@ -31,7 +31,7 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { editClient, type ClientMatch } from '#lib/client.js';
-	import { displayName } from '#lib/clientDetail.js';
+	import { fullName } from '#lib/personName.js';
 	import { formatCalendarDay } from '#lib/dates.js';
 	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
@@ -112,7 +112,7 @@
 	const options = $derived([
 		...intakeDraft.matches.map((match) => ({
 			value: match.id,
-			label: displayName(match),
+			label: fullName(match),
 			description: matchDescription(match)
 		})),
 		{
@@ -182,7 +182,7 @@
 		journey={JOURNEY}
 		{steps}
 		backHref="{base}/duplicate"
-		question={{ as: 'legend', text: `Save these changes to ${displayName(reviewing)}?` }}
+		question={{ as: 'legend', text: `Save these changes to ${fullName(reviewing)}?` }}
 		hint="No new record is created. The record already on file is kept and updated."
 		errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 	>

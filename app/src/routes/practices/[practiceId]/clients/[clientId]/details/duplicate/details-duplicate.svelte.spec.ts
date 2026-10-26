@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { CollisionMatch } from '#lib/client.js';
-import { displayName } from '#lib/clientDetail.js';
+import { fullName } from '#lib/personName.js';
 import { editMergeDraft } from '#lib/editMergeDraft.svelte.js';
 import { detailsSavedMessage } from '#lib/intakeJourney.js';
 import { captureLanding } from '#lib/testOutcome.js';
@@ -78,7 +78,7 @@ describe('when gate two names a possible duplicate', () => {
 		await setup();
 
 		await expect
-			.element(testPage.getByLabelText(displayName(matches[0])).first())
+			.element(testPage.getByLabelText(fullName(matches[0])).first())
 			.toBeVisible();
 		await expect.element(testPage.getByLabelText('No, a different person')).toBeVisible();
 		await expect
@@ -115,7 +115,7 @@ describe('when gate two names a possible duplicate', () => {
 	it('reviews the changes before writing them', async () => {
 		await setup();
 
-		await testPage.getByLabelText(displayName(matches[0])).first().click();
+		await testPage.getByLabelText(fullName(matches[0])).first().click();
 		await testPage.getByRole('button', { name: 'Continue' }).click();
 
 		expect(goto).toHaveBeenCalledWith(`${base}?match=${matches[0]!.id}`);
@@ -128,7 +128,7 @@ describe('when gate two names a possible duplicate', () => {
 		});
 
 		await expect
-			.element(testPage.getByText(`Save these changes to ${displayName(matches[0])}?`))
+			.element(testPage.getByText(`Save these changes to ${fullName(matches[0])}?`))
 			.toBeVisible();
 
 		const landing = captureLanding(goto);
@@ -149,7 +149,7 @@ describe('when gate two names a possible duplicate', () => {
 		editMergeDraft.open(clientId, fields, [noChangeMatch]);
 		await setup({ respond: jsonResponse({ id: noChangeMatch.id, ...fields }) });
 
-		await testPage.getByLabelText(displayName(noChangeMatch)).first().click();
+		await testPage.getByLabelText(fullName(noChangeMatch)).first().click();
 		await testPage.getByRole('button', { name: 'Continue' }).click();
 
 		expect(goto).toHaveBeenCalledWith(detailHref(noChangeMatch.id));
@@ -165,7 +165,7 @@ describe('when gate two names a possible duplicate', () => {
 			wouldSurvive: false
 		};
 		editMergeDraft.open(clientId, survivorFields, [absorbed]);
-		const survivorName = displayName({ ...survivorFields, id: clientId });
+		const survivorName = fullName(survivorFields);
 		await setup({ search: `?match=${absorbed.id}`, respond: jsonResponse({ id: clientId, ...survivorFields }) });
 
 		await expect
@@ -205,7 +205,7 @@ describe('what the page says a merge actually does', () => {
 		editMergeDraft.open(clientId, fields, [attachedMatch]);
 		await setup();
 
-		await expect.element(testPage.getByLabelText(displayName(attachedMatch)).first()).toBeVisible();
+		await expect.element(testPage.getByLabelText(fullName(attachedMatch)).first()).toBeVisible();
 		await expect
 			.element(testPage.getByText("can't be combined with another record", { exact: false }))
 			.not.toBeInTheDocument();

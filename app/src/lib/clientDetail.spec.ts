@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-	displayName,
 	loadClientDetail,
 	pendingRequests,
 	resolvedFieldGroups,
@@ -24,35 +23,6 @@ describe('loadClientDetail', () => {
 		const fetcher = vi.fn().mockResolvedValue(response('client not found', 404));
 
 		await expect(loadClientDetail(fetcher, 'practice-1', 'client-1')).rejects.toThrow('client not found');
-	});
-});
-
-describe('displayName', () => {
-	const base = {
-		id: 'c1',
-		givenName: 'Ada',
-		familyName: 'Lovelace',
-		preferredName: '',
-		email: '',
-		phone: '',
-		addressLine1: '',
-		addressLine2: '',
-		addressLocality: '',
-		addressRegion: '',
-		addressPostalCode: '',
-		dateOfBirth: ''
-	};
-
-	it('reads the preferred name when set', () => {
-		expect(displayName({ ...base, preferredName: 'Ada' })).toBe('Ada');
-	});
-
-	it('falls back to given plus family name', () => {
-		expect(displayName(base)).toBe('Ada Lovelace');
-	});
-
-	it('falls back to given name alone when family name is unset', () => {
-		expect(displayName({ ...base, familyName: '' })).toBe('Ada');
 	});
 });
 

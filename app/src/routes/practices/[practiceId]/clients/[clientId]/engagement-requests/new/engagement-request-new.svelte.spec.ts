@@ -2,7 +2,8 @@ import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
-import { displayName, type ClientDetail, type EngagementSummary } from '#lib/clientDetail.js';
+import { type ClientDetail, type EngagementSummary } from '#lib/clientDetail.js';
+import { fullName } from '#lib/personName.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../../../../routeFixture.js';
 import type { RequestDoulas } from '#lib/engagementRequest.js';
@@ -36,7 +37,7 @@ vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
 const { practiceId, clientId } = fixture.params;
 const clientDetailHref = `/practices/${practiceId}/clients/${clientId}`;
-const clientName = displayName(baseDetail);
+const clientName = fullName(baseDetail);
 // What every message about her calls her: her preferred name, or her
 // given name (#463).
 const knownAs = knownAsFrom(baseDetail);

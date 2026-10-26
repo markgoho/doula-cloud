@@ -50,14 +50,17 @@ func TestDetailHandler_Success(t *testing.T) {
 
 // TestDetailHandler_ClientDisplayName proves the page's title carries her
 // family name, as her own Client record's title does, while clientName
-// stays the conversation name (#2004).
+// stays the conversation name (#2004). A preferred name leads the title
+// and keeps the family name after it (#2111): the title is
+// personname.Full, so "Ama" alone never titles a record whose family name
+// is on file.
 func TestDetailHandler_ClientDisplayName(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-viewing-display-name"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
 	clientID, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Amara", "amara@example.com", engagement.StatusActive)
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE clients SET family_name = 'Okafor' WHERE id = $1`, clientID,
+		`UPDATE clients SET family_name = 'Okafor', preferred_name = 'Ama' WHERE id = $1`, clientID,
 	); err != nil {
 		t.Fatalf("seed family_name: %v", err)
 	}
@@ -72,8 +75,8 @@ func TestDetailHandler_ClientDisplayName(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if d.ClientDisplayName != "Amara Okafor" || d.ClientName != "Amara" {
-		t.Fatalf("clientDisplayName = %q, clientName = %q, want %q and %q", d.ClientDisplayName, d.ClientName, "Amara Okafor", "Amara")
+	if d.ClientDisplayName != "Ama Okafor" || d.ClientName != "Ama" {
+		t.Fatalf("clientDisplayName = %q, clientName = %q, want %q and %q", d.ClientDisplayName, d.ClientName, "Ama Okafor", "Ama")
 	}
 }
 
