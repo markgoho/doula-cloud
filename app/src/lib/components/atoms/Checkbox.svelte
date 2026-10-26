@@ -65,16 +65,68 @@
 
 <style>
 	@layer components {
-		input {
-			inline-size: 1.5rem;
-			block-size: 1.5rem;
-			accent-color: var(--color-primary);
+		/*
+		 * GOV.UK's box, drawn on the real <input> (#2014), the same way
+		 * RadioGroup draws its circle (#1518): `--choice-size` square, a
+		 * `--border-active` edge, and a tick when chosen. The browser's
+		 * own box, tinted by accent-color, was 24px beside a 40px radio
+		 * on the same form, and its edge is whatever the engine draws.
+		 * The tick is the box's ::before, an L of two borders turned
+		 * through 45 degrees, every length a share of the box so it
+		 * keeps its shape at any size.
+		 */
+		input:not(.toggle) {
+			appearance: none;
+			position: relative;
+			flex-shrink: 0;
+			inline-size: var(--choice-size);
+			block-size: var(--choice-size);
+			/* Never smaller than the text beside it, for the reason
+			   RadioGroup gives: a box with `appearance: none` and no token
+			   to size it would be a box of nothing. */
+			min-inline-size: 1em;
+			min-block-size: 1em;
+			margin: 0;
+			border: var(--border-active) solid var(--color-on-surface);
+			border-radius: 0;
+			background-color: var(--color-surface);
 			cursor: pointer;
 		}
 
-		input.invalid {
-			outline: var(--focus-ring-width) solid var(--color-error);
-			outline-offset: var(--focus-ring-offset);
+		input:not(.toggle):checked {
+			border-color: var(--color-primary);
+			background-color: var(--color-primary);
+		}
+
+		input:not(.toggle):checked::before {
+			content: '';
+			position: absolute;
+			inset-block-start: 22%;
+			inset-inline-start: 18%;
+			inline-size: 55%;
+			block-size: 28%;
+			border: solid var(--color-on-primary);
+			border-width: 0 0 calc(var(--choice-size) / 8) calc(var(--choice-size) / 8);
+			rotate: -45deg;
+		}
+
+		/* A refused box takes the error color on its edge, the way a
+		   refused radio's ring does, beside the message above it. A
+		   ticked one keeps its own color: it is usually the answer. */
+		input.invalid:not(:checked) {
+			border-color: var(--color-error);
+		}
+
+		/* Windows High Contrast drops the painted background and the
+		   tick with it, so the system's own box is handed back. */
+		@media (forced-colors: active) {
+			input:not(.toggle) {
+				appearance: auto;
+			}
+
+			input:not(.toggle):checked::before {
+				content: none;
+			}
 		}
 
 		input:disabled {

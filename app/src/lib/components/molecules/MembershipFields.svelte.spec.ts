@@ -47,6 +47,23 @@ describe('MembershipFields', () => {
 		expect(onRolesChange).toHaveBeenCalledWith(['doula']);
 	});
 
+	// #2014: the words alone do not say what is being chosen.
+	it('carries a one-line hint under every role and every employment type', async () => {
+		await setup();
+
+		for (const name of ['Owner', 'Admin', 'Doula']) {
+			const box = page.getByRole('checkbox', { name }).element();
+			expect(box.getAttribute('aria-describedby')).not.toBeNull();
+		}
+		for (const name of ['Employee', 'Contractor']) {
+			const radio = page.getByRole('radio', { name }).element();
+			expect(radio.getAttribute('aria-describedby')).not.toBeNull();
+		}
+		await expect
+			.element(page.getByRole('checkbox', { name: 'Admin' }))
+			.toHaveAccessibleDescription('Looks after Clients, Contracts, Invoices and scheduling');
+	});
+
 	it('reports the employment type chosen', async () => {
 		const { onEmploymentTypeChange } = await setup({ employmentType: 'employee' });
 

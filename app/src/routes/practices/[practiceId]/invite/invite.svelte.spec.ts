@@ -187,7 +187,7 @@ describe('invite a Staff member screen', () => {
 		// first checkbox, and under the group's own legend.
 		await expect
 			.element(testPage.getByRole('link', { name: 'Select at least one role' }))
-			.toHaveAttribute('href', '#invite-roles');
+			.toHaveAttribute('href', '#invite-roles-owner');
 		await expect.element(testPage.getByText('Select at least one role').last()).toBeVisible();
 		// Nothing was sent, so nothing is confirmed as on its way.
 		await expect

@@ -182,6 +182,18 @@
 	/* Fixed dimensions the brief states as numbers. Tokens rather than magic
 	   numbers, so #431's shell and #422's Templates share one source. */
 	--control-height: 2.5rem;
+	/* The checkbox's box and the radio's circle (#2014): one size, so a
+	   form that asks both reads as one product. GOV.UK's 40px, the height
+	   of a text input, which was the radio's size already (#1518) and was
+	   24px on the box beside it. */
+	--choice-size: var(--control-height);
+	/* From that box or circle to its own label's text, decided once
+	   (#2014): RadioGroup, CheckboxGroup and LabeledField's inline
+	   orientation all read it. 16px at the narrowest container, about
+	   GOV.UK's 15px, and never so wide that the text drifts nearer the
+	   next option than its own box, which is what F-C-4 found when a
+	   group's options bypassed it. */
+	--choice-gap: var(--space-4);
 	/* A table row's whole box, its 1px rule included: 40px when every
 	   input is fine, and raised by the coarse-pointer block below (#1843).
 	   --row-target-min is what is left inside the rule, which is the floor

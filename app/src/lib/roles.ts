@@ -47,6 +47,23 @@ export const EMPLOYMENT_TYPE_LABELS: readonly LabeledValue<EmploymentType>[] = [
 	{ value: 'contractor', label: 'Contractor' }
 ];
 
+/** One line under each role and each employment type on the invite and
+ * Membership edit forms (#2014): the words alone do not say what an Owner
+ * is choosing, and "Admin" in particular is narrower than it sounds. Each
+ * is GLOSSARY.md's meaning, said aloud. Here rather than in
+ * `MembershipFields` because this file is the one place these values are
+ * put into words (`roles.usage.spec.ts`). */
+export const ROLE_DESCRIPTIONS: Readonly<Record<string, string>> = {
+	owner: 'Runs the Practice: its Staff, its Plan Templates and its billing',
+	admin: 'Looks after Clients, Contracts, Invoices and scheduling',
+	doula: 'Works with Clients, on Engagements and Visits'
+};
+
+export const EMPLOYMENT_TYPE_DESCRIPTIONS: Readonly<Record<EmploymentType, string>> = {
+	employee: 'Inside the business, and sees every Engagement at this Practice',
+	contractor: 'Outside the business, and sees only the work offered and accepted, unless also an Owner or Admin'
+};
+
 /**
  * The display word for one stored `practice_role` value.
  *

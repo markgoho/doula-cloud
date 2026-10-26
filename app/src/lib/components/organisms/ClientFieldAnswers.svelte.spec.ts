@@ -33,6 +33,12 @@ async function setup(values: Record<string, FieldValue> = {}) {
 	return { onChange };
 }
 
+/* A box is found inside its own question's group, as a screen reader
+   meets it: the legend names the question, the label the option. */
+function attendeesGroup() {
+	return page.getByRole('group', { name: 'Who else is expected' });
+}
+
 describe('ClientFieldAnswers', () => {
 	it('asks every field the Practice defined, by its own label', async () => {
 		await setup();
@@ -77,11 +83,14 @@ describe('ClientFieldAnswers', () => {
 	});
 
 	// The save is free, so every Practice-defined question needs a real
-	// unanswered state -- which is what the placeholder is.
-	it('offers an unanswered state on a single choice', async () => {
-		await setup();
+	// unanswered state -- and it stays selectable, so an answer can be
+	// taken back (#2014).
+	it('offers an unanswered state on a single choice, and lets an answer be taken back', async () => {
+		const { onChange } = await setup({ birthplace: 'Home' });
 
-		await expect.element(page.getByText('Not answered yet')).toBeInTheDocument();
+		await page.getByLabelText('Planned place of birth').selectOptions('Not answered yet');
+
+		expect(onChange).toHaveBeenCalledWith('birthplace', '');
 	});
 
 	it('groups a multi-select under its own question', async () => {
@@ -93,7 +102,7 @@ describe('ClientFieldAnswers', () => {
 	it('adds a choice to a multi-select', async () => {
 		const { onChange } = await setup({ attendees: ['Partner'] });
 
-		await page.getByLabelText('Who else is expected: Mother').click();
+		await attendeesGroup().getByLabelText('Mother').click();
 
 		expect(onChange).toHaveBeenCalledWith('attendees', ['Partner', 'Mother']);
 	});
@@ -101,7 +110,7 @@ describe('ClientFieldAnswers', () => {
 	it('takes a choice back out of a multi-select', async () => {
 		const { onChange } = await setup({ attendees: ['Partner', 'Mother'] });
 
-		await page.getByLabelText('Who else is expected: Partner').click();
+		await attendeesGroup().getByLabelText('Partner').click();
 
 		expect(onChange).toHaveBeenCalledWith('attendees', ['Mother']);
 	});
@@ -109,9 +118,17 @@ describe('ClientFieldAnswers', () => {
 	it('reads a multi-select value that is not a list as nothing chosen', async () => {
 		const { onChange } = await setup({ attendees: 'Partner' });
 
-		await page.getByLabelText('Who else is expected: Mother').click();
+		await attendeesGroup().getByLabelText('Mother').click();
 
 		expect(onChange).toHaveBeenCalledWith('attendees', ['Mother']);
+	});
+
+	it('keeps a stored choice the question no longer offers', async () => {
+		const { onChange } = await setup({ attendees: ['Doula'] });
+
+		await attendeesGroup().getByLabelText('Partner').click();
+
+		expect(onChange).toHaveBeenCalledWith('attendees', ['Partner', 'Doula']);
 	});
 
 	it('reports a checkbox as ticked or not', async () => {

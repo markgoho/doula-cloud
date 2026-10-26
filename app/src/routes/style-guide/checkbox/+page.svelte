@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 
 	const noop = () => {};
 
@@ -14,8 +15,8 @@
 
 	<section>
 		<h2>Default</h2>
-		<label><Checkbox checked={isUnchecked} onChange={(value) => (isUnchecked = value)} /> Unchecked</label>
-		<label><Checkbox checked={isChecked} onChange={(value) => (isChecked = value)} /> I have read this Contract and I am signing it electronically</label>
+		<LabeledField label="Unchecked" orientation="inline">{#snippet children(control)}<Checkbox checked={isUnchecked} onChange={(value) => (isUnchecked = value)} {...control} />{/snippet}</LabeledField>
+		<LabeledField label="I have read this Contract and I am signing it electronically" orientation="inline">{#snippet children(control)}<Checkbox checked={isChecked} onChange={(value) => (isChecked = value)} {...control} />{/snippet}</LabeledField>
 	</section>
 
 	<section>
@@ -25,13 +26,13 @@
 
 	<section>
 		<h2>Invalid</h2>
-		<label><Checkbox checked={false} onChange={noop} invalid /> I agree to sign electronically, continue</label>
+		<LabeledField label="I agree to sign electronically, continue" orientation="inline">{#snippet children(control)}<Checkbox {...control} checked={false} onChange={noop} invalid />{/snippet}</LabeledField>
 	</section>
 
 	<section>
 		<h2>Disabled</h2>
-		<label><Checkbox checked={false} onChange={noop} disabled /> Disabled, unchecked</label>
-		<label><Checkbox checked={true} onChange={noop} disabled /> Disabled, checked</label>
+		<LabeledField label="Disabled, unchecked" orientation="inline">{#snippet children(control)}<Checkbox checked={false} onChange={noop} disabled {...control} />{/snippet}</LabeledField>
+		<LabeledField label="Disabled, checked" orientation="inline">{#snippet children(control)}<Checkbox checked={true} onChange={noop} disabled {...control} />{/snippet}</LabeledField>
 	</section>
 
 	<section>

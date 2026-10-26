@@ -45,10 +45,25 @@
 			options: ['My partner, for the whole labor', 'My Doula from Highland Midwifery'],
 			order: 5
 		},
-		{ id: 'music', type: 'checkbox', label: 'Music playing throughout the labor', order: 6 }
+		{ id: 'music', type: 'checkbox', label: 'Music playing throughout the labor', order: 6 },
+		{
+			id: 'after',
+			type: 'section_header',
+			label: 'In the first hours after the birth',
+			order: 7
+		},
+		{
+			id: 'feeding',
+			type: 'single_select',
+			label: 'How do you plan to feed your baby at first?',
+			options: ['Breastfeeding', 'Formula', 'Not sure yet'],
+			order: 8
+		}
 	];
 
 	let answers = $state<Answers>({
+		people: ['My Doula from Highland Midwifery'],
+		pain: 'Nothing unless I specifically ask a member of the birth team for it',
 		preference: 'Standing, or leaning on the bed if I get tired',
 		notes:
 			'The playlist is at https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake'
