@@ -56,6 +56,24 @@ export interface Invoice {
 	refundedCents: number;
 }
 
+/** One Invoice as a contractor Doula reads it on her own Engagement
+ * (#2094, ADR-0008's amendment of 2026-10-26): its days and its status,
+ * and no money at all. A type of its own, not `Invoice` with fields left
+ * out, because the BFF sends her a struct with no money field
+ * (`payments.ContractorInvoiceView`), and this type must not claim one. */
+export interface ContractorInvoice {
+	id: string;
+	status: string;
+	/** The day the Invoice was raised, `YYYY-MM-DD`, in the Practice's own
+	 * timezone. */
+	raisedOn: string;
+	dueOn: string;
+	paidOn?: string;
+	/** Counted by the BFF as the Practice-wide list counts it: 0 unless the
+	 * Invoice is open and past its due day. */
+	daysOverdue: number;
+}
+
 /** The two kinds of Payment that can cover an Invoice -- see
  * Invoice.activePaymentKind. */
 export type ActivePaymentKind = 'stripe' | 'manual';
@@ -178,6 +196,23 @@ export async function loadInvoices(fetcher: Fetcher, practiceId: string, engagem
 		throw new Error(await apiErrorMessage(response));
 	}
 	const body: { items: Invoice[] } = await response.json();
+	return body.items;
+}
+
+/** Loads the same route as loadInvoices for a contractor Doula (#2094):
+ * the BFF answers her with each Invoice's days and status and no money,
+ * so the rows are typed as what she is sent. Only the first page, as
+ * loadInvoices. */
+export async function loadContractorInvoices(
+	fetcher: Fetcher,
+	practiceId: string,
+	engagementId: string
+): Promise<ContractorInvoice[]> {
+	const response = await fetcher(invoicesPath(practiceId, engagementId));
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	const body: { items: ContractorInvoice[] } = await response.json();
 	return body.items;
 }
 
@@ -508,18 +543,33 @@ export function unbillableContractMessage(status: string): string {
 	return 'Invoicing is unavailable until the Client signs this Contract.';
 }
 
-/** What a contractor Doula reads in place of the Invoice list (#2002):
- * information, not an error, because nothing went wrong. ADR-0008 (as
- * amended on #282) gives her "her own agreed fee only -- never the
- * Practice's price", so the list and its amounts are not hers to read,
- * and the fee that is hers is on the same page. */
+/** What a contractor Doula reads under her Invoice rows (#2094):
+ * information, not an error. ADR-0008 (amended 2026-10-26) gives her each
+ * Invoice's date and status and never its money, so the line says what
+ * she sees, what she does not, and where the money that is hers is. */
 export const contractorInvoicesMessage =
-	'You contract for this Practice, so you do not see its Invoices or what the Client pays. Your own fee is in the Contract section.';
+	'You see when each Invoice was raised and where it stands, not what the Client pays. Your own fee is in the Contract section.';
 
-/** What a Staff member who cannot read the Invoice list reads after
- * Create Invoice works (#2002): with no list to add a row to, this is
- * the only sign that the press did something. */
+/** What a Staff member reads after Create Invoice works (#2002, #2106):
+ * the press closed the form or the button she pressed, so a status that
+ * takes focus says it worked, above the row it added. */
 export const invoiceCreatedMessage = 'Invoice created.';
+
+/** The status a contractor's Invoice row shows (#2094): Overdue in place
+ * of Open once the BFF counts it late, because lateness is the one status
+ * the stored value does not say. Every other status reads as it does for
+ * everyone, through invoiceStatusLabel. */
+export function contractorInvoiceStatusLabel(invoice: Pick<ContractorInvoice, 'status' | 'daysOverdue'>): string {
+	return invoice.daysOverdue > 0 ? 'Overdue' : invoiceStatusLabel(invoice.status);
+}
+
+/** The Badge variant beside contractorInvoiceStatusLabel: Overdue is the
+ * warning, as late money is on the Practice-wide list. */
+export function contractorInvoiceStatusVariant(
+	invoice: Pick<ContractorInvoice, 'status' | 'daysOverdue'>
+): 'info' | 'success' | 'warning' | 'neutral' {
+	return invoice.daysOverdue > 0 ? 'warning' : invoiceStatusVariant(invoice.status);
+}
 
 /** The message InvoiceSection shows in place of the Create Invoice form
  * when Clients cannot pay this Practice yet (#270) -- a fact about the

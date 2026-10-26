@@ -92,6 +92,7 @@
 	import InvoiceSection from '#lib/components/organisms/InvoiceSection.svelte';
 	import {
 		loadInvoices,
+		loadContractorInvoices,
 		createInvoice,
 		loadBillingMode,
 		recordPayment,
@@ -100,6 +101,7 @@
 		voidInvoice,
 		writeOffInvoice,
 		type BillingMode,
+		type ContractorInvoice,
 		type Invoice,
 		type PaymentMethod,
 		type RefundPaymentInput
@@ -695,7 +697,10 @@
 	// Named invoicesState for the same reason as contractState above.
 	const invoicesState = new SectionState<Invoice[]>([]);
 	const invoices = $derived(invoicesState.value);
-	const invoicesError = $derived(invoicesState.error);
+	// #2094: a contractor's rows, dates and status with no money, read
+	// from the same route in a shape of their own.
+	const contractorInvoicesState = new SectionState<ContractorInvoice[]>([]);
+	const invoicesError = $derived(invoicesState.error || contractorInvoicesState.error);
 
 	// #271: undefined until this Practice has chosen a billing rail --
 	// InvoiceSection itself decides what to render for that, from the
@@ -1176,14 +1181,17 @@
 	}
 
 	async function loadInvoicesSection() {
-		// #2002: a contractor never reads Invoice history (ADR-0008, as
-		// amended on #282), and the BFF refuses her the list. Asking anyway
-		// put that refusal on her screen as an error, then "No Invoices
-		// yet." beside Invoices that exist. InvoiceSection says what she
-		// can and cannot see here instead.
+		// #2094: a contractor reads each Invoice's dates and status and never
+		// its money (ADR-0008, amended 2026-10-26), so the BFF answers her
+		// with rows of their own; everyone else reads the list with money.
 		if (canReadContractMoney) {
 			await invoicesState.load(
 				() => loadInvoices(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!),
+				'Failed to load invoices'
+			);
+		} else {
+			await contractorInvoicesState.load(
+				() => loadContractorInvoices(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!),
 				'Failed to load invoices'
 			);
 		}
@@ -1223,12 +1231,14 @@
 			page.params.engagementId!,
 			chosenBillingMode
 		);
-		// #2002: a contractor's 201 names no amount (RaisedInvoice), and
-		// she has no list to add it to; only the rail it went on is hers.
+		// #2002: a contractor's 201 names no amount (RaisedInvoice), so her
+		// new row is read back in her own shape (#2094) rather than spliced.
+		billingModeState.value = invoice.billingMode;
 		if (canReadContractMoney) {
 			invoicesState.value = [invoice, ...invoicesState.value];
+		} else {
+			await loadInvoicesSection();
 		}
-		billingModeState.value = invoice.billingMode;
 	}
 
 	// #271: reported by InvoiceSection's onRecordPayment/onVoidInvoice/
@@ -2434,7 +2444,8 @@
 			hasClientEmail={hasClientEmailOnFile}
 			isOwner={isPracticeOwner}
 			isOwnerOrAdmin={isPracticeOwnerOrAdmin}
-			canReadInvoices={canReadContractMoney}
+			canReadInvoiceMoney={canReadContractMoney}
+			contractorInvoices={contractorInvoicesState.value}
 			{practiceTimezone}
 			{paymentsSettingsHref}
 			onCreate={handleCreateInvoice}

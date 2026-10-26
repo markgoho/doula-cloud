@@ -1,6 +1,6 @@
 <script lang="ts">
 	import InvoiceSection from '#lib/components/organisms/InvoiceSection.svelte';
-	import type { Invoice } from '#lib/invoice.js';
+	import type { ContractorInvoice, Invoice } from '#lib/invoice.js';
 
 	/*
 	 * The longest realistic value, not a representative one (ADR-0025): an
@@ -55,7 +55,18 @@
 		{ ...invoices[0], id: 'in_4', activePaymentId: 'pay_4', activePaymentKind: 'stripe' }
 	];
 
-	const paymentsSettingsHref = 'https://example.test/practices/practice-1/settings/payments';
+	/*
+	 * #2094: a contractor's rows, one of each state they draw differently --
+	 * late (Overdue, the longest status word, and the widest day), paid (a
+	 * Paid day) and void.
+	 */
+	const contractorInvoices: ContractorInvoice[] = [
+		{ id: 'in_5', status: 'open', raisedOn: '2027-09-14', dueOn: '2027-10-14', daysOverdue: 12 },
+		{ id: 'in_6', status: 'paid', raisedOn: '2027-11-30', dueOn: '2027-12-30', paidOn: '2027-12-28', daysOverdue: 0 },
+		{ id: 'in_7', status: 'void', raisedOn: '2027-12-31', dueOn: '2028-01-30', daysOverdue: 0 }
+	];
+
+	const paymentsSettingsHref ='https://example.test/practices/practice-1/settings/payments';
 	// #1280: any real IANA zone does -- this page's own todayIsoDate calls
 	// don't depend on which one, only that a real name is there.
 	const practiceTimezone = 'America/New_York';
@@ -238,19 +249,20 @@
 		/>
 	</section>
 
-	<!-- #2002: a contractor Doula reads no Invoice and no Practice price
-	     (ADR-0008, as amended on #282), and may still raise an Invoice.
-	     One information line in place of the list, whatever the list holds. -->
+	<!-- #2094: a contractor Doula reads each Invoice's date and status and
+	     never its money (ADR-0008, amended 2026-10-26), and may still raise
+	     an Invoice. Her rows, then the information line. -->
 	<section>
 		<h2>A contractor Doula</h2>
 		<InvoiceSection
-			{invoices}
+			invoices={[]}
+			{contractorInvoices}
 			contractStatus="signed"
 			clientsCanPay={true}
 			hasClientEmail={true}
 			isOwner={false}
 			isOwnerOrAdmin={false}
-			canReadInvoices={false}
+			canReadInvoiceMoney={false}
 			billingMode="stripe"
 			{paymentsSettingsHref}
 			{practiceTimezone}
@@ -270,6 +282,30 @@
 	     sentence -- the longest words this question has. -->
 	<section>
 		<h2>Billing mode not yet chosen</h2>
+		<InvoiceSection
+			invoices={[]}
+			contractStatus="signed"
+			clientsCanPay={false}
+			hasClientEmail={true}
+			isOwner={false}
+			isOwnerOrAdmin={false}
+			billingMode={undefined}
+			isAskingBillingMode
+			{paymentsSettingsHref}
+			{practiceTimezone}
+			onCreate={async () => {}}
+			onRecordPayment={async () => {}}
+			onVoidInvoice={async () => {}}
+			onWriteOffInvoice={async () => {}}
+			onReversePayment={async () => {}}
+			onRefundPayment={async () => {}}
+		/>
+	</section>
+
+	<!-- #2106: the same Practice before Create Invoice is pressed -- the
+	     section's facts and one action, with the question not yet asked. -->
+	<section>
+		<h2>Billing mode not yet chosen, not yet asked</h2>
 		<InvoiceSection
 			invoices={[]}
 			contractStatus="signed"

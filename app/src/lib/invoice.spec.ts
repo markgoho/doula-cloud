@@ -1,11 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
 	billableContractStatus,
+	contractorInvoiceStatusLabel,
+	contractorInvoiceStatusVariant,
 	createInvoice,
 	formatAmount,
 	invoiceStatusLabel,
 	invoiceStatusVariant,
 	loadBillingMode,
+	loadContractorInvoices,
 	loadInvoices,
 	loadPracticeInvoices,
 	practiceInvoicesPath,
@@ -56,6 +59,41 @@ describe('loadInvoices', () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse('server error', 500));
 
 		await expect(loadInvoices(fetcher, 'practice-1', 'eng-1')).rejects.toThrow('server error');
+	});
+});
+
+describe('loadContractorInvoices (#2094)', () => {
+	it('reads the same path and returns her money-free rows', async () => {
+		const row = { id: 'inv-1', status: 'open', raisedOn: '2026-10-01', dueOn: '2026-10-31', daysOverdue: 0 };
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: [row], hasMore: false }));
+
+		const result = await loadContractorInvoices(fetcher, 'practice-1', 'eng-1');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/engagements/eng-1/contract/invoices');
+		expect(result).toEqual([row]);
+	});
+
+	it('throws with the response body text on a non-ok response', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('engagement not found', 404));
+
+		await expect(loadContractorInvoices(fetcher, 'practice-1', 'eng-1')).rejects.toThrow('engagement not found');
+	});
+});
+
+describe('contractorInvoiceStatusLabel and contractorInvoiceStatusVariant (#2094)', () => {
+	it('reads Overdue, as a warning, once the BFF counts an Invoice late', () => {
+		const late = { status: 'open', daysOverdue: 3 };
+
+		expect(contractorInvoiceStatusLabel(late)).toBe('Overdue');
+		expect(contractorInvoiceStatusVariant(late)).toBe('warning');
+	});
+
+	it('reads every other status as everyone reads it', () => {
+		const paid = { status: 'paid', daysOverdue: 0 };
+
+		expect(contractorInvoiceStatusLabel(paid)).toBe('Paid');
+		expect(contractorInvoiceStatusVariant(paid)).toBe('success');
+		expect(contractorInvoiceStatusLabel({ status: 'open', daysOverdue: 0 })).toBe('Open');
 	});
 });
 

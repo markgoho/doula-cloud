@@ -16,6 +16,7 @@ import '#lib/styles/app.css';
 import { toApiResponder, toPageState } from '../../../../routeFixture.js';
 import {
 	contract as fixtureContract,
+	contractorInvoices,
 	detail as fixtureDetail,
 	fixture,
 	session
@@ -2779,18 +2780,23 @@ describe('what a reader sees about money (#2002, #2003)', () => {
 		await expect.element(testPage.getByText('Your fee')).not.toBeInTheDocument();
 	});
 
-	it('never asks for the Invoice list for a contractor, and says why there is none, as information', async () => {
-		await setupMoney(contractorReader);
+	it("shows a contractor each Invoice's date and status, and says what she does not see, as information (#2094)", async () => {
+		await setupMoney(contractorReader, fixtureDetail, (path, init) =>
+			path.endsWith('/contract/invoices') && init?.method !== 'POST'
+				? jsonResponse({ items: contractorInvoices, hasMore: false })
+				: undefined
+		);
 
+		const invoices = testPage.getByRole('region', { name: 'Invoices', exact: true });
+		await expect.element(invoices.getByRole('cell', { name: 'Aug 1, 2026' })).toBeVisible();
+		await expect.element(invoices.getByRole('cell', { name: 'Overdue' })).toBeVisible();
 		await expect
-			.element(testPage.getByText(/You contract for this Practice, so you do not see its Invoices/))
+			.element(testPage.getByText(/You see when each Invoice was raised and where it stands, not what the Client pays/))
 			.toBeVisible();
-		await expect.element(testPage.getByText('No Invoices yet.')).not.toBeInTheDocument();
-		await expect.element(testPage.getByText(/cannot see its money/)).not.toBeInTheDocument();
-		expect(invoiceListReads()).toHaveLength(0);
+		expect(invoiceListReads()).toHaveLength(1);
 	});
 
-	it('lets a contractor raise an Invoice and tells her it worked, without a list to put it in', async () => {
+	it('lets a contractor raise an Invoice, tells her it worked, and reads her rows again', async () => {
 		await setupMoney(contractorReader, fixtureDetail, (path, init) =>
 			path.endsWith('/contract/invoices') && init?.method === 'POST'
 				? jsonResponse({ id: 'invoice-9', status: 'open', billingMode: 'stripe' }, 201)
@@ -2800,7 +2806,7 @@ describe('what a reader sees about money (#2002, #2003)', () => {
 		await testPage.getByRole('button', { name: 'Create Invoice' }).click();
 
 		await expect.element(testPage.getByText('Invoice created.')).toBeVisible();
-		await expect.element(testPage.getByText('No Invoices yet.')).not.toBeInTheDocument();
+		expect(invoiceListReads()).toHaveLength(2);
 	});
 
 	it('reads and lists the Invoices for an Owner, with no contractor line', async () => {

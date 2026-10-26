@@ -2,7 +2,7 @@ import { page } from 'vitest/browser';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import InvoiceSection from './InvoiceSection.svelte';
-import type { BillingMode, Invoice, PaymentMethod, RefundPaymentInput } from '#lib/invoice.js';
+import type { BillingMode, ContractorInvoice, Invoice, PaymentMethod, RefundPaymentInput } from '#lib/invoice.js';
 import { RefusalError } from '#lib/formErrors.js';
 
 interface SetupOptions {
@@ -18,7 +18,8 @@ interface SetupOptions {
 	hasClientEmail?: boolean;
 	isOwner?: boolean;
 	isOwnerOrAdmin?: boolean;
-	canReadInvoices?: boolean;
+	canReadInvoiceMoney?: boolean;
+	contractorInvoices?: ContractorInvoice[];
 	practiceTimezone?: string;
 	onCreate?: (billingMode?: BillingMode) => Promise<void>;
 	onRecordPayment?: (
@@ -97,7 +98,8 @@ async function setup({
 	hasClientEmail = true,
 	isOwner = false,
 	isOwnerOrAdmin = false,
-	canReadInvoices = true,
+	canReadInvoiceMoney = true,
+	contractorInvoices = [],
 	// America/New_York, the same fixture zone the repo's other timezone
 	// tests use (ADR-0036) -- a zone behind UTC, which is the case the
 	// future-date boundary tests below exercise.
@@ -117,7 +119,8 @@ async function setup({
 		hasClientEmail,
 		isOwner,
 		isOwnerOrAdmin,
-		canReadInvoices,
+		canReadInvoiceMoney,
+		contractorInvoices,
 		practiceTimezone,
 		paymentsSettingsHref,
 		onCreate,
@@ -128,6 +131,14 @@ async function setup({
 		onRefundPayment
 	});
 	return { onCreate, onRecordPayment, onVoidInvoice, onWriteOffInvoice, onReversePayment, onRefundPayment };
+}
+
+/* #2106: the billing-mode question is on the page only once Create Invoice
+ * asks for it, so a test of the question opens it first. */
+async function setupAsked(options: SetupOptions) {
+	const callbacks = await setup(options);
+	await page.getByRole('button', { name: 'Create Invoice' }).click();
+	return callbacks;
 }
 
 afterEach(() => {
@@ -326,8 +337,47 @@ describe('InvoiceSection.svelte', () => {
 	// bills on, inline -- never a routed gate and never assumed from an
 	// absent Stripe Connect account.
 	describe('billing mode not yet chosen (#271)', () => {
+		it('offers one Create Invoice and does not put the question on the page until it is pressed (#2106)', async () => {
+			await setup({ billingMode: 'unset' });
+
+			await expect.element(page.getByRole('button', { name: 'Create Invoice' })).toBeVisible();
+			await expect.element(page.getByText('How does this Practice bill Clients?')).not.toBeInTheDocument();
+		});
+
+		it('opens the question under its own heading, which takes focus (#2106)', async () => {
+			await setupAsked({ billingMode: 'unset' });
+
+			const heading = page.getByRole('heading', { name: 'Create an Invoice' });
+			await expect.element(heading).toBeVisible();
+			await expect.element(heading).toHaveFocus();
+			await expect.element(page.getByRole('group', { name: 'How does this Practice bill Clients?' })).toBeVisible();
+		});
+
+		it('closes the question on Cancel, sends nothing, and forgets the choice (#2106)', async () => {
+			const { onCreate } = await setupAsked({ billingMode: 'unset' });
+
+			await page.getByLabelText('By hand.').click();
+			await page.getByRole('button', { name: 'Cancel' }).click();
+
+			expect(onCreate).not.toHaveBeenCalled();
+			await expect.element(page.getByText('How does this Practice bill Clients?')).not.toBeInTheDocument();
+			await page.getByRole('button', { name: 'Create Invoice' }).click();
+			await expect.element(page.getByLabelText('By hand.')).not.toBeChecked();
+		});
+
+		it('says the Invoice was created once the first raise works (#2106)', async () => {
+			await setupAsked({ billingMode: 'unset' });
+
+			await page.getByLabelText('By hand.').click();
+			await page.getByRole('button', { name: 'Create Invoice' }).click();
+
+			const created = page.getByText('Invoice created.');
+			await expect.element(created).toBeVisible();
+			await expect.element(created).toHaveFocus();
+		});
+
 		it('shows the billing-mode ask with neither cannot-pay Notice', async () => {
-			await setup({ billingMode: 'unset', clientsCanPay: false, hasClientEmail: false });
+			await setupAsked({ billingMode: 'unset', clientsCanPay: false, hasClientEmail: false });
 
 			await expect.element(page.getByText('How does this Practice bill Clients?')).toBeVisible();
 			await expect.element(page.getByLabelText('By card, through Stripe.')).toBeVisible();
@@ -337,7 +387,7 @@ describe('InvoiceSection.svelte', () => {
 		});
 
 		it('says the words of the question, the hint and both options (#1590)', async () => {
-			await setup({ billingMode: 'unset', clientsCanPay: true });
+			await setupAsked({ billingMode: 'unset', clientsCanPay: true });
 
 			await expect.element(page.getByText('You answer this one time. A Practice Owner can change it later in Settings.')).toBeVisible();
 			await expect.element(page.getByText('DoulaCloud sends the bill and the Client pays by card.', { exact: true })).toBeVisible();
@@ -347,26 +397,26 @@ describe('InvoiceSection.svelte', () => {
 		});
 
 		it('selects no option when the question opens (#1590)', async () => {
-			await setup({ billingMode: 'unset' });
+			await setupAsked({ billingMode: 'unset' });
 
 			await expect.element(page.getByLabelText('By card, through Stripe.')).not.toBeChecked();
 			await expect.element(page.getByLabelText('By hand.')).not.toBeChecked();
 		});
 
 		it('warns on the Stripe option, before the choice, when Clients cannot pay yet (#1590)', async () => {
-			await setup({ billingMode: 'unset', clientsCanPay: false });
+			await setupAsked({ billingMode: 'unset', clientsCanPay: false });
 
 			await expect.element(page.getByText('A Practice Owner must connect Stripe first.', { exact: false })).toBeVisible();
 		});
 
 		it('does not warn when Clients can already pay (#1590)', async () => {
-			await setup({ billingMode: 'unset', clientsCanPay: true });
+			await setupAsked({ billingMode: 'unset', clientsCanPay: true });
 
 			await expect.element(page.getByText('must connect Stripe first', { exact: false })).not.toBeInTheDocument();
 		});
 
 		it('submits the chosen mode on the first raise', async () => {
-			const { onCreate } = await setup({ billingMode: 'unset' });
+			const { onCreate } = await setupAsked({ billingMode: 'unset' });
 
 			await page.getByLabelText('By hand.').click();
 			await page.getByRole('button', { name: 'Create Invoice' }).click();
@@ -375,7 +425,7 @@ describe('InvoiceSection.svelte', () => {
 		});
 
 		it('submits Stripe when that option is chosen', async () => {
-			const { onCreate } = await setup({ billingMode: 'unset' });
+			const { onCreate } = await setupAsked({ billingMode: 'unset' });
 
 			await page.getByLabelText('By card, through Stripe.').click();
 			await page.getByRole('button', { name: 'Create Invoice' }).click();
@@ -384,7 +434,7 @@ describe('InvoiceSection.svelte', () => {
 		});
 
 		it('refuses a submit with no option chosen, names the question, and sends no request (#1590)', async () => {
-			const { onCreate } = await setup({ billingMode: 'unset' });
+			const { onCreate } = await setupAsked({ billingMode: 'unset' });
 
 			await page.getByRole('button', { name: 'Create Invoice' }).click();
 
@@ -396,7 +446,7 @@ describe('InvoiceSection.svelte', () => {
 		});
 
 		it('clears the refusal once an option is chosen and the form is sent (#1590)', async () => {
-			const { onCreate } = await setup({ billingMode: 'unset' });
+			const { onCreate } = await setupAsked({ billingMode: 'unset' });
 
 			await page.getByRole('button', { name: 'Create Invoice' }).click();
 			await page.getByLabelText('By hand.').click();
@@ -414,7 +464,7 @@ describe('InvoiceSection.svelte', () => {
 				.mockRejectedValue(
 					new RefusalError('Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe.')
 				);
-			await setup({ billingMode: 'unset', onCreate });
+			await setupAsked({ billingMode: 'unset', onCreate });
 
 			await page.getByLabelText('By card, through Stripe.').click();
 			await page.getByRole('button', { name: 'Create Invoice' }).click();
@@ -431,7 +481,7 @@ describe('InvoiceSection.svelte', () => {
 					billingMode: 'Select how this Practice bills Clients'
 				})
 			);
-			await setup({ billingMode: 'unset', onCreate });
+			await setupAsked({ billingMode: 'unset', onCreate });
 
 			await page.getByLabelText('By hand.').click();
 			await page.getByRole('button', { name: 'Create Invoice' }).click();
@@ -1071,34 +1121,73 @@ describe('InvoiceSection.svelte', () => {
 	});
 });
 
-// #2002: a contractor Doula reads no Invoice history and no Practice price
-// (ADR-0008, as amended on #282), and may still raise an Invoice (its write
-// table). The section says so once, as information, and never pretends the
-// list is empty.
-describe('InvoiceSection.svelte for a reader who cannot see Invoices (#2002)', () => {
-	it('says what she can and cannot see, as information and not as an error', async () => {
-		await setup({ canReadInvoices: false });
+// A contractor Doula reads each Invoice's date and status and never its
+// money (#2094, ADR-0008's amendment of 2026-10-26), and may still raise an
+// Invoice (its write table). Her rows come in a shape of their own, so the
+// section draws them from `contractorInvoices`, never from `invoices`.
+const contractorLate: ContractorInvoice = {
+	id: 'inv-late',
+	status: 'open',
+	raisedOn: '2026-08-01',
+	dueOn: '2026-08-31',
+	daysOverdue: 12
+};
 
-		const statement = page.getByRole('status').filter({ hasText: 'You contract for this Practice' });
+const contractorPaid: ContractorInvoice = {
+	id: 'inv-paid',
+	status: 'paid',
+	raisedOn: '2026-07-01',
+	dueOn: '2026-07-31',
+	paidOn: '2026-07-20',
+	daysOverdue: 0
+};
+
+describe('InvoiceSection.svelte for a contractor Doula (#2002, #2094)', () => {
+	it('says what she sees and what she does not, as information and not as an error', async () => {
+		await setup({ canReadInvoiceMoney: false });
+
+		const statement = page.getByRole('status').filter({ hasText: 'You see when each Invoice was raised' });
 		await expect.element(statement).toBeVisible();
 		await expect
 			.element(statement)
 			.toHaveTextContent(
-				'You contract for this Practice, so you do not see its Invoices or what the Client pays. Your own fee is in the Contract section.'
+				'You see when each Invoice was raised and where it stands, not what the Client pays. Your own fee is in the Contract section.'
 			);
 		await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
 	});
 
-	it('never says "No Invoices yet." and lists no Invoice, even when some exist', async () => {
-		await setup({ canReadInvoices: false, invoices: [invoiceOpen, invoicePaid] });
+	it('lists each Invoice by the day it was raised and where it stands, Overdue once it is late', async () => {
+		await setup({ canReadInvoiceMoney: false, contractorInvoices: [contractorLate, contractorPaid] });
 
-		await expect.element(page.getByText('No Invoices yet.')).not.toBeInTheDocument();
-		await expect.element(page.getByText(/\$150\.00/)).not.toBeInTheDocument();
-		await expect.element(page.getByRole('table')).not.toBeInTheDocument();
+		await expect.element(invoiceTitle('Aug 1, 2026')).toBeVisible();
+		await expect.element(invoiceFact('Overdue')).toBeVisible();
+		await expect.element(invoiceFact('Aug 31, 2026')).toBeVisible();
+		await expect.element(invoiceTitle('Jul 1, 2026')).toBeVisible();
+		await expect.element(invoiceFact('Paid')).toBeVisible();
+		await expect.element(invoiceFact('Jul 20, 2026')).toBeVisible();
+	});
+
+	it('draws no money and no Invoice action, even when money-bearing Invoices are passed', async () => {
+		await setup({
+			canReadInvoiceMoney: false,
+			isOwnerOrAdmin: true,
+			invoices: [invoiceOpen, invoicePaid],
+			contractorInvoices: [contractorLate]
+		});
+
+		await expect.element(invoiceTitle('Aug 1, 2026')).toBeVisible();
+		await expect.element(page.getByText(/\$/)).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Record payment' })).not.toBeInTheDocument();
+	});
+
+	it('says "No Invoices yet." when there are none', async () => {
+		await setup({ canReadInvoiceMoney: false });
+
+		await expect.element(page.getByText('No Invoices yet.')).toBeVisible();
 	});
 
 	it('still offers Create Invoice, which ADR-0008 lets her raise, and says when it worked', async () => {
-		const { onCreate } = await setup({ canReadInvoices: false });
+		const { onCreate } = await setup({ canReadInvoiceMoney: false });
 
 		await page.getByRole('button', { name: 'Create Invoice' }).click();
 
@@ -1110,7 +1199,7 @@ describe('InvoiceSection.svelte for a reader who cannot see Invoices (#2002)', (
 
 	it('says nothing was created when the create is refused', async () => {
 		await setup({
-			canReadInvoices: false,
+			canReadInvoiceMoney: false,
 			onCreate: vi.fn().mockRejectedValue(new Error('This Contract is not signed.'))
 		});
 
@@ -1120,8 +1209,8 @@ describe('InvoiceSection.svelte for a reader who cannot see Invoices (#2002)', (
 		await expect.element(page.getByText('Invoice created.')).not.toBeInTheDocument();
 	});
 
-	it('asks the billing-mode question on the first Invoice, as for anyone who raises it', async () => {
-		await setup({ canReadInvoices: false, billingMode: 'unset' });
+	it('asks the billing-mode question on the first Invoice, as for anyone who raises it, once asked', async () => {
+		await setupAsked({ canReadInvoiceMoney: false, billingMode: 'unset' });
 
 		await expect.element(page.getByRole('group', { name: /How does this Practice bill Clients/ })).toBeVisible();
 	});
