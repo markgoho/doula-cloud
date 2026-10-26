@@ -277,8 +277,26 @@ func PostInvoiceHandler(client Client) http.Handler {
 			return
 		}
 
+		// #2002: a contractor may raise the Invoice (ADR-0008's write
+		// table) and may not read its money (its read table, as amended
+		// on #282), so what she gets back says it exists and on which
+		// rail, and names no amount.
+		if reader, has := staffauth.ReaderFrom(r.Context()); has && reader.IsAmbientContractor() {
+			apierr.WriteJSON(w, http.StatusCreated, RaisedInvoice{ID: view.ID, Status: view.Status, BillingMode: view.BillingMode})
+			return
+		}
 		apierr.WriteJSON(w, http.StatusCreated, view)
 	})
+}
+
+// RaisedInvoice is PostInvoiceHandler's 201 for a contractor Doula
+// (#2002): the Invoice's identity, state and rail, with none of its
+// money. The screen needs the rail, because the first Invoice a Practice
+// raises is also where its billing mode is set.
+type RaisedInvoice struct {
+	ID          string `json:"id"`
+	Status      string `json:"status"`
+	BillingMode string `json:"billingMode"`
 }
 
 // errClientsCannotPay is createStripeInvoice's refusal (#270) when this

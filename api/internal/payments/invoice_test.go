@@ -628,6 +628,38 @@ func TestPostInvoiceHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T
 	if got := invoiceCount(t, db); got != 1 {
 		t.Fatalf("invoices row count = %d, want 1", got)
 	}
+
+	// #2002: she may raise the Invoice (ADR-0008's write table), but what
+	// comes back is not money she may read (its read table: "her own
+	// agreed fee only -- never the Practice's price"). The 201 says the
+	// Invoice exists and which rail it went on, and names no amount.
+	var fields map[string]json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&fields); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	for _, key := range []string{"amountCents", "currency", "refundedCents", "activePaymentId"} {
+		if _, present := fields[key]; present {
+			t.Fatalf("a contractor's 201 carries %q; ADR-0008 keeps Invoice money from her", key)
+		}
+	}
+	var raised payments.RaisedInvoice
+	if err := json.Unmarshal(mustMarshal(t, fields), &raised); err != nil {
+		t.Fatalf("decode raised invoice: %v", err)
+	}
+	if raised.ID == "" || raised.BillingMode != string(payments.BillingModeByHand) {
+		t.Fatalf("raised = %+v, want an id and billingMode %q", raised, payments.BillingModeByHand)
+	}
+}
+
+// mustMarshal re-encodes a decoded JSON object, so one response body can
+// be read both as raw keys and as a typed value.
+func mustMarshal(t *testing.T, v any) []byte {
+	t.Helper()
+	out, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	return out
 }
 
 // TestPostInvoiceHandler_AmountDerivesFromContractIgnoringBody proves

@@ -493,6 +493,19 @@ export function unbillableContractMessage(status: string): string {
 	return 'Invoicing is unavailable until the Client signs this Contract.';
 }
 
+/** What a contractor Doula reads in place of the Invoice list (#2002):
+ * information, not an error, because nothing went wrong. ADR-0008 (as
+ * amended on #282) gives her "her own agreed fee only -- never the
+ * Practice's price", so the list and its amounts are not hers to read,
+ * and the fee that is hers is on the same page. */
+export const contractorInvoicesMessage =
+	'You contract for this Practice, so you do not see its Invoices or what the Client pays. Your own fee is in the Contract section.';
+
+/** What a Staff member who cannot read the Invoice list reads after
+ * Create Invoice works (#2002): with no list to add a row to, this is
+ * the only sign that the press did something. */
+export const invoiceCreatedMessage = 'Invoice created.';
+
 /** The message InvoiceSection shows in place of the Create Invoice form
  * when Clients cannot pay this Practice yet (#270) -- a fact about the
  * Practice, not a refusal aimed at whoever is looking at the form, and

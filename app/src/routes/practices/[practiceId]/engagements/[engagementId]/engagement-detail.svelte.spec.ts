@@ -68,6 +68,7 @@ interface Detail {
 	clientHasEmail?: boolean;
 	doulas: { staffId: string; name: string }[];
 	canAttachSelf: boolean;
+	yourFee?: { amountCents: number; acceptedOn: string };
 }
 
 // The Engagement is handed in as `data` rather than stubbed out of a
@@ -2068,5 +2069,86 @@ describe('id uniqueness across DataTable two trees (#666)', () => {
 		await expect.element(testPage.getByLabelText('Reassign to').first()).toBeVisible();
 
 		expect(findDuplicateIds(document)).toEqual([]);
+	});
+});
+
+/*
+ * #2002 and #2003: what a reader sees about money on this page. A
+ * contractor Doula who holds neither Owner nor Admin reads her own agreed
+ * fee and never the Practice's Invoices (ADR-0008, as amended on #282);
+ * everyone else reads the Invoice list as before. `respond` is the
+ * fixture's; a test that needs the create to answer overrides that one
+ * path.
+ */
+async function setupMoney(
+	reader: typeof session,
+	detail: Detail = fixtureDetail,
+	respondOverride?: (path: string, init?: RequestInit) => Response | undefined
+) {
+	await testPage.viewport(3200, 900);
+	const respond = toApiResponder(fixture);
+	apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) =>
+		Promise.resolve(respondOverride?.(path, init) ?? respond(path))
+	);
+	await render(Page, { data: { ...detail, session: reader }, params: fixture.params });
+}
+
+const contractorReader = sessionFor(['doula'], 'staff-9', true);
+
+function invoiceListReads(): unknown[] {
+	return apiFetchWithSession.mock.calls.filter(
+		([path, init]) => String(path).endsWith('/contract/invoices') && (init as RequestInit | undefined)?.method !== 'POST'
+	);
+}
+
+describe('what a reader sees about money (#2002, #2003)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('shows a contractor her own fee in the Contract section, and the day she accepted it', async () => {
+		await setupMoney(contractorReader);
+
+		await expect.element(testPage.getByText('Your fee')).toBeVisible();
+		await expect.element(testPage.getByText('$12,620.00, the fee you accepted on Jul 22, 2026')).toBeVisible();
+	});
+
+	it('draws no fee row for a reader the BFF sends no fee', async () => {
+		await setupMoney(sessionFor(['owner']), { ...fixtureDetail, yourFee: undefined });
+
+		await expect.element(testPage.getByText('Status: signed')).toBeVisible();
+		await expect.element(testPage.getByText('Your fee')).not.toBeInTheDocument();
+	});
+
+	it('never asks for the Invoice list for a contractor, and says why there is none, as information', async () => {
+		await setupMoney(contractorReader);
+
+		await expect
+			.element(testPage.getByText(/You contract for this Practice, so you do not see its Invoices/))
+			.toBeVisible();
+		await expect.element(testPage.getByText('No Invoices yet.')).not.toBeInTheDocument();
+		await expect.element(testPage.getByText(/cannot see its money/)).not.toBeInTheDocument();
+		expect(invoiceListReads()).toHaveLength(0);
+	});
+
+	it('lets a contractor raise an Invoice and tells her it worked, without a list to put it in', async () => {
+		await setupMoney(contractorReader, fixtureDetail, (path, init) =>
+			path.endsWith('/contract/invoices') && init?.method === 'POST'
+				? jsonResponse({ id: 'invoice-9', status: 'open', billingMode: 'stripe' }, 201)
+				: undefined
+		);
+
+		await testPage.getByRole('button', { name: 'Create Invoice' }).click();
+
+		await expect.element(testPage.getByText('Invoice created.')).toBeVisible();
+		await expect.element(testPage.getByText('No Invoices yet.')).not.toBeInTheDocument();
+	});
+
+	it('reads and lists the Invoices for an Owner, with no contractor line', async () => {
+		await setupMoney(sessionFor(['owner']));
+
+		await expect.element(testPage.getByText('No Invoices yet.')).toBeVisible();
+		await expect.element(testPage.getByText(/You contract for this Practice/)).not.toBeInTheDocument();
+		expect(invoiceListReads()).toHaveLength(1);
 	});
 });

@@ -238,6 +238,31 @@
 		/>
 	</section>
 
+	<!-- #2002: a contractor Doula reads no Invoice and no Practice price
+	     (ADR-0008, as amended on #282), and may still raise an Invoice.
+	     One information line in place of the list, whatever the list holds. -->
+	<section>
+		<h2>A contractor Doula</h2>
+		<InvoiceSection
+			{invoices}
+			contractStatus="signed"
+			clientsCanPay={true}
+			hasClientEmail={true}
+			isOwner={false}
+			isOwnerOrAdmin={false}
+			canReadInvoices={false}
+			billingMode="stripe"
+			{paymentsSettingsHref}
+			{practiceTimezone}
+			onCreate={async () => {}}
+			onRecordPayment={async () => {}}
+			onVoidInvoice={async () => {}}
+			onWriteOffInvoice={async () => {}}
+			onReversePayment={async () => {}}
+			onRefundPayment={async () => {}}
+		/>
+	</section>
+
 	<!-- #271: the Practice has never chosen a rail -- asked inline, on the
 	     first Invoice raise, rather than assumed from an absent Stripe
 	     Connect account. -->

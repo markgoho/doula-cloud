@@ -97,7 +97,8 @@ func writeContract(w http.ResponseWriter, r *http.Request, tx *sql.Tx, status in
 		return
 	}
 	out.HasSignedPDF = hasSignedPDF
-	apierr.WriteJSON(w, status, out)
+	reader, hasReader := staffauth.ReaderFrom(r.Context())
+	apierr.WriteJSON(w, status, shapeForReader(reader, hasReader, out))
 }
 
 // mergeFieldPattern matches a {{merge_field_key}} placeholder in Contract

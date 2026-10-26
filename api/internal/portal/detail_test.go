@@ -116,8 +116,8 @@ func TestDetailHandler_Success(t *testing.T) {
 	if out.PracticeName != "Riverside Doulas" {
 		t.Fatalf("practiceName = %q, want %q", out.PracticeName, "Riverside Doulas")
 	}
-	if out.Status != status {
-		t.Fatalf("status = %q, want %q", out.Status, status)
+	if out.Status == nil || *out.Status != status {
+		t.Fatalf("status = %v, want %q", out.Status, status)
 	}
 	// #505: the portal reads the Engagement's due date.
 	if out.DueDate == nil || *out.DueDate != "2027-06-15" {

@@ -35,7 +35,9 @@
 		billableContractStatus,
 		clientHasNoEmailMessage,
 		clientsCannotPayMessage,
+		contractorInvoicesMessage,
 		formatAmount,
+		invoiceCreatedMessage,
 		invoiceStatusLabel,
 		paymentMethodLabels,
 		paymentMethodOptions,
@@ -67,6 +69,7 @@
 		hasClientEmail,
 		isOwner,
 		isOwnerOrAdmin,
+		canReadInvoices = true,
 		practiceTimezone,
 		paymentsSettingsHref,
 		onCreate,
@@ -94,6 +97,11 @@
 		/** Gates Record payment/Void/Write off/Reverse payment/Return money -- ADR-0008's
 		 * Contract-money write row, Owner and Admin only. */
 		isOwnerOrAdmin: boolean;
+		/** False for a contractor Doula (#2002): ADR-0008 gives her no
+		 * Invoice history and no Practice price, so the list is replaced by
+		 * one information line. Raising an Invoice stays hers (ADR-0008's
+		 * write table), so the Create Invoice branches below are unchanged. */
+		canReadInvoices?: boolean;
 		paymentsSettingsHref: string;
 		onCreate: (billingMode?: BillingMode) => Promise<void>;
 		onRecordPayment: (
@@ -122,6 +130,8 @@
 	let billingModeError = $state('');
 	let isCreating = $state(false);
 	let createError = $state('');
+	// #2002: set once a create works for a reader with no list to show it in.
+	let hasCreatedUnseen = $state(false);
 
 	const billingModeName = 'invoice-billing-mode';
 	// The first option's id, as the payment form's Method does: the summary
@@ -185,6 +195,7 @@
 			} else {
 				await onCreate();
 			}
+			hasCreatedUnseen = !canReadInvoices;
 		} catch (error_) {
 			applyCreateRefusal(error_);
 		} finally {
@@ -511,7 +522,12 @@
 	}
 </script>
 
-{#if invoices.length === 0}
+{#if !canReadInvoices}
+	<Notice variant="info" message={contractorInvoicesMessage} />
+	{#if hasCreatedUnseen}
+		<Notice variant="status" message={invoiceCreatedMessage} isFocusedOnAppear />
+	{/if}
+{:else if invoices.length === 0}
 	<p>No Invoices yet.</p>
 {:else}
 	<ul>

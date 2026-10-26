@@ -507,3 +507,25 @@ describe('Your visits (#478)', () => {
 		expect(text()!.indexOf(soonestDay)).toBeLessThan(text()!.indexOf(furthestDay));
 	});
 });
+
+// #2003, as #293 decided: after a loss the BFF leaves out the care phase
+// and the due date (portal.Detail omits both keys), and the hub draws no
+// row, no label and no placeholder for either. The record is the
+// fixture's own Engagement with both keys gone, the shape the BFF sends.
+describe('the hub after a loss (#2003)', () => {
+	it('shows no care phase and no due date', async () => {
+		await setupHub({ record: { ...detail, status: undefined, dueDate: undefined, offersBirthPlan: false } });
+
+		await expect.element(page.getByRole('heading', { name: 'Your care', level: 1 })).toBeVisible();
+		await expect.element(page.getByText('Total to pay $3,350.00')).toBeVisible();
+		await expect.element(page.getByText('Status')).not.toBeInTheDocument();
+		await expect.element(page.getByText(/due date/i)).not.toBeInTheDocument();
+		await expect.element(page.getByText('Mar 1, 2027')).not.toBeInTheDocument();
+	});
+
+	it('still shows the care phase when only the due date is absent', async () => {
+		await setupHub({ record: { ...detail, dueDate: undefined } });
+
+		await expect.element(page.getByText('Status')).toBeVisible();
+	});
+});

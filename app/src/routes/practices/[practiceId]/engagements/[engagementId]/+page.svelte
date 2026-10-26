@@ -30,6 +30,7 @@
 		sendPortalInvite,
 		visitTypeLabel,
 		engagementStatusText,
+		yourFeeValue,
 		type AttachedDoula,
 		type BirthOutcomeFacts,
 		type BirthOutcomeRequest,
@@ -996,10 +997,17 @@
 	}
 
 	async function loadInvoicesSection() {
-		await invoicesState.load(
-			() => loadInvoices(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!),
-			'Failed to load invoices'
-		);
+		// #2002: a contractor never reads Invoice history (ADR-0008, as
+		// amended on #282), and the BFF refuses her the list. Asking anyway
+		// put that refusal on her screen as an error, then "No Invoices
+		// yet." beside Invoices that exist. InvoiceSection says what she
+		// can and cannot see here instead.
+		if (canReadContractMoney) {
+			await invoicesState.load(
+				() => loadInvoices(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!),
+				'Failed to load invoices'
+			);
+		}
 		// #271: read alongside the Invoice list itself -- InvoiceSection
 		// needs to know the current mode (or its absence) before it can
 		// decide whether to show the "ask once" form.
@@ -1036,7 +1044,11 @@
 			page.params.engagementId!,
 			chosenBillingMode
 		);
-		invoicesState.value = [invoice, ...invoicesState.value];
+		// #2002: a contractor's 201 names no amount (RaisedInvoice), and
+		// she has no list to add it to; only the rail it went on is hers.
+		if (canReadContractMoney) {
+			invoicesState.value = [invoice, ...invoicesState.value];
+		}
 		billingModeState.value = invoice.billingMode;
 	}
 
@@ -1911,6 +1923,14 @@
 {/snippet}
 
 {#snippet contractSection()}
+	<!--
+		#2003: the reader's own agreed fee, where the drawing puts it. ADR-0008
+		gives a contractor this and never the Practice's price; the BFF sends
+		it only to the person whose fee it is, so this reads nothing else.
+	-->
+	{#if data.yourFee}
+		<DescriptionList items={[{ label: 'Your fee', value: yourFeeValue(data.yourFee) }]} />
+	{/if}
 	{#if contractError}
 		<Notice variant="error" message={contractError} />
 	{/if}
@@ -2033,6 +2053,7 @@
 			hasClientEmail={hasClientEmailOnFile}
 			isOwner={isPracticeOwner}
 			isOwnerOrAdmin={isPracticeOwnerOrAdmin}
+			canReadInvoices={canReadContractMoney}
 			{practiceTimezone}
 			{paymentsSettingsHref}
 			onCreate={handleCreateInvoice}
