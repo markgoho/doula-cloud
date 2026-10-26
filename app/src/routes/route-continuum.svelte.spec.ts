@@ -529,7 +529,9 @@ function toRouteFloorKey(condition: Condition): string {
  * #2091 the Visits on an Engagement are too: their Notes column wraps, so
  * the table's floor is its facts beside a note's longest word. Since
  * #2098 the Engagement's Activity ledger and both histories on a Staff
- * member's page wrap their What column the same way.
+ * member's page wrap their What column the same way, and since #2112
+ * every activity ledger does: the hub's keeps a floor of its own, lowered
+ * from 48rem to 28.5rem.
  */
 const ROUTE_FLOORS: Readonly<Record<string, string>> = {
 	'(person)/feedback#unopened-table': 'Issue not opened',
