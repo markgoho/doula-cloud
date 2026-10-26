@@ -133,11 +133,15 @@
 
 <style>
 	@layer components {
-		/* The All feedback table's content floor (#1945): below it the table's cells
-		   wrap to more lines than at the old type floors, so it shows its
-		   records -- the founder's answer on #1945. Measured 2026-10-25 on
-		   this route's fixture on the drag surface:
-		   its natural width fits its column from 1398px.
+		/* The All feedback table's content floor (#1945, #1981): below it the table's
+		   cells wrap to more lines than at the old type floors, so it
+		   shows its records -- the founder's answer on #1945. Measured on
+		   this route's typical pilot screen, not its hostile one -- the
+		   founder's answer of 2026-10-25 on #1981: a very long name or
+		   address wraps one more line, and it does not change the layout.
+		   Measured 2026-10-25 on the drag surface: its natural width fits
+		   its column from 1208px on macOS/Chromium with no margin beyond it.
+		   On the hostile fixture it was 87.5rem.
 		   `DataTable.svelte`'s floor comment says why the floor is the
 		   route's own. */
 		.feedback-table {
@@ -150,20 +154,22 @@
 			--data-table-records-display: block;
 		}
 
-		@container feedback-table (min-width: 87.5rem) {
+		@container feedback-table (min-width: 75.5rem) {
 			.feedback-table > :global(*) {
 				--data-table-table-display: table;
 				--data-table-records-display: none;
 			}
 		}
 
-		/* The Issue not opened table's content floor (#1945): below it the table's cells
-		   wrap to more lines than at the old type floors, so it shows its
-		   records -- the founder's answer on #1945. Measured 2026-10-25 on
-		   this route's fixture on the drag surface:
-		   its natural width fits its column from 2192px on macOS/Chromium and
-		   from 2220px in CI's Linux/Chromium, the canonical environment,
-		   with no margin beyond it.
+		/* The Issue not opened table's content floor (#1945, #1981): below it the table's
+		   cells wrap to more lines than at the old type floors, so it
+		   shows its records -- the founder's answer on #1945. Measured on
+		   this route's typical pilot screen, not its hostile one -- the
+		   founder's answer of 2026-10-25 on #1981: a very long name or
+		   address wraps one more line, and it does not change the layout.
+		   Measured 2026-10-25 on the drag surface: its natural width fits
+		   its column from 1672px on macOS/Chromium with no margin beyond it.
+		   On the hostile fixture it was 138.75rem.
 		   `DataTable.svelte`'s floor comment says why the floor is the
 		   route's own. */
 		.unopened-table {
@@ -176,7 +182,7 @@
 			--data-table-records-display: block;
 		}
 
-		@container unopened-table (min-width: 138.75rem) {
+		@container unopened-table (min-width: 104.5rem) {
 			.unopened-table > :global(*) {
 				--data-table-table-display: table;
 				--data-table-records-display: none;

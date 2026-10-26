@@ -238,10 +238,29 @@ export function atConditionWidth(
  * overflows nothing. The table is shown while it is measured: a floor
  * just above `DataTable`'s own probes below it, where the component's
  * rule still hides the table, and a hidden table has no width at all.
+ *
+ * One column is not asked for its one line (#1981): a row's own controls,
+ * the cells `DataTable` marks `actions`. They are this repo's buttons and
+ * links, laid out as inline flow, and they wrap onto a second line by
+ * design -- the Staff roster's five controls already did inside the
+ * `--measure` cap, so counting them at max-content made the cap a floor.
+ * Each such cell is held to its widest single control while the table is
+ * measured: no control is squeezed below its own label, and the row of
+ * them may wrap.
  */
 export interface TableFitMeasurement {
 	readonly given: number;
 	readonly needed: readonly number[];
+}
+
+// A control's own width, not the width a column stack stretches it to: a
+// `<select>` fills its field, and its own is its longest option.
+function ownWidth(control: HTMLElement): number {
+	const { inlineSize } = control.style;
+	control.style.inlineSize = 'max-content';
+	const width = control.getBoundingClientRect().width;
+	control.style.inlineSize = inlineSize;
+	return width;
 }
 
 export function measureTableFit(container: HTMLElement): TableFitMeasurement {
@@ -249,7 +268,15 @@ export function measureTableFit(container: HTMLElement): TableFitMeasurement {
 		const { display, inlineSize } = table.style;
 		table.style.display = 'table';
 		table.style.inlineSize = 'max-content';
+		const actions = [...table.querySelectorAll<HTMLElement>(':scope > * > tr > .actions')];
+		const widestControl = Math.max(
+			0,
+			...actions.flatMap((cell) => [...cell.querySelectorAll<HTMLElement>('button, a, select')].map((control) => ownWidth(control)))
+		);
+		const held = actions.map((cell) => [cell, cell.style.inlineSize] as const);
+		for (const [cell] of held) cell.style.inlineSize = `${widestControl}px`;
 		const width = table.getBoundingClientRect().width;
+		for (const [cell, size] of held) cell.style.inlineSize = size;
 		table.style.display = display;
 		table.style.inlineSize = inlineSize;
 		return Math.ceil(width);

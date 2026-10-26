@@ -14,7 +14,8 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { PendingRequestItem } from '#lib/engagementRequest.js';
-import type { RouteFixture } from '../../../routeFixture.js';
+import type { RouteFixture, RouteVariant } from '../../../routeFixture.js';
+import { nth, TYPICAL_CLIENTS, TYPICAL_DOULAS } from '../../../typicalPilot.js';
 import Page from './+page.svelte';
 
 export const requests: PendingRequestItem[] = [
@@ -41,8 +42,35 @@ export const requests: PendingRequestItem[] = [
 	}
 ];
 
+/*
+ * Typical pilot data (#1981), the screen this route's table floor is
+ * measured on (`typicalPilot.ts` says where each value comes from): four
+ * Requests a 14-doula agency has waiting, birth ones with a due date and a
+ * postpartum one without, each asked for by one of its Doulas.
+ */
+const typicalRequests: PendingRequestItem[] = [4, 5, 6, 7].map((index) => {
+	const person = nth(TYPICAL_CLIENTS, index);
+	const isBirth = index !== 6;
+	return {
+		requestId: `request-${index}`,
+		clientId: person.clientId,
+		clientName: person.name,
+		kind: isBirth ? 'birth' : 'postpartum',
+		...(isBirth && { dueDate: `2027-0${index}-14` }),
+		requestedByName: nth(TYPICAL_DOULAS, index).name,
+		requestedAt: `2026-10-0${index}T15:00:00Z`
+	};
+});
+
+export const typical: RouteVariant = {
+	name: 'The pending Engagement Requests inbox, with typical pilot data',
+	typical: true,
+	respond: () => jsonResponse({ items: typicalRequests, hasMore: false })
+};
+
 export const fixture: RouteFixture = {
 	name: 'The pending Engagement Requests inbox',
+	variants: [typical],
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/engagement-requests',

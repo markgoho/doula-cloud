@@ -102,9 +102,7 @@ test.describe('After a material change to the Terms starts', () => {
 		await expect(ownerPage).toHaveURL(new RegExp(`/practices/${owner.practiceId}$`));
 
 		// Two rows: the agreement at signup, and this one, on the day the
-		// new version started. Wider than the activity ledger's own floor
-		// (#1945), so it draws its <table> and the rows are rows.
-		await ownerPage.setViewportSize({ width: 3200, height: 900 });
+		// new version started.
 		const agreements = ownerPage.getByRole('row').filter({ hasText: 'Terms accepted' });
 		await expect(agreements).toHaveCount(2);
 		const agreedOnTheDay = agreements.filter({ has: ownerPage.locator(`time[datetime^="${effective}"]`) });

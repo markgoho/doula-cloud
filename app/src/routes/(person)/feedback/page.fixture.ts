@@ -66,9 +66,51 @@ export const empty: RouteVariant = {
 	props: { data: { unopened: { items: [], hasMore: false }, all: { items: [], hasMore: false } } }
 };
 
+/*
+ * Typical pilot data (#1981), the screen this route's two table floors are
+ * measured on. Feedback from a 14-doula agency's first weeks names the
+ * screens its people use every day -- the Clients list, an Engagement, the
+ * schedule, the portal's Engagement -- and a failure to open its issue is
+ * the one GitHub answer this repo has seen, a credentials refusal, without
+ * a URL in it. The longest route pattern and the error with a URL in it
+ * stay on the hostile screen above.
+ */
+function typicalPiece(index: number, routeId: string, kind: FeedbackSummary['kind']): FeedbackSummary {
+	return {
+		id: `feedback-${index}`,
+		kind,
+		routeId,
+		sentAt: `2026-10-${String(4 + index).padStart(2, '0')}T15:00:00Z`,
+		issue: { state: 'opened', number: 40 + index, url: `https://github.com/markgoho/doula-cloud-feedback/issues/${40 + index}`, attempts: 0 }
+	};
+}
+
+const typicalUnopened: FeedbackSummary = {
+	...typicalPiece(1, '/(app)/practices/[practiceId]/engagements/[engagementId]', 'not_working'),
+	issue: { state: 'dead_lettered', attempts: 5, lastError: 'feedback: create issue: 401 Bad credentials' }
+};
+
+const typicalAll: FeedbackSummary[] = [
+	typicalUnopened,
+	typicalPiece(2, '/(app)/practices/[practiceId]/clients', 'idea_or_request'),
+	typicalPiece(3, '/(app)/practices/[practiceId]/schedule', 'not_working'),
+	typicalPiece(4, '/portal/(authenticated)/engagements/[engagementId]', 'something_else')
+];
+
+export const typical: RouteVariant = {
+	name: 'The founder feedback list, with typical pilot data',
+	typical: true,
+	props: {
+		data: {
+			unopened: { items: [typicalUnopened], hasMore: false },
+			all: { items: typicalAll, hasMore: false }
+		} satisfies FeedbackListData
+	}
+};
+
 export const fixture: RouteFixture = {
 	name: 'The founder feedback list',
-	variants: [empty],
+	variants: [empty, typical],
 	component: Page,
 	params: {},
 	url: 'https://example.test/feedback',

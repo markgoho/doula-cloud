@@ -904,6 +904,35 @@ describe('the table-fit criterion (#1945)', () => {
 		}
 	});
 
+	/*
+	 * #1981: a row's own controls wrap by design, so the criterion holds
+	 * the `actions` column to its widest control. Three buttons in a row
+	 * need more than the frame; any one of them beside the short cell does
+	 * not.
+	 */
+	it('holds a row of controls to its widest control, not the whole row', () => {
+		const buttons = ['Edit membership', 'Send a recovery code', 'Remove from practice']
+			.map((label) => `<button type="button">${label}</button>`)
+			.join(' ');
+		const { frame, remove } = frameHolding(
+			`<table><tr><td>Bo Ng</td><td class="actions">${buttons}</td></tr></table>`
+		);
+		try {
+			atWidth(frame, AT_WIDTH);
+			const table = frame.querySelector('table')!;
+			table.style.inlineSize = 'max-content';
+			const wholeRow = table.getBoundingClientRect().width;
+			table.style.inlineSize = '';
+
+			const measurement = measureTableFit(frame);
+
+			expect(wholeRow).toBeGreaterThan(AT_WIDTH);
+			expect(isTableFitAcceptable(measurement, TOLERANCE)).toBe(true);
+		} finally {
+			remove();
+		}
+	});
+
 	it('refuses a container that holds no table', () => {
 		const { frame, remove } = frameHolding('<p>Nothing here.</p>');
 		try {

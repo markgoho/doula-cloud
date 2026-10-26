@@ -216,7 +216,10 @@
 					<th scope="col" class:numeric={column.numeric}>{column.label}</th>
 				{/each}
 				{#if rowActions}
-					<th scope="col">{rowActions.label}</th>
+					<!-- `actions` names the column of this table's own controls for
+					     the floor check's table-fit measurement (#1981, `floor.ts`);
+					     no rule here selects it. -->
+					<th scope="col" class="actions">{rowActions.label}</th>
 				{/if}
 			</tr>
 		</thead>
@@ -244,7 +247,7 @@
 							</td>
 						{/each}
 						{#if rowActions}
-							<td>
+							<td class="actions">
 								{@render rowActions.content(row, 'table')}
 							</td>
 						{/if}
@@ -548,7 +551,15 @@
 		   `--data-table-records-display: block`; at it, `table` and
 		   `none`, or nothing, which is these defaults. Each such floor is
 		   checked against its route's own fixture by
-		   `route-continuum.svelte.spec.ts`. */
+		   `route-continuum.svelte.spec.ts`.
+
+		   Since #1981 a route's floor is measured on its fixture's typical
+		   pilot screen, not its hostile one -- the founder's answer of
+		   2026-10-25: a very long name or address wraps one more line, and
+		   it does not change the layout. The 2988px above was the hostile
+		   Clients list's; each route's own comment has its typical
+		   number. This floor is measured on the style-guide demo and stays
+		   as it is. */
 		@container data-table (min-width: 55rem) {
 			.table-view {
 				display: var(--data-table-table-display, table);
@@ -569,11 +580,19 @@
 		   hub's Reassign control set the column 12px past the record at
 		   320px, which only the box criterion saw: the overflow landed in
 		   the page's own gutter, not past the frame. */
+		/* A record is capped at the reading measure (#1981). The record
+		   view shows past this component's own floor wherever a route's
+		   table needs more room, and a `<dl>` that spans the whole column
+		   put a label up to 1,200px from its value at a 1440px window, and
+		   an amount at the column's far edge. `--measure` is this repo's
+		   one reading width and is font-relative, so it is not a number
+		   picked off a screen; below it, at 320px, it is inert. */
 		.record-view dl {
 			display: grid;
 			grid-template-columns: auto minmax(0, 1fr);
 			gap: 0 var(--space-4);
 			margin: 0;
+			max-inline-size: var(--measure);
 		}
 
 		.record-view dl + dl {

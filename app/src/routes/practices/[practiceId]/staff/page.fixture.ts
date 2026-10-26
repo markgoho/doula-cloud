@@ -17,7 +17,8 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { MembershipHistory, WorkStateHistory } from '#lib/staff.js';
-import type { RouteFixture } from '../../../routeFixture.js';
+import type { RouteFixture, RouteVariant } from '../../../routeFixture.js';
+import { TYPICAL_STAFF } from '../../../typicalPilot.js';
 import Page from './+page.svelte';
 
 export const roster = {
@@ -214,8 +215,71 @@ export function subjectOf(path: string): string {
 	return path.split('/').at(-2) ?? '';
 }
 
+/*
+ * Typical pilot data (#1981), the screen this route's two table floors are
+ * measured on (`typicalPilot.ts` says where each value comes from): the
+ * fifteen Staff of a 14-doula agency, each with the history a Membership
+ * ordinarily has -- her own one-time report of her Work State and the
+ * day she joined -- and one live invitation to the next Doula. The long
+ * sentences (a move between the two longest state names, a full house of
+ * roles) stay on the hostile rows above.
+ */
+const typicalRoster = {
+	members: TYPICAL_STAFF.map((member) => ({
+		...member,
+		roles: [...member.roles],
+		workStateReportedAt: '2026-09-08T15:00:00Z'
+	})),
+	invitations: {
+		items: [
+			{
+				invitationId: 'invitation-1',
+				address: 'sofia.ortiz@gmail.com',
+				roles: ['doula'],
+				employmentType: 'employee',
+				expiresAt: '2026-10-29T15:00:00Z',
+				expired: false,
+				deliveryFailed: false
+			}
+		],
+		hasMore: false
+	}
+};
+
+export const typical: RouteVariant = {
+	name: 'The Staff roster, with typical pilot data',
+	typical: true,
+	respond: (path) => {
+		const member = TYPICAL_STAFF.find((each) => each.staffId === subjectOf(path)) ?? TYPICAL_STAFF[0]!;
+		if (path.includes('/work-state-history')) {
+			return jsonResponse({
+				memberSince: '2026-09-07T15:00:00Z',
+				items: [{ eventId: 'event-1', workState: member.workState, createdAt: '2026-09-08T15:00:00Z' }],
+				hasMore: false
+			} satisfies WorkStateHistory);
+		}
+		if (path.includes('/membership-history')) {
+			return jsonResponse({
+				items: [
+					{
+						eventId: 'membership-event-1',
+						action: 'joined',
+						actorName: TYPICAL_STAFF[0]!.name,
+						roles: [...member.roles],
+						employmentType: member.employmentType,
+						createdAt: '2026-09-07T15:00:00Z'
+					}
+				],
+				hasMore: false
+			} satisfies MembershipHistory);
+		}
+		return jsonResponse(typicalRoster);
+	}
+};
+
 export const fixture: RouteFixture = {
 	name: 'The Staff roster',
+	variants: [typical],
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/staff',

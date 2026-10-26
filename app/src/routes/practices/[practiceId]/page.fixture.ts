@@ -30,6 +30,7 @@
 import { jsonResponse } from '#lib/testResponse.js';
 import type { Offer } from '#lib/offer.js';
 import { practiceSession, type RouteFixture, type RouteVariant } from '../../routeFixture.js';
+import { nth, TYPICAL_PRACTICE_NAME, TYPICAL_STAFF } from '../../typicalPilot.js';
 import Page from './+page.svelte';
 
 export const practiceName =
@@ -318,6 +319,45 @@ export const asOwnerWithNoSecondFactor: RouteVariant = {
 	pageData: practiceSession(['owner'], { practiceName, secondFactor: false })
 };
 
+/*
+ * Typical pilot data (#1981), the screen this route's activity ledger floor
+ * is measured on (`typicalPilot.ts` says where each value comes from): an
+ * Owner's hub at a 14-doula agency, its name the agency's own, and a page
+ * of the week's activity -- Visits logged, a Contract sent, an Invoice
+ * raised, a Visit scheduled, and the roster changes an Owner sees, among
+ * them the employment type change the World has Renata make for Kimiko
+ * Nakashima. Every other block is the base's answer.
+ */
+const typicalActivity = [
+	{ action: 'visit_logged', actor: 3 },
+	{ action: 'contract_sent', actor: 0 },
+	{ action: 'invoice_raised', actor: 1 },
+	{ action: 'visit_scheduled', actor: 5 },
+	{ action: 'visit_logged', actor: 8 },
+	{ action: 'joined', actor: 0, subject: 12 },
+	{ action: 'employment_type_changed', actor: 0, subject: 11 },
+	{ action: 'roles_changed', actor: 0, subject: 1 }
+].map(({ action, actor, subject }, index) => ({
+	subjectKind: subject === undefined ? 'engagement' : 'membership',
+	subjectId: subject === undefined ? `engagement-${index + 1}` : nth(TYPICAL_STAFF, subject).staffId,
+	...(subject !== undefined && { subjectName: nth(TYPICAL_STAFF, subject).name }),
+	action,
+	actorKind: 'staff',
+	actorName: nth(TYPICAL_STAFF, actor).name,
+	createdAt: `2026-10-${String(11 - index).padStart(2, '0')}T15:00:00Z`
+}));
+
+export const typical: RouteVariant = {
+	name: 'The Practice landing hub, as an Owner, with typical pilot data',
+	typical: true,
+	pageData: practiceSession(['owner', 'doula'], { practiceName: TYPICAL_PRACTICE_NAME }),
+	readyText: `Welcome to ${TYPICAL_PRACTICE_NAME}`,
+	respond: (path) => {
+		if (path.includes('/activity')) return jsonResponse({ items: typicalActivity, hasMore: true, nextCursor: 'cursor-1' });
+		return respondForPopulatedPractice(path);
+	}
+};
+
 export const fixture: RouteFixture = {
 	name: 'The Practice landing hub, as a Doula',
 	component: Page,
@@ -326,5 +366,5 @@ export const fixture: RouteFixture = {
 	pageData: practiceSession(['doula'], { practiceName }),
 	respond: respondForPopulatedPractice,
 	readyText: `Welcome to ${practiceName}`,
-	variants: [asOwner, asOwnerWithNoClient, asOwnerNotConnected, asOwnerWithNoSecondFactor]
+	variants: [asOwner, asOwnerWithNoClient, asOwnerNotConnected, asOwnerWithNoSecondFactor, typical]
 };

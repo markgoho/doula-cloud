@@ -14,7 +14,8 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { EmailSuppression } from '#lib/emailSuppression.js';
-import type { RouteFixture } from '../../../../routeFixture.js';
+import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
+import { nth, TYPICAL_CLIENTS } from '../../../../typicalPilot.js';
 import Page from './+page.svelte';
 
 export const suppressions: EmailSuppression[] = [
@@ -34,8 +35,28 @@ export const suppressions: EmailSuppression[] = [
 	}
 ];
 
+/*
+ * Typical pilot data (#1981), the screen this route's table floor is
+ * measured on (`typicalPilot.ts` says where each value comes from): the
+ * same two causes, each on an ordinary address -- a Client's mistyped
+ * mailbox that bounced, and one that marked an email as spam. The long
+ * plus-tagged address on a long subdomain stays on the hostile screen.
+ */
+export const typical: RouteVariant = {
+	name: 'The blocked email addresses screen, with typical pilot data',
+	typical: true,
+	respond: () =>
+		jsonResponse({
+			suppressions: [
+				{ ...suppressions[0]!, address: nth(TYPICAL_CLIENTS, 4).email },
+				{ ...suppressions[1]!, address: nth(TYPICAL_CLIENTS, 5).email }
+			]
+		})
+};
+
 export const fixture: RouteFixture = {
 	name: 'The blocked email addresses screen',
+	variants: [typical],
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/settings/blocked-addresses',

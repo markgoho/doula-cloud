@@ -81,18 +81,16 @@
 </script>
 
 {#snippet content()}
-	<div class="requests-table">
-		<DataTable
-			{columns}
-			rows={requests.items}
-			rowHref={approvalHref}
-			hasMore={requests.hasMore}
-			onLoadMore={() => requests.loadMore()}
-			isLoadingMore={requests.isLoadingMore}
-			loadMoreError={requests.loadMoreError}
-			emptyMessage="No requests are waiting for a decision."
-		/>
-	</div>
+	<DataTable
+		{columns}
+		rows={requests.items}
+		rowHref={approvalHref}
+		hasMore={requests.hasMore}
+		onLoadMore={() => requests.loadMore()}
+		isLoadingMore={requests.isLoadingMore}
+		loadMoreError={requests.loadMoreError}
+		emptyMessage="No requests are waiting for a decision."
+	/>
 {/snippet}
 
 <ListPage
@@ -101,31 +99,3 @@
 	loading={isLoaded ? undefined : 'Loading pending requests'}
 	{content}
 />
-
-<style>
-	@layer components {
-		/* The Engagement Requests table's content floor (#1945): below it the table's cells
-		   wrap to more lines than at the old type floors, so it shows its
-		   records -- the founder's answer on #1945. Measured 2026-10-25 on
-		   this route's fixture on the drag surface:
-		   its natural width fits its column from 1322px.
-		   `DataTable.svelte`'s floor comment says why the floor is the
-		   route's own. */
-		.requests-table {
-			container: requests-table / inline-size;
-		}
-
-		.requests-table > :global(*) {
-			font-size: var(--text-body-size);
-			--data-table-table-display: none;
-			--data-table-records-display: block;
-		}
-
-		@container requests-table (min-width: 82.75rem) {
-			.requests-table > :global(*) {
-				--data-table-table-display: table;
-				--data-table-records-display: none;
-			}
-		}
-	}
-</style>

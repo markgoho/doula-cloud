@@ -178,7 +178,7 @@ describe('the Practice landing page', () => {
 		// test below sets this -- otherwise the narrow record view's own
 		// <p>{emptyMessage}</p> and the table's <td> both match a bare text
 		// query.
-		await testPage.viewport(3200, 900);
+		await testPage.viewport(1440, 900);
 		await setup();
 
 		await expect
@@ -614,7 +614,7 @@ describe('the Practice landing page', () => {
 		// floor (55rem, DataTable.svelte) or it renders the narrow
 		// record view instead, whose cells carry no `cell` role -- see
 		// DataTable.svelte.spec.ts's own WIDE viewport for the same reason.
-		await testPage.viewport(3200, 900);
+		await testPage.viewport(1440, 900);
 		await setup({
 			overrides: {
 				activity: jsonResponse({
@@ -645,7 +645,7 @@ describe('the Practice landing page', () => {
 	});
 
 	it('shows the empty-feed message when there is no activity yet', async () => {
-		await testPage.viewport(3200, 900);
+		await testPage.viewport(1440, 900);
 		await setup();
 
 		await expect.element(testPage.getByRole('cell', { name: 'Nothing has happened yet.' })).toBeVisible();

@@ -2285,17 +2285,15 @@
 	{#if activityError}
 		<Notice variant="error" message={activityError} />
 	{/if}
-	<div class="activity-table">
-		<DataTable
-			columns={activityLedgerColumns()}
-			rows={activity.items}
-			hasMore={activity.hasMore}
-			onLoadMore={() => activity.loadMore()}
-			isLoadingMore={activity.isLoadingMore}
-			loadMoreError={activity.loadMoreError}
-			emptyMessage="Nothing has happened yet."
-		/>
-	</div>
+	<DataTable
+		columns={activityLedgerColumns()}
+		rows={activity.items}
+		hasMore={activity.hasMore}
+		onLoadMore={() => activity.loadMore()}
+		isLoadingMore={activity.isLoadingMore}
+		loadMoreError={activity.loadMoreError}
+		emptyMessage="Nothing has happened yet."
+	/>
 {/snippet}
 
 <!--
@@ -2333,39 +2331,15 @@
 
 <style>
 	@layer components {
-		/* The activity ledger's content floor (#1945): below it the table's cells
-		   wrap to more lines than at the old type floors, so it shows its
-		   records -- the founder's answer on #1945. Measured 2026-10-25 on
-		   this route's fixture on the drag surface:
-		   its natural width fits its column from 1108px on macOS/Chromium and
-		   from 1124px in CI's Linux/Chromium, the canonical environment,
-		   with no margin beyond it, for every session, in UTC (CI's zone, where the fixture's times print widest).
-		   `DataTable.svelte`'s floor comment says why the floor is the
-		   route's own. */
-		.activity-table {
-			container: activity-table / inline-size;
-		}
-
-		.activity-table > :global(*) {
-			font-size: var(--text-body-size);
-			--data-table-table-display: none;
-			--data-table-records-display: block;
-		}
-
-		@container activity-table (min-width: 70.25rem) {
-			.activity-table > :global(*) {
-				--data-table-table-display: table;
-				--data-table-records-display: none;
-			}
-		}
-
-		/* The Visits table's content floor (#1945): below it the table's cells
-		   wrap to more lines than at the old type floors, so it shows its
-		   records -- the founder's answer on #1945. Measured 2026-10-25 on
-		   this route's fixture on the drag surface:
-		   its natural width fits its column from 2066px on macOS/Chromium and
-		   from 2084px in CI's Linux/Chromium, the canonical environment,
-		   with no margin beyond it, for every session.
+		/* The Visits table's content floor (#1945, #1981): below it the table's
+		   cells wrap to more lines than at the old type floors, so it
+		   shows its records -- the founder's answer on #1945. Measured on
+		   this route's typical pilot screen, not its hostile one -- the
+		   founder's answer of 2026-10-25 on #1981: a very long name or
+		   address wraps one more line, and it does not change the layout.
+		   Measured 2026-10-25 on the drag surface: its natural width fits
+		   its column from 1222px on macOS/Chromium with no margin beyond it.
+		   On the hostile fixture it was 130.25rem.
 		   `DataTable.svelte`'s floor comment says why the floor is the
 		   route's own. */
 		.visits-table {
@@ -2378,7 +2352,7 @@
 			--data-table-records-display: block;
 		}
 
-		@container visits-table (min-width: 130.25rem) {
+		@container visits-table (min-width: 76.5rem) {
 			.visits-table > :global(*) {
 				--data-table-table-display: table;
 				--data-table-records-display: none;

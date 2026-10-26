@@ -11,7 +11,8 @@
 import type { CursorPage } from '#lib/paginatedList.svelte.js';
 import type { ScheduledVisit } from '#lib/visitSchedule.js';
 import type { SchedulePageData } from './+page.js';
-import type { RouteFixture } from '../../../routeFixture.js';
+import type { RouteFixture, RouteVariant } from '../../../routeFixture.js';
+import { nth, TYPICAL_CLIENTS, TYPICAL_DOULAS } from '../../../typicalPilot.js';
 import type { RouteParams as RouteParameters } from './$types';
 import Page from './+page.svelte';
 
@@ -47,8 +48,40 @@ export const data: SchedulePageData = {
 	]
 };
 
+/*
+ * Typical pilot data (#1981), the screen this route's table floor is
+ * measured on (`typicalPilot.ts` says where each value comes from): a
+ * month of a 14-doula agency's Visits, each Client with her own Doula, and
+ * every Doula in the filter.
+ */
+export const typical: RouteVariant<RouteParameters> = {
+	name: 'The Practice-wide schedule, with typical pilot data',
+	typical: true,
+	props: {
+		data: {
+			...data,
+			page: {
+				items: TYPICAL_CLIENTS.slice(0, 8).map((person, index) => {
+					const doula = nth(TYPICAL_DOULAS, index + 2);
+					return {
+						visitId: `visit-${index + 1}`,
+						engagementId: `eng-${index + 1}`,
+						clientName: person.name,
+						staffId: doula.staffId,
+						staffName: doula.name,
+						scheduledAt: `2026-09-${String(8 + index * 3).padStart(2, '0')}T14:30:00Z`
+					};
+				}),
+				hasMore: false
+			},
+			doulas: TYPICAL_DOULAS.map((doula) => ({ value: doula.staffId, label: doula.name }))
+		} satisfies SchedulePageData
+	}
+};
+
 export const fixture: RouteFixture<RouteParameters> = {
 	name: 'The Practice-wide schedule',
+	variants: [typical],
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/schedule',

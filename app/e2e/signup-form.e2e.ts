@@ -120,9 +120,6 @@ test("The Practice's activity shows that its Owner agreed to the terms at signup
 	await seedClient(request, practiceId, { Cookie: `__session=${session!.value}` }, { givenName: 'Ada' });
 	await page.reload();
 
-	// Wider than the activity ledger's own floor (#1945), so it draws its
-	// <table> and the agreement is a row.
-	await page.setViewportSize({ width: 3200, height: 900 });
 	const agreement = page.getByRole('row').filter({ hasText: 'Terms accepted' });
 	await expect(agreement).toBeVisible();
 	await expect(agreement).toContainText('Jamie Owner');

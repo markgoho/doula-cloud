@@ -584,18 +584,16 @@
 		{#if invitations.items.length === 0}
 			<Text text="No pending invitations." />
 		{:else}
-			<div class="invitations-table">
-				<DataTable
-					columns={invitationColumns}
-					rows={invitations.items}
-					rowActions={{ label: 'Actions', content: invitationActions }}
-					hasMore={invitations.hasMore}
-					onLoadMore={() => invitations.loadMore()}
-					isLoadingMore={invitations.isLoadingMore}
-					loadMoreError={invitations.loadMoreError}
-					emptyMessage="No pending invitations."
-				/>
-			</div>
+			<DataTable
+				columns={invitationColumns}
+				rows={invitations.items}
+				rowActions={{ label: 'Actions', content: invitationActions }}
+				hasMore={invitations.hasMore}
+				onLoadMore={() => invitations.loadMore()}
+				isLoadingMore={invitations.isLoadingMore}
+				loadMoreError={invitations.loadMoreError}
+				emptyMessage="No pending invitations."
+			/>
 		{/if}
 	{/if}
 {/snippet}
@@ -604,37 +602,15 @@
 
 <style>
 	@layer components {
-		/* The Pending invitations table's content floor (#1945): below it the table's cells
-		   wrap to more lines than at the old type floors, so it shows its
-		   records -- the founder's answer on #1945. Measured 2026-10-25 on
-		   this route's fixture on the drag surface:
-		   its natural width fits its column from 1459px.
-		   `DataTable.svelte`'s floor comment says why the floor is the
-		   route's own. */
-		.invitations-table {
-			container: invitations-table / inline-size;
-		}
-
-		.invitations-table > :global(*) {
-			font-size: var(--text-body-size);
-			--data-table-table-display: none;
-			--data-table-records-display: block;
-		}
-
-		@container invitations-table (min-width: 91.25rem) {
-			.invitations-table > :global(*) {
-				--data-table-table-display: table;
-				--data-table-records-display: none;
-			}
-		}
-
-		/* The members table's content floor (#1945): below it the table's cells
-		   wrap to more lines than at the old type floors, so it shows its
-		   records -- the founder's answer on #1945. Measured 2026-10-25 on
-		   this route's fixture on the drag surface:
-		   its natural width fits its column from 2416px on macOS/Chromium and
-		   from 2448px in CI's Linux/Chromium, the canonical environment,
-		   with no margin beyond it.
+		/* The members table's content floor (#1945, #1981): below it the table's
+		   cells wrap to more lines than at the old type floors, so it
+		   shows its records -- the founder's answer on #1945. Measured on
+		   this route's typical pilot screen, not its hostile one -- the
+		   founder's answer of 2026-10-25 on #1981: a very long name or
+		   address wraps one more line, and it does not change the layout.
+		   Measured 2026-10-25 on the drag surface: its natural width fits
+		   its column from 1383px on macOS/Chromium with no margin beyond it.
+		   On the hostile fixture it was 153rem.
 		   `DataTable.svelte`'s floor comment says why the floor is the
 		   route's own. */
 		.members-table {
@@ -647,7 +623,7 @@
 			--data-table-records-display: block;
 		}
 
-		@container members-table (min-width: 153rem) {
+		@container members-table (min-width: 86.5rem) {
 			.members-table > :global(*) {
 				--data-table-table-display: table;
 				--data-table-records-display: none;

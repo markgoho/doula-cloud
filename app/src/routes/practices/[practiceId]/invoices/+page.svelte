@@ -195,13 +195,15 @@
 
 <style>
 	@layer components {
-		/* The invoice list's content floor (#1945): below it the table's cells
-		   wrap to more lines than at the old type floors, so it shows its
-		   records -- the founder's answer on #1945. Measured 2026-10-25 on
-		   this route's fixture on the drag surface:
-		   its natural width fits its column from 1702px on macOS/Chromium and
-		   from 1756px in CI's Linux/Chromium, the canonical environment,
-		   with no margin beyond it.
+		/* The invoice list's content floor (#1945, #1981): below it the table's
+		   cells wrap to more lines than at the old type floors, so it
+		   shows its records -- the founder's answer on #1945. Measured on
+		   this route's typical pilot screen, not its hostile one -- the
+		   founder's answer of 2026-10-25 on #1981: a very long name or
+		   address wraps one more line, and it does not change the layout.
+		   Measured 2026-10-25 on the drag surface: its natural width fits
+		   its column from 1125px on macOS/Chromium with no margin beyond it.
+		   On the hostile fixture it was 109.75rem.
 		   `DataTable.svelte`'s floor comment says why the floor is the
 		   route's own. */
 		.invoices-table {
@@ -214,7 +216,7 @@
 			--data-table-records-display: block;
 		}
 
-		@container invoices-table (min-width: 109.75rem) {
+		@container invoices-table (min-width: 70.5rem) {
 			.invoices-table > :global(*) {
 				--data-table-table-display: table;
 				--data-table-records-display: none;
