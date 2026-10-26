@@ -60,6 +60,24 @@ describe('RecordDetail.svelte', () => {
 		await expect.element(page.getByRole('heading', { level: 1, name: 'Ada Lovelace' })).toBeVisible();
 	});
 
+	it('renders the back link above the outcome and the title (#1998)', async () => {
+		await setup({ backHref: '/practices/p1/clients', backLabel: 'Clients', outcome: 'Work with Ada started.' });
+
+		const back = page.getByRole('link', { name: 'Clients' });
+		await expect.element(back).toBeVisible();
+		await expect.element(back).toHaveAttribute('href', '/practices/p1/clients');
+		const outcome = page.getByRole('status').element();
+		const title = page.getByRole('heading', { level: 1, name: 'Ada Lovelace' }).element();
+		expect(back.element().compareDocumentPosition(outcome) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(back.element().compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
+	it('draws no back link when none is given', async () => {
+		const { container } = await setup();
+
+		expect(container.querySelector('.back')).toBeNull();
+	});
+
 	it('omits the summary and the actions when neither is given', async () => {
 		await setup();
 

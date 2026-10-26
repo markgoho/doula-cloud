@@ -13,6 +13,7 @@
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import BackLink from '#lib/components/molecules/BackLink.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 
@@ -37,6 +38,14 @@
 		 * Snippet: every page a save leads to says it the same way.
 		 */
 		outcome?: string;
+		/**
+		 * GOV.UK's Back link, above everything else on the record, the
+		 * outcome banner included (#1998): the Engagement's drawing has
+		 * "← Clients" there. Page arrangement is the Template's, so the
+		 * place is here and the words are the route's.
+		 */
+		backHref?: string;
+		backLabel?: string;
 		summary?: Snippet;
 		actions?: Snippet;
 		sections: Section[];
@@ -68,6 +77,8 @@
 		title,
 		serviceName,
 		outcome,
+		backHref,
+		backLabel,
 		summary,
 		actions,
 		sections,
@@ -110,6 +121,9 @@
 					shell's (#431), not a page's. A Template renders no chrome.
 				-->
 				<div class="record-header">
+					{#if backHref}
+						<div class="back"><BackLink href={backHref} label={backLabel} /></div>
+					{/if}
 					{#if outcome}
 						<div class="notice"><Notice variant="status" message={outcome} isFocusedOnAppear /></div>
 					{/if}
@@ -257,6 +271,11 @@
 
 		.notice {
 			margin-block-end: var(--space-6);
+		}
+
+		/* The drawing's --space-4 between the Back link and the title row. */
+		.back {
+			margin-block-end: var(--space-4);
 		}
 
 		.contents-heading {
