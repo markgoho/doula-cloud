@@ -27,6 +27,15 @@
 		 * reader reads the button as unavailable.
 		 */
 		ariaDisabled?: boolean;
+		/*
+		 * The button's own action is in flight. It takes the `ariaDisabled`
+		 * form above, not `disabled` (#2119): a `disabled` button drops focus
+		 * to the page, so a keyboard user who pressed "Load more" or a
+		 * submit, and whose action then failed, started the next Tab at the
+		 * top of the page. Here focus stays, a screen reader reads the button
+		 * as busy and unavailable, and a press does nothing -- a submit's
+		 * press is canceled too, so the form is not sent twice.
+		 */
 		loading?: boolean;
 		icon?: IconName;
 		/*
@@ -110,7 +119,22 @@
 		element.focus();
 	}
 
-	const isDisabled = $derived(disabled || loading);
+	const isUnavailable = $derived(ariaDisabled || loading);
+
+	/*
+	 * An unavailable button still receives the click: a press with the
+	 * mouse, Enter or Space, or a form's implicit submission from a field.
+	 * Canceling it stops what the browser would do next -- send the form,
+	 * toggle the popover -- as well as the caller's own action.
+	 */
+	function handleClick(event: MouseEvent) {
+		if (isUnavailable) {
+			event.preventDefault();
+			return;
+		}
+		onClick?.(event);
+	}
+
 	const iconSize = $derived(size === 'sm' ? 16 : (size === 'lg' ? 24 : 20));
 	// `link` carries no size scale of its own (see the prop comment above),
 	// so the `size-*` class -- and the padding/min-height it sets -- is
@@ -122,14 +146,14 @@
 	{type}
 	class={buttonClass}
 	class:icon-only={iconOnly}
-	disabled={isDisabled}
-	aria-disabled={ariaDisabled || undefined}
+	{disabled}
+	aria-disabled={isUnavailable || undefined}
 	aria-busy={loading}
 	aria-expanded={expanded}
 	aria-controls={ariaControls}
 	aria-describedby={describedBy}
 	popovertarget={popoverTarget}
-	onclick={ariaDisabled ? undefined : onClick}
+	onclick={handleClick}
 	{@attach focusOnAppearing && takeFocus}
 >
 	{#if loading}
@@ -198,7 +222,7 @@
 		 * plum read as pressed or hovered, and in dark mode it was a
 		 * low-contrast mauve. The outline is drawn at full opacity, so its
 		 * words stay legible in both themes. A *loading* button is excluded
-		 * (`aria-busy`): it is disabled only while its own request is in
+		 * (`aria-busy`): it is unavailable only while its own request is in
 		 * flight, and it keeps its fill so the button just pressed still
 		 * looks pressed (the spinner's comment below). `bare` and `link`
 		 * have no box to outline, so they keep the faded rule above.
@@ -413,7 +437,7 @@
 		   brief's governing law. What the brief does not allow is movement a
 		   person cannot switch off, so the rotation is gated below and
 		   `reduce` gets the ring standing still. The feedback survives that:
-		   the ring is still drawn, and `button:disabled` still dims the whole
+		   the ring is still drawn, and `[aria-disabled='true']` still dims the whole
 		   control over its own fill (the outline rule above leaves a
 		   loading button alone), so a pressed button still looks pressed.
 		   See #418. */
