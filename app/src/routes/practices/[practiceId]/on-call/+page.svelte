@@ -33,6 +33,7 @@
 		type CoverageGap,
 		type DayRange,
 		type NoWindowRow,
+		type RosterDoula,
 		type RosterWindow
 	} from '#lib/onCall.js';
 	import Badge from '#lib/components/atoms/Badge.svelte';
@@ -104,6 +105,29 @@
 		{ label: 'Cover', accessor: describeCoverage, content: coverCell }
 	]);
 
+	/*
+	 * The Doulas as a table (#2031): a roster is a list of rows, and a
+	 * badge marks only the exception -- more than one birth in these
+	 * days, or away. One birth and "Available" are what nearly everybody
+	 * is, so they are plain text. `concurrentWindows` is absent where the
+	 * reader may not hold it (a contractor reading about a colleague): the
+	 * cell is empty and the record card leaves the row out (#2022).
+	 */
+	function birthsText(doula: RosterDoula): string {
+		if (doula.concurrentWindows === undefined) return '';
+		return doula.concurrentWindows === 1 ? '1 birth' : `${doula.concurrentWindows} births`;
+	}
+
+	const doulaColumns = [
+		{ label: 'Doula', accessor: (doula: RosterDoula) => doula.name },
+		{ label: 'Births in these days', accessor: birthsText, content: birthsCell },
+		{
+			label: 'Available',
+			accessor: (doula: RosterDoula) => (doula.available ? 'Available' : 'Away'),
+			content: availableCell
+		}
+	];
+
 	const noWindowColumns = [
 		{ label: 'Client', accessor: (row: NoWindowRow) => row.clientName },
 		{ label: 'Why', accessor: (row: NoWindowRow) => describeNoWindow(row.reason), variant: 'muted' as const }
@@ -124,9 +148,31 @@
 	{/if}
 {/snippet}
 
+{#snippet birthsCell(doula: RosterDoula)}
+	{#if (doula.concurrentWindows ?? 0) > 1}
+		<Badge label={birthsText(doula)} variant="warning" />
+	{:else}
+		{birthsText(doula)}
+	{/if}
+{/snippet}
+
+{#snippet availableCell(doula: RosterDoula)}
+	{#if doula.available}
+		Available
+	{:else}
+		<Badge label="Away" variant="neutral" />
+	{/if}
+{/snippet}
+
 {#snippet coverCell(row: RosterWindow)}
 	<div class="cover">
-		<Badge label={describeCoverage(row)} variant={row.uncovered ? 'warning' : 'success'} />
+		<!-- A badge for the gap alone (#2031): "Covered" is the normal
+		     case, and a badge on every row would spend the one a gap needs. -->
+		{#if row.uncovered}
+			<Badge label={describeCoverage(row)} variant="warning" />
+		{:else}
+			<Text text={describeCoverage(row)} />
+		{/if}
 		{#each row.unstaffedDays as hole (hole.start)}
 			<Text text={`Nobody on call ${dayRange(hole)}`} tone="muted" />
 		{/each}
@@ -228,22 +274,14 @@
 					text={`${stretched.map((doula) => doula.name).join(', ')} ${stretched.length === 1 ? 'is' : 'are'} on more than one birth in these days.`}
 				/>
 			{/if}
-			<ul class="doulas">
-				{#each data.roster.doulas as doula (doula.staffId)}
-					<li>
-						<span class="name">{doula.name}</span>
-						{#if doula.concurrentWindows !== undefined}
-							<Badge
-								label={doula.concurrentWindows === 1
-									? '1 birth'
-									: `${doula.concurrentWindows} births`}
-								variant={doula.concurrentWindows > 1 ? 'warning' : 'neutral'}
-							/>
-						{/if}
-						<Badge label={doula.available ? 'Available' : 'Away'} variant={doula.available ? 'success' : 'neutral'} />
-					</li>
-				{/each}
-			</ul>
+			<div class="doula-table">
+				<DataTable
+					columns={doulaColumns}
+					rows={data.roster.doulas}
+					hasMore={false}
+					emptyMessage="No doula is on this Practice's roster."
+				/>
+			</div>
 		</section>
 	{/snippet}
 </ListPage>
@@ -293,26 +331,12 @@
 			gap: var(--space-1);
 		}
 
-		/* The doula list wraps into as many columns as the space holds,
-		   one per row at 320px, with no viewport query. */
-		.doulas {
-			flex-direction: row;
-			flex-wrap: wrap;
-			gap: var(--space-2) var(--space-4);
-		}
-
-		/* The badges wrap under a name too long to share their line
-		   (#1743), rather than taking the room out of their own icons. */
-		.doulas li {
-			display: flex;
-			flex-wrap: wrap;
-			align-items: center;
-			gap: var(--space-2);
-			flex: 1 1 14rem;
-		}
-
-		.name {
-			font-weight: var(--font-weight-medium);
+		/* The Doulas table's floor (#2031, #2063): three short columns,
+		   so it stays a table at every width. Fifteen record cards at
+		   320px would be the same tall column of pills in another shape. */
+		.doula-table > :global(*) {
+			--data-table-table-display: table;
+			--data-table-records-display: none;
 		}
 
 		/* A narrowed doula's own days sit under her name rather than

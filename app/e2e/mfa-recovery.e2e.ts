@@ -212,9 +212,9 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 		const token = await readStaffInviteToken(request, invitationId);
 
 		await page.goto(`/accept-invite?token=${token}`);
+		await page.getByRole('radio', { name: /I'm new here/ }).check();
 		await page.getByLabel('Email').fill(doulaEmail);
 		await page.getByLabel('Password').fill(password);
-		await page.getByRole('radio', { name: /I'm new here/ }).check();
 		await page.getByRole('button', { name: 'Continue' }).click();
 		await expect(page.getByRole('heading', { name: 'Tell us about yourself' })).toBeVisible();
 		const [doulaFirstName, ...doulaLastName] = doulaName.split(' ');

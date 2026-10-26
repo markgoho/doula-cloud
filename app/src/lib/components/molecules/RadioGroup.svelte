@@ -14,6 +14,8 @@
 </script>
 
 <script lang="ts" generics="T extends string">
+	import type { Snippet } from 'svelte';
+
 	interface Option<T> {
 		value: T;
 		label: string;
@@ -26,6 +28,15 @@
 		 * the group, so a `label` string could not carry them.
 		 */
 		description?: string;
+		/*
+		 * GOV.UK's conditional reveal (#2043, #2035): what this answer asks
+		 * next, drawn under the option only while it is the chosen one. The
+		 * approval screen's refusal reason and `/accept-invite`'s email and
+		 * password are the two consumers. Mounted only while chosen, so a
+		 * field under an answer she did not pick is not on the page at all
+		 * -- nothing hidden is left to point `aria-controls` at.
+		 */
+		conditional?: Snippet;
 	}
 
 	interface Properties<T> {
@@ -119,6 +130,17 @@
 					<p id="{name}-{option.value}-hint" class="description">{option.description}</p>
 				{/if}
 			</div>
+			<!--
+				A sibling of the choice, not inside it: the choice's second
+				track ends where the label's text ends (#1518), which would
+				squeeze a field to the label's width, and the <label> around
+				the radio cannot hold a field's own <label>.
+			-->
+			{#if option.conditional && option.value === value}
+				<div class="conditional">
+					{@render option.conditional()}
+				</div>
+			{/if}
 		{/each}
 		<!-- v8 ignore stop -->
 	</stack-l>
@@ -317,6 +339,18 @@
 			margin: var(--space-1) 0 0;
 			color: var(--color-on-surface-muted);
 			font-size: var(--text-body-sm-size);
+		}
+
+		/*
+		 * GOV.UK's conditional: a rule down from the middle of the chosen
+		 * circle, and what the answer asks next indented beside it, so it
+		 * reads as belonging to that option and not as the next question.
+		 * The rule starts under the circle's center whatever its size.
+		 */
+		.conditional {
+			margin-inline-start: calc((var(--choice-size) - var(--border-active)) / 2);
+			padding-inline-start: calc(var(--choice-gap) + (var(--choice-size) - var(--border-active)) / 2);
+			border-inline-start: var(--border-active) solid var(--color-outline-variant);
 		}
 	}
 </style>

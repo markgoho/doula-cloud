@@ -1,5 +1,7 @@
 <script lang="ts">
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
+	import Textarea from '#lib/components/atoms/Textarea.svelte';
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 
 	const modeOptions: { value: 'signup' | 'login'; label: string }[] = [
 		{ value: 'signup', label: "I'm new here — create an account with this email address" },
@@ -20,11 +22,24 @@
 		{ value: 'new', label: 'No, this is a different person' }
 	];
 
+	/* The approval screen's question (#2043): the reason is asked only
+	   under Refuse. Opened on Refuse, since the sweep never clicks. */
+	let decision = $state<'approve' | 'refuse'>('refuse');
+	let reason = $state('');
+
 	let mode = $state<'signup' | 'login'>('signup');
 	let unchosenMode = $state<'signup' | 'login' | ''>('');
 	let doula = $state('you');
 	let client = $state<'existing' | 'new'>('existing');
 </script>
+
+{#snippet refusalReason()}
+	<LabeledField label="Why are you refusing this?" hint="The doula who asked will see this.">
+		{#snippet children({ id, describedBy, invalid })}
+			<Textarea {id} {describedBy} {invalid} value={reason} onInput={(value) => (reason = value)} />
+		{/snippet}
+	</LabeledField>
+{/snippet}
 
 <stack-l space="var(--space-6)">
 	<h1>Radio group</h1>
@@ -47,6 +62,19 @@
 	<section>
 		<h2>With a hint per option</h2>
 		<RadioGroup legend="Is this the same person?" options={clientOptions} value={client} onChange={(value) => (client = value)} />
+	</section>
+
+	<section>
+		<h2>With a conditional reveal</h2>
+		<RadioGroup
+			legend="Do you approve this work?"
+			options={[
+				{ value: 'approve', label: 'Approve and start the work', description: 'Uses 1 credit. 2 left after this.' },
+				{ value: 'refuse', label: 'Refuse', conditional: refusalReason }
+			]}
+			value={decision}
+			onChange={(value) => (decision = value)}
+		/>
 	</section>
 
 	<section>

@@ -57,28 +57,28 @@
 	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import RadioGroup, { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
 
 	const reasonId = 'engagement-request-refusal-reason';
+	const decisionName = 'engagement-request-decision';
+	// The summary entry for the question points at its first option,
+	// GOV.UK's rule for a group.
+	const decisionFieldId = radioFieldId(decisionName, 'approve');
 
 	let detail = $state<ApprovalDetail | undefined>();
 	let loadError = $state('');
-	let reason = $state('');
 	/*
-	 * One `FormSubmission` for both decisions -- Approve and Refuse write
-	 * into the same summary -- but each button needs its own spinner, since
-	 * both render at once and only one is ever the one just pressed.
-	 * `isApproving`/`isRefusing` below are that per-button read, derived
-	 * from which decision is running rather than from `isSubmitting` alone.
+	 * #2043: the two decisions are two answers to one question, "Do you
+	 * approve this work?", with one Continue -- the Birth outcome shape.
+	 * It opens with neither chosen (ADR-0055): Approve spends a Credit,
+	 * and a Continue pressed without reading must not spend it.
 	 */
+	let decision = $state<'approve' | 'refuse' | undefined>();
+	let reason = $state('');
 	const submission = new FormSubmission();
-	let activeDecision = $state<'approve' | 'refuse' | undefined>();
 	let hasNoCredits = $state(false);
-
-	const isApproving = $derived(activeDecision === 'approve' && submission.isSubmitting);
-	const isRefusing = $derived(activeDecision === 'refuse' && submission.isSubmitting);
-	const isDeciding = $derived(submission.isSubmitting);
 	// The empty-balance path is offered before the attempt as well as after
 	// it: the read already knows the balance, so an approver is told she
 	// must buy Credits rather than discovering it by pressing Approve.
@@ -164,29 +164,39 @@
 		}
 	});
 
-	async function handleApprove() {
+	/*
+	 * What Approve costs, as the hint under it: the Credit it spends and
+	 * what is left. On an empty balance the negative arithmetic stays off
+	 * the screen (#1235); the Notice above already says there is none.
+	 */
+	function approveHint(request: ApprovalDetail): string {
+		const cost = `Uses ${request.creditCost} credit.`;
+		return request.balanceAfter < 0
+			? `${cost} There are none left.`
+			: `${cost} ${request.balanceAfter} left after this.`;
+	}
+
+	async function handleDecide(event: SubmitEvent) {
+		event.preventDefault();
 		hasNoCredits = false;
-		activeDecision = 'approve';
 		await submission.run(async () => {
+			if (decision === undefined) {
+				return [{ message: 'Select whether you approve this work', targetId: decisionFieldId }];
+			}
+			if (decision === 'refuse') {
+				if (reason.trim() === '') {
+					return [{ message: 'Enter why this request is being refused', targetId: reasonId }];
+				}
+				await refuseRequest(apiFetchWithSession, page.params.practiceId!, page.params.requestId!, reason.trim());
+				await goto(clientHref(detail!.client.clientId));
+				return;
+			}
 			const result = await approveRequest(apiFetchWithSession, page.params.practiceId!, page.params.requestId!);
 			if (result.noCredits) {
 				hasNoCredits = true;
 				return;
 			}
 			await goto(engagementHref(result.outcome.engagementId));
-		}, orThrownMessage);
-	}
-
-	async function handleRefuse(event: SubmitEvent) {
-		event.preventDefault();
-		hasNoCredits = false;
-		activeDecision = 'refuse';
-		await submission.run(async () => {
-			if (reason.trim() === '') {
-				return [{ message: 'Enter why this request is being refused', targetId: reasonId }];
-			}
-			await refuseRequest(apiFetchWithSession, page.params.practiceId!, page.params.requestId!, reason.trim());
-			await goto(clientHref(detail!.client.clientId));
 		}, orThrownMessage);
 	}
 </script>
@@ -227,34 +237,39 @@
 	{/if}
 {/snippet}
 
+{#snippet refusalReason()}
+	<LabeledField
+		id={reasonId}
+		label="Why are you refusing this?"
+		hint="The doula who asked will see this."
+		error={submission.errorFor(reasonId)}
+	>
+		{#snippet children({ id, describedBy, invalid })}
+			<Textarea {id} {describedBy} {invalid} value={reason} onInput={(v) => (reason = v)} />
+		{/snippet}
+	</LabeledField>
+{/snippet}
+
 {#snippet decideSection()}
-	<stack-l space="var(--space-5)">
-		<Button label="Approve and start the work" loading={isApproving} disabled={isDeciding} onClick={handleApprove} />
-		<!--
-			#1108: this used to stack at `var(--space-4)`, the one form in
-			the product that did. Nothing on record asked for the tighter
-			rhythm, so it takes the same one every other form takes.
-		-->
-		<StackedForm onSubmit={handleRefuse}>
-			<LabeledField
-				id={reasonId}
-				label="Why are you refusing this?"
-				hint="The doula who asked will see this."
-				error={submission.errorFor(reasonId)}
-			>
-				{#snippet children({ id, describedBy, invalid })}
-					<Textarea {id} {describedBy} {invalid} value={reason} onInput={(v) => (reason = v)} />
-				{/snippet}
-			</LabeledField>
-			<Button
-				type="submit"
-				variant="destructive"
-				label="Refuse this request"
-				loading={isRefusing}
-				disabled={isDeciding}
-			/>
-		</StackedForm>
-	</stack-l>
+	<!--
+		#2043: one question, two answers, one primary -- the Birth outcome
+		shape. The reason is asked only under Refuse, so the destructive
+		answer is no longer a whole second form a hand's width from Approve.
+	-->
+	<StackedForm onSubmit={handleDecide}>
+		<RadioGroup
+			legend="Do you approve this work?"
+			name={decisionName}
+			options={[
+				{ value: 'approve', label: 'Approve and start the work', description: approveHint(detail!) },
+				{ value: 'refuse', label: 'Refuse', conditional: refusalReason }
+			]}
+			value={decision}
+			onChange={(value) => (decision = value)}
+			error={submission.errorFor(decisionFieldId)}
+		/>
+		<Button type="submit" label="Continue" loading={submission.isSubmitting} />
+	</StackedForm>
 {/snippet}
 
 <RecordDetail

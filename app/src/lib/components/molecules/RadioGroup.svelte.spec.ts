@@ -1,4 +1,5 @@
 import { page } from 'vitest/browser';
+import { createRawSnippet } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import RadioGroup from './RadioGroup.svelte';
@@ -130,6 +131,41 @@ describe('RadioGroup.svelte', () => {
 		expect(
 			page.getByLabelText('No, this is a different person').element().getAttribute('aria-describedby')
 		).toBeNull();
+	});
+
+	/*
+	 * GOV.UK's conditional reveal (#2043, #2035): what an answer asks next
+	 * is on the page only while that answer is the chosen one, and it
+	 * comes straight after its own option, before the next one.
+	 */
+	it('draws an option’s conditional only while that option is chosen, right under it', async () => {
+		const conditional = createRawSnippet(() => ({ render: () => '<p>Why are you refusing this?</p>' }));
+		const conditionalOptions = [
+			{ value: 'signup', label: 'Approve' },
+			{ value: 'login', label: 'Refuse', conditional },
+			{ value: 'other', label: 'Ask again later' }
+		];
+		const { rerender } = await render(RadioGroup<string>, {
+			legend: 'Do you approve this work?',
+			options: conditionalOptions,
+			value: undefined as string | undefined,
+			onChange: vi.fn()
+		});
+
+		await expect.element(page.getByText('Why are you refusing this?')).not.toBeInTheDocument();
+
+		await rerender({ value: 'login' });
+
+		const revealed = page.getByText('Why are you refusing this?');
+		await expect.element(revealed).toBeVisible();
+		const position = (other: string) =>
+			page.getByLabelText(other).element().compareDocumentPosition(revealed.element());
+		expect(position('Refuse') & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(position('Ask again later') & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+
+		await rerender({ value: 'signup' });
+
+		await expect.element(page.getByText('Why are you refusing this?')).not.toBeInTheDocument();
 	});
 
 	/*

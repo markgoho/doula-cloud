@@ -127,6 +127,16 @@ describe('the on-call roster', () => {
 			.toBeVisible();
 	});
 
+	// #2031: a roster is a list of rows, so the Doulas are a table.
+	it('lists the doulas as a table of name, births and availability', async () => {
+		await setup();
+
+		for (const name of ['Doula', 'Births in these days', 'Available'])
+			await expect.element(testPage.getByRole('columnheader', { name, exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: '1 birth', exact: true }).first()).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: '3 births', exact: true }).first()).toBeVisible();
+	});
+
 	it('marks a doula who cannot be reached as away', async () => {
 		await setup();
 
