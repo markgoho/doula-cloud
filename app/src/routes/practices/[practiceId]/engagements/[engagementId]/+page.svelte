@@ -2273,7 +2273,10 @@
 						{#if onCallDaysError}
 							<Notice variant="error" message={onCallDaysError} />
 						{/if}
-						<LabeledField label="First day on call">
+						<!-- An empty date is the window's own (`saveNarrowing`), so the
+						     form says so rather than leaving a blank to guess at. -->
+						<LabeledField label="First day on call" hint="Leave it empty to start when the window does.">
+
 							{#snippet children({ id, describedBy, invalid })}
 								<TextInput
 									{id}
@@ -2285,7 +2288,7 @@
 								/>
 							{/snippet}
 						</LabeledField>
-						<LabeledField label="Last day on call">
+						<LabeledField label="Last day on call" hint="Leave it empty to end when the window does.">
 							{#snippet children({ id, describedBy, invalid })}
 								<TextInput
 									{id}
