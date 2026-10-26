@@ -73,6 +73,7 @@
 		<UnusableLink
 			message={token ? LINK_EXPIRED_OR_USED : LINK_NOT_COMPLETE}
 			next={{ label: 'Sign in to ask for a new link', href: resolve('/portal/(signed-out)/login') }}
+			isFocusedOnAppear={isLinkUnusable}
 		/>
 	{:else if confirmedAddress}
 		<Notice variant="status" message="Your sign-in address has changed" />

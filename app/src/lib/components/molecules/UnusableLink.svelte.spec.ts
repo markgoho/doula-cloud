@@ -31,6 +31,14 @@ describe('UnusableLink.svelte', () => {
 			.toHaveAttribute('href', '/portal/login');
 	});
 
+	// Replacing a pressed Continue, focus goes to what replaced it rather
+	// than falling to the document.
+	it('takes focus when asked, where it replaces a pressed button', async () => {
+		await setup({ isFocusedOnAppear: true });
+
+		await expect.element(page.getByRole('alert')).toHaveFocus();
+	});
+
 	// A step taken away from DoulaCloud has no page, so no link is drawn
 	// for it: a link to nowhere would be a lie about where it goes.
 	it('says a step with no page as a line of text, not a link', async () => {

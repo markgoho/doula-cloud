@@ -111,6 +111,7 @@
 		<UnusableLink
 			message={token ? LINK_EXPIRED_OR_USED : LINK_NOT_COMPLETE}
 			next={{ label: 'Ask for a new sign-in link', href: resolve('/portal/(signed-out)/login') }}
+			isFocusedOnAppear={isLinkUnusable}
 		/>
 	{:else}
 		<!--

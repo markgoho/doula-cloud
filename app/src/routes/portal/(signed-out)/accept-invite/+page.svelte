@@ -107,7 +107,11 @@
 	{#if !inviteToken}
 		<UnusableLink message={LINK_NOT_COMPLETE} next={{ text: 'Ask your doula to send the invite again.' }} />
 	{:else if isLinkUnusable}
-		<UnusableLink message={LINK_EXPIRED_OR_USED} next={{ text: 'Ask your doula to send the invite again.' }} />
+		<UnusableLink
+			message={LINK_EXPIRED_OR_USED}
+			next={{ text: 'Ask your doula to send the invite again.' }}
+			isFocusedOnAppear
+		/>
 	{:else}
 		<!-- #610: see the sign-in page for why the warning sits on this button. -->
 		{#if signOutWarning}

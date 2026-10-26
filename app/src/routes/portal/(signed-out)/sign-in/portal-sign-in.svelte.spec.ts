@@ -135,6 +135,8 @@ describe('Redeeming a sign-in link over a live Staff session (#610)', () => {
 
 		// #2025: the link's own fault, so Continue gives way to the next step.
 		await expect.element(testPage.getByRole('alert')).toHaveTextContent('This link has expired or was already used.');
+		// The pressed button is gone, so focus moves to what replaced it.
+		await expect.element(testPage.getByRole('alert')).toHaveFocus();
 		await expect
 			.element(testPage.getByRole('link', { name: 'Ask for a new sign-in link' }))
 			.toHaveAttribute('href', '/portal/login');

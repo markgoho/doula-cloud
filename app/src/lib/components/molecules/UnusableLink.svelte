@@ -32,9 +32,15 @@
 	interface Properties {
 		message: string;
 		next: UnusableLinkNext;
+		/**
+		 * Set where this replaces a Continue the person just pressed: the
+		 * button is gone, and focus would otherwise fall to the document
+		 * (`Notice`'s own reason for the prop).
+		 */
+		isFocusedOnAppear?: boolean;
 	}
 
-	let { message, next }: Properties = $props();
+	let { message, next, isFocusedOnAppear = false }: Properties = $props();
 </script>
 
 <!--
@@ -42,7 +48,7 @@
 	rather than as two of the page's groups.
 -->
 <stack-l space="var(--space-related)">
-	<Notice variant="error" {message} />
+	<Notice variant="error" {message} {isFocusedOnAppear} />
 	{#if 'href' in next}
 		<Link href={next.href} label={next.label} />
 	{:else}
