@@ -691,6 +691,28 @@ const STAFF_ROUTES: SeededRoute<StaffSeed>[] = [
 		h1: 'Help Alex Owner sign in again'
 	},
 	{
+		// #2041: a Staff member's own page, the roster's one row action,
+		// scanned on the Owner's own row for the reason the row above gives.
+		// Her Owner session draws every section, the Access one included.
+		key: 'practices/[practiceId]/staff/[staffId]',
+		archetype: 'D',
+		url: (s) => `/practices/${s.practiceId}/staff/${s.staffId}`,
+		h1: 'Alex Owner'
+	},
+	{
+		// #2041: the two question pages that page's Changes open.
+		key: 'practices/[practiceId]/staff/[staffId]/roles',
+		archetype: 'E',
+		url: (s) => `/practices/${s.practiceId}/staff/${s.staffId}/roles`,
+		h1: 'Which roles does Alex Owner have?'
+	},
+	{
+		key: 'practices/[practiceId]/staff/[staffId]/employment-type',
+		archetype: 'E',
+		url: (s) => `/practices/${s.practiceId}/staff/${s.staffId}/employment-type`,
+		h1: 'Is Alex Owner an employee or a contractor?'
+	},
+	{
 		// #2006: the whole activity ledger the Overview links to.
 		key: 'practices/[practiceId]/activity',
 		archetype: 'C',

@@ -53,6 +53,14 @@
 		actions?: Snippet;
 		content: Snippet;
 		/**
+		 * What the act that led here did, such as "Pat Lee was removed from
+		 * this Practice." (#2041): `takeOutcome`'s message, drawn the way
+		 * `RecordDetail` draws its own -- a status `Notice` before the <h1>,
+		 * focused on arrival -- so every page a save lands on says it the
+		 * same way (`outcome.ts`).
+		 */
+		outcome?: string;
+		/**
 		Presence is the state, value is the Skeleton's accessible label (#480).
 		*/
 		loading?: string;
@@ -62,7 +70,7 @@
 		loadError?: string;
 	}
 
-	let { title, serviceName, intro, actions, content, loading, loadError }: Properties = $props();
+	let { title, serviceName, intro, actions, content, outcome, loading, loadError }: Properties = $props();
 </script>
 
 <PageTitle page={title} {serviceName} />
@@ -83,6 +91,9 @@
 			</stack-l>
 		{:else}
 			<stack-l space="var(--space-section)">
+				{#if outcome}
+					<Notice variant="status" message={outcome} isFocusedOnAppear />
+				{/if}
 				<Heading level={1} variant="page" text={title} />
 
 				{#if intro}
