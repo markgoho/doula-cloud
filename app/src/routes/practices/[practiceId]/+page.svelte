@@ -383,17 +383,15 @@
 			{#if activityError}
 				<Notice variant="error" message={activityError} />
 			{/if}
-			<div class="activity-table">
-				<DataTable
-					columns={activityLedgerColumns()}
-					rows={activity.items}
-					hasMore={activity.hasMore}
-					onLoadMore={() => activity.loadMore()}
-					isLoadingMore={activity.isLoadingMore}
-					loadMoreError={activity.loadMoreError}
-					emptyMessage="Nothing has happened yet."
-				/>
-			</div>
+			<DataTable
+				columns={activityLedgerColumns()}
+				rows={activity.items}
+				hasMore={activity.hasMore}
+				onLoadMore={() => activity.loadMore()}
+				isLoadingMore={activity.isLoadingMore}
+				loadMoreError={activity.loadMoreError}
+				emptyMessage="Nothing has happened yet."
+			/>
 		</stack-l>
 	</section>
 {/snippet}
@@ -449,31 +447,3 @@
 	loadError={error || undefined}
 	{outcome}
 />
-
-<style>
-	@layer components {
-		/* The activity ledger's content floor (#1945): below it the table's cells
-		   wrap to more lines than at the old type floors, so it shows its
-		   records -- the founder's answer on #1945. Measured 2026-10-25 on
-		   this route's fixture on the drag surface:
-		   its natural width fits its column from 1424px, for every session, in UTC (CI's zone, where the fixture's times print widest).
-		   `DataTable.svelte`'s floor comment says why the floor is the
-		   route's own. */
-		.activity-table {
-			container: activity-table / inline-size;
-		}
-
-		.activity-table > :global(*) {
-			font-size: var(--text-body-size);
-			--data-table-table-display: none;
-			--data-table-records-display: block;
-		}
-
-		@container activity-table (min-width: 89rem) {
-			.activity-table > :global(*) {
-				--data-table-table-display: table;
-				--data-table-records-display: none;
-			}
-		}
-	}
-</style>

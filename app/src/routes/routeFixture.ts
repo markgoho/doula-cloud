@@ -26,6 +26,18 @@
  * fixture holding representative content measures a screen nobody will
  * ever see. #521's approval screen fits at 320px on polite content and is
  * 93px past its edge on one pasted URL.
+ *
+ * One question is asked of typical content instead: where a table route
+ * moves from its records to its table (#1981). A table's own floor is the
+ * width at which its cells stop wrapping, and on hostile content that is
+ * up to 2988px, so five tables showed their records on every laptop
+ * whatever the Practice's names were. The founder's answer on 2026-10-25:
+ * measure that floor on what a 14-doula agency really holds; a very long
+ * name or address wraps one more line, and it does not change the layout.
+ * So a table route also declares a variant marked `typical`, with the
+ * values `typicalPilot.ts` names and sources, and the floor check over
+ * routes reads only that. The hostile screens stay for everything else:
+ * the 320px sweep, and no table crossing its frame at any width.
  */
 import type { Component } from 'svelte';
 import type { PracticeSession } from './practices/[practiceId]/+layout.js';
@@ -202,6 +214,12 @@ export interface RouteFixture<RouteParameters extends Record<string, string> = R
 	*/
 	readonly readyText: string;
 	/**
+	Whether this screen holds typical pilot data rather than hostile data
+	(#1981), which makes it a screen a table route's floor is measured on.
+	Set only by a variant; see `RouteVariant.typical`.
+	*/
+	readonly typical?: boolean;
+	/**
 	The other sessions this same screen renders differently under
 	([#913](https://github.com/markgoho/doula-cloud/issues/913)).
 
@@ -268,6 +286,13 @@ export interface RouteVariant<
 	/** The level-1 heading, when this branch's screen is titled
 	differently. */
 	readonly readyText?: string;
+	/**
+	This branch holds typical pilot data, the values `typicalPilot.ts`
+	names, not hostile data (#1981). The floor check over routes measures a
+	table route's own floor on these screens only, and every other check
+	sweeps them as it sweeps any other screen.
+	*/
+	readonly typical?: boolean;
 }
 
 /**

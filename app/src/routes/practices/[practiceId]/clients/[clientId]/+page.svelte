@@ -537,18 +537,16 @@
 		-->
 		<Text step="body-sm" tone="muted" text={mergeSummary()} />
 	{/if}
-	<div class="history-table">
-		<DataTable
-			columns={[
-				{ label: 'When', accessor: historyWhen, variant: 'meta' as const, datetimeAccessor: historyAt },
-				{ label: 'What', accessor: historyWhat, variant: 'body' as const },
-				{ label: 'Who', accessor: historyWho, variant: 'muted' as const }
-			]}
-			rows={detail!.history}
-			hasMore={false}
-			emptyMessage="No history yet."
-		/>
-	</div>
+	<DataTable
+		columns={[
+			{ label: 'When', accessor: historyWhen, variant: 'meta' as const, datetimeAccessor: historyAt },
+			{ label: 'What', accessor: historyWhat, variant: 'body' as const },
+			{ label: 'Who', accessor: historyWho, variant: 'muted' as const }
+		]}
+		rows={detail!.history}
+		hasMore={false}
+		emptyMessage="No history yet."
+	/>
 {/snippet}
 
 {#snippet eraseSection()}
@@ -615,33 +613,3 @@
 	loading={detail || error ? undefined : 'Loading the Client'}
 	loadError={error || undefined}
 />
-
-<style>
-	@layer components {
-		/* The Client's history's content floor (#1945): below it the table's cells
-		   wrap to more lines than at the old type floors, so it shows its
-		   records -- the founder's answer on #1945. Measured 2026-10-25 on
-		   this route's fixture on the drag surface:
-		   its natural width fits its column from 1049px on macOS/Chromium and
-		   from 1060px in CI's Linux/Chromium, the canonical environment,
-		   with no margin beyond it, for every session.
-		   `DataTable.svelte`'s floor comment says why the floor is the
-		   route's own. */
-		.history-table {
-			container: history-table / inline-size;
-		}
-
-		.history-table > :global(*) {
-			font-size: var(--text-body-size);
-			--data-table-table-display: none;
-			--data-table-records-display: block;
-		}
-
-		@container history-table (min-width: 66.25rem) {
-			.history-table > :global(*) {
-				--data-table-table-display: table;
-				--data-table-records-display: none;
-			}
-		}
-	}
-</style>

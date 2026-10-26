@@ -467,8 +467,15 @@ describe('the continuum check, over routes', () => {
  * to more lines than they did at the old type floors -- the founder's
  * answer on #1945, and `DataTable.svelte`'s floor comment says why the
  * floor is the route's and not the component's. A route's floor is read
- * off its own fixture, which is the content #537 makes hostile on purpose,
- * so this file is the one that can mount it.
+ * off its own fixture, so this file is the one that can mount it.
+ *
+ * Off the fixture's typical screens only (#1981), the variants marked
+ * `typical`: the founder's answer of 2026-10-25 is that a table's floor
+ * is measured on what a 14-doula agency really holds, not on the content
+ * #537 makes hostile on purpose. On a hostile screen a table past its
+ * floor wraps a long name or address onto more lines, and the continuum
+ * sweep above is what holds that table inside its frame at every width.
+ * A route floor that no typical screen renders fails.
  *
  * The same discovery as the component check -- `floor.ts`'s
  * `findConditions` over the raw source, never a list -- and the same two
@@ -498,26 +505,20 @@ function toRouteFloorKey(condition: Condition): string {
 /*
  * Which table each route floor is for. Every one is the table-fit
  * criterion (`floor.ts`'s `measureTableFit`), so the entry names the
- * table rather than a criterion.
+ * table rather than a criterion. Since #1981 the tables whose typical
+ * screen fits under `DataTable`'s own 55rem keep that floor and are not
+ * here: both activity ledgers, a Client's history, both Contracts tables,
+ * Engagement Requests, the schedule, Blocked email addresses and Pending
+ * invitations.
  */
 const ROUTE_FLOORS: Readonly<Record<string, string>> = {
 	'(person)/feedback#unopened-table': 'Issue not opened',
 	'(person)/feedback#feedback-table': 'All feedback',
-	'practices/[practiceId]#activity-table': 'The Practice-wide activity ledger',
 	'practices/[practiceId]/clients#clients-table': 'The Clients list',
-	'practices/[practiceId]/clients/[clientId]#history-table': "The Client's history",
-	'practices/[practiceId]/contracts#contracts-table': 'Contracts awaiting signature',
-	'practices/[practiceId]/contracts#void-requests-table': 'Void requests',
-	'practices/[practiceId]/engagement-requests#requests-table': 'Engagement Requests',
 	'practices/[practiceId]/engagements/[engagementId]#visits-table': 'Visits',
-	'practices/[practiceId]/engagements/[engagementId]#activity-table':
-		"The Engagement's activity ledger",
 	'practices/[practiceId]/invoices#invoices-table': 'The invoice list',
 	'practices/[practiceId]/on-call#roster-table': 'The on-call roster',
-	'practices/[practiceId]/schedule#schedule-table': 'The schedule',
-	'practices/[practiceId]/settings/blocked-addresses#blocked-table': 'Blocked email addresses',
-	'practices/[practiceId]/staff#members-table': 'Staff members',
-	'practices/[practiceId]/staff#invitations-table': 'Pending invitations'
+	'practices/[practiceId]/staff#members-table': 'Staff members'
 };
 
 describe('the floor check, over routes (#1945)', () => {
@@ -545,14 +546,14 @@ describe('the floor check, over routes (#1945)', () => {
 		const key = toRouteFloorKey(condition);
 		const declared = fixtures.get(toRoutePath(condition.file));
 		if (!declared || !Object.hasOwn(ROUTE_FLOORS, key)) continue; // reported above
-		const screens = toSweptFixtures(declared);
+		const screens = toSweptFixtures(declared).filter((screen) => screen.typical);
 		const floorPx = remToPx(condition.floorRem);
 		// The component check's depth, for its reason: 5%, never less than
 		// two steps of the sweep.
 		const belowFloorPx = floorPx - Math.max(2 * RESOLUTION, Math.round(floorPx * 0.05));
 
 		/*
-		 * Every screen of the route that renders this table, measured at
+		 * Every typical screen of the route that renders this table, measured at
 		 * `px`. A screen that does not render it -- the landing hub with no
 		 * Client yet draws its empty state, not its ledger -- is left out,
 		 * and a floor no screen renders is reported by the caller.
@@ -600,11 +601,11 @@ describe('the floor check, over routes (#1945)', () => {
 
 		function report(measurements: TableFitMeasurement[]): string {
 			return measurements.length === 0
-				? `${key}: no screen of the route renders its ${condition.containerName} container.`
+				? `${key}: no typical screen of the route renders its ${condition.containerName} container.`
 				: measurements.map((measurement) => tableFitReport(key, measurement)).join(' ');
 		}
 
-		it(`${key} is sufficient at its floor (${condition.floorRem}rem) on every screen`, async () => {
+		it(`${key} is sufficient at its floor (${condition.floorRem}rem) on every typical screen`, async () => {
 			const measurements = await measureAt([floorPx]);
 			expect(
 				measurements.length > 0 &&
@@ -613,7 +614,7 @@ describe('the floor check, over routes (#1945)', () => {
 			).toBe(true);
 		});
 
-		const minimalityName = `${key} is minimal: some screen's table does not fit somewhere in the ${floorPx - belowFloorPx}px below its floor`;
+		const minimalityName = `${key} is minimal: some typical screen's table does not fit somewhere in the ${floorPx - belowFloorPx}px below its floor`;
 		if (isCanonicalEnvironment()) {
 			it(minimalityName, async () => {
 				const measurements = await measureAt(belowFloorWidths);

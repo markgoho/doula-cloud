@@ -13,7 +13,8 @@
  */
 import type { AwaitingContract, AwaitingVoidRequest } from '#lib/contract.js';
 import type { CursorPage } from '#lib/paginatedList.svelte.js';
-import type { RouteFixture } from '../../../routeFixture.js';
+import type { RouteFixture, RouteVariant } from '../../../routeFixture.js';
+import { nth, TYPICAL_CLIENTS, TYPICAL_DOULAS } from '../../../typicalPilot.js';
 import type { RouteParams as RouteParameters } from './$types';
 import type { ContractsPageData } from './+page.js';
 import Page from './+page.svelte';
@@ -59,8 +60,53 @@ export const voidRequestsData: CursorPage<AwaitingVoidRequest> = {
 
 export const data: ContractsPageData = { contracts: contractsData, voidRequests: voidRequestsData };
 
+/*
+ * Typical pilot data (#1981), the screen this route's two table floors are
+ * measured on (`typicalPilot.ts` says where each value comes from): three
+ * Contracts a 14-doula agency is waiting on, Drafts and Sent ones, and one
+ * void request from a Doula with the reason in a sentence she would type.
+ * The pasted URL as a name and as a reason stays on the hostile screen.
+ */
+export const typical: RouteVariant<RouteParameters> = {
+	name: 'The Practice-wide Contracts awaiting signature list, with typical pilot data',
+	typical: true,
+	props: {
+		data: {
+			contracts: {
+				items: [4, 5, 6].map((index) => {
+					const person = nth(TYPICAL_CLIENTS, index);
+					return {
+						engagementId: `eng-${index}`,
+						contractId: `contract-${index}`,
+						clientId: person.clientId,
+						clientName: person.name,
+						status: index === 4 ? 'draft' : 'sent',
+						createdAt: `2026-10-0${index}T15:00:00Z`
+					};
+				}),
+				hasMore: false
+			},
+			voidRequests: {
+				items: [
+					{
+						requestId: 'request-1',
+						engagementId: 'eng-7',
+						clientId: nth(TYPICAL_CLIENTS, 7).clientId,
+						clientName: nth(TYPICAL_CLIENTS, 7).name,
+						requestedByName: nth(TYPICAL_DOULAS, 2).name,
+						reason: 'Her due date moved, so the fee changed',
+						createdAt: '2026-10-08T15:00:00Z'
+					}
+				],
+				hasMore: false
+			}
+		} satisfies ContractsPageData
+	}
+};
+
 export const fixture: RouteFixture<RouteParameters> = {
 	name: 'The Practice-wide Contracts awaiting signature list',
+	variants: [typical],
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/contracts',

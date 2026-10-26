@@ -62,8 +62,8 @@ async function setup(page: PracticeInvoiceListData = data) {
 	// Billing ledger's spec makes for the same reason. What the list says
 	// is asserted here; that it says the same thing in a narrow container
 	// is DataTable's own spec's job.
-	// Above this route's own table floor (#1945, its +page.svelte), so the <table> renders.
-	await testPage.viewport(3200, 900);
+	// Above this route's own table floor (#1945, #1981, its +page.svelte), so the <table> renders.
+	await testPage.viewport(1440, 900);
 	await render(Page, { params: fixture.params, data: { ...page, session: sessionStub } });
 }
 

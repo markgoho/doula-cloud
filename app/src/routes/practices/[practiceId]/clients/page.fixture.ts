@@ -10,6 +10,7 @@
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ClientListItem } from '#lib/client.js';
 import type { RouteFixture, RouteVariant } from '../../../routeFixture.js';
+import { nth, TYPICAL_CLIENTS, TYPICAL_DOULAS } from '../../../typicalPilot.js';
 import Page from './+page.svelte';
 
 export const clients: ClientListItem[] = [
@@ -151,6 +152,56 @@ export const asContractorWithNoClients: RouteVariant = {
 	respond: () => jsonResponse({ items: [], hasMore: false })
 };
 
+/*
+ * Typical pilot data (#1981), the screen this route's table floor is
+ * measured on (`typicalPilot.ts` says where each value comes from). An
+ * Owner's first page of a 14-doula agency's book: most Clients carry one
+ * open Engagement with its Contract signed, its Doula on it and an
+ * Invoice outstanding, one has just been entered and has nothing yet, one
+ * carries a pending birth Request, and the invites are the ordinary ones
+ * (accepted, sent, never sent). The rare long branches -- a blocked
+ * invite, a Request of each kind, two open Engagements -- stay on the
+ * hostile rows above, where the sweep still holds them inside the frame.
+ */
+const typicalClients: ClientListItem[] = TYPICAL_CLIENTS.slice(0, 8).map((person, index) => {
+	const doula = nth(TYPICAL_DOULAS, index + 2);
+	const isNew = index === 3;
+	const kind = index % 3 === 2 ? 'postpartum' : 'birth';
+	return {
+		clientId: person.clientId,
+		name: person.name,
+		email: person.email,
+		hasWork: !isNew,
+		portalInviteStatus: isNew ? undefined : (index % 4 === 1 ? 'sent' : 'accepted'),
+		pendingRequestKinds: index === 5 ? ['birth'] : [],
+		openEngagements: isNew
+			? []
+			: [
+					{
+						engagementId: `engagement-${index + 1}`,
+						kind,
+						engagementStatus: 'active',
+						contractStatus: 'signed',
+						doulaName: doula.name,
+						invoiceStatus: 'open',
+						invoiceAmountCents: kind === 'birth' ? 150_000 : 90_000
+					}
+				]
+	};
+});
+
+export const typical: RouteVariant = {
+	name: 'The Clients list, with typical pilot data',
+	typical: true,
+	respond: () => jsonResponse({ items: typicalClients, hasMore: false })
+};
+
+export const typicalWithEveryone: RouteVariant = {
+	...typical,
+	name: 'The Clients list, with typical pilot data and See everyone on',
+	url: withEveryone.url
+};
+
 export const fixture: RouteFixture = {
 	name: 'The Clients list',
 	component: Page,
@@ -159,5 +210,5 @@ export const fixture: RouteFixture = {
 	props: { data: { isContractor: false } },
 	respond: () => jsonResponse({ items: clients, hasMore: false }),
 	readyText: 'Clients',
-	variants: [asContractorWithNoClients, withEveryone]
+	variants: [asContractorWithNoClients, withEveryone, typical, typicalWithEveryone]
 };

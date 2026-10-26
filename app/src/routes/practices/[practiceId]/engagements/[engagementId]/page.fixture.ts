@@ -40,6 +40,7 @@ import type { Contract } from '#lib/contract.js';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { EngagementOnCall } from '#lib/onCall.js';
 import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
+import { nth, TYPICAL_CLIENTS, TYPICAL_DOULAS, TYPICAL_STAFF } from '../../../../typicalPilot.js';
 import { detail as clientDetail } from '../../clients/[clientId]/page.fixture.js';
 import type { RouteParams as RouteParameters } from './$types';
 import Page from './+page.svelte';
@@ -424,6 +425,88 @@ export const withNoRate: RouteVariant<RouteParameters> = {
 	}
 };
 
+/*
+ * Typical pilot data (#1981), the screen this route's two table floors are
+ * measured on (`typicalPilot.ts` says where each value comes from). Camille
+ * Boyd's birth Engagement at a 14-doula agency, with one Doula on it:
+ * five Visits so far, each logged by that Doula with a short note or none
+ * (Nadia Haddad's World Engagement has eleven by its twentieth week), the
+ * agency's own roster in the Visit pickers, and the ledger's ordinary
+ * week -- Visits logged, a Contract sent, an Invoice raised. The long note,
+ * the long names and the corrected birth outcome stay on the hostile
+ * screen.
+ */
+const typicalClientName = TYPICAL_CLIENTS[0]!.name;
+const typicalDoula = nth(TYPICAL_DOULAS, 2);
+const typicalDetail = {
+	...detail,
+	clientName: typicalClientName,
+	doulas: [{ staffId: typicalDoula.staffId, name: typicalDoula.name }]
+};
+const typicalRoster = TYPICAL_STAFF.map((member) => ({
+	...member,
+	roles: [...member.roles],
+	workStateReportedAt: '2026-09-08T15:00:00Z'
+}));
+const typicalNotes = [
+	'Talked through comfort measures and what to pack.',
+	'',
+	'Walked through the birth plan draft with her partner.',
+	'Feeding is going well.',
+	''
+];
+
+export const typical: RouteVariant<RouteParameters> = {
+	name: 'The Staff-side Engagement detail hub, with typical pilot data',
+	typical: true,
+	readyText: typicalClientName,
+	props: { data: { ...typicalDetail, session } },
+	respond: (path) => {
+		if (/\/engagements\/engagement-1$/.test(path)) return jsonResponse(typicalDetail);
+		if (path.endsWith('/visit-assignees')) {
+			return jsonResponse({
+				items: TYPICAL_DOULAS.map(({ staffId, name, employmentType }) => ({
+					staffId,
+					name,
+					employmentType,
+					nameable: employmentType === 'employee'
+				}))
+			});
+		}
+		if (path.endsWith('/staff')) return jsonResponse({ members: typicalRoster, invitations: { items: [] } });
+		if (path.includes('/visits')) {
+			return jsonResponse({
+				items: typicalNotes.map((notes, index) => ({
+					visitId: `visit-${index + 1}`,
+					staffId: typicalDoula.staffId,
+					staffName: typicalDoula.name,
+					createdAt: `2026-09-${String(1 + index * 6).padStart(2, '0')}T15:00:00Z`,
+					scheduledAt: `2026-09-${String(2 + index * 6).padStart(2, '0')}T15:00:00Z`,
+					...(notes && { notes }),
+					type: index === 3 ? 'postpartum' : 'prenatal'
+				})),
+				hasMore: false
+			});
+		}
+		if (path.includes('/activity')) {
+			return jsonResponse({
+				items: ['visit_logged', 'invoice_raised', 'contract_sent', 'visit_logged', 'visit_scheduled'].map(
+					(action, index) => ({
+						subjectKind: 'engagement',
+						subjectId: 'engagement-1',
+						action,
+						actorKind: 'staff',
+						actorName: index % 2 === 0 ? typicalDoula.name : TYPICAL_STAFF[0]!.name,
+						createdAt: `2026-10-${String(10 - index).padStart(2, '0')}T15:00:00Z`
+					})
+				),
+				hasMore: false
+			});
+		}
+		return fixture.respond!(path);
+	}
+};
+
 export const fixture: RouteFixture<RouteParameters> = {
 	name: 'The Staff-side Engagement detail hub, as an Owner who is also a Doula',
 	component: Page,
@@ -532,5 +615,5 @@ export const fixture: RouteFixture<RouteParameters> = {
 		throw new Error(`engagements/[engagementId] fixture: unmatched fetch path ${path}`);
 	},
 	readyText: clientName,
-	variants: [asDoula, withNoRate]
+	variants: [asDoula, withNoRate, typical]
 };

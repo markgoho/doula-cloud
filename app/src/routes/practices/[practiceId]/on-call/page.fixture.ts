@@ -16,7 +16,8 @@ import type {
 	RosterDoula,
 	RosterWindow,
 } from '#lib/onCall.js';
-import type { RouteFixture } from '../../../routeFixture.js';
+import type { RouteFixture, RouteVariant } from '../../../routeFixture.js';
+import { nth, TYPICAL_CLIENTS, TYPICAL_DOULAS } from '../../../typicalPilot.js';
 import type { RouteParams as RouteParameters } from './$types';
 import Page from './+page.svelte';
 
@@ -152,8 +153,77 @@ export const data: OnCallPageData = {
 	range: { from: '2026-10-01', to: '2026-10-31' },
 };
 
+/*
+ * Typical pilot data (#1981), the screen this route's table floor is
+ * measured on (`typicalPilot.ts` says where each value comes from). A
+ * 14-doula agency with 32 births spread over six months has five or six
+ * due in a month, and with a window of five weeks round each, about ten
+ * are on call in any one month. Most have one Doula on call for the whole
+ * window; every third hands over to a backup partway through; one has a
+ * Doula away for a night with another covering, and one has two days
+ * nobody is on call for.
+ */
+const typicalDoulas: RosterDoula[] = TYPICAL_DOULAS.map((doula, index) => ({
+	staffId: doula.staffId,
+	name: doula.name,
+	available: index % 5 !== 0,
+	concurrentWindows: index % 3
+}));
+
+const typicalWindows: RosterWindow[] = TYPICAL_CLIENTS.slice(0, 10).map((person, index) => {
+	const day = String(index * 3 + 1).padStart(2, '0');
+	const primary = nth(typicalDoulas, index + 2);
+	const backup = nth(typicalDoulas, index + 3);
+	const hasBackup = index % 3 === 0;
+	const isUncovered = index === 4;
+	return {
+		engagementId: `eng-${index + 1}`,
+		clientName: person.name,
+		dueDate: `2026-11-${day}`,
+		window: { start: `2026-10-${day}`, end: `2026-11-${day}` },
+		onCall: hasBackup
+			? [
+					{ staffId: primary.staffId, name: primary.name, from: `2026-10-${day}`, to: '2026-10-22', narrowed: true },
+					{ staffId: backup.staffId, name: backup.name, from: '2026-10-23', to: `2026-11-${day}`, narrowed: true }
+				]
+			: [{ staffId: primary.staffId, name: primary.name, from: `2026-10-${day}`, to: `2026-11-${day}`, narrowed: false }],
+		gaps:
+			index === 1
+				? [
+						gap({
+							id: 'gap-1',
+							staffId: primary.staffId,
+							staffName: primary.name,
+							coveringStaffId: backup.staffId,
+							coveringStaffName: backup.name,
+							reason: 'Family wedding'
+						})
+					]
+				: [],
+		unstaffedDays: isUncovered ? [{ start: '2026-10-23', end: '2026-10-24' }] : [],
+		uncovered: isUncovered
+	};
+});
+
+export const typical: RouteVariant<RouteParameters> = {
+	name: 'The on-call roster, with typical pilot data',
+	typical: true,
+	props: {
+		data: {
+			...data,
+			roster: {
+				...roster,
+				windows: typicalWindows,
+				noWindow: [{ engagementId: 'eng-no-due', clientName: nth(TYPICAL_CLIENTS, 10).name, reason: 'no_due_date' }],
+				doulas: typicalDoulas
+			}
+		} satisfies OnCallPageData
+	}
+};
+
 export const fixture: RouteFixture<RouteParameters> = {
 	name: 'The on-call roster',
+	variants: [typical],
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/on-call?from=2026-10-01&to=2026-10-31',

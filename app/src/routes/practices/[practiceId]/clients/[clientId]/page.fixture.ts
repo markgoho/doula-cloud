@@ -27,6 +27,7 @@ import { jsonResponse } from '#lib/testResponse.js';
 import type { ClientDetail } from '#lib/clientDetail.js';
 import type { EraseEligibility } from '#lib/clientErasure.js';
 import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
+import { nth, TYPICAL_CLIENTS, TYPICAL_DOULAS, TYPICAL_STAFF } from '../../../../typicalPilot.js';
 import Page from './+page.svelte';
 
 export const detail: ClientDetail = {
@@ -213,6 +214,75 @@ export const asOwnerWithoutSecondFactor: RouteVariant = {
 	props: { data: { isContractor: false, isOwner: true, hasSecondFactor: false } }
 };
 
+/*
+ * Typical pilot data (#1981), the screen this route's history table floor
+ * is measured on (`typicalPilot.ts` says where each value comes from):
+ * Camille Boyd, Rooted's own Client Persona, entered by the Owner, her
+ * details corrected once by her Doula, and a birth Request that Doula has
+ * asked for. The absorbed record and its long "from another record" label
+ * stay on the hostile screen.
+ */
+const typicalClient = TYPICAL_CLIENTS[0]!;
+const typicalOwner = TYPICAL_STAFF[0]!;
+const typicalDoula = nth(TYPICAL_DOULAS, 2);
+
+export const typicalDetail: ClientDetail = {
+	...detail,
+	givenName: typicalClient.givenName,
+	familyName: typicalClient.familyName,
+	email: typicalClient.email,
+	resolvedFields: [],
+	history: [
+		{
+			type: 'engagement_request',
+			at: '2026-10-08T15:00:00Z',
+			engagementRequest: {
+				requestId: 'request-1',
+				kind: 'birth',
+				state: 'pending',
+				requestedBy: typicalDoula.staffId,
+				requestedByName: typicalDoula.name,
+				requestedAt: '2026-10-08T15:00:00Z'
+			}
+		},
+		{
+			type: 'client_event',
+			at: '2026-10-06T15:00:00Z',
+			clientEvent: {
+				eventType: 'updated',
+				diff: undefined,
+				actorKind: 'staff',
+				actorStaffId: typicalDoula.staffId,
+				actorName: typicalDoula.name,
+				createdAt: '2026-10-06T15:00:00Z'
+			}
+		},
+		{
+			type: 'client_event',
+			at: '2026-10-05T15:00:00Z',
+			clientEvent: {
+				eventType: 'created',
+				diff: undefined,
+				actorKind: 'staff',
+				actorStaffId: typicalOwner.staffId,
+				actorName: typicalOwner.name,
+				createdAt: '2026-10-05T15:00:00Z'
+			}
+		}
+	],
+	mergedFrom: []
+};
+
+export const typical: RouteVariant = {
+	name: 'The Client detail hub, with typical pilot data',
+	typical: true,
+	readyText: typicalClient.name,
+	respond: (path) => {
+		if (path.endsWith('/api/staff/session')) return jsonResponse({ staffId: typicalDoula.staffId });
+		return jsonResponse(typicalDetail);
+	}
+};
+
 export const fixture: RouteFixture = {
 	name: 'The Client detail hub, as an employee Doula',
 	component: Page,
@@ -224,5 +294,5 @@ export const fixture: RouteFixture = {
 		return jsonResponse(detail);
 	},
 	readyText: 'Persephone Ochieng-Whitfield',
-	variants: [asOwner, asOwnerWhoMayErase, asOwnerWithoutSecondFactor]
+	variants: [asOwner, asOwnerWhoMayErase, asOwnerWithoutSecondFactor, typical]
 };

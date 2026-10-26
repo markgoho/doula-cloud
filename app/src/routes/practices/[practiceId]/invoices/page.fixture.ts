@@ -15,6 +15,7 @@
  */
 import type { PracticeInvoiceListData } from '#lib/invoice.js';
 import type { RouteFixture, RouteVariant } from '../../../routeFixture.js';
+import { TYPICAL_CLIENTS } from '../../../typicalPilot.js';
 import type { RouteParams as RouteParameters } from './$types';
 import Page from './+page.svelte';
 
@@ -91,9 +92,54 @@ export const narrowedToOverdue: RouteVariant<RouteParameters> = {
 	props: { data: { ...data, items: [data.items[0]], isNarrowedToOverdue: true } }
 };
 
+/*
+ * Typical pilot data (#1981), the screen this route's table floor is
+ * measured on (`typicalPilot.ts` says where each value comes from): eight
+ * Invoices from a 14-doula agency's book, a birth fee of $1,500.00 and a
+ * postpartum one of $900.00, most open and within their terms, some paid,
+ * one a month overdue, billed through Stripe or by hand. A
+ * four-figure amount is the most a single Invoice here ever says.
+ */
+export const typical: RouteVariant<RouteParameters> = {
+	name: 'The Practice-wide invoice list, with typical pilot data',
+	typical: true,
+	props: {
+		data: {
+			...data,
+			items: TYPICAL_CLIENTS.slice(0, 8).map((person, index) => {
+				const isPaid = index % 3 === 1;
+				const isOverdue = index === 2;
+				const isByHand = index % 4 === 3;
+				return {
+					id: `inv-${index + 1}`,
+					engagementId: `eng-${index + 1}`,
+					contractId: `contract-${index + 1}`,
+					clientName: person.name,
+					status: isPaid ? 'paid' : 'open',
+					amountCents: index % 3 === 2 ? 90_000 : 150_000,
+					currency: 'usd',
+					createdAt: `2026-09-${String(1 + index * 3).padStart(2, '0')}T15:00:00Z`,
+					...(isPaid && { paidOn: `2026-09-${String(5 + index * 3).padStart(2, '0')}` }),
+					reference: isByHand ? `INV-00${String(index + 10)}` : `DC-00${String(index + 10)}`,
+					billingMode: isByHand ? 'by_hand' : 'stripe',
+					dueOn: `2026-09-${String(15 + index * 2).padStart(2, '0')}`,
+					daysOverdue: isOverdue ? 36 : 0
+				};
+			}),
+			// The totals the eight rows above add up to.
+			outstandingCents: 630_000,
+			outstandingCount: 5,
+			paidCents: 450_000,
+			refundedCents: 0,
+			overdueCents: 90_000,
+			overdueCount: 1
+		} satisfies PracticeInvoiceListData
+	}
+};
+
 export const fixture: RouteFixture<RouteParameters> = {
 	name: 'The Practice-wide invoice list',
-	variants: [narrowedToOverdue],
+	variants: [narrowedToOverdue, typical],
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/invoices',
