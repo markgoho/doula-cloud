@@ -1,8 +1,13 @@
 <script lang="ts">
-	import LabeledField from './LabeledField.svelte';
+	import CheckboxGroup from './CheckboxGroup.svelte';
 	import RadioGroup from './RadioGroup.svelte';
-	import Checkbox from '../atoms/Checkbox.svelte';
-	import { ROLE_LABELS, EMPLOYMENT_TYPE_LABELS, type EmploymentType } from '#lib/roles.js';
+	import {
+		ROLE_LABELS,
+		ROLE_DESCRIPTIONS,
+		EMPLOYMENT_TYPE_LABELS,
+		EMPLOYMENT_TYPE_DESCRIPTIONS,
+		type EmploymentType
+	} from '#lib/roles.js';
 
 	// The two halves of a Membership, edited together: ADR-0008 makes
 	// roles what a person does at a Practice and employment type what she
@@ -28,19 +33,18 @@
 		 */
 		rolesError?: string;
 		/**
-		 * The id given to the *first* role checkbox, so an error summary
-		 * entry can link to the group: GOV.UK sends a reader to the first
-		 * control of the group that was refused, and the group itself is a
-		 * <fieldset>, which is not focusable. Handed in rather than
-		 * generated because the route builds the summary and the two have
-		 * to agree on one string.
+		 * The `name` the role checkboxes share, which is also what their
+		 * ids are built from (`checkboxFieldId(rolesName, 'owner')`). Handed
+		 * in because the route builds the error summary, which sends a
+		 * reader to the group's first box -- GOV.UK's rule, since the
+		 * <fieldset> itself is not focusable -- and the two have to agree
+		 * on one string.
 		 */
-		rolesFieldId?: string;
+		rolesName?: string;
 		/**
 		 * The `name` the employment-type radios share, which is also what
 		 * their ids are built from (`<name>-employee`). Handed in for the
-		 * same reason `rolesFieldId` is: the route builds the error
-		 * summary and the two have to agree on one string (#488).
+		 * same reason `rolesName` is (#488).
 		 */
 		employmentTypeName?: string;
 		/**
@@ -56,26 +60,19 @@
 		onRolesChange,
 		onEmploymentTypeChange,
 		rolesError,
-		rolesFieldId,
+		rolesName,
 		employmentTypeName,
 		employmentTypeError
 	}: Properties = $props();
 
-	const rolesErrorId = $props.id();
+	/* One line under each option (#2014): Owner, Admin and
+	   Contractor are the answers a person needs explained. */
+	const roleOptions = ROLE_LABELS.map((option) => ({ ...option, description: ROLE_DESCRIPTIONS[option.value] }));
 
-	const roleOptions = ROLE_LABELS;
-
-	const employmentOptions = EMPLOYMENT_TYPE_LABELS;
-
-	function toggleRole(role: string, isChecked: boolean) {
-		// Order follows roleOptions rather than the click order, so the
-		// same set of roles always reads the same way.
-		onRolesChange(
-			isChecked
-				? roleOptions.map((option) => option.value).filter((value) => value === role || roles.includes(value))
-				: roles.filter((value) => value !== role)
-		);
-	}
+	const employmentOptions = EMPLOYMENT_TYPE_LABELS.map((option) => ({
+		...option,
+		description: EMPLOYMENT_TYPE_DESCRIPTIONS[option.value]
+	}));
 </script>
 
 <!--
@@ -85,29 +82,16 @@
 	compose this, because it is the same decision on both (#425).
 -->
 <stack-l space="var(--space-7)">
-	<fieldset aria-describedby={rolesError ? rolesErrorId : undefined} class:refused={Boolean(rolesError)}>
-		<legend>Roles</legend>
-		{#if rolesError}
-			<p id={rolesErrorId} class="error" role="alert">{rolesError}</p>
-		{/if}
-		<stack-l space="var(--space-5)">
-			{#each roleOptions as option, index (option.value)}
-				<LabeledField
-					id={index === 0 ? rolesFieldId : undefined}
-					label={option.label}
-					orientation="inline"
-				>
-					{#snippet children(control)}
-						<Checkbox
-							checked={roles.includes(option.value)}
-							onChange={(isChecked) => toggleRole(option.value, isChecked)}
-							{...control}
-						/>
-					{/snippet}
-				</LabeledField>
-			{/each}
-		</stack-l>
-	</fieldset>
+	<!-- CheckboxGroup orders the chosen roles as the options are listed,
+	     not in the click order, so the same set always reads the same way. -->
+	<CheckboxGroup
+		legend="Roles"
+		name={rolesName}
+		options={roleOptions}
+		value={roles}
+		onChange={onRolesChange}
+		error={rolesError}
+	/>
 
 	<RadioGroup
 		legend="Employment type"
@@ -118,40 +102,3 @@
 		error={employmentTypeError}
 	/>
 </stack-l>
-
-<style>
-	@layer components {
-		/* The legend is the group's name; the options below it are
-		   consecutive fields, so 20px, per the same Density section.
-		   The fieldset stays a block -- a flex fieldset drags its own
-		   <legend> in as a flex item. */
-		fieldset {
-			margin: 0;
-			padding: 0;
-			border: 0;
-			min-inline-size: 0;
-		}
-
-		legend {
-			padding: 0;
-			margin-block-end: var(--space-5);
-			font-weight: var(--font-weight-medium);
-			color: var(--color-on-surface);
-		}
-
-		/* The group's error message sits between its name and its first
-		   option, close to the name it qualifies rather than adrift between
-		   the two -- so the legend gives up its own 20px when there is one,
-		   and the message keeps it instead. Same treatment `LabeledField`
-		   gives a field's own message. */
-		fieldset.refused legend {
-			margin-block-end: var(--space-1);
-		}
-
-		.error {
-			margin: 0 0 var(--space-5);
-			color: var(--color-error);
-			font-size: var(--text-body-sm-size);
-		}
-	}
-</style>

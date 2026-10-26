@@ -199,7 +199,7 @@
 			/* Or the free space goes to the `auto` track, and the text
 			   is pushed to the far edge. */
 			justify-content: start;
-			column-gap: var(--space-4);
+			column-gap: var(--choice-gap);
 		}
 
 		/* The label takes both tracks of its choice through a subgrid, so
@@ -220,7 +220,7 @@
 		 * its first line level with the circle and grows downward.
 		 */
 		.text {
-			padding-block: calc((var(--control-height) - 1lh) / 2);
+			padding-block: calc((var(--choice-size) - 1lh) / 2);
 			overflow-wrap: anywhere;
 		}
 
@@ -235,8 +235,8 @@
 		 */
 		input {
 			appearance: none;
-			inline-size: var(--control-height);
-			block-size: var(--control-height);
+			inline-size: var(--choice-size);
+			block-size: var(--choice-size);
 			/* Never smaller than the text beside it. A radio with
 			   `appearance: none` has no size of its own, so a page that
 			   somehow lacked the tokens -- a unit spec mounting this
@@ -245,7 +245,7 @@
 			min-inline-size: 1em;
 			min-block-size: 1em;
 			margin: 0;
-			padding: calc(var(--control-height) / 4 - var(--border-active));
+			padding: calc(var(--choice-size) / 4 - var(--border-active));
 			border: var(--border-active) solid var(--color-on-surface);
 			border-radius: var(--radius-pill);
 			background-color: var(--color-surface);

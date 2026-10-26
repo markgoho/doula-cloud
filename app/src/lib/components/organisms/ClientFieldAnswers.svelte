@@ -1,6 +1,7 @@
 <script lang="ts">
 	/*
-	 * A Practice's own questions, asked (#466).
+	 * A Practice's own questions, asked (#466) -- the one renderer for a
+	 * Practice-defined field, whoever is answering it.
 	 *
 	 * ## Why this is not `DynamicFieldEditor`
 	 *
@@ -13,6 +14,16 @@
 	 * carry-through of `fieldValues` as an opaque payload is the gap this
 	 * fills.
 	 *
+	 * ## Two consumers, one renderer (#2014)
+	 *
+	 * The Client details sections ask a Practice's Client fields here,
+	 * and `PlanInstanceForm` asks a Care Plan's and a Birth Plan's fields
+	 * through this same component, one call per section. The two drew the
+	 * same five field types two ways until #2014 found the Plan's version
+	 * bulleted, boxed and run together; they change together now
+	 * (ADR-0018's bar). So `fields` takes only what both kinds of field
+	 * carry, and `values` takes whatever was stored, read by type below.
+	 *
 	 * ## An organism, by #424's rule
 	 *
 	 * A whole page section rather than a part of one: a Practice-named
@@ -20,17 +31,20 @@
 	 *
 	 * ## The five types, and the control each gets
 	 *
-	 * `section_header` never reaches here -- `intakeJourney.ts` splits on
-	 * it rather than passing it through, because a heading is not a
-	 * question. Of the five that do:
+	 * `section_header` never reaches here -- `intakeJourney.ts` and
+	 * `PlanInstanceForm` both split on it rather than passing it through,
+	 * because a heading is not a question. Of the five that do:
 	 *
 	 * - **short_text** a text input, **long_text** a textarea.
 	 * - **single_select** a `Select`, not radios. Radios are GOV.UK's
 	 *   default for a small option set, but a Practice's list is
 	 *   unbounded and, since the save is free (ADR-0017), every one of
-	 *   these has to have a real unanswered state -- which a select's
-	 *   placeholder is and a radio group is not.
-	 * - **multi_select** a checkbox each, which is GOV.UK's Checkboxes
+	 *   these has to have a real unanswered state. It is the first
+	 *   option, "Not answered yet", and it stays selectable, so an answer
+	 *   given by mistake can be taken back -- a disabled placeholder
+	 *   could not be chosen again once left. #1253 turns these into
+	 *   radios, in this one place.
+	 * - **multi_select** a `CheckboxGroup`, which is GOV.UK's Checkboxes
 	 *   pattern and the only control where "none of them" and "several of
 	 *   them" are both sayable.
 	 * - **checkbox** one checkbox, its label the question.
@@ -39,13 +53,20 @@
 	import Select from '#lib/components/atoms/Select.svelte';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import CheckboxGroup from '#lib/components/molecules/CheckboxGroup.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
-	import type { Field } from '#lib/clientFieldTemplate.js';
+	import type { Field as ClientField } from '#lib/clientFieldTemplate.js';
+	import type { Field as PlanField } from '#lib/planTemplate.js';
 	import type { FieldValue } from '#lib/intakeDraft.svelte.js';
 
+	/*
+	A Client field or a Plan field: this reads only what the two share.
+	*/
+	type AskedField = ClientField | PlanField;
+
 	interface Properties {
-		fields: Field[];
-		values: Record<string, FieldValue>;
+		fields: readonly AskedField[];
+		values: Readonly<Record<string, unknown>>;
 		onChange: (fieldId: string, value: FieldValue) => void;
 		/**
 		 * Prefixes each control's id, so an error summary entry can link to
@@ -56,30 +77,28 @@
 
 	let { fields, values, onChange, idPrefix }: Properties = $props();
 
-	function fieldId(field: Field): string {
+	const UNANSWERED = { value: '', label: 'Not answered yet' };
+
+	function fieldId(field: AskedField): string {
 		return `${idPrefix}-${field.id}`;
 	}
 
-	function textValue(field: Field): string {
+	function textValue(field: AskedField): string {
 		const value = values[field.id];
 		return typeof value === 'string' ? value : '';
 	}
 
-	function listValue(field: Field): string[] {
+	function listValue(field: AskedField): string[] {
 		const value = values[field.id];
 		return Array.isArray(value) ? value : [];
 	}
 
-	function isChecked(field: Field): boolean {
+	function isChecked(field: AskedField): boolean {
 		return values[field.id] === true;
 	}
 
-	function toggleOption(field: Field, option: string, isChosen: boolean) {
-		const chosen = listValue(field);
-		onChange(
-			field.id,
-			isChosen ? [...chosen, option] : chosen.filter((entry) => entry !== option)
-		);
+	function choiceOptions(field: AskedField) {
+		return (field.options ?? []).map((option) => ({ value: option, label: option }));
 	}
 </script>
 
@@ -98,51 +117,22 @@
 				{/snippet}
 			</LabeledField>
 		{:else if field.type === 'multi_select'}
-			<!--
-				Its own <fieldset>, unlike every other field here: the
-				question names the group and each checkbox carries an
-				option, so without one a screen reader announces four
-				unrelated checkboxes and never the question they answer.
-			-->
-			<fieldset>
-				<legend>{field.label}</legend>
-				<stack-l space="var(--space-4)">
-					<!-- v8 ignore start: only the compiled branch for "was this
-					     keyed option added/removed from the DOM since the last
-					     render" is unreachable here (Svelte's own each-block
-					     diffing internals, not app code) -- the loop body is
-					     exercised by "groups a multi-select under its own
-					     question" in ClientFieldAnswers.svelte.spec.ts -->
-					{#each field.options ?? [] as option (option)}
-						<LabeledField
-							id="{fieldId(field)}-{option}"
-							label={option}
-							orientation="inline"
-						>
-							{#snippet children({ id, describedBy })}
-								<Checkbox
-									{id}
-									{describedBy}
-									checked={listValue(field).includes(option)}
-									ariaLabel="{field.label}: {option}"
-									onChange={(isChosen) => toggleOption(field, option, isChosen)}
-									autocomplete="off"
-								/>
-							{/snippet}
-						</LabeledField>
-					{/each}
-					<!-- v8 ignore stop -->
-				</stack-l>
-			</fieldset>
+			<CheckboxGroup
+				legend={field.label}
+				name={fieldId(field)}
+				options={choiceOptions(field)}
+				value={listValue(field)}
+				onChange={(chosen) => onChange(field.id, chosen)}
+				autocomplete="off"
+			/>
 		{:else if field.type === 'single_select'}
 			<LabeledField id={fieldId(field)} label={field.label}>
 				{#snippet children({ id, describedBy })}
 					<Select
 						{id}
 						{describedBy}
-						options={field.options ?? []}
+						options={[UNANSWERED, ...choiceOptions(field)]}
 						value={textValue(field)}
-						placeholder="Not answered yet"
 						onChange={(chosen) => onChange(field.id, chosen)}
 						autocomplete="off"
 					/>
@@ -175,21 +165,3 @@
 		{/if}
 	{/each}
 </stack-l>
-
-<style>
-	@layer components {
-		fieldset {
-			margin: 0;
-			padding: 0;
-			border: 0;
-			min-inline-size: 0;
-		}
-
-		legend {
-			padding: 0;
-			margin-block-end: var(--space-4);
-			font-weight: var(--font-weight-medium);
-			color: var(--color-on-surface);
-		}
-	}
-</style>

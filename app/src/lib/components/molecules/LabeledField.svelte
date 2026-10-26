@@ -138,15 +138,27 @@
 			grid-template-areas: 'control label';
 			grid-template-columns: auto minmax(0, 1fr);
 			align-items: start;
-			gap: var(--space-4);
+			/* The one box-to-text gap (#2014), shared with RadioGroup and
+			   CheckboxGroup -- see tokens.css. */
+			gap: var(--choice-gap);
 		}
 
 		.inline-row > :first-child {
 			grid-area: control;
 		}
 
+		/* Level with the control's middle on its first line, and wrapping
+		   downward from there, as RadioGroup's text is (#1518): a checkbox
+		   and a text input are both `--choice-size` tall, so the text is
+		   pushed down by half of what they are taller than one line. A
+		   switch is drawn shorter than that, so its label keeps the top. */
 		.inline-row > label {
 			grid-area: label;
+			padding-block: calc((var(--choice-size) - 1lh) / 2);
+		}
+
+		.inline-row:has(> :global([role='switch'])) > label {
+			padding-block: 0;
 		}
 	}
 </style>

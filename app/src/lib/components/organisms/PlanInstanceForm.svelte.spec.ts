@@ -27,6 +27,12 @@ async function setup({ fields = defaultFields, answers = {} }: SetupOptions = {}
 	return { onAnswerChange, onToggleOption };
 }
 
+/* The options repeat across questions, so a box is found inside its own
+   question's group, as a screen reader meets it. */
+function notifyGroup() {
+	return page.getByRole('group', { name: 'Notify' });
+}
+
 describe('PlanInstanceForm.svelte', () => {
 	it('renders no option checkboxes for a multi_select field with no options', async () => {
 		const fieldWithoutOptions: Field[] = [{ id: 'notify', type: 'multi_select', label: 'Notify', order: 0 }];
@@ -75,8 +81,8 @@ describe('PlanInstanceForm.svelte', () => {
 	it('checks the selected options for a multi_select field', async () => {
 		await setup({ answers: { notify: ['Doula'] } });
 
-		await expect.element(page.getByLabelText('Notify: Doula')).toBeChecked();
-		await expect.element(page.getByLabelText('Notify: Partner')).not.toBeChecked();
+		await expect.element(notifyGroup().getByLabelText('Doula')).toBeChecked();
+		await expect.element(notifyGroup().getByLabelText('Partner')).not.toBeChecked();
 	});
 
 	it('calls onAnswerChange when the short_text input changes', async () => {
@@ -111,11 +117,53 @@ describe('PlanInstanceForm.svelte', () => {
 		expect(onAnswerChange).toHaveBeenCalledWith('location', 'Home');
 	});
 
-	it('calls onToggleOption with the field id and option when a multi_select checkbox is clicked', async () => {
-		const { onToggleOption } = await setup();
+	it('calls onToggleOption with the field id and the option ticked', async () => {
+		const { onToggleOption } = await setup({ answers: { notify: ['Doula'] } });
 
-		await page.getByLabelText('Notify: Partner').click();
+		await notifyGroup().getByLabelText('Partner').click();
 
 		expect(onToggleOption).toHaveBeenCalledWith('notify', 'Partner');
+	});
+
+	it('calls onToggleOption with the field id and the option unticked', async () => {
+		const { onToggleOption } = await setup({ answers: { notify: ['Doula', 'Partner'] } });
+
+		await notifyGroup().getByLabelText('Doula').click();
+
+		expect(onToggleOption).toHaveBeenCalledWith('notify', 'Doula');
+	});
+
+	// The first option is the unanswered state, and it stays selectable,
+	// so a Staff member can take an answer back.
+	it('clears a single_select answer through its Not answered yet option', async () => {
+		const { onAnswerChange } = await setup({ answers: { location: 'Home' } });
+
+		await page.getByLabelText('Location').selectOptions('Not answered yet');
+
+		expect(onAnswerChange).toHaveBeenCalledWith('location', '');
+	});
+
+	it('starts a group at each section header, with the questions before the first one in a group of their own', async () => {
+		await setup({
+			fields: [
+				{ id: 'intro', type: 'short_text', label: 'Due date notes', order: 0 },
+				{ id: 'h1', type: 'section_header', label: 'Labor', order: 1 },
+				{ id: 'pain', type: 'short_text', label: 'Pain relief', order: 2 },
+				{ id: 'h2', type: 'section_header', label: 'After the birth', order: 3 }
+			]
+		});
+
+		await expect.element(page.getByLabelText('Due date notes')).toBeVisible();
+		await expect.element(page.getByRole('heading', { level: 3, name: 'Labor' })).toBeVisible();
+		await expect.element(page.getByLabelText('Pain relief')).toBeVisible();
+		await expect.element(page.getByRole('heading', { level: 3, name: 'After the birth' })).toBeVisible();
+		expect(page.getByRole('list').elements()).toHaveLength(0);
+	});
+
+	it('draws nothing for a Plan with no fields', async () => {
+		await setup({ fields: [] });
+
+		expect(page.getByRole('textbox').elements()).toHaveLength(0);
+		expect(page.getByRole('heading').elements()).toHaveLength(0);
 	});
 });

@@ -7,6 +7,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import MembershipFields from '#lib/components/molecules/MembershipFields.svelte';
 	import { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
+	import { checkboxFieldId } from '#lib/components/molecules/CheckboxGroup.svelte';
 	import type { EmploymentType } from '#lib/roles.js';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
@@ -14,7 +15,10 @@
 	import { FormSubmission, orServiceProblem, type FormError } from '#lib/formSubmission.svelte.js';
 
 	const emailId = 'invite-email';
-	const rolesFieldId = 'invite-roles';
+	// The role checkboxes share one name, and CheckboxGroup builds each
+	// box's id from it, so the summary entry points at the first one.
+	const rolesName = 'invite-roles';
+	const rolesFieldId = checkboxFieldId(rolesName, 'owner');
 	// docs/api-design.md section 7's Details is keyed by the DTO's own
 	// JSON field name -- the POST body a few lines below.
 	// The employment-type radios share one name, and RadioGroup builds
@@ -112,7 +116,7 @@
 	<MembershipFields
 		{roles}
 		{employmentType}
-		{rolesFieldId}
+		{rolesName}
 		{employmentTypeName}
 		rolesError={submission.errorFor(rolesFieldId)}
 		employmentTypeError={submission.errorFor(employmentTypeFieldId)}
