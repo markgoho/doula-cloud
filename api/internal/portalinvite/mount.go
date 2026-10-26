@@ -24,12 +24,15 @@ var portalAcceptInviteRules = []ratelimit.Rule{
 // Client to the portal, one of #350's write surfaces exempt from
 // staffauth.AttachingWrite by name (offer.CreateHandler's mount comment
 // records the same reasoning) -- and the pre-account acceptance itself,
-// which has no session of either population yet.
-func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB, nudge tasknudge.Enqueuer) {
+// which has no session of either population yet. Both are writes that
+// register through ir (the acceptance since #1924), so the GatedRouter is
+// unused -- kept in the signature every feature Mount shares.
+func Mount(_ *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB, nudge tasknudge.Enqueuer) {
 	ir.Replayable("POST /api/practices/{practiceId}/engagements/{engagementId}/portal-invite", false, InviteHandler(nudge))
 
 	// #617: a Client has no Identity Platform account to authenticate
 	// through any more, so the invitation token is the whole credential.
-	g.Write("POST /api/portal/accept-invite",
+	ir.PortalExempt("POST /api/portal/accept-invite",
+		"pre-session: no Client is signed in to key a retry to, and a second acceptance at the same Practice is refused (409) rather than making a second Portal Account",
 		ratelimit.Wrap(db, "portal_accept_invite", portalAcceptInviteRules)(AcceptInviteHandler(db, nudge)))
 }

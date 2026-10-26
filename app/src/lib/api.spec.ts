@@ -260,6 +260,14 @@ describe('apiFetchWithSession', () => {
 	});
 });
 
+// One Message submit, sent the way a route sends it.
+function submitMessage(): Promise<Response> {
+	return apiFetchWithSession('/api/practices/prac-1/engagements/eng-1/messages', {
+		method: 'POST',
+		body: JSON.stringify({ body: 'See you Tuesday' })
+	});
+}
+
 describe('apiFetch', () => {
 	it('hands a 401 straight back instead of sending the caller to the login screen', async () => {
 		goto.mockClear();
@@ -273,6 +281,33 @@ describe('apiFetch', () => {
 		expect(response.status).toBe(401);
 		expect(goto).not.toHaveBeenCalled();
 		expect(signOut).not.toHaveBeenCalled();
+		vi.unstubAllGlobals();
+	});
+
+	// #1924: the seam is apiFetch, so every POST a route sends through
+	// apiFetchWithSession carries the key without the route naming one.
+	it('sends the same Idempotency-Key when a dropped submit is pressed again, and a new one after it lands', async () => {
+		const sent: (string | null)[] = [];
+		const state = { shouldDrop: true };
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (_url: string, init: RequestInit) => {
+				sent.push(new Headers(init.headers).get('Idempotency-Key'));
+				if (state.shouldDrop) {
+					state.shouldDrop = false;
+					throw new TypeError('Failed to fetch');
+				}
+				return new Response(undefined, { status: 201 });
+			})
+		);
+
+		await expect(submitMessage()).rejects.toThrow('Failed to fetch');
+		await submitMessage();
+		await submitMessage();
+
+		expect(sent[0]).toMatch(/^[0-9a-f-]{36}$/);
+		expect(sent[1]).toBe(sent[0]);
+		expect(sent[2]).not.toBe(sent[0]);
 		vi.unstubAllGlobals();
 	});
 });

@@ -34,8 +34,10 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB, store o
 
 	g.OpenGet("/api/portal/engagements/{engagementId}/messages", clientauth.PortalPopulation,
 		clientauth.Middleware(db)(ClientListHandler()))
-	g.Write("POST /api/portal/engagements/{engagementId}/messages",
-		clientauth.Middleware(db)(ClientCreateHandler(store, pusher)))
+	// #1924: the portal's own Message create is the same unconditional
+	// INSERT as the Staff one, so it is Replayable too, keyed to the
+	// calling Client. PortalReplayable applies clientauth.Middleware.
+	ir.PortalReplayable("POST /api/portal/engagements/{engagementId}/messages", ClientCreateHandler(store, pusher))
 	g.OpenGet("/api/portal/engagements/{engagementId}/messages/{messageId}/attachment", clientauth.PortalPopulation,
 		clientauth.Middleware(db)(ClientAttachmentHandler(store)))
 }

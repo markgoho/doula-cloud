@@ -28,7 +28,7 @@ func newAcceptThenSessionServer(t *testing.T, db *testdb.DB) *httptest.Server {
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
 	portalinvite.Mount(g, ir, db.App, &tasknudge.FakeEnqueuer{})
-	clientauth.Mount(g, db.App, tasknudge.NoOpEnqueuer{})
+	clientauth.Mount(g, ir, db.App, tasknudge.NoOpEnqueuer{})
 	return httptest.NewServer(mux)
 }
 

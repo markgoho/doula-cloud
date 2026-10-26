@@ -83,6 +83,13 @@ func TestRoutes_EveryMutatingWriteDeclaresRolesOrIsExempt(t *testing.T) {
 
 	seen := make(map[string]bool, len(roleFreeWriteRoutes))
 	for _, route := range irRoutes {
+		// A portal write (#1924) is the Client population's: ADR-0008's
+		// role table describes Staff at a Practice, and a Client holds no
+		// Membership for a role list to be about -- clientauth.PortalPopulation,
+		// the same reason every portal read gives at its mount.
+		if route.Portal {
+			continue
+		}
 		reason, exempted := roleFreeWriteRoutes[route.Pattern]
 		if exempted {
 			seen[route.Pattern] = true

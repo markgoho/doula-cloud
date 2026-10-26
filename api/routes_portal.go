@@ -2,6 +2,7 @@ package main
 
 import (
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/notificationpref"
 	"doula-cloud/api/internal/portal"
 	"doula-cloud/api/internal/staffauth"
@@ -26,8 +27,12 @@ import (
 // /contract(/sign|/pdf), /messages(/{messageId}/attachment), or
 // /push-subscriptions finds them there, beside the Practice-side sibling
 // of the same record.
-func registerPortalRoutes(g *staffauth.GatedRouter, d Deps) {
-	clientauth.Mount(g, d.DB, d.NudgeEnqueuer)
+//
+// Every portal write goes through ir (#1924): PortalReplayable for one a
+// retry could repeat, PortalExempt with its reason for one that cannot --
+// idempotency_guardrail_test.go walks the registry to hold that.
+func registerPortalRoutes(g *staffauth.GatedRouter, ir *idempotency.Router, d Deps) {
+	clientauth.Mount(g, ir, d.DB, d.NudgeEnqueuer)
 	portal.Mount(g, d.DB)
-	notificationpref.Mount(g, d.DB)
+	notificationpref.Mount(g, ir, d.DB)
 }

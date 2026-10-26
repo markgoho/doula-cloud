@@ -2,6 +2,7 @@ package clientauth
 
 import (
 	"database/sql"
+	"net/http"
 	"time"
 
 	"doula-cloud/api/internal/ratelimit"
@@ -48,16 +49,28 @@ var feedbackRules = []ratelimit.Rule{
 	ratelimit.SessionCookieRule(20, time.Hour),
 }
 
+// PortalWriteRouter is the one door Mount needs from
+// idempotency.Router: each portal write here declares, at its route, why
+// it runs without an Idempotency-Key (#1924). An interface rather than
+// *idempotency.Router because idempotency imports this package for
+// clientauth.Middleware and WrapClient's Client scope, so this package
+// cannot import it back.
+type PortalWriteRouter interface {
+	PortalExempt(pattern, reason string, h http.Handler)
+}
+
 // Mount registers the Client's own session surface: #617's magic-link
 // sign-in, #619's sign-in-address change, the session read, and #618's
 // sign-out-everywhere. A different population with a different session,
 // which is why none of these reads go through GatedRouter.Get.
-func Mount(g *staffauth.GatedRouter, db *sql.DB, nudge tasknudge.Enqueuer) {
+func Mount(g *staffauth.GatedRouter, ir PortalWriteRouter, db *sql.DB, nudge tasknudge.Enqueuer) {
 	// #617: request and redeem a Client sign-in link, ADR-0026's magic
 	// link. Same shape as a Staff reset request/spend pair.
-	g.Write("POST /api/portal/magic-link/request",
+	ir.PortalExempt("POST /api/portal/magic-link/request",
+		"pre-session; a repeat re-mints the token and resets the one pending outbox row rather than sending a second mail",
 		ratelimit.Wrap(db, "portal_magic_link_request", resetRequestRules)(RequestMagicLinkHandler(db)))
-	g.Write("POST /api/portal/magic-link",
+	ir.PortalExempt("POST /api/portal/magic-link",
+		"pre-session; the link's token is single-use, so a repeat is refused rather than signing in twice",
 		ratelimit.Wrap(db, "portal_magic_link", tokenSpendRules)(RedeemMagicLinkHandler(db, nudge)))
 	// #619: she changes her own sign-in address, proved by a link to the
 	// new one. The request is authenticated by her live portal session
@@ -70,9 +83,11 @@ func Mount(g *staffauth.GatedRouter, db *sql.DB, nudge tasknudge.Enqueuer) {
 	// resets the pending outbox row rather than sending a second mail
 	// (docs/api-design.md section 3), and the spend's own single-use
 	// token already makes a repeat a no-op.
-	g.Write("POST /api/portal/sign-in-address/request",
+	ir.PortalExempt("POST /api/portal/sign-in-address/request",
+		"a repeat mints a fresh token and resets the pending outbox row rather than sending a second mail",
 		ratelimit.Wrap(db, "portal_sign_in_address_request", portalAddressChangeRequestRules)(RequestAddressChangeHandler(db)))
-	g.Write("POST /api/portal/sign-in-address",
+	ir.PortalExempt("POST /api/portal/sign-in-address",
+		"pre-session; the confirmation link's token is single-use, so a repeat changes nothing",
 		ratelimit.Wrap(db, "portal_sign_in_address", tokenSpendRules)(SpendAddressChangeHandler(db)))
 	// Not rate limited: gated by authn.Begin's own __session cookie check
 	// -- there is no bootstrap window here for an attacker to spend.
@@ -81,11 +96,14 @@ func Mount(g *staffauth.GatedRouter, db *sql.DB, nudge tasknudge.Enqueuer) {
 	// -- ending zero sessions is as much a success as ending several --
 	// so this carries no Idempotency-Key handling, and is gated by the
 	// live session it gets to act on rather than by a rate limit.
-	g.Write("DELETE /api/portal/sessions", EndAllSessionsHandler(db))
+	ir.PortalExempt("DELETE /api/portal/sessions",
+		"delete; ending zero sessions is as much a success as ending several",
+		EndAllSessionsHandler(db))
 	// #1523: any signed-in Client sends a piece of Feedback from any
 	// portal screen. Not Engagement-scoped -- most of this route's
 	// screens name no single Engagement -- so it sits beside the
 	// session-level routes above rather than in portal.Mount.
-	g.Write("POST /api/portal/feedback",
+	ir.PortalExempt("POST /api/portal/feedback",
+		"#1498 Q2: redundant feedback is better than no feedback, and the route is not Engagement-scoped, so it has no clientauth.Middleware tx to key a retry on",
 		ratelimit.Wrap(db, "portal_feedback", feedbackRules)(FeedbackHandler(db, nudge)))
 }

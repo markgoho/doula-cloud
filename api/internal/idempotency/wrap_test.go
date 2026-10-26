@@ -202,6 +202,38 @@ func TestWrap_DefaultsToStatusOKWhenHandlerOmitsWriteHeader(t *testing.T) {
 	}
 }
 
+// TestWrap_ReplaysAResponseWithNoBody proves a 204 is stored and replayed
+// like any other response: its empty body used to reach response_body as
+// NULL and fail the save, so the retry ran the handler a second time.
+func TestWrap_ReplaysAResponseWithNoBody(t *testing.T) {
+	db := testdb.New(t)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "no-body-owner", []string{doulaRole}, "employee")
+
+	calls := 0
+	mux := http.NewServeMux()
+	mux.Handle("POST /practices/{practiceId}/widgets",
+		staffauth.Middleware(db.App)(idempotency.Wrap(http.HandlerFunc(
+			func(w http.ResponseWriter, _ *http.Request) {
+				calls++
+				w.WriteHeader(http.StatusNoContent)
+			},
+		))))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	session := authntest.SeedSession(t, db.App, "no-body-owner")
+
+	for range 2 {
+		resp := postWidget(t, srv, session, practiceID, "no-body-key")
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusNoContent {
+			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("handler invoked %d times, want 1 -- the 204 must be replayed, not re-run", calls)
+	}
+}
+
 // TestWrap_TreatsOversizedKeyAsAbsent proves a key over maxKeyLength is
 // treated the same as no key: the request still succeeds, just without
 // idempotency protection.
