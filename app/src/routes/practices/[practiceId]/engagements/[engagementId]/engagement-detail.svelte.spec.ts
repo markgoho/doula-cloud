@@ -1907,6 +1907,8 @@ describe('the Care Plan and Birth Plan sections (#2004)', () => {
 		await planSection('Care Plan').getByRole('button', { name: 'Start the Care Plan' }).click();
 
 		await expect.element(testPage.getByRole('heading', { level: 3, name: 'Change the Care Plan' })).toHaveFocus();
+		// #2106: the Plan's own groups sit one level under the form's heading.
+		await expect.element(testPage.getByRole('heading', { level: 4, name: 'Labor' })).toBeVisible();
 		await expect.element(testPage.getByLabelText('Music')).toHaveValue('');
 	});
 

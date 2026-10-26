@@ -16,13 +16,14 @@ const defaultFields: Field[] = [
 interface SetupOptions {
 	fields?: Field[];
 	answers?: Answers;
+	headingLevel?: 2 | 3 | 4 | 5 | 6;
 }
 
-async function setup({ fields = defaultFields, answers = {} }: SetupOptions = {}) {
+async function setup({ fields = defaultFields, answers = {}, headingLevel = 4 }: SetupOptions = {}) {
 	const onAnswerChange = vi.fn();
 	const onToggleOption = vi.fn();
 
-	await render(PlanInstanceForm, { fields, answers, onAnswerChange, onToggleOption });
+	await render(PlanInstanceForm, { fields, answers, onAnswerChange, onToggleOption, headingLevel });
 
 	return { onAnswerChange, onToggleOption };
 }
@@ -46,6 +47,14 @@ describe('PlanInstanceForm.svelte', () => {
 		await setup();
 
 		await expect.element(page.getByRole('heading', { name: 'Support' })).toBeInTheDocument();
+	});
+
+	// #2106: the page says what the form sits under, so a group heading
+	// nests one level below it rather than beside it.
+	it('draws each group heading at the level the page gives it', async () => {
+		await setup({ headingLevel: 3 });
+
+		await expect.element(page.getByRole('heading', { level: 3, name: 'Support' })).toBeVisible();
 	});
 
 	it('renders the stored value for a short_text field', async () => {
@@ -154,9 +163,9 @@ describe('PlanInstanceForm.svelte', () => {
 		});
 
 		await expect.element(page.getByLabelText('Due date notes')).toBeVisible();
-		await expect.element(page.getByRole('heading', { level: 3, name: 'Labor' })).toBeVisible();
+		await expect.element(page.getByRole('heading', { level: 4, name: 'Labor' })).toBeVisible();
 		await expect.element(page.getByLabelText('Pain relief')).toBeVisible();
-		await expect.element(page.getByRole('heading', { level: 3, name: 'After the birth' })).toBeVisible();
+		await expect.element(page.getByRole('heading', { level: 4, name: 'After the birth' })).toBeVisible();
 		expect(page.getByRole('list').elements()).toHaveLength(0);
 	});
 

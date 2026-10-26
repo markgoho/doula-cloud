@@ -2345,6 +2345,7 @@
 					answers={planDraft[planType]}
 					onAnswerChange={(fieldId, value) => handlePlanAnswerChange(planType, fieldId, value)}
 					onToggleOption={(fieldId, option) => handlePlanToggleOption(planType, fieldId, option)}
+					headingLevel={4}
 				/>
 				<cluster-l space="var(--space-3)">
 					<Button label="Save {heading}" type="submit" loading={planState[planType].isBusy} />
