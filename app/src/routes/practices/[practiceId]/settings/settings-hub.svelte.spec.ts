@@ -1,14 +1,16 @@
 import { page as testPage } from 'vitest/browser';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { jsonResponse } from '#lib/testResponse.js';
+import { zoneLabel } from '#lib/timezones.js';
 import Page from './+page.svelte';
-import { toPageState } from '../../../routeFixture.js';
-import { fixture } from './page.fixture.js';
+import { practiceSession, toApiResponder, toPageState } from '../../../routeFixture.js';
+import { asDoula, fixture, ownerWithoutSecondFactor, pageUrl, respond } from './page.fixture.js';
 
 /*
  * The `page` this route reads comes from its own fixture (#596), so the
  * params this spec installs and the params the continuum sweep installs
- * are one description.
+ * are one description; so are the reads it answers (`respond`).
  */
 const pageState = vi.hoisted(() => ({
 	params: {} as Record<string, string>,
@@ -16,132 +18,128 @@ const pageState = vi.hoisted(() => ({
 	data: {} as Record<string, unknown>
 }));
 vi.mock('$app/state', () => ({ page: pageState }));
-Object.assign(pageState, toPageState(fixture));
 
-async function setup(roles: string[] = [], hasSecondFactor = true) {
-	pageState.data = {
-		session: {
-			practiceId: 'practice-1',
-			practiceName: 'Riverside Doula Collective',
-			roles,
-			isContractor: false,
-			secondFactor: hasSecondFactor
-		}
-	};
+const apiFetchWithSession = vi.hoisted(() => vi.fn());
+vi.mock('#lib/api.js', () => ({ apiFetchWithSession, apiBaseURL: () => '' }));
+
+async function setup(variant: Partial<typeof fixture> = {}, answer = toApiResponder(fixture)) {
+	Object.assign(pageState, toPageState({ ...fixture, ...variant }));
+	apiFetchWithSession.mockImplementation(answer);
 	await render(Page, {});
 }
 
-describe('the Settings hub', () => {
-	it('withholds Getting paid, Rates, blocked addresses and MFA from a Doula', async () => {
-		await setup(['doula']);
+/*
+ * A row's action link. Every action reads "Change", told apart only by
+ * the visually-hidden words it is described by -- an accessible
+ * description, which no role query filters on, so this reads the
+ * `aria-describedby` target the way a screen reader does.
+ */
+function actionFor(changes: string): HTMLAnchorElement {
+	const link = [...document.querySelectorAll<HTMLAnchorElement>('dd a[aria-describedby]')].find(
+		(candidate) => document.querySelector(`#${CSS.escape(candidate.getAttribute('aria-describedby')!)}`)?.textContent === changes
+	);
+	if (!link) throw new Error(`no row action is described by "${changes}"`);
+	return link;
+}
 
-		await expect.element(testPage.getByRole('link', { name: 'Getting paid' })).not.toBeInTheDocument();
-		// #966: gated the same notch as Getting paid -- a Doula's session
-		// reads no Owner-or-Admin endpoint the Rates screen depends on.
-		await expect.element(testPage.getByRole('link', { name: 'Rates' })).not.toBeInTheDocument();
-		// #1166: gated the same notch again -- both the read and the write
-		// behind the Timezone screen are Owner-or-Admin.
-		await expect.element(testPage.getByRole('link', { name: 'Timezone' })).not.toBeInTheDocument();
-		await expect.element(testPage.getByRole('link', { name: 'Website' })).toBeVisible();
-		await expect.element(testPage.getByRole('link', { name: 'Client Fields' })).toBeVisible();
-		await expect.element(testPage.getByRole('link', { name: 'Plan Templates' })).toBeVisible();
-		await expect.element(testPage.getByRole('link', { name: 'Contract Template' })).toBeVisible();
-		await expect
-			.element(testPage.getByRole('link', { name: 'Multi-factor authentication' }))
-			.not.toBeInTheDocument();
-		await expect
-			.element(testPage.getByRole('link', { name: 'Blocked email addresses' }))
-			.not.toBeInTheDocument();
-		await expect
-			.element(testPage.getByRole('link', { name: "Export this Practice's data" }))
-			.not.toBeInTheDocument();
-	});
+beforeEach(() => {
+	apiFetchWithSession.mockReset();
+});
 
-	/*
-	 * #744: the two gated entries are gated differently. An Admin runs the
-	 * work -- an address that bounced can receive neither the invite, the
-	 * Contract nor the payment notice until somebody lifts it -- while who
-	 * is at the Practice at all stays the Owner's.
-	 */
-	it('gives an Admin the blocked-addresses, Getting paid and Rates entries but not the Owner-only MFA one', async () => {
-		await setup(['admin']);
+describe('the Settings index', () => {
+	it('shows an Owner four groups, each setting with its value, and deletion set apart', async () => {
+		await setup();
 
-		await expect.element(testPage.getByRole('link', { name: 'Practice name' })).not.toBeInTheDocument();
-		// #267: Getting paid is the second entry gated at Owner-or-Admin,
-		// and for the same reason -- its screen reads an endpoint an Admin
-		// may read and a Doula may not.
-		await expect.element(testPage.getByRole('link', { name: 'Getting paid' })).toBeVisible();
-		const ratesLink = testPage.getByRole('link', { name: 'Rates' });
-		await expect.element(ratesLink).toBeVisible();
-		await expect.element(ratesLink).toHaveAttribute('href', '/practices/practice-1/settings/rates');
-		const timezoneLink = testPage.getByRole('link', { name: 'Timezone' });
-		await expect.element(timezoneLink).toBeVisible();
+		for (const heading of ['Your Practice', 'Clients and care', 'Money', 'Security and data', 'Delete this Practice']) {
+			await expect.element(testPage.getByRole('heading', { name: heading })).toBeVisible();
+		}
+		await expect.element(testPage.getByRole('link', { name: pageUrl })).toHaveAttribute('href', pageUrl);
+		await expect.element(testPage.getByText(zoneLabel('America/Indiana/Indianapolis'))).toBeVisible();
+		// An archived field and a section heading are not questions.
+		await expect.element(testPage.getByText('2 questions', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText('Care Plan: 3 questions. Birth Plan: 1 question.')).toBeVisible();
+		await expect.element(testPage.getByText('Written', { exact: true })).toBeVisible();
 		await expect
-			.element(timezoneLink)
-			.toHaveAttribute('href', '/practices/practice-1/settings/timezone');
-		const link = testPage.getByRole('link', { name: 'Blocked email addresses' });
-		await expect.element(link).toBeVisible();
-		await expect
-			.element(link)
-			.toHaveAttribute('href', '/practices/practice-1/settings/blocked-addresses');
-		await expect
-			.element(testPage.getByRole('link', { name: 'Multi-factor authentication' }))
-			.not.toBeInTheDocument();
-	});
-
-	it("adds the Owner-only MFA entry, linking to the switch's own screen", async () => {
-		await setup(['owner']);
-
-		// #1540: the Practice name is the Owner's alone; the BFF refuses an Admin.
-		await expect
-			.element(testPage.getByRole('link', { name: 'Practice name' }))
-			.toHaveAttribute('href', '/practices/practice-1/settings/name');
-		const link = testPage.getByRole('link', { name: 'Multi-factor authentication' });
-		await expect.element(link).toBeVisible();
-		await expect.element(testPage.getByRole('link', { name: 'Getting paid' })).toBeVisible();
-		await expect
-			.element(testPage.getByRole('link', { name: 'Blocked email addresses' }))
+			.element(testPage.getByText('From the day a doula takes the birth, until 14 days past the due date'))
 			.toBeVisible();
+		await expect.element(testPage.getByText('Taking payments, payouts on hold')).toBeVisible();
+		await expect.element(testPage.getByText('Birth: $12,345.00. Postpartum: $9,876.00')).toBeVisible();
+		await expect.element(testPage.getByText('128 Credits')).toBeVisible();
+		await expect.element(testPage.getByText('On for every Staff member')).toBeVisible();
+		await expect.element(testPage.getByText('2 addresses')).toBeVisible();
+
+		expect(actionFor('the Practice name').getAttribute('href')).toBe('/practices/practice-1/settings/name');
+		expect(actionFor('your website').getAttribute('href')).toBe('/practices/practice-1/settings/website');
+		expect(actionFor('multi-factor authentication').getAttribute('href')).toBe(
+			'/practices/practice-1/settings/mfa'
+		);
+		await expect.element(testPage.getByRole('link', { name: 'Buy' })).toHaveAttribute('href', '/practices/practice-1/billing');
 		await expect
-			.element(link)
-			.toHaveAttribute('href', '/practices/practice-1/settings/mfa');
+			.element(testPage.getByRole('link', { name: 'Delete this Practice' }))
+			.toHaveAttribute('href', '/practices/practice-1/settings/delete');
 	});
 
-	// #288: the export control is Owner-only, the same seat as erasure --
-	// a whole-Practice export crosses every attachment and role boundary
-	// ADR-0008 draws, so it does not widen to Admin the way blocked
-	// addresses does.
-	it('adds the Owner-only export entry, linking to the BFF download route', async () => {
-		await setup(['owner']);
-
-		const link = testPage.getByRole('link', { name: "Export this Practice's data" });
-		await expect.element(link).toBeVisible();
-		await expect.element(link).toHaveAttribute('href', '/api/practices/practice-1/export');
-	});
-
-	it('withholds the export entry from an Admin', async () => {
-		await setup(['admin']);
+	// #288: a download the browser fetches from the BFF, not a page.
+	it('gives an Owner the export as a download from the BFF', async () => {
+		await setup();
 
 		await expect
-			.element(testPage.getByRole('link', { name: "Export this Practice's data" }))
-			.not.toBeInTheDocument();
+			.element(testPage.getByRole('link', { name: 'Download' }))
+			.toHaveAttribute('href', '/api/practices/practice-1/export');
+	});
+
+	it('shows a Doula only what she may change: the Plan Templates', async () => {
+		await setup(asDoula);
+
+		await expect.element(testPage.getByRole('heading', { name: 'Clients and care' })).toBeVisible();
+		expect(actionFor('the Plan Templates').getAttribute('href')).toBe('/practices/practice-1/settings/plan-templates');
+		for (const hidden of ['Your Practice', 'Money', 'Security and data', 'Delete this Practice']) {
+			await expect.element(testPage.getByRole('heading', { name: hidden })).not.toBeInTheDocument();
+		}
+		await expect.element(testPage.getByText('Client Fields')).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('Contract Template')).not.toBeInTheDocument();
+		// Nothing is read that her index does not show.
+		expect(apiFetchWithSession.mock.calls.map(([path]) => path as string).toSorted((a, b) => a.localeCompare(b))).toEqual([
+			'/api/practices/practice-1/plan-templates/birth_plan',
+			'/api/practices/practice-1/plan-templates/care_plan'
+		]);
+	});
+
+	it('gives an Admin the Owner-or-Admin settings and none of the Owner-only ones', async () => {
+		await setup({ pageData: practiceSession(['admin']) });
+
+		expect(actionFor('the timezone').getAttribute('href')).toBe('/practices/practice-1/settings/timezone');
+		expect(actionFor('the rates').getAttribute('href')).toBe('/practices/practice-1/settings/rates');
+		expect(actionFor('the blocked email addresses').getAttribute('href')).toBe(
+			'/practices/practice-1/settings/blocked-addresses'
+		);
+		for (const ownerOnly of ['Practice name', 'Your website', 'Contract Template', 'Multi-factor authentication']) {
+			await expect.element(testPage.getByText(ownerOnly, { exact: true })).not.toBeInTheDocument();
+		}
+		await expect.element(testPage.getByRole('link', { name: 'Download' })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('heading', { name: 'Delete this Practice' })).not.toBeInTheDocument();
 	});
 
 	// #1532: the archive needs a second factor. She is told so before she
-	// tries, in place of a download link the BFF would refuse, with the way
-	// to set one up; enrollment brings her back to this hub.
-	it('tells an Owner with no second factor that exporting needs one, in place of the download link', async () => {
-		await setup(['owner'], false);
+	// tries, in place of a download link the BFF would refuse.
+	it('tells an Owner with no second factor that exporting needs one, in place of the download', async () => {
+		await setup(ownerWithoutSecondFactor);
 
-		await expect.element(testPage.getByText("Export this Practice's data", { exact: true })).toBeVisible();
-		await expect
-			.element(testPage.getByRole('link', { name: "Export this Practice's data" }))
-			.not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('link', { name: 'Download' })).not.toBeInTheDocument();
 		await expect
 			.element(testPage.getByText("You need two-factor authentication before you can export this Practice's data."))
 			.toBeVisible();
 		await expect
 			.element(testPage.getByRole('link', { name: 'Set up two-factor authentication' }))
 			.toHaveAttribute('href', `/mfa/enroll?returnTo=${encodeURIComponent(pageState.url.pathname)}`);
+	});
+
+	it('says which value could not be read, and still shows the rest', async () => {
+		await setup({}, (path: string) =>
+			Promise.resolve(path.endsWith('/rates') ? jsonResponse({ message: 'internal error' }, 500) : respond(path))
+		);
+
+		await expect.element(testPage.getByText('Could not load this. Open it to see why.')).toBeVisible();
+		await expect.element(testPage.getByText('128 Credits')).toBeVisible();
 	});
 });

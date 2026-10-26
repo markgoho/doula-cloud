@@ -22,7 +22,12 @@ test('Practice Owner can view seeded plan templates and add/save a field', async
 	// shell's six-item nav replaced the temporary header of links (#452).
 	await page.getByRole('link', { name: 'Settings' }).first().click();
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/settings$`));
-	await page.getByRole('link', { name: 'Plan Templates' }).click();
+	// The index is a summary list (#2028): the row's Change is the way in.
+	await page
+		.locator('dt', { hasText: /^Plan Templates$/ })
+		.locator('..')
+		.getByRole('link', { name: 'Change', exact: true })
+		.click();
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/settings/plan-templates$`));
 
 	// Seeded default care_plan fields render.

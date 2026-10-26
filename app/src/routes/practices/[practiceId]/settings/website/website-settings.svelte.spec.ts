@@ -71,6 +71,27 @@ async function setup({ website = undeclared, roles = ['owner'], websiteOk = true
 	return { puts };
 }
 
+/*
+ * A saved answer's Change (#2047). Every row's action reads "Change",
+ * told apart only by the visually-hidden words it is described by -- an
+ * accessible description, which no role query filters on, so this reads
+ * the `aria-describedby` target the way a screen reader does.
+ */
+async function changeFor(changes: string) {
+	// The answers arrive after mount; every saved state has this row.
+	await expect.element(testPage.getByText('How Clients find you', { exact: true })).toBeVisible();
+	const control = [...document.querySelectorAll<HTMLElement>('dd [aria-describedby]')].find(
+		(candidate) => document.querySelector(`#${CSS.escape(candidate.getAttribute('aria-describedby')!)}`)?.textContent === changes
+	);
+	if (!control) throw new Error(`no Change is described by "${changes}"`);
+	return testPage.elementLocator(control);
+}
+
+async function clickChange(changes: string) {
+	const control = await changeFor(changes);
+	await control.click();
+}
+
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
 });
@@ -283,8 +304,42 @@ describe('website settings screen', () => {
 			.element(testPage.getByText(`Last changed by ${fixtureWebsite.updatedBy} on ${updatedOn}`))
 			.toBeVisible();
 
-		await testPage.getByRole('button', { name: 'Change' }).click();
+		await clickChange('how Clients find you');
+		await expect.element(testPage.getByRole('radio', { name: 'Publish a page for me' })).toBeChecked();
 		await expect.element(testPage.getByLabelText('What your Practice offers')).toBeVisible();
+	});
+
+	// #2047: a Change per row, and each leads to that one question.
+	it('changes only the cancellation policy, and publishes the rest as it was', async () => {
+		const { puts } = await setup({ website: fixtureWebsite });
+
+		await clickChange('the cancellation policy');
+		await expect.element(testPage.getByLabelText('Your cancellation or refund policy')).toBeVisible();
+		await expect.element(testPage.getByLabelText('What your Practice offers')).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('radio')).not.toBeInTheDocument();
+
+		await testPage.getByLabelText('Your cancellation or refund policy').fill('Two weeks notice.');
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+		await testPage.getByRole('button', { name: 'Publish page' }).click();
+		expect(puts.at(-1)).toEqual({
+			mode: 'hosted',
+			serviceDescription: fixtureWebsite.serviceDescription,
+			cancellationPolicy: 'Two weeks notice.'
+		});
+	});
+
+	it('changes only what she offers', async () => {
+		await setup({ website: fixtureWebsite });
+
+		await clickChange('what you offer');
+		await expect.element(testPage.getByLabelText('What your Practice offers')).toBeVisible();
+		await expect.element(testPage.getByLabelText('Your cancellation or refund policy')).not.toBeInTheDocument();
+	});
+
+	it('sends a change of business name to the Practice name screen', async () => {
+		await setup({ website: fixtureWebsite });
+
+		await expect.element(await changeFor('the business name')).toHaveAttribute('href', '/practices/practice-1/settings/name');
 	});
 
 	/* #443. Three states, and the middle one is the point: a page nothing
@@ -303,8 +358,12 @@ describe('website settings screen', () => {
 		});
 
 		await expect
-			.element(testPage.getByText('Your page is being published', { exact: false }))
+			.element(testPage.getByText('Being published.', { exact: false }))
 			.toBeVisible();
+		// Not a link until we have loaded it ourselves.
+		await expect
+			.element(testPage.getByRole('link', { name: 'https://doula.cloud/p/rochester-doulas' }))
+			.not.toBeInTheDocument();
 	});
 
 	it('shows her the address once we have loaded the page ourselves', async () => {
@@ -320,8 +379,8 @@ describe('website settings screen', () => {
 		});
 
 		await expect
-			.element(testPage.getByText('Your page is live at https://doula.cloud/p/rochester-doulas'))
-			.toBeVisible();
+			.element(testPage.getByRole('link', { name: 'https://doula.cloud/p/rochester-doulas' }))
+			.toHaveAttribute('href', 'https://doula.cloud/p/rochester-doulas');
 	});
 
 	it('tells her why her page failed, in words she can act on', async () => {
@@ -355,9 +414,19 @@ describe('website settings screen', () => {
 		});
 
 		await expect.element(testPage.getByText('https://rochesterdoulas.com')).toBeVisible();
-		await testPage.getByRole('button', { name: 'Change' }).click();
+		await clickChange('your page');
+		await testPage
+			.getByLabelText('The web address of your website or social profile')
+			.fill('https://example.com/abandoned');
 		await testPage.getByRole('button', { name: 'Cancel' }).click();
-		await expect.element(testPage.getByText('https://rochesterdoulas.com')).toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'https://rochesterdoulas.com' }))
+			.toHaveAttribute('href', 'https://rochesterdoulas.com');
+		// Opened again, the question starts from what is saved.
+		await clickChange('your page');
+		await expect
+			.element(testPage.getByLabelText('The web address of your website or social profile'))
+			.toHaveValue('https://rochesterdoulas.com');
 	});
 
 	it('tells a non-Owner she cannot change it and offers her no button at all (#1968)', async () => {
@@ -395,8 +464,9 @@ describe('website settings screen', () => {
 	it('shows a non-Owner a published page with no Change or Publish page button (#1968)', async () => {
 		await setup({ roles: ['doula'], website: fixtureWebsite });
 
-		await expect.element(testPage.getByText('Your page is live at', { exact: false })).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: fixtureWebsite.pageUrl })).toBeVisible();
 		await expect.element(testPage.getByRole('button')).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('link', { name: 'Change' })).not.toBeInTheDocument();
 	});
 
 	it('says so when the answer cannot be loaded at all', async () => {

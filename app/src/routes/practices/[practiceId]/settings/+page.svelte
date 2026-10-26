@@ -1,240 +1,186 @@
 <script lang="ts">
 	/*
-	 * Settings is a nav item in the shell (#431), so it needs somewhere to
-	 * land. Before this ticket there was no `/settings` page at all: the
-	 * four settings screens were reachable only from the temporary header of
-	 * links the shell replaces, so Plan Templates, Contract Template and
-	 * Website would have been orphaned the moment that header went.
+	 * Settings (#431, #2028): every setting a person may change, in four
+	 * headed groups, each a `SummaryList` row with its current value and a
+	 * Change. GOV.UK's Summary list is the shape a settings page takes, and
+	 * the groups are Miller's Law: thirteen settings in one run had no group
+	 * at all, and showed no value, so the timezone or the rates took a page
+	 * each to read.
 	 *
-	 * Archetype F is outside this map's destination, so this is deliberately
-	 * the smallest thing that keeps every screen reachable -- a way in, not
-	 * a settings design. What each screen is called and how the group is
-	 * ordered belongs to whoever builds archetype F.
+	 * A row is drawn only for someone who may change it (`MAY_CHANGE`,
+	 * which names each write's role list): a Doula's Settings is the one
+	 * setting the BFF lets her write. The values come off the same loaders
+	 * each setting's screen reads (`loadSettingsSummary`), side by side.
+	 *
+	 * Deletion is last and on its own, under its own heading: it is the one
+	 * act here that cannot be put back, and it must not read like "Rates".
 	 */
+	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { page } from '#lib/appState.svelte.js';
-	import { apiBaseURL } from '#lib/api.js';
-	import { hasSecondFactor as checkHasSecondFactor, isOwner, isOwnerOrAdmin } from '#lib/roles.js';
+	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
+	import { hasSecondFactor as checkHasSecondFactor } from '#lib/roles.js';
+	import { loadSettingsSummary, MAY_CHANGE, type SettingKey, type SettingsSummary } from '#lib/settingsSummary.js';
+	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import SecondFactorNeeded from '#lib/components/molecules/SecondFactorNeeded.svelte';
+	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 	import OverviewHub from '#lib/components/templates/OverviewHub.svelte';
 	import type { PracticeSession } from '../+layout.js';
 
 	const practiceId = $derived(page.params.practiceId!);
-
-	// Multi-factor authentication (#606) is the first Owner-only entry
-	// this hub has ever needed to hide: its screen reads an Owner-only
-	// endpoint, so a Doula or Admin who followed the link would only meet
-	// a 403. The Membership comes off practices/[practiceId]/+layout.ts's
+	// The Membership comes off practices/[practiceId]/+layout.ts's
 	// already-resolved read (#835), not a fetch of this page's own.
 	const session = $derived((page.data as { session: PracticeSession }).session);
-	let isPracticeOwner = $derived(isOwner(session));
-	// Blocked email addresses (#744) is the second gated entry, and gated
-	// one notch wider: its list is every Client and Staff address at the
-	// Practice whose mail is failing, which ADR-0008 keeps in the same
-	// hands as the roster it is drawn from -- Owner or Admin, matching the
-	// endpoint's own `ownerAndAdmin` guard.
-	let isPracticeOwnerOrAdmin = $derived(isOwnerOrAdmin(session));
 	// #1532: downloading the archive is one of the five acts the BFF
-	// refuses without a second factor. `hasSecondFactor` (#lib/roles.ts)
-	// holds the rule for a session that says nothing.
+	// refuses without a second factor, so the row says what it needs in
+	// place of a download link that would land her on the BFF's JSON.
 	const hasSecondFactor = $derived(checkHasSecondFactor(session));
 
-	interface SettingEntry {
-		label: string;
-		description: string;
+	let summary = $state<SettingsSummary | undefined>();
+
+	onMount(async () => {
+		summary = await loadSettingsSummary(apiFetchWithSession, practiceId, session);
+	});
+
+	interface SettingRow extends SummaryListRow {
+		key: SettingKey;
 		href: string;
-		/** Set when the entry is an act this session cannot do yet for
-		 * want of a second factor (#1532): the entry names the act and
-		 * what it needs, in place of a link the BFF would refuse. */
-		secondFactorMessage?: string;
+		/**
+		The action's word, where it is not "Change".
+		*/
+		act?: string;
 	}
 
-	const settings: SettingEntry[] = $derived([
-		// Getting paid (#267) is gated the same notch as blocked addresses,
-		// and for the same reason: its screen reads an Owner-or-Admin
-		// endpoint, so a Doula who followed the link would meet a screen
-		// with nothing on it. It stays first in the list for whoever does
-		// see it. Labeled Getting paid, not Payments (#256): the route
-		// stays `/settings/payments` on purpose (ADR-0032), but GLOSSARY.md
-		// defines Payment as money received against an Invoice, which this
-		// screen holds none of -- it manages a Connected account instead.
-		...(isPracticeOwnerOrAdmin
-			? [
-					{
-						label: 'Getting paid',
-						description: 'How this Practice gets paid, and what Stripe still wants from it.',
-						href: resolve('/practices/[practiceId]/settings/payments', { practiceId })
-					}
+	interface SettingGroup {
+		heading: string;
+		rows: SettingRow[];
+	}
+
+	const groups: SettingGroup[] = $derived(
+		(
+		[
+			{
+				heading: 'Your Practice',
+				rows: [
+					{ key: 'name', label: 'Practice name', value: session.practiceName, changes: 'the Practice name', href: resolve('/practices/[practiceId]/settings/name', { practiceId }) },
+					{ key: 'website', label: 'Your website', value: '', changes: 'your website', href: resolve('/practices/[practiceId]/settings/website', { practiceId }) },
+					{ key: 'timezone', label: 'Timezone', value: '', changes: 'the timezone', href: resolve('/practices/[practiceId]/settings/timezone', { practiceId }) }
 				]
-			: []),
-		{
-			label: 'Website',
-			description: 'The address a Client arrives from.',
-			href: resolve('/practices/[practiceId]/settings/website', { practiceId })
-		},
-		{
-			label: 'Client Fields',
-			description: 'The extra questions this Practice asks every Client, beyond the standard ones.',
-			href: resolve('/practices/[practiceId]/settings/client-fields', { practiceId })
-		},
-		{
-			label: 'Plan Templates',
-			description: 'The questions every birth plan and care plan starts from.',
-			href: resolve('/practices/[practiceId]/settings/plan-templates', { practiceId })
-		},
-		{
-			label: 'Contract Template',
-			description: 'The terms every Contract is written from.',
-			href: resolve('/practices/[practiceId]/settings/contract-template', { practiceId })
-		},
-		...(isPracticeOwnerOrAdmin
-			? [
-					{
-						// #966: the flat amount this Practice charges for each
-						// Engagement kind. Gated the same notch as Getting paid
-						// and blocked addresses -- its screen reads and writes
-						// an Owner-or-Admin endpoint.
-						label: 'Rates',
-						description: 'What this Practice charges for birth and postpartum care.',
-						href: resolve('/practices/[practiceId]/settings/rates', { practiceId })
-					}
+			},
+			{
+				heading: 'Clients and care',
+				rows: [
+					{ key: 'clientFields', label: 'Client Fields', value: '', changes: 'the Client Fields', href: resolve('/practices/[practiceId]/settings/client-fields', { practiceId }) },
+					{ key: 'planTemplates', label: 'Plan Templates', value: '', changes: 'the Plan Templates', href: resolve('/practices/[practiceId]/settings/plan-templates', { practiceId }) },
+					{ key: 'contractTemplate', label: 'Contract Template', value: '', changes: 'the Contract Template', href: resolve('/practices/[practiceId]/settings/contract-template', { practiceId }) },
+					{ key: 'onCall', label: 'On call', value: '', changes: 'when on call starts and ends', href: resolve('/practices/[practiceId]/settings/on-call', { practiceId }) }
 				]
-			: []),
-		...(isPracticeOwnerOrAdmin
-			? [
-					{
-						// #1166: the one zone this Practice's calendar-day math
-						// happens in (ADR-0036). Gated the same notch as Rates
-						// and Getting paid, and for the same reason -- both the
-						// read and the write are Owner-or-Admin, so a Doula who
-						// followed the link would meet only a 403.
-						label: 'Timezone',
-						description: 'The timezone this Practice works in, which decides what day a Visit falls on.',
-						href: resolve('/practices/[practiceId]/settings/timezone', { practiceId })
-					}
+			},
+			{
+				heading: 'Money',
+				rows: [
+					// Getting paid, not Payments (#256): the route stays
+					// `/settings/payments` (ADR-0032), but a Payment is money
+					// received against an Invoice, which this screen holds none of.
+					{ key: 'gettingPaid', label: 'Getting paid', value: '', changes: 'how this Practice gets paid', href: resolve('/practices/[practiceId]/settings/payments', { practiceId }) },
+					{ key: 'rates', label: 'Rates', value: '', changes: 'the rates', href: resolve('/practices/[practiceId]/settings/rates', { practiceId }) },
+					{ key: 'credits', label: 'Credits', value: '', changes: 'credits', act: 'Buy', href: resolve('/practices/[practiceId]/billing', { practiceId }) }
 				]
-			: []),
-		...(isPracticeOwnerOrAdmin
-			? [
+			},
+			{
+				heading: 'Security and data',
+				rows: [
+					{ key: 'mfa', label: 'Multi-factor authentication', value: '', changes: 'multi-factor authentication', href: resolve('/practices/[practiceId]/settings/mfa', { practiceId }) },
+					{ key: 'blockedAddresses', label: 'Blocked email addresses', value: '', changes: 'the blocked email addresses', href: resolve('/practices/[practiceId]/settings/blocked-addresses', { practiceId }) },
+					// #288: a download the browser fetches on its own, so the BFF's
+					// own address rather than resolve(). Without a second factor
+					// the row has no action: its value says what the act needs.
 					{
-						// #1093: when on call starts for a birth, and how long it
-						// runs past the due date. Gated the same notch as
-						// Timezone and Rates -- both the read and the write are
-						// Owner-or-Admin, so a Doula who followed the link would
-						// meet only a 403. The rule's effect is met everywhere
-						// else: on the roster, and on a birth's own page.
-						label: 'On call',
-						description:
-							'When a doula goes on call for a birth, and how long on call runs past the due date.',
-						href: resolve('/practices/[practiceId]/settings/on-call', { practiceId })
-					}
-				]
-			: []),
-		...(isPracticeOwnerOrAdmin
-			? [
-					{
-						label: 'Blocked email addresses',
-						description:
-							'The addresses DoulaCloud has stopped writing to, and why each one stopped.',
-						href: resolve('/practices/[practiceId]/settings/blocked-addresses', { practiceId })
-					}
-				]
-			: []),
-		...(isPracticeOwner
-			? [
-					{
-						// #1540: the name a Client, a Contract and the Practice
-						// Page call this Practice. Owner-only, the same seat as
-						// the rest of this group: the BFF refuses an Admin, so
-						// the link is not shown to one.
-						label: 'Practice name',
-						description: 'What your Clients, your Contracts and your Practice Page call you.',
-						href: resolve('/practices/[practiceId]/settings/name', { practiceId })
-					},
-					{
-						label: 'Multi-factor authentication',
-						description: 'Whether every Staff member must use a second factor to sign in.',
-						href: resolve('/practices/[practiceId]/settings/mfa', { practiceId })
-					},
-					// #288: a ZIP of every Client, Engagement, Contract, Invoice
-					// and the rest of what this Practice owns, as CSVs a
-					// spreadsheet opens without DoulaCloud. Owner-only, same
-					// seat as erasure -- a whole-Practice export is a bulk read
-					// across every attachment and role boundary ADR-0008 draws.
-					// Plain API href, not resolve(): this is not a page inside
-					// the app, it is a download the browser fetches on its own.
-					// A bare download link, so a refusal would land her on the
-					// BFF's own JSON with no way back: without a second factor
-					// the entry says what the act needs instead (#1532).
-					{
+						key: 'export',
 						label: "Export this Practice's data",
-						description: 'Every record this Practice holds, as one ZIP of spreadsheet-ready files.',
-						href: `${apiBaseURL()}/api/practices/${practiceId}/export`,
-						...(!hasSecondFactor && {
-							secondFactorMessage: "You need two-factor authentication before you can export this Practice's data."
-						})
-					},
-					// #871: the same seat as export and erasure. Export is the
-					// stated prerequisite in product terms, which is why this
-					// entry sits directly beneath it rather than first in the
-					// Owner-only group.
-					{
-						label: 'Delete this Practice',
-						description: 'Start or restore the 30-day countdown that ends in every Client being erased.',
-						href: resolve('/practices/[practiceId]/settings/delete', { practiceId })
+						value: 'Every record, as one ZIP of spreadsheet-ready files',
+						...(hasSecondFactor && { changes: "this Practice's data" }),
+						act: 'Download',
+						href: `${apiBaseURL()}/api/practices/${practiceId}/export`
 					}
 				]
-			: [])
-	]);
+			}
+		] satisfies SettingGroup[]
+		)
+			.map((group) => ({ ...group, rows: group.rows.filter((row) => MAY_CHANGE[row.key](session)) }))
+			.filter((group) => group.rows.length > 0)
+	);
+
+	const isMayDelete = $derived(MAY_CHANGE.delete(session));
 </script>
 
+{#snippet value(row: SettingRow)}
+	{@const read = summary?.[row.key]}
+	{#if row.key === 'export' && !hasSecondFactor}
+		<SecondFactorNeeded
+			message="You need two-factor authentication before you can export this Practice's data."
+			returnTo={page.url.pathname}
+		/>
+	{:else if row.value !== ''}
+		{row.value}
+	{:else if read === undefined}
+		<Skeleton variant="text" lines={1} label="Loading {row.label}" />
+	{:else if read === 'unavailable'}
+		Could not load this. Open it to see why.
+	{:else if read.href}
+		<Link href={read.href} label={read.text} />
+	{:else}
+		{read.text}
+	{/if}
+{/snippet}
+
+{#snippet action(row: SettingRow, describedBy: string)}
+	<Link href={row.href} label={row.act ?? 'Change'} {describedBy} />
+{/snippet}
+
 {#snippet primary()}
-	<ul>
-		{#each settings as setting (setting.href)}
-			<li>
-				{#if setting.secondFactorMessage}
-					<Text text={setting.label} />
-					<Text text={setting.description} step="body-sm" tone="variant" />
-					<SecondFactorNeeded message={setting.secondFactorMessage} returnTo={page.url.pathname} />
-				{:else}
-					<Link href={setting.href} label={setting.label} />
-					<Text text={setting.description} step="body-sm" tone="variant" />
-				{/if}
-			</li>
-		{/each}
-	</ul>
+	{#each groups as group (group.heading)}
+		<section>
+			<stack-l space="var(--space-related)">
+				<Heading level={2} variant="section" text={group.heading} />
+				<SummaryList rows={group.rows} {value} {action} />
+			</stack-l>
+		</section>
+	{/each}
+	{#if isMayDelete}
+		<section class="apart">
+			<stack-l space="var(--space-related)">
+				<Heading level={2} variant="section" text="Delete this Practice" />
+				<Text text="This starts a 30-day countdown. When it ends, every Client is erased." />
+				<Link href={resolve('/practices/[practiceId]/settings/delete', { practiceId })} label="Delete this Practice" />
+			</stack-l>
+		</section>
+	{/if}
 {/snippet}
 
 {#snippet empty()}
 	<!--
-		Unreachable in practice: the list is fixed content gated only by
-		role (#606), not a query. The region is required by OverviewHub on
-		purpose (#422), and a Template that cannot be instantiated without
-		an empty state is what makes the first-run case impossible to
-		forget.
+		Unreachable in practice: every Staff member may change the Plan
+		Templates, so no session has an empty Settings. The region is
+		required by OverviewHub on purpose (#422).
 	-->
-	<Text text="This Practice has no settings screens." />
+	<Text text="This Practice has no settings you can change." />
 {/snippet}
 
 <OverviewHub title="Settings" isEmpty={false} {primary} {empty} />
 
 <style>
 	@layer components {
-		ul {
-			display: flex;
-			flex-direction: column;
-			gap: var(--space-6);
-			margin: 0;
-			padding: 0;
-			list-style: none;
-		}
-
-		li {
-			display: flex;
-			flex-direction: column;
-			gap: var(--space-1);
+		/* Set apart: a rule above it, and a section's gap over the group's. */
+		.apart {
+			/* The summary lists' own measure, so the rule ends where they do. */
+			max-inline-size: var(--measure);
+			margin-block-start: var(--space-group);
+			padding-block-start: var(--space-group);
+			border-block-start: var(--border-thin) solid var(--color-outline-variant);
 		}
 	}
 </style>

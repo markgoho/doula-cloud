@@ -8,9 +8,9 @@
  * into either.
  *
  * Two sessions, three trees (#928). `isOwner` decides three things here, and one of
- * them is additive: anybody else reads a Notice in the saved frame, where
- * an Owner's Change button is, saying the setting is not hers to change
- * (#1971). The other two only withhold: the Change button, and, for a
+ * them is additive: anybody else reads a Notice in the saved frame, under
+ * the answers an Owner has a Change on, saying the setting is not hers to
+ * change (#1971). The other two only withhold: each row's Change (#2047), and, for a
  * Practice that has not answered, the questions themselves (#1968), so a
  * non-Owner never meets a Save or Publish page she cannot press. That
  * undeclared non-Owner tree draws a sentence no other branch draws ("Not
