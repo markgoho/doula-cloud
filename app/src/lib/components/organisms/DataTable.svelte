@@ -404,8 +404,11 @@
 		   table's first column is what the eye scans down; a general rule
 		   for leftover space is #543's, and a table that authors no
 		   alignment inherits whatever that decides. */
+		/* Below this component's own floor the two trees read the same two
+		   properties the floor's query reads (#2063), so a route can lower
+		   a table's floor as well as raise it. See the floor comment. */
 		.table-view {
-			display: none;
+			display: var(--data-table-table-display, none);
 			border-collapse: collapse;
 			/* The frame is a column flex container now (ADR-0039), which
 			   stretches its items across the inline axis -- and stretching
@@ -414,6 +417,12 @@
 			   table back its own shrink-to-fit width, so it still stops
 			   where its columns are satisfied. */
 			align-self: start;
+		}
+
+		/* Before the floor's query, which overrides it at the same
+		   specificity by coming later. */
+		.record-view {
+			display: var(--data-table-records-display, block);
 		}
 
 		/* "Compact rows, airy forms": the brief's Density section fixes a
@@ -612,7 +621,14 @@
 		   it does not change the layout. The 2988px above was the hostile
 		   Clients list's; each route's own comment has its typical
 		   number. This floor is measured on the style-guide demo and stays
-		   as it is. */
+		   as it is.
+
+		   Since #2063 a route can set a floor LOWER than this one, with
+		   the same two properties: the base rules above and below read
+		   them too, so a route that sets `table` and `none` from its own
+		   floor shows its table under 55rem. The hub's activity feed is
+		   the first: three short columns, in a primary column of about
+		   840px at a 1280px window. */
 		@container data-table (min-width: 55rem) {
 			.table-view {
 				display: var(--data-table-table-display, table);

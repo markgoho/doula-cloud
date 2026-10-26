@@ -281,16 +281,18 @@
 	{#if waitingOnReplyError}
 		<Notice variant="error" message={waitingOnReplyError} />
 	{/if}
-	<DataTable
-		columns={waitingOnReplyColumns}
-		rows={waitingOnReply.items}
-		rowHref={waitingOnReplyEngagementHref}
-		hasMore={waitingOnReply.hasMore}
-		onLoadMore={() => waitingOnReply.loadMore()}
-		isLoadingMore={waitingOnReply.isLoadingMore}
-		loadMoreError={waitingOnReply.loadMoreError}
-		emptyMessage="Nobody is waiting on a reply."
-	/>
+	<div class="waiting-table">
+		<DataTable
+			columns={waitingOnReplyColumns}
+			rows={waitingOnReply.items}
+			rowHref={waitingOnReplyEngagementHref}
+			hasMore={waitingOnReply.hasMore}
+			onLoadMore={() => waitingOnReply.loadMore()}
+			isLoadingMore={waitingOnReply.isLoadingMore}
+			loadMoreError={waitingOnReply.loadMoreError}
+			emptyMessage="Nobody is waiting on a reply."
+		/>
+	</div>
 {/snippet}
 
 {#snippet rosterBlock()}
@@ -341,23 +343,25 @@
 			{#if landing!.requests === 'unavailable'}
 				<Text text="Could not load pending requests just now." tone="muted" />
 			{:else if landing!.requests}
-				<cluster-l space="var(--space-3)" align="center">
-					{#if landing!.requests.count > 0}
+				<!-- The link only where a request waits (#2032): with none, it
+				     would lead to an empty inbox, so the line stands alone. -->
+				{#if landing!.requests.count > 0}
+					<cluster-l space="var(--space-3)" align="center">
 						<Badge
 							label={`${landing!.requests.count}${landing!.requests.hasMore ? '+' : ''} waiting`}
 							variant="warning"
 						/>
-					{:else}
-						<Text text="Nobody is waiting on you." tone="muted" />
-					{/if}
-					<Link
-						href={resolve('/practices/[practiceId]/engagement-requests', {
-							practiceId: page.params.practiceId!
-						})}
-						label="Review requests"
-						variant="secondary"
-					/>
-				</cluster-l>
+						<Link
+							href={resolve('/practices/[practiceId]/engagement-requests', {
+								practiceId: page.params.practiceId!
+							})}
+							label="Review requests"
+							variant="secondary"
+						/>
+					</cluster-l>
+				{:else}
+					<Text text="Nobody is waiting on you." tone="muted" />
+				{/if}
 			{/if}
 		</stack-l>
 	</section>
@@ -443,12 +447,14 @@
 			{#if activityError}
 				<Notice variant="error" message={activityError} />
 			{/if}
-			<DataTable
-				columns={activityLedgerColumns()}
-				rows={recentActivity}
-				hasMore={false}
-				emptyMessage="Nothing has happened yet."
-			/>
+			<div class="activity-table">
+				<DataTable
+					columns={activityLedgerColumns()}
+					rows={recentActivity}
+					hasMore={false}
+					emptyMessage="Nothing has happened yet."
+				/>
+			</div>
 			{#if recentActivity.length > 0}
 				<Link
 					href={resolve('/practices/[practiceId]/activity', { practiceId: page.params.practiceId! })}
@@ -531,3 +537,49 @@
 	loadError={error || undefined}
 	{outcome}
 />
+
+<style>
+	@layer components {
+		/* The floors of this hub's two tables (#2063), each lower than
+		   `DataTable`'s own 55rem: both sit in the primary column, which is
+		   about 840px at a 1280px window, and each is a few short columns.
+		   Below its floor a table shows its records; from it, the table.
+		   Measured on this route's typical pilot screen (#1981), the
+		   activity table's eight rows of the week and the waiting table's
+		   one Client. `DataTable.svelte`'s floor comment says why a route
+		   can set a floor lower than the component's.
+
+		   Measured 2026-10-26 on macOS/Chromium: the waiting table needs
+		   427px of a 456px column and fits from 27rem; the activity table
+		   needs 749px of a 736px one, its cells growing with the column's
+		   fluid type, and fits from 48rem. */
+		.waiting-table {
+			container: waiting-table / inline-size;
+		}
+
+		.activity-table {
+			container: activity-table / inline-size;
+		}
+
+		.waiting-table > :global(*),
+		.activity-table > :global(*) {
+			font-size: var(--text-body-size);
+			--data-table-table-display: none;
+			--data-table-records-display: block;
+		}
+
+		@container waiting-table (min-width: 27rem) {
+			.waiting-table > :global(*) {
+				--data-table-table-display: table;
+				--data-table-records-display: none;
+			}
+		}
+
+		@container activity-table (min-width: 48rem) {
+			.activity-table > :global(*) {
+				--data-table-table-display: table;
+				--data-table-records-display: none;
+			}
+		}
+	}
+</style>

@@ -33,10 +33,23 @@
 		/**
 		 * #486's Recent-activity feed: low-prominence and low on the page,
 		 * per the design brief's own #433 amendment ("it sits low on every
-		 * page it appears on"). Rendered below the primary/secondary split
-		 * at the container's own width, not squeezed into either column --
-		 * a table reads better full-width than in the narrow sidebar, and
-		 * the brief is explicit this is not what a person comes here for.
+		 * page it appears on"). Rendered last in the primary column
+		 * (#2020, #2063), so it starts under that column's last card: below
+		 * the whole split, a long rail set where it started and left a
+		 * blank band above it. Never in the rail, which is too narrow for
+		 * a table.
+		 *
+		 * Once the split wraps to one column (a phone), the feed comes
+		 * after the primary column's work and before the rail's cards, a
+		 * stated choice (#2063): the feed is the primary column's own
+		 * content, and moving it under the rail would need a query on the
+		 * very width `sidebar-l` reads for itself (#564). It is still the
+		 * last thing in its column, so it still sits low.
+		 *
+		 * The column is narrower than `DataTable`'s own 55rem floor below
+		 * about a 1366px window, so the caller gives the feed's table its
+		 * own floor (the Practice landing hub's `activity-table`).
+		 *
 		 * Absent while `isEmpty`, the same as `secondary`: a Practice with
 		 * no Client yet has no activity to show either.
 		 */
@@ -76,6 +89,15 @@
 	let { title, serviceName, primary, secondary, feed, links, isEmpty, empty, loading, loadError, outcome }: Properties =
 		$props();
 </script>
+
+<!-- The primary column's content, then the feed, last (#2063). Drawn
+     only while not `isEmpty`, so the feed needs no check of that here. -->
+{#snippet primaryColumn()}
+	{@render primary()}
+	{#if feed}
+		{@render feed()}
+	{/if}
+{/snippet}
 
 <PageTitle page={title} {serviceName} />
 
@@ -122,20 +144,11 @@
 						actually has once alone.
 					-->
 					<sidebar-l side="end" space="var(--space-section)" content-min="min(var(--measure), 100%)">
-						<stack-l space="var(--space-group)">{@render primary()}</stack-l>
+						<stack-l space="var(--space-group)">{@render primaryColumn()}</stack-l>
 						<aside><stack-l space="var(--space-group)">{@render secondary()}</stack-l></aside>
 					</sidebar-l>
 				{:else}
-					<stack-l space="var(--space-group)">{@render primary()}</stack-l>
-				{/if}
-
-				<!-- Still below the whole split, so a long rail leaves a blank
-				     band above it at desktop widths (#2020). Moving it to the end
-				     of the primary column was tried and undone: that column is
-				     under DataTable's 55rem table floor below about a 1366px
-				     window, so the feed fell to its record view on a laptop. -->
-				{#if !isEmpty && feed}
-					{@render feed()}
+					<stack-l space="var(--space-group)">{@render primaryColumn()}</stack-l>
 				{/if}
 			</stack-l>
 		{/if}

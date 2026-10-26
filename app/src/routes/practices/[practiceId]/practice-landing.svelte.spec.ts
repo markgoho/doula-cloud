@@ -228,6 +228,8 @@ describe('the Practice landing page', () => {
 		await setup({ overrides: { 'engagement-requests': jsonResponse({ items: [], hasMore: false }) } });
 
 		await expect.element(testPage.getByText('Nobody is waiting on you.')).toBeVisible();
+		// #2032: no link to an inbox with nothing in it.
+		await expect.element(testPage.getByRole('link', { name: 'Review requests' })).not.toBeInTheDocument();
 	});
 
 	it('says so when the pending Requests cannot be read', async () => {
