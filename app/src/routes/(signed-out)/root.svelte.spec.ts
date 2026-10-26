@@ -2,6 +2,7 @@ import { page as testPage } from 'vitest/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { SIGN_OUT_FAILED_MESSAGE } from '#lib/signOut.js';
+import { inReaderZone } from '#lib/testZone.js';
 import type { RootLanding } from './+page.js';
 import Page from './+page.svelte';
 import { data as staffPickerData, fixture, signedOut } from './page.fixture.js';
@@ -27,6 +28,11 @@ beforeEach(() => {
 afterEach(() => {
 	vi.useRealTimers();
 });
+
+// The portal picker's labels print each Engagement's `createdAt`, an
+// instant, in the reader's zone: this file names the zone those days are
+// true in rather than trusting the runner's (#1982).
+inReaderZone('America/New_York');
 
 interface SetupOptions {
 	data?: RootLanding;
