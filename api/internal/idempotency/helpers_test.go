@@ -8,8 +8,10 @@ import (
 	"strconv"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/staffauth"
@@ -72,6 +74,18 @@ func newIdempotencyServer(t *testing.T, db *testdb.DB, uid string, calls *int, s
 	mux.Handle("POST /practices/{practiceId}/widgets",
 		staffauth.Middleware(db.App)(idempotency.Wrap(countingHandler(calls, status))))
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+}
+
+// newIdempotencyServerAt is newIdempotencyServer with every request's
+// clock fixed at now (#1991): clock.Middleware outside the same
+// composition, and a session seeded at that instant so it is live there.
+func newIdempotencyServerAt(t *testing.T, db *testdb.DB, uid string, calls *int, status int, now time.Time) (srv *httptest.Server, session string) {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.Handle("POST /practices/{practiceId}/widgets",
+		staffauth.Middleware(db.App)(idempotency.Wrap(countingHandler(calls, status))))
+	fixed := clock.Middleware(func() time.Time { return now })
+	return httptest.NewServer(fixed(mux)), authntest.SeedSessionAt(t, db.App, uid, now)
 }
 
 func postWidget(t *testing.T, srv *httptest.Server, session, practiceID, idempotencyKey string) *http.Response {
