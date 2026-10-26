@@ -123,12 +123,12 @@ describe('the Practice-wide schedule (#263)', () => {
 			.toHaveClass('visually-hidden');
 	});
 
-	it('announces how many Visits the narrowed view is showing', async () => {
+	it('announces how many Visits the narrowed view is showing, as the filter bar’s status line', async () => {
 		await setup();
 
-		const summary = testPage.getByText('Showing 2 scheduled visits.');
+		const summary = testPage.getByRole('status');
 		await expect.element(summary).toBeVisible();
-		await expect.element(summary).toHaveAttribute('aria-live', 'polite');
+		await expect.element(summary).toHaveTextContent('Showing 2 scheduled visits.');
 	});
 
 	it('offers the narrowing as named form controls, each with its own label', async () => {

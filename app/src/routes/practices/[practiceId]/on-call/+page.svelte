@@ -8,13 +8,12 @@
 	 * schedule (#263) does: `ListPage` for the frame, `DataTable` for the
 	 * book (its record view is what carries a dense roster at 320px, and
 	 * its per-column snippets are what let one row say three things), and
-	 * `LabeledField` + `TextInput` for the narrowing.
+	 * `FilterBar` with `LabeledField` + `TextInput` for the narrowing
+	 * (#2026).
 	 *
-	 * The narrowing is a real `<form method="get">`: Enter submits it,
-	 * the browser's own date controls do the entry, and the fields are
-	 * named so the form reaches the right URL with no script running at
-	 * all (Rule of Least Power). `onsubmit` upgrades that to a
-	 * client-side navigation rather than replacing it.
+	 * The narrowing is `FilterBar`'s real `<form method="get">`;
+	 * `applyRange` upgrades it to a client-side navigation rather than
+	 * replacing it (Rule of Least Power).
 	 *
 	 * What a reader sees is the BFF's answer and nothing more: a
 	 * contractor Doula's roster carries only births she is on, decided in
@@ -37,10 +36,10 @@
 		type RosterWindow
 	} from '#lib/onCall.js';
 	import Badge from '#lib/components/atoms/Badge.svelte';
-	import Button from '#lib/components/atoms/Button.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import FilterBar from '#lib/components/molecules/FilterBar.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
@@ -149,55 +148,40 @@
 	{/snippet}
 
 	{#snippet content()}
-		<!-- stacked-form:ignore: #1093 -- a `method="get"` narrowing control, not a run of fields. Its two dates sit side by side and wrap on their own, and `StackedForm` would both stack them and take away the GET submission this form is built on. -->
-		<form method="get" action={basePath} onsubmit={applyRange}>
-			<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- a route-owned filter bar, copied from Schedule; the FilterBar molecule that will own this fieldset is #2026 -->
-			<fieldset>
-				<legend>Choose the days</legend>
-				<div class="controls">
-					<LabeledField label="From">
-						{#snippet children({ id, describedBy, invalid })}
-							<TextInput
-								{id}
-								{describedBy}
-								{invalid}
-								type="date"
-								name="from"
-								value={fromValue}
-								onInput={(value) => (fromValue = value)}
-							/>
-						{/snippet}
-					</LabeledField>
-					<LabeledField label="To">
-						{#snippet children({ id, describedBy, invalid })}
-							<TextInput
-								{id}
-								{describedBy}
-								{invalid}
-								type="date"
-								name="to"
-								value={toValue}
-								onInput={(value) => (toValue = value)}
-							/>
-						{/snippet}
-					</LabeledField>
-					<div class="apply">
-						<Button type="submit" label="Show" />
-					</div>
-				</div>
-			</fieldset>
-		</form>
-
-		<!-- Hidden, not removed, when the roster is empty (#2015): the table's
-		     empty state says it on screen, and this live region still tells a
-		     screen reader what the new dates found. -->
-		<p
-			aria-live="polite"
-			class="summary"
-			class:visually-hidden={data.roster.windows.length === 0}
+		<FilterBar
+			action={basePath}
+			onSubmit={applyRange}
+			legend="Choose the days"
+			status={summary}
+			empty={data.roster.windows.length === 0}
 		>
-			{summary}
-		</p>
+			<LabeledField label="From">
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						type="date"
+						name="from"
+						value={fromValue}
+						onInput={(value) => (fromValue = value)}
+					/>
+				{/snippet}
+			</LabeledField>
+			<LabeledField label="To">
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						type="date"
+						name="to"
+						value={toValue}
+						onInput={(value) => (toValue = value)}
+					/>
+				{/snippet}
+			</LabeledField>
+		</FilterBar>
 
 		<!--
 			hasMore is false and says something true: the roster is one whole
@@ -290,44 +274,6 @@
 				--data-table-table-display: table;
 				--data-table-records-display: none;
 			}
-		}
-
-		fieldset {
-			margin: 0;
-			padding: 0;
-			border: 0;
-		}
-
-		legend {
-			padding: 0;
-			font-size: var(--text-body-size);
-			font-weight: var(--font-weight-bold);
-			color: var(--color-on-surface);
-		}
-
-		/* Intrinsic, not a breakpoint (ADR-0024): each control asks for a
-		   comfortable width and takes its own row the moment the space
-		   this form is given cannot hold two side by side. */
-		.controls {
-			display: flex;
-			flex-wrap: wrap;
-			gap: var(--space-4);
-			align-items: end;
-			margin-block-start: var(--space-3);
-		}
-
-		.controls > :global(*) {
-			flex: 1 1 12rem;
-		}
-
-		.apply {
-			flex: 0 0 auto;
-		}
-
-		.summary {
-			margin: 0;
-			color: var(--color-on-surface-variant);
-			font-size: var(--text-small-size);
 		}
 
 		section {

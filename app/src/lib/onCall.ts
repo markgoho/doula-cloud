@@ -14,6 +14,7 @@
 import type { Fetcher } from './fetcher.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
 import { refusalError } from './formErrors.js';
+import { addDays, DEFAULT_SCHEDULE_DAYS } from './visitSchedule.js';
 
 /** One live coverage gap, as the roster and the Engagement panel show
  * it. Mirrors the Go BFF's oncall.Gap. */
@@ -139,16 +140,19 @@ export function toDayValue(date: Date): string {
 	return `${date.getFullYear()}-${padTwoDigits(date.getMonth() + 1)}-${padTwoDigits(date.getDate())}`;
 }
 
-/** The days the screen opens on when the URL names none: today, and
- * only today. "Who is on call tonight" is the question the roster
- * exists for, and a reader widens it from there. */
+/** The days the screen opens on when the URL names none: today through
+ * the next 30 days, the same window the Practice-wide schedule opens on
+ * (#2026). It opened on today alone, and a birth's on-call window rarely
+ * starts on the day a reader looks, so a first visit was always empty
+ * (Cognitive Bias: a default is never neutral). Tonight is the first
+ * row; a reader narrows from there. */
 export function defaultRange(now: Date = new Date()): RosterRange {
 	const today = toDayValue(now);
-	return { from: today, to: today };
+	return { from: today, to: addDays(today, DEFAULT_SCHEDULE_DAYS) };
 }
 
-/** Reads the range off a URL's search parameters, falling back to today
- * for a day the URL does not name. */
+/** Reads the range off a URL's search parameters, falling back to the
+ * default range for a day the URL does not name. */
 export function rangeFromParameters(
 	parameters: URLSearchParams,
 	now: Date = new Date()

@@ -1,7 +1,9 @@
 import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { defaultRange } from '#lib/onCall.js';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
+import { addDays } from '#lib/visitSchedule.js';
 // DataTable's frame needs stack-l's display:block default (primitives.css)
 // to work as a container-query context, and ListPage's <center-l max="none">
 // only lifts the default measure cap through the registered element -- see
@@ -134,13 +136,28 @@ describe('the on-call roster', () => {
 	it('navigates to the days a reader chose, keeping them in the address', async () => {
 		await setup();
 
-		await testPage.getByLabelText('From').fill('2026-11-01');
-		await testPage.getByLabelText('To').fill('2026-11-30');
-		await testPage.getByRole('button', { name: 'Show' }).click();
+		// Said relative to today, as the schedule's own spec does:
+		// `rosterHref` omits a day that equals the default range, so a
+		// literal pair would assert a different URL on the day it matched.
+		const { from: today, to: defaultTo } = defaultRange();
+		const chosenFrom = addDays(today, 5);
+		const chosenTo = addDays(defaultTo, 10);
+
+		await testPage.getByLabelText('From').fill(chosenFrom);
+		await testPage.getByLabelText('To').fill(chosenTo);
+		await testPage.getByRole('button', { name: 'Apply' }).click();
 
 		expect(goto).toHaveBeenCalledWith(
-			`/practices/${practiceId}/on-call?from=2026-11-01&to=2026-11-30`
+			`/practices/${practiceId}/on-call?from=${chosenFrom}&to=${chosenTo}`
 		);
+	});
+
+	it('says the result as the filter bar’s own status line', async () => {
+		await setup();
+
+		await expect
+			.element(testPage.getByRole('status'))
+			.toHaveTextContent(/births on call, \d+ needing cover\./);
 	});
 
 	it('says so plainly when no birth is on call in the days chosen', async () => {

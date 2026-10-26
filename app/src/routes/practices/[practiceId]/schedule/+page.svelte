@@ -6,17 +6,15 @@
 	 *
 	 * Composes existing components only, the same as the Practice-wide
 	 * Contract list this follows (#273): `ListPage` for the frame,
-	 * `DataTable` for the book, `LabeledField` + `TextInput`/`Select` for
-	 * the narrowing. The one atom this screen changed is `Select`, which
-	 * now takes `{value, label}` options as well as bare strings -- two
-	 * Doulas at one agency can share a name, so the filter has to store an
-	 * id.
+	 * `DataTable` for the book, `FilterBar` with `LabeledField` +
+	 * `TextInput`/`Select` for the narrowing (#2026). The one atom this
+	 * screen changed is `Select`, which now takes `{value, label}` options
+	 * as well as bare strings -- two Doulas at one agency can share a
+	 * name, so the filter has to store an id.
 	 *
-	 * The narrowing is a real `<form method="get">`: Enter submits it, the
-	 * browser's own controls do the date entry, and the fields are named
-	 * so the form still reaches the right URL with no script running at
-	 * all. `onsubmit` upgrades that to a client-side navigation rather
-	 * than replacing it (Rule of Least Power).
+	 * The narrowing is `FilterBar`'s real `<form method="get">`;
+	 * `applyNarrowing` upgrades it to a client-side navigation rather than
+	 * replacing it (Rule of Least Power).
 	 */
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -31,11 +29,11 @@
 		scheduleResultSummary,
 		type ScheduledVisit
 	} from '#lib/visitSchedule.js';
-	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Select from '#lib/components/atoms/Select.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import FilterBar from '#lib/components/molecules/FilterBar.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
@@ -142,65 +140,55 @@
 	{/snippet}
 
 	{#snippet content()}
-		<!-- stacked-form:ignore: #1108 -- a `method="get"` narrowing control, not a run of fields. Its controls sit side by side in `.controls` and wrap to one per row on their own, and `StackedForm` would both stack them and take away the GET submission this form is built on. -->
-		<form method="get" action={basePath} onsubmit={applyNarrowing}>
-			<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- a route-owned filter bar, copied on On call; the FilterBar molecule that will own this fieldset is #2026 -->
-			<fieldset>
-				<legend>Narrow the schedule</legend>
-				<div class="controls">
-					<LabeledField label="From">
-						{#snippet children({ id, describedBy, invalid })}
-							<TextInput
-								{id}
-								{describedBy}
-								{invalid}
-								type="date"
-								name="from"
-								value={fromValue}
-								onInput={(value) => (fromValue = value)}
-							/>
-						{/snippet}
-					</LabeledField>
-					<LabeledField label="To">
-						{#snippet children({ id, describedBy, invalid })}
-							<TextInput
-								{id}
-								{describedBy}
-								{invalid}
-								type="date"
-								name="to"
-								value={toValue}
-								onInput={(value) => (toValue = value)}
-							/>
-						{/snippet}
-					</LabeledField>
-					{#if data.doulas.length > 0}
-						<LabeledField label="Doula">
-							{#snippet children({ id, describedBy, invalid })}
-								<Select
-									{id}
-									{describedBy}
-									{invalid}
-									name="staffId"
-									options={[{ value: '', label: 'Every doula' }, ...data.doulas]}
-									bind:value={staffIdValue}
-								/>
-							{/snippet}
-						</LabeledField>
-					{/if}
-					<div class="apply">
-						<Button type="submit" label="Apply" />
-					</div>
-				</div>
-			</fieldset>
-		</form>
-
-		<!-- Hidden, not removed, when nothing is scheduled (#2015): the
-		     table's empty state says it on screen, and this live region still
-		     tells a screen reader what the new range found. -->
-		<p aria-live="polite" class="summary" class:visually-hidden={schedule.items.length === 0}>
-			{summary}
-		</p>
+		<FilterBar
+			action={basePath}
+			onSubmit={applyNarrowing}
+			legend="Narrow the schedule"
+			status={summary}
+			empty={schedule.items.length === 0}
+		>
+			<LabeledField label="From">
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						type="date"
+						name="from"
+						value={fromValue}
+						onInput={(value) => (fromValue = value)}
+					/>
+				{/snippet}
+			</LabeledField>
+			<LabeledField label="To">
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						type="date"
+						name="to"
+						value={toValue}
+						onInput={(value) => (toValue = value)}
+					/>
+				{/snippet}
+			</LabeledField>
+			{#if data.doulas.length > 0}
+				<LabeledField label="Doula" width={20}>
+					{#snippet children({ id, describedBy, invalid, width })}
+						<Select
+							{id}
+							{describedBy}
+							{invalid}
+							{width}
+							name="staffId"
+							options={[{ value: '', label: 'Every doula' }, ...data.doulas]}
+							bind:value={staffIdValue}
+						/>
+					{/snippet}
+				</LabeledField>
+			{/if}
+		</FilterBar>
 
 		<DataTable
 			{columns}
@@ -217,58 +205,3 @@
 		{/if}
 	{/snippet}
 </ListPage>
-
-<style>
-	@layer components {
-		fieldset {
-			margin: 0;
-			padding: 0;
-			border: 0;
-		}
-
-		legend {
-			padding: 0;
-			font-size: var(--text-body-size);
-			font-weight: var(--font-weight-bold);
-			color: var(--color-on-surface);
-		}
-
-		/* Intrinsic, not a breakpoint (ADR-0024): each control asks for a
-		   comfortable width and wraps to its own row the moment the space
-		   this form is given cannot hold two side by side. At 320px that is
-		   one control per row; in a wide column all four sit together. No
-		   viewport media query, and the same behavior whether the form is
-		   the page or a panel inside something else. */
-		/* #1108: `var(--space-4)` rather than the `var(--space-5)` a run of
-		   form fields takes, and deliberately. This gap is read on both
-		   axes -- it is the space between two controls sitting side by
-		   side as much as the space between two rows of them -- and the
-		   token that reads right down a column is too loose across one.
-		   A form whose fields only ever stack has no such second reading,
-		   which is why the ordinary rhythm is the ordinary rhythm. */
-		.controls {
-			display: flex;
-			flex-wrap: wrap;
-			gap: var(--space-4);
-			align-items: end;
-			margin-block-start: var(--space-3);
-		}
-
-		.controls > :global(*) {
-			flex: 1 1 12rem;
-		}
-
-		/* The button asks for no growth: it is as wide as its own words,
-		   and drops onto its own row only when nothing else fits beside
-		   it. */
-		.apply {
-			flex: 0 0 auto;
-		}
-
-		.summary {
-			margin: 0;
-			color: var(--color-on-surface-variant);
-			font-size: var(--text-small-size);
-		}
-	}
-</style>
