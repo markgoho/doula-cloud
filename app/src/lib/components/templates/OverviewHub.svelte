@@ -33,11 +33,11 @@
 		/**
 		 * #486's Recent-activity feed: low-prominence and low on the page,
 		 * per the design brief's own #433 amendment ("it sits low on every
-		 * page it appears on"). Rendered at the end of the primary column
-		 * (#2020), never in the narrow sidebar. It sat below the whole
-		 * primary/secondary split until then, which made the taller
-		 * column decide where it started: under a long rail, a blank band
-		 * opened between the last card and the feed. Absent while `isEmpty`, the same as `secondary`: a Practice with
+		 * page it appears on"). Rendered below the primary/secondary split
+		 * at the container's own width, not squeezed into either column --
+		 * a table reads better full-width than in the narrow sidebar, and
+		 * the brief is explicit this is not what a person comes here for.
+		 * Absent while `isEmpty`, the same as `secondary`: a Practice with
 		 * no Client yet has no activity to show either.
 		 */
 		feed?: Snippet;
@@ -78,24 +78,6 @@
 </script>
 
 <PageTitle page={title} {serviceName} />
-
-<!--
-	The feed ends the primary column, not the page (#2020): rendered after
-	the whole sidebar-l, it started below whichever column was taller, so
-	on the Owner hub the rail's height left a blank band above it at 1440.
-	At the section step from the cards above it, because it is a section
-	of its own rather than one more card.
--->
-{#snippet primaryColumn()}
-	{#if feed}
-		<stack-l space="var(--space-section)">
-			<stack-l space="var(--space-group)">{@render primary()}</stack-l>
-			{@render feed()}
-		</stack-l>
-	{:else}
-		<stack-l space="var(--space-group)">{@render primary()}</stack-l>
-	{/if}
-{/snippet}
 
 <container-l name="overview-hub">
 	<!-- No cap: a hub is cards, tables and a rail rather than prose, and
@@ -140,11 +122,20 @@
 						actually has once alone.
 					-->
 					<sidebar-l side="end" space="var(--space-section)" content-min="min(var(--measure), 100%)">
-						{@render primaryColumn()}
+						<stack-l space="var(--space-group)">{@render primary()}</stack-l>
 						<aside><stack-l space="var(--space-group)">{@render secondary()}</stack-l></aside>
 					</sidebar-l>
 				{:else}
-					{@render primaryColumn()}
+					<stack-l space="var(--space-group)">{@render primary()}</stack-l>
+				{/if}
+
+				<!-- Still below the whole split, so a long rail leaves a blank
+				     band above it at desktop widths (#2020). Moving it to the end
+				     of the primary column was tried and undone: that column is
+				     under DataTable's 55rem table floor below about a 1366px
+				     window, so the feed fell to its record view on a laptop. -->
+				{#if !isEmpty && feed}
+					{@render feed()}
 				{/if}
 			</stack-l>
 		{/if}

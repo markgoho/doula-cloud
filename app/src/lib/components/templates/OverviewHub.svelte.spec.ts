@@ -98,37 +98,19 @@ describe('OverviewHub.svelte', () => {
 		await expect.element(page.getByText('Six open Offers')).toBeVisible();
 	});
 
-	// #486: the Recent-activity feed sits low on the page -- not inside
-	// `secondary`'s own narrow rail, which is why this gets its own prop
-	// rather than becoming one more block a route appends to `secondary`.
-	// #2020: it ends the primary column, so the rail's height no longer
-	// decides where it starts.
-	it('renders the feed region when given, at the end of the primary column', async () => {
+	// #486: the Recent-activity feed sits low on the page, below the
+	// primary/secondary split -- not inside `secondary`'s own narrow rail,
+	// which is why this gets its own prop rather than becoming one more
+	// block a route appends to `secondary`.
+	it('renders the feed region when given, alongside primary and secondary', async () => {
 		await setup({
 			secondary: textSnippet('Two doulas unassigned'),
 			feed: textSnippet('Mark Goho sent the invoice')
 		});
 
-		const primary = page.getByText('Six open Offers');
-		const feed = page.getByText('Mark Goho sent the invoice');
-		await expect.element(primary).toBeVisible();
+		await expect.element(page.getByText('Six open Offers')).toBeVisible();
 		await expect.element(page.getByText('Two doulas unassigned')).toBeVisible();
-		await expect.element(feed).toBeVisible();
-		await expect.element(page.getByRole('complementary')).not.toContainElement(feed.element());
-		expect(
-			primary.element().compareDocumentPosition(feed.element()) & Node.DOCUMENT_POSITION_FOLLOWING
-		).toBeTruthy();
-	});
-
-	it('renders the feed after the primary region when there is no secondary', async () => {
-		await setup({ feed: textSnippet('Mark Goho sent the invoice') });
-
-		const feed = page.getByText('Mark Goho sent the invoice');
-		await expect.element(feed).toBeVisible();
-		expect(
-			page.getByText('Six open Offers').element().compareDocumentPosition(feed.element()) &
-				Node.DOCUMENT_POSITION_FOLLOWING
-		).toBeTruthy();
+		await expect.element(page.getByText('Mark Goho sent the invoice')).toBeVisible();
 	});
 
 	it('renders no feed region when empty, whatever was passed', async () => {
