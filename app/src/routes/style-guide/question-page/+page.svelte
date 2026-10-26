@@ -130,6 +130,7 @@
 			for: 'client-email'
 		}}
 		hint="Optional. Without an email address Anne-Marie Ochieng-Whitfield cannot be invited to the Client portal and cannot be invoiced."
+		error={hasError ? 'Enter an email address in the correct format, like name@example.com' : undefined}
 		content={emailInput}
 		{actions}
 	/>

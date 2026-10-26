@@ -1,12 +1,22 @@
-import { page as testPage, userEvent } from 'vitest/browser';
+import { page as testPage } from 'vitest/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { workStateReportedOn } from '#lib/workStates.js';
 import { jsonResponse as buildResponse } from '#lib/testResponse.js';
 import { expectFieldError } from '#lib/components/molecules/LabeledField.testing.js';
+import { gotoWithOutcome } from '#lib/outcome.js';
+import { toPageState } from '../../routeFixture.js';
 import Page from './+page.svelte';
 import { resetAccountSession } from '../session.svelte.js';
-import { session, soleOwnerSession } from './page.fixture.js';
+import { fixture, session, soleOwnerSession } from './page.fixture.js';
+
+const pageState = vi.hoisted(() => ({
+	params: {} as Record<string, string>,
+	url: new URL('https://example.test/'),
+	data: {} as Record<string, unknown>
+}));
+vi.mock('$app/state', () => ({ page: pageState }));
+Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
@@ -36,8 +46,6 @@ vi.mock('#lib/firebase.js', () => ({ getFirebaseAuth: () => ({}) }));
 
 const globalFetch = vi.hoisted(() => vi.fn());
 
-const SAVED_AT = '2027-03-14T10:00:00Z';
-
 function jsonResponse(body: unknown): Response {
 	return buildResponse(body);
 }
@@ -48,27 +56,21 @@ function refusal(status: number, message: string): Response {
 
 interface MockOptions {
 	sessionResponse?: Response;
-	saveResponse?: Response;
-	saveThrows?: boolean;
 	resendResponse?: Response;
 	resendThrows?: boolean;
 }
 
 function mockApi({
 	sessionResponse = jsonResponse(session),
-	saveResponse = jsonResponse({ workState: 'NJ', workStateReportedAt: SAVED_AT }),
-	saveThrows = false,
 	resendResponse = new Response(undefined, { status: 202 }),
 	resendThrows = false
 }: MockOptions = {}) {
 	apiFetchWithSession.mockImplementation((path: string) => {
-		if (path === '/api/staff/session') return Promise.resolve(sessionResponse);
 		if (path === '/api/staff/verify-email/request') {
 			if (resendThrows) return Promise.reject(new Error('The network dropped'));
 			return Promise.resolve(resendResponse);
 		}
-		if (saveThrows) return Promise.reject(new Error('The network dropped'));
-		return Promise.resolve(saveResponse);
+		return Promise.resolve(sessionResponse);
 	});
 }
 
@@ -89,105 +91,132 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
-const saveButton = () => testPage.getByRole('button', { name: 'Save work state' });
-const stateSelect = () => testPage.getByRole('combobox', { name: 'Which state do you work from?' });
+const resendButton = () => testPage.getByRole('button', { name: 'Send a new verification link' });
 
 async function setup(options: MockOptions = {}) {
 	mockApi(options);
 	await render(Page, {});
 }
 
-describe('the account screen', () => {
-	it('shows the work state she has already asserted, and the day she asserted it', async () => {
+/*
+ * #2044: the page is the facts about her, and each row says how it
+ * changes. It asks no question itself, so there is no form here to
+ * submit: the name and the work state each have a question page of
+ * their own (name/, work-state/).
+ */
+describe('the account summary', () => {
+	it('shows her name, where she works and since when, her email address and her second factor', async () => {
 		await setup();
 
-		await expect.element(testPage.getByRole('heading', { name: 'Your account' })).toBeVisible();
-		await expect.element(stateSelect()).toHaveValue('New York');
+		await expect.element(testPage.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
+		await expect.element(testPage.getByText(`${session.firstName} ${session.lastName}`)).toBeVisible();
+		await expect.element(testPage.getByText('New York')).toBeVisible();
 		await expect
 			.element(testPage.getByText(`Last confirmed ${workStateReportedOn(session.workStateReportedAt)}.`))
 			.toBeVisible();
+		await expect.element(testPage.getByText(session.email)).toBeVisible();
+		await expect.element(testPage.getByText('Off', { exact: true })).toBeVisible();
 	});
 
-	// The consequence, before the choice rather than in a dialog after it
-	// -- and the answer to the question it invites, which is whether a
-	// correction reaches backwards. It does not (#420). Both sit on the
-	// work-state question itself, not in a page intro (#2023).
-	it('states the sales tax consequence and that past purchases are not re-priced', async () => {
+	it('asks nothing on the page itself: no field and no save button', async () => {
 		await setup();
 
-		await expect.element(testPage.getByText(/sales tax on your practice's credits/)).toBeVisible();
-		await testPage.getByText('If you change it').click();
-		await expect.element(testPage.getByText(/are not re-priced/)).toBeVisible();
+		await expect.element(testPage.getByRole('heading', { level: 1 })).toBeVisible();
+		expect(testPage.getByRole('textbox').elements()).toHaveLength(0);
+		expect(testPage.getByRole('combobox').elements()).toHaveLength(0);
+		expect(testPage.getByRole('button', { name: /^Save/ }).elements()).toHaveLength(0);
 	});
 
-	it('sends the USPS code for the state she picked, with no staff id of its own', async () => {
+	// Each Change names what it changes through SummaryList's hidden text,
+	// so a list of the page's links does not read "Change, Change".
+	it('opens a question page for the name and for where she works', async () => {
 		await setup();
 
-		await stateSelect().selectOptions('New Jersey');
-		await saveButton().click();
-
-		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/staff/work-state', {
-			method: 'PUT',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ workState: 'NJ' })
-		});
+		const changes = testPage.getByRole('link', { name: 'Change' });
+		await expect.element(changes.first()).toHaveAttribute('href', '/account/name');
+		await expect.element(changes.first()).toHaveAccessibleDescription('name');
+		await expect.element(changes.last()).toHaveAttribute('href', '/account/work-state');
+		await expect.element(changes.last()).toHaveAccessibleDescription('where you work');
 	});
 
-	it('confirms the save and moves the last-confirmed day to the one the server returned', async () => {
+	it('says when no work state has been given yet', async () => {
+		await setup({ sessionResponse: jsonResponse({ ...session, workState: '', workStateReportedAt: '' }) });
+
+		await expect.element(testPage.getByText('Not given yet')).toBeVisible();
+		expect(testPage.getByText(/Last confirmed/).elements()).toHaveLength(0);
+	});
+
+	// The way back is one Back link at the top of the column (#2044), not a
+	// heading at the foot of the shell listing every Practice.
+	it('goes back to the Practice she was last in, by name', async () => {
 		await setup();
 
-		await stateSelect().selectOptions('New Jersey');
-		await saveButton().click();
-
-		await expect.element(testPage.getByRole('status')).toHaveTextContent(
-			'Saved. You work from New Jersey.'
-		);
 		await expect
-			.element(testPage.getByText(`Last confirmed ${workStateReportedOn(SAVED_AT)}.`))
+			.element(testPage.getByRole('link', { name: 'Back to Riverside Doula Collective' }))
+			.toHaveAttribute('href', '/practices/practice-1');
+	});
+
+	it('goes back to the Practice she was last in when she works at several', async () => {
+		const memberships = [
+			{ practiceId: 'practice-2', practiceName: 'Lakeshore Birth Partners', roles: ['doula'] },
+			...session.memberships
+		];
+		await setup({ sessionResponse: jsonResponse({ ...session, memberships }) });
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Back to Riverside Doula Collective' }))
+			.toHaveAttribute('href', '/practices/practice-1');
+	});
+
+	it('goes back to the chooser when she works at several and none was the last', async () => {
+		const memberships = [
+			{ practiceId: 'practice-2', practiceName: 'Lakeshore Birth Partners', roles: ['doula'] },
+			...session.memberships
+		];
+		await setup({ sessionResponse: jsonResponse({ ...session, memberships, lastPracticeId: undefined }) });
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Back to your practices' }))
+			.toHaveAttribute('href', '/');
+	});
+
+	it('goes back to her one Practice when none is recorded as the last', async () => {
+		await setup({ sessionResponse: jsonResponse({ ...session, lastPracticeId: undefined }) });
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Back to Riverside Doula Collective' }))
 			.toBeVisible();
 	});
 
-	// The re-assertion case, which is the reason the button is never
-	// disabled on an unchanged value: "yes, still New York, as of today"
-	// is the only staleness signal the design has.
-	it('sends the same state again rather than treating it as a no-op', async () => {
-		await setup({ saveResponse: jsonResponse({ workState: 'NY', workStateReportedAt: SAVED_AT }) });
+	// #1526: the founder holds no Membership, and a way back to nowhere is
+	// no way back.
+	it('offers no way back to a person who belongs to no Practice', async () => {
+		await setup({ sessionResponse: jsonResponse({ ...session, memberships: [], lastPracticeId: undefined }) });
 
-		await expect.element(saveButton()).toBeEnabled();
-		await saveButton().click();
-
-		expect(apiFetchWithSession).toHaveBeenCalledWith(
-			'/api/staff/work-state',
-			expect.objectContaining({ body: JSON.stringify({ workState: 'NY' }) })
-		);
-		await expect
-			.element(testPage.getByText(`Last confirmed ${workStateReportedOn(SAVED_AT)}.`))
-			.toBeVisible();
+		await expect.element(testPage.getByRole('heading', { level: 1 })).toBeVisible();
+		expect(testPage.getByRole('link', { name: /^Back/ }).elements()).toHaveLength(0);
 	});
-
-	// The practices nav is layout chrome, not this page's business -- see
-	// account-layout.svelte.spec.ts (#474).
 
 	// #613's re-request AC: a signed-in Staff member can ask for a fresh
 	// verification link without knowing whether her address is already
-	// verified.
+	// verified. The answer is under the row it was asked from.
 	it('sends a fresh verification link on request', async () => {
 		await setup();
 
-		await testPage.getByRole('button', { name: 'Send a new verification link' }).click();
+		await resendButton().click();
 
 		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/staff/verify-email/request', {
 			method: 'POST'
 		});
 		await expect
-			.element(testPage.getByRole('status'))
+			.element(testPage.getByRole('status').filter({ hasText: "We've sent a new verification link" }))
 			.toHaveTextContent("We've sent a new verification link to your email address.");
 	});
 
 	it("shows the server's own words when a resend is refused", async () => {
 		await setup({ resendResponse: refusal(429, 'too many requests -- try again later') });
 
-		await testPage.getByRole('button', { name: 'Send a new verification link' }).click();
+		await resendButton().click();
 
 		await expect
 			.element(testPage.getByRole('alert'))
@@ -197,7 +226,7 @@ describe('the account screen', () => {
 	it('owns a resend that never reached the server at all', async () => {
 		await setup({ resendThrows: true });
 
-		await testPage.getByRole('button', { name: 'Send a new verification link' }).click();
+		await resendButton().click();
 
 		await expect
 			.element(testPage.getByRole('alert'))
@@ -205,47 +234,39 @@ describe('the account screen', () => {
 	});
 });
 
+// #1710: a question page saves and comes back here, and this page says
+// what it did.
+describe('the status message after a change (#2044)', () => {
+	it('says what the save did, as a status before the title, and takes focus once the account loads', async () => {
+		goto.mockImplementationOnce(async () => {
+			await setup();
+		});
+
+		await gotoWithOutcome('/account', 'Your name is Mary Anne Smith.');
+
+		const message = testPage.getByRole('status').filter({ hasText: 'Your name is Mary Anne Smith.' });
+		await expect.element(message).toBeVisible();
+		await expect.element(message).toHaveFocus();
+	});
+
+	it('says nothing on a visit no save sent', async () => {
+		await setup();
+
+		await expect.element(testPage.getByRole('heading', { level: 1 })).toBeVisible();
+		expect(testPage.getByText(/^Your name is/).elements()).toHaveLength(0);
+	});
+});
+
 describe('when the account screen cannot do its job', () => {
 	// A verified identity with no staff row behind it. Signed in, but
-	// nobody here yet -- so there is nothing to edit and no form to offer.
-	it('says so, and offers no form, when there is no Staff account', async () => {
+	// nobody here yet -- so there is nothing to change and no row to offer.
+	it('says so, and offers nothing to change, when there is no Staff account', async () => {
 		await setup({ sessionResponse: refusal(404, 'no matching staff account') });
 
 		await expect
 			.element(testPage.getByRole('alert'))
 			.toHaveTextContent('no matching staff account');
-		expect(saveButton().elements()).toHaveLength(0);
-	});
-
-	it("shows the server's own words when a save is refused", async () => {
-		await setup({
-			saveResponse: refusal(
-				400,
-				'workState is required, and must be a two-letter US state abbreviation'
-			)
-		});
-
-		await saveButton().click();
-
-		await expect
-			.element(testPage.getByRole('alert'))
-			.toHaveTextContent('workState is required, and must be a two-letter US state abbreviation');
-	});
-
-	/*
-	 * The thrown message is the network's. Since #467 this screen owns the
-	 * failure in words she can act on rather than repeating an exception,
-	 * and reports it in the error summary above the title.
-	 */
-	it('owns a save that never reached the server at all', async () => {
-		await setup({ saveThrows: true });
-
-		await saveButton().click();
-
-		await expect
-			.element(testPage.getByRole('alert'))
-			.toHaveTextContent('There is a problem with the service. Try again in a few minutes.');
-		await expect.element(testPage.getByText('The network dropped')).not.toBeInTheDocument();
+		expect(testPage.getByRole('link', { name: 'Change' }).elements()).toHaveLength(0);
 	});
 });
 
@@ -257,20 +278,22 @@ describe('when the account screen cannot do its job', () => {
  * response rather than modeling a fresh enrollment check.
  */
 describe('two-factor authentication status (#606)', () => {
-	it('shows it is turned on and offers to remove it', async () => {
+	it('shows it is on and offers to remove it', async () => {
 		await setup({ sessionResponse: jsonResponse({ ...session, secondFactor: true }) });
 
-		await expect.element(testPage.getByText('Turned on.')).toBeVisible();
-		await expect.element(testPage.getByRole('button', { name: 'Remove' })).toBeVisible();
+		await expect.element(testPage.getByText('On', { exact: true })).toBeVisible();
+		const remove = testPage.getByRole('button', { name: 'Remove' });
+		await expect.element(remove).toHaveAccessibleDescription('two-factor authentication');
+		await expect.element(remove).toHaveAttribute('aria-expanded', 'false');
 	});
 
 	it('offers to set it up voluntarily when it is off, returning here afterward', async () => {
 		await setup({ sessionResponse: jsonResponse({ ...session, secondFactor: false }) });
 
-		await expect.element(testPage.getByText('Not turned on.')).toBeVisible();
-		await expect
-			.element(testPage.getByRole('link', { name: 'Set up two-factor authentication' }))
-			.toHaveAttribute('href', '/mfa/enroll?returnTo=%2Faccount');
+		await expect.element(testPage.getByText('Off', { exact: true })).toBeVisible();
+		const setUp = testPage.getByRole('link', { name: 'Set up' });
+		await expect.element(setUp).toHaveAttribute('href', '/mfa/enroll?returnTo=%2Faccount');
+		await expect.element(setUp).toHaveAccessibleDescription('two-factor authentication');
 	});
 });
 
@@ -293,7 +316,7 @@ describe('removing a second factor (#606)', () => {
 		mockApi({ sessionResponse: jsonResponse({ ...session, secondFactor: true }) });
 		globalFetch.mockResolvedValue(deleteResponse);
 		await render(Page, {});
-		await testPage.getByRole('button', { name: 'Remove' }).click();
+		await testPage.getByRole('button', { name: 'Remove' }).last().click();
 		await expect.element(testPage.getByLabelText('Password')).toBeVisible();
 	}
 
@@ -329,12 +352,24 @@ describe('removing a second factor (#606)', () => {
 		await expectFieldError('account-mfa-password', 'Password is not correct');
 	});
 
-	it('lets her cancel out of the step-up back to the status line', async () => {
+	it('lets her cancel out of the step-up back to the row', async () => {
 		await setup();
 
 		await testPage.getByRole('button', { name: 'Cancel' }).click();
 
-		await expect.element(testPage.getByText('Turned on.')).toBeVisible();
+		await expect.element(testPage.getByText('On', { exact: true })).toBeVisible();
+		expect(testPage.getByLabelText('Password').elements()).toHaveLength(0);
+	});
+
+	// The row's own Remove closes the step-up it opened, the way a Change
+	// on a record page closes its in-place form.
+	it('closes the step-up from the row that opened it', async () => {
+		await setup();
+
+		const rowRemove = testPage.getByRole('button', { name: 'Remove' }).first();
+		await expect.element(rowRemove).toHaveAttribute('aria-expanded', 'true');
+		await rowRemove.click();
+
 		expect(testPage.getByLabelText('Password').elements()).toHaveLength(0);
 	});
 
@@ -347,7 +382,7 @@ describe('removing a second factor (#606)', () => {
 	it('refuses an empty code without resolving sign-in', async () => {
 		await reachCodeStep();
 
-		await testPage.getByRole('button', { name: 'Remove' }).click();
+		await testPage.getByRole('button', { name: 'Remove' }).last().click();
 
 		await expectFieldError('account-mfa-code', 'Enter the 6-digit code from your authenticator app');
 		expect(resolver.resolveSignIn).not.toHaveBeenCalled();
@@ -358,7 +393,7 @@ describe('removing a second factor (#606)', () => {
 		await reachCodeStep();
 
 		await testPage.getByLabelText('Authenticator app code').fill('000000');
-		await testPage.getByRole('button', { name: 'Remove' }).click();
+		await testPage.getByRole('button', { name: 'Remove' }).last().click();
 
 		await expectFieldError(
 			'account-mfa-code',
@@ -374,7 +409,7 @@ describe('removing a second factor (#606)', () => {
 		await reachCodeStep();
 
 		await testPage.getByLabelText('Authenticator app code').fill('123456');
-		await testPage.getByRole('button', { name: 'Remove' }).click();
+		await testPage.getByRole('button', { name: 'Remove' }).last().click();
 
 		expect(assertionForSignIn).toHaveBeenCalledWith('enrollment-1', '123456');
 		await vi.waitFor(() =>
@@ -550,9 +585,7 @@ describe('recovery codes for a sole Owner (#615)', () => {
 	it('offers nothing at all to a Staff member who is not a sole Owner', async () => {
 		await setup({ soleOwner: false });
 
-		await expect
-			.element(testPage.getByText("You'll be asked for a code", { exact: false }))
-			.toBeVisible();
+		await expect.element(testPage.getByText('On', { exact: true })).toBeVisible();
 		expect(testPage.getByRole('button', { name: 'Show my recovery codes' }).elements()).toHaveLength(0);
 		expect(testPage.getByText('Recovery codes').elements()).toHaveLength(0);
 	});
@@ -617,90 +650,5 @@ describe('recovery codes for a sole Owner (#615)', () => {
 		await expect
 			.element(testPage.getByText("saved recovery codes are only issued to a practice's sole owner"))
 			.toBeVisible();
-	});
-});
-
-/*
- * Correcting her own name (#1537). One form with two submit buttons, so
- * the handler has to know which one asked: these pin that a name save
- * never sends a work state and the reverse.
- */
-const saveNameButton = () => testPage.getByRole('button', { name: 'Save name' });
-const firstName = () => testPage.getByLabelText('First name');
-const lastName = () => testPage.getByLabelText('Last name');
-
-describe('correcting her name (#1537)', () => {
-	it('shows her two names, each in its own field', async () => {
-		await setup();
-
-		await expect.element(firstName()).toHaveValue(session.firstName);
-		await expect.element(lastName()).toHaveValue(session.lastName);
-	});
-
-	it('sends both names, with no staff id and no work state', async () => {
-		await setup({ saveResponse: jsonResponse({ firstName: 'Mary Anne', lastName: 'Smith' }) });
-
-		await firstName().fill('Mary Anne');
-		await lastName().fill('Smith');
-		await saveNameButton().click();
-
-		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/staff/name', {
-			method: 'PUT',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ firstName: 'Mary Anne', lastName: 'Smith' })
-		});
-		expect(apiFetchWithSession).not.toHaveBeenCalledWith('/api/staff/work-state', expect.anything());
-		await expect.element(testPage.getByText('Saved. Your name is Mary Anne Smith.')).toBeVisible();
-	});
-
-	it('saves the name, not the work state, when she presses Enter in a name field', async () => {
-		await setup({ saveResponse: jsonResponse({ firstName: 'Mary Anne', lastName: 'Smith' }) });
-
-		await firstName().fill('Mary Anne');
-		await lastName().fill('Smith');
-		await lastName().click();
-		await userEvent.keyboard('{Enter}');
-
-		await vi.waitFor(() =>
-			expect(apiFetchWithSession).toHaveBeenCalledWith('/api/staff/name', expect.anything())
-		);
-		expect(apiFetchWithSession).not.toHaveBeenCalledWith('/api/staff/work-state', expect.anything());
-	});
-
-	it('refuses each empty name on its own, without calling the server', async () => {
-		await setup();
-
-		await firstName().fill('');
-		await saveNameButton().click();
-
-		await expect.element(testPage.getByText('Enter your first name').first()).toBeVisible();
-		expect(apiFetchWithSession).not.toHaveBeenCalledWith('/api/staff/name', expect.anything());
-		expect(testPage.getByText('Enter your last name').elements()).toHaveLength(0);
-
-		await firstName().fill('Anne-Marie');
-		await lastName().fill('');
-		await saveNameButton().click();
-
-		await expect.element(testPage.getByText('Enter your last name').first()).toBeVisible();
-	});
-
-	it("shows the server's own words when the save is refused", async () => {
-		await setup({ saveResponse: refusal(400, 'firstName and lastName are required') });
-
-		await saveNameButton().click();
-
-		await expect
-			.element(testPage.getByRole('alert'))
-			.toHaveTextContent('firstName and lastName are required');
-	});
-
-	it('keeps the work state save working beside it', async () => {
-		await setup();
-
-		await stateSelect().selectOptions('New Jersey');
-		await saveButton().click();
-
-		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/staff/work-state', expect.anything());
-		expect(apiFetchWithSession).not.toHaveBeenCalledWith('/api/staff/name', expect.anything());
 	});
 });

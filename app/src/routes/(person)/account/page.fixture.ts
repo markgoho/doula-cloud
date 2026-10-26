@@ -1,8 +1,8 @@
 /*
  * Your account, as the continuum check sees it (#595).
  *
- * The fieldset legend echoes the signed-in Staff member's own name, so
- * this carries #537's vocabulary the same way the two existing fixtures
+ * The summary's Name row echoes the signed-in Staff member's own name,
+ * so this carries #537's vocabulary the same way the two existing fixtures
  * do -- a hyphenated double-barreled name, since that is what a person
  * actually types into a name field, unlike the URL vocabulary that fits
  * a Practice's own free-text fields.
@@ -33,7 +33,7 @@ export const session: SessionInfo = {
  * than removal, and a person who is not a Practice's sole Owner is
  * offered no recovery codes at all. This is the branch that has both --
  * the widest the screen ever gets, and the only one where the Recovery
- * codes fieldset exists to be measured.
+ * codes section exists to be measured.
  */
 export const soleOwnerSession: SessionInfo = { ...session, secondFactor: true, soleOwner: true };
 

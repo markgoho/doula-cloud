@@ -4,7 +4,7 @@
  *
  * The address is hostile on purpose (#537): a long local part at a long
  * domain is what a real person's work address looks like, and it is the
- * value that decides whether the intro line wraps or overflows at 320px.
+ * value that decides whether the summary row wraps or overflows at 320px.
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { RouteFixture } from '../../../../../routeFixture.js';

@@ -2,12 +2,13 @@ import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import Page from './+page.svelte';
+import { gotoWithOutcome } from '#lib/outcome.js';
 import { jsonResponse } from '#lib/testResponse.js';
 import { toApiResponder, toPageState } from '../../../../../routeFixture.js';
 import { fixture, session } from './page.fixture.js';
 
 /*
- * #619's request half. The `page` this route reads and the answer its
+ * #619's address, and #618's sign out everywhere (#2045). The `page` this route reads and the answer its
  * own fetch gets both come from its fixture (#596), so what this spec
  * renders and what the continuum sweep measures are one description.
  */
@@ -56,10 +57,6 @@ interface SetupOptions {
 	*/
 	load?: Response | Error;
 	/**
-	What POST /api/portal/sign-in-address/request answers.
-	*/
-	request?: Response | Error;
-	/**
 	What DELETE /api/portal/sessions (#618's sign-out-everywhere) answers.
 	*/
 	signOutEverywhere?: Response | Error;
@@ -67,7 +64,6 @@ interface SetupOptions {
 
 async function setup({
 	load,
-	request = jsonResponse({}, 202),
 	signOutEverywhere = jsonResponse('', 204)
 }: SetupOptions = {}) {
 	apiFetchWithSession.mockReset();
@@ -80,33 +76,42 @@ async function setup({
 				? Promise.reject(signOutEverywhere)
 				: Promise.resolve(signOutEverywhere);
 		}
-		if (path !== '/api/portal/session') {
-			return request instanceof Error ? Promise.reject(request) : Promise.resolve(request);
-		}
 		if (load === undefined) return happyPath(path);
 		return load instanceof Error ? Promise.reject(load) : Promise.resolve(load);
 	});
 	await render(Page);
 }
 
-const field = () => page.getByLabelText('New sign-in address');
-const submit = () => page.getByRole('button', { name: 'Send the link' });
 const signOutEverywhereButton = () => page.getByRole('button', { name: 'Sign out of every device' });
 const signOutEverywhereDialog = () =>
 	page.getByRole('dialog', { name: 'Sign out of every device' });
 
+// #2045: a summary, not a form. The address is a row whose Change opens a
+// question page; nothing on this page is typed into.
 describe('the Client-portal sign-in address screen', () => {
-	it('shows the address that signs her in today', async () => {
+	it('shows the address that signs her in today, with a Change to its question page', async () => {
 		await setup();
 
-		await expect.element(page.getByText(new RegExp(currentAddress))).toBeVisible();
-		await expect.element(field()).toBeVisible();
+		await expect.element(page.getByText(currentAddress)).toBeVisible();
+		const change = page.getByRole('link', { name: 'Change' });
+		await expect
+			.element(change)
+			.toHaveAttribute('href', '/portal/engagements/engagement-1/sign-in-address/change');
+		await expect.element(change).toHaveAccessibleDescription('sign-in address');
+		expect(page.getByRole('textbox').elements()).toHaveLength(0);
 	});
 
-	it('reports the page failing to load without pretending there is a form', async () => {
+	it('says the address is her own, apart from what her Practice holds', async () => {
+		await setup();
+
+		await expect.element(page.getByText(/separate from the contact details your Practice holds/)).toBeVisible();
+	});
+
+	it('reports the page failing to load without pretending there is an address', async () => {
 		await setup({ load: jsonResponse('', 500) });
 
 		await expect.element(page.getByText(/problem with the service/)).toBeVisible();
+		expect(page.getByRole('link', { name: 'Change' }).elements()).toHaveLength(0);
 	});
 
 	it('reports a thrown load the same way', async () => {
@@ -115,85 +120,33 @@ describe('the Client-portal sign-in address screen', () => {
 		await expect.element(page.getByText(/problem with the service/)).toBeVisible();
 	});
 
-	it('refuses an empty address before it costs a round trip', async () => {
-		await setup();
-		await expect.element(field()).toBeVisible();
-
-		await submit().click();
-
-		await expect.element(page.getByText('Enter your new sign-in address').first()).toBeVisible();
-		expect(apiFetchWithSession).not.toHaveBeenCalledWith(
-			'/api/portal/sign-in-address/request',
-			expect.anything()
-		);
-	});
-
-	it('refuses an address with no at sign', async () => {
-		await setup();
-		await expect.element(field()).toBeVisible();
-
-		await field().fill('not-an-address');
-		await submit().click();
-
-		await expect.element(page.getByText(/in the correct format/).first()).toBeVisible();
-	});
-
-	// govuk-alignment.md's second recorded departure: the outcome is
-	// announced in place and the form stays where it is, rather than a
-	// confirmation page replacing it.
-	it('announces the sent link in place, leaving the form up', async () => {
-		await setup();
-		await expect.element(field()).toBeVisible();
-
-		await field().fill('new@example.test');
-		await submit().click();
-
-		await expect.element(page.getByText(/Check your email/)).toBeVisible();
-		await expect.element(page.getByText(/new@example.test/)).toBeVisible();
-		// The reassurance the ADR is built on, said where she can read it.
-		await expect
-			.element(page.getByText(new RegExp(`${currentAddress} still signs you in`)))
-			.toBeVisible();
-		await expect.element(field()).toBeVisible();
-	});
-
-	// The BFF names the field its refusal is about (api-design.md section
-	// 7), which is what puts the message above the input rather than
-	// adrift at the top of the page.
-	it('puts a field-keyed BFF refusal on the field it names', async () => {
-		await setup({
-			request: jsonResponse(
-				{
-					code: 'INVALID_ARGUMENT',
-					message: 'Enter your new sign-in address',
-					details: { email: 'Enter your new sign-in address' }
-				},
-				400
-			)
+	// #1710: the question page sends the link and comes back here, and this
+	// page says what it did, before its title and focused.
+	it('says the link was sent when the question page sends her back', async () => {
+		goto.mockImplementationOnce(async () => {
+			await setup();
 		});
-		await expect.element(field()).toBeVisible();
 
-		await field().fill('new@example.test');
-		await submit().click();
+		await gotoWithOutcome(fixture.url, 'Check your email.');
 
-		await expect.element(page.getByText('Enter your new sign-in address').first()).toBeVisible();
-		await expect.element(field()).toHaveAttribute('aria-invalid', 'true');
-	});
-
-	it('reports a thrown submit as a service problem', async () => {
-		await setup({ request: new Error('offline') });
-		await expect.element(field()).toBeVisible();
-
-		await field().fill('new@example.test');
-		await submit().click();
-
-		await expect.element(page.getByText(/problem with the service/)).toBeVisible();
+		const message = page.getByRole('status').filter({ hasText: 'Check your email.' });
+		await expect.element(message).toBeVisible();
+		await expect.element(message).toHaveFocus();
 	});
 });
 
-// #618, ADR-0026: her own "sign out everywhere", a separate fieldset on
-// the same screen from the address change above.
+// #618, ADR-0026: her own "sign out everywhere", its own last section on
+// the same screen, apart from the address row (#2045).
 describe('the Client-portal sign-out-everywhere control', () => {
+	it('warns that it ends every session, this one included', async () => {
+		await setup();
+
+		await expect
+			.element(page.getByRole('heading', { level: 2, name: 'Sign out of every device' }))
+			.toBeVisible();
+		await expect.element(page.getByText(/ends every session on every device, including this one/)).toBeVisible();
+	});
+
 	it('asks for confirmation before signing out of every device', async () => {
 		await setup();
 

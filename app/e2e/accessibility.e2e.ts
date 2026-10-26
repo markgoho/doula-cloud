@@ -908,9 +908,22 @@ const STAFF_ROUTES: SeededRoute<StaffSeed>[] = [
 		// -- the one route in this loop not built from `practiceId`. Now
 		// carries the same shell as the rest of them (#484).
 		key: 'account',
-		archetype: 'F',
+		archetype: 'D',
 		url: () => '/account',
 		h1: 'Your account'
+	},
+	// #2044: the summary's two Changes, each a question page of its own.
+	{
+		key: 'account/name',
+		archetype: 'E',
+		url: () => '/account/name',
+		h1: 'What is your name?'
+	},
+	{
+		key: 'account/work-state',
+		archetype: 'E',
+		url: () => '/account/work-state',
+		h1: 'Which state do you work from?'
 	},
 	// #1810: the screens that were in neither this inventory nor the
 	// not-scanned list. Archetype by shape: a ListPage is C, a
@@ -1298,13 +1311,19 @@ const PORTAL_ROUTES: SeededRoute<PortalSeed>[] = [
 		url: (s) => `/portal/engagements/${s.engagementId}/notifications`,
 		h1: 'Notifications'
 	},
-	// #1810: where she changes the address she signs in with (#619), a
-	// FormPage like Notifications.
+	// #1810: the address she signs in with (#619), a summary since #2045,
+	// and its Change, a question page.
 	{
 		key: 'portal/engagements/[engagementId]/sign-in-address',
-		archetype: 'G',
+		archetype: 'D',
 		url: (s) => `/portal/engagements/${s.engagementId}/sign-in-address`,
 		h1: 'Sign-in address'
+	},
+	{
+		key: 'portal/engagements/[engagementId]/sign-in-address/change',
+		archetype: 'E',
+		url: (s) => `/portal/engagements/${s.engagementId}/sign-in-address/change`,
+		h1: 'What is your new sign-in address?'
 	},
 	// #1564: the Client's money -- an index of Invoices (archetype D,
 	// like the hub) and a page per Invoice (archetype G, like the
