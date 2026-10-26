@@ -56,6 +56,27 @@ func TestDisplay(t *testing.T) {
 	}
 }
 
+func TestFull(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		given        string
+		preferred    string
+		family       string
+		want         string
+		whyItMatters string
+	}{
+		{"preferred and family", clientGiven, clientPreferred, clientFamily, clientPreferred + " " + clientFamily, "the conversation name leads, and the family name tells two Gretas apart"},
+		{"no preferred name", givenName, "", "Alvarez", "Renata Alvarez", "the given name stands in for the preferred name, as Preferred says"},
+		{"no family name", givenName, "", "", givenName, "family_name is optional, so there is no trailing separator to trim"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := personname.Full(tc.given, tc.preferred, tc.family); got != tc.want {
+				t.Errorf("Full(%q, %q, %q) = %q, want %q -- %s", tc.given, tc.preferred, tc.family, got, tc.want, tc.whyItMatters)
+			}
+		})
+	}
+}
+
 func TestPreferred(t *testing.T) {
 	for _, tc := range []struct {
 		name         string

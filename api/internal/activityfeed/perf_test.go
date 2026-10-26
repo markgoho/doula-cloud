@@ -29,7 +29,7 @@ func TestListPracticeActivityQuery_ComposesTheSharedActorJoin(t *testing.T) {
 		}
 	}
 
-	const wantColumns = `s.name, c.given_name, c.preferred_name, subj.name, sc.given_name, sc.preferred_name, a.created_at`
+	const wantColumns = `s.name, c.given_name, c.preferred_name, subj.name, sc.given_name, sc.preferred_name, sc.family_name, a.created_at`
 	if !strings.Contains(listPracticeActivityQuery, wantColumns) {
 		t.Errorf("listPracticeActivityQuery select list = %q, want it to contain %q byte-for-byte", listPracticeActivityQuery, wantColumns)
 	}

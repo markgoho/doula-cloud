@@ -114,9 +114,10 @@ export async function loadClients(
 }
 
 /*
- * Whether the Practice holds any Client record at all -- the test both
- * the overview's empty state and the Clients list's header link decide
- * from (#1609, ADR-0017's amendment of 2026-10-02).
+ * Whether the Practice holds any Client record at all -- the test the
+ * Clients list's header link decides from (#1609, ADR-0017's amendment
+ * of 2026-10-02). The overview's empty state reads `loadClientCount`'s
+ * `records` instead (#2095), which answers it without a page of rows.
  *
  * `?all=true` matters, and it is not a detail: `client.ListHandler`
  * defaults to Clients who have work -- an Engagement, or a pending
@@ -132,6 +133,26 @@ export async function loadClients(
 export async function hasAnyClient(fetcher: Fetcher, practiceId: string): Promise<boolean> {
 	const first = await loadClients(fetcher, practiceId, { showAll: true });
 	return first.items.length > 0;
+}
+
+/**
+ * How many Client records the reader can be shown, and how many of those
+ * Clients are in active care (an Engagement whose status is active) --
+ * `client.CountHandler`, one row from the BFF (#2095). A contractor Doula
+ * is told only about the Clients she is attached to, as the list tells
+ * her. Throws as `loadClients` does.
+ */
+export interface ClientCount {
+	records: number;
+	active: number;
+}
+
+export async function loadClientCount(fetcher: Fetcher, practiceId: string): Promise<ClientCount> {
+	const response = await fetcher(`${clientsPath(practiceId)}/count`);
+	if (!response.ok) {
+		throw await refusalError(response);
+	}
+	return response.json();
 }
 
 /**

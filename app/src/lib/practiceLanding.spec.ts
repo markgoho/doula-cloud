@@ -38,7 +38,7 @@ const connectStatus = {
 function fetcherFor(overrides: Record<string, Response> = {}) {
 	const answers: Record<string, Response> = {
 		offers: jsonResponse({ items: [openOffer, decidedOffer] }),
-		clients: jsonResponse({ items: [{ clientId: 'client-1' }], hasMore: false }),
+		clients: jsonResponse({ records: 3, active: 2 }),
 		staff: jsonResponse(roster),
 		// Before `billing`: its path holds `/billing` (#1589).
 		'billing-mode': jsonResponse({ billingMode: 'stripe' }),
@@ -121,6 +121,15 @@ describe('loadPracticeLanding', () => {
 		expect(landing.practiceName).toBe('Riverside Doula Collective');
 	});
 
+	// #2095: one count read answers both the empty state and the Clients
+	// card's number.
+	it('counts the Clients in active care, from the read that says whether there are any', async () => {
+		const landing = await loadPracticeLanding(fetcherFor(), 'practice-1', session);
+
+		expect(landing.hasClients).toBe(true);
+		expect(landing.activeClients).toBe(2);
+	});
+
 	it('counts the roster and the invitations that have expired', async () => {
 		const landing = await loadPracticeLanding(fetcherFor(), 'practice-1', session);
 
@@ -151,7 +160,7 @@ describe('loadPracticeLanding', () => {
 
 	it('reports a Practice with no Clients as empty', async () => {
 		const landing = await loadPracticeLanding(
-			fetcherFor({ clients: jsonResponse({ items: [], hasMore: false }) }),
+			fetcherFor({ clients: jsonResponse({ records: 0, active: 0 }) }),
 			'practice-1',
 			session
 		);
@@ -172,9 +181,7 @@ describe('loadPracticeLanding', () => {
 		]);
 		expect(fetcher.mock.calls.map(([path]) => path)).toEqual([
 			'/api/practices/practice-1/offers',
-			// `?all=true`, because the default list is Clients who have work
-			// and the question here is whether the Practice has any at all.
-			'/api/practices/practice-1/clients?all=true'
+			'/api/practices/practice-1/clients/count'
 		]);
 	});
 

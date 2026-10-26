@@ -11,9 +11,10 @@
  * already has its own (`clientRegister.ts`, #708).
  *
  * The subject is named by `subjectName`, which the Practice-wide feed
- * resolves server-side: the Client's conversation name for an
- * Engagement's or a Client record's row, the staff member's name for a
- * Membership row. The Engagement page's own ledger sends no name -- every
+ * resolves server-side: the Client's full name for an Engagement's or a
+ * Client record's row (the preferred name, then the family name, so two
+ * Clients called Sarah read apart -- #2095, the brief's Voice amendment
+ * of 2026-10-26), the staff member's name for a Membership row. The Engagement page's own ledger sends no name -- every
  * row there is about the Client the page is already headed with -- so
  * each phrase falls back to the domain noun ("the Client", "a Staff
  * member"), the brief's Voice rule 2. A Practice's own rows name the
