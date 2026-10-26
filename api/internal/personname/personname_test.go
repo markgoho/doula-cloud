@@ -10,8 +10,10 @@ import (
 // is the one suite that holds them.
 
 const (
-	givenName   = "Renata"
-	clientGiven = "Margaretha"
+	givenName       = "Renata"
+	clientGiven     = "Margaretha"
+	clientPreferred = "Greta"
+	clientFamily    = "Okafor"
 )
 
 func TestLegal(t *testing.T) {
@@ -42,8 +44,8 @@ func TestDisplay(t *testing.T) {
 		want         string
 		whyItMatters string
 	}{
-		{"she has a preferred name", clientGiven, "Okafor", "Greta", "Greta", "the name she is called titles her record"},
-		{"she has a family name and no preferred name", clientGiven, "Okafor", "", clientGiven + " Okafor", "a first name alone does not say whose record it is"},
+		{"she has a preferred name", clientGiven, clientFamily, clientPreferred, clientPreferred, "the name she is called titles her record"},
+		{"she has a family name and no preferred name", clientGiven, clientFamily, "", clientGiven + " " + clientFamily, "a first name alone does not say whose record it is"},
 		{"she has neither", clientGiven, "", "", clientGiven, "given_name is the one column that is never empty"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -62,7 +64,7 @@ func TestPreferred(t *testing.T) {
 		want         string
 		whyItMatters string
 	}{
-		{"she has a preferred name", clientGiven, "Greta", "Greta", "the name she is called is the one every screen shows"},
+		{"she has a preferred name", clientGiven, clientPreferred, clientPreferred, "the name she is called is the one every screen shows"},
 		{"she has none", clientGiven, "", clientGiven, "given_name is the one column that is never empty"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

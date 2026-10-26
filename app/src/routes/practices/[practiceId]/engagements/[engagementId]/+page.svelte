@@ -2387,7 +2387,7 @@
 	{#if messageBlock && hasNeverInvitedClient && hasClientEmailOnFile}
 		<div>
 			<Button
-				label="Send the portal invite"
+				label="Send portal invite"
 				variant="secondary"
 				onClick={handleSendPortalInvite}
 				loading={isSendingPortalInvite}

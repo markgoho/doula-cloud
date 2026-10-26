@@ -174,7 +174,7 @@
 		{:else if loading}
 			{#if isContentsShown}
 				<!-- sidebar-l (#564), side="end" (like OverviewHub's own
-				     secondary), same as the loaded state below. The rail
+				     secondary), as the loaded state's wide arrangement. The rail
 				     slot holds an empty placeholder rather than
 				     placeholder links, because `sections` -- and so the
 				     links -- do not exist yet, and a second "loading"
@@ -313,6 +313,12 @@
 		 */
 		sidebar-l {
 			flex-direction: row-reverse;
+		}
+
+		/* The placeholder holds its column whatever the width: the query
+		   below that hides a rail asks about the loaded record. */
+		sidebar-l > .contents-rail {
+			display: block;
 		}
 
 		/*

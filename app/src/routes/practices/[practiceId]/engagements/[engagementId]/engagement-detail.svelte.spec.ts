@@ -959,7 +959,7 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 	it('offers "Send portal invite" while never invited', async () => {
 		await setup(fixtureDetail);
 
-		await expect.element(testPage.getByRole('button', { name: 'Send portal invite' })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Send portal invite' }).first()).toBeVisible();
 	});
 
 	it('withholds "Send portal invite" once the Client has accepted one', async () => {
@@ -1024,7 +1024,7 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 			.element(testPage.getByText(/send a portal invite to this client before sending the contract/i))
 			.toBeVisible();
 
-		await testPage.getByRole('button', { name: 'Send portal invite' }).click();
+		await testPage.getByRole('button', { name: 'Send portal invite' }).first().click();
 
 		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeEnabled();
 		await expect.element(testPage.getByText('Invite pending')).toBeVisible();
@@ -2710,7 +2710,7 @@ describe('the Messages section (#2004)', () => {
 			.element(messagesSection().getByText(/reads messages in the portal, so send the portal invite first/))
 			.toBeVisible();
 		expect(messagesSection().getByRole('button', { name: 'Write a message' }).elements()).toHaveLength(0);
-		await expect.element(messagesSection().getByRole('button', { name: 'Send the portal invite' })).toBeVisible();
+		await expect.element(messagesSection().getByRole('button', { name: 'Send portal invite' })).toBeVisible();
 	});
 
 	it('says the thread opens once a pending invite is accepted', async () => {
@@ -2721,14 +2721,14 @@ describe('the Messages section (#2004)', () => {
 				messagesSection().getByText(`The thread opens once ${fixtureDetail.clientName} has accepted the portal invite.`)
 			)
 			.toBeVisible();
-		expect(messagesSection().getByRole('button', { name: 'Send the portal invite' }).elements()).toHaveLength(0);
+		expect(messagesSection().getByRole('button', { name: 'Send portal invite' }).elements()).toHaveLength(0);
 	});
 
 	it('says an email address comes first when the Client has none', async () => {
 		await setupMoney(sessionFor(['owner']), { ...fixtureDetail, clientHasEmail: false });
 
 		await expect.element(messagesSection().getByText(/has no email address on file/)).toBeVisible();
-		expect(messagesSection().getByRole('button', { name: 'Send the portal invite' }).elements()).toHaveLength(0);
+		expect(messagesSection().getByRole('button', { name: 'Send portal invite' }).elements()).toHaveLength(0);
 	});
 
 	it('opens the form only when asked, for a Client with a portal account, and sends', async () => {
