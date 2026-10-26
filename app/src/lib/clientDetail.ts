@@ -170,15 +170,6 @@ export async function loadClientDetail(fetcher: Fetcher, practiceId: string, cli
 	return response.json();
 }
 
-/** The name every screen reads (ADR-0017's read table): preferred name
- * when she has one, otherwise given plus family name. */
-export function displayName(record: ClientRecord): string {
-	if (record.preferredName) {
-		return record.preferredName;
-	}
-	return [record.givenName, record.familyName].filter(Boolean).join(' ');
-}
-
 /** Renders a resolved Practice-defined field's stored value as text, per
  * ADR-0001's field-type palette -- a `section_header` carries no value
  * and is never passed here. Undefined/null (a blank active field) reads

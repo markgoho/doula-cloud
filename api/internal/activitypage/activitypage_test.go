@@ -135,6 +135,15 @@ func TestList_NamesEveryKindOfActorOnce(t *testing.T) {
 	ownerID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "activitypage-actor-owner", "Renata Alvarez", []string{ownerRole}, employeeType)
 	departedID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "activitypage-actor-departed", "Marguerite Vandenberg", []string{doulaRole}, employeeType)
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Margaretha", "activitypage-actor-client@example.com")
+	// #2111: a family name on file, so the client_acted row below proves a
+	// subject-scoped ledger -- a page about one Client, whose heading
+	// already names her in full -- keeps the first name and does not
+	// borrow the Practice-wide feed's full name.
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE clients SET family_name = 'Okafor' WHERE id = $1`, clientID,
+	); err != nil {
+		t.Fatalf("seed family_name: %v", err)
+	}
 
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, "staff_acted", activity.StaffActor(ownerID))
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, "departed_acted", activity.StaffActor(departedID))

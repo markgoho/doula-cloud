@@ -30,9 +30,9 @@ type Detail struct {
 	EngagementID string `json:"engagementId"`
 	ClientID     string `json:"clientId"`
 	ClientName   string `json:"clientName"`
-	// ClientDisplayName is the page's title (#2004): personname.Display,
-	// the words her own Client record is titled with. ClientName stays the
-	// conversation name the page's sentences use.
+	// ClientDisplayName is the page's title (#2004): personname.Full, the
+	// words her own Client record is titled with (#2111). ClientName stays
+	// the conversation name the page's sentences use.
 	ClientDisplayName string    `json:"clientDisplayName"`
 	Status            string    `json:"status"`
 	CreatedAt         time.Time `json:"createdAt"`
@@ -194,7 +194,7 @@ func DetailHandler() http.Handler {
 			return
 		}
 		d.ClientName = personname.Preferred(givenName, preferredName.String)
-		d.ClientDisplayName = personname.Display(givenName, familyName.String, preferredName.String)
+		d.ClientDisplayName = personname.Full(givenName, preferredName.String, familyName.String)
 		if dueDate.Valid {
 			d.DueDate = &dueDate.String
 		}

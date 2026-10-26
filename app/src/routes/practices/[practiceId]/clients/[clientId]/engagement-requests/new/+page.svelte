@@ -53,7 +53,8 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { isOwnerOrAdmin } from '#lib/roles.js';
 	import { creditCount, loadBalance } from '#lib/billing.js';
-	import { displayName, loadClientDetail, type ClientDetail } from '#lib/clientDetail.js';
+	import { loadClientDetail, type ClientDetail } from '#lib/clientDetail.js';
+	import { fullName } from '#lib/personName.js';
 	import type { PracticeSession } from '../../../../+layout.js';
 	import {
 		NO_DOULA_YET,
@@ -144,7 +145,7 @@
 	// is making (ADR-0017's solo-Practice collapse), a Doula reads as the
 	// ask she is sending.
 	function submitLabelFor(client: ClientDetail): string {
-		return isApprover ? `Start work with ${displayName(client)}` : `Ask to start work with ${displayName(client)}`;
+		return isApprover ? `Start work with ${fullName(client)}` : `Ask to start work with ${fullName(client)}`;
 	}
 	const submitLabel = $derived(detail ? submitLabelFor(detail) : '');
 	const hasIntroContent = $derived(hasLiveEngagement || (isApprover && balance !== undefined) || hasNoCredits);
@@ -329,7 +330,7 @@
 		{#if hasLiveEngagement}
 			<Notice
 				variant="info"
-				message="{detail ? displayName(detail) : 'This Client'} already has a live Engagement. A second one does not stop this request."
+				message="{detail ? fullName(detail) : 'This Client'} already has a live Engagement. A second one does not stop this request."
 			/>
 		{/if}
 
@@ -344,7 +345,7 @@
 				The balance is read after the Client, so `detail` is here.
 			-->
 			<Text
-				text="Starting work with {displayName(detail!)} uses 1 Credit. This Practice has {balanceCount}. After this, it has {balance - 1}."
+				text="Starting work with {fullName(detail!)} uses 1 Credit. This Practice has {balanceCount}. After this, it has {balance - 1}."
 			/>
 		{/if}
 	</stack-l>
@@ -434,7 +435,7 @@
 	-->
 	<Link
 		href={detailHref()}
-		label="Go to {detail ? `${displayName(detail)}'s` : "the Client's"} record without starting work"
+		label="Go to {detail ? `${fullName(detail)}'s` : "the Client's"} record without starting work"
 		variant="secondary"
 	/>
 {/snippet}

@@ -1,7 +1,7 @@
 /*
  * The Client detail hub, as the continuum check sees it (#595).
  *
- * `title` is `displayName(detail)`, gated on load the same way the
+ * `title` is `fullName(detail)`, gated on load the same way the
  * approval-screen fixture's is. Address and history rows carry #537's
  * vocabulary again -- a Client's own address line and a fellow Staff
  * member's name are exactly the free-text shapes this map keeps finding.

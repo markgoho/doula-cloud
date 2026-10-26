@@ -229,9 +229,11 @@ describe('detailsLinkLabel', () => {
 		expect(detailsLinkLabel(detail())).toBe("Add Anne-Marie Ochieng's details");
 	});
 
+	// The full name for now (#2111's fullName); #2115 gives this link the
+	// first name, as rule 2 says.
 	it('says Change once each fact is given', () => {
 		expect(detailsLinkLabel(detail({ ...complete, preferredName: 'Annie' }))).toBe(
-			"Change Annie's details"
+			"Change Annie Ochieng's details"
 		);
 	});
 });

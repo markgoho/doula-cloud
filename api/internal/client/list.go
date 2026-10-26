@@ -24,9 +24,12 @@ const pageSize = 30
 // two Engagements no longer appears twice).
 type ListItem struct {
 	ClientID string `json:"clientId"`
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	HasWork  bool   `json:"hasWork"`
+	// Name is personname.Full (#2111): the list sets every Client side by
+	// side, and two who share a first name must read apart. The order is
+	// not by name (ListHandler's own comment, #446).
+	Name    string `json:"name"`
+	Email   string `json:"email"`
+	HasWork bool   `json:"hasWork"`
 
 	// PortalInviteStatus mirrors the pre-#397 engagement.ClientEngagement
 	// field of the same name: nil when the Client was never invited,
@@ -236,7 +239,7 @@ const pendingRequestKindsExpr = `(
 // Doula -- filtered by practiceID explicitly, on top of the RLS scoping
 // staffauth.Middleware already set up on tx.
 func listClients(ctx context.Context, tx *sql.Tx, practiceID string, withWorkOnly bool, after *pagecursor.Cursor) ([]ListItem, error) {
-	query := `SELECT c.id, c.given_name, c.preferred_name, COALESCE(c.email, ''), ` + hasWorkExpr + `,
+	query := `SELECT c.id, c.given_name, c.preferred_name, c.family_name, COALESCE(c.email, ''), ` + hasWorkExpr + `,
 		        pu.id IS NOT NULL, pu.identity_uid IS NOT NULL, latest.status, ` + emailSuppressedExpr + `, ` + pendingRequestKindsExpr + `, c.created_at
 		 FROM clients c` + portalUserForClient + `
 		 LEFT JOIN LATERAL (
@@ -275,7 +278,7 @@ func listAttachedClients(ctx context.Context, tx *sql.Tx, practiceID, staffID st
 	// (created_at, id) needs the outer query's own comparison, not the
 	// inner DISTINCT's column list.
 	query := `SELECT * FROM (
-		     SELECT DISTINCT c.id, c.given_name, c.preferred_name, COALESCE(c.email, '') AS email, ` + hasWorkExpr + ` AS has_work,
+		     SELECT DISTINCT c.id, c.given_name, c.preferred_name, c.family_name, COALESCE(c.email, '') AS email, ` + hasWorkExpr + ` AS has_work,
 		            pu.id IS NOT NULL AS has_portal_user, pu.identity_uid IS NOT NULL AS accepted, latest.status,
 		            ` + emailSuppressedExpr + ` AS email_suppressed,
 		            ` + pendingRequestKindsExpr + ` AS pending_request_kinds, c.created_at
@@ -527,19 +530,19 @@ func scanListItems(rows *sql.Rows) ([]ListItem, error) {
 	for rows.Next() {
 		var item ListItem
 		var givenName string
-		var preferredName sql.NullString
+		var preferredName, familyName sql.NullString
 		var hasPortalUser, accepted bool
 		var outboxStatus sql.NullString
 		var pendingKinds sql.NullString
 		var createdAt time.Time
 		if err := rows.Scan(
-			&item.ClientID, &givenName, &preferredName, &item.Email, &item.HasWork,
+			&item.ClientID, &givenName, &preferredName, &familyName, &item.Email, &item.HasWork,
 			&hasPortalUser, &accepted, &outboxStatus, &item.EmailSuppressed, &pendingKinds, &createdAt,
 		); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("client: scan list item: %w", err)
 		}
-		item.Name = personname.Preferred(givenName, preferredName.String)
+		item.Name = personname.Full(givenName, preferredName.String, familyName.String)
 		item.PortalInviteStatus = PortalInviteStatus(hasPortalUser, accepted, outboxStatus)
 		if pendingKinds.Valid {
 			item.PendingRequestKinds = strings.Split(pendingKinds.String, ",")

@@ -43,7 +43,7 @@
 	import type { RouteId } from '$app/types';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { searchClients, type ClientMatch, type ClientSearchFields } from '#lib/client.js';
-	import { displayName } from '#lib/clientDetail.js';
+	import { fullName } from '#lib/personName.js';
 	import { formatCalendarDay } from '#lib/dates.js';
 	import { carriedGivenName } from '#lib/intakeJourney.js';
 	import { handOffToIntake } from '#lib/intakeHandoff.js';
@@ -323,7 +323,7 @@
 									{#each matches as match (match.id)}
 										<section class="match">
 											<stack-l space="var(--space-3)">
-												<Heading level={3} variant="card" text={displayName(match)} />
+												<Heading level={3} variant="card" text={fullName(match)} />
 												<SummaryList
 													rows={[
 														{
@@ -349,7 +349,7 @@
 													text="No Engagements with this Client yet."
 												/>
 												{/if}
-												<Link href={detailHref(match.id)} label="Open {displayName(match)}'s record" />
+												<Link href={detailHref(match.id)} label="Open {fullName(match)}'s record" />
 											</stack-l>
 										</section>
 									{/each}

@@ -6,8 +6,8 @@ import (
 	"doula-cloud/api/internal/personname"
 )
 
-// Every reader of a Client's name reaches these two rules here, so this
-// is the one suite that holds them.
+// Every reader of a Client's name reaches these rules here, so this is
+// the one suite that holds them.
 
 const (
 	givenName       = "Renata"
@@ -35,27 +35,6 @@ func TestLegal(t *testing.T) {
 	}
 }
 
-func TestDisplay(t *testing.T) {
-	for _, tc := range []struct {
-		name         string
-		given        string
-		family       string
-		preferred    string
-		want         string
-		whyItMatters string
-	}{
-		{"she has a preferred name", clientGiven, clientFamily, clientPreferred, clientPreferred, "the name she is called titles her record"},
-		{"she has a family name and no preferred name", clientGiven, clientFamily, "", clientGiven + " " + clientFamily, "a first name alone does not say whose record it is"},
-		{"she has neither", clientGiven, "", "", clientGiven, "given_name is the one column that is never empty"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := personname.Display(tc.given, tc.family, tc.preferred); got != tc.want {
-				t.Errorf("Display(%q, %q, %q) = %q, want %q -- %s", tc.given, tc.family, tc.preferred, got, tc.want, tc.whyItMatters)
-			}
-		})
-	}
-}
-
 func TestFull(t *testing.T) {
 	for _, tc := range []struct {
 		name         string
@@ -66,6 +45,7 @@ func TestFull(t *testing.T) {
 		whyItMatters string
 	}{
 		{"preferred and family", clientGiven, clientPreferred, clientFamily, clientPreferred + " " + clientFamily, "the conversation name leads, and the family name tells two Gretas apart"},
+		{"preferred and no family name", clientGiven, clientPreferred, "", clientPreferred, "a record titled by Full never reads as a bare given name she does not go by"},
 		{"no preferred name", givenName, "", "Alvarez", "Renata Alvarez", "the given name stands in for the preferred name, as Preferred says"},
 		{"no family name", givenName, "", "", givenName, "family_name is optional, so there is no trailing separator to trim"},
 	} {
@@ -85,7 +65,7 @@ func TestPreferred(t *testing.T) {
 		want         string
 		whyItMatters string
 	}{
-		{"she has a preferred name", clientGiven, clientPreferred, clientPreferred, "the name she is called is the one every screen shows"},
+		{"she has a preferred name", clientGiven, clientPreferred, clientPreferred, "the name she is called is the first name every sentence uses"},
 		{"she has none", clientGiven, "", clientGiven, "given_name is the one column that is never empty"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

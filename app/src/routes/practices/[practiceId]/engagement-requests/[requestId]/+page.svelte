@@ -38,6 +38,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { formatCalendarDay, formatInstant } from '#lib/dates.js';
 	import { engagementStatusText } from '#lib/engagementDetail.js';
+	import { fullName } from '#lib/personName.js';
 	import {
 		NO_DOULA_YET_LABEL,
 		approveRequest,
@@ -88,16 +89,12 @@
 	// assumption, read off a value that already has it applied.
 	const isBalanceEmpty = $derived(detail !== undefined && detail.balanceAfter < 0);
 
-	function clientName(record: ApprovalDetail['client']): string {
-		if (record.preferredName) return record.preferredName;
-		return [record.givenName, record.familyName].filter(Boolean).join(' ');
-	}
 
 	function facts(request: ApprovalDetail): { label: string; value: string }[] {
 		const items = [
 			{
 				label: 'Client',
-				value: `${clientName(request.client)} — ${request.client.isNewToPractice ? 'new to this Practice' : 'already known here'}`
+				value: `${fullName(request.client)} — ${request.client.isNewToPractice ? 'new to this Practice' : 'already known here'}`
 			},
 			{ label: 'Asked by', value: `${request.requestedByName} on ${formatInstant(request.requestedAt)}` },
 			{ label: 'Kind of work', value: kindLabel(request.kind) },
@@ -207,7 +204,7 @@
 			{#if detail.warning}
 				<Notice
 					variant="info"
-					message="{clientName(detail.client)} already has a live engagement. That does not stop this approval."
+					message="{fullName(detail.client)} already has a live engagement. That does not stop this approval."
 				/>
 			{/if}
 			{#if hasNoCredits || isBalanceEmpty}
@@ -218,7 +215,7 @@
 				<ErrorSummary errors={submission.errors} />
 			{/if}
 			<SummaryList rows={facts(detail)} />
-			<Link href={clientHref(detail.client.clientId)} label="View {clientName(detail.client)}'s record" />
+			<Link href={clientHref(detail.client.clientId)} label="View {fullName(detail.client)}'s record" />
 		</stack-l>
 	{/if}
 {/snippet}
@@ -233,7 +230,7 @@
 			{/each}
 		</ul>
 	{:else}
-		<Text text={`This would be ${clientName(detail!.client)}'s first engagement with this Practice.`} />
+		<Text text={`This would be ${fullName(detail!.client)}'s first engagement with this Practice.`} />
 	{/if}
 {/snippet}
 
@@ -278,11 +275,11 @@
 {/snippet}
 
 <RecordDetail
-	title={detail ? `Approve work with ${clientName(detail.client)}` : 'Approve an engagement request'}
+	title={detail ? `Approve work with ${fullName(detail.client)}` : 'Approve an engagement request'}
 	summary={detail ? summary : undefined}
 	sections={detail
 		? [
-				{ heading: `${clientName(detail.client)}'s engagements`, content: engagementsSection },
+				{ heading: `${fullName(detail.client)}'s engagements`, content: engagementsSection },
 				{ heading: 'Decide', content: decideSection }
 			]
 		: []}

@@ -95,7 +95,8 @@ type Query struct {
 // a bare id a reader has to resolve itself: the acting Staff member's
 // name, activity.DepartedStaffName once her Membership has ended and
 // staff_practice_visibility (00002) stops admitting her staff row, the
-// acting Client's preferred name, or activity.SystemActorName
+// acting Client's first name (ActorFirstName -- every reader of this
+// package is about one subject), or activity.SystemActorName
 // ("DoulaCloud", never "System" -- ADR-0022).
 //
 // The Staff case is the one with a name to lose, and losing it is
@@ -159,9 +160,12 @@ type Page[T any] struct {
 // caller could extend, the same restriction Projection's own doc comment
 // places on a caller's Joins and Columns.
 //
-// Columns is s.name, c.given_name, c.preferred_name -- ActorName's own
-// three inputs, in the scan order both this package's List and
-// activityfeed's practice-wide reader expect them.
+// Columns is s.name, c.given_name, c.preferred_name, c.family_name --
+// ActorName's own four name inputs, in the scan order both this
+// package's List and activityfeed's practice-wide reader expect them.
+// c.family_name is #2111's: the practice-wide reader names a Client actor
+// in full, and the family name is a column of a row the c join already
+// fetches.
 //
 // Joins reaches the actor's name whichever of ADR-0022's two named actor
 // kinds wrote the row. Both are LEFT JOINs: a system-written row matches
@@ -183,13 +187,13 @@ type ActorJoin struct {
 // It is a var and not a const only because Go has no const struct; treat
 // it as one -- neither field is ever reassigned, here or in a caller.
 var SharedActorJoin = ActorJoin{
-	Columns: `s.name, c.given_name, c.preferred_name`,
+	Columns: `s.name, c.given_name, c.preferred_name, c.family_name`,
 	Joins: `LEFT JOIN staff s ON s.id = a.actor_staff_id
 	LEFT JOIN clients c ON c.id = a.actor_client_id`,
 }
 
 // sharedColumns is what every subject-scoped reader selects, in scan
-// order: the row's identity and timing, and the three name columns
+// order: the row's identity and timing, and the four name columns
 // SharedActorJoin's own joins reach.
 var sharedColumns = `a.id, a.subject_kind, a.subject_id, a.action, a.actor_kind::text,
 	       ` + SharedActorJoin.Columns + `, a.created_at`
@@ -272,17 +276,17 @@ func List[T any](ctx context.Context, tx *sql.Tx, q Query, p Projection[T]) (Pag
 	keys := []rowKey{}
 	for rows.Next() {
 		var row Row
-		var staffName, clientGivenName, clientPreferredName sql.NullString
+		var staffName, clientGivenName, clientPreferredName, clientFamilyName sql.NullString
 		targets, build := p.Row()
 		dest := append([]any{
 			&row.ID, &row.SubjectKind, &row.SubjectID, &row.Action, &row.ActorKind,
-			&staffName, &clientGivenName, &clientPreferredName, &row.CreatedAt,
+			&staffName, &clientGivenName, &clientPreferredName, &clientFamilyName, &row.CreatedAt,
 		}, targets...)
 		if err := rows.Scan(dest...); err != nil {
 			// coverage:ignore reason: row scan failure on a well-typed query, not exercised by unit tests
 			return Page[T]{}, fmt.Errorf("activitypage: scan %s activity row: %w", q.SubjectKind, err)
 		}
-		row.ActorName = ActorName(row.ActorKind, staffName, clientGivenName, clientPreferredName)
+		row.ActorName = ActorName(row.ActorKind, staffName, clientGivenName, clientPreferredName, clientFamilyName, ActorFirstName)
 		keys = append(keys, rowKey{id: row.ID, at: row.CreatedAt})
 		items = append(items, build(row))
 	}
@@ -305,6 +309,25 @@ func List[T any](ctx context.Context, tx *sql.Tx, q Query, p Projection[T]) (Pag
 	}
 	return page, nil
 }
+
+// ClientActorForm is which of a Client's names ActorName gives the Client
+// who did a thing (#2111), decided by how many Clients the reader sees at
+// once -- the brief's Voice amendment of 2026-10-26 on #2111.
+type ClientActorForm int
+
+const (
+	// ActorFirstName (personname.Preferred) is for a reader about one
+	// subject: every caller of this package's List -- the Engagement
+	// ledger, the Client page's history, a Membership's history, and the
+	// Client portal's ledger. The page's heading already names the
+	// Client, and in the portal she reads only her own name.
+	ActorFirstName ClientActorForm = iota
+	// ActorFullName (personname.Full) is for the Practice-wide feed, the
+	// Overview's and the Activity screen's ledger: it sets every Client at
+	// the Practice side by side, and two who share a first name must read
+	// apart in Who as they do in the row's own subject name (#2095).
+	ActorFullName
+)
 
 // rowKey is the (created_at, id) pair one row is resumable from.
 type rowKey struct {
@@ -329,7 +352,10 @@ type rowKey struct {
 // history's own reader used to avoid by hand; #1150 traded that join for
 // one spelling of the actor rule, because the hand-written avoidance is
 // what let the departed-actor word drift in the first place.
-func ActorName(actorKind string, staffName, clientGivenName, clientPreferredName sql.NullString) string {
+//
+// form says which of the Client's names a Client actor reads by; see
+// ClientActorForm for which reader takes which.
+func ActorName(actorKind string, staffName, clientGivenName, clientPreferredName, clientFamilyName sql.NullString, form ClientActorForm) string {
 	switch activity.ActorKind(actorKind) {
 	case activity.ActorStaff:
 		if !staffName.Valid {
@@ -337,6 +363,9 @@ func ActorName(actorKind string, staffName, clientGivenName, clientPreferredName
 		}
 		return staffName.String
 	case activity.ActorClient:
+		if form == ActorFullName {
+			return personname.Full(clientGivenName.String, clientPreferredName.String, clientFamilyName.String)
+		}
 		return personname.Preferred(clientGivenName.String, clientPreferredName.String)
 	case activity.ActorSystem:
 		return activity.SystemActorName
