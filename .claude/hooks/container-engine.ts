@@ -88,7 +88,7 @@ function runCaptured(binary: string, argv: string[]): string {
  * exports DOCKER_HOST for another engine's socket (a Colima Docker
  * socket), and a SessionStart hook inherits that profile. `podman --url`
  * at that socket fails, the reaper failed open as designed, and nothing
- * reaped for days while bare `podman ps` reached the right engine all
+ * reaped for weeks while bare `podman ps` reached the right engine all
  * along: 91 `org.testcontainers=true` containers, the oldest 23 hours
  * old, observed live on 2026-10-26.
  */
