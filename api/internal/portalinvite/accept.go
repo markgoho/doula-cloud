@@ -64,7 +64,7 @@ func AcceptInviteHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 		// invite -- the same refusal as an unknown one, rather than a 500
 		// when Postgres will not read it as the uuid column it is matched to.
 		if _, err := uuid.Parse(req.InviteToken); err != nil {
-			apierr.WriteError(w, "invite not found or already accepted", http.StatusNotFound)
+			apierr.WriteError(w, "This invite was not found or was already accepted.", http.StatusNotFound)
 			return
 		}
 
