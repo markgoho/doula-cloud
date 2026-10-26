@@ -167,6 +167,14 @@ export function e2ePidfilePath(kind: E2EPidfileKind, offset: number): string {
 	return path.join(tmpdir(), `${E2E_COMPOSE_PROJECT_PREFIX}-${kind}${offset ? `-${offset}` : ''}.pid`);
 }
 
+// The dev server's pidfile, which only `bun run dev:full`
+// (scripts/development-full.ts) writes and reads (#2010). Outside the
+// E2E_COMPOSE_PROJECT_PREFIX names on purpose: the reaper does not sweep
+// it, and dev:full itself stops the dev server a killed run left behind.
+export function developmentServerPidfilePath(offset: number): string {
+	return path.join(tmpdir(), `doula-cloud-dev-server${offset ? `-${offset}` : ''}.pid`);
+}
+
 // The Go BFF binary startAPI builds and execs, offset-suffixed the same
 // way its pidfile is (see API_BINARY_PATH, e2e/stack.ts). Exported so the
 // pidfile reaper can reconstruct *any* offset's expected binary path --

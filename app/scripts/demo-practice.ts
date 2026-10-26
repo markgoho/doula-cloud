@@ -32,7 +32,7 @@ import { API_URL, DEV_SERVER_ORIGIN, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from
 import { retryPastRateLimit } from '../e2e/rateLimit';
 import { provisionTail, type DoulaSession, type ProvisionedClient } from '../e2e/simulation/provision';
 import { describeWorld, type SeededClient } from '../e2e/simulation/world';
-import { backdateInvoice, MAILBOX_URL, readStaffInviteToken, simulatedDateAfter, WORKER_SECRET } from '../e2e/stack';
+import { backdateInvoice, countPracticesNamed, MAILBOX_URL, readStaffInviteToken, simulatedDateAfter, WORKER_SECRET } from '../e2e/stack';
 import { acceptStaffInvite } from '../e2e/staffSignup';
 import { TYPICAL_PRACTICE_NAME, TYPICAL_STAFF, type TypicalStaff } from '../src/routes/typicalPilot';
 
@@ -100,6 +100,14 @@ const PRIYA_CLIENTS: readonly NamedClient[] = [
 	{ givenName: 'Grace', familyName: 'Whitfield', kind: 'birth', dueInDays: 80 }
 ];
 
+// One Client beyond the World, for the portal's after-a-loss state (#2003,
+// #2007): Priya's too, so one Staff account walks both sides of it. Her
+// pregnancy ended at about 30 weeks, ten weeks before she was due; her
+// Engagement stays active, the state a Client is in when she next signs in.
+// The World's own loss is Nadia Haddad's, at Maya's Practice, not Rooted.
+const AFTER_A_LOSS: NamedClient = { givenName: 'Mira', familyName: 'Castellanos', kind: 'birth', dueInDays: 64 };
+const PREGNANCY_ENDED_DAYS_AGO = 6;
+
 /**
 A fixed sign-in account, as the summary prints it.
 */
@@ -117,6 +125,7 @@ export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
 ];
 
 export const DEMO_CLIENT_EMAIL = demoAddress(CAMILLE.givenName, CAMILLE.familyName);
+export const AFTER_A_LOSS_CLIENT_EMAIL = demoAddress(AFTER_A_LOSS.givenName, AFTER_A_LOSS.familyName);
 
 type Session = { Cookie: string };
 
@@ -490,6 +499,21 @@ async function seedPriyaBook(request: APIRequestContext, roster: Roster, today: 
 	return book;
 }
 
+// Mira Castellanos: a signed Contract and a logged Visit, then the loss,
+// recorded the way a Staff member records it (#294) -- the portal reads
+// the outcome to show its after-a-loss state.
+async function seedAfterALoss(request: APIRequestContext, roster: Roster, today: string): Promise<void> {
+	const mira = await addPriyaClient(request, roster, today, AFTER_A_LOSS);
+	await contractFor(request, roster, today, mira, await portalSessionFor(request, roster, mira));
+	await send(
+		request,
+		'PUT',
+		`/api/practices/${roster.practiceId}/engagements/${mira.engagementId}/birth-outcome`,
+		roster.staff.priya.headers,
+		{ birthOutcome: 'loss', pregnancyEndedOn: dayAfter(today, -PREGNANCY_ENDED_DAYS_AGO) }
+	);
+}
+
 // The contractor's door: an Offer on a tail birth, which Lena accepts and
 // then visits, and a second Offer to Fern that she has not answered yet.
 async function seedOffers(
@@ -531,13 +555,27 @@ export interface DemoPractice {
 }
 
 // The demo Practice this stack already holds, or undefined on a fresh
-// stack. Renata's password sign-in is the probe: the emulator and the
-// database are wiped together when dev:full stops, so her account is
-// there only once the seed has run. A roster short of fifteen means a
-// seed that stopped part way, which this refuses to build on.
+// stack. Renata's password sign-in is the probe: her account is there only
+// once the seed has run. A roster short of fifteen means a seed that
+// stopped part way, which this refuses to build on.
+//
+// No account for her, but the Practice in the database, is a stack killed
+// without its teardown (#2010): the Auth emulator keeps nothing between
+// starts, the database volume does. Seeding on top would sign Renata up
+// again and make a second Rooted Birth Collective, so this refuses.
+// dev:full never meets it, because it starts from a clean stack; a
+// `seed:demo` against such a stack does.
 async function findDemoPractice(request: APIRequestContext): Promise<DemoPractice | undefined> {
 	const idToken = await signInWithPassword(request, addressOf(OWNER));
-	if (idToken === undefined) return undefined;
+	if (idToken === undefined) {
+		const stale = countPracticesNamed(TYPICAL_PRACTICE_NAME);
+		if (stale > 0) {
+			throw new Error(
+				`demo seed: the database holds ${TYPICAL_PRACTICE_NAME}, but the Auth emulator has no account for ${addressOf(OWNER)}. The stack was stopped without its teardown. Stop dev:full and start it again: it starts from a clean stack.`
+			);
+		}
+		return undefined;
+	}
 	const owner = await signIn(request, API_URL, idToken);
 	const { memberships } = await send<{ memberships: { practiceId: string; practiceName: string }[] }>(
 		request,
@@ -571,6 +609,7 @@ export async function seedDemoPractice(request: APIRequestContext): Promise<Demo
 	const tail = await provisionTail(request, roster.practiceId, roster.owner, roster.staff, demoTail(today));
 	await spreadTailAcrossPhases(request, roster, today, tail);
 	await seedPriyaBook(request, roster, today);
+	await seedAfterALoss(request, roster, today);
 	await seedOffers(request, roster, today, tail);
 	return { practiceId: roster.practiceId, seeded: true };
 }
@@ -580,34 +619,51 @@ const MAGIC_LINK = /https?:\/\/\S+\/portal\/sign-in\?token=\S+/;
 const MAIL_TIMEOUT_MS = 10_000;
 
 /**
- * A fresh portal sign-in link for Camille, the way the portal signs a
- * Client in locally: request it, drain the outbox as Cloud Scheduler
+ * A fresh portal sign-in link for one demo Client, the way the portal signs
+ * a Client in locally: request it, drain the outbox as Cloud Scheduler
  * would, and read it out of the sandbox mailbox. Only mail newer than the
  * request counts, so a link an earlier run printed is never handed back.
  * It lasts 15 minutes and works once (clientauth.MagicLinkLifetime).
+ * dev:full's own drain may send it first; the mailbox read finds it either
+ * way.
  */
-export async function mintPortalLink(request: APIRequestContext): Promise<string> {
-	const before = await readMailbox(request, DEMO_CLIENT_EMAIL);
+export async function mintPortalLink(request: APIRequestContext, email: string): Promise<string> {
+	const before = await readMailbox(request, email);
 	const newestBefore = Math.max(0, ...before.map((message) => message.seq));
-	await send(request, 'POST', '/api/portal/magic-link/request', {}, { email: DEMO_CLIENT_EMAIL });
+	await send(request, 'POST', '/api/portal/magic-link/request', {}, { email });
 	const deadline = Date.now() + MAIL_TIMEOUT_MS;
 	for (;;) {
 		await drainOutbox(request, 'process-portal-magic-link-outbox');
-		const inbox = await readMailbox(request, DEMO_CLIENT_EMAIL);
+		const inbox = await readMailbox(request, email);
 		const mail = inbox.find((message) => message.seq > newestBefore && message.subject === MAGIC_LINK_SUBJECT);
 		const link = mail?.text.match(MAGIC_LINK)?.[0];
 		if (link) return link;
 		if (Date.now() > deadline) {
-			throw new Error(`demo seed: no sign-in link reached ${DEMO_CLIENT_EMAIL} within ${MAIL_TIMEOUT_MS}ms`);
+			throw new Error(`demo seed: no sign-in link reached ${email} within ${MAIL_TIMEOUT_MS}ms`);
 		}
 		await new Promise((resolve) => setTimeout(resolve, 250));
 	}
 }
 
 /**
+The demo's portal Clients, each with a fresh sign-in link.
+*/
+export interface PortalLinks {
+	camille: string;
+	afterALoss: string;
+}
+
+export async function mintPortalLinks(request: APIRequestContext): Promise<PortalLinks> {
+	return {
+		camille: await mintPortalLink(request, DEMO_CLIENT_EMAIL),
+		afterALoss: await mintPortalLink(request, AFTER_A_LOSS_CLIENT_EMAIL)
+	};
+}
+
+/**
 What a person needs to sign in, as the lines dev:full prints.
 */
-export function demoSummary(practice: DemoPractice, portalLink: string): string {
+export function demoSummary(practice: DemoPractice, links: PortalLinks): string {
 	const practiceUrl = `${DEV_SERVER_ORIGIN}/practices/${practice.practiceId}`;
 	const width = Math.max(...DEMO_ACCOUNTS.map((account) => account.role.length));
 	return [
@@ -619,10 +675,12 @@ export function demoSummary(practice: DemoPractice, portalLink: string): string 
 		'    Every other Rooted Staff member signs in the same way, at given.family@sim.doula.cloud.',
 		`  The Practice: ${practiceUrl}`,
 		'',
-		`  Client: ${DEMO_CLIENT_EMAIL} (Camille Boyd), no password`,
-		`    Sign-in link, good for 15 minutes and one use: ${portalLink}`,
-		'    For a new one, run: bun run --cwd app seed:demo',
-		`    Her mail, sign-in links among it: ${MAILBOX_URL}/inbox/${encodeURIComponent(DEMO_CLIENT_EMAIL)}`,
+		'  Clients have no password. Each sign-in link is good for 15 minutes and one use.',
+		`    ${DEMO_CLIENT_EMAIL} (Camille Boyd): ${links.camille}`,
+		`    ${AFTER_A_LOSS_CLIENT_EMAIL} (Mira Castellanos, after a loss): ${links.afterALoss}`,
+		`    For a new link, ask for one at ${DEV_SERVER_ORIGIN}/portal/login, or run: bun run --cwd app seed:demo`,
+		'',
+		`  Local mail, sign-in links and Invitations among it: ${MAILBOX_URL}/`,
 		''
 	].join('\n');
 }

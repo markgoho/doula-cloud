@@ -492,6 +492,17 @@ export function backdateInvoice(invoiceId: string, days: number): void {
 }
 
 /**
+ * How many Practices in the stack's database carry `name`. Read as the
+ * superuser, so row-level security hides none of them: the demo seed
+ * (scripts/demo-practice.ts) asks it when the Auth emulator holds no
+ * account for the Practice, to tell an empty stack from one whose
+ * emulator was wiped under rows that outlived it (#2010).
+ */
+export function countPracticesNamed(name: string): number {
+	return Number(querySQLValue(`SELECT count(*) FROM practices WHERE name = ${sqlLiteral(name)}`));
+}
+
+/**
  * Clears every rate-limit counter the BFF is holding (#1138), so a
  * repeated batch can keep spending budgets a person never would.
  *
@@ -735,15 +746,18 @@ export function simulatedDateAfter(days: number): string {
 // dead -- the shape a resumed run needs (#763): the world (rows,
 // sim.offset_row, Stripe's test clocks, which live at Stripe) survives,
 // and only the host processes, which hold no state of their own, are
-// killed and restarted by a later startStack.
-export function stopStack({ keepVolume = false }: { keepVolume?: boolean } = {}) {
+// killed and restarted by a later startStack. quiet keeps compose's own
+// output off the console: dev:full stops the stack before it starts one
+// (#2010), and on a stack with nothing left behind, compose prints an
+// error for each container it does not find, then exits 0.
+export function stopStack({ keepVolume = false, quiet = false }: { keepVolume?: boolean; quiet?: boolean } = {}) {
 	stopHeartbeat();
 	killPidfile(API_PIDFILE);
 	rmSync(API_BINARY_PATH, { force: true });
 	killPidfile(MAILBOX_PIDFILE);
 	killPidfile(EMULATOR_PIDFILE);
 	execFileSync(CONTAINER_ENGINE, [...COMPOSE_ARGS, 'down', ...(keepVolume ? [] : ['-v'])], {
-		stdio: 'inherit',
+		stdio: quiet ? 'ignore' : 'inherit',
 		timeout: 60_000,
 		env: COMPOSE_ENV
 	});
