@@ -288,7 +288,7 @@ func DeleteRateHandler() http.Handler {
 
 		kind := r.PathValue("kind")
 		if !validKind(kind) {
-			apierr.WriteError(w, "kind must be birth or postpartum", http.StatusBadRequest)
+			apierr.WriteError(w, "Choose the birth rate or the postpartum rate.", http.StatusBadRequest)
 			return
 		}
 
