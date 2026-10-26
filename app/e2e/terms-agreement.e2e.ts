@@ -102,7 +102,10 @@ test.describe('After a material change to the Terms starts', () => {
 		await expect(ownerPage).toHaveURL(new RegExp(`/practices/${owner.practiceId}$`));
 
 		// Two rows: the agreement at signup, and this one, on the day the
-		// new version started.
+		// new version started. Read on the whole ledger (#2006): the
+		// Overview shows only the newest eight rows, and the signup row is
+		// the oldest.
+		await ownerPage.goto(`/practices/${owner.practiceId}/activity`);
 		const agreements = ownerPage.getByRole('row').filter({ hasText: 'Terms of Service and Privacy Policy agreed to' });
 		await expect(agreements).toHaveCount(2);
 		const agreedOnTheDay = agreements.filter({ has: ownerPage.locator(`time[datetime^="${effective}"]`) });
