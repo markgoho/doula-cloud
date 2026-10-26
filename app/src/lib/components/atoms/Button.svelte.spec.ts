@@ -206,6 +206,24 @@ describe('Button.svelte', () => {
 		form.remove();
 	});
 
+	// Enter in a field sends the form through its submit button's click,
+	// which `disabled` used to block and the canceled click now does.
+	it.each([
+		{ loading: false, sends: 1 },
+		{ loading: true, sends: 0 }
+	])('Enter in a field sends the form $sends time(s) when loading is $loading', async ({ loading, sends }) => {
+		const { onSubmit, form } = await setupInForm({ loading });
+		const field = document.createElement('input');
+		field.setAttribute('aria-label', 'Message');
+		form.prepend(field);
+
+		await page.getByRole('textbox', { name: 'Message' }).fill('Hello');
+		await userEvent.keyboard('{Enter}');
+
+		expect(onSubmit).toHaveBeenCalledTimes(sends);
+		form.remove();
+	});
+
 	it('sets aria-busy=false when not loading', async () => {
 		await setup();
 
