@@ -26,7 +26,22 @@ The recipe for running one spec, the local stack and a seeded Practice from a wo
 
 5. **The local stack and the dev origin.** Start the stack in the background with step 2's variables in front of `bun run --cwd app dev:full`. The dev server listens on `5173 + 100 × offset`, where the offset is the number in the worktree's `.port-offset` (no file, as in the main checkout, is offset 0): offset 3 is `http://localhost:5473`. `app/e2e/ports.ts` holds every port and the formula.
 
-6. **A signed-in Staff member, a Client and an Engagement.** With the stack up:
+6. **The demo Practice.** `dev:full` seeds Rooted Birth Collective, the simulation's World ([`docs/simulation/worlds/rooted-birth-collective.md`](../simulation/worlds/rooted-birth-collective.md)), each time it starts, once the stack is up and before the dev server starts ([#1994](https://github.com/markgoho/doula-cloud/issues/1994)). Put `SEED_DEMO=0` in front of the command to skip it. The stack starts empty each time, so the seed runs on each start. It goes through the BFF and the Auth emulator, as the e2e fixtures do, and `app/scripts/demo-practice.ts` says what it makes and why. The e2e suite starts its own stack from `global-setup.ts` and never seeds it.
+
+   Every account signs in with the password `demo-password-local-only`. It is a dev-only password that exists only in the local emulator, and it is kept in `app/scripts/demo-practice.ts` (`DEMO_PASSWORD`). Staff sign in at the real `/login` form on the dev origin (step 5), in any browser:
+
+   | Account | Email |
+   | --- | --- |
+   | Owner (also Admin and Doula) | `renata.alvarez@sim.doula.cloud` |
+   | Admin, not a Doula | `dee.whitlock@sim.doula.cloud` |
+   | Employee Doula | `priya.raman@sim.doula.cloud` |
+   | Contractor Doula | `lena.vasquez@sim.doula.cloud` |
+
+   The other eleven Rooted Staff members sign in the same way, at `given.family@sim.doula.cloud` (`joss.adeyemi@sim.doula.cloud`, for example). The Client is Camille Boyd, `camille.boyd@sim.doula.cloud`. A Client has no password: she signs in with a magic link, and locally nothing sends the mail until somebody drains the outbox. So the seed requests a link, drains the outbox, and prints the link. A link lasts 15 minutes and works once. To get a new one, run `bun run --cwd app seed:demo`. That command seeds the demo Practice against a running stack, or finds it already there and changes nothing, and prints the accounts and a new link. The Client's mail is also in the sandbox mailbox, at `http://127.0.0.1:<19080 + 100 × offset>/inbox/camille.boyd%40sim.doula.cloud`.
+
+   What the Practice holds: the fifteen Staff members, each joined through a real Invitation, with the founding grant of Credits; two thirds of the World's anonymous book (29 Clients across the eight employee Doulas, with due dates that start from the current day) in intake, active and completed care; Priya's four Clients, with a signed Contract and an open Invoice for Camille, a paid Invoice and an overdue Invoice for two of the other three, and a Contract that waits for a signature; Visits logged and scheduled, Message threads, an Offer that Lena accepted and one that Fern has not answered, the on-call days that come from those due dates, and the Activity all of it records.
+
+7. **A signed-in Staff member, a Client and an Engagement.** With the stack up:
 
    ```sh
    SEED_CLIENT=1 bun run --cwd app seed:staff-session
@@ -34,4 +49,4 @@ The recipe for running one spec, the local stack and a seeded Practice from a wo
 
    It prints JSON: the `__session` cookie value, the dev origin, and the Practice, Client and Engagement URLs. Without `SEED_CLIENT=1` it seeds the founding Owner and the Practice only. The Owner has no second factor, the same as after a real signup: since [#1531](https://github.com/markgoho/doula-cloud/issues/1531) she enters her Practice without one, and the second-factor recommendation and the notices on the five acts that need one are shown only to her. To walk one of those five acts (`SecondFactorActs` in `api/internal/staffauth/secondfactor.go`) or the Practice's MFA switch, put `SEED_SECOND_FACTOR=1` in front of the command too: the script then enrolls the emulator's phone factor for her and signs her in with it. Put the cookie into a browser with `context.addCookies([{ name: '__session', value: cookieValue, url: origin, httpOnly: true, secure: false, sameSite: 'Lax' }])` and `page.goto` the URL you need. What this path does and does not exercise, and the founder's `/feedback` variant, are in [`e2e.md`](e2e.md), "Logging in as Staff locally".
 
-7. **Stop the stack** by stopping the background command; `dev:full` takes the stack down on exit. A stack a killed session left behind is collected by the `SessionStart` reaper ([`e2e.md`](e2e.md), "Reaping orphaned e2e stacks").
+8. **Stop the stack** by stopping the background command; `dev:full` takes the stack down on exit. A stack a killed session left behind is collected by the `SessionStart` reaper ([`e2e.md`](e2e.md), "Reaping orphaned e2e stacks").
