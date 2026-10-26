@@ -675,7 +675,7 @@ const STAFF_ROUTES: SeededRoute<StaffSeed>[] = [
 		key: 'practices/[practiceId]',
 		archetype: 'B',
 		url: (s) => `/practices/${s.practiceId}`,
-		h1: 'Welcome to Riverside Doulas'
+		h1: 'Overview'
 	},
 	{
 		key: 'practices/[practiceId]/clients',
@@ -1099,7 +1099,7 @@ const NO_SECOND_FACTOR_ROUTES: SeededRoute<StaffSeed>[] = [
 		key: 'practices/[practiceId] (no second factor)',
 		archetype: 'B',
 		url: (s) => `/practices/${s.practiceId}`,
-		h1: 'Welcome to Riverside Doulas',
+		h1: 'Overview',
 		reach: (page) =>
 			expect(page.getByRole('heading', { level: 2, name: 'Add a second step when you sign in' })).toBeVisible()
 	},

@@ -75,8 +75,10 @@ interface SetupOptions {
 	secondFactor?: boolean;
 }
 
+// An Owner who is also a Doula, the founder of a small agency and the
+// demo's Renata: the session that draws every block the hub has.
 async function setup({
-	roles = ['owner'],
+	roles = ['owner', 'doula'],
 	clients = [{ clientId: 'c1' }],
 	overrides = {},
 	secondFactor
@@ -150,6 +152,28 @@ describe('the Practice landing page', () => {
 			.toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Accept' })).toBeVisible();
 		expect(testPage.getByText('Declined').elements()).toHaveLength(0);
+	});
+
+	// #2141: the page is named for the nav item that opens it, not a
+	// welcome to the Practice the top bar already names.
+	it('is titled Overview', async () => {
+		await setup();
+
+		await expect.element(testPage.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
+		expect(document.title).toBe('Overview — DoulaCloud');
+	});
+
+	// #2141: an Offer goes to a Doula, so a Staff member without the role
+	// has no inbox to answer.
+	it.each([
+		['an Admin who is not a Doula', ['admin']],
+		['an Owner who is not a Doula', ['owner']]
+	])('draws no Offers inbox for %s', async (_who, roles) => {
+		await setup({ roles });
+
+		await expect.element(testPage.getByRole('heading', { name: 'Clients waiting on a reply' })).toBeVisible();
+		expect(testPage.getByRole('heading', { name: 'Offers awaiting your answer' }).elements()).toHaveLength(0);
+		expect(testPage.getByText('You have no offers.').elements()).toHaveLength(0);
 	});
 
 	// #455: the roll-up of Engagements whose thread's latest Message came
@@ -375,7 +399,7 @@ describe('the Practice landing page', () => {
 				overrides: { 'second-factor-recommendation': jsonResponse({ recommended: false }) }
 			});
 
-			await expect.element(testPage.getByRole('heading', { name: 'Offers awaiting your answer' })).toBeVisible();
+			await expect.element(testPage.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
 			expect(notice().elements()).toHaveLength(0);
 		});
 
@@ -386,7 +410,7 @@ describe('the Practice landing page', () => {
 		])('is not shown to %s', async (_name, roles, secondFactor) => {
 			await setup({ roles, secondFactor });
 
-			await expect.element(testPage.getByRole('heading', { name: 'Offers awaiting your answer' })).toBeVisible();
+			await expect.element(testPage.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
 			expect(notice().elements()).toHaveLength(0);
 		});
 
@@ -408,7 +432,7 @@ describe('the Practice landing page', () => {
 
 			await expect.element(notice()).not.toBeInTheDocument();
 			expect(apiFetchWithSession).toHaveBeenCalledWith(closePath, { method: 'POST' });
-			await expect.element(testPage.getByRole('heading', { name: 'Offers awaiting your answer' })).toBeVisible();
+			await expect.element(testPage.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
 		});
 	});
 
@@ -468,7 +492,7 @@ describe('the Practice landing page', () => {
 		await render(Page, {});
 
 		await expect
-			.element(testPage.getByRole('heading', { level: 1, name: `Welcome to ${practiceName}` }))
+			.element(testPage.getByRole('heading', { level: 1, name: 'Overview' }))
 			.toBeVisible();
 		await expect
 			.element(

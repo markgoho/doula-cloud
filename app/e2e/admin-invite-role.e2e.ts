@@ -66,7 +66,7 @@ test('An Admin invited via the Staff invite route reaches the Credits and Staff 
 	await page.getByRole('button', { name: 'Accept invite' }).click();
 
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
-	await expect(page.locator('h1')).toHaveText('Welcome to Riverside Doulas');
+	await expect(page.locator('h1')).toHaveText('Overview');
 
 	// Still signed in as the Admin. The Staff roster is OwnerAndAdmin, and
 	// her own row carries exactly the role that was selected: Admin, and

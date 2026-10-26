@@ -56,11 +56,23 @@
 				<p class="email">{email}</p>
 			{/if}
 		</div>
+		<!--
+			Rows, not a link and a button card (#2141): each item is the
+			panel's full width at one weight. Sign out sits apart from
+			Account under a divider, because it ends the session where
+			Account goes somewhere. In the panel's own color, not the
+			drawing's red: signing out loses nothing, and red is the brief's
+			signal for an error or a destructive act; GOV.UK's header draws
+			Sign out as a plain link. With no Account (the Client portal) the
+			identity's own rule is the divider.
+		-->
 		<div class="items">
 			{#if accountHref}
-				<Link href={accountHref} label="Account" variant="secondary" />
+				<Link href={accountHref} label="Account" variant="menu" />
 			{/if}
-			<SignOutButton {signOut} />
+			<div class="sign-out" class:divided={Boolean(accountHref)}>
+				<SignOutButton {signOut} variant="menu" />
+			</div>
 		</div>
 	</MenuButton>
 {/if}
@@ -97,9 +109,18 @@
 		.items {
 			display: flex;
 			flex-direction: column;
-			align-items: flex-start;
-			gap: var(--space-2);
-			padding: var(--space-3) var(--space-4);
+			padding-block: var(--space-1) 0;
+		}
+
+		.sign-out {
+			display: flex;
+			flex-direction: column;
+		}
+
+		.divided {
+			margin-block-start: var(--space-1);
+			padding-block-start: var(--space-1);
+			border-block-start: var(--border-thin) solid var(--color-outline-variant);
 		}
 	}
 </style>

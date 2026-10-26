@@ -17,7 +17,8 @@
 			| 'skip'
 			| 'step'
 			| 'error'
-			| 'brand';
+			| 'brand'
+			| 'menu';
 		icon?: IconName;
 		current?: boolean;
 		/*
@@ -470,6 +471,30 @@
 			border-inline-start-color: var(--color-primary);
 			background-color: var(--color-surface-container);
 			color: var(--color-primary);
+		}
+
+		/* A row in a menu button's panel (#2141): the avatar menu's Account,
+		   beside `Button`'s `menu` row for Sign out, at the same weight. Not
+		   underlined: it is one of a panel's items, which Jakob's Law reads
+		   as a list of places to go, not prose. The focus ring is drawn
+		   inside the row, since the panel clips what is drawn outside it. */
+		a.menu {
+			inline-size: 100%;
+			--link-inset-start: var(--space-4);
+			--link-inset-end: var(--space-4);
+			padding-block: var(--space-2);
+			padding-inline: var(--link-inset-start) var(--link-inset-end);
+			color: var(--color-on-surface);
+			font-size: var(--text-body-sm-size);
+			text-decoration: none;
+		}
+
+		a.menu:hover {
+			background-color: var(--color-surface-container);
+		}
+
+		a.menu:focus-visible {
+			outline-offset: calc(-1 * var(--focus-ring-width));
 		}
 
 		/* A step in a journey's own rail (`StepRail`, #464). Unlike `rail`,

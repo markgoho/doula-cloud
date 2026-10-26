@@ -7,8 +7,9 @@
  * probe, the awaiting-reply roll-up and the activity feed ever fetch --
  * `respondForPopulatedPractice` below answers the Owner's four blocks as
  * well, for the reason
- * written beside them. The hub's title still carries #530's own URL as
- * the Practice's registered name, and an Offer's `terms` carries #537's
+ * written beside them. The session still carries #530's own URL as the
+ * Practice's registered name, though since #2141 the hub's title is
+ * "Overview" and does not print it, and an Offer's `terms` carries #537's
  * hyphenated double-barreled name where a Practice writes free text
  * about who it is offering the work to.
  *
@@ -241,8 +242,9 @@ function respondForPopulatedPractice(path: string): Response {
  * a tree that neither subject above draws (#1621). `/clients/count`
  * reads no record (#2095), so `OverviewHub` draws its `empty` snippet in
  * place of `primary`, `secondary` and `feed`: the level-1 heading, one sentence
- * and one link. The hostile content of this screen is the heading, so
- * the session keeps the fixture's own `practiceName`.
+ * and one link. The heading no longer names the Practice (#2141), so the
+ * hostile content of this screen is the Credits sentence; the session
+ * keeps the fixture's own `practiceName` all the same.
  *
  * This variant is a state of the data and not a second caller. The empty
  * state replaces the whole tree, so one mount cannot hold an empty
@@ -362,7 +364,7 @@ export const typical: RouteVariant = {
 	name: 'The Practice landing hub, as an Owner, with typical pilot data',
 	typical: true,
 	pageData: practiceSession(['owner', 'doula'], { practiceName: TYPICAL_PRACTICE_NAME }),
-	readyText: `Welcome to ${TYPICAL_PRACTICE_NAME}`,
+	readyText: 'Overview',
 	respond: (path) => {
 		if (path.includes('/activity')) return jsonResponse({ items: typicalActivity, hasMore: true, nextCursor: 'cursor-1' });
 		return respondForPopulatedPractice(path);
@@ -376,6 +378,6 @@ export const fixture: RouteFixture = {
 	url: 'https://example.test/practices/practice-1',
 	pageData: practiceSession(['doula'], { practiceName }),
 	respond: respondForPopulatedPractice,
-	readyText: `Welcome to ${practiceName}`,
+	readyText: 'Overview',
 	variants: [asOwner, asOwnerWithNoClient, asOwnerNotConnected, asOwnerWithNoSecondFactor, typical]
 };

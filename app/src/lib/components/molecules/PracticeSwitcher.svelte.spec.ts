@@ -75,6 +75,33 @@ describe('PracticeSwitcher', () => {
 			.toHaveAttribute('aria-current', 'page');
 	});
 
+	// #2141: the Practice she is in heads the list, whatever order the
+	// Memberships arrive in, and the others keep theirs.
+	it('lists the current Practice first', async () => {
+		const genesee = { ...FINGER_LAKES, practiceId: 'p3', practiceName: 'Genesee Valley Midwifery', href: '/practices/p3' };
+		const { trigger } = await setup({ practices: [FINGER_LAKES, genesee, RIVERSIDE] });
+
+		await trigger.click();
+
+		expect(page.getByRole('link').elements().map((link) => link.getAttribute('href'))).toEqual([
+			'/practices/p1',
+			'/practices/p2',
+			'/practices/p3'
+		]);
+	});
+
+	// #2141: the roles line is part of the row a press lands on, and is
+	// heard after the Practice's name rather than as part of it.
+	it('makes the whole row, roles and all, the way to that Practice', async () => {
+		const { trigger } = await setup();
+
+		await trigger.click();
+
+		const row = page.getByRole('link', { name: 'Finger Lakes Birth Support' });
+		await expect.element(row).toHaveAccessibleDescription('Doula');
+		expect(page.getByText('Doula', { exact: true }).element().closest('a')).toBe(row.element());
+	});
+
 	/*
 	 * A person with one Membership still sees her Practice's name -- but a
 	 * control that opens a list of one is a promise the product cannot keep,

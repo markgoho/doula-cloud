@@ -16,7 +16,7 @@ function refusal(body: string): Response {
 	return jsonResponse(body, 403);
 }
 
-const session = { practiceName: 'Riverside Doula Collective', roles: ['owner'] };
+const session = { practiceName: 'Riverside Doula Collective', roles: ['owner', 'doula'] };
 
 const openOffer = { offerId: 'offer-1', state: 'offered' };
 const decidedOffer = { offerId: 'offer-2', state: 'accepted' };
@@ -196,6 +196,17 @@ describe('loadPracticeLanding', () => {
 		expect(landing.connect).not.toBeUndefined();
 		expect(landing.roster).not.toBeUndefined();
 		expect(landing.credit).not.toBeUndefined();
+	});
+
+	// #2141: an Offer goes to a Doula, so an Admin who is not one has no
+	// inbox to read.
+	it('reads no Offers on behalf of a Staff member who is not a Doula', async () => {
+		const fetcher = fetcherFor();
+
+		const landing = await loadPracticeLanding(fetcher, 'practice-1', { ...session, roles: ['admin'] });
+
+		expect(landing.openOffers).toEqual([]);
+		expect(fetcher.mock.calls.map(([path]) => path)).not.toContain('/api/practices/practice-1/offers');
 	});
 
 	// #1589: the mode rides on the Connect block, and a read that fails

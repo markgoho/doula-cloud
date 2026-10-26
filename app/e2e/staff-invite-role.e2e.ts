@@ -66,7 +66,7 @@ test('A Doula invited via the Staff invite route is refused an Owner-only action
 	await page.getByRole('button', { name: 'Accept invite' }).click();
 
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
-	await expect(page.locator('h1')).toHaveText('Welcome to Riverside Doulas');
+	await expect(page.locator('h1')).toHaveText('Overview');
 
 	// Still signed in as the Doula: the same Owner-only screen that just
 	// worked for Jamie refuses Robin outright -- the role rule PR-B2 names

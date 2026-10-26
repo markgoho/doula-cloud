@@ -20,7 +20,7 @@ import { creditCount, loadBalance } from './billing.js';
 import { loadConnectStatus, type ConnectStatus } from './payments.js';
 import { loadBillingMode, type BillingMode } from './invoice.js';
 import type { Fetcher } from './fetcher.js';
-import { hasSecondFactor, isOwner } from './roles.js';
+import { hasSecondFactor, isDoula, isOwner } from './roles.js';
 import type { CursorPage } from './paginatedList.svelte.js';
 
 /*
@@ -263,7 +263,9 @@ export async function loadPracticeLanding(
 	const { roles } = session;
 
 	const [openOffers, clientCount, roster, credit, connect, requests, secondFactorRecommended] = await Promise.all([
-		readOpenOffers(fetcher, practiceId),
+		// An Offer goes to a Doula (#2141), so a caller without the role has
+		// none to answer and the hub draws no inbox for her: nothing to read.
+		isDoula(session) ? readOpenOffers(fetcher, practiceId) : [],
 		// One row from the BFF (#2095), where this was a whole page of the
 		// list read to learn whether it was empty.
 		loadClientCount(fetcher, practiceId),
