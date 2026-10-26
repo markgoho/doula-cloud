@@ -20,9 +20,9 @@ import (
 type Sweeper struct{}
 
 // ProcessPending deletes every row created before clock.Now(ctx) less
-// ttl.
+// ttl -- expiredBefore, the same line lookup draws (#1991).
 func (Sweeper) ProcessPending(ctx context.Context, tx *sql.Tx) error {
-	cutoff := clock.Now(ctx).Add(-ttl)
+	cutoff := expiredBefore(clock.Now(ctx))
 	if _, err := tx.ExecContext(ctx, `SELECT sweep_expired_idempotency_keys($1)`, cutoff); err != nil {
 		return fmt.Errorf("idempotency: sweep expired keys: %w", err)
 	}

@@ -24,6 +24,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -42,7 +43,18 @@ const maxKeyLength = 255
 // stored response does not outlive the window it exists for. Between the
 // two, lookup's own created_at check is what honors the TTL, and save
 // refreshes a row the sweep has not reached yet.
+//
+// All three read the instant from clock.Now(ctx), never SQL now(), and
+// draw the line through expiredBefore (#1991): a row is live when
+// created_at >= the cutoff and swept when created_at < it, so a moved
+// clock moves the lookup, the save and the sweep together.
 const ttl = 48 * time.Hour
+
+// expiredBefore is the cutoff a row created before is past ttl at now --
+// the one line lookup, save and Sweeper all draw.
+func expiredBefore(now time.Time) time.Time {
+	return now.Add(-ttl)
+}
 
 // scope is whose key a request carries: a Staff member at a Practice, or a
 // Client, whose Practice is the one her own clients row belongs to.
@@ -167,19 +179,19 @@ func serve(w http.ResponseWriter, r *http.Request, next http.Handler, tx *sql.Tx
 }
 
 // lookup returns the stored status code and response body for key, if one
-// was already persisted for the caller's own scope within ttl. A row older
-// than ttl is treated as not found, honoring docs/api-design.md section
-// 3's TTL until Sweeper deletes it. IS NOT DISTINCT FROM
-// compares the caller column a scope leaves NULL as equal to the row's
-// NULL, the same reading idempotency_keys_scope's NULLS NOT DISTINCT
-// gives it.
+// was already persisted for the caller's own scope within ttl of
+// clock.Now(ctx). A row older than ttl is treated as not found, honoring
+// docs/api-design.md section 3's TTL until Sweeper deletes it. IS NOT
+// DISTINCT FROM compares the caller column a scope leaves NULL as equal
+// to the row's NULL, the same reading idempotency_keys_scope's NULLS NOT
+// DISTINCT gives it.
 func lookup(ctx context.Context, tx *sql.Tx, key string, sc scope) (found bool, status int, body []byte, err error) {
 	err = tx.QueryRowContext(ctx,
 		`SELECT status_code, response_body FROM idempotency_keys
 		 WHERE key = $1 AND practice_id = $2
 		   AND staff_id IS NOT DISTINCT FROM $3::uuid AND client_id IS NOT DISTINCT FROM $4::uuid
-		   AND created_at >= now() - make_interval(secs => $5)`,
-		key, sc.practiceID, sc.staffID, sc.clientID, ttl.Seconds(),
+		   AND created_at >= $5`,
+		key, sc.practiceID, sc.staffID, sc.clientID, expiredBefore(clock.Now(ctx)),
 	).Scan(&status, &body)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, 0, nil, nil
@@ -199,16 +211,21 @@ func lookup(ctx context.Context, tx *sql.Tx, key string, sc scope) (found bool, 
 // re-ran), the row is refreshed in place instead of staying stale
 // forever, since ON CONFLICT DO NOTHING would otherwise silently drop
 // every save attempt against that key going forward.
+//
+// created_at is written from clock.Now(ctx), on the insert as well as the
+// refresh, rather than left to the column's DEFAULT now(): the row's age
+// is read against the same clock lookup and Sweeper read.
 func save(ctx context.Context, tx *sql.Tx, key string, sc scope, status int, body []byte) error {
+	now := clock.Now(ctx)
 	_, err := tx.ExecContext(ctx,
-		`INSERT INTO idempotency_keys (key, practice_id, staff_id, client_id, status_code, response_body)
-		 VALUES ($1, $2, $3, $4, $5, $6)
+		`INSERT INTO idempotency_keys (key, practice_id, staff_id, client_id, status_code, response_body, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
 		 ON CONFLICT (key, practice_id, staff_id, client_id) DO UPDATE
 		 SET status_code = EXCLUDED.status_code,
 		     response_body = EXCLUDED.response_body,
-		     created_at = now()
-		 WHERE idempotency_keys.created_at < now() - make_interval(secs => $7)`,
-		key, sc.practiceID, sc.staffID, sc.clientID, status, body, ttl.Seconds(),
+		     created_at = EXCLUDED.created_at
+		 WHERE idempotency_keys.created_at < $8`,
+		key, sc.practiceID, sc.staffID, sc.clientID, status, body, now, expiredBefore(now),
 	)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests

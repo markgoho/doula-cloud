@@ -70,7 +70,7 @@ func TestWrap_RunsHandlerAgainAndRefreshesRowPastTTL(t *testing.T) {
 	db := testdb.New(t)
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "ttl-owner", []string{doulaRole}, "employee")
 	var calls int
-	srv, session := newIdempotencyServer(t, db, "ttl-owner", &calls, http.StatusCreated)
+	srv, session := newIdempotencyServerAt(t, db, "ttl-owner", &calls, http.StatusCreated, sweepNow)
 	defer srv.Close()
 
 	first := postWidget(t, srv, session, practiceID, "ttl-key")
@@ -83,7 +83,7 @@ func TestWrap_RunsHandlerAgainAndRefreshesRowPastTTL(t *testing.T) {
 	}
 
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE idempotency_keys SET created_at = now() - interval '49 hours' WHERE key = 'ttl-key'`,
+		`UPDATE idempotency_keys SET created_at = $1 WHERE key = 'ttl-key'`, sweepNow.Add(-49*time.Hour),
 	); err != nil {
 		t.Fatalf("backdate stored row: %v", err)
 	}
@@ -107,14 +107,11 @@ func TestWrap_RunsHandlerAgainAndRefreshesRowPastTTL(t *testing.T) {
 	).Scan(&createdAt); err != nil {
 		t.Fatalf("query refreshed row: %v", err)
 	}
-	// created_at came back from Postgres's own now() (Wrap's refresh, not
-	// a host-side write), so this reads it against the host's clock --
-	// deliberately, since there is no other way to prove "refreshed" from
-	// outside. A 1-minute margin absorbs any host-vs-container clock skew
-	// a VM-backed engine (Podman/Docker Desktop on macOS) can produce; see
-	// "A due-time fixture must not compare two clocks" in docs/testing/api.md.
-	if time.Since(createdAt) > time.Minute {
-		t.Fatalf("created_at = %v, want refreshed to roughly now", createdAt)
+	// The refresh stamps clock.Now(ctx), the request's fixed instant
+	// (#1991), so the row reads exactly that -- no second clock to allow
+	// skew against.
+	if !createdAt.Equal(sweepNow) {
+		t.Fatalf("created_at = %v, want refreshed to the request's clock %v", createdAt, sweepNow)
 	}
 }
 
