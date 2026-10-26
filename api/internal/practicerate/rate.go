@@ -4,7 +4,7 @@
 // it, contractors included -- GLOSSARY.md: "a Practice's published rates
 // hold no person's information", the same reason ADR-0008's read table
 // already gives every Doula the Contract Template. Only an Owner or an
-// Admin may set or change it. All handlers rely on staffauth.Middleware
+// Admin may set, change or remove it. All handlers rely on staffauth.Middleware
 // having already resolved the caller's Staff/Practice ids and opened a
 // request-scoped *sql.Tx with app.current_practice_id set, the same way
 // contracts does.
@@ -129,12 +129,53 @@ type RatePutRequest struct {
 	AmountCents int64 `json:"amountCents"`
 }
 
-// rateDiff is PutRateHandler's activity diff shape. AmountCentsBefore is
-// nil when the Practice had no rate set for Kind before this write.
+// rateDiff is the activity diff shape PutRateHandler and
+// DeleteRateHandler share. AmountCentsBefore is nil when the Practice
+// had no rate set for Kind before this write; AmountCentsAfter is nil
+// when this write removed the rate (#2080), so a set, a change and a
+// removal all read as one practice_rate_changed action.
 type rateDiff struct {
 	Kind              string `json:"kind"`
 	AmountCentsBefore *int64 `json:"amountCentsBefore"`
-	AmountCentsAfter  int64  `json:"amountCentsAfter"`
+	AmountCentsAfter  *int64 `json:"amountCentsAfter"`
+}
+
+// recordRateChanged writes one practice_rate_changed activity row for
+// diff, attributed to the Staff member making the request.
+func recordRateChanged(r *http.Request, tx *sql.Tx, practiceID string, diff rateDiff) error {
+	diffJSON, err := json.Marshal(diff)
+	// coverage:ignore reason: marshal of a fixed, always-serializable struct never fails
+	if err != nil {
+		return fmt.Errorf("practicerate: marshal rate diff: %w", err)
+	}
+	actorStaffID, _ := staffauth.StaffID(r.Context())
+	if err := activity.Record(r.Context(), tx, activity.Entry{
+		PracticeID:  practiceID,
+		SubjectKind: activity.SubjectPractice,
+		SubjectID:   practiceID,
+		Action:      actionRateChanged,
+		Diff:        diffJSON,
+		Actor:       activity.StaffActor(actorStaffID),
+	}); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("practicerate: record rate change: %w", err)
+	}
+	return nil
+}
+
+// readRate reads practiceID's current rate for kind; the result is not
+// Valid when no rate is set.
+func readRate(r *http.Request, tx *sql.Tx, practiceID, kind string) (sql.NullInt64, error) {
+	var amount sql.NullInt64
+	err := tx.QueryRowContext(r.Context(),
+		`SELECT amount_cents FROM practice_rates WHERE practice_id = $1 AND kind = $2::engagement_kind`,
+		practiceID, kind,
+	).Scan(&amount)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return amount, fmt.Errorf("practicerate: read rate: %w", err)
+	}
+	return amount, nil
 }
 
 // PutRateHandler lets a Practice Owner or Admin set or change the rate
@@ -174,12 +215,8 @@ func PutRateHandler() http.Handler {
 			return
 		}
 
-		var before sql.NullInt64
-		err := tx.QueryRowContext(r.Context(),
-			`SELECT amount_cents FROM practice_rates WHERE practice_id = $1 AND kind = $2::engagement_kind`,
-			practiceID, kind,
-		).Scan(&before)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		before, err := readRate(r, tx, practiceID, kind)
+		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -196,26 +233,12 @@ func PutRateHandler() http.Handler {
 				return
 			}
 
-			diff := rateDiff{Kind: kind, AmountCentsAfter: req.AmountCents}
+			after := req.AmountCents
+			diff := rateDiff{Kind: kind, AmountCentsAfter: &after}
 			if before.Valid {
 				diff.AmountCentsBefore = &before.Int64
 			}
-			diffJSON, err := json.Marshal(diff)
-			if err != nil {
-				// coverage:ignore reason: marshal of a fixed, always-serializable struct never fails
-				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-				return
-			}
-
-			actorStaffID, _ := staffauth.StaffID(r.Context())
-			if err := activity.Record(r.Context(), tx, activity.Entry{
-				PracticeID:  practiceID,
-				SubjectKind: activity.SubjectPractice,
-				SubjectID:   practiceID,
-				Action:      actionRateChanged,
-				Diff:        diffJSON,
-				Actor:       activity.StaffActor(actorStaffID),
-			}); err != nil {
+			if err := recordRateChanged(r, tx, practiceID, diff); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
@@ -235,5 +258,63 @@ func PutRateHandler() http.Handler {
 
 		amountCents := req.AmountCents
 		apierr.WriteJSON(w, http.StatusOK, Rate{Kind: kind, AmountCents: &amountCents})
+	})
+}
+
+// DeleteRateHandler lets a Practice Owner or Admin remove the rate for
+// one Engagement kind, so the kind has no rate again (#2080) -- #966's
+// "no rate set" state, which a Practice that stops offering postpartum
+// care must be able to return to. Must be mounted behind
+// staffauth.Middleware, under the same Owner-and-Admin gate as
+// PutRateHandler (mount.go).
+//
+// The removal is recorded as practice_rate_changed with the amount
+// before and a null amount after, so who removed a rate and when reads
+// the same way as who set it. Removing a rate that is not set writes and
+// records nothing, so a retry is a no-op.
+//
+// A draft or sent Contract keeps the amount it was drafted at: there is
+// no rate left to re-price it to, and its amount is a fact on the
+// Contract, not a pointer to the rate card. A new Contract of this kind
+// is refused the way it is for a Practice that never set one
+// (contracts.noRateSetMsg, #967, #1885).
+func DeleteRateHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tx, practiceID, ok := staffauth.RequireTx(w, r)
+		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
+		if !ok {
+			return
+		}
+
+		kind := r.PathValue("kind")
+		if !validKind(kind) {
+			apierr.WriteError(w, "kind must be birth or postpartum", http.StatusBadRequest)
+			return
+		}
+
+		before, err := readRate(r, tx, practiceID, kind)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		if before.Valid {
+			if _, err := tx.ExecContext(r.Context(),
+				`DELETE FROM practice_rates WHERE practice_id = $1 AND kind = $2::engagement_kind`,
+				practiceID, kind,
+			); err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+				return
+			}
+			if err := recordRateChanged(r, tx, practiceID, rateDiff{Kind: kind, AmountCentsBefore: &before.Int64}); err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+				return
+			}
+		}
+
+		apierr.WriteJSON(w, http.StatusOK, Rate{Kind: kind})
 	})
 }

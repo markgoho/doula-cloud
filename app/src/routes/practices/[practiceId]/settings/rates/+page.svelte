@@ -9,11 +9,10 @@
 	 * <h1> and again beside its box.
 	 *
 	 * A save says what was saved in a status `Notice`, read back from the
-	 * server rather than from the boxes. A blank box is left alone -- #966's
-	 * "no rate yet" is a valid state, and the BFF has no way to clear a
-	 * rate once set -- so a box emptied over a stored rate keeps that rate,
-	 * and the Notice and the refilled box say so rather than pretending it
-	 * was removed. The Notice uses the Settings index's own words
+	 * server rather than from the boxes. An empty box means "no rate" --
+	 * #966's valid state -- so a box emptied over a stored rate removes
+	 * that rate (#2080), and a box that was empty and stays empty sends
+	 * nothing. The Notice uses the Settings index's own words
 	 * (`ratesValue`), so the two never describe one rate card two ways.
 	 */
 	import { onMount } from 'svelte';
@@ -22,6 +21,7 @@
 	import {
 		loadRates,
 		saveRate,
+		removeRate,
 		dollarsToCents,
 		centsToDollars,
 		type EngagementKind,
@@ -48,10 +48,14 @@
 	let isLoaded = $state(false);
 	let savedMessage = $state('');
 	const submission = new FormSubmission();
+	// Each kind's stored rate, as last read -- so an emptied box
+	// removes only a rate that exists.
+	const stored: Partial<Record<EngagementKind, number>> = {};
 
 	function fill(rates: readonly Rate[]) {
 		for (const rate of rates) {
 			dollars[rate.kind] = rate.amountCents === null ? '' : centsToDollars(rate.amountCents);
+			stored[rate.kind] = rate.amountCents ?? undefined;
 		}
 	}
 
@@ -86,6 +90,8 @@
 				const amountCents = dollarsToCents(dollars[kind]);
 				if (amountCents !== undefined) {
 					await saveRate(apiFetchWithSession, page.params.practiceId!, kind, amountCents);
+				} else if (stored[kind] !== undefined) {
+					await removeRate(apiFetchWithSession, page.params.practiceId!, kind);
 				}
 			}
 			const { rates } = await loadRates(apiFetchWithSession, page.params.practiceId!);

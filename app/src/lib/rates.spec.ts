@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { centsToDollars, dollarsToCents, loadRates, saveRate } from './rates.js';
+import { centsToDollars, dollarsToCents, loadRates, removeRate, saveRate } from './rates.js';
 import { jsonResponse } from './testResponse.js';
 
 describe('loadRates', () => {
@@ -45,6 +45,27 @@ describe('saveRate', () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse('only a Practice Owner or Admin can do that', 403));
 
 		await expect(saveRate(fetcher, 'practice-1', 'birth', 15_000)).rejects.toThrow(
+			'only a Practice Owner or Admin can do that'
+		);
+	});
+});
+
+describe('removeRate', () => {
+	it('DELETEs the practice/kind path and returns the kind with no rate', async () => {
+		// eslint-disable-next-line unicorn/no-null -- a real API response's JSON null, for a kind with no rate set
+		const removed = { kind: 'postpartum', amountCents: null };
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse(removed));
+
+		const result = await removeRate(fetcher, 'practice-1', 'postpartum');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/rates/postpartum', { method: 'DELETE' });
+		expect(result).toEqual(removed);
+	});
+
+	it('throws with the response body text on a non-ok response', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('only a Practice Owner or Admin can do that', 403));
+
+		await expect(removeRate(fetcher, 'practice-1', 'postpartum')).rejects.toThrow(
 			'only a Practice Owner or Admin can do that'
 		);
 	});
