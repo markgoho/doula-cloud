@@ -29,9 +29,14 @@ import { globFiles } from './globFiles';
  * rather than dropped from the glob, so the gate still asks the question
  * of every route and the answer is that something they compose calls the
  * primitive.
+ *
+ * `MembershipQuestion` is the same kind of thing for a Staff member's
+ * roles and employment type pages (#2041): it composes `QuestionPage`,
+ * and `FormPage` while the page loads or refuses an Admin.
  */
 const TEMPLATES_WITH_PAGE_TITLE = [
 	'JourneyQuestion',
+	'MembershipQuestion',
 	'DateOfBirthQuestion',
 	'EmailQuestion',
 	'PhoneQuestion',

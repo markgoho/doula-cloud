@@ -32,6 +32,18 @@ describe('ListPage.svelte', () => {
 		await expect.element(page.getByRole('heading', { level: 1, name: 'Staff' })).toBeVisible();
 	});
 
+	// #2041: the roster is where a removal lands, and it says what was done
+	// the way RecordDetail does -- before the h1, as a status that takes focus.
+	it('renders the outcome before the title, as a status that takes focus', async () => {
+		await setup({ outcome: 'Pat Lee was removed from this Practice.' });
+
+		const outcome = page.getByRole('status');
+		await expect.element(outcome).toHaveTextContent('Pat Lee was removed from this Practice.');
+		await expect.element(outcome).toHaveFocus();
+		const heading = page.getByRole('heading', { level: 1, name: 'Staff' }).element();
+		expect(outcome.element().compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
 	it('always renders the content region', async () => {
 		await setup();
 

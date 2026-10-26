@@ -76,11 +76,13 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 	// The Owner's way in is the roster, so that is where this starts.
 	await enterPractice(context, page, ownerHeaders, practiceId);
 	await page.goto(`/practices/${practiceId}/staff`);
-	// By href rather than by accessible name: every member row carries a
-	// link reading "Send a recovery code", and which row it is comes from
-	// the visually-hidden name joined by aria-describedby (#515) -- which
-	// no Playwright role query can select on.
-	await page.locator(`a[href$="/staff/${doulaStaffId}/mfa-recovery"]`).filter({ visible: true }).first().click();
+	// The name is the row's one link (#2041), and the way in to vouching
+	// is on that Staff member's own page. By href, since two people can
+	// share a name; DataTable draws the row twice, once per tree, so the
+	// visible copy is the one clicked.
+	await page.locator(`a[href$="/staff/${doulaStaffId}"]`).filter({ visible: true }).first().click();
+	await expect(page.getByRole('heading', { level: 1, name: doulaName })).toBeVisible();
+	await page.getByRole('link', { name: 'Send a recovery code' }).click();
 
 	await expect(page.getByRole('heading', { name: `Help ${doulaName} sign in again` })).toBeVisible();
 	// #615's AC, and the misreading the screen exists to prevent: the code

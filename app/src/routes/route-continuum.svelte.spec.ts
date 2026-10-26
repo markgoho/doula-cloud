@@ -360,9 +360,10 @@ async function mountRoute(fixture: RouteFixture): Promise<Mounted> {
 		 * (#1126). This is the second call -- `mountInFrame` made the
 		 * first, before the route had fetched anything, and a route
 		 * keeps its disclosures behind rows that only exist once the
-		 * cascade above has run. The Staff roster is that case: two
-		 * `HistoryDisclosure`s per Member, each fetching its own
-		 * history when it opens, none of them in the DOM at mount.
+		 * cascade above has run. The Staff roster was the case that made
+		 * it: two `HistoryDisclosure`s per Member, each fetching its own
+		 * history when it opened, none of them in the DOM at mount, until
+		 * #2041 moved both histories onto the Staff member's own page.
 		 *
 		 * It happens HERE, in preparation, and not inside `sweep` --
 		 * which still opens and closes inside one task and still fires
