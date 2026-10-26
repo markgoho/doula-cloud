@@ -168,20 +168,20 @@
 		   width the labels need, `(width - 100%) * 999` is huge and the
 		   clamp holds it at the share; above it the value is negative and
 		   the clamp holds it at zero, so the item is its label's own
-		   width. No query, and the count is read with `:has()`. The share
-		   is the content box, so each item's own inset sits outside it:
-		   a quarter plus the inset puts three to a line and never four,
-		   two fifths plus the inset two and never three. An item whose
-		   label is wider than its share keeps its label's width.
+		   width. No query, and the count is read with `:has()`. Under the
+		   app's border-box sizing, 30% puts three to a line and never
+		   four, 45% two and never three. An item whose label is wider than
+		   its share keeps its label's width.
 
-		   The widths, measured 2026-10-26 on macOS/Chromium at the 16px
-		   type floor: five labels need 464px of row, four about 376px.
-		   31rem (496px) and 25rem (400px) leave each about 6% for CI's
-		   Linux/Chromium, which sets the same font wider. The spec sweeps
-		   every 4px from 320px to 640px for both counts. */
+		   The widths, measured 2026-10-26 in the running app on
+		   macOS/Chromium at the 16px type floor: five labels need 458px of
+		   row, four about 370px. 31rem (496px) and 25rem (400px) leave
+		   each about 8% for CI's Linux/Chromium, which sets the same font
+		   wider. The spec sweeps every 4px from 320px to 640px for both
+		   counts, under the app's own stylesheet. */
 		.narrow :global(a) {
 			flex: 0 0 auto;
-			flex-basis: clamp(0rem, calc((31rem - 100%) * 999), 25%);
+			flex-basis: clamp(0rem, calc((31rem - 100%) * 999), 30%);
 			justify-content: center;
 			min-block-size: var(--nav-row-height);
 			/* The link's own inset, which its padding and its label's 44px
@@ -192,7 +192,7 @@
 
 		/* Four items (no Birth plan): two to a line where they wrap. */
 		.narrow:not(:has(> :global(a:nth-child(5)))) :global(a) {
-			flex-basis: clamp(0rem, calc((25rem - 100%) * 999), 40%);
+			flex-basis: clamp(0rem, calc((25rem - 100%) * 999), 45%);
 		}
 
 		/* Unavoidable (#564): the same shape as StaffTopBar's own -- a wide

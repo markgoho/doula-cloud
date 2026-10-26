@@ -9,7 +9,7 @@ import {
 } from '#lib/components/molecules/MenuButton.testing.js';
 import { CONFORMANCE_COMMITMENT, findBlockSpill } from '../../../routes/style-guide/continuum.js';
 import PortalTopBar from './PortalTopBar.svelte';
-import '#lib/styles/tokens.css';
+import '#lib/styles/app.css';
 
 const NAV_ITEMS = [
 	{ label: 'Your care', href: '/care', current: true },
