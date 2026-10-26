@@ -12,7 +12,7 @@ There is one route. It has five screens and four presses, and it is three acts.
 
 | Act (ADR-0048) | Press | On the screen | She lands on |
 | --- | --- | --- | --- |
-| 1. Sign up | 1. **Create Practice** | 1. The signup form, `/signup` | 2. The empty Practice |
+| 1. Sign up | 1. **Create your Practice** | 1. The signup journey, `/signup` to `/signup/check` | 2. The empty Practice |
 | 2. Add a Client | 2. **Add your first Client** | 2. The empty Practice | 3. The Client's name |
 | | 3. **Save and continue** | 3. The Client's name | 4. The Start work form |
 | 3. Start the Engagement | 4. **Start work with (name)** | 4. The Start work form | 5. The Engagement's page: First Value |
@@ -106,7 +106,9 @@ The words below are the words to build. Where a build ticket and this document d
 
 ### Screen 1: the signup form
 
-`/signup`. The heading is "Sign up your Practice".
+**Amended, 2026-10-26 ([#2049](https://github.com/markgoho/doula-cloud/issues/2049)):** the form is a journey of three question pages and a check page. `/signup` asks "About you" (rows 1, 5 and 6), `/signup/practice` asks "What is your Practice called? (optional)" (row 2), `/signup/where` asks "Where do you work?" (rows 3 and 4), and `/signup/check` is "Check your answers" with rows 8 and 9 as its declaration and its one button, **Create your Practice**. Row 7, the role notice, is the first line of the empty Practice for the person who holds every role. Continue sends nothing; the check page's button is still the one press. The table below is the form as #1493 decided it.
+
+`/signup`. The heading was "Sign up your Practice".
 
 | # | Field | Words | Decided by |
 | --- | --- | --- | --- |

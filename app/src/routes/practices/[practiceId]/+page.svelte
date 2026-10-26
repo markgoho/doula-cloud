@@ -30,7 +30,7 @@
 		type WaitingOnReply
 	} from '#lib/practiceLanding.js';
 	import { CONNECT_STATUS_BADGES } from '#lib/payments.js';
-	import { isOwner, isOwnerOrAdmin } from '#lib/roles.js';
+	import { EVERY_ROLE_SENTENCE, hasEveryRole, isOwner, isOwnerOrAdmin } from '#lib/roles.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import DoorLink from '#lib/components/atoms/DoorLink.svelte';
 	import { startHref } from './clients/new/intake.js';
@@ -499,6 +499,15 @@
 		for the two of them.
 	-->
 	<stack-l space="var(--space-4)">
+		<!--
+			#290, moved here from signup by #2049: the person who set the
+			Practice up holds every role, and is told so on the first screen
+			she lands on. Only for a person who does: an invited Doula or
+			Admin on an empty Practice holds the roles she was given.
+		-->
+		{#if hasEveryRole(session)}
+			<Text text={EVERY_ROLE_SENTENCE} />
+		{/if}
 		<Text
 			text="Nothing is here yet, because no Client is. Add one and this becomes the Client's birth plan, the visits with the Client, and the contract and invoices between the Client and your Practice."
 		/>

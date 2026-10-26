@@ -1,39 +1,64 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { uniqueEmail, STAFF_PASSWORD } from './staffSignup';
 import { seedClient } from './portalClient';
 
 // Every other spec in this suite provisions its Practice with
 // POST /api/staff/signup directly (fixture setup is not automation, #207) --
-// this is the one spec that drives the /signup screen itself, so the form
-// under the whole suite is exercised at least once.
-//
-// #1531: the Practice this creates has a brand-new Owner with an
-// unverified email and no second factor, and neither keeps her out of
-// it: she lands on her Practice overview straight after Create
-// Practice, with no visit to /mfa/enroll (ADR-0026's amendment for
-// #1492). The IndexedDB/cookie checks below are about the signup
-// exchange itself.
-test('Signing up through the /signup form lands the new Owner on her Practice overview', async ({ page }) => {
-	const email = uniqueEmail('signup-form');
-	const password = STAFF_PASSWORD;
+// this is the one spec that drives the signup journey itself (#2049: three
+// question pages and a check page), so the screens under the whole suite
+// are exercised at least once.
 
+/**
+ * Walks the journey from its first page to the check page: about you,
+ * the Practice's name (left empty when none is given), where she works.
+ */
+async function walkToCheck(page: Page, { email, practiceName }: { email: string; practiceName?: string }) {
 	await page.goto('/signup');
 	await page.getByLabel('First name').fill('Jamie');
 	await page.getByLabel('Last name').fill('Owner');
-	await page.getByLabel('Practice name (optional)').fill('Riverside Doulas');
+	await page.getByLabel('Email').fill(email);
+	await page.getByLabel('Password').fill(STAFF_PASSWORD);
+	await page.getByRole('button', { name: 'Continue' }).click();
+
+	await expect(page).toHaveURL(/\/signup\/practice$/);
+	if (practiceName) await page.getByLabel('What is your Practice called? (optional)').fill(practiceName);
+	await page.getByRole('button', { name: 'Continue' }).click();
+
+	await expect(page).toHaveURL(/\/signup\/where$/);
 	await page.getByLabel('Which state do you work from?').selectOption('New York');
 	// #1166: chosen rather than left on whatever zone the runner reports,
-	// so what the form sends is the same on a laptop and in CI.
-	await page
-		.getByLabel('What timezone does this Practice work in?')
-		.selectOption('America/New_York');
-	await page.getByLabel('Email').fill(email);
-	await page.getByLabel('Password').fill(password);
+	// so what the journey sends is the same on a laptop and in CI.
+	await page.getByLabel('What timezone does this Practice work in?').selectOption('America/New_York');
+	await page.getByRole('button', { name: 'Continue' }).click();
+
+	await expect(page).toHaveURL(/\/signup\/check$/);
+}
+
+// #1531: the Practice this creates has a brand-new Owner with an
+// unverified email and no second factor, and neither keeps her out of
+// it: she lands on her Practice overview straight after Create your
+// Practice, with no visit to /mfa/enroll (ADR-0026's amendment for
+// #1492). The IndexedDB/cookie checks below are about the signup
+// exchange itself.
+test('Signing up through the journey lands the new Owner on her Practice overview', async ({ page }) => {
+	await walkToCheck(page, { email: uniqueEmail('signup-form'), practiceName: 'Riverside Doulas' });
+
+	// #2049: a reload on the check page keeps every answer but the
+	// password, which is asked for again on the first page.
+	await page.reload();
+	await expect(page.getByText('Riverside Doulas')).toBeVisible();
+	await page.getByRole('button', { name: 'Create your Practice' }).click();
+	await page.getByRole('link', { name: 'Enter a password' }).click();
+	await expect(page).toHaveURL(/\/signup\?from=check$/);
+	await page.getByLabel('Password').fill(STAFF_PASSWORD);
+	await page.getByRole('button', { name: 'Continue' }).click();
+	await expect(page).toHaveURL(/\/signup\/check$/);
+
 	// #1547: the agreement sentence sits above the button and is its description.
-	await expect(page.getByRole('button', { name: 'Create Practice' })).toHaveAccessibleDescription(
+	await expect(page.getByRole('button', { name: 'Create your Practice' })).toHaveAccessibleDescription(
 		/^By creating your Practice, you agree to the Terms of Service \(opens in new tab\) and the Privacy Policy \(opens in new tab\)/
 	);
-	await page.getByRole('button', { name: 'Create Practice' }).click();
+	await page.getByRole('button', { name: 'Create your Practice' }).click();
 
 	await expect(page).toHaveURL(/\/practices\/[^/?]+$/);
 	await expect(page.getByRole('heading', { level: 1, name: 'Welcome to Riverside Doulas' })).toBeVisible();
@@ -81,36 +106,20 @@ test('Signing up through the /signup form lands the new Owner on her Practice ov
 // name empty, and the Practice she lands in is called by her name, first
 // name then last name.
 test('An empty Practice name gives the new Practice her own name', async ({ page }) => {
-	await page.goto('/signup');
-	await page.getByLabel('First name').fill('Jamie');
-	await page.getByLabel('Last name').fill('Owner');
-	await page.getByLabel('Which state do you work from?').selectOption('New York');
-	await page
-		.getByLabel('What timezone does this Practice work in?')
-		.selectOption('America/New_York');
-	await page.getByLabel('Email').fill(uniqueEmail('signup-own-name'));
-	await page.getByLabel('Password').fill(STAFF_PASSWORD);
-	await page.getByRole('button', { name: 'Create Practice' }).click();
+	await walkToCheck(page, { email: uniqueEmail('signup-own-name') });
+	await page.getByRole('button', { name: 'Create your Practice' }).click();
 
 	await expect(page).toHaveURL(/\/practices\/[^/?]+$/);
 	await expect(page.getByRole('heading', { level: 1, name: 'Welcome to Jamie Owner' })).toBeVisible();
 });
 
-// #1547 (ADR-0053): pressing Create Practice is the Practice's agreement
+// #1547 (ADR-0053): pressing Create your Practice is the Practice's agreement
 // to the Terms of Service and the Privacy Policy, and the Practice's
 // Recent activity shows it in plain words, with her name and the date.
 // The feed shows once the Practice holds a Client, so the spec adds one.
 test("The Practice's activity shows that its Owner agreed to the terms at signup", async ({ page, request }) => {
-	await page.goto('/signup');
-	await page.getByLabel('First name').fill('Jamie');
-	await page.getByLabel('Last name').fill('Owner');
-	await page.getByLabel('Which state do you work from?').selectOption('New York');
-	await page
-		.getByLabel('What timezone does this Practice work in?')
-		.selectOption('America/New_York');
-	await page.getByLabel('Email').fill(uniqueEmail('signup-terms'));
-	await page.getByLabel('Password').fill(STAFF_PASSWORD);
-	await page.getByRole('button', { name: 'Create Practice' }).click();
+	await walkToCheck(page, { email: uniqueEmail('signup-terms') });
+	await page.getByRole('button', { name: 'Create your Practice' }).click();
 	await expect(page).toHaveURL(/\/practices\/[^/?]+$/);
 
 	const practiceId = new URL(page.url()).pathname.split('/').at(-1)!;

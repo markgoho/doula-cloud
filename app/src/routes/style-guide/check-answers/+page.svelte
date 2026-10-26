@@ -3,6 +3,7 @@
 
 	interface Properties {
 		isWide?: boolean;
+		hasDeclaration?: boolean;
 	}
 
 	/*
@@ -11,7 +12,9 @@
 	 * for the continuum check and the drag surface.
 	 */
 	export const variants: readonly DemoVariant<Properties>[] = [
-		{ name: 'Check answers, with the wide column', props: { isWide: true } }
+		{ name: 'Check answers, with the wide column', props: { isWide: true } },
+		// #2049: GOV.UK's declaration, the words the button agrees to.
+		{ name: 'Check answers, with a declaration', props: { hasDeclaration: true } }
 	];
 </script>
 
@@ -112,10 +115,17 @@
 		}
 	];
 
-	let { isWide = false }: Properties = $props();
+	let { isWide = false, hasDeclaration = false }: Properties = $props();
 
 	const noop = () => {};
 </script>
+
+{#snippet declaration()}
+	<p id="style-guide-check-answers-declaration">
+		By adding Anne-Marie Ochieng-Whitfield, you confirm that Highland Midwifery has the Client's
+		permission to keep these details.
+	</p>
+{/snippet}
 
 {#snippet actions()}
 	<Button label="Save this Client and send the portal invite" type="submit" onClick={noop} />
@@ -130,5 +140,6 @@
 	caption="Adding a Client to Highland Midwifery"
 	{sections}
 	{isWide}
+	declaration={hasDeclaration ? declaration : undefined}
 	{actions}
 />

@@ -15,6 +15,14 @@
 	export interface FormError {
 		message: string;
 		targetId?: string;
+		/**
+		 * Where the fix is, when it is on another page (#2049). A check page
+		 * holds no control, so a refusal of its one button links to the
+		 * question page that asks the thing refused. It wins over
+		 * `targetId`, which the entry keeps so that the question page can
+		 * still mark its own control.
+		 */
+		href?: string;
 	}
 </script>
 
@@ -120,7 +128,9 @@
 					     ErrorSummary.svelte.spec.ts -->
 					{#each errors as error, index (index)}
 						<li>
-							{#if error.targetId}
+							{#if error.href}
+								<Link href={error.href} label={error.message} variant="error" />
+							{:else if error.targetId}
 								<Link href="#{error.targetId}" label={error.message} variant="error" />
 							{:else}
 								{error.message}

@@ -280,11 +280,32 @@ const LINK_TOKEN = 'a11y-scan-token';
 const SIGNED_OUT_ROUTES: Route[] = [
 	{ key: '/', archetype: 'A', url: '/', h1: 'Sign in or set up a Practice' },
 	{ key: 'login', archetype: 'A', url: '/login', h1: 'Log in' },
+	// #2049: setting up a Practice is three question pages and a check
+	// page. Each is reached by its address with nothing typed, which is
+	// the state a person who follows a link to one of them meets.
 	{
 		key: 'signup',
-		archetype: 'A',
+		archetype: 'E',
 		url: '/signup',
-		h1: 'Sign up your Practice'
+		h1: 'About you'
+	},
+	{
+		key: 'signup/practice',
+		archetype: 'E',
+		url: '/signup/practice',
+		h1: /What is your Practice called\? \(optional\)$/
+	},
+	{
+		key: 'signup/where',
+		archetype: 'E',
+		url: '/signup/where',
+		h1: 'Where do you work?'
+	},
+	{
+		key: 'signup/check',
+		archetype: 'E',
+		url: '/signup/check',
+		h1: 'Check your answers'
 	},
 	{
 		key: 'accept-invite',
