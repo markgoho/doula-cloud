@@ -62,11 +62,12 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, client Client, enq 
 	// Practice. AttachingWrite closes that: an unattached contractor now
 	// 404s the same way she already does on a Contract write.
 	ir.Replayable("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/invoices", true, PostInvoiceHandler(client))
-	// Invoice history: Owner, Admin, and an employed Doula (ADR-0008's
-	// money row as amended by #282); GetInvoicesHandler refuses a
-	// contractor in-handler, so the mount stays AnyStaff. A contractor's
-	// own-fee narrowing (rather than an outright no) is #317's to build
-	// once the Offer/Attachment flow exists.
+	// Invoice history: Owner, Admin, and an employed Doula read it with its
+	// money (ADR-0008's money row as amended by #282). A contractor reads
+	// each Invoice's dates and status and no money, as a shape of its own,
+	// on an Engagement she holds a granted attachment on (#2094, ADR-0008's
+	// amendment of 2026-10-26). GetInvoicesHandler chooses the shape and
+	// checks her reach in-handler, so the mount stays AnyStaff.
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/contract/invoices", staffauth.AnyStaff, GetInvoicesHandler())
 	// The Practice-wide Invoice list (#265): every Invoice the Practice
 	// has billed, with the whole book's outstanding and paid totals, so

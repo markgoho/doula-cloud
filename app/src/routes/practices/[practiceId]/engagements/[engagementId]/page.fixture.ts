@@ -36,6 +36,7 @@
  * list, which no other session draws, so she is `asContractor` below.
  */
 import type { Contract } from '#lib/contract.js';
+import type { ContractorInvoice } from '#lib/invoice.js';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { EngagementOnCall } from '#lib/onCall.js';
 import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
@@ -424,13 +425,27 @@ export const asDoula: RouteVariant<RouteParameters> = {
 };
 
 /*
- * The contractor Doula's own reading (#2002). Since #2002 she is no
- * longer a strict subset of `asDoula`: her Invoices section is one
- * information line in place of the list, which no other session draws.
- * `props` for the same reason `asDoula` gives. `respond` is inherited:
- * the page no longer asks for the Invoice list for her, so the base's
- * answer to that path is never read.
+ * The contractor Doula's own reading (#2002, #2094). She is not a strict
+ * subset of `asDoula`: her Invoices section is a table of dates and
+ * status with no money, and an information line, which no other session
+ * draws. `props` for the same reason `asDoula` gives. Its own `respond`
+ * for the one path whose answer is hers alone, the rest the base's: one
+ * row of each state her rows draw differently -- an Invoice counted late
+ * (Overdue, with no Paid day), one paid (a Paid day), and one void.
  */
+export const contractorInvoices: ContractorInvoice[] = [
+	{ id: 'invoice-late', status: 'open', raisedOn: '2026-08-01', dueOn: '2026-08-31', daysOverdue: 12 },
+	{
+		id: 'invoice-paid',
+		status: 'paid',
+		raisedOn: '2026-07-01',
+		dueOn: '2026-07-31',
+		paidOn: '2026-07-20',
+		daysOverdue: 0
+	},
+	{ id: 'invoice-void', status: 'void', raisedOn: '2026-06-01', dueOn: '2026-07-01', daysOverdue: 0 }
+];
+
 export const asContractor: RouteVariant<RouteParameters> = {
 	name: 'The Staff-side Engagement detail hub, as a contractor Doula',
 	props: {
@@ -438,6 +453,10 @@ export const asContractor: RouteVariant<RouteParameters> = {
 			...detail,
 			session: { ...session, roles: ['doula'], isContractor: true }
 		}
+	},
+	respond: (path) => {
+		if (path.endsWith('/contract/invoices')) return jsonResponse({ items: contractorInvoices, hasMore: false });
+		return fixture.respond!(path);
 	}
 };
 

@@ -20,7 +20,10 @@
 	 *   Invoice raise asks which rail this Practice bills on, before either
 	 *   check below applies. There is no amount to ask alongside it any
 	 *   more (#947) -- the Invoice is raised for whatever the Contract
-	 *   itself carries.
+	 *   itself carries. Since #2106 the question is asked only when the
+	 *   first raise is: the section shows its facts and one Create Invoice
+	 *   that opens the question, never the question unasked (the record-page
+	 *   pattern, govuk-alignment.md, "Sections of a record page").
 	 * - On the Stripe rail only, once chosen: !clientsCanPay (a Practice
 	 *   Owner has to connect Stripe) or !hasClientEmail (Staff adds an
 	 *   email to the Client's record) -- #430's amendment: a by-hand
@@ -36,6 +39,8 @@
 		clientHasNoEmailMessage,
 		clientsCannotPayMessage,
 		contractorInvoicesMessage,
+		contractorInvoiceStatusLabel,
+		contractorInvoiceStatusVariant,
 		formatAmount,
 		invoiceCreatedMessage,
 		invoiceStatusLabel,
@@ -44,6 +49,7 @@
 		paymentMethodOptions,
 		unbillableContractMessage,
 		type BillingMode,
+		type ContractorInvoice,
 		type Invoice,
 		type PaymentMethod,
 		type RefundPaymentInput
@@ -73,7 +79,9 @@
 		hasClientEmail,
 		isOwner,
 		isOwnerOrAdmin,
-		canReadInvoices = true,
+		canReadInvoiceMoney = true,
+		contractorInvoices = [],
+		isAskingBillingMode = $bindable(false),
 		practiceTimezone,
 		paymentsSettingsHref,
 		onCreate,
@@ -101,11 +109,19 @@
 		/** Gates Record payment/Void/Write off/Reverse payment/Return money -- ADR-0008's
 		 * Contract-money write row, Owner and Admin only. */
 		isOwnerOrAdmin: boolean;
-		/** False for a contractor Doula (#2002): ADR-0008 gives her no
-		 * Invoice history and no Practice price, so the list is replaced by
-		 * one information line. Raising an Invoice stays hers (ADR-0008's
+		/** False for a contractor Doula (#2002, #2094): ADR-0008 gives her
+		 * each Invoice's date and status and never its money, so the
+		 * money-bearing `invoices` list is replaced by `contractorInvoices`
+		 * and one information line. Raising an Invoice stays hers (ADR-0008's
 		 * write table), so the Create Invoice branches below are unchanged. */
-		canReadInvoices?: boolean;
+		canReadInvoiceMoney?: boolean;
+		/** A contractor's rows (#2094), as the BFF sends her them: days and
+		 * status, no money. Read only when canReadInvoiceMoney is false. */
+		contractorInvoices?: ContractorInvoice[];
+		/** Whether the billing-mode question is open (#2106): it is on the
+		 * page only once Create Invoice has asked for it. Bindable, as
+		 * OfferSection's isFormOpen, so a demo can draw it open. */
+		isAskingBillingMode?: boolean;
 		paymentsSettingsHref: string;
 		onCreate: (billingMode?: BillingMode) => Promise<void>;
 		onRecordPayment: (
@@ -134,8 +150,19 @@
 	let billingModeError = $state('');
 	let isCreating = $state(false);
 	let createError = $state('');
-	// #2002: set once a create works for a reader with no list to show it in.
-	let hasCreatedUnseen = $state(false);
+	// Set once a create works (#2002); cleared when the next one starts.
+	let hasCreated = $state(false);
+	function openBillingModeQuestion() {
+		hasCreated = false;
+		isAskingBillingMode = true;
+	}
+
+	function closeBillingModeQuestion() {
+		isAskingBillingMode = false;
+		chosenBillingMode = undefined;
+		billingModeError = '';
+		createError = '';
+	}
 
 	const billingModeName = 'invoice-billing-mode';
 	// The first option's id, as the payment form's Method does: the summary
@@ -186,6 +213,7 @@
 		event.preventDefault();
 		createError = '';
 		billingModeError = '';
+		hasCreated = false;
 
 		if (billingMode === undefined && chosenBillingMode === undefined) {
 			billingModeError = 'Select how this Practice bills Clients';
@@ -199,7 +227,8 @@
 			} else {
 				await onCreate();
 			}
-			hasCreatedUnseen = !canReadInvoices;
+			isAskingBillingMode = false;
+			hasCreated = true;
 		} catch (error_) {
 			applyCreateRefusal(error_);
 		} finally {
@@ -509,6 +538,26 @@
 		}
 	];
 
+	/*
+	 * A contractor's Invoices (#2094): the day each was raised first, since
+	 * it titles each card at a narrow width and is what she checks before
+	 * she raises another, then where it stands, when it is due and when it
+	 * was paid. No column holds money, because her rows hold none.
+	 */
+	const contractorInvoiceColumns = [
+		{ label: 'Raised', accessor: (invoice: ContractorInvoice) => formatCalendarDay(invoice.raisedOn) },
+		{
+			label: 'Status',
+			accessor: (invoice: ContractorInvoice) => contractorInvoiceStatusLabel(invoice),
+			content: contractorInvoiceStatus
+		},
+		{ label: 'Payment due', accessor: (invoice: ContractorInvoice) => formatCalendarDay(invoice.dueOn) },
+		{
+			label: 'Paid',
+			accessor: (invoice: ContractorInvoice) => (invoice.paidOn ? formatCalendarDay(invoice.paidOn) : '')
+		}
+	];
+
 	function hasMoneyLeftToReturn(invoice: Invoice): boolean {
 		return invoice.amountCents > invoice.refundedCents;
 	}
@@ -546,6 +595,10 @@
 
 {#snippet invoiceStatus(invoice: Invoice)}
 	<Badge label={invoiceStatusLabel(invoice.status)} variant={invoiceStatusVariant(invoice.status)} />
+{/snippet}
+
+{#snippet contractorInvoiceStatus(invoice: ContractorInvoice)}
+	<Badge label={contractorInvoiceStatusLabel(invoice)} variant={contractorInvoiceStatusVariant(invoice)} />
 {/snippet}
 
 <!--
@@ -625,11 +678,18 @@
 	{/if}
 {/snippet}
 
-{#if !canReadInvoices}
+{#if hasCreated}
+	<Notice variant="status" message={invoiceCreatedMessage} isFocusedOnAppear />
+{/if}
+
+{#if !canReadInvoiceMoney}
+	<!--
+		#2094: her rows, dates and status only, so she can see what has
+		already been billed before she raises another. No row actions: every
+		act on an Invoice is an Owner's or an Admin's.
+	-->
+	<DataTable columns={contractorInvoiceColumns} rows={contractorInvoices} emptyMessage="No Invoices yet." />
 	<Notice variant="info" message={contractorInvoicesMessage} />
-	{#if hasCreatedUnseen}
-		<Notice variant="status" message={invoiceCreatedMessage} isFocusedOnAppear />
-	{/if}
 {:else}
 	<!--
 		#2059: one row per Invoice, its status a Badge and its actions the
@@ -778,8 +838,13 @@
 
 {#if !isBillable}
 	<Notice variant="info" message={unbillableContractMessage(contractStatus)} />
+{:else if billingMode === undefined && !isAskingBillingMode}
+	<!-- #2106: the first raise is where the billing mode is asked (#271), so
+	     the question waits for this press rather than standing on the page. -->
+	<div><Button label="Create Invoice" variant="secondary" onClick={openBillingModeQuestion} /></div>
 {:else if billingMode === undefined}
 	<StackedForm onSubmit={handleCreate}>
+		<Heading level={3} text="Create an Invoice" focusOnAppearing />
 		{#if createFormErrors.length > 0}
 			<ErrorSummary errors={createFormErrors} />
 		{/if}
@@ -793,6 +858,7 @@
 			error={billingModeError || undefined}
 		/>
 		<Button label="Create Invoice" type="submit" loading={isCreating} />
+		<Button label="Cancel" variant="secondary" onClick={closeBillingModeQuestion} />
 	</StackedForm>
 {:else if billingMode === 'stripe' && !clientsCanPay}
 	<Notice variant="info" message={clientsCannotPayMessage} />

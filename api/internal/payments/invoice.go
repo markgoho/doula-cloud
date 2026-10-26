@@ -11,6 +11,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/personname"
@@ -95,6 +96,58 @@ type InvoiceView struct {
 	// (00115_payment_refund.sql), so this field is the only thing that
 	// answers "is this Client owed money back".
 	RefundedCents int64 `json:"refundedCents"`
+	// dueAt is the stored due instant behind DueOn, kept off the wire
+	// (unexported) so contractorInvoiceRows can judge lateness with
+	// daysOverdue, the one rule the Practice-wide list uses (#2094).
+	dueAt time.Time
+}
+
+// ContractorInvoiceView is one Invoice as a contractor Doula reads it on an
+// Engagement she holds a granted attachment on (#2094, ADR-0008's
+// amendment of 2026-10-26): when it was raised, when it falls due, when it
+// was paid, and where it stands. It is a separate struct from InvoiceView,
+// not InvoiceView with its money left empty, so no amount, currency,
+// Payment or Refund can reach her by a field someone forgets to blank.
+// Its money is the Practice's price, and she reads only her own fee.
+type ContractorInvoiceView struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
+	// RaisedOn is the day the Invoice was raised, YYYY-MM-DD in the
+	// Practice's zone: the date a contractor checks before she raises
+	// another, so she does not bill a Client twice.
+	RaisedOn string  `json:"raisedOn"`
+	DueOn    string  `json:"dueOn"`
+	PaidOn   *string `json:"paidOn,omitempty"`
+	// DaysOverdue is counted as the Practice-wide list counts it
+	// (daysOverdue): 0 unless the Invoice is open and past its due day.
+	// The screen reads Overdue from it and never judges lateness itself.
+	DaysOverdue int `json:"daysOverdue"`
+}
+
+// ContractorInvoicesResponse is GetInvoicesHandler's 200 for a contractor
+// Doula (#2094): the same cursor envelope as ListInvoicesResponse, holding
+// ContractorInvoiceView rows.
+type ContractorInvoicesResponse struct {
+	Items      []ContractorInvoiceView `json:"items"`
+	NextCursor *string                 `json:"nextCursor,omitempty"`
+	HasMore    bool                    `json:"hasMore"`
+}
+
+// contractorInvoiceRows is items with every money field left behind:
+// each row is built field by field from what ContractorInvoiceView holds.
+func contractorInvoiceRows(items []InvoiceView, now time.Time, zone *time.Location) []ContractorInvoiceView {
+	rows := make([]ContractorInvoiceView, 0, len(items))
+	for _, it := range items {
+		rows = append(rows, ContractorInvoiceView{
+			ID:          it.ID,
+			Status:      it.Status,
+			RaisedOn:    practiceDay(it.CreatedAt, zone),
+			DueOn:       it.DueOn,
+			PaidOn:      it.PaidOn,
+			DaysOverdue: daysOverdue(it.Status, it.dueAt, now, zone),
+		})
+	}
+	return rows
 }
 
 // CreateInvoiceRequest is the body of a POST to PostInvoiceHandler.
@@ -434,15 +487,25 @@ func createStripeInvoice(ctx context.Context, tx *sql.Tx, client Client, practic
 // :engagementId's Contract(s), newest first, cursor-paginated -- by
 // Engagement rather than "the current Contract row" alone, so an
 // Invoice's billing history survives a Contract Void-then-recreate
-// (#72): a superseded, voided Contract's Invoices stay visible. Who may
-// read it: Owner, Admin, and an employed Doula (ADR-0008's money row as
-// amended by #282); RequireNotAmbientContractor refuses a contractor
-// regardless of any attachment she holds, since her own fee is never
-// this route. Must be mounted behind staffauth.Middleware.
+// (#72): a superseded, voided Contract's Invoices stay visible. Who
+// reads what: an Owner, an Admin and an employed Doula read every Invoice
+// with its money (ADR-0008's money row as amended by #282). A contractor
+// Doula reads the same rows as ContractorInvoicesResponse, dates and
+// status with no money at all (#2094, ADR-0008's amendment of
+// 2026-10-26), and only on an Engagement she holds a granted attachment
+// on; any other Engagement is not found for her. Must be mounted behind
+// staffauth.Middleware.
 func GetInvoicesHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireNotAmbientContractor(w, r)
+		tx, practiceID, ok := staffauth.RequireTx(w, r)
+		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 		if !ok {
+			return
+		}
+		reader, has := staffauth.ReaderFrom(r.Context())
+		if !has {
+			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		engagementID := r.PathValue("engagementId")
@@ -456,6 +519,16 @@ func GetInvoicesHandler() http.Handler {
 			}
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if !canAccess {
+			apierr.WriteError(w, "Engagement not found", http.StatusNotFound)
 			return
 		}
 
@@ -483,12 +556,20 @@ func GetInvoicesHandler() http.Handler {
 			return
 		}
 
-		resp := ListInvoicesResponse{Items: items, HasMore: hasMore}
+		var nextCursor *string
 		if hasMore {
 			next := encodeInvoiceCursor(items[len(items)-1].CreatedAt, items[len(items)-1].ID)
-			resp.NextCursor = &next
+			nextCursor = &next
 		}
-		apierr.WriteJSON(w, http.StatusOK, resp)
+		if reader.IsAmbientContractor() {
+			apierr.WriteJSON(w, http.StatusOK, ContractorInvoicesResponse{
+				Items:      contractorInvoiceRows(items, clock.Now(r.Context()), zone),
+				NextCursor: nextCursor,
+				HasMore:    hasMore,
+			})
+			return
+		}
+		apierr.WriteJSON(w, http.StatusOK, ListInvoicesResponse{Items: items, NextCursor: nextCursor, HasMore: hasMore})
 	})
 }
 
@@ -797,6 +878,7 @@ func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *i
 		}
 		it.PaidOn = invoicePaidOn(paidAt, activePaymentKind.String == paymentKindManual, zone)
 		it.DueOn = practiceDay(dueAt, zone)
+		it.dueAt = dueAt
 		if activePaymentID.Valid {
 			it.ActivePaymentID = &activePaymentID.String
 			it.ActivePaymentKind = activePaymentKind.String
