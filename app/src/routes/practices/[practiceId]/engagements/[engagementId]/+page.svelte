@@ -2531,7 +2531,7 @@
 <!-- #1611, #1710: a save that leads here says what it did, such as
      "Work with Pat started." at the end of a new Client's flow. -->
 <RecordDetail
-	title={detail.clientName}
+	title={detail.clientDisplayName}
 	{outcome}
 	backHref={clientsHref}
 	backLabel="Clients"

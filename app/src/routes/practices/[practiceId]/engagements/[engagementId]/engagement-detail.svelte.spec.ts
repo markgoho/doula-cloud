@@ -56,6 +56,7 @@ interface Detail {
 	engagementId: string;
 	clientId: string;
 	clientName: string;
+	clientDisplayName: string;
 	status: string;
 	createdAt: string;
 	kind: string;
@@ -240,6 +241,16 @@ async function openChange(changes: string) {
 describe('Staff Engagement detail summary', () => {
 	beforeEach(() => {
 		apiFetchWithSession.mockReset();
+	});
+
+	// #2004: her full name, the title her own Client record carries, not
+	// the first name the page's sentences use.
+	it("titles the page with the Client's full name", async () => {
+		await setup(fixtureDetail);
+
+		await expect
+			.element(testPage.getByRole('heading', { level: 1, name: fixtureDetail.clientDisplayName }))
+			.toBeVisible();
 	});
 
 	// #1998: the drawing's summary card -- Care, Due, Care phase, Doula --
@@ -1464,7 +1475,7 @@ describe("the link to the Client's details journey (#1610)", () => {
 		await renderWithFixtureResponder();
 
 		await expect
-			.element(testPage.getByRole('link', { name: `Add ${fixtureDetail.clientName}'s details` }))
+			.element(testPage.getByRole('link', { name: `Add ${fixtureDetail.clientDisplayName}'s details` }))
 			.toHaveAttribute(
 				'href',
 				`/practices/${fixture.params.practiceId}/clients/${fixtureDetail.clientId}/details?engagement=${fixture.params.engagementId}`

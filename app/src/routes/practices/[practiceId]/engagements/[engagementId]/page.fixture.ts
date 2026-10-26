@@ -187,7 +187,11 @@ export const onCallPanel: EngagementOnCall = {
 export const detail = {
 	engagementId: 'engagement-1',
 	clientId: 'client-1',
-	clientName,
+	// #2004: the conversation name the page's sentences use, and the
+	// title, her record's own: she has no preferred name, so given and
+	// family names together.
+	clientName: clientRecord.givenName,
+	clientDisplayName: clientName,
 	status: 'active',
 	createdAt: '2026-08-01T00:00:00Z',
 	// #874: what the Practice sold. 'birth' agrees with the recorded birth
@@ -461,7 +465,8 @@ const typicalClientName = TYPICAL_CLIENTS[0]!.name;
 const typicalDoula = nth(TYPICAL_DOULAS, 2);
 const typicalDetail = {
 	...detail,
-	clientName: typicalClientName,
+	clientName: TYPICAL_CLIENTS[0]!.givenName,
+	clientDisplayName: typicalClientName,
 	doulas: [{ staffId: typicalDoula.staffId, name: typicalDoula.name }]
 };
 const typicalRoster = TYPICAL_STAFF.map((member) => ({

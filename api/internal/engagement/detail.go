@@ -27,11 +27,15 @@ import (
 // status, when it was created, and when it's due -- the landing point
 // later features (Visits, Plans, Contracts, Messages) attach to.
 type Detail struct {
-	EngagementID string    `json:"engagementId"`
-	ClientID     string    `json:"clientId"`
-	ClientName   string    `json:"clientName"`
-	Status       string    `json:"status"`
-	CreatedAt    time.Time `json:"createdAt"`
+	EngagementID string `json:"engagementId"`
+	ClientID     string `json:"clientId"`
+	ClientName   string `json:"clientName"`
+	// ClientDisplayName is the page's title (#2004): personname.Display,
+	// the words her own Client record is titled with. ClientName stays the
+	// conversation name the page's sentences use.
+	ClientDisplayName string    `json:"clientDisplayName"`
+	Status            string    `json:"status"`
+	CreatedAt         time.Time `json:"createdAt"`
 	// Kind is ADR-0015's own fact (#874's write side): what the Practice
 	// sold, "birth" or "postpartum". Staff-only, per kind.go's own
 	// package comment -- portal.Detail never carries this column, only
@@ -169,16 +173,16 @@ func DetailHandler() http.Handler {
 
 		var d Detail
 		var givenName string
-		var preferredName sql.NullString
+		var familyName, preferredName sql.NullString
 		var dueDate sql.NullString
 		err = tx.QueryRowContext(r.Context(),
-			`SELECT e.id, c.id, c.given_name, c.preferred_name, e.status, e.created_at, e.due_date::text,
+			`SELECT e.id, c.id, c.given_name, c.family_name, c.preferred_name, e.status, e.created_at, e.due_date::text,
 			        e.kind::text, e.birth_outcome::text, e.pregnancy_ended_on::text
 			 FROM engagements e
 			 JOIN clients c ON c.id = e.client_id
 			 WHERE e.id = $1 AND e.practice_id = $2`,
 			engagementID, practiceID,
-		).Scan(&d.EngagementID, &d.ClientID, &givenName, &preferredName, &d.Status, &d.CreatedAt, &dueDate,
+		).Scan(&d.EngagementID, &d.ClientID, &givenName, &familyName, &preferredName, &d.Status, &d.CreatedAt, &dueDate,
 			&d.Kind, &d.BirthOutcome, &d.PregnancyEndedOn)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
@@ -190,6 +194,7 @@ func DetailHandler() http.Handler {
 			return
 		}
 		d.ClientName = personname.Preferred(givenName, preferredName.String)
+		d.ClientDisplayName = personname.Display(givenName, familyName.String, preferredName.String)
 		if dueDate.Valid {
 			d.DueDate = &dueDate.String
 		}

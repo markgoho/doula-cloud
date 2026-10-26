@@ -33,6 +33,27 @@ func TestLegal(t *testing.T) {
 	}
 }
 
+func TestDisplay(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		given        string
+		family       string
+		preferred    string
+		want         string
+		whyItMatters string
+	}{
+		{"she has a preferred name", clientGiven, "Okafor", "Greta", "Greta", "the name she is called titles her record"},
+		{"she has a family name and no preferred name", clientGiven, "Okafor", "", clientGiven + " Okafor", "a first name alone does not say whose record it is"},
+		{"she has neither", clientGiven, "", "", clientGiven, "given_name is the one column that is never empty"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := personname.Display(tc.given, tc.family, tc.preferred); got != tc.want {
+				t.Errorf("Display(%q, %q, %q) = %q, want %q -- %s", tc.given, tc.family, tc.preferred, got, tc.want, tc.whyItMatters)
+			}
+		})
+	}
+}
+
 func TestPreferred(t *testing.T) {
 	for _, tc := range []struct {
 		name         string
