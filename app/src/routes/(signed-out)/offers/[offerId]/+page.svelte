@@ -23,7 +23,6 @@
 	} from '#lib/offer.js';
 	import { FormSubmission, orThrownMessage, type FormError } from '#lib/formSubmission.svelte.js';
 	import Text from '#lib/components/atoms/Text.svelte';
-	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
@@ -32,7 +31,9 @@
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
+	import UnusableLink from '#lib/components/molecules/UnusableLink.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
+	import { LINK_NOT_COMPLETE } from '#lib/formErrors.js';
 
 	const codeId = 'offer-access-code';
 	const CODE_PATTERN = /^\d{6}$/;
@@ -154,7 +155,8 @@
 
 {#snippet content()}
 	{#if !token}
-		<Notice message="This link is missing its token. Open the offer from the email you were sent." variant="error" />
+		<!-- #2025: the offer is in the Practice's hands, so the way on is to ask it again. -->
+		<UnusableLink message={LINK_NOT_COMPLETE} next={{ text: 'Ask the practice to send the offer again.' }} />
 	{:else if !offer}
 		<Text text="Enter the six-digit code from the email to open this offer." tone="variant" />
 		<StackedForm onSubmit={handleOpen}>

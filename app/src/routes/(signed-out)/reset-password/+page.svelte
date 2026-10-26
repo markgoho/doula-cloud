@@ -3,7 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { pushState } from '$app/navigation';
 	import { apiBaseURL } from '#lib/api.js';
-	import { refusalErrors } from '#lib/formErrors.js';
+	import { LINK_EXPIRED_OR_USED, refusalErrors } from '#lib/formErrors.js';
 	import {
 		PASSWORD_HINT,
 		PASSWORD_RULES,
@@ -19,6 +19,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
+	import UnusableLink from '#lib/components/molecules/UnusableLink.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 
 	// Read once, as the screen mounts. A load with no token (a bare
@@ -97,8 +98,10 @@
 		/>
 		<Link href={resolve('/(signed-out)/login')} label="Continue to log in" />
 	{:else if !token}
-		<Notice variant="error" message="This link has expired or was already used." />
-		<Link href={resolve('/(signed-out)/forgot-password')} label="Ask for a new link" />
+		<UnusableLink
+			message={LINK_EXPIRED_OR_USED}
+			next={{ label: 'Ask for a new link', href: resolve('/(signed-out)/forgot-password') }}
+		/>
 	{:else}
 		<StackedForm onSubmit={handleSubmit}>
 			{#if accountEmail}

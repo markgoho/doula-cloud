@@ -115,6 +115,29 @@ export async function parseRefusal(
 }
 
 /*
+ * Whether the BFF refused an emailed link itself (#2025): it has expired,
+ * it was used already, or it names nothing. The link endpoints a screen
+ * spends one on say so with 400 (`verify-email`, the sign-in link, the
+ * sign-in address link), 404 or 410 (the portal invite). A screen that
+ * gets one shows `UnusableLink`, with a next step, rather than a refusal
+ * summary above a Continue button that can only be refused again.
+ * Everything else -- a 409 the screen answers on its own, a 5xx -- is not
+ * the link's fault, and a second press may still work.
+ */
+export function isUnusableLink(response: Response): boolean {
+	return [400, 404, 410].includes(response.status);
+}
+
+/*
+ * The two things `UnusableLink` says is wrong, once each so every link
+ * screen says them the same way (#2025). A link with no code in it was cut
+ * short when it was copied; a refused one has run out or was spent, and
+ * the BFF does not say which, so neither does this.
+ */
+export const LINK_NOT_COMPLETE = 'This link is not complete.';
+export const LINK_EXPIRED_OR_USED = 'This link has expired or was already used.';
+
+/*
  * Reads a refused response into one message.
  *
  * A 4xx is the server saying something true about *this* submission --

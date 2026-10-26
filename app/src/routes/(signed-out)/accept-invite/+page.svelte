@@ -29,7 +29,7 @@
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiBaseURL, apiFetch, apiFetchWithSession } from '#lib/api.js';
-	import { authRefusal, refusalErrors, refusalOrConfirmable } from '#lib/formErrors.js';
+	import { authRefusal, LINK_NOT_COMPLETE, refusalErrors, refusalOrConfirmable } from '#lib/formErrors.js';
 	import {
 		PASSWORD_HINT,
 		PASSWORD_RULES,
@@ -40,7 +40,6 @@
 	import { decideLanding, type Membership, type SessionInfo } from '#lib/landing.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
-	import Notice from '#lib/components/atoms/Notice.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
@@ -51,6 +50,7 @@
 	import RadioGroup, { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
+	import UnusableLink from '#lib/components/molecules/UnusableLink.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 	import { workStateCode, workStateName, workStateReportedOn } from '#lib/workStates.js';
 	import { privacyPolicyUrl } from '#lib/legal.js';
@@ -366,7 +366,8 @@
 
 {#snippet content()}
 	{#if !inviteToken}
-		<Notice variant="error" message="Missing invite token" />
+		<!-- #2025: only the Practice can send another invite. -->
+		<UnusableLink message={LINK_NOT_COMPLETE} next={{ text: 'Ask the practice to send the invite again.' }} />
 	{:else if step === 'identify'}
 		<!--
 			Step one asks only what tells us who she is. Nothing about her name

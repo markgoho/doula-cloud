@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
@@ -56,6 +58,13 @@ func AcceptInviteHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 		req.InviteToken = strings.TrimSpace(req.InviteToken)
 		if req.InviteToken == "" {
 			apierr.WriteError(w, "inviteToken is required", http.StatusBadRequest)
+			return
+		}
+		// #2025: a link cut short carries part of a token, which names no
+		// invite -- the same refusal as an unknown one, rather than a 500
+		// when Postgres will not read it as the uuid column it is matched to.
+		if _, err := uuid.Parse(req.InviteToken); err != nil {
+			apierr.WriteError(w, "invite not found or already accepted", http.StatusNotFound)
 			return
 		}
 

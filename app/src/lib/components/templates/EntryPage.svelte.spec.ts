@@ -60,6 +60,27 @@ describe('EntryPage.svelte', () => {
 		expect(summary.compareDocumentPosition(content) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 	});
 
+	// #2025: the one line that says where the person is, between the title
+	// and whatever the route asks for next.
+	it('renders the lede under the title and above the content', async () => {
+		await setup({ lede: 'For clients of a doula practice.' });
+
+		const title = page.getByRole('heading', { level: 1, name: 'Log in' }).element();
+		const lede = page.getByText('For clients of a doula practice.').element();
+		const content = page.getByText('The credentials form').element();
+
+		expect(title.compareDocumentPosition(lede) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(lede.compareDocumentPosition(content) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
+	it('renders no lede when none is passed', async () => {
+		const { container } = await setup();
+
+		// A fact about the document (svelte-tests.md, case 3): the only
+		// paragraph is the content's own.
+		expect(container.querySelectorAll('p')).toHaveLength(1);
+	});
+
 	// Top-aligned in a --form-max column, not centered in the viewport (see
 	// the Template's own comment for the reasoning) -- the same token and
 	// gutter FormPage already spends on a form.

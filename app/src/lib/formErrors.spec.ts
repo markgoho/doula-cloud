@@ -4,6 +4,7 @@ import {
 	emailFormatError,
 	errorsFromCause,
 	isMultiFactorAuthRequired,
+	isUnusableLink,
 	isUnverifiedEmail,
 	passwordReauthRefusal,
 	RefusalError,
@@ -227,6 +228,18 @@ describe('isUnverifiedEmail', () => {
 
 	it.each([[undefined], ['a string'], [{ code: 'auth/wrong-password' }]])('reads %s as anything else', (cause) => {
 		expect(isUnverifiedEmail(cause)).toBe(false);
+	});
+});
+
+describe('isUnusableLink', () => {
+	it.each([[400], [404], [410]])('reads a %i as a link that cannot be used', (status) => {
+		expect(isUnusableLink(jsonResponse('this link is invalid or has expired', status))).toBe(true);
+	});
+
+	// A 409 is a question the screen answers (#610's sign-out warning), and
+	// a 5xx is ours: neither says the link is spent.
+	it.each([[409], [500]])('reads a %i as not the link', (status) => {
+		expect(isUnusableLink(jsonResponse('not the link', status))).toBe(false);
 	});
 });
 

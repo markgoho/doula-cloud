@@ -418,6 +418,9 @@
 			-->
 			<Link href={resolve('/(signed-out)/recovery-code')} label="Use a recovery code" />
 		</cluster-l>
+		<!-- #2025: the other door, named as the signed-out landing names it. A
+		     group of its own: it is not another way into this account. -->
+		<Link href={resolve('/portal/(signed-out)/login')} label="Client portal log in" />
 	{:else if step === 'confirm-sign-out'}
 		<!--
 			#610: the warning goes on the button that acts, not on a screen
@@ -459,4 +462,10 @@
 	{/if}
 {/snippet}
 
-<EntryPage title="Log in" errorSummary={submission.errors.length > 0 ? errorSummary : undefined} {content} />
+<!-- #2025: both doors say "Log in", so the lede says which one this is, in the landing door's own words. -->
+<EntryPage
+	title="Log in"
+	lede="For doulas and practice owners."
+	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
+	{content}
+/>

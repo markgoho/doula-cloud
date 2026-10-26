@@ -2,6 +2,7 @@ import { page as testPage } from 'vitest/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { expectOneFramedHeading } from '#lib/components/templates/pageFrame.testing.js';
+import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../routeFixture.js';
 import { fixture } from './page.fixture.js';
@@ -72,8 +73,27 @@ describe('verifying an email address', () => {
 	it('reports a link with no code in words, without an error title', async () => {
 		await setup();
 
-		await expect.element(testPage.getByRole('alert')).toHaveTextContent('This link is missing its verification code.');
+		await expect.element(testPage.getByRole('alert')).toHaveTextContent('This link is not complete.');
 		await expectOneFramedHeading(fixture.readyText);
+		expect(document.title.startsWith('Error:')).toBe(false);
+	});
+
+	// #2025: a used or expired link is the link's fault, not the service's,
+	// so the screen says so in its own words and offers the way to a new
+	// one: a signed-in person asks again from the account screen.
+	it('offers the way to a new link when the link has expired or was used', async () => {
+		await setup({
+			token: 'token-1',
+			respond: () =>
+				Promise.resolve(
+					jsonResponse({ code: 'INVALID_ARGUMENT', message: 'this link is invalid or has expired -- ask for a new one' }, 400)
+				)
+		});
+
+		await expect.element(testPage.getByRole('alert')).toHaveTextContent('This link has expired or was already used.');
+		await expect
+			.element(testPage.getByRole('link', { name: 'Log in to get a new link' }))
+			.toHaveAttribute('href', '/login');
 		expect(document.title.startsWith('Error:')).toBe(false);
 	});
 });

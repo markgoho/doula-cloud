@@ -4,7 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../routeFixture.js';
-import { fixture } from './page.fixture.js';
+import { fixture, linkNotComplete } from './page.fixture.js';
 
 /*
  * #610 on the invitation: ADR-0026 makes it the first magic link, so
@@ -137,5 +137,44 @@ describe('Accepting a portal invitation over a live Staff session (#610)', () =>
 		expect(testPage.getByRole('button', { name: 'Continue and sign out' }).elements()).toHaveLength(
 			0
 		);
+	});
+});
+
+/*
+ * #2025: the line under the heading says what Continue does, and a link
+ * that cannot be used ends on the one next step rather than on a refusal
+ * above a Continue that can only be refused again.
+ */
+describe('Where an invitation link leads (#2025)', () => {
+	afterEach(() => {
+		Object.assign(pageState, toPageState(fixture));
+	});
+
+	it('says what the invitation is for under the heading', async () => {
+		await render(Page, {});
+
+		await expect.element(testPage.getByText('Your doula invited you to see your care online.')).toBeVisible();
+	});
+
+	it('ends on the next step when the invitation has expired or was accepted already', async () => {
+		vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ message: 'invite not found or already accepted' }, 404)));
+
+		await render(Page, {});
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+
+		await expect.element(testPage.getByRole('alert')).toHaveTextContent('This link has expired or was already used.');
+		await expect.element(testPage.getByText('Ask your doula to send the invite again.')).toBeVisible();
+		expect(testPage.getByRole('button', { name: 'Continue' }).elements()).toHaveLength(0);
+		expect(testPage.getByText('Your doula invited you to see your care online.').elements()).toHaveLength(0);
+	});
+
+	it('ends on the next step when the link is not complete', async () => {
+		Object.assign(pageState, toPageState({ ...fixture, ...linkNotComplete }));
+
+		await render(Page, {});
+
+		await expect.element(testPage.getByRole('alert')).toHaveTextContent('This link is not complete.');
+		await expect.element(testPage.getByText('Ask your doula to send the invite again.')).toBeVisible();
+		expect(testPage.getByRole('button', { name: 'Continue' }).elements()).toHaveLength(0);
 	});
 });

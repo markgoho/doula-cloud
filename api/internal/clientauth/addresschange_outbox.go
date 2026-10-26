@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 	"time"
 
 	"doula-cloud/api/internal/outbox"
@@ -58,7 +59,7 @@ func composeAddressChange(mailer outbox.Mailer) func(context.Context, *sql.Tx, a
 			// coverage:ignore reason: every row this package queues carries a token; unreachable without writing to the table outside queueAddressChangeMail
 			return "", "", "", &outbox.DeadLetterError{Reason: "outbox row carries no token"}
 		}
-		subject, text := addressChangeCopy(mailer.AppBaseURL, r.token.String)
+		subject, text := addressChangeCopy(mailer.AppBaseURL, r.token.String, r.toAddress)
 		return r.toAddress, subject, text, nil
 	}
 }
@@ -67,8 +68,13 @@ func composeAddressChange(mailer outbox.Mailer) func(context.Context, *sql.Tx, a
 // (ADR-0009): no Client name, no Practice name, no old address -- this
 // mail may be arriving in a mailbox belonging to somebody who never
 // asked for it, and it must tell that person nothing.
-func addressChangeCopy(appBaseURL, token string) (subject, text string) {
-	link := appBaseURL + "/portal/confirm-sign-in-address?token=" + token
+//
+// The link carries toAddress, the mailbox's own address (#2025), so the
+// confirm screen can name the address being confirmed. That tells the
+// mailbox's owner nothing new; the old address is still never named. It
+// rides in the fragment, as the password reset link's does (#1827).
+func addressChangeCopy(appBaseURL, token, toAddress string) (subject, text string) {
+	link := appBaseURL + "/portal/confirm-sign-in-address?token=" + token + "#email=" + url.QueryEscape(toAddress)
 	return "Confirm your DoulaCloud sign-in address", "Hello,\n\n" +
 		"Someone asked to use this address to sign in to DoulaCloud. Confirm it here:\n\n" +
 		link + "\n\n" +

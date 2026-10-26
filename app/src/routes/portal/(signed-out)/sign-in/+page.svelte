@@ -3,16 +3,28 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
-	import { refusalErrors, refusalOrConfirmable } from '#lib/formErrors.js';
+	import {
+		isUnusableLink,
+		LINK_EXPIRED_OR_USED,
+		LINK_NOT_COMPLETE,
+		refusalErrors,
+		refusalOrConfirmable
+	} from '#lib/formErrors.js';
 	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
 	import { decidePortalLanding, type PortalSessionInfo } from '#lib/portalLanding.js';
 	import Button from '#lib/components/atoms/Button.svelte';
-	import Notice from '#lib/components/atoms/Notice.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
+	import UnusableLink from '#lib/components/molecules/UnusableLink.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 
 	const token = page.url.searchParams.get('token') ?? '';
+	// #2025: the address the link was mailed to, so the screen can say who
+	// is signing in. In the fragment, which no browser sends to a server,
+	// the way `reset-password` carries its own (#1813, #1827). A label
+	// only: the token alone names the account to the BFF.
+	const signInAddress = new URLSearchParams(page.url.hash.slice(1)).get('email') ?? '';
+	const lede = signInAddress ? `You are signing in as ${signInAddress}.` : 'Continue to see your care.';
 
 	const submission = new FormSubmission();
 
@@ -25,6 +37,10 @@
 	 * until the BFF says otherwise.
 	 */
 	let signOutWarning = $state<string | undefined>();
+
+	// #2025: the BFF refused the link itself -- expired, or used already --
+	// so Continue can only be refused again.
+	let isLinkUnusable = $state(false);
 
 	// #617, ADR-0026: the token is spent on this POST, never on the GET
 	// that rendered this page -- a mail client or a security scanner
@@ -51,6 +67,10 @@
 				},
 				body: JSON.stringify({ token })
 			});
+			if (isUnusableLink(response)) {
+				isLinkUnusable = true;
+				return;
+			}
 			if (!response.ok) {
 				const refusal = await refusalOrConfirmable(response);
 				if (refusal.kind === 'confirmable') {
@@ -87,8 +107,11 @@
 {/snippet}
 
 {#snippet content()}
-	{#if !token}
-		<Notice variant="error" message="This link is missing its sign-in code." />
+	{#if !token || isLinkUnusable}
+		<UnusableLink
+			message={token ? LINK_EXPIRED_OR_USED : LINK_NOT_COMPLETE}
+			next={{ label: 'Ask for a new sign-in link', href: resolve('/portal/(signed-out)/login') }}
+		/>
 	{:else}
 		<!--
 			#610: the warning goes on the Continue button, not on a screen of
@@ -109,4 +132,9 @@
 	{/if}
 {/snippet}
 
-<EntryPage title="Sign in" errorSummary={submission.errors.length > 0 ? errorSummary : undefined} {content} />
+<EntryPage
+	title="Sign in"
+	lede={token && !isLinkUnusable ? lede : undefined}
+	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
+	{content}
+/>

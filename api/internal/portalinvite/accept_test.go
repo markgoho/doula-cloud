@@ -74,6 +74,22 @@ func TestAcceptInviteHandler_UnknownToken(t *testing.T) {
 	}
 }
 
+// #2025: a link cut short when it was copied carries part of a token.
+// That is an invite nobody holds, the same 404 as an unknown one, not a
+// 500 from Postgres refusing to read it as a uuid.
+func TestAcceptInviteHandler_TokenThatIsNotAUUID(t *testing.T) {
+	db := testdb.New(t)
+	srv := newAcceptServer(db)
+	defer srv.Close()
+
+	resp := postAccept(t, srv, portalinvite.AcceptInviteRequest{InviteToken: "00000000-0000-00"})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
 // TestAcceptInviteHandler_ExpiredInvite proves #616's AC: an invitation
 // past its invite_token_expires_at is refused with 410, and the pending
 // row is left untouched (the doula re-sends rather than this handler

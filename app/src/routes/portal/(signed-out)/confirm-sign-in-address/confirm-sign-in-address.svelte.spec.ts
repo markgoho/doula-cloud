@@ -1,6 +1,7 @@
 import { page } from 'vitest/browser';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 import { fixture } from './page.fixture.js';
 
@@ -71,7 +72,45 @@ describe('confirming a changed Client sign-in address', () => {
 	it('says so when the link carries no token at all', async () => {
 		await setup({ url: 'https://example.test/portal/confirm-sign-in-address' });
 
-		await expect.element(page.getByText(/missing its confirmation code/)).toBeVisible();
+		await expect.element(page.getByRole('alert')).toHaveTextContent('This link is not complete.');
+		await expect
+			.element(page.getByRole('link', { name: 'Sign in to ask for a new link' }))
+			.toHaveAttribute('href', '/portal/(signed-out)/login');
+		expect(continueButton().elements()).toHaveLength(0);
+	});
+
+	// #2025: the address the link was mailed to, from the fragment, so the
+	// screen says which address is being confirmed.
+	it('names the new address in the line under the heading', async () => {
+		await setup();
+
+		await expect
+			.element(
+				page.getByText(
+					'Confirm that you want to sign in with anne-marie.ochieng-whitfield+new-address@highland-midwifery-group.example.org from now on.'
+				)
+			)
+			.toBeVisible();
+	});
+
+	it('falls back to a plain line when the link carries no address', async () => {
+		await setup({ url: 'https://example.test/portal/confirm-sign-in-address?token=address-change-token-1' });
+
+		await expect
+			.element(page.getByText('Confirm that you want to use this address to sign in to DoulaCloud.'))
+			.toBeVisible();
+	});
+
+	// #2025: a used or expired link cannot be pressed through, so Continue
+	// gives way to the next step.
+	it('offers the way to a new link when the link has expired or was used', async () => {
+		await setup({ spend: jsonResponse({ code: 'INVALID_ARGUMENT', message: 'this link is invalid or has expired' }, 400) });
+
+		await continueButton().click();
+
+		await expect.element(page.getByRole('alert')).toHaveTextContent('This link has expired or was already used.');
+		await expect.element(page.getByRole('link', { name: 'Sign in to ask for a new link' })).toBeVisible();
+		expect(continueButton().elements()).toHaveLength(0);
 	});
 
 	// The one collision the request endpoint deliberately does not
