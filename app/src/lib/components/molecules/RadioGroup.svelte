@@ -27,7 +27,13 @@
 		 * history and what picking her will do belong to the option, not to
 		 * the group, so a `label` string could not carry them.
 		 */
-		description?: string;
+		/*
+		 * Several lines when the history and the consequence are two
+		 * separate things to read (#2143): each starts on its own line,
+		 * and together they are still the one hint the radio is described
+		 * by.
+		 */
+		description?: string | readonly string[];
 		/*
 		 * GOV.UK's conditional reveal (#2043, #2035): what this answer asks
 		 * next, drawn under the option only while it is the chosen one. The
@@ -127,7 +133,8 @@
 					<span class="text">{option.label}</span>
 				</label>
 				{#if option.description}
-					<p id="{name}-{option.value}-hint" class="description">{option.description}</p>
+					<!-- One line, so no whitespace lands in the hint's text. -->
+					<p id="{name}-{option.value}-hint" class="description">{#if typeof option.description === 'string'}{option.description}{:else}{#each option.description as line, index (index)}<span class="line">{line}</span>{/each}{/if}</p>
 				{/if}
 			</div>
 			<!--
@@ -339,6 +346,10 @@
 			margin: var(--space-1) 0 0;
 			color: var(--color-on-surface-muted);
 			font-size: var(--text-body-sm-size);
+		}
+
+		.line {
+			display: block;
 		}
 
 		/*

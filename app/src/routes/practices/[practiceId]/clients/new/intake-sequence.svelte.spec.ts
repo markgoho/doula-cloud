@@ -265,6 +265,22 @@ describe('the duplicate check', () => {
 		await expect.element(testPage.getByLabelText('No, this is a different person')).toBeVisible();
 	});
 
+	// #2143: under each existing record, when it was added and when the
+	// Client was last cared for -- what tells two of one name apart --
+	// and then what choosing it does.
+	it('says under each existing record when it was added, when it was last cared for, and what choosing it does', async () => {
+		await setup();
+
+		const [busiest, empty] = testPage.getByLabelText('Anne-Marie Ochieng-Whitfield').all();
+		await expect
+			.element(busiest!)
+			.toHaveAccessibleDescription(
+				/^Added Nov 14, 2023 · 2 Engagements · most recent ended Jun 12, 2026\s*Keeps this record\. You check any changes before they are saved\.$/
+			);
+		await expect.element(empty!).toHaveAccessibleDescription(/^Added Oct 20, 2026 · No Engagements yet\s*Keeps this record\./);
+		await expect.element(testPage.getByText(/Records are never merged here/)).not.toBeInTheDocument();
+	});
+
 	it('refuses to go on until one of them is chosen', async () => {
 		await setup();
 		// #1705: no "Error: " title until the page is really refused.

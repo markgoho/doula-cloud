@@ -14,7 +14,7 @@ import { createClient } from '#lib/client.js';
 import type { JourneyStep } from '#lib/components/organisms/StepRail.svelte';
 import { errorsFromCause, type FormError } from '#lib/formErrors.js';
 import { intakeDraft } from '#lib/intakeDraft.svelte.js';
-import { clientSavedMessage, knownAsFrom, originQuery, type IntakeOrigin } from '#lib/intakeJourney.js';
+import { clientSavedMessage, originQuery, type IntakeOrigin } from '#lib/intakeJourney.js';
 import { gotoWithOutcome } from '#lib/outcome.js';
 
 /**
@@ -103,16 +103,6 @@ export function startWorkHref(practiceId: string, clientId: string): string {
 		practiceId,
 		clientId
 	});
-}
-
-/**
- * What the Client is called on this page.
- *
- * #463's rule with no pronoun in it: her preferred name if she has one,
- * her given name otherwise, and the domain noun before either exists.
- */
-export function knownAs(): string {
-	return knownAsFrom(intakeDraft.answers);
 }
 
 /**

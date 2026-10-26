@@ -291,6 +291,63 @@ func TestSearchHandler_ReadsTheBodyNotTheURL(t *testing.T) {
 	}
 }
 
+// TestSearchHandler_SaysWhenEachMatchWasAddedAndLastCaredFor proves
+// #2143: each match carries when its record was added, and each completed
+// Engagement when it was completed -- the latest engagement_completed
+// ledger entry, so a reopen and a second completion move it. An open
+// Engagement has no end, and a completed one with no ledger entry (only
+// a seeded row can be one) has none either rather than a guess.
+func TestSearchHandler_SaysWhenEachMatchWasAddedAndLastCaredFor(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-search-history"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	clientID, completedID := testdb.SeedEngagementInStatus(t, db, practiceID, "Reese Bishop", "reese@example.com", "completed")
+	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE clients SET created_at = '2024-03-04T15:00:00Z' WHERE id = $1`, clientID); err != nil {
+		t.Fatalf("backdate client: %v", err)
+	}
+	unrecordedID := seedEngagementForClient(t, db, clientID, practiceID, "completed", "postpartum")
+	openID := seedEngagementForClient(t, db, clientID, practiceID, "active", "birth")
+	for _, completedAt := range []string{"2026-05-01T12:00:00Z", "2026-06-12T12:00:00Z"} {
+		if _, err := db.Admin.ExecContext(t.Context(),
+			`INSERT INTO activity (practice_id, subject_kind, subject_id, action, diff, actor_kind, created_at)
+			 VALUES ($1, 'engagement', $2, 'engagement_completed', '{}', 'system', $3)`,
+			practiceID, completedID, completedAt,
+		); err != nil {
+			t.Fatalf("seed completion entry: %v", err)
+		}
+	}
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/search", client.SearchRequest{Name: "Reese"})
+	defer resp.Body.Close()
+	var out client.SearchResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(out.Matches) != 1 {
+		t.Fatalf("matches = %+v, want one", out.Matches)
+	}
+	match := out.Matches[0]
+	if got := match.CreatedAt.UTC().Format("2006-01-02"); got != "2024-03-04" {
+		t.Fatalf("createdAt = %s, want 2024-03-04", got)
+	}
+	ended := map[string]string{}
+	for _, e := range match.Engagements {
+		if e.EndedAt != nil {
+			ended[e.EngagementID] = e.EndedAt.UTC().Format("2006-01-02")
+		} else {
+			ended[e.EngagementID] = ""
+		}
+	}
+	if ended[completedID] != "2026-06-12" {
+		t.Fatalf("completed endedAt = %q, want the latest completion, 2026-06-12", ended[completedID])
+	}
+	if ended[unrecordedID] != "" || ended[openID] != "" {
+		t.Fatalf("endedAt = %+v, want none for the open and the unrecorded Engagement", ended)
+	}
+}
+
 // TestEditHandler_WhoeverMayReadMayEdit proves the contractor
 // attached/unattached split on edit access.
 func TestEditHandler_WhoeverMayReadMayEdit(t *testing.T) {

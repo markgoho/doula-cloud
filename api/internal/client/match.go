@@ -6,23 +6,38 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"doula-cloud/api/internal/activity"
 )
 
 // EngagementSummary is one row of a matched Client's Engagement history --
 // what the save-time prompt and the search result print alongside her
 // name and history, unrestricted inside the Practice, per ADR-0017.
+//
+// EndedAt is when a completed Engagement was completed, read from its
+// latest engagement_completed entry in the activity ledger (ADR-0022:
+// the ledger is where that fact is recorded; engagements carries no
+// column for it). Nil while the Engagement is open, and nil for a
+// completed one with no such entry, which only a seeded row can be.
+// #2143: it is half of what tells two Clients with one name apart --
+// when each was last cared for.
 type EngagementSummary struct {
-	EngagementID string    `json:"engagementId"`
-	Kind         string    `json:"kind"`
-	Status       string    `json:"status"`
-	CreatedAt    time.Time `json:"createdAt"`
+	EngagementID string     `json:"engagementId"`
+	Kind         string     `json:"kind"`
+	Status       string     `json:"status"`
+	CreatedAt    time.Time  `json:"createdAt"`
+	EndedAt      *time.Time `json:"endedAt,omitempty"`
 }
 
-// Match is one Client the match query found: her record plus her
-// Engagement history, unrestricted inside the Practice -- what the
-// save-time prompt and the search screen both need to print.
+// Match is one Client the match query found: her record, when it was
+// added, and her Engagement history, unrestricted inside the Practice --
+// what the save-time prompt and the search screen both need to print.
+// CreatedAt sits on Match rather than Record because Record is also the
+// body an edit PUTs, and when a row was made is never a caller's to
+// write (#2143: the other half of telling two namesakes apart).
 type Match struct {
 	Record
+	CreatedAt   time.Time           `json:"createdAt"`
 	Engagements []EngagementSummary `json:"engagements"`
 }
 
@@ -55,7 +70,7 @@ func FindMatches(ctx context.Context, tx *sql.Tx, practiceID, givenName, familyN
 	}
 
 	rows, err := tx.QueryContext(ctx,
-		`SELECT `+recordColumns+`
+		`SELECT `+recordColumns+`, created_at
 		 FROM clients
 		 WHERE practice_id = $1
 		   AND merged_into IS NULL
@@ -78,12 +93,17 @@ func FindMatches(ctx context.Context, tx *sql.Tx, practiceID, givenName, familyN
 
 	var matches []Match
 	for rows.Next() {
-		rec, err := scanRecord(rows.Scan)
+		var createdAt time.Time
+		// created_at rides as the 14th column, appended here the way
+		// FindCollisions appends it, rather than taught to scanRecord.
+		rec, err := scanRecord(func(dest ...any) error {
+			return rows.Scan(append(dest, &createdAt)...)
+		})
 		if err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("client: scan match: %w", err)
 		}
-		matches = append(matches, Match{Record: rec})
+		matches = append(matches, Match{Record: rec, CreatedAt: createdAt})
 	}
 	if err := rows.Err(); err != nil {
 		// coverage:ignore reason: row iteration failure, not exercised by unit tests
@@ -109,8 +129,18 @@ func FindMatches(ctx context.Context, tx *sql.Tx, practiceID, givenName, familyN
 // Practice, so it carries no access rule of its own.
 func ListEngagementsForClient(ctx context.Context, tx *sql.Tx, clientID string) ([]EngagementSummary, error) {
 	rows, err := tx.QueryContext(ctx,
-		`SELECT id, kind::text, status, created_at FROM engagements WHERE client_id = $1 ORDER BY created_at`,
-		clientID,
+		`SELECT e.id, e.kind::text, e.status, e.created_at,
+		        CASE WHEN e.status = 'completed' THEN (
+		            SELECT max(a.created_at) FROM activity a
+		             WHERE a.practice_id = e.practice_id
+		               AND a.subject_kind = $2
+		               AND a.subject_id = e.id
+		               AND a.action = $3
+		        ) END
+		 FROM engagements e
+		 WHERE e.client_id = $1
+		 ORDER BY e.created_at`,
+		clientID, activity.SubjectEngagement, string(activity.ActionEngagementCompleted),
 	)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -121,9 +151,13 @@ func ListEngagementsForClient(ctx context.Context, tx *sql.Tx, clientID string) 
 	list := []EngagementSummary{}
 	for rows.Next() {
 		var e EngagementSummary
-		if err := rows.Scan(&e.EngagementID, &e.Kind, &e.Status, &e.CreatedAt); err != nil {
+		var endedAt sql.NullTime
+		if err := rows.Scan(&e.EngagementID, &e.Kind, &e.Status, &e.CreatedAt, &endedAt); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("client: scan engagement: %w", err)
+		}
+		if endedAt.Valid {
+			e.EndedAt = &endedAt.Time
 		}
 		list = append(list, e)
 	}

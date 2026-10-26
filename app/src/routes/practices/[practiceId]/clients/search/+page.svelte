@@ -44,7 +44,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { searchClients, type ClientMatch, type ClientSearchFields } from '#lib/client.js';
 	import { fullName } from '#lib/personName.js';
-	import { formatCalendarDay } from '#lib/dates.js';
+	import { matchHistory } from '#lib/clientMatch.js';
 	import { carriedGivenName } from '#lib/intakeJourney.js';
 	import { handOffToIntake } from '#lib/intakeHandoff.js';
 	import { intakeDraft } from '#lib/intakeDraft.svelte.js';
@@ -58,7 +58,6 @@
 	import DateFields from '#lib/components/molecules/DateFields.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
-	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import {
 		EMPTY_DATE_PARTS,
 		dateFieldId,
@@ -123,14 +122,10 @@
 	 * focus to it on its own (the same fact intake's own module comment
 	 * names for a step change). `searchToken` increments on every
 	 * completed search -- including a repeat search with the same typed
-	 * values -- so the results heading is re-focused and re-announced
-	 * every time, not only the first.
+	 * values -- and keys the results heading, which takes focus as it
+	 * appears (`Heading`'s `focusOnAppearing`, #2143), so it is re-focused
+	 * and re-announced every time, not only the first.
 	 */
-	let resultsStart = $state<HTMLElement | undefined>();
-	$effect(() => {
-		void searchToken;
-		resultsStart?.focus();
-	});
 
 	function currentFields(): ClientSearchFields {
 		return {
@@ -309,51 +304,42 @@
 				{#if hasSearched}
 					<section aria-labelledby="client-search-results-heading"> <!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
 						<stack-l space="var(--space-6)">
-							<div bind:this={resultsStart} id="client-search-results" tabindex="-1">
+							<!--
+								Remounted by each completed search, so the heading
+								takes focus again on a repeat search with the same
+								count -- `focusOnAppearing` acts as it appears (#2143).
+							-->
+							{#key searchToken}
 								<Heading
 									level={2}
 									variant="section"
 									text={resultsHeading()}
 									id="client-search-results-heading"
+									focusOnAppearing
 								/>
-							</div>
+							{/key}
 
 							{#if matches.length > 0}
-								<stack-l space="var(--space-6)">
+								<!--
+									#2143: one row per match, the full name as the link
+									(the brief's Voice, amended 2026-10-26: a search
+									result keeps the full name) and one line under it
+									saying when the record was added and when the Client
+									was last cared for -- what tells two people with one
+									name apart. Date of birth, email and phone left the
+									row: on a record that holds none of them they were
+									three dashes, and the record they link to shows them.
+								-->
+								<ul class="matches">
 									{#each matches as match (match.id)}
-										<section class="match">
-											<stack-l space="var(--space-3)">
-												<Heading level={3} variant="card" text={fullName(match)} />
-												<SummaryList
-													rows={[
-														{
-															label: 'Date of birth',
-															value: match.dateOfBirth ? formatCalendarDay(match.dateOfBirth) : '—'
-														},
-														{ label: 'Email', value: match.email || '—' },
-														{ label: 'Phone', value: match.phone || '—' }
-													]}
-												/>
-												{#if match.engagements.length > 0}
-													<ul>
-														{#each match.engagements as engagement (engagement.engagementId)}
-															<li>
-																{engagement.kind === 'birth' ? 'Birth' : 'Postpartum'} · {engagement.status}
-															</li>
-														{/each}
-													</ul>
-												{:else}
-													<Text
-													step="body-sm"
-													tone="muted"
-													text="No Engagements with this Client yet."
-												/>
-												{/if}
-												<Link href={detailHref(match.id)} label="Open {fullName(match)}'s record" />
+										<li>
+											<stack-l space="var(--space-1)">
+												<Link href={detailHref(match.id)} label={fullName(match)} />
+												<Text step="body-sm" tone="variant" text={matchHistory(match)} />
 											</stack-l>
-										</section>
+										</li>
 									{/each}
-								</stack-l>
+								</ul>
 								<!--
 									#2005: a new Client can share a name with one on
 									file, so a match is never a dead end. The way on is
@@ -400,26 +386,20 @@
 			padding-block: var(--space-8);
 		}
 
-		/*
-		 * Focused programmatically after every search, never by the
-		 * keyboard -- so, per ErrorSummary's own note, `:focus-visible`
-		 * would never fire here and the ring has to be `:focus` instead.
-		 */
-		[tabindex='-1']:focus {
-			outline: var(--focus-ring-width) solid var(--color-primary);
-			outline-offset: var(--focus-ring-offset);
-		}
-
-		.match {
-			padding: var(--space-4);
-			border: var(--border-thin) solid var(--color-outline-variant);
-			border-radius: var(--radius);
-		}
-
-		ul {
+		/* Hairline-separated rows, the way the drawing set them apart. */
+		.matches {
 			margin: 0;
-			padding-inline-start: var(--space-5);
-			font-size: var(--text-body-sm-size);
+			padding: 0;
+			list-style: none;
+		}
+
+		.matches > li {
+			padding-block: var(--space-3);
+			border-block-end: var(--border-thin) solid var(--color-outline-variant);
+		}
+
+		.matches > li:first-child {
+			border-block-start: var(--border-thin) solid var(--color-outline-variant);
 		}
 	}
 </style>

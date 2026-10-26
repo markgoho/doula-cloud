@@ -21,7 +21,7 @@ function fields(partial: Partial<ClientEditFields> = {}): ClientEditFields {
 }
 
 function match(partial: Partial<CollisionMatch> = {}): CollisionMatch {
-	return { ...fields(), id: 'c1', wouldSurvive: true, engagements: [], ...partial };
+	return { ...fields(), id: 'c1', createdAt: '2024-03-04T15:00:00Z', wouldSurvive: true, engagements: [], ...partial };
 }
 
 describe('proposedChanges', () => {
