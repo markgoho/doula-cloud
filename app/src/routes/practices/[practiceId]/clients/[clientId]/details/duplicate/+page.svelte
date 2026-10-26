@@ -1,6 +1,10 @@
 <script lang="ts">
 	/*
 	 * Gate two's question, on the edit path (ADR-0017's amendment, #814).
+	 * Part of her details journey since #2048 retired the Edit form: the
+	 * journey's save (`detailsSave`) comes here, from the check page or
+	 * from a question a Change on her record opened, and this is the only
+	 * door to combining two records.
 	 *
 	 * `edit.go` answers 409 with `substitution: false` when the collision
 	 * predicate hits and it is not an exact name substitution -- a
@@ -55,27 +59,24 @@
 	import { detailsSavedMessage } from '#lib/intakeJourney.js';
 	// #1710: a save leaves this page, so her record says it happened.
 	import { gotoWithOutcome } from '#lib/outcome.js';
+	import { detailsQuestions } from '../details.js';
 
-	const JOURNEY = 'Editing a Client';
 	const DIFFERENT_PERSON = 'different';
 	// Named rather than generated, so the error summary can point an
 	// entry at the first radio by id.
-	const ANSWER_NAME = 'edit-same-person';
+	const ANSWER_NAME = 'details-same-person';
 
 	const practiceId = $derived(page.params.practiceId ?? '');
 	const clientId = $derived(page.params.clientId ?? '');
 
-	function editHref(): string {
-		return resolve('/practices/[practiceId]/clients/[clientId]/edit', { practiceId, clientId });
-	}
 	function detailHref(id: string): string {
 		return resolve('/practices/[practiceId]/clients/[clientId]', { practiceId, clientId: id });
 	}
 
-	const base = $derived(`${editHref()}/duplicate`);
-	// One step, not a rail: this page is reached from Client edit rather
-	// than from a multi-step sequence, so the journey it names is the
-	// single question in front of the reader, not a sequence of them.
+	const base = $derived(`${detailsQuestions.basePath}/duplicate`);
+	// One step, not a rail: this question is asked of the save, not as a
+	// step of the journey, so the journey it names is the single question
+	// in front of the reader, not a sequence of them.
 	const steps = $derived<JourneyStep[]>([
 		{ label: 'Possible duplicate', href: base, status: 'current' }
 	]);
@@ -98,12 +99,12 @@
 	/*
 	 * A reader who reloads this page, or reaches it directly, has nothing
 	 * in the draft: it lives in memory and the 409 that filled it is not
-	 * repeated by a page load. Back to the edit page, the same shape
-	 * intake's own duplicate page uses for the same reason.
+	 * repeated by a page load. Back to her record, the same shape intake's
+	 * own duplicate page uses for the same reason.
 	 */
 	onMount(() => {
 		if (editMergeDraft.matches.length === 0) {
-			void goto(editHref());
+			void goto(detailHref(clientId));
 		}
 	});
 
@@ -202,7 +203,7 @@
 
 {#if reviewing}
 	<QuestionPage
-		journey={JOURNEY}
+		journey={detailsQuestions.label}
 		{steps}
 		backHref={base}
 		question={{ as: 'legend', text: `Save these changes to ${survivorName(reviewing)}?` }}
@@ -226,9 +227,9 @@
 	<!-- stacked-form:ignore: #1108 -- this form wraps a Template. `QuestionPage` renders the controls and the actions as two separate regions of one column and stacks each itself, so the `<form>` here exists to put the submit button inside the form that owns the inputs, not to arrange anything. -->
 	<form onsubmit={handleContinue} novalidate>
 		<QuestionPage
-			journey={JOURNEY}
+			journey={detailsQuestions.label}
 			{steps}
-			backHref={editMergeDraft.backHref ?? editHref()}
+			backHref={editMergeDraft.backHref ?? detailHref(clientId)}
 			question={{ as: 'legend', text: 'Is this the same person?' }}
 			hint="Nothing has been saved yet. What was typed matches a Client this Practice already has."
 			errorSummary={submission.errors.length > 0 ? errorSummary : undefined}

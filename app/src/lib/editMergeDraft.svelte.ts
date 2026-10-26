@@ -1,6 +1,7 @@
 /**
  * What gate two (ADR-0017's amendment, #814) needs to carry from the
- * Client edit page to its own `duplicate` sub-route and back -- the same
+ * page a details save was made on to the journey's `duplicate` page and
+ * back (#2048) -- the same
  * "module state a whole sequence shares" idiom `intakeDraft.svelte.ts`
  * uses, scoped to one edit act rather than to a multi-step sequence.
  *
@@ -47,8 +48,8 @@ export class EditMergeDraft {
 	matches = $state<CollisionMatch[]>([]);
 	/**
 	 * Where the duplicate page's Back goes: the screen the refused save was
-	 * made from. Undefined for the Edit form, which is the default; her
-	 * details journey (#1610) names its own check page.
+	 * made from -- her details journey's check page, or the question a
+	 * Change on her record opened (#2048). Undefined goes to her record.
 	 */
 	backHref = $state<string | undefined>();
 	/**

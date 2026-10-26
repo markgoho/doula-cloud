@@ -143,10 +143,10 @@ export const STRUCTURAL_STEPS: StructuralStep[] = [
 ];
 
 /** The structural steps a Client's details journey asks (#1610): every
- * one but the name, which intake asked and the Edit form corrects. */
-export const DETAILS_STEPS: StructuralStep[] = STRUCTURAL_STEPS.filter(
-	(step) => step.slug !== 'name'
-);
+ * one, the name first. The journey is the one way to change her record
+ * since #2048 retired the Edit form, so the name is asked here too, and
+ * a save that changes it runs the duplicate check. */
+export const DETAILS_STEPS: StructuralStep[] = STRUCTURAL_STEPS;
 
 /** Every structural column a reader types, flat -- what `proposedChanges.ts`
  * walks to say what a save to an existing Client would change. */
@@ -163,6 +163,14 @@ export const STRUCTURAL_QUESTIONS: StructuralQuestion[] = STRUCTURAL_STEPS.flatM
 export const CHANGE_PARAMETER = 'from';
 export const CHANGE_VALUE = 'check';
 export const CHANGE_QUERY = `${CHANGE_PARAMETER}=${CHANGE_VALUE}`;
+
+/*
+ * The same `from`, on a question a Change on her record opened (#2048):
+ * Back goes to the record, and the question saves there and then rather
+ * than going on, because the reader came to change one thing.
+ */
+export const RECORD_VALUE = 'record';
+export const RECORD_QUERY = `${CHANGE_PARAMETER}=${RECORD_VALUE}`;
 
 /**
  * The screens that open the name question directly, with no search in
@@ -237,7 +245,7 @@ function capitalizeFirst(text: string): string {
 
 /**
  * What the screen a save of her details lands on says (#1710): the
- * details journey, the edit form and the duplicate pages.
+ * details journey and the duplicate pages.
  */
 export function detailsSavedMessage(names: ClientNames): string {
 	return capitalizeFirst(`${knownAsFrom(names)}'s details saved.`);

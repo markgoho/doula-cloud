@@ -13,7 +13,13 @@
  */
 
 import type { IntakeDraft } from '#lib/intakeDraft.svelte.js';
-import { CHANGE_PARAMETER, CHANGE_VALUE, type IntakeSection, type IntakeStep } from '#lib/intakeJourney.js';
+import {
+	CHANGE_PARAMETER,
+	CHANGE_VALUE,
+	RECORD_VALUE,
+	type IntakeSection,
+	type IntakeStep
+} from '#lib/intakeJourney.js';
 
 export interface QuestionJourney {
 	/**
@@ -47,6 +53,12 @@ export interface QuestionJourney {
 	/** What the Client is called on this page (#463's rule, with no
 	 * pronoun in it). */
 	readonly knownAs: string;
+	/**
+	 * Saves the draft as it stands, from a question a Change on her record
+	 * opened (#2048). `returnHref` is the question's own address, where the
+	 * duplicate check's Back goes. Throws a refusal for the page to show.
+	 */
+	save(returnHref: string): Promise<void>;
 }
 
 /**
@@ -64,6 +76,12 @@ export type ReadonlyURLSearchParameters = Pick<URLSearchParams, 'get'>;
  * which is what decides where both Back and Continue go. */
 export function isFromCheck(search: ReadonlyURLSearchParameters): boolean {
 	return search.get(CHANGE_PARAMETER) === CHANGE_VALUE;
+}
+
+/** Whether this page was reached by a Change on her record (#2048),
+ * which makes Back go to the record and Continue save. */
+export function isFromRecord(search: ReadonlyURLSearchParameters): boolean {
+	return search.get(CHANGE_PARAMETER) === RECORD_VALUE;
 }
 
 /**

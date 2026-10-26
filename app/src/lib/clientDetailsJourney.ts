@@ -9,17 +9,20 @@
  * that decide what that one edit sends are here, pure, so a spec can
  * read them without a page in front of them.
  *
- * ## A blank never replaces a value on file
+ * ## The one way to change her record
  *
- * The journey adds facts. Taking one away is a correction, and the Edit
- * form is the path for a correction. So a question left blank keeps what
- * the record holds, and a fact the journey never asks -- the three name
- * columns, a value under a field the Practice has archived -- is always
- * the one on file, whatever a draft mirrored from an earlier visit says.
+ * Since #2048 the journey is the only way to change a Client's record:
+ * the Edit form is retired, and each row of her record has a Change that
+ * opens the question for that row. So the journey asks the name too, and
+ * a question cleared on its page clears the value on file -- every
+ * question starts from the record (`answersOnFile`), so a blank there is
+ * one the reader made. The given name is the one value that cannot be
+ * cleared, and its question refuses a blank. A value under a field the
+ * Practice has archived is never asked, so it is always the one on file.
  */
 
 import type { ClientEditFields } from './client.js';
-import type { ClientDetail, ClientRecord } from './clientDetail.js';
+import type { ClientDetail, ClientRecord, ResolvedField } from './clientDetail.js';
 import { displayName } from './clientDetail.js';
 import type { FieldValue, IntakeAnswers } from './intakeDraft.svelte.js';
 import { DETAILS_STEPS, type TextColumn } from './intakeJourney.js';
@@ -73,10 +76,11 @@ export function answersOnFile(record: ClientRecord): IntakeAnswers {
 }
 
 /**
- * The one edit the check page sends: the record on file, with each
- * answer the journey was given laid over it. `askedFieldIds` are the
- * Practice's active questions, the only Practice-defined values the
- * journey may write.
+ * The one edit a save sends: the record on file, with each answer the
+ * journey was given laid over it, a blank one included. `askedFieldIds`
+ * are the Practice's active questions, the only Practice-defined values
+ * the journey may write; a question the draft holds no answer to keeps
+ * the value on file.
  */
 export function detailsToSave(
 	record: ClientRecord,
@@ -85,11 +89,11 @@ export function detailsToSave(
 ): IntakeAnswers & ClientEditFields {
 	const saved = answersOnFile(record);
 	for (const column of ASKED_COLUMNS) {
-		if (!isBlank(answers[column])) saved[column] = answers[column];
+		saved[column] = answers[column];
 	}
 	for (const fieldId of askedFieldIds) {
 		const value = answers.fieldValues[fieldId];
-		if (value !== undefined && !isBlank(value)) saved.fieldValues[fieldId] = value;
+		if (value !== undefined) saved.fieldValues[fieldId] = value;
 	}
 	return saved;
 }
@@ -130,6 +134,50 @@ const ID_PATTERN = /^[\w-]+$/;
 export function engagementOrigin(search: Pick<URLSearchParams, 'get'>): string | undefined {
 	const value = search.get(ENGAGEMENT_PARAMETER) ?? '';
 	return ID_PATTERN.test(value) ? value : undefined;
+}
+
+/** The query a Change on her record carries to the journey's door, naming
+ * the question it opens (#2048). */
+export const STEP_PARAMETER = 'step';
+
+/**
+A Practice section's slug, and nothing else with a slash in it.
+*/
+const SECTION_SLUG_PATTERN = /^sections\/\d+$/;
+
+/** The question a Change on her record names, read off the query string.
+ * Only a step the journey has is accepted, so the URL can name a
+ * question but can never name an address of its own. */
+export function stepOrigin(search: Pick<URLSearchParams, 'get'>): string | undefined {
+	const value = search.get(STEP_PARAMETER) ?? '';
+	if (DETAILS_STEPS.some((step) => step.slug === value)) return value;
+	return SECTION_SLUG_PATTERN.test(value) ? value : undefined;
+}
+
+/**
+ * Which of the journey's section pages asks each Practice field on her
+ * record, by field id (#2048). Her record lists a field the Practice has
+ * archived when she holds a value under it (marked with a `note`), and
+ * the journey never asks one, so this counts sections the way
+ * `intakeSections` does: over the asked fields alone, a header opening a
+ * new section only once the one before it holds a field. An archived
+ * field has no entry, so its row has no Change.
+ */
+export function fieldSectionIndexes(fields: readonly ResolvedField[]): Map<string, number> {
+	const indexes = new Map<string, number>();
+	let section = 0;
+	let isSectionEmpty = true;
+	for (const field of fields) {
+		if (field.note !== undefined) continue;
+		if (field.type === SECTION_HEADER) {
+			if (!isSectionEmpty) section += 1;
+			isSectionEmpty = true;
+			continue;
+		}
+		indexes.set(field.fieldId, section);
+		isSectionEmpty = false;
+	}
+	return indexes;
 }
 
 /** Whether the journey can be offered at all. An erased record has no

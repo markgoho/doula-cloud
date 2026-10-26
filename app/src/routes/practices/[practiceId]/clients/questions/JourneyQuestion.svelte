@@ -31,8 +31,8 @@
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import QuestionPage, { type Question } from '#lib/components/templates/QuestionPage.svelte';
 	import { journeySteps, nextStepHref, previousStepHref, type StepId } from '#lib/intakeJourney.js';
-	import type { FormError } from '#lib/formSubmission.svelte.js';
-	import { checkOr, type QuestionJourney } from './questionJourney.js';
+	import { FormSubmission, orThrownErrors, type FormError } from '#lib/formSubmission.svelte.js';
+	import { checkOr, isFromRecord, type QuestionJourney } from './questionJourney.js';
 
 	interface Properties {
 		journey: QuestionJourney;
@@ -58,23 +58,43 @@
 
 	let { journey, stepId, question, hint, validate, controls }: Properties = $props();
 
+	/*
+	 * A Change on her record opened this one question (#2048): the reader
+	 * came to change one thing, so the page is a journey of one -- no rail
+	 * (`QuestionPage` draws none for one step) -- Back goes to the record,
+	 * and the button saves, landing on the record with a status Notice.
+	 */
+	const isRecordChange = $derived(isFromRecord(page.url.searchParams));
 	const steps = $derived(
-		journeySteps(journey.steps, journey.basePath, stepId, journey.draft.visitedSteps)
+		journeySteps(journey.steps, journey.basePath, stepId, journey.draft.visitedSteps).filter(
+			(step) => !isRecordChange || step.status === 'current'
+		)
 	);
 
 	/*
 	 * What the last `validate` said, so the error summary and the controls
 	 * both see the same refusals. Continue saves nothing -- the details
-	 * journey saves once, at its check page -- so there is no submission
-	 * to be busy for.
+	 * journey saves at its check page -- except on a Change from her
+	 * record, whose save is the `submission` below.
 	 */
 	let errors = $state<FormError[]>([]);
+
+	// The save's own refusals: the server's, which `validate` cannot know.
+	const submission = new FormSubmission();
+	const shownErrors = $derived(errors.length > 0 ? errors : submission.errors);
 
 	async function handleContinue(event: SubmitEvent) {
 		event.preventDefault();
 		errors = validate?.() ?? [];
 		if (errors.length > 0) return;
 		journey.draft.visit(stepId);
+		if (isRecordChange) {
+			await submission.run(
+				() => journey.save(`${page.url.pathname}${page.url.search}`),
+				orThrownErrors({})
+			);
+			return;
+		}
 		await goto(
 			checkOr(
 				page.url.searchParams,
@@ -83,14 +103,13 @@
 			)
 		);
 	}
-
 </script>
 
 <!-- Passed only while there is a refusal, never declared as a child of
      the Template: a declared snippet is always truthy, so the Template
      would title a first visit "Error: " (#1705). -->
 {#snippet errorSummary()}
-	<ErrorSummary {errors} />
+	<ErrorSummary errors={shownErrors} />
 {/snippet}
 
 <!-- stacked-form:ignore: #1108 -- this form wraps a Template. `QuestionPage` renders the controls and the actions as two separate regions of one column and stacks each itself, so the `<form>` here exists to put the submit button inside the form that owns the inputs (see the note above), not to arrange anything. -->
@@ -98,14 +117,16 @@
 	<QuestionPage
 		journey={journey.label}
 		{steps}
-		backHref={checkOr(
-			page.url.searchParams,
-			journey.basePath,
-			previousStepHref(journey.steps, journey.basePath, stepId, journey.exitHref)
-		)}
+		backHref={isRecordChange
+			? journey.exitHref
+			: checkOr(
+					page.url.searchParams,
+					journey.basePath,
+					previousStepHref(journey.steps, journey.basePath, stepId, journey.exitHref)
+				)}
 		{question}
 		{hint}
-		errorSummary={errors.length > 0 ? errorSummary : undefined}
+		errorSummary={shownErrors.length > 0 ? errorSummary : undefined}
 	>
 		{#snippet content({ describedBy })}
 			{@render controls({ describedBy, errors })}
@@ -113,7 +134,11 @@
 
 		{#snippet actions()}
 			<!-- The submit, so the form submits on Enter from any field. -->
-			<Button type="submit" label="Continue" />
+			<Button
+				type="submit"
+				label={isRecordChange ? 'Save' : 'Continue'}
+				loading={submission.isSubmitting}
+			/>
 		{/snippet}
 	</QuestionPage>
 </form>

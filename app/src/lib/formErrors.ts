@@ -211,7 +211,7 @@ function targetedErrors(
  *
  * `client.ts` and `engagementRequest.ts` do their fetching for a screen
  * and report a refusal by throwing, which is what let their three
- * `ErrorSummary` routes -- `clients/new`, `clients/[clientId]/edit` and
+ * `ErrorSummary` routes -- `clients/new`, `clients/[clientId]/edit` (retired on #2048) and
  * `engagement-requests/new` -- lose `details` before they could ever read
  * it: an `Error` carries one string. This carries the field map beside
  * the message, so those routes can target a refusal the same way the

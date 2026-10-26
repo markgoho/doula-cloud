@@ -1,19 +1,23 @@
 import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import type { Component } from 'svelte';
+import { createRawSnippet, type Component } from 'svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import { clientDetails } from '#lib/clientDetailsFlow.svelte.js';
 import { editMergeDraft } from '#lib/editMergeDraft.svelte.js';
 import type { IntakeAnswers } from '#lib/intakeDraft.svelte.js';
-import { knownAsFrom } from '#lib/intakeJourney.js';
+import { knownAsFrom, RECORD_QUERY } from '#lib/intakeJourney.js';
 import { captureLanding } from '#lib/testOutcome.js';
 import { toPageState, type RouteFixture } from '../../../../../routeFixture.js';
 import { clientId, practiceId, record, seedDetails } from './detailsFixture.js';
+import Layout from './+layout.svelte';
+import { detailsSave } from './detailsSave.svelte.js';
+import NamePage from './name/+page.svelte';
 import DateOfBirthPage from './date-of-birth/+page.svelte';
 import EmailPage from './email/+page.svelte';
 import SectionPage from './sections/[sectionIndex]/+page.svelte';
 import CheckPage from './check/+page.svelte';
+import { fixture as nameFixture } from './name/page.fixture.js';
 import { fixture as dateOfBirthFixture } from './date-of-birth/page.fixture.js';
 import { fixture as emailFixture } from './email/page.fixture.js';
 import { fixture as sectionFixture } from './sections/[sectionIndex]/page.fixture.js';
@@ -58,18 +62,26 @@ interface SetupOptions {
 	The Engagement whose page opened the journey.
 	*/
 	engagementId?: string;
+	/**
+	The query the page was reached with, such as a Change's `?from=record`.
+	*/
+	search?: string;
 }
 
 function setupFor(fixture: RouteFixture, Page: Component<never>) {
 	// The cast `route-continuum.svelte.spec.ts` makes where it mounts a
 	// route, for the reason its comment gives.
 	const RoutePage = Page as Component;
-	return async ({ responses = [], answers, engagementId }: SetupOptions = {}) => {
-		Object.assign(pageState, toPageState(fixture));
+	return async ({ responses = [], answers, engagementId, search = '' }: SetupOptions = {}) => {
+		const state = toPageState(fixture);
+		Object.assign(pageState, { ...state, url: new URL(`${state.url.href}${search}`) });
 		if (answers) clientDetails.draft.update(answers);
 		clientDetails.engagementId = engagementId;
 		for (const response of responses) apiFetchWithSession.mockResolvedValueOnce(response);
 		await render(RoutePage);
+		// The layout draws the save's one dialog (#2048). Its record and the
+		// Practice's template are already seeded, so it reads nothing.
+		await render(Layout, { children: createRawSnippet(() => ({ render: () => '<span></span>' })) });
 		return { sent };
 	};
 }
@@ -86,19 +98,22 @@ beforeEach(() => {
 	goto.mockResolvedValue(undefined);
 	apiFetchWithSession.mockReset();
 	editMergeDraft.clear();
+	// The save's dialog is module state, so a test that leaves it open
+	// would leave the next test's page inert behind it.
+	detailsSave.isConflictOpen = false;
+	detailsSave.cancel();
 	seedDetails();
 });
 
-describe('the first question', () => {
-	const setup = setupFor(dateOfBirthFixture, DateOfBirthPage);
+describe('the first question, her name', () => {
+	const setup = setupFor(nameFixture, NamePage);
 
-	it('starts from the value on file and says it is optional', async () => {
+	it('starts from the name on file', async () => {
 		await setup();
 
-		await expect
-			.element(testPage.getByRole('heading', { level: 1, name: /date of birth\? \(optional\)$/ }))
-			.toBeVisible();
-		await expect.element(testPage.getByLabelText('Year')).toHaveValue('1988');
+		await expect.element(testPage.getByRole('heading', { level: 1, name: /'s name\?$/ })).toBeVisible();
+		await expect.element(testPage.getByLabelText('Given name')).toHaveValue(record.givenName);
+		await expect.element(testPage.getByLabelText('Family name (optional)')).toHaveValue(record.familyName);
 	});
 
 	it.each([
@@ -110,6 +125,120 @@ describe('the first question', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: 'Back', exact: true }))
 			.toHaveAttribute('href', href);
+	});
+
+	// ADR-0017: a record needs a given name and nothing else.
+	it('refuses a blank given name', async () => {
+		await setup({ answers: { givenName: '  ' } });
+
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+
+		await expect.element(testPage.getByRole('link', { name: 'Enter a given name' })).toBeVisible();
+		expect(goto).not.toHaveBeenCalled();
+	});
+
+	it('goes on to the date of birth', async () => {
+		await setup();
+
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+
+		expect(goto).toHaveBeenCalledWith(`${base}/date-of-birth`);
+	});
+});
+
+/*
+ * A Change on her record (#2048) opens one question, through the door,
+ * with `?from=record`: the reader came to change one thing, so the page
+ * saves it and goes back to the record with a status Notice.
+ */
+describe('a question a Change on her record opened', () => {
+	const setup = setupFor(nameFixture, NamePage);
+	const fromRecord = `?${RECORD_QUERY}`;
+
+	it('is a journey of one, with Back to the record and a Save', async () => {
+		await setup({ search: fromRecord });
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Back', exact: true }))
+			.toHaveAttribute('href', recordHref);
+		await expect.element(testPage.getByRole('button', { name: 'Save' })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
+		// QuestionPage draws no rail for a journey of one step.
+		await expect.element(testPage.getByRole('link', { name: /Date of birth/ })).not.toBeInTheDocument();
+	});
+
+	it('saves the change and says so on her record', async () => {
+		const { sent } = await setup({ search: fromRecord, responses: [jsonResponse(record)] });
+
+		await testPage.getByLabelText('Given name').fill('Annie');
+		const landing = captureLanding(goto);
+		await testPage.getByRole('button', { name: 'Save' }).click();
+
+		expect(sent()).toMatchObject({ givenName: 'Annie', email: record.email, override: false });
+		await vi.waitFor(() => expect(landing).toEqual({ href: recordHref, message: "Annie's details saved." }));
+	});
+
+	// The duplicate check moved here from the Edit form: a name that
+	// matches another Client asks "Is this the same person?", with Back
+	// to this question.
+	it('asks whether a matching name is the same person', async () => {
+		await setup({
+			search: fromRecord,
+			responses: [jsonResponse({ matches: [match], substitution: false }, 409)]
+		});
+
+		await testPage.getByRole('button', { name: 'Save' }).click();
+
+		expect(goto).toHaveBeenCalledWith(`${base}/duplicate`);
+		expect(editMergeDraft.matches).toEqual([match]);
+		expect(editMergeDraft.backHref).toBe(`${base}/name${fromRecord}`);
+	});
+
+	it('asks the substitution question in the layout’s dialog', async () => {
+		await setup({
+			search: fromRecord,
+			responses: [jsonResponse({ matches: [match], substitution: true }, 409), jsonResponse(record)]
+		});
+
+		await testPage.getByRole('button', { name: 'Save' }).click();
+		await expect.element(testPage.getByRole('dialog')).toBeVisible();
+		const landing = captureLanding(goto);
+		await testPage.getByRole('button', { name: 'Yes, a different person' }).click();
+
+		await vi.waitFor(() => expect(landing).toEqual({ href: recordHref, message: savedMessage }));
+	});
+
+	it('shows a refused save on the question', async () => {
+		await setup({
+			search: fromRecord,
+			responses: [jsonResponse({ code: 'INTERNAL', message: 'the save went wrong' }, 500)]
+		});
+
+		await testPage.getByRole('button', { name: 'Save' }).click();
+
+		await expect.element(testPage.getByText('There is a problem')).toBeVisible();
+		expect(goto).not.toHaveBeenCalled();
+	});
+});
+
+describe('the date of birth', () => {
+	const setup = setupFor(dateOfBirthFixture, DateOfBirthPage);
+
+	it('starts from the value on file and says it is optional', async () => {
+		await setup();
+
+		await expect
+			.element(testPage.getByRole('heading', { level: 1, name: /date of birth\? \(optional\)$/ }))
+			.toBeVisible();
+		await expect.element(testPage.getByLabelText('Year')).toHaveValue('1988');
+	});
+
+	it('sends Back to the name', async () => {
+		await setup();
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Back', exact: true }))
+			.toHaveAttribute('href', `${base}/name`);
 	});
 
 	// #1705: GOV.UK's "Error: " title prefix is for a page that was
@@ -148,6 +277,17 @@ describe('a question with a value on file', () => {
 		await setup();
 
 		await expect.element(testPage.getByRole('textbox')).toHaveValue(record.email);
+		await expect.element(testPage.getByText('cancels any portal invite', { exact: false })).not.toBeInTheDocument();
+	});
+
+	// What the Edit form said until #2048: a new address revokes an
+	// invite still waiting at the old one.
+	it('says a new address cancels a waiting portal invite', async () => {
+		await setup();
+
+		await testPage.getByRole('textbox').fill('anne@example.com');
+
+		await expect.element(testPage.getByText('cancels any portal invite', { exact: false })).toBeVisible();
 	});
 });
 
@@ -195,15 +335,15 @@ describe('the check page', () => {
 		expect(landing).toEqual({ href: engagementHref, message: savedMessage });
 	});
 
-	// A blank never replaces a value on file: the row says what the save
-	// keeps, and the save keeps it.
-	it('keeps the value on file where a question was left blank', async () => {
+	// #2048: a question cleared on its page clears the value on file, and
+	// the row says so before the save.
+	it('clears the value on file where a question was cleared', async () => {
 		const { sent } = await setup({ responses: [jsonResponse(record)], answers: { email: '' } });
 
-		await expect.element(testPage.getByText(record.email).first()).toBeVisible();
+		await expect.element(testPage.getByText(record.email)).not.toBeInTheDocument();
 		await testPage.getByRole('button', { name: 'Save these details' }).click();
 
-		expect(sent().email).toBe(record.email);
+		expect(sent().email).toBe('');
 	});
 
 	it('saves a Practice-defined value, and keeps one the Practice no longer asks', async () => {
@@ -220,14 +360,14 @@ describe('the check page', () => {
 		});
 	});
 
-	// Gate two: a possible duplicate is asked on the edit path's own page,
+	// Gate two: a possible duplicate is asked on the journey's own page,
 	// with Back to this one.
-	it('opens the edit path’s duplicate page for a possible duplicate', async () => {
+	it('opens the journey’s duplicate page for a possible duplicate', async () => {
 		await setup({ responses: [jsonResponse({ matches: [match], substitution: false }, 409)] });
 
 		await testPage.getByRole('button', { name: 'Save these details' }).click();
 
-		expect(goto).toHaveBeenCalledWith(`${recordHref}/edit/duplicate`);
+		expect(goto).toHaveBeenCalledWith(`${base}/duplicate`);
 		expect(editMergeDraft.matches).toEqual([match]);
 		expect(editMergeDraft.fields.phone).toBe('+1 (585) 555-0142');
 		expect(editMergeDraft.backHref).toBe(`${base}/check`);

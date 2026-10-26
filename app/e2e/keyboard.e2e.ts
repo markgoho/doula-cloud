@@ -155,7 +155,8 @@ test('Renata signs in and invites a Doula, with no pointer at any step', async (
 });
 
 /*
- * The second walk (#516): the three screens under clients/[clientId],
+ * The second walk (#516): three screens under clients/[clientId] (the
+ * hub, her name question since #2048, and the Engagement Request form),
  * which between them hold the two controls axe cannot judge -- a modal
  * confirmation, and a radio group that is the whole question. Both are
  * reached the way a keyboard user reaches them, from the Client's own
@@ -198,23 +199,25 @@ test('A doula edits a Client and starts new work, with no pointer at any step', 
 	const hubURL = `/practices/${practiceId}/clients/${clientId}`;
 	await page.goto(hubURL);
 
-	// Stage 1 -- reach the edit form from the hub.
+	// Stage 1 -- reach the name question from the hub (#2048): the first
+	// Change on her record is the given name row's, and it opens the
+	// details journey's name question, through the journey's door.
 	await tabTo(
 		page,
-		page.getByRole('main').getByRole('link', { name: 'Edit', exact: true }),
-		'the Edit link on the Client detail hub'
+		page.getByRole('main').getByRole('link', { name: 'Change', exact: true }).first(),
+		"the given name row's Change on the Client detail hub"
 	);
 	await page.keyboard.press('Enter');
-	await expect(page).toHaveURL(new RegExp(`${hubURL}/edit$`));
+	await expect(page).toHaveURL(new RegExp(String.raw`${hubURL}/details/name\?from=record$`));
 
 	// Stage 2 -- retype the given name. ControlOrMeta so the selection
 	// works on both a developer's Mac and CI's Linux; nothing here may
 	// assume the field arrives with its value already selected.
-	await tabTo(page, page.getByLabel('Given name'), 'the Given name field on the edit form');
+	await tabTo(page, page.getByLabel('Given name'), 'the Given name field on the name question');
 	await page.keyboard.press('ControlOrMeta+a');
 	await page.keyboard.type('Jane');
 
-	await tabTo(page, page.getByRole('button', { name: 'Save' }), 'the Save button on the edit form');
+	await tabTo(page, page.getByRole('button', { name: 'Save' }), 'the Save button on the name question');
 	await page.keyboard.press('Enter');
 
 	// Stage 3 -- the refusal, and the one deliberate override. showModal()
@@ -288,7 +291,7 @@ test('A contractor Doula reaches the explainer\'s "Set up a Practice" link, with
 
 	await signInByKeyboard(page, contractor.email, PORTAL_CLIENT_PASSWORD, practiceId);
 
-	// Entry point, same as the edit-form walk's own hubURL goto above: a
+	// Entry point, same as the Client walk's own hubURL goto above: a
 	// contractor Doula does not see "Find or add a Client" on her Clients
 	// list at all (#539, ADR-0017) -- her only link to this door is the
 	// empty-state explainer on that list, one control this walk does not

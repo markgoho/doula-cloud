@@ -15,7 +15,9 @@
 		type EngagementSummary,
 		type HistoryEntry
 	} from '#lib/clientDetail.js';
-	import { canAddDetails, detailsLinkLabel } from '#lib/clientDetailsJourney.js';
+	import { canAddDetails, fieldSectionIndexes } from '#lib/clientDetailsJourney.js';
+	import { sectionSlug } from '#lib/intakeJourney.js';
+	import type { SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 	import { kindLabel, withdrawRequest } from '#lib/engagementRequest.js';
 	import { engagementStatusText } from '#lib/engagementDetail.js';
 	import { eraseClient, loadEraseEligibility, type EraseEligibility, type UnsettledInvoice } from '#lib/clientErasure.js';
@@ -34,8 +36,15 @@
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
-	import { detailsHref } from './details/details.js';
+	import { detailsChangeHref } from './details/details.js';
 	import type { PageProps as PageProperties } from './$types';
+
+	/**
+	A row of her record, and where its Change goes when it has one.
+	*/
+	interface ChangeRow extends SummaryListRow {
+		href?: string;
+	}
 
 	// ADR-0017: a contractor Doula originates no Engagement Request, even
 	// on a Client she is attached to (`engagementrequest.go`'s 403). `data`
@@ -53,7 +62,7 @@
 	const hasSecondFactor = $derived(data?.hasSecondFactor ?? true);
 
 	// What the save that led here did, if one did (#1710): her details
-	// journey, the edit form, a duplicate page, or a request to start work
+	// journey (a Change on a row, or its check page), a duplicate page, or a request to start work
 	// that waits. Read once, while the page renders, so a reload says
 	// nothing.
 	const outcome = takeOutcome(page.url);
@@ -93,8 +102,27 @@
 		isOwner && eligibility && !detail?.erasedAt ? [{ heading: `Erase ${name}'s data`, content: eraseSection }] : []
 	);
 
-	function editHref(): string {
-		return `/practices/${page.params.practiceId}/clients/${page.params.clientId}/edit`;
+	/*
+	 * Each row's Change (#2048): the details journey's door, naming the
+	 * one question that row's value is asked by. The journey is the one
+	 * way to change her record, so a row without a question -- the portal
+	 * invite, a field the Practice no longer asks -- has no Change, and
+	 * neither does an erased or merged record, whose edit `edit.go`
+	 * refuses. Not gated on the contractor flag: edit follows read
+	 * (ADR-0017), and `edit.go` refuses a Client she is not attached to.
+	 */
+	const canChange = $derived(detail !== undefined && canAddDetails(detail));
+	const fieldSections = $derived(fieldSectionIndexes(detail?.resolvedFields ?? []));
+
+	function changeHref(slug: string): string {
+		return detailsChangeHref(page.params.practiceId!, page.params.clientId!, slug);
+	}
+
+	/**
+	A row of her record, with a Change into the question that asks it.
+	*/
+	function changeable(label: string, value: string, slug: string, changes: string): ChangeRow {
+		return canChange ? { label, value, changes, href: changeHref(slug) } : { label, value };
 	}
 
 	function newEngagementRequestHref(): string {
@@ -339,27 +367,10 @@
 
 {#snippet actions()}
 	<!--
-		"Edit" alone doesn't say whose record it edits, the #513 violation
-		CheckAnswers's Change links already solved -- a sibling
-		visually-hidden span joined by aria-describedby, so the announced
-		name becomes "Edit, Jane Smith" without a second visible word.
-	-->
-	<Link href={editHref()} label="Edit" describedBy="edit-client-name" />
-	<span class="visually-hidden" id="edit-client-name">{name}</span>
-	<!--
-		Her other details, as one journey of question pages (#1610). The
-		label names her, so it reads on its own. Absent for an erased
-		record, whose edit `edit.go` refuses; a merged one never renders
-		here at all. Not gated on the contractor flag: edit follows read
-		(ADR-0017), and `edit.go` refuses a Client she is not attached to.
-	-->
-	{#if detail && canAddDetails(detail)}
-		<Link
-			href={detailsHref(page.params.practiceId!, page.params.clientId!)}
-			label={detailsLinkLabel(detail)}
-		/>
-	{/if}
-	<!--
+		The header's one action (#2048). Her record is changed a row at a
+		time, through each row's Change, so neither "Edit" nor a link to
+		the whole details journey sits here any more.
+
 		The hub is the only door to an Engagement Request (#496). The label
 		names her rather than saying "her", so it reads on its own out of
 		context and needs no describedBy sibling. The request screen itself
@@ -436,24 +447,33 @@
 	</stack-l>
 {/snippet}
 
+<!-- GOV.UK's Summary list row action, as `CheckAnswers` draws it: one word,
+     with what it changes in the visually-hidden text SummaryList joins to
+     it, so the announced name is "Change, given name". -->
+{#snippet changeAction(row: ChangeRow, describedBy: string)}
+	<Link href={row.href!} label="Change" variant="secondary" {describedBy} />
+{/snippet}
+
 {#snippet whoSection()}
 	<SummaryList
 		rows={[
-			{ label: 'Given name', value: detail!.givenName },
-			{ label: 'Family name', value: detail!.familyName || '—' },
-			{ label: 'Preferred name', value: detail!.preferredName || '—' },
-			{ label: 'Date of birth', value: detail!.dateOfBirth || '—' }
+			changeable('Given name', detail!.givenName, 'name', 'given name'),
+			changeable('Family name', detail!.familyName || '—', 'name', 'family name'),
+			changeable('Preferred name', detail!.preferredName || '—', 'name', 'preferred name'),
+			changeable('Date of birth', detail!.dateOfBirth || '—', 'date-of-birth', 'date of birth')
 		]}
+		action={changeAction}
 	/>
 {/snippet}
 
 {#snippet contactSection()}
 	<SummaryList
 		rows={[
-			{ label: 'Email', value: detail!.email || '—' },
-			{ label: 'Phone', value: detail!.phone || '—' },
+			changeable('Email', detail!.email || '—', 'email', 'email address'),
+			changeable('Phone', detail!.phone || '—', 'phone', 'phone number'),
 			{ label: 'Portal invite', value: portalInviteStatusText(detail!) }
-		]}
+		] as ChangeRow[]}
+		action={changeAction}
 	>
 		{#snippet value(row)}
 			{row.value}
@@ -479,20 +499,22 @@
 {#snippet addressSection()}
 	<SummaryList
 		rows={[
-			{
-				label: 'Address',
-				value:
-					[
-						detail!.addressLine1,
-						detail!.addressLine2,
-						detail!.addressLocality,
-						detail!.addressRegion,
-						detail!.addressPostalCode
-					]
-						.filter(Boolean)
-						.join(', ') || '—'
-			}
+			changeable(
+				'Address',
+				[
+					detail!.addressLine1,
+					detail!.addressLine2,
+					detail!.addressLocality,
+					detail!.addressRegion,
+					detail!.addressPostalCode
+				]
+					.filter(Boolean)
+					.join(', ') || '—',
+				'address',
+				'address'
+			)
 		]}
+		action={changeAction}
 	/>
 {/snippet}
 
@@ -517,7 +539,8 @@
 			One SummaryList per section, not per field (#2051): a list per
 			field gave each its own key column, so the values zig-zagged down
 			the page. Keyed on index: a Practice can name two sections alike.
-			#2008's Change links go on these rows.
+			Each row's Change opens the journey's page for its section (#2048);
+			a field the Practice no longer asks has none.
 		-->
 		<stack-l space="var(--space-6)">
 			{#each fieldGroups as group, groupIndex (groupIndex)}
@@ -526,10 +549,16 @@
 						<Heading level={3} variant="card" text={group.heading} />
 					{/if}
 					<SummaryList
-						rows={group.fields.map((field) => ({
-							label: field.label,
-							value: field.note ? `${resolvedFieldValueText(field) || '—'} (${field.note})` : resolvedFieldValueText(field) || '—'
-						}))}
+						rows={group.fields.map((field): ChangeRow => {
+							const value = field.note
+								? `${resolvedFieldValueText(field) || '—'} (${field.note})`
+								: resolvedFieldValueText(field) || '—';
+							const section = fieldSections.get(field.fieldId);
+							return section === undefined
+								? { label: field.label, value }
+								: changeable(field.label, value, sectionSlug(section), field.label);
+						})}
+						action={changeAction}
 					/>
 				</stack-l>
 			{/each}

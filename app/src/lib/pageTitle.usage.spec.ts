@@ -41,6 +41,7 @@ const TEMPLATES_WITH_PAGE_TITLE = [
 	'JourneyQuestion',
 	'MembershipQuestion',
 	'SignupQuestion',
+	'NameQuestion',
 	'DateOfBirthQuestion',
 	'EmailQuestion',
 	'PhoneQuestion',

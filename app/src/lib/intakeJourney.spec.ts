@@ -126,8 +126,10 @@ describe('detailsSavedMessage and clientSavedMessage', () => {
 
 describe('intakeStepList', () => {
 	// #1610: a Client's details journey asks everything but the name.
-	it('is four steps for a details journey at a Practice with no added fields', () => {
+	// #2048: the name first, since the journey is the one way to change it.
+	it('is five steps for a details journey at a Practice with no added fields', () => {
 		expect(intakeStepList([], DETAILS_STEPS).map((step) => step.slug)).toEqual([
+			'name',
 			'date-of-birth',
 			'email',
 			'phone',

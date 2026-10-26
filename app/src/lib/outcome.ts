@@ -3,7 +3,8 @@
  *
  * A save that stays where it was made says what it did with a `Notice` in
  * place. A save that leaves the screen -- the details journey's check
- * page, the Client edit form, intake, the Start work form -- has nothing
+ * page or a question a Change on her record opened, intake, the Start
+ * work form -- has nothing
  * in place to say it with, so it hands the message to the screen it goes
  * to, and that screen shows it before its `<h1>`, focused on arrival
  * (`docs/design/govuk-alignment.md`, Confirmation pages and Notification

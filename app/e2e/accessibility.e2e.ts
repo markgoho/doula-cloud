@@ -800,12 +800,6 @@ const STAFF_ROUTES: SeededRoute<StaffSeed>[] = [
 		h1: 'Approve work with Casey Pending'
 	},
 	{
-		key: 'practices/[practiceId]/clients/[clientId]/edit',
-		archetype: 'E',
-		url: (s) => `/practices/${s.practiceId}/clients/${s.clientId}/edit`,
-		h1: 'Edit Jane Smith'
-	},
-	{
 		// Anchored, unlike every other h1 here: the heading is the submit
 		// button's own label, and the Doula wording ("Ask to start work
 		// with Jane Smith") renders in the window between the Client
@@ -819,10 +813,16 @@ const STAFF_ROUTES: SeededRoute<StaffSeed>[] = [
 	},
 	{
 		// #1610: her details journey, opened through its door the way
-		// her record's link opens it.
-		key: 'practices/[practiceId]/clients/[clientId]/details/date-of-birth',
+		// her Engagement's link opens it, at its first question (#2048).
+		key: 'practices/[practiceId]/clients/[clientId]/details/name',
 		archetype: 'E',
 		url: (s) => `/practices/${s.practiceId}/clients/${s.clientId}/details`,
+		h1: "What is Jane's name?"
+	},
+	{
+		key: 'practices/[practiceId]/clients/[clientId]/details/date-of-birth',
+		archetype: 'E',
+		url: (s) => `/practices/${s.practiceId}/clients/${s.clientId}/details/date-of-birth`,
 		h1: /date of birth\? \(optional\)$/
 	},
 	{
@@ -1045,22 +1045,25 @@ const STAFF_ROUTES: SeededRoute<StaffSeed>[] = [
 		}
 	},
 	{
-		// The edit path's possible-duplicate question (gate two, #814):
-		// Jane's email changed to Pat's collides on the email alone, which
-		// is not a name substitution, so the save goes to this page rather
-		// than to the substitution dialog. Nothing is written.
-		key: 'practices/[practiceId]/clients/[clientId]/edit/duplicate',
+		// The edit path's possible-duplicate question (gate two, #814), on
+		// the details journey since #2048: Jane's email changed to Pat's,
+		// from the Change on her record's email row, collides on the email
+		// alone, which is not a name substitution, so the save goes to this
+		// page rather than to the substitution dialog. Nothing is written.
+		key: 'practices/[practiceId]/clients/[clientId]/details/duplicate',
 		archetype: 'E',
-		url: (s) => `/practices/${s.practiceId}/clients/${s.clientId}/edit`,
+		url: (s) => `/practices/${s.practiceId}/clients/${s.clientId}/details?step=email`,
 		h1: 'Is this the same person?',
 		reach: async (page, { patEmail }) => {
-			// The form fills in from her record once it loads, so it is
+			// The question fills in from her record once it loads, so it is
 			// typed into only after that.
-			await expect(page.getByRole('heading', { level: 1, name: 'Edit Jane Smith' })).toBeVisible();
+			await expect(
+				page.getByRole('heading', { level: 1, name: "What is Jane's email address? (optional)" })
+			).toBeVisible();
 			await expect(page.locator(LOADING_AFFORDANCE_SELECTOR)).toHaveCount(0);
-			await page.getByLabel('Email').fill(patEmail);
+			await page.getByRole('textbox').fill(patEmail);
 			await page.getByRole('button', { name: 'Save' }).click();
-			await expect(page).toHaveURL(/\/edit\/duplicate$/);
+			await expect(page).toHaveURL(/\/details\/duplicate$/);
 		}
 	}
 ];

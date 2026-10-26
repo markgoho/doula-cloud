@@ -70,8 +70,16 @@ describe('answerSections', () => {
 	it('lists only the steps a details journey asks', () => {
 		const sections = answerSections(blankAnswers(), [], basePath, DETAILS_STEPS);
 
-		expect(rowLabels(sections[0].answers)).toEqual(['Date of birth', 'Email address', 'Phone number', 'Address']);
-		expect(sections[0].answers[0].changeHref).toBe(`${basePath}/date-of-birth?from=check`);
+		expect(rowLabels(sections[0].answers)).toEqual([
+			'Given name',
+			'Family name',
+			'Preferred name',
+			'Date of birth',
+			'Email address',
+			'Phone number',
+			'Address'
+		]);
+		expect(sections[0].answers[0].changeHref).toBe(`${basePath}/name?from=check`);
 	});
 
 	// #2033: GOV.UK shows an address as one row with its lines joined.
@@ -108,19 +116,22 @@ describe('answerSections', () => {
 	it('reads the date of birth back in words, not as it is stored', () => {
 		const sections = answerSections({ ...blankAnswers(), dateOfBirth: '1988-02-09' }, [], basePath, DETAILS_STEPS);
 
-		expect(sections[0].answers[0].value).toBe('Feb 9, 1988');
+		expect(sections[0].answers[3].value).toBe('Feb 9, 1988');
 	});
 
 	it('leaves an unanswered date of birth unanswered rather than formatting a blank', () => {
 		const sections = answerSections(blankAnswers(), [], basePath, DETAILS_STEPS);
 
-		expect(sections[0].answers[0].value).toBe(NOT_ANSWERED);
+		expect(sections[0].answers[3].value).toBe(NOT_ANSWERED);
 	});
 
 	it('sends each Change link back to the question that asked it', () => {
 		const sections = answerSections(blankAnswers(), [], basePath, DETAILS_STEPS);
 
 		expect(sections[0].answers.map((answer) => answer.changeHref)).toEqual([
+			`${basePath}/name?from=check`,
+			`${basePath}/name?from=check`,
+			`${basePath}/name?from=check`,
 			`${basePath}/date-of-birth?from=check`,
 			`${basePath}/email?from=check`,
 			`${basePath}/phone?from=check`,

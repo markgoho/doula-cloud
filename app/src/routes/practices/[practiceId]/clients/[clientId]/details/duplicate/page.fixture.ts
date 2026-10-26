@@ -1,11 +1,12 @@
 /*
- * Gate two's question, on the edit path (ADR-0017's amendment, #814), as
+ * Gate two's question, on the details journey's save (ADR-0017's
+ * amendment, #814, #2048), as
  * the continuum check sees it (#595).
  *
  * Seeded through `editMergeDraft` directly rather than through
  * `respond()`, the same reason `clients/new/duplicate/page.fixture.ts`
  * seeds `intakeDraft`: the sweep mounts this route on its own, without
- * the edit page's 409 that would normally fill the draft.
+ * the journey's save whose 409 would normally fill the draft.
  *
  * Two matches, not one (`.claude/rules/svelte-tests.md`'s row rule): one
  * with `wouldSurvive: true` and every optional column filled in at its
@@ -16,6 +17,7 @@
 import type { ClientEditFields, CollisionMatch } from '#lib/client.js';
 import { editMergeDraft } from '#lib/editMergeDraft.svelte.js';
 import type { RouteFixture } from '../../../../../../routeFixture.js';
+import { seedDetails } from '../detailsFixture.js';
 import Page from './+page.svelte';
 
 export const practiceId = 'practice-1';
@@ -80,16 +82,17 @@ export const matches: CollisionMatch[] = [
  * renders the screen a reader would actually meet.
  */
 export function seedEditMergeDraft(): void {
+	seedDetails();
 	editMergeDraft.open(clientId, fields, matches);
 }
 
-// eslint-disable-next-line unicorn/no-top-level-side-effects -- installing state IS what a fixture does: the sweep mounts this route without the edit page's 409 that would have filled it, and the module has no other moment to do it in.
+// eslint-disable-next-line unicorn/no-top-level-side-effects -- installing state IS what a fixture does: the sweep mounts this route without the journey's save whose 409 would have filled it, and the module has no other moment to do it in.
 seedEditMergeDraft();
 
 export const fixture: RouteFixture = {
-	name: 'The Client edit duplicate check',
+	name: 'The duplicate check on a change to a Client’s details',
 	component: Page,
 	params: { practiceId, clientId },
-	url: 'https://example.test/practices/practice-1/clients/client-1/edit/duplicate',
+	url: 'https://example.test/practices/practice-1/clients/client-1/details/duplicate',
 	readyText: 'Is this the same person?'
 };
