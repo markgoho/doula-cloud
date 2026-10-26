@@ -138,11 +138,12 @@ describe('the Practice-wide invoice list (#265)', () => {
 
 		await expect
 			.element(
-				testPage.getByRole('cell', {
-					name: 'No invoices yet. One appears here as soon as a contract is billed.'
-				})
+				testPage.getByText('No invoices yet. One appears here as soon as a contract is billed.')
 			)
 			.toBeVisible();
+		// #2015: an empty book has nothing to total and nothing to narrow.
+		await expect.element(testPage.getByText('Outstanding')).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('link', { name: 'All invoices' })).not.toBeInTheDocument();
 	});
 
 	// #270: a standing fact from the envelope's own clientsCanPay field,

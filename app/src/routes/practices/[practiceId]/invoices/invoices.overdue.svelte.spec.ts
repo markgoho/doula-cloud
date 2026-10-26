@@ -97,6 +97,6 @@ describe('the overdue book (#768)', () => {
 	it('says nothing is late rather than "no invoices yet" when the narrowed list is empty', async () => {
 		await setup({ ...data, items: [], isNarrowedToOverdue: true, overdueCents: 0, overdueCount: 0 });
 
-		await expect.element(testPage.getByRole('cell', { name: /Nothing is overdue/ })).toBeVisible();
+		await expect.element(testPage.getByText(/Nothing is overdue/)).toBeVisible();
 	});
 });

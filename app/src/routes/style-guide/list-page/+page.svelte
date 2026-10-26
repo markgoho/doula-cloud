@@ -2,7 +2,7 @@
 	import type { DemoVariant } from '../drag-surface/dragSurface.js';
 
 	interface Properties {
-		shown?: 'content' | 'loading' | 'loadError';
+		shown?: 'content' | 'empty' | 'loading' | 'loadError';
 	}
 
 	/*
@@ -11,6 +11,7 @@
 	 * replaces the content, so one mount cannot hold two of them.
 	 */
 	export const variants: readonly DemoVariant<Properties>[] = [
+		{ name: 'List page, empty', props: { shown: 'empty' } },
 		{ name: 'List page, loading', props: { shown: 'loading' } },
 		{ name: 'List page, with a load error', props: { shown: 'loadError' } }
 	];
@@ -67,7 +68,7 @@
 {/snippet}
 
 {#snippet content()}
-	<DataTable {columns} {rows} emptyMessage="No Staff yet." />
+	<DataTable {columns} rows={shown === 'empty' ? [] : rows} emptyMessage="No Staff yet." />
 {/snippet}
 
 {#if shown === 'loading'}

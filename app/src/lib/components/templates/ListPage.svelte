@@ -18,6 +18,12 @@
 	 * `primary`/`empty` would recreate a state that already exists one layer
 	 * down, so this Template takes a single `content` region instead.
 	 *
+	 * The empty list is therefore the content's own (#2015): `DataTable`
+	 * draws an `EmptyState` in place of its table, and a list that is not a
+	 * `DataTable` places one itself. Whatever summarizes the list (totals,
+	 * a count line, filters with nothing to narrow) is the route's to leave
+	 * out when there is nothing to summarize.
+	 *
 	 * No cap on `center-l`, matching `OverviewHub`'s own reasoning: a list is
 	 * tables, not prose, and past the ramp's plateau more room buys more
 	 * content (#531, #541) -- a `DataTable` stops at its own content width

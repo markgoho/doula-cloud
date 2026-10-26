@@ -13,7 +13,9 @@
 	 * pair: a document that does not exist yet is one sentence ("No Contract
 	 * has been sent for your care yet."), and presence-is-state keeps it the
 	 * same shape as `loading` and `loadError` beside it. A hub's empty state
-	 * is a whole body; a document's is a line.
+	 * is a whole body; a document's is a line. That line is drawn as an
+	 * `EmptyState` (#2015), with `emptyAction` beside it where the reader has
+	 * one.
 	 *
 	 * The back link is `backHref`/`backLabel`, `QuestionPage`'s shape, not a
 	 * Snippet: this Template owns `BackLink`, so it can also own hiding it on
@@ -25,7 +27,7 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
-	import Text from '#lib/components/atoms/Text.svelte';
+	import EmptyState, { type EmptyStateAction } from '#lib/components/molecules/EmptyState.svelte';
 
 	interface Properties {
 		/**
@@ -53,9 +55,23 @@
 		Presence is the state, value is the "none yet" sentence.
 		*/
 		empty?: string;
+		/**
+		 * The one action that makes the document, shown with `empty`.
+		 */
+		emptyAction?: EmptyStateAction;
 	}
 
-	let { title, serviceName, backHref, backLabel, content, loading, loadError, empty }: Properties = $props();
+	let {
+		title,
+		serviceName,
+		backHref,
+		backLabel,
+		content,
+		loading,
+		loadError,
+		empty,
+		emptyAction
+	}: Properties = $props();
 </script>
 
 <PageTitle page={title} {serviceName} />
@@ -82,7 +98,7 @@
 			{:else if empty}
 				<stack-l space="var(--space-7)">
 					<Heading level={1} variant="page" text={title} />
-					<Text text={empty} />
+					<EmptyState message={empty} action={emptyAction} />
 				</stack-l>
 			{:else}
 				<stack-l space="var(--space-7)">

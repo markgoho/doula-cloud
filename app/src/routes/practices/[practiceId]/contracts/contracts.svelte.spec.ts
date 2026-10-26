@@ -91,9 +91,7 @@ describe('the Practice-wide Contracts awaiting signature list (#273)', () => {
 
 		await expect
 			.element(
-				testPage.getByRole('cell', {
-					name: 'Nothing is waiting. Every contract has been signed or voided.'
-				})
+				testPage.getByText('Nothing is waiting. Every contract has been signed or voided.')
 			)
 			.toBeVisible();
 	});
@@ -163,7 +161,7 @@ describe('the Practice-wide void requests waiting list (#971)', () => {
 		await setup({ ...data, voidRequests: { items: [], hasMore: false } });
 
 		await expect
-			.element(testPage.getByRole('cell', { name: 'No void request is waiting on you.' }))
+			.element(testPage.getByText('No void request is waiting on you.'))
 			.toBeVisible();
 	});
 });

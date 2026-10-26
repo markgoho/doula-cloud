@@ -13,6 +13,7 @@
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import EmptyState from '#lib/components/molecules/EmptyState.svelte';
 
 	let {
 		offers,
@@ -39,7 +40,7 @@
 </script>
 
 {#if offers.length === 0}
-	<p>You have no offers.</p>
+	<EmptyState message="You have no offers." />
 {:else}
 	<ul>
 		{#each offers as offer (offer.offerId)}

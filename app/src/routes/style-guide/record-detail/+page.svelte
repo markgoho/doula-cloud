@@ -4,6 +4,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import EmptyState from '#lib/components/molecules/EmptyState.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 
 	interface Visit {
@@ -87,11 +88,9 @@
 {/snippet}
 
 {#snippet invoicesSection()}
-	<Text
-		text="One invoice outstanding — $4,250.00, due Mar 15, 2027."
-		step="body-sm"
-		tone="variant"
-	/>
+	<!-- An empty section keeps its heading and places its own EmptyState
+	     (#2015). -->
+	<EmptyState message="No Invoices yet." />
 {/snippet}
 
 <!--

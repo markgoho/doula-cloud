@@ -104,10 +104,10 @@ describe('the founder feedback list (#1526)', () => {
 		await setup(empty.props!.data as FeedbackListData);
 
 		await expect
-			.element(testPage.getByRole('cell', { name: 'No attempt to open an issue has failed.' }))
+			.element(testPage.getByText('No attempt to open an issue has failed.'))
 			.toBeVisible();
 		await expect
-			.element(testPage.getByRole('cell', { name: 'No feedback yet. A piece appears here as soon as somebody sends one.' }))
+			.element(testPage.getByText('No feedback yet. A piece appears here as soon as somebody sends one.'))
 			.toBeVisible();
 	});
 

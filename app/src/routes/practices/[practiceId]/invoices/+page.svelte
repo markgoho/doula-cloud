@@ -57,6 +57,8 @@
 	 * the whole book's figures on every page, so paging must not make
 	 * "outstanding" look like it is only what has been scrolled to.
 	 */
+	const isBookEmpty = $derived(!data.isNarrowedToOverdue && invoices.items.length === 0);
+
 	const summary = $derived([
 		{ label: 'Outstanding', value: formatAmount(data.outstandingCents) },
 		{
@@ -147,19 +149,27 @@
 {/snippet}
 
 {#snippet content()}
-	<DescriptionList items={summary} />
+	<!--
+		#2015: a book with no invoice in it has nothing to total and nothing
+		to narrow, so six zeros and two chips would answer no question. The
+		narrowed list keeps both even when it is empty: the chips are its way
+		back to the whole book.
+	-->
+	{#if !isBookEmpty}
+		<DescriptionList items={summary} />
 
-	<!-- One cluster, so the two filters sit side by side as one control
-	     rather than as two rows of ListPage's stack. -->
-	<cluster-l space="var(--space-3)">
-		<Link href={invoicesHref} label="All invoices" variant="chip" current={!data.isNarrowedToOverdue} />
-		<Link
-			href="{invoicesHref}?overdue=true"
-			label="Overdue ({data.overdueCount})"
-			variant="chip"
-			current={data.isNarrowedToOverdue}
-		/>
-	</cluster-l>
+		<!-- One cluster, so the two filters sit side by side as one control
+		     rather than as two rows of ListPage's stack. -->
+		<cluster-l space="var(--space-3)">
+			<Link href={invoicesHref} label="All invoices" variant="chip" current={!data.isNarrowedToOverdue} />
+			<Link
+				href="{invoicesHref}?overdue=true"
+				label="Overdue ({data.overdueCount})"
+				variant="chip"
+				current={data.isNarrowedToOverdue}
+			/>
+		</cluster-l>
+	{/if}
 
 	<!--
 		#270: a standing fact about the Practice, from the same aggregate

@@ -474,9 +474,10 @@ describe('Your visits (#478)', () => {
 	it('promises nothing when nothing is booked', async () => {
 		await page.viewport(1440, 900);
 
-		const { container } = await setupVisits({ items: [] });
+		await setupVisits({ items: [] });
 
-		await expect.poll(visitsTableText(container)).toContain('Nothing is booked yet.');
+		// #2015: an empty list is its empty state, not a table.
+		await expect.element(page.getByText('Nothing is booked yet.')).toBeVisible();
 		await expect.element(page.getByText(/will be|soon|shortly|coming up/i)).not.toBeInTheDocument();
 	});
 

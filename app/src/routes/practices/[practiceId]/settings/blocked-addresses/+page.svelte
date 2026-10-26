@@ -180,30 +180,24 @@
 		<Notice variant="status" message="{unblockedAddress} can receive email again." />
 	{/if}
 
-	{#if suppressions.length === 0}
-		<!--
-			Most Practices are here, and the sentence is written for them: a
-			table header over the word "none" answers nothing, so the empty
-			state says what the empty list means instead.
-		-->
-		<Text
-			text="No blocked addresses. Every address this Practice writes to can still receive its email."
-		/>
-	{:else}
-		<!--
-			hasMore is always false: the endpoint answers one Practice's
-			blocked addresses whole. It is a bounded population -- a
-			Practice with enough of these to page through has a mail
-			problem no list would fix.
-		-->
-		<DataTable
-			{columns}
-			rows={suppressions}
-			rowActions={{ label: 'Actions', content: rowActions }}
-			hasMore={false}
-			emptyMessage="No blocked addresses."
-		/>
-	{/if}
+	<!--
+		Most Practices are empty here, and the sentence is written for them:
+		it says what the empty list means, and DataTable draws it as its
+		empty state rather than a header over nothing (#2015). There is no
+		action: a block is the mail's to make, not the Practice's.
+
+		hasMore is always false: the endpoint answers one Practice's
+		blocked addresses whole. It is a bounded population -- a
+		Practice with enough of these to page through has a mail
+		problem no list would fix.
+	-->
+	<DataTable
+		{columns}
+		rows={suppressions}
+		rowActions={{ label: 'Actions', content: rowActions }}
+		hasMore={false}
+		emptyMessage="No blocked addresses. Every address this Practice writes to can still receive its email."
+	/>
 {/snippet}
 
 <ListPage

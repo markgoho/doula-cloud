@@ -194,7 +194,12 @@
 			</fieldset>
 		</form>
 
-		<p aria-live="polite" class="summary">{summary}</p>
+		<!-- Hidden, not removed, when nothing is scheduled (#2015): the
+		     table's empty state says it on screen, and this live region still
+		     tells a screen reader what the new range found. -->
+		<p aria-live="polite" class="summary" class:visually-hidden={schedule.items.length === 0}>
+			{summary}
+		</p>
 
 		<DataTable
 			{columns}

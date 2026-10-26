@@ -109,6 +109,14 @@ describe('DocumentPage.svelte', () => {
 		expect(h1Count(container)).toBe(1);
 	});
 
+	it('offers the one action that makes the document beside its "none yet" sentence', async () => {
+		await setup({ empty: 'No Birth Plan yet.', emptyAction: { label: 'Start the Birth Plan', href: '/plan' } });
+
+		await expect
+			.element(page.getByRole('link', { name: 'Start the Birth Plan' }))
+			.toHaveAttribute('href', '/plan');
+	});
+
 	it('prefers loadError over loading, and loading over empty, when more than one is given', async () => {
 		await setup({ loadError: 'Failed to load Contract', loading: 'Loading Contract', empty: 'None yet.' });
 

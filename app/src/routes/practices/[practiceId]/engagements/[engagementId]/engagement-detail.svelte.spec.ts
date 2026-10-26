@@ -552,7 +552,7 @@ describe('the Activity ledger section (#486)', () => {
 	it('shows the empty-ledger message when the Engagement has no activity yet', async () => {
 		await setup(fixtureDetail, jsonResponse({ items: [], hasMore: false }));
 
-		await expect.element(testPage.getByRole('cell', { name: 'Nothing has happened yet.' })).toBeVisible();
+		await expect.element(testPage.getByText('Nothing has happened yet.')).toBeVisible();
 	});
 
 	it('says so when the ledger cannot be read', async () => {

@@ -232,9 +232,7 @@ describe('clients list screen', () => {
 	it('shows the empty message when there are no Clients', async () => {
 		await setup(jsonResponse({ items: [], hasMore: false }), { hasAnyClient: false });
 
-		// getByRole, not getByText: the record view carries the same
-		// message in a hidden <p>, and only a role query excludes it.
-		await expect.element(testPage.getByRole('cell', { name: 'No Clients yet.' })).toBeVisible();
+		await expect.element(testPage.getByText('No Clients yet.')).toBeVisible();
 	});
 
 	it('shows an error notice when the Clients list fails to load', async () => {
@@ -261,13 +259,9 @@ describe('a contractor Doula without the owner or admin role', () => {
 	it('names why her list is empty rather than reusing "No Clients yet."', async () => {
 		await setup(jsonResponse({ items: [], hasMore: false }), { isContractor: true });
 
-		// getByRole, not getByText: the record view carries the same
-		// message in a hidden <p>, and only a role query excludes it.
 		await expect
 			.element(
-				testPage.getByRole('cell', {
-					name: 'Work reaches you as an Offer, so there are no Clients here yet.'
-				})
+				testPage.getByText('Work reaches you as an Offer, so there are no Clients here yet.')
 			)
 			.toBeVisible();
 	});
@@ -293,9 +287,7 @@ describe('a non-contractor with an empty list', () => {
 	it('shows the plain empty message with no explainer link', async () => {
 		await setup(jsonResponse({ items: [], hasMore: false }), { hasAnyClient: false });
 
-		// getByRole, not getByText: the record view carries the same
-		// message in a hidden <p>, and only a role query excludes it.
-		await expect.element(testPage.getByRole('cell', { name: 'No Clients yet.' })).toBeVisible();
+		await expect.element(testPage.getByText('No Clients yet.')).toBeVisible();
 		await expect
 			.element(testPage.getByRole('link', { name: 'How to add Clients of your own' }))
 			.not.toBeInTheDocument();
@@ -306,13 +298,9 @@ describe('a non-contractor with an empty list', () => {
 		await setup(jsonResponse({ items: [], hasMore: false }), { hasAnyClient: true });
 
 		await expect
-			.element(
-				testPage.getByRole('cell', {
-					name: 'No Client has work yet. Turn on See everyone to list every Client.'
-				})
-			)
+			.element(testPage.getByText('No Client has work yet. Turn on See everyone to list every Client.'))
 			.toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: 'No Clients yet.' })).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('No Clients yet.')).not.toBeInTheDocument();
 	});
 
 	// With "See everyone" on there is no filter left to point at, so an
@@ -322,7 +310,7 @@ describe('a non-contractor with an empty list', () => {
 
 		await setup(jsonResponse({ items: [], hasMore: false }), { hasAnyClient: true });
 
-		await expect.element(testPage.getByRole('cell', { name: 'No Clients yet.' })).toBeVisible();
+		await expect.element(testPage.getByText('No Clients yet.')).toBeVisible();
 	});
 });
 

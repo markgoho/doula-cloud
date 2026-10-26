@@ -187,7 +187,16 @@
 			</fieldset>
 		</form>
 
-		<p aria-live="polite" class="summary">{summary}</p>
+		<!-- Hidden, not removed, when the roster is empty (#2015): the table's
+		     empty state says it on screen, and this live region still tells a
+		     screen reader what the new dates found. -->
+		<p
+			aria-live="polite"
+			class="summary"
+			class:visually-hidden={data.roster.windows.length === 0}
+		>
+			{summary}
+		</p>
 
 		<!--
 			hasMore is false and says something true: the roster is one whole

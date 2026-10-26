@@ -454,6 +454,24 @@ describe('client detail hub', () => {
 			.toBeVisible();
 	});
 
+	// #2015: the empty Practice-defined fields section sends the Owner, who
+	// can add the questions, to the editor, and offers a Doula nothing.
+	it('sends an Owner to add a question when the Practice asks none', async () => {
+		await setup({ isOwner: true, overrides: { resolvedFields: [] } });
+
+		await expect.element(testPage.getByText('No Practice-defined fields yet.')).toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Add a question' }))
+			.toHaveAttribute('href', `/practices/${practiceId}/settings/client-fields`);
+	});
+
+	it('offers a Doula no way to add a question', async () => {
+		await setup({ overrides: { resolvedFields: [] } });
+
+		await expect.element(testPage.getByText('No Practice-defined fields yet.')).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: 'Add a question' })).not.toBeInTheDocument();
+	});
+
 	it('offers no details journey on an erased record', async () => {
 		await setup({ overrides: { erasedAt: '2026-03-01T00:00:00Z' } });
 

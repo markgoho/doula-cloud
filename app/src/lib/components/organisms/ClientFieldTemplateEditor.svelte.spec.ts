@@ -71,6 +71,20 @@ describe('ClientFieldTemplateEditor.svelte', () => {
 		expect(labelInputs.map((element) => element.value)).toEqual(['Intake note', 'Referral source']);
 	});
 
+	// #2015: every Practice starts with no extra questions, and says so.
+	it('says there are no extra questions yet when no field is active', async () => {
+		await setup({ fields: [{ ...defaultFields[0]!, archived: true }] });
+
+		await expect.element(page.getByText('No extra questions yet. Add one below.')).toBeVisible();
+		expect(page.getByLabelText('Field label').elements()).toHaveLength(0);
+	});
+
+	it('shows no empty state while a field is active', async () => {
+		await setup();
+
+		await expect.element(page.getByText('No extra questions yet. Add one below.')).not.toBeInTheDocument();
+	});
+
 	it('renders an empty options textarea for a select field with no options property at all', async () => {
 		const fieldWithoutOptions: Field[] = [{ id: 'a', type: 'single_select', label: 'Location', order: 0, archived: false }];
 		await setup({ fields: fieldWithoutOptions });
