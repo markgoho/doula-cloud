@@ -80,6 +80,7 @@
 			{answers}
 			onAnswerChange={(fieldId, value) => (answers = setAnswer(answers, fieldId, value))}
 			onToggleOption={(fieldId, option) => (answers = toggleMultiSelectOption(answers, fieldId, option))}
+			headingLevel={3}
 		/>
 	</section>
 </stack-l>

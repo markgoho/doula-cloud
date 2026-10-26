@@ -12,9 +12,16 @@
 	 * that two consumers which should change together share one
 	 * component. What is left here is the one thing a Plan has that a
 	 * Client details section does not: `section_header` fields in among
-	 * the questions. Each starts a group, its label a level-3 `Heading`
-	 * under the page's Care Plan or Birth Plan heading, and the questions
-	 * after it, up to the next header, are that group's.
+	 * the questions. Each starts a group, its label a `Heading` one level
+	 * under the heading the form sits under, and the questions after it,
+	 * up to the next header, are that group's.
+	 *
+	 * `headingLevel` is that group heading's level, and it is required:
+	 * only the page knows what the form sits under (#2106). On the
+	 * Engagement page the form opens under a level-3 "Change the Care
+	 * Plan", so its groups are level 4; a fixed level 3 made them siblings
+	 * of the form's own heading and the outline went flat. The size stays
+	 * the `card` step whatever the level -- this is outline, not look.
 	 */
 	import { answerOptions, type Answers, type Field } from '#lib/planInstance.js';
 	import type { FieldValue } from '#lib/intakeDraft.svelte.js';
@@ -29,9 +36,13 @@
 		A multi-select's one ticked or unticked option.
 		*/
 		onToggleOption: (fieldId: string, option: string) => void;
+		/**
+		The level of each group's heading: one under the heading the form sits under.
+		*/
+		headingLevel: 2 | 3 | 4 | 5 | 6;
 	}
 
-	let { fields, answers, onAnswerChange, onToggleOption }: Properties = $props();
+	let { fields, answers, onAnswerChange, onToggleOption, headingLevel }: Properties = $props();
 
 	/*
 	 * `ClientFieldAnswers` reports a multi-select as its whole list after
@@ -85,7 +96,7 @@
 	{#each groups as group (group.key)}
 		<stack-l space="var(--space-4)">
 			{#if group.heading !== undefined}
-				<Heading level={3} variant="card" text={group.heading} />
+				<Heading level={headingLevel} variant="card" text={group.heading} />
 			{/if}
 			<ClientFieldAnswers fields={group.fields} values={answers} onChange={handleChange} {idPrefix} />
 		</stack-l>
