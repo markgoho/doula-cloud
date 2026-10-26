@@ -63,7 +63,9 @@
 	{#if isSwitchable}
 		<MenuButton label={current.practiceName} icon="caret-down" iconPosition="end" align="end">
 			<p class="heading">Your practices</p>
-			<ul>
+			<!-- No preload (#2070): a hover would load that Practice's session,
+			     which the BFF records as her last-used Practice. -->
+			<ul data-sveltekit-preload-data="false">
 				{#each practices as practice (practice.practiceId)}
 					{@const isCurrent = practice.practiceId === currentPracticeId}
 					<li class:current={isCurrent}>

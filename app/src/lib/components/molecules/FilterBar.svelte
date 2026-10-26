@@ -33,6 +33,14 @@
 	 * and the line stays in the document, visually hidden, so it is still
 	 * announced (#2015). It is hidden with a class rather than removed, so
 	 * the live region exists before its text changes.
+	 *
+	 * `isAppliedOnChange` (#2068) is the bar whose every control acts the
+	 * moment it changes -- the Clients list's "See everyone" toggle. A
+	 * switch is a setting that takes effect at once, so an Apply after it
+	 * would be a second press for nothing; the bar draws none. The route
+	 * navigates from the control's own change. Schedule and On call keep
+	 * Apply: a date is typed a character at a time, and a list that
+	 * reloaded on each one would move under the person typing it.
 	 */
 	import type { Snippet } from 'svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -44,8 +52,10 @@
 		action: string;
 		/**
 		 * The route's client-side navigation. It owns `preventDefault()`.
+		 * A bar with Apply needs it; an `isAppliedOnChange` bar of controls
+		 * that never submit a form (a switch) has nothing to hand it.
 		 */
-		onSubmit: (event: SubmitEvent) => void;
+		onSubmit?: (event: SubmitEvent) => void;
 		/**
 		 * What the bar does, in a few words ("Narrow the schedule").
 		 */
@@ -61,12 +71,17 @@
 		 */
 		empty?: boolean;
 		/**
+		 * Every control acts the moment it changes (a toggle), so the bar
+		 * draws no Apply. The route navigates from the control's change.
+		 */
+		isAppliedOnChange?: boolean;
+		/**
 		 * The fields, each a `LabeledField` with a named control.
 		 */
 		children: Snippet;
 	}
 
-	let { action, onSubmit, legend, status, empty = false, children }: Properties = $props();
+	let { action, onSubmit, legend, status, empty = false, isAppliedOnChange = false, children }: Properties = $props();
 </script>
 
 <!-- stacked-form:ignore: #2026 -- the one GET narrowing form. Its fields sit side by side and wrap on their own, and `StackedForm` would both stack them and take away the GET submission this form is built on. -->
@@ -75,7 +90,9 @@
 		<legend>{legend}</legend>
 		<cluster-l space="var(--space-related)" align="flex-end">
 			{@render children()}
-			<Button type="submit" label="Apply" variant="secondary" />
+			{#if !isAppliedOnChange}
+				<Button type="submit" label="Apply" variant="secondary" />
+			{/if}
 		</cluster-l>
 	</fieldset>
 	<p role="status" class="status" class:visually-hidden={empty}>{status}</p>

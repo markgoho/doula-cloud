@@ -517,6 +517,51 @@ func TestPutInstanceHandler_Success(t *testing.T) {
 	}
 }
 
+// TestPutInstanceHandler_RecordsWhichPlanChanged proves #2066 at the write
+// side: a save records one action per plan, so the Practice's feed names
+// the plan and the portal reader can leave the staff-only Care Plan out by
+// action alone.
+func TestPutInstanceHandler_RecordsWhichPlanChanged(t *testing.T) {
+	for _, tc := range []struct {
+		planType string
+		want     string
+	}{
+		{carePlanType, "care_plan_edited"},
+		{birthPlanType, "birth_plan_edited"},
+	} {
+		t.Run(tc.planType, func(t *testing.T) {
+			db := testdb.New(t)
+			uid := "put-instance-action-" + tc.planType
+			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+			_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+			seedInstance(t, db, engagementID, tc.planType,
+				`[{"id":"name","type":"short_text","label":"Name","order":0}]`, `{}`)
+
+			srv, session := newPlanServer(t, db, uid)
+			defer srv.Close()
+
+			resp := putInstance(t, srv, session, practiceID, engagementID, tc.planType, plans.PutInstanceRequest{
+				Answers: plans.Answers{nameFieldID: jamieAnswer},
+			})
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("PUT status = %d, want %d", resp.StatusCode, http.StatusOK)
+			}
+
+			var action string
+			if err := db.Admin.QueryRowContext(t.Context(),
+				`SELECT action FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1`,
+				engagementID,
+			).Scan(&action); err != nil {
+				t.Fatalf("query activity: %v", err)
+			}
+			if action != tc.want {
+				t.Fatalf("activity action = %q, want %q", action, tc.want)
+			}
+		})
+	}
+}
+
 // TestPlanTemplateEditDoesNotMutateExistingInstance is the AC's centerpiece:
 // editing a Practice's Plan Template after a Plan Instance already exists
 // must never change that instance's stored field snapshot.

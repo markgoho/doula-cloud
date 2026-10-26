@@ -16,16 +16,22 @@ function fromField() {
 
 interface SetupOptions {
 	empty?: boolean;
+	isAppliedOnChange?: boolean;
 	onSubmit?: (event: SubmitEvent) => void;
 }
 
-async function setup({ empty, onSubmit = vi.fn((event: SubmitEvent) => event.preventDefault()) }: SetupOptions = {}) {
+async function setup({
+	empty,
+	isAppliedOnChange,
+	onSubmit = vi.fn((event: SubmitEvent) => event.preventDefault())
+}: SetupOptions = {}) {
 	await render(FilterBar, {
 		action: '/practices/practice-1/schedule',
 		onSubmit,
 		legend: 'Narrow the schedule',
 		status: 'Showing 2 scheduled visits.',
 		empty,
+		isAppliedOnChange,
 		children: fromField()
 	});
 	return { onSubmit };
@@ -56,6 +62,14 @@ describe('FilterBar', () => {
 		await page.getByRole('button', { name: 'Apply' }).click();
 
 		expect(onSubmit).toHaveBeenCalledOnce();
+	});
+
+	// #2068: a bar whose control acts at once (a toggle) has no second press.
+	it('draws no Apply when every control acts the moment it changes', async () => {
+		await setup({ isAppliedOnChange: true });
+
+		await expect.element(page.getByRole('group', { name: 'Narrow the schedule' })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Apply' })).not.toBeInTheDocument();
 	});
 
 	it('says the result as its own status line', async () => {

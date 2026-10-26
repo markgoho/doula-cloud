@@ -29,7 +29,13 @@
 	let { practices }: Properties = $props();
 </script>
 
-<ul>
+<!--
+	data-sveltekit-preload-data="false" (#2070). app.html preloads a link's
+	data on hover, and a door's load reads that Practice's session -- the
+	request the BFF records as her last-used Practice. A pointer resting on
+	a door is not a choice, so no door here may load ahead of the click.
+-->
+<ul data-sveltekit-preload-data="false">
 	{#each practices as practice (practice.practiceId)}
 		<li>
 			<DoorLink href={practice.href} label={practice.practiceName} description={rolesLabel(practice.roles)} />

@@ -252,6 +252,8 @@ func TestStaffingActions_ContainsExactlyTheRosterSet(t *testing.T) {
 		activity.ActionEngagementReopened,
 		activity.ActionKindChanged,
 		activity.ActionBirthOutcomeRecorded,
+		// #2066: the Care Plan is staff-only, never shown in the portal.
+		activity.ActionCarePlanEdited,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("StaffingActions() = %v, want exactly %v", activity.StaffingActions(), want)

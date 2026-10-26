@@ -246,6 +246,17 @@ describe('the "see everyone" toggle', () => {
 		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients?all=true`);
 	});
 
+	// #2068: the toggle is the list's filter bar, with no Apply (a switch
+	// acts at once), and the bar says what the list now holds.
+	it('sits in the list’s filter bar, which says what the list holds', async () => {
+		await setup();
+
+		const bar = testPage.getByRole('group', { name: 'Choose who to show' });
+		await expect.element(bar.getByRole('switch', { name: 'See everyone' })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Apply' })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('status')).toHaveTextContent(/^Showing \d+ Clients? with work/);
+	});
+
 	it('navigates back to the default view when switched off', async () => {
 		pageState.url.searchParams.set('all', 'true');
 		await setup();

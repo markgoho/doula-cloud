@@ -232,18 +232,11 @@ func PutInstanceHandler() http.Handler {
 		}
 		practiceID, _ := staffauth.PracticeID(r.Context())
 		staffID, _ := staffauth.StaffID(r.Context())
-		diff, err := json.Marshal(map[string]string{"planType": planType})
-		if err != nil {
-			// coverage:ignore reason: a map of strings always marshals cleanly, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
 		if err := activity.Record(r.Context(), tx, activity.Entry{
 			PracticeID:  practiceID,
 			SubjectKind: activity.SubjectEngagement,
 			SubjectID:   engagementID,
-			Action:      string(activity.ActionPlanInstanceEdited),
-			Diff:        diff,
+			Action:      string(editedAction(planType)),
 			Actor:       activity.StaffActor(staffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -254,6 +247,17 @@ func PutInstanceHandler() http.Handler {
 		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: req.Answers, ClientAcknowledgedAt: nullTimePtr(clientAcknowledgedAt)}
 		apierr.WriteJSON(w, http.StatusOK, out)
 	})
+}
+
+// editedAction is the activity action a save of planType records (#2066):
+// one action per plan, so a reader names the plan from the action alone
+// and the portal reader can leave the staff-only Care Plan out by action.
+// planType has already passed planTypeFromPath, so it is one of the two.
+func editedAction(planType string) activity.EngagementAction {
+	if planType == birthPlanType {
+		return activity.ActionBirthPlanEdited
+	}
+	return activity.ActionCarePlanEdited
 }
 
 // fetchInstance reads the field snapshot, answers, and Client

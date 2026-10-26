@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import { loadClients, type ClientListItem, type OpenEngagement } from '#lib/client.js';
+	import { clientsResultSummary, loadClients, type ClientListItem, type OpenEngagement } from '#lib/client.js';
 	import type { ComponentProps } from 'svelte';
 	import { kindLabel } from '#lib/engagementRequest.js';
 	import { engagementStatusText } from '#lib/engagementDetail.js';
@@ -14,6 +14,7 @@
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import FilterBar from '#lib/components/molecules/FilterBar.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
@@ -70,6 +71,8 @@
 		clients.abandon();
 		await goto(clientsPath(checked));
 	}
+
+	const summary = $derived(clientsResultSummary(clients.items.length, clients.hasMore, isShowingEveryone));
 
 	// ADR-0017: a pending Engagement Request shows on its Client's row.
 	// She can hold one of each kind at once, hence the join rather than a
@@ -316,12 +319,25 @@
 		The default view is "Clients with work" (ADR-0017); this switches to
 		everyone, including a Client whose only Request was refused -- nothing
 		new is built for her, she is simply no longer filtered out.
+
+		#2068: the toggle is the list's filter, so it sits in the list's
+		filter bar, directly above the list it narrows (Law of Proximity).
+		A switch acts at once, so the bar draws no Apply; the toggle's own
+		change navigates.
 	-->
-	<LabeledField label="See everyone" orientation="inline">
-		{#snippet children(control)}
-			<Checkbox variant="toggle" checked={isShowingEveryone} onChange={handleToggleAll} {...control} />
-		{/snippet}
-	</LabeledField>
+	<FilterBar
+		action={clientsPath(false)}
+		legend="Choose who to show"
+		status={isLoaded ? summary : ''}
+		empty={isLoaded && clients.items.length === 0}
+		isAppliedOnChange
+	>
+		<LabeledField label="See everyone" orientation="inline">
+			{#snippet children(control)}
+				<Checkbox variant="toggle" checked={isShowingEveryone} onChange={handleToggleAll} {...control} />
+			{/snippet}
+		</LabeledField>
+	</FilterBar>
 
 	{#if error}
 		<Notice message={error} variant="error" />

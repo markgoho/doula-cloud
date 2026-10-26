@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { staffActivityPhrase, staffActivityPhrasedActions, staffPlanPhrase } from './staffActivityPhrases.js';
+import { staffActivityPhrase, staffActivityPhrasedActions } from './staffActivityPhrases.js';
 
 /*
  * Every action's Staff wording, with the subject's name (the Practice-wide
@@ -13,7 +13,9 @@ const WORDING: readonly (readonly [action: string, named: string, unnamed: strin
 	['billing_mode_changed', 'How the Practice takes payment changed', 'How the Practice takes payment changed'],
 	['birth_outcome_recorded', 'Birth outcome recorded for Amara', 'Birth outcome recorded for the Client'],
 	['birth_plan_acknowledged', 'Birth Plan marked as read by Amara', 'Birth Plan marked as read by the Client'],
+	['birth_plan_edited', 'Birth Plan for Amara changed', 'Birth Plan for the Client changed'],
 	['care_phase_changed', 'Care phase changed for Amara', 'Care phase changed for the Client'],
+	['care_plan_edited', 'Care Plan for Amara changed', 'Care Plan for the Client changed'],
 	['contract_amount_overridden', 'Contract price for Amara changed by hand', 'Contract price for the Client changed by hand'],
 	[
 		'contract_amount_repriced',
@@ -61,7 +63,6 @@ const WORDING: readonly (readonly [action: string, named: string, unnamed: strin
 	['payment_refunded', 'Money returned to Amara', 'Money returned to the Client'],
 	['payment_reversed', 'Payment from Amara removed', 'Payment from the Client removed'],
 	['payment_terms_changed', 'Payment terms changed', 'Payment terms changed'],
-	['plan_instance_edited', 'Care Plan or Birth Plan for Amara changed', 'Care Plan or Birth Plan for the Client changed'],
 	['portal_account_linked', "Care added to Amara's login", "Care added to the Client's login"],
 	['portal_account_provisioned', 'Login created for Amara', 'Login created for the Client'],
 	['portal_invite_sent', 'Amara invited to sign in', 'The Client invited to sign in'],
@@ -112,15 +113,3 @@ describe('staffActivityPhrase', () => {
 	});
 });
 
-describe('staffPlanPhrase (#2023)', () => {
-	it('names the plan a save changed, with the name and without it', () => {
-		expect(staffPlanPhrase('care_plan', 'Amara')).toBe('Care Plan for Amara changed');
-		expect(staffPlanPhrase('birth_plan')).toBe('Birth Plan for the Client changed');
-		expect(staffPlanPhrase('birth_plan', '')).toBe('Birth Plan for the Client changed');
-	});
-
-	it('has no words for a plan type it has not met, or none at all', () => {
-		expect(staffPlanPhrase('feeding_plan', 'Amara')).toBeUndefined();
-		expect(staffPlanPhrase(undefined)).toBeUndefined();
-	});
-});

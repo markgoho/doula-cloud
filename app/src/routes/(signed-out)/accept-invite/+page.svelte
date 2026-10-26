@@ -532,7 +532,9 @@
 
 	{#if picker}
 		<Heading level={2} variant="section" text="Choose a Practice" />
-		<ul>
+		<!-- No preload (#2070): a hover would load that Practice's session,
+		     which the BFF records as her last-used Practice. -->
+		<ul data-sveltekit-preload-data="false">
 			{#each picker as membership (membership.practiceId)}
 				<li>
 					<Link

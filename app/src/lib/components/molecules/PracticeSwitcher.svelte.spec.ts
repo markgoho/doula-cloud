@@ -53,6 +53,18 @@ describe('PracticeSwitcher', () => {
 		await expect.element(page.getByText('Owner, Admin')).toBeVisible();
 	});
 
+	// #2070: a hover on another Practice must not load its session, which
+	// the BFF records as her last-used Practice. The preload attribute has
+	// no accessible signal, so the link's own DOM ancestry is read.
+	it('loads no Practice ahead of the click', async () => {
+		const { trigger } = await setup();
+
+		await trigger.click();
+
+		const other = page.getByRole('link', { name: 'Finger Lakes Birth Support' }).element();
+		expect(other.closest<HTMLElement>('[data-sveltekit-preload-data]')?.dataset.sveltekitPreloadData).toBe('false');
+	});
+
 	it('marks the current Practice', async () => {
 		const { trigger } = await setup();
 

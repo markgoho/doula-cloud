@@ -20,7 +20,7 @@ import { formatActivityTimestamp, formatCalendarDay } from './dates.js';
 import type { CursorPage } from './paginatedList.svelte.js';
 import { birthOutcomeLabel, endingReasons, engagementStatusText, type EngagementReference } from './engagementDetail.js';
 import { kindLabel } from './engagementRequest.js';
-import { staffActivityPhrase, staffPlanPhrase } from './staffActivityPhrases.js';
+import { staffActivityPhrase } from './staffActivityPhrases.js';
 
 /**
  * subjectKind/subjectId are optional because loadEngagementActivityPage
@@ -178,8 +178,7 @@ function factChangeText(row: ActivityEntry): string | undefined {
  */
 function staffEventText(row: ActivityEntry): string {
 	if (row.detail) return row.detail;
-	const plan = row.action === 'plan_instance_edited' ? staffPlanPhrase(row.diff?.planType, row.subjectName) : undefined;
-	return plan ?? factChangeText(row) ?? staffActivityPhrase(row.action, row.subjectName);
+	return factChangeText(row) ?? staffActivityPhrase(row.action, row.subjectName);
 }
 
 /**

@@ -134,6 +134,22 @@ afterEach(() => {
 	vi.useRealTimers();
 });
 
+/*
+ * One fact of the Invoice on screen (#2059). DataTable draws a table and a
+ * card per row and shows one by its own width; at this spec's width it is
+ * the card, whose facts are a Summary list. `getByRole` skips the hidden
+ * tree, so this finds the copy a person sees.
+ */
+function invoiceFact(text: string) {
+	return page.getByRole('definition').filter({ hasText: text });
+}
+
+/* The card's title is the amount, in a block with no role of its own; the
+ * card's tree is the later of DataTable's two, so `last()` is its copy. */
+function invoiceTitle(amount: string) {
+	return page.getByText(amount, { exact: true }).last();
+}
+
 describe('InvoiceSection.svelte', () => {
 	it('shows "No Invoices yet." when the list is empty', async () => {
 		await setup();
@@ -141,10 +157,29 @@ describe('InvoiceSection.svelte', () => {
 		await expect.element(page.getByText('No Invoices yet.')).toBeInTheDocument();
 	});
 
-	it('lists an Invoice with its formatted amount and status', async () => {
+	// #2059: a row per Invoice, its status a Badge of its own.
+	it('lists an Invoice with its formatted amount and its status', async () => {
 		await setup({ invoices: [invoiceOpen] });
 
-		await expect.element(page.getByText('$150.00 — Open')).toBeInTheDocument();
+		await expect.element(invoiceTitle('$150.00')).toBeVisible();
+		await expect.element(invoiceFact('Open')).toBeVisible();
+	});
+
+	// #2017's rule: no list item holds a control.
+	it('puts no Invoice in a list item', async () => {
+		await setup({ invoices: [invoiceOpen, invoicePaid], isOwnerOrAdmin: true });
+
+		await expect.element(page.getByRole('button', { name: 'Record payment' })).toBeVisible();
+		await expect.element(page.getByRole('listitem')).not.toBeInTheDocument();
+	});
+
+	// The same words on every row, so each action names its Invoice.
+	it('describes each action by the Invoice it acts on', async () => {
+		await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true });
+
+		await expect
+			.element(page.getByRole('button', { name: 'Record payment' }))
+			.toHaveAccessibleDescription('Invoice STRIPE-in_1, $150.00');
 	});
 
 	// #1958, #1965: paidOn is the day the BFF read in the Practice's own
@@ -153,14 +188,14 @@ describe('InvoiceSection.svelte', () => {
 	it('shows a paid Invoice on the day its Payment was recorded, month first', async () => {
 		await setup({ invoices: [invoicePaid] });
 
-		await expect.element(page.getByText(/\$200\.00 — Paid/)).toBeVisible();
-		await expect.element(page.getByText('(paid Jan 5, 2026)')).toBeVisible();
+		await expect.element(invoiceFact('Paid')).toBeVisible();
+		await expect.element(invoiceFact('Jan 5, 2026')).toBeVisible();
 	});
 
 	it('falls back to the raw status string for a status with no known label', async () => {
 		await setup({ invoices: [{ ...invoiceOpen, status: 'unknown_status' }] });
 
-		await expect.element(page.getByText('$150.00 — unknown_status')).toBeInTheDocument();
+		await expect.element(invoiceFact('unknown_status')).toBeVisible();
 	});
 
 	it('shows the Create Invoice button when the Contract is billable, Clients can pay, and the Client has an email', async () => {
@@ -970,8 +1005,8 @@ describe('InvoiceSection.svelte', () => {
 			const partlyRefunded: Invoice = { ...invoicePaidByHand, refundedCents: 10_000 };
 			await setup({ invoices: [partlyRefunded], isOwnerOrAdmin: true });
 
-			await expect.element(page.getByText(/\$100\.00 returned/)).toBeVisible();
-			await expect.element(page.getByText(/Paid/)).toBeVisible();
+			await expect.element(invoiceFact('$100.00')).toBeVisible();
+			await expect.element(invoiceFact('Paid')).toBeVisible();
 			await expect.element(page.getByRole('button', { name: 'Return money' })).toBeVisible();
 			expect(page.getByRole('button', { name: 'Reverse payment' }).all()).toHaveLength(0);
 		});
@@ -980,7 +1015,7 @@ describe('InvoiceSection.svelte', () => {
 			const fullyRefunded: Invoice = { ...invoicePaidByHand, refundedCents: invoicePaidByHand.amountCents };
 			await setup({ invoices: [fullyRefunded], isOwnerOrAdmin: true });
 
-			await expect.element(page.getByText(/\$250\.00 returned/)).toBeVisible();
+			await expect.element(invoiceFact('$250.00')).toBeVisible();
 			expect(page.getByRole('button', { name: 'Return money' }).all()).toHaveLength(0);
 		});
 
@@ -1059,7 +1094,7 @@ describe('InvoiceSection.svelte for a reader who cannot see Invoices (#2002)', (
 
 		await expect.element(page.getByText('No Invoices yet.')).not.toBeInTheDocument();
 		await expect.element(page.getByText(/\$150\.00/)).not.toBeInTheDocument();
-		await expect.element(page.getByRole('listitem')).not.toBeInTheDocument();
+		await expect.element(page.getByRole('table')).not.toBeInTheDocument();
 	});
 
 	it('still offers Create Invoice, which ADR-0008 lets her raise, and says when it worked', async () => {
