@@ -57,9 +57,13 @@
 		{ label: 'Check your answers', href: `${here}#check`, status: 'current' }
 	];
 
+	/*
+	 * The real check page's shape (#2033): the built-in questions are one
+	 * group with no heading, the address one row, and a Practice's own
+	 * section is a headed group under them.
+	 */
 	const sections: AnswerSection[] = [
 		{
-			heading: 'Who Anne-Marie Ochieng-Whitfield is',
 			answers: [
 				{ label: 'Given name', value: 'Anne-Marie', changeHref: here, changes: 'given name' },
 				{
@@ -79,19 +83,20 @@
 					value: 'Feb 4, 1990',
 					changeHref: here,
 					changes: 'date of birth'
-				}
-			]
-		},
-		{
-			heading: 'How to reach Anne-Marie Ochieng-Whitfield',
-			answers: [
+				},
 				{
 					label: 'Email address',
 					value: 'anne-marie.ochieng-whitfield@highland-midwifery-group.example.org',
 					changeHref: here,
 					changes: 'email address'
 				},
-				{ label: 'Phone number', value: '(585) 555 0142', changeHref: here, changes: 'phone number' }
+				{ label: 'Phone number', value: '(585) 555 0142', changeHref: here, changes: 'phone number' },
+				{
+					label: 'Address',
+					value: '1180 East Henrietta Road, Apartment 4B, Rochester, NY, 14623',
+					changeHref: here,
+					changes: 'address'
+				}
 			]
 		},
 		{

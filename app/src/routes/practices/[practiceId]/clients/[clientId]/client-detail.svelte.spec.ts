@@ -237,6 +237,28 @@ describe('client detail hub', () => {
 		await expect.element(testPage.getByText('kept value (No longer collected)')).toBeVisible();
 	});
 
+	// #2051: one list per section, so a section's values share one column.
+	it('lists the fields of one section together, under its heading', async () => {
+		await setup({
+			overrides: {
+				resolvedFields: [
+					{ fieldId: 'f1', label: 'Pronouns', type: 'short_text', value: 'she/her' },
+					{ fieldId: 'f2', label: 'Health', type: 'section_header' },
+					{ fieldId: 'f3', label: 'Allergies', type: 'short_text', value: 'Peanuts' },
+					{ fieldId: 'f4', label: 'Medications', type: 'short_text', value: 'None' }
+				]
+			}
+		});
+
+		const heading = testPage.getByRole('heading', { level: 3, name: 'Health' });
+		await expect.element(heading).toBeVisible();
+		// Which list a row sits in has no accessible signal (a `<dl>` has no
+		// role), so the list after the heading is read off the DOM.
+		const list = heading.element().nextElementSibling;
+		expect([...(list?.querySelectorAll('dt') ?? [])].map((node) => node.textContent)).toEqual(['Allergies', 'Medications']);
+		await expect.element(testPage.getByText('she/her')).toBeVisible();
+	});
+
 	it("renders her Engagements identifying each one's kind and status", async () => {
 		await setup({
 			// The fixture's own history carries a pending birth request, whose

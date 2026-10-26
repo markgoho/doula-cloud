@@ -14,7 +14,12 @@
 	}
 
 	export interface AnswerSection {
-		heading: string;
+		/**
+		 * Unset for a group that needs no heading (#2033): GOV.UK's Check
+		 * answers heads only answers that form a group, so the built-in
+		 * questions, one row each, sit under the page's own title.
+		 */
+		heading?: string;
 		answers: Answer[];
 	}
 </script>
@@ -137,7 +142,9 @@
 						{#each sections as section, sectionIndex (sectionIndex)}
 							<section>
 								<stack-l space="var(--space-4)">
-									<Heading level={2} variant="section" text={section.heading} />
+									{#if section.heading}
+										<Heading level={2} variant="section" text={section.heading} />
+									{/if}
 									<!--
 										The rows are `SummaryList`'s (#1998). The Change is a
 										link back to the question, described by the

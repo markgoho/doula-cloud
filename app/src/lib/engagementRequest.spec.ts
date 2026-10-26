@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
 	approveRequest,
+	DOULA_RADIOS_MAX,
 	doulaOptions,
+	doulaSelectOptions,
 	initialDoulaAnswer,
+	isDoulaSelect,
 	kindLabel,
 	loadApprovalDetail,
 	loadPendingRequests,
@@ -123,6 +126,43 @@ describe('doulaOptions', () => {
 
 	it('still offers No Doula yet at a Practice with nobody to name', () => {
 		expect(doulaOptions([], 'staff-1')).toEqual([{ value: 'none', label: 'No Doula yet' }]);
+	});
+});
+
+function rosterOf(count: number) {
+	return Array.from({ length: count }, (_, index) => ({ staffId: `staff-${index}`, name: `Doula ${index}` }));
+}
+
+describe('isDoulaSelect', () => {
+	it('keeps radios up to the threshold and turns to a select past it', () => {
+		expect(isDoulaSelect(rosterOf(DOULA_RADIOS_MAX))).toBe(false);
+		expect(isDoulaSelect(rosterOf(DOULA_RADIOS_MAX + 1))).toBe(true);
+	});
+});
+
+describe('doulaSelectOptions', () => {
+	const roster = [
+		{ staffId: 'staff-1', name: 'Renata Alvarez' },
+		{ staffId: 'staff-2', name: 'Amara Okafor' },
+		{ staffId: 'staff-3', name: 'Beth Lin' }
+	];
+
+	it('puts the person at the form, then No Doula yet, before everybody else', () => {
+		expect(doulaSelectOptions(roster, 'staff-1').map((option) => option.label)).toEqual([
+			'Renata Alvarez (you)',
+			'No Doula yet',
+			'Amara Okafor',
+			'Beth Lin'
+		]);
+	});
+
+	it('opens on No Doula yet where the person at the form is not in the list', () => {
+		expect(doulaSelectOptions(roster, 'staff-9').map((option) => option.value)).toEqual([
+			'none',
+			'staff-1',
+			'staff-2',
+			'staff-3'
+		]);
 	});
 });
 

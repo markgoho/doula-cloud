@@ -197,6 +197,38 @@ export function resolvedFieldValueText(field: ResolvedField): string {
 	return String(field.value);
 }
 
+/** One run of a Practice's own fields on the Client hub: the fields
+ * between two `section_header`s, under that header's label. */
+export interface ResolvedFieldGroup {
+	/** Unset for the fields before the first header, which the Practice
+	 * put under no heading of its own. */
+	heading?: string;
+	fields: ResolvedField[];
+}
+
+/**
+ * A Client's Practice-defined fields, as the summary lists the hub draws
+ * them in (#2051): one list per section, so the values of one section
+ * line up in one column and the section reads as one group (the Law of
+ * Uniform Connectedness). A header with no field under it is dropped, as
+ * intake's own `intakeSections` drops it: a heading over nothing says the
+ * Practice asks something it does not.
+ */
+export function resolvedFieldGroups(fields: ResolvedField[]): ResolvedFieldGroup[] {
+	const groups: ResolvedFieldGroup[] = [];
+	let current: ResolvedFieldGroup = { fields: [] };
+	for (const field of fields) {
+		if (field.type === 'section_header') {
+			if (current.fields.length > 0) groups.push(current);
+			current = { heading: field.label, fields: [] };
+			continue;
+		}
+		current.fields.push(field);
+	}
+	if (current.fields.length > 0) groups.push(current);
+	return groups;
+}
+
 /** The Requests still open for this Client, one per kind -- the block
  * ADR-0017 names "the Client's record shows a pending-request block
  * naming who asked and when". */

@@ -11,9 +11,9 @@
  *
  * `resolvedFields` and `history` are each a row set the route's own
  * markup branches on, neither delegated to a component swept elsewhere
- * (#720): a `section_header` Field renders only a Heading while every
- * other type renders a SummaryList row, so one of each is here, the
- * value row carrying an archived field's `note` too and #530's own URL
+ * (#720): a `section_header` Field heads the SummaryList of the fields
+ * under it, and fields before any header are a list with no heading
+ * (#2051), so both are here, one value row carrying an archived field's `note` too and #530's own URL
  * as the Practice's own question label. `history` merges two shapes at
  * once (`client_event`/`engagement_request`, see the route's own
  * `historyWho`/`historyWhat`) and ADR-0017 lets both kinds of Request be
@@ -47,7 +47,11 @@ export const detail: ClientDetail = {
 	// draws a link beside them (#785).
 	portalInviteStatus: 'bounced',
 	emailSuppressed: true,
+	// #2051: a field before any header (a list with no heading) and a
+	// section of two (one list under its heading), so both groupings are
+	// swept.
 	resolvedFields: [
+		{ fieldId: 'field-0', type: 'short_text', label: 'Pronouns' },
 		{ fieldId: 'field-1', type: 'section_header', label: 'Birth history' },
 		{
 			fieldId: 'field-2',
@@ -55,7 +59,8 @@ export const detail: ClientDetail = {
 			label: 'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake',
 			value: 'Epidural, as early as it can be given',
 			note: 'No longer collected'
-		}
+		},
+		{ fieldId: 'field-3', type: 'checkbox', label: 'Consents to photos at the birth', value: true }
 	],
 	engagements: [{ engagementId: 'engagement-1', kind: 'birth', status: 'active', createdAt: '2026-08-01T00:00:00Z' }],
 	history: [
