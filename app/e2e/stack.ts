@@ -199,9 +199,11 @@ export const WORKER_SECRET = NOTIFICATION_WORKER_SECRET;
 // starved machine is what timed out in #889. Each reaper keeps whatever
 // a live owner still holds, fails open and exits 0, so a failure here
 // only ever costs the cleanup, never the stack. Skipped in CI, whose
-// runner holds no other session's leftovers.
+// runner holds no other session's leftovers. Each takes a few seconds on
+// a healthy machine; the timeout caps what a hung Podman machine can cost
+// a start, and a reaper cut off there is finished by the next run.
 const REAPER_HOOKS = ['testdb-reap.ts', 'e2e-stack-reap.ts'];
-const REAPER_TIMEOUT_MS = 60_000;
+const REAPER_TIMEOUT_MS = 20_000;
 
 function reapOrphans(): void {
 	if (process.env.CI) return;
