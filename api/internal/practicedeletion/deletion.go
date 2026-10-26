@@ -53,9 +53,9 @@ const RestoreWindow = 30 * 24 * time.Hour
 // that key off them; nothing reads a Practice-deletion action by name
 // yet).
 const (
-	actionRequested = "practice_deletion_requested"
-	actionRestored  = "practice_deletion_restored"
-	actionFinalized = "practice_deletion_finalized"
+	actionRequested = string(activity.ActionPracticeDeletionRequested)
+	actionRestored  = string(activity.ActionPracticeDeletionRestored)
+	actionFinalized = string(activity.ActionPracticeDeletionFinalized)
 )
 
 // requestedScope is the diff practice_deletion_requested's row carries:

@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/activitypage"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/pagecursor"
+	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -178,6 +179,17 @@ const personSubjectKind = activity.SubjectMembership
 // 140 ms above). Both still Limit -> Sort (top-N heapsort) -> an
 // activity_subject-prefixed scan, still no JIT section in either case.
 //
+// Re-measured after #2006 added the se and sc joins below (2026-10-26):
+// TestPracticeQueryPlanAtScale, 202 ms; TestPracticeQueryPlanWith
+// DepartedMembershipSubjects, 419 ms. Both higher than the numbers
+// above, and not from the new joins: in the plan, the actor-staff join
+// alone took 171 ms of the 194 ms under the Sort, the se join (an
+// Index Scan on engagements_pkey, 5,000 loops) about 11 ms, and the sc
+// join (a Materialize over the Practice's clients) about 3 ms. The
+// Podman VM ran slower this day than the day above. Same shape: Limit ->
+// Sort (top-N heapsort) -> an activity_subject-prefixed scan, no JIT
+// section.
+//
 // The subject join (subj) is #1148's own addition: a feed spanning many
 // subject kinds has to say who a roster change happened to, or "Roles
 // changed" names the actor and nobody else, and a reader cannot tell one
@@ -213,28 +225,41 @@ const personSubjectKind = activity.SubjectMembership
 // on what those columns are or how they are reached -- #1150 already did
 // that for what a name resolves to (ActorName below); this is the SQL
 // that reaches it.
+//
+// %[5]s and %[6]s are activity.SubjectEngagement and SubjectClient: the
+// se and sc joins are #2006's, and name the Client an Engagement's row or
+// a Client record's own row is about. Like subj, each is guarded by an
+// equality on a.subject_kind, so a Membership or Practice row drives
+// neither, and each is a primary-key lookup on a table this query
+// already reads.
 const listPracticeActivityQueryTemplate = `SELECT a.id, a.subject_kind, a.subject_id, a.action, a.actor_kind::text,
-	       %[3]s, subj.name, a.created_at
+	       %[3]s, subj.name, sc.given_name, sc.preferred_name, a.created_at
 	FROM activity a
 	%[4]s
 	LEFT JOIN staff subj ON a.subject_kind = '%[2]s' AND subj.id = a.subject_id
+	LEFT JOIN engagements se ON a.subject_kind = '%[5]s' AND se.id = a.subject_id
+	LEFT JOIN clients sc ON sc.id = CASE WHEN a.subject_kind = '%[6]s' THEN a.subject_id ELSE se.client_id END
 	WHERE a.practice_id = $1
 	ORDER BY a.created_at DESC, a.id DESC LIMIT %[1]d`
 
 const listPracticeActivityAfterQueryTemplate = `SELECT a.id, a.subject_kind, a.subject_id, a.action, a.actor_kind::text,
-	       %[3]s, subj.name, a.created_at
+	       %[3]s, subj.name, sc.given_name, sc.preferred_name, a.created_at
 	FROM activity a
 	%[4]s
 	LEFT JOIN staff subj ON a.subject_kind = '%[2]s' AND subj.id = a.subject_id
+	LEFT JOIN engagements se ON a.subject_kind = '%[5]s' AND se.id = a.subject_id
+	LEFT JOIN clients sc ON sc.id = CASE WHEN a.subject_kind = '%[6]s' THEN a.subject_id ELSE se.client_id END
 	WHERE a.practice_id = $1
 	  AND (a.created_at, a.id) < ($2, $3)
 	ORDER BY a.created_at DESC, a.id DESC LIMIT %[1]d`
 
-var listPracticeActivityQuery = fmt.Sprintf(listPracticeActivityQueryTemplate, //nolint:gosec // all four interpolated values are package-internal constants (the last two activitypage's own), not request input
-	practiceBatchSize+1, personSubjectKind, activitypage.SharedActorJoin.Columns, activitypage.SharedActorJoin.Joins)
+var listPracticeActivityQuery = fmt.Sprintf(listPracticeActivityQueryTemplate, //nolint:gosec // all six interpolated values are package-internal constants (two activitypage's own, two activity's), not request input
+	practiceBatchSize+1, personSubjectKind, activitypage.SharedActorJoin.Columns, activitypage.SharedActorJoin.Joins,
+	activity.SubjectEngagement, activity.SubjectClient)
 
-var listPracticeActivityAfterQuery = fmt.Sprintf(listPracticeActivityAfterQueryTemplate, //nolint:gosec // all four interpolated values are package-internal constants (the last two activitypage's own), not request input
-	practiceBatchSize+1, personSubjectKind, activitypage.SharedActorJoin.Columns, activitypage.SharedActorJoin.Joins)
+var listPracticeActivityAfterQuery = fmt.Sprintf(listPracticeActivityAfterQueryTemplate, //nolint:gosec // all six interpolated values are package-internal constants (two activitypage's own, two activity's), not request input
+	practiceBatchSize+1, personSubjectKind, activitypage.SharedActorJoin.Columns, activitypage.SharedActorJoin.Joins,
+	activity.SubjectEngagement, activity.SubjectClient)
 
 // rawEntry is Entry plus the row id fetchPage needs to mint a cursor but
 // never puts in the response, the same shape engagement.activityRow
@@ -328,14 +353,16 @@ func queryBatch(ctx context.Context, tx *sql.Tx, practiceID string, after *pagec
 		var row rawEntry
 		var actorKind string
 		var staffName, clientGivenName, clientPreferredName, subjectName sql.NullString
+		var subjectClientGivenName, subjectClientPreferredName sql.NullString
 		if err := rows.Scan(&row.cursorID, &row.SubjectKind, &row.SubjectID, &row.Action, &actorKind,
-			&staffName, &clientGivenName, &clientPreferredName, &subjectName, &row.CreatedAt); err != nil {
+			&staffName, &clientGivenName, &clientPreferredName, &subjectName,
+			&subjectClientGivenName, &subjectClientPreferredName, &row.CreatedAt); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("activityfeed: scan practice activity row: %w", err)
 		}
 		row.ActorKind = actorKind
 		row.ActorName = activitypage.ActorName(actorKind, staffName, clientGivenName, clientPreferredName)
-		row.SubjectName = resolveSubjectName(row.SubjectKind, subjectName)
+		row.SubjectName = resolveSubjectName(row.SubjectKind, subjectName, subjectClientGivenName, subjectClientPreferredName)
 		items = append(items, row)
 	}
 	if err := rows.Err(); err != nil {
@@ -350,12 +377,15 @@ func queryBatch(ctx context.Context, tx *sql.Tx, practiceID string, after *pagec
 // its subject_id is a staff_id, and the roster change the row records is
 // unreadable without the name -- "Roles changed" alone names the actor
 // and leaves the reader to guess whose roles moved. An Engagement's or a
-// Client's own rows name a record the reader is looking at or can reach
-// by id, and are left empty rather than given a second, differently-
-// shaped label. A Practice's own rows (#1255) are the same case for a
-// different reason: subject_id is the reader's own practice_id, so a
-// name would only print the Practice's own name on every row of its own
-// feed -- decided empty, deliberately, not merely left off.
+// Client's own rows name the Client (#2006): this feed spans every Client
+// the Practice holds, and "Contract sent" without a name left the reader
+// unable to say whose. The name is read through the Client's row as it
+// stands, never a copy in the diff, so an Erasure's redaction (ADR-0027)
+// reaches every row at once -- the same reason #1256 gave for staff. A
+// Practice's own rows (#1255) stay empty: subject_id is the reader's own
+// practice_id, so a name would only print the Practice's own name on
+// every row of its own feed -- decided empty, deliberately, not merely
+// left off.
 //
 // #1256 closed the gap this comment used to describe: staff_practice_
 // visibility (00002) reaches a staff row only through a live
@@ -382,9 +412,17 @@ func queryBatch(ctx context.Context, tx *sql.Tx, practiceID string, after *pagec
 // exactly what ADR-0033's redaction promises stops happening. 00116's own
 // doc comment carries the full reasoning and the cost measurement #1077
 // asked any fourth staff policy to repeat.
-func resolveSubjectName(subjectKind string, subjectName sql.NullString) string {
+func resolveSubjectName(subjectKind string, subjectName, clientGivenName, clientPreferredName sql.NullString) string {
 	if subjectKind != personSubjectKind {
-		return ""
+		// #2006: an Engagement's row and a Client record's own row name
+		// the Client, in the conversation name every screen reads. Not
+		// Valid for a Practice row, which joins no Client, and for a row
+		// whose Client this reader's RLS does not reach -- a row the gate
+		// refuses anyway.
+		if !clientGivenName.Valid {
+			return ""
+		}
+		return personname.Preferred(clientGivenName.String, clientPreferredName.String)
 	}
 	if !subjectName.Valid {
 		return activity.DepartedStaffName

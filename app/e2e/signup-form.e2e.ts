@@ -120,7 +120,7 @@ test("The Practice's activity shows that its Owner agreed to the terms at signup
 	await seedClient(request, practiceId, { Cookie: `__session=${session!.value}` }, { givenName: 'Ada' });
 	await page.reload();
 
-	const agreement = page.getByRole('row').filter({ hasText: 'Terms accepted' });
+	const agreement = page.getByRole('row').filter({ hasText: 'Terms of Service and Privacy Policy agreed to' });
 	await expect(agreement).toBeVisible();
 	await expect(agreement).toContainText('Jamie Owner');
 	await expect(agreement.locator('time')).toHaveAttribute('datetime', /^\d{4}-\d{2}-\d{2}T/);

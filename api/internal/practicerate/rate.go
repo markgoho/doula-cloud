@@ -29,7 +29,7 @@ import (
 // mfa_required_enabled/disabled shape). A rate change has no analogous
 // on/off pair to name, and a reader wanting a per-kind breakdown already
 // has Diff.Kind to filter on.
-const actionRateChanged = "practice_rate_changed"
+const actionRateChanged = string(activity.ActionPracticeRateChanged)
 
 // kinds is every Engagement kind #966's rate card names, in the fixed
 // order GetRatesHandler renders them -- GLOSSARY.md's Engagement entry

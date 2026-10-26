@@ -30,7 +30,7 @@
 import { jsonResponse } from '#lib/testResponse.js';
 import type { Offer } from '#lib/offer.js';
 import { practiceSession, type RouteFixture, type RouteVariant } from '../../routeFixture.js';
-import { nth, TYPICAL_PRACTICE_NAME, TYPICAL_STAFF } from '../../typicalPilot.js';
+import { nth, TYPICAL_CLIENTS, TYPICAL_PRACTICE_NAME, TYPICAL_STAFF } from '../../typicalPilot.js';
 import Page from './+page.svelte';
 
 export const practiceName =
@@ -119,13 +119,13 @@ function respondForPopulatedPractice(path: string): Response {
 	// #530's own URL again, this time as the diff a Practice's own
 	// edit produced.
 	//
-	// The second row is #1148's own state of the What column: a
-	// Membership row, whose text is the action plus the person it
-	// happened to, where every other subject kind's is the action
-	// alone. Two rows because the column renders two ways, per this
-	// repo's fixture rule -- and this one's name is long on purpose,
-	// so the sweep measures a roster change against a real Practice's
-	// longest member rather than a polite one.
+	// Since #2006 the What column names the row's subject: the first
+	// row's Client, the second row's staff member (#1148), and nothing
+	// for the third, a Practice row, which names a setting. Three rows
+	// because the column renders three ways, per this repo's fixture
+	// rule -- and each name is long on purpose, so the sweep measures
+	// the sentence against a real Practice's longest names rather than
+	// polite ones.
 	//
 	// Said plainly, since these answers are shared with the Doula's
 	// session, which is the base fixture: a Doula never receives a
@@ -138,7 +138,8 @@ function respondForPopulatedPractice(path: string): Response {
 				{
 					subjectKind: 'engagement',
 					subjectId: 'engagement-1',
-					action: 'contract_sent',
+					subjectName: 'Renata Chiamaka Okonkwo-Adeyemi',
+					action: 'contract_amount_repriced',
 					actorKind: 'staff',
 					actorName: 'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake',
 					createdAt: '2026-08-01T00:00:00Z'
@@ -151,6 +152,14 @@ function respondForPopulatedPractice(path: string): Response {
 					actorKind: 'staff',
 					actorName: 'Marguerite Vandenberg-Whitfield',
 					createdAt: '2026-07-30T00:00:00Z'
+				},
+				{
+					subjectKind: 'practice',
+					subjectId: 'practice-1',
+					action: 'mfa_required_disabled',
+					actorKind: 'staff',
+					actorName: 'Marguerite Vandenberg-Whitfield',
+					createdAt: '2026-07-29T00:00:00Z'
 				}
 			],
 			hasMore: false
@@ -340,7 +349,9 @@ const typicalActivity = [
 ].map(({ action, actor, subject }, index) => ({
 	subjectKind: subject === undefined ? 'engagement' : 'membership',
 	subjectId: subject === undefined ? `engagement-${index + 1}` : nth(TYPICAL_STAFF, subject).staffId,
-	...(subject !== undefined && { subjectName: nth(TYPICAL_STAFF, subject).name }),
+	// #2006: an Engagement's row names its Client by the conversation
+	// name, the given name here; a Membership row names the staff member.
+	subjectName: subject === undefined ? nth(TYPICAL_CLIENTS, index).givenName : nth(TYPICAL_STAFF, subject).name,
 	action,
 	actorKind: 'staff',
 	actorName: nth(TYPICAL_STAFF, actor).name,

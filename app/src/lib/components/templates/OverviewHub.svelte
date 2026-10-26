@@ -41,6 +41,13 @@
 		 * no Client yet has no activity to show either.
 		 */
 		feed?: Snippet;
+		/**
+		 * The quick-link cards the drawing puts under the title (#2006):
+		 * the places a person goes from here, before the work. Absent while
+		 * `isEmpty`, the same as `secondary` and `feed`: the empty Practice
+		 * offers one act (ADR-0048).
+		 */
+		links?: Snippet;
 		isEmpty: boolean;
 		empty: Snippet;
 		/**
@@ -66,7 +73,7 @@
 		outcome?: string;
 	}
 
-	let { title, serviceName, primary, secondary, feed, isEmpty, empty, loading, loadError, outcome }: Properties =
+	let { title, serviceName, primary, secondary, feed, links, isEmpty, empty, loading, loadError, outcome }: Properties =
 		$props();
 </script>
 
@@ -87,6 +94,10 @@
 					<Notice variant="status" message={outcome} isFocusedOnAppear />
 				{/if}
 				<h1>{title}</h1>
+
+				{#if !isEmpty && links}
+					{@render links()}
+				{/if}
 
 				{#if isEmpty}
 					<div class="empty">{@render empty()}</div>

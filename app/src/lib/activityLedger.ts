@@ -20,6 +20,7 @@ import { formatActivityTimestamp, formatCalendarDay } from './dates.js';
 import type { CursorPage } from './paginatedList.svelte.js';
 import { birthOutcomeLabel, endingReasons, engagementStatusText, type EngagementReference } from './engagementDetail.js';
 import { kindLabel } from './engagementRequest.js';
+import { staffActivityPhrase } from './staffActivityPhrases.js';
 
 /**
  * subjectKind/subjectId are optional because loadEngagementActivityPage
@@ -34,14 +35,13 @@ export interface ActivityEntry {
 	subjectKind?: string;
 	subjectId?: string;
 	/**
-	 * The person this entry happened to, already resolved server-side --
-	 * "Renata Alvarez", or the server's own word for someone who has left
-	 * (#1148). Optional because only a subject kind whose subject is a
-	 * person carries one: a Membership row does, and an Engagement's or a
-	 * Client's own rows name a record rather than a person and send
-	 * nothing. `staffEventText` appends it to the What column, so a reader
-	 * of the practice-wide feed can tell one roster change from the next;
-	 * an entry without one renders exactly as it does today.
+	 * The person this entry is about, already resolved server-side: the
+	 * staff member on a Membership row ("Renata Alvarez", or the server's
+	 * word for someone who has left, #1148), and the Client on an
+	 * Engagement's or a Client record's row on the Practice-wide feed
+	 * (#2006). Optional because a Practice's own rows carry none, and the
+	 * Engagement page's ledger sends none -- the page already names its
+	 * Client. `staffActivityPhrase` puts it in the sentence.
 	 */
 	subjectName?: string;
 	action: string;
@@ -69,18 +69,13 @@ export interface ActivityEntry {
 }
 
 /**
- * "The event as body text" (brief.md's #433 amendment): a raw action
- * string ("invoice_raised", "contract_signed", "created") turned into a
- * sentence-cased phrase. Deliberately generic rather than a hand-copied
- * label per action -- the write side (activity/actions.go) already names
- * every action once, and a second, hand-maintained copy here is exactly
- * the kind of table that goes stale the next time a write site adds one.
- *
- * Staff-facing only, and that is the whole of #708's fix: its output is
- * the domain word itself, which ADR-0005 says a Client never meets. The
- * Client portal renders `clientRegister.clientActivityPhrase` instead,
- * whose own doc comment says why the staleness argument above does not
- * carry on that side.
+ * A raw action string ("invoice_raised") turned into a sentence-cased
+ * phrase ("Invoice raised"). No ledger prints it any more: #2006 found
+ * that the staff ledger reading it showed system words and named nobody,
+ * and gave every action its own words in `staffActivityPhrases.ts`, the
+ * way #708 had for the Client register. It stays as the Membership
+ * history's fallback (`membershipHistory.ts`) and as the measure the two
+ * phrase specs hold their tables against.
  */
 export function describeActivityAction(action: string): string {
 	const spaced = action.replaceAll('_', ' ');
@@ -166,34 +161,24 @@ const factChanges: Record<string, (diff: Diff) => string | undefined> = {
 
 function factChangeText(row: ActivityEntry): string | undefined {
 	const change = row.diff ? factChanges[row.action]?.(row.diff) : undefined;
-	return change ? `${describeActivityAction(row.action)}: ${change}` : undefined;
+	return change ? `${staffActivityPhrase(row.action, row.subjectName)}: ${change}` : undefined;
 }
 
 /**
  * The two staff surfaces' event text: the server's own `detail` sentence
- * when the entry carries one (#887), and the generic description
- * otherwise. `activityLedgerColumns`'s default, and the whole of what
- * #708 left unchanged for them.
+ * when the entry carries one (#887), a fact's before and after when the
+ * diff carries both (#1423), and the row's own words otherwise (#2006,
+ * `staffActivityPhrases.ts`), which name the Client, the staff member or
+ * the setting the row is about. The subject's name is in the sentence
+ * rather than a fourth column: the ledger's three columns (When, What,
+ * Who) are the design brief's own.
  *
- * `subjectName` is appended when the entry carries one (#1148), because
- * on a feed spanning every subject kind the action alone does not say who
- * it happened to -- "Roles changed" names the actor in the Who column and
- * leaves whose roles moved unanswered. An em dash rather than a second
- * column: the ledger's three columns (When, What, Who) are the design
- * brief's own, they are shared with two surfaces that send no subject at
- * all, and a fourth column empty on two of three surfaces would be a
- * worse table at 320px than a slightly longer sentence.
- *
- * A `detail` sentence wins outright and does not get the name appended:
- * it is the server's own finished prose about the row, and it already
- * names the people in it.
+ * A `detail` sentence wins outright: it is the server's own finished
+ * prose about the row, and it already names the people in it.
  */
 function staffEventText(row: ActivityEntry): string {
 	if (row.detail) return row.detail;
-	const change = factChangeText(row);
-	if (change) return change;
-	const described = describeActivityAction(row.action);
-	return row.subjectName ? `${described} — ${row.subjectName}` : described;
+	return factChangeText(row) ?? staffActivityPhrase(row.action, row.subjectName);
 }
 
 /**
@@ -214,10 +199,8 @@ interface LedgerColumn {
  * order -- When, What, Who -- built once so the hub feed, the staff
  * Engagement ledger and the Client portal's own disclosure render the
  * identical treatment rather than three hand-typed literals free to drift.
- * The What column prefers the server's own `detail` sentence when the
- * entry carries one and falls back to the generic description otherwise
- * (#887) -- still no per-action label table here, for the reason
- * describeActivityAction's own comment gives.
+ * The What column is `staffEventText`'s: the server's `detail` sentence
+ * when there is one (#887), and otherwise the row's own words (#2006).
  * The When column's `datetimeAccessor` is ADR-0022's own requirement:
  * `row.createdAt` is already the raw instant, so the rendered `<time>`
  * carries it as its machine-readable value even while accessor shows the

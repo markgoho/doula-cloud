@@ -58,7 +58,7 @@ const MsgConnectNudgeTooSoon = "DoulaCloud was already asked to email every Prac
 // connect_nudge_outbox.requested_by_staff_id on the row itself: the
 // ledger answers "who asked, and when" where a Practice already reads
 // its own history, and the row answers it where the worker can see it.
-const actionConnectNudgeRequested = "stripe_connect_nudge_requested"
+const actionConnectNudgeRequested = string(activity.ActionStripeConnectNudgeRequested)
 
 // connectNudgeSubject and connectNudgeText are the nudge's fixed copy.
 // ADR-0009's content rule is unconditional and ADR-0011 removed its one

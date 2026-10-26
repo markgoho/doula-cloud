@@ -691,6 +691,13 @@ const STAFF_ROUTES: SeededRoute<StaffSeed>[] = [
 		h1: 'Help Alex Owner sign in again'
 	},
 	{
+		// #2006: the whole activity ledger the Overview links to.
+		key: 'practices/[practiceId]/activity',
+		archetype: 'C',
+		url: (s) => `/practices/${s.practiceId}/activity`,
+		h1: 'Activity'
+	},
+	{
 		key: 'practices/[practiceId]/offers',
 		archetype: 'C',
 		url: (s) => `/practices/${s.practiceId}/offers`,

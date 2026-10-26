@@ -16,7 +16,7 @@ import (
 // actionTimezoneChanged records a change to a Practice's timezone --
 // Practice-scoped, plain-string, the same shape
 // actionPaymentTermsChanged uses for the sibling Practice-level setting.
-const actionTimezoneChanged = "practice_timezone_changed"
+const actionTimezoneChanged = string(activity.ActionPracticeTimezoneChanged)
 
 // fieldTimezone is PutRequest's own json tag, and so the Details key its
 // refusal is written under -- docs/api-design.md section 7 rule 4 keys

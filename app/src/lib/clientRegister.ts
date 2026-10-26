@@ -126,11 +126,11 @@ export function engagementLabel(engagement: EngagementLabelInput): string {
  * care, her visits, her Contract, her Invoice, her payments, her Birth
  * Plan, her login, her notifications.
  *
- * This is deliberately the hand-maintained per-action table
- * `describeActivityAction` argues against for the two staff surfaces, and
- * that argument does not carry here: the humanizer's whole output is the
- * raw action string with its underscores taken out, which is a domain
- * word, and ADR-0005's premise is that a Client never meets one. What
+ * A hand-maintained per-action table, as the staff side's
+ * `staffActivityPhrases.ts` now is too (#2006): the generic humanizer's
+ * output is the raw action string with its underscores taken out, which
+ * is a domain word, and ADR-0005's premise is that a Client never meets
+ * one. What
  * keeps this table from going stale is not a generic fallback but
  * `activityPhrases.usage.spec.ts`, which reads the Go action vocabulary
  * itself and fails on an action added, removed, or left unphrased.

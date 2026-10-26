@@ -524,7 +524,7 @@ describe('the Activity ledger section (#486)', () => {
 		);
 
 		await expect.element(testPage.getByRole('heading', { name: 'Activity' })).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: 'Visit logged' })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Visit added for the Client' })).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'Maya Torres' })).toBeVisible();
 	});
 
@@ -545,7 +545,7 @@ describe('the Activity ledger section (#486)', () => {
 			})
 		);
 
-		await expect.element(testPage.getByRole('cell', { name: 'Kind changed: Birth to Postpartum' })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Type of care changed for the Client: Birth to Postpartum' })).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'Maya Torres' })).toBeVisible();
 	});
 

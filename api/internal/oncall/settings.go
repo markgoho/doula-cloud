@@ -14,7 +14,7 @@ import (
 // actionPracticeOnCallChanged records a change to a Practice's on-call
 // rule -- Practice-scoped and plain-string, the shape
 // practicetimezone's actionTimezoneChanged uses for its sibling setting.
-const actionPracticeOnCallChanged = "practice_on_call_changed"
+const actionPracticeOnCallChanged = string(activity.ActionPracticeOnCallChanged)
 
 // The bounds 00114's CHECKs hold, restated so the refusal can say them.
 const (

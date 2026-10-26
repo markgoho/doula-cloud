@@ -67,9 +67,9 @@ func PutMFARequiredHandler() http.Handler {
 				return
 			}
 
-			action := "mfa_required_disabled"
+			action := string(activity.ActionMFARequiredDisabled)
 			if req.Required {
-				action = "mfa_required_enabled"
+				action = string(activity.ActionMFARequiredEnabled)
 			}
 			actorStaffID, _ := StaffID(r.Context())
 			if err := activity.Record(r.Context(), tx, activity.Entry{
