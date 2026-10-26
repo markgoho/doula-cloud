@@ -8,7 +8,7 @@
 	 * here, and the BFF refuses only an Owner (staffauth.Middleware).
 	 *
 	 * GOV.UK's Check answers declaration, the same as the sentence above
-	 * Create Practice at signup: one sentence the press agrees to, joined
+	 * Create your Practice at signup: one sentence the press agrees to, joined
 	 * to the button as its `aria-describedby`, and no checkbox. There is
 	 * no "Not now" (ADR-0053 rejects it: it turns the screen back into
 	 * email only). What the screen does not stand in front of -- export,

@@ -151,3 +151,20 @@ export function isOwnerOrAdmin(session: Pick<RoleSession, 'roles'>): boolean {
 export function isAmbientContractor(session: RoleSession): boolean {
 	return session.isContractor && !isOwnerOrAdmin(session);
 }
+
+/**
+ * Whether a person holds all three roles, which is what signup gives the
+ * person who sets a Practice up.
+ */
+export function hasEveryRole(session: Pick<RoleSession, 'roles'>): boolean {
+	return ROLE_LABELS.every((role) => session.roles.includes(role.value));
+}
+
+/*
+ * #290, moved by #2049: what holding every role means, said on the
+ * Practice's first screen rather than on the signup journey. Read off
+ * ROLE_LABELS -- the source MembershipFields draws its checkboxes from --
+ * rather than spelling the three words out a second time.
+ */
+const roleNames = ROLE_LABELS.map((role) => role.label);
+export const EVERY_ROLE_SENTENCE = `You hold every role — ${roleNames.slice(0, -1).join(', ')} and ${roleNames.at(-1)}. Anyone you invite holds only the roles you choose.`;

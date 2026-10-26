@@ -75,6 +75,13 @@
 		 * GOV.UK's wider column for a long answer list.
 		 */
 		isWide?: boolean;
+		/**
+		 * GOV.UK's declaration: what pressing the button agrees to, read
+		 * after the answers and directly before the actions (#2049). The
+		 * route writes the words and joins them to its button as the
+		 * button's description; this Template only places them.
+		 */
+		declaration?: Snippet;
 		actions: Snippet;
 	}
 
@@ -88,6 +95,7 @@
 		errorSummary,
 		sections,
 		isWide = false,
+		declaration,
 		actions
 	}: Properties = $props();
 </script>
@@ -168,6 +176,10 @@
 							</section>
 						{/each}
 					</stack-l>
+
+					{#if declaration}
+						<stack-l space="var(--space-4)">{@render declaration()}</stack-l>
+					{/if}
 
 					<cluster-l space="var(--space-4)" align="center">{@render actions()}</cluster-l>
 				</stack-l>

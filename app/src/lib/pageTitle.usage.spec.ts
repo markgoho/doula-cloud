@@ -33,10 +33,14 @@ import { globFiles } from './globFiles';
  * `MembershipQuestion` is the same kind of thing for a Staff member's
  * roles and employment type pages (#2041): it composes `QuestionPage`,
  * and `FormPage` while the page loads or refuses an Admin.
+ *
+ * `SignupQuestion` is the same kind of thing for the three question
+ * pages of setting up a Practice (#2049): it composes `QuestionPage`.
  */
 const TEMPLATES_WITH_PAGE_TITLE = [
 	'JourneyQuestion',
 	'MembershipQuestion',
+	'SignupQuestion',
 	'DateOfBirthQuestion',
 	'EmailQuestion',
 	'PhoneQuestion',

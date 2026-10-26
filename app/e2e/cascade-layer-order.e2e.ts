@@ -17,8 +17,8 @@ const LAYER_ORDER = ['reset', 'tokens', 'base', 'utilities', 'components'];
 test('The first stylesheet the built page loads declares the cascade layer order before any layered rule', async ({
 	page
 }) => {
-	await page.goto('/signup');
-	await expect(page.getByRole('button', { name: 'Create Practice' })).toBeVisible();
+	await page.goto('/signup/check');
+	await expect(page.getByRole('button', { name: 'Create your Practice' })).toBeVisible();
 
 	const firstLayerRule = await page.evaluate(() => {
 		for (const sheet of document.styleSheets) {
@@ -40,8 +40,8 @@ test('The first stylesheet the built page loads declares the cascade layer order
 test('A component rule beats the reset in the built app: a Link icon in a sentence stays inline', async ({
 	page
 }) => {
-	await page.goto('/signup');
-	const createPractice = page.getByRole('button', { name: 'Create Practice' });
+	await page.goto('/signup/check');
+	const createPractice = page.getByRole('button', { name: 'Create your Practice' });
 	await expect(createPractice).toBeVisible();
 
 	// `reset.css`'s `svg { display: block }` loses to `Link`'s inline icon

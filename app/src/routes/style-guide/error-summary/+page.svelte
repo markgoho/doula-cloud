@@ -94,6 +94,21 @@
 		]}
 	/>
 
+	<Heading level={3} variant="card" text="On a check page" />
+	<Text
+		text="A check page holds no control, so each entry links to the question page that asks the thing refused."
+		tone="variant"
+	/>
+	<ErrorSummary
+		errors={[
+			{
+				message: 'This email address already has an account. Log in instead.',
+				targetId: emailId,
+				href: '/style-guide/question-page'
+			}
+		]}
+	/>
+
 	<Heading level={3} variant="card" text="On a real form" />
 	<Text
 		text="Submit this empty to see what a refused form does: the summary appears and takes focus, each entry links to its field, and the message beside the field is word-for-word the entry above."

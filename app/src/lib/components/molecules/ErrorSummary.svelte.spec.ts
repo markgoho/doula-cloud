@@ -58,6 +58,18 @@ describe('ErrorSummary.svelte', () => {
 		expect(container.querySelectorAll(':scope li a')).toHaveLength(0);
 	});
 
+	// #2049: a check page holds no control, so its refusal links to the
+	// question page that asks the thing refused.
+	it('links an entry to another page when it names one, over its control', async () => {
+		await setup({
+			errors: [{ message: 'Enter your last name', targetId: 'last-name', href: '/signup?from=check' }]
+		});
+
+		await expect
+			.element(page.getByRole('link', { name: 'Enter your last name' }))
+			.toHaveAttribute('href', '/signup?from=check');
+	});
+
 	/*
 	 * The half no markup can do: a person who has just pressed a button is
 	 * looking at the button, and the refusal is at the other end of the

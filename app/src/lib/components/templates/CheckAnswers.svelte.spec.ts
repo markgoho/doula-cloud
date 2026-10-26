@@ -190,6 +190,19 @@ describe('CheckAnswers.svelte', () => {
 		await expect.element(page.getByText('Save this client')).toBeVisible();
 	});
 
+	// #2049: GOV.UK's declaration sits after the answers and before the
+	// button it describes.
+	it('renders the declaration between the answers and the actions', async () => {
+		await setup({ declaration: textSnippet('By saving, you agree to the Terms.') });
+
+		const declaration = page.getByText('By saving, you agree to the Terms.');
+		await expect.element(declaration).toBeVisible();
+		const lastAnswer = page.getByText('sarah@example.com').element();
+		const action = page.getByText('Save this client').element();
+		expect(lastAnswer.compareDocumentPosition(declaration.element()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(declaration.element().compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
 	it('renders the page frame and no chrome beyond the journey rail', async () => {
 		const { container } = await setup();
 

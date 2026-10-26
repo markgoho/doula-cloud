@@ -559,6 +559,26 @@ describe('the Practice landing page', () => {
 		expect(testPage.getByText(/costs|\$/).elements()).toHaveLength(0);
 	});
 
+	// #290, moved from signup by #2049: the person who set the Practice up
+	// holds every role, and is told so on its first screen.
+	const everyRole =
+		'You hold every role — Owner, Admin and Doula. Anyone you invite holds only the roles you choose.';
+
+	it('tells the person who holds every role so, first, on the empty Practice', async () => {
+		await setup({ roles: ['owner', 'admin', 'doula'], clients: [] });
+
+		const sentence = testPage.getByText(everyRole, { exact: true });
+		await expect.element(sentence).toBeVisible();
+		expect(sentence.element().nextElementSibling?.textContent).toContain('Nothing is here yet');
+	});
+
+	it('says nothing about roles to a person who holds only some', async () => {
+		await setup({ roles: ['owner'], clients: [] });
+
+		await expect.element(testPage.getByText(/Nothing is here yet/)).toBeVisible();
+		expect(testPage.getByText(everyRole).elements()).toHaveLength(0);
+	});
+
 	it('gives an Admin the same sentence', async () => {
 		await setup({ roles: ['admin'], clients: [] });
 

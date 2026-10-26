@@ -31,6 +31,8 @@ There is no checkbox. The courts enforce a sentence that is joined to the button
 - **Outside a notice period** there is no block, and the form is as it was before this amendment.
 - **Where the versions come from.** The form reads them from the BFF, `GET /api/legal/coming`, which walks the same history (`staffauth.AgreementDocuments`) through the same function as the `terms_accepted` row, at the server's instant. A copy built into the app was rejected: it would be a third copy of the history to keep the same as `api/internal/legal` and `site/src/lib/legal.ts`, it would stay as it was built until the next deploy of the app, and it would decide "coming" by the reader's clock, which this ADR rejects for the site. When the read fails, the page is refused as unavailable rather than drawn without the line, because the form must not leave out a version the press records, and a BFF that cannot answer the read cannot take the signup either.
 
+**Amended, 2026-10-26 ([#2049](https://github.com/markgoho/doula-cloud/issues/2049)):** signup is a journey of three question pages and a check page, and the agreement is the check page's declaration. The sentence and the list keep their words. They sit after the answers and directly before the one button, which is now **Create your Practice**, and the button's `aria-describedby` still names the sentence and then the list. The role notice is no longer on signup: it is the first line of the empty Practice, for the person who holds every role.
+
 ## The record
 
 One `activity` row (ADR-0022), written in the transaction that creates the Practice:
