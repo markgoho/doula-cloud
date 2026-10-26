@@ -24,6 +24,7 @@ import {
 	scheduleVisit,
 	sendMessage,
 	sendPortalInvite,
+	sortVisits,
 	visitsURL,
 	visitTypeLabel,
 	type EngagementReference,
@@ -649,5 +650,36 @@ describe('visitTypeLabel', () => {
 		['something-new', 'something-new']
 	])('labels the %s type as %s', (type, expected) => {
 		expect(visitTypeLabel(type)).toBe(expected);
+	});
+});
+
+function visit(visitId: string, createdAt: string, scheduledAt?: string): Visit {
+	return {
+		visitId,
+		staffId: 'staff-1',
+		staffName: 'Priya Raman',
+		createdAt,
+		...(scheduledAt && { scheduledAt }),
+		type: 'prenatal'
+	};
+}
+
+describe('sortVisits (#1999)', () => {
+	it('lists the scheduled Visits newest first, then the unscheduled ones newest logged first', () => {
+		const sorted = sortVisits([
+			visit('logged-early', '2026-07-01T15:00:00Z'),
+			visit('nov-5', '2026-08-01T15:00:00Z', '2026-11-05T15:00:00Z'),
+			visit('aug-4', '2026-08-02T15:00:00Z', '2026-08-04T15:00:00Z'),
+			visit('logged-late', '2026-09-01T15:00:00Z'),
+			visit('aug-18', '2026-08-03T15:00:00Z', '2026-08-18T15:00:00Z')
+		]);
+
+		expect(sorted.map((entry) => entry.visitId)).toEqual(['nov-5', 'aug-18', 'aug-4', 'logged-late', 'logged-early']);
+	});
+
+	it('leaves the list it was given as it was', () => {
+		const given = [visit('a', '2026-07-01T15:00:00Z'), visit('b', '2026-07-02T15:00:00Z')];
+		sortVisits(given);
+		expect(given.map((entry) => entry.visitId)).toEqual(['a', 'b']);
 	});
 });

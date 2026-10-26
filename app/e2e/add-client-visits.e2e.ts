@@ -87,10 +87,13 @@ test('The first Client in three presses, then the Visits section', async ({ page
 	// the first Visit lands below.
 	await page.setViewportSize({ width: 3200, height: 900 });
 	await expect(page.getByText('No Visits yet.', { exact: true })).toBeVisible();
+	// #1999: "Add a Visit" opens the form; "Save Visit" sends it.
 	await page.getByRole('button', { name: 'Add a Visit' }).click();
+	await page.getByRole('button', { name: 'Save Visit' }).click();
+	await expect(page.getByText('Your Visit is added.')).toBeVisible();
 
 	// Scoped to the Visits table, and exact: true within it. Two things
-	// name the same Staff member on this screen: the Reassign cell's own
+	// name the same Staff member on this screen: the Actions cell's own
 	// visually-hidden text, which `exact` excludes, and the per-record
 	// Activity ledger #486 added after this test was written, which it
 	// does not -- the ledger records who added the Visit, under the same

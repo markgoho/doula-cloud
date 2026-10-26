@@ -198,6 +198,26 @@ function visitsTable() {
 }
 
 /*
+ * #1999: a Visit row's one action, opening that Visit's change form under
+ * the table. `row` is the row's place in the table, which lists the
+ * fixture's scheduled Visit (Anne-Marie Ochieng-Whitfield) before its
+ * unscheduled one (Jordan Reyes).
+ */
+async function changeVisit(row: number) {
+	await visitsTable().getByRole('button', { name: 'Change' }).nth(row).click();
+}
+
+// A Visit as the BFF sends it, for the order case below (#1999).
+function visitRow(visitId: string, staffName: string, createdAt: string, scheduledAt?: string) {
+	return { visitId, staffId: 'staff-1', staffName, createdAt, ...(scheduledAt && { scheduledAt }), type: 'prenatal' };
+}
+
+// #1999: the add form opens only when asked, from its one opener.
+async function openAddVisit() {
+	await testPage.getByRole('button', { name: 'Add a Visit' }).click();
+}
+
+/*
  * #1998: the summary card's "Change" for one row. Every row's button reads
  * "Change", and the visually-hidden words it is described by name the row
  * (SummaryList), so that is how a test tells them apart, the same way a
@@ -585,26 +605,104 @@ describe('the Visits section Date column and schedule control (#250)', () => {
 		await expect.element(testPage.getByRole('cell', { name: 'Not yet scheduled', exact: true })).toBeVisible();
 	});
 
-	it('sets an unscheduled Visit schedule from its own row control', async () => {
-		const requests: { path: string; body: unknown }[] = [];
+	it("sets an unscheduled Visit's schedule from its Change, and sends nothing for the fields left alone", async () => {
+		const requests: { path: string; method?: string; body: unknown }[] = [];
 		await renderWithFixtureResponder((path, init) => {
-			if (!init || init.method !== 'PATCH' || !path.endsWith('/schedule')) return;
-			requests.push({ path, body: init.body ? JSON.parse(init.body as string) : undefined });
+			if (!init?.method || init.method === 'GET') return;
+			requests.push({ path, method: init.method, body: init.body ? JSON.parse(init.body as string) : undefined });
 			return Promise.resolve(jsonResponse({ visitId: 'visit-2', scheduledAt: '2027-04-01T09:00:00Z' }));
 		});
 
-		// Jordan Reyes is visit-2, the fixture's unscheduled row (#250) --
-		// its own field is scoped by that row's unique label id. `exact`
-		// excludes the "Add a Visit" form's own field just above the
-		// table, whose label ("...(optional)") contains this one's as a
-		// substring.
-		const field = testPage.getByLabelText('Scheduled date and time', { exact: true }).nth(1);
-		await field.fill('2027-04-01T09:00');
-		await testPage.getByRole('button', { name: 'Update schedule' }).nth(1).click();
+		// Jordan Reyes is visit-2, the fixture's unscheduled row (#250).
+		await changeVisit(1);
+		await expect
+			.element(testPage.getByRole('heading', { name: 'Change the Visit for Jordan Reyes, not yet scheduled' }))
+			.toHaveFocus();
+		await testPage.getByLabelText('Scheduled date and time', { exact: true }).fill('2027-04-01T09:00');
+		await testPage.getByRole('button', { name: 'Save changes' }).click();
 
 		await expect.poll(() => requests).toHaveLength(1);
 		expect(requests[0]!.path).toContain('/visits/visit-2/schedule');
 		expect(requests[0]!.body).toEqual({ scheduledAt: new Date('2027-04-01T09:00').toISOString() });
+		// #1999: a save returns to the rows, and says what it did.
+		await expect.element(testPage.getByText('The Visit for Jordan Reyes is saved.')).toHaveFocus();
+		await expect.element(testPage.getByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+	});
+
+	it("clears a scheduled Visit's schedule when its date is emptied", async () => {
+		const requests: { path: string; body: unknown }[] = [];
+		await renderWithFixtureResponder((path, init) => {
+			if (init?.method !== 'PATCH') return;
+			requests.push({ path, body: init.body ? JSON.parse(init.body as string) : undefined });
+			return Promise.resolve(jsonResponse({ visitId: 'visit-1' }));
+		});
+
+		await changeVisit(0);
+		await testPage.getByLabelText('Scheduled date and time', { exact: true }).fill('');
+		await testPage.getByRole('button', { name: 'Save changes' }).click();
+
+		await expect.poll(() => requests).toHaveLength(1);
+		expect(requests[0]!.path).toContain('/visits/visit-1/schedule');
+		expect(requests[0]!.body).toEqual({});
+	});
+
+	it('closes a change that changed nothing without sending anything', async () => {
+		const writes: string[] = [];
+		await renderWithFixtureResponder((path, init) => {
+			if (init?.method && init.method !== 'GET') writes.push(path);
+			return;
+		});
+
+		await changeVisit(0);
+		await testPage.getByRole('button', { name: 'Save changes' }).click();
+
+		await expect.element(testPage.getByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+		expect(writes).toEqual([]);
+	});
+
+	it('holds one change open at a time, and the row action closes its own', async () => {
+		await renderWithFixtureResponder();
+
+		await changeVisit(0);
+		await expect.element(visitsTable().getByRole('button', { name: 'Change' }).nth(0)).toHaveAttribute('aria-expanded', 'true');
+		await changeVisit(1);
+		await expect
+			.element(testPage.getByRole('heading', { name: 'Change the Visit for Jordan Reyes, not yet scheduled' }))
+			.toBeVisible();
+		await expect.element(testPage.getByRole('heading', { name: /Change the Visit for Anne-Marie/ })).not.toBeInTheDocument();
+		await changeVisit(1);
+		await expect.element(testPage.getByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+	});
+
+	it('keeps the Visit as it was when a change is canceled', async () => {
+		await renderWithFixtureResponder();
+
+		await changeVisit(0);
+		await testPage.getByRole('button', { name: 'Cancel' }).click();
+
+		await expect.element(testPage.getByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+	});
+
+	it('says what was refused, keeps the form open, and reads the rows again for what was already written', async () => {
+		let visitReads = 0;
+		await renderWithFixtureResponder((path, init) => {
+			if (!init && path.includes('/visits')) visitReads += 1;
+			if (init?.method === 'PATCH' && path.endsWith('/schedule')) return Promise.resolve(jsonResponse({}));
+			if (init?.method === 'PATCH' && path.endsWith('/notes')) {
+				return Promise.resolve(jsonResponse('notes are down', 500));
+			}
+			return;
+		});
+		await expect.poll(() => visitReads).toBe(1);
+
+		await changeVisit(1);
+		await testPage.getByLabelText('Scheduled date and time', { exact: true }).fill('2027-04-01T09:00');
+		await testPage.getByLabelText('Notes').fill('First check-in went well.');
+		await testPage.getByRole('button', { name: 'Save changes' }).click();
+
+		await expect.element(testPage.getByText('notes are down')).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Save changes' })).toBeVisible();
+		await expect.poll(() => visitReads).toBe(2);
 	});
 
 	it('shows the automatic intake -> active move after a Visit is scheduled, without a reload', async () => {
@@ -631,9 +729,9 @@ describe('the Visits section Date column and schedule control (#250)', () => {
 
 		await expect.element(testPage.getByText('Intake', { exact: true })).toBeVisible();
 
-		const field = testPage.getByLabelText('Scheduled date and time', { exact: true }).nth(1);
-		await field.fill('2027-04-01T09:00');
-		await testPage.getByRole('button', { name: 'Update schedule' }).nth(1).click();
+		await changeVisit(1);
+		await testPage.getByLabelText('Scheduled date and time', { exact: true }).fill('2027-04-01T09:00');
+		await testPage.getByRole('button', { name: 'Save changes' }).click();
 
 		await expect.element(testPage.getByText('Active', { exact: true })).toBeVisible();
 	});
@@ -646,9 +744,14 @@ describe('the Visits section Date column and schedule control (#250)', () => {
 			return Promise.resolve(jsonResponse({ visitId: 'visit-3', staffId: 'staff-1' }, 201));
 		});
 
+		await testPage.getByRole('button', { name: 'Add a Visit' }).click();
+		await expect.element(testPage.getByRole('heading', { name: 'Add a Visit' })).toHaveFocus();
+		// #1999: the opener goes while its form is open, so the section
+		// offers the form's one primary and nothing that opens it again.
+		await expect.element(testPage.getByRole('button', { name: 'Add a Visit' })).not.toBeInTheDocument();
 		await testPage.getByLabelText('Who is this Visit for?').selectOptions('Jordan Reyes');
 		await testPage.getByLabelText('Scheduled date and time (optional)').fill('2027-05-20T10:15');
-		await testPage.getByRole('button', { name: 'Add a Visit' }).click();
+		await testPage.getByRole('button', { name: 'Save Visit' }).click();
 
 		await expect.poll(() => requests).toHaveLength(1);
 		expect(requests[0]!.path).toContain('/visits');
@@ -656,6 +759,48 @@ describe('the Visits section Date column and schedule control (#250)', () => {
 			scheduledAt: new Date('2027-05-20T10:15').toISOString(),
 			staffId: 'staff-2'
 		});
+		await expect.element(testPage.getByText('The Visit for Jordan Reyes is added.')).toHaveFocus();
+		await expect.element(testPage.getByRole('button', { name: 'Add a Visit' })).toBeVisible();
+	});
+
+	it('says why an add was refused, in the add form', async () => {
+		await renderWithFixtureResponder((path, init) =>
+			init?.method === 'POST' && path.endsWith('/visits')
+				? Promise.resolve(jsonResponse('visits are down', 500))
+				: undefined
+		);
+
+		await testPage.getByRole('button', { name: 'Add a Visit' }).click();
+		await testPage.getByRole('button', { name: 'Save Visit' }).click();
+
+		await expect.element(testPage.getByText('visits are down')).toBeVisible();
+		await testPage.getByRole('button', { name: 'Cancel' }).click();
+		await expect.element(testPage.getByText('visits are down')).not.toBeInTheDocument();
+	});
+
+	it('lists the scheduled Visits by date, newest first, then the unscheduled ones (#1999)', async () => {
+		await renderWithFixtureResponder((path, init) => {
+			if (init || !path.includes('/visits')) return;
+			// Newest logged first, the order the BFF pages in (#446).
+			return Promise.resolve(
+				jsonResponse({
+					items: [
+						visitRow('v-3', 'Logged Last', '2026-09-01T15:00:00Z'),
+						visitRow('v-2', 'Aug Eighteen', '2026-08-03T15:00:00Z', '2026-08-18T15:00:00Z'),
+						visitRow('v-1', 'Nov Fifth', '2026-08-01T15:00:00Z', '2026-11-05T15:00:00Z')
+					],
+					hasMore: false
+				})
+			);
+		});
+
+		await expect.element(testPage.getByRole('cell', { name: 'Logged Last', exact: true })).toBeVisible();
+		const rows = visitsTable()
+			.getByRole('row')
+			.elements()
+			.slice(1)
+			.map((row) => ['Nov Fifth', 'Aug Eighteen', 'Logged Last'].find((name) => row.textContent?.includes(name)));
+		expect(rows).toEqual(['Nov Fifth', 'Aug Eighteen', 'Logged Last']);
 	});
 });
 
@@ -668,11 +813,6 @@ describe('the Visits section notes control (#251)', () => {
 	it("shows a Visit's own notes, and the empty-state text for one that has never had any", async () => {
 		await renderWithFixtureResponder();
 
-		// `exact` matters here: the row's own notes control (visitActions)
-		// carries this same text as its Textarea's current value, which
-		// widens the Actions cell's own accessible name to a longer string
-		// that contains this one as a substring -- an inexact or regex
-		// match would resolve both cells and violate strict mode.
 		await expect
 			.element(
 				testPage.getByRole('cell', {
@@ -684,7 +824,7 @@ describe('the Visits section notes control (#251)', () => {
 		await expect.element(testPage.getByRole('cell', { name: 'No notes yet.', exact: true })).toBeVisible();
 	});
 
-	it('saves a Visit without notes from its own row control', async () => {
+	it('saves notes for a Visit without any from its Change', async () => {
 		const requests: { path: string; body: unknown }[] = [];
 		await renderWithFixtureResponder((path, init) => {
 			if (!init || init.method !== 'PATCH' || !path.endsWith('/notes')) return;
@@ -693,9 +833,9 @@ describe('the Visits section notes control (#251)', () => {
 		});
 
 		// Jordan Reyes is visit-2, the fixture's row with no prior notes.
-		const field = testPage.getByLabelText('Notes').nth(1);
-		await field.fill('First check-in went well.');
-		await testPage.getByRole('button', { name: 'Save notes' }).nth(1).click();
+		await changeVisit(1);
+		await testPage.getByLabelText('Notes').fill('First check-in went well.');
+		await testPage.getByRole('button', { name: 'Save changes' }).click();
 
 		await expect.poll(() => requests).toHaveLength(1);
 		expect(requests[0]!.path).toContain('/visits/visit-2/notes');
@@ -1371,6 +1511,7 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 
 	it('offers the Practice\'s Doulas by name when adding a Visit', async () => {
 		await setupWithRoster();
+		await openAddVisit();
 
 		const picker = testPage.getByLabelText('Who is this Visit for?');
 		await expect.element(picker).toBeVisible();
@@ -1390,6 +1531,7 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 	// the BFF refuses.
 	it('leaves a Staff member who holds no Doula role out of the picker', async () => {
 		await setupWithRoster();
+		await openAddVisit();
 
 		await expect.element(testPage.getByLabelText('Who is this Visit for?')).toBeVisible();
 		expect(
@@ -1399,8 +1541,9 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 
 	it('offers a select, not a free-text staff id, for reassigning a Visit', async () => {
 		await setupWithRoster();
+		await changeVisit(0);
 
-		const picker = testPage.getByLabelText('Reassign to').first();
+		const picker = testPage.getByLabelText('Who is this Visit for?');
 		await expect.element(picker).toBeVisible();
 		expect(picker.element().tagName).toBe('SELECT');
 	});
@@ -1409,6 +1552,7 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 	// id, so a field asking for one could not be filled in.
 	it('offers no staff-id text field anywhere on the page', async () => {
 		await setupWithRoster();
+		await openAddVisit();
 
 		await expect.element(testPage.getByLabelText('Who is this Visit for?')).toBeVisible();
 		expect(testPage.getByLabelText(/staff id/i).elements()).toHaveLength(0);
@@ -1421,9 +1565,13 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 	it('leaves both pickers out for a reader the roster read refuses, and still lets her log her own Visit', async () => {
 		await setupWithRoster(jsonResponse('not permitted to read this', 403), ['doula']);
 
-		await expect.element(testPage.getByRole('button', { name: 'Add a Visit' })).toBeVisible();
+		await openAddVisit();
+		await expect.element(testPage.getByRole('button', { name: 'Save Visit' })).toBeVisible();
 		expect(testPage.getByLabelText('Who is this Visit for?').elements()).toHaveLength(0);
-		expect(testPage.getByLabelText('Reassign to').elements()).toHaveLength(0);
+		await changeVisit(0);
+		await expect.element(testPage.getByLabelText('Notes')).toBeVisible();
+		expect(testPage.getByLabelText('Who is this Visit for?').elements()).toHaveLength(0);
+		expect(testPage.getByText('There is nobody else to reassign this Visit to.').elements()).toHaveLength(0);
 		expect(testPage.getByRole('alert').elements()).toHaveLength(0);
 	});
 
@@ -1445,6 +1593,7 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 	// picker is the only way in for her -- and it is there.
 	it('offers the picker to an Admin who holds no Doula role', async () => {
 		await setupWithRoster(undefined, ['admin']);
+		await openAddVisit();
 
 		await expect.element(testPage.getByLabelText('Who is this Visit for?')).toBeVisible();
 	});
@@ -1458,6 +1607,7 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 	describe('a Doula who owns her Practice, logging her own Visit (#909)', () => {
 		it('opens the picker on the caller, marked as the signed-in person and first in the list', async () => {
 			await setupWithRoster();
+			await openAddVisit();
 
 			const picker = testPage.getByLabelText('Who is this Visit for?');
 			await expect.element(picker).toHaveValue('staff-1');
@@ -1469,8 +1619,9 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 
 		it('logs the Visit for the caller without her touching the picker', async () => {
 			await setupWithRoster();
+			await openAddVisit();
 			await expect.element(testPage.getByLabelText('Who is this Visit for?')).toHaveValue('staff-1');
-			await testPage.getByRole('button', { name: 'Add a Visit' }).click();
+			await testPage.getByRole('button', { name: 'Save Visit' }).click();
 
 			expect(apiFetchWithSession).toHaveBeenCalledWith(
 				'/api/practices/practice-1/engagements/engagement-1/visits',
@@ -1478,6 +1629,8 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 					body: JSON.stringify({ scheduledAt: undefined, staffId: 'staff-1' })
 				})
 			);
+			// Her own Visit is hers, however the request named her (#1999).
+			await expect.element(testPage.getByText('Your Visit is added.')).toHaveFocus();
 		});
 
 		// The other two thirds of the split. An Admin who is not on the
@@ -1485,6 +1638,7 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 		// nothing is chosen for her.
 		it('opens on the placeholder for an Admin who holds no Doula role', async () => {
 			await setupWithRoster(undefined, ['admin'], 'staff-bookkeeper');
+			await openAddVisit();
 
 			await expect.element(testPage.getByLabelText('Who is this Visit for?')).toHaveValue('');
 		});
@@ -1495,10 +1649,11 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 		// than sent as an empty staffId for the BFF to 400 on.
 		it('refuses an Add a Visit submit left on the placeholder, without calling the API', async () => {
 			await setupWithRoster(undefined, ['admin'], 'staff-bookkeeper');
+			await openAddVisit();
 			await expect.element(testPage.getByLabelText('Who is this Visit for?')).toHaveValue('');
 			apiFetchWithSession.mockClear();
 
-			await testPage.getByRole('button', { name: 'Add a Visit' }).click();
+			await testPage.getByRole('button', { name: 'Save Visit' }).click();
 
 			expect(apiFetchWithSession).not.toHaveBeenCalled();
 			await expect.element(testPage.getByText('Select who this Visit is for').first()).toBeVisible();
@@ -1509,7 +1664,8 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 		it('asks a plain Doula nothing, and still lets her log her own Visit', async () => {
 			await setupWithRoster(jsonResponse('not permitted to read this', 403), ['doula'], 'staff-2');
 
-			await expect.element(testPage.getByRole('button', { name: 'Add a Visit' })).toBeVisible();
+			await openAddVisit();
+			await expect.element(testPage.getByRole('button', { name: 'Save Visit' })).toBeVisible();
 			expect(testPage.getByLabelText('Who is this Visit for?').elements()).toHaveLength(0);
 		});
 
@@ -1517,6 +1673,7 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 		// books her colleagues' Visits, and naming one has to stick.
 		it('keeps the colleague she names, rather than reverting to her own name', async () => {
 			await setupWithRoster();
+			await openAddVisit();
 			const picker = testPage.getByLabelText('Who is this Visit for?');
 			await expect.element(picker).toHaveValue('staff-1');
 
@@ -1529,18 +1686,22 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 		// either her own Visit back to her is a move that did not happen.
 		it("leaves a Visit's current assignee out of its own reassign picker", async () => {
 			await setupWithRoster();
+			const picker = testPage.getByLabelText('Who is this Visit for?');
 
-			const forVisitOne = testPage.getByLabelText('Reassign to').first();
-			await expect.element(forVisitOne).toBeVisible();
+			// #1999: she is kept by the first option, which opens chosen and
+			// sends nothing, rather than offered as a move.
+			await changeVisit(0);
+			await expect.element(picker).toHaveValue('');
+			expect(picker.getByRole('option', { name: 'Keep Anne-Marie Ochieng-Whitfield' }).elements()).toHaveLength(1);
 			expect(
-				forVisitOne.getByRole('option', { name: 'Anne-Marie Ochieng-Whitfield (you)' }).elements()
+				picker.getByRole('option', { name: 'Anne-Marie Ochieng-Whitfield (you)' }).elements()
 			).toHaveLength(0);
 			// She is still offered on a Visit that is not already hers.
-			const forVisitTwo = testPage.getByLabelText('Reassign to').nth(1);
-			expect(
-				forVisitTwo.getByRole('option', { name: 'Anne-Marie Ochieng-Whitfield (you)' }).elements()
-			).toHaveLength(1);
-			expect(forVisitTwo.getByRole('option', { name: 'Jordan Reyes' }).elements()).toHaveLength(0);
+			await changeVisit(1);
+			await expect
+				.poll(() => picker.getByRole('option', { name: 'Anne-Marie Ochieng-Whitfield (you)' }).elements())
+				.toHaveLength(1);
+			expect(picker.getByRole('option', { name: 'Jordan Reyes', exact: true }).elements()).toHaveLength(0);
 		});
 
 		// ADR-0024's floor, on the real route rather than on a style-guide
@@ -1549,6 +1710,7 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 		it('never scrolls the document sideways at 320px with a fourteen-name roster', async () => {
 			await setupWithRoster();
 			await testPage.viewport(320, 800);
+			await openAddVisit();
 
 			await expect.element(testPage.getByLabelText('Who is this Visit for?')).toBeVisible();
 			expect(document.documentElement.scrollWidth).toBe(document.documentElement.clientWidth);
@@ -1569,20 +1731,20 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 				]
 			};
 			await setupWithRoster(jsonResponse(soleDoula));
+			const nobodyElse = testPage.getByText('There is nobody else to reassign this Visit to.');
 
-			await expect
-				.element(testPage.getByText('There is nobody else to reassign this Visit to.').first())
-				.toBeVisible();
+			// #1999: said once, in the open change, where the question would
+			// be -- never as a line in every row.
+			await expect.element(visitsTable().getByRole('button', { name: 'Change' }).first()).toBeVisible();
+			expect(nobodyElse.elements()).toHaveLength(0);
+			await changeVisit(0);
+			await expect.element(nobodyElse).toBeVisible();
+			expect(testPage.getByLabelText('Who is this Visit for?').elements()).toHaveLength(0);
 			// visit-2 is Jordan Reyes's, and she is not on this roster, so
-			// its own picker still offers the sole Doula.
-			//
-			// Scoped to the Visits `<table>` -- the tree this spec's wide
-			// viewport actually shows. DataTable builds its record view
-			// alongside the table at every width, so an unscoped count is a
-			// count of trees as much as of pickers. It read 1 before #666
-			// only because both copies of the label pointed at one duplicated
-			// id and so resolved to the same control.
-			expect(visitsTable().getByLabelText('Reassign to').elements()).toHaveLength(1);
+			// its own change still offers the sole Doula.
+			await changeVisit(1);
+			await expect.element(testPage.getByLabelText('Who is this Visit for?')).toBeVisible();
+			expect(nobodyElse.elements()).toHaveLength(0);
 		});
 	});
 
@@ -1597,8 +1759,9 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 
 	it('sends the chosen colleague on the create request', async () => {
 		await setupWithRoster();
+		await openAddVisit();
 		await testPage.getByLabelText('Who is this Visit for?').selectOptions('Jordan Reyes');
-		await testPage.getByRole('button', { name: 'Add a Visit' }).click();
+		await testPage.getByRole('button', { name: 'Save Visit' }).click();
 
 		expect(apiFetchWithSession).toHaveBeenCalledWith(
 			'/api/practices/practice-1/engagements/engagement-1/visits',
@@ -1609,15 +1772,17 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 		);
 	});
 
-	it('sends the chosen colleague on the reassign request', async () => {
+	it('sends the chosen colleague on the reassign request, and says whose the Visit is now', async () => {
 		await setupWithRoster();
-		await testPage.getByLabelText('Reassign to').first().selectOptions('Jordan Reyes');
-		await testPage.getByRole('button', { name: 'Reassign' }).first().click();
+		await changeVisit(0);
+		await testPage.getByLabelText('Who is this Visit for?').selectOptions('Jordan Reyes');
+		await testPage.getByRole('button', { name: 'Save changes' }).click();
 
 		expect(apiFetchWithSession).toHaveBeenCalledWith(
 			'/api/practices/practice-1/engagements/engagement-1/visits/visit-1',
 			expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ staffId: 'staff-2' }) })
 		);
+		await expect.element(testPage.getByText('The Visit for Jordan Reyes is saved.')).toBeVisible();
 	});
 });
 
@@ -1654,6 +1819,7 @@ describe('the Offers form does not list the person at the screen (#1598)', () =>
 		await expect.element(doulaPick.getByLabelText('Jordan Reyes')).toBeVisible();
 		expect(doulaPick.getByLabelText('Anne-Marie Ochieng-Whitfield').elements()).toHaveLength(0);
 
+		await openAddVisit();
 		const visitPicker = testPage.getByLabelText('Who is this Visit for?');
 		expect(visitPicker.getByRole('option', { name: 'Anne-Marie Ochieng-Whitfield (you)' }).elements()).toHaveLength(1);
 	});
@@ -1669,6 +1835,7 @@ describe('the Offers form does not list the person at the screen (#1598)', () =>
 		expect(testPage.getByRole('group', { name: 'Offer this work to' }).elements()).toHaveLength(0);
 		await expect.element(testPage.getByLabelText('Email address')).toBeVisible();
 		// The same roster still gives her own Visit its standing answer.
+		await openAddVisit();
 		await expect.element(testPage.getByLabelText('Who is this Visit for?')).toHaveValue('staff-1');
 	});
 
@@ -1828,9 +1995,10 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 		});
 		await openChange('Doula');
 		await expect.element(putMeOnIt()).toBeVisible();
+		await openAddVisit();
 		await expect.element(testPage.getByLabelText('Who is this Visit for?')).toHaveValue('staff-1');
 
-		await testPage.getByRole('button', { name: 'Add a Visit' }).click();
+		await testPage.getByRole('button', { name: 'Save Visit' }).click();
 
 		await expect.element(putMeOnIt()).not.toBeInTheDocument();
 		expect(testPage.getByText('No Doula yet', { exact: true }).elements()).toHaveLength(0);
@@ -1862,6 +2030,7 @@ describe('who can be named on a Visit at this Engagement (#911)', () => {
 	// reason, so choosing her is what produces one.
 	it('lists an unattached contractor by name, marked, and still choosable', async () => {
 		await setupWithRoster();
+		await openAddVisit();
 
 		const picker = testPage.getByLabelText('Who is this Visit for?');
 		await expect.element(picker).toBeVisible();
@@ -1874,8 +2043,9 @@ describe('who can be named on a Visit at this Engagement (#911)', () => {
 	// one page is the failure this ticket exists to close.
 	it('marks her the same way in the reassign picker', async () => {
 		await setupWithRoster();
+		await changeVisit(0);
 
-		const picker = testPage.getByLabelText('Reassign to').first();
+		const picker = testPage.getByLabelText('Who is this Visit for?');
 		await expect.element(picker).toBeVisible();
 		expect(picker.getByRole('option', { name: unattachedOption }).elements()).toHaveLength(1);
 	});
@@ -1885,6 +2055,7 @@ describe('who can be named on a Visit at this Engagement (#911)', () => {
 	// a bare `disabled` attribute.
 	it('says in text what the marker means and what makes her nameable', async () => {
 		await setupWithRoster();
+		await openAddVisit();
 
 		await expect
 			.element(testPage.getByText(/Send her an Offer, then name her on a Visit/).first())
@@ -1899,6 +2070,7 @@ describe('who can be named on a Visit at this Engagement (#911)', () => {
 	// though the inline field error (unchanged since #911) shows at once.
 	it('marks an ineligible pick on the field at once, without mounting the summary or moving focus', async () => {
 		await setupWithRoster();
+		await openAddVisit();
 		const picker = testPage.getByLabelText('Who is this Visit for?');
 		await expect.element(picker).toBeVisible();
 
@@ -1912,9 +2084,10 @@ describe('who can be named on a Visit at this Engagement (#911)', () => {
 	// act that changes it (GOV.UK's error-message rule).
 	it('blocks the create submit rather than letting the BFF 400 be the first news', async () => {
 		await setupWithRoster();
+		await openAddVisit();
 		await testPage.getByLabelText('Who is this Visit for?').selectOptions(unattachedOption);
 		apiFetchWithSession.mockClear();
-		await testPage.getByRole('button', { name: 'Add a Visit' }).click();
+		await testPage.getByRole('button', { name: 'Save Visit' }).click();
 
 		expect(apiFetchWithSession).not.toHaveBeenCalled();
 		// .first() -- #1228's ErrorSummary repeats the message as a link, so
@@ -1926,29 +2099,16 @@ describe('who can be named on a Visit at this Engagement (#911)', () => {
 			.toBeVisible();
 	});
 
-	it('blocks the reassign submit the same way', async () => {
+	it('blocks the reassign submit the same way, with the summary once she has tried', async () => {
 		await setupWithRoster();
-		await testPage.getByLabelText('Reassign to').first().selectOptions(unattachedOption);
+		await changeVisit(0);
+		await testPage.getByLabelText('Who is this Visit for?').selectOptions(unattachedOption);
+		await expect.element(testPage.getByRole('heading', { name: 'There is a problem' })).not.toBeInTheDocument();
 		apiFetchWithSession.mockClear();
-		await testPage.getByRole('button', { name: 'Reassign' }).first().click();
+		await testPage.getByRole('button', { name: 'Save changes' }).click();
 
 		expect(apiFetchWithSession).not.toHaveBeenCalled();
-	});
-
-	// #1228: the reassign Select's own `required` was the only refusal an
-	// empty pick had -- StackedForm's `novalidate` (ADR-0021) took it
-	// away. Left on its own placeholder, not touched at all.
-	it('refuses a reassign submit left on the placeholder, without calling the API', async () => {
-		await setupWithRoster();
-		await expect.element(testPage.getByLabelText('Reassign to').first()).toBeVisible();
-		apiFetchWithSession.mockClear();
-
-		await testPage.getByRole('button', { name: 'Reassign' }).first().click();
-
-		expect(apiFetchWithSession).not.toHaveBeenCalled();
-		await expect
-			.element(testPage.getByText('Select who to reassign this Visit to').first())
-			.toBeVisible();
+		await expect.element(testPage.getByRole('heading', { name: 'There is a problem' })).toBeVisible();
 	});
 
 	// The caller's own row takes the self rule, not the named-colleague
@@ -1959,6 +2119,7 @@ describe('who can be named on a Visit at this Engagement (#911)', () => {
 	// not block a write the BFF allows.
 	it('offers the caller herself without the marker, though she is an unattached contractor', async () => {
 		await setupWithRoster();
+		await openAddVisit();
 
 		const picker = testPage.getByLabelText('Who is this Visit for?');
 		await expect.element(picker).toBeVisible();
@@ -2195,10 +2356,11 @@ describe('id uniqueness across DataTable two trees (#666)', () => {
 	it('emits no duplicate id with a non-empty Visits list on screen', async () => {
 		await setupWithRoster();
 
-		// The reassign control renders only once the assignee read has
-		// landed, and it carries three of the four ids at issue -- so
-		// waiting for it is what makes this assertion cover them.
-		await expect.element(testPage.getByLabelText('Reassign to').first()).toBeVisible();
+		// Each row's Change is described by a name span in both trees, and
+		// the open change form's ids sit beside them (#1999), so the
+		// assertion covers both.
+		await changeVisit(0);
+		await expect.element(testPage.getByLabelText('Who is this Visit for?')).toBeVisible();
 
 		expect(findDuplicateIds(document)).toEqual([]);
 	});

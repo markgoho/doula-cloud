@@ -223,6 +223,26 @@ export function visitTypeLabel(type: string): string {
 }
 
 /**
+ * The Visits in the order the Engagement page lists them (#1999): the
+ * scheduled ones by their date, newest first as the drawing lists them,
+ * then the ones not yet scheduled, newest logged first. The BFF pages
+ * by when a Visit was logged (`(created_at, id)`, #446), which is not
+ * the date the table shows, so the page sorts what it has loaded.
+ */
+function newestFirst(a: string, b: string): number {
+	return b.localeCompare(a);
+}
+
+export function sortVisits(visits: readonly Visit[]): Visit[] {
+	return visits.toSorted((a, b) => {
+		if (a.scheduledAt && b.scheduledAt) return newestFirst(a.scheduledAt, b.scheduledAt);
+		if (a.scheduledAt) return -1;
+		if (b.scheduledAt) return 1;
+		return newestFirst(a.createdAt, b.createdAt);
+	});
+}
+
+/**
  * The only two facts these functions need about a Message: which one it
  * is, and whether it carries an image.
  *
