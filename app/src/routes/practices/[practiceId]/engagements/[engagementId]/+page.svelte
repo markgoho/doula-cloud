@@ -2000,24 +2000,27 @@
 	{@const canAddVisit = canAssignVisits || canLogOwnVisit}
 	{@const addOpener =
 		canAddVisit && openVisitChange !== 'add' ? { label: 'Add a Visit', onClick: () => openVisitForm('add') } : undefined}
-	<div class="visits-table">
-		<DataTable
-			columns={[
-				{ label: 'Date', accessor: (visit: Visit) => formatScheduledVisit(visit.scheduledAt) },
-				{ label: 'Type', accessor: (visit: Visit) => visitTypeLabel(visit.type) },
-				{ label: 'Doula', accessor: (visit: Visit) => visit.staffName },
-				{ label: 'Notes', accessor: (visit: Visit) => visit.notes || 'No notes yet.' }
-			]}
-			rows={sortedVisits}
-			rowActions={{ label: 'Actions', content: visitActions }}
-			hasMore={visits.hasMore}
-			onLoadMore={() => visits.loadMore()}
-			isLoadingMore={visits.isLoadingMore}
-			loadMoreError={visits.loadMoreError}
-			emptyMessage="No Visits yet."
-			emptyAction={addOpener}
-		/>
-	</div>
+	<DataTable
+		columns={[
+			{ label: 'Date', accessor: (visit: Visit) => formatScheduledVisit(visit.scheduledAt) },
+			{ label: 'Type', accessor: (visit: Visit) => visitTypeLabel(visit.type) },
+			{ label: 'Doula', accessor: (visit: Visit) => visit.staffName },
+			// #2091: a note is a Doula's prose beside four facts, so it takes
+			// the room they leave and wraps there. The table's floor is then the
+			// facts beside the note's longest word, 615px on the typical screen in
+			// macOS/Chromium, under DataTable's own 55rem, so this route sets no
+			// floor of its own.
+			{ label: 'Notes', accessor: (visit: Visit) => visit.notes || 'No notes yet.', wraps: true }
+		]}
+		rows={sortedVisits}
+		rowActions={{ label: 'Actions', content: visitActions }}
+		hasMore={visits.hasMore}
+		onLoadMore={() => visits.loadMore()}
+		isLoadingMore={visits.isLoadingMore}
+		loadMoreError={visits.loadMoreError}
+		emptyMessage="No Visits yet."
+		emptyAction={addOpener}
+	/>
 
 	{#if visitsSavedMessage}
 		<Notice variant="status" message={visitsSavedMessage} isFocusedOnAppear />
@@ -2548,45 +2551,3 @@
 		{ heading: 'Activity', content: activitySection }
 	]}
 />
-
-<style>
-	@layer components {
-		/* The Visits table's content floor (#1945, #1981): below it the table's
-		   cells wrap to more lines than at the old type floors, so it
-		   shows its records -- the founder's answer on #1945. Measured on
-		   this route's typical pilot screen, not its hostile one -- the
-		   founder's answer of 2026-10-25 on #1981: a very long name or
-		   address wraps one more line, and it does not change the layout.
-		   Re-measured 2026-10-26 (#1999), once the Actions column held one
-		   Change link instead of three forms (it was 76.75rem), and with
-		   the typical screen holding a two-sentence note, as the demo
-		   Practice's Visits do. A note is prose, and its cell caps it at
-		   `--measure`, so this is the width at which any note fits beside
-		   the four bounded columns: 1161px of a 1135px column on
-		   macOS/Chromium, fitting from 1168px, and 1170px of a 1168px
-		   column in CI's Linux/Chromium, the canonical environment, so
-		   1176px, the next half-rem step; the route floor check's
-		   minimal half holds it there. A one-line-notes
-		   screen fits at 59rem, and a lower floor than this one broke
-		   "Prenatal" and "Change" mid-word on the demo Practice at a 1440px
-		   window, so there the Visits are records.
-		   `DataTable.svelte`'s floor comment says why the floor is the
-		   route's own. */
-		.visits-table {
-			container: visits-table / inline-size;
-		}
-
-		.visits-table > :global(*) {
-			font-size: var(--text-body-size);
-			--data-table-table-display: none;
-			--data-table-records-display: block;
-		}
-
-		@container visits-table (min-width: 73.5rem) {
-			.visits-table > :global(*) {
-				--data-table-table-display: table;
-				--data-table-records-display: none;
-			}
-		}
-	}
-</style>

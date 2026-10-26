@@ -101,6 +101,25 @@
 		 * the other would make that paragraph false.
 		 */
 		content?: Snippet<[row: T, view: DataTableView]>;
+		/*
+		 * The one column of a table that wraps (#2091): a Practice's own
+		 * prose -- a Visit's notes -- beside columns of facts. It takes the
+		 * width the other columns leave and wraps its text there, while
+		 * every other plain cell keeps its content width on one line, so a
+		 * date, a Type or a name is never narrowed to make room for a
+		 * sentence. Without it, shrink-to-fit (#542) sizes every column to
+		 * its content, a sentence pushes the table's floor past the room a
+		 * page has, and a lower floor broke "Prenatal" and "Change"
+		 * mid-word.
+		 *
+		 * The floor of a table with this column is measured with the
+		 * column at its minimum -- its longest word -- not its longest line
+		 * (`floor.ts`'s `measureTableFit`). One per table: a second would
+		 * share the room by content again, which is what this exists to
+		 * stop. It does not combine with `columnWidths="even"`, whose fixed
+		 * layout gives every column the same share whatever it holds.
+		 */
+		wraps?: boolean;
 	}
 
 	interface RowActions<T> {
@@ -269,11 +288,15 @@
 			<EmptyState message={emptyMessage} action={emptyAction} />
 		{/if}
 	{:else}
-		<table class="table-view" class:even={columnWidths === 'even'}>
+		<table
+			class="table-view"
+			class:even={columnWidths === 'even'}
+			class:has-wrapping-column={columns.some((column) => column.wraps)}
+		>
 			<thead>
 				<tr>
 					{#each columns as column (column.label)}
-						<th scope="col" class:numeric={column.numeric}>{column.label}</th>
+						<th scope="col" class:numeric={column.numeric} class:wraps={column.wraps}>{column.label}</th>
 					{/each}
 					{#if rowActions}
 						<!-- `actions` names the column of this table's own controls for
@@ -297,6 +320,7 @@
 								class:variant-body={column.variant === 'body'}
 								class:muted={column.variant === 'muted'}
 								class:content={isContentCell(column, columnIndex)}
+								class:wraps={column.wraps}
 							>
 								{@render cell(column, columnIndex, row, 'table')}
 							</td>
@@ -440,6 +464,25 @@
 		.table-view.even {
 			inline-size: min(100%, var(--measure));
 			table-layout: fixed;
+		}
+
+		/* A table with a wrapping column (#2091). The auto table layout
+		   shares the room between a column's one-word width and its
+		   one-line width in proportion to the gap between the two, so
+		   without this every column gave up width together and a date
+		   wrapped beside a sentence. A cell that cannot wrap has no gap,
+		   so the wrapping column, the only one left with one, takes all of
+		   the shortfall, and the table still stops where its columns are
+		   satisfied (#542). A caller's snippet cell is left to wrap: it
+		   may be more than one line by design (#264). A row's controls
+		   still wrap between each other (#1981), but never inside a word:
+		   `anywhere` below let "Change" break into "Chang" and "e". */
+		.has-wrapping-column :is(th, td):not(.wraps, .content, .actions) {
+			white-space: nowrap;
+		}
+
+		.has-wrapping-column .actions {
+			overflow-wrap: normal;
 		}
 
 		/* Before the floor's query, which overrides it at the same

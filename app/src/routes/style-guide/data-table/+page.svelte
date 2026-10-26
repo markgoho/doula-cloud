@@ -162,6 +162,45 @@
 	];
 
 	/*
+	 * #2091: the Visits table's shape -- four facts and a Doula's notes
+	 * beside them -- with the notes column marked `wraps`. Above the floor
+	 * the facts each hold one line and the notes take what is left; the
+	 * longest name and a two-sentence note beside a row with none
+	 * (ADR-0025). #530's URL stays in the history demo below: the floor
+	 * check reads with emergency wrapping off, and there a word that long
+	 * holds this column at its own width beside facts that cannot give way.
+	 */
+	interface VisitRow {
+		date: string;
+		type: string;
+		doula: string;
+		notes: string;
+	}
+
+	const visitColumns = [
+		{ label: 'Date', accessor: (row: VisitRow) => row.date },
+		{ label: 'Type', accessor: (row: VisitRow) => row.type },
+		{ label: 'Doula', accessor: (row: VisitRow) => row.doula },
+		{ label: 'Notes', accessor: (row: VisitRow) => row.notes, wraps: true }
+	];
+
+	const visitRows: VisitRow[] = [
+		{
+			date: 'Sep 12, 2026, 10:30am',
+			type: 'Postpartum',
+			doula: 'Persephone Adeyemi-Wollstonecraft',
+			notes:
+				'Talked through the birth plan and the hospital bag. Wants a second visit before the due date to practice positions for early labor at home.'
+		},
+		{
+			date: 'Sep 14, 2026, 9:00am',
+			type: 'Prenatal',
+			doula: 'Anne-Marie Ochieng-Whitfield',
+			notes: 'No notes yet.'
+		}
+	];
+
+	/*
 	 * The second `content` consumer #740 asks for, and the whole of what
 	 * it proves: this page copies NO class from the Clients list, whose
 	 * rollup was the seam's only consumer when the seam was written. The
@@ -275,6 +314,16 @@
 	<span class="visually-hidden" id="{view}-remove-{client.name.replaceAll(' ', '-')}">{client.name}</span>
 {/snippet}
 
+{#snippet changeAction(row: VisitRow, view: DataTableView)}
+	<Button
+		label="Change"
+		variant="link"
+		describedBy="{view}-visit-{row.date.replaceAll(/\W/g, '-')}"
+		onClick={noop}
+	/>
+	<span class="visually-hidden" id="{view}-visit-{row.date.replaceAll(/\W/g, '-')}">{row.doula}, {row.date}</span>
+{/snippet}
+
 {#snippet staffActions(member: Member, view: DataTableView)}
 	<Button
 		label="Edit membership"
@@ -378,6 +427,16 @@
 	<section>
 		<h2>A column a Practice writes, with no length the component can predict</h2>
 		<DataTable columns={historyColumns} rows={history} emptyMessage="No history yet." />
+	</section>
+
+	<section>
+		<h2>A column that wraps beside columns of facts</h2>
+		<DataTable
+			columns={visitColumns}
+			rows={visitRows}
+			rowActions={{ label: 'Actions', content: changeAction }}
+			emptyMessage="No Visits yet."
+		/>
 	</section>
 
 	<section>

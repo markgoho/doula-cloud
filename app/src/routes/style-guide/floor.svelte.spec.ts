@@ -933,6 +933,35 @@ describe('the table-fit criterion (#1945)', () => {
 		}
 	});
 
+	/*
+	 * #2091: the wrapping column is held at its longest word, so a long
+	 * note beside a short fact fits a frame its one line would not, and
+	 * the hold is undone once the table is read.
+	 */
+	it('holds a wrapping column to its longest word, not its line', () => {
+		const note = 'Discussed the birth plan and practiced positions for early labor at home. '.repeat(2);
+		const { frame, remove } = frameHolding(
+			`<table><tr><td>Prenatal</td><td class="wraps">${note}</td></tr></table>`
+		);
+		try {
+			atWidth(frame, AT_WIDTH);
+			const table = frame.querySelector('table')!;
+			const cell = frame.querySelector<HTMLElement>('.wraps')!;
+			table.style.inlineSize = 'max-content';
+			const wholeLine = table.getBoundingClientRect().width;
+			table.style.inlineSize = '';
+
+			const measurement = measureTableFit(frame);
+
+			expect(wholeLine).toBeGreaterThan(AT_WIDTH);
+			expect(isTableFitAcceptable(measurement, TOLERANCE)).toBe(true);
+			expect(cell.style.inlineSize).toBe('');
+			expect(cell.style.overflowWrap).toBe('');
+		} finally {
+			remove();
+		}
+	});
+
 	it('refuses a container that holds no table', () => {
 		const { frame, remove } = frameHolding('<p>Nothing here.</p>');
 		try {

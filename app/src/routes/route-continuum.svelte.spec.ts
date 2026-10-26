@@ -122,7 +122,7 @@ import {
 	revealDisclosures,
 	sweep,
 	TOLERANCE,
-	type Mounted
+	type Mounted,
 } from './style-guide/continuum.js';
 import {
 	atConditionWidth,
@@ -135,14 +135,14 @@ import {
 	scopeClasses,
 	tableFitReport,
 	type Condition,
-	type TableFitMeasurement
+	type TableFitMeasurement,
 } from './style-guide/floor.js';
 import {
 	toApiResponder,
 	toPageState,
 	toRoutePath,
 	toSweptFixtures,
-	type RouteFixture
+	type RouteFixture,
 } from './routeFixture.js';
 
 /*
@@ -161,7 +161,7 @@ const pageState = vi.hoisted(() => ({
 	// `$app/state` rather than through a component `data` prop, so they
 	// need this set alongside `params`/`url`. Every other route's own
 	// `data` arrives through `fixture.props` instead and leaves this `{}`.
-	data: {} as Record<string, unknown>
+	data: {} as Record<string, unknown>,
 }));
 vi.mock('$app/state', () => ({ page: pageState }));
 
@@ -177,7 +177,7 @@ vi.mock('$app/navigation', () => ({
 	invalidate: vi.fn(),
 	invalidateAll: vi.fn(),
 	pushState: vi.fn(),
-	refreshAll: vi.fn()
+	refreshAll: vi.fn(),
 }));
 
 /*
@@ -196,7 +196,7 @@ vi.mock('#lib/api.js', () => ({
 	// doc comment) rather than through apiFetchWithSession -- mirrored
 	// here rather than re-exported from the real module, since the real
 	// one closes over the real apiFetch, not this file's mock.
-	probeSession: async <Session,>(path: string): Promise<Session | undefined> => {
+	probeSession: async <Session>(path: string): Promise<Session | undefined> => {
 		try {
 			const response = await apiFetch(path);
 			if (!response.ok) return undefined;
@@ -204,7 +204,7 @@ vi.mock('#lib/api.js', () => ({
 		} catch {
 			return undefined;
 		}
-	}
+	},
 }));
 
 /*
@@ -212,9 +212,12 @@ vi.mock('#lib/api.js', () => ({
  * on #527.
  */
 const routePages = import.meta.glob('./**/+page.svelte');
-const fixtureModules = import.meta.glob<{ fixture: RouteFixture }>('./**/page.fixture.ts', {
-	eager: true
-});
+const fixtureModules = import.meta.glob<{ fixture: RouteFixture }>(
+	'./**/page.fixture.ts',
+	{
+		eager: true,
+	}
+);
 
 /*
  * The style guide is the component check's own territory: every page under
@@ -231,7 +234,7 @@ const routePaths = Object.keys(routePages)
 const fixtures = new Map(
 	Object.entries(fixtureModules).map(([modulePath, module]) => [
 		toRoutePath(modulePath),
-		module.fixture
+		module.fixture,
 	])
 );
 
@@ -300,7 +303,7 @@ async function mountRoute(fixture: RouteFixture): Promise<Mounted> {
 	 * route's `load` output is checked by its own `+page.ts`.
 	 */
 	const mounted = await mountInFrame(fixture.component as Component, {
-		...fixture.props
+		...fixture.props,
 	});
 	const { frame } = mounted;
 	try {
@@ -318,7 +321,9 @@ async function mountRoute(fixture: RouteFixture): Promise<Mounted> {
 		 * violation rather than as a fixture that named the wrong thing.
 		 */
 		await expect
-			.element(testPage.getByRole('heading', { name: fixture.readyText, level: 1 }))
+			.element(
+				testPage.getByRole('heading', { name: fixture.readyText, level: 1 })
+			)
 			.toBeVisible();
 		/*
 		 * And then for the rest of the screen (#885). The heading
@@ -443,7 +448,10 @@ describe('the continuum check, over routes', () => {
 			const { run, frame, remove } = await mountRoute(fixture);
 			try {
 				const found = sweep(frame, run.clientWidth);
-				expect(found, found && overflowReport(fixture.name, found)).toBeUndefined();
+				expect(
+					found,
+					found && overflowReport(fixture.name, found)
+				).toBeUndefined();
 			} finally {
 				remove();
 			}
@@ -451,7 +459,10 @@ describe('the continuum check, over routes', () => {
 
 		const brokenOn = KNOWN_BROKEN[routePath];
 		if (brokenOn) {
-			it.fails(`${fixture.name} (${brokenOn}) still needs more room than it is given`, assertion);
+			it.fails(
+				`${fixture.name} (${brokenOn}) still needs more room than it is given`,
+				assertion
+			);
 		} else {
 			it(`${fixture.name} never needs more room than it is given`, assertion);
 		}
@@ -489,12 +500,14 @@ describe('the continuum check, over routes', () => {
 const routeSources = import.meta.glob('./**/+page.svelte', {
 	eager: true,
 	query: '?raw',
-	import: 'default'
+	import: 'default',
 }) as Record<string, string>;
 
 const routeConditions = findConditions(
 	Object.fromEntries(
-		Object.entries(routeSources).filter(([modulePath]) => !modulePath.startsWith('./style-guide/'))
+		Object.entries(routeSources).filter(
+			([modulePath]) => !modulePath.startsWith('./style-guide/')
+		)
 	)
 );
 
@@ -512,7 +525,9 @@ function toRouteFloorKey(condition: Condition): string {
  * here: the activity ledgers other than the hub's, a Client's history, both Contracts tables,
  * Engagement Requests, the schedule, Blocked email addresses and Pending
  * invitations. Since #2022 the Clients list is one of them: its cells were
- * cut to Name and a Status of badges, and its typical screen fits.
+ * cut to Name and a Status of badges, and its typical screen fits. Since
+ * #2091 the Visits on an Engagement are too: their Notes column wraps, so
+ * the table's floor is its facts beside a note's longest word.
  */
 const ROUTE_FLOORS: Readonly<Record<string, string>> = {
 	'(person)/feedback#unopened-table': 'Issue not opened',
@@ -521,10 +536,9 @@ const ROUTE_FLOORS: Readonly<Record<string, string>> = {
 	// primary column, which is narrower than that at a laptop's window.
 	'practices/[practiceId]#activity-table': 'Recent activity',
 	'practices/[practiceId]#waiting-table': 'Clients waiting on a reply',
-	'practices/[practiceId]/engagements/[engagementId]#visits-table': 'Visits',
 	'practices/[practiceId]/invoices#invoices-table': 'The invoice list',
 	'practices/[practiceId]/on-call#roster-table': 'The on-call roster',
-	'practices/[practiceId]/staff#members-table': 'Staff members'
+	'practices/[practiceId]/staff#members-table': 'Staff members',
 };
 
 describe('the floor check, over routes (#1945)', () => {
@@ -536,8 +550,12 @@ describe('the floor check, over routes (#1945)', () => {
 	});
 
 	it('names no route floor the source no longer has', () => {
-		const discovered = new Set(routeConditions.map((condition) => toRouteFloorKey(condition)));
-		const stale = Object.keys(ROUTE_FLOORS).filter((key) => !discovered.has(key));
+		const discovered = new Set(
+			routeConditions.map((condition) => toRouteFloorKey(condition))
+		);
+		const stale = Object.keys(ROUTE_FLOORS).filter(
+			(key) => !discovered.has(key)
+		);
 		expect(stale, stale.join(', ')).toEqual([]);
 	});
 
@@ -552,11 +570,14 @@ describe('the floor check, over routes (#1945)', () => {
 		const key = toRouteFloorKey(condition);
 		const declared = fixtures.get(toRoutePath(condition.file));
 		if (!declared || !Object.hasOwn(ROUTE_FLOORS, key)) continue; // reported above
-		const screens = toSweptFixtures(declared).filter((screen) => screen.typical);
+		const screens = toSweptFixtures(declared).filter(
+			(screen) => screen.typical
+		);
 		const floorPx = remToPx(condition.floorRem);
 		// The component check's depth, for its reason: 5%, never less than
 		// two steps of the sweep.
-		const belowFloorPx = floorPx - Math.max(2 * RESOLUTION, Math.round(floorPx * 0.05));
+		const belowFloorPx =
+			floorPx - Math.max(2 * RESOLUTION, Math.round(floorPx * 0.05));
 
 		/*
 		 * Every typical screen of the route that renders this table, measured at
@@ -564,7 +585,9 @@ describe('the floor check, over routes (#1945)', () => {
 		 * Client yet draws its empty state, not its ledger -- is left out,
 		 * and a floor no screen renders is reported by the caller.
 		 */
-		async function measureAt(widths: readonly number[]): Promise<TableFitMeasurement[]> {
+		async function measureAt(
+			widths: readonly number[]
+		): Promise<TableFitMeasurement[]> {
 			const measurements: TableFitMeasurement[] = [];
 			for (const fixture of screens) {
 				const { frame, remove } = await mountRoute(fixture);
@@ -581,7 +604,9 @@ describe('the floor check, over routes (#1945)', () => {
 						 * fallback.
 						 */
 						await document.fonts.ready;
-						measurements.push(measureTableFit(conditionContainer(frame, condition)!));
+						measurements.push(
+							measureTableFit(conditionContainer(frame, condition)!)
+						);
 					}
 				} finally {
 					remove();
@@ -608,14 +633,18 @@ describe('the floor check, over routes (#1945)', () => {
 		function report(measurements: TableFitMeasurement[]): string {
 			return measurements.length === 0
 				? `${key}: no typical screen of the route renders its ${condition.containerName} container.`
-				: measurements.map((measurement) => tableFitReport(key, measurement)).join(' ');
+				: measurements
+						.map((measurement) => tableFitReport(key, measurement))
+						.join(' ');
 		}
 
 		it(`${key} is sufficient at its floor (${condition.floorRem}rem) on every typical screen`, async () => {
 			const measurements = await measureAt([floorPx]);
 			expect(
 				measurements.length > 0 &&
-					measurements.every((measurement) => isTableFitAcceptable(measurement, TOLERANCE)),
+					measurements.every((measurement) =>
+						isTableFitAcceptable(measurement, TOLERANCE)
+					),
 				report(measurements)
 			).toBe(true);
 		});
@@ -625,8 +654,14 @@ describe('the floor check, over routes (#1945)', () => {
 			it(minimalityName, async () => {
 				const measurements = await measureAt(belowFloorWidths);
 				expect(
-					measurements.some((measurement) => !isTableFitAcceptable(measurement, TOLERANCE)),
-					report(measurements.filter((_, index) => index % belowFloorWidths.length === 0))
+					measurements.some(
+						(measurement) => !isTableFitAcceptable(measurement, TOLERANCE)
+					),
+					report(
+						measurements.filter(
+							(_, index) => index % belowFloorWidths.length === 0
+						)
+					)
 				).toBe(true);
 			});
 		} else {
