@@ -91,7 +91,9 @@
 		{ label: 'Client', accessor: (row: RosterWindow) => row.clientName },
 		{
 			label: 'On call',
-			accessor: (row: RosterWindow) => row.onCall.map((doula) => doula.name).join(', '),
+			// "Nobody" as the cell says it: an empty accessor leaves the row
+			// out of the record card (#2022), and nobody on call is the fact.
+			accessor: (row: RosterWindow) => row.onCall.map((doula) => doula.name).join(', ') || 'Nobody',
 			content: onCallCell
 		},
 		{

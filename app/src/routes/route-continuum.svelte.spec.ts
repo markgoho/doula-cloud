@@ -509,12 +509,12 @@ function toRouteFloorKey(condition: Condition): string {
  * screen fits under `DataTable`'s own 55rem keep that floor and are not
  * here: both activity ledgers, a Client's history, both Contracts tables,
  * Engagement Requests, the schedule, Blocked email addresses and Pending
- * invitations.
+ * invitations. Since #2022 the Clients list is one of them: its cells were
+ * cut to Name and a Status of badges, and its typical screen fits.
  */
 const ROUTE_FLOORS: Readonly<Record<string, string>> = {
 	'(person)/feedback#unopened-table': 'Issue not opened',
 	'(person)/feedback#feedback-table': 'All feedback',
-	'practices/[practiceId]/clients#clients-table': 'The Clients list',
 	'practices/[practiceId]/engagements/[engagementId]#visits-table': 'Visits',
 	'practices/[practiceId]/invoices#invoices-table': 'The invoice list',
 	'practices/[practiceId]/on-call#roster-table': 'The on-call roster',

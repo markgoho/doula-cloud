@@ -519,6 +519,40 @@ func TestDetailHandler_ReturnsRecordEngagementsAndHistory(t *testing.T) {
 	}
 }
 
+// TestDetailHandler_ReturnsPortalInviteState proves #2022's move of the
+// portal-invite facts from the Clients list to her hub: a Client never
+// invited reads no status, and her address's suppression reads true.
+func TestDetailHandler_ReturnsPortalInviteState(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-detail-portal"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	clientID, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Blocked Client", "blocked-detail@example.com", "active")
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO email_suppressions (address, cause) VALUES ($1, 'bounce')`, "blocked-detail@example.com",
+	); err != nil {
+		t.Fatalf("seed suppression: %v", err)
+	}
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var out client.DetailResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.PortalInviteStatus != nil {
+		t.Fatalf("PortalInviteStatus = %q, want absent for a Client never invited", *out.PortalInviteStatus)
+	}
+	if !out.EmailSuppressed {
+		t.Fatal("EmailSuppressed = false, want true for a suppressed address")
+	}
+}
+
 // TestDetailHandler_ResolvedFieldsCoverActiveBlankArchivedHeldAndDropped
 // proves #399's AC3 and AC5: an active field always appears (even
 // blank), an archived field appears only when the Client holds a stored

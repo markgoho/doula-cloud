@@ -19,6 +19,7 @@
 	import { engagementStatusText } from '#lib/engagementDetail.js';
 	import { eraseClient, loadEraseEligibility, type EraseEligibility, type UnsettledInvoice } from '#lib/clientErasure.js';
 	import { formatAmount } from '#lib/invoice.js';
+	import { isBlockedInvite, portalInviteStatusText } from '#lib/portalInvite.js';
 	import { formatActivityTimestamp, formatInstant } from '#lib/dates.js';
 	import { takeOutcome } from '#lib/outcome.js';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
@@ -449,9 +450,29 @@
 	<SummaryList
 		rows={[
 			{ label: 'Email', value: detail!.email || '—' },
-			{ label: 'Phone', value: detail!.phone || '—' }
+			{ label: 'Phone', value: detail!.phone || '—' },
+			{ label: 'Portal invite', value: portalInviteStatusText(detail!) }
 		]}
-	/>
+	>
+		{#snippet value(row)}
+			{row.value}
+			<!--
+				#785, moved here from the Clients list on #2022: the words alone
+				name an act ("unblock the address") without saying where it
+				happens, and Blocked email addresses is two clicks away under
+				Settings. An anchor is the whole affordance, so the Rule of
+				Least Power puts it here rather than in script.
+			-->
+			{#if row.label === 'Portal invite' && isBlockedInvite(detail!)}
+				<Link
+					href={resolve('/practices/[practiceId]/settings/blocked-addresses', {
+						practiceId: page.params.practiceId!
+					})}
+					label="Blocked email addresses"
+				/>
+			{/if}
+		{/snippet}
+	</SummaryList>
 {/snippet}
 
 {#snippet addressSection()}

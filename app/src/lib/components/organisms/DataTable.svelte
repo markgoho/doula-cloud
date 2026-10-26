@@ -189,27 +189,31 @@
 	}
 
 	/*
-	 * One record of the record view as `SummaryList` rows (#2021): a row
-	 * per column, then the row actions' row. The value text is the
-	 * column's accessor; what draws is the `cell` snippet, through the
-	 * list's `value` snippet below.
+	 * One record card's rows (#2021, #2022): every column after the
+	 * first, which is the card's title, as a `SummaryList` row. The value
+	 * text is the column's accessor; what draws is the `cell` snippet,
+	 * through the list's `value` snippet below.
+	 *
+	 * A row whose accessor says nothing is left out (#2022): a card of
+	 * twelve rows where four read blank makes the eye search the blanks
+	 * for a value. So a `content` column's accessor has to say something
+	 * whenever its snippet draws something -- the accessor is what decides
+	 * whether the row is there at all.
 	 */
 	interface RecordRow extends SummaryListRow {
-		column?: Column<T>;
+		column: Column<T>;
 		columnIndex: number;
 	}
 
 	function recordRows(row: T): RecordRow[] {
-		const fields: RecordRow[] = columns.map((column, columnIndex) => ({
-			label: column.label,
-			value: column.accessor(row),
-			column,
-			columnIndex
-		}));
-		if (rowActions) {
-			fields.push({ label: rowActions.label, value: '', columnIndex: columns.length });
-		}
-		return fields;
+		return columns
+			.map((column, columnIndex) => ({
+				label: column.label,
+				value: column.accessor(row),
+				column,
+				columnIndex
+			}))
+			.filter((field) => field.columnIndex > 0 && field.value.trim() !== '');
 	}
 </script>
 
@@ -308,13 +312,19 @@
 		     failure mode. -->
 		<div class="record-view">
 			{#each rows as row, index (index)}
-				<!-- Each record is a `SummaryList` (#2021). The wrapper is
-				     the record's own box, which #2022's card frame is drawn
-				     on. -->
+				<!-- Each record is a card (#2022): its first column as the
+				     title, the thing a reader finds a record by (Serial
+				     Position), the rest as `SummaryList` rows (#2021), and its
+				     actions at the foot. The title is a block on the
+				     subheading step, not a heading: this component cannot
+				     know the level its page needs, and the title is often the
+				     row's link, which the `Heading` atom does not hold. -->
+				{@const fields = recordRows(row)}
 				<div class="record">
-					<SummaryList rows={recordRows(row)}>
-						{#snippet value(field)}
-							{#if field.column}
+					<div class="record-title">{@render cell(columns[0]!, 0, row, 'record')}</div>
+					{#if fields.length > 0}
+						<SummaryList rows={fields}>
+							{#snippet value(field)}
 								<!-- Neither `variant-body` nor `content` is written
 								     here, and for one reason: each would name a rule
 								     that overrides nothing in this tree. See the
@@ -326,14 +336,16 @@
 									class:muted={field.column.variant === 'muted'}
 									>{@render cell(field.column, field.columnIndex, row, 'record')}</span
 								>
-							{:else}
-								<!-- The one row with no column is the row actions'
-								     row, which `recordRows` adds only when they are
-								     set. -->
-								{@render rowActions!.content(row, 'record')}
-							{/if}
-						{/snippet}
-					</SummaryList>
+							{/snippet}
+						</SummaryList>
+					{/if}
+					{#if rowActions}
+						<!-- The actions are the card's own, not one more key and
+						     value: GOV.UK's summary card puts them in its frame. -->
+						<cluster-l class="record-actions" space="var(--space-3)" align="center">
+							{@render rowActions.content(row, 'record')}
+						</cluster-l>
+					{/if}
 				</div>
 			{/each}
 		</div>
@@ -615,10 +627,54 @@
 		   a mangled <table>, which strips table semantics in Safari and
 		   Firefox. The list owns what this view used to write for itself:
 		   the shrinkable value track (#1851, a row action's `<select>`;
-		   #542, a pasted URL), the measure cap (#1981, a label 1,200px
-		   from its value at 1440px), and one rule per row. */
+		   #542, a pasted URL), and one rule per row.
+
+		   Each record is the brief's card (#2022, Law of Common Region: a
+		   record genuinely is a unit): `surface-bright` inside a one-pixel
+		   `outline-variant` edge, the Engagement summary card's own
+		   (`SummaryList`'s `isBordered`) drawn around the title and the
+		   actions too. The measure that capped the list caps the card, so
+		   a card at 1440px is a reading width, not the window's (#1981).
+		   Before this, the gap between two records was the same step as
+		   the gap inside one, and on Schedule at 320px the eye could not
+		   find where one Visit ended. */
+		.record {
+			display: flex;
+			flex-direction: column;
+			gap: var(--space-2);
+			max-inline-size: var(--measure);
+			padding: var(--space-4);
+			border: var(--border-thin) solid var(--color-outline-variant);
+			border-radius: var(--radius);
+			background-color: var(--color-surface-bright);
+		}
+
+		/* Records are a group from the next, so the group step: 28px at
+		   the floor, the brief's "a labeled field group is 28px from the
+		   next" (Density). #2020 names this step in tokens.css. */
 		.record + .record {
-			margin-block-start: var(--space-4);
+			margin-block-start: var(--space-7);
+		}
+
+		/* The card's title: the subheading step, the brief's "card and
+		   group titles". `anywhere` because a first column can be a
+		   Practice's own words, a pasted URL included (#530). */
+		.record-title {
+			min-inline-size: 0;
+			font-size: var(--text-subheading-size);
+			font-weight: var(--text-subheading-weight);
+			line-height: var(--text-subheading-leading);
+			letter-spacing: var(--text-subheading-tracking);
+			overflow-wrap: anywhere;
+		}
+
+		/* The last row's hairline is the card's edge's job. */
+		.record :global(dl > .row:last-child) {
+			border-block-end: none;
+		}
+
+		.record-actions {
+			padding-block-start: var(--space-2);
 		}
 
 		/* A block, so a numeric value can sit at its column's end. */

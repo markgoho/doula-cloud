@@ -3,9 +3,11 @@
  *
  * `isContractor: false` from `+page.ts`'s own load keeps the "Find or
  * add a Client" action and the search-door paragraph both on screen.
- * `name` and `email` are the table's two free-text columns -- #530's URL
- * and #537's hyphenated double-barreled name, `DataTable`'s own #542
- * fix measured again on a different screen.
+ * `name` is the table's free-text column -- #530's URL and #537's
+ * hyphenated double-barreled name, `DataTable`'s own #542 fix measured
+ * again on a different screen. Email and the portal invite left the list
+ * for the Client hub on #2022; they stay on the rows because they are
+ * the list's wire shape.
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ClientListItem } from '#lib/client.js';

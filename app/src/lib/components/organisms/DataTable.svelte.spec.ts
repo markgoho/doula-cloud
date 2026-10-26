@@ -817,13 +817,55 @@ describe('the record view (#508, ADR-0024)', () => {
 		}
 	});
 
-	it('keeps each column label next to its value, one dl per row', async () => {
+	/*
+	 * #2022: a record is a card whose first column is its title, and the
+	 * rest of its columns are the list under it.
+	 */
+	it('titles each record with its first column and lists the rest under it', async () => {
 		const { container } = await setup();
 		await page.viewport(...NARROW);
 
-		const [firstRecord] = container.querySelectorAll(':scope .record-view dl');
-		expect(firstRecord.querySelector('dt')?.textContent).toBe('Name');
-		expect(firstRecord.querySelector('dd')?.textContent).toBe('Ada Lovelace');
+		const [firstRecord] = container.querySelectorAll(':scope .record-view .record');
+		expect(firstRecord.querySelector('.record-title')?.textContent).toBe('Ada Lovelace');
+		expect(firstRecord.querySelector('dt')?.textContent).toBe('Status');
+		expect(firstRecord.querySelector('dd')?.textContent).toBe('Active');
+	});
+
+	it("draws a first column's own snippet as the title, told it is the record view", async () => {
+		const viewSnippet = createRawSnippet<[Row, DataTableView]>((_row, view) => ({
+			render: () => `<span data-testid="column-content">${view()}</span>`
+		}));
+		const viewColumns = [{ label: 'Name', accessor: (row: Row) => row.name, content: viewSnippet }, columns[1]!];
+		const { container } = await setup({ columns: viewColumns });
+		await page.viewport(...NARROW);
+
+		const [firstRecord] = container.querySelectorAll(':scope .record-view .record');
+		expect(firstRecord.querySelector(':scope .record-title [data-testid="column-content"]')?.textContent).toBe(
+			'record'
+		);
+	});
+
+	it('leaves out a row whose value is empty', async () => {
+		const { container } = await setup({
+			rows: [
+				{ name: 'Ada Lovelace', status: '' },
+				{ name: 'Grace Hopper', status: 'Inactive' }
+			]
+		});
+		await page.viewport(...NARROW);
+
+		const [first, second] = container.querySelectorAll(':scope .record-view .record');
+		expect(first.querySelector('dl')).toBeNull();
+		expect(second.querySelector('dt')?.textContent).toBe('Status');
+	});
+
+	it('puts the row actions at the foot of the card, not in its list', async () => {
+		const { container } = await setup({ rowActions: { label: 'Actions', onRemove: vi.fn() } });
+		await page.viewport(...NARROW);
+
+		const [firstRecord] = container.querySelectorAll(':scope .record-view .record');
+		expect([...firstRecord.querySelectorAll('dt')].map((term) => term.textContent)).toEqual(['Status']);
+		expect(firstRecord.lastElementChild?.querySelector('button')?.textContent).toBe('Remove');
 	});
 
 	it('keeps rowHref reachable in the record view', async () => {

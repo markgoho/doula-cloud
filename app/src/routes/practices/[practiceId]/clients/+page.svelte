@@ -4,13 +4,14 @@
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadClients, type ClientListItem, type OpenEngagement } from '#lib/client.js';
-	import { NO_DOULA_YET_LABEL, kindLabel } from '#lib/engagementRequest.js';
+	import type { ComponentProps } from 'svelte';
+	import { kindLabel } from '#lib/engagementRequest.js';
 	import { engagementStatusText } from '#lib/engagementDetail.js';
 	import { startHref } from './new/intake.js';
-	import { isBlockedInvite, portalInviteStatusText } from '#lib/portalInvite.js';
 	import { formatAmount, invoiceStatusLabel } from '#lib/invoice.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
+	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
@@ -88,75 +89,78 @@
 		return client.hasWork ? 'Has work' : 'No work yet';
 	}
 
-	// #264 (RA-G6): the Contract lifecycle words a rollup line shows --
-	// mirrors portalInviteStatusLabel's own map above.
-	const contractStatusLabel: Record<string, string> = {
-		draft: 'Draft',
-		sent: 'Sent',
-		signed: 'Signed',
-		voided: 'Voided'
+	type StatusBadge = { label: string; variant: ComponentProps<typeof Badge>['variant'] };
+
+	// #264 (RA-G6), #2022: the Contract lifecycle as a badge. Signed is
+	// done, sent waits on the Client, and the rest are facts with nothing
+	// to do.
+	const contractBadges: Record<string, StatusBadge> = {
+		draft: { label: 'Contract draft', variant: 'neutral' },
+		sent: { label: 'Contract sent', variant: 'info' },
+		signed: { label: 'Contract signed', variant: 'success' },
+		voided: { label: 'Contract voided', variant: 'neutral' }
 	};
 
-	// #264: one line of a Client's open-Engagement rollup -- Contract
-	// status, the Doula on it (an explicit state for none, the same
-	// pattern as portalInviteStatusText's own "Never invited";
-	// NO_DOULA_YET_LABEL says why the words are shared, #1597), Engagement
-	// status, and Invoice status/money or her own fee wherever the BFF's
-	// role gate let the field through the wire at all (ADR-0006/ADR-0008).
-	// A field this Reader may not see is absent from `line` entirely, not
-	// blanked, so there is nothing here to hide -- only to append when
-	// present.
+	const NO_CONTRACT_BADGE: StatusBadge = { label: 'No contract yet', variant: 'neutral' };
+
+	// #2022: one open Engagement's status as badges -- its care phase, its
+	// Contract, and its money wherever the BFF's role gate let the field
+	// through the wire at all (ADR-0006/ADR-0008). A field this Reader may
+	// not see is absent from `line` entirely, not blanked, so there is
+	// nothing here to hide -- only to append when present.
 	//
-	// #741: `invoiceStatus`/`invoiceAmountCents` are now the BFF's answer
-	// to "is anything outstanding under this Contract", not merely its
-	// newest Invoice's status (list.go's OpenEngagement doc comment). The
-	// wording follows that split rather than always saying "Invoice:" --
-	// an `open` (billed, unpaid) result reads as "Outstanding" so the
-	// reader is never told this is just the latest of several Invoices;
-	// every other status (nothing outstanding) keeps the old "Invoice:
-	// <status>" wording, since there is nothing left to flag.
-	function engagementLineText(line: OpenEngagement): string {
-		const parts = [
-			`Contract: ${line.contractStatus ? contractStatusLabel[line.contractStatus] : 'No contract yet'}`,
-			`Doula: ${line.doulaName ?? NO_DOULA_YET_LABEL}`,
-			// #264: the Engagement's own status, as stored; #1512: in the
-			// word every Staff screen shows for it.
-			engagementStatusText(line.engagementStatus)
+	// The badges replace #264's sentence ("Contract: Signed · Doula: … ·
+	// Active · Outstanding ($1,500.00)"), whose one long line set this
+	// list's floor at 101.75rem, past what a desktop window holds. The
+	// Doula's name is on the Engagement's own page, one link away.
+	//
+	// #741: `invoiceStatus`/`invoiceAmountCents` are the BFF's answer to
+	// "is anything outstanding under this Contract", not merely its newest
+	// Invoice's status (list.go's OpenEngagement doc comment). So an `open`
+	// result reads "Owes", never as the latest of several Invoices, and it
+	// is the one badge that asks for something. "Owes", not #741's
+	// "Outstanding": a typical row (Postpartum, Active, Contract signed and
+	// the money) wrapped at 1440px in a cell held to the measure, and the
+	// shorter word keeps it on one line. A doula says it that way too.
+	function lineBadges(line: OpenEngagement): StatusBadge[] {
+		const badges: StatusBadge[] = [
+			// #1512: the care phase in the word every Staff screen shows.
+			{ label: engagementStatusText(line.engagementStatus), variant: 'neutral' },
+			(line.contractStatus && contractBadges[line.contractStatus]) || NO_CONTRACT_BADGE
 		];
 		if (line.invoiceStatus) {
-			const amount =
-				line.invoiceAmountCents === undefined ? '' : ` (${formatAmount(line.invoiceAmountCents)})`;
-			parts.push(
-				line.invoiceStatus === 'open'
-					? `Outstanding${amount}`
-					: `Invoice: ${invoiceStatusLabel(line.invoiceStatus)}${amount}`
-			);
+			const amount = line.invoiceAmountCents === undefined ? '' : ` ${formatAmount(line.invoiceAmountCents)}`;
+			if (line.invoiceStatus === 'open') {
+				badges.push({ label: `Owes${amount}`, variant: 'warning' });
+			} else if (line.invoiceStatus === 'paid') {
+				badges.push({ label: `Paid${amount}`, variant: 'success' });
+			} else {
+				badges.push({ label: `Invoice ${invoiceStatusLabel(line.invoiceStatus).toLowerCase()}${amount}`, variant: 'neutral' });
+			}
 		}
 		if (line.feeCents !== undefined) {
-			parts.push(`Your fee: ${formatAmount(line.feeCents)}`);
+			badges.push({ label: `Your fee ${formatAmount(line.feeCents)}`, variant: 'neutral' });
 		}
-		return parts.join(' · ');
+		return badges;
 	}
 
+	// The Status cell's words. They name the cell to `DataTable`, and they
+	// decide whether a record card keeps the row at all (#2022): one clause
+	// per open Engagement, then the pending Request.
+	function statusText(client: ClientListItem): string {
+		const lines = (client.openEngagements ?? []).map(
+			(line) => `${kindLabel(line.kind)}: ${lineBadges(line).map((badge) => badge.label).join(', ')}`
+		);
+		const pending = pendingRequestText(client);
+		return [...lines, ...(pending ? [pending] : [])].join('; ');
+	}
+
+	// #2022: Email and Portal invite are on the Client hub, where the
+	// Blocked email addresses link (#785) went with them, and a pending
+	// Request is a badge in Status. What is left fits a desktop.
 	const columns = $derived([
 		{ label: 'Name', accessor: (client: ClientListItem) => client.name },
-		{ label: 'Email', accessor: (client: ClientListItem) => client.email },
-		{
-			label: 'Engagements',
-			// Never actually rendered -- DataTable's `content` branch always
-			// wins over `accessor` -- but required by Column<T> regardless
-			// (#264's own reasoning: every other column's call site stays
-			// untouched rather than gaining an "accessor is missing" branch
-			// nothing exercises). Computed for real anyway, as the same
-			// summary `content` renders, so it is never a stray empty value.
-			accessor: (client: ClientListItem) =>
-				(client.openEngagements ?? [])
-					.map((line) => `${kindLabel(line.kind)} · ${engagementLineText(line)}`)
-					.join('; '),
-			content: engagementRollup
-		},
-		{ label: 'Pending request', accessor: pendingRequestText },
-		{ label: 'Portal invite', accessor: portalInviteStatusText, content: portalInviteCell },
+		{ label: 'Status', accessor: statusText, content: statusCell },
 		...(isShowingEveryone ? [{ label: 'Work', accessor: workStatusText }] : [])
 	]);
 
@@ -240,17 +244,17 @@
 	});
 </script>
 
-{#snippet engagementRollup(client: ClientListItem, view: DataTableView)}
+{#snippet statusCell(client: ClientListItem, view: DataTableView)}
 	<!--
-		#264: one <li> per open Engagement -- ADR-0017's "a Client can hold
-		more than one concurrent open Engagement" is why this is a list
-		rather than DataTable's plain per-cell string, so a second (or
-		third) line is never dropped or overwritten. Nothing renders at all
-		for a Client with no open Engagements (the empty-array case) --
-		the existing Pending request column already covers a pending
-		Request with no Engagement yet.
+		#264, #2022: one <li> per open Engagement -- ADR-0017's "a Client can
+		hold more than one concurrent open Engagement" is why this is a list,
+		so a second (or third) line is never dropped -- then the pending
+		Request, which a Client can hold before she has any Engagement.
+		Nothing renders for a Client with neither, and `statusText` is empty
+		for her too, so her record card leaves the row out.
 	-->
-	{#if client.openEngagements && client.openEngagements.length > 0}
+	{@const pending = pendingRequestText(client)}
+	{#if (client.openEngagements ?? []).length > 0 || pending}
 		<!--
 			#1511: each line's kind opens the Engagement's page. A new
 			Engagement has no Visit, Contract or Invoice, so no other screen
@@ -260,38 +264,28 @@
 			read hidden text, and the cell's own name then stays the line.
 			DataTable draws this cell once per view, hence the view in the id.
 		-->
-		<span id="rollup-{view}-{client.clientId}" hidden>{client.name}</span>
-		<ul class="rollup-list">
-			{#each client.openEngagements as line (line.engagementId)}
+		<span id="status-{view}-{client.clientId}" hidden>{client.name}</span>
+		<ul class="status-list">
+			{#each client.openEngagements ?? [] as line (line.engagementId)}
 				<li>
-					<Link
-						href={engagementHref(line)}
-						label={kindLabel(line.kind)}
-						describedBy="rollup-{view}-{client.clientId}"
-					/> · {engagementLineText(line)}
+					<cluster-l space="var(--space-2)" align="center">
+						<Link
+							href={engagementHref(line)}
+							label={kindLabel(line.kind)}
+							describedBy="status-{view}-{client.clientId}"
+						/>
+						{#each lineBadges(line) as badge (badge.label)}
+							<Badge label={badge.label} variant={badge.variant} />
+						{/each}
+					</cluster-l>
 				</li>
 			{/each}
+			{#if pending}
+				<!-- ADR-0017: a pending Request waits on the Practice, so it is
+				     the warning. -->
+				<li><Badge label={pending} variant="warning" /></li>
+			{/if}
 		</ul>
-	{/if}
-{/snippet}
-
-{#snippet portalInviteCell(client: ClientListItem)}
-	<!--
-		#785: the words alone name an act ("unblock the address") without
-		saying where it happens, and Blocked email addresses is two clicks
-		away under Settings. An anchor is the whole affordance -- no state,
-		no handler -- so the Rule of Least Power puts it here rather than
-		in script. Every other row renders exactly the string the accessor
-		already returned.
-	-->
-	{portalInviteStatusText(client)}
-	{#if isBlockedInvite(client)}
-		<Link
-			href={resolve('/practices/[practiceId]/settings/blocked-addresses', {
-				practiceId: page.params.practiceId!
-			})}
-			label="Blocked email addresses"
-		/>
 	{/if}
 {/snippet}
 
@@ -332,28 +326,31 @@
 	{#if error}
 		<Notice message={error} variant="error" />
 	{:else if isLoaded}
-		<div class="clients-table">
-			<DataTable
-				{columns}
-				rows={clients.items}
-				rowHref={clientHref}
-				hasMore={clients.hasMore}
-				onLoadMore={() => clients.loadMore()}
-				isLoadingMore={clients.isLoadingMore}
-				loadMoreError={clients.loadMoreError}
-				{emptyMessage}
-				emptyAction={isContractor
-					? { label: 'How to add Clients of your own', href: searchHref() }
-					: undefined}
-			/>
-			<!--
-				#539, #501 (ADR-0017): hiding "Find or add a Client" above took
-				away this door's only link for a contractor Doula, so it comes
-				back as the empty list's action (#2015) -- once she has an
-				attached Client, the narrowed list is already her route to it.
-				Everyone else has "Find or add a Client" above the list.
-			-->
-		</div>
+		<!--
+			No floor of its own (#2022): with Email, Portal invite and the
+			Engagements sentence gone, the typical pilot screen's table fits
+			`DataTable`'s own 55rem, so the 101.75rem this route used to set
+			(#1945, #1981) went with them.
+
+			#539, #501 (ADR-0017): hiding "Find or add a Client" above took
+			away this door's only link for a contractor Doula, so it comes
+			back as the empty list's action (#2015) -- once she has an
+			attached Client, the narrowed list is already her route to it.
+			Everyone else has "Find or add a Client" above the list.
+		-->
+		<DataTable
+			{columns}
+			rows={clients.items}
+			rowHref={clientHref}
+			hasMore={clients.hasMore}
+			onLoadMore={() => clients.loadMore()}
+			isLoadingMore={clients.isLoadingMore}
+			loadMoreError={clients.loadMoreError}
+			{emptyMessage}
+			emptyAction={isContractor
+				? { label: 'How to add Clients of your own', href: searchHref() }
+				: undefined}
+		/>
 	{:else}
 		<Skeleton variant="row" lines={8} label="Loading Clients" />
 	{/if}
@@ -363,59 +360,16 @@
 
 <style>
 	@layer components {
-		/* The Clients list's content floor (#1945, #1981): below it the table's
-		   cells wrap to more lines than at the old type floors, so it
-		   shows its records -- the founder's answer on #1945. Measured on
-		   this route's typical pilot screen, not its hostile one -- the
-		   founder's answer of 2026-10-25 on #1981: a very long name or
-		   address wraps one more line, and it does not change the layout.
-		   Measured 2026-10-25 on the drag surface: its natural width fits
-		   its column from 1626px on macOS/Chromium with no margin beyond it.
-		   On the hostile fixture it was 186.75rem.
-		   `DataTable.svelte`'s floor comment says why the floor is the
-		   route's own. */
-		.clients-table {
-			container: clients-table / inline-size;
-		}
-
-		.clients-table > :global(*) {
-			font-size: var(--text-body-size);
-			--data-table-table-display: none;
-			--data-table-records-display: block;
-		}
-
-		@container clients-table (min-width: 101.75rem) {
-			.clients-table > :global(*) {
-				--data-table-table-display: table;
-				--data-table-records-display: none;
-			}
-		}
-
 		/*
-		 * The rollup's own list treatment (#264), which used to live in
-		 * `DataTable.svelte` behind `:global(.rollup-list)` and leaked from
-		 * there to every element in the app that happened to share the
-		 * name (#740). The markup is written in this file, so this file's
-		 * own scope reaches it and no `:global` is needed -- and DataTable
-		 * is left owning the CELL rather than what a caller puts in it. A
-		 * second `content` consumer inherits nothing from here, which is
-		 * the point: it writes whatever its own content needs, and its
-		 * cell sizes and pads itself either way.
-		 *
-		 * The cell's vertical room is DataTable's own (`td.content`), so
-		 * this declares none of it.
+		 * The Status cell's own list (#264, #2022). The markup is written in
+		 * this file, so this file's scope reaches it and DataTable is left
+		 * owning the CELL rather than what a caller puts in it (#740). The
+		 * cell's vertical room is DataTable's own (`td.content`).
 		 */
-		.rollup-list {
+		.status-list {
 			display: grid;
 			gap: var(--space-1);
 			margin: 0;
-			padding: 0;
-			list-style: none;
-		}
-
-		.rollup-list li + li {
-			padding-block-start: var(--space-1);
-			border-block-start: var(--border-thin) solid var(--color-outline-variant);
 		}
 	}
 </style>

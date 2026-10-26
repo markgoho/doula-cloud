@@ -208,7 +208,10 @@
 		},
 		{
 			client: 'Anne-Marie Ochieng-Whitfield',
-			summary: 'No open Engagements',
+			// Empty, as the cell is: below the floor this record's card
+			// leaves the row out rather than show a label over nothing
+			// (#2022).
+			summary: '',
 			lines: [],
 			note: 'Accepted'
 		}
@@ -362,7 +365,7 @@
 	</section>
 
 	<section>
-		<h2>Columns whose cells a caller draws itself</h2>
+		<h2>Columns whose cells a caller draws itself, one of them empty</h2>
 		<DataTable
 			columns={stateColumns}
 			rows={states}
