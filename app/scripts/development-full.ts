@@ -8,6 +8,9 @@
 // the Auth emulator keeps nothing between starts, so the old rows would
 // outlive every account that signs in to them. stopStack first removes
 // what such a run left, and it costs nothing when there is nothing left.
+// Reset rather than repair: the Staff rows carry the emulator UIDs the
+// first run minted, so a repair would have to re-create each account
+// under its old UID; a clean stack needs only the seed that already runs.
 //
 // Between the stack and the dev server it seeds the local demo Practice
 // (#1994, demo-practice.ts), so a person can sign in from /login at once;
@@ -21,8 +24,31 @@
 // link, an Invitation, a reset -- reaches the sandbox mailbox.
 import { request } from '@playwright/test';
 import { MAILBOX_URL, startStack, stopStack, WORKER_SECRET } from '../e2e/stack';
-import { API_URL, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT, DEV_SERVER_ORIGIN } from '../e2e/ports';
+import {
+	API_URL,
+	E2E_EMULATOR_HOST,
+	E2E_EMULATOR_PORT,
+	DEV_SERVER_ORIGIN,
+	developmentServerPidfilePath,
+	PORT_OFFSET
+} from '../e2e/ports';
 import { demoSummary, mintPortalLinks, seedDemoPractice } from './demo-practice';
+
+// The dev server's pid, kept so the next dev:full can stop a dev server a
+// killed run left holding the dev port (#2010): Vite would otherwise move
+// to the next free port, which the BFF's EXPECTED_ORIGINS does not name.
+const DEV_SERVER_PIDFILE = Bun.file(developmentServerPidfilePath(PORT_OFFSET));
+
+// Stops the dev server a killed run left, if the pid still names one: a
+// pid can be given to another process once its own has ended, so a
+// pidfile a clean exit left behind stops nothing.
+async function stopLeftDevelopmentServer() {
+	if (!(await DEV_SERVER_PIDFILE.exists())) return;
+	const pid = Number(await DEV_SERVER_PIDFILE.text());
+	await DEV_SERVER_PIDFILE.delete();
+	const command = Bun.spawnSync(['ps', '-o', 'command=', '-p', String(pid)]).stdout.toString();
+	if (command.includes('vite')) process.kill(pid);
+}
 
 // Deployed, the drain runs every five minutes, as a backstop under the
 // Cloud Tasks nudge that sends most mail at once. Locally there is no
@@ -31,6 +57,7 @@ import { demoSummary, mintPortalLinks, seedDemoPractice } from './demo-practice'
 // minutes.
 const DRAIN_INTERVAL_MS = 3000;
 
+await stopLeftDevelopmentServer();
 stopStack({ quiet: true });
 await startStack(DEV_SERVER_ORIGIN);
 
@@ -74,7 +101,9 @@ async function drainOutboxes() {
 const drainTimer = setInterval(drainOutboxes, DRAIN_INTERVAL_MS);
 console.log(`Local mail is drained every ${DRAIN_INTERVAL_MS / 1000}s. Read it at ${MAILBOX_URL}/\n`);
 
-const vite = Bun.spawn(['bun', 'run', 'dev'], {
+// Vite's own binary rather than `bun run dev`, so the pid is the dev
+// server's, not a wrapper's that would leave the server behind.
+const vite = Bun.spawn(['./node_modules/.bin/vite', 'dev'], {
 	stdio: ['inherit', 'inherit', 'inherit'],
 	env: {
 		...process.env,
@@ -86,6 +115,8 @@ const vite = Bun.spawn(['bun', 'run', 'dev'], {
 		process.exit(exitCode ?? 0);
 	}
 });
+
+await Bun.write(DEV_SERVER_PIDFILE, String(vite.pid));
 
 let isTornDown = false;
 function teardown() {
