@@ -66,9 +66,8 @@
 		/**
 		 * Presence, not a paired boolean: the value is also the Skeleton's
 		 * accessible label, so a caller cannot supply "loading" without
-		 * saying what is loading. `title` is not known yet in every caller
-		 * (the Practice landing page's welcome line is built from the data
-		 * this state is standing in for), so nothing here reads it.
+		 * saying what is loading. A caller's `title` may be built from the
+		 * data this state is standing in for, so nothing here reads it.
 		 */
 		loading?: string;
 		/**

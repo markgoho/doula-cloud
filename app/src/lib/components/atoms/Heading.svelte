@@ -68,9 +68,8 @@
 			font-family: var(--font-family-base);
 			color: var(--color-on-surface);
 			/*
-			 * #595: a hub's title interpolates a Practice's own name
-			 * (`OverviewHub`'s `Welcome to ${practiceName}`),
-			 * and a Practice's registered name is one this repo has already
+			 * #595: a heading can interpolate a Practice's own name (the
+			 * Practice landing hub's title did, until #2141), and a Practice's registered name is one this repo has already
 			 * seen typed as a bare URL (#530) -- no space or hyphen for a
 			 * browser to break on. Every other free-text surface this repo
 			 * ships (`Link`, `DataTable`, `SummaryList`, `ContractView`)

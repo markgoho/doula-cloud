@@ -130,7 +130,7 @@ The words below are the words to build. Where a build ticket and this document d
 
 ### Screen 2: the empty Practice
 
-The Practice overview, while the Practice holds no Client record. The heading is "Welcome to (Practice name)".
+The Practice overview, while the Practice holds no Client record. The heading is "Overview" ([#2141](https://github.com/markgoho/doula-cloud/issues/2141)); the Practice's name is in the top bar.
 
 | Part | Words | Decided by |
 | --- | --- | --- |

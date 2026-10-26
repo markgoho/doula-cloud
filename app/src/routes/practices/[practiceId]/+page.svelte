@@ -30,7 +30,7 @@
 		type WaitingOnReply
 	} from '#lib/practiceLanding.js';
 	import { CONNECT_STATUS_BADGES } from '#lib/payments.js';
-	import { EVERY_ROLE_SENTENCE, hasEveryRole, isOwner, isOwnerOrAdmin } from '#lib/roles.js';
+	import { EVERY_ROLE_SENTENCE, hasEveryRole, isDoula, isOwner, isOwnerOrAdmin } from '#lib/roles.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import DoorLink from '#lib/components/atoms/DoorLink.svelte';
 	import { startHref } from './clients/new/intake.js';
@@ -281,12 +281,17 @@
 			onClose={closeRecommendation}
 		/>
 	{/if}
-	<Heading level={2} variant="section" text="Offers awaiting your answer" />
-	<Text
-		text="Work you have been offered. Accepting puts you on the birth; declining is final for that offer."
-		tone="variant"
-	/>
-	<OfferInbox offers={landing!.openOffers} onDecide={handleDecide} />
+	<!-- An Offer goes to a Doula (#2141): a Staff member without the role
+	     can never be offered work, so an inbox that could only ever say
+	     "You have no offers." is not drawn for her. -->
+	{#if isDoula(session)}
+		<Heading level={2} variant="section" text="Offers awaiting your answer" />
+		<Text
+			text="Work you have been offered. Accepting puts you on the birth; declining is final for that offer."
+			tone="variant"
+		/>
+		<OfferInbox offers={landing!.openOffers} onDecide={handleDecide} />
+	{/if}
 
 	<!--
 		#455: computed from thread authorship (the latest Message on the
@@ -553,8 +558,15 @@
 	</stack-l>
 {/snippet}
 
+<!--
+	The title is the nav item's own name (#2141), the GOV.UK rule that a
+	link's words and the page's heading match. It used to welcome her to
+	the Practice by name on every visit: a first-visit greeting shown
+	forever, which said nothing the top bar's Practice name does not, and
+	read "Welcome to Jamie Owner" when signup left the name to default.
+-->
 <OverviewHub
-	title={landing ? `Welcome to ${landing.practiceName}` : ''}
+	title="Overview"
 	isEmpty={landing ? !landing.hasClients : false}
 	{primary}
 	secondary={landing && hasSecondary(landing) ? secondary : undefined}

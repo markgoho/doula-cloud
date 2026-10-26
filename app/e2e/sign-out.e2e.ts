@@ -126,7 +126,7 @@ test('a second tab loses access once the first tab signs out, without itself sig
 
 	const secondTab = await page.context().newPage();
 	await secondTab.goto(`/practices/${practiceId}`);
-	await expect(secondTab.locator('h1')).toHaveText('Welcome to Elm Street Doulas');
+	await expect(secondTab.locator('h1')).toHaveText('Overview');
 
 	// Sign out moved behind the avatar menu when the shell landed (#452):
 	// the menu is the person's, and Sign out is the one thing in it that

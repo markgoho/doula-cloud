@@ -61,7 +61,10 @@ test('Signing up through the journey lands the new Owner on her Practice overvie
 	await page.getByRole('button', { name: 'Create your Practice' }).click();
 
 	await expect(page).toHaveURL(/\/practices\/[^/?]+$/);
-	await expect(page.getByRole('heading', { level: 1, name: 'Welcome to Riverside Doulas' })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
+	// The Practice's name is the top bar's to show (#2141), so that is
+	// where the name typed at signup is looked for.
+	await expect(page.getByText('Riverside Doulas', { exact: true }).locator('visible=true')).toBeVisible();
 
 	// #149: the app exchanges the ID token for the session cookie and signs
 	// out of the Firebase JS SDK locally -- a lingering credential would show
@@ -110,7 +113,8 @@ test('An empty Practice name gives the new Practice her own name', async ({ page
 	await page.getByRole('button', { name: 'Create your Practice' }).click();
 
 	await expect(page).toHaveURL(/\/practices\/[^/?]+$/);
-	await expect(page.getByRole('heading', { level: 1, name: 'Welcome to Jamie Owner' })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
+	await expect(page.getByText('Jamie Owner', { exact: true }).locator('visible=true')).toBeVisible();
 });
 
 // #1547 (ADR-0053): pressing Create your Practice is the Practice's agreement
