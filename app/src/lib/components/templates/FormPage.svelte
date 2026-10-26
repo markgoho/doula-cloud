@@ -123,19 +123,19 @@
 			     loaded screen (#1258). Presence-only, like Skeleton's own
 			     aria-busy, and invisible to sight and to assistive tech: the
 			     Notice below still carries role="alert" on its own. -->
-			<stack-l space="var(--space-7)" data-load-error>
+			<stack-l space="var(--space-group)" data-load-error>
 				<Heading level={1} variant="page" text={title} />
 				{@render introRegion()}
 				<Notice variant="error" message={loadError} />
 			</stack-l>
 		{:else if loading}
-			<stack-l space="var(--space-7)">
+			<stack-l space="var(--space-group)">
 				<Heading level={1} variant="page" text={title} />
 				{@render introRegion()}
 				<Skeleton variant="text" lines={4} label={loading} />
 			</stack-l>
 		{:else}
-			<stack-l space="var(--space-7)">
+			<stack-l space="var(--space-group)">
 				{#if errorSummary}
 					{@render errorSummary()}
 				{/if}
@@ -156,11 +156,11 @@
 				-->
 				{#each fieldsets as fieldset, index (index)}
 					{#if fieldset.legend === undefined}
-						<stack-l space="var(--space-5)">{@render fieldset.content()}</stack-l>
+						<stack-l space="var(--space-field)">{@render fieldset.content()}</stack-l>
 					{:else}
 						<fieldset>
 							<legend>{fieldset.legend}</legend>
-							<stack-l space="var(--space-5)">{@render fieldset.content()}</stack-l>
+							<stack-l space="var(--space-field)">{@render fieldset.content()}</stack-l>
 						</fieldset>
 					{/if}
 				{/each}
@@ -179,8 +179,8 @@
 
 		/*
 		 * The brief's "airy forms" half: consecutive fields 20px apart
-		 * (--space-5, on the stack inside each fieldset) and a labeled group
-		 * 28px from the next (--space-7, on the outer stack). A fieldset
+		 * (--space-field, on the stack inside each fieldset) and a labeled group
+		 * 28px from the next (--space-group, on the outer stack). A fieldset
 		 * carries no border of its own -- the Law of Proximity does the
 		 * grouping, and the direction drops boxes that only exist to look
 		 * busy.
@@ -200,9 +200,32 @@
 			max-inline-size: var(--measure);
 		}
 
+		/*
+		 * A region whose snippet rendered nothing draws nothing (#2020).
+		 * An intro or a fieldset can be all conditions -- Delete this
+		 * Practice's intro is a Badge only while a deletion is pending, its
+		 * body a Notice only while something needs saying, and its actions
+		 * a button only for an Owner -- and an empty flex child still takes
+		 * the stack's gap on each side, which left a blank band between the
+		 * title and the button. `display: none` takes the box out of the
+		 * flex layout, its gaps with it.
+		 *
+		 * "Holds no element", not `:empty`: the whitespace between two
+		 * `{#if}` blocks in a route's snippet is a text node, which
+		 * `:empty` counts. So a region's content is elements -- a `Text`,
+		 * a `Notice` -- never a bare string, which this rule would hide;
+		 * every region in the app already is. `:global(*)` because the
+		 * elements are the route's, outside this component's scope.
+		 */
+		.intro:not(:has(:global(*))),
+		stack-l:not(:has(:global(*))),
+		cluster-l:not(:has(:global(*))) {
+			display: none;
+		}
+
 		legend {
 			padding: 0;
-			margin-block-end: var(--space-4);
+			margin-block-end: var(--space-field);
 			font-family: var(--font-family-base);
 			font-size: var(--text-heading-size);
 			font-weight: var(--text-heading-weight);

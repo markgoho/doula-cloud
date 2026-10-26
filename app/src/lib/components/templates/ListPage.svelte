@@ -72,21 +72,23 @@
 		{#if loadError}
 			<!-- data-load-error: see FormPage.svelte's own comment on this
 			     attribute (#1258) -- the same fact, the same reason. -->
-			<stack-l space="var(--space-7)" data-load-error>
+			<stack-l space="var(--space-section)" data-load-error>
 				<Heading level={1} variant="page" text={title} />
 				<Notice variant="error" message={loadError} />
 			</stack-l>
 		{:else if loading}
-			<stack-l space="var(--space-7)">
+			<stack-l space="var(--space-section)">
 				<Heading level={1} variant="page" text={title} />
 				<Skeleton variant="row" lines={6} label={loading} />
 			</stack-l>
 		{:else}
-			<stack-l space="var(--space-8)">
+			<stack-l space="var(--space-section)">
 				<Heading level={1} variant="page" text={title} />
 
 				{#if intro}
-					<div class="intro">{@render intro()}</div>
+					<!-- A stack, not a plain div (#2020): an intro of two
+					     paragraphs ran them together. -->
+					<stack-l class="intro" space="var(--space-related)">{@render intro()}</stack-l>
 				{/if}
 
 				{#if actions}
@@ -109,7 +111,8 @@
 		   uncapped for tables, but an intro sentence is prose, and prose left
 		   uncapped is the exact defect #491 found on the settings screens --
 		   here on the same Template rather than on the same route, since the
-		   intro is the only region here that is ever prose. */
+		   intro is the only region here that is ever prose. A `Text` placed
+		   in `content` caps itself (#2020). */
 		.intro {
 			max-inline-size: var(--measure);
 		}

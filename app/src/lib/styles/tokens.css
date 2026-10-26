@@ -179,6 +179,27 @@
 	--space-10: clamp(2.5rem, 2.25rem + 1.25cqi, 3.75rem);
 	--space-12: clamp(3rem, 2.7rem + 1.5cqi, 4.5rem);
 
+	/* The rhythm, named for what each step separates (#2020). The
+	   Templates and the field molecules read these and never a raw step,
+	   so a page author does not choose one and a change to the rhythm is
+	   an edit here. Each is a step on the ramp above, so it stays fluid
+	   and on the 4px base. */
+	/* A label from its own hint, error and control: the parts of one
+	   question, read as one thing. */
+	--space-label: var(--space-1);
+	/* Related items that read as one group: two links offered side by
+	   side ("Forgot your password?", "Use a recovery code"), the
+	   paragraphs of one intro, a row of badges. */
+	--space-related: var(--space-3);
+	/* One field from the next: the brief's 20px. */
+	--space-field: var(--space-5);
+	/* A labeled group of fields, or a page's title, from the next group:
+	   the brief's 28px. */
+	--space-group: var(--space-7);
+	/* One section of a page from the next: a record's sections, a hub's
+	   or a list's regions. */
+	--space-section: var(--space-8);
+
 	/* Fixed dimensions the brief states as numbers. Tokens rather than magic
 	   numbers, so #431's shell and #422's Templates share one source. */
 	--control-height: 2.5rem;

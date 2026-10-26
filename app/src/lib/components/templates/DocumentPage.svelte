@@ -84,24 +84,24 @@
 			{#if loadError}
 				<!-- data-load-error: see FormPage.svelte's own comment on this
 				     attribute (#1258) -- the same fact, the same reason. -->
-				<stack-l space="var(--space-7)" data-load-error>
+				<stack-l space="var(--space-group)" data-load-error>
 					<Heading level={1} variant="page" text={title} />
 					<Notice variant="error" message={loadError} />
 				</stack-l>
 			{:else if loading}
-				<stack-l space="var(--space-7)">
+				<stack-l space="var(--space-group)">
 					<Heading level={1} variant="page" text={title} />
 					<!-- `text`, not ListPage's `row`: what is coming is prose and
 					     a list of facts, not table rows. -->
 					<Skeleton variant="text" lines={6} label={loading} />
 				</stack-l>
 			{:else if empty}
-				<stack-l space="var(--space-7)">
+				<stack-l space="var(--space-group)">
 					<Heading level={1} variant="page" text={title} />
 					<EmptyState message={empty} action={emptyAction} />
 				</stack-l>
 			{:else}
-				<stack-l space="var(--space-7)">
+				<stack-l space="var(--space-group)">
 					<Heading level={1} variant="page" text={title} />
 					{@render content()}
 				</stack-l>

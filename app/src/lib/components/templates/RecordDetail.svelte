@@ -115,10 +115,10 @@
 				record with no contents rail used to render the header and the
 				sections as bare siblings, so the summary's last block touched
 				the first section heading. Every record now puts the same
-				--space-8 between its header and its first section as between
+				--space-section between its header and its first section as between
 				two sections.
 			-->
-			<stack-l space="var(--space-8)">
+			<stack-l space="var(--space-section)">
 				<!--
 					A plain div, not <header>: a <header> outside article/aside/main/
 					nav/section maps to the `banner` landmark, and the banner is the
@@ -143,7 +143,7 @@
 				</div>
 
 				<div class="sections">
-					<stack-l space="var(--space-8)">
+					<stack-l space="var(--space-section)">
 						{#each sections as section (section.heading)}
 							<!-- v8 ignore start: Svelte-compiled attribute-diffing branch for the
 							     templated aria-labelledby/id pair below isn't reachable from -- spelling:ignore: aria-labelledby is an ARIA attribute name
@@ -266,7 +266,7 @@
 		/*
 		 * Law of Proximity: the summary belongs to the title, so it sits
 		 * nearer to it than the first section does -- --space-4 here against
-		 * the --space-8 the stack puts between sections. That difference is
+		 * the --space-section the stack puts between sections. That difference is
 		 * what groups the header, not a border.
 		 */
 		.summary {

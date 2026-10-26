@@ -245,7 +245,6 @@
 				<Heading level={1} variant="page" text="Find a Client" />
 				<Text
 					tone="variant"
-					measure
 					text="Search for a Client already on file before adding a new one. Name, date of birth, email and phone all match — use whatever you have, one on its own is enough."
 				/>
 

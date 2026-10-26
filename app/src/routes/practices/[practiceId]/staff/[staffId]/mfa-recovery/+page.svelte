@@ -137,7 +137,6 @@
 	<Text
 		text="Use this when a Staff member has lost the phone or the app holding the authenticator codes, and cannot sign in."
 		tone="variant"
-		measure
 	/>
 {/snippet}
 

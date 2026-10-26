@@ -40,7 +40,7 @@ describe('StackedForm', () => {
 		const { container } = await setup();
 
 		const stack = container.querySelector(':scope form > stack-l');
-		expect(stack?.getAttribute('space')).toBe('var(--space-5)');
+		expect(stack?.getAttribute('space')).toBe('var(--space-field)');
 		expect(stack?.querySelector(':scope button')).not.toBeNull();
 	});
 

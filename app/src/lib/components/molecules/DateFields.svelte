@@ -148,9 +148,13 @@
 			min-inline-size: 0;
 		}
 
+		/* `--space-label` to the hint, the error and the boxes, the same
+		   step `LabeledField` puts between its label and those (#2020):
+		   this was `--space-5`, so a date question's hint sat about five
+		   times as far from its question as any other field's. */
 		legend {
 			padding: 0;
-			margin-block-end: var(--space-5);
+			margin-block-end: var(--space-label);
 			font-weight: var(--font-weight-medium);
 			color: var(--color-on-surface);
 		}
@@ -158,7 +162,7 @@
 		/* The same quiet, smaller step `LabeledField`'s own hint carries,
 		   so a hint reads the same wherever it appears. */
 		.hint {
-			margin: 0 0 var(--space-3);
+			margin: 0 0 var(--space-label);
 			color: var(--color-on-surface-muted);
 			font-size: var(--text-body-sm-size);
 		}
@@ -166,7 +170,7 @@
 		/* The same weight and color every other refusal in the app
 		   carries -- `LabeledField`'s and `RadioGroup`'s. */
 		.error {
-			margin: 0 0 var(--space-3);
+			margin: 0 0 var(--space-label);
 			color: var(--color-error);
 			font-size: var(--text-body-sm-size);
 		}

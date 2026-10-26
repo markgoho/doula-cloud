@@ -385,14 +385,20 @@
 			<Button type="submit" label="Log in" loading={submission.isSubmitting} />
 		</StackedForm>
 
-		<Link href={resolve('/(signed-out)/forgot-password')} label="Forgot your password?" />
-		<!--
-			#694: the way back for a lost authenticator app. It is offered
-			here as well as on the challenge step below because a person who
-			already knows her phone is gone starts from this screen, not from
-			a code prompt she cannot answer.
-		-->
-		<Link href={resolve('/(signed-out)/recovery-code')} label="Use a recovery code" />
+		<!-- One group (#2020): the two other ways in sit together, not a
+		     group apart as EntryPage's own step would put them. A cluster,
+		     so where there is room they share a line, and a link's own 44px
+		     target already holds them apart when they wrap. -->
+		<cluster-l space="var(--space-related)">
+			<Link href={resolve('/(signed-out)/forgot-password')} label="Forgot your password?" />
+			<!--
+				#694: the way back for a lost authenticator app. It is offered
+				here as well as on the challenge step below because a person who
+				already knows her phone is gone starts from this screen, not from
+				a code prompt she cannot answer.
+			-->
+			<Link href={resolve('/(signed-out)/recovery-code')} label="Use a recovery code" />
+		</cluster-l>
 	{:else if step === 'confirm-sign-out'}
 		<!--
 			#610: the warning goes on the button that acts, not on a screen

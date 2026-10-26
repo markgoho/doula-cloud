@@ -48,6 +48,14 @@
 		 * switches between an access-code form and a read-only record with
 		 * decision controls, the plain logins never do -- and a Template
 		 * does not get to know which.
+		 *
+		 * The region takes groups, not loose items (#2020): each child is
+		 * spaced from the next at `--space-group`, the gap between the
+		 * title and the form. Things that belong together -- two links
+		 * offered side by side, the paragraphs of one explanation -- go in
+		 * one `stack-l` (or, for links that can share a line, one
+		 * `cluster-l`) at `space="var(--space-related)"`, so they read as
+		 * one group rather than as groups of their own.
 		 */
 		content: Snippet;
 	}
@@ -59,7 +67,7 @@
 
 <container-l>
 	<center-l max="var(--form-max)" gutters="var(--page-gutter)">
-		<stack-l space="var(--space-7)">
+		<stack-l space="var(--space-group)">
 			{#if errorSummary}
 				{@render errorSummary()}
 			{/if}
