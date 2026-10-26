@@ -296,12 +296,21 @@
 	{/if}
 
 	{#if isFeeRequired}
-		<LabeledField id={feeFieldId} label="Fee (USD)" error={offerSubmission.errorFor(feeFieldId)}>
-			{#snippet children({ id, describedBy, invalid })}
+		<!--
+			Widths (#1216): a fee to the cent ("2500.00") is seven characters,
+			so GOV.UK's 10-character step, after a "$" that the label's "(USD)"
+			says again for a screen reader; one letter at the smallest step; an
+			area is a town's name, so GOV.UK's 20; the due date sizes to its
+			own control.
+		-->
+		<LabeledField id={feeFieldId} label="Fee (USD)" error={offerSubmission.errorFor(feeFieldId)} width={10}>
+			{#snippet children({ id, describedBy, invalid, width })}
 				<TextInput
 					{id}
 					{describedBy}
 					{invalid}
+					{width}
+					prefix="$"
 					type="number"
 					step={0.01}
 					value={feeDollars}
@@ -312,12 +321,18 @@
 		</LabeledField>
 	{/if}
 
-	<LabeledField id={initialFieldId} label="Client's first initial" error={offerSubmission.errorFor(initialFieldId)}>
-		{#snippet children({ id, describedBy, invalid })}
+	<LabeledField
+		id={initialFieldId}
+		label="Client's first initial"
+		error={offerSubmission.errorFor(initialFieldId)}
+		width={2}
+	>
+		{#snippet children({ id, describedBy, invalid, width })}
 			<TextInput
 				{id}
 				{describedBy}
 				{invalid}
+				{width}
 				maxlength={1}
 				value={initial}
 				onInput={(value) => (initial = value)}
@@ -325,12 +340,13 @@
 			/>
 		{/snippet}
 	</LabeledField>
-	<LabeledField id={areaFieldId} label="General area" error={offerSubmission.errorFor(areaFieldId)}>
-		{#snippet children({ id, describedBy, invalid })}
+	<LabeledField id={areaFieldId} label="General area" error={offerSubmission.errorFor(areaFieldId)} width={20}>
+		{#snippet children({ id, describedBy, invalid, width })}
 			<TextInput
 				{id}
 				{describedBy}
 				{invalid}
+				{width}
 				value={clientArea}
 				onInput={(value) => (clientArea = value)}
 				required

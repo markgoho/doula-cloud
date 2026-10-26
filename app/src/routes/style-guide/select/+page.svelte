@@ -24,6 +24,15 @@
 		<Select {options} bind:value placeholder="Choose where this birth is planned to happen" />
 	</section>
 
+	<!--
+		A width is the longest option's count (#1216): the 51 work states run
+		to "District of Columbia", twenty characters.
+	-->
+	<section>
+		<h2>With a width</h2>
+		<Select options={['New York', 'District of Columbia']} value="District of Columbia" width={20} />
+	</section>
+
 	<section>
 		<h2>Focus</h2>
 		<p>Tab to any control on this page to see its focus outline.</p>

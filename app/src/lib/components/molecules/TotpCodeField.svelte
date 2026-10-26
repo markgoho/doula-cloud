@@ -28,12 +28,14 @@
 	let { id, value, onInput, error }: Properties = $props();
 </script>
 
-<LabeledField {id} {error} label="Authenticator app code">
-	{#snippet children({ id: controlId, describedBy, invalid })}
+<!-- Six digits, so GOV.UK's 10-character step: the smallest that holds them (#1216). -->
+<LabeledField {id} {error} label="Authenticator app code" width={10}>
+	{#snippet children({ id: controlId, describedBy, invalid, width })}
 		<TextInput
 			id={controlId}
 			{describedBy}
 			{invalid}
+			{width}
 			{value}
 			{onInput}
 			inputmode="numeric"

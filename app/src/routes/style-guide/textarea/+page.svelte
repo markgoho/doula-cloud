@@ -8,6 +8,7 @@
 	let prose = $state('');
 	let fact = $state('');
 	let labeled = $state('');
+	let narrow = $state('Upstairs flat, side door');
 </script>
 
 <stack-l space="var(--space-6)">
@@ -23,6 +24,12 @@
 		<h2>A taller starting height</h2>
 		<p>What a contract body asks for: <code>rows</code> is a starting height, not a cap.</p>
 		<Textarea value={prose} onInput={(value) => (prose = value)} rows={12} />
+	</section>
+
+	<section>
+		<h2>With a width</h2>
+		<p>The same character scale as a text input. Almost every long answer keeps the column instead.</p>
+		<Textarea value={narrow} onInput={(value) => (narrow = value)} rows={2} width={30} />
 	</section>
 
 	<section>

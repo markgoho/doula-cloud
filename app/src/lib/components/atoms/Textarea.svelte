@@ -50,6 +50,7 @@
 -->
 <script lang="ts">
 	import type { HTMLTextareaAttributes } from 'svelte/elements';
+	import type { InputWidth } from './TextInput.svelte';
 
 	/*
 	 * govuk-frontend's own figure: long enough that a touch typist is not
@@ -77,7 +78,8 @@
 		ariaLabel,
 		rows = 4,
 		maxLength,
-		autocomplete
+		autocomplete,
+		width
 	}: {
 		id?: string;
 		value: string;
@@ -94,6 +96,12 @@
 		maxLength?: number;
 		// Whose data this is, per docs/design/govuk-alignment.md (#469).
 		autocomplete?: HTMLTextareaAttributes['autocomplete'];
+		/*
+		 * How many characters a line holds, on the scale `TextInput`
+		 * names and argues (#1216). Almost every long answer keeps the
+		 * column; unset is that.
+		 */
+		width?: InputWidth;
 	} = $props();
 
 	const isCounted = $derived(maxLength !== undefined);
@@ -138,7 +146,9 @@
 	{autocomplete}
 	aria-label={ariaLabel}
 	class:invalid
+	class:sized={width !== undefined}
 	style:--textarea-rows={rows}
+	style:--input-chars={width}
 	aria-invalid={invalid}
 	aria-describedby={control}
 	oninput={(event_) => onInput(event_.currentTarget.value)}
@@ -177,6 +187,13 @@
 			 */
 			min-block-size: calc(var(--textarea-rows) * 1lh);
 			max-block-size: calc(var(--textarea-max-lines) * 1lh);
+		}
+
+		/* `TextInput`'s formula, for the same reason. */
+		textarea.sized {
+			max-inline-size: calc(
+				(var(--input-chars) + 1) * 1ch + var(--space-6) + 2 * var(--border-thin)
+			);
 		}
 
 		@supports (field-sizing: content) {

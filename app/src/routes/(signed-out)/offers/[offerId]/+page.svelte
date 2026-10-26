@@ -158,12 +158,14 @@
 	{:else if !offer}
 		<Text text="Enter the six-digit code from the email to open this offer." tone="variant" />
 		<StackedForm onSubmit={handleOpen}>
-			<LabeledField id={codeId} label="Access code" error={submission.errorFor(codeId)}>
-				{#snippet children({ id, describedBy, invalid })}
+			<!-- Six digits: GOV.UK's 10-character step, the smallest that holds them (#1216). -->
+			<LabeledField id={codeId} label="Access code" error={submission.errorFor(codeId)} width={10}>
+				{#snippet children({ id, describedBy, invalid, width })}
 					<TextInput
 						{id}
 						{describedBy}
 						{invalid}
+						{width}
 						inputmode="numeric"
 						maxlength={6}
 						value={code}

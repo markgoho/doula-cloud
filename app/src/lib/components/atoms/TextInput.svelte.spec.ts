@@ -11,7 +11,7 @@ import { render } from 'vitest-browser-svelte';
  * tokens -- one entry point, so the layer order is the app's own.
  */
 import '#lib/styles/app.css';
-import TextInput from './TextInput.svelte';
+import TextInput, { type InputWidth } from './TextInput.svelte';
 /*
  * The other two controls a form puts in the same column. Imported here
  * rather than asserted from each atom's own file because the claim is
@@ -52,6 +52,45 @@ async function measureInWrapper(wrapperStyle: Partial<CSSStyleDeclaration>) {
 		wrapperWidth: container.getBoundingClientRect().width
 	};
 }
+
+/*
+ * One `ch` in the control's own font, measured off a probe rather than
+ * assumed: the claim a `width` makes is "holds N characters", and a
+ * character is only a length once a font has drawn it. At module scope
+ * for the same lint rule as the helper above.
+ */
+function chOf(control: Element): number {
+	const probe = document.createElement('span');
+	probe.style.font = getComputedStyle(control).font;
+	probe.style.display = 'inline-block';
+	probe.style.inlineSize = '100ch';
+	document.body.append(probe);
+	const ch = probe.getBoundingClientRect().width / 100;
+	probe.remove();
+	return ch;
+}
+
+/*
+ * The box a person types into: the control's width less its own padding
+ * and border, which is what the characters have to fit in.
+ */
+// A computed length is always "<number>px", so the unit is cut off.
+function px(length: string): number {
+	return Number(length.slice(0, -2));
+}
+
+function contentWidthOf(control: Element): number {
+	const style = getComputedStyle(control);
+	return (
+		control.getBoundingClientRect().width -
+		px(style.paddingInlineStart) -
+		px(style.paddingInlineEnd) -
+		px(style.borderInlineStartWidth) -
+		px(style.borderInlineEndWidth)
+	);
+}
+
+const SCALE: readonly InputWidth[] = [2, 3, 4, 5, 10, 20, 30];
 
 describe('TextInput.svelte', () => {
 	it('renders a textbox with the given value', async () => {
@@ -397,4 +436,143 @@ describe('TextInput.svelte', () => {
 			expect(textareaWidth).toBeCloseTo(inputWidth, 1);
 		});
 	});
+
+	/*
+	 * The `width` scale (#1216), measured against the claim each step
+	 * makes: a `width={N}` box holds N characters and not much more. The
+	 * continuum sweep cannot see a box that is merely too wide, so a step
+	 * that widened in passing -- or stopped narrowing at all -- fails here
+	 * rather than on a screen nobody looked at. The bounds are in `ch`
+	 * measured off the control's own font, never in pixels (ADR-0025).
+	 */
+	describe('width', () => {
+		it.each(SCALE)('a width of %i holds that many digits and stops short of the next step', async (width) => {
+			const { container } = await setup({ width, value: '8'.repeat(width) });
+			Object.assign(container.style, column);
+			const input = page.getByRole('textbox').element() as HTMLInputElement;
+			const ch = chOf(input);
+
+			expect(input.scrollWidth).toBeLessThanOrEqual(input.clientWidth);
+			expect(contentWidthOf(input)).toBeGreaterThanOrEqual(width * ch);
+			expect(contentWidthOf(input)).toBeLessThan((width + 2) * ch);
+		});
+
+		/*
+		 * A type="number" control draws the browser's spin buttons inside
+		 * the same box, so the step has to hold the digits beside them.
+		 */
+		it('holds its digits beside the spin buttons of a number field', async () => {
+			const { container } = await setup({
+				type: 'number',
+				width: 3,
+				value: '365'
+			});
+			Object.assign(container.style, column);
+			const input = page.getByRole('spinbutton').element() as HTMLInputElement;
+
+			expect(input.scrollWidth).toBeLessThanOrEqual(input.clientWidth);
+		});
+
+		it('shrinks with a column narrower than its width, rather than overflowing it', async () => {
+			const { inputWidth, wrapperWidth } = await measureNarrowed({ width: 30 }, '10ch');
+
+			expect(inputWidth).toBeCloseTo(wrapperWidth, 1);
+		});
+
+		/*
+		 * A native date control lays out its own segments: it is capped at
+		 * them, so a column-wide box is not mostly empty, and it still holds
+		 * every segment without scrolling.
+		 */
+		it.each(['date', 'datetime-local'] as const)('sizes a %s control to its own segments', async (type) => {
+			const { container } = await setup({
+				type,
+				value: type === 'date' ? '2027-12-28' : '2027-12-28T23:45'
+			});
+			Object.assign(container.style, column);
+			const input = page.getByRole('textbox').element();
+
+			expect(input.getBoundingClientRect().width).toBeLessThan(container.getBoundingClientRect().width / 2);
+			expect(input.scrollWidth).toBeLessThanOrEqual(input.clientWidth);
+		});
+
+		it('puts a prefix before the box and a suffix after it, both hidden from assistive technology', async () => {
+			const { container } = await setup({
+				width: 10,
+				prefix: '$',
+				suffix: 'a month',
+				value: '1500.00'
+			});
+			// querySelector, case 2 of `.claude/rules/svelte-tests.md`: the
+			// unit is deliberately out of the accessible tree, as GOV.UK's is.
+			const [prefix, suffix] = container.querySelectorAll('[aria-hidden="true"]');
+			const input = page.getByRole('textbox').element();
+
+			expect(prefix).toHaveTextContent('$');
+			expect(suffix).toHaveTextContent('a month');
+			expect(prefix.getBoundingClientRect().right).toBeCloseTo(input.getBoundingClientRect().left, 1);
+			expect(suffix.getBoundingClientRect().left).toBeCloseTo(input.getBoundingClientRect().right, 1);
+		});
+
+		/*
+		 * Select and Textarea take the same scale. A select's claim is its
+		 * longest option: the chosen answer has to show whole beside the
+		 * picker icon, so the box has to be wider than the text alone.
+		 */
+		it('sizes a Select to its longest option, with room left for the picker icon', async () => {
+			const longest = 'District of Columbia';
+			const { container } = await render(Select, {
+				options: [longest],
+				value: longest,
+				width: 20
+			});
+			Object.assign(container.style, column);
+			const select = page.getByRole('combobox').element();
+			const probe = document.createElement('span');
+			probe.style.font = getComputedStyle(select).font;
+			probe.textContent = longest;
+			container.append(probe);
+
+			expect(contentWidthOf(select)).toBeGreaterThan(probe.getBoundingClientRect().width + chOf(select));
+			expect(select.getBoundingClientRect().width).toBeLessThan(container.getBoundingClientRect().width / 2);
+		});
+
+		it('narrows a Textarea on the same scale', async () => {
+			const { container } = await render(Textarea, {
+				value: '',
+				onInput: vi.fn(),
+				width: 20
+			});
+			Object.assign(container.style, column);
+			const textarea = page.getByRole('textbox').element();
+
+			expect(contentWidthOf(textarea)).toBeGreaterThanOrEqual(20 * chOf(textarea));
+			expect(contentWidthOf(textarea)).toBeLessThan(22 * chOf(textarea));
+		});
+
+		it('keeps a sized field at its width when a unit follows it', async () => {
+			const { container } = await setup({
+				width: 3,
+				suffix: 'days',
+				value: '365'
+			});
+			Object.assign(container.style, column);
+			const input = page.getByRole('textbox').element();
+
+			expect(contentWidthOf(input)).toBeLessThan(5 * chOf(input));
+		});
+	});
 });
+
+/*
+ * A sized control in a column narrower than its stated width -- the 320px
+ * case, at the scale of one field.
+ */
+async function measureNarrowed(options: SetupOptions, columnWidth: string) {
+	const { container } = await setup(options);
+	Object.assign(container.style, { display: 'block', inlineSize: columnWidth });
+	return {
+		inputWidth: page.getByRole('textbox').element().getBoundingClientRect().width,
+		wrapperWidth: container.getBoundingClientRect().width
+	};
+}

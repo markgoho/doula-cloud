@@ -347,9 +347,15 @@
 			message={`Saving with this email revokes any pending portal invite sent to ${detail!.givenName}'s old address.`}
 		/>
 	{/if}
-	<LabeledField id={phoneId} label="Phone">
-		{#snippet children({ id, describedBy })}
-			<TextInput {id} {describedBy} type="tel" value={phone} onInput={(v) => (phone = v)} autocomplete="off" />
+	<!--
+		Widths (#1216), the same as the details journey's own questions:
+		GOV.UK's Telephone numbers width for the phone, and its Addresses
+		widths for the town, the state and the ZIP code (ZIP+4 is ten). The
+		two address lines keep the column.
+	-->
+	<LabeledField id={phoneId} label="Phone" width={20}>
+		{#snippet children({ id, describedBy, width })}
+			<TextInput {id} {describedBy} {width} type="tel" value={phone} onInput={(v) => (phone = v)} autocomplete="off" />
 		{/snippet}
 	</LabeledField>
 	<LabeledField id={addressLine1Id} label="Address line 1">
@@ -362,19 +368,19 @@
 			<TextInput {id} {describedBy} value={addressLine2} onInput={(v) => (addressLine2 = v)} autocomplete="off" />
 		{/snippet}
 	</LabeledField>
-	<LabeledField id={addressLocalityId} label="Town or city">
-		{#snippet children({ id, describedBy })}
-			<TextInput {id} {describedBy} value={addressLocality} onInput={(v) => (addressLocality = v)} autocomplete="off" />
+	<LabeledField id={addressLocalityId} label="Town or city" width={20}>
+		{#snippet children({ id, describedBy, width })}
+			<TextInput {id} {describedBy} {width} value={addressLocality} onInput={(v) => (addressLocality = v)} autocomplete="off" />
 		{/snippet}
 	</LabeledField>
-	<LabeledField id={addressRegionId} label="State">
-		{#snippet children({ id, describedBy })}
-			<TextInput {id} {describedBy} value={addressRegion} onInput={(v) => (addressRegion = v)} autocomplete="off" />
+	<LabeledField id={addressRegionId} label="State" width={10}>
+		{#snippet children({ id, describedBy, width })}
+			<TextInput {id} {describedBy} {width} value={addressRegion} onInput={(v) => (addressRegion = v)} autocomplete="off" />
 		{/snippet}
 	</LabeledField>
-	<LabeledField id={addressPostalCodeId} label="Postal code">
-		{#snippet children({ id, describedBy })}
-			<TextInput {id} {describedBy} value={addressPostalCode} onInput={(v) => (addressPostalCode = v)} autocomplete="off" />
+	<LabeledField id={addressPostalCodeId} label="Postal code" width={10}>
+		{#snippet children({ id, describedBy, width })}
+			<TextInput {id} {describedBy} {width} value={addressPostalCode} onInput={(v) => (addressPostalCode = v)} autocomplete="off" />
 		{/snippet}
 	</LabeledField>
 	<DateFields

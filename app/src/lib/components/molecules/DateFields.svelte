@@ -195,8 +195,13 @@
 		 * two- and four-character widths are more generous still.
 		 *
 		 * The box is the width and the control fills it, because
-		 * `TextInput` stretches to whatever it is given -- that atom's
-		 * own module comment is where the width argument lives (#805).
+		 * `TextInput` stretches to whatever it is given (#805). These
+		 * boxes do not take `TextInput`'s `width` prop (#1216), which is a
+		 * cap and nothing more: each box here is a `cluster-l` item that
+		 * holds its own label above the control, so the box itself needs
+		 * a definite `inline-size`, and the three stay one rule here. The
+		 * length is the prop's own formula -- the count plus one `ch` of
+		 * slack, plus the padding.
 		 * Two rules that stood here until then are gone: a
 		 * `:global(input)` sizing the control, and a `min-inline-size: 0`
 		 * on this box. The second was there because a flex item's

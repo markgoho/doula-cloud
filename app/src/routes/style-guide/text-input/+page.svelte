@@ -1,7 +1,10 @@
 <script lang="ts">
-	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import TextInput, { type InputWidth } from '#lib/components/atoms/TextInput.svelte';
 
 	const noop = () => {};
+	const widths: readonly InputWidth[] = [2, 3, 4, 5, 10, 20, 30];
+	let fee = $state('2500.00');
+	let days = $state('365');
 
 	let name = $state('Anne-Marie Ochieng-Whitfield');
 	let email = $state('anne-marie.ochieng-whitfield@highland-midwifery-group.example.org');
@@ -40,7 +43,31 @@
 
 	<section>
 		<h2>Date type</h2>
+		<p>Sized to its own segments, not to the column.</p>
 		<TextInput type="date" value={dueDate} onInput={(value) => (dueDate = value)} />
+	</section>
+
+	<!--
+		The scale (#1216): each step filled with as many wide digits as it
+		claims to hold, so a step that clipped or widened shows here first.
+	-->
+	<section>
+		<h2>Widths</h2>
+		<p>GOV.UK's steps, in characters. Each box holds its count; the last one shrinks with a narrow column.</p>
+		<stack-l space="var(--space-3)">
+			{#each widths as width (width)}
+				<TextInput ariaLabel={`Width ${width}`} {width} value={'8'.repeat(width)} onInput={noop} />
+			{/each}
+		</stack-l>
+	</section>
+
+	<section>
+		<h2>Prefix and suffix</h2>
+		<p>The unit says what the narrow box holds. The label says it again for a screen reader.</p>
+		<stack-l space="var(--space-3)">
+			<TextInput ariaLabel="Fee (USD)" type="number" width={10} prefix="$" value={fee} onInput={(value) => (fee = value)} />
+			<TextInput ariaLabel="Days to pay" type="number" width={3} suffix="days" value={days} onInput={(value) => (days = value)} />
+		</stack-l>
 	</section>
 
 	<!--

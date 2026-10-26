@@ -96,12 +96,18 @@
 				/>
 			{/snippet}
 		</LabeledField>
-		<LabeledField id={codeId} label="Recovery code" error={submission.errorFor(codeId)}>
-			{#snippet children({ id, describedBy, invalid })}
+		<!--
+			GOV.UK's 30-character step (#1216): the field takes an Owner-vouched
+			code of eight digits or a saved code of 26 characters
+			(`rand.Text()`), and the longer of the two decides.
+		-->
+		<LabeledField id={codeId} label="Recovery code" error={submission.errorFor(codeId)} width={30}>
+			{#snippet children({ id, describedBy, invalid, width })}
 				<TextInput
 					{id}
 					{describedBy}
 					{invalid}
+					{width}
 					value={code}
 					onInput={(value) => (code = value)}
 					required

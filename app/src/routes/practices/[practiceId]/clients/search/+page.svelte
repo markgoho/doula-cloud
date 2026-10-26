@@ -287,11 +287,13 @@
 							/>
 						{/snippet}
 					</LabeledField>
-					<LabeledField id={phoneId} label="Phone">
-						{#snippet children({ id, describedBy })}
+					<!-- GOV.UK's Telephone numbers width (#1216). -->
+					<LabeledField id={phoneId} label="Phone" width={20}>
+						{#snippet children({ id, describedBy, width })}
 							<TextInput
 								{id}
 								{describedBy}
+								{width}
 								type="tel"
 								value={phone}
 								onInput={(v) => (phone = v)}

@@ -2,7 +2,8 @@
 	/*
 	 * The phone number, on its own page -- see `EmailQuestion`'s comment
 	 * for why the two are not one screen (#466). Optional, and the label
-	 * says so (#1610).
+	 * says so (#1610). GOV.UK's Telephone numbers pattern sizes the box at
+	 * 20 characters, room for a country code (#1216).
 	 */
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import JourneyQuestion from './JourneyQuestion.svelte';
@@ -24,6 +25,7 @@
 			id={FIELD_ID}
 			{describedBy}
 			type="tel"
+			width={20}
 			value={journey.draft.answers.phone}
 			onInput={(value) => journey.draft.update({ phone: value })}
 			autocomplete="off"

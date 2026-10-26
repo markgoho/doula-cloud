@@ -9,11 +9,14 @@ function inputSnippet() {
 	return createRawSnippet<[ControlProperties]>((control) => ({
 		render: () => `<input type="text" />`,
 		setup: (element) => {
-			const { id, describedBy, invalid } = control();
+			const { id, describedBy, invalid, width } = control();
 			const input = element as HTMLInputElement;
 			input.id = id;
 			input.setAttribute('aria-invalid', String(invalid));
 			if (describedBy) input.setAttribute('aria-describedby', describedBy);
+			// Written where the test can read it: the width is the control's
+			// to apply, so this snippet stands in for the control (#1216).
+			if (width !== undefined) input.dataset.width = String(width);
 		}
 	}));
 }
@@ -29,6 +32,18 @@ describe('LabeledField.svelte', () => {
 		await setup({ label: 'Client name' });
 
 		await expect.element(page.getByLabelText('Client name')).toBeInTheDocument();
+	});
+
+	it('passes the width of the field through to the control', async () => {
+		await setup({ width: 20 });
+
+		await expect.element(page.getByLabelText('Client name')).toHaveAttribute('data-width', '20');
+	});
+
+	it('passes no width when the field states none', async () => {
+		await setup();
+
+		await expect.element(page.getByLabelText('Client name')).not.toHaveAttribute('data-width');
 	});
 
 	it('auto-generates a distinct id per instance', async () => {
