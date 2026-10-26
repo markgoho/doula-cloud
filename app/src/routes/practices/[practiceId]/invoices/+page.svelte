@@ -215,6 +215,9 @@
 		   address wraps one more line, and it does not change the layout.
 		   Measured 2026-10-25 on the drag surface: its natural width fits
 		   its column from 1125px on macOS/Chromium and from 1141px in CI's Linux/Chromium, the canonical environment, with no margin beyond it.
+		   #2122 made the late row's Status read "Overdue" in place of
+		   "Open", and CI's floor check measured 1156px (72.25rem) on
+		   2026-10-26, so the floor moved up to it.
 		   On the hostile fixture it was 109.75rem.
 		   `DataTable.svelte`'s floor comment says why the floor is the
 		   route's own. */
@@ -228,7 +231,7 @@
 			--data-table-records-display: block;
 		}
 
-		@container invoices-table (min-width: 71.5rem) {
+		@container invoices-table (min-width: 72.25rem) {
 			.invoices-table > :global(*) {
 				--data-table-table-display: table;
 				--data-table-records-display: none;
