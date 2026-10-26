@@ -8,15 +8,16 @@
  * grid track, which is the point.
  *
  * Three Fields, not one (#720), the same shape as `plan-templates`'s own
- * widening: `isSelectType()` is the only thing an active row itself
- * branches on -- an Options textarea renders only for
+ * widening: `isSelectType()` is the only thing an active card itself
+ * branches on -- an "Answers to choose from" box renders only for
  * `single_select`/`multi_select` -- so the second Field is
  * `single_select`, with #537's hyphenated double-barreled name as one
  * of its options, since an option is a Practice's free text too. A third
  * Field is archived: `ClientFieldTemplateEditor` renders a whole
- * "Archived fields" section only once one exists (line 172's own
- * `{#if archivedFields.length > 0}`), which a fixture with no archived
- * Field never shows at all.
+ * "Archived questions" list only once one exists (its own
+ * `{#if archivedRows.length > 0}`), which a fixture with no archived
+ * Field never shows at all. Every Field here is loaded, so each card's
+ * kind of answer is fixed and carries its hint.
  *
  * Two sessions (#928), and they are two different components rather than
  * one component with controls withheld: `isOwnerOrAdmin` chooses between

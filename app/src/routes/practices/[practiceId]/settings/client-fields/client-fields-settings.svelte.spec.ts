@@ -62,14 +62,14 @@ describe('client fields settings screen', () => {
 	it('shows the editor and a Save button for an Owner', async () => {
 		await setup({ roles: ['owner'] });
 
-		await expect.element(testPage.getByLabelText('Field label').first()).toHaveValue(firstField.label);
+		await expect.element(testPage.getByLabelText('Question', { exact: true }).first()).toHaveValue(firstField.label);
 		await expect.element(testPage.getByRole('button', { name: 'Save' })).toBeVisible();
 	});
 
 	it('shows the editor and a Save button for an Admin', async () => {
 		await setup({ roles: ['admin'] });
 
-		await expect.element(testPage.getByLabelText('Field label').first()).toHaveValue(firstField.label);
+		await expect.element(testPage.getByLabelText('Question', { exact: true }).first()).toHaveValue(firstField.label);
 		await expect.element(testPage.getByRole('button', { name: 'Save' })).toBeVisible();
 	});
 
@@ -77,7 +77,7 @@ describe('client fields settings screen', () => {
 		await setup({ roles: ['doula'] });
 
 		await expect.element(testPage.getByText(firstField.label)).toBeVisible();
-		await expect.element(testPage.getByLabelText('Field label')).not.toBeInTheDocument();
+		await expect.element(testPage.getByLabelText('Question', { exact: true })).not.toBeInTheDocument();
 		await expect.element(testPage.getByRole('button', { name: 'Save' })).not.toBeInTheDocument();
 		await expect
 			.element(testPage.getByText('Ask a Practice Owner or Admin to edit Client fields.'))

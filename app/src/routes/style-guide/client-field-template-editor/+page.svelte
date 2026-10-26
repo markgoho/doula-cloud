@@ -32,6 +32,10 @@
 		}
 	]);
 
+	/* The fields as saved: a question added on this page is new, so its
+	 * kind of answer stays open to change. */
+	const savedIds: ReadonlySet<string> = new Set(['a', 'b', 'c']);
+
 	function updateField(id: string, patch: Partial<Field>) {
 		fields = fields.map((field) => (field.id === id ? { ...field, ...patch } : field));
 	}
@@ -44,7 +48,7 @@
 		<h2>Default -- active and archived fields, and a locked type on existing ones</h2>
 		<ClientFieldTemplateEditor
 			{fields}
-			existingIds={new Set(fields.map((f) => f.id))}
+			existingIds={savedIds}
 			onAdd={(type: FieldType) => (fields = addField(fields, crypto.randomUUID(), type))}
 			onArchiveToggle={(id: string) => {
 				const field = fields.find((f) => f.id === id);

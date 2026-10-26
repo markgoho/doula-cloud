@@ -25,6 +25,27 @@ export const FIELD_TYPES = [
 
 export type FieldType = (typeof FIELD_TYPES)[number];
 
+/** What a person reads for each field type (#1252): the name the
+ * question editor's "Kind of answer" select shows, and the words on the
+ * one Add button per type. The one source of these words for both the
+ * Plan Template and the Client Field Template editors, which share this
+ * palette; the stored identifier never reaches the screen. */
+export const FIELD_TYPE_NAMES: Readonly<Record<FieldType, { name: string; addLabel: string }>> = {
+	short_text: { name: 'Short answer', addLabel: 'Add a short answer' },
+	long_text: { name: 'Long answer', addLabel: 'Add a long answer' },
+	single_select: { name: 'Choose one', addLabel: 'Add a choose-one question' },
+	multi_select: { name: 'Choose several', addLabel: 'Add a choose-several question' },
+	checkbox: { name: 'Yes or no', addLabel: 'Add a yes-or-no question' },
+	section_header: { name: 'Section heading', addLabel: 'Add a section heading' }
+};
+
+/** The field types as a select's options: the stored identifier as the
+ * value, its human name as the label. */
+export const FIELD_TYPE_OPTIONS: readonly { value: FieldType; label: string }[] = FIELD_TYPES.map((type) => ({
+	value: type,
+	label: FIELD_TYPE_NAMES[type].name
+}));
+
 const SELECT_FIELD_TYPES: ReadonlySet<FieldType> = new Set(['single_select', 'multi_select']);
 
 /** Reports whether type requires an Options list -- single/multi-select

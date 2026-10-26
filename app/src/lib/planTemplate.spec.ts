@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
 	addField,
+	FIELD_TYPE_OPTIONS,
+	FIELD_TYPES,
 	isSelectType,
 	loadTemplate,
 	moveField,
@@ -22,6 +24,21 @@ describe('isSelectType', () => {
 		expect(isSelectType('long_text')).toBe(false);
 		expect(isSelectType('checkbox')).toBe(false);
 		expect(isSelectType('section_header')).toBe(false);
+	});
+});
+
+// #1252: a person reads a name, the API stores the identifier.
+describe('FIELD_TYPE_OPTIONS', () => {
+	it('pairs every stored type, in palette order, with a human name', () => {
+		expect(FIELD_TYPE_OPTIONS.map((option) => option.value)).toEqual([...FIELD_TYPES]);
+		expect(FIELD_TYPE_OPTIONS.map((option) => option.label)).toEqual([
+			'Short answer',
+			'Long answer',
+			'Choose one',
+			'Choose several',
+			'Yes or no',
+			'Section heading'
+		]);
 	});
 });
 

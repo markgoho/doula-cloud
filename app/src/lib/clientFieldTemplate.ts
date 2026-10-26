@@ -12,23 +12,12 @@
 import type { Fetcher } from './fetcher.js';
 
 import { apiErrorMessage } from './apiErrorMessage.js';
+import { isSelectType, type FieldType } from './planTemplate.js';
 
-export const FIELD_TYPES = [
-	'short_text',
-	'long_text',
-	'single_select',
-	'multi_select',
-	'checkbox',
-	'section_header'
-] as const;
-
-export type FieldType = (typeof FIELD_TYPES)[number];
-
-const SELECT_FIELD_TYPES: ReadonlySet<FieldType> = new Set(['single_select', 'multi_select']);
-
-export function isSelectType(type: FieldType): boolean {
-	return SELECT_FIELD_TYPES.has(type);
-}
+/* The same six field types as a Plan Template (GLOSSARY.md, "Client
+ * Field Template"), so one palette and one set of human names (#1252),
+ * not a copy of each. */
+export { FIELD_TYPES, FIELD_TYPE_NAMES, FIELD_TYPE_OPTIONS, isSelectType, type FieldType } from './planTemplate.js';
 
 /** A section_header is a heading a Client reads, never a question the
  * Client answers -- fieldCountWarning excludes it from the

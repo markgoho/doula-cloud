@@ -3,7 +3,7 @@
 	 * A Practice's own questions, asked (#466) -- the one renderer for a
 	 * Practice-defined field, whoever is answering it.
 	 *
-	 * ## Why this is not `DynamicFieldEditor`
+	 * ## Why this is not `PracticeQuestionsEditor`
 	 *
 	 * That organism *defines* a Practice's fields -- an Owner naming
 	 * them, choosing types, adding options, reordering. This *collects*

@@ -5,7 +5,7 @@
  * region that is in the page from the first render, so the first move is
  * read too. `fields` is the list being reordered, after the move, and
  * `name` is the editor's own name for a row (its `rowName`, which falls
- * back to "Untitled field"). The id is always in `fields`: it is the id of
+ * back to "Untitled question"). The id is always in `fields`: it is the id of
  * the row whose button was pressed.
  *
  * A press at an end of the list moves nothing and calls nothing (the
@@ -24,7 +24,7 @@ export function moveAnnouncement<F extends { id: string }>(
 
 /**
  * Where focus goes after *Move up* or *Move down* in a field editor
- * (`DynamicFieldEditor`, `ClientFieldTemplateEditor`), #1920: back on the
+ * (`PracticeQuestionsEditor`, for Plan Templates and Client fields), #1920: back on the
  * button that was pressed, in the row that moved.
  *
  * A keyed `{#each}` moves the row's DOM nodes, and a focused element that
