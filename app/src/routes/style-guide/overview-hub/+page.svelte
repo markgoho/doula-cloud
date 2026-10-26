@@ -21,6 +21,7 @@
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
+	import DoorLink from '#lib/components/atoms/DoorLink.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
@@ -122,4 +123,30 @@
 	</stack-l>
 {/snippet}
 
-<OverviewHub title="Highland Midwifery &amp; Birth Support Collective of Western New York" {primary} {secondary} {isEmpty} {empty} />
+<!-- #2006: the quick-link cards, as the Practice Overview draws them. -->
+{#snippet links()}
+	<nav aria-label="Quick links">
+		<grid-l min="var(--door-min)" space="var(--space-4)">
+			<DoorLink href="#clients" label="Clients" description="Find a Client's record and care." />
+			<DoorLink
+				href="#getting-paid"
+				label="Getting paid"
+				description="How this Practice gets paid, and what Stripe still wants from it."
+			/>
+			<DoorLink
+				href="#plan-templates"
+				label="Plan Templates"
+				description="The questions every birth plan and care plan starts from."
+			/>
+		</grid-l>
+	</nav>
+{/snippet}
+
+<OverviewHub
+	title="Highland Midwifery &amp; Birth Support Collective of Western New York"
+	{primary}
+	{secondary}
+	{links}
+	{isEmpty}
+	{empty}
+/>

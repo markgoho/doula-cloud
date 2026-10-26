@@ -30,8 +30,9 @@
 		type WaitingOnReply
 	} from '#lib/practiceLanding.js';
 	import { CONNECT_STATUS_BADGES } from '#lib/payments.js';
-	import { isOwner } from '#lib/roles.js';
+	import { isOwner, isOwnerOrAdmin } from '#lib/roles.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
+	import DoorLink from '#lib/components/atoms/DoorLink.svelte';
 	import { startHref } from './clients/new/intake.js';
 	import { activityLedgerColumns, loadPracticeActivityPage, type ActivityEntry } from '#lib/activityLedger.js';
 	import { formatActivityTimestamp } from '#lib/dates.js';
@@ -56,15 +57,13 @@
 	// while the page renders, so a reload says nothing.
 	const outcome = takeOutcome(page.url);
 
-	// #486's Recent-activity feed: cursor-paginated on its own, unlike the
-	// one-shot blocks loadPracticeLanding already merges into `landing`, so
-	// it gets its own PaginatedList the same way the Engagement page's own
-	// Visits section does.
-	const activity = new PaginatedList<ActivityEntry>({
-		first: { items: [], hasMore: false },
-		loadPage: (cursor) => loadPracticeActivityPage(apiFetchWithSession, page.params.practiceId!, cursor),
-		failureMessage: 'Failed to load more activity'
-	});
+	// #486's Recent-activity feed, bounded by #2006: the newest few rows of
+	// the feed's first page, and a link to the whole ledger on its own
+	// screen. At 390px the whole page of rows stacked to 6,250px, and the
+	// brief puts the ledger low on every page it appears on -- it is not
+	// what a person comes to the Overview for. Eight is the drawing's.
+	const RECENT_ACTIVITY_ROWS = 8;
+	let recentActivity = $state<ActivityEntry[]>([]);
 	let activityError = $state('');
 
 	// #455's roll-up: cursor-paginated on its own, unlike the one-shot
@@ -101,7 +100,8 @@
 
 	async function loadActivity() {
 		try {
-			activity.reset(await loadPracticeActivityPage(apiFetchWithSession, page.params.practiceId!, ''));
+			const first = await loadPracticeActivityPage(apiFetchWithSession, page.params.practiceId!, '');
+			recentActivity = first.items.slice(0, RECENT_ACTIVITY_ROWS);
 		} catch (error_) {
 			activityError = error_ instanceof Error ? error_.message : 'Failed to load activity';
 		}
@@ -183,6 +183,66 @@
 	const adminAsk = 'Clients cannot pay this Practice by card yet. A Practice Owner has to connect Stripe.';
 
 	const isPracticeOwner = $derived(isOwner(session));
+
+	interface QuickLinkCard {
+		label: string;
+		description: string;
+		href: string;
+	}
+
+	const quickLinkCards = $derived.by((): QuickLinkCard[] => {
+		const practiceId = page.params.practiceId!;
+		const isForOwnerOrAdmin = isOwnerOrAdmin(session);
+		return [
+			{
+				label: 'Clients',
+				description: "Find a Client's record and care.",
+				href: resolve('/practices/[practiceId]/clients', { practiceId })
+			},
+			...(isForOwnerOrAdmin
+				? [
+						{
+							label: 'Credits',
+							description: 'Buy Credits and see the balance.',
+							href: resolve('/practices/[practiceId]/billing', { practiceId })
+						}
+					]
+				: []),
+			{
+				label: 'Your offers',
+				description: 'Work you have been offered.',
+				href: resolve('/practices/[practiceId]/offers', { practiceId })
+			},
+			...(isForOwnerOrAdmin
+				? [
+						{
+							label: 'Staff',
+							description: 'Who works here, and who is invited.',
+							href: resolve('/practices/[practiceId]/staff', { practiceId })
+						}
+					]
+				: []),
+			{
+				label: 'Plan Templates',
+				description: 'The questions every birth plan and care plan starts from.',
+				href: resolve('/practices/[practiceId]/settings/plan-templates', { practiceId })
+			},
+			{
+				label: 'Contract Template',
+				description: 'The terms every Contract is written from.',
+				href: resolve('/practices/[practiceId]/settings/contract-template', { practiceId })
+			},
+			...(isForOwnerOrAdmin
+				? [
+						{
+							label: 'Getting paid',
+							description: 'How this Practice gets paid, and what Stripe still wants from it.',
+							href: resolve('/practices/[practiceId]/settings/payments', { practiceId })
+						}
+					]
+				: [])
+		];
+	});
 
 	function notConnectedWords(connect: ConnectHealth): string {
 		if (!isPracticeOwner) return adminAsk;
@@ -385,15 +445,38 @@
 			{/if}
 			<DataTable
 				columns={activityLedgerColumns()}
-				rows={activity.items}
-				hasMore={activity.hasMore}
-				onLoadMore={() => activity.loadMore()}
-				isLoadingMore={activity.isLoadingMore}
-				loadMoreError={activity.loadMoreError}
+				rows={recentActivity}
+				hasMore={false}
 				emptyMessage="Nothing has happened yet."
 			/>
+			{#if recentActivity.length > 0}
+				<Link
+					href={resolve('/practices/[practiceId]/activity', { practiceId: page.params.practiceId! })}
+					label="See all activity"
+					variant="secondary"
+				/>
+			{/if}
 		</stack-l>
 	</section>
+{/snippet}
+
+<!--
+	#2006: the drawing's quick-link cards, under the title, at every width.
+	The same card the signed-out landing's doors are (`DoorLink`, #1645) in
+	the same `grid-l`, so the row wraps to as many columns as fit. Offered
+	only where that person can go: the role split is the top bar's own,
+	and the three settings cards say what the Settings hub says about them.
+	The drawing's Billing and Payments are named Credits and Getting paid
+	here, the names #256 and ADR-0032 gave them after it was drawn.
+-->
+{#snippet quickLinks()}
+	<nav aria-label="Quick links">
+		<grid-l min="var(--door-min)" space="var(--space-4)">
+			{#each quickLinkCards as card (card.href)}
+				<DoorLink href={card.href} label={card.label} description={card.description} />
+			{/each}
+		</grid-l>
+	</nav>
 {/snippet}
 
 {#snippet empty()}
@@ -442,6 +525,7 @@
 	{primary}
 	secondary={landing && hasSecondary(landing) ? secondary : undefined}
 	feed={landing ? activityFeed : undefined}
+	links={landing ? quickLinks : undefined}
 	{empty}
 	loading={landing || error ? undefined : 'Loading your Practice'}
 	loadError={error || undefined}

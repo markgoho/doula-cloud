@@ -12,6 +12,7 @@ import {
 	type ActivityEntry
 } from './activityLedger.js';
 import type { EngagementReference } from './engagementDetail.js';
+import { staffActivityPhrase } from './staffActivityPhrases.js';
 
 describe('describeActivityAction', () => {
 	it.each([
@@ -115,7 +116,7 @@ describe('activityLedgerColumns: an Engagement fact, from what to what (#1423)',
 	const what = activityLedgerColumns()[1];
 
 	it.each([
-		['care_phase_changed', { statusBefore: 'intake', statusAfter: 'active' }, 'Care phase changed: Intake to Active'],
+		['care_phase_changed', { statusBefore: 'intake', statusAfter: 'active' }, 'Care phase changed for the Client: Intake to Active'],
 		[
 			'engagement_completed',
 			{
@@ -126,19 +127,19 @@ describe('activityLedgerColumns: an Engagement fact, from what to what (#1423)',
 				endingNoteBefore: recordedNull,
 				endingNoteAfter: 'Baby arrived safely'
 			},
-			'Engagement completed: Active to Completed. Reason: The work finished as agreed'
+			'Care for the Client ended: Active to Completed. Reason: The work finished as agreed'
 		],
 		[
 			'engagement_completed',
 			{ statusBefore: 'intake', statusAfter: 'completed' },
-			'Engagement completed: Intake to Completed'
+			'Care for the Client ended: Intake to Completed'
 		],
 		[
 			'engagement_reopened',
 			{ statusBefore: 'completed', statusAfter: 'active', endingReasonBefore: 'client_withdrew', endingReasonAfter: recordedNull },
-			'Engagement reopened: Completed to Active'
+			'Care for the Client reopened: Completed to Active'
 		],
-		['kind_changed', { kindBefore: 'birth', kindAfter: 'postpartum' }, 'Kind changed: Birth to Postpartum'],
+		['kind_changed', { kindBefore: 'birth', kindAfter: 'postpartum' }, 'Type of care changed for the Client: Birth to Postpartum'],
 		[
 			'birth_outcome_recorded',
 			{
@@ -147,7 +148,7 @@ describe('activityLedgerColumns: an Engagement fact, from what to what (#1423)',
 				pregnancyEndedOnBefore: recordedNull,
 				pregnancyEndedOnAfter: recordedNull
 			},
-			'Birth outcome recorded: Not recorded to The Practice never learned what happened'
+			'Birth outcome recorded for the Client: Not recorded to The Practice never learned what happened'
 		],
 		[
 			'birth_outcome_recorded',
@@ -157,7 +158,7 @@ describe('activityLedgerColumns: an Engagement fact, from what to what (#1423)',
 				pregnancyEndedOnBefore: '2027-03-04',
 				pregnancyEndedOnAfter: recordedNull
 			},
-			`Birth outcome recorded: The pregnancy ended without a living baby, ${formatCalendarDay('2027-03-04')} to Not recorded`
+			`Birth outcome recorded for the Client: The pregnancy ended without a living baby, ${formatCalendarDay('2027-03-04')} to Not recorded`
 		]
 	])('reads %s off its diff', (action, diff, want) => {
 		expect(what.accessor(entry({ action, diff }))).toBe(want);
@@ -165,7 +166,7 @@ describe('activityLedgerColumns: an Engagement fact, from what to what (#1423)',
 
 	it('shows an unlabeled value as it is stored, rather than dropping the change', () => {
 		expect(what.accessor(entry({ action: 'care_phase_changed', diff: { statusBefore: 'intake', statusAfter: 'paused' } }))).toBe(
-			'Care phase changed: Intake to paused'
+			'Care phase changed for the Client: Intake to paused'
 		);
 		expect(
 			what.accessor(
@@ -174,7 +175,7 @@ describe('activityLedgerColumns: an Engagement fact, from what to what (#1423)',
 					diff: { statusBefore: 'active', statusAfter: 'completed', endingReasonAfter: 'moved_away' }
 				})
 			)
-		).toBe('Engagement completed: Active to Completed. Reason: moved_away');
+		).toBe('Care for the Client ended: Active to Completed. Reason: moved_away');
 	});
 
 	it.each([
@@ -183,12 +184,12 @@ describe('activityLedgerColumns: an Engagement fact, from what to what (#1423)',
 		['no after side', 'kind_changed', { kindBefore: 'birth' }],
 		['no status move, only a reason', 'engagement_completed', { endingReasonAfter: 'care_complete' }]
 	])('falls back to the action alone given %s', (_case, action, diff) => {
-		expect(what.accessor(entry({ action, diff }))).toBe(describeActivityAction(action));
+		expect(what.accessor(entry({ action, diff }))).toBe(staffActivityPhrase(action));
 	});
 
 	it('reads no diff for an action that is not one of these facts', () => {
 		expect(what.accessor(entry({ action: 'visit_scheduled', diff: { scheduledAtBefore: recordedNull } }))).toBe(
-			'Visit scheduled'
+			'Visit time for the Client updated'
 		);
 	});
 
@@ -208,10 +209,10 @@ describe('activityLedgerColumns', () => {
 		);
 	});
 
-	it('falls back to the generic description for an entry carrying no detail', () => {
+	it("says the row's own words for an entry carrying no detail (#2006)", () => {
 		const what = activityLedgerColumns()[1];
 
-		expect(what.accessor(entry({ action: 'invoice_raised' }))).toBe('Invoice raised');
+		expect(what.accessor(entry({ action: 'invoice_raised' }))).toBe('Invoice created for the Client');
 	});
 
 	it('names the person a roster change happened to (#1148)', () => {
@@ -221,15 +222,15 @@ describe('activityLedgerColumns', () => {
 			what.accessor(
 				entry({ action: 'roles_changed', subjectKind: 'membership', subjectName: 'Renata Alvarez' })
 			)
-		).toBe('Roles changed — Renata Alvarez');
+		).toBe('Roles changed for Renata Alvarez');
 	});
 
-	it('leaves an entry with no subject name exactly as it reads today (#1148)', () => {
+	it('names the Client an Engagement row is about (#2006)', () => {
 		const what = activityLedgerColumns()[1];
 
-		expect(what.accessor(entry({ action: 'invoice_raised', subjectKind: 'engagement' }))).toBe(
-			'Invoice raised'
-		);
+		expect(
+			what.accessor(entry({ action: 'invoice_raised', subjectKind: 'engagement', subjectName: 'Amara' }))
+		).toBe('Invoice created for Amara');
 	});
 
 	it("does not append a subject name to the server's own detail sentence (#1148)", () => {

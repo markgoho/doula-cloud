@@ -290,7 +290,9 @@ describe('the Practice landing page', () => {
 
 			await expect.element(testPage.getByText(adminWords, { exact: true })).toBeVisible();
 			await expect
-				.element(testPage.getByRole('link', { name: 'Getting paid' }))
+				// In the rail: the quick links (#2006) carry a Getting paid
+				// card of their own.
+				.element(testPage.getByRole('complementary').getByRole('link', { name: 'Getting paid' }))
 				.toHaveAttribute('href', `/practices/${practiceId}/settings/payments`);
 			expect(testPage.getByText('Not connected').elements()).toHaveLength(0);
 		});
@@ -622,6 +624,7 @@ describe('the Practice landing page', () => {
 						{
 							subjectKind: 'engagement',
 							subjectId: 'e1',
+							subjectName: 'Amara',
 							action: 'invoice_raised',
 							actorKind: 'staff',
 							actorName: 'Mark Goho',
@@ -634,8 +637,61 @@ describe('the Practice landing page', () => {
 		});
 
 		await expect.element(testPage.getByRole('heading', { name: 'Recent activity' })).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: 'Invoice raised' })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Invoice created for Amara' })).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'Mark Goho' })).toBeVisible();
+	});
+
+	// #2006: the Overview shows the newest few rows and sends the reader to
+	// the whole ledger for the rest, at every width -- at 390px the whole
+	// first page stacked into 6,250px of rows.
+	it('shows the newest eight rows and links to the whole ledger', async () => {
+		await testPage.viewport(1440, 900);
+		const items = Array.from({ length: 12 }, (_, index) => ({
+			subjectKind: 'engagement',
+			subjectId: `e${index}`,
+			subjectName: `Client ${index + 1}`,
+			action: 'visit_logged',
+			actorKind: 'staff',
+			actorName: 'Mark Goho',
+			createdAt: new Date().toISOString()
+		}));
+		await setup({ overrides: { activity: jsonResponse({ items, hasMore: true, nextCursor: 'c1' }) } });
+
+		await expect.element(testPage.getByRole('cell', { name: 'Visit added for Client 8', exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Visit added for Client 9', exact: true })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('button', { name: /load more/i })).not.toBeInTheDocument();
+		await expect
+			.element(testPage.getByRole('link', { name: 'See all activity' }))
+			.toHaveAttribute('href', `/practices/${practiceId}/activity`);
+	});
+
+	// #2006: the drawing's quick-link cards, the places a person goes from
+	// here, offered only where the BFF will let that person in -- the same
+	// role split as the top bar's own sections.
+	it.each([
+		[
+			'an Owner',
+			['owner'],
+			['Clients', 'Credits', 'Your offers', 'Staff', 'Plan Templates', 'Contract Template', 'Getting paid']
+		],
+		['a Doula', ['doula'], ['Clients', 'Your offers', 'Plan Templates', 'Contract Template']]
+	])('offers %s the quick links that person can open', async (_who, roles, labels) => {
+		await setup({ roles });
+
+		const quickLinks = testPage.getByRole('navigation', { name: 'Quick links' });
+		await expect.element(quickLinks).toBeVisible();
+		for (const label of labels) {
+			await expect.element(quickLinks.getByRole('link', { name: label, exact: true })).toBeVisible();
+		}
+		expect(quickLinks.getByRole('link').elements()).toHaveLength(labels.length);
+	});
+
+	it('sends the Clients card to the Clients list', async () => {
+		await setup();
+
+		await expect
+			.element(testPage.getByRole('navigation', { name: 'Quick links' }).getByRole('link', { name: 'Clients' }))
+			.toHaveAttribute('href', `/practices/${practiceId}/clients`);
 	});
 
 	it('says so when the activity feed cannot be read', async () => {

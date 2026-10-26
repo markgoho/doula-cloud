@@ -103,7 +103,7 @@ test.describe('After a material change to the Terms starts', () => {
 
 		// Two rows: the agreement at signup, and this one, on the day the
 		// new version started.
-		const agreements = ownerPage.getByRole('row').filter({ hasText: 'Terms accepted' });
+		const agreements = ownerPage.getByRole('row').filter({ hasText: 'Terms of Service and Privacy Policy agreed to' });
 		await expect(agreements).toHaveCount(2);
 		const agreedOnTheDay = agreements.filter({ has: ownerPage.locator(`time[datetime^="${effective}"]`) });
 		await expect(agreedOnTheDay).toHaveCount(1);

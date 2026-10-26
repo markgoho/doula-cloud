@@ -119,6 +119,23 @@ describe('OverviewHub.svelte', () => {
 		await expect.element(page.getByText('Mark Goho sent the invoice')).not.toBeInTheDocument();
 	});
 
+	// #2006: the drawing's quick-link cards sit under the title, before
+	// the work, at every width.
+	it('renders the links region between the title and the primary region', async () => {
+		const { container } = await setup({ links: textSnippet('Clients card') });
+
+		await expect.element(page.getByText('Clients card')).toBeVisible();
+		const text = container.textContent ?? '';
+		expect(text.indexOf('Willow Birth Collective')).toBeLessThan(text.indexOf('Clients card'));
+		expect(text.indexOf('Clients card')).toBeLessThan(text.indexOf('Six open Offers'));
+	});
+
+	it('renders no links region when empty, whatever was passed', async () => {
+		await setup({ isEmpty: true, links: textSnippet('Clients card') });
+
+		await expect.element(page.getByText('Clients card')).not.toBeInTheDocument();
+	});
+
 	it('owns the page frame and renders no chrome', async () => {
 		const { container } = await setup();
 
