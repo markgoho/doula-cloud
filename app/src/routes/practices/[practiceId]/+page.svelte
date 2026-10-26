@@ -578,9 +578,11 @@
 		   can set a floor lower than the component's.
 
 		   Measured 2026-10-26 on macOS/Chromium: the waiting table needs
-		   427px of a 456px column and fits from 27rem; the activity table
-		   needs 749px of a 736px one, its cells growing with the column's
-		   fluid type, and fits from 48rem. */
+		   427px of a 456px column and fits from 27rem. The activity table's
+		   What column wraps since #2112, so its floor is When and Who beside
+		   a sentence's longest word: it needs 455px of a 448px column, its
+		   cells growing with the column's fluid type, and fits from 28.5rem
+		   (it was 48rem with the column unwrapped). */
 		.waiting-table {
 			container: waiting-table / inline-size;
 		}
@@ -603,7 +605,7 @@
 			}
 		}
 
-		@container activity-table (min-width: 48rem) {
+		@container activity-table (min-width: 28.5rem) {
 			.activity-table > :global(*) {
 				--data-table-table-display: table;
 				--data-table-records-display: none;

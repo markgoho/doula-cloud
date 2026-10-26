@@ -201,19 +201,6 @@ interface LedgerColumn {
 }
 
 /**
- * How one ledger lays out its What column (#2098). `whatWraps` makes it
- * DataTable's one wrapping column (#2091): the sentence takes the room
- * When and Who leave and wraps there, so the table's floor is those two
- * facts beside the sentence's longest word, not its longest line. It is
- * the caller's choice rather than every ledger's because a route that
- * sets its own floor for this table measured that floor with the column
- * unwrapped (the hub's, #2063), and a wrapping column moves it.
- */
-interface LedgerLayout {
-	whatWraps?: boolean;
-}
-
-/**
  * The brief's own three columns (#433's amendment), in the brief's own
  * order -- When, What, Who -- built once so the hub feed, the staff
  * Engagement ledger and the Client portal's own disclosure render the
@@ -233,10 +220,15 @@ interface LedgerLayout {
  * "What", which is a heading a design change is free to reword.
  * Everything else stays built once here, which is the point of the
  * module.
+ *
+ * The What column is DataTable's one wrapping column (#2091) on every
+ * ledger: the sentence takes the room When and Who leave and wraps there,
+ * so a ledger's floor is those two facts beside the sentence's longest
+ * word, not its longest line. #2098 began it on the Engagement page and
+ * #2112 made it every ledger's, so no caller chooses.
  */
 export function activityLedgerColumns(
-	describeEvent: (row: ActivityEntry) => string = staffEventText,
-	{ whatWraps = false }: LedgerLayout = {}
+	describeEvent: (row: ActivityEntry) => string = staffEventText
 ): LedgerColumn[] {
 	return [
 		{
@@ -245,7 +237,7 @@ export function activityLedgerColumns(
 			variant: 'meta',
 			datetimeAccessor: (row) => row.createdAt
 		},
-		{ label: 'What', accessor: describeEvent, variant: 'body', wraps: whatWraps },
+		{ label: 'What', accessor: describeEvent, variant: 'body', wraps: true },
 		{ label: 'Who', accessor: (row) => row.actorName, variant: 'muted' }
 	];
 }

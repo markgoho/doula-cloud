@@ -253,11 +253,9 @@ describe('activityLedgerColumns', () => {
 		).toBe('Invoice created for Amara');
 	});
 
-	it('wraps only the What column, and only when a ledger asks (#2098)', () => {
-		const wrapping = activityLedgerColumns(undefined, { whatWraps: true });
-
-		expect(wrapping.map((column) => Boolean(column.wraps))).toEqual([false, true, false]);
-		expect(activityLedgerColumns().some((column) => column.wraps)).toBe(false);
+	it('wraps only the What column, on every ledger (#2098, #2112)', () => {
+		expect(activityLedgerColumns().map((column) => Boolean(column.wraps))).toEqual([false, true, false]);
+		expect(clientActivityLedgerColumns().map((column) => Boolean(column.wraps))).toEqual([false, true, false]);
 	});
 
 	it("does not append a subject name to the server's own detail sentence (#1148)", () => {
