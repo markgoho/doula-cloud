@@ -19,9 +19,25 @@
 		Lets a caller point an `aria-labelledby` at this heading -- RecordDetail's section landmarks (#507). spelling:ignore: aria-labelledby is an ARIA attribute name
 		*/
 		id?: string;
+		/**
+		 * A heading that replaces what was on screen takes focus the moment
+		 * it appears (#816, #2018): replacing a form under a keyboard or
+		 * screen reader user without moving her focus leaves her tabbing
+		 * forward through a page she was never told had changed. The
+		 * heading takes tabindex="-1" so it can hold focus without ever
+		 * joining the tab order, which is the GOV.UK pattern for exactly
+		 * this. A boolean rather than an attachment passthrough keeps the
+		 * atom closed: taking focus on arrival is the one thing a heading
+		 * is ever asked to do beyond being read.
+		 */
+		focusOnAppearing?: boolean;
 	}
 
-	let { level, variant, text, id }: Properties = $props();
+	let { level, variant, text, id, focusOnAppearing = false }: Properties = $props();
+
+	function takeFocus(element: Element) {
+		(element as HTMLElement).focus();
+	}
 
 	const fallbackByLevel = {
 		1: 'page',
@@ -36,7 +52,12 @@
 	const classes = $derived(`variant-${resolved}`);
 </script>
 
-<svelte:element this={tag} {id} class={classes}>{text}</svelte:element>
+<svelte:element
+	this={tag}
+	{id}
+	class={classes}
+	tabindex={focusOnAppearing ? -1 : undefined}
+	{@attach focusOnAppearing && takeFocus}>{text}</svelte:element>
 
 <style>
 	@layer components {

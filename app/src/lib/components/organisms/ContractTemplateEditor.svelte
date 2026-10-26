@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { MERGE_FIELDS } from '#lib/contractTemplate.js';
+	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 
@@ -19,7 +20,7 @@
 </LabeledField>
 
 <section>
-	<h2>Merge-field placeholders</h2>
+	<Heading level={2} text="Merge-field placeholders" />
 	<p>Insert these tokens into the prose above; they are replaced per Engagement.</p>
 	<ul>
 		<!-- v8 ignore start: Svelte-compiled keyed-each-diffing branch, same

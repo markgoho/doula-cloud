@@ -454,3 +454,32 @@ describe('an address not in the pilot (#1790)', () => {
 		await expect.element(testPage.getByLabelText('Email')).toHaveValue('priya@example.com');
 	});
 });
+
+/*
+ * #816: signing up over a live portal session ends that session, so the
+ * BFF refuses the first submit and says what continuing costs. The form
+ * unmounts with the button she pressed, so the warning's heading takes
+ * focus (#2018 moved it onto the `Heading` atom).
+ */
+describe('signing up over a live portal session (#816)', () => {
+	it('moves focus to the warning, since the button she pressed unmounted with the form', async () => {
+		await setup();
+		await fillForm();
+
+		createUserWithEmailAndPassword.mockResolvedValueOnce(credential);
+		globalFetch.mockResolvedValueOnce(
+			jsonResponse(
+				{
+					code: 'SESSION_EVICTION_UNCONFIRMED',
+					message: 'Continuing signs you out of the client portal in this browser.'
+				},
+				409
+			)
+		);
+		await submit();
+
+		await expect
+			.element(testPage.getByRole('heading', { level: 2, name: 'Before you continue' }))
+			.toHaveFocus();
+	});
+});

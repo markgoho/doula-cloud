@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Heading from '#lib/components/atoms/Heading.svelte';
 	import { isAnswerChecked, answerOptions, answerText, type Answers, type Field } from '#lib/planInstance.js';
 	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 
@@ -9,7 +10,7 @@
 	 *
 	 * The heading has to sit *outside* the `<dl>` rather than inside it:
 	 * a description list may only directly contain `<dt>`, `<dd>` and
-	 * `<div>`, so an `<h3>` between the pairs is invalid HTML and axe
+	 * `<div>`, so a heading between the pairs is invalid HTML and axe
 	 * fails it (`definition-list`, WCAG 1.3.1). One list per section says
 	 * what the old single list only implied -- these pairs belong under
 	 * that heading -- and it is what a screen reader announces when it is
@@ -68,7 +69,8 @@
 
 {#each sections as section (section.key)}
 	{#if section.heading !== undefined}
-		<h3>{section.heading}</h3>
+		<!-- Level 2: both consumers render this directly under the page's <h1> (#2018). -->
+		<Heading level={2} text={section.heading} />
 	{/if}
 	{#if section.fields.length > 0}
 		<SummaryList rows={rowsFor(section)} isStacked />

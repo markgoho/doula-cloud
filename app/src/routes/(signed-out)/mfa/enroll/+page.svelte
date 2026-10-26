@@ -55,6 +55,7 @@
 	import type { SessionInfo } from '#lib/landing.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
+	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
@@ -302,12 +303,6 @@
 		signOutWarning = undefined;
 		step = 'setup';
 	}
-
-	// Moves focus to #816's warning the moment it replaces the form -- see
-	// the sign-in page's own copy of this comment for why.
-	function focusOnAppearing(element: HTMLElement) {
-		element.focus();
-	}
 </script>
 
 {#snippet errorSummary()}
@@ -340,7 +335,7 @@
 			#1504: verification comes before enrollment. Nothing here is a
 			field -- both presses are deliberate acts, so no form.
 		-->
-		<h2>Verify your email address first</h2>
+		<Heading level={2} text="Verify your email address first" />
 		<Text text="We sent a link to {email}. Open it, then come back and press the button." />
 		{#if resendNotice}
 			<Notice variant="status" message={resendNotice} />
@@ -364,7 +359,7 @@
 			Her code is already accepted, so there is nothing to re-render
 			here but the consequence and the two ways out of it.
 		-->
-		<h2 tabindex="-1" {@attach focusOnAppearing}>Before you continue</h2>
+		<Heading level={2} text="Before you continue" focusOnAppearing />
 		<WarningText message={signOutWarning ?? ''} />
 		<Button
 			type="button"

@@ -716,3 +716,30 @@ describe('what happens after the invite is accepted', () => {
 			.toHaveTextContent('There is a problem with the service. Try again in a few minutes.');
 	});
 });
+
+/*
+ * #816: accepting over a live portal session ends that session, so the BFF
+ * refuses the first accept and says what continuing costs. The form
+ * unmounts with the button she pressed, so the warning's heading takes
+ * focus (#2018 moved it onto the `Heading` atom).
+ */
+describe('accepting over a live portal session (#816)', () => {
+	it('moves focus to the warning, since the button she pressed unmounted with the form', async () => {
+		await setup({
+			accept: buildResponse(
+				{
+					code: 'SESSION_EVICTION_UNCONFIRMED',
+					message: 'Continuing signs you out of the client portal in this browser.'
+				},
+				409
+			)
+		});
+
+		await identifyAsNewPerson();
+		await acceptButton().click();
+
+		await expect
+			.element(testPage.getByRole('heading', { level: 2, name: 'Before you continue' }))
+			.toHaveFocus();
+	});
+});

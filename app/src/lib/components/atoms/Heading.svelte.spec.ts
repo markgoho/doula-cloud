@@ -51,6 +51,26 @@ describe('Heading.svelte', () => {
 		}
 	);
 
+	/*
+	 * #2018: the signed-out steps (#816) replace a form with a heading that
+	 * must take focus, and the heading is still the atom.
+	 */
+	it('takes focus when it appears, without joining the tab order', async () => {
+		await setup({ level: 2, text: 'Before you continue', focusOnAppearing: true });
+
+		const heading = page.getByRole('heading', { level: 2, name: 'Before you continue' });
+		await expect.element(heading).toHaveFocus();
+		await expect.element(heading).toHaveAttribute('tabindex', '-1');
+	});
+
+	it('neither takes focus nor a tabindex unless asked to', async () => {
+		await setup({ level: 2, text: 'Section' });
+
+		const heading = page.getByRole('heading', { level: 2, name: 'Section' });
+		await expect.element(heading).not.toHaveFocus();
+		await expect.element(heading).not.toHaveAttribute('tabindex');
+	});
+
 	it('does not expose the display step, which the OverviewHub Template owns', async () => {
 		const { container } = await setup({ level: 1 });
 

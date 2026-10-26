@@ -26,10 +26,12 @@ function valueFor(label: string) {
 }
 
 describe('BirthPlanView.svelte', () => {
-	it('renders a heading for a section_header field', async () => {
+	// Level 2: both consumers render the view directly under the page's
+	// <h1>, so a level-3 section heading skipped one (#2018).
+	it('renders a level-2 heading for a section_header field', async () => {
 		await setup();
 
-		await expect.element(page.getByRole('heading', { name: 'Birth Setting' })).toBeInTheDocument();
+		await expect.element(page.getByRole('heading', { level: 2, name: 'Birth Setting' })).toBeVisible();
 	});
 
 	it('renders the stored value for a text-shaped field', async () => {

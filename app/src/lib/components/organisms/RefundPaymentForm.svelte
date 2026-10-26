@@ -40,6 +40,7 @@
 	} from '#lib/invoice.js';
 	import { RefusalError, type FormError } from '#lib/formErrors.js';
 	import Button from '#lib/components/atoms/Button.svelte';
+	import Heading from '#lib/components/atoms/Heading.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
@@ -185,9 +186,7 @@
 </script>
 
 <section aria-label="Return money to the Client">
-	<!-- v8 ignore start: Svelte's compiled null-guard on this text node is unreachable -- formatAmount always returns a string -->
-	<h3>Return money from a payment of {formatAmount(invoice.amountCents)}</h3>
-	<!-- v8 ignore stop -->
+	<Heading level={3} text="Return money from a payment of {formatAmount(invoice.amountCents)}" />
 	<!-- Above the step switch, as on InvoiceSection's payment form: an
 	     untargeted refusal leaves the review step on screen, and it has to
 	     show there too. One region for the whole form. -->
