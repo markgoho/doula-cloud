@@ -757,7 +757,7 @@
 	 *
 	 * `dueDate` is left out entirely when null (#538): ADR-0017's
 	 * postpartum-only Engagement has none. "Due" has no Change: no write
-	 * sets an Engagement's due date after its request is approved.
+	 * sets an Engagement's due date after its request is approved (#2013).
 	 *
 	 * A row carries `changes` -- and so a Change -- only where this reader
 	 * may change it, from the same flags that drew the old buttons:
