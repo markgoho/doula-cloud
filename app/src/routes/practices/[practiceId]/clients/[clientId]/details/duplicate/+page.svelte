@@ -44,7 +44,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { editClient, mergeClient, type CollisionMatch } from '#lib/client.js';
 	import { fullName } from '#lib/personName.js';
-	import { formatCalendarDay } from '#lib/dates.js';
+	import { matchHistory } from '#lib/clientMatch.js';
 	import type { JourneyStep } from '#lib/components/organisms/StepRail.svelte';
 	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
@@ -108,20 +108,14 @@
 		}
 	});
 
-	function matchDescription(match: CollisionMatch): string {
-		const facts = [
-			match.dateOfBirth ? `Born ${formatCalendarDay(match.dateOfBirth)}` : 'No date of birth on file',
-			match.email || match.phone || 'No contact details on file',
-			match.engagements.length === 1 ? '1 Engagement' : `${match.engagements.length} Engagements`
-		];
-		return facts.join(' · ');
-	}
-
+	// #2143: the same line intake's "Is this the same person?" and Find a
+	// Client print for a record -- when it was added and when the Client
+	// was last cared for -- so one question reads the same on both paths.
 	const options = $derived([
 		...editMergeDraft.matches.map((match) => ({
 			value: match.id,
 			label: fullName(match),
-			description: matchDescription(match)
+			description: matchHistory(match)
 		})),
 		{
 			value: DIFFERENT_PERSON,

@@ -86,6 +86,17 @@ describe('when gate two names a possible duplicate', () => {
 			.toBeVisible();
 	});
 
+	// #2143: the same line intake's question and Find a Client print.
+	it('says under each match when it was added and when it was last cared for', async () => {
+		await setup();
+
+		const [busiest, empty] = testPage.getByLabelText(fullName(matches[0])).all();
+		await expect
+			.element(busiest!)
+			.toHaveAccessibleDescription('Added Nov 14, 2023 · 2 Engagements · 1 open now');
+		await expect.element(empty!).toHaveAccessibleDescription('Added Oct 20, 2026 · No Engagements yet');
+	});
+
 	it('refuses to go on until one of them is chosen', async () => {
 		await setup();
 		// #1705: no "Error: " title until the page is really refused.
