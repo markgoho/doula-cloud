@@ -17,7 +17,7 @@
  * unguarded `branch --merged origin/trunk` call has something to look at)
  * and a copy of every file in HOOK_FILES.
  */
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import {
   mkdtempSync,
@@ -84,6 +84,28 @@ function addWorktree(root: string, name: string, branch: string): string {
   git(root, ['worktree', 'add', '-q', worktreePath, '-b', branch]);
   return worktreePath;
 }
+
+/*
+ * Every test here runs about thirty real processes -- the fixture's git
+ * commands, then a `bun` child that runs git, `du`, `ps` and `gh` per
+ * worktree -- and the header says why they cannot be faked. No single one
+ * of them is slow; the cost is the count, plus whatever is still cold the
+ * first time the job runs them. In the `scripts` job of seven green CI runs
+ * on 2026-10-25, every test but the first in this file took 83-342ms, and
+ * the first took 264-1593ms. Trunk run 40210681105 then saw the first take
+ * more than 5000ms -- bun's default timeout -- with its child still running,
+ * so bun killed it (#1978). On a busy Mac with other sessions running, 720
+ * local runs (the file 20 times over, twice alone and twice beside the
+ * whole `scripts` suite) took 0.42-2.87s per test: the 5s default was thin
+ * there too.
+ *
+ * The bound is six times that worst observed run, rounded up: 30s. It only
+ * stops a stalled runner from failing a correct test; nothing here asserts
+ * speed, and a test that truly hangs still fails, both here and at the
+ * job's own 5-minute cap. `setDefaultTimeout` holds for this file only:
+ * the next file `bun test scripts/` loads is back on bun's 5s default.
+ */
+setDefaultTimeout(30_000);
 
 function makeStale(worktreePath: string): void {
   rmSync(worktreePath, { recursive: true, force: true });
