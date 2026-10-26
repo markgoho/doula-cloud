@@ -173,6 +173,29 @@
 			opacity: var(--opacity-disabled);
 		}
 
+		/*
+		 * An unavailable button with its own chrome is a dashed outline in
+		 * the muted color with no fill (#2019), not its own fill faded: a faded
+		 * plum read as pressed or hovered, and in dark mode it was a
+		 * low-contrast mauve. The outline is drawn at full opacity, so its
+		 * words stay legible in both themes. A *loading* button is excluded
+		 * (`aria-busy`): it is disabled only while its own request is in
+		 * flight, and it keeps its fill so the button just pressed still
+		 * looks pressed (the spinner's comment below). `bare` and `link`
+		 * have no box to outline, so they keep the faded rule above.
+		 */
+		button:is(.primary, .secondary, .destructive):is(:disabled, [aria-disabled='true']):not(
+				[aria-busy='true']
+			) {
+			opacity: 1;
+			color: var(--color-on-surface-variant);
+			background-color: transparent;
+			border-color: var(--color-outline);
+			/* Dashed, because a solid outline is what an available
+			   `secondary` already draws: the two would read the same. */
+			border-style: dashed;
+		}
+
 		button:focus-visible {
 			outline: var(--focus-ring-width) solid var(--color-primary);
 			outline-offset: var(--focus-ring-offset);
@@ -372,7 +395,9 @@
 		   person cannot switch off, so the rotation is gated below and
 		   `reduce` gets the ring standing still. The feedback survives that:
 		   the ring is still drawn, and `button:disabled` still dims the whole
-		   control, so a pressed button still looks pressed. See #418. */
+		   control over its own fill (the outline rule above leaves a
+		   loading button alone), so a pressed button still looks pressed.
+		   See #418. */
 		.spinner {
 			/* tokens:ignore -- `1em` is the label's own size, so the ring
 			   is as tall as the words it stands in for. */

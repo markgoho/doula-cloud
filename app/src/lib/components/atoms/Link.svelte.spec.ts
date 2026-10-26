@@ -158,6 +158,30 @@ describe('Link.svelte', () => {
 		await expect.element(page.getByRole('link')).toHaveClass('chip');
 	});
 
+	// #2019: the applied filter chip carries the state its own rule draws.
+	it('marks a current chip as the current page', async () => {
+		await setup({ variant: 'chip', current: true });
+
+		await expect.element(page.getByRole('link')).toHaveAttribute('aria-current', 'page');
+	});
+
+	// #2019: GOV.UK's start button, a link drawn as the primary button with
+	// an arrow after its words; its name is still only the label. The arrow
+	// is aria-hidden, so `querySelector` is the deliberately non-accessible
+	// element case of `.claude/rules/svelte-tests.md`.
+	it('renders the start variant with a trailing arrow and the label as its name', async () => {
+		const { container } = await setup({ variant: 'start', label: 'Invite a Staff member', href: '/invite' });
+
+		await expect.element(page.getByRole('link', { name: 'Invite a Staff member', exact: true })).toHaveClass('start');
+		expect(container.querySelector(':scope a.start > .label + svg')).not.toBeNull();
+	});
+
+	it('draws no arrow on a link that is not a start button', async () => {
+		const { container } = await setup({ variant: 'primary' });
+
+		expect(container.querySelector(':scope a svg')).toBeNull();
+	});
+
 	// #464: a step in a journey rail takes the shell's nav treatment rather
 	// than the link treatment, so the accent is spent once per screen.
 	it('renders the step variant class', async () => {

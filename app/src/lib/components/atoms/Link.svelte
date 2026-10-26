@@ -11,6 +11,7 @@
 			| 'card'
 			| 'rail'
 			| 'chip'
+			| 'start'
 			| 'nav'
 			| 'sheet'
 			| 'skip'
@@ -92,7 +93,7 @@
 	{#if icon}<Icon name={icon} size={16} />{/if}<span class="label">{text}</span>{#if isExternal}<Icon
 			name="arrow-square-out"
 			size={16}
-		/>{/if}
+		/>{:else if variant === 'start'}<Icon name="arrow-right" size={20} />{/if}
 </a>
 
 <style>
@@ -369,6 +370,50 @@
 		a.chip:hover {
 			border-color: var(--color-primary);
 			color: var(--color-primary);
+		}
+
+		/* The applied filter (#2019). `a.chip` sets its own color and
+		   weight, so the bare `a[aria-current]` rule above never reached a
+		   chip, and the applied one looked like the others. Its border is
+		   drawn twice as thick with an inset shadow rather than a wider
+		   border, so the chip does not grow and the row does not shift as
+		   the filter changes; the weight is the signal that is not color. */
+		a.chip[aria-current='page'] {
+			border-color: var(--color-primary);
+			box-shadow: inset 0 0 0 var(--border-thin) var(--color-primary);
+			background-color: var(--color-surface-container);
+			color: var(--color-primary);
+			font-weight: var(--font-weight-semibold);
+		}
+
+		/*
+		 * GOV.UK's start button (#2019): a link drawn as the primary
+		 * `Button`, for the one navigation that starts a screen's task --
+		 * "Invite a Staff member", "Add your first Client". It is a link
+		 * because it goes somewhere rather than doing something, and the
+		 * arrow after the label is GOV.UK's own mark for it. Used once on a
+		 * screen at most, and never beside a primary `Button`: the accent
+		 * is spent once (the brief's Von Restorff row). Its box and type
+		 * match `Button`'s `primary` at `md`.
+		 */
+		a.start {
+			justify-content: center;
+			gap: var(--space-2);
+			--link-inset-start: var(--space-4);
+			--link-inset-end: var(--space-4);
+			padding-block: var(--space-2);
+			padding-inline: var(--link-inset-start) var(--link-inset-end);
+			border: var(--border-thin) solid transparent;
+			border-radius: var(--radius);
+			background-color: var(--color-primary);
+			color: var(--color-on-primary);
+			font-size: var(--text-body-size);
+			font-weight: var(--font-weight-medium);
+			text-decoration: none;
+		}
+
+		a.start:hover {
+			background-color: var(--color-primary-hover);
 		}
 
 		/* A destination in the shell's own nav bar, at either width. It fills
