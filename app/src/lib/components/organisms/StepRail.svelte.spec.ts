@@ -204,6 +204,9 @@ describe('StepRail.svelte', () => {
 	 * the rail on the left and the words moved in over it. Measured on
 	 * the icon itself, not only its box, with the longest caption a step
 	 * can carry: a Client's full name. Same query exception as above.
+	 * This suite runs in Chromium only, where the box held, so this pins
+	 * the shape; the Firefox and Safari difference was found and checked
+	 * by the three-engine walk recorded on the #1633 pull request.
 	 */
 	it('keeps the whole caret inside the rail when the caption wraps', async () => {
 		const frame = document.createElement('div');
