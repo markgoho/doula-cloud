@@ -126,7 +126,7 @@ func countFactEntries(t *testing.T, db *testdb.DB, engagementID string) int {
 		`SELECT count(*) FROM activity
 		  WHERE subject_kind = 'engagement' AND subject_id = $1
 		    AND action IN ('care_phase_changed', 'engagement_completed', 'engagement_reopened',
-		                   'kind_changed', 'birth_outcome_recorded')`, engagementID,
+		                   'kind_changed', 'birth_outcome_recorded', 'due_date_changed')`, engagementID,
 	).Scan(&n); err != nil {
 		t.Fatalf("count fact entries: %v", err)
 	}

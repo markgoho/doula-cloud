@@ -13,7 +13,10 @@
 	 * a picker makes a reader navigate to 1988 to enter a fact they could
 	 * have typed in four keystrokes, and a single text box makes them
 	 * guess a format. Three labeled boxes ask for it the way it is
-	 * remembered.
+	 * remembered. A revised due date is one of those too (#2013): it is
+	 * read off a scan report or a midwife's note, not chosen, so the
+	 * Engagement page's Due row asks for it here, composed by
+	 * `joinCalendarDay`.
 	 *
 	 * ## The legend is optional, like `RadioGroup`'s
 	 *

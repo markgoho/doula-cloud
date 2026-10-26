@@ -306,6 +306,28 @@ export async function changeEngagementKind(
 }
 
 /**
+ * Sets the Engagement's due date (#2013), a `YYYY-MM-DD` calendar day.
+ * `PUT` and no `Idempotency-Key`, the same naturally-idempotent shape
+ * `changeEngagementKind` has. A refusal is thrown as a `RefusalError`, so
+ * one naming the `dueDate` field lands on the date boxes through
+ * `orThrownErrors`.
+ */
+export async function changeEngagementDueDate(
+	fetcher: Fetcher,
+	reference: EngagementReference,
+	dueDate: string
+): Promise<{ dueDate: string }> {
+	const response = await fetcher(`${engagementURL(reference)}/due-date`, {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ dueDate })
+	});
+	if (!response.ok) throw await refusalError(response);
+	const body = (await response.json()) as { dueDate: string };
+	return { dueDate: body.dueDate };
+}
+
+/**
  * The Engagement itself. The one blocking read on this route: without it
  * there is no page, which is why it is the only section that runs in
  * `+page.ts`'s load rather than after mount.

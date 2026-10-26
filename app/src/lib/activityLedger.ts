@@ -150,6 +150,8 @@ const factChanges: Record<string, (diff: Diff) => string | undefined> = {
 		return move && reason ? `${move}. Reason: ${reason}` : move;
 	},
 	kind_changed: (diff) => fromTo(diff, 'kind', kindLabel),
+	// #2013: two calendar days; a first due date's before side is null.
+	due_date_changed: (diff) => fromTo(diff, 'dueDate', formatCalendarDay),
 	birth_outcome_recorded: (diff) =>
 		fromTo(
 			diff,

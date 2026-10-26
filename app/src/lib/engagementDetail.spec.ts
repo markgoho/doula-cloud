@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { errorsFromCause } from './formErrors.js';
 import { jsonResponse } from './testResponse.js';
 import {
 	attachSelf,
 	birthOutcomeLabel,
 	birthOutcomeURL,
+	changeEngagementDueDate,
 	changeEngagementKind,
 	changeEngagementStatus,
 	createVisit,
@@ -266,6 +268,45 @@ describe('changeEngagementKind', () => {
 		await expect(changeEngagementKind(fetcher, reference, 'postpartum')).rejects.toThrow(
 			'only a Practice Owner, Admin or Doula can do that'
 		);
+	});
+});
+
+describe('changeEngagementDueDate', () => {
+	it('puts the new due date, and answers with the one now held', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ engagementId: 'engagement-1', dueDate: '2027-03-15' }));
+
+		const result = await changeEngagementDueDate(fetcher, reference, '2027-03-15');
+
+		expect(fetcher).toHaveBeenCalledWith(`${base}/due-date`, {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ dueDate: '2027-03-15' })
+		});
+		expect(result).toEqual({ dueDate: '2027-03-15' });
+	});
+
+	it('throws a refusal that keeps the field it names', async () => {
+		const fetcher = vi.fn().mockResolvedValue(
+			jsonResponse(
+				{
+					code: 'INVALID_ARGUMENT',
+					message: 'The due date must be a calendar day, YYYY-MM-DD',
+					details: { dueDate: 'Enter the due date as a real date, like 2027-04-23' }
+				},
+				400
+			)
+		);
+
+		let refusal: unknown;
+		try {
+			await changeEngagementDueDate(fetcher, reference, 'soon');
+		} catch (error) {
+			refusal = error;
+		}
+
+		expect(errorsFromCause(refusal, { dueDate: 'due-date-month' })).toEqual([
+			{ message: 'Enter the due date as a real date, like 2027-04-23', targetId: 'due-date-month' }
+		]);
 	});
 });
 

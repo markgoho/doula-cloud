@@ -246,6 +246,13 @@ const (
 	// engagement.ChangeKindHandler. In staffingActions below.
 	ActionKindChanged EngagementAction = "kind_changed"
 
+	// ActionDueDateChanged records an Engagement's due date being set or
+	// moved after its Engagement Request was approved (#2013, ADR-0015)
+	// -- diff dueDateBefore (null for a first date) and dueDateAfter, two
+	// YYYY-MM-DD calendar days. Written by engagement.ChangeDueDateHandler.
+	// In staffingActions below, beside ActionKindChanged.
+	ActionDueDateChanged EngagementAction = "due_date_changed"
+
 	// ActionBirthOutcomeRecorded records a birth outcome and the date the
 	// pregnancy ended being recorded, corrected or cleared (#293) -- diff
 	// birthOutcomeBefore/After and pregnancyEndedOnBefore/After. One
@@ -572,6 +579,10 @@ var staffingActions = map[EngagementAction]bool{
 	ActionEngagementReopened:   true,
 	ActionKindChanged:          true,
 	ActionBirthOutcomeRecorded: true,
+	// #2013: the due date is one more of those mutable facts. The Client
+	// reads her due date itself on her own care page; the record of who
+	// moved it, and from what, is the Practice's.
+	ActionDueDateChanged: true,
 	// #2066: the Care Plan is staff-only.
 	ActionCarePlanEdited: true,
 }

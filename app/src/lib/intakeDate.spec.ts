@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	dateFieldId,
 	dateGroupRefusal,
+	joinCalendarDay,
 	joinDate,
 	splitDate,
 	type DateParts
@@ -163,6 +164,47 @@ describe('joinDate', () => {
 		for (const message of messages) {
 			expect(message).not.toMatch(/\b(please|valid|invalid|required)\b/i);
 		}
+	});
+});
+
+describe('joinCalendarDay', () => {
+	const label = 'The due date';
+
+	it('composes a day ahead of today, which joinDate refuses', () => {
+		expect(joinCalendarDay(parts('3', '1', '2027'), label)).toEqual({ ok: true, value: '2027-03-01' });
+		expect(joinDate(parts('3', '1', '2027'), label, today).ok).toBe(false);
+	});
+
+	it('composes a day behind today too', () => {
+		expect(joinCalendarDay(parts('08', '30', '2026'), label)).toEqual({ ok: true, value: '2026-08-30' });
+	});
+
+	it('composes three blank boxes to the empty string', () => {
+		expect(joinCalendarDay(parts(' ', '', ''), label)).toEqual({ ok: true, value: '' });
+	});
+
+	it('names the box left empty', () => {
+		expect(joinCalendarDay(parts('3', '', '2027'), label)).toEqual({
+			ok: false,
+			message: 'The due date must include a day',
+			field: 'day'
+		});
+	});
+
+	it('refuses a two-digit year rather than guessing its century', () => {
+		expect(joinCalendarDay(parts('3', '1', '27'), label)).toEqual({
+			ok: false,
+			message: 'The due date must be a real date',
+			field: 'year'
+		});
+	});
+
+	it('refuses a day that does not exist', () => {
+		expect(joinCalendarDay(parts('2', '30', '2027'), label)).toEqual({
+			ok: false,
+			message: 'The due date must be a real date',
+			field: 'day'
+		});
 	});
 });
 

@@ -35,6 +35,12 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router) {
 	ir.Exempt("PUT /api/practices/{practiceId}/engagements/{engagementId}/kind",
 		"naturally idempotent (docs/api-design.md rule 4): a PUT of the kind the Engagement already holds writes nothing and returns the same 200",
 		false, ChangeKindHandler())
+	// ChangeDueDateHandler (#2013) gates exactly as ChangeKindHandler does
+	// (refuseFactWrite) and carries no staffauth.AttachingWrite, for the
+	// same reason.
+	ir.Exempt("PUT /api/practices/{practiceId}/engagements/{engagementId}/due-date",
+		"naturally idempotent (docs/api-design.md rule 4): a PUT of the due date the Engagement already holds writes nothing and returns the same 200",
+		false, ChangeDueDateHandler())
 	// AttachSelfHandler (#1598) carries no staffauth.AttachingWrite: it
 	// mints a granted Attachment itself, which that seam must never do,
 	// and the seam attaches nobody who holds Owner or Admin. No role list

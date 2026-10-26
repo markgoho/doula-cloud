@@ -38,6 +38,7 @@ const WORDING: readonly (readonly [action: string, named: string, unnamed: strin
 	['coverage_gap_updated', 'Gap in on-call cover changed for Amara', 'Gap in on-call cover changed for the Client'],
 	['created', 'Client record created for Amara', 'Client record created for the Client'],
 	['doula_attached', "Doula added to Amara's care", "Doula added to the Client's care"],
+	['due_date_changed', 'Due date changed for Amara', 'Due date changed for the Client'],
 	['employment_type_changed', 'Employment type changed for Amara', 'Employment type changed for a Staff member'],
 	['engagement_completed', 'Care for Amara ended', 'Care for the Client ended'],
 	['engagement_created', 'Care for Amara started', 'Care for the Client started'],
