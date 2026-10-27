@@ -192,8 +192,10 @@
 		/* The base size re-resolved against the bar (#544): a `cqi`
 		   resolves against the nearest ANCESTOR container, so `header`
 		   cannot answer its own, and text inside it would otherwise carry
-		   the size computed for the page. */
-		header > * {
+		   the size computed for the page. The sheet's bar does the same, so
+		   what it draws over the narrow bar is the same size (#2161). */
+		header > *,
+		.sheet-bar > * {
 			font-size: var(--text-body-size);
 		}
 
@@ -376,13 +378,20 @@
 		}
 
 		/* The lockup beside the close button, at the start, for the reason
-		   `.narrow` gives (#2141): it stays where it is in every bar. */
+		   `.narrow` gives (#2141): it stays where it is in every bar. Drawn
+		   over the narrow bar, so it keeps that bar's gutter and gap: Close
+		   lands where Menu was and the avatar where it was, and the avatar's
+		   panel, which ends at its button, keeps the page's gutter (#2161).
+		   A container too, with its text re-resolved against it as the
+		   header's is (#544): text sized against the page instead drew the
+		   avatar a fraction of a pixel wider here than in the bar below. */
 		.sheet-bar {
+			container-type: inline-size;
 			display: flex;
 			align-items: center;
 			gap: var(--space-1);
 			block-size: var(--top-bar-height);
-			padding-inline: var(--space-2);
+			padding-inline: var(--page-gutter);
 			border-block-end: var(--border-thin) solid var(--color-outline-variant);
 		}
 
