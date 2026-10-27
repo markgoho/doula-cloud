@@ -148,7 +148,7 @@ Every plan has been executed once ([#209](https://github.com/markgoho/doula-clou
 
 | Plan | Persona | `automated` | `manual` | `blocked` | `missing-feature` |
 | --- | --- | --- | --- | --- | --- |
-| [evaluator-doula.md](evaluator-doula.md) | Tasha Bell | 11 | 38 | 0 | 7 |
+| [evaluator-doula.md](evaluator-doula.md) | Tasha Bell | 11 | 34 | 0 | 11 |
 | [solo-birth-doula.md](solo-birth-doula.md) | Maya Okonkwo | 24 | 53 | 0 | 3 |
 | [practice-owner.md](practice-owner.md) | Renata Alvarez | 18 | 60 | 0 | 6 |
 | [non-doula-admin.md](non-doula-admin.md) | Dee Whitlock | 11 | 50 | 0 | 3 |
@@ -157,7 +157,7 @@ Every plan has been executed once ([#209](https://github.com/markgoho/doula-clou
 | [loss-client.md](loss-client.md) | Nadia Haddad | 11 | 34 | 0 | 8 |
 | [first-time-client.md](first-time-client.md) | Hannah Sorensen | 16 | 49 | 0 | 6 |
 | [returning-postpartum-client.md](returning-postpartum-client.md) | Camille Boyd | 4 | 32 | 0 | 0 |
-| **Total** | | **114** | **406** | **0** | **46** |
+| **Total** | | **114** | **402** | **0** | **50** |
 
 Every `automated` step passed. **No plan carries a `blocked` step any more** — Stripe was the last holdout and [#242](https://github.com/markgoho/doula-cloud/issues/242) opened the Sandbox, after which Connect, Checkout and Invoices were all walked for real.
 
@@ -188,6 +188,8 @@ Every `automated` step passed. **No plan carries a `blocked` step any more** —
 **[#1649](https://github.com/markgoho/doula-cloud/issues/1649) gave Renata Alvarez a Stage 0**, the route from `/signup` to her first Engagement as an agency Owner, and walked the built route against [`docs/onboarding-route.md`](../onboarding-route.md) as a solo Owner and as an agency Owner, at 1280px and at 320px. The stage is numbered 0 so that no step id on her map or plan moves. It adds 15 steps to practice-owner.md, 3 `automated` and 12 `manual`, and the run-status table above is recounted with them, Total with it, to 110 / 410 / 0 / 46. Each of the four walks counted 3 acts and 4 presses on 5 screens with no exit from the app, which is the spec's count; practice-owner.md's Run log has the agency Owner's walks and solo-birth-doula.md's has the solo Owner's. The two employee Doulas that make "Who is the Doula?" open with no option selected are fixture setup, because the route has no Invitation on it, and carry no mark. Two sentences on the screens differed from the spec, and the spec was corrected, because the product follows a recorded decision in each case (#1557, #1710). The walk minted no gap ID: what it found are layout defects on built screens, added to [#1803](https://github.com/markgoho/doula-cloud/issues/1803) and [#1805](https://github.com/markgoho/doula-cloud/issues/1805) or filed as [#1828](https://github.com/markgoho/doula-cloud/issues/1828).
 
 **The automated marks were re-derived for the second walk ([#329](https://github.com/markgoho/doula-cloud/issues/329))**, as a desk pass on 2026-10-27, against the suite as it stands, which has grown well past the [Spec inventory](#spec-inventory) above. `birth-plan.e2e.ts` no longer opens the Engagement from the Clients list, so the four steps that cited it for that act moved: Tasha Bell's 5.3 and Renata Alvarez's 4.1 and 6.1 now cite `add-client-visits.e2e.ts`, which does, and Maya Okonkwo's 3.3 is `manual`, because no spec asserts the six sections its cell names. Five `manual` steps became `automated`, each driven by a spec as the Persona and asserting the cell's own result: Maya's 3.2-b and 6.1 (`add-client-visits.e2e.ts`), her 5.3 and 5.4-a (`contract-lifecycle.e2e.ts`), and Renata's 2.1 (`staff-invite-role.e2e.ts`). Each moved plan carries a dated Run-log section naming them, and the run-status table above is recounted, Total with it, to 114 / 406 / 0 / 46. No `missing-feature` step moved: re-marking those is the walk's act, and the walk's own tickets list which ones a spec now drives.
+
+**The second walk began with Tasha Bell ([#2170](https://github.com/markgoho/doula-cloud/issues/2170))**, on 2026-10-27, driven by the chrome-devtools MCP's headless Chrome inside WSL rather than a person's own browser. Her moment of truth now holds: the first screen names the birth plan, the visits, the contract and the invoices, and offers one action. Four stage-7 budget steps moved from `manual` to `missing-feature (TB-G6)`, because import closed without a build (ruled out of v1 on [#175](https://github.com/markgoho/doula-cloud/issues/175)) and there is no import screen to measure. The run-status table above is recounted, Total with it, to 114 / 402 / 0 / 50. The walk minted TB-G8 to TB-G12, all failed budget steps, and filed one bug ([#2186](https://github.com/markgoho/doula-cloud/issues/2186)). Her plan's Run log has the measurements. **For the walks after hers**: the local Firebase Auth emulator cannot enroll a TOTP second factor, so any act in `SecondFactorActs` (export, Practice deletion, Client erasure, the MFA switch, the MFA-recovery vouch) cannot be finished by a person who signed up during the walk. Walk the refusal as that person, then walk the act itself under `SEED_SECOND_FACTOR=1 bun run --cwd app seed:staff-session` ([walk-a-screen-locally.md](../testing/walk-a-screen-locally.md)), and record which session did which.
 
 ### Gap issues
 
@@ -253,6 +255,11 @@ One `journey-gap` issue per missing or broken capability, deduplicated across th
 | TB-G5 | [#288](https://github.com/markgoho/doula-cloud/issues/288) | [Tasha Bell (the evaluator doula)](https://github.com/markgoho/doula-cloud/issues/319) |
 | TB-G6 | [#289](https://github.com/markgoho/doula-cloud/issues/289) | [Tasha Bell (the evaluator doula)](https://github.com/markgoho/doula-cloud/issues/319) |
 | TB-G7 | [#290](https://github.com/markgoho/doula-cloud/issues/290) | [Tasha Bell (the evaluator doula)](https://github.com/markgoho/doula-cloud/issues/319) |
+| TB-G8 | [#2181](https://github.com/markgoho/doula-cloud/issues/2181) | [Practice, Staff and Membership](https://github.com/markgoho/doula-cloud/issues/638) |
+| TB-G9 | [#2182](https://github.com/markgoho/doula-cloud/issues/2182) | [Practice, Staff and Membership](https://github.com/markgoho/doula-cloud/issues/638) |
+| TB-G10 | [#2183](https://github.com/markgoho/doula-cloud/issues/2183) | [The design system and intrinsic layout](https://github.com/markgoho/doula-cloud/issues/647) |
+| TB-G11 | [#2184](https://github.com/markgoho/doula-cloud/issues/2184) | [Engagements and the work of care](https://github.com/markgoho/doula-cloud/issues/640) |
+| TB-G12 | [#2185](https://github.com/markgoho/doula-cloud/issues/2185) | [Practice, Staff and Membership](https://github.com/markgoho/doula-cloud/issues/638) |
 | LV-G8 | [#291](https://github.com/markgoho/doula-cloud/issues/291) | [Lena Vasquez (the contractor doula)](https://github.com/markgoho/doula-cloud/issues/324) |
 | LV-G9 | [#292](https://github.com/markgoho/doula-cloud/issues/292) | [Lena Vasquez (the contractor doula)](https://github.com/markgoho/doula-cloud/issues/324) |
 | NH-G1 | [#293](https://github.com/markgoho/doula-cloud/issues/293) | [Nadia Haddad (the client whose pregnancy ends in loss)](https://github.com/markgoho/doula-cloud/issues/325) |
