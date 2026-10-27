@@ -121,7 +121,10 @@
 		   control (this rule) stays fully themed everywhere either way. */
 		select {
 			appearance: base-select;
+			/* Up to a reading measure, as `TextInput` and `Textarea`
+			   are (#2158). */
 			width: 100%;
+			max-inline-size: var(--measure);
 			padding: var(--space-2) var(--space-3);
 			font-family: var(--font-family-base);
 			font-size: var(--text-body-size);

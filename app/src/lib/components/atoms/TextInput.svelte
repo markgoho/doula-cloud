@@ -24,7 +24,8 @@
 	`width={20}` is a name, `width={10}` a six-digit code or a ZIP+4,
 	`width={2}` a week of pregnancy. A caller picks the smallest step
 	that holds the longest answer the field takes, and a field that holds
-	a sentence or an address line passes nothing and keeps the column.
+	a sentence or an address line passes nothing and keeps the column,
+	up to a reading measure (#2158).
 
 	It is a `max-inline-size`, never a width, so the 100% base above still
 	holds below it: in a 320px column a `width={30}` box shrinks with the
@@ -284,8 +285,13 @@
 			/* The width nobody chose, chosen -- see the comment at the top
 			   of this file. `border-box` is global (reset.css), so the
 			   padding below sits inside the 100% rather than pushing the
-			   control past its column. */
+			   control past its column. Up to a reading measure (#2158),
+			   as `Textarea` and `Select` are: a record page's section
+			   column has no `--form-max`, and an unsized field there ran
+			   to 1,044px at 1440 under text that stops at 650. A column
+			   narrower than the measure is filled, as before. */
 			inline-size: 100%;
+			max-inline-size: var(--measure);
 			min-height: var(--control-height);
 			padding: var(--space-2) var(--space-3);
 			color: var(--color-on-surface);
