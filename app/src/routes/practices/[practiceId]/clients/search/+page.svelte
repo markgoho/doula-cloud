@@ -283,7 +283,7 @@
 						{/snippet}
 					</LabeledField>
 					<!-- GOV.UK's Telephone numbers width (#1216). -->
-					<LabeledField id={phoneId} label="Phone" width={20}>
+					<LabeledField id={phoneId} label="Phone number" width={20}>
 						{#snippet children({ id, describedBy, width })}
 							<TextInput
 								{id}

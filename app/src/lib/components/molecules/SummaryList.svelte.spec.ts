@@ -151,8 +151,8 @@ describe('SummaryList.svelte', () => {
 		const { container } = await render(SummaryList, {
 			props: {
 				rows: [
-					{ label: 'Phone', value: '(585) 555 0142' },
-					{ label: 'Phone', value: '(585) 555 0199' }
+					{ label: 'Phone number', value: '(585) 555 0142' },
+					{ label: 'Phone number', value: '(585) 555 0199' }
 				]
 			}
 		});

@@ -97,10 +97,10 @@ describe('an address and a phone number reach the screen through contactDetails.
 		expect(findRawContactDetails('a.svelte', '\n<dd>{detail!.addressPostalCode}</dd>')).toEqual([
 			{ file: 'a.svelte', line: 2 }
 		]);
-		expect(findRawContactDetails('a.svelte', "changeable('Phone', detail!.phone || '—')")).toEqual([
+		expect(findRawContactDetails('a.svelte', "changeable('Phone number', detail!.phone || '—')")).toEqual([
 			{ file: 'a.svelte', line: 1 }
 		]);
-		expect(findRawContactDetails('a.svelte', "{ label: 'Phone', value: draft.answers.phone.trim() }")).toEqual([
+		expect(findRawContactDetails('a.svelte', "{ label: 'Phone number', value: draft.answers.phone.trim() }")).toEqual([
 			{ file: 'a.svelte', line: 1 }
 		]);
 		expect(findRawContactDetails('a.svelte', '<dd>{x.phone}</dd>')).toEqual([{ file: 'a.svelte', line: 1 }]);
