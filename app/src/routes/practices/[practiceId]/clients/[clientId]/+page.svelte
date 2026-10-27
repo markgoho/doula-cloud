@@ -512,7 +512,7 @@
 	<SummaryList
 		rows={[
 			changeable('Email address', detail!.email || '—', 'email', 'email address'),
-			changeable('Phone', formatPhoneNumber(detail!.phone) || '—', 'phone', 'phone number'),
+			changeable('Phone number', formatPhoneNumber(detail!.phone) || '—', 'phone', 'phone number'),
 			{ label: 'Portal invite', value: portalInviteStatusText(detail!) }
 		] as ChangeRow[]}
 		action={changeAction}
