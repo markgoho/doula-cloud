@@ -69,8 +69,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Chromium's shared memory must not land in the size-capped /tmp;
-      # the `app` job's step of the same name says why (#2190).
       - name: Keep temporary files on disk
         run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
 
@@ -460,19 +458,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Chromium's shared memory goes to TMPDIR, not /dev/shm: Playwright
-      # launches it with --disable-dev-shm-usage on Linux. Each segment is
-      # a file unlinked the moment it is created, so `du` never shows it,
-      # but it counts against /tmp all the same. On ubuntu-26.04 /tmp is a
-      # tmpfs mounted `usrquota` (the image runs systemd 259), and the
-      # runner user's usage stopped at exactly 80% of it, 6.2 GiB of
-      # 7.8 GiB: the unit suite's browser project hit that line and failed
-      # with `Unknown system error -122` (EDQUOT) on write. The measuring
-      # run is quoted on #2190. RUNNER_TEMP is on the runner's disk, with
-      # no quota. Set
-      # through GITHUB_ENV because a job-level `env:` cannot read the
-      # `runner` context. `site` and gcp-dashboard-ci.yml's `build` run
-      # the same browser and do the same.
       - name: Keep temporary files on disk
         run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
 
