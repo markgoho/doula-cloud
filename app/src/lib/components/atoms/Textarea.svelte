@@ -174,7 +174,22 @@
 			 */
 			--textarea-max-lines: 20;
 
+			/*
+			 * Fills the column it is given, up to a reading measure
+			 * (#2158), the cap `Text` (#2020) and `SummaryList` (#2021)
+			 * already keep. #1216 left a long answer the whole column on
+			 * the assumption that the column was a form's, capped at
+			 * `--form-max`; a record page's section column has no such
+			 * cap, so at 1440 the void request's Reason ran to 1,044px
+			 * under a summary list that stops at 650. GOV.UK sizes a
+			 * textarea to the answer it expects, and no answer is wider
+			 * than the text it is written under. Intrinsic: in a column
+			 * narrower than the measure the cap never applies and the
+			 * field fills it, so 320px is unchanged. A `width` narrows it
+			 * further below.
+			 */
 			inline-size: 100%;
+			max-inline-size: var(--measure);
 			padding: var(--space-2) var(--space-3);
 			color: var(--color-on-surface);
 			background-color: var(--color-surface);

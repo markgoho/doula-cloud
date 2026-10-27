@@ -20,6 +20,8 @@ import TextInput, { type InputWidth } from './TextInput.svelte';
  */
 import Select from './Select.svelte';
 import Textarea from './Textarea.svelte';
+// The paragraph a field sits under, for the measure case (#2158).
+import Text from './Text.svelte';
 
 type SetupOptions = Partial<Omit<ComponentProps<typeof TextInput>, 'onInput'>>;
 
@@ -36,6 +38,18 @@ async function setup({ value = '', ...rest }: SetupOptions = {}) {
  * default" cannot both pass.
  */
 const column: Partial<CSSStyleDeclaration> = { display: 'block', inlineSize: '600px' };
+
+/*
+ * A column narrower than a reading measure, past which a control stops
+ * (#2158): what "fills the space it is given" is asserted in.
+ */
+const narrowColumn: Partial<CSSStyleDeclaration> = { display: 'block', inlineSize: '400px' };
+
+/*
+ * A record page's section column at a desktop width: no form cap, and
+ * far wider than any line of text set in it.
+ */
+const wideColumn: Partial<CSSStyleDeclaration> = { display: 'block', inlineSize: '1200px' };
 
 /*
  * The setup for the width cases at the foot of this file: style the
@@ -386,7 +400,7 @@ describe('TextInput.svelte', () => {
 	 */
 	describe('inline size', () => {
 		it('fills the space it is given', async () => {
-			const { inputWidth, wrapperWidth } = await measureInWrapper(column);
+			const { inputWidth, wrapperWidth } = await measureInWrapper(narrowColumn);
 
 			expect(inputWidth).toBeCloseTo(wrapperWidth, 1);
 		});
@@ -434,6 +448,39 @@ describe('TextInput.svelte', () => {
 
 			expect(selectWidth).toBeCloseTo(inputWidth, 1);
 			expect(textareaWidth).toBeCloseTo(inputWidth, 1);
+		});
+
+		/*
+		 * #2158: in a column with no form cap -- a record page's section at
+		 * 1440 -- a field filled the column and ran some 400px past the
+		 * text it sat under. Each of the three stops where a paragraph of
+		 * the same column does, measured against a rendered `Text` rather
+		 * than a stated length.
+		 */
+		it('stops where the text above it stops, in a column wider than a line of text', async () => {
+			const prose = await render(Text, { text: 'A sentence long enough to run on. '.repeat(20) });
+			Object.assign(prose.container.style, wideColumn);
+			const proseWidth = page.getByText(/A sentence long enough/).element().getBoundingClientRect().width;
+			await prose.unmount();
+
+			const input = await setup();
+			Object.assign(input.container.style, wideColumn);
+			const inputWidth = page.getByRole('textbox').element().getBoundingClientRect().width;
+			await input.unmount();
+
+			const select = await render(Select, { options: ['Home', 'Hospital'] });
+			Object.assign(select.container.style, wideColumn);
+			const selectWidth = page.getByRole('combobox').element().getBoundingClientRect().width;
+			await select.unmount();
+
+			const textarea = await render(Textarea, { value: '', onInput: vi.fn() });
+			Object.assign(textarea.container.style, wideColumn);
+			const textareaWidth = page.getByRole('textbox').element().getBoundingClientRect().width;
+
+			expect(proseWidth).toBeLessThan(1200);
+			expect(inputWidth).toBeCloseTo(proseWidth, 1);
+			expect(selectWidth).toBeCloseTo(proseWidth, 1);
+			expect(textareaWidth).toBeCloseTo(proseWidth, 1);
 		});
 	});
 

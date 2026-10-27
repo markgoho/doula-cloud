@@ -323,10 +323,12 @@
 		   "No file chosen" text, and at the 16px `body` floor (ADR-0060)
 		   that is wider than a 320px screen's 288px column (#1943). Capping
 		   it at its column lets the text truncate inside the control, which
-		   is the browser's own behavior for a narrow file input. */
+		   is the browser's own behavior for a narrow file input. Up to a
+		   reading measure, as the input atoms are (#2158): in a record
+		   page's section column it was stretched to 1,044px at 1440. */
 		input[type='file'] {
 			display: block;
-			max-inline-size: 100%;
+			max-inline-size: min(100%, var(--measure));
 			/* "No file chosen" and the chosen file's name take the input's
 			   own color, which is the browser's until it is set here. */
 			color: var(--color-on-surface);
