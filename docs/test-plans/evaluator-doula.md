@@ -78,7 +78,7 @@ None, and that is the test. Tasha arrives from outside with no account and no fi
 | 5.2 | Answer the name question and press **Save and continue** | A Client is saved and **nothing else is**: no Engagement, no `credit_ledger` row, and her balance still reads 3. She lands on the Start work form for that Client, not on an Engagement, and the form says "{name} saved as a Client." with focus on that message ([#1710](https://github.com/markgoho/doula-cloud/issues/1710)) | `manual` |
 | 5.2-a | Look for any warning that the trial has a size | Nothing on the name question mentions credits, and there is nothing to warn about — the save is free. The size of the trial is named on the next screen, at 5.2-b, before she spends anything. `manual`, because no spec opens the name question looking for what is *not* on it | `manual` |
 | 5.2-b | Read the Start work form and press **Start work with {name}** | Before she commits, the form says what the start uses and what is left after it: `Starting work with {name} uses 1 Credit. This Practice has 3 Welcome credits. After this, it has 2.` ([#1612](https://github.com/markgoho/doula-cloud/issues/1612)). No price is on the form. She holds Owner, so ADR-0017's solo-Practice collapse fires and the request is created and approved in one act — this is where the Engagement is created and the Credit locks. She lands on the Engagement's page, which says "Work with {name} started." On an empty balance the whole act fails with `402 no credits remaining, ask a practice owner or admin to buy more`, and the screen offers **Buy credits** inline. The second action, **Go to {name}'s record without starting work**, leaves the Client saved and nothing started | `manual` |
-| 5.3 | Open the Engagement from the Clients list | The Engagement page renders | `automated (birth-plan.e2e.ts)` |
+| 5.3 | Open the Engagement from the Clients list | The Engagement page renders | `automated (add-client-visits.e2e.ts)` |
 | 5.4 | Read the page | Visits, Care Plan, Birth Plan, Contract, Invoices and Messages. **The first moment the product looks like doula work** — four clicks past where she was deciding whether to leave | `manual` |
 | 5.B-screens | Count the screens from the stage's entry to its end | **Screens**: 5 (Hick's Law, Flow). The empty Practice, the name question, the Start work form, the Engagement: four ([#1611](https://github.com/markgoho/doula-cloud/issues/1611)) | `manual` |
 | 5.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 3 (Hick's Law, Miller's Law). The name question: the given name, the two optional names, and **Save and continue** | `manual` |
@@ -132,6 +132,14 @@ Five gaps are closed: TB-G2's in-product half and TB-G3 (unexplained credits) ar
 Her plan is the least automatable of the six, and for a reason worth keeping: two of her seven stages happen before the product exists, and a Playwright spec cannot run against a marketing site that has not been written.
 
 ## Run log
+
+### 2026-10-27 — automated marks re-derived for the second walk ([#329](https://github.com/markgoho/doula-cloud/issues/329))
+
+A desk pass, not a walk: every `automated` and `manual` step was read against the current `app/e2e/` suite before the second walk.
+
+- **5.3** moves from `automated (birth-plan.e2e.ts)` to `automated (add-client-visits.e2e.ts)`. `birth-plan.e2e.ts` now opens the Engagement by its URL, not from the Clients list. `add-client-visits.e2e.ts` follows the Client's row on the Clients list to her Engagement and asserts its page.
+
+No mark moved from one kind to another, so the Marks summary is unchanged.
 
 ### 2026-10-02 — budget steps added ([#1683](https://github.com/markgoho/doula-cloud/issues/1683))
 

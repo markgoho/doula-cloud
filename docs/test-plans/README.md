@@ -110,7 +110,7 @@ What the suite covers today, as the marks below were assigned from:
 | `plan-templates.e2e.ts` | Plan Templates screen: read seeded, add field, save, per-plan-type isolation |
 | `contract-template.e2e.ts` | Contract Template screen: read seeded, edit prose, save, reload |
 | `billing.e2e.ts` | Billing screen: credit balance `3` and the `signup_bonus` ledger row |
-| `birth-plan.e2e.ts` | Clients list → Engagement page → create, fill and save a Birth Plan → the Client's read-only portal view |
+| `birth-plan.e2e.ts` | The Engagement page, opened by its URL rather than from the Clients list → create, fill and save a Birth Plan → the Client's read-only portal view, and her **I've read this** |
 | `portal-invite-accept.e2e.ts` | Client accepting a portal invite and landing on their Engagement |
 | `client-portal-login.e2e.ts` | Client portal login |
 | `portal-link-landing.e2e.ts` | A signed-in Client following a portal link from another site |
@@ -120,7 +120,7 @@ What the suite covers today, as the marks below were assigned from:
 | `staff-invite-role.e2e.ts` | The Staff invite flow end to end (send through `/invite`, accept through `/accept-invite`) for a Doula who is not the Owner, then a `403` on an Owner-only action from her session |
 | `admin-invite-role.e2e.ts` | The same invite flow for an Admin (`admin` without `owner` or `doula`, selected on the invite form): her roster row, the Credits screen ADR-0008 grants her, and the Owner-only invite send refused (#965) |
 | `contract-lifecycle.e2e.ts` | A Contract's full lifecycle: build and send on the Practice side, the Client signing it in the portal, and the Signed PDF coming back |
-| `add-client-visits.e2e.ts` | The first Client in three presses as the founding Owner, from the empty Practice through the name question and the Start work form to the Engagement's page (#497, #1611), and that Engagement's Visits section: add a Visit, read it back |
+| `add-client-visits.e2e.ts` | The first Client in three presses as the founding Owner, from the empty Practice through the name question and the Start work form to the Engagement's page (#497, #1611), back to the Clients list and through the Client's row to the same Engagement, and that Engagement's Visits section: add a Visit, read it back |
 | `portal-320.e2e.ts` | Every signed-in portal screen, shell and route together, at 320px with no sideways scroll — the 320px budget step on a signed-in portal stage |
 | `route-continuum.svelte.spec.ts` (unit suite) | Every route this repo ships, swept from 320px up — the 320px budget step on every other stage |
 
@@ -149,15 +149,15 @@ Every plan has been executed once ([#209](https://github.com/markgoho/doula-clou
 | Plan | Persona | `automated` | `manual` | `blocked` | `missing-feature` |
 | --- | --- | --- | --- | --- | --- |
 | [evaluator-doula.md](evaluator-doula.md) | Tasha Bell | 11 | 38 | 0 | 7 |
-| [solo-birth-doula.md](solo-birth-doula.md) | Maya Okonkwo | 21 | 56 | 0 | 3 |
-| [practice-owner.md](practice-owner.md) | Renata Alvarez | 17 | 61 | 0 | 6 |
+| [solo-birth-doula.md](solo-birth-doula.md) | Maya Okonkwo | 24 | 53 | 0 | 3 |
+| [practice-owner.md](practice-owner.md) | Renata Alvarez | 18 | 60 | 0 | 6 |
 | [non-doula-admin.md](non-doula-admin.md) | Dee Whitlock | 11 | 50 | 0 | 3 |
 | [employed-doula.md](employed-doula.md) | Priya Raman | 10 | 46 | 0 | 5 |
 | [contractor-doula.md](contractor-doula.md) | Lena Vasquez | 9 | 44 | 0 | 8 |
 | [loss-client.md](loss-client.md) | Nadia Haddad | 11 | 34 | 0 | 8 |
 | [first-time-client.md](first-time-client.md) | Hannah Sorensen | 16 | 49 | 0 | 6 |
 | [returning-postpartum-client.md](returning-postpartum-client.md) | Camille Boyd | 4 | 32 | 0 | 0 |
-| **Total** | | **110** | **410** | **0** | **46** |
+| **Total** | | **114** | **406** | **0** | **46** |
 
 Every `automated` step passed. **No plan carries a `blocked` step any more** — Stripe was the last holdout and [#242](https://github.com/markgoho/doula-cloud/issues/242) opened the Sandbox, after which Connect, Checkout and Invoices were all walked for real.
 
@@ -186,6 +186,8 @@ Every `automated` step passed. **No plan carries a `blocked` step any more** —
 **[#1683](https://github.com/markgoho/doula-cloud/issues/1683) added the [budget steps](#budget-steps)**, as a desk pass: every journey map's stages gained a **Budget**, and every budget line became a step in its plan — **310 of them**, 65 `automated`, 242 `manual` and 3 `missing-feature` (Tasha Bell's stage 1, which has no page to measure while [TB-G1](https://github.com/markgoho/doula-cloud/issues/284) is open). Every `automated` one is a 320px line, held by `route-continuum.svelte.spec.ts` or `portal-320.e2e.ts`; every `manual` one waits for the second walk ([#329](https://github.com/markgoho/doula-cloud/issues/329)) to measure it, and none has been measured. No existing step is re-marked. Each plan carries a dated Run-log section naming its budget steps, and the run-status table above is recounted with them, Total with it, to 107 / 398 / 0 / 46. The numbers jump because a step now asks what a stage cost as well as whether it can be done, and that is the point: the first run could only say whether a Persona got through.
 
 **[#1649](https://github.com/markgoho/doula-cloud/issues/1649) gave Renata Alvarez a Stage 0**, the route from `/signup` to her first Engagement as an agency Owner, and walked the built route against [`docs/onboarding-route.md`](../onboarding-route.md) as a solo Owner and as an agency Owner, at 1280px and at 320px. The stage is numbered 0 so that no step id on her map or plan moves. It adds 15 steps to practice-owner.md, 3 `automated` and 12 `manual`, and the run-status table above is recounted with them, Total with it, to 110 / 410 / 0 / 46. Each of the four walks counted 3 acts and 4 presses on 5 screens with no exit from the app, which is the spec's count; practice-owner.md's Run log has the agency Owner's walks and solo-birth-doula.md's has the solo Owner's. The two employee Doulas that make "Who is the Doula?" open with no option selected are fixture setup, because the route has no Invitation on it, and carry no mark. Two sentences on the screens differed from the spec, and the spec was corrected, because the product follows a recorded decision in each case (#1557, #1710). The walk minted no gap ID: what it found are layout defects on built screens, added to [#1803](https://github.com/markgoho/doula-cloud/issues/1803) and [#1805](https://github.com/markgoho/doula-cloud/issues/1805) or filed as [#1828](https://github.com/markgoho/doula-cloud/issues/1828).
+
+**The automated marks were re-derived for the second walk ([#329](https://github.com/markgoho/doula-cloud/issues/329))**, as a desk pass on 2026-10-27, against the suite as it stands, which has grown well past the [Spec inventory](#spec-inventory) above. `birth-plan.e2e.ts` no longer opens the Engagement from the Clients list, so the four steps that cited it for that act moved: Tasha Bell's 5.3 and Renata Alvarez's 4.1 and 6.1 now cite `add-client-visits.e2e.ts`, which does, and Maya Okonkwo's 3.3 is `manual`, because no spec asserts the six sections its cell names. Five `manual` steps became `automated`, each driven by a spec as the Persona and asserting the cell's own result: Maya's 3.2-b and 6.1 (`add-client-visits.e2e.ts`), her 5.3 and 5.4-a (`contract-lifecycle.e2e.ts`), and Renata's 2.1 (`staff-invite-role.e2e.ts`). Each moved plan carries a dated Run-log section naming them, and the run-status table above is recounted, Total with it, to 114 / 406 / 0 / 46. No `missing-feature` step moved: re-marking those is the walk's act, and the walk's own tickets list which ones a spec now drives.
 
 ### Gap issues
 
