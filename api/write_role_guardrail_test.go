@@ -19,11 +19,6 @@ const (
 // narrowing inside the handler), because the rule is an identity one
 // rather than a role one, or because the rule is state-dependent and a
 // single role list could not express it.
-//
-// One entry is none of those and says so: PUT /plan-templates/{planType}
-// is a flat Owner-only rule still checked in-handler. It is outside
-// #1028's named ten, so moving it is its own work (#1407) rather than
-// this ticket's to widen into.
 var roleFreeWriteRoutes = map[string]string{
 	"POST /api/practices/{practiceId}/offers/{offerId}/accept":  reasonOwnOffer,
 	"POST /api/practices/{practiceId}/offers/{offerId}/decline": reasonOwnOffer,
@@ -56,12 +51,6 @@ var roleFreeWriteRoutes = map[string]string{
 	"POST /api/practices/{practiceId}/engagement-requests/{requestId}/withdraw": "the requester alone (UPDATE ... WHERE requested_by = $1): an identity rule, not a role one",
 	"PUT /api/practices/{practiceId}/clients/{clientId}":                        "any Staff member, narrowed to the Clients she can reach by reader.CanAccessClient inside the handler (client.Mount): a row narrowing, not a role list",
 	"POST /api/practices/{practiceId}/clients/{clientId}/merge":                 "any Staff member, narrowed the same way the Client edit beside it is -- reader.CanAccessClient in-handler, which 404s rather than 403s",
-
-	// Not a reach, identity or state rule: a flat Owner-only check
-	// (plans.PutTemplateHandler's own hasOwnerRole) that belongs at the
-	// mount exactly the way #1028's ten now declare theirs. It is not one
-	// of the ten, so it is listed rather than moved here; see #1407.
-	"PUT /api/practices/{practiceId}/plan-templates/{planType}": "Owner-only, still checked in-handler rather than declared at the mount -- outside #1028's named ten, so its move is its own work, #1407",
 }
 
 // TestRoutes_EveryMutatingWriteDeclaresRolesOrIsExempt inverts what

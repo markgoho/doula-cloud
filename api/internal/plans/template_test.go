@@ -23,11 +23,12 @@ const shortTextType = "short_text"
 const carePlanType = "care_plan"
 const birthPlanType = "birth_plan"
 
-// ownerRole and doulaRole are named once so golangci-lint's goconst
-// check doesn't see repeated "owner"/"doula" literals across this
-// package's whole test surface.
+// ownerRole, adminRole and doulaRole are named once so golangci-lint's
+// goconst check doesn't see repeated "owner"/"admin"/"doula" literals
+// across this package's whole test surface.
 const (
 	ownerRole = "owner"
+	adminRole = "admin"
 	doulaRole = "doula"
 )
 
@@ -207,51 +208,88 @@ func TestGetTemplateHandler_NotFound(t *testing.T) {
 	}
 }
 
-// TestGetTemplateHandler_AnyMemberAllowed proves a non-Owner member (a
-// doula) can read the template -- only PUT is Owner-gated.
+// TestGetTemplateHandler_AnyMemberAllowed proves every Staff role --
+// Owner, Admin, an employed Doula and a contractor Doula -- can read the
+// template (ADR-0008's read table): only the PUT is Owner-gated (#1407).
 func TestGetTemplateHandler_AnyMemberAllowed(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-any-member"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	seedPlanTemplate(t, db, practiceID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
-
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getTemplate(t, srv, session, practiceID, "care_plan")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	const employee = "employee"
+	cases := []struct {
+		name           string
+		roles          []string
+		employmentType string
+	}{
+		{ownerRole, []string{ownerRole}, employee},
+		{adminRole, []string{adminRole}, employee},
+		{doulaRole, []string{doulaRole}, employee},
+		{"contractor doula", []string{doulaRole}, "contractor"},
 	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := testdb.New(t)
+			uid := "get-any-member-" + tc.roles[0] + "-" + tc.employmentType
+			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, tc.roles, tc.employmentType)
+			seedPlanTemplate(t, db, practiceID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
 
-	var out plans.TemplateResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if out.PlanType != "care_plan" {
-		t.Fatalf("planType = %q, want care_plan", out.PlanType)
-	}
-	if len(out.Fields) != 1 || out.Fields[0].ID != "f1" {
-		t.Fatalf("fields = %+v, want one field with id f1", out.Fields)
+			srv, session := newPlanServer(t, db, uid)
+			defer srv.Close()
+
+			resp := getTemplate(t, srv, session, practiceID, "care_plan")
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+			}
+
+			var out plans.TemplateResponse
+			if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if out.PlanType != "care_plan" {
+				t.Fatalf("planType = %q, want care_plan", out.PlanType)
+			}
+			if len(out.Fields) != 1 || out.Fields[0].ID != "f1" {
+				t.Fatalf("fields = %+v, want one field with id f1", out.Fields)
+			}
+		})
 	}
 }
 
+// TestPutTemplateHandler_NonOwnerForbidden proves the mount's OwnerOnly
+// declaration (#1407) refuses both a plain Doula and an Admin -- the
+// in-handler check this replaced was reader.Has("owner") alone, and the
+// mount declaration must keep exactly that population, not widen it to
+// Owner and Admin. The refusal also leaves the stored template untouched.
 func TestPutTemplateHandler_NonOwnerForbidden(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-non-owner"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	for _, roles := range [][]string{{doulaRole}, {adminRole}} {
+		t.Run(roles[0], func(t *testing.T) {
+			db := testdb.New(t)
+			uid := "put-non-owner-" + roles[0]
+			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, roles, "employee")
+			seedPlanTemplate(t, db, practiceID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
 
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
+			srv, session := newPlanServer(t, db, uid)
+			defer srv.Close()
 
-	resp := putTemplate(t, srv, session, practiceID, "care_plan", plans.TemplateResponse{Fields: []plans.Field{
-		{ID: "f1", Type: shortTextType, Label: testFieldLabel},
-	}})
-	defer resp.Body.Close()
+			resp := putTemplate(t, srv, session, practiceID, "care_plan", plans.TemplateResponse{Fields: []plans.Field{
+				{ID: "f2", Type: shortTextType, Label: testFieldLabel},
+			}})
+			defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+			if resp.StatusCode != http.StatusForbidden {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+			}
+
+			var stored string
+			if err := db.Admin.QueryRowContext(t.Context(),
+				`SELECT fields->0->>'id' FROM plan_templates WHERE practice_id = $1 AND plan_type = $2`,
+				practiceID, carePlanType,
+			).Scan(&stored); err != nil {
+				t.Fatalf("read stored template: %v", err)
+			}
+			if stored != "f1" {
+				t.Fatalf("stored first field id = %q, want f1 (the refused PUT must not write)", stored)
+			}
+		})
 	}
 }
 
