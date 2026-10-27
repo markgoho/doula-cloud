@@ -19,7 +19,7 @@ import (
 
 // signedUpAt is the instant the fixed clock below reports, so a test can
 // tell the server's clock.Now(ctx) from the database's own now().
-var signedUpAt = time.Date(2026, 10, 23, 14, 30, 0, 0, time.UTC)
+var signedUpAt = time.Date(2026, 10, 28, 14, 30, 0, 0, time.UTC)
 
 // newClockedSignupServer is newSignupServer behind clock.Middleware, with
 // a fixed instant.
@@ -135,7 +135,7 @@ func TestSignupHandler_RecordsTheOwnersAgreement(t *testing.T) {
 // asks it nothing more after the date.
 //
 // On October 21, 2026 the Privacy Policy of October 3 is in force and
-// the one of October 22 is coming; no Terms version is coming.
+// the ones of October 22 and 27 are coming; no Terms version is coming.
 func TestSignupHandler_DuringANoticeRecordsTheVersionInForceAndTheComingOne(t *testing.T) {
 	duringNotice := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
 	db := testdb.New(t)
@@ -154,7 +154,7 @@ func TestSignupHandler_DuringANoticeRecordsTheVersionInForceAndTheComingOne(t *t
 	assertDiff(t, rows[0].diff, map[string]any{
 		diffTermsVersion:   "2026-10-03",
 		diffPrivacyVersion: "2026-10-03",
-		diffPrivacyComing:  []any{"2026-10-22"},
+		diffPrivacyComing:  []any{"2026-10-22", "2026-10-27"},
 		diffIPAddress:      loopbackIP,
 	})
 }
@@ -281,7 +281,7 @@ func TestComingVersions_TheFormNamesTheVersionsTheRecordRecords(t *testing.T) {
 
 // Outside a notice period the read names nothing, as an empty list
 // rather than null, so the form shows nothing more than the agreement
-// sentence. On October 23, 2026 no version of either shipped document
+// sentence. On October 28, 2026 no version of either shipped document
 // is coming.
 func TestComingVersions_OutsideANoticeNamesNothing(t *testing.T) {
 	srv := newSignupServerAt(signedUpAt, authntest.Verifier{}, testdb.New(t))
