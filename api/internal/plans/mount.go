@@ -8,16 +8,26 @@ import (
 	"doula-cloud/api/internal/staffauth"
 )
 
-// Mount registers the Plan Template (every Staff role, ADR-0008, no
-// attachment narrowing -- a Template isn't Engagement-scoped) and Plan
-// Instance surface, the Birth Plan's rendered PDF (#306, Birth Plan only
-// -- Care Plan has no Client-facing surface for it to mirror), plus the
-// Client portal's own birth-plan read, acknowledge, and PDF.
+// Mount registers the Plan Template and Plan Instance surface, the Birth
+// Plan's rendered PDF (#306, Birth Plan only -- Care Plan has no
+// Client-facing surface for it to mirror), plus the Client portal's own
+// birth-plan read, acknowledge, and PDF.
+//
+// The Plan Template's read and write differ. The GET is open to every
+// Staff role (ADR-0008's read table, its "Plan Template and Contract
+// Template" row), with no attachment narrowing -- a Template isn't
+// Engagement-scoped. The PUT is Owner-only (not Admin), the same rule as
+// its Contract Template sibling in contracts.Mount.
 func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB) {
 	g.Get("/api/practices/{practiceId}/plan-templates/{planType}", staffauth.AnyStaff, GetTemplateHandler())
-	ir.Exempt("PUT /api/practices/{practiceId}/plan-templates/{planType}",
+	// Owner-only (not Admin): #1407 moved this rule from an in-handler
+	// check (reader.Has("owner")) to this declaration without widening
+	// it, registered through ir.ExemptGated, which panics if the role list
+	// is ever left empty -- PutTemplateHandler itself no longer checks the
+	// caller's role at all.
+	ir.ExemptGated("PUT /api/practices/{practiceId}/plan-templates/{planType}",
 		"upsert (ON CONFLICT ... DO UPDATE); replaces the template wholesale, so re-sending the same body is a no-op",
-		false, PutTemplateHandler())
+		false, staffauth.OwnerOnly, PutTemplateHandler())
 	ir.Exempt("POST /api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
 		"guarded by plan_instances' unique constraint on (engagement_id, plan_type); a retry after the first succeeds hits the constraint and 409s rather than creating a duplicate Plan Instance",
 		true, PostInstanceHandler())

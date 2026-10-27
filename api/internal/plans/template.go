@@ -111,23 +111,17 @@ func GetTemplateHandler() http.Handler {
 }
 
 // PutTemplateHandler lets a Practice Owner replace the full field list of
-// its Plan Template for :planType. Must be mounted behind
-// staffauth.Middleware.
+// its Plan Template for :planType. Owner-only is enforced at the mount
+// (plans.Mount, staffauth.OwnerOnly), not here -- #1407 moved this
+// handler's own reader.Has("owner") check to that declaration, so a
+// forgotten declaration fails the binary at startup rather than silently
+// admitting every Staff member. Must be mounted through
+// idempotency.Router.ExemptGated.
 func PutTemplateHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, ok := staffauth.RequireTx(w, r)
 		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 		if !ok {
-			return
-		}
-		reader, has := staffauth.ReaderFrom(r.Context())
-		if !has {
-			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if !hasOwnerRole(reader) {
-			apierr.WriteError(w, "only a Practice Owner can do that", http.StatusForbidden)
 			return
 		}
 
@@ -206,11 +200,6 @@ func normalizeFields(fields []Field) ([]Field, string) {
 		out[i] = Field{ID: f.ID, Type: f.Type, Label: f.Label, Options: f.Options, Order: i}
 	}
 	return out, ""
-}
-
-// hasOwnerRole reports whether reader holds the "owner" role.
-func hasOwnerRole(reader staffauth.Reader) bool {
-	return reader.Has("owner")
 }
 
 // fetchFields reads the field list stored for practiceID and planType,
