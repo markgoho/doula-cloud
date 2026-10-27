@@ -49,8 +49,8 @@ None. Maya's journey starts at a cold `/signup`, so this plan builds its own fix
 | 3.1-a | Look for due date, phone, address, hospital, or intake notes | The due date is on the Start work form, the next screen. Phone, address and date of birth are added from the Client's record, through **Add {name}'s details**, one question per page ([#1610](https://github.com/markgoho/doula-cloud/issues/1610)), and the folder's remaining facts — hospital, the partner's name, the page of notes — go on the Practice's own Client Field Template, which that journey then asks as its own pages. The paper folder can be transcribed ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252) is closed). `manual` rather than `automated`, because the claim reaches the whole details journey and the Practice's own template pages, and no spec answers them all — `accessibility.e2e.ts` opens two of the routes to run axe over them, which tests the pages and not the folder | `manual` |
 | 3.2 | Answer the name question and press **Save and continue** | The Client is saved and **the save is free**: no Engagement row, no `credit_ledger` row. She lands on the Start work form for that Client, which says "{name} saved as a Client." and has focus on that message ([#1710](https://github.com/markgoho/doula-cloud/issues/1710)) | `manual` |
 | 3.2-a | Re-read the Billing balance | `Credit balance: 3`, still, with the `signup_bonus` row alone. Adding a Client costs nothing. `manual`: `billing.e2e.ts` reads that balance on a Practice that has added no Client, so it never asserts the thing this step checks — that the balance is unmoved *after* one | `manual` |
-| 3.2-b | Read the Start work form and press **Start work with {name}** | Before she presses **Start work with {name}**, the form says `Starting work with {name} uses 1 Credit. This Practice has 3 Welcome credits. After this, it has 2.` ([#1612](https://github.com/markgoho/doula-cloud/issues/1612)). She is the Owner, so ADR-0017's solo-Practice collapse fires: the Request is written and approved in the same instant, mailing nobody, and it is *this* act that creates the Engagement and locks the Credit. She lands on the Engagement's page, which says "Work with {name} started." | `manual` |
-| 3.3 | Open the Engagement from the Clients list | The Engagement page shows Visits, Care Plan, Birth Plan, Contract, Invoices and Messages on one page | `automated (birth-plan.e2e.ts)` |
+| 3.2-b | Read the Start work form and press **Start work with {name}** | Before she presses **Start work with {name}**, the form says `Starting work with {name} uses 1 Credit. This Practice has 3 Welcome credits. After this, it has 2.` ([#1612](https://github.com/markgoho/doula-cloud/issues/1612)). She is the Owner, so ADR-0017's solo-Practice collapse fires: the Request is written and approved in the same instant, mailing nobody, and it is *this* act that creates the Engagement and locks the Credit. She lands on the Engagement's page, which says "Work with {name} started." | `automated (add-client-visits.e2e.ts)` |
+| 3.3 | Open the Engagement from the Clients list | The Engagement page shows Visits, Care Plan, Birth Plan, Contract, Invoices and Messages on one page | `manual` |
 | 3.4 | Add a second and third Client, start work with all three, then attempt a fourth Engagement | Clients are free and unlimited; the wall is on Engagements. The fourth **Start work with {name}** returns `402 no credits remaining, ask a practice owner or admin to buy more` — to Maya, who *is* the Owner — and the whole act rolls back, leaving no half-written Request behind. The refusal offers **Buy credits** inline, on the same screen and with what she typed still on it. The empty balance is also said before the click: on an empty balance an approver reads "There are no credits left on this Practice's balance." with **Buy credits**, and no sentence about what is left after ([#1235](https://github.com/markgoho/doula-cloud/issues/1235), [#1612](https://github.com/markgoho/doula-cloud/issues/1612)) | `manual` |
 | 3.4-a | Follow that instruction and try to buy credits | Stripe Checkout opens for the chosen quantity; paying credits the ledger | `manual` |
 | 3.B-screens | Count the screens from the stage's entry to its end | **Screens**: 5 (Hick's Law, Flow). The empty Practice, the name question, the Start work form, the Engagement: four ([#1611](https://github.com/markgoho/doula-cloud/issues/1611)) | `manual` |
@@ -86,9 +86,9 @@ None. Maya's journey starts at a cold `/signup`, so this plan builds its own fix
 | --- | --- | --- | --- |
 | 5.1 | Send the portal invite from the Engagement page | `POST .../portal-invite` returns a token; **no email is sent** and the link must be delivered by hand | `manual` |
 | 5.2 | Build the Contract from the Practice template | `POST .../contract` creates it at status `draft` with the template prose snapshotted — and **no merge field resolved**: every value comes back empty and must be typed by hand, `practice_name` and `client_name` included ([MO-G10](https://github.com/markgoho/doula-cloud/issues/258)) | `manual` |
-| 5.3 | Press **Send** | Status moves to `sent` | `manual` |
+| 5.3 | Press **Send** | Status moves to `sent` | `automated (contract-lifecycle.e2e.ts)` |
 | 5.4 | As the Client, accept the invite and sign in | The accept → login path lands on `/portal/engagements/{engagementId}` | `automated (portal-invite-accept.e2e.ts)` |
-| 5.4-a | Sign the Contract from the portal | `POST /api/portal/engagements/{id}/contract/sign` renders the signed PDF, puts it in the object store, **then** sets status `signed` | `manual` |
+| 5.4-a | Sign the Contract from the portal | `POST /api/portal/engagements/{id}/contract/sign` renders the signed PDF, puts it in the object store, **then** sets status `signed` | `automated (contract-lifecycle.e2e.ts)` |
 | 5.5 | Back as Maya, reload the Engagement | The Contract reads `signed`, without leaving the app, and a **Void Contract** action appears | `manual` |
 | 5.5-a | Look for a way to move the Engagement past `intake` | No update path exists anywhere; the status is fixed for the Engagement's whole life | `missing-feature (MO-G4)` [#253](https://github.com/markgoho/doula-cloud/issues/253) |
 | 5.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). Her own screens only; the Client signs on hers | `manual` |
@@ -101,7 +101,7 @@ None. Maya's journey starts at a cold `/signup`, so this plan builds its own fix
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 6.1 | Open the Visits section | A list and an add control | `manual` |
+| 6.1 | Open the Visits section | A list and an add control | `automated (add-client-visits.e2e.ts)` |
 | 6.2 | Add a Visit | `POST .../visits` records a row of Staff name plus creation timestamp | `manual` |
 | 6.2-a | Set a date and time for a future prenatal | No date field, no endpoint field, no column. A Visit can be recorded, never scheduled | `missing-feature (MO-G1)` [#250](https://github.com/markgoho/doula-cloud/issues/250) |
 | 6.2-b | Write what was covered on the Visit | Nowhere to put it | `missing-feature (MO-G2)` [#251](https://github.com/markgoho/doula-cloud/issues/251) |
@@ -141,8 +141,8 @@ None. Maya's journey starts at a cold `/signup`, so this plan builds its own fix
 
 | Mark | Steps |
 | --- | --- |
-| `automated` | 21 (8 of them [budget steps](README.md#budget-steps)) |
-| `manual` | 56 (36 of them [budget steps](README.md#budget-steps)) |
+| `automated` | 24 (8 of them [budget steps](README.md#budget-steps)) |
+| `manual` | 53 (36 of them [budget steps](README.md#budget-steps)) |
 | `blocked` | 0 |
 | `missing-feature` | 3 ([MO-G1](https://github.com/markgoho/doula-cloud/issues/250), [MO-G2](https://github.com/markgoho/doula-cloud/issues/251), [MO-G4](https://github.com/markgoho/doula-cloud/issues/253)) |
 
@@ -151,6 +151,17 @@ MO-G3 ([#252](https://github.com/markgoho/doula-cloud/issues/252)) is closed and
 MO-G5 to MO-G9 are experience-layer or infrastructure findings; they are observed inside the steps above (3.4, 7.1, 7.2-a) rather than given steps of their own. MO-G9 ([#257](https://github.com/markgoho/doula-cloud/issues/257)) is closed as well — 3.4 still meets a wall, but a paid one she can walk through, not the dead end that gap named.
 
 ## Run log
+
+### 2026-10-27 — automated marks re-derived for the second walk ([#329](https://github.com/markgoho/doula-cloud/issues/329))
+
+A desk pass, not a walk: every `automated` and `manual` step was read against the current `app/e2e/` suite before the second walk.
+
+- **3.3** moves from `automated (birth-plan.e2e.ts)` to `manual`. `birth-plan.e2e.ts` now opens the Engagement by its URL, not from the Clients list, and no spec asserts the six sections this cell names. `add-client-visits.e2e.ts` does open it from the Clients list, but asserts only the heading.
+- **3.2-b** moves to `automated (add-client-visits.e2e.ts)`. The spec reads the Start work form's Credit sentence word for word, presses **Start work with {name}** as the founding Owner, and lands on the Engagement's page with "Work with {name} started."
+- **5.3** and **5.4-a** move to `automated (contract-lifecycle.e2e.ts)`. The spec sends the Contract as the Owner and reads "Sent, waiting for the Client to sign", then signs it as the Client, reads **Signed**, and fetches the signed PDF from the store.
+- **6.1** moves to `automated (add-client-visits.e2e.ts)`. The spec reads "No Visits yet." and the **Add a Visit** control on the Engagement's page.
+
+No `missing-feature` step moved: re-marking those is the walk's act.
 
 ### 2026-10-23 — the route walked as a solo Owner, against the spec ([#1649](https://github.com/markgoho/doula-cloud/issues/1649))
 

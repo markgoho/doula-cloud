@@ -50,7 +50,7 @@ The membership picker (1.2) is exercised by no spec — every spec's Staff membe
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 2.1 | Open `/practices/[practiceId]/invite` | The form renders for an Owner | `manual` |
+| 2.1 | Open `/practices/[practiceId]/invite` | The form renders for an Owner | `automated (staff-invite-role.e2e.ts)` |
 | 2.2 | Enter a name and email, press **Send invite** | `POST /api/practices/{id}/invitations` succeeds and the screen **prints a link**; no email leaves the system | `manual` |
 | 2.2-a | Check the invitee's inbox | Nothing arrives. No invitation email is sent by anything | `missing-feature (RA-G1)` [#260](https://github.com/markgoho/doula-cloud/issues/260) |
 | 2.3 | Deliver the link out of band | The invitee receives a raw URL by text or Renata's own mail client, which they cannot verify is genuine | `manual` |
@@ -81,7 +81,7 @@ The membership picker (1.2) is exercised by no spec — every spec's Staff membe
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 4.1 | Open an Engagement from the Clients list | The single-page Engagement view renders | `automated (birth-plan.e2e.ts)` |
+| 4.1 | Open an Engagement from the Clients list | The single-page Engagement view renders | `automated (add-client-visits.e2e.ts)` |
 | 4.2 | Look for a control that puts a Doula on the Engagement | No field, no endpoint, no screen. An Engagement carries no Doula | `missing-feature (RA-G4)` [#225](https://github.com/markgoho/doula-cloud/issues/225) |
 | 4.3 | Add a Visit naming the new Doula as `staffId` | **The Visit names her.** Create carries its own assignee now, and the Engagement page asks **Who is this Visit for?** as a picker of the Doulas this Engagement can admit — no UUID, no free-text box ([RA-G10](https://github.com/markgoho/doula-cloud/issues/268) closed). `resolveAssignee` (`api/internal/visit/roles.go`) keeps naming a colleague with the Owner and the Admin, and logging your own Visit with the Doula, so Renata reaches it from either seat. The row she writes carries a scheduled date and time, a type and notes. Assignment still exists at Visit level; whether an Engagement itself names a Doula is 4.2's question, not this one | `manual` |
 | 4.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
@@ -104,7 +104,7 @@ The membership picker (1.2) is exercised by no spec — every spec's Staff membe
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 6.1 | Open `/practices/[practiceId]/clients` | The list renders and each Client links to their Engagement | `automated (birth-plan.e2e.ts)` |
+| 6.1 | Open `/practices/[practiceId]/clients` | The list renders and each Client links to their Engagement | `automated (add-client-visits.e2e.ts)` |
 | 6.1-a | Create a Client as a *second* Staff member, then reload as Renata | She appears: the list is one row per Client at the Practice, whoever saved her, and no longer one row per Client-and-Engagement pair (ADR-0017 — a Client needs no Engagement to exist at all). **This half of her requirement passes** | `manual` |
 | 6.1-b | Read the columns | Name and Status only — and Status is `intake` on every row forever ([MO-G4](https://github.com/markgoho/doula-cloud/issues/253)) | `manual` |
 | 6.2 | Learn each Engagement's Contract and Invoice state | Reachable only by opening every Engagement in turn | `manual` |
@@ -152,13 +152,22 @@ The membership picker (1.2) is exercised by no spec — every spec's Staff membe
 
 | Mark | Steps |
 | --- | --- |
-| `automated` | 17 (10 of them [budget steps](README.md#budget-steps)) |
-| `manual` | 61 (37 of them [budget steps](README.md#budget-steps)) |
+| `automated` | 18 (10 of them [budget steps](README.md#budget-steps)) |
+| `manual` | 60 (37 of them [budget steps](README.md#budget-steps)) |
 | `missing-feature` | 6 ([RA-G1](https://github.com/markgoho/doula-cloud/issues/260), [RA-G4](https://github.com/markgoho/doula-cloud/issues/225), [RA-G5](https://github.com/markgoho/doula-cloud/issues/263), [RA-G6](https://github.com/markgoho/doula-cloud/issues/264), [RA-G7](https://github.com/markgoho/doula-cloud/issues/265), [RA-G8](https://github.com/markgoho/doula-cloud/issues/266)) |
 
 RA-G2 and RA-G3 are observed at 3.3 and 3.2 rather than given steps of their own: both screens render, so both steps are walkable. RA-G3's failure is the word the screen prints, and 3.3's **Edit membership** has since answered RA-G2's own question, which is why that step reads `manual` and RA-G2 is no longer counted above. **RA-G9** and **RA-G10** were minted by the walk and are observed the same way, inside 1.3 and 4.3: both steps can be performed, and what the product does when they are is the finding.
 
 ## Run log
+
+### 2026-10-27 — automated marks re-derived for the second walk ([#329](https://github.com/markgoho/doula-cloud/issues/329))
+
+A desk pass, not a walk: every `automated` and `manual` step was read against the current `app/e2e/` suite before the second walk.
+
+- **4.1** and **6.1** move from `automated (birth-plan.e2e.ts)` to `automated (add-client-visits.e2e.ts)`. `birth-plan.e2e.ts` now opens the Engagement by its URL, not from the Clients list. `add-client-visits.e2e.ts` opens the Clients list from the Engagement page, follows the Client's row to her Engagement, and asserts it is there.
+- **2.1** moves from `manual` to `automated (staff-invite-role.e2e.ts)`. The spec opens `/practices/[practiceId]/invite` as the founding Owner and fills and sends the form.
+
+No `missing-feature` step moved: re-marking those is the walk's act.
 
 ### 2026-10-23 — Stage 0 added, and the route walked against the spec ([#1649](https://github.com/markgoho/doula-cloud/issues/1649))
 
