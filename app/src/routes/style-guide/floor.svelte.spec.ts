@@ -62,6 +62,15 @@
  * below it. It is judged by the same criteria as a tree swap (`measure`,
  * here) and carries its own justification like every other entry.
  *
+ * A third kind is admitted (#2145): a query that picks WHICH WIDTH one
+ * element takes, its column's or its own -- `Button` and `Link`'s start
+ * button, full width in a narrow column (GOV.UK's narrow Button). Nothing
+ * intrinsic picks between the two: Switcher arithmetic on
+ * `min-inline-size` leaves an explicit minimum in the wide case, which
+ * replaces a flex item's own (#1851), and `calc-size()` is Chromium's
+ * alone. Both members are judged by `measure`, at the same reading
+ * measure as `OverviewHub`'s title.
+ *
  * `StepRail` was the exception that proved the rule, in `UNDERIVABLE`
  * below rather than here. It is not any more: #585 replaced its query
  * with a `<details>` the reader opens, so it authors no condition at all

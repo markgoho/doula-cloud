@@ -397,13 +397,16 @@
 				{#if declineError}
 					<p role="alert">{declineError}</p>
 				{/if}
-				<Button
-					label="Decline"
-					describedBy="void-request-{request.id}-name"
-					onClick={() => handleDeclineVoidRequest(request.id)}
-					loading={decliningRequestId === request.id}
-				/>
-				<Button label="Cancel" variant="secondary" onClick={cancelDeclineForm} />
+				<!-- One button group, Decline first (#2145), as Send request above. -->
+				<cluster-l>
+					<Button
+						label="Decline"
+						describedBy="void-request-{request.id}-name"
+						onClick={() => handleDeclineVoidRequest(request.id)}
+						loading={decliningRequestId === request.id}
+					/>
+					<Button label="Cancel" variant="secondary" onClick={cancelDeclineForm} />
+				</cluster-l>
 			{:else}
 				<Button
 					label="Decline"

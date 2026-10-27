@@ -441,9 +441,12 @@
 		 * not a control, so it keeps its own width there.
 		 *
 		 * The query reads the nearest containment context: a Template's
-		 * `container-l` (the page's own frame), the drag surface's frame,
-		 * or `body` where neither holds the button -- so a dialog or a
-		 * rail card on a wide screen is answered by the page it sits on.
+		 * `container-l` (the page's own frame), `RecordDetail`'s record, a
+		 * `DataTable`'s own box, `Drawer`'s scope, the drag surface's
+		 * frame, or `body` where none holds the button. None of those is a
+		 * dialog panel or a rail card, so a dialog or a card on a wide
+		 * screen is answered by the page it sits on (seen 2026-10-27: the
+		 * confirm dialog's two buttons keep their own width at 1440).
 		 *
 		 * 37rem is a content floor, not a device: the width at which the
 		 * column holds a reading measure (`--measure`, 65ch, 585px at the
@@ -453,7 +456,9 @@
 		 * the column is wider than a measure, prose stops short of its
 		 * edge and a full-width button would run past the text it acts on.
 		 * The floor check measures it (`floor.svelte.spec.ts`, the measure
-		 * criterion on the Width demo of `/style-guide/button`). GOV.UK's
+		 * criterion on the Width demo of `/style-guide/button`): measured on
+		 * Linux, as CI is, where the fixed point is 585px (36.6rem)
+		 * and 37rem is the next whole rem, not a figure chosen first. GOV.UK's
 		 * own breakpoint (40.0625em of window) is a device number and is
 		 * not used. `Link.svelte`'s start button holds the same floor.
 		 *
