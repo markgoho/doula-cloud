@@ -44,7 +44,7 @@ jobs:
   # Its own job because it lives at the repo root rather than in app/,
   # site/ or api/, and because it needs neither a browser nor a database.
   scripts:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
@@ -62,7 +62,7 @@ jobs:
   # steps are app/'s, cut down, for the browser-mode component specs; see
   # the `app` job below for why each one is shaped the way it is.
   site:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # 20 minutes holds the Playwright install steps' worst case, 16 minutes;
     # the arithmetic is on the `app` job's step (#1661).
     timeout-minutes: 20
@@ -163,7 +163,7 @@ jobs:
   # and auto-merge does not wait on a job that is merely red -- an advisory
   # gate here would be the same silent drift the job exists to end.
   format:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
@@ -180,7 +180,7 @@ jobs:
         run: bun run typecheck
 
   actionlint:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
@@ -221,7 +221,7 @@ jobs:
   # that is classified as code rather than judged on a partial list.
   changes:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       pull-requests: read
@@ -280,7 +280,7 @@ jobs:
   # No --coverage: the 100% gate is measured over the whole suite, and a
   # partial run would fail it.
   docs:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
@@ -321,7 +321,7 @@ jobs:
   api:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -429,7 +429,7 @@ jobs:
   app:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     # e2e/stack.ts's db-only compose stack: `docker compose` ships
     # preinstalled on ubuntu-latest and needs no rootless-socket setup or
@@ -601,9 +601,27 @@ jobs:
           exit 1
         if: steps.playwright-cache.outputs.cache-hit != 'true'
 
+      - name: DIAG-2190 temp before
+        run: |
+          cat /etc/os-release | head -2; uname -r; nproc; free -h
+          echo "TMPDIR=${TMPDIR:-unset} RUNNER_TEMP=$RUNNER_TEMP"
+          findmnt -o TARGET,SOURCE,FSTYPE,OPTIONS /tmp || echo "/tmp not a mount"
+          df -h /tmp "$GITHUB_WORKSPACE" "$RUNNER_TEMP"; df -i /tmp
+          findmnt -t tmpfs -o TARGET,SIZE,OPTIONS
+          sudo quota -u "$(id -un)" 2>&1 || true
+          id
+
       - name: Unit test with coverage gate
+        id: unit
         working-directory: app
         run: bun run test:unit:coverage
+
+      - name: DIAG-2190 temp after
+        if: ${{ always() }}
+        run: |
+          df -h /tmp; df -i /tmp
+          sudo du -xsh /tmp/* 2>/dev/null | sort -h | tail -15
+          sudo dmesg 2>/dev/null | tail -20 || true
 
       - name: E2e test
         working-directory: app
@@ -628,7 +646,7 @@ jobs:
   # Runs in parallel with `app`, off the critical path -- it doesn't gate
   # or slow down the e2e run, which no longer touches this image at all.
   api-image:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -732,7 +750,7 @@ jobs:
   migrate:
     needs: [api, app]
     if: ${{ !cancelled() && github.ref == 'refs/heads/trunk' && github.event_name == 'push' && needs.api.result == 'success' && needs.app.result == 'success' }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     # Own concurrency group -- the actual protection from a second quick
     # trunk push cancelling a migration mid-run is the workflow-level
@@ -818,7 +836,7 @@ jobs:
   deploy-api:
     needs: [api, app, migrate, api-image]
     if: ${{ !cancelled() && github.ref == 'refs/heads/trunk' && github.event_name == 'push' && needs.api.result == 'success' && needs.app.result == 'success' && needs.migrate.result == 'success' && needs.api-image.result == 'success' }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     # Own concurrency group -- serializes deploy-api runs against each
     # other; the actual protection from cancellation mid-deploy is the
@@ -948,7 +966,7 @@ jobs:
   deploy-app:
     needs: [api, app, migrate]
     if: ${{ !cancelled() && github.ref == 'refs/heads/trunk' && github.event_name == 'push' && needs.api.result == 'success' && needs.app.result == 'success' && needs.migrate.result == 'success' }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     # Own concurrency group -- serializes deploy-app runs against each
     # other; the actual protection from cancellation mid-deploy is the
