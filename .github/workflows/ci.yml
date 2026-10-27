@@ -608,8 +608,13 @@ jobs:
           findmnt -o TARGET,SOURCE,FSTYPE,OPTIONS /tmp || echo "/tmp not a mount"
           df -h /tmp "$GITHUB_WORKSPACE" "$RUNNER_TEMP"; df -i /tmp
           findmnt -t tmpfs -o TARGET,SIZE,OPTIONS
-          sudo quota -u "$(id -un)" 2>&1 || true
-          id
+          id; systemctl --version | head -1
+          sudo apt-get install -y -qq quota >/dev/null 2>&1 || echo "quota install failed"
+          sudo quota -v -u runner 2>&1 || true
+          sudo repquota -u /tmp /dev/shm 2>&1 || true
+          userdbctl user runner 2>&1 | grep -iE "limit|tmp|shm" || true
+          grep -rhiE "tmp|shm|quota" /etc/systemd/logind.conf /etc/systemd/logind.conf.d /usr/lib/systemd/logind.conf.d 2>/dev/null | grep -v '^#' || true
+          nohup setsid bash -c 'while true; do echo "$(date +%T) shm=$(df --output=used /dev/shm | tail -1) tmp=$(df --output=used /tmp | tail -1)"; sleep 1; done' > "$RUNNER_TEMP/tmpfs-usage.log" 2>&1 &
 
       - name: Unit test with coverage gate
         id: unit
@@ -619,8 +624,9 @@ jobs:
       - name: DIAG-2190 temp after
         if: ${{ always() }}
         run: |
-          df -h /tmp; df -i /tmp
-          sudo du -xsh /tmp/* 2>/dev/null | sort -h | tail -15
+          echo "peak shm KiB: $(grep -o 'shm=[0-9]*' "$RUNNER_TEMP/tmpfs-usage.log" | cut -d= -f2 | sort -n | tail -1)"
+          echo "peak tmp KiB: $(grep -o 'tmp=[0-9]*' "$RUNNER_TEMP/tmpfs-usage.log" | cut -d= -f2 | sort -n | tail -1)"
+          sudo quota -v -u runner 2>&1 || true
           sudo dmesg 2>/dev/null | tail -20 || true
 
       - name: E2e test
