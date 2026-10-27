@@ -44,6 +44,24 @@
 		</cluster-l>
 	</section>
 
+	<!-- The floor check measures `#width` against a reading measure (#2145),
+	     the column width at which a button stops filling it. The long label
+	     is the app's longest action name. -->
+	<section id="width">
+		<h2>Width</h2>
+		<stack-l>
+			<p>
+				In a narrow column a button fills it, and a primary and a secondary in one group stack, primary first. In a
+				wide column each keeps its own width. A small button is a row's action and stays as wide as its words.
+			</p>
+			<cluster-l space="var(--space-4)">
+				<Button label="Save these details" onClick={noop} />
+				<Button label="Cancel" variant="secondary" onClick={noop} />
+			</cluster-l>
+			<Button label="Record a time a doula cannot be reached" variant="secondary" onClick={noop} />
+		</stack-l>
+	</section>
+
 	<section>
 		<h2>Icon composition</h2>
 		<cluster-l space="var(--space-4)" align="center">

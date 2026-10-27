@@ -205,6 +205,35 @@ const CRITERIA: Readonly<Record<string, Criterion>> = {
 			'tree, and no intrinsic mechanism swaps markup. The 60px bar holds one line (#1945), so the ' +
 			'wide tree waits until the Practice name fits on one line beside the nav.'
 	},
+	/*
+	 * A width swap, not a DOM-tree swap (#2145): one button, full width in
+	 * a narrow column and its own width in a wide one. The floor is where
+	 * the column holds a reading measure: below it, prose runs the
+	 * column's full width and the action under it does too.
+	 */
+	'atoms/Button.svelte#1': {
+		kind: 'measure',
+		target: '#width',
+		cap: 'measure',
+		justification:
+			"A choice between two widths for one button: the column's (GOV.UK's narrow Button) and its own. " +
+			'No intrinsic mechanism makes it: Switcher arithmetic on min-inline-size leaves an explicit ' +
+			"minimum on the button in a wide column, which replaces a flex item's own (its longest word, " +
+			"#1851), and calc-size(), which could say 'own width', is Chromium's alone. So the button keeps " +
+			'its own width once its column holds a reading measure, and fills a narrower one, as the prose ' +
+			'above it does.'
+	},
+	// The start button is drawn as the primary Button, so its width swap
+	// is Button's, judged the same way on its own demo's section.
+	'atoms/Link.svelte#1': {
+		kind: 'measure',
+		target: '#start',
+		cap: 'measure',
+		justification:
+			"The start button's own width or its column's, for the reason Button's entry gives: no " +
+			'intrinsic mechanism picks between them without an explicit minimum (#1851). It keeps its own ' +
+			'width once its column holds a reading measure, as the primary Button it is drawn as does.'
+	},
 	'templates/RecordDetail.svelte#1': {
 		kind: 'measure',
 		target: '.record-grid > .sections',

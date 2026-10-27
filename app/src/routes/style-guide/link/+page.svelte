@@ -13,7 +13,8 @@
 		</cluster-l>
 	</section>
 
-	<section>
+	<!-- The floor check measures `#start` against a reading measure (#2145). -->
+	<section id="start">
 		<h2>Start button</h2>
 		<p>The one navigation that starts a screen's task, drawn as the primary button. Once on a screen at most.</p>
 		<stack-l space="var(--space-4)">

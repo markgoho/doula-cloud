@@ -329,8 +329,12 @@
 		{#if requestError}
 			<p role="alert">{requestError}</p>
 		{/if}
-		<Button label="Send request" onClick={handleRequestVoid} loading={isRequestingVoid} />
-		<Button label="Cancel" variant="secondary" onClick={cancelRequestForm} />
+		<!-- One button group (#2145): side by side in a wide column, stacked
+		     full width in a narrow one, Send request first. -->
+		<cluster-l>
+			<Button label="Send request" onClick={handleRequestVoid} loading={isRequestingVoid} />
+			<Button label="Cancel" variant="secondary" onClick={cancelRequestForm} />
+		</cluster-l>
 	{:else}
 		<Button
 			label="Request void"
