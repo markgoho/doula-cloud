@@ -108,14 +108,31 @@
 		}
 	});
 
-	// #2143: the same line intake's "Is this the same person?" and Find a
-	// Client print for a record -- when it was added and when the Client
-	// was last cared for -- so one question reads the same on both paths.
+	/*
+	 * #2143: the same line intake's "Is this the same person?" and Find a
+	 * Client print for a record -- when it was added and when the Client
+	 * was last cared for -- so one question reads the same on both paths.
+	 *
+	 * #2154: then which of the two records choosing it keeps, from the
+	 * BFF's own `wouldSurvive` (the direction `MergeHandler` will take),
+	 * so the reader is not left to work out which record has more
+	 * history. Said by position, "this record" and "the record you are
+	 * changing", never by name: the two usually share the full name, and
+	 * that is why the question is asked. The words match the review
+	 * step's hint ("is kept", "closed as a duplicate").
+	 */
+	function keptLine(match: CollisionMatch): string {
+		if (match.wouldSurvive) {
+			return 'Keeps this record. The record you are changing is closed as a duplicate.';
+		}
+		return 'Keeps the record you are changing. This record is closed as a duplicate.';
+	}
+
 	const options = $derived([
 		...editMergeDraft.matches.map((match) => ({
 			value: match.id,
 			label: fullName(match),
-			description: matchHistory(match)
+			description: [matchHistory(match), keptLine(match)]
 		})),
 		{
 			value: DIFFERENT_PERSON,
@@ -240,7 +257,7 @@
 					<Text
 						step="body-sm"
 						tone="muted"
-						text="Choosing an existing Client combines the two records into one. Engagements, requests and portal access move to the record that is kept, and the record that is absorbed stops appearing anywhere. The one kept is whichever has more history behind it. Check which record that is before you choose."
+						text="Choosing an existing Client combines the two records into one. Engagements, requests and portal access move to the record that is kept, and the other record stops appearing anywhere."
 					/>
 					<Notice
 						variant="info"
