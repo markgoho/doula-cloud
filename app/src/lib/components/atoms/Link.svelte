@@ -417,6 +417,22 @@
 			background-color: var(--color-primary-hover);
 		}
 
+		/* The start button fills a narrow container and keeps its own width
+		   in a wide one, at the same 37rem floor (the column holds a reading
+		   measure) and for the reason `Button.svelte` records beside its own
+		   rule (#2145): it is drawn as the primary button, so it answers the
+		   space the way that button does. The floor check measures it on
+		   `/style-guide/link`'s start-button section. */
+		a.start {
+			inline-size: 100%;
+		}
+
+		@container (min-width: 37rem) {
+			a.start {
+				inline-size: auto;
+			}
+		}
+
 		/* A destination in the shell's own nav bar, at either width. It fills
 		   the bar's height so the 2px accent rule that marks the current
 		   section sits on the bar's own edge rather than floating under the

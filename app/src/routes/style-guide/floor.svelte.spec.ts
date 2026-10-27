@@ -62,6 +62,15 @@
  * below it. It is judged by the same criteria as a tree swap (`measure`,
  * here) and carries its own justification like every other entry.
  *
+ * A third kind is admitted (#2145): a query that picks WHICH WIDTH one
+ * element takes, its column's or its own -- `Button` and `Link`'s start
+ * button, full width in a narrow column (GOV.UK's narrow Button). Nothing
+ * intrinsic picks between the two: Switcher arithmetic on
+ * `min-inline-size` leaves an explicit minimum in the wide case, which
+ * replaces a flex item's own (#1851), and `calc-size()` is Chromium's
+ * alone. Both members are judged by `measure`, at the same reading
+ * measure as `OverviewHub`'s title.
+ *
  * `StepRail` was the exception that proved the rule, in `UNDERIVABLE`
  * below rather than here. It is not any more: #585 replaced its query
  * with a `<details>` the reader opens, so it authors no condition at all
@@ -204,6 +213,35 @@ const CRITERIA: Readonly<Record<string, Criterion>> = {
 			'The same shape as StaffTopBar: a wide nav row versus a narrow stacked row is a different DOM ' +
 			'tree, and no intrinsic mechanism swaps markup. The 60px bar holds one line (#1945), so the ' +
 			'wide tree waits until the Practice name fits on one line beside the nav.'
+	},
+	/*
+	 * A width swap, not a DOM-tree swap (#2145): one button, full width in
+	 * a narrow column and its own width in a wide one. The floor is where
+	 * the column holds a reading measure: below it, prose runs the
+	 * column's full width and the action under it does too.
+	 */
+	'atoms/Button.svelte#1': {
+		kind: 'measure',
+		target: '#width',
+		cap: 'measure',
+		justification:
+			"A choice between two widths for one button: the column's (GOV.UK's narrow Button) and its own. " +
+			'No intrinsic mechanism makes it: Switcher arithmetic on min-inline-size leaves an explicit ' +
+			"minimum on the button in a wide column, which replaces a flex item's own (its longest word, " +
+			"#1851), and calc-size(), which could say 'own width', is Chromium's alone. So the button keeps " +
+			'its own width once its column holds a reading measure, and fills a narrower one, as the prose ' +
+			'above it does.'
+	},
+	// The start button is drawn as the primary Button, so its width swap
+	// is Button's, judged the same way on its own demo's section.
+	'atoms/Link.svelte#1': {
+		kind: 'measure',
+		target: '#start',
+		cap: 'measure',
+		justification:
+			"The start button's own width or its column's, for the reason Button's entry gives: no " +
+			'intrinsic mechanism picks between them without an explicit minimum (#1851). It keeps its own ' +
+			'width once its column holds a reading measure, as the primary Button it is drawn as does.'
 	},
 	'templates/RecordDetail.svelte#1': {
 		kind: 'measure',

@@ -329,8 +329,12 @@
 		{#if requestError}
 			<p role="alert">{requestError}</p>
 		{/if}
-		<Button label="Send request" onClick={handleRequestVoid} loading={isRequestingVoid} />
-		<Button label="Cancel" variant="secondary" onClick={cancelRequestForm} />
+		<!-- One button group (#2145): side by side in a wide column, stacked
+		     full width in a narrow one, Send request first. -->
+		<cluster-l>
+			<Button label="Send request" onClick={handleRequestVoid} loading={isRequestingVoid} />
+			<Button label="Cancel" variant="secondary" onClick={cancelRequestForm} />
+		</cluster-l>
 	{:else}
 		<Button
 			label="Request void"
@@ -393,13 +397,16 @@
 				{#if declineError}
 					<p role="alert">{declineError}</p>
 				{/if}
-				<Button
-					label="Decline"
-					describedBy="void-request-{request.id}-name"
-					onClick={() => handleDeclineVoidRequest(request.id)}
-					loading={decliningRequestId === request.id}
-				/>
-				<Button label="Cancel" variant="secondary" onClick={cancelDeclineForm} />
+				<!-- One button group, Decline first (#2145), as Send request above. -->
+				<cluster-l>
+					<Button
+						label="Decline"
+						describedBy="void-request-{request.id}-name"
+						onClick={() => handleDeclineVoidRequest(request.id)}
+						loading={decliningRequestId === request.id}
+					/>
+					<Button label="Cancel" variant="secondary" onClick={cancelDeclineForm} />
+				</cluster-l>
 			{:else}
 				<Button
 					label="Decline"

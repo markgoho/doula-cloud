@@ -145,12 +145,24 @@
 	// it sets -- is left off rather than fought with a second,
 	// higher-specificity rule.
 	const buttonClass = $derived(variant === 'link' || variant === 'menu' ? variant : `${variant} size-${size}`);
+	/*
+	 * Which buttons fill a narrow container (#2145): a screen's or a
+	 * section's own action, a box with words in it. `sm` is the in-row
+	 * size (an Invoice's Void, a field's Move up, an Offer's Withdraw), and
+	 * a row's actions stay as wide as their words beside the row they act
+	 * on. `bare`, `link` and `menu` have no box of their own to fill with,
+	 * and a glyph-only button has no words to center in one.
+	 */
+	const canFillNarrow = $derived(
+		['primary', 'secondary', 'destructive'].includes(variant) && size !== 'sm' && !iconOnly
+	);
 </script>
 
 <button
 	{type}
 	class={buttonClass}
 	class:icon-only={iconOnly}
+	class:fills-narrow={canFillNarrow}
 	{disabled}
 	aria-disabled={isUnavailable || undefined}
 	aria-busy={loading}
@@ -414,6 +426,64 @@
 
 		:global(td) .label {
 			min-inline-size: calc(var(--row-target-min) - 2 * var(--button-inset, 0rem));
+		}
+
+		/*
+		 * A screen's or a section's own action fills a narrow container
+		 * and keeps its own width in a wide one (#2145), GOV.UK's Button
+		 * behavior read as the space the button is given rather than the
+		 * window (ADR-0024 rule 2). In a narrow column a button as wide as
+		 * its words is a short target at one edge with an empty run beside
+		 * it; full width it is the whole column's width to press, and a
+		 * primary and a secondary in one `cluster-l` stack, each the
+		 * column's width, in their source order -- primary first. In a
+		 * wide column a full-width button is a bar that reads as a banner,
+		 * not a control, so it keeps its own width there.
+		 *
+		 * The query reads the nearest containment context: a Template's
+		 * `container-l` (the page's own frame), `RecordDetail`'s record, a
+		 * `DataTable`'s own box, `Drawer`'s scope, the drag surface's
+		 * frame, or `body` where none holds the button. None of those is a
+		 * dialog panel or a rail card, so a dialog or a card on a wide
+		 * screen is answered by the page it sits on (seen 2026-10-27: the
+		 * confirm dialog's two buttons keep their own width at 1440).
+		 *
+		 * 37rem is a content floor, not a device: the width at which the
+		 * column holds a reading measure (`--measure`, 65ch, 585px at the
+		 * type the column is set in there). Prose is capped at a measure,
+		 * so in a narrower column every paragraph runs the column's full
+		 * width, and the action under it fills the same edge to edge; once
+		 * the column is wider than a measure, prose stops short of its
+		 * edge and a full-width button would run past the text it acts on.
+		 * The floor check measures it (`floor.svelte.spec.ts`, the measure
+		 * criterion on the Width demo of `/style-guide/button`): measured on
+		 * Linux, as CI is, where the fixed point is 585px (36.6rem)
+		 * and 37rem is the next whole rem, not a figure chosen first. GOV.UK's
+		 * own breakpoint (40.0625em of window) is a device number and is
+		 * not used. `Link.svelte`'s start button holds the same floor.
+		 *
+		 * No intrinsic mechanism picks between the two widths: the
+		 * query-free form (Every Layout's Switcher arithmetic on
+		 * `min-inline-size`) leaves an explicit minimum on the button in
+		 * a wide column, which replaces a flex item's own (its longest
+		 * word) -- the #1851 defect the `.label` floor exists to avoid --
+		 * and `calc-size()`, which could say "own width", is Chromium's
+		 * alone. So `inline-size`, set wide by the query below. A table
+		 * cell keeps its buttons at their own width at every width -- a
+		 * row's action is beside the row.
+		 */
+		button.fills-narrow {
+			inline-size: 100%;
+		}
+
+		@container (min-width: 37rem) {
+			button.fills-narrow {
+				inline-size: auto;
+			}
+		}
+
+		:global(td) button.fills-narrow {
+			inline-size: auto;
 		}
 
 		/* Chrome controls: the shell's hamburger, avatar and Practice
