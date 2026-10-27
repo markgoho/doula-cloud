@@ -127,7 +127,7 @@
 		.panel {
 			inline-size: max-content;
 			min-inline-size: var(--menu-panel-min);
-			max-inline-size: min(var(--menu-panel-max), calc(100dvw - var(--space-4) * 2));
+			max-inline-size: min(var(--menu-panel-max), calc(100dvw - var(--page-gutter) * 2));
 			margin: 0;
 			padding: var(--space-2) 0;
 			overflow: hidden;
@@ -158,17 +158,40 @@
 				inset: auto;
 				margin-block-start: var(--space-1);
 				/* Flip toward the viewport rather than off it -- a switcher
-				   near the inline end has no room to span inline-end. */
-				position-try-fallbacks: flip-inline;
+				   near the inline end has no room to span inline-end. When
+				   neither side has room, as for the narrow bar's switcher at
+				   320px, where it sits near the inline start (#2151), center
+				   it under the trigger inside the gutters, rather than let
+				   the browser shove it against the window's edge. */
+				position-try-fallbacks: flip-inline, --menu-panel-within-gutters;
 			}
 
+			/* Each side spans from the trigger's edge to the page gutter, not
+			   to the window's edge, so a side "has room" only if the panel
+			   keeps the gutter the rest of the page keeps (#2151). The panel
+			   is held against the trigger's edge explicitly: with one inset
+			   set, the default alignment would push it to the gutter instead.
+			   flip-inline swaps the insets and the alignment along with the
+			   area. */
 			.align-start {
 				position-area: block-end span-inline-end;
+				inset-inline-end: var(--page-gutter);
+				justify-self: start;
 			}
 
 			.align-end {
 				position-area: block-end span-inline-start;
+				inset-inline-start: var(--page-gutter);
+				justify-self: end;
 			}
+		}
+
+		/* Below the trigger, across the whole width between the two
+		   gutters. */
+		@position-try --menu-panel-within-gutters {
+			position-area: block-end span-all;
+			inset-inline: var(--page-gutter);
+			justify-self: anchor-center;
 		}
 	}
 </style>

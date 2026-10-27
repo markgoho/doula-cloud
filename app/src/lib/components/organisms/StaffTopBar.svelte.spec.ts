@@ -10,7 +10,9 @@ import {
 } from '#lib/components/molecules/MenuButton.testing.js';
 import { CONFORMANCE_COMMITMENT, findBlockSpill } from '../../../routes/style-guide/continuum.js';
 import StaffTopBar from './StaffTopBar.svelte';
-import '#lib/styles/tokens.css';
+// The app's whole cascade, not the tokens alone: where a panel lands
+// turns on its border-box width, and `border-box` is reset.css's (#2151).
+import '#lib/styles/app.css';
 
 const NAV_ITEMS = [
 	{ label: 'Overview', href: '/overview', current: true },
@@ -365,6 +367,58 @@ describe('StaffTopBar, with a Practice name long enough to wrap (#1573)', () => 
 			} finally {
 				withoutAnchors.remove();
 			}
+		}
+	);
+});
+
+/*
+ * #2151: #2141 put the Practice's name beside the Menu button, near the
+ * narrow bar's inline start. Its panel is wider than the room on either
+ * side of it at 320px, and the browser shoved it against the window's
+ * edge. The gutter is read off the bar as drawn -- how far in from the
+ * banner's own edge the Menu button sits -- and the panel has to keep it
+ * from both edges of the window.
+ */
+async function setupGutter(width: number) {
+	await setupNarrow();
+	await page.viewport(width, 844);
+	const header = page.getByRole('banner').element().getBoundingClientRect();
+	const menu = page.getByRole('button', { name: 'Menu' }).element().getBoundingClientRect();
+	return { gutter: menu.left - header.left };
+}
+
+describe('StaffTopBar, the narrow bar’s panels and the page gutter (#2151)', () => {
+	it.each([CONFORMANCE_COMMITMENT, NARROW[0]])(
+		'keeps the gutter on both sides of the switcher’s panel at %ipx',
+		async (width) => {
+			const { gutter } = await setupGutter(width);
+
+			await page.getByRole('button', { name: 'Riverside Doula Collective' }).click();
+
+			const other = page.getByRole('link', { name: 'Finger Lakes Birth Support' });
+			await expect.element(other).toBeVisible();
+			const panel = panelHolding(other).getBoundingClientRect();
+			expect(panel.left).toBeGreaterThanOrEqual(gutter);
+			expect(window.innerWidth - panel.right).toBeGreaterThanOrEqual(gutter);
+		}
+	);
+
+	// The avatar has room to open toward the inline start, so it still
+	// lines up with its own button's end edge, as it did before.
+	it.each([CONFORMANCE_COMMITMENT, NARROW[0]])(
+		'still ends the avatar’s panel at its button at %ipx',
+		async (width) => {
+			await setupGutter(width);
+			const avatar = page.getByRole('button', { name: 'Your account, Mark Goho' });
+
+			await avatar.click();
+
+			const signOut = page.getByRole('button', { name: 'Sign out' });
+			await expect.element(signOut).toBeVisible();
+			expect(panelHolding(signOut).getBoundingClientRect().right).toBeCloseTo(
+				avatar.element().getBoundingClientRect().right,
+				0
+			);
 		}
 	);
 });
