@@ -61,18 +61,11 @@ const sessionStub = {
 // What the section of the Practice's own questions says while it holds
 // none (#2142).
 const emptyQuestionsText = `${sessionStub.practiceName} has not added any questions of its own yet.`;
-// The Address SummaryList row joins the same fields the same way the
-// route does -- an empty addressLine2 is filtered out rather than shown
-// as a bare comma.
-const address = [
-	baseDetail.addressLine1,
-	baseDetail.addressLine2,
-	baseDetail.addressLocality,
-	baseDetail.addressRegion,
-	baseDetail.addressPostalCode
-]
-	.filter(Boolean)
-	.join(', ');
+// The fixture's address and phone number as the record reads them
+// (#2147): an empty addressLine2 leaves no bare comma, no comma comes
+// before the ZIP code, and "585-555-0101" reads in the one US form.
+const address = '100 Highland Ave, Rochester, NY 14620';
+const phone = '(585) 555-0101';
 
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
@@ -203,7 +196,7 @@ describe('client detail hub', () => {
 		expect(apiFetchWithSession).toHaveBeenCalledWith(`/api/practices/${practiceId}/clients/${clientId}`);
 		await expect.element(testPage.getByRole('heading', { level: 1, name: fixture.readyText })).toBeVisible();
 		await expect.element(testPage.getByText(baseDetail.email)).toBeVisible();
-		await expect.element(testPage.getByText(baseDetail.phone)).toBeVisible();
+		await expect.element(testPage.getByText(phone)).toBeVisible();
 		await expect.element(testPage.getByText(address)).toBeVisible();
 		// #2008: month-day, as intake and every other screen print a day.
 		await expect.element(testPage.getByText(formatCalendarDay(baseDetail.dateOfBirth))).toBeVisible();

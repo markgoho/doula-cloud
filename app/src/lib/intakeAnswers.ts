@@ -24,6 +24,7 @@
 
 import type { Answer, AnswerSection } from './components/templates/CheckAnswers.svelte';
 import type { Field } from './clientFieldTemplate.js';
+import { formatAddress, formatPhoneNumber } from './contactDetails.js';
 import { formatCalendarDay } from './dates.js';
 import {
 	CHANGE_QUERY,
@@ -60,8 +61,11 @@ export function fieldValueText(field: Field, value: FieldValue | undefined): str
  * than an answer.
  */
 function answerText(key: string, value: string): string {
-	if (key !== 'dateOfBirth' || value.trim() === '') return shown(value);
-	return formatCalendarDay(value);
+	if (value.trim() === '') return NOT_ANSWERED;
+	if (key === 'dateOfBirth') return formatCalendarDay(value);
+	// A US number in one form, any other as typed: `contactDetails.ts` (#2147).
+	if (key === 'phone') return formatPhoneNumber(value);
+	return shown(value);
 }
 
 function changeHref(basePath: string, slug: string): string {
@@ -72,19 +76,20 @@ function changeHref(basePath: string, slug: string): string {
  * The address is one answer to a person, asked as five boxes: GOV.UK's
  * Check answers shows it as one row with its lines joined, and one
  * Change, rather than five rows that each say "Address line 2: Not
- * answered" (#2033). Joined with a comma, the way the Client hub's own
- * Address row already reads it.
+ * answered" (#2033). Written on one line by `contactDetails.ts`, the way
+ * the Client record's own Address row reads it: no comma before the ZIP
+ * code (#2147).
  */
 const ADDRESS_SLUG = 'address';
 
 function stepAnswers(answers: IntakeAnswers, step: StructuralStep, basePath: string): Answer[] {
 	const href = changeHref(basePath, step.slug);
 	if (step.slug === ADDRESS_SLUG) {
-		const lines = step.questions.map((question) => answers[question.key].trim()).filter(Boolean);
+		const address = formatAddress(answers);
 		return [
 			{
 				label: step.label,
-				value: lines.length > 0 ? lines.join(', ') : NOT_ANSWERED,
+				value: address || NOT_ANSWERED,
 				changes: step.label.toLowerCase(),
 				changeHref: href
 			}

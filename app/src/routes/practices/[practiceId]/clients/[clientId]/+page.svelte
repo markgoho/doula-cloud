@@ -25,6 +25,7 @@
 	import { formatAmount } from '#lib/invoice.js';
 	import { isBlockedInvite, portalInviteStatusText } from '#lib/portalInvite.js';
 	import { formatActivityTimestamp, formatCalendarDay, formatInstant } from '#lib/dates.js';
+	import { formatAddress, formatPhoneNumber } from '#lib/contactDetails.js';
 	import { takeOutcome } from '#lib/outcome.js';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 	import EmptyState from '#lib/components/molecules/EmptyState.svelte';
@@ -511,7 +512,7 @@
 	<SummaryList
 		rows={[
 			changeable('Email address', detail!.email || '—', 'email', 'email address'),
-			changeable('Phone', detail!.phone || '—', 'phone', 'phone number'),
+			changeable('Phone', formatPhoneNumber(detail!.phone) || '—', 'phone', 'phone number'),
 			{ label: 'Portal invite', value: portalInviteStatusText(detail!) }
 		] as ChangeRow[]}
 		action={changeAction}
@@ -540,20 +541,7 @@
 {#snippet addressSection()}
 	<SummaryList
 		rows={[
-			changeable(
-				'Address',
-				[
-					detail!.addressLine1,
-					detail!.addressLine2,
-					detail!.addressLocality,
-					detail!.addressRegion,
-					detail!.addressPostalCode
-				]
-					.filter(Boolean)
-					.join(', ') || '—',
-				'address',
-				'address'
-			)
+			changeable('Address', formatAddress(detail!) || '—', 'address', 'address')
 		]}
 		action={changeAction}
 	/>

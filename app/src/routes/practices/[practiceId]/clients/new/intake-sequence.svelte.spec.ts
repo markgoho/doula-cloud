@@ -132,7 +132,7 @@ describe('the name question', () => {
 		await expect
 			.element(testPage.getByText('anne-marie.ochieng-whitfield@finger-lakes-midwifery.example.com'))
 			.toBeVisible();
-		await expect.element(testPage.getByText('+1 (585) 555-0142')).toBeVisible();
+		await expect.element(testPage.getByText('(585) 555-0142')).toBeVisible();
 	});
 
 	it('lists only what the search carried', async () => {

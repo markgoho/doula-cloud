@@ -92,10 +92,10 @@
 					changeHref: here,
 					changes: 'email address'
 				},
-				{ label: 'Phone number', value: '(585) 555 0142', changeHref: here, changes: 'phone number' },
+				{ label: 'Phone number', value: '(585) 555-0142', changeHref: here, changes: 'phone number' },
 				{
 					label: 'Address',
-					value: '1180 East Henrietta Road, Apartment 4B, Rochester, NY, 14623',
+					value: '1180 East Henrietta Road, Apartment 4B, Rochester, NY 14623',
 					changeHref: here,
 					changes: 'address'
 				}
