@@ -7,7 +7,7 @@ import WaitlistCard from './WaitlistCard.svelte';
 const action = 'https://buttondown.example/api/emails/embed-subscribe/doulacloud';
 
 describe('WaitlistCard, with Buttondown’s address (#358)', () => {
-	it('posts to it, with Buttondown’s six field names exactly', async () => {
+	it('posts to it, with Buttondown’s seven field names exactly', async () => {
 		const { container } = await render(WaitlistCard, { action });
 		const form = container.querySelector('form');
 		expect(form?.getAttribute('method')).toBe('post');
@@ -15,6 +15,7 @@ describe('WaitlistCard, with Buttondown’s address (#358)', () => {
 		expect([...(form?.elements ?? [])].map((element) => (element as HTMLInputElement).name).filter(Boolean)).toEqual([
 			'metadata__first_name',
 			'email',
+			'metadata__pilot_interest',
 			'metadata__utm_source',
 			'metadata__utm_medium',
 			'metadata__utm_campaign',
@@ -30,7 +31,7 @@ describe('WaitlistCard, with Buttondown’s address (#358)', () => {
 		await expect.element(testPage.getByLabelText('First name')).not.toBeRequired();
 	});
 
-	it('goes First name, Email address, then the button, by keyboard', async () => {
+	it('goes First name, Email address, the pilot box, its terms, then the button, by keyboard', async () => {
 		await render(WaitlistCard, { action });
 		// The first field takes focus by hand, since where the test
 		// runner's own page leaves focus is not the card's to decide.
@@ -38,6 +39,10 @@ describe('WaitlistCard, with Buttondown’s address (#358)', () => {
 		await expect.element(testPage.getByLabelText('First name')).toHaveFocus();
 		await userEvent.tab();
 		await expect.element(testPage.getByLabelText('Email address')).toHaveFocus();
+		await userEvent.tab();
+		await expect.element(testPage.getByLabelText("I'd like to be in the pilot group")).toHaveFocus();
+		await userEvent.tab();
+		await expect.element(testPage.getByRole('link', { name: 'pilot terms' })).toHaveFocus();
 		await userEvent.tab();
 		await expect.element(testPage.getByRole('button', { name: 'Add me to the list' })).toHaveFocus();
 	});
@@ -90,6 +95,35 @@ describe('WaitlistCard, with Buttondown’s address (#358)', () => {
 		]);
 		fillUtmFields('');
 		expect([...new FormData(form)]).toEqual([['email', 'ada@example.com']]);
+	});
+
+	// The pilot box (#2179): optional, its hint read with it, and the pilot
+	// terms beside it, where a person asks to take part (#444).
+	it('offers the pilot as an optional box, with the pilot terms in its hint', async () => {
+		await render(WaitlistCard, { action });
+		const box = testPage.getByRole('checkbox', { name: "I'd like to be in the pilot group" });
+		await expect.element(box).not.toBeChecked();
+		await expect.element(box).not.toBeRequired();
+		await expect
+			.element(box)
+			.toHaveAccessibleDescription(
+				"A small private pilot runs from now until January, and I'll write to you myself about it. What it gives and what it costs are in the pilot terms."
+			);
+		await expect.element(testPage.getByRole('link', { name: 'pilot terms' })).toHaveAttribute('href', '/pilot-terms');
+	});
+
+	// An unticked checkbox is never submitted, so it cannot clear a value
+	// Buttondown holds (#1771); the tests above submit the form unticked.
+	it('submits the pilot answer only when the box is ticked (#2179)', async () => {
+		const { container } = await render(WaitlistCard, { action });
+		await testPage.getByLabelText('Email address').fill('ada@example.com');
+		await testPage.getByRole('checkbox', { name: "I'd like to be in the pilot group" }).click();
+		await expect.element(testPage.getByRole('checkbox', { name: "I'd like to be in the pilot group" })).toBeChecked();
+		fillUtmFields('');
+		expect([...new FormData(container.querySelector('form')!)]).toEqual([
+			['email', 'ada@example.com'],
+			['metadata__pilot_interest', 'yes']
+		]);
 	});
 
 	it('carries the script that fills the hidden inputs, after them', async () => {

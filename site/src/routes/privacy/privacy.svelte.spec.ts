@@ -23,7 +23,7 @@ describe('the Privacy Policy at /privacy (#1556)', () => {
 
 	it('says when this version takes effect, and shows the version history', async () => {
 		await render(Page);
-		await expect.element(testPage.getByText('Last updated October 22, 2026.')).toBeVisible();
+		await expect.element(testPage.getByText('Last updated October 27, 2026.')).toBeVisible();
 		await expect.element(testPage.getByRole('heading', { level: 2, name: 'Version history' })).toBeVisible();
 		await expect
 			.element(testPage.getByRole('listitem').filter({ hasText: 'Not a material change. First version.' }))
@@ -97,6 +97,16 @@ describe('the Privacy Policy at /privacy (#1556)', () => {
 			.toBeVisible();
 		await expect.element(testPage.getByText('holds its counts in Germany. It works out', { exact: false })).toBeVisible();
 		await expect.element(testPage.getByText('Buttondown', { exact: true })).toBeVisible();
+	});
+
+	it('says the waitlist keeps whether a person asked to be in the pilot (#2179)', async () => {
+		await render(Page);
+		await expect
+			.element(testPage.getByText('together with whether you ticked the box to be in the pilot', { exact: false }))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByText('whether they asked to be in the pilot', { exact: false }))
+			.toBeVisible();
 	});
 
 	it("links Stripe's Privacy Policy", async () => {

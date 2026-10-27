@@ -4,8 +4,9 @@ docs/copy/pilot-terms-page.md.
 
 Unlisted, not secret. Stripe's rule for a promotion is placement -- the
 terms are visible where a practice agrees to take part -- not publicity,
-and the pilot is private. So: noindex here, no link from anywhere on the
-site, and left out of sitemap.xml as well. A noindexed page listed in the
+and the pilot is private. So: noindex here, linked only from the
+waitlist form's pilot box, where a person asks to take part (#2179), and
+left out of sitemap.xml as well. A noindexed page listed in the
 sitemap is a mixed signal that publishes the URL anyway, which is the one
 thing being avoided.
 -->

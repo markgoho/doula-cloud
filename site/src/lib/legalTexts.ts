@@ -1,6 +1,7 @@
 import type { Component } from 'svelte';
 import { PRIVACY, TERMS, type LegalDocument, type LegalVersion } from './legal.js';
 import PrivacyPolicy20261022 from './legalTexts/PrivacyPolicy20261022.svelte';
+import PrivacyPolicy20261027 from './legalTexts/PrivacyPolicy20261027.svelte';
 import TermsOfService20261003 from './legalTexts/TermsOfService20261003.svelte';
 
 /**
@@ -21,7 +22,7 @@ export type LegalText = Component<{ effective: string }>;
 // By each document's address, so a copy of a document finds its texts.
 const TEXTS = new Map<string, Record<string, LegalText>>([
 	[TERMS.path, { '2026-10-03': TermsOfService20261003 }],
-	[PRIVACY.path, { '2026-10-22': PrivacyPolicy20261022 }]
+	[PRIVACY.path, { '2026-10-22': PrivacyPolicy20261022, '2026-10-27': PrivacyPolicy20261027 }]
 ]);
 
 // The dates in `legalDocument`'s history that have a text, oldest first.
