@@ -22,7 +22,8 @@ export function panelHolding(inside: Locator): HTMLElement {
 Makes the panel take `MenuButton`'s fallback path in an engine that has
 anchor positioning, so the path an engine without it takes can be measured
 here at all. `@supports` cannot be switched off, so this undoes what that
-block sets -- the anchored position and the margin -- and restores the
+block sets -- the anchored position, the margin, the gutter inset at the
+far edge and the alignment against the trigger (#2151) -- and restores the
 fallback's own pin, which that block's `inset: auto` overrode. It restates
 that pin, so a change to the fallback rule in `MenuButton.svelte` has to be
 made here too. Remove it when done.
@@ -32,7 +33,10 @@ export function withoutAnchorPositioning(): HTMLStyleElement {
 	style.textContent = `[popover] {
 		position: fixed !important;
 		position-area: none !important;
+		position-try-fallbacks: none !important;
+		justify-self: auto !important;
 		margin: 0 !important;
+		inset-inline-start: auto !important;
 		inset-block-start: var(--menu-fallback-top, var(--top-bar-height)) !important;
 		inset-inline-end: var(--page-gutter) !important;
 	}`;
