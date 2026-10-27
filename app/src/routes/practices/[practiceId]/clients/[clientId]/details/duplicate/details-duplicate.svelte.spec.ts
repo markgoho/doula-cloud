@@ -93,8 +93,26 @@ describe('when gate two names a possible duplicate', () => {
 		const [busiest, empty] = testPage.getByLabelText(fullName(matches[0])).all();
 		await expect
 			.element(busiest!)
-			.toHaveAccessibleDescription('Added Nov 14, 2023 · 2 Engagements · 1 open now');
-		await expect.element(empty!).toHaveAccessibleDescription('Added Oct 20, 2026 · No Engagements yet');
+			.toHaveAccessibleDescription(/^Added Nov 14, 2023 · 2 Engagements · 1 open now\s*Keeps/);
+		await expect.element(empty!).toHaveAccessibleDescription(/^Added Oct 20, 2026 · No Engagements yet\s*Keeps/);
+	});
+
+	// #2154: which record is kept, from `wouldSurvive`, under each match --
+	// the fixture's first match survives, its second is absorbed, and both
+	// carry the same full name, so only this line tells the two apart.
+	it('says under each match which record choosing it keeps', async () => {
+		await setup();
+
+		const [survives, absorbed] = testPage.getByLabelText(fullName(matches[0])).all();
+		await expect
+			.element(survives!)
+			.toHaveAccessibleDescription(/Keeps this record\. The record you are changing is closed as a duplicate\.$/);
+		await expect
+			.element(absorbed!)
+			.toHaveAccessibleDescription(/Keeps the record you are changing\. This record is closed as a duplicate\.$/);
+		await expect
+			.element(testPage.getByText('whichever has more history', { exact: false }))
+			.not.toBeInTheDocument();
 	});
 
 	it('refuses to go on until one of them is chosen', async () => {
