@@ -422,3 +422,66 @@ describe('StaffTopBar, the narrow bar’s panels and the page gutter (#2151)', (
 		}
 	);
 });
+
+/*
+ * #2161: the sheet's own bar padded its edges less than the narrow bar it
+ * covers, so opening it moved the avatar 8px toward the window's edge and
+ * the Close button 8px in from where the Menu button was, and the avatar's
+ * panel, which ends at its button, sat inside the gutter. The sheet's bar
+ * is drawn over the narrow bar, so each control has to land where the one
+ * it stands in for already was.
+ */
+const SHEET_WIDTHS = [CONFORMANCE_COMMITMENT, NARROW[0], 768];
+const AVATAR = 'Your account, Mark Goho';
+
+/*
+ * The inline edges, exactly. The block center is held to the nearest
+ * pixel: at 320px the narrow bar's switcher makes that bar a fraction of
+ * a pixel taller than the sheet's, which has no switcher in it.
+ */
+function expectSamePlace(open: Element, closed: DOMRect) {
+	const box = open.getBoundingClientRect();
+	expect({ left: box.left, right: box.right }).toEqual({
+		left: closed.left,
+		right: closed.right
+	});
+	expect(box.top + box.height / 2).toBeCloseTo(closed.top + closed.height / 2, 0);
+}
+
+describe('StaffTopBar, the sheet’s bar over the narrow bar (#2161)', () => {
+	it.each(SHEET_WIDTHS)(
+		'puts Close and the avatar where Menu and the avatar were at %ipx',
+		async (width) => {
+			await setupGutter(width);
+			const menu = page.getByRole('button', { name: 'Menu' });
+			const closed = {
+				menu: menu.element().getBoundingClientRect(),
+				avatar: page.getByRole('button', { name: AVATAR }).element().getBoundingClientRect()
+			};
+
+			await menu.click();
+
+			const sheet = page.getByRole('dialog');
+			const close = sheet.getByRole('button', { name: 'Close menu' });
+			await expect.element(close).toBeVisible();
+			expectSamePlace(close.element(), closed.menu);
+			expectSamePlace(sheet.getByRole('button', { name: AVATAR }).element(), closed.avatar);
+		}
+	);
+
+	it.each(SHEET_WIDTHS)(
+		'keeps the gutter on both sides of the sheet’s avatar panel at %ipx',
+		async (width) => {
+			const { gutter } = await setupGutter(width);
+			await page.getByRole('button', { name: 'Menu' }).click();
+
+			await page.getByRole('dialog').getByRole('button', { name: AVATAR }).click();
+
+			const signOut = page.getByRole('dialog').getByRole('button', { name: 'Sign out' });
+			await expect.element(signOut).toBeVisible();
+			const panel = panelHolding(signOut).getBoundingClientRect();
+			expect(panel.left).toBeGreaterThanOrEqual(gutter);
+			expect(window.innerWidth - panel.right).toBeGreaterThanOrEqual(gutter);
+		}
+	);
+});
