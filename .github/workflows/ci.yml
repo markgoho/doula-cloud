@@ -69,6 +69,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Chromium's shared memory must not land in the size-capped /tmp;
+      # the `app` job's step of the same name says why (#2190).
+      - name: Keep temporary files on disk
+        run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
+
       - uses: oven-sh/setup-bun@v2
 
       - name: Cache node_modules
@@ -455,6 +460,20 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Chromium's shared memory goes to TMPDIR, not /dev/shm: Playwright
+      # launches it with --disable-dev-shm-usage on Linux. Each segment is
+      # a file unlinked the moment it is created, so `du` never shows it,
+      # but it counts against /tmp all the same. On ubuntu-26.04 /tmp is a
+      # tmpfs and systemd 259 caps each user at 80% of it (6.2 GiB of
+      # 7.8 GiB); the unit suite's browser project peaked right on that
+      # line and failed with `Unknown system error -122` (EDQUOT) on write
+      # (#2190). RUNNER_TEMP is on the runner's disk, with no quota. Set
+      # through GITHUB_ENV because a job-level `env:` cannot read the
+      # `runner` context. `site` and gcp-dashboard-ci.yml's `build` run
+      # the same browser and do the same.
+      - name: Keep temporary files on disk
+        run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
+
       # e2e/stack.ts runs api/cmd/migrate and the Go BFF itself as host
       # processes (`go run`/`go build`) rather than building them into
       # compose images -- this primes the Go toolchain and its build/
@@ -601,33 +620,9 @@ jobs:
           exit 1
         if: steps.playwright-cache.outputs.cache-hit != 'true'
 
-      - name: DIAG-2190 temp before
-        run: |
-          cat /etc/os-release | head -2; uname -r; nproc; free -h
-          echo "TMPDIR=${TMPDIR:-unset} RUNNER_TEMP=$RUNNER_TEMP"
-          findmnt -o TARGET,SOURCE,FSTYPE,OPTIONS /tmp || echo "/tmp not a mount"
-          df -h /tmp "$GITHUB_WORKSPACE" "$RUNNER_TEMP"; df -i /tmp
-          findmnt -t tmpfs -o TARGET,SIZE,OPTIONS
-          id; systemctl --version | head -1
-          sudo apt-get install -y -qq quota >/dev/null 2>&1 || echo "quota install failed"
-          sudo quota -v -u runner 2>&1 || true
-          sudo repquota -u /tmp /dev/shm 2>&1 || true
-          userdbctl user runner 2>&1 | grep -iE "limit|tmp|shm" || true
-          grep -rhiE "tmp|shm|quota" /etc/systemd/logind.conf /etc/systemd/logind.conf.d /usr/lib/systemd/logind.conf.d 2>/dev/null | grep -v '^#' || true
-          nohup setsid bash -c 'while true; do echo "$(date +%T) shm=$(df --output=used /dev/shm | tail -1) tmp=$(df --output=used /tmp | tail -1)"; sleep 1; done' > "$RUNNER_TEMP/tmpfs-usage.log" 2>&1 &
-
       - name: Unit test with coverage gate
-        id: unit
         working-directory: app
         run: bun run test:unit:coverage
-
-      - name: DIAG-2190 temp after
-        if: ${{ always() }}
-        run: |
-          echo "peak shm KiB: $(grep -o 'shm=[0-9]*' "$RUNNER_TEMP/tmpfs-usage.log" | cut -d= -f2 | sort -n | tail -1)"
-          echo "peak tmp KiB: $(grep -o 'tmp=[0-9]*' "$RUNNER_TEMP/tmpfs-usage.log" | cut -d= -f2 | sort -n | tail -1)"
-          sudo quota -v -u runner 2>&1 || true
-          sudo dmesg 2>/dev/null | tail -20 || true
 
       - name: E2e test
         working-directory: app

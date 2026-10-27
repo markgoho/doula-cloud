@@ -30,6 +30,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Chromium's shared memory must not land in the size-capped /tmp;
+      # ci.yml's `app` job, on its step of the same name, says why (#2190).
+      - name: Keep temporary files on disk
+        run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
+
       - uses: oven-sh/setup-bun@v2
 
       - name: Cache bun dependencies
