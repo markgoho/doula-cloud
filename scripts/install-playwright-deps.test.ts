@@ -18,7 +18,6 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -252,10 +251,14 @@ exit 0
     const realProbe = { APT_BUSY_CMD: '', ATTEMPTS: '2' };
 
     test('pgrep sees a process named apt-get', () => {
-      // comm is the name the process was started under, so a symlink named
-      // apt-get to sleep is "apt-get" to pgrep -x.
+      // comm is the name of the file the process was started from, so a
+      // script named apt-get is "apt-get" to pgrep -x while it waits on its
+      // sleep. Not a symlink to sleep: a multi-call coreutils, such as the
+      // Rust one newer Ubuntu images ship, reads its own name to pick the
+      // tool, and exits at once on "apt-get".
       const aptGet = join(dir, 'apt-get');
-      symlinkSync('/bin/sleep', aptGet);
+      writeFileSync(aptGet, '#!/bin/sh\nsleep "$1"\n');
+      chmodSync(aptGet, 0o755);
       const { code, out } = run(
         orphanInstall(`${aptGet} 2`, 'pgrep -x apt-get >/dev/null'),
         { ...realProbe, APT_LOCK_FILES: join(dir, 'no-such-lock') }
