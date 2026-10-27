@@ -6,6 +6,12 @@ import { DETAILS_STEPS } from './intakeJourney.js';
 
 const basePath = '/practices/p1/clients/new';
 
+function phoneRow(phone: string): string | undefined {
+	return answerSections({ ...blankAnswers(), phone }, [], basePath, DETAILS_STEPS)[0].answers.find(
+		(answer) => answer.label === 'Phone number'
+	)?.value;
+}
+
 function field(partial: Partial<Field> & { id: string }): Field {
 	return { type: 'short_text', label: partial.id, order: 0, archived: false, ...partial };
 }
@@ -82,6 +88,13 @@ describe('answerSections', () => {
 		expect(sections[0].answers[0].changeHref).toBe(`${basePath}/name?from=check`);
 	});
 
+	// #2147: a US number reads in one form; any other reads as typed.
+	it('reads a US phone number in one form and any other as typed', () => {
+		expect(phoneRow('585 555 0142')).toBe('(585) 555-0142');
+		expect(phoneRow('+44 7911 123456')).toBe('+44 7911 123456');
+		expect(phoneRow('  ')).toBe(NOT_ANSWERED);
+	});
+
 	// #2033: GOV.UK shows an address as one row with its lines joined.
 	it('reads the address as one row, its answered lines joined, with one Change', () => {
 		const sections = answerSections(
@@ -99,7 +112,7 @@ describe('answerSections', () => {
 
 		expect(sections[0].answers.at(-1)).toEqual({
 			label: 'Address',
-			value: '12 Lake Avenue, Rochester, NY, 14608',
+			value: '12 Lake Avenue, Rochester, NY 14608',
 			changes: 'address',
 			changeHref: `${basePath}/address?from=check`
 		});

@@ -39,6 +39,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import QuestionPage from '#lib/components/templates/QuestionPage.svelte';
 	import { formatCalendarDay } from '#lib/dates.js';
+	import { formatPhoneNumber } from '#lib/contactDetails.js';
 	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
 	import { intakeDraft } from '#lib/intakeDraft.svelte.js';
 	import {
@@ -67,7 +68,7 @@
 				value: intakeDraft.answers.dateOfBirth && formatCalendarDay(intakeDraft.answers.dateOfBirth)
 			},
 			{ label: 'Email address', value: intakeDraft.answers.email.trim() },
-			{ label: 'Phone number', value: intakeDraft.answers.phone.trim() }
+			{ label: 'Phone number', value: formatPhoneNumber(intakeDraft.answers.phone) }
 		].filter((item) => item.value !== '')
 	);
 
