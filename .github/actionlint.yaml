@@ -1,9 +1,9 @@
-# ubuntu-26.04 is a GitHub-hosted image, not a self-hosted runner, but no
-# actionlint release (1.7.12 is the latest) knows the label yet, and this
-# list is the only way to declare one. Every workflow pins ubuntu-26.04
-# rather than ubuntu-latest so the next image flip is a change made on
-# purpose, not one that lands under CI unannounced (#2190). Drop the entry
-# once an actionlint release lists the label itself.
+# ubuntu-26.04 is a GitHub-hosted image, not a self-hosted runner, but
+# actionlint 1.7.12 (the latest release on 2026-10-27) does not know the
+# label yet, and this list is the only way to declare one. Every workflow
+# pins ubuntu-26.04 rather than ubuntu-latest so the next image flip is a
+# change made on purpose, not one that lands under CI unannounced (#2190).
+# #2204 drops the entry once an actionlint release lists the label itself.
 self-hosted-runner:
   labels:
     - ubuntu-26.04

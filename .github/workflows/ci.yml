@@ -336,7 +336,7 @@ jobs:
           go-version-file: api/go.mod
           cache-dependency-path: api/go.sum
 
-      # Docker ships preinstalled and running on ubuntu-latest, so
+      # Docker ships preinstalled and running on the ubuntu-26.04 runner, so
       # testcontainers-go (internal/testdb) needs no setup here -- it
       # falls back to Docker's default socket when DOCKER_HOST is unset.
       # Local dev instead points DOCKER_HOST at a Podman socket (see
@@ -437,8 +437,8 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     # e2e/stack.ts's db-only compose stack: `docker compose` ships
-    # preinstalled on ubuntu-latest and needs no rootless-socket setup or
-    # external compose provider, unlike this runner's Podman (see
+    # preinstalled on the ubuntu-26.04 runner and needs no rootless-socket
+    # setup or external compose provider, unlike this runner's Podman (see
     # e2e/stack.ts and compose.e2e.yaml for what that combination broke
     # back when the stack also built/ran Go images through it). Local dev
     # keeps defaulting to Podman -- see docs/testing/e2e.md.
@@ -464,10 +464,12 @@ jobs:
       # launches it with --disable-dev-shm-usage on Linux. Each segment is
       # a file unlinked the moment it is created, so `du` never shows it,
       # but it counts against /tmp all the same. On ubuntu-26.04 /tmp is a
-      # tmpfs and systemd 259 caps each user at 80% of it (6.2 GiB of
-      # 7.8 GiB); the unit suite's browser project peaked right on that
-      # line and failed with `Unknown system error -122` (EDQUOT) on write
-      # (#2190). RUNNER_TEMP is on the runner's disk, with no quota. Set
+      # tmpfs mounted `usrquota` (the image runs systemd 259), and the
+      # runner user's usage stopped at exactly 80% of it, 6.2 GiB of
+      # 7.8 GiB: the unit suite's browser project hit that line and failed
+      # with `Unknown system error -122` (EDQUOT) on write. The measuring
+      # run is quoted on #2190. RUNNER_TEMP is on the runner's disk, with
+      # no quota. Set
       # through GITHUB_ENV because a job-level `env:` cannot read the
       # `runner` context. `site` and gcp-dashboard-ci.yml's `build` run
       # the same browser and do the same.
