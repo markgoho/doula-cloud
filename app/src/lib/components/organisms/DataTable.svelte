@@ -683,7 +683,7 @@
 		   the machine that measured it, held there but read as
 		   insufficient on CI's own runner: the same font bytes rasterize
 		   wider on CI's Linux/Chromium, so Staff's Members table (Name,
-		   Email, Roles, Employment type, Works from, plus its Actions
+		   Email address, Roles, Employment type, Works from, plus its Actions
 		   column of three buttons) -- the widest DataTable built today --
 		   needs 780px, not 768px, to stop overflowing
 		   /style-guide/data-table's own demo of that exact shape. 48.75rem

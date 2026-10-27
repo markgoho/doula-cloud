@@ -78,7 +78,7 @@
 			answers: [
 				{ label: 'Name', value: ownName || NOT_ANSWERED, changeHref: changeHref('you'), changes: 'name' },
 				{
-					label: 'Email',
+					label: 'Email address',
 					value: answers.email.trim() || NOT_ANSWERED,
 					changeHref: changeHref('you'),
 					changes: 'email'

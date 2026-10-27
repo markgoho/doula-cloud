@@ -80,7 +80,7 @@ test('An invitation arrives as readable mail, and a complaint stops the next one
 
 	await expect(page.getByRole('radio', { name: /I'm new here/ })).toBeVisible();
 	await page.getByRole('radio', { name: /I'm new here/ }).check();
-	await page.getByLabel('Email').fill(doulaEmail);
+	await page.getByLabel('Email address').fill(doulaEmail);
 	await page.getByLabel('Password').fill(password);
 	await page.getByRole('button', { name: 'Continue' }).click();
 	await expect(page.getByRole('heading', { name: 'Tell us about yourself' })).toBeVisible();

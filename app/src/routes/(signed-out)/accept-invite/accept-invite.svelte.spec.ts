@@ -155,7 +155,7 @@ beforeEach(() => {
 		mock.mockReset();
 });
 
-const emailField = () => testPage.getByLabelText('Email');
+const emailField = () => testPage.getByLabelText('Email address');
 const passwordField = () => testPage.getByLabelText('Password');
 const continueButton = () => testPage.getByRole('button', { name: 'Continue' });
 const acceptButton = () => testPage.getByRole('button', { name: 'Accept invite' });

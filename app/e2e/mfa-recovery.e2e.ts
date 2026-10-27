@@ -172,7 +172,7 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 	await page.getByRole('link', { name: 'Use a recovery code' }).click();
 
 	await expect(page.getByRole('heading', { name: 'Use a recovery code' })).toBeVisible();
-	await page.getByLabel('Email').fill(doulaEmail);
+	await page.getByLabel('Email address').fill(doulaEmail);
 	await page.getByLabel('Recovery code').fill('00000000');
 	await page.getByRole('button', { name: 'Continue' }).click();
 	await expect(page.getByText('this code is invalid or has expired').first()).toBeVisible();
@@ -180,7 +180,7 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 	// The same sentence for an address the service has never heard of --
 	// #168's whole point, and the one thing a screen can get wrong by
 	// being helpful.
-	await page.getByLabel('Email').fill(uniqueEmail('nobody'));
+	await page.getByLabel('Email address').fill(uniqueEmail('nobody'));
 	await page.getByLabel('Recovery code').fill(code!);
 	await page.getByRole('button', { name: 'Continue' }).click();
 	await expect(page.getByText('this code is invalid or has expired').first()).toBeVisible();
@@ -213,7 +213,7 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 
 		await page.goto(`/accept-invite?token=${token}`);
 		await page.getByRole('radio', { name: /I'm new here/ }).check();
-		await page.getByLabel('Email').fill(doulaEmail);
+		await page.getByLabel('Email address').fill(doulaEmail);
 		await page.getByLabel('Password').fill(password);
 		await page.getByRole('button', { name: 'Continue' }).click();
 		await expect(page.getByRole('heading', { name: 'Tell us about yourself' })).toBeVisible();

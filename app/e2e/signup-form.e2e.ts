@@ -16,7 +16,7 @@ async function walkToCheck(page: Page, { email, practiceName }: { email: string;
 	await page.goto('/signup');
 	await page.getByLabel('First name').fill('Jamie');
 	await page.getByLabel('Last name').fill('Owner');
-	await page.getByLabel('Email').fill(email);
+	await page.getByLabel('Email address').fill(email);
 	await page.getByLabel('Password').fill(STAFF_PASSWORD);
 	await page.getByRole('button', { name: 'Continue' }).click();
 

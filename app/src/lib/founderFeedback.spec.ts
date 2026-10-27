@@ -90,7 +90,7 @@ describe('pieceFacts', () => {
 			'Kind',
 			'Sent',
 			'Sender',
-			'Email',
+			'Email address',
 			'Role',
 			'Practice',
 			'Page',
@@ -101,7 +101,7 @@ describe('pieceFacts', () => {
 		]);
 		expect(valueOf(facts, 'Kind')).toBe('Something is not working');
 		expect(valueOf(facts, 'Sender')).toBe('Anne-Marie Ochieng');
-		expect(valueOf(facts, 'Email')).toBe('anne-marie@example.test');
+		expect(valueOf(facts, 'Email address')).toBe('anne-marie@example.test');
 		expect(valueOf(facts, 'Role')).toBe('Owner, Admin');
 		expect(valueOf(facts, 'Practice')).toBe('Riverside Doula Collective');
 		expect(valueOf(facts, 'Page')).toBe('/practices/practice-1/invoices');
@@ -120,7 +120,7 @@ describe('pieceFacts', () => {
 		});
 
 		expect(valueOf(facts, 'Sender')).toBe('A Client, named by the sign-in address');
-		expect(valueOf(facts, 'Email')).toBe('priya.signin@example.test');
+		expect(valueOf(facts, 'Email address')).toBe('priya.signin@example.test');
 	});
 
 	it('says so when the piece has no Practice, no role and no name', () => {
@@ -132,7 +132,7 @@ describe('pieceFacts', () => {
 		});
 
 		expect(valueOf(facts, 'Sender')).toBe('No name on record');
-		expect(valueOf(facts, 'Email')).toBe('No address on record');
+		expect(valueOf(facts, 'Email address')).toBe('No address on record');
 
 		expect(valueOf(facts, 'Practice')).toBe('None: sent from a screen outside any Practice');
 		expect(valueOf(facts, 'Role')).toBe('No role assigned');

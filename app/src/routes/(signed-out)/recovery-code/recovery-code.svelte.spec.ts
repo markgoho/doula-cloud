@@ -29,7 +29,7 @@ async function setup({ response = jsonResponse(undefined, 204) }: SetupOptions =
 }
 
 async function fillAndSubmit(email: string, code: string) {
-	await testPage.getByLabelText('Email').fill(email);
+	await testPage.getByLabelText('Email address').fill(email);
 	await testPage.getByLabelText('Recovery code').fill(code);
 	await testPage.getByRole('button', { name: 'Continue' }).click();
 }
@@ -47,7 +47,7 @@ describe('spending a recovery code', () => {
 		await setup();
 
 		await expect.element(testPage.getByRole('heading', { name: 'Use a recovery code' })).toBeVisible();
-		await expect.element(testPage.getByLabelText('Email')).toBeVisible();
+		await expect.element(testPage.getByLabelText('Email address')).toBeVisible();
 		await expect.element(testPage.getByLabelText('Recovery code')).toBeVisible();
 		expect(testPage.getByLabelText('Password').elements()).toHaveLength(0);
 	});

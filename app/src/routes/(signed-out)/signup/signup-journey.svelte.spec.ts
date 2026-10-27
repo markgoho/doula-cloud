@@ -62,7 +62,7 @@ const continueButton = () => testPage.getByRole('button', { name: 'Continue' });
 async function fillYou(password = 'correct horse battery') {
 	await testPage.getByLabelText('First name').fill('Priya');
 	await testPage.getByLabelText('Last name').fill('Sharma');
-	await testPage.getByLabelText('Email').fill('priya@example.com');
+	await testPage.getByLabelText('Email address').fill('priya@example.com');
 	await testPage.getByLabelText('Password').fill(password);
 }
 
@@ -179,7 +179,7 @@ describe('the first page: about you', () => {
 			.element(testPage.getByRole('link', { name: 'This email address already has an account. Sign in instead.' }))
 			.toHaveAttribute('href', '#signup-email');
 		await expect
-			.element(testPage.getByLabelText('Email'))
+			.element(testPage.getByLabelText('Email address'))
 			.toHaveAccessibleDescription('This email address already has an account. Sign in instead.');
 		expect(testPage.getByText('Choose the state you work from').elements()).toHaveLength(0);
 

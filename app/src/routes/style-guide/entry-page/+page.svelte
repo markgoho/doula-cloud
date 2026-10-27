@@ -60,7 +60,7 @@
 
 {#snippet content()}
 	<StackedForm onSubmit={(event) => event.preventDefault()}>
-		<LabeledField id={emailId} label="Email" error={hasError ? 'Enter your email address' : undefined}>
+		<LabeledField id={emailId} label="Email address" error={hasError ? 'Enter your email address' : undefined}>
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput
 					{id}

@@ -55,7 +55,7 @@ test('An Admin invited via the Staff invite route reaches the Credits and Staff 
 	// brand-new person, so the signup branch and both questions on step two.
 	await page.goto(`/accept-invite?token=${inviteToken}`);
 	await page.getByRole('radio', { name: /I'm new here/ }).check();
-	await page.getByLabel('Email').fill(adminEmail);
+	await page.getByLabel('Email address').fill(adminEmail);
 	await page.getByLabel('Password').fill(password);
 	await page.getByRole('button', { name: 'Continue' }).click();
 

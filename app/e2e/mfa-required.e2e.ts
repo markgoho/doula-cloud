@@ -90,7 +90,7 @@ test('a Doula with no second factor is barred once the Practice requires MFA for
 	// the Practice landing page's own first Practice-scoped fetch that
 	// trips the gate and redirects her.
 	await page.goto('/login');
-	await page.getByLabel('Email').fill(doula.email);
+	await page.getByLabel('Email address').fill(doula.email);
 	await page.getByLabel('Password').fill(PORTAL_CLIENT_PASSWORD);
 	await page.getByRole('button', { name: 'Sign in' }).click();
 	const returnTo = encodeURIComponent(`/practices/${practiceId}`);

@@ -116,7 +116,7 @@
 
 	const memberColumns = [
 		{ label: 'Name', accessor: (member: Member) => member.name },
-		{ label: 'Email', accessor: (member: Member) => member.email },
+		{ label: 'Email address', accessor: (member: Member) => member.email },
 		{ label: 'Roles', accessor: (member: Member) => member.roles },
 		{ label: 'Employment type', accessor: (member: Member) => member.employment },
 		{ label: 'Works from', accessor: (member: Member) => member.worksFrom }

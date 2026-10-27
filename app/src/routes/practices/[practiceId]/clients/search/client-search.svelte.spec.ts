@@ -147,7 +147,7 @@ describe('the search that fronts intake (#498)', () => {
 		await testPage.getByLabelText('Month').fill('12');
 		await testPage.getByLabelText('Day').fill('10');
 		await testPage.getByLabelText('Year').fill('1815');
-		await testPage.getByLabelText('Email').fill('ada@example.com');
+		await testPage.getByLabelText('Email address').fill('ada@example.com');
 		await testPage.getByLabelText('Phone').fill('555-0100');
 		await testPage.getByRole('button', { name: 'Search' }).click();
 
@@ -278,7 +278,7 @@ describe('the search that fronts intake (#498)', () => {
 		await testPage.getByLabelText('Month').fill('2');
 		await testPage.getByLabelText('Day').fill('11');
 		await testPage.getByLabelText('Year').fill('1994');
-		await testPage.getByLabelText('Email').fill('nadia@example.com');
+		await testPage.getByLabelText('Email address').fill('nadia@example.com');
 		await testPage.getByLabelText('Phone').fill('555-0100');
 		await testPage.getByRole('button', { name: 'Search' }).click();
 
@@ -397,7 +397,7 @@ describe('Back from the name question (#1835)', () => {
 		await expect.element(testPage.getByLabelText('Month')).toHaveValue('02');
 		await expect.element(testPage.getByLabelText('Day')).toHaveValue('11');
 		await expect.element(testPage.getByLabelText('Year')).toHaveValue('1994');
-		await expect.element(testPage.getByLabelText('Email')).toHaveValue('nadia@example.com');
+		await expect.element(testPage.getByLabelText('Email address')).toHaveValue('nadia@example.com');
 		await expect.element(testPage.getByLabelText('Phone')).toHaveValue('555-0100');
 		await expect.element(testPage.getByRole('heading', { level: 2, name: 'No matches' })).toBeVisible();
 		expect(apiFetchWithSession).toHaveBeenCalledOnce();

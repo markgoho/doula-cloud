@@ -130,7 +130,7 @@ describe('Client-portal login -- on-load session probe (#283)', () => {
 
 		await setup();
 
-		await expect.element(testPage.getByLabelText('Email')).toBeVisible();
+		await expect.element(testPage.getByLabelText('Email address')).toBeVisible();
 		expect(testPage.getByText(/session/i).elements()).toHaveLength(0);
 		expect(goto).not.toHaveBeenCalled();
 	});
@@ -184,7 +184,7 @@ describe('Client-portal login -- the session-ended notice (#757)', () => {
 		await setupSessionEnded();
 
 		await expect.element(testPage.getByText(NOTICE)).toBeVisible();
-		await expect.element(testPage.getByLabelText('Email')).toBeVisible();
+		await expect.element(testPage.getByLabelText('Email address')).toBeVisible();
 	});
 
 	it('says nothing on an ordinary visit', async () => {
@@ -200,7 +200,7 @@ describe('Client-portal login -- the session-ended notice (#757)', () => {
 		vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({}, 200)));
 
 		await setupSessionEnded();
-		await testPage.getByLabelText('Email').fill('priya@example.com');
+		await testPage.getByLabelText('Email address').fill('priya@example.com');
 		await testPage.getByRole('button', { name: 'Send me a sign-in link' }).click();
 
 		await expect.element(testPage.getByText(/we have sent a sign-in link/i)).toBeVisible();

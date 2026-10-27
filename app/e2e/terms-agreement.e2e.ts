@@ -80,7 +80,7 @@ test.describe('After a material change to the Terms starts', () => {
 		// The Doula is not an Owner: she is never asked, and the Practice
 		// works for her as usual while it waits on an Owner.
 		await page.goto('/login');
-		await page.getByLabel('Email').fill(doula.email);
+		await page.getByLabel('Email address').fill(doula.email);
 		await page.getByLabel('Password').fill(doula.password);
 		await page.getByRole('button', { name: 'Sign in' }).click();
 		await expect(page).toHaveURL(new RegExp(`/practices/${owner.practiceId}$`));
@@ -91,7 +91,7 @@ test.describe('After a material change to the Terms starts', () => {
 		const ownerContext = await browser.newContext({ baseURL: PREVIEW_SERVER_ORIGIN });
 		const ownerPage = await ownerContext.newPage();
 		await ownerPage.goto('/login');
-		await ownerPage.getByLabel('Email').fill(owner.email);
+		await ownerPage.getByLabel('Email address').fill(owner.email);
 		await ownerPage.getByLabel('Password').fill(owner.password);
 		await ownerPage.getByRole('button', { name: 'Sign in' }).click();
 		await expect(ownerPage).toHaveURL(new RegExp(`/practices/${owner.practiceId}/agreement$`));

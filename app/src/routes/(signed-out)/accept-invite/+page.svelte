@@ -380,7 +380,7 @@
 	<!-- Revealed under whichever answer she chose (#2035); the answer
 	     decides the autocomplete and whether the password rule applies. -->
 	<stack-l space="var(--space-5)">
-		<LabeledField id={emailId} label="Email" error={submission.errorFor(emailId)}>
+		<LabeledField id={emailId} label="Email address" error={submission.errorFor(emailId)}>
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput
 					{id}

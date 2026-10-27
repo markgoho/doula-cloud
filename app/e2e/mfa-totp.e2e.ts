@@ -42,7 +42,7 @@ test('An Owner sets up an authenticator app and lands on the Practice she was se
 	await stubTotpFactor(page, request);
 
 	await page.goto('/login');
-	await page.getByLabel('Email').fill(email);
+	await page.getByLabel('Email address').fill(email);
 	await page.getByLabel('Password').fill(password);
 	await page.getByRole('button', { name: 'Sign in' }).click();
 
@@ -82,7 +82,7 @@ test('An enrolled Owner answers the code challenge at sign-in and is admitted', 
 	await stubTotpFactor(page, request);
 
 	await page.goto('/login');
-	await page.getByLabel('Email').fill(email);
+	await page.getByLabel('Email address').fill(email);
 	await page.getByLabel('Password').fill(password);
 	await page.getByRole('button', { name: 'Sign in' }).click();
 

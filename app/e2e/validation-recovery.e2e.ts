@@ -74,7 +74,7 @@ test('a refused form says what is wrong, takes focus, and leads to the field', a
 
 	// And recovery: fixing the fields and submitting again clears the
 	// summary rather than leaving a stale list of solved problems.
-	await page.getByLabel('Email').fill('nobody@example.com');
+	await page.getByLabel('Email address').fill('nobody@example.com');
 	await page.getByLabel('Password').fill('a-password');
 	await page.getByRole('button', { name: 'Sign in' }).click();
 	await expect(page.getByRole('link', { name: 'Enter your email address' })).toBeHidden();

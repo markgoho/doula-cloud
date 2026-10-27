@@ -87,7 +87,7 @@ async function signInByKeyboard(page: Page, email: string, password: string, pra
 		'the skip link must be the first stop, or it skips nothing'
 	).toBeFocused();
 
-	await tabTo(page, page.getByLabel('Email'), 'the Email field on /login');
+	await tabTo(page, page.getByLabel('Email address'), 'the Email address field on /login');
 	await page.keyboard.type(email);
 
 	// Asserted as an adjacency rather than found by tabTo: a password that
