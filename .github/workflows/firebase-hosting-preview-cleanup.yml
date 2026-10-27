@@ -30,7 +30,7 @@ jobs:
     # The same guard the deploy workflows carry: a fork's PR never had
     # the credentials to create a channel, so it has none to release.
     if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Checkout repository

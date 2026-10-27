@@ -75,7 +75,7 @@ concurrency:
 
 jobs:
   alarm:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       # On `workflow_run` this is the default branch's head, never the
