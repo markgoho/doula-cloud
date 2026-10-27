@@ -12,6 +12,14 @@ only refusal; there is no server of ours behind it (ADR-0014).
 With no `action` there is no form, because a form with nowhere to post
 would take a person's name and lose it. The card then says the list is
 not open yet. #366 records the address; `WAITLIST_FORM_ACTION` carries it.
+
+The pilot box (#2179) lets a person ask to join the pilot as they sign
+up. Ticked, it posts `metadata__pilot_interest=yes`, and the Welcome email
+reads that value and acknowledges the request in place of asking the
+`pilot_interest` survey again. Unticked, a checkbox posts nothing at all,
+so it never clears a value Buttondown holds (#1771): signing up again
+unticked leaves an earlier yes in place. The pilot terms sit in its hint
+because they belong where a person asks to take part (#444).
 -->
 <script lang="ts">
 	import { PRODUCT_NAME } from '#lib/product.js';
@@ -33,7 +41,7 @@ not open yet. #366 records the address; `WAITLIST_FORM_ACTION` carries it.
 <section class="card" aria-labelledby="waitlist-heading"> <!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
 	<stack-l>
 		<h2 id="waitlist-heading">Join the waitlist</h2>
-		<p class="note">Two fields. One email from me when it opens.</p>
+		<p class="note">Two fields, and a box if you'd like to be in the pilot.</p>
 
 		{#if action}
 			<form method="post" {action}>
@@ -57,6 +65,22 @@ not open yet. #366 records the address; `WAITLIST_FORM_ACTION` carries it.
 							inputmode="email"
 							required
 						/>
+					</div>
+					<div class="choice">
+						<input
+							id="waitlist-pilot"
+							name="metadata__pilot_interest"
+							type="checkbox"
+							value="yes"
+							aria-describedby="waitlist-pilot-hint"
+						/>
+						<div class="choice-text">
+							<label for="waitlist-pilot">I'd like to be in the pilot group</label>
+							<p id="waitlist-pilot-hint" class="fine">
+								A small private pilot runs from now until January, and I'll write to you myself about it.
+								What it gives and what it costs are in the <a href="/pilot-terms">pilot terms</a>.
+							</p>
+						</div>
 					</div>
 					<!-- Off until the script below fills one: Buttondown clears a
 					     tag an empty value posts over, so an unfilled input stays
@@ -120,6 +144,30 @@ not open yet. #366 records the address; `WAITLIST_FORM_ACTION` carries it.
 
 	label {
 		font-weight: var(--text-label-weight);
+	}
+
+	/* GOV.UK's single checkbox: the box first, its label and hint beside it,
+	   wrapping in the space the card gives them. */
+	.choice {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--space-3);
+	}
+
+	.choice input {
+		flex: none;
+		inline-size: var(--space-5);
+		block-size: var(--space-5);
+		margin: 0;
+		padding: 0;
+		accent-color: var(--color-primary);
+	}
+
+	.choice-text {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+		min-inline-size: 0;
 	}
 
 	input {

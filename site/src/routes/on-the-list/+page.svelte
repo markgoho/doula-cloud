@@ -6,7 +6,8 @@ the page says it is on its way. The Promotions line is the one the
 founder approved for the Welcome email itself.
 
 The pilot terms are not linked here: /pilot-terms stays unlisted (#444),
-and the Welcome email carries the link. Unlisted, as /pilot-terms is:
+and the waitlist form's pilot box (#2179) and the Welcome email carry the
+link. Unlisted, as /pilot-terms is:
 noindex, and left out of sitemap.xml.
 
 The redirect set in Buttondown is https://doula.cloud/on-the-list#_

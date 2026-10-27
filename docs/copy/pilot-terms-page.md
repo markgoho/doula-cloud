@@ -7,7 +7,7 @@ Built as `site/src/routes/pilot-terms/+page.svelte` on `site/src/lib/components/
 ## Where it lives, and how it is served
 
 - URL: `https://doula.cloud/pilot-terms`
-- **Unlisted, not secret.** `noindex, nofollow`, absent from the sitemap, absent from every navigation, and linked from nothing on the site. Since [#1556](https://github.com/markgoho/doula-cloud/issues/1556) it carries the site footer every page carries, with its links out to the Terms of Service and the Privacy Policy; a link out of an unlisted page does not list it. Its "Last updated" line is no longer a `footer` element, because the site footer is the page's one `contentinfo` landmark. The only route to it is the disclaimer line in the waitlist confirmation email.
+- **Unlisted, not secret.** `noindex, nofollow`, absent from the sitemap, absent from every navigation, and linked from one place on the site: the hint under the waitlist form's pilot box ([#2179](https://github.com/markgoho/doula-cloud/issues/2179)), which is where a person asks to take part, so placement puts the terms there. Since [#1556](https://github.com/markgoho/doula-cloud/issues/1556) it carries the site footer every page carries, with its links out to the Terms of Service and the Privacy Policy; a link out of an unlisted page does not list it. Its "Last updated" line is no longer a `footer` element, because the site footer is the page's one `contentinfo` landmark. The two routes to it are that hint and the disclaimer line in the waitlist Welcome email.
 - Stripe's rule for *"any promotion, discount, or trial"* is about **placement** — the terms are visible where a person agrees to take part — **not** about publicity. So an unlisted page satisfies it, and the pilot stays private. This does not contradict [#390](https://github.com/markgoho/doula-cloud/issues/390), which took `noindex` **off** `/support`: there it bought nothing, and here it buys the privacy the pilot is meant to have.
 - **Not behind authentication.** The reader has no account yet; a login wall would put the terms behind the thing she is agreeing to.
 - Reachable with no password, no cookie and no JavaScript.
@@ -25,6 +25,8 @@ The page is reached from the waitlist Welcome email ([#361](https://github.com/m
 > The pilot's founding grant of free Credits, and what a Credit costs once it runs out, are set out in the [pilot terms](https://doula.cloud/pilot-terms).
 
 It must sit **beside the survey button**, not in the footer. Placement is the whole requirement.
+
+Since [#2179](https://github.com/markgoho/doula-cloud/issues/2179) a person can also ask on the waitlist form, so the terms are linked there too, in the pilot box's hint: "What it gives and what it costs are in the pilot terms." A person who ticked the box gets a Welcome email that says the request was heard in place of the survey, with this same line under it.
 
 ## Constraints the copy is written under
 

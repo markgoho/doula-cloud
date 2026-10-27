@@ -2,7 +2,7 @@
 
 The copy below is **final and verbatim**. It was written on [Publish the Terms of Service and the Privacy Policy at /terms and /privacy (#1556)](https://github.com/markgoho/doula-cloud/issues/1556), with [ADR-0054](../adr/0054-the-terms-hold-the-refund-rule-a-dispute-goes-to-court-and-only-an-owner-agrees.md) for the decisions no record held before 2026-09-28.
 
-The text of the version of 2026-10-22 is `site/src/lib/legalTexts/PrivacyPolicy20261022.svelte`, shown at `/privacy` and at `/privacy/2026-10-22` by `site/src/lib/components/LegalPage.svelte` (#1816). The spec beside `site/src/routes/privacy/+page.svelte` asserts the sentences that do legal work by their words.
+The text of the version of 2026-10-27 is `site/src/lib/legalTexts/PrivacyPolicy20261027.svelte`, shown at `/privacy` and at `/privacy/2026-10-27` by `site/src/lib/components/LegalPage.svelte` (#1816). The spec beside `site/src/routes/privacy/+page.svelte` asserts the sentences that do legal work by their words.
 
 **Every claim about a company, a cookie or how long something is kept was checked against the code and the ADR that owns it before it was written.** The table under [Where each claim was checked](#where-each-claim-was-checked) names the source of each. A change to the product that makes a sentence false is a new version of this policy, in the same commit as the change.
 
@@ -94,7 +94,7 @@ Pirsch, a German company, counts how many people visit the home page, and holds 
 
 Firebase Hosting, a Google service, delivers each page, and receives your IP address to do so.
 
-If you join the waitlist, your email address and first name are kept by Buttondown, the service that runs the list, together with the campaign tags from the address you arrived by, if it had any. After you confirm your address, the list sends you one email straight away, which asks whether you would like to join the pilot, and then writes to you when DoulaCloud opens in January 2027. You can leave the list from any of its emails.
+If you join the waitlist, your email address and first name are kept by Buttondown, the service that runs the list, together with whether you ticked the box to be in the pilot, and the campaign tags from the address you arrived by, if it had any. After you confirm your address, the list sends you one email straight away, which asks whether you would like to join the pilot, or says you asked to if you ticked the box, and then writes to you when DoulaCloud opens in January 2027. You can leave the list from any of its emails.
 
 DoulaCloud does not follow you across other sites, so it treats every visit the same whether or not your browser sends a Do Not Track signal.
 
@@ -105,7 +105,7 @@ These companies receive data to run DoulaCloud, and each receives only what its 
 - **Google Cloud** runs DoulaCloud and stores all of its data, in the United States: the database, files such as contract documents and message attachments, and the jobs that send its email.
 - **Google Identity Platform** checks the sign-in of each person who owns or works at a practice: the email address, the password and the second sign-in factor.
 - **Firebase Hosting**, a Google service, delivers the DoulaCloud app and this site, and receives the IP address of each request.
-- **Buttondown** keeps the waitlist: the email address and first name of each person who joins, and the campaign tags from the address they arrived by. It sends the confirmation email and the one email when DoulaCloud opens.
+- **Buttondown** keeps the waitlist: the email address and first name of each person who joins, whether they asked to be in the pilot, and the campaign tags from the address they arrived by. It sends the confirmation email, the welcome email, and the one email when DoulaCloud opens.
 - **Pirsch**, a German company, counts visits to the home page of this site, and holds its counts in Germany. It sets no cookie and keeps no IP address.
 - **Mailgun** sends DoulaCloud's email. It receives each address and message, and deletes its logs of them within 30 days.
 - **Stripe** takes payments: a practice's payment for Credits, and a client's payment of an invoice. It receives what each payment needs, including a client's name and email address with an invoice, and it holds each practice's own Stripe account. Stripe processes data as [Stripe's Privacy Policy](https://stripe.com/privacy) explains.
@@ -178,10 +178,11 @@ Email [hello@doula.cloud](mailto:hello@doula.cloud). That address reaches a pers
 
 ## Version history
 
-1. October 22, 2026. Not a material change. Names Buttondown, which keeps the waitlist, and Pirsch, which counts visits to the home page without a cookie.
-2. October 3, 2026. Not a material change. Writes the name of the product as one word, DoulaCloud.
-3. October 2, 2026. Not a material change. Says how long Feedback is kept, what erases it, and that GitHub keeps a note of each piece.
-4. September 29, 2026. Not a material change. First version.
+1. October 27, 2026. Not a material change. Says the waitlist keeps whether you asked to be in the pilot.
+2. October 22, 2026. Not a material change. Names Buttondown, which keeps the waitlist, and Pirsch, which counts visits to the home page without a cookie.
+3. October 3, 2026. Not a material change. Writes the name of the product as one word, DoulaCloud.
+4. October 2, 2026. Not a material change. Says how long Feedback is kept, what erases it, and that GitHub keeps a note of each piece.
+5. September 29, 2026. Not a material change. First version.
 
 ---
 

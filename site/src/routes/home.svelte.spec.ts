@@ -58,6 +58,7 @@ describe('the teaser at / (#358)', () => {
 		).toEqual([
 			'metadata__first_name',
 			'email',
+			'metadata__pilot_interest',
 			'metadata__utm_source',
 			'metadata__utm_medium',
 			'metadata__utm_campaign',

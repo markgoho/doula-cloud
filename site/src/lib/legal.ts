@@ -62,6 +62,11 @@ export const PRIVACY: LegalDocument = {
 			effective: '2026-10-22',
 			material: false,
 			change: 'Names Buttondown, which keeps the waitlist, and Pirsch, which counts visits to the home page without a cookie.'
+		},
+		{
+			effective: '2026-10-27',
+			material: false,
+			change: 'Says the waitlist keeps whether you asked to be in the pilot.'
 		}
 	]
 };
