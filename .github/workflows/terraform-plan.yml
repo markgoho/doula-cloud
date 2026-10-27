@@ -89,7 +89,7 @@ jobs:
     # path/branch filter on `on:`), which would stay pending forever.
     # Verified against #1023, an open Dependabot PR, before relying on it.
     if: github.actor != 'dependabot[bot]'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # 10 -> 15: room for the 480s `-lock-timeout` in the "Terraform plan"
     # step below, plus setup, on top of the plan itself. `timeout-minutes`
     # only counts once a job starts running, never time spent queued

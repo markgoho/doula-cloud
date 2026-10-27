@@ -70,12 +70,12 @@ The divergence is the finding: the terms she arrives with are the terms `GLOSSAR
 * **320px**: yes (ADR-0024)
 
 - **3.1** — Open `/signup`.
-- **3.2** — Fill the fields in this order: First name, Last name, Practice name (optional), the state she works from, Timezone, Email, Password.
-- **3.3** — Press **Create Practice** (`POST /api/staff/signup`). The Practice, the Staff record, and a membership holding Owner + Admin + Doula are created in one statement (`signup.go:152`).
+- **3.2** — Answer three question pages ([#2049](https://github.com/markgoho/doula-cloud/issues/2049)): First name, Last name, Email, Password; then the Practice name (optional); then the state she works from and Timezone.
+- **3.3** — Press **Create your Practice** on "Check your answers" (`POST /api/staff/signup`). The Practice, the Staff record, and a membership holding Owner + Admin + Doula are created in one statement (`signup.go:152`).
 
-This stage is genuinely cheap and is the strongest leg of her journey. One screen, four fields, no email confirmation step.
+This stage is genuinely cheap and is the strongest leg of her journey. Four short pages, each saying why it asks, and no email confirmation step before she is in.
 
-- **3.3-a** — Look for anything telling her roles exist. The signup screen now states it, before she commits: the account holds Owner, Admin and Doula, why, and where roles are read and changed afterward. The role-scoped **Staff** nav item repeats it (TB-G7, closed).
+- **3.3-a** — Look for anything telling her roles exist. Signup itself no longer says; the first screen after it does: "You hold every role — Owner, Admin and Doula. Anyone you invite holds only the roles you choose." (moved there by #2049). The role-scoped **Staff** nav item leads to the roster (TB-G7, closed).
 
 **Abandon point**: "Practice name" asks her to name a business she may not think of as one. Lower risk since #1536: the field says "(optional)", comes after her own name, and its hint says an empty field gives the Practice her own name. Worth watching.
 
@@ -114,9 +114,9 @@ This stage is genuinely cheap and is the strongest leg of her journey. One scree
 
 - **5.1** — On her empty Practice, press **Add your first Client**. Intake is one question (ADR-0017): the name. The date of birth, email, phone, address and whatever the Practice put on its own Client Field Template are added later from the Client's record.
 - **5.2** — Answer the name question and press **Save and continue**. The save is **free** and creates a Client and nothing else — no Engagement, no credit spent — and opens the Start work form for that Client.
-- **5.2-b** — **Start work with {name}** on that form. This is the act that costs, and it says so before she commits: `Credit cost 1 credit` and `Balance after 2`. She holds Owner, so asking and approving collapse into one act, and the Engagement is created and the Credit locked there; she lands on the Engagement's page, which says "Work with {name} started." A trial still has a size — three Engagements, not three Clients — but it is now named on screen rather than discovered at a paywall.
+- **5.2-b** — **Start work with {name}** on that form. This is the act that costs, and it says so before she commits: "Starting work with {name} uses 1 Credit. This Practice has 3 Welcome credits. After this, it has 2." ([#1612](https://github.com/markgoho/doula-cloud/issues/1612)). She holds Owner, so asking and approving collapse into one act, and the Engagement is created and the Credit locked there; she lands on the Engagement's page, which says "Work with {name} started." A trial still has a size — three Engagements, not three Clients — but it is now named on screen rather than discovered at a paywall.
 - **5.3** — Open the Engagement from the Clients list.
-- **5.4** — See Visits, Care Plan, Birth Plan, Contract, Invoices, and Messages on one page. This is the first moment the product looks like doula work — and it is four clicks past the point where she was deciding whether to leave.
+- **5.4** — See On call, Birth outcome, Contract, Visits, Care Plan, Birth Plan, Invoices, Offers, Messages and Activity on one page. This is the first moment the product looks like doula work — three presses past the first screen.
 
 ### Stage 6 — Judge the exit
 
@@ -148,7 +148,7 @@ This stage is genuinely cheap and is the strongest leg of her journey. One scree
 
 - **7.1** — Look for an import.
 
-**Abandon point**: there is no import (TB-G6). Every Client must be typed by hand, and the only fields that exist to type are name and email — so the spreadsheet cannot be reproduced even manually.
+**Abandon point**: there is no import (TB-G6, ruled out of v1 on [#175](https://github.com/markgoho/doula-cloud/issues/175)). Every Client must be typed by hand. Each row can be reproduced now, one question at a time, with every column the Practice adds to its own Client Fields (MO-G3, closed), but two years of rows cannot arrive together.
 
 ## Gaps found
 
@@ -159,7 +159,12 @@ This stage is genuinely cheap and is the strongest leg of her journey. One scree
 | TB-G3 | 2 | Interaction | **Closed.** The Billing screen now states what a Credit buys ("One Credit covers one Engagement") and its origin column runs every value through a label instead of printing the raw enum. | [#286](https://github.com/markgoho/doula-cloud/issues/286) |
 | TB-G4 | 4 | Experience | **Closed.** The first screen is now `OverviewHub`'s zero-Client state: it names the birth plan, the visits, the contract and the invoices a first Client will bring, and offers one action, not a menu. | [#287](https://github.com/markgoho/doula-cloud/issues/287) |
 | TB-G5 | 6 | Interaction | **Closed, split in two.** **Settings** offers a whole-Practice data export and **Delete this Practice**, a 30-day countdown before erasure. | [#288](https://github.com/markgoho/doula-cloud/issues/288) (export), [#871](https://github.com/markgoho/doula-cloud/issues/871) (deletion) |
-| TB-G6 | 7 | Interaction | No data import for a migrating owner, and Client creation accepts only name and email. | [#289](https://github.com/markgoho/doula-cloud/issues/289) |
-| TB-G7 | 3 | Experience | **Closed.** Signup grants Owner + Admin + Doula and now says so, before she commits ([#878](https://github.com/markgoho/doula-cloud/issues/878)). The Staff screen speaks the team's words, `Owner, Admin, Doula`, not the schema's ([#262](https://github.com/markgoho/doula-cloud/issues/262), closed), and a role-scoped **Staff** nav item signposts the roster from every screen. | [#290](https://github.com/markgoho/doula-cloud/issues/290) |
+| TB-G6 | 7 | Interaction | No data import for a migrating owner. **Closed without a build**: ruled out of v1 on [#175](https://github.com/markgoho/doula-cloud/issues/175), first priority after launch. A row can be retyped by hand since MO-G3 closed. | [#289](https://github.com/markgoho/doula-cloud/issues/289) |
+| TB-G7 | 3 | Experience | **Closed.** Signup grants Owner + Admin + Doula, and the first screen after it says so ([#878](https://github.com/markgoho/doula-cloud/issues/878); moved off signup by [#2049](https://github.com/markgoho/doula-cloud/issues/2049)). The Staff screen speaks the team's words, `Owner, Admin, Doula`, not the schema's ([#262](https://github.com/markgoho/doula-cloud/issues/262), closed), and a role-scoped **Staff** nav item signposts the roster from every screen. | [#290](https://github.com/markgoho/doula-cloud/issues/290) |
+| TB-G8 | 3 | Interaction | Signup fails its budget: `**Screens**: 2 (Hick's Law, Flow)` — measured 5 (four question pages since [#2049](https://github.com/markgoho/doula-cloud/issues/2049), then Overview); `**Decisions**: 5 (Hick's Law, Miller's Law)` — measured 6 on "Check your answers". Second walk, 2026-10-27. | [#2181](https://github.com/markgoho/doula-cloud/issues/2181) |
+| TB-G9 | 3, 4 | Experience | Nothing says her Practice was created. `**Confirmation**: yes (Peak-End Rule)` — measured no on stage 3 and on stage 4: Overview says what to do next, and only the Practice's name in the top bar implies it exists. Second walk, 2026-10-27. | [#2182](https://github.com/markgoho/doula-cloud/issues/2182) |
+| TB-G10 | 4 | Experience | The top bar puts ten destinations over an empty Practice. `**Decisions**: 5 (Hick's Law, Miller's Law)` — measured 13: ten destinations, the account menu, the pilot feedback link and **Add your first Client**. The body itself offers one action. Second walk, 2026-10-27. | [#2183](https://github.com/markgoho/doula-cloud/issues/2183) |
+| TB-G11 | 5 | Interaction | `**Decisions**: 3 (Hick's Law, Miller's Law)` — measured 8 on the Start work form and 4 on the name question, page body only. Second walk, 2026-10-27. | [#2184](https://github.com/markgoho/doula-cloud/issues/2184) |
+| TB-G12 | 6 | Both | Both exit acts need a second factor first, and sit at the bottom of the Settings hub. `**Screens**: 2 (Hick's Law, Flow)` — measured at least 5 for a new Owner (Settings, three enrollment steps, Settings again); `**Decisions**: 2 (Hick's Law, Miller's Law)` — measured 14 on Settings. Second walk, 2026-10-27. | [#2185](https://github.com/markgoho/doula-cloud/issues/2185) |
 
-Also hit here, filed on their owning maps: **MO-G3** (Client takes name and email only — which is also why TB-G6 cannot be worked around by hand).
+Also hit here, filed on their owning maps: **MO-G3** (Client takes name and email only — closed; it was why TB-G6 could not be worked around by hand).
