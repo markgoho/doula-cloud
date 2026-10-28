@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import type { Component } from 'svelte';
 import type { StreamedRead } from '#lib/streamedRead.svelte.js';
+import { gotoWithOutcome } from '#lib/outcome.js';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import '#lib/styles/app.css';
 import Credits from './billing/+page.svelte';
@@ -27,6 +28,9 @@ const pageState = vi.hoisted(() => ({
 	data: {} as Record<string, unknown>
 }));
 vi.mock('$app/state', () => ({ page: pageState }));
+
+const goto = vi.hoisted(() => vi.fn());
+vi.mock('$app/navigation', () => ({ goto }));
 
 const didFollowSessionRefusal = vi.hoisted(() => vi.fn(async () => false));
 vi.mock('#lib/api.js', () => ({ apiFetch: vi.fn(), didFollowSessionRefusal }));
@@ -77,4 +81,23 @@ describe.each(screens)('%s', (_name, screen, known) => {
 
 		await expect.element(testPage.getByText('Loaded')).toHaveAttribute('title', expect.stringContaining('"landed":true'));
 	});
+});
+
+// #1710: a save hands its message over only while its own navigation
+// runs, which ends once this page draws its loading state and before the
+// read lands. The page takes it then, and the loaded screen says it.
+it('hands the Engagement screen what the save that led here did', async () => {
+	const engagementPath = '/practices/practice-1/engagements/engagement-1';
+	pageState.url = new URL(`https://example.test${engagementPath}`);
+	const read = Promise.withResolvers<StreamedRead<unknown>>();
+	goto.mockImplementationOnce(async () => {
+		await setup(Engagement as unknown as StreamingPage, read.promise);
+	});
+
+	await gotoWithOutcome(engagementPath, 'Work with Pat started.');
+	read.resolve({ isLoaded: true, value: { landed: true } });
+
+	await expect
+		.element(testPage.getByText('Loaded'))
+		.toHaveAttribute('title', expect.stringContaining('"outcome":"Work with Pat started."'));
 });

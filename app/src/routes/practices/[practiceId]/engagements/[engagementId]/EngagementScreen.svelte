@@ -40,7 +40,6 @@
 		type WhoIsOn
 	} from '#lib/engagementDetail.js';
 	import { kindLabel } from '#lib/engagementRequest.js';
-	import { takeOutcome } from '#lib/outcome.js';
 	import {
 		assigneeBlock,
 		loadVisitAssigneesOrNone,
@@ -159,16 +158,19 @@
 		type EngagementOnCall
 	} from '#lib/onCall.js';
 
-	// What the save that led here did, if one did (#1710): an approved
-	// start from the Start work form, or her details journey's save. Read
-	// once, while the page renders, so a reload says nothing.
-	const outcome = takeOutcome(page.url);
-
 	// The Engagement comes from +page.ts's read, once it lands (#695,
 	// #2249); +page.svelte draws the loading state and a refusal. The
 	// other six sections still load after mount, each rendering as it
 	// lands.
-	let { data }: { data: Omit<PageData, 'read'> & EngagementSummary } = $props();
+	//
+	// `outcome` is what the save that led here did, if one did (#1710): an
+	// approved start from the Start work form, or her details journey's
+	// save. +page.svelte takes it, because it is handed over only while
+	// the navigation runs, and that ends before this screen mounts.
+	let {
+		data,
+		outcome
+	}: { data: Omit<PageData, 'read'> & EngagementSummary; outcome?: string } = $props();
 	const detail = $derived(data);
 
 	// The Contract's PDF download opens to an Owner, an Admin, and an

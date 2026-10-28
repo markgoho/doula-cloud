@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { page } from '#lib/appState.svelte.js';
+	import { takeOutcome } from '#lib/outcome.js';
 	import { Streamed } from '#lib/streamedRead.svelte.js';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 	import FailedRead from '../../FailedRead.svelte';
@@ -9,6 +10,10 @@
 
 	let { data }: PageProperties = $props();
 	const engagement = new Streamed(() => data.read);
+
+	// What the save that led here did, if one did (#1710). Taken while the
+	// navigation runs, which ends before the read lands.
+	const outcome = takeOutcome(page.url);
 
 	// EngagementScreen's sections, in its order. Offers is left out: it
 	// shows only once its own read lands, after the Engagement's.
@@ -30,7 +35,7 @@
 {#if engagement.failure}
 	<FailedRead kind={engagement.failure} />
 {:else if engagement.value}
-	<EngagementScreen data={{ ...data, ...engagement.value }} />
+	<EngagementScreen data={{ ...data, ...engagement.value }} {outcome} />
 {:else}
 	<RecordDetail
 		title=""

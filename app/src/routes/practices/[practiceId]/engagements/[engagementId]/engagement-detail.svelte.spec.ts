@@ -4,8 +4,6 @@ import { render } from 'vitest-browser-svelte';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import { jsonResponse } from '#lib/testResponse.js';
 import { findDuplicateIds } from '#lib/duplicateIds.js';
-import { gotoWithOutcome } from '#lib/outcome.js';
-import { goto } from '$app/navigation';
 import Page from './EngagementScreen.svelte';
 // Rendering `+page.svelte` directly bypasses `+layout.svelte`, the only
 // place the real app calls this -- without it a layout primitive like
@@ -98,7 +96,7 @@ function sessionFor(roles: string[] = [], staffId = 'staff-1', isContractor = fa
 	return { ...session, staffId, roles, isContractor };
 }
 
-async function setup(detail: Detail, activityResponse?: Response) {
+async function setup(detail: Detail, activityResponse?: Response, outcome?: string) {
 	await testPage.viewport(3200, 900);
 	if (activityResponse) {
 		apiFetchWithSession.mockImplementation((path: string) =>
@@ -111,7 +109,8 @@ async function setup(detail: Detail, activityResponse?: Response) {
 	// $app/state mock above supplies from the fixture, so the two cannot
 	// disagree about which Engagement this is (#596).
 	await render(Page, {
-		data: { ...detail, session: sessionFor() }
+		data: { ...detail, session: sessionFor() },
+		outcome
 	});
 }
 
@@ -540,24 +539,17 @@ describe("the due date's Change (#2013)", () => {
 	});
 });
 
-// Arrives the way a save sends the reader here (#1710): the save's own
-// navigation renders this page while it runs, with `goto` standing in.
-async function arriveFromSave(message: string) {
-	vi.mocked(goto).mockImplementationOnce(async () => {
-		await setup(fixtureDetail);
-	});
-	await gotoWithOutcome(fixture.url, message);
-}
-
 // #1611, #1710: a save that leads here says what it did, such as an
-// approved start at the end of a new Client's flow.
+// approved start at the end of a new Client's flow. +page.svelte takes
+// the message while the save's navigation runs and hands it over
+// (`streamed-pages.svelte.spec.ts`).
 describe('the status message after a save that leads here (#1611, #1710)', () => {
 	beforeEach(() => {
 		apiFetchWithSession.mockReset();
 	});
 
 	it('says what the save did, as a status, and takes focus', async () => {
-		await arriveFromSave(`Work with ${fixtureDetail.clientName} started.`);
+		await setup(fixtureDetail, undefined, `Work with ${fixtureDetail.clientName} started.`);
 
 		const message = testPage.getByRole('status').filter({ hasText: `Work with ${fixtureDetail.clientName} started.` });
 		await expect.element(message).toBeVisible();
