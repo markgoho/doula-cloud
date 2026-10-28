@@ -56,8 +56,20 @@
 
 	interface SettingGroup {
 		heading: string;
+		/**
+		The section's id, where a screen sends her back to the group
+		rather than to the top of the hub.
+		*/
+		id?: string;
 		rows: SettingRow[];
 	}
+
+	/*
+	 * #2185: enrolling a second factor from the export's row sends her
+	 * back to this group, where Download now is, not to the top of the
+	 * hub with the export eleven rows below it.
+	 */
+	const securityGroupId = 'security-and-data';
 
 	const groups: SettingGroup[] = $derived(
 		(
@@ -92,6 +104,7 @@
 			},
 			{
 				heading: 'Security and data',
+				id: securityGroupId,
 				rows: [
 					{ key: 'mfa', label: 'Multi-factor authentication', value: '', changes: 'multi-factor authentication', href: resolve('/practices/[practiceId]/settings/mfa', { practiceId }) },
 					{ key: 'blockedAddresses', label: 'Blocked email addresses', value: '', changes: 'the blocked email addresses', href: resolve('/practices/[practiceId]/settings/blocked-addresses', { practiceId }) },
@@ -122,7 +135,7 @@
 	{#if row.key === 'export' && !hasSecondFactor}
 		<SecondFactorNeeded
 			message="You need two-factor authentication before you can export this Practice's data."
-			returnTo={page.url.pathname}
+			returnTo={`${page.url.pathname}#${securityGroupId}`}
 		/>
 	{:else if row.value !== ''}
 		{row.value}
@@ -143,7 +156,7 @@
 
 {#snippet primary()}
 	{#each groups as group (group.heading)}
-		<section>
+		<section id={group.id}>
 			<stack-l space="var(--space-related)">
 				<Heading level={2} variant="section" text={group.heading} />
 				<SummaryList rows={group.rows} {value} {action} />
