@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import { privacyPolicyUrl, termsOfServiceUrl } from '#lib/legal.js';
+import { takeOutcome } from '#lib/outcome.js';
 import { toPageState } from '../../../routeFixture.js';
 import { signupDraft } from '../signupJourney.svelte.js';
 import Page from './+page.svelte';
@@ -109,6 +110,38 @@ describe('the answers', () => {
 
 		expect(testPage.getByText('Not answered').elements()).toHaveLength(4);
 		await expect.element(testPage.getByText('Your own name')).toBeVisible();
+	});
+});
+
+/**
+What the Overview is given to say on arrival (#2182): the message the
+outcome carrier holds for the Practice's path while `goto` runs.
+*/
+function carriedOnArrival(): Promise<string | undefined> {
+	return new Promise((resolve) => {
+		goto.mockImplementationOnce(async (href: string) => resolve(takeOutcome(new URL(href, 'https://example.test/'))));
+	});
+}
+
+describe('what the Overview says on arrival (#2182)', () => {
+	it('says the Practice was created, by its name', async () => {
+		await setup();
+		answerCreated();
+		const carried = carriedOnArrival();
+		await create();
+
+		expect(await carried).toBe(`You created your Practice, ${answers.practiceName}.`);
+		expect(goto).toHaveBeenCalledWith('/practices/practice-1');
+	});
+
+	it('names it after her when she left the Practice name empty (#1536)', async () => {
+		signupDraft.update({ practiceName: '' });
+		await setup();
+		answerCreated();
+		const carried = carriedOnArrival();
+		await create();
+
+		expect(await carried).toBe('You created your Practice, Anne-Marie Ochieng-Whitfield.');
 	});
 });
 

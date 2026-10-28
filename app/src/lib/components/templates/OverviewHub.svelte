@@ -89,8 +89,8 @@
 		 * A status `Notice` before the <h1>, focused on arrival, and only
 		 * once the hub has loaded -- the same as `FormPage`'s and
 		 * `RecordDetail`'s own `outcome`. The Practice landing page is its
-		 * first reader: agreeing to a changed Terms of Service lands there
-		 * (#1549).
+		 * first reader: creating the Practice at signup (#2182) and agreeing
+		 * to a changed Terms of Service (#1549) land there.
 		 */
 		outcome?: string;
 	}
