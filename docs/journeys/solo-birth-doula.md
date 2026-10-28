@@ -145,10 +145,10 @@ This is the largest single gap on the practice side. It also removes any possibi
 * **Cold**: yes (Paradox of the Active User)
 * **320px**: yes (ADR-0024)
 
-- **7.1** — Open `/practices/[practiceId]/settings/payments` and start Stripe Connect onboarding (`POST /api/practices/{id}/payments/connect`, owner-gated). On return from Stripe the screen is **stale** (**MO-G11**).
+- **7.1** — Open `/practices/[practiceId]/settings/payments` and start Stripe Connect onboarding (`POST /api/practices/{id}/payments/connect`, owner-gated). On return from Stripe the screen reads "Awaiting Stripe review" until Stripe verifies, then "Taking payments"; it re-reads status on a short poll and offers **Check status again** (**MO-G11**, closed).
 - **7.2** — Raise an Invoice against the signed Contract (`POST /api/practices/{id}/engagements/{id}/contract/invoices`).
 
-No Stripe account exists yet, so this leg is **blocked rather than broken**. The invoice endpoint returns `connectRequired` before it creates anything.
+The leg is walked end to end (second walk, finished 2026-10-28, [#2171](https://github.com/markgoho/doula-cloud/issues/2171)): Stripe's hosted onboarding, finished in a person's own Chrome, leaves the account `active` by the `capability_status_updated` webhook; the first **Create Invoice** asks the billing mode once; by card, the Invoice is created on the connected account, the Client pays it on Stripe's hosted page, and `invoice.paid` marks it **Paid** for Maya and in the Client's portal. Before the account is active, the same press refuses with "Clients cannot pay this Practice yet." ([#2200](https://github.com/markgoho/doula-cloud/issues/2200)).
 
 ### Stage 8 — Message the Client
 
@@ -183,5 +183,5 @@ No Stripe account exists yet, so this leg is **blocked rather than broken**. The
 | MO-G12 | 2 | Interaction | The Plan Templates editor shows every question's controls at once, and has no way on to the Contract Template. `**Decisions**: 7 (Hick's Law, Miller's Law)` — measured 16 in view at once (35 on the screen); `**Screens**: 2 (Hick's Law, Flow)` — measured 3, through the Settings hub. Second walk, 2026-10-27. | [#2193](https://github.com/markgoho/doula-cloud/issues/2193) |
 | MO-G13 | 2 | Experience | Saving a template says "Saved." and nothing about what changes or what is next. `**Confirmation**: yes (Peak-End Rule)` — measured no. Second walk, 2026-10-27. | [#2194](https://github.com/markgoho/doula-cloud/issues/2194) |
 | MO-G14 | 4 | Interaction | The seeded Birth Plan is one section. `**Decisions**: 7 (Hick's Law, Miller's Law)` — measured 10 in "Birth Setting", a choose-several question counted per option. Second walk, 2026-10-27. | [#2195](https://github.com/markgoho/doula-cloud/issues/2195) |
-| MO-G15 | 7 | Interaction | Two one-time questions the stage does not name, the website before **Connect Stripe** and the billing mode on the first Invoice, each on a screen of four. `**Decisions**: 3 (Hick's Law, Miller's Law)` — measured 4. Second walk, 2026-10-27. | [#2196](https://github.com/markgoho/doula-cloud/issues/2196) |
+| MO-G15 | 7 | Interaction | Two one-time questions the stage does not name, the website before **Connect Stripe** and the billing mode on the first Invoice, each on a screen of four. `**Decisions**: 3 (Hick's Law, Miller's Law)` — measured 4. Second walk, 2026-10-27. The website detour also fails `**Screens**: 3 (Hick's Law, Flow)` — measured 5 from a cold start, 2026-10-28. | [#2196](https://github.com/markgoho/doula-cloud/issues/2196) |
 | MO-G16 | 8 | Interaction | `**Decisions**: 2 (Hick's Law, Miller's Law)` — measured 4: Message, Attachment, **Send** and **Cancel**, behind **Write a message**. Second walk, 2026-10-27. | [#2197](https://github.com/markgoho/doula-cloud/issues/2197) |
