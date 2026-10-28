@@ -23,12 +23,15 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # 20 minutes holds the Playwright install steps' worst case, 16 minutes;
     # the arithmetic is on ci.yml's `app` job (#1661).
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+
+      - name: Keep temporary files on disk
+        run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
 
       - uses: oven-sh/setup-bun@v2
 
