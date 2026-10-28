@@ -64,12 +64,12 @@ She is **not** a test of role separation. Every permission boundary rides on Ren
 
 ### Stage 3 — Add the first Client — moment of truth
 
-**Thinking**: "Everything in the folder goes in here." **Pain points**: the folder holds a due date, a phone number, an address, a hospital, a partner's name, and a page of intake notes. The form took two fields when this map was drawn; intake now asks for all of it, the fixed facts as its own questions and the rest through the Practice's Client Field Template ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252) is closed).
+**Thinking**: "Everything in the folder goes in here." **Pain points**: the folder holds a due date, a phone number, an address, a hospital, a partner's name, and a page of intake notes. The form took two fields when this map was drawn; intake now asks for all of it, the fixed facts as its own questions and the rest through the Practice's Client Field Template ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252) is closed). The Start work form asks the kind of work, the due date and who the Doula is in one act, by decision ([#1515](https://github.com/markgoho/doula-cloud/issues/1515)), so its six decisions are the stage's largest screen ([TB-G11](evaluator-doula.md#gaps-found) holds the reason).
 
 **Budget**:
 
 * **Screens**: 5 (Hick's Law, Flow)
-* **Decisions**: 3 (Hick's Law, Miller's Law)
+* **Decisions**: 6 (Hick's Law, Miller's Law)
 * **Memory**: yes (Working Memory)
 * **Time**: 400 ms, 100 ms (Doherty Threshold)
 * **Confirmation**: yes (Peak-End Rule)
