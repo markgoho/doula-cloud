@@ -131,7 +131,18 @@ describe('the Settings index', () => {
 			.toBeVisible();
 		await expect
 			.element(testPage.getByRole('link', { name: 'Set up two-factor authentication' }))
-			.toHaveAttribute('href', `/mfa/enroll?returnTo=${encodeURIComponent(pageState.url.pathname)}`);
+			.toHaveAttribute('href', `/mfa/enroll?returnTo=${encodeURIComponent(`${pageState.url.pathname}#security-and-data`)}`);
+	});
+
+	// #2185: enrolling sends her back to the group that holds Download,
+	// not to the top of the hub with the export eleven rows down. The
+	// fragment resolves through an id, which the accessible tree does not
+	// carry, so the section is read off the heading's DOM.
+	it('names the group that holds the export, so enrolling lands her on it', async () => {
+		await setup(ownerWithoutSecondFactor);
+
+		const group = testPage.getByRole('heading', { name: 'Security and data' }).element().closest('section');
+		expect(group?.id).toBe('security-and-data');
 	});
 
 	it('says which value could not be read, and still shows the rest', async () => {
