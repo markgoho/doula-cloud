@@ -66,10 +66,20 @@
 		/**
 		 * Presence, not a paired boolean: the value is also the Skeleton's
 		 * accessible label, so a caller cannot supply "loading" without
-		 * saying what is loading. A caller's `title` may be built from the
-		 * data this state is standing in for, so nothing here reads it.
+		 * saying what is loading. The title and `links` are drawn while
+		 * loading (#2248), so a caller passes only ones that stand without
+		 * the data; bars hold the rest of the hub's space.
 		 */
 		loading?: string;
+		/**
+		 * Whether the hub will have a `secondary` rail once loaded. Read
+		 * only while `loading`, to hold the rail's column so the primary
+		 * column does not narrow when the data lands, the same as
+		 * `RecordDetail`'s `isContentsShown`. A caller knows it before the
+		 * data does when the rail turns on who is reading, not on what
+		 * loads.
+		 */
+		isRailShown?: boolean;
 		/**
 		Same shape as `loading`: presence is the state, value is the message.
 		*/
@@ -85,8 +95,20 @@
 		outcome?: string;
 	}
 
-	let { title, serviceName, primary, secondary, feed, links, isEmpty, empty, loading, loadError, outcome }: Properties =
-		$props();
+	let {
+		title,
+		serviceName,
+		primary,
+		secondary,
+		feed,
+		links,
+		isEmpty,
+		empty,
+		loading,
+		isRailShown = false,
+		loadError,
+		outcome
+	}: Properties = $props();
 </script>
 
 <!-- The primary column's content, then the feed, last (#2063). Drawn
@@ -108,7 +130,22 @@
 		{#if loadError}
 			<Notice variant="error" message={loadError} />
 		{:else if loading}
-			<Skeleton variant="text" lines={6} label={loading} />
+			<stack-l space="var(--space-section)">
+				<h1>{title}</h1>
+				{#if links}
+					{@render links()}
+				{/if}
+				{#if isRailShown}
+					<!-- The loaded split's own sidebar-l. The rail's bars are
+					     unlabeled: one load, one announcement. -->
+					<sidebar-l side="end" space="var(--space-section)" content-min="min(var(--measure), 100%)">
+						<Skeleton variant="text" lines={6} label={loading} />
+						<Skeleton variant="text" lines={4} />
+					</sidebar-l>
+				{:else}
+					<Skeleton variant="text" lines={6} label={loading} />
+				{/if}
+			</stack-l>
 		{:else}
 			<stack-l space="var(--space-section)">
 				{#if outcome}

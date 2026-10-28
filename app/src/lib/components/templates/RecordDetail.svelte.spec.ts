@@ -177,14 +177,36 @@ describe('RecordDetail.svelte', () => {
 		expect(strip.compareDocumentPosition(firstSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 	});
 
-	it('reserves the page frame for a skeleton while loading, instead of rendering the record (#480)', async () => {
-		const { container } = await setup({ loading: 'Loading the Engagement' });
+	it('draws the back link, the title and a skeleton while loading, instead of the record (#480, #2248)', async () => {
+		const { container } = await setup({
+			loading: 'Loading the Engagement',
+			backHref: '/clients',
+			backLabel: 'Clients'
+		});
 
 		expect(container.querySelector('center-l')).toHaveAttribute('max', 'none');
 		await expect
 			.element(page.getByRole('status', { name: 'Loading the Engagement' }))
 			.toBeVisible();
-		await expect.element(page.getByRole('heading', { level: 1, name: 'Ada Lovelace' })).not.toBeInTheDocument();
+		await expect.element(page.getByRole('link', { name: 'Clients' })).toBeVisible();
+		await expect.element(page.getByRole('heading', { level: 1, name: 'Ada Lovelace' })).toBeVisible();
+		await expect.element(page.getByRole('heading', { level: 2, name: 'Invoices' })).toBeVisible();
+		await expect.element(page.getByText('Three visits booked')).not.toBeInTheDocument();
+		expect(page.getByRole('status').all()).toHaveLength(1);
+	});
+
+	it('draws one block of bars while loading a record that names no sections yet', async () => {
+		await setup({ loading: 'Loading the request', sections: [] });
+
+		await expect.element(page.getByRole('status', { name: 'Loading the request' })).toBeVisible();
+		await expect.element(page.getByRole('heading', { level: 2 })).not.toBeInTheDocument();
+	});
+
+	it('holds a heading-shaped bar, not an empty heading, while a title that is the data loads (#2248)', async () => {
+		await setup({ title: '', loading: 'Loading the Client' });
+
+		await expect.element(page.getByRole('heading', { level: 1 })).not.toBeInTheDocument();
+		expect(page.getByRole('status').all()).toHaveLength(1);
 	});
 
 	it('reserves the contents rail column while loading, if the loaded record will have one (#480)', async () => {

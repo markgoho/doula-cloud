@@ -571,9 +571,10 @@
 	{primary}
 	secondary={landing && hasSecondary(landing) ? secondary : undefined}
 	feed={landing ? activityFeed : undefined}
-	links={landing ? quickLinks : undefined}
+	links={quickLinks}
 	{empty}
 	loading={landing || error ? undefined : 'Loading your Practice'}
+	isRailShown={isOwnerOrAdmin(session)}
 	loadError={error || undefined}
 	{outcome}
 />

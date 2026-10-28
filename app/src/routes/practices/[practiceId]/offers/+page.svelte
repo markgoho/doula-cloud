@@ -7,6 +7,7 @@
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
+	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 
 	let offers = $state<Offer[]>([]);
 	let error = $state('');
@@ -48,6 +49,8 @@
 
 	{#if isLoaded}
 		<OfferInbox {offers} onDecide={handleDecide} />
+	{:else}
+		<Skeleton variant="text" lines={3} label="Loading your offers" />
 	{/if}
 {/snippet}
 

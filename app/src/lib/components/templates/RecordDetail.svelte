@@ -134,6 +134,43 @@
 				</div>
 		{/snippet}
 
+		<!-- What the header is before the record loads (#2248): the back
+		     link and the title, which a route knows first, and a
+		     heading-shaped bar where the title is the record's own data
+		     (the route passes it empty until then). -->
+		{#snippet loadingHeader()}
+			<div class="record-header">
+				{#if backHref}
+					<div class="back"><BackLink href={backHref} label={backLabel} /></div>
+				{/if}
+				{#if title}
+					<Heading level={1} variant="page" text={title} />
+				{:else}
+					<Skeleton variant="heading" lines={1} />
+				{/if}
+			</div>
+		{/snippet}
+
+		<!-- The sections a route already names while its record loads, each
+		     heading with bars under it (#2248); one load, so only the first
+		     announces. A route that names none yet gets one block of bars. -->
+		{#snippet loadingSections()}
+			<div class="sections">
+				<stack-l space="var(--space-section)">
+					{#each sections as section, index (section.heading)}
+						<stack-l space="var(--space-4)">
+							<Heading level={2} variant="section" text={section.heading} />
+							<div class="loading-bars">
+								<Skeleton variant="text" lines={3} label={index === 0 ? loading : undefined} />
+							</div>
+						</stack-l>
+					{:else}
+						<div class="loading-bars"><Skeleton variant="text" lines={6} label={loading} /></div>
+					{/each}
+				</stack-l>
+			</div>
+		{/snippet}
+
 		{#snippet recordSections()}
 				<div class="sections">
 					<stack-l space="var(--space-section)">
@@ -173,25 +210,23 @@
 			<Notice variant="error" message={loadError} />
 		{:else if loading}
 			{#if isContentsShown}
-				<!-- sidebar-l (#564), side="end" (like OverviewHub's own
-				     secondary), as the loaded state's wide arrangement. The rail
-				     slot holds an empty placeholder rather than
-				     placeholder links, because `sections` -- and so the
-				     links -- do not exist yet, and a second "loading"
-				     announcement here would double up on the Skeleton's
-				     own; it still reserves the column's width so the page
-				     does not reflow once the real rail arrives. -->
-				<sidebar-l
-					side="end"
-					space="var(--space-12)"
-					basis="var(--page-rail)"
-					content-min="min(var(--measure), 100%)"
-				>
-					<Skeleton variant="text" lines={6} label={loading} />
-					<div class="contents-rail"></div>
-				</sidebar-l>
+				<!-- The loaded record's own grid (#2248), so the rail's column
+				     sits where the loaded rail does and flips at the same
+				     width. The rail is an empty placeholder rather than
+				     placeholder links: `sections`, and so the links, do not
+				     exist yet. -->
+				<div class="record">
+					<div class="record-grid">
+						{@render loadingHeader()}
+						<div class="contents"><div class="contents-rail"></div></div>
+						{@render loadingSections()}
+					</div>
+				</div>
 			{:else}
-				<Skeleton variant="text" lines={6} label={loading} />
+				<stack-l space="var(--space-section)">
+					{@render loadingHeader()}
+					{@render loadingSections()}
+				</stack-l>
 			{/if}
 		{:else if isContentsShown}
 			<!--
@@ -276,6 +311,11 @@
 			margin-block-end: var(--space-4);
 		}
 
+		/* A section is a summary list or prose, capped at a reading measure
+		   once loaded, so its bars stop there too. */
+		.loading-bars {
+			max-inline-size: var(--measure);
+		}
 		.contents-heading {
 			margin: 0;
 			color: var(--color-on-surface-muted);
@@ -304,21 +344,6 @@
 		   already broken. */
 		section {
 			scroll-margin-block-start: calc(var(--top-bar-height) + var(--space-4));
-		}
-
-		/*
-		 * The loading state's reserved rail (#480, #564): `sidebar-l`,
-		 * `side="end"` with the line reversed, so the DOM-last placeholder
-		 * sits on the left where the loaded rail does.
-		 */
-		sidebar-l {
-			flex-direction: row-reverse;
-		}
-
-		/* The placeholder holds its column whatever the width: the query
-		   below that hides a rail asks about the loaded record. */
-		sidebar-l > .contents-rail {
-			display: block;
 		}
 
 		/*

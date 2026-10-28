@@ -571,8 +571,9 @@
 			}
 		}
 
-		/* motion:ignore -- the app's only keyframe animation. It is the
-		   in-button loading indicator above, already gated on
+		/* motion:ignore -- the app's only keyframe animation that moves
+		   anything (Skeleton's changes opacity once). It is the in-button
+		   loading indicator above, already gated on
 		   prefers-reduced-motion, and it moves nothing else on the page. */
 		@keyframes spin {
 			to {
