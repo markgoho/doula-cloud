@@ -33,6 +33,14 @@
 	function fullName(): string {
 		return lastName ? `${firstName} ${lastName}` : firstName;
 	}
+
+	// Where an address too wide for the panel may wrap: after the @ and
+	// before each dot of the domain, never mid-label (#2226).
+	function emailParts(address: string): string[] {
+		const at = address.lastIndexOf('@');
+		const [first, ...rest] = address.slice(at + 1).split('.');
+		return [address.slice(0, at + 1), first, ...rest.map((label) => `.${label}`)];
+	}
 </script>
 
 {#snippet face()}
@@ -53,7 +61,9 @@
 		<div class="identity">
 			<p class="name">{fullName()}</p>
 			{#if email}
-				<p class="email">{email}</p>
+				<p class="email">
+					{#each emailParts(email) as part, index (index)}{#if index > 0}<wbr />{/if}{part}{/each}
+				</p>
 			{/if}
 		</div>
 		<!--
