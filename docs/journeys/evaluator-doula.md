@@ -58,12 +58,12 @@ The divergence is the finding: the terms she arrives with are the terms `GLOSSAR
 
 ### Stage 3 — Sign up
 
-**Thinking**: "Fine, I will spend one minute." **Pain points**: she has none of Maya's motivation. Every field costs her.
+**Thinking**: "Fine, I will spend one minute." **Pain points**: she has none of Maya's motivation. Every field costs her. Signup is four short pages and not one form, by decision ([#2049](https://github.com/markgoho/doula-cloud/issues/2049)): the brief's Hick's Law row asks for a form "in sequence, not as a wall", and its tension with Tesler's Law lets Hick win "on what is shown at once", not on how many screens a journey crosses. So the stage crosses five screens, and no page asks more than six decisions of her at once, where the one form asked eight (TB-G8).
 
 **Budget**:
 
-* **Screens**: 2 (Hick's Law, Flow)
-* **Decisions**: 5 (Hick's Law, Miller's Law)
+* **Screens**: 5 (Hick's Law, Flow)
+* **Decisions**: 6 (Hick's Law, Miller's Law)
 * **Memory**: yes (Working Memory)
 * **Confirmation**: yes (Peak-End Rule)
 * **Cold**: yes (Paradox of the Active User)
@@ -161,7 +161,7 @@ This stage is genuinely cheap and is the strongest leg of her journey. Four shor
 | TB-G5 | 6 | Interaction | **Closed, split in two.** **Settings** offers a whole-Practice data export and **Delete this Practice**, a 30-day countdown before erasure. | [#288](https://github.com/markgoho/doula-cloud/issues/288) (export), [#871](https://github.com/markgoho/doula-cloud/issues/871) (deletion) |
 | TB-G6 | 7 | Interaction | No data import for a migrating owner. **Closed without a build**: ruled out of v1 on [#175](https://github.com/markgoho/doula-cloud/issues/175), first priority after launch. A row can be retyped by hand since MO-G3 closed. | [#289](https://github.com/markgoho/doula-cloud/issues/289) |
 | TB-G7 | 3 | Experience | **Closed.** Signup grants Owner + Admin + Doula, and the first screen after it says so ([#878](https://github.com/markgoho/doula-cloud/issues/878); moved off signup by [#2049](https://github.com/markgoho/doula-cloud/issues/2049)). The Staff screen speaks the team's words, `Owner, Admin, Doula`, not the schema's ([#262](https://github.com/markgoho/doula-cloud/issues/262), closed), and a role-scoped **Staff** nav item signposts the roster from every screen. | [#290](https://github.com/markgoho/doula-cloud/issues/290) |
-| TB-G8 | 3 | Interaction | Signup fails its budget: `**Screens**: 2 (Hick's Law, Flow)` — measured 5 (four question pages since [#2049](https://github.com/markgoho/doula-cloud/issues/2049), then Overview); `**Decisions**: 5 (Hick's Law, Miller's Law)` — measured 6 on "Check your answers". Second walk, 2026-10-27. | [#2181](https://github.com/markgoho/doula-cloud/issues/2181) |
+| TB-G8 | 3 | Interaction | **Closed by a budget change.** Signup failed `**Screens**: 2 (Hick's Law, Flow)` — measured 5 (four question pages since [#2049](https://github.com/markgoho/doula-cloud/issues/2049), then Overview) — and `**Decisions**: 5 (Hick's Law, Miller's Law)` — measured 6 on "Check your answers", on the second walk, 2026-10-27. Both lines were set for the one-screen form that #2049 replaced. The founder's decision on #2049, and the brief's Hick's Law row it rests on, settled it: the budget is now 5 and 6, with the reason in stage 3's Pain points. Maya Okonkwo's stage 1 and Renata Alvarez's stage 0 moved with it. | [#2181](https://github.com/markgoho/doula-cloud/issues/2181) |
 | TB-G9 | 3, 4 | Experience | Nothing says her Practice was created. `**Confirmation**: yes (Peak-End Rule)` — measured no on stage 3 and on stage 4: Overview says what to do next, and only the Practice's name in the top bar implies it exists. Second walk, 2026-10-27. | [#2182](https://github.com/markgoho/doula-cloud/issues/2182) |
 | TB-G10 | 4 | Experience | The top bar puts ten destinations over an empty Practice. `**Decisions**: 5 (Hick's Law, Miller's Law)` — measured 13: ten destinations, the account menu, the pilot feedback link and **Add your first Client**. The body itself offers one action. Second walk, 2026-10-27. | [#2183](https://github.com/markgoho/doula-cloud/issues/2183) |
 | TB-G11 | 5 | Interaction | `**Decisions**: 3 (Hick's Law, Miller's Law)` — measured 8 on the Start work form and 4 on the name question, page body only. Second walk, 2026-10-27. | [#2184](https://github.com/markgoho/doula-cloud/issues/2184) |

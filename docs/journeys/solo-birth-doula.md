@@ -28,20 +28,20 @@ Maya is close to a domain expert but not inside the model.
 
 ### Stage 1 — Sign up and create the Practice
 
-**Thinking**: "I lost an intake form last spring. I am not doing that again." **Pain points**: none — she has the strongest motivation of any Persona.
+**Thinking**: "I lost an intake form last spring. I am not doing that again." **Pain points**: none — she has the strongest motivation of any Persona. Signup is four short pages and not one form, by decision ([#2049](https://github.com/markgoho/doula-cloud/issues/2049)), so the stage crosses five screens and no page asks more than six decisions of her at once ([TB-G8](evaluator-doula.md#gaps-found) holds the reason).
 
 **Budget**:
 
-* **Screens**: 2 (Hick's Law, Flow)
-* **Decisions**: 5 (Hick's Law, Miller's Law)
+* **Screens**: 5 (Hick's Law, Flow)
+* **Decisions**: 6 (Hick's Law, Miller's Law)
 * **Memory**: yes (Working Memory)
 * **Confirmation**: yes (Peak-End Rule)
 * **Cold**: yes (Paradox of the Active User)
 * **320px**: yes (ADR-0024)
 
 - **1.1** — Open `/signup`.
-- **1.2** — Fill First name, Last name, Practice name (optional), the state she works from, Timezone, Email, Password; read the role notice and the sentence above the button, "By creating your Practice, you agree to the Terms of Service and the Privacy Policy.", whose two links open in a new tab; press **Create Practice** (`POST /api/staff/signup`). She works under her own name, so she can leave Practice name empty: the BFF gives the Practice her own name, first name then last name, and she types it only once (#1536). Pressing the button is her Practice's agreement to the two documents, recorded as a `terms_accepted` Activity row with the version of each (#1547, ADR-0053). There is no checkbox.
-- **1.3** — Land on `/practices/[practiceId]`. She now holds Owner, Admin, and Doula on one membership, granted in a single statement (`signup.go:152`).
+- **1.2** — Answer three question pages ([#2049](https://github.com/markgoho/doula-cloud/issues/2049)), each with **Continue**: "About you" (First name, Last name, Email address, Password); "What is your Practice called? (optional)"; "Where do you work?" (the state she works from, Timezone). On "Check your answers", read her answers, each with a **Change** link, and the sentence above the button, "By creating your Practice, you agree to the Terms of Service and the Privacy Policy.", whose two links open in a new tab; press **Create your Practice** (`POST /api/staff/signup`). She works under her own name, so she can leave the Practice name empty: the BFF gives the Practice her own name, first name then last name, and she types it only once (#1536). Pressing the button is her Practice's agreement to the two documents, recorded as a `terms_accepted` Activity row with the version of each (#1547, ADR-0053). There is no checkbox.
+- **1.3** — Land on `/practices/[practiceId]`, whose first line now carries the role notice. She now holds Owner, Admin, and Doula on one membership, granted in a single statement (`signup.go:152`).
 
 She is **not** a test of role separation. Every permission boundary rides on Renata's invite route instead.
 
