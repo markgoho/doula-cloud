@@ -3,6 +3,7 @@ import { resolve } from '$app/paths';
 import { apiFetch, isMFARequired, isTermsAgreementRequired } from '#lib/api.js';
 import { apiErrorMessage } from '#lib/apiErrorMessage.js';
 import { decideLanding, type SessionInfo } from '#lib/landing.js';
+import { PRACTICE_SESSION_DEPENDENCY } from '#lib/practiceSession.js';
 import { staffLoginAfterSessionEnded } from '#lib/sessionEnded.js';
 import type { LayoutLoad } from './$types';
 
@@ -42,6 +43,12 @@ export interface PracticeSession {
 	// carries it, and only while something is due. This load sends her to
 	// the agreement screen while it is set; the BFF is what refuses.
 	agreementDue?: DueVersion[];
+	// #2183 (TB-G10): whether the Practice holds any Client yet, the
+	// Practice's answer for every caller. The Staff top bar leaves out the
+	// sections that can only be empty without one. This load always sets
+	// it; it is optional so the route fixtures that predate it need not
+	// restate it, and only `false` narrows the bar.
+	hasClients?: boolean;
 }
 
 /**
@@ -104,7 +111,8 @@ const deleteSettingsPath = (practiceId: string) =>
  * she lands, and `/no-practice` is the fallback only once there truly is
  * nowhere else.
  */
-export const load: LayoutLoad = async ({ params, url }): Promise<{ session: PracticeSession }> => {
+export const load: LayoutLoad = async ({ params, url, depends }): Promise<{ session: PracticeSession }> => {
+	depends(PRACTICE_SESSION_DEPENDENCY);
 	const response = await apiFetch(`/api/practices/${params.practiceId}/session`);
 
 	if (response.status === 401) {
@@ -130,6 +138,7 @@ export const load: LayoutLoad = async ({ params, url }): Promise<{ session: Prac
 		pendingDeletion: boolean;
 		secondFactor: boolean;
 		agreementDue?: DueVersion[];
+		hasClients: boolean;
 	} = await response.json();
 
 	if (body.pendingDeletion && url.pathname !== deleteSettingsPath(params.practiceId)) {
@@ -156,7 +165,8 @@ export const load: LayoutLoad = async ({ params, url }): Promise<{ session: Prac
 			isContractor: body.isContractor,
 			pendingDeletion: body.pendingDeletion,
 			secondFactor: body.secondFactor,
-			agreementDue: body.agreementDue
+			agreementDue: body.agreementDue,
+			hasClients: body.hasClients
 		}
 	};
 };

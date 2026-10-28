@@ -102,6 +102,9 @@ describe('the name question', () => {
 
 		await expect.poll(() => landing.href).toBe(startWorkHref);
 		expect(landing.message).toBe(message);
+		// #2183: the Practice session is read again on the way, so a first
+		// Client fills in the top bar.
+		expect(goto).toHaveBeenLastCalledWith(startWorkHref, { invalidate: ['practice:session'] });
 	});
 
 	it('offers no later steps and no save for later', async () => {
@@ -325,7 +328,7 @@ describe('the duplicate check', () => {
 		// `matches`, and a reactive empty-matches guard on this page would
 		// fire on the way out and send a reader who had just saved to the
 		// name question instead of to the Start work form.
-		expect(goto).toHaveBeenLastCalledWith(startWorkHref);
+		expect(goto).toHaveBeenLastCalledWith(startWorkHref, { invalidate: ['practice:session'] });
 	});
 
 	it('reviews the changes before writing them to a Client already on file', async () => {

@@ -39,11 +39,14 @@ function pathnameOf(href: string): string {
 
 /**
  * Navigates to `href`, and gives `message` to the screen there.
+ * `invalidate` names the `load` dependencies the save changed, so they
+ * are read again on the same navigation (#2183): a Practice's first
+ * Client changes the Practice session the top bar is drawn from.
  */
-export async function gotoWithOutcome(href: string, message: string): Promise<void> {
+export async function gotoWithOutcome(href: string, message: string, invalidate?: string[]): Promise<void> {
 	carried.pending = { pathname: pathnameOf(href), message };
 	try {
-		await goto(href);
+		await (invalidate ? goto(href, { invalidate }) : goto(href));
 	} finally {
 		carried.pending = undefined;
 	}

@@ -89,6 +89,47 @@ func TestPracticeSessionHandler_ReportsPracticeAndRoles(t *testing.T) {
 	}
 }
 
+// TestPracticeSessionHandler_HasClients proves HasClients (#2183) reads
+// false for a Practice with no Client and true once it has one, whoever
+// asks: a contractor Doula with no attachment reads the Practice's
+// answer, not her own reach, so the bar still offers her Offers.
+func TestPracticeSessionHandler_HasClients(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "practice-session-has-clients-owner"
+	const contractorUID = "practice-session-has-clients-contractor"
+	practiceID := testdb.SeedPractice(t, db, "Has Clients Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, ownerUID, []string{ownerRole, doulaRole}, employeeType)
+	testdb.SeedStaffAtPractice(t, db, practiceID, contractorUID, []string{doulaRole}, contractorType)
+
+	srv, ownerSession := newPracticeSessionServer(t, db, ownerUID)
+	defer srv.Close()
+	contractorSession := authntest.SeedSession(t, db.App, contractorUID)
+
+	read := func(session string) staffauth.PracticeSessionResponse {
+		t.Helper()
+		resp := getPracticeSession(t, srv, session, practiceID)
+		defer resp.Body.Close()
+		var out staffauth.PracticeSessionResponse
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		return out
+	}
+
+	if read(ownerSession).HasClients {
+		t.Fatal("hasClients = true, want false before any Client exists")
+	}
+
+	testdb.SeedNamedClient(t, db, practiceID, "First Client", "")
+
+	if !read(ownerSession).HasClients {
+		t.Fatal("hasClients = false, want true once the Practice has a Client")
+	}
+	if !read(contractorSession).HasClients {
+		t.Fatal("hasClients = false for a contractor with no attachment, want the Practice's answer")
+	}
+}
+
 // TestPracticeSessionHandler_EmployeeNotContractor proves IsContractor
 // reads false for an employee Membership, not just true for a
 // contractor.

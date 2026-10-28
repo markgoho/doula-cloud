@@ -45,6 +45,7 @@ interface SetupOptions {
 	pathname?: string;
 	roles?: string[];
 	hasPracticeSession?: boolean;
+	hasClients?: boolean;
 	staffSessionRefuses?: boolean;
 	memberships?: { practiceId: string; practiceName: string; roles: string[] }[];
 }
@@ -55,6 +56,7 @@ async function setup({
 	pathname = '/practices/practice-1',
 	roles = ['owner'],
 	hasPracticeSession = true,
+	hasClients,
 	staffSessionRefuses = false,
 	memberships = ONE_MEMBERSHIP
 }: SetupOptions = {}) {
@@ -70,7 +72,8 @@ async function setup({
 					practiceId: routeParameters.practiceId ?? '',
 					practiceName: 'Riverside Doula Collective',
 					roles,
-					isContractor: false
+					isContractor: false,
+					...(hasClients !== undefined && { hasClients })
 				}
 			}
 		: {};
@@ -218,6 +221,60 @@ describe('the nav', () => {
 		await expect
 			.element(page.getByRole('link', { name: 'Overview', exact: true }).first())
 			.not.toHaveAttribute('aria-current');
+	});
+});
+
+/*
+ * #2183 (TB-G10): a Practice with no Client yet is offered only the
+ * sections that hold something before one exists. The six that list the
+ * Practice's work with Clients wait for the first Client; Credits (the
+ * price, TB-G2), Staff (the roster, TB-G7) and Settings (the setup and
+ * the exit acts, TB-G5) stay.
+ */
+describe('the nav on a Practice with no Client', () => {
+	it.each(['Overview', 'Credits', 'Staff', 'Settings'])('still offers %s to an Owner', async (label) => {
+		await setup({ roles: ['owner'], hasClients: false });
+
+		await expect.element(page.getByRole('link', { name: label, exact: true })).toBeVisible();
+	});
+
+	it.each(['Clients', 'Schedule', 'On call', 'Invoices', 'Contracts', 'Offers'])(
+		'leaves %s out until the first Client',
+		async (label) => {
+			await setup({ roles: ['owner'], hasClients: false });
+
+			await expect.element(page.getByRole('link', { name: label, exact: true })).not.toBeInTheDocument();
+		}
+	);
+
+	it("keeps a Doula's bar role-scoped: Overview and Settings only", async () => {
+		await setup({ roles: ['doula'], hasClients: false });
+
+		await expect.element(page.getByRole('link', { name: 'Overview', exact: true })).toBeVisible();
+		await expect.element(page.getByRole('link', { name: 'Settings', exact: true })).toBeVisible();
+		await expect.element(page.getByRole('link', { name: 'Staff', exact: true })).not.toBeInTheDocument();
+		await expect.element(page.getByRole('link', { name: 'Clients', exact: true })).not.toBeInTheDocument();
+	});
+
+	/*
+	 * The bar always shows where she is: on the first Client's own intake
+	 * the Clients section is drawn, and marked current, though the
+	 * Practice has none yet.
+	 */
+	it('draws a waiting section while she is inside it, marked current', async () => {
+		await setup({ roles: ['owner'], hasClients: false, pathname: '/practices/practice-1/clients/new' });
+
+		await expect
+			.element(page.getByRole('link', { name: 'Clients', exact: true }).first())
+			.toHaveAttribute('aria-current', 'page');
+		await expect.element(page.getByRole('link', { name: 'Schedule', exact: true })).not.toBeInTheDocument();
+	});
+
+	it('offers every section once the Practice has a Client', async () => {
+		await setup({ roles: ['owner'], hasClients: true });
+
+		await expect.element(page.getByRole('link', { name: 'Offers', exact: true })).toBeVisible();
+		await expect.element(page.getByRole('link', { name: 'Schedule', exact: true })).toBeVisible();
 	});
 });
 

@@ -16,6 +16,7 @@ import { errorsFromCause, type FormError } from '#lib/formErrors.js';
 import { intakeDraft } from '#lib/intakeDraft.svelte.js';
 import { clientSavedMessage, originQuery, type IntakeOrigin } from '#lib/intakeJourney.js';
 import { gotoWithOutcome } from '#lib/outcome.js';
+import { PRACTICE_SESSION_DEPENDENCY } from '#lib/practiceSession.js';
 
 /**
 Names the journey a question page is in.
@@ -139,7 +140,9 @@ export async function saveIntake(
 		const clientId = result.record.id;
 		const message = clientSavedMessage(intakeDraft.answers);
 		intakeDraft.clear();
-		await gotoWithOutcome(startWorkHref(practiceId, clientId), message);
+		// The Practice session is read again on the way (#2183): with its
+		// first Client, the top bar offers the sections that waited for one.
+		await gotoWithOutcome(startWorkHref(practiceId, clientId), message, [PRACTICE_SESSION_DEPENDENCY]);
 		return undefined;
 	} catch (error) {
 		// A server refusal that names fields becomes one entry each

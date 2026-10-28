@@ -60,7 +60,24 @@ type PracticeSessionResponse struct {
 	// screen can say what changed. Left out when nothing is due, and
 	// always for a Staff member who is not an Owner, who is never asked.
 	AgreementDue []DueVersion `json:"agreementDue,omitempty"`
+	// HasClients is whether the Practice holds any Client yet (#2183).
+	// The Staff top bar reads it on every screen, before first paint, to
+	// leave out the six sections that can only be empty without one
+	// (Clients, Schedule, On call, Invoices, Contracts, Offers). It is the
+	// Practice's yes or no for every caller, never narrowed to a
+	// contractor's attachments: a contractor is offered work on the
+	// Practice's Engagements before she is attached to any, so narrowing
+	// it would hide her Offers. It is not the count client.CountHandler
+	// withholds from her -- only whether the Practice has begun.
+	HasClients bool `json:"hasClients"`
 }
+
+// hasClientsQuery names practice_id itself rather than leaving the
+// Practice to the clients RLS policy, the same reason client/count.go's
+// queries do; EXISTS stops at the first row. A merged-away record is a
+// pointer to a survivor that is still counted, so excluding it changes
+// nothing but keeps the read the same as the Client list's.
+const hasClientsQuery = `SELECT EXISTS (SELECT 1 FROM clients WHERE practice_id = $1 AND merged_into IS NULL)`
 
 // PracticeSessionHandler answers GET .../session: which Practice, which
 // roles, which employment type. Moved from routes_practice.go by #836 --
@@ -73,6 +90,13 @@ func PracticeSessionHandler() http.Handler {
 
 		var name string
 		if err := tx.QueryRowContext(r.Context(), `SELECT name FROM practices WHERE id = $1`, practiceID).Scan(&name); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		var hasClients bool
+		if err := tx.QueryRowContext(r.Context(), hasClientsQuery, practiceID).Scan(&hasClients); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -96,6 +120,7 @@ func PracticeSessionHandler() http.Handler {
 			PendingDeletion: pendingDeletionFrom(r.Context()),
 			SecondFactor:    SecondFactor(r.Context()),
 			AgreementDue:    agreementDueFrom(r.Context()),
+			HasClients:      hasClients,
 		}
 		apierr.WriteJSON(w, http.StatusOK, resp)
 	})
