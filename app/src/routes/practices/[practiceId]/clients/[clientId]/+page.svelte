@@ -718,15 +718,17 @@
 	{outcome}
 	{summary}
 	{actions}
-	sections={[
-		{ heading: `Who ${name} is`, content: whoSection },
-		{ heading: `How to reach ${name}`, content: contactSection },
-		{ heading: `Where ${name} lives`, content: addressSection },
-		{ heading: `What else ${practiceName} asks`, content: practiceQuestionsSection },
-		{ heading: 'Engagements', content: engagementsSection },
-		{ heading: 'History', content: historySection },
-		...eraseSections
-	]}
+	sections={detail
+		? [
+				{ heading: `Who ${name} is`, content: whoSection },
+				{ heading: `How to reach ${name}`, content: contactSection },
+				{ heading: `Where ${name} lives`, content: addressSection },
+				{ heading: `What else ${practiceName} asks`, content: practiceQuestionsSection },
+				{ heading: 'Engagements', content: engagementsSection },
+				{ heading: 'History', content: historySection },
+				...eraseSections
+			]
+		: []}
 	loading={detail || error ? undefined : 'Loading the Client'}
 	loadError={error || undefined}
 />

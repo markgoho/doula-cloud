@@ -210,7 +210,9 @@ export interface RouteFixture<RouteParameters extends Record<string, string> = R
 	The screen's own level-1 heading, matched by role. It must be on the page before a measurement is taken. A route
 	that loads in `onMount` renders a Skeleton first, and sweeping that
 	measures the loading state rather than the screen -- an honest wait, not
-	a timeout.
+	a timeout. A Template draws a heading it already knows while it loads
+	(#2248), so this wait alone does not prove the data landed; the sweep's
+	quiescence wait after it does (#885).
 	*/
 	readonly readyText: string;
 	/**

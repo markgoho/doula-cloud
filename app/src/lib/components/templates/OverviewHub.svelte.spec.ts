@@ -171,15 +171,30 @@ describe('OverviewHub.svelte', () => {
 		expect(withoutEmptyState.title).toBe('Willow Birth Collective');
 	});
 
-	it('reserves the page frame for a skeleton while loading, instead of rendering the title or content (#480)', async () => {
+	it('draws the title and a skeleton while loading, instead of the content (#480, #2248)', async () => {
 		const { container } = await setup({ loading: 'Loading your Practice' });
 
 		expect(container.querySelector('center-l')).toHaveAttribute('max', 'none');
 		await expect.element(page.getByRole('status', { name: 'Loading your Practice' })).toBeVisible();
 		await expect
 			.element(page.getByRole('heading', { level: 1, name: 'Willow Birth Collective' }))
-			.not.toBeInTheDocument();
+			.toBeVisible();
 		await expect.element(page.getByText('Six open Offers')).not.toBeInTheDocument();
+	});
+
+	it('draws the quick links while loading, since they stand without the data (#2248)', async () => {
+		await setup({ loading: 'Loading your Practice', links: textSnippet('Clients') });
+
+		await expect.element(page.getByText('Clients')).toBeVisible();
+	});
+
+	it('announces the load once when it holds the rail too (#2248)', async () => {
+		const { container } = await setup({ loading: 'Loading your Practice', isRailShown: true });
+
+		expect(page.getByRole('status').all()).toHaveLength(1);
+		// A deliberately non-accessible element (svelte-tests.md, case 2):
+		// the rail's bars are hidden so the load is not announced twice.
+		expect(container.querySelectorAll(':scope sidebar-l [aria-hidden="true"] > span').length).toBeGreaterThan(0);
 	});
 
 	it('reserves the page frame for a Notice on a load failure, instead of rendering the title or content (#480)', async () => {

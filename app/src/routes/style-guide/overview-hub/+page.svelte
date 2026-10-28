@@ -3,6 +3,7 @@
 
 	interface Properties {
 		isEmpty?: boolean;
+		isLoading?: boolean;
 	}
 
 	/*
@@ -12,7 +13,8 @@
 	 * surface under this name.
 	 */
 	export const variants: readonly DemoVariant<Properties>[] = [
-		{ name: 'Overview hub, empty', props: { isEmpty: true } }
+		{ name: 'Overview hub, empty', props: { isEmpty: true } },
+		{ name: 'Overview hub, loading', props: { isLoading: true } }
 	];
 </script>
 
@@ -66,7 +68,7 @@
 
 	const noop = () => {};
 
-	let { isEmpty = false }: Properties = $props();
+	let { isEmpty = false, isLoading = false }: Properties = $props();
 </script>
 
 {#snippet primary()}
@@ -149,4 +151,6 @@
 	{links}
 	{isEmpty}
 	{empty}
+	loading={isLoading ? 'Loading your Practice' : undefined}
+	isRailShown
 />

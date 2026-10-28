@@ -1,6 +1,6 @@
 import { page } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
-import { render } from 'vitest-browser-svelte';
+import { cleanup, render } from 'vitest-browser-svelte';
 // A row's height is `--row-height` (#1843), which only the real token
 // sheet defines.
 import '#lib/styles/app.css';
@@ -8,7 +8,7 @@ import Skeleton from './Skeleton.svelte';
 
 interface SetupOptions {
 	lines?: number;
-	variant?: 'row' | 'text';
+	variant?: 'row' | 'text' | 'heading';
 	label?: string;
 }
 
@@ -58,6 +58,21 @@ describe('Skeleton', () => {
 	it('reserves only a line of body copy in the text variant', async () => {
 		const { barHeight } = await setup({ lines: 1, variant: 'text' });
 		expect(await barHeight()).toBeLessThan(40);
+	});
+
+	it('reserves a page title’s line in the heading variant', async () => {
+		const { barHeight: textHeight } = await setup({ lines: 1, variant: 'text' });
+		const text = await textHeight();
+		cleanup();
+		const { barHeight } = await setup({ lines: 1, variant: 'heading' });
+		expect(await barHeight()).toBeGreaterThan(text);
+	});
+
+	it('is no status at all when unlabeled, so a second region of one load is not announced twice', async () => {
+		const { container } = await render(Skeleton, { lines: 2 });
+		await expect.element(page.getByRole('status')).not.toBeInTheDocument();
+		// A deliberately non-accessible element (svelte-tests.md, case 2).
+		expect(container.querySelector('[aria-hidden="true"]')?.querySelectorAll('span')).toHaveLength(2);
 	});
 
 	it('hides the bars themselves from assistive technology, since only the status matters', async () => {

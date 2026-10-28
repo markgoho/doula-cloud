@@ -267,6 +267,12 @@
 	--motion-nav: 200ms;
 	--ease-out: cubic-bezier(0, 0, 0.2, 1);
 
+	/* How long a Skeleton holds its space empty before its bars show
+	   (#2248). Inside the brief's 400ms Doherty budget, so a load that
+	   lands in time never flashes a placeholder. Not a motion token:
+	   nothing moves. */
+	--loading-delay: 300ms;
+
 	/* Layout -- #98, default line-length cap for the Center primitive. */
 	--measure: 65ch;
 

@@ -22,6 +22,7 @@
 		<stack-l space="var(--space-4)">
 			<Skeleton variant="row" lines={3} label="Loading the Client list" />
 			<Skeleton variant="text" lines={3} label="Loading the birth plan" />
+			<Skeleton variant="heading" lines={1} label="Loading the Client's name" />
 		</stack-l>
 	</section>
 

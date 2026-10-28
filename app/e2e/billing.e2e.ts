@@ -14,7 +14,9 @@ test('Staff member can view the signup-bonus balance and ledger history', async 
 	await enterPractice(context, page, staffHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
-	await page.getByRole('link', { name: 'Credits' }).click();
+	// The top bar's, not the Overview's quick-link card of the same name,
+	// which is drawn from the first frame too (#2248).
+	await page.getByRole('navigation', { name: 'Practice' }).getByRole('link', { name: 'Credits' }).click();
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/billing$`));
 
 	// A brand-new Practice's balance is the +3 signup_bonus grant from

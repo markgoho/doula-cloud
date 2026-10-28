@@ -1,3 +1,19 @@
+<script module lang="ts">
+	import type { DemoVariant } from '../drag-surface/dragSurface.js';
+
+	interface Properties {
+		isLoading?: boolean;
+	}
+
+	/*
+	 * The record before it loads (#2248): its title is the Client's name,
+	 * the data itself, so a heading-shaped bar holds its line.
+	 */
+	export const variants: readonly DemoVariant<Properties>[] = [
+		{ name: 'Record detail, loading', props: { isLoading: true } }
+	];
+</script>
+
 <script lang="ts">
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 	import Badge from '#lib/components/atoms/Badge.svelte';
@@ -46,6 +62,8 @@
 	];
 
 	const noop = () => {};
+
+	let { isLoading = false }: Properties = $props();
 </script>
 
 {#snippet summary()}
@@ -99,7 +117,8 @@
 	A second instance would put a second <h1> on one demo page.
 -->
 <RecordDetail
-	title="Anne-Marie Ochieng-Whitfield"
+	title={isLoading ? '' : 'Anne-Marie Ochieng-Whitfield'}
+	loading={isLoading ? 'Loading the Client' : undefined}
 	{summary}
 	{actions}
 	isContentsShown
