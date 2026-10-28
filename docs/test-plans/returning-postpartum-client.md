@@ -104,7 +104,7 @@ No step is `blocked`. Nothing on her path touches Stripe.
 
 CB-G3, **MO-G9**, **RA-G1** and NH-G4 are observed inside walkable steps (5.2, 3.2, 5.1, 6.1) rather than given steps of their own. CB-G3 is closed, and 5.2 is now where that shows: the step is performed, and what it produces is her existing login reaching both Engagements rather than a `409`.
 
-**She has no automated step any more.** Every spec in the suite provisions a Client who has never been seen before, holding exactly one Engagement, so none of them drives the two-Engagement root list her whole path now ends in — which is the same reason her first login used to be her only automated step, read the other way round.
+**Her only automated steps are four 320px budget steps** ([#1683](https://github.com/markgoho/doula-cloud/issues/1683)), held by `route-continuum.svelte.spec.ts` and `portal-320.e2e.ts`. **No step of her journey itself is automated.** Every spec in the suite provisions a Client who has never been seen before, holding exactly one Engagement, so none of them drives the two-Engagement root list her whole path now ends in. That is the same reason her first login used to be her only automated step, read the other way round.
 
 ## Run log
 

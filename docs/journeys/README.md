@@ -69,6 +69,22 @@ These are drafts against **proto-personas** — assumptions grounded in the sche
 
 **All nine have now been walked** ([#209](https://github.com/markgoho/doula-cloud/issues/209)), so the gaps below are no longer hypotheses read out of the code: each one was attempted against the running product. The walks minted eleven new gap IDs, narrowed three, and falsified one map's reasoning outright (Dee's stage 5).
 
+**All nine have been walked a second time** ([#329](https://github.com/markgoho/doula-cloud/issues/329), walk tickets [#2170](https://github.com/markgoho/doula-cloud/issues/2170)–[#2178](https://github.com/markgoho/doula-cloud/issues/2178), 2026-10-27 and 28). Seven journeys are completable end to end. Tasha's is completable from `/signup` but not from where it starts, because the marketing site is exempt from the run ([#284](https://github.com/markgoho/doula-cloud/issues/284)). Lena's stops at 7.1, because nothing records what she was paid (LV-G3, [#2271](https://github.com/markgoho/doula-cloud/issues/2271)). The walks minted **44 gap IDs**, almost all of them failed budget steps:
+
+| Map | New gap IDs | Count |
+| --- | --- | --- |
+| [evaluator-doula.md](evaluator-doula.md) | TB-G8 to TB-G12 | 5 |
+| [solo-birth-doula.md](solo-birth-doula.md) | MO-G12 to MO-G16 | 5 |
+| [practice-owner.md](practice-owner.md) | RA-G11 to RA-G18 (RA-G18 on the older [#428](https://github.com/markgoho/doula-cloud/issues/428)) | 8 |
+| [non-doula-admin.md](non-doula-admin.md) | DW-G9 to DW-G14 | 6 |
+| [employed-doula.md](employed-doula.md) | PR-G10 to PR-G12 | 3 |
+| [contractor-doula.md](contractor-doula.md) | LV-G10 to LV-G15 | 6 |
+| [loss-client.md](loss-client.md) | NH-G9 to NH-G12 | 4 |
+| [first-time-client.md](first-time-client.md) | HS-G8 to HS-G11 | 4 |
+| [returning-postpartum-client.md](returning-postpartum-client.md) | CB-G7 to CB-G9 | 3 |
+
+The walks narrowed one gap: LV-G3's owed half is answered, since the fee she accepted is on the Offer and her Engagement, and its paid half is re-filed as [#2271](https://github.com/markgoho/doula-cloud/issues/2271). They walked 37 steps that the first run had left `missing-feature`, now that the gaps behind them are closed, and found each one performable. They falsified two expected results (Dee's 7.2-a and Priya's 2.1-b). Since the walks, TB-G8 and TB-G11 have closed by a budget change, and TB-G9 and TB-G10 are built and wait on a re-walk ([#2264](https://github.com/markgoho/doula-cloud/issues/2264)). [`docs/test-plans/README.md`](../test-plans/README.md#the-second-run) has the walk-by-walk record and the nine verdicts.
+
 Every gap now carries an **Issue** column in its map's `## Gaps found` table, pointing at the `journey-gap` issue that owns the work — except where another wayfinding map owns the capability outright ([#225](https://github.com/markgoho/doula-cloud/issues/225) for roles, employment type, attachment and Offer; [#212](https://github.com/markgoho/doula-cloud/issues/212) for the Client register).
 
 ## Practice side
