@@ -6,9 +6,9 @@
 
 ## Preconditions
 
-- **Stage 0** starts from no account: an address that has no Identity Platform account, on the pilot allowlist or with the pilot gate open (`dev:full` and the e2e stack open it as they start, `docs/environment.md`). After step 0.3, and before step 0.4, two employee Doulas accept Invitations to her Practice. This is fixture setup, not a step, because the route has no Invitation on it (`docs/onboarding-route.md`): `POST /api/practices/{id}/staff/invitations` with `roles` `["doula"]` and `employmentType` `employee`, as Renata; then for each invitee an Identity Platform account and `POST /api/staff/accept-invite` with the token from `staff_invite_outbox`.
+- **Stage 0** starts from no account: an address that has no Identity Platform account, on the pilot allowlist or with the pilot gate open (`dev:full` and the e2e stack open it as they start, `docs/environment.md`). After step 0.3, and before step 0.4, two employee Doulas accept Invitations to her Practice. This is fixture setup, not a step, because the route has no Invitation on it (`docs/onboarding-route.md`). The product can build it: as Renata, **Invite a Staff member** twice (Doula, Employee), then open each mail in the sandbox mailbox and accept in a separate browser context. The API route works too: `POST /api/practices/{id}/staff/invitations` with `roles` `["doula"]` and `employmentType` `employee`, then for each invitee an Identity Platform account and `POST /api/staff/accept-invite` with the token from `staff_invite_outbox`.
 - **Stages 1 to 9** start from the Practice that Stage 0 makes, with at least two Clients with Engagements. A second Client is added from the Clients list (search, then **Add a new Client**), or provisioned with `POST /api/practices/{id}/clients` as the specs do.
-- A second Identity Platform account for the invitee in Stage 2, and a way to read the invitation token (`staff_invite_outbox`, or the sandbox mailbox).
+- An address with no account for the invitee in Stage 2, and the sandbox mailbox to read her Invitation in (locally, the mail catcher). She accepts through the product, in her own browser context.
 
 ## Steps
 
@@ -38,7 +38,7 @@
 | --- | --- | --- | --- |
 | 1.1 | Sign in at `/login` | `POST /api/session` sets `__session`; the browser lands on `/practices/[practiceId]` | `automated (staff-login.e2e.ts)` |
 | 1.2 | Choose Rooted Birth Collective from her memberships | **There is no choosing.** With one membership `decideLanding` redirects straight to `/practices/{id}` (`app/src/lib/landing.ts:24-26`); the `Choose a Practice` picker renders only for two or more, which her own journey never gives her — only Lena Vasquez's does | `manual` |
-| 1.3 | Read the tiles | All seven render for her — but only **four** are owner-gated (Invite, Staff, Plan Templates, Contract Template). **Payments sits outside the gate** (`app/src/routes/practices/[practiceId]/+page.svelte:76-81`), so every member sees it, roles or none ([RA-G9](https://github.com/markgoho/doula-cloud/issues/267)) | `manual` |
+| 1.3 | Read the tiles | The Overview's **Quick links**, role-scoped: for her, Clients (with how many are active), Credits, Your offers, Staff, Plan Templates, Contract Template and **Getting paid**. A Doula's Overview has no Getting paid link, and `GET .../payments/connect` refuses her with `403` ([RA-G9](https://github.com/markgoho/doula-cloud/issues/267) closed). Above the fold for an Owner with no second factor: the notice "Add a second step when you sign in" | `manual` |
 | 1.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). `/login`, then the Practice landing; one membership needs no picker | `manual` |
 | 1.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 3 (Hick's Law, Miller's Law) | `manual` |
 | 1.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
@@ -51,11 +51,11 @@ The membership picker (1.2) is exercised by no spec — every spec's Staff membe
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 2.1 | Open `/practices/[practiceId]/invite` | The form renders for an Owner | `automated (staff-invite-role.e2e.ts)` |
-| 2.2 | Enter a name and email, press **Send invite** | `POST /api/practices/{id}/invitations` succeeds and the screen **prints a link**; no email leaves the system | `manual` |
-| 2.2-a | Check the invitee's inbox | Nothing arrives. No invitation email is sent by anything | `missing-feature (RA-G1)` [#260](https://github.com/markgoho/doula-cloud/issues/260) |
-| 2.3 | Deliver the link out of band | The invitee receives a raw URL by text or Renata's own mail client, which they cannot verify is genuine | `manual` |
-| 2.4 | Have the invitee accept at `/accept-invite` | `POST /api/staff/accept-invite` creates the membership with `roles = '{}'` — a zero-role member is the only possible outcome of inviting anyone | `manual` |
-| 2.4-a | Look for a roles control on the invite form | The invitation carries no roles at all | `missing-feature (RA-G8)` [#266](https://github.com/markgoho/doula-cloud/issues/266) |
+| 2.2 | Enter an email, choose roles and an employment type, press **Send invite** | `POST /api/practices/{id}/invitations` succeeds and the screen says "Invited. An email with a link to join is on its way to {email}." The form asks no name | `automated (staff-invite-role.e2e.ts)` |
+| 2.2-a | Check the invitee's inbox | "You've been invited to join a practice on DoulaCloud", from DoulaCloud, "Hello,", the link, and "If you weren't expecting this, you can safely ignore this email." ([RA-G1](https://github.com/markgoho/doula-cloud/issues/260) closed). Locally it lands in the mail catcher | `manual` |
+| 2.3 | Read the mail as the invitee | It names no Practice and no sender, by decision (ADR-0009: a Notification is content-free), so the invitee knows it is real only because she expected it. The accept page names no Practice either; she sees Rooted Birth Collective's name once she lands | `manual` |
+| 2.4 | Have the invitee accept at `/accept-invite` | Two steps: "I'm new here — create an account" with email and password, then "Tell us about yourself" (first name, last name, the state she works from) and **Accept invite**. She lands on `Overview` at the Practice, and her membership holds the roles and employment type the invitation named | `automated (staff-invite-role.e2e.ts)` |
+| 2.4-a | Look for a roles control on the invite form | Roles (Owner, Admin, Doula, each with a line saying what it does) and Employment type (Employee, Contractor), and accept copies both onto the membership (#316, [RA-G8](https://github.com/markgoho/doula-cloud/issues/266) closed) | `manual` |
 | 2.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
 | 2.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 4 (Hick's Law, Miller's Law). Name, email, role, and **Send invite** | `manual` |
 | 2.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule). The screen says the invitation went, to whom, and what the invitee does next | `manual` |
@@ -66,9 +66,9 @@ The membership picker (1.2) is exercised by no spec — every spec's Staff membe
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 3.1 | Open `/practices/[practiceId]/staff` | The roster loads; the `GET` is owner-gated and passes for Renata | `manual` |
+| 3.1 | Open `/practices/[practiceId]/staff` | The roster loads, with **Invite a Staff member**, Members (Name, Email address, Roles, Employment type, Works from) and Pending invitations; the `GET` is Owner-and-Admin and passes for Renata | `manual` |
 | 3.2 | Read the Roles column | Renders the team's words via `rolesLabel` — an Admin shows as `Admin` (closed by [#262](https://github.com/markgoho/doula-cloud/issues/262)) | `manual` |
-| 3.3 | Change a member's roles from the screen | **Edit membership** opens roles and employment type on one form and saves both (#316). No staff id is needed and no terminal is involved, so a roster can be built in the product | `manual` |
+| 3.3 | Change a member's roles from the screen | The member's name opens her page, with a **Change** on the Roles row and another on the Employment type row; each opens its own question page ("Which roles does {name} have?", three checkboxes and **Save**) and saves back to her page with "{name}'s roles are now {roles}." Her Membership history records the change and who made it. No staff id is needed and no terminal is involved, so a roster can be built in the product | `manual` |
 | 3.4 | Read the Pending invitations group | Addresses asked but not answered, each with its roles, employment type, expiry and a **Revoke** action — a second group, not a row in the members list | `manual` |
 | 3.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
 | 3.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 5 (Hick's Law, Miller's Law). **Edit membership**: the three roles, the employment type, and the save | `manual` |
@@ -82,7 +82,7 @@ The membership picker (1.2) is exercised by no spec — every spec's Staff membe
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 4.1 | Open an Engagement from the Clients list | The single-page Engagement view renders | `automated (add-client-visits.e2e.ts)` |
-| 4.2 | Look for a control that puts a Doula on the Engagement | No field, no endpoint, no screen. An Engagement carries no Doula | `missing-feature (RA-G4)` [#225](https://github.com/markgoho/doula-cloud/issues/225) |
+| 4.2 | Look for a control that puts a Doula on the Engagement | The Doula row names who is on it, and its **Change** offers only **Put me on this Engagement**. Another employee Doula is put on through **Offer this work** (someone at the Practice, which Doula, the Client's first initial, a general area, the due date and terms), and she is on it once she presses **Accept** on her own **Your offers**: the row then reads "Doulas: {both names}" and On call gives her a window ([RA-G4](https://github.com/markgoho/doula-cloud/issues/225) closed; [RA-G13](https://github.com/markgoho/doula-cloud/issues/2230)) | `manual` |
 | 4.3 | Add a Visit naming the new Doula as `staffId` | **The Visit names her.** Create carries its own assignee now, and the Engagement page asks **Who is this Visit for?** as a picker of the Doulas this Engagement can admit — no UUID, no free-text box ([RA-G10](https://github.com/markgoho/doula-cloud/issues/268) closed). `resolveAssignee` (`api/internal/visit/roles.go`) keeps naming a colleague with the Owner and the Admin, and logging your own Visit with the Doula, so Renata reaches it from either seat. The row she writes carries a scheduled date and time, a type and notes. Assignment still exists at Visit level; whether an Engagement itself names a Doula is 4.2's question, not this one | `manual` |
 | 4.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
 | 4.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 2 (Hick's Law, Miller's Law). Which Doula, and the save | `manual` |
@@ -93,7 +93,7 @@ The membership picker (1.2) is exercised by no spec — every spec's Staff membe
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 5.1 | `PATCH .../visits/{visitId}` with a new `staffId` | The Visit's Staff member changes, chosen from the row's own **Reassign to** picker rather than pasted as an id, and it is refused unless the person named is a Doula this Engagement can admit. Something dated does move now: a Visit carries a scheduled instant, rescheduled from **Update schedule** on the same row | `manual` |
+| 5.1 | Press **Change** on the Visit's row and name someone else | One form, "Change the Visit for {name}, …": "Who is this Visit for?" (opening on "Keep {name}"), Scheduled date and time, Notes, **Save changes**. The Visit's Doula changes, with "The Visit for {new name} is saved."; a contractor who has not accepted an Offer on the Engagement is marked "(cannot be named yet)" and refused at the field: "{name} is a contractor who has not accepted an Offer on this Engagement, so cannot be named on a Visit here yet. Send {name} an Offer, then name {name}." | `manual` |
 | 5.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
 | 5.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 2 (Hick's Law, Miller's Law). Who takes it instead, and the save | `manual` |
 | 5.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
@@ -105,10 +105,10 @@ The membership picker (1.2) is exercised by no spec — every spec's Staff membe
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 6.1 | Open `/practices/[practiceId]/clients` | The list renders and each Client links to their Engagement | `automated (add-client-visits.e2e.ts)` |
-| 6.1-a | Create a Client as a *second* Staff member, then reload as Renata | She appears: the list is one row per Client at the Practice, whoever saved her, and no longer one row per Client-and-Engagement pair (ADR-0017 — a Client needs no Engagement to exist at all). **This half of her requirement passes** | `manual` |
-| 6.1-b | Read the columns | Name and Status only — and Status is `intake` on every row forever ([MO-G4](https://github.com/markgoho/doula-cloud/issues/253)) | `manual` |
-| 6.2 | Learn each Engagement's Contract and Invoice state | Reachable only by opening every Engagement in turn | `manual` |
-| 6.2-a | Look for a roll-up of Contract state, Invoice state, or covering Doula | There is none at any level above one Engagement | `missing-feature (RA-G6)` [#264](https://github.com/markgoho/doula-cloud/issues/264) |
+| 6.1-a | Create a Client as a *second* Staff member, then reload as Renata | She appears under **See everyone**: the list is one row per Client at the Practice, whoever saved her (ADR-0017 — a Client needs no Engagement to exist at all). The list opens on "Clients with work", so a Client saved with no Engagement shows only once the switch is on, as "No work yet". **This half of her requirement passes** | `manual` |
+| 6.1-b | Read the columns | Name and Status, and Work under **See everyone**. Status rolls up each open Engagement: its kind, its care phase, its Contract state and what is owed, paid or overdue ("Birth, Active, Contract signed, Owes $1,500.00"). No column names the Doula. The list shows 30 rows and **Load more** | `manual` |
+| 6.2 | Learn each Engagement's Contract and Invoice state | Read from the Clients list, with no Engagement opened. Who covers each Engagement is not on it: a birth's Doula is on **On call** while its window is in the chosen days, otherwise on the Engagement's page ([RA-G15](https://github.com/markgoho/doula-cloud/issues/2232)) | `manual` |
+| 6.2-a | Look for a roll-up of Contract state, Invoice state, or covering Doula | Contract and Invoice state are on the Clients list ([RA-G6](https://github.com/markgoho/doula-cloud/issues/264) closed, #735); the Doula is not | `manual` |
 | 6.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow). One list answers each Engagement's Contract, Invoice and covering Doula, with no Engagement opened | `manual` |
 | 6.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
 | 6.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
@@ -118,7 +118,7 @@ The membership picker (1.2) is exercised by no spec — every spec's Staff membe
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 7.1 | Open `/practices/[practiceId]/billing` | Credit balance and purchase ledger render — DoulaCloud's own billing, not Client money | `automated (billing.e2e.ts)` |
-| 7.2 | Look for unpaid Client Invoices | No Practice-wide Invoice list and no unpaid view exist | `missing-feature (RA-G7)` [#265](https://github.com/markgoho/doula-cloud/issues/265) |
+| 7.2 | Look for unpaid Client Invoices | **Invoices** in the top bar: "Every invoice this practice has billed, newest first.", totals (Clients owe, Unpaid invoices, Paid, Returned to Clients, Overdue, Overdue invoices), **All invoices** and **Overdue ({n})**, and one row per Invoice with its Client, reference, amount, status, how it was billed, and its billed, due and paid dates ([RA-G7](https://github.com/markgoho/doula-cloud/issues/265) closed, #571) | `manual` |
 | 7.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow). One list of unpaid Client Invoices across every Engagement | `manual` |
 | 7.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
 | 7.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
@@ -127,8 +127,9 @@ The membership picker (1.2) is exercised by no spec — every spec's Staff membe
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 8.1 | Sign in on a phone | The practice screen renders on a small viewport | `manual` |
-| 8.2 | Find who is free tonight | No availability, on-call, or coverage surface exists — and dateless Visits ([MO-G1](https://github.com/markgoho/doula-cloud/issues/250)) mean the data one would read does not exist either | `missing-feature (RA-G5)` [#263](https://github.com/markgoho/doula-cloud/issues/263) |
+| 8.1 | Sign in on a phone | The Overview renders on a small viewport with no sideways scroll; the top bar folds into **Menu** | `manual` |
+| 8.2 | Find who is free tonight | **On call**, from **Menu**: "Every birth on call in these days, who is on call for it, and where cover is still needed.", From and To (opening on today to 30 days ahead) and **Apply**, a card per birth (its Client, who is on call, the window, the cover), then a Doulas table with each Doula's births and Available. **Schedule** lists every scheduled Visit, soonest first, with its Doula ([RA-G5](https://github.com/markgoho/doula-cloud/issues/263) closed, #904) | `manual` |
+| 8.2-a | Narrow On call to tonight and read two births on one Doula | Both births are listed under the one Doula, the Doulas table flags "{name} is on more than one birth in these days.", and the summary still reads "{n} births on call, all covered." Nothing says who is at a birth now: Available reads Yes for every Doula who has not recorded a time she cannot be reached ([RA-G18](https://github.com/markgoho/doula-cloud/issues/428)) | `manual` |
 | 8.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). Signed in on the phone, then the one screen that says who is free tonight | `manual` |
 | 8.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 2 (Hick's Law, Miller's Law) | `manual` |
 | 8.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory) | `manual` |
@@ -152,13 +153,123 @@ The membership picker (1.2) is exercised by no spec — every spec's Staff membe
 
 | Mark | Steps |
 | --- | --- |
-| `automated` | 18 (10 of them [budget steps](README.md#budget-steps)) |
-| `manual` | 60 (37 of them [budget steps](README.md#budget-steps)) |
-| `missing-feature` | 6 ([RA-G1](https://github.com/markgoho/doula-cloud/issues/260), [RA-G4](https://github.com/markgoho/doula-cloud/issues/225), [RA-G5](https://github.com/markgoho/doula-cloud/issues/263), [RA-G6](https://github.com/markgoho/doula-cloud/issues/264), [RA-G7](https://github.com/markgoho/doula-cloud/issues/265), [RA-G8](https://github.com/markgoho/doula-cloud/issues/266)) |
+| `automated` | 20 (10 of them [budget steps](README.md#budget-steps)) |
+| `manual` | 65 (37 of them [budget steps](README.md#budget-steps)) |
+| `missing-feature` | 0 |
+
+No step is `missing-feature` after the second walk: the six gaps the first walk confirmed (RA-G1, RA-G4, RA-G5, RA-G6, RA-G7, RA-G8) are built, and each of their steps was walked. The second walk's own findings (RA-G11 to RA-G18) are failed budget steps or a falsified expected result inside steps that can be performed, so none is a mark.
 
 RA-G2 and RA-G3 are observed at 3.3 and 3.2 rather than given steps of their own: both screens render, so both steps are walkable. RA-G3's failure is the word the screen prints, and 3.3's **Edit membership** has since answered RA-G2's own question, which is why that step reads `manual` and RA-G2 is no longer counted above. **RA-G9** and **RA-G10** were minted by the walk and are observed the same way, inside 1.3 and 4.3: both steps can be performed, and what the product does when they are is the finding.
 
 ## Run log
+
+### 2026-10-28 — second manual walk ([#2174](https://github.com/markgoho/doula-cloud/issues/2174))
+
+**Stack**: the shared walk stack, `bun run --cwd app dev:full` from the main checkout at port offset 0: the app at `http://localhost:5173`, the BFF at `127.0.0.1:18080`, the mail catcher at `http://127.0.0.1:19080`, on trunk at `f32f7b23`, in WSL2 with rootless Podman. `scripts/stripe-listen.sh` was running against it. Not restarted. Nothing on this walk touched Stripe or **Getting paid**.
+
+**Device**: headless Chrome inside WSL, driven by the chrome-devtools MCP, all in UTC. Stages 0 to 7 and 9 at 1280x900; stage 8 on an emulated 390x844 iPhone (3x, mobile and touch, an iOS Safari user agent), as the first walk. One isolated browser context per person: Renata's Stage 0 account, each of its two invited Doulas, Renata on Rooted, Joan Walker (the Stage 2 invitee), a Doula of Rooted's for the read check at 1.3, and two fresh contexts for stage 8, which are its Cold walk. Every timing below is on an unbundled Vite dev server, which compiles a route the first time it is visited; every timed route was warm.
+
+**Accounts and preconditions**:
+
+- **Stage 0**: a throwaway Owner at `renata.walk2.c610b3@sim.doula.cloud`, signed up through `/signup` with "Rooted Birth Collective" as the name (a second Practice of that name, `31283249-…`), New York, Eastern time. Between 0.3 and 0.4 the fixture's two employee Doulas were built **through the product**, not the API: Renata sent two Invitations from **Invite a Staff member** (Doula, Employee) to `priya.walk2.c610b3@sim.doula.cloud` and `jo.walk2.c610b3@sim.doula.cloud`, each mail was opened in the catcher, and each was accepted in its own context as Priya Raman and Jo Mercer. All three accounts share one generated local-emulator password, kept out of this document. The first run's bypass for this fixture is no longer needed.
+- **Stages 1 to 9**: the seeded Rooted Birth Collective (`19a0107e-…`), signed in as `renata.alvarez@sim.doula.cloud` with the seed password ([walk-a-screen-locally.md](../testing/walk-a-screen-locally.md)): fifteen Staff, 34 Clients, Visits, three Invoices billed by hand, on-call days from due dates. Stage 2's invitee was `joan.walk2.c610b3@sim.doula.cloud` (Joan Walker), accepted from the catcher in her own context with the same generated password. Stage 4 used the seeded Avery Falk Engagement (birth, due Jan 29, 2027, Doula Kimiko Nakashima), chosen because no later walk reads it. 6.1-a's Client, Rosa Linwood, was saved by Joan. 9.1's added question was removed again after 9.2, so Rooted's Birth Plan template is as seeded.
+
+The plan's `automated` steps were **not** re-run as specs; 0.2, 0.5, 4.1 and 6.1 were walked anyway, since the stages open on them.
+
+| Step | Mark | Result | What was seen |
+| --- | --- | --- | --- |
+| 0.1 | `manual` | as expected | "About you", "Step 1 of 3 · You" as a disclosure, First name, Last name, Email address, Password with "Must be 15 characters or more, and not a commonly used password" and **Show password**, then **Continue**. No checkbox and no second password field. Then "What is your Practice called? (optional)", "Where do you work?" (state, and Timezone opening on UTC, the zone this browser reports), and "Check your answers" with five **Change** links and the agreement sentence as **Create your Practice**'s description |
+| 0.2 | `automated (signup-form.e2e.ts)` | as expected | The Overview in 444 ms from the press, busy within 5 ms: "Rooted Birth Collective" in the top bar, and first "You hold every role — Owner, Admin and Doula. Anyone you invite holds only the roles you choose." |
+| 0.3 | `manual` | as expected | Both sentences word for word and one link, **Add your first Client**. No word "Stripe" on the page |
+| 0.3-a | `manual` | as expected | After both Invitations were accepted, the same words and the same link; no second-factor notice |
+| 0.4 | `manual` | as expected | "What is the Client's name?", "Only the given name is needed to save the record.", Given name, Family name (optional), Preferred name (optional), **Save and continue**. No search |
+| 0.5 | `automated (add-client-visits.e2e.ts)` | as expected | "Hannah saved as a Client." and "Starting work with Hannah uses 1 Credit. This Practice has 3 Welcome credits. After this, it has 2." |
+| 0.6 | `manual` | as expected | "Renata Alvarez (you)", "Jo Mercer", "Priya Raman", "No Doula yet", none checked. With Birth and a due date, the press was refused with "Select who the Doula is, or select No Doula yet" in the summary and at the question. The button reads **Start work with Hannah**, the given name |
+| 0.7 | `manual` | as expected | "Work with Hannah started.", Doula "No Doula yet", On call "Nobody is on this birth yet." The Overview then showed the Quick links, "Add a second step when you sign in", and the Getting paid card "Clients cannot pay you by card yet. …" with **Set up card payments** |
+| 0.7-a | `manual` | as expected | A second Client, Camille, with **Priya Raman**: "Work with Camille started.", Doula "Priya Raman", "On call from Feb 8, 2027 to Mar 15, 2027." for Mar 1, 2027 |
+| 1.2 | `manual` | as expected | One membership, so `/login` went straight to the Overview |
+| 1.3 | `manual` | **falsified** (the tiles are gone), cell corrected | Quick links: Clients "22 active", Credits "14 Credits", Your offers, Staff, Plan Templates, Contract Template, Getting paid. As Joss Adeyemi, a Doula: Clients, Your offers, Plan Templates, Contract Template, and `GET .../payments/connect` `403`. RA-G9 holds closed |
+| 2.2 | `automated (staff-invite-role.e2e.ts)` (was `manual`) | cell corrected | Email address, Roles (Owner, Admin, Doula), Employment type (Employee, Contractor), **Send invite**; no name field. "Invited. An email with a link to join is on its way to joan.walk2.c610b3@sim.doula.cloud." in 35 ms, busy within 3 ms. The spec asserts that sentence |
+| 2.2-a | `manual` (was `missing-feature (RA-G1)`) | **walked** | The catcher held "You've been invited to join a practice on DoulaCloud" from `notifications@sim.doula.cloud`, reply-to support, with the accept link |
+| 2.3 | `manual` | cell corrected | Nothing to deliver by hand. The mail names no Practice and no sender, by ADR-0009's content-free rule, and the accept page ("Accept your Staff invite") names none either; Joan first saw "Rooted Birth Collective" on landing. Not filed: decided |
+| 2.4 | `automated (staff-invite-role.e2e.ts)` (was `manual`) | cell corrected | "I'm new here — create an account", email and password, **Continue**; "Tell us about yourself", first and last name, "Which state do you work from?" ("We need the state for sales tax on your practice's credits, not your address.", decided on #453), **Accept invite**; the Overview with Clients, Schedule, On call, Offers and Settings in the bar. Her roster row: Doula, Employee. The spec drives the same two steps and lands on `Overview` |
+| 2.4-a | `manual` (was `missing-feature (RA-G8)`) | **walked** | Roles and Employment type on the form, each option with its line, and both on her membership after accept |
+| 3.1 | `manual` | as expected, cell corrected | **Staff**: **Invite a Staff member**, Members with Name, Email address, Roles, Employment type, Works from, and Pending invitations |
+| 3.2 | `manual` | as expected | "Owner, Admin, Doula" on Renata's row, "Admin" on Dee Whitlock's, "Doula" on the rest |
+| 3.3 | `manual` | **falsified** (there is no **Edit membership**), cell corrected | Joan's name opened her page: Roles "Doula" with **Change**, Employment type "Employee" with **Change**, Works from, Work state history, Membership history, and Access (**End sessions everywhere**, **Remove from this Practice**). **Change** on Roles: "Which roles does Joan Walker have?", **Save**: "Joan Walker's roles are now Admin, Doula." in 83 ms, busy within 2 ms. Set back to Doula the same way; her history reads both changes, by Renata Alvarez |
+| 3.4 | `manual` | as expected | Before Joan accepted: "joan.walk2.c610b3@sim.doula.cloud, Doula, Employee, Nov 4, 2026" and **Revoke**. After: "No pending invitations." |
+| 4.1 | `automated (add-client-visits.e2e.ts)` | as the spec asserts | The Clients row opens the Client's record; its Engagements table opens the Engagement |
+| 4.2 | `manual` (was `missing-feature (RA-G4)`) | **walked** | **Change** on "Doula: Kimiko Nakashima" offered only **Put me on this Engagement**. **Offer this work**, "Someone already at this Practice", Joan Walker, initial "A" (filled), "Rochester, east side", the due date typed again, **Send Offer**: "Offer sent to Joan Walker.", "Awaiting a decision". Joan's **Your offers** read "Due date 2027-01-29" ([#2236](https://github.com/markgoho/doula-cloud/issues/2236)); she pressed **Accept**. On reload: "Doulas: Kimiko Nakashima, Joan Walker", and On call gave Joan "On call Jan 8, 2027 to Feb 12, 2027" ([RA-G13](https://github.com/markgoho/doula-cloud/issues/2230)) |
+| 4.3 | `manual` | as expected | **Add a Visit**, "Who is this Visit for?" (every Doula; contractors without an accepted Offer marked "(cannot be named yet)"), Joan Walker, **Save Visit**: "The Visit for Joan Walker is added." in 59 ms, busy within 3 ms. The scheduled time this walk typed did not register in the headless browser, so the Visit was saved unscheduled |
+| 5.1 | `manual` | as expected, cell corrected | **Change** on Joan's row, Kimiko Nakashima, **Save changes**: "The Visit for Kimiko Nakashima is saved." in 50 ms, busy within 2 ms. Naming Trish Halvorsen, a contractor: "Trish Halvorsen is a contractor who has not accepted an Offer on this Engagement, so cannot be named on a Visit here yet. Send Trish an Offer, then name Trish." |
+| 6.1 | `automated (add-client-visits.e2e.ts)` | as the spec asserts | Each row links to the Client's record |
+| 6.1-a | `manual` | as expected, cell corrected | Rosa Linwood, saved by Joan with no Engagement, was not on the default list ("Showing 30 Clients with work so far. More remain.") and was first under **See everyone**, "No work yet" |
+| 6.1-b | `manual` | **better than the plan claimed**, cell corrected | Status reads "Birth, Intake, Contract signed", "Postpartum, Active, Contract signed, Overdue $950.00", "Birth, Active, Contract signed, Owes $1,500.00", "Birth, Active, No contract yet". MO-G4 holds closed. No Doula |
+| 6.2 | `manual` | **better than the plan claimed**, cell corrected | Contract and Invoice state without opening an Engagement. The Doula still needs On call or the Engagement ([RA-G15](https://github.com/markgoho/doula-cloud/issues/2232)) |
+| 6.2-a | `manual` (was `missing-feature (RA-G6)`) | **walked** | The roll-up above |
+| 7.2 | `manual` (was `missing-feature (RA-G7)`) | **walked** | Clients owe $2,450.00, Unpaid invoices 2, Paid $1,500.00, Returned to Clients $0.00, Overdue $950.00, Overdue invoices 1; Tessa Moreau `INV-0002` Paid, Camille Boyd `INV-0001` Open, Imani Brooks `INV-0003` Overdue "13 days overdue", all "By hand". Above the table, to the Owner: "Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe." (added to [#2200](https://github.com/markgoho/doula-cloud/issues/2200)) |
+| 8.1 | `manual` | as expected, cell corrected | On the phone, the Overview with `scrollWidth` 390; the top bar is **Menu**, the Practice's name and the account |
+| 8.2 | `manual` (was `missing-feature (RA-G5)`) | **walked** | **Menu**, **On call**: the sheet stayed open over the page until **Close menu** ([#2235](https://github.com/markgoho/doula-cloud/issues/2235)). For Oct 28 to Nov 27: "5 births on call, all covered.", cards for Casey Estrada and Quinn Estrada (Rowan Petrosyan), Morgan Grier (Marisol Terrazas), Camille Boyd and Tessa Moreau (Priya Raman), and the Doulas table. No sideways scroll at 390px. **Schedule**: 22 scheduled Visits, soonest first, each with its Doula. Mira Castellanos, the seeded loss, is on neither, so #2220's line did not appear here |
+| 8.2-a | `manual` (new) | **walked** | To set to Oct 28, **Apply**, 49 ms: "4 births on call, all covered.", Casey and Quinn Estrada both on Rowan Petrosyan, "Rowan Petrosyan is on more than one birth in these days.", and Available "Yes" for all fifteen Doulas ([RA-G18](https://github.com/markgoho/doula-cloud/issues/428)) |
+| 9.2 | `manual` | as expected — **passes** | Added "If you transfer to the hospital, what matters most?" to the Birth Plan template and saved ("Saved."); `GET .../plan-templates/birth_plan` held it. Camille Boyd's filled Birth Plan still read "2 of 4 questions answered". The question was removed again and saved |
+
+**Re-marked**: 2.2-a, 2.4-a, 4.2, 6.2-a, 7.2 and 8.2 from `missing-feature` to `manual`, their gaps built. 2.2 and 2.4 from `manual` to `automated (staff-invite-role.e2e.ts)`, their cells corrected to what the spec asserts. 8.2-a is new: the two-births-on-one-Doula check the plan had no row for. 1.3 and 3.3 were **falsified** and corrected; their marks hold. The Marks summary is recounted to 20 / 65 / 0 / 0, and [README.md](README.md)'s run-status row and Total move with it.
+
+#### Budget steps — measured
+
+**How Decisions is counted**, as on the earlier second-run walks: fields, options, and links or buttons that move her somewhere or change what happens, enabled and in view at once in the page body. **Back**, the skip link, the Terms and Privacy links and **Show password** are not counted. A question is one decision where this plan's own budget note says so (Stage 0: "A radio group is one decision"), and on every stage of this plan for consistency: a checkbox group, a radio group and a select are one each. A list of records (the roster, the Clients list, the On call cards) is one decision, the choice of a row. The Staff top bar holds ten destinations and the account menu for an Owner and is given beside a number where it matters. **Time** is measured in the page: a script presses the control and polls each animation frame until the result has settled on screen, and records when the control showed it was busy, or for a top-bar move when anything on the page first changed.
+
+| Step | Budget | Measured | Met |
+| --- | --- | --- | --- |
+| 0.B-screens | 5 | **8**: About you, the Practice name, Where do you work?, Check your answers, the empty Practice, the name question, the Start work form, the Engagement's page | **no**, [TB-G8 (#2181)](https://github.com/markgoho/doula-cloud/issues/2181), cited |
+| 0.B-decisions | 7 | 6 on Check your answers (five **Change**, **Create your Practice**) and 6 on the Start work form (kind, due date, "Who is the Doula?", Note, **Start work with {name}**, **Go to {name}'s record without starting work**). Counting each option, as [TB-G11](https://github.com/markgoho/doula-cloud/issues/2184) does on Tasha Bell's stage 5, the Start work form is 10; this stage's note governs here | yes |
+| 0.B-memory | yes | yes. The Client's name is in the Start work form's heading, its Credits sentence and its button | yes |
+| 0.B-confirmation | yes | yes. "Work with Camille started.", the Doula row "Priya Raman", and On call's window | yes |
+| 0.B-cold | yes | yes, in a fresh context. Each refusal says what to do at its field | yes |
+| 1.B-screens | 2 | 2: `/login`, then the Overview | yes |
+| 1.B-decisions | 3 | **13** in the Overview's body: seven Quick links, **Set up two-factor authentication**, **Close**, Camille Boyd (waiting on a reply), **See all activity**, **Manage staff**, **Buy credits**. Plus the top bar's 11. `/login` 3 | **no**, [RA-G11](https://github.com/markgoho/doula-cloud/issues/2228) |
+| 1.B-time | 400 ms, 100 ms | **Sign in** 370 ms, busy within 6 ms. Top-bar moves settled in 71 to 125 ms; Overview, Clients and Staff acknowledged in 22 to 59 ms | yes |
+| 2.B-screens | 1 | 1: **Invite a Staff member**, from Staff | yes |
+| 2.B-decisions | 4 | 4: Email address, Roles, Employment type, **Send invite** | yes |
+| 2.B-confirmation | yes | yes. "Invited. An email with a link to join is on its way to {email}.", and the address under Pending invitations until she accepts | yes |
+| 2.B-cold | yes | yes. Each role and employment type carries a line saying what it means | yes |
+| 3.B-screens | 1 | **3**: the roster, Joan's page, "Which roles does Joan Walker have?" (a fourth for Employment type) | **no**, [RA-G12](https://github.com/markgoho/doula-cloud/issues/2229) |
+| 3.B-decisions | 5 | 4 on the roles page (Owner, Admin, Doula, **Save**); 5 on her page (**Send a recovery code**, two **Change**, **End sessions everywhere**, **Remove from this Practice**); 2 on the roster (**Invite a Staff member**, the list) | yes |
+| 3.B-memory | yes | yes. Her name is the roles page's heading | yes |
+| 3.B-confirmation | yes | yes. "Joan Walker's roles are now Admin, Doula.", and the Membership history row | yes |
+| 3.B-cold | yes | yes. Her name is a link, and each row says what **Change** changes | yes |
+| 4.B-screens | 1 | **3**: the Clients list, the Client's record, the Engagement | **no**, [RA-G13](https://github.com/markgoho/doula-cloud/issues/2230) |
+| 4.B-decisions | 2 | **8** on **Offer this work** (to whom, which Doula, initial, area, due date, terms, **Send Offer**, **Cancel**); **Add a Visit** 4 (who, when, **Save Visit**, **Cancel**) | **no**, [RA-G13](https://github.com/markgoho/doula-cloud/issues/2230) |
+| 4.B-confirmation | yes | yes. "Offer sent to Joan Walker." and "Awaiting a decision"; once she accepted, the Doulas row. "The Visit for Joan Walker is added." | yes |
+| 5.B-screens | 1 | 1: the Engagement | yes |
+| 5.B-decisions | 2 | **5**: who, when, Notes, **Save changes**, **Cancel** | **no**, [RA-G14](https://github.com/markgoho/doula-cloud/issues/2231) |
+| 5.B-time | 400 ms, 100 ms | **Save changes** 50 ms, **Save Visit** 59 ms, busy within 3 ms | yes |
+| 5.B-confirmation | yes | yes. "The Visit for Kimiko Nakashima is saved." It does not say whom it moved from | yes |
+| 6.B-screens | 1 | **2**: the Clients list answers Contract and Invoice; the Doula needs **On call** (births in window only) or the Engagement | **no**, [RA-G15](https://github.com/markgoho/doula-cloud/issues/2232) |
+| 6.B-time | 400 ms, 100 ms | **Clients** from the top bar settled in 69 to 114 ms over seven presses, acknowledged in 36 to 59 ms | yes |
+| 7.B-screens | 1 | 1: **Invoices** | yes |
+| 7.B-time | 400 ms, 100 ms | **Invoices** settled in 108 to 125 ms over seven presses, and nothing changed before it settled; `GET .../invoices` took 97 ms | **no**, [RA-G16](https://github.com/markgoho/doula-cloud/issues/2233) |
+| 8.B-screens | 2 | **3**: `/login`, the Overview, **On call** (from **Menu**) | **no**, [RA-G17](https://github.com/markgoho/doula-cloud/issues/2234) |
+| 8.B-decisions | 2 | **4** on **On call**: From, To, **Apply**, the list | **no**, [RA-G17](https://github.com/markgoho/doula-cloud/issues/2234) |
+| 8.B-memory | yes | yes. Nothing to carry: the days, the births and the Doulas are on one page | yes |
+| 8.B-time | 400 ms, 100 ms | **Sign in** on the phone **516 ms and 518 ms** in two fresh contexts, busy within 7 ms (about 150 ms of it the local Auth emulator's iframe); **On call** from the Menu 94 ms; **Apply** 49 ms | **no**, [RA-G16](https://github.com/markgoho/doula-cloud/issues/2233) |
+| 8.B-confirmation | yes | **no**. It names who is on call for each birth tonight, who is on two, and who has none. It cannot say who is already at a birth, and it calls two births on one Doula "all covered" | **no**, [RA-G18 (#428)](https://github.com/markgoho/doula-cloud/issues/428) |
+| 8.B-cold | yes | yes, in two fresh contexts. **On call** is named in the Menu and the page says what it lists; the sheet staying open is [#2235](https://github.com/markgoho/doula-cloud/issues/2235) | yes |
+| 9.B-screens | 1 | 1: Plan Templates, from the Overview's Quick link | yes |
+| 9.B-decisions | 7 | **16** at once mid-page on the Birth Plan tab (7 at the top) | **no**, [MO-G12 (#2193)](https://github.com/markgoho/doula-cloud/issues/2193), cited |
+| 9.B-confirmation | yes | **no**. "Saved." | **no**, [MO-G13 (#2194)](https://github.com/markgoho/doula-cloud/issues/2194), cited |
+
+The 320px budget steps are `automated (route-continuum.svelte.spec.ts)` and were not re-measured; every phone screen on stage 8 had `scrollWidth` 390. **Failed**: 0.B-screens, 1.B-decisions, 3.B-screens, 4.B-screens, 4.B-decisions, 5.B-decisions, 6.B-screens, 7.B-time, 8.B-screens, 8.B-decisions, 8.B-time, 8.B-confirmation, 9.B-decisions, 9.B-confirmation.
+
+#### Moment of truth — the verdict, against the first run's
+
+**Stage 8, two Clients in labor the same night: who is free?** First run (2026-08-22): fails on absence. The phone rendered cleanly at 390px and there was nothing on it: three Client names, each `intake`, and no route to a coverage view. **This run: overturned in part.** From the phone, two taps behind the landing, **On call** says, for tonight, which four births are in their on-call window and who is on call for each; it flags that Rowan Petrosyan is on two of them (Casey and Quinn Estrada, the exact night the map describes); and its Doulas table shows who has no birth tonight, so Renata can name someone free, Joss Adeyemi or Charlene Boateng, within the minute. **Schedule** adds every Visit with its Doula. What it still cannot tell her is who is *already at a birth*: nothing records a Doula being at one now, so every Doula reads Available "Yes", including one who may have been at a birth since nine o'clock. And for two births on one Doula the headline says "4 births on call, all covered." The first run's screen had nothing to say; this one says most of it, and says the one thing she needs at 2 a.m., whether both are covered, wrongly ([RA-G18 on #428](https://github.com/markgoho/doula-cloud/issues/428)).
+
+#### Is the journey completable end to end?
+
+**Yes.** Against "a pass means": Joan Walker accepted an emailed Invitation, holds the Doula role (set on the invitation and changed and changed back from her page), and is on a live Engagement, Avery Falk's, with an on-call window; and the Clients list shows every open Engagement in the Practice with its Contract and Invoice state, no Engagement opened. Every `missing-feature` step from the first run is walked, and no step stops her. Three things fall short of the letter: putting Joan on the Engagement was not Renata's act alone, since an existing Engagement takes an Offer that Joan must accept (RA-G13); the list that shows the money does not show who covers each birth (RA-G15); and the moment of truth answers who is on call, not who is at a birth (RA-G18).
+
+**Findings filed**: [RA-G11 (#2228)](https://github.com/markgoho/doula-cloud/issues/2228), [RA-G12 (#2229)](https://github.com/markgoho/doula-cloud/issues/2229), [RA-G13 (#2230)](https://github.com/markgoho/doula-cloud/issues/2230), [RA-G14 (#2231)](https://github.com/markgoho/doula-cloud/issues/2231), [RA-G15 (#2232)](https://github.com/markgoho/doula-cloud/issues/2232), [RA-G16 (#2233)](https://github.com/markgoho/doula-cloud/issues/2233) and [RA-G17 (#2234)](https://github.com/markgoho/doula-cloud/issues/2234), failed budget steps, each on the [journey map](../journeys/practice-owner.md#gaps-found) with its budget line quoted; **RA-G18** recorded on the older, open [#428](https://github.com/markgoho/doula-cloud/issues/428), which already owns "who is at a birth now", rather than filed again; and two bugs, [#2235](https://github.com/markgoho/doula-cloud/issues/2235) (the narrow menu stays open) and [#2236](https://github.com/markgoho/doula-cloud/issues/2236) (an Offer's ISO due date). Cited, with a comment on each: [TB-G8 (#2181)](https://github.com/markgoho/doula-cloud/issues/2181), [MO-G12 (#2193)](https://github.com/markgoho/doula-cloud/issues/2193), [MO-G13 (#2194)](https://github.com/markgoho/doula-cloud/issues/2194) and [#2200](https://github.com/markgoho/doula-cloud/issues/2200). Not filed: the Invitation mail naming no Practice (ADR-0009) and the invitee asked her work state (#453).
 
 ### 2026-10-27 — automated marks re-derived for the second walk ([#329](https://github.com/markgoho/doula-cloud/issues/329))
 
