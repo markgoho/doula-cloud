@@ -70,12 +70,12 @@ Dee is a domain expert on the business half and a stranger to the care half.
 
 ### Stage 4 — Take the call and create the Client
 
-**Thinking**: "She is due in March, wants a birth doula, heard about us from her midwife." **Pain points**: they take a page of notes on the call, and the form accepted two fields when this map was drawn — everything else went back into a notebook, which is the problem the product was meant to solve. **That is closed** ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252), ADR-0017): the notes have somewhere to go.
+**Thinking**: "She is due in March, wants a birth doula, heard about us from her midwife." **Pain points**: they take a page of notes on the call, and the form accepted two fields when this map was drawn — everything else went back into a notebook, which is the problem the product was meant to solve. **That is closed** ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252), ADR-0017): the notes have somewhere to go. The Start work form asks the kind of work, the due date and who the Doula is in one act, by decision ([#1515](https://github.com/markgoho/doula-cloud/issues/1515)), so its six decisions are the stage's largest screen ([TB-G11](evaluator-doula.md#gaps-found) holds the reason).
 
 **Budget**:
 
 * **Screens**: 8 (Hick's Law, Flow)
-* **Decisions**: 3 (Hick's Law, Miller's Law)
+* **Decisions**: 6 (Hick's Law, Miller's Law)
 * **Memory**: yes (Working Memory)
 * **Time**: 400 ms, 100 ms (Doherty Threshold)
 * **Confirmation**: yes (Peak-End Rule)
@@ -86,12 +86,12 @@ Dee is a domain expert on the business half and a stranger to the care half.
 
 ### Stage 5 — Put a Doula on the Engagement
 
-**Thinking**: "Priya has room in March." **Pain points**: an Engagement has no Doula on it, and nothing puts one there. See RA-G4.
+**Thinking**: "Priya has room in March." **Pain points**: an Engagement has no Doula on it, and nothing puts one there. See RA-G4. On a new Engagement the Doula is now named on the Start work form, by decision ([#1515](https://github.com/markgoho/doula-cloud/issues/1515)), which rejected naming her afterward on the Engagement, so the stage's screen is that form and its six decisions ([TB-G11](evaluator-doula.md#gaps-found) holds the reason). Putting a Doula on an Engagement that already exists is [RA-G13](practice-owner.md#gaps-found)'s, on Renata Alvarez's stage 4, under its own budget of 2.
 
 **Budget**:
 
 * **Screens**: 1 (Hick's Law, Flow)
-* **Decisions**: 2 (Hick's Law, Miller's Law)
+* **Decisions**: 6 (Hick's Law, Miller's Law)
 * **Confirmation**: yes (Peak-End Rule)
 * **320px**: yes (ADR-0024)
 
