@@ -112,7 +112,9 @@ const KNOWN: Known[] = [];
  * what it means rather than by a test hook: `role="status"` plus
  * `aria-busy="true"` is what `Skeleton.svelte` renders, and the pair
  * cannot be silently dropped without a screen-reader user losing the
- * announcement too. `Button`'s in-flight state also sets `aria-busy` but
+ * announcement too. An unlabeled `Skeleton` carries neither (#2248), but it
+ * is only ever a second region of one load, drawn and removed with a
+ * labeled one, so this selector still sees every load in flight. `Button`'s in-flight state also sets `aria-busy` but
  * carries the button role, so it is not matched here -- and nothing on a
  * freshly-loaded route is submitting anyway.
  *
