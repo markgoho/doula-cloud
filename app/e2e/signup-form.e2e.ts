@@ -62,6 +62,12 @@ test('Signing up through the journey lands the new Owner on her Practice overvie
 
 	await expect(page).toHaveURL(/\/practices\/[^/?]+$/);
 	await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
+	// #2182: the act that made the Practice says so, by name, in a status
+	// that takes focus on arrival -- and only on arrival: a reload of the
+	// same Overview says nothing.
+	const created = page.getByRole('status').filter({ hasText: 'You created your Practice, Riverside Doulas.' });
+	await expect(created).toBeVisible();
+	await expect(created).toBeFocused();
 	// The Practice's name is the top bar's to show (#2141), so that is
 	// where the name typed at signup is looked for.
 	await expect(page.getByText('Riverside Doulas', { exact: true }).locator('visible=true')).toBeVisible();
@@ -103,6 +109,10 @@ test('Signing up through the journey lands the new Owner on her Practice overvie
 	// attribute checks.
 	const readableCookies = await page.evaluate(() => document.cookie);
 	expect(readableCookies, 'session cookie is readable from document.cookie').not.toContain('__session');
+
+	await page.reload();
+	await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
+	await expect(created).toHaveCount(0);
 });
 
 // #1536: a solo doula who works under her own name leaves the Practice

@@ -22,6 +22,7 @@
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiBaseURL } from '#lib/api.js';
+	import { gotoWithOutcome } from '#lib/outcome.js';
 	import { legalVersionUrl, privacyPolicyUrl, termsOfServiceUrl } from '#lib/legal.js';
 	import { formatCalendarDay } from '#lib/dates.js';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -64,6 +65,11 @@
 	const answers = $derived(signupDraft.answers);
 	const steps = $derived(railSteps(undefined, signupDraft.visited));
 	const ownName = $derived(`${answers.firstName.trim()} ${answers.lastName.trim()}`.trim());
+	// The name the Practice is created with: an empty answer is her own
+	// name, what the BFF does with it (#1536). One expression for the
+	// answers' row and for what the Overview says on arrival, so the two
+	// cannot disagree.
+	const practiceName = $derived(answers.practiceName.trim() || ownName);
 	const timezoneName = $derived(
 		timezoneOptions(answers.timezone).find((option) => option.value === answers.timezone)?.label ?? ''
 	);
@@ -85,7 +91,7 @@
 				},
 				{
 					label: 'Practice name',
-					value: answers.practiceName.trim() || ownName || 'Your own name',
+					value: practiceName || 'Your own name',
 					changeHref: changeHref('practice'),
 					changes: 'Practice name'
 				},
@@ -175,9 +181,13 @@
 		const created: { practiceId: string } = await response.json();
 		// SignupHandler already set the session cookie on its own response
 		// (#145): drop the JS SDK credential (#149) and the draft.
+		// Read before the draft it comes from is cleared. The Overview says
+		// it once, on arrival (#2182, #1710): the act that made the Practice
+		// says so, as saving a Client and starting work do.
+		const message = `You created your Practice, ${practiceName}.`;
 		await signOut(getFirebaseAuth());
 		signupDraft.clear();
-		await goto(resolve('/practices/[practiceId]', { practiceId: created.practiceId }));
+		await gotoWithOutcome(resolve('/practices/[practiceId]', { practiceId: created.practiceId }), message);
 	}
 
 	/*

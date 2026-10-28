@@ -57,8 +57,9 @@
 	let landing = $state<PracticeLanding | undefined>();
 	let error = $state('');
 
-	// What the act that sent her here did (#1710) -- today only agreeing
-	// to a changed Terms of Service or Privacy Policy (#1549). Read once,
+	// What the act that sent her here did (#1710): creating the Practice
+	// at signup (#2182), or agreeing to a changed Terms of Service or
+	// Privacy Policy (#1549). Read once,
 	// while the page renders, so a reload says nothing.
 	const outcome = takeOutcome(page.url);
 
