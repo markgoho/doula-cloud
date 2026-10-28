@@ -49,6 +49,10 @@
 	 * promise the endpoint refuses. Same rule #423 applied to the landing
 	 * page's rail -- ask only for what the caller's role can be served.
 	 */
+	// The sections that can only be empty while the Practice has no
+	// Client (#2183), keyed on the label every one of them already has.
+	const WAITS_FOR_A_CLIENT = new Set(['Clients', 'Schedule', 'On call', 'Invoices', 'Contracts', 'Offers']);
+
 	const isAdmin = $derived(practiceSession !== undefined && isOwnerOrAdmin(practiceSession));
 
 	const navItems = $derived.by((): NavItem[] => {
@@ -102,10 +106,28 @@
 		];
 		// Overview is an exact match and every other section is a prefix, so
 		// a Client's own screen still marks Clients as the current section.
-		return items.map((item) => ({
+		const marked = items.map((item) => ({
 			...item,
 			current: item.current ?? path.startsWith(item.href)
 		}));
+		/*
+		 * #2183 (TB-G10): a Practice with no Client yet is offered only the
+		 * sections that hold something before one exists -- Overview,
+		 * Credits (what a Credit costs, TB-G2), Staff (the roster, TB-G7)
+		 * and Settings (the setup and the exit acts, TB-G5). The six that
+		 * list the Practice's work with Clients would each open an empty
+		 * list, and with them the first screen offered thirteen decisions
+		 * against a budget of five (the top bar's destinations and the one
+		 * way forward, **Add your first Client**). One threshold, the first
+		 * Client, the same fact Overview's empty state switches on: a rule
+		 * per section would keep Schedule and Contracts hidden just as she
+		 * adds a first Client to see them. Only `false` narrows the bar, so
+		 * a session that has not said keeps every section. A section she is
+		 * inside is drawn anyway, marked current, so the bar always shows
+		 * where she is (the first Client's own intake is under Clients).
+		 */
+		if (practiceSession?.hasClients !== false) return marked;
+		return marked.filter((item) => item.current || !WAITS_FOR_A_CLIENT.has(item.label));
 	});
 
 	const practices = $derived.by((): PracticeOption[] =>
@@ -145,7 +167,7 @@
 	The one exception is a Practice name long enough to wrap in the
 	switcher, which grows the bar when it arrives (#1573) -- a name drawn
 	over the page would be worse than the page moving down once. The parts that need an answer from the BFF -- the person's
-	avatar, the Practice switcher, and the three admin-only nav items --
+	avatar, the Practice switcher, and the four admin-only nav items --
 	arrive into a bar that is already there.
 -->
 <StaffTopBar

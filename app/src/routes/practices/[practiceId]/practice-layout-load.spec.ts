@@ -15,9 +15,12 @@ function setup(byPath: Record<string, { status: number; body: unknown } | undefi
 	return { fetchMock };
 }
 
+const depends = vi.fn();
+
 const loadArguments = {
 	params: { practiceId: 'practice-1' },
-	url: new URL('https://example.test/practices/practice-1/billing')
+	url: new URL('https://example.test/practices/practice-1/billing'),
+	depends
 } as unknown as Parameters<typeof import('./+layout.js').load>[0];
 
 afterEach(() => {
@@ -70,6 +73,43 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 		const result = await load(loadArguments);
 
 		expect(result).toMatchObject({ session: { secondFactor: false } });
+	});
+
+	// #2183: the Staff top bar reads this off the session on every screen.
+	it('carries whether the Practice holds any Client yet', async () => {
+		const { load } = await import('./+layout.js');
+		setup({
+			'/api/practices/practice-1/session': {
+				status: 200,
+				body: {
+					staffId: 'staff-9',
+					practiceName: 'Riverside Doula Collective',
+					roles: ['owner'],
+					isContractor: false,
+					hasClients: false
+				}
+			}
+		});
+
+		const result = await load(loadArguments);
+
+		expect(result).toMatchObject({ session: { hasClients: false } });
+	});
+
+	// #2183: saving a Practice's first Client invalidates this name, so the
+	// session (and with it the top bar) is read again on the way out.
+	it('declares the dependency an act invalidates to read the session again', async () => {
+		const { load } = await import('./+layout.js');
+		setup({
+			'/api/practices/practice-1/session': {
+				status: 200,
+				body: { staffId: 'staff-9', practiceName: 'Riverside Doula Collective', roles: ['owner'], isContractor: false }
+			}
+		});
+
+		await load(loadArguments);
+
+		expect(depends).toHaveBeenCalledWith('practice:session');
 	});
 
 	it('redirects to login on a 401, rather than reaching for goto mid-load', async () => {

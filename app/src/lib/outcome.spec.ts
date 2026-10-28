@@ -24,6 +24,12 @@ describe('gotoWithOutcome and takeOutcome (#1710)', () => {
 		expect(goto).toHaveBeenCalledWith('/practices/p/clients/c');
 	});
 
+	it('reads again the load dependencies the save names, on the same navigation (#2183)', async () => {
+		await gotoWithOutcome('/practices/p/clients/c', 'Sam saved.', ['practice:session']);
+
+		expect(goto).toHaveBeenCalledWith('/practices/p/clients/c', { invalidate: ['practice:session'] });
+	});
+
 	it('gives the message to the screen it lands on, during the navigation', async () => {
 		let arrived: string | undefined;
 		vi.mocked(goto).mockImplementation(async () => {
