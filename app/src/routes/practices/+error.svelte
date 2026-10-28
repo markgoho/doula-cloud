@@ -6,15 +6,8 @@
 	 * failed `load`, because routing matched before the load ran.
 	 */
 	import { page } from '$app/state';
-	import { resolve } from '$app/paths';
-	import ErrorPage from '#lib/components/templates/ErrorPage.svelte';
 	import { errorKindForStatus } from '#lib/errorPage.js';
-
-	const practiceId = $derived(page.params.practiceId!);
+	import FailedRead from './[practiceId]/FailedRead.svelte';
 </script>
 
-<ErrorPage
-	kind={errorKindForStatus(page.status, page.error?.code)}
-	wayOutHref={resolve('/practices/[practiceId]', { practiceId })}
-	wayOutLabel="Go to your Practice overview"
-/>
+<FailedRead kind={errorKindForStatus(page.status, page.error?.code)} />

@@ -497,7 +497,7 @@ describe('the continuum check, over routes', () => {
  * step of it, for the reason given where it is built). A route condition with no entry in `ROUTE_FLOORS` fails,
  * and so does an entry with no condition.
  */
-const routeSources = import.meta.glob('./**/+page.svelte', {
+const routeSources = import.meta.glob(['./**/+page.svelte', './**/*Screen.svelte'], {
 	eager: true,
 	query: '?raw',
 	import: 'default',

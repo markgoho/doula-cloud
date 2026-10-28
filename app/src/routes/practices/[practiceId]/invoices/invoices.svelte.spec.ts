@@ -10,7 +10,7 @@ import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 // their CSS -- see staff-list.svelte.spec.ts for why.
 import '#lib/styles/app.css';
 import { expectOneFramedHeading } from '#lib/components/templates/pageFrame.testing.js';
-import Page from './+page.svelte';
+import Page from './InvoicesScreen.svelte';
 import { toPageState } from '../../../routeFixture.js';
 import { data, fixture } from './page.fixture.js';
 
@@ -44,18 +44,6 @@ beforeEach(() => {
 	apiFetchWithSession.mockReset();
 });
 
-// `session` merges in from practices/[practiceId]/+layout.ts (#835) --
-// this route never reads it, but the generated `data` prop type requires
-// it, since SvelteKit really does merge ancestor layout data into it at
-// runtime.
-const sessionStub = {
-	practiceId,
-	staffId: 'staff-1',
-	practiceName: 'Riverside Doula Collective',
-	roles: ['owner'],
-	isContractor: false
-};
-
 async function setup(page: PracticeInvoiceListData = data) {
 	// Wide enough for DataTable's <table> rather than the <dl> record view
 	// its content floor stacks into below 46rem (#508) -- the same call the
@@ -64,7 +52,7 @@ async function setup(page: PracticeInvoiceListData = data) {
 	// is DataTable's own spec's job.
 	// Above this route's own table floor (#1945, #1981, its +page.svelte), so the <table> renders.
 	await testPage.viewport(1440, 900);
-	await render(Page, { params: fixture.params, data: { ...page, session: sessionStub } });
+	await render(Page, { data: page });
 }
 
 describe('the dates the Practice-wide invoice list prints (#1958, #1965)', () => {

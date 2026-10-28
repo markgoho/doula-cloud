@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { jsonResponse } from '#lib/testResponse.js';
+import { loadedValue, settledRead } from '#lib/testStreamedRead.js';
 import type { SchedulePageData } from './+page.js';
 
 const goto = vi.hoisted(() => vi.fn());
@@ -71,9 +72,7 @@ describe('schedule/+page.ts load', () => {
 		const { load } = await import('./+page.js');
 		const { fetchMock } = setup(200, emptyPage);
 
-		const result = (await load(
-			loadEvent('?from=2026-09-12&to=2026-09-19&staffId=staff-1') as Parameters<typeof load>[0]
-		)) as SchedulePageData;
+		const result = await loadedValue<SchedulePageData>(await load(loadEvent('?from=2026-09-12&to=2026-09-19&staffId=staff-1') as Parameters<typeof load>[0]));
 
 		const [requestedPath] = fetchMock.mock.calls[0];
 		const url = new URL(requestedPath, 'https://example.test');
@@ -97,7 +96,7 @@ describe('schedule/+page.ts load', () => {
 		const { load } = await import('./+page.js');
 		const { fetchMock } = setup(200, emptyPage);
 
-		const result = (await load(loadEvent() as Parameters<typeof load>[0])) as SchedulePageData;
+		const result = await loadedValue<SchedulePageData>(await load(loadEvent() as Parameters<typeof load>[0]));
 
 		const url = new URL(fetchMock.mock.calls[0][0], 'https://example.test');
 		expect(result.filters).toEqual({ from: '2026-10-02', to: '2026-11-01', staffId: undefined });
@@ -111,7 +110,7 @@ describe('schedule/+page.ts load', () => {
 		const { load } = await import('./+page.js');
 		setup(200, emptyPage);
 
-		const result = (await load(loadEvent() as Parameters<typeof load>[0])) as SchedulePageData;
+		const result = await loadedValue<SchedulePageData>(await load(loadEvent() as Parameters<typeof load>[0]));
 
 		expect(result.doulas).toEqual([
 			{ value: 'staff-1', label: 'Persephone Vandermeulen-Achterberg, CD(DONA)' }
@@ -122,43 +121,52 @@ describe('schedule/+page.ts load', () => {
 		const { load } = await import('./+page.js');
 		const { fetchMock } = setup(200, emptyPage);
 
-		const result = (await load(
-			loadEvent('', ['doula']) as Parameters<typeof load>[0]
-		)) as SchedulePageData;
+		const result = await loadedValue<SchedulePageData>(await load(loadEvent('', ['doula']) as Parameters<typeof load>[0]));
 
 		expect(result.doulas).toEqual([]);
 		expect(fetchMock.mock.calls.every(([path]) => !path.includes('/staff'))).toBe(true);
 	});
 
-	it('redirects to login on a 401, rather than reaching for goto mid-load', async () => {
+	it('starts the schedule and the roster together', async () => {
 		const { load } = await import('./+page.js');
-		setup(401, 'no session');
+		const { fetchMock } = setup(200, emptyPage);
 
-		await expect(load(loadEvent() as Parameters<typeof load>[0])).rejects.toMatchObject({
-			status: 303,
-			location: '/login?sessionEnded=true'
-		});
+		await load(loadEvent() as Parameters<typeof load>[0]);
+
+		expect(fetchMock.mock.calls.map(([path]) => new URL(path, 'https://example.test').pathname)).toEqual([
+			'/api/practices/practice-1/visits',
+			'/api/practices/practice-1/staff'
+		]);
 	});
 
-	it('throws a 403 SvelteKit error on a role refusal, for practices/+error.svelte to render', async () => {
+	// #2249: a refusal is the screen's to draw, after the screen has
+	// changed, so the read carries the response through unread.
+	it('hands a refused schedule read to the screen', async () => {
 		const { load } = await import('./+page.js');
 		setup(403, { code: 'FORBIDDEN', message: 'not permitted to read this' });
 
-		// The reason rides along with the status (#918), so
-		// practices/+error.svelte renders the state matching the refusal
-		// rather than one state for every 403 alike.
-		await expect(load(loadEvent() as Parameters<typeof load>[0])).rejects.toMatchObject({
-			status: 403,
-			body: { code: 'FORBIDDEN', message: 'not permitted to read this' }
+		const data = await load(loadEvent() as Parameters<typeof load>[0]);
+
+		await expect(settledRead(data)).resolves.toMatchObject({
+			isLoaded: false,
+			response: { status: 403 }
 		});
 	});
 
-	it('throws with the response status on any other failure', async () => {
+	it('hands a refused roster read to the screen', async () => {
 		const { load } = await import('./+page.js');
-		setup(500, 'boom');
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (path: string) =>
+				path.includes('/staff') ? jsonResponse('no', 403) : jsonResponse(emptyPage, 200)
+			)
+		);
 
-		await expect(load(loadEvent() as Parameters<typeof load>[0])).rejects.toMatchObject({
-			status: 500
+		const data = await load(loadEvent() as Parameters<typeof load>[0]);
+
+		await expect(settledRead(data)).resolves.toMatchObject({
+			isLoaded: false,
+			response: { status: 403 }
 		});
 	});
 });

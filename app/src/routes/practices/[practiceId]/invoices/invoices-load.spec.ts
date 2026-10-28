@@ -1,8 +1,6 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { jsonResponse } from '#lib/testResponse.js';
-
-const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+import { loadedValue, settledRead } from '#lib/testStreamedRead.js';
 
 function setup(status: number, body: unknown) {
 	const fetchMock = vi.fn(async () => jsonResponse(body, status));
@@ -25,17 +23,17 @@ const emptyBook = {
 };
 
 describe('invoices/+page.ts load', () => {
-	it('fetches the Practice-wide invoices path and returns the page', async () => {
+	it('fetches the Practice-wide invoices path and hands over the page', async () => {
 		const { load } = await import('./+page.js');
 		const { fetchMock } = setup(200, emptyBook);
 
-		const result = await load({ params: { practiceId: 'practice-1' }, url: new URL('https://example.test/practices/practice-1/invoices') } as Parameters<typeof load>[0]);
+		const data = await load({ params: { practiceId: 'practice-1' }, url: new URL('https://example.test/practices/practice-1/invoices') } as Parameters<typeof load>[0]);
 
 		expect(fetchMock).toHaveBeenCalledWith(
 			'/api/practices/practice-1/invoices',
 			expect.objectContaining({ credentials: 'include' })
 		);
-		expect(result).toEqual({ ...emptyBook, isNarrowedToOverdue: false });
+		await expect(loadedValue(data)).resolves.toEqual({ ...emptyBook, isNarrowedToOverdue: false });
 	});
 
 	// #768: the narrowing is in the URL, so the load reads it there and
@@ -44,7 +42,7 @@ describe('invoices/+page.ts load', () => {
 		const { load } = await import('./+page.js');
 		const { fetchMock } = setup(200, emptyBook);
 
-		const result = await load({
+		const data = await load({
 			params: { practiceId: 'practice-1' },
 			url: new URL('https://example.test/practices/practice-1/invoices?overdue=true')
 		} as Parameters<typeof load>[0]);
@@ -53,36 +51,17 @@ describe('invoices/+page.ts load', () => {
 			'/api/practices/practice-1/invoices?overdue=true',
 			expect.objectContaining({ credentials: 'include' })
 		);
-		expect(result).toEqual({ ...emptyBook, isNarrowedToOverdue: true });
+		await expect(loadedValue(data)).resolves.toEqual({ ...emptyBook, isNarrowedToOverdue: true });
 	});
 
-	it('redirects to login on a 401, rather than reaching for goto mid-load', async () => {
-		const { load } = await import('./+page.js');
-		setup(401, 'no session');
-
-		await expect(
-			load({ params: { practiceId: 'practice-1' }, url: new URL('https://example.test/practices/practice-1/invoices') } as Parameters<typeof load>[0])
-		).rejects.toMatchObject({ status: 303, location: '/login?sessionEnded=true' });
-	});
-
-	it('throws a 403 SvelteKit error on a role refusal, for practices/+error.svelte to render', async () => {
+	// #2249: the screen has changed by the time a refusal lands, so the
+	// screen follows it; the read carries the response through unread.
+	it('hands a refusal to the screen rather than throwing mid-load', async () => {
 		const { load } = await import('./+page.js');
 		setup(403, { code: 'FORBIDDEN', message: 'not permitted to read this' });
 
-		// The reason rides along with the status (#918), so
-		// practices/+error.svelte renders the state matching the refusal
-		// rather than one state for every 403 alike.
-		await expect(
-			load({ params: { practiceId: 'practice-1' }, url: new URL('https://example.test/practices/practice-1/invoices') } as Parameters<typeof load>[0])
-		).rejects.toMatchObject({ status: 403, body: { code: 'FORBIDDEN', message: 'not permitted to read this' } });
-	});
+		const data = await load({ params: { practiceId: 'practice-1' }, url: new URL('https://example.test/practices/practice-1/invoices') } as Parameters<typeof load>[0]);
 
-	it('throws with the response status on any other failure', async () => {
-		const { load } = await import('./+page.js');
-		setup(500, 'boom');
-
-		await expect(
-			load({ params: { practiceId: 'practice-1' }, url: new URL('https://example.test/practices/practice-1/invoices') } as Parameters<typeof load>[0])
-		).rejects.toMatchObject({ status: 500 });
+		await expect(settledRead(data)).resolves.toMatchObject({ isLoaded: false, response: { status: 403 } });
 	});
 });

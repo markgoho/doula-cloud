@@ -10,7 +10,7 @@ import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 // via the custom element's own attribute handling, and an unregistered
 // center-l never runs it, leaving every DataTable narrower than its floor.
 import '#lib/styles/app.css';
-import Page from './+page.svelte';
+import Page from './CreditsScreen.svelte';
 import { toPageState } from '../../../routeFixture.js';
 import { data, fixture } from './page.fixture.js';
 
@@ -54,25 +54,11 @@ const { practiceId } = fixture.params;
 // screen's own return path is a plain string this route only echoes back.
 const approvalReturnPath = `/practices/${practiceId}/engagement-requests/request-1`;
 
-// The generated `data` prop merges practices/[practiceId]/+layout.ts's
-// `session` (#835) into +page.ts's own `Balance`, the way SvelteKit
-// really does at runtime -- the prop's type carries both, so the render
-// call below supplies both, even though this route reads only the
-// `Balance` half (#1162 took its last role read away).
-const sessionStub = {
-	practiceId,
-	staffId: 'staff-1',
-	practiceName: 'Riverside Doula Collective',
-	roles: ['owner'],
-	isContractor: false
-};
-const dataWithSession = { ...data, session: sessionStub };
-
 // SIFERS setup() shared by every describe below: `overrides` is the one
 // thing any of these tests varies from the fixture's own happy path
-// (#285), spread over `dataWithSession` per the fixture-departure rule.
-async function renderBilling(overrides: Partial<typeof dataWithSession> = {}) {
-	await render(Page, { params: fixture.params, data: { ...dataWithSession, ...overrides } });
+// (#285), spread over `data` per the fixture-departure rule.
+async function renderBilling(overrides: Partial<typeof data> = {}) {
+	await render(Page, { data: { ...data, ...overrides } });
 }
 
 describe('the way back to an approval an empty balance interrupted (#502)', () => {
@@ -207,9 +193,9 @@ describe('who may buy Credits (#257, #1162)', () => {
 	 * One assertion, where there used to be four. This screen no longer
 	 * reads a role: ADR-0008 admits Owner and Admin to the Credit balance
 	 * and refuses a Doula, billing/mount.go declares that same
-	 * OwnerAndAdmin seat on the balance read and the purchase, and the
-	 * balance arrives through +page.ts's own load -- so a session that
-	 * could not buy meets that refusal and never renders this component.
+	 * OwnerAndAdmin seat on the balance read and the purchase, and
+	 * +page.svelte draws a refused balance read itself -- so a session
+	 * that could not buy meets that refusal and never renders this component.
 	 * The three tests removed here wrote a Doula, an Admin and a roleless
 	 * session onto the mocked page.data by hand and asserted a disabled
 	 * button, describing a screen the route cannot serve (#1162). What is

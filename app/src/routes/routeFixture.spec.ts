@@ -15,6 +15,8 @@ describe('toRoutePath', () => {
 		// The check's own form: globbed from `src/routes` itself.
 		['./practices/[practiceId]/invoices/+page.svelte', 'practices/[practiceId]/invoices'],
 		['./practices/[practiceId]/invoices/page.fixture.ts', 'practices/[practiceId]/invoices'],
+		// A loaded screen beside its `+page.svelte` (#2249).
+		['./practices/[practiceId]/invoices/InvoicesScreen.svelte', 'practices/[practiceId]/invoices'],
 		// The drag surface's form: globbed from two directories down.
 		['../../practices/[practiceId]/invoices/page.fixture.ts', 'practices/[practiceId]/invoices'],
 		['../../account/page.fixture.ts', 'account'],

@@ -2,9 +2,10 @@
  * The Practice-wide Billing screen, as the continuum check sees it
  * (#595).
  *
- * The balance and the ledger's first page come from `+page.ts`'s own
- * `load`, so both arrive as a component prop the same way the invoice
- * list fixture's `data` does. The ledger carries no Practice-typed free
+ * The balance and the ledger's first page come from `+page.ts`'s read,
+ * which `+page.svelte` hands to `CreditsScreen` once it lands (#2249), so
+ * both arrive as a component prop the same way the invoice list
+ * fixture's `data` does. The ledger carries no Practice-typed free
  * text (origin is a fixed enum, quantity a number), so this measures a
  * large realistic balance and the widest origin label rather than any
  * hostile string.
@@ -12,9 +13,9 @@
  * One session is all this screen has (#928), and now the route says so
  * itself. It reads no role at all: who may be here is ADR-0008's Credit
  * row, the balance read and the purchase both declare
- * `staffauth.OwnerAndAdmin` (`billing/mount.go`), and the balance arrives
- * through `+page.ts`'s own `load` -- so a Doula meets `refuseRead` and
- * `practices/+error.svelte` instead of this component, and an Owner and
+ * `staffauth.OwnerAndAdmin` (`billing/mount.go`), so a Doula's balance
+ * read is refused and `+page.svelte` draws the refusal instead of this
+ * component (swept as `ErrorPage`'s own demo), and an Owner and
  * an Admin draw the identical screen with the Buy credits button plainly
  * enabled.
  * [#1162](https://github.com/markgoho/doula-cloud/issues/1162) removed the
@@ -23,7 +24,7 @@
 import type { Balance } from '#lib/billing.js';
 import type { RouteFixture, RouteVariant } from '../../../routeFixture.js';
 import type { RouteParams as RouteParameters } from './$types';
-import Page from './+page.svelte';
+import Page from './CreditsScreen.svelte';
 
 export const data: Balance = {
 	balance: 42,

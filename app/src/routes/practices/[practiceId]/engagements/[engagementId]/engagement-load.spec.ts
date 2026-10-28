@@ -1,8 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { jsonResponse } from '#lib/testResponse.js';
-
-const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+import { loadedValue, settledRead } from '#lib/testStreamedRead.js';
 
 function setup(status: number, body: unknown) {
 	const fetchMock = vi.fn(async () => jsonResponse(body, status));
@@ -22,7 +20,7 @@ afterEach(() => {
 });
 
 describe('engagements/[engagementId]/+page.ts load', () => {
-	it('fetches the Engagement and returns it', async () => {
+	it('fetches the Engagement and hands it over', async () => {
 		const detail = {
 			engagementId: 'engagement-1',
 			clientId: 'client-1',
@@ -33,44 +31,22 @@ describe('engagements/[engagementId]/+page.ts load', () => {
 		};
 		const { fetchMock } = setup(200, detail);
 
-		expect(await callLoad()).toEqual(detail);
+		await expect(loadedValue(await callLoad())).resolves.toEqual(detail);
 		expect(fetchMock).toHaveBeenCalledWith(
 			'/api/practices/practice-1/engagements/engagement-1',
 			expect.objectContaining({ credentials: 'include' })
 		);
 	});
 
-	it('redirects to login on a 401, rather than reaching for goto mid-load', async () => {
-		setup(401, 'no session');
-
-		await expect(callLoad()).rejects.toMatchObject({
-			status: 303,
-			location: '/login?sessionEnded=true'
-		});
-	});
-
-	// The reason this read moved into load at all: a Doula who is not
-	// attached to this Engagement gets a 403 (ADR-0008, #350), and that
-	// belongs in practices/+error.svelte rather than in a local error
-	// string the page owns.
-	it('throws a 403 SvelteKit error on a refusal, for practices/+error.svelte to render', async () => {
+	// A Doula who is not attached to this Engagement gets a 403 (ADR-0008,
+	// #350). The screen has changed by the time it lands (#2249), so the
+	// screen draws it; the read carries the response through unread.
+	it('hands a refusal to the screen rather than throwing mid-load', async () => {
 		setup(403, { code: 'FORBIDDEN', message: 'not permitted to read this' });
 
-		// The reason rides along with the status (#918), so
-		// practices/+error.svelte renders the state matching the refusal
-		// rather than one state for every 403 alike.
-		await expect(callLoad()).rejects.toMatchObject({
-			status: 403,
-			body: { code: 'FORBIDDEN', message: 'not permitted to read this' }
-		});
-	});
-
-	it('throws the endpoint status and message on any other failure', async () => {
-		setup(500, 'internal error');
-
-		await expect(callLoad()).rejects.toMatchObject({
-			status: 500,
-			body: { message: 'internal error' }
+		await expect(settledRead(await callLoad())).resolves.toMatchObject({
+			isLoaded: false,
+			response: { status: 403 }
 		});
 	});
 });

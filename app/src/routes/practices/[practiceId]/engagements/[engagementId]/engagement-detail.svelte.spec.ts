@@ -6,7 +6,7 @@ import { jsonResponse } from '#lib/testResponse.js';
 import { findDuplicateIds } from '#lib/duplicateIds.js';
 import { gotoWithOutcome } from '#lib/outcome.js';
 import { goto } from '$app/navigation';
-import Page from './+page.svelte';
+import Page from './EngagementScreen.svelte';
 // Rendering `+page.svelte` directly bypasses `+layout.svelte`, the only
 // place the real app calls this -- without it a layout primitive like
 // `center-l`'s own `max` override sits unregistered and inert (matching
@@ -107,14 +107,11 @@ async function setup(detail: Detail, activityResponse?: Response) {
 	} else {
 		apiFetchWithSession.mockResolvedValue(jsonResponse('not available', 403));
 	}
-	// No `params` prop: the page reads `page.params`, which the $app/state
-	// `params` rides along because PageProps requires it; the page itself
-	// reads `page.params`, which the $app/state mock above supplies. Both
-	// come from the fixture, so the two cannot disagree about which
-	// Engagement this is (#596).
+	// No `params` prop: the screen reads `page.params`, which the
+	// $app/state mock above supplies from the fixture, so the two cannot
+	// disagree about which Engagement this is (#596).
 	await render(Page, {
-		data: { ...detail, session: sessionFor() },
-		params: fixture.params
+		data: { ...detail, session: sessionFor() }
 	});
 }
 
@@ -135,8 +132,7 @@ async function renderWithFixtureResponder(
 		return respond(path);
 	});
 	await render(Page, {
-		data: { ...detail, session: sessionFor() },
-		params: fixture.params
+		data: { ...detail, session: sessionFor() }
 	});
 }
 
@@ -160,8 +156,7 @@ async function setupWithRoster(
 		return respond(path);
 	});
 	await render(Page, {
-		data: { ...fixtureDetail, session: sessionFor(roles, staffId) },
-		params: fixture.params
+		data: { ...fixtureDetail, session: sessionFor(roles, staffId) }
 	});
 }
 
@@ -179,8 +174,7 @@ async function setupWithContract(
 	await testPage.viewport(3200, 900);
 	prepareApi();
 	await render(Page, {
-		data: { ...detail, session: contractSession },
-		params: fixture.params
+		data: { ...detail, session: contractSession }
 	});
 }
 
@@ -284,7 +278,7 @@ describe('Staff Engagement detail summary', () => {
 	it('gives an Owner who is a Doula a Change on each row she may change, Due among them (#2013)', async () => {
 		await testPage.viewport(3200, 900);
 		apiFetchWithSession.mockResolvedValue(jsonResponse('not available', 403));
-		await render(Page, { data: { ...fixtureDetail, session: sessionFor(['owner', 'doula']) }, params: fixture.params });
+		await render(Page, { data: { ...fixtureDetail, session: sessionFor(['owner', 'doula']) } });
 
 		await vi.waitFor(() => expect(changeButton('care')).toBeDefined());
 		expect(changeButton('care phase')).toBeDefined();
@@ -303,8 +297,7 @@ describe('Staff Engagement detail summary', () => {
 				statusMoves: [],
 				canAttachSelf: false,
 				session: { ...sessionFor(['doula']), isContractor: true }
-			},
-			params: fixture.params
+			}
 		});
 
 		await expect.element(testPage.getByText('Care phase', { exact: true })).toBeVisible();
@@ -367,8 +360,7 @@ describe('Staff Engagement detail summary', () => {
 				statusMoves: [],
 				canAttachSelf: false,
 				session: { ...sessionFor(['doula']), isContractor: true }
-			},
-			params: fixture.params
+			}
 		});
 
 		await expect.element(testPage.getByText('Not given', { exact: true })).toBeVisible();
@@ -434,7 +426,7 @@ async function setupDueDate(
 	apiFetchWithSession.mockImplementation((path: string) =>
 		path.endsWith('/due-date') ? Promise.resolve(dueResponse) : respond(path)
 	);
-	await render(Page, { data: { ...detail, session: sessionFor(roles) }, params: fixture.params });
+	await render(Page, { data: { ...detail, session: sessionFor(roles) } });
 }
 
 function dueDateGroup() {
@@ -839,7 +831,7 @@ describe('the Activity ledger section (#486)', () => {
 			return Promise.resolve(jsonResponse('not available', 403));
 		});
 		await testPage.viewport(3200, 900);
-		await render(Page, { data: { ...fixtureDetail, session: sessionFor() }, params: fixture.params });
+		await render(Page, { data: { ...fixtureDetail, session: sessionFor() } });
 
 		await testPage.getByRole('button', { name: 'Load more' }).click();
 		await expect.element(testPage.getByRole('cell', { name: 'Doula 9', exact: true })).toBeVisible();
@@ -1146,8 +1138,7 @@ describe('a section fails on its own, independent of the others (#841)', () => {
 		);
 
 		await render(Page, {
-			data: { ...fixtureDetail, session: sessionFor() },
-			params: fixture.params
+			data: { ...fixtureDetail, session: sessionFor() }
 		});
 
 		await expect.element(testPage.getByText('contract is down')).toBeVisible();
@@ -1768,7 +1759,7 @@ describe('the order of the sections (#2146)', () => {
 async function mountFixture() {
 	await testPage.viewport(320, 900);
 	respondFromFixture();
-	await render(Page, { data: { ...fixtureDetail, session }, params: fixture.params });
+	await render(Page, { data: { ...fixtureDetail, session } });
 }
 
 describe("the fixture's own Contract section, as the sweep mounts it (#885)", () => {
@@ -1801,8 +1792,7 @@ async function setupWithRoles(roles: string[], pdfResponse: Response, isContract
 	await testPage.viewport(3200, 900);
 	mockSignedContract(pdfResponse);
 	await render(Page, {
-		data: { ...fixtureDetail, session: sessionFor(roles, 'staff-1', isContractor) },
-		params: fixture.params
+		data: { ...fixtureDetail, session: sessionFor(roles, 'staff-1', isContractor) }
 	});
 }
 
@@ -1959,7 +1949,7 @@ async function setupPlans(
 		}
 		return respond(path);
 	});
-	await render(Page, { data: { ...fixtureDetail, session: sessionFor() }, params: fixture.params });
+	await render(Page, { data: { ...fixtureDetail, session: sessionFor() } });
 }
 
 function planSection(heading: string) {
@@ -2509,8 +2499,7 @@ async function setupWhoIsOn(detail: Detail, attachResponse?: () => Response) {
 		)
 	);
 	await render(Page, {
-		data: { ...detail, session: sessionFor(['owner', 'doula']) },
-		params: fixture.params
+		data: { ...detail, session: sessionFor(['owner', 'doula']) }
 	});
 }
 
@@ -2547,7 +2536,7 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 		await testPage.viewport(3200, 900);
 		apiFetchWithSession.mockImplementation(() => Promise.resolve(jsonResponse('not available', 403)));
 		expect(session).toMatchObject({ roles: ['owner', 'doula'], isContractor: true });
-		await render(Page, { data: { ...nobodyOnIt, session }, params: fixture.params });
+		await render(Page, { data: { ...nobodyOnIt, session } });
 
 		await expect.element(testPage.getByText('No Doula yet', { exact: true })).toBeVisible();
 		await openChange('Doula');
@@ -2636,8 +2625,7 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 			return respond(path);
 		});
 		await render(Page, {
-			data: { ...nobodyOnIt, session: sessionFor(['owner', 'doula']) },
-			params: fixture.params
+			data: { ...nobodyOnIt, session: sessionFor(['owner', 'doula']) }
 		});
 		await openChange('Doula');
 		await expect.element(putMeOnIt()).toBeVisible();
@@ -2802,8 +2790,7 @@ describe('the birth outcome section', () => {
 		await testPage.viewport(3200, 900);
 		apiFetchWithSession.mockResolvedValue(jsonResponse('not available', 403));
 		await render(Page, {
-			data: { ...detail, session: { ...sessionFor(roles), isContractor } },
-			params: fixture.params
+			data: { ...detail, session: { ...sessionFor(roles), isContractor } }
 		});
 	}
 
@@ -2867,8 +2854,7 @@ describe('the Kind section (#874)', () => {
 		await testPage.viewport(3200, 900);
 		apiFetchWithSession.mockResolvedValue(jsonResponse('not available', 403));
 		await render(Page, {
-			data: { ...detail, session: { ...sessionFor(roles), isContractor } },
-			params: fixture.params
+			data: { ...detail, session: { ...sessionFor(roles), isContractor } }
 		});
 	}
 
@@ -3030,7 +3016,7 @@ async function setupMoney(
 	apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) =>
 		Promise.resolve(respondOverride?.(path, init) ?? respond(path))
 	);
-	await render(Page, { data: { ...detail, session: reader }, params: fixture.params });
+	await render(Page, { data: { ...detail, session: reader } });
 }
 
 const contractorReader = sessionFor(['doula'], 'staff-9', true);

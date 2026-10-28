@@ -66,11 +66,15 @@ The relative prefix differs because the two callers glob from different
 directories, and the fixture is `page.fixture.ts` rather than
 `+page.fixture.ts` because a leading `+` is reserved by SvelteKit's own
 routing.
+
+A route whose `load` hands its read over unawaited (#2249) draws its
+loaded screen from a `*Screen.svelte` beside `+page.svelte`, so that file
+reads as the route too: the floor check finds a table's floor in it.
 */
 export function toRoutePath(modulePath: string): string {
 	return modulePath
 		.replace(/^(\.\.?\/)+/, '')
-		.replace(/\/?(\+page\.svelte|page\.fixture\.ts)$/, '');
+		.replace(/\/?(\+page\.svelte|page\.fixture\.ts|[A-Z][A-Za-z]*Screen\.svelte)$/, '');
 }
 
 /**

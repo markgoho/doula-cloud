@@ -81,7 +81,7 @@ describe('whether the Practice holds a Client record (#1609)', () => {
 
 		const { result } = await runLoad(['owner']);
 
-		expect(result.hasAnyClient).toBe(false);
+		await expect(result.hasAnyClient).resolves.toBe(false);
 	});
 
 	// A Client with no work yet is hidden by the default filter, and the
@@ -94,7 +94,7 @@ describe('whether the Practice holds a Client record (#1609)', () => {
 
 		const { result } = await runLoad(['owner']);
 
-		expect(result.hasAnyClient).toBe(true);
+		await expect(result.hasAnyClient).resolves.toBe(true);
 	});
 
 	it('holds one at a Practice whose only Client has work', async () => {
@@ -104,7 +104,7 @@ describe('whether the Practice holds a Client record (#1609)', () => {
 
 		const { result } = await runLoad(['owner']);
 
-		expect(result.hasAnyClient).toBe(true);
+		await expect(result.hasAnyClient).resolves.toBe(true);
 	});
 
 	// The search works at a Practice of any size, so a failed count falls
@@ -114,6 +114,6 @@ describe('whether the Practice holds a Client record (#1609)', () => {
 
 		const { result } = await runLoad(['owner']);
 
-		expect(result.hasAnyClient).toBe(true);
+		await expect(result.hasAnyClient).resolves.toBe(true);
 	});
 });

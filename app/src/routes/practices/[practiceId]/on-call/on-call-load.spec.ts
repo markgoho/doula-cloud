@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { jsonResponse } from '#lib/testResponse.js';
+import { loadedValue, settledRead } from '#lib/testStreamedRead.js';
 import type { OnCallPageData } from './+page.js';
 import { defaultRange, type Roster } from '#lib/onCall.js';
 
 /*
  * This spec declares its own body rather than importing the fixture
  * beside it, which is the one departure from #596's rule and has a
- * mechanical reason: `page.fixture.ts` imports `+page.svelte`, and this
+ * mechanical reason: `page.fixture.ts` imports `OnCallScreen.svelte`, and this
  * spec runs in the `server` project, where a Svelte component is loaded
  * and never rendered. Importing the fixture here would pull every
  * component the screen composes into that project's coverage with none
@@ -37,9 +38,6 @@ const roster: Roster = {
 	doulas: []
 };
 
-const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
-
 function setup(status: number, body: unknown = roster) {
 	const fetchMock = vi.fn(async (path: string) => {
 		void path;
@@ -67,9 +65,7 @@ describe('on-call/+page.ts load', () => {
 		const { load } = await import('./+page.js');
 		const { fetchMock } = setup(200);
 
-		const data = (await load(
-			loadEvent('?from=2026-10-01&to=2026-10-31') as Parameters<typeof load>[0]
-		)) as OnCallPageData;
+		const data = await loadedValue<OnCallPageData>(await load(loadEvent('?from=2026-10-01&to=2026-10-31') as Parameters<typeof load>[0]));
 
 		expect(fetchMock.mock.calls[0][0]).toContain(
 			'/api/practices/practice-1/on-call?from=2026-10-01&to=2026-10-31'
@@ -82,9 +78,7 @@ describe('on-call/+page.ts load', () => {
 		const { load } = await import('./+page.js');
 		const { fetchMock } = setup(200);
 
-		const data = (await load(
-			loadEvent() as Parameters<typeof load>[0]
-		)) as OnCallPageData;
+		const data = await loadedValue<OnCallPageData>(await load(loadEvent() as Parameters<typeof load>[0]));
 
 		expect(data.range).toEqual(defaultRange());
 		expect(fetchMock.mock.calls[0][0]).toContain(
@@ -92,36 +86,14 @@ describe('on-call/+page.ts load', () => {
 		);
 	});
 
-	it('sends a reader whose session ended to the staff login', async () => {
-		const { load } = await import('./+page.js');
-		setup(401, 'unauthorized');
-
-		await expect(
-			load(loadEvent() as Parameters<typeof load>[0])
-		).rejects.toMatchObject({ status: 303 });
-	});
-
-	it('raises the refusal a reader who may not read this Practice meets', async () => {
-		const { load } = await import('./+page.js');
-		setup(403, 'forbidden');
-
-		await expect(
-			load(loadEvent() as Parameters<typeof load>[0])
-		).rejects.toBeDefined();
-	});
-
-	it('raises the BFF’s own sentence for a range it refuses', async () => {
+	// #2249: the screen has changed by the time a refusal lands, so the
+	// screen follows it; the read carries the response through unread.
+	it('hands a refusal to the screen rather than throwing mid-load', async () => {
 		const { load } = await import('./+page.js');
 		setup(400, 'Choose a range of 92 days or fewer');
 
-		await expect(
-			load(
-				loadEvent('?from=2026-01-01&to=2026-12-31') as Parameters<
-					typeof load
-				>[0]
-			)
-		).rejects.toMatchObject({
-			status: 400,
-		});
+		const data = await load(loadEvent('?from=2026-01-01&to=2026-12-31') as Parameters<typeof load>[0]);
+
+		await expect(settledRead(data)).resolves.toMatchObject({ isLoaded: false, response: { status: 400 } });
 	});
 });

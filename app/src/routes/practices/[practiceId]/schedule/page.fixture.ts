@@ -14,7 +14,7 @@ import type { SchedulePageData } from './+page.js';
 import type { RouteFixture, RouteVariant } from '../../../routeFixture.js';
 import { nth, TYPICAL_CLIENTS, TYPICAL_DOULAS } from '../../../typicalPilot.js';
 import type { RouteParams as RouteParameters } from './$types';
-import Page from './+page.svelte';
+import Page from './ScheduleScreen.svelte';
 
 export const schedulePage: CursorPage<ScheduledVisit> = {
 	items: [

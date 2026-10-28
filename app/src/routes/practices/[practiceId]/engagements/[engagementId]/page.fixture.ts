@@ -43,7 +43,7 @@ import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
 import { nth, TYPICAL_CLIENTS, TYPICAL_DOULAS, TYPICAL_STAFF } from '../../../../typicalPilot.js';
 import { detail as clientDetail } from '../../clients/[clientId]/page.fixture.js';
 import type { RouteParams as RouteParameters } from './$types';
-import Page from './+page.svelte';
+import Page from './EngagementScreen.svelte';
 
 const clientName = 'Anne-Marie Ochieng-Whitfield';
 

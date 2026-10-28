@@ -31,8 +31,19 @@
 	const isContractor = $derived(data?.isContractor ?? false);
 	// #1609: whether the Practice holds any Client record, which decides
 	// where the header link goes. Defaults to the search, which is right
-	// at a Practice of any size.
-	const hasAnyClient = $derived(data?.hasAnyClient ?? true);
+	// at a Practice of any size. Undefined while +page.ts's read runs
+	// (#2249).
+	let hasAnyClient = $state<boolean>();
+	$effect(() => {
+		const gate = data?.hasAnyClient ?? Promise.resolve(true);
+		let isCurrent = true;
+		void gate.then((answer) => {
+			if (isCurrent) hasAnyClient = answer;
+		});
+		return () => {
+			isCurrent = false;
+		};
+	});
 
 	// Starts empty: unlike Billing and Invoices this screen fetches its own
 	// first page in the effect below rather than through a load, so every
@@ -48,6 +59,7 @@
 	});
 	let error = $state('');
 	let isLoaded = $state(false);
+	const isReady = $derived(isLoaded && hasAnyClient !== undefined);
 
 	// The default filter is "Clients with work" (ADR-0017); `?all=true`
 	// switches to everyone -- including a Client whose only Request was
@@ -313,7 +325,9 @@
 		ADR-0017's amendment of 2026-10-02). +page.ts decides which, from
 		the count of records, not from the filtered rows below.
 	-->
-	{#if hasAnyClient}
+	{#if hasAnyClient === undefined}
+		<Skeleton variant="text" lines={1} />
+	{:else if hasAnyClient}
 		<Link href={searchHref()} label="Find or add a Client" />
 	{:else}
 		<Link href={startHref(page.params.practiceId!, 'clients')} label="Add a Client" />
@@ -334,8 +348,8 @@
 	<FilterBar
 		action={clientsPath(false)}
 		legend="Choose who to show"
-		status={isLoaded ? summary : ''}
-		empty={isLoaded && clients.items.length === 0}
+		status={isReady ? summary : ''}
+		empty={isReady && clients.items.length === 0}
 		isAppliedOnChange
 	>
 		<LabeledField label="See everyone" orientation="inline">
@@ -347,7 +361,7 @@
 
 	{#if error}
 		<Notice message={error} variant="error" />
-	{:else if isLoaded}
+	{:else if isReady}
 		<!--
 			No floor of its own (#2022): with Email, Portal invite and the
 			Engagements sentence gone, the typical pilot screen's table fits

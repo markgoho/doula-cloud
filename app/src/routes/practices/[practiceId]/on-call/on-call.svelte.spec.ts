@@ -9,7 +9,7 @@ import { addDays } from '#lib/visitSchedule.js';
 // only lifts the default measure cap through the registered element -- see
 // the schedule route's own spec for the full reasoning.
 import '#lib/styles/app.css';
-import Page from './+page.svelte';
+import Page from './OnCallScreen.svelte';
 import { toPageState } from '../../../routeFixture.js';
 import { data, fixture } from './page.fixture.js';
 import type { OnCallPageData } from './+page.js';
@@ -33,17 +33,6 @@ beforeEach(() => {
 	goto.mockReset();
 });
 
-// `session` merges in from practices/[practiceId]/+layout.ts (#835); this
-// route reads it only through its own `load`, but the generated `data`
-// prop type requires it.
-const sessionStub = {
-	practiceId,
-	staffId: 'staff-1',
-	practiceName: 'Riverside Doula Collective',
-	roles: ['owner'],
-	isContractor: false,
-};
-
 async function setup(pageData: OnCallPageData = data) {
 	// Wide enough for DataTable's <table> rather than the <dl> record
 	// view its content floor stacks into below 46rem (#508) -- the same
@@ -52,8 +41,7 @@ async function setup(pageData: OnCallPageData = data) {
 	// Above this route's own table floor (#1945, its +page.svelte), so the <table> renders.
 	await testPage.viewport(3200, 900);
 	return render(Page, {
-		params: fixture.params,
-		data: { ...pageData, session: sessionStub },
+		data: pageData,
 	});
 }
 
