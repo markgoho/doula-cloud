@@ -156,8 +156,8 @@ Every plan has been executed once ([#209](https://github.com/markgoho/doula-clou
 | [contractor-doula.md](contractor-doula.md) | Lena Vasquez | 9 | 50 | 0 | 2 |
 | [loss-client.md](loss-client.md) | Nadia Haddad | 10 | 45 | 0 | 1 |
 | [first-time-client.md](first-time-client.md) | Hannah Sorensen | 16 | 51 | 0 | 5 |
-| [returning-postpartum-client.md](returning-postpartum-client.md) | Camille Boyd | 4 | 32 | 0 | 0 |
-| **Total** | | **119** | **433** | **0** | **19** |
+| [returning-postpartum-client.md](returning-postpartum-client.md) | Camille Boyd | 4 | 33 | 0 | 0 |
+| **Total** | | **119** | **434** | **0** | **19** |
 
 Every `automated` step passed. **After the first run no plan carried a `blocked` step** — Stripe was the last holdout and [#242](https://github.com/markgoho/doula-cloud/issues/242) opened the Sandbox, after which Connect, Checkout and Invoices were all walked for real. The second run put two back: Maya Okonkwo's 7.1 and 7.2, walked from a browser Stripe's hosted onboarding challenges ([#2171](https://github.com/markgoho/doula-cloud/issues/2171)). Both cleared the next day, once the onboarding was finished in the founder's own Chrome, so no plan carries a `blocked` step again.
 
@@ -204,6 +204,22 @@ Every `automated` step passed. **After the first run no plan carried a `blocked`
 **Priya Raman's second walk ([#2176](https://github.com/markgoho/doula-cloud/issues/2176))** followed, on 2026-10-28, on the seeded Rooted Birth Collective, on the same stack and the same kind of browser, with stages 1 and 6 on an emulated Pixel 7. Her journey is completable end to end: a Doula invited by email holds the Doula role, opens an Engagement that names her, logs a dated Visit with notes, and exchanges messages with the Client, and, read against ADR-0008 rather than the superseded ADR-0006 table, she sees no screen she has no right to: the roster, Credits and the Stripe status are refused on the read now. Her moment of truth is half overturned: from a cold phone she reaches the Birth Plan unaided and can print or download it, but on a Pixel 7 it is two screens from the Engagement and five screens down it, the page settles in up to 0.8 s, and a saved address to it is lost through sign-in. Her five `missing-feature` steps (4.2-a, 6.2-a, 7.1-a, 7.1-b, 7.1-c) are walked and `manual`; 1.2 moves to `automated (staff-invite-role.e2e.ts)` once its cell is corrected; 2.1-b is falsified, because a membership with no role can no longer be made. The run-status table above is recounted, Total with it, to 119 / 427 / 0 / 25. The walk minted PR-G10 to PR-G12, all failed budget steps, and filed two bugs ([#2260](https://github.com/markgoho/doula-cloud/issues/2260), [#2261](https://github.com/markgoho/doula-cloud/issues/2261)). **For the walks after hers**: Rooted now has an eighteenth Staff member, Priya Ramanathan (Doula, Employee); Ines Calloway has a second Visit, Oct 28 with notes; Morgan Grier's Engagement holds an unsent Draft Contract; Camille Boyd's thread has two new messages, the last hers.
 
 **Lena Vasquez's second walk ([#2177](https://github.com/markgoho/doula-cloud/issues/2177))** followed, on 2026-10-28, on the same stack and the same kind of browser, at desktop size. The seed makes Rooted Birth Collective her *first* agency, so the walk built a second, Ridgeline Doulas, through `/signup` and an Invitation (Doula, Contractor), and walked stage 1 on her accepting it. That reverses the plan's order. **Her journey is not completable end to end: 7.1 stops it.** Nothing records what she was paid ([LV-G3, #2271](https://github.com/markgoho/doula-cloud/issues/2271)). Every other clause holds. The Engagement she took was completed and her reach on it ended. She can point to the fee and terms she accepted. And she saw no Client who was not hers: her list, **See everyone**, a direct address and the API all held to the two Engagements she accepted. **Her moment of truth is overturned**, from no screen at all to a working Offer. It shows the Client's initial, the area, the due date, the fee and the terms, and she can accept or decline. A decline is durable, and Renata reads it on the Engagement. It falls short on its budgets: nothing tells her an Offer is waiting, the Overview she meets it on holds seven decisions, and neither answer confirms what it did. Seven `missing-feature` steps (1.3, 2.2-a, 3.1, 3.2, 3.3, 5.3, 8.1) are walked and `manual`. 7.B-screens moves to `missing-feature (LV-G3)` on TB-G6's precedent, since its gap closed without a build. The run-status table above is recounted, Total with it, to 119 / 433 / 0 / 19. The walk minted LV-G10 to LV-G15, re-filed LV-G3's open half, and filed two bugs ([#2272](https://github.com/markgoho/doula-cloud/issues/2272), [#2273](https://github.com/markgoho/doula-cloud/issues/2273)). **For Camille Boyd's walk**: Rooted now has a Client Adaeze Nwosu, whose Engagement is completed, and Credits are 13. A second Practice, Ridgeline Doulas, exists with Lena as a Contractor. Camille's and Mira's Engagements are untouched.
+
+**Camille Boyd's second walk ([#2178](https://github.com/markgoho/doula-cloud/issues/2178))** came last, on 2026-10-28, on the seeded Rooted Birth Collective, on the same stack and the same kind of browser, at desktop size. **Her journey is completable end to end.** Priya recorded a live birth on her seeded Engagement and completed it. Priya asked for postpartum work from her Client record, and Renata approved it. **Her moment of truth is overturned**, from a `409` at the login she already had to one list holding both Engagements. The list labels them "Rooted Birth Collective, started Oct 27, 2026" (Care ended) and "…, started Oct 28, 2026" (Getting started), and both open from one magic link. It falls short in one place: inside either Engagement, the screen does not say which one it is (CB-G7). The duplicate-Client branch's refusal holds, in the API's words (CB-G9), and the Practice side offers a Birth Plan on postpartum work (CB-G8). No step was re-marked. 7.2-b is new, and the run-status table above is recounted, Total with it, to 119 / 434 / 0 / 19. The walk minted CB-G7 to CB-G9 and filed one bug ([#2280](https://github.com/markgoho/doula-cloud/issues/2280)).
+
+**The second run is complete.** All nine plans carry a second dated Run log (#329). Whether each journey is completable end to end, from each plan's own verdict:
+
+| Persona | Completable | What stops it |
+| --- | --- | --- |
+| Tasha Bell | No, from where her journey starts. Yes from `/signup` | 1.1: there is no page to arrive at (TB-G1, exempt) |
+| Maya Okonkwo | Yes | — |
+| Renata Alvarez | Yes | — |
+| Dee Whitlock | Yes | — |
+| Priya Raman | Yes | — |
+| Lena Vasquez | No | 7.1: nothing records what she was paid (LV-G3, [#2271](https://github.com/markgoho/doula-cloud/issues/2271)) |
+| Nadia Haddad | Yes | — |
+| Hannah Sorensen | Yes | — |
+| Camille Boyd | Yes | — |
 
 ### Gap issues
 
@@ -333,12 +349,15 @@ One `journey-gap` issue per missing or broken capability, deduplicated across th
 | CB-G4 | [#310](https://github.com/markgoho/doula-cloud/issues/310) | [Camille Boyd (the returning postpartum-only client)](https://github.com/markgoho/doula-cloud/issues/327) |
 | CB-G5 | [#311](https://github.com/markgoho/doula-cloud/issues/311) | [Camille Boyd (the returning postpartum-only client)](https://github.com/markgoho/doula-cloud/issues/327) |
 | CB-G6 | [#312](https://github.com/markgoho/doula-cloud/issues/312) | [Camille Boyd (the returning postpartum-only client)](https://github.com/markgoho/doula-cloud/issues/327) |
+| CB-G7 | [#2276](https://github.com/markgoho/doula-cloud/issues/2276) | [The Client portal](https://github.com/markgoho/doula-cloud/issues/646) |
+| CB-G8 | [#2277](https://github.com/markgoho/doula-cloud/issues/2277) | [Plans and Contracts](https://github.com/markgoho/doula-cloud/issues/642) |
+| CB-G9 | [#2279](https://github.com/markgoho/doula-cloud/issues/2279) | [The Client portal](https://github.com/markgoho/doula-cloud/issues/646) |
 
 **Not filed here, and why:**
 
 | Gap | Where it lives instead |
 | --- | --- |
-| LV-G1, LV-G2, LV-G3, LV-G4, LV-G5, LV-G6, LV-G7, RA-G4, PR-G1 | [Who a Staff member is to a Practice, and which work is theirs](https://github.com/markgoho/doula-cloud/issues/225) owns these outright and carries execution; its tickets are their issues |
+| LV-G1, LV-G2, LV-G4, LV-G5, LV-G6, LV-G7, RA-G4, PR-G1 | [Who a Staff member is to a Practice, and which work is theirs](https://github.com/markgoho/doula-cloud/issues/225) owns these outright and carries execution; its tickets are their issues |
 | NH-G5 | Folded into [#212](https://github.com/markgoho/doula-cloud/issues/212), which already owns the Client register, with two acceptance criteria added for it |
 | MO-G8 | Not a product capability. A Stripe Sandbox account exists ([#242](https://github.com/markgoho/doula-cloud/issues/242)) and a Practice was onboarded to `card_payments: active` on Dee's walk |
 
