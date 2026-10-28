@@ -15,7 +15,7 @@ import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 // See invoices.svelte.spec.ts: ListPage's frame (#1576) needs both the
 // primitives' CSS and their registration for the table to get its room.
 import '#lib/styles/app.css';
-import Page from './+page.svelte';
+import Page from './InvoicesScreen.svelte';
 import { toPageState } from '../../../routeFixture.js';
 import { data, fixture } from './page.fixture.js';
 
@@ -33,14 +33,6 @@ vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
 const { practiceId } = fixture.params;
 
-const sessionStub = {
-	practiceId,
-	staffId: 'staff-1',
-	practiceName: 'Riverside Doula Collective',
-	roles: ['owner'],
-	isContractor: false
-};
-
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
 });
@@ -50,7 +42,7 @@ async function setup(page: PracticeInvoiceListData = data) {
 	// content floor stacks into below 46rem -- the same call the sibling
 	// spec makes, for the same reason.
 	await testPage.viewport(1440, 900);
-	await render(Page, { params: fixture.params, data: { ...page, session: sessionStub } });
+	await render(Page, { data: page });
 }
 
 describe('the overdue book (#768)', () => {

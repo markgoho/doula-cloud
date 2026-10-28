@@ -9,7 +9,7 @@ import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 // their CSS -- see staff-list.svelte.spec.ts for why.
 import '#lib/styles/app.css';
 import { expectOneFramedHeading } from '#lib/components/templates/pageFrame.testing.js';
-import Page from './+page.svelte';
+import Page from './ContractsScreen.svelte';
 import type { ContractsPageData } from './+page.js';
 import { toPageState } from '../../../routeFixture.js';
 import { data, fixture } from './page.fixture.js';
@@ -38,24 +38,12 @@ beforeEach(() => {
 	apiFetchWithSession.mockReset();
 });
 
-// `session` merges in from practices/[practiceId]/+layout.ts (#835) --
-// this route never reads it, but the generated `data` prop type requires
-// it, since SvelteKit really does merge ancestor layout data into it at
-// runtime.
-const sessionStub = {
-	practiceId,
-	staffId: 'staff-1',
-	practiceName: 'Riverside Doula Collective',
-	roles: ['owner'],
-	isContractor: false
-};
-
 async function setup(pageData: ContractsPageData = data) {
 	// Wide enough for DataTable's <table> rather than the <dl> record view
 	// its content floor stacks into below 46rem (#508) -- the same call the
 	// Invoice list's own spec makes for the same reason.
 	await testPage.viewport(1440, 900);
-	await render(Page, { params: fixture.params, data: { ...pageData, session: sessionStub } });
+	await render(Page, { data: pageData });
 }
 
 describe('the Practice-wide Contracts awaiting signature list (#273)', () => {

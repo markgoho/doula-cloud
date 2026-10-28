@@ -1,10 +1,6 @@
-import { error, redirect } from '@sveltejs/kit';
-import { apiFetch } from '#lib/api.js';
-import { apiErrorMessage } from '#lib/apiErrorMessage.js';
-import { refuseRead } from '#lib/errorPage.js';
-import { staffLoginAfterSessionEnded } from '#lib/sessionEnded.js';
 import { isOwnerOrAdmin, type LabeledValue } from '#lib/roles.js';
-import { doulaOptions, loadDoulas } from '#lib/staff.js';
+import { doulaOptions, doulasOf, staffPath, type Roster } from '#lib/staff.js';
+import { bothRead, mapRead, streamRead, type StreamedRead } from '#lib/streamedRead.svelte.js';
 import {
 	practiceSchedulePath,
 	scheduleFiltersFromParameters,
@@ -32,10 +28,10 @@ export interface SchedulePageData {
 
 /**
  * Loads through SvelteKit's `load`, mirroring the Practice-wide Contract
- * and Invoice lists (#273, #265): the refusal has to reach
- * `practices/+error.svelte` rather than sit in a local error string this
- * page owns. `apiFetch`, not `apiFetchWithSession`: that helper's 401
- * handling calls `goto()`, which is the wrong tool mid-`load`.
+ * and Invoice lists (#273, #265), and hands the reads over unawaited, so
+ * a click changes screen at once (#2249). A refusal is drawn by the screen
+ * as the page `practices/+error.svelte` would draw it. The schedule and
+ * the roster are read at the same time.
  *
  * Unlike those two, this list is narrowed, and the narrowing lives in the
  * URL. Reading it here rather than in the component is what makes a
@@ -47,23 +43,18 @@ export interface SchedulePageData {
  * resolved (#835) through `parent()` rather than a session fetch of its
  * own.
  */
-export const load: PageLoad = async ({ params, url, parent }): Promise<SchedulePageData> => {
+export const load: PageLoad = async ({
+	params,
+	url,
+	parent
+}): Promise<{ read: Promise<StreamedRead<SchedulePageData>> }> => {
 	const { session } = await parent();
 	const filters = scheduleFiltersFromParameters(url.searchParams);
-
-	const response = await apiFetch(practiceSchedulePath(params.practiceId, filters));
-
-	if (response.status === 401) {
-		redirect(303, staffLoginAfterSessionEnded());
-	} else if (response.status === 403) {
-		await refuseRead(response);
-	} else if (!response.ok) {
-		error(response.status, await apiErrorMessage(response));
-	}
-
-	const page: CursorPage<ScheduledVisit> = await response.json();
-	const doulas = isOwnerOrAdmin(session) ? await loadDoulaOptions(params.practiceId) : [];
-	return { page, filters, doulas };
+	const schedule = streamRead<CursorPage<ScheduledVisit>>(practiceSchedulePath(params.practiceId, filters));
+	const doulas = isOwnerOrAdmin(session) ? loadDoulaOptions(params.practiceId) : noDoulas();
+	return {
+		read: mapRead(bothRead(schedule, doulas), ([page, doulas]) => ({ page, filters, doulas }))
+	};
 };
 
 /**
@@ -71,10 +62,15 @@ export const load: PageLoad = async ({ params, url, parent }): Promise<ScheduleP
  * A Visit can only ever be assigned to a holder of the doula role
  * (api/internal/visit's `requireEligibleAssignee`), so anybody else would
  * never appear on a schedule row and would only narrow the list to
- * nothing. `staff.ts` owns both the read and the reduction now (#268) --
- * this screen's filter and the Engagement page's Visit pickers offer the
- * same people, from the same one function.
+ * nothing. `staff.ts` owns the reduction (#268) -- this screen's filter
+ * and the Engagement page's Visit pickers offer the same people.
  */
-async function loadDoulaOptions(practiceId: string): Promise<LabeledValue[]> {
-	return doulaOptions(await loadDoulas(apiFetch, practiceId));
+function loadDoulaOptions(practiceId: string): Promise<StreamedRead<LabeledValue[]>> {
+	return mapRead(streamRead<Roster>(staffPath(practiceId)), (roster) =>
+		doulaOptions(doulasOf(roster))
+	);
+}
+
+async function noDoulas(): Promise<StreamedRead<LabeledValue[]>> {
+	return { isLoaded: true, value: [] };
 }

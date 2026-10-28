@@ -44,7 +44,7 @@ export interface Roster {
 	invitations: CursorPage<InvitationSummary>;
 }
 
-function staffPath(practiceId: string): string {
+export function staffPath(practiceId: string): string {
 	return `/api/practices/${practiceId}/staff`;
 }
 
@@ -273,7 +273,13 @@ export interface Doula {
  * failure.
  */
 export async function loadDoulas(fetcher: Fetcher, practiceId: string): Promise<Doula[]> {
-	const roster = await loadStaff(fetcher, practiceId);
+	return doulasOf(await loadStaff(fetcher, practiceId));
+}
+
+/**
+The roster's holders of the doula role, for a caller that read the roster itself.
+*/
+export function doulasOf(roster: Roster): Doula[] {
 	return roster.members
 		.filter((member) => member.roles.includes('doula'))
 		.map(({ staffId, name, employmentType }) => ({ staffId, name, employmentType }));

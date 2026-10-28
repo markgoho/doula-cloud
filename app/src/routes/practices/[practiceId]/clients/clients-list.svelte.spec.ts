@@ -90,7 +90,7 @@ async function setup(response?: Response, { isContractor = false, hasAnyClient =
 		data: {
 			isContractor,
 			isOwner: false,
-			hasAnyClient,
+			hasAnyClient: Promise.resolve(hasAnyClient),
 			session: { practiceId, staffId: 'staff-1', practiceName: 'Riverside Doula Collective', roles: [], isContractor }
 		}
 	});

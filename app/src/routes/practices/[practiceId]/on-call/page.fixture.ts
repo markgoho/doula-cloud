@@ -19,7 +19,7 @@ import type {
 import type { RouteFixture, RouteVariant } from '../../../routeFixture.js';
 import { nth, TYPICAL_CLIENTS, TYPICAL_DOULAS } from '../../../typicalPilot.js';
 import type { RouteParams as RouteParameters } from './$types';
-import Page from './+page.svelte';
+import Page from './OnCallScreen.svelte';
 
 const doulaNames = [
 	'Persephone Vandermeulen-Achterberg, CD(DONA)',

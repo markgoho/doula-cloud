@@ -18,9 +18,10 @@
  * read with `all=true` -- `hasAnyClient`, the same read the overview
  * makes -- never the rows on the screen, because the list's default
  * filter is "Clients with work" and a Practice whose only Client has no
- * work, or was erased, still holds a record. Decided here rather than in
- * the component so the link is right on the first paint instead of
- * changing under her.
+ * work, or was erased, still holds a record. Read here, so a hovered link
+ * starts it, and handed over unawaited (#2249), so a click changes screen
+ * at once; the screen holds the link's line until it lands, so the link
+ * never changes under her.
  */
 import { apiFetch } from '#lib/api.js';
 import { hasAnyClient } from '#lib/client.js';
@@ -31,7 +32,7 @@ export interface ClientsListGate {
 	isContractor: boolean;
 	isOwner: boolean;
 	// Whether the Practice holds any Client record at all.
-	hasAnyClient: boolean;
+	hasAnyClient: Promise<boolean>;
 }
 
 /*
@@ -55,6 +56,6 @@ export const load: PageLoad = async ({ params, parent }): Promise<ClientsListGat
 		isContractor,
 		isOwner: isOwner(session),
 		// A contractor Doula has no header link, so nothing turns on it.
-		hasAnyClient: isContractor ? true : await hasAnyClientRecord(params.practiceId)
+		hasAnyClient: isContractor ? Promise.resolve(true) : hasAnyClientRecord(params.practiceId)
 	};
 };

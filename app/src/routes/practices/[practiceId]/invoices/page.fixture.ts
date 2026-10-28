@@ -17,7 +17,7 @@ import type { PracticeInvoiceListData } from '#lib/invoice.js';
 import type { RouteFixture, RouteVariant } from '../../../routeFixture.js';
 import { TYPICAL_CLIENTS } from '../../../typicalPilot.js';
 import type { RouteParams as RouteParameters } from './$types';
-import Page from './+page.svelte';
+import Page from './InvoicesScreen.svelte';
 
 /*
  * A Client's name is the one free-text column a Practice types itself, so

@@ -1,41 +1,22 @@
-import { error, redirect } from '@sveltejs/kit';
-import { apiFetch } from '#lib/api.js';
-import { apiErrorMessage } from '#lib/apiErrorMessage.js';
-import { refuseRead } from '#lib/errorPage.js';
-import { staffLoginAfterSessionEnded } from '#lib/sessionEnded.js';
+import { streamRead, type StreamedRead } from '#lib/streamedRead.svelte.js';
 import { engagementURL, type EngagementSummary } from '#lib/engagementDetail.js';
 import type { PageLoad } from './$types';
 
 /**
- * The Engagement itself, loaded before the page renders (#695).
+ * The Engagement itself, read through `load` (#695) so a hovered link
+ * starts it, and handed over unawaited (#2249), so a click changes screen
+ * at once.
  *
- * Only this one section moves into `load`. The other six -- Visits,
- * Messages, both Plan types, the Contract, the Invoices, the Offers --
- * stay after mount on purpose: they arrive one at a time and each renders
- * as it lands, and awaiting all seven here would hold the whole page back
- * for the slowest of them.
+ * Only this one section is read here. The other six -- Visits, Messages,
+ * both Plan types, the Contract, the Invoices, the Offers -- stay after
+ * mount on purpose: they arrive one at a time and each renders as it
+ * lands.
  *
- * This one is different because without it there is no page. Loading it
- * here also puts a refusal in front of `practices/+error.svelte` rather
- * than in a local error string, the same move #471 made for billing --
- * which matters more here, since a Doula who is not attached to this
- * Engagement gets a 403 (ADR-0008, #350).
- *
- * `apiFetch`, not `apiFetchWithSession`: that helper's 401 handling calls
- * `goto()`, which is the wrong tool mid-load.
+ * A Doula who is not attached to this Engagement gets a 403 (ADR-0008,
+ * #350), which the screen draws as the page `practices/+error.svelte`
+ * would.
  */
-export const load: PageLoad = async ({ params }): Promise<EngagementSummary> => {
-	const response = await apiFetch(
-		engagementURL({ practiceId: params.practiceId, engagementId: params.engagementId })
-	);
-
-	if (response.status === 401) {
-		redirect(303, staffLoginAfterSessionEnded());
-	} else if (response.status === 403) {
-		await refuseRead(response);
-	} else if (!response.ok) {
-		error(response.status, await apiErrorMessage(response));
-	}
-
-	return response.json();
-};
+export const load: PageLoad = ({ params }): { read: Promise<StreamedRead<EngagementSummary>> } => ({
+	read: streamRead<EngagementSummary>(engagementURL({ practiceId: params.practiceId, engagementId: params.engagementId })
+	)
+});

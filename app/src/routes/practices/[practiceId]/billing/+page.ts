@@ -1,29 +1,14 @@
-import { error, redirect } from '@sveltejs/kit';
-import { apiFetch } from '#lib/api.js';
-import { apiErrorMessage } from '#lib/apiErrorMessage.js';
-import { refuseRead } from '#lib/errorPage.js';
-import { staffLoginAfterSessionEnded } from '#lib/sessionEnded.js';
+import { streamRead, type StreamedRead } from '#lib/streamedRead.svelte.js';
 import { billingPath, type Balance } from '#lib/billing.js';
 import type { PageLoad } from './$types';
 
 /**
- * Loads through SvelteKit's `load` rather than the app's usual
- * onMount-fetch, specifically so a role refusal reaches `practices/
- * +error.svelte` (#471) -- billing reads are Owner/Admin-only
- * (ADR-0008), and a Doula who types this URL gets a 403 from the BFF.
- * `apiFetch`, not `apiFetchWithSession`: that helper's 401 handling
- * calls `goto()`, which is the wrong tool mid-`load`.
+ * Loads through SvelteKit's `load`, so a hovered link starts the read
+ * (#471), and hands the read over unawaited, so a click changes screen at
+ * once (#2249). Billing reads are Owner/Admin-only (ADR-0008): a Doula who
+ * types this URL gets a 403, which the screen draws as the page
+ * `practices/+error.svelte` would.
  */
-export const load: PageLoad = async ({ params }): Promise<Balance> => {
-	const response = await apiFetch(billingPath(params.practiceId));
-
-	if (response.status === 401) {
-		redirect(303, staffLoginAfterSessionEnded());
-	} else if (response.status === 403) {
-		await refuseRead(response);
-	} else if (!response.ok) {
-		error(response.status, await apiErrorMessage(response));
-	}
-
-	return response.json();
-};
+export const load: PageLoad = ({ params }): { read: Promise<StreamedRead<Balance>> } => ({
+	read: streamRead<Balance>(billingPath(params.practiceId))
+});

@@ -9,7 +9,7 @@ vi.mock('firebase/auth', () => ({ signOut }));
 const getFirebaseAuth = vi.fn(() => 'the-auth-instance');
 vi.mock('./firebase.js', () => ({ getFirebaseAuth }));
 
-const { apiBaseURL, apiFetch, apiFetchWithSession, probeSession } = await import('./api');
+const { apiBaseURL, apiFetch, apiFetchWithSession, didFollowSessionRefusal, probeSession } = await import('./api');
 
 describe('apiBaseURL', () => {
 	it('defaults to same-origin (empty string) when unset', () => {
@@ -257,6 +257,45 @@ describe('apiFetchWithSession', () => {
 		expect(goto).toHaveBeenCalledTimes(1);
 		resolveGoto();
 		await first;
+	});
+
+	// #2249: a screen whose `load` read through plain `apiFetch` follows the
+	// refusal itself, and keeps its loading state while the browser leaves.
+	describe('didFollowSessionRefusal', () => {
+		it.each([
+			['an ended session', () => new Response(undefined, { status: 401 })],
+			['a second factor the Practice requires', () => Response.json({ code: 'MFA_REQUIRED' }, { status: 403 })],
+			['a Terms agreement that is due', () => Response.json({ code: 'TERMS_AGREEMENT_REQUIRED' }, { status: 403 })]
+		])('reports that it is sending the browser elsewhere for %s', async (_reason, response) => {
+			setup({ pathname: '/practices/prac-1/invoices' });
+
+			await expect(didFollowSessionRefusal(response())).resolves.toBe(true);
+			expect(goto).toHaveBeenCalledOnce();
+		});
+
+		it.each([
+			['a role refusal', '/practices/prac-1/invoices', () => Response.json({ code: 'FORBIDDEN' }, { status: 403 })],
+			['a Terms refusal met on the agreement screen', '/practices/prac-1/agreement', () => Response.json({ code: 'TERMS_AGREEMENT_REQUIRED' }, { status: 403 })],
+			['a second-factor refusal met on enrollment', '/mfa/enroll', () => Response.json({ code: 'MFA_REQUIRED' }, { status: 403 })]
+		])('leaves the screen to draw %s', async (_reason, pathname, response) => {
+			setup({ pathname });
+
+			await expect(didFollowSessionRefusal(response())).resolves.toBe(false);
+			expect(goto).not.toHaveBeenCalled();
+		});
+
+		it('reports a redirect already underway, whatever the response', async () => {
+			setup({ status: 401, pathname: '/practices/prac-1/invoices' });
+			let resolveGoto!: () => void;
+			goto.mockImplementation(() => new Promise<void>((resolve) => (resolveGoto = resolve)));
+
+			const first = apiFetchWithSession('/api/practices/prac-1/invoices');
+			await vi.waitFor(() => expect(goto).toHaveBeenCalledTimes(1));
+
+			await expect(didFollowSessionRefusal(Response.json({ code: 'FORBIDDEN' }, { status: 403 }))).resolves.toBe(true);
+			resolveGoto();
+			await first;
+		});
 	});
 });
 

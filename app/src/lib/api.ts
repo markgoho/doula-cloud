@@ -46,20 +46,37 @@ const redirectGuard = { isRedirecting: false };
 
 export async function apiFetchWithSession(path: string, init: RequestInit = {}): Promise<Response> {
 	const response = await apiFetch(path, init);
-	if (redirectGuard.isRedirecting) return response;
+	await didFollowSessionRefusal(response);
+	return response;
+}
+
+/**
+What `apiFetchWithSession` does with a response it has fetched, for a
+response fetched without it: a route's `load` reads through plain
+`apiFetch`, because a `load` also runs on a hovered link (#2249), and the
+screen follows the refusal once it is showing. Reports whether the browser
+is being sent elsewhere, so the screen keeps its loading state instead of
+drawing the refusal for a frame.
+*/
+export async function didFollowSessionRefusal(response: Response): Promise<boolean> {
+	if (redirectGuard.isRedirecting) return true;
 	if (response.status === 401) {
 		redirectGuard.isRedirecting = true;
 		await handleExpiredSession();
 		redirectGuard.isRedirecting = false;
-	} else if (await isMFARequired(response)) {
-		if (redirectGuard.isRedirecting || location.pathname === resolve('/(signed-out)/mfa/enroll')) return response;
+		return true;
+	}
+	if (await isMFARequired(response)) {
+		if (redirectGuard.isRedirecting || location.pathname === resolve('/(signed-out)/mfa/enroll')) return false;
 		redirectGuard.isRedirecting = true;
 		await goto(`${resolve('/(signed-out)/mfa/enroll')}?returnTo=${encodeURIComponent(location.pathname)}`);
 		redirectGuard.isRedirecting = false;
-	} else if (await isTermsAgreementRequired(response)) {
-		await goToAgreement();
+		return true;
 	}
-	return response;
+	if (await isTermsAgreementRequired(response)) {
+		return didGoToAgreement();
+	}
+	return false;
 }
 
 /**
@@ -69,14 +86,15 @@ screen that asks, for the Practice in the current address. A refusal met
 on that screen itself, or with no Practice in the address, stays where it
 is.
 */
-async function goToAgreement(): Promise<void> {
+async function didGoToAgreement(): Promise<boolean> {
 	const practiceId = /^\/practices\/([^/]+)/.exec(location.pathname)?.[1];
-	if (practiceId === undefined) return;
+	if (practiceId === undefined) return false;
 	const agreement = resolve('/practices/[practiceId]/agreement', { practiceId });
-	if (redirectGuard.isRedirecting || location.pathname === agreement) return;
+	if (redirectGuard.isRedirecting || location.pathname === agreement) return false;
 	redirectGuard.isRedirecting = true;
 	await goto(agreement);
 	redirectGuard.isRedirecting = false;
+	return true;
 }
 
 /**

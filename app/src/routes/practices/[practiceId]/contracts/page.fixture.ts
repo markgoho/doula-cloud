@@ -17,7 +17,7 @@ import type { RouteFixture, RouteVariant } from '../../../routeFixture.js';
 import { nth, TYPICAL_CLIENTS, TYPICAL_DOULAS } from '../../../typicalPilot.js';
 import type { RouteParams as RouteParameters } from './$types';
 import type { ContractsPageData } from './+page.js';
-import Page from './+page.svelte';
+import Page from './ContractsScreen.svelte';
 
 export const contractsData: CursorPage<AwaitingContract> = {
 	items: [

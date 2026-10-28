@@ -1,40 +1,34 @@
-import { error, redirect } from '@sveltejs/kit';
-import { apiFetch } from '#lib/api.js';
-import { apiErrorMessage } from '#lib/apiErrorMessage.js';
-import { refuseRead } from '#lib/errorPage.js';
-import { staffLoginAfterSessionEnded } from '#lib/sessionEnded.js';
-import { practiceInvoicesPath, type PracticeInvoiceListData } from '#lib/invoice.js';
+import { mapRead, streamRead, type StreamedRead } from '#lib/streamedRead.svelte.js';
+import {
+	practiceInvoicesPath,
+	type PracticeInvoiceListData,
+	type PracticeInvoicePage
+} from '#lib/invoice.js';
 import type { PageLoad } from './$types';
 
 /**
- * Loads through SvelteKit's `load` rather than the app's usual
- * onMount-fetch, for the reason the Billing route's `load` gives (#471):
- * this read is Owner/Admin-only (ADR-0006's money row, carried forward by
- * ADR-0008), so a Doula who types this URL gets a 403 from the BFF and
- * that refusal has to reach `practices/+error.svelte` rather than sit in
- * a local error string this page owns. `apiFetch`, not
- * `apiFetchWithSession`: that helper's 401 handling calls `goto()`, which
- * is the wrong tool mid-`load`.
+ * Loads through SvelteKit's `load`, for the reason the Billing route's
+ * `load` gives (#471), and hands the read over unawaited, so a click
+ * changes screen at once (#2249). This read is Owner/Admin-only
+ * (ADR-0006's money row, carried forward by ADR-0008), so a Doula who
+ * types this URL gets a 403, which the screen draws as the page
+ * `practices/+error.svelte` would.
  */
-export const load: PageLoad = async ({
+export const load: PageLoad = ({
 	params,
 	url
-}): Promise<PracticeInvoiceListData> => {
+}): { read: Promise<StreamedRead<PracticeInvoiceListData>> } => {
 	// #768: the overdue narrowing is a link, not a control the page holds
 	// in memory -- the URL is the state, so it survives a reload, a back
 	// button and a link a Practice sends to itself. The load reads it and
 	// carries it through, because every later page of the same narrowed
 	// list has to ask for the same narrowing.
 	const isNarrowedToOverdue = url.searchParams.get('overdue') === 'true';
-	const response = await apiFetch(practiceInvoicesPath(params.practiceId, undefined, isNarrowedToOverdue));
-
-	if (response.status === 401) {
-		redirect(303, staffLoginAfterSessionEnded());
-	} else if (response.status === 403) {
-		await refuseRead(response);
-	} else if (!response.ok) {
-		error(response.status, await apiErrorMessage(response));
-	}
-
-	return { ...(await response.json()), isNarrowedToOverdue };
+	const path = practiceInvoicesPath(params.practiceId, undefined, isNarrowedToOverdue);
+	return {
+		read: mapRead(streamRead<PracticeInvoicePage>(path), (invoices) => ({
+			...invoices,
+			isNarrowedToOverdue
+		}))
+	};
 };

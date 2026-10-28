@@ -1,0 +1,210 @@
+<script lang="ts">
+	import { onMount, untrack } from 'svelte';
+	import { page } from '#lib/appState.svelte.js';
+	import { apiFetchWithSession } from '#lib/api.js';
+	import { PaginatedList } from '#lib/paginatedList.svelte.js';
+	import {
+		formatSignedQuantity,
+		loadLedgerPage,
+		originLabel,
+		purchaseCredits,
+		type LedgerEntry
+	} from '#lib/billing.js';
+	import { formatMoney } from '#lib/money.js';
+	import { formatCalendarDay, formatInstantWithClock } from '#lib/dates.js';
+	import { readApprovalReturn } from '#lib/engagementRequest.js';
+	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
+	import type { FormError } from '#lib/formErrors.js';
+	import DataTable from '#lib/components/organisms/DataTable.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Text from '#lib/components/atoms/Text.svelte';
+	import Button from '#lib/components/atoms/Button.svelte';
+	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
+	import ListPage from '#lib/components/templates/ListPage.svelte';
+	import type { Balance } from '#lib/billing.js';
+
+	const quantityId = 'buy-credits-quantity';
+
+	// Balance and the ledger's first page come from +page.ts's read, once
+	// it lands (#471, #2249). Later pages (#446) are appended locally.
+	let { data }: { data: Balance } = $props();
+
+	// untrack because capturing data.ledger's first page once is the point
+	// (#446): the list grows itself from here, so re-deriving from `data`
+	// would drop every page appended since.
+	const ledger = new PaginatedList<LedgerEntry>({
+		first: untrack(() => data.ledger),
+		loadPage: (cursor) => loadLedgerPage(apiFetchWithSession, page.params.practiceId!, cursor),
+		failureMessage: 'Failed to load more ledger entries'
+	});
+
+	let checkoutStatus = $derived(page.url.searchParams.get('checkout'));
+
+	const columns = [
+		// createdAt is an instant (billing/balance.go), to the minute.
+		{ label: 'Date', accessor: (entry: LedgerEntry) => formatInstantWithClock(entry.createdAt) },
+		{ label: 'Origin', accessor: (entry: LedgerEntry) => originLabel(entry.origin) },
+		{
+			label: 'Quantity',
+			accessor: (entry: LedgerEntry) => formatSignedQuantity(entry.quantity),
+			numeric: true
+		}
+	];
+
+	/*
+	 * An approver sent here by an empty balance mid-decision (#502) is
+	 * given the way back to the Request she was deciding. Stripe's return
+	 * URLs point at this page and nothing else, so the approval screen
+	 * leaves its own address in sessionStorage on the way out and this
+	 * page reads it -- read once on mount rather than derived, because
+	 * nothing on this page changes it.
+	 */
+	let approvalReturn = $state('');
+
+	// Defaults to 5, not 1: no minimum purchase, but the common case lands
+	// nearer Stripe's 3.2% effective rate than the 4.4% a single Credit
+	// pays (#286, decided on #429).
+	let quantity = $state(5);
+	const purchaseSubmission = new FormSubmission();
+
+	// The price checkout charges today, from the version of the Terms in
+	// force (#1834) -- the BFF reads it the same way the purchase does,
+	// so it is always there and needs no Stripe call.
+	const unitPrice = $derived(formatMoney(data.price.unitAmountCents, data.price.currency));
+	const priceItems = $derived([
+		{ label: 'Price per Credit', value: unitPrice },
+		{ label: 'Subtotal', value: formatMoney(data.price.unitAmountCents * quantity, data.price.currency) }
+	]);
+	// A new price that has been announced and has not started: the Terms
+	// promise "until the new price starts you can buy as many Credits as
+	// you like at the old one", so the screen says when it starts.
+	const comingPrice = $derived(
+		data.comingPrice
+			? `From ${formatCalendarDay(data.comingPrice.effective)}, one Credit costs ${formatMoney(data.comingPrice.unitAmountCents, data.comingPrice.currency)}. Until then, you pay ${unitPrice}.`
+			: ''
+	);
+
+	onMount(() => {
+		approvalReturn = readApprovalReturn();
+	});
+
+	// #1228: the Quantity box's own `required min={1}` was the only refusal
+	// this form had -- StackedForm's `novalidate` (ADR-0021) takes that away,
+	// so this check replaces it before the endpoint ever sees an empty or
+	// zero quantity.
+	async function handlePurchase(event: SubmitEvent) {
+		event.preventDefault();
+		await purchaseSubmission.run(async () => {
+			if (!Number.isFinite(quantity) || quantity < 1) {
+				const error: FormError = { message: 'Enter a quantity of 1 or more', targetId: quantityId };
+				return [error];
+			}
+			const checkoutUrl = await purchaseCredits(apiFetchWithSession, page.params.practiceId!, quantity);
+			location.assign(checkoutUrl);
+		}, orThrownMessage);
+	}
+</script>
+
+{#snippet intro()}
+	<!--
+		#256: this screen used to say only "Credit balance: {n}", nothing
+		naming who a Credit is bought from or what one costs -- so an Owner
+		could not tell it apart from Getting paid (Stripe Connect, a
+		different counterparty entirely) without opening both. The three
+		sentences below state that in GLOSSARY.md's own words: Credit ("a
+		unit of DoulaCloud's own billing... one costs the price the Terms of
+		Service in force state") and
+		Connected account ("so Clients can pay that Practice directly").
+		"Stripe account" itself is on that entry's own _Avoid_ list, so the
+		cross-reference says "connects Stripe", matching the button and
+		status copy on that screen.
+	-->
+	<Text text="Practices buy Credits from DoulaCloud." />
+	<Text
+		text="One Credit covers one Engagement — a single Client relationship centered on one baby, from intake through the end of care."
+	/>
+	<Text text={`One Credit costs ${unitPrice}.`} />
+	{#if comingPrice}
+		<Text text={comingPrice} />
+	{/if}
+	<Text text="Getting paid is a separate screen, where this Practice connects Stripe so its Clients can pay it directly." />
+	<Text text={`Credit balance: ${data.balance}`} />
+{/snippet}
+
+{#snippet content()}
+	<DataTable
+		{columns}
+		rows={ledger.items}
+		hasMore={ledger.hasMore}
+		onLoadMore={() => ledger.loadMore()}
+		isLoadingMore={ledger.isLoadingMore}
+		loadMoreError={ledger.loadMoreError}
+		emptyMessage="No ledger history yet."
+	/>
+
+	{#if approvalReturn}
+		<Link href={approvalReturn} label="Back to the engagement request you were deciding" />
+	{/if}
+
+	{#if checkoutStatus === 'success'}
+		<Notice
+			message="Credit purchase complete. The balance updates once Stripe confirms payment."
+			variant="status"
+		/>
+	{:else if checkoutStatus === 'canceled'}
+		<Notice message="Credit purchase canceled." variant="status" />
+	{/if}
+
+	<StackedForm onSubmit={handlePurchase}>
+		{#if purchaseSubmission.errors.length > 0}
+			<ErrorSummary errors={purchaseSubmission.errors} />
+		{/if}
+		<!--
+			Through LabeledField and TextInput rather than a raw <label> around a
+			raw <input>: reaching around the atoms put the word "Quantity" on the
+			same line as its box, which is the defect #425 found and #475 walked
+			the pages to catch the rest of.
+		-->
+		<!-- A count of credits, GOV.UK's 4-character step (#1216). -->
+		<LabeledField id={quantityId} label="Quantity" error={purchaseSubmission.errorFor(quantityId)} width={4}>
+			{#snippet children({ id, describedBy, invalid, width })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					{width}
+					type="number"
+					inputmode="numeric"
+					min={1}
+					required
+					value={String(quantity)}
+					onInput={(entered) => (quantity = Number(entered))}
+				/>
+			{/snippet}
+		</LabeledField>
+
+		<SummaryList rows={priceItems} />
+		<Text text="New York sales tax is added at checkout where it applies." step="body-sm" tone="variant" />
+
+		<!--
+			Unconditional, and this screen reads no role of its own
+			(#1162). Who may be here at all is ADR-0008's Credit row --
+			Owner and Admin, never a Doula -- and both the balance read
+			and the purchase declare that same seat,
+			staffauth.OwnerAndAdmin in billing/mount.go. A session outside
+			that seat has its balance read refused, and +page.svelte draws
+			the refusal instead of this component; every session that does mount it
+			may buy. Drawing this button disabled for a caller who cannot
+			reach the page was #257's fix, which #272 and #910 between
+			them left with no session to fire for.
+		-->
+		<Button label="Buy credits" type="submit" loading={purchaseSubmission.isSubmitting} />
+	</StackedForm>
+{/snippet}
+
+<ListPage title="Credits" {intro} {content} />

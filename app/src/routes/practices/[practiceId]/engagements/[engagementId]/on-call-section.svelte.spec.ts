@@ -11,7 +11,7 @@ import { render } from 'vitest-browser-svelte';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import { jsonResponse } from '#lib/testResponse.js';
 import '#lib/styles/app.css';
-import Page from './+page.svelte';
+import Page from './EngagementScreen.svelte';
 import { toApiResponder, toPageState } from '../../../../routeFixture.js';
 import { asDoula, detail as fixtureDetail, fixture, onCallPanel, session } from './page.fixture.js';
 
@@ -51,7 +51,7 @@ async function setupOnCall(
 		const answer = extra(path, init);
 		return answer ? Promise.resolve(answer) : respond(path);
 	});
-	await render(Page, { data: data ?? { ...fixtureDetail, session }, params: fixture.params });
+	await render(Page, { data: data ?? { ...fixtureDetail, session } });
 }
 
 // The summary card above has Changes of its own, so the section's are

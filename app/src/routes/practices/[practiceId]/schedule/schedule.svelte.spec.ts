@@ -11,7 +11,7 @@ import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 // via the custom element's own attribute handling, and an unregistered
 // center-l never runs it, leaving every DataTable narrower than its floor.
 import '#lib/styles/app.css';
-import Page from './+page.svelte';
+import Page from './ScheduleScreen.svelte';
 import { toPageState } from '../../../routeFixture.js';
 import { data, fixture, schedulePage } from './page.fixture.js';
 import type { SchedulePageData } from './+page.js';
@@ -45,26 +45,13 @@ beforeEach(() => {
 	goto.mockReset();
 });
 
-// `session` merges in from practices/[practiceId]/+layout.ts (#835) --
-// this route reads it only through its own `load`, but the generated
-// `data` prop type requires it, since SvelteKit really does merge
-// ancestor layout data into it at runtime.
-const sessionStub = {
-	practiceId,
-	staffId: 'staff-1',
-	practiceName: 'Riverside Doula Collective',
-	roles: ['owner'],
-	isContractor: false
-};
-
 async function setup(pageData: SchedulePageData = data) {
 	// Wide enough for DataTable's <table> rather than the <dl> record view
 	// its content floor stacks into below 46rem (#508) -- the same call the
 	// Contract list's own spec makes for the same reason.
 	await testPage.viewport(1440, 900);
 	return render(Page, {
-		params: fixture.params,
-		data: { ...pageData, session: sessionStub }
+		data: pageData
 	});
 }
 
@@ -175,12 +162,10 @@ describe('the Practice-wide schedule (#263)', () => {
 		const { rerender } = await setup();
 
 		await rerender({
-			params: fixture.params,
 			data: {
 				...data,
 				filters: { from: '2026-09-18', to: '2026-09-20' },
-				page: { items: [laterVisit], hasMore: false },
-				session: sessionStub
+				page: { items: [laterVisit], hasMore: false }
 			}
 		});
 
