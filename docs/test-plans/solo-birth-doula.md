@@ -31,9 +31,9 @@ None. Maya's journey starts at a cold `/signup`, so this plan builds its own fix
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 2.1 | Open `/practices/[practiceId]/settings/plan-templates` | The seeded Care Plan fields render, none of them blank | `automated (plan-templates.e2e.ts)` |
+| 2.1 | Open `/practices/[practiceId]/settings/plan-templates` | The seeded Care Plan questions are listed, none of them blank, each with its kind of answer and a **Change** (#2193) | `automated (plan-templates.e2e.ts)` |
 | 2.2 | Switch to the Birth Plan tab | A separate seeded field set; edits to one plan type do not appear on the other | `automated (plan-templates.e2e.ts)` |
-| 2.3 | Add a field and **Save** | `PUT /api/practices/{id}/plan-templates/{planType}` succeeds for an Owner; `Saved.` appears and survives a reload | `automated (plan-templates.e2e.ts)` |
+| 2.3 | **Add a question**, choose its kind of answer, fill in its own page and **Save question** | `PUT /api/practices/{id}/plan-templates/{planType}` succeeds for an Owner; the list it lands on says "Care Plan questions saved." and holds the question after a reload (#2193) | `automated (plan-templates.e2e.ts)` |
 | 2.4 | Open `/practices/[practiceId]/settings/contract-template`, edit the prose, **Save**, reload | The seeded prose renders with `{{client_name}}` visible; the edit persists | `automated (contract-template.e2e.ts)` |
 | 2.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). The Plan Templates screen, then the Contract Template screen | `manual` |
 | 2.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 7 (Hick's Law, Miller's Law) | `manual` |

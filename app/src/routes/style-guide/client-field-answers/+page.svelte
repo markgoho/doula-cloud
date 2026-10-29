@@ -56,7 +56,7 @@
 		<h2>Every field type a Practice can define</h2>
 		<p>
 			The values a Practice’s own questions collect. Defining those questions is
-			<code>PracticeQuestionsEditor</code>’s job, and this is the other half: it never renders a type
+			<code>PracticeQuestionForm</code>’s job, and this is the other half: it never renders a type
 			picker and never reorders anything.
 		</p>
 		<ClientFieldAnswers

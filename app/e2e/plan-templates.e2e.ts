@@ -3,11 +3,11 @@ import { API_URL } from './ports';
 import { enterPractice, signIn } from './auth';
 import { seedFoundingOwner } from './staffSignup';
 
-// Exercises the settings screen from app/src/routes/practices/[practiceId]/settings/plan-templates
-// end-to-end -- the pieces it's built from (planTemplate.ts, PracticeQuestionsEditor.svelte) have their
-// own Vitest coverage, but this is the only test that renders the actual route and hits the real
-// API, proving signup's seeded defaults, add/save, and the plan-type switch all work together.
-test('Practice Owner can view seeded plan templates and add/save a field', async ({
+// Exercises the Plan Templates list and its question pages (#2193) end-to-end against the real API:
+// signup's seeded defaults, adding a question through its kind and its own page, moving it, and the
+// plan-type switch. The pieces (planTemplate.ts, practiceQuestions.ts, PracticeQuestionList,
+// PracticeQuestionForm) have their own Vitest coverage; this is the test that hits the real API.
+test('Practice Owner adds a Plan Template question on its own page and moves it to the top', async ({
 	page,
 	request,
 	context
@@ -30,20 +30,35 @@ test('Practice Owner can view seeded plan templates and add/save a field', async
 		.click();
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/settings/plan-templates$`));
 
-	// Seeded default care_plan fields render.
-	await expect(page.getByLabel('Question', { exact: true }).first()).not.toHaveValue('');
-	expect(await page.getByLabel('Question', { exact: true }).count()).toBeGreaterThan(0);
+	// The seeded Care Plan questions are rows, each with its own Change.
+	const changes = page.getByRole('link', { name: 'Change', exact: true });
+	await expect(changes.first()).toBeVisible();
+	const seededCount = await changes.count();
+	expect(seededCount).toBeGreaterThan(0);
 
-	// Add a field, save, and switch plan types and back -- each switch
-	// re-fetches from the server, proving the save round-tripped through
-	// the real API rather than only updating client-side state.
-	await page.getByRole('button', { name: 'Add a short answer' }).click();
-	await page.getByLabel('Question', { exact: true }).last().fill('Favorite music');
-	await page.getByRole('button', { name: 'Save' }).click();
+	// Add a question asks the kind of answer first, then opens its page.
+	await page.getByRole('link', { name: 'Add a question' }).click();
+	await page.getByRole('radio', { name: 'Short answer' }).check();
+	await page.getByRole('button', { name: 'Continue' }).click();
+	await page.getByLabel('Question', { exact: true }).fill('Favorite music');
+	await page.getByRole('button', { name: 'Save question' }).click();
+
+	// Saved through the real API, and said on the list it lands on.
+	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/settings/plan-templates$`));
 	await expect(page.getByRole('status').filter({ hasText: 'Care Plan questions saved.' })).toBeVisible();
+	await expect(changes).toHaveCount(seededCount + 1);
+	await expect(page.locator('dt').last()).toHaveText('Favorite music');
 
+	// Its own page moves it to the top of the list.
+	await changes.last().click();
+	await page.getByLabel('Place in the list').selectOption({ label: `1 of ${seededCount + 1}` });
+	await page.getByRole('button', { name: 'Save question' }).click();
+	await expect(page.getByRole('status').filter({ hasText: 'Care Plan questions saved.' })).toBeVisible();
+	await expect(page.locator('dt').first()).toHaveText('Favorite music');
+
+	// The Birth Plan is a template of its own, read from the server.
 	await page.getByRole('tab', { name: 'Birth Plan' }).click();
-	await expect(page.getByLabel('Question', { exact: true }).first()).not.toHaveValue('Favorite music');
-	await page.getByRole('tab', { name: 'Care Plan' }).click();
-	await expect(page.getByLabel('Question', { exact: true }).last()).toHaveValue('Favorite music');
+	await expect(page).toHaveURL(/\?plan=birth_plan$/);
+	await expect(page.locator('dt').first()).not.toHaveText('Favorite music');
+	await expect(page.getByText('Favorite music')).toHaveCount(0);
 });

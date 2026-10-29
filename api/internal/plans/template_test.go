@@ -444,3 +444,106 @@ func TestPutTemplateHandler_ReplacesExistingRow(t *testing.T) {
 		t.Fatalf("fields = %+v, want only the replacement field", out.Fields)
 	}
 }
+
+// planTemplateAudit reads the plan_template activity rows for practiceID,
+// oldest first: who wrote each, and its before/after diff.
+func planTemplateAudit(t *testing.T, db *testdb.DB, practiceID string) []struct {
+	actor string
+	diff  map[string][]plans.Field
+} {
+	t.Helper()
+	rows, err := db.Admin.QueryContext(t.Context(),
+		`SELECT actor_staff_id, diff FROM activity
+		 WHERE practice_id = $1 AND subject_kind = 'plan_template' AND action = 'updated'
+		 ORDER BY created_at, id`, practiceID)
+	if err != nil {
+		t.Fatalf("read audit rows: %v", err)
+	}
+	defer rows.Close()
+	var out []struct {
+		actor string
+		diff  map[string][]plans.Field
+	}
+	for rows.Next() {
+		var actor string
+		var raw []byte
+		if err := rows.Scan(&actor, &raw); err != nil {
+			t.Fatalf("scan audit row: %v", err)
+		}
+		var diff map[string][]plans.Field
+		if err := json.Unmarshal(raw, &diff); err != nil {
+			t.Fatalf("decode audit diff: %v", err)
+		}
+		out = append(out, struct {
+			actor string
+			diff  map[string][]plans.Field
+		}{actor, diff})
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read audit rows: %v", err)
+	}
+	return out
+}
+
+// TestPutTemplateHandler_WritesOneAuditRowPerRealChange proves a change to
+// a Plan Template records who made it and the list before and after
+// (#2193: each question page saves one question's change), and that
+// re-saving an unchanged list records nothing.
+func TestPutTemplateHandler_WritesOneAuditRowPerRealChange(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "put-audit-trail"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	seedPlanTemplate(t, db, practiceID, carePlanType, `[{"id":"old","type":"short_text","label":"Old field","order":0}]`)
+	var staffID string
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT id FROM staff WHERE identity_uid = $1`, uid).Scan(&staffID); err != nil {
+		t.Fatalf("read seeded staff id: %v", err)
+	}
+
+	srv, session := newPlanServer(t, db, uid)
+	defer srv.Close()
+
+	changed := plans.TemplateResponse{Fields: []plans.Field{
+		{ID: "old", Type: shortTextType, Label: "Old field"},
+		{ID: "added", Type: shortTextType, Label: "Hospital transfer"},
+	}}
+	for range 2 {
+		resp := putTemplate(t, srv, session, practiceID, carePlanType, changed)
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("PUT status = %d, want %d", resp.StatusCode, http.StatusOK)
+		}
+	}
+
+	audit := planTemplateAudit(t, db, practiceID)
+	if len(audit) != 1 {
+		t.Fatalf("audit rows = %d, want 1 (the second PUT changed nothing)", len(audit))
+	}
+	if audit[0].actor != staffID {
+		t.Errorf("audit actor = %q, want %q", audit[0].actor, staffID)
+	}
+	if before, after := audit[0].diff["before"], audit[0].diff["after"]; len(before) != 1 || len(after) != 2 || after[1].ID != "added" {
+		t.Errorf("audit diff = %+v, want one field before and the added one after", audit[0].diff)
+	}
+}
+
+// TestPutTemplateHandler_AuditsAFirstSaveAgainstAnEmptyList proves a
+// Practice with no row for a plan type yet records its first save, with
+// an empty list before it.
+func TestPutTemplateHandler_AuditsAFirstSaveAgainstAnEmptyList(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "put-audit-first"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+
+	srv, session := newPlanServer(t, db, uid)
+	defer srv.Close()
+
+	resp := putTemplate(t, srv, session, practiceID, birthPlanType, plans.TemplateResponse{Fields: []plans.Field{
+		{ID: "first", Type: shortTextType, Label: "First"},
+	}})
+	_ = resp.Body.Close()
+
+	audit := planTemplateAudit(t, db, practiceID)
+	if len(audit) != 1 || len(audit[0].diff["before"]) != 0 || len(audit[0].diff["after"]) != 1 {
+		t.Fatalf("audit = %+v, want one row from an empty list to one field", audit)
+	}
+}

@@ -12,7 +12,7 @@
 import type { Fetcher } from './fetcher.js';
 
 import { apiErrorMessage } from './apiErrorMessage.js';
-import { isSelectType, type FieldType } from './planTemplate.js';
+import type { FieldType } from './planTemplate.js';
 
 /* The same six field types as a Plan Template (GLOSSARY.md, "Client
  * Field Template"), so one palette and one set of human names (#1252),
@@ -70,17 +70,6 @@ export async function saveTemplate(
 	return response.json();
 }
 
-/**
- * Appends a new blank, unarchived field of type.
- */
-export function addField(fields: Field[], id: string, type: FieldType): Field[] {
-	const field: Field = { id, type, label: '', order: fields.length, archived: false };
-	if (isSelectType(type)) {
-		field.options = [];
-	}
-	return [...fields, field];
-}
-
 /** Sets archived=true on the field with id -- ADR-0017's "removing a
  * field archives it, never deletes it": a Client who already holds a
  * value under this id keeps it, and it stays live-read on her record. */
@@ -95,40 +84,7 @@ export function unarchiveField(fields: Field[], id: string): Field[] {
 	return fields.map((f) => (f.id === id ? { ...f, archived: false } : f));
 }
 
-/** Moves the field with id one position toward the front ('up') or back
- * ('down') of the array, skipping past any field whose archived state
- * differs from the moved field's. An active field reorders only among
- * active fields -- which is how it crosses from one Practice-named
- * section into another, since a section is just the run of active fields
- * between two section_header entries -- and an archived field reorders
- * only among the "Archived fields" list. A move past either end, or past
- * the last field sharing its state, is a no-op. */
-export function moveField(fields: Field[], id: string, direction: 'up' | 'down'): Field[] {
-	const index = fields.findIndex((f) => f.id === id);
-	if (index === -1) {
-		return fields;
-	}
-	const archived = fields[index].archived;
-	const step = direction === 'up' ? -1 : 1;
-	let target = index + step;
-	while (target >= 0 && target < fields.length && fields[target].archived !== archived) {
-		target += step;
-	}
-	if (target < 0 || target >= fields.length) {
-		return fields;
-	}
-	const reordered = [...fields];
-	const moved = reordered[index];
-	reordered[index] = reordered[target];
-	reordered[target] = moved;
-	return normalizeOrder(reordered);
-}
-
-function normalizeOrder(fields: Field[]): Field[] {
-	return fields.map((f, order) => ({ ...f, order }));
-}
-
-/** The trimmed, lowercased labels validateFields blocks as restating one
+/** The trimmed, lowercased labels structuralFieldRefusal refuses as restating one
  * of ADR-0017's twelve structural columns, mapped to the structural fact's
  * own name -- mirrors the Go BFF's structuralFieldNames
  * (api/internal/clientfieldtemplate/validate.go) for early UX feedback and
@@ -165,6 +121,16 @@ const STRUCTURAL_FIELD_NAMES: ReadonlyMap<string, string> = new Map([
 	['birthday', 'date of birth']
 ]);
 
+/** The refusal of a label that restates one of the structural facts, or
+ * undefined for any other label, which a Client field's own question page
+ * asks before its save (#2193). */
+export function structuralFieldRefusal(label: string): string | undefined {
+	const structural = STRUCTURAL_FIELD_NAMES.get(label.trim().toLowerCase());
+	return structural
+		? `"${label}" is already on every Client record as the ${structural} field, so it is not a field to add here.`
+		: undefined;
+}
+
 /** ADR-0017 puts no cap on the field list, and the intake form's Tesler
  * ruling (#432) means no field is ever deleted just to shorten it -- so
  * past this point an Owner is told the cost instead of being blocked.
@@ -182,38 +148,3 @@ export function fieldCountWarning(fields: Field[]): string | undefined {
 	return `This template asks a Client ${askedCount} questions beyond the standard ones. Each one makes intake longer, so archive any you no longer need before adding more.`;
 }
 
-/** Validates fields against the same rules the Go BFF enforces
- * server-side, mirrored here purely for early feedback before a round
- * trip. Returns an error message, or undefined if fields is valid. */
-export function validateFields(fields: Field[]): string | undefined {
-	const seenIDs = new Set<string>();
-	for (const f of fields) {
-		if (f.id === '') {
-			return 'field id is required';
-		}
-		if (seenIDs.has(f.id)) {
-			return `duplicate field id: ${f.id}`;
-		}
-		seenIDs.add(f.id);
-
-		if (f.label === '') {
-			return 'field label is required';
-		}
-		const structural = STRUCTURAL_FIELD_NAMES.get(f.label.trim().toLowerCase());
-		if (structural) {
-			return `"${f.label}" is already on every Client record as the ${structural} field, so it is not a field to add here.`;
-		}
-
-		if (isSelectType(f.type)) {
-			if (!f.options || f.options.length === 0) {
-				return `field ${f.id} requires at least one option`;
-			}
-			if (f.options.includes('')) {
-				return `field ${f.id} has a blank option`;
-			}
-		} else if (f.options && f.options.length > 0) {
-			return `field ${f.id} of type ${f.type} may not have options`;
-		}
-	}
-	return undefined;
-}

@@ -142,9 +142,9 @@ The membership picker (1.2) is exercised by no spec — every spec's Staff membe
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 9.1 | Add a field to the Birth Plan template and save | `PUT .../plan-templates/{planType}` succeeds for an Owner and persists | `automated (plan-templates.e2e.ts)` |
+| 9.1 | On the Birth Plan tab, **Add a question**, choose its kind of answer, fill in its own page and **Save question** | `PUT .../plan-templates/{planType}` succeeds for an Owner and persists; the list it lands on holds the question (#2193) | `automated (plan-templates.e2e.ts)` |
 | 9.2 | Reopen an already-filled Birth Plan | Unchanged — the Plan Instance snapshots the field definitions at creation. **Passes** | `manual` |
-| 9.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
+| 9.B-screens | Count the screens from the stage's entry to its end | **Screens**: 3 (Hick's Law, Flow). The Plan Templates list, the kind of answer, then the new question's own page, whose save lands back on the list (#2193) | `manual` |
 | 9.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 7 (Hick's Law, Miller's Law) | `manual` |
 | 9.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
 | 9.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |

@@ -1,74 +1,65 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
+	import { replaceState } from '$app/navigation';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
+	import { takeOutcome } from '#lib/outcome.js';
 	import { MAY_CHANGE } from '#lib/settingsSummary.js';
 	import Link from '#lib/components/atoms/Link.svelte';
-	import PracticeQuestionsEditor from '#lib/components/organisms/PracticeQuestionsEditor.svelte';
-	import Text from '#lib/components/atoms/Text.svelte';
-	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Text from '#lib/components/atoms/Text.svelte';
+	import PracticeQuestionList, {
+		type ListedQuestion
+	} from '#lib/components/organisms/PracticeQuestionList.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
-	import {
-		loadTemplate,
-		saveTemplate,
-		addField,
-		removeField,
-		moveField,
-		validateFields,
-		type Field,
-		type FieldType
-	} from '#lib/planTemplate.js';
+	import { loadTemplate, type Field } from '#lib/planTemplate.js';
+	import { PLAN_TYPES, planTypeFromQuery, type PlanType } from './planTemplatePages.js';
 	import type { PracticeSession } from '../../+layout.js';
 
-	// The Membership comes off practices/[practiceId]/+layout.ts's
-	// already-resolved read (#835), as the Settings hub reads it.
+	/*
+	 * #2193 (MO-G12): GOV.UK's "Add another" list. The questions of the plan
+	 * type shown are a Summary list, a row each with a Change that opens the
+	 * question on its own page, and one "Add a question" that asks the kind
+	 * of answer first. Each question's page saves the template and comes
+	 * back here, so this screen has no Save of its own: what the save did is
+	 * said here, before the <h1>, focused on arrival (`outcome`, #1710).
+	 *
+	 * Which plan type is shown is in the address (`?plan=birth_plan`), so a
+	 * question's Back and its save land on the tab it was opened from.
+	 */
 	const session = $derived((page.data as { session: PracticeSession }).session);
+	const canChange = $derived(MAY_CHANGE.planTemplates(session));
 	const canChangeContractTemplate = $derived(MAY_CHANGE.contractTemplate(session));
+	const practiceId = $derived(page.params.practiceId!);
 
-	const planTypes = [
-		{ value: 'care_plan', label: 'Care Plan' },
-		{ value: 'birth_plan', label: 'Birth Plan' }
-	] as const;
+	const outcome = takeOutcome(page.url);
 
-	let planType = $state<'care_plan' | 'birth_plan'>('care_plan');
-	const planLabel = $derived(planType === 'birth_plan' ? 'Birth Plan' : 'Care Plan');
+	let planType = $state<PlanType>(planTypeFromQuery(page.url));
 	let fields = $state<Field[]>([]);
+	let isLoaded = $state(false);
 	let error = $state('');
-	let isSaved = $state(false);
 	let tabElements = $state<HTMLButtonElement[]>([]);
 
 	async function load() {
 		error = '';
-		isSaved = false;
+		isLoaded = false;
 		try {
-			const template = await loadTemplate(apiFetchWithSession, page.params.practiceId!, planType);
+			const template = await loadTemplate(apiFetchWithSession, practiceId, planType);
 			fields = template.fields;
+			isLoaded = true;
 		} catch (error_) {
 			error = error_ instanceof Error ? error_.message : 'Failed to load plan template';
 		}
 	}
 
-	async function save() {
-		error = '';
-		isSaved = false;
-		const validationError = validateFields(fields);
-		if (validationError) {
-			error = validationError;
-			return;
-		}
-		try {
-			const template = await saveTemplate(apiFetchWithSession, page.params.practiceId!, planType, fields);
-			fields = template.fields;
-			isSaved = true;
-		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Failed to save plan template';
-		}
-	}
-
-	function selectPlanType(value: 'care_plan' | 'birth_plan') {
+	function selectPlanType(value: PlanType) {
 		planType = value;
+		// The address follows the tab without a navigation, so a reload or
+		// a Back from a question lands on the plan type in view.
+		const url = new URL(page.url.href);
+		url.searchParams.set('plan', value);
+		replaceState(url, {});
 		void load();
 	}
 
@@ -81,7 +72,7 @@
 	 * user passes through on the way to the one she wants.
 	 */
 	function focusTab(fromIndex: number, direction: 1 | -1) {
-		const nextIndex = (fromIndex + direction + planTypes.length) % planTypes.length;
+		const nextIndex = (fromIndex + direction + PLAN_TYPES.length) % PLAN_TYPES.length;
 		tabElements[nextIndex]?.focus();
 	}
 
@@ -98,16 +89,24 @@
 	// One id pair per plan type, so the tab/tabpanel pairing (`id` /
 	// `aria-controls` / `aria-labelledby`) is built in one place rather -- spelling:ignore: aria-labelledby is an ARIA attribute name
 	// than retyped at each of the three call sites below.
-	function tabId(value: 'care_plan' | 'birth_plan'): string {
+	function tabId(value: PlanType): string {
 		return `plan-type-tab-${value}`;
 	}
-	function panelId(value: 'care_plan' | 'birth_plan'): string {
+	function panelId(value: PlanType): string {
 		return `plan-type-panel-${value}`;
 	}
 
-	function updateField(id: string, patch: Partial<Field>) {
-		fields = fields.map((f) => (f.id === id ? { ...f, ...patch } : f));
+	function changeHref(question: ListedQuestion): string {
+		return resolve('/practices/[practiceId]/settings/plan-templates/[planType]/[questionId]', {
+			practiceId,
+			planType,
+			questionId: question.id
+		});
 	}
+
+	const addHref = $derived(
+		resolve('/practices/[practiceId]/settings/plan-templates/[planType]/kind', { practiceId, planType })
+	);
 
 	onMount(() => {
 		void load();
@@ -141,7 +140,7 @@
 		buttons reachable and names the current one correctly.
 	-->
 	<cluster-l space="var(--space-2)" role="tablist" aria-label="Plan type">
-		{#each planTypes as pt, index (pt.value)}
+		{#each PLAN_TYPES as pt, index (pt.value)}
 			<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- Button is a closed atom with no role/aria-selected/tabindex/onkeydown passthrough (ADR-0018); a tab needs all four, and this is the pattern's only consumer -->
 			<button
 				bind:this={tabElements[index]}
@@ -161,63 +160,42 @@
 	</cluster-l>
 {/snippet}
 
-{#snippet editor()}
+{#snippet list()}
 	<stack-l space="var(--space-5)" role="tabpanel" id={panelId(planType)} aria-labelledby={tabId(planType)} tabindex="0"> <!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
 		{#if error}
 			<Notice variant="error" message={error} />
 		{/if}
-
-		<PracticeQuestionsEditor
-			questions={fields}
-			emptyMessage="No questions yet. Add one below."
-			removeLabel="Remove"
-			onAdd={(type: FieldType) => (fields = addField(fields, crypto.randomUUID(), type))}
-			onRemove={(id: string) => (fields = removeField(fields, id))}
-			onMoveUp={(id: string) => (fields = moveField(fields, id, 'up'))}
-			onMoveDown={(id: string) => (fields = moveField(fields, id, 'down'))}
-			onLabelChange={(id: string, label: string) => updateField(id, { label })}
-			onTypeChange={(id: string, type: FieldType) => updateField(id, { type })}
-			onOptionsChange={(id: string, options: string[]) => updateField(id, { options })}
-		/>
+		{#if isLoaded}
+			<PracticeQuestionList
+				questions={fields}
+				emptyMessage="No questions yet."
+				changeHref={canChange ? changeHref : undefined}
+				addHref={canChange ? addHref : undefined}
+			/>
+		{/if}
 	</stack-l>
 {/snippet}
 
 {#snippet actions()}
 	<!--
 		#2193 (MO-G12): a new Practice judges its Plan Templates and then its
-		Contract Template, and this screen had no way on, so she went back
-		through Settings. The way on sits under Save, not beside it, so it
-		does not read as an alternative to saving; it is drawn only for
-		someone who may change the Contract Template (`MAY_CHANGE`), since
-		a Doula may change the Plan Templates and nothing after them.
-
-		#2194 (MO-G13): between Save and the way on, the status names the
-		plan type saved and which plans it reaches, in the intro's own words
-		(ADR-0001's snapshot). It sits under Save so the person who pressed
-		it sees it without scrolling at 320px. A polite status in place,
-		never focused: Save is still there.
+		Contract Template, so the way on is here, for someone who may change
+		the Contract Template (`MAY_CHANGE`). It is the screen's last thing,
+		after the list and its add, so it does not read as one of them.
 	-->
-	<stack-l space="var(--space-4)">
-		<Button label="Save" onClick={save} />
-		{#if isSaved}
-			<Notice
-				variant="status"
-				message="{planLabel} questions saved. Every {planLabel} filled in from now on asks them, and a {planLabel} already filled in keeps the questions it had."
-			/>
-		{/if}
-		{#if canChangeContractTemplate}
-			<Link
-				href={resolve('/practices/[practiceId]/settings/contract-template', { practiceId: page.params.practiceId! })}
-				label="Next, check your Contract Template"
-			/>
-		{/if}
-	</stack-l>
+	{#if canChangeContractTemplate}
+		<Link
+			href={resolve('/practices/[practiceId]/settings/contract-template', { practiceId })}
+			label="Next, check your Contract Template"
+		/>
+	{/if}
 {/snippet}
 
 <FormPage
 	title="Plan Templates"
 	{intro}
-	fieldsets={[{ content: planTypeSelector }, { content: editor }]}
+	{outcome}
+	fieldsets={[{ content: planTypeSelector }, { content: list }]}
 	{actions}
 />
 

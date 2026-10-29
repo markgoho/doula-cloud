@@ -25,18 +25,18 @@ export const FIELD_TYPES = [
 
 export type FieldType = (typeof FIELD_TYPES)[number];
 
-/** What a person reads for each field type (#1252): the name the
- * question editor's "Kind of answer" select shows, and the words on the
- * one Add button per type. The one source of these words for both the
- * Plan Template and the Client Field Template editors, which share this
+/** What a person reads for each field type (#1252): the name the kind of
+ * answer question, the question page's "Kind of answer" select and the
+ * question list's rows show (#2193). The one source of these words for
+ * both the Plan Templates and the Client Fields, which share this
  * palette; the stored identifier never reaches the screen. */
-export const FIELD_TYPE_NAMES: Readonly<Record<FieldType, { name: string; addLabel: string }>> = {
-	short_text: { name: 'Short answer', addLabel: 'Add a short answer' },
-	long_text: { name: 'Long answer', addLabel: 'Add a long answer' },
-	single_select: { name: 'Choose one', addLabel: 'Add a choose-one question' },
-	multi_select: { name: 'Choose several', addLabel: 'Add a choose-several question' },
-	checkbox: { name: 'Yes or no', addLabel: 'Add a yes-or-no question' },
-	section_header: { name: 'Section heading', addLabel: 'Add a section heading' }
+export const FIELD_TYPE_NAMES: Readonly<Record<FieldType, { name: string }>> = {
+	short_text: { name: 'Short answer' },
+	long_text: { name: 'Long answer' },
+	single_select: { name: 'Choose one' },
+	multi_select: { name: 'Choose several' },
+	checkbox: { name: 'Yes or no' },
+	section_header: { name: 'Section heading' }
 };
 
 /** The field types as a select's options: the stored identifier as the
@@ -107,74 +107,13 @@ export async function saveTemplate(
 	return response.json();
 }
 
-/** Appends a new blank field of type, returning a new array (fields is
- * never mutated) with Order left as array position -- normalizeOrder, or
- * the server on save, keeps Order in sync after removeField/moveField. */
-export function addField(fields: Field[], id: string, type: FieldType): Field[] {
-	const field: Field = { id, type, label: '', order: fields.length };
-	if (isSelectType(type)) {
-		field.options = [];
-	}
-	return [...fields, field];
-}
-
 /** Removes the field with id, renumbering Order to match the resulting
  * array position. */
 export function removeField(fields: Field[], id: string): Field[] {
 	return normalizeOrder(fields.filter((f) => f.id !== id));
 }
 
-/** Moves the field with id one position toward the front ('up') or back
- * ('down') of the array -- the plain, non-drag-and-drop reorder control
- * ADR-0001 calls for. A move past either end is a no-op, not an error,
- * since the UI disables the control at the boundary. */
-export function moveField(fields: Field[], id: string, direction: 'up' | 'down'): Field[] {
-	const index = fields.findIndex((f) => f.id === id);
-	const target = direction === 'up' ? index - 1 : index + 1;
-	if (index === -1 || target < 0 || target >= fields.length) {
-		return fields;
-	}
-	const reordered = [...fields];
-	const moved = reordered[index];
-	reordered[index] = reordered[target];
-	reordered[target] = moved;
-	return normalizeOrder(reordered);
-}
-
 function normalizeOrder(fields: Field[]): Field[] {
 	return fields.map((f, order) => ({ ...f, order }));
 }
 
-/** Validates fields against the same rules the Go BFF enforces
- * server-side (api/internal/plans/template.go's normalizeFields) --
- * mirrored here purely for early UX feedback before a round trip; the
- * server remains the authority. Returns an error message, or undefined if
- * fields is valid. */
-export function validateFields(fields: Field[]): string | undefined {
-	const seenIDs = new Set<string>();
-	for (const f of fields) {
-		if (f.id === '') {
-			return 'field id is required';
-		}
-		if (seenIDs.has(f.id)) {
-			return `duplicate field id: ${f.id}`;
-		}
-		seenIDs.add(f.id);
-
-		if (f.label === '') {
-			return 'field label is required';
-		}
-
-		if (isSelectType(f.type)) {
-			if (!f.options || f.options.length === 0) {
-				return `field ${f.id} requires at least one option`;
-			}
-			if (f.options.includes('')) {
-				return `field ${f.id} has a blank option`;
-			}
-		} else if (f.options && f.options.length > 0) {
-			return `field ${f.id} of type ${f.type} may not have options`;
-		}
-	}
-	return undefined;
-}
