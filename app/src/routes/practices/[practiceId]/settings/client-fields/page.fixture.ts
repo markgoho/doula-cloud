@@ -72,6 +72,17 @@ export const asDoula: RouteVariant = {
 	pageData: practiceSession(['doula'])
 };
 
+/*
+ * #2194 (MO-G13): an Owner or Admin whose Practice holds no Client yet is
+ * linked on to her first one under Save. From the first Client on, the
+ * search is the door again (ADR-0017's amendment for #1516), so the base
+ * session draws no link.
+ */
+export const noClientYet: RouteVariant = {
+	name: 'The Client Field Template editor, at a Practice with no Client yet',
+	pageData: { session: { ...practiceSession(['owner']).session, hasClients: false } }
+};
+
 export const fixture: RouteFixture = {
 	name: 'The Client Field Template editor, as an Owner',
 	component: Page,
@@ -80,5 +91,5 @@ export const fixture: RouteFixture = {
 	pageData: practiceSession(['owner']),
 	respond: () => jsonResponse(template),
 	readyText: 'Client Fields',
-	variants: [asDoula]
+	variants: [asDoula, noClientYet]
 };

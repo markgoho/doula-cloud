@@ -6,6 +6,8 @@
 	import ClientFieldTemplateEditor from '#lib/components/organisms/ClientFieldTemplateEditor.svelte';
 	import type { PracticeSession } from '../../+layout.js';
 	import Text from '#lib/components/atoms/Text.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
+	import { startHref } from '../../clients/new/intake.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
@@ -107,9 +109,6 @@
 	{#if error}
 		<Notice variant="error" message={error} />
 	{/if}
-	{#if isSaved}
-		<Text text="Saved." />
-	{/if}
 	{#if countWarning}
 		<Notice variant="info" message={countWarning} />
 	{/if}
@@ -142,8 +141,31 @@
 {/snippet}
 
 {#snippet actions()}
+	<!--
+		#2194 (MO-G13): what was saved and what it changes, under Save so
+		the person who pressed it sees it without scrolling at 320px. A
+		Client's values are read live (GLOSSARY.md, Client Field Template),
+		so the questions reach every Client's record at once, and the
+		archive rule is what keeps a recorded fact. A polite status in
+		place, never focused: Save is still there.
+
+		A Practice with no Client yet is then linked on to her first one, as
+		the Contract Template is; from the first Client on, the search is
+		the door to intake (ADR-0017's amendment for #1516).
+	-->
 	{#if isPracticeOwnerOrAdmin}
-		<Button label="Save" onClick={save} />
+		<stack-l space="var(--space-4)">
+			<Button label="Save" onClick={save} />
+			{#if isSaved}
+				<Notice
+					variant="status"
+					message="Client Fields saved. These questions are on every Client's record now, and an archived field keeps what was already recorded."
+				/>
+			{/if}
+			{#if session.hasClients === false}
+				<Link href={startHref(page.params.practiceId!, 'client-fields')} label="Next, add your first Client" />
+			{/if}
+		</stack-l>
 	{/if}
 {/snippet}
 

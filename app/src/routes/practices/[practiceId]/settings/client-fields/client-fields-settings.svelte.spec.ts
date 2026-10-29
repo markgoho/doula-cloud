@@ -33,6 +33,8 @@ const [firstField] = defaultFields;
 interface MockOptions {
 	fields?: Field[];
 	roles?: string[];
+	// Omitted is a session that does not say, which draws no link (#2183).
+	hasClients?: boolean;
 }
 
 /*
@@ -42,9 +44,15 @@ interface MockOptions {
  * already uses for the same split. The Membership (roles) comes off
  * page.data.session (#835), not a fetch this mock has to answer.
  */
-function mockApi({ fields = defaultFields, roles = [] }: MockOptions = {}) {
+function mockApi({ fields = defaultFields, roles = [], hasClients }: MockOptions = {}) {
 	pageState.data = {
-		session: { practiceId: 'practice-1', practiceName: 'Riverside Doula Collective', roles, isContractor: false }
+		session: {
+			practiceId: 'practice-1',
+			practiceName: 'Riverside Doula Collective',
+			roles,
+			isContractor: false,
+			hasClients
+		}
 	};
 	apiFetchWithSession.mockImplementation(() => Promise.resolve(jsonResponse({ fields })));
 }
@@ -159,5 +167,65 @@ describe('client fields settings screen: it introduces itself (#865)', () => {
 		await expect
 			.element(intro('removing a field archives it, so what was already recorded stays'))
 			.toBeVisible();
+	});
+});
+
+/*
+ * #2194 (MO-G13): the save said "Saved." and nothing else. The status
+ * names what was saved and what it changes: a Client's values are read
+ * live (GLOSSARY.md, Client Field Template), so the questions are on
+ * every Client's record at once, new and existing, and an archived one
+ * keeps what was recorded. It is a polite status in place and takes no
+ * focus, because Save is still there. A Practice with no Client yet is
+ * linked on to her first one.
+ */
+function saveButton() {
+	return testPage.getByRole('button', { name: 'Save' });
+}
+
+function firstClientLink() {
+	return testPage.getByRole('link', { name: 'Next, add your first Client' });
+}
+
+// The editor keeps a status region of its own, so the save's is the one
+// that says it saved.
+function savedStatus() {
+	return testPage.getByRole('status').filter({ hasText: 'Client Fields saved.' });
+}
+
+describe('client fields settings screen: what a save says (#2194)', () => {
+	it('says what was saved and what it changes from here', async () => {
+		await setup({ roles: ['owner'] });
+
+		await saveButton().click();
+
+		await expect
+			.element(savedStatus())
+			.toHaveTextContent(
+				"Client Fields saved. These questions are on every Client's record now, and an archived field keeps what was already recorded."
+			);
+		await expect.element(saveButton()).toHaveFocus();
+	});
+
+	it('links an Admin on to her first Client while the Practice holds none', async () => {
+		await setup({ roles: ['admin'], hasClients: false });
+
+		await expect
+			.element(firstClientLink())
+			.toHaveAttribute('href', '/practices/practice-1/clients/new?from=client-fields');
+	});
+
+	it('draws no link once the Practice holds a Client', async () => {
+		await setup({ roles: ['owner'], hasClients: true });
+
+		await expect.element(saveButton()).toBeVisible();
+		expect(firstClientLink().query()).toBeNull();
+	});
+
+	it('draws no link for a Doula, who cannot change the fields', async () => {
+		await setup({ roles: ['doula'], hasClients: false });
+
+		await expect.element(testPage.getByText('Ask a Practice Owner or Admin to edit Client fields.')).toBeVisible();
+		expect(firstClientLink().query()).toBeNull();
 	});
 });

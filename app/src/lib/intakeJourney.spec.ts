@@ -224,11 +224,14 @@ describe('previousStepHref', () => {
 });
 
 describe('intakeOrigin (#1609)', () => {
-	it.each(['overview', 'clients'] as const)('reads %s as the screen that opened intake', (origin) => {
-		const search = new URLSearchParams(originQuery(origin));
+	it.each(['overview', 'clients', 'contract-template', 'client-fields'] as const)(
+		'reads %s as the screen that opened intake',
+		(origin) => {
+			const search = new URLSearchParams(originQuery(origin));
 
-		expect(intakeOrigin(search)).toBe(origin);
-	});
+			expect(intakeOrigin(search)).toBe(origin);
+		}
+	);
 
 	it.each([
 		['no origin at all', ''],

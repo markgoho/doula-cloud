@@ -40,7 +40,7 @@ test('Practice Owner can view seeded plan templates and add/save a field', async
 	await page.getByRole('button', { name: 'Add a short answer' }).click();
 	await page.getByLabel('Question', { exact: true }).last().fill('Favorite music');
 	await page.getByRole('button', { name: 'Save' }).click();
-	await expect(page.getByText('Saved.')).toBeVisible();
+	await expect(page.getByRole('status').filter({ hasText: 'Care Plan questions saved.' })).toBeVisible();
 
 	await page.getByRole('tab', { name: 'Birth Plan' }).click();
 	await expect(page.getByLabel('Question', { exact: true }).first()).not.toHaveValue('Favorite music');

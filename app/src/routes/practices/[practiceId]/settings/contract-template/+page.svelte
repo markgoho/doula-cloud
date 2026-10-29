@@ -6,6 +6,8 @@
 	import ContractTemplateEditor from '#lib/components/organisms/ContractTemplateEditor.svelte';
 	import { loadContractTemplate, saveContractTemplate, validateProse } from '#lib/contractTemplate.js';
 	import Text from '#lib/components/atoms/Text.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
+	import { startHref } from '../../clients/new/intake.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
@@ -76,9 +78,6 @@
 	{#if error}
 		<Notice variant="error" message={error} />
 	{/if}
-	{#if isSaved}
-		<Text text="Saved." />
-	{/if}
 	{#if !isPracticeOwner}
 		<Notice variant="info" message="Only a Practice Owner can change these terms." />
 	{/if}
@@ -86,8 +85,35 @@
 {/snippet}
 
 {#snippet actions()}
+	<!--
+		#2194 (MO-G13): what was saved and what it reaches from here, in the
+		intro's own words, then what is next. The status sits under Save, not
+		at the top of the form, which the prose field puts a screen away at
+		320px: there, with Save scrolled into view, the status's first line
+		shows beside it without a scroll, and Save does not move from under
+		the pointer, as it would with the status above it. A polite
+		status in place, never focused: Save is still there
+		(docs/design/govuk-alignment.md, Notification banner).
+
+		This screen ends a new Practice's setup (stage 2 of the solo doula's
+		journey), and the next stage is her first Client. The way on sits
+		under Save, as Plan Templates' does (#2193), and only while the
+		Practice holds no Client: from the first one on, the search is the
+		door to intake (ADR-0017's amendment for #1516).
+	-->
 	{#if isPracticeOwner}
-		<Button label="Save" onClick={save} />
+		<stack-l space="var(--space-4)">
+			<Button label="Save" onClick={save} />
+			{#if isSaved}
+				<Notice
+					variant="status"
+					message="Contract Template saved. Every Contract written from now on uses these terms, and a Contract already written keeps the terms it was written from."
+				/>
+			{/if}
+			{#if session.hasClients === false}
+				<Link href={startHref(page.params.practiceId!, 'contract-template')} label="Next, add your first Client" />
+			{/if}
+		</stack-l>
 	{/if}
 {/snippet}
 

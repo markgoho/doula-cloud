@@ -204,7 +204,11 @@ describe('the name question', () => {
 	it.each([
 		['the search', undefined, `/practices/${practiceId}/clients/search`],
 		['the overview', 'overview', `/practices/${practiceId}`],
-		['the Clients list', 'clients', `/practices/${practiceId}/clients`]
+		['the Clients list', 'clients', `/practices/${practiceId}/clients`],
+		// #2194: the two settings screens a Practice with no Client yet
+		// saves link on to her first one.
+		['the Contract Template', 'contract-template', `/practices/${practiceId}/settings/contract-template`],
+		['the Client Fields', 'client-fields', `/practices/${practiceId}/settings/client-fields`]
 	] as const)('sends Back to %s that opened it', async (_screen, origin, href) => {
 		await setup({ origin });
 

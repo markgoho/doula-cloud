@@ -171,3 +171,60 @@ describe('plan-templates settings screen: the way on to the Contract Template (#
 		}
 	});
 });
+
+/*
+ * #2194 (MO-G13): the save said "Saved." and nothing about which plans
+ * change. The status names the plan type saved, that a plan filled in
+ * from now on asks the new questions, and that one already filled in
+ * keeps its own (ADR-0001's snapshot). It is a polite status in place and
+ * takes no focus, because Save is still there.
+ */
+function saveButton() {
+	return testPage.getByRole('button', { name: 'Save' });
+}
+
+// The editor keeps a status region of its own, so the save's is the one
+// that says it saved.
+function savedStatus() {
+	return testPage.getByRole('status').filter({ hasText: 'questions saved.' });
+}
+
+describe('plan-templates settings screen: what a save says (#2194)', () => {
+	it('names the Care Plan and what its save changes from here', async () => {
+		await setup();
+
+		await saveButton().click();
+
+		await expect
+			.element(savedStatus())
+			.toHaveTextContent(
+				'Care Plan questions saved. Every Care Plan filled in from now on asks them, and a Care Plan already filled in keeps the questions it had.'
+			);
+		await expect.element(saveButton()).toHaveFocus();
+	});
+
+	it('names the Birth Plan when the Birth Plan is the one saved', async () => {
+		const { birthTab } = await setup();
+		await birthTab.click();
+		await expect.element(birthTab).toHaveAttribute('aria-selected', 'true');
+
+		await saveButton().click();
+
+		await expect
+			.element(savedStatus())
+			.toHaveTextContent(
+				'Birth Plan questions saved. Every Birth Plan filled in from now on asks them, and a Birth Plan already filled in keeps the questions it had.'
+			);
+	});
+
+	it('says nothing once another plan type is opened', async () => {
+		const { birthTab } = await setup();
+		await saveButton().click();
+		await expect.element(savedStatus()).toBeVisible();
+
+		await birthTab.click();
+
+		await expect.element(birthTab).toHaveAttribute('aria-selected', 'true');
+		expect(savedStatus().query()).toBeNull();
+	});
+});

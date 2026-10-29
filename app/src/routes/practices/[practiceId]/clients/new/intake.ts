@@ -63,8 +63,9 @@ export function intakeSteps(practiceId: string): JourneyStep[] {
 /**
  * The link that opens the name question directly, with no search in front
  * of it (#1609), naming the screen it is on so Back returns there. Only
- * the overview and the Clients list of a Practice that holds no Client
- * record show one.
+ * a Practice that holds no Client record shows one: on the overview and
+ * the Clients list, and under Save on the Contract Template and Client
+ * Fields (#2194).
  */
 export function startHref(practiceId: string, origin: IntakeOrigin): string {
 	return `${basePath(practiceId)}?${originQuery(origin)}`;
@@ -72,8 +73,8 @@ export function startHref(practiceId: string, origin: IntakeOrigin): string {
 
 /**
  * Where the name question's Back goes: the screen that opened it (#1609).
- * The overview and the Clients list open it directly while the Practice
- * holds no Client record; from the first Client on, the search does, and
+ * The overview, the Clients list and two settings screens open it
+ * directly while the Practice holds no Client record; from the first Client on, the search does, and
  * the search is also where Back goes when the origin is not known.
  */
 export function exitHref(practiceId: string, origin: IntakeOrigin | undefined): string {
@@ -83,6 +84,12 @@ export function exitHref(practiceId: string, origin: IntakeOrigin | undefined): 
 		}
 		case 'clients': {
 			return resolve('/practices/[practiceId]/clients', { practiceId });
+		}
+		case 'contract-template': {
+			return resolve('/practices/[practiceId]/settings/contract-template', { practiceId });
+		}
+		case 'client-fields': {
+			return resolve('/practices/[practiceId]/settings/client-fields', { practiceId });
 		}
 		default: {
 			return resolve('/practices/[practiceId]/clients/search', { practiceId });
