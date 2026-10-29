@@ -32,6 +32,7 @@
 	import Text from '#lib/components/atoms/Text.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import type { PracticeInvoiceListData } from '#lib/invoice.js';
+	import type { PracticeSession } from '../+layout.js';
 
 	/*
 	 * `data` is the read once it lands (#2255). Until then the screen draws
@@ -41,6 +42,9 @@
 	let { data }: { data?: PracticeInvoiceListData } = $props();
 
 	const isNarrowedToOverdue = $derived(page.url.searchParams.get('overdue') === 'true');
+	const canClientsPay = $derived(
+		(page.data as { session?: PracticeSession }).session?.clientsCanPay !== false
+	);
 
 	/*
 	 * Grows from the landed read's first page (#446). The list owns its own
@@ -208,6 +212,16 @@
 		</cluster-l>
 	{/if}
 
+	<!--
+		#270: an empty book looks the same whether nobody has billed yet or
+		Clients cannot pay this Practice at all; this tells the two apart.
+		From the session, so it is drawn on the first frame and the rows
+		never move under it (#2293).
+	-->
+	{#if !canClientsPay}
+		<Notice variant="info" message={clientsCannotPayMessage} />
+	{/if}
+
 	{#if read}
 		<div class="invoices-table">
 			<DataTable
@@ -224,18 +238,6 @@
 		</div>
 	{:else}
 		<Skeleton variant="row" lines={6} label="Loading your invoices" />
-	{/if}
-
-	<!--
-		#270: a standing fact about the Practice, from the same aggregate
-		field the totals already carry -- an empty book looks identical
-		whether nobody has billed anything yet or Clients cannot pay this
-		Practice at all, so this is the only thing on the page that tells the
-		two apart. Under the book, not over it (#2255): it is known only once
-		the read lands, and over the book it pushed the rows down.
-	-->
-	{#if read && !read.clientsCanPay}
-		<Notice variant="info" message={clientsCannotPayMessage} />
 	{/if}
 
 	{#if invoices.loadMoreError}

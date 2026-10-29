@@ -14,7 +14,7 @@
  * the regression test for #542, on a real screen rather than a demo.
  */
 import type { PracticeInvoiceListData } from '#lib/invoice.js';
-import type { RouteFixture, RouteVariant } from '../../../routeFixture.js';
+import { practiceSession, type RouteFixture, type RouteVariant } from '../../../routeFixture.js';
 import { TYPICAL_CLIENTS } from '../../../typicalPilot.js';
 import type { RouteParams as RouteParameters } from './$types';
 import Page from './InvoicesScreen.svelte';
@@ -76,7 +76,6 @@ export const data: PracticeInvoiceListData = {
 	refundedCents: 125_050,
 	overdueCents: 450_000,
 	overdueCount: 1,
-	clientsCanPay: true,
 	// #768: the unnarrowed list, so the fixture sweeps the "Payment due"
 	// column and both filter links in the state a Practice meets first.
 	isNarrowedToOverdue: false
@@ -149,13 +148,31 @@ export const loading: RouteVariant<RouteParameters> = {
 	props: {}
 };
 
+const owner = practiceSession(['owner']).session;
+
+/*
+ * #2293: a Practice Clients cannot pay draws the Notice above the book,
+ * from the session, both while the read runs and once it lands.
+ */
+export const clientsCannotPay: RouteVariant<RouteParameters> = {
+	name: 'The Practice-wide invoice list, at a Practice Clients cannot pay',
+	pageData: { session: { ...owner, clientsCanPay: false } }
+};
+
+export const clientsCannotPayWhileLoading: RouteVariant<RouteParameters> = {
+	name: 'The Practice-wide invoice list, at a Practice Clients cannot pay, while its read runs',
+	props: {},
+	pageData: { session: { ...owner, clientsCanPay: false } }
+};
+
 export const fixture: RouteFixture<RouteParameters> = {
 	name: 'The Practice-wide invoice list',
-	variants: [narrowedToOverdue, typical, loading],
+	variants: [narrowedToOverdue, typical, loading, clientsCannotPay, clientsCannotPayWhileLoading],
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/invoices',
 	props: { data },
+	pageData: { session: { ...owner, clientsCanPay: true } },
 	// The route takes its first page from `load` rather than from a fetch,
 	// so the screen is on the page as soon as it renders; the heading is
 	// still what proves it rendered the screen and not an error state.

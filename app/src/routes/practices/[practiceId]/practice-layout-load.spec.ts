@@ -96,6 +96,27 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 		expect(result).toMatchObject({ session: { hasClients: false } });
 	});
 
+	// #2293: the Invoices list reads this off the session on its first frame.
+	it('carries whether Clients can pay the Practice', async () => {
+		const { load } = await import('./+layout.js');
+		setup({
+			'/api/practices/practice-1/session': {
+				status: 200,
+				body: {
+					staffId: 'staff-9',
+					practiceName: 'Riverside Doula Collective',
+					roles: ['owner'],
+					isContractor: false,
+					clientsCanPay: false
+				}
+			}
+		});
+
+		const result = await load(loadArguments);
+
+		expect(result).toMatchObject({ session: { clientsCanPay: false } });
+	});
+
 	// #2183: saving a Practice's first Client invalidates this name, so the
 	// session (and with it the top bar) is read again on the way out.
 	it('declares the dependency an act invalidates to read the session again', async () => {
