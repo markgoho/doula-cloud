@@ -1,7 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { resolve } from '$app/paths';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
+	import { MAY_CHANGE } from '#lib/settingsSummary.js';
+	import Link from '#lib/components/atoms/Link.svelte';
 	import PracticeQuestionsEditor from '#lib/components/organisms/PracticeQuestionsEditor.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -17,6 +20,12 @@
 		type Field,
 		type FieldType
 	} from '#lib/planTemplate.js';
+	import type { PracticeSession } from '../../+layout.js';
+
+	// The Membership comes off practices/[practiceId]/+layout.ts's
+	// already-resolved read (#835), as the Settings hub reads it.
+	const session = $derived((page.data as { session: PracticeSession }).session);
+	const canChangeContractTemplate = $derived(MAY_CHANGE.contractTemplate(session));
 
 	const planTypes = [
 		{ value: 'care_plan', label: 'Care Plan' },
@@ -176,7 +185,23 @@
 {/snippet}
 
 {#snippet actions()}
-	<Button label="Save" onClick={save} />
+	<!--
+		#2193 (MO-G12): a new Practice judges its Plan Templates and then its
+		Contract Template, and this screen had no way on, so she went back
+		through Settings. The way on sits under Save, not beside it, so it
+		does not read as an alternative to saving; it is drawn only for
+		someone who may change the Contract Template (`MAY_CHANGE`), since
+		a Doula may change the Plan Templates and nothing after them.
+	-->
+	<stack-l space="var(--space-4)">
+		<Button label="Save" onClick={save} />
+		{#if canChangeContractTemplate}
+			<Link
+				href={resolve('/practices/[practiceId]/settings/contract-template', { practiceId: page.params.practiceId! })}
+				label="Next, check your Contract Template"
+			/>
+		{/if}
+	</stack-l>
 {/snippet}
 
 <FormPage
