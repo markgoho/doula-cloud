@@ -104,7 +104,7 @@ export function toInstantRange(from: string, to: string): { from: string; to: st
  * controls and its fetch both read this, so what is shown and what was
  * asked for can never drift apart. */
 export function scheduleFiltersFromParameters(
-	parameters: URLSearchParams,
+	parameters: Pick<URLSearchParams, 'get'>,
 	now: Date = new Date()
 ): ResolvedScheduleFilters {
 	const fallback = defaultScheduleRange(now);

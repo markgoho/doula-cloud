@@ -63,9 +63,24 @@ const routeFiles = globFiles('src/routes/**/+page.svelte', { cwd: appRoot }).fil
 	(file) => !file.startsWith('src/routes/style-guide/')
 );
 
-function hasPageTitle(source: string): boolean {
+const SCREEN_IMPORT = /import \w+ from '\.\/(\w+Screen\.svelte)'/;
+
+/*
+ * A streamed route's `+page.svelte` (#2249) draws its `*Screen.svelte`
+ * from the first frame (#2255), so the Template, and the title with it,
+ * is one file further out: the screen beside it is what is read.
+ */
+function hasOwnPageTitle(source: string): boolean {
 	if (source.includes('PageTitle')) return true;
 	return TEMPLATES_WITH_PAGE_TITLE.some((name) => source.includes(name));
+}
+
+function hasPageTitle(source: string, file: string): boolean {
+	if (hasOwnPageTitle(source)) return true;
+	const screen = SCREEN_IMPORT.exec(source)?.[1];
+	if (screen === undefined) return false;
+	const route = new URL(file, `file://${appRoot}`);
+	return hasOwnPageTitle(readFileSync(new URL(screen, route), 'utf8'));
 }
 
 /*
@@ -102,7 +117,7 @@ describe('every route sets a page title', () => {
 	for (const file of routeFiles) {
 		it(`${file} calls the shared PageTitle primitive`, () => {
 			const source = readFileSync(new URL(file, `file://${appRoot}`), 'utf8');
-			expect(hasPageTitle(source)).toBe(true);
+			expect(hasPageTitle(source, file)).toBe(true);
 		});
 	}
 });

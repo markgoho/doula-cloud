@@ -154,7 +154,7 @@ export function defaultRange(now: Date = new Date()): RosterRange {
 /** Reads the range off a URL's search parameters, falling back to the
  * default range for a day the URL does not name. */
 export function rangeFromParameters(
-	parameters: URLSearchParams,
+	parameters: Pick<URLSearchParams, 'get'>,
 	now: Date = new Date()
 ): RosterRange {
 	const fallback = defaultRange(now);

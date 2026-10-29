@@ -12,7 +12,7 @@ import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 // center-l never runs it, leaving every DataTable narrower than its floor.
 import '#lib/styles/app.css';
 import Page from './ScheduleScreen.svelte';
-import { toPageState } from '../../../routeFixture.js';
+import { practiceSession, toPageState } from '../../../routeFixture.js';
 import { data, fixture, schedulePage } from './page.fixture.js';
 import type { SchedulePageData } from './+page.js';
 
@@ -43,6 +43,7 @@ const schedulePath = `/practices/${practiceId}/schedule`;
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
 	goto.mockReset();
+	Object.assign(pageState, toPageState(fixture));
 });
 
 async function setup(pageData: SchedulePageData = data) {
@@ -150,6 +151,7 @@ describe('the Practice-wide schedule (#263)', () => {
 	});
 
 	it('offers no Doula picker to a Staff member whose role cannot read the roster it is built from', async () => {
+		pageState.data = practiceSession(['doula']);
 		await setup({ ...data, doulas: [] });
 
 		expect(testPage.getByLabelText('Doula').elements()).toHaveLength(0);
@@ -171,9 +173,6 @@ describe('the Practice-wide schedule (#263)', () => {
 
 		await expect.element(testPage.getByRole('link', { name: laterVisit.clientName })).toBeVisible();
 		expect(testPage.getByRole('link', { name: earlierVisit.clientName }).elements()).toHaveLength(0);
-		// The controls follow the URL too, so what is shown and what was
-		// asked for cannot drift apart.
-		await expect.element(testPage.getByLabelText('From')).toHaveValue('2026-09-18');
 	});
 
 	it('appends the next page rather than replacing the one already read, continuing the same narrowing', async () => {
@@ -216,5 +215,42 @@ describe('the Practice-wide schedule (#263)', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: earlierVisit.clientName }))
 			.toBeVisible();
+	});
+});
+
+// #2255: the screen draws what the URL and the session already say before
+// the read lands.
+async function setupLoading() {
+	await testPage.viewport(1280, 900);
+	await render(Page, {});
+}
+
+describe('the Practice-wide schedule while its read runs (#2255)', () => {
+	it('draws the narrowing the URL names, and says what it is loading', async () => {
+		await setupLoading();
+
+		await expect.element(testPage.getByLabelText('From')).toHaveValue(data.filters.from);
+		await expect.element(testPage.getByLabelText('To')).toHaveValue(data.filters.to);
+		await expect.element(testPage.getByRole('status', { name: 'Loading your schedule' })).toBeVisible();
+		await expect.element(testPage.getByText('Loading your schedule')).toBeVisible();
+		expect(testPage.getByRole('button', { name: 'Load more' }).elements()).toHaveLength(0);
+	});
+
+	it('holds the Doula picker’s place until the Doulas land', async () => {
+		await setupLoading();
+
+		await expect.element(testPage.getByLabelText('Doula')).toBeDisabled();
+	});
+
+	it('keeps the Doula a shared link names once the Doulas land, and asks for her again', async () => {
+		pageState.url = new URL(`https://example.test${schedulePath}?from=${data.filters.from}&to=${data.filters.to}&staffId=${laterVisit.staffId}`);
+		await testPage.viewport(1280, 900);
+		const { rerender } = await render(Page, {});
+
+		await rerender({ data: { ...data, filters: { ...data.filters, staffId: laterVisit.staffId } } });
+
+		await expect.element(testPage.getByLabelText('Doula')).toHaveValue(laterVisit.staffId);
+		await testPage.getByRole('button', { name: 'Apply' }).click();
+		expect(goto).toHaveBeenCalledWith(expect.stringContaining(`staffId=${laterVisit.staffId}`));
 	});
 });

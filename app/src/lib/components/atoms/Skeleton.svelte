@@ -118,13 +118,34 @@
 		}
 
 		/* A line of body copy, so a paragraph placeholder reserves the same
-		   space the paragraph will. Narrower than full width on the last
-		   line, because a real last line rarely reaches the margin. */
-		.text span {
-			block-size: var(--text-body-size);
+		   space the paragraph will: each line is a real line box, its
+		   leading and its baseline included, with the bar the height of the
+		   type sitting on it (#2255). A bar with no line box held a
+		   one-line value in a `SummaryList` short of the line its figure
+		   took, and a row aligned on its baseline had none to align to.
+		   Narrower than full width on the last line, because a real last
+		   line rarely reaches the margin. */
+		.text {
+			gap: 0;
 		}
 
-		.text span:last-child {
+		.text span {
+			font-size: var(--text-body-size);
+			line-height: var(--text-body-leading);
+			background-color: transparent;
+		}
+
+		.text span::before {
+			content: '';
+			display: inline-block;
+			vertical-align: text-bottom;
+			block-size: var(--text-body-size);
+			inline-size: 100%;
+			background-color: var(--color-surface-container-high);
+			border-radius: var(--radius);
+		}
+
+		.text span:last-child::before {
 			inline-size: 60%;
 		}
 
