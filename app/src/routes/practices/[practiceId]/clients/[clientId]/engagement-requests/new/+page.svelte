@@ -107,7 +107,6 @@
 	let doula = $state('');
 
 	const submission = new FormSubmission();
-	let hasNoCredits = $state(false);
 
 	const isApprover = $derived(isOwnerOrAdmin(session));
 	const doulaChoices = $derived(doulas ? doulaOptions(doulas.items, session.staffId) : []);
@@ -151,7 +150,23 @@
 	}
 	const title = $derived(detail ? submitLabelFor(fullName(detail)) : 'Start new work');
 	const submitLabel = $derived(detail ? submitLabelFor(firstName(detail)) : '');
-	const hasIntroContent = $derived(hasLiveEngagement || (isApprover && balance !== undefined) || hasNoCredits);
+	// #2186: a press the balance refuses is an entry in the error summary,
+	// which takes focus and announces it, and the entry links to the
+	// Credits screen, where the fix is (ErrorSummary's `href`, #2049).
+	// "None left" because this start always uses exactly one Credit.
+	function creditRefusal(): FormError {
+		return {
+			message: `Buy credits to start work with ${firstName(detail!)}. This Practice has none left.`,
+			href: billingHref()
+		};
+	}
+	// While the summary says it, the notice the form opened with does not
+	// say it a second time beside it: one refusal, in one alert region.
+	const isCreditRefusalShown = $derived(submission.errors.some((entry) => entry.href === billingHref()));
+	const isBalanceNoticeShown = $derived(isBalanceEmpty && !isCreditRefusalShown);
+	const hasIntroContent = $derived(
+		hasLiveEngagement || isBalanceNoticeShown || (isApprover && balance !== undefined && !isBalanceEmpty)
+	);
 
 	function detailHref(): string {
 		return resolve('/practices/[practiceId]/clients/[clientId]', {
@@ -242,6 +257,13 @@
 			found.push({ message: 'Enter the due date', targetId: dueDateId });
 		if (doula === '')
 			found.push({ message: 'Select who the Doula is, or select No Doula yet', targetId: doulaFieldId });
+		// A balance already known to be empty is said beside the questions
+		// still unanswered, so one press tells her everything in the way.
+		// With every question answered the press still goes to the BFF,
+		// which is what refuses it (its 402, below): the balance on screen
+		// was read when the form opened, and Credits bought since then in
+		// another tab would make it stale.
+		if (isBalanceEmpty && found.length > 0) found.push(creditRefusal());
 		return found;
 	}
 
@@ -273,7 +295,6 @@
 
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
-		hasNoCredits = false;
 
 		await submission.run(async () => {
 			const refusals = findRefusals();
@@ -297,9 +318,12 @@
 				request
 			);
 			if (result.noCredits) {
-				hasNoCredits = true;
+				// The race (#2186): a balance that held a Credit when the form
+				// opened holds none now. Reading it as empty takes the stale
+				// "After this, it has N" sentence off the screen.
+				balance = 0;
 				saveDraft();
-				return;
+				return [creditRefusal()];
 			}
 			clearDraft();
 			// #1611: an approved start has an Engagement, and the flow ends
@@ -337,10 +361,10 @@
 			/>
 		{/if}
 
-		{#if hasNoCredits || isBalanceEmpty}
+		{#if isBalanceNoticeShown}
 			<Notice variant="error" message="There are no credits left on this Practice's balance." />
 			<Link href={billingHref()} label="Buy credits" />
-		{:else if isApprover && balance !== undefined}
+		{:else if isApprover && balance !== undefined && !isBalanceEmpty}
 			<!--
 				#1612: one sentence, where a list of "Credit cost" and "Balance
 				after" was. "Welcome credits" by the empty Practice's rule

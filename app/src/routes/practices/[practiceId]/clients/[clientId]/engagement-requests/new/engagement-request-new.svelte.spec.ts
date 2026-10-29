@@ -46,6 +46,8 @@ const clientName = firstName(baseDetail);
 const knownAs = knownAsFrom(baseDetail);
 // #1612: the first sentence of what an approver reads about the Credit.
 const costSentence = `Starting work with ${clientName} uses 1 Credit.`;
+// #2186: the error summary's entry for a press the balance refuses.
+const creditRefusal = `Buy credits to start work with ${clientName}. This Practice has none left.`;
 
 const liveEngagement: EngagementSummary = {
 	engagementId: 'engagement-0',
@@ -358,20 +360,58 @@ describe('the Engagement Request screen', () => {
 		});
 	});
 
-	it('surfaces an empty balance with an inline Buy credits path, leaving the typed form in place', async () => {
-		await setup({ roles: ['owner'], requestStatus: 402 });
+	/*
+	 * #2186: a press the balance refuses says so where she is looking. The
+	 * error summary takes focus and announces it, and its one entry is the
+	 * way forward, a link to the Credits screen. Both paths end the same:
+	 * a balance already empty when the form opened, and the race where it
+	 * still held a Credit at load and none at the press. Either way the
+	 * BFF is what refuses, so both press through to its 402.
+	 */
+	describe('a press the balance refuses (#2186)', () => {
+		it.each([
+			['empty when the form opened', 0],
+			['spent between opening the form and pressing', 3]
+		])('moves focus to a refusal that links to Buy credits, on a balance %s', async (_, balance) => {
+			await setup({ roles: ['owner'], balance, requestStatus: 402 });
 
-		await testPage.getByLabelText('Birth').click();
-		await testPage.getByLabelText('Due date').fill('2027-03-01');
-		await testPage.getByLabelText('No Doula yet').click();
-		await testPage.getByRole('button', { name: `Start work with ${clientName}` }).click();
+			await testPage.getByLabelText('Birth').click();
+			await testPage.getByLabelText('Due date').fill('2027-03-01');
+			await testPage.getByLabelText('No Doula yet').click();
+			await testPage.getByRole('button', { name: `Start work with ${clientName}` }).click();
 
-		await expect.element(testPage.getByRole('link', { name: 'Buy credits' })).toBeVisible();
-		// Nothing was lost: the same mounted form still holds what she typed.
-		await expect.element(testPage.getByLabelText('Due date')).toHaveValue('2027-03-01');
-		await expect.element(testPage.getByLabelText('Birth')).toBeChecked();
-		expect(goto).not.toHaveBeenCalled();
-		expect(sessionStorage.getItem(draftKey)).toContain('2027-03-01');
+			const refusal = testPage.getByRole('link', { name: creditRefusal, exact: true });
+			await expect.element(refusal).toHaveAttribute('href', `/practices/${practiceId}/billing`);
+			await expect.element(testPage.getByRole('alert').filter({ hasText: creditRefusal })).toBeVisible();
+			// Focus is on the summary that holds the refusal, not on the
+			// button she pressed. The summary's container has no role of its
+			// own (ErrorSummary.svelte), so it is read off the DOM.
+			await expect.poll(() => document.activeElement?.contains(refusal.element())).toBe(true);
+			// Said once: the notice the form opened with gives way to the
+			// summary, and the stale "After this, it has 2." sentence goes.
+			expect(testPage.getByText("There are no credits left on this Practice's balance.").elements()).toHaveLength(0);
+			expect(testPage.getByText(costSentence).elements()).toHaveLength(0);
+			// Nothing was lost: the same mounted form still holds what she typed.
+			await expect.element(testPage.getByLabelText('Due date')).toHaveValue('2027-03-01');
+			await expect.element(testPage.getByLabelText('Birth')).toBeChecked();
+			expect(goto).not.toHaveBeenCalled();
+			expect(sessionStorage.getItem(draftKey)).toContain('2027-03-01');
+		});
+
+		it('lists the refusal beside the questions still unanswered, so one press says everything', async () => {
+			await setup({ roles: ['owner'], balance: 0, requestStatus: 402 });
+
+			await testPage.getByRole('button', { name: `Start work with ${clientName}` }).click();
+
+			await expect
+				.element(testPage.getByRole('link', { name: 'Select whether this is birth or postpartum work' }))
+				.toBeVisible();
+			await expect.element(testPage.getByRole('link', { name: creditRefusal, exact: true })).toBeVisible();
+			expect(apiFetchWithSession).not.toHaveBeenCalledWith(
+				expect.stringMatching(/\/engagement-requests$/),
+				expect.anything()
+			);
+		});
 	});
 
 	it('restores a saved draft on mount, the far side of the Buy Credits round trip', async () => {
