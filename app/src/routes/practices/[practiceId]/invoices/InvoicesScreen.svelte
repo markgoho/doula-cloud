@@ -52,6 +52,14 @@
 		failureMessage: 'Failed to load more invoices'
 	});
 
+	// #2254: a narrowing re-runs `load` without remounting this screen. The
+	// derived holds back a rerender that hands back the same read.
+	const read = $derived(data);
+	$effect(() => {
+		const first = read;
+		untrack(() => invoices.reset(first));
+	});
+
 	/*
 	 * The totals stay the load's, never the loaded pages': the BFF returns
 	 * the whole book's figures on every page, so paging must not make

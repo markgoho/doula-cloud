@@ -22,7 +22,7 @@ import { data, fixture } from './page.fixture.js';
 const pageState = vi.hoisted(() => ({
 	params: {} as Record<string, string>,
 	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
+	data: {} as Record<string, unknown>,
 }));
 vi.mock('$app/state', () => ({ page: pageState }));
 if (!customElements.get('center-l')) registerLayoutPrimitives();
@@ -42,7 +42,7 @@ async function setup(page: PracticeInvoiceListData = data) {
 	// content floor stacks into below 46rem -- the same call the sibling
 	// spec makes, for the same reason.
 	await testPage.viewport(1440, 900);
-	await render(Page, { data: page });
+	return render(Page, { data: page });
 }
 
 describe('the overdue book (#768)', () => {
@@ -52,7 +52,9 @@ describe('the overdue book (#768)', () => {
 		// $4,500.00 owed, all of it overdue -- the fixture's first
 		// row is open and past its due date.
 		await expect.element(testPage.getByText('Overdue invoices')).toBeVisible();
-		await expect.element(testPage.getByRole('term').filter({ hasText: /^Overdue$/ })).toBeVisible();
+		await expect
+			.element(testPage.getByRole('term').filter({ hasText: /^Overdue$/ }))
+			.toBeVisible();
 	});
 
 	it('says how late an unpaid invoice is, in the row itself', async () => {
@@ -61,24 +63,40 @@ describe('the overdue book (#768)', () => {
 		// The cell, not the whole row: DataTable renders both a table cell
 		// and a record-view line for every value, and only one of them is
 		// on screen at this width.
-		await expect.element(testPage.getByRole('cell', { name: /days overdue/ })).toBeVisible();
+		await expect
+			.element(testPage.getByRole('cell', { name: /days overdue/ }))
+			.toBeVisible();
 	});
 
 	it('offers the narrowing as a link, carrying the practice overdue count', async () => {
 		await setup();
 
 		await expect
-			.element(testPage.getByRole('link', { name: `Overdue (${data.overdueCount})` }))
+			.element(
+				testPage.getByRole('link', { name: `Overdue (${data.overdueCount})` })
+			)
 			.toBeVisible();
-		await expect.element(testPage.getByRole('link', { name: 'All invoices' })).toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'All invoices' }))
+			.toBeVisible();
 	});
 
 	it('asks every later page for the same narrowing it was read under', async () => {
 		apiFetchWithSession.mockResolvedValue(
-			jsonResponse({ ...data, items: [], hasMore: false, nextCursor: undefined })
+			jsonResponse({
+				...data,
+				items: [],
+				hasMore: false,
+				nextCursor: undefined,
+			})
 		);
 
-		await setup({ ...data, isNarrowedToOverdue: true, hasMore: true, nextCursor: 'cursor-1' });
+		await setup({
+			...data,
+			isNarrowedToOverdue: true,
+			hasMore: true,
+			nextCursor: 'cursor-1',
+		});
 		await testPage.getByRole('button', { name: 'Load more' }).click();
 
 		expect(apiFetchWithSession).toHaveBeenCalledWith(
@@ -87,8 +105,63 @@ describe('the overdue book (#768)', () => {
 	});
 
 	it('says nothing is late rather than "no invoices yet" when the narrowed list is empty', async () => {
-		await setup({ ...data, items: [], isNarrowedToOverdue: true, overdueCents: 0, overdueCount: 0 });
+		await setup({
+			...data,
+			items: [],
+			isNarrowedToOverdue: true,
+			overdueCents: 0,
+			overdueCount: 0,
+		});
 
-		await expect.element(testPage.getByText(/Nothing is overdue/)).toBeVisible();
+		await expect
+			.element(testPage.getByText(/Nothing is overdue/))
+			.toBeVisible();
+	});
+
+	it('shows only the narrowed rows when the narrowing changes, and the whole book when it is lifted (#2254)', async () => {
+		const [overdueInvoice, paidInvoice] = data.items;
+		const { rerender } = await setup();
+
+		await rerender({
+			data: { ...data, items: [overdueInvoice], isNarrowedToOverdue: true },
+		});
+
+		await expect
+			.element(testPage.getByRole('link', { name: overdueInvoice.clientName }))
+			.toBeVisible();
+		expect(
+			testPage.getByRole('link', { name: paidInvoice.clientName }).elements()
+		).toHaveLength(0);
+
+		await rerender({ data: { ...data } });
+
+		await expect
+			.element(testPage.getByRole('link', { name: paidInvoice.clientName }))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: overdueInvoice.clientName }))
+			.toBeVisible();
+	});
+
+	it('keeps the pages already loaded when the same read is handed back', async () => {
+		apiFetchWithSession.mockResolvedValue(
+			jsonResponse({
+				...data,
+				items: [{ ...data.items[0], id: 'inv-3', clientName: 'Cleo' }],
+				hasMore: false,
+			})
+		);
+		const first = { ...data, hasMore: true, nextCursor: 'cursor-1' };
+		const { rerender } = await setup(first);
+		await testPage.getByRole('button', { name: 'Load more' }).click();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Cleo' }))
+			.toBeVisible();
+
+		await rerender({ data: first });
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Cleo' }))
+			.toBeVisible();
 	});
 });
