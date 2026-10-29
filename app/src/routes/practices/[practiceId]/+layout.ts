@@ -49,6 +49,10 @@ export interface PracticeSession {
 	// it; it is optional so the route fixtures that predate it need not
 	// restate it, and only `false` narrows the bar.
 	hasClients?: boolean;
+	// #2293: whether Clients can pay this Practice through Stripe (#270),
+	// so the Invoices list draws its Notice above the rows on the first
+	// frame. This load always sets it; only `false` draws the Notice.
+	clientsCanPay?: boolean;
 }
 
 /**
@@ -139,6 +143,7 @@ export const load: LayoutLoad = async ({ params, url, depends }): Promise<{ sess
 		secondFactor: boolean;
 		agreementDue?: DueVersion[];
 		hasClients: boolean;
+		clientsCanPay: boolean;
 	} = await response.json();
 
 	if (body.pendingDeletion && url.pathname !== deleteSettingsPath(params.practiceId)) {
@@ -166,7 +171,8 @@ export const load: LayoutLoad = async ({ params, url, depends }): Promise<{ sess
 			pendingDeletion: body.pendingDeletion,
 			secondFactor: body.secondFactor,
 			agreementDue: body.agreementDue,
-			hasClients: body.hasClients
+			hasClients: body.hasClients,
+			clientsCanPay: body.clientsCanPay
 		}
 	};
 };

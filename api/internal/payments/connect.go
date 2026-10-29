@@ -214,8 +214,10 @@ func PostConnectHandler(client Client) http.Handler {
 // column directly rather than a live Stripe retrieve: unlike the Payments
 // settings screen's own GetConnectStatusHandler, which is deliberately
 // backed by an on-demand Account fetch, every other reader of this fact
-// -- the Engagement read (engagement.Detail.ClientsCanPay), the
-// Practice-wide Invoice totals, and PostInvoiceHandler's own gate --
+// -- the Engagement read (engagement.Detail.ClientsCanPay), the Practice
+// session (staffauth.PracticeSessionResponse.ClientsCanPay, which reads
+// the same column itself because staffauth cannot import this package),
+// and PostInvoiceHandler's own gate --
 // needs an instant answer on a request that is not itself about Stripe
 // Connect, not a network round trip to it.
 func ClientsCanPay(ctx context.Context, tx *sql.Tx, practiceID string) (bool, error) {

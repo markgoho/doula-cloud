@@ -130,6 +130,40 @@ func TestPracticeSessionHandler_HasClients(t *testing.T) {
 	}
 }
 
+// TestPracticeSessionHandler_ClientsCanPay proves ClientsCanPay (#2293)
+// is payments.ClientsCanPay's fact: false until the Practice's card
+// payments capability is active, then true.
+func TestPracticeSessionHandler_ClientsCanPay(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "practice-session-clients-can-pay"
+	practiceID := testdb.SeedPractice(t, db, "Clients Can Pay Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, uid, []string{ownerRole}, employeeType)
+
+	srv, session := newPracticeSessionServer(t, db, uid)
+	defer srv.Close()
+
+	read := func() staffauth.PracticeSessionResponse {
+		t.Helper()
+		resp := getPracticeSession(t, srv, session, practiceID)
+		defer resp.Body.Close()
+		var out staffauth.PracticeSessionResponse
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		return out
+	}
+
+	if read().ClientsCanPay {
+		t.Fatal("clientsCanPay = true before card payments are active, want false")
+	}
+
+	testdb.SeedClientsCanPay(t, db, practiceID)
+
+	if !read().ClientsCanPay {
+		t.Fatal("clientsCanPay = false once card payments are active, want true")
+	}
+}
+
 // TestPracticeSessionHandler_EmployeeNotContractor proves IsContractor
 // reads false for an employee Membership, not just true for a
 // contractor.

@@ -70,6 +70,13 @@ type PracticeSessionResponse struct {
 	// it would hide her Offers. It is not the count client.CountHandler
 	// withholds from her -- only whether the Practice has begun.
 	HasClients bool `json:"hasClients"`
+	// ClientsCanPay is payments.ClientsCanPay's fact (#270): the Practice's
+	// card payments capability is active. It rides on the session so the
+	// Invoices list can say "Clients cannot pay this Practice yet" above
+	// its rows from the first frame, before the list's own read lands
+	// (#2293). The Practice's answer for every caller, as the Engagement
+	// read already gives it; PostInvoiceHandler's gate is what refuses.
+	ClientsCanPay bool `json:"clientsCanPay"`
 }
 
 // hasClientsQuery names practice_id itself rather than leaving the
@@ -78,6 +85,10 @@ type PracticeSessionResponse struct {
 // pointer to a survivor that is still counted, so excluding it changes
 // nothing but keeps the read the same as the Client list's.
 const hasClientsQuery = `SELECT EXISTS (SELECT 1 FROM clients WHERE practice_id = $1 AND merged_into IS NULL)`
+
+// practiceQuery's second column is payments.ClientsCanPay's predicate,
+// written out here because payments imports this package.
+const practiceQuery = `SELECT name, stripe_connect_card_payments_status = 'active' FROM practices WHERE id = $1`
 
 // PracticeSessionHandler answers GET .../session: which Practice, which
 // roles, which employment type. Moved from routes_practice.go by #836 --
@@ -89,7 +100,8 @@ func PracticeSessionHandler() http.Handler {
 		practiceID, _ := PracticeID(r.Context())
 
 		var name string
-		if err := tx.QueryRowContext(r.Context(), `SELECT name FROM practices WHERE id = $1`, practiceID).Scan(&name); err != nil {
+		var clientsCanPay bool
+		if err := tx.QueryRowContext(r.Context(), practiceQuery, practiceID).Scan(&name, &clientsCanPay); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -121,6 +133,7 @@ func PracticeSessionHandler() http.Handler {
 			SecondFactor:    SecondFactor(r.Context()),
 			AgreementDue:    agreementDueFrom(r.Context()),
 			HasClients:      hasClients,
+			ClientsCanPay:   clientsCanPay,
 		}
 		apierr.WriteJSON(w, http.StatusOK, resp)
 	})

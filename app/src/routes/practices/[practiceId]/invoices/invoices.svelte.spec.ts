@@ -1,5 +1,5 @@
 import { page as testPage } from 'vitest/browser';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { PracticeInvoiceListData } from '#lib/invoice.js';
@@ -12,7 +12,7 @@ import '#lib/styles/app.css';
 import { expectOneFramedHeading } from '#lib/components/templates/pageFrame.testing.js';
 import Page from './InvoicesScreen.svelte';
 import { toPageState } from '../../../routeFixture.js';
-import { data, fixture } from './page.fixture.js';
+import { clientsCannotPay, data, fixture } from './page.fixture.js';
 
 /*
  * The screen's content and the `page` it reads both come from the route's
@@ -136,25 +136,6 @@ describe('the Practice-wide invoice list (#265)', () => {
 		await expect.element(testPage.getByRole('link', { name: 'All invoices' })).not.toBeInTheDocument();
 	});
 
-	// #270: a standing fact from the envelope's own clientsCanPay field,
-	// never derived from an empty book -- an empty book looks the same
-	// whether nobody has billed anything yet or Clients cannot pay at all.
-	it('shows a standing Notice when Clients cannot pay this Practice', async () => {
-		await setup({ ...data, clientsCanPay: false });
-
-		await expect
-			.element(testPage.getByText('Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe.'))
-			.toBeVisible();
-	});
-
-	it('shows no Notice when Clients can pay this Practice', async () => {
-		await setup();
-
-		await expect
-			.element(testPage.getByText('Clients cannot pay this Practice yet.', { exact: false }))
-			.not.toBeInTheDocument();
-	});
-
 	it('appends the next page rather than replacing the one already read', async () => {
 		// A second page is content the fixture does not hold: the screen the
 		// sweep measures is the first page, and this is what arrives after an
@@ -233,5 +214,58 @@ describe('the Practice-wide invoice list while its read runs (#2255)', () => {
 		await expect.element(testPage.getByRole('link', { name: 'All invoices' })).toHaveAttribute('aria-current', 'page');
 		await expect.element(testPage.getByRole('link', { name: 'Overdue', exact: true })).toBeVisible();
 		await expect.element(testPage.getByRole('status', { name: 'Loading your invoices' })).toBeVisible();
+	});
+});
+
+// #270, #2293: from the session, so it is above the book on the first frame.
+const cannotPayText = 'Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe.';
+
+async function setupClientsCanPay(canPay: boolean, read: PracticeInvoiceListData | undefined) {
+	pageState.data = toPageState(canPay ? fixture : { ...fixture, ...clientsCannotPay }).data;
+	await testPage.viewport(1440, 900);
+	await render(Page, read ? { data: read } : {});
+}
+
+function isBefore(earlier: Element, later: Element): boolean {
+	return Boolean(earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING);
+}
+
+describe('whether Clients can pay this Practice (#270, #2293)', () => {
+	afterEach(() => {
+		pageState.data = toPageState(fixture).data;
+	});
+
+	it('shows the Notice above the invoice table', async () => {
+		await setupClientsCanPay(false, data);
+
+		const notice = testPage.getByText(cannotPayText);
+		await expect.element(notice).toBeVisible();
+		await expect.element(testPage.getByRole('table')).toBeVisible();
+		expect(isBefore(notice.element(), testPage.getByRole('table').element())).toBe(true);
+	});
+
+	it('shows the Notice above the rows’ placeholder while the read runs', async () => {
+		await setupClientsCanPay(false, undefined);
+
+		const notice = testPage.getByText(cannotPayText);
+		const loading = testPage.getByRole('status', { name: 'Loading your invoices' });
+		await expect.element(notice).toBeVisible();
+		await expect.element(loading).toBeVisible();
+		expect(isBefore(notice.element(), loading.element())).toBe(true);
+	});
+
+	it('shows the Notice on an empty book', async () => {
+		await setupClientsCanPay(false, { ...data, items: [], outstandingCents: 0, outstandingCount: 0, paidCents: 0 });
+
+		await expect.element(testPage.getByText(cannotPayText)).toBeVisible();
+	});
+
+	it('shows no Notice when Clients can pay, while the read runs or once it lands', async () => {
+		await setupClientsCanPay(true, undefined);
+		await expect.element(testPage.getByText(cannotPayText)).not.toBeInTheDocument();
+
+		await setupClientsCanPay(true, data);
+		await expect.element(testPage.getByRole('table')).toBeVisible();
+		await expect.element(testPage.getByText(cannotPayText)).not.toBeInTheDocument();
 	});
 });

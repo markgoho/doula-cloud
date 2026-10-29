@@ -134,11 +134,6 @@ export interface PracticeInvoicePage {
 	 * total here. */
 	overdueCents: number;
 	overdueCount: number;
-	/** Whether Clients can pay this Practice at all (#270) -- an aggregate
-	 * fact alongside the three totals above, not derived from them: an
-	 * empty book looks the same whether nobody has billed anything yet or
-	 * Clients cannot pay this Practice at all. */
-	clientsCanPay: boolean;
 }
 
 /** What the Practice-wide Invoice route's `load` hands its page: one page
