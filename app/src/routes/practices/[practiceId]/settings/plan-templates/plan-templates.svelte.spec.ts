@@ -12,7 +12,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import Page from './+page.svelte';
 import { toApiResponder, toPageState } from '../../../../routeFixture.js';
-import { birthTemplate, careTemplate, fixture } from './page.fixture.js';
+import { asDoula, birthTemplate, careTemplate, fixture } from './page.fixture.js';
 
 const pageState = vi.hoisted(() => ({
 	params: {} as Record<string, string>,
@@ -137,5 +137,37 @@ describe('plan-templates settings screen: it introduces itself (#865)', () => {
 				)
 			)
 			.toBeVisible();
+	});
+});
+
+/*
+ * #2193 (MO-G12): stage 2 of the solo doula's journey goes from the Plan
+ * Templates to the Contract Template, and this screen had no way on, so
+ * the walk passed back through the Settings hub. The way on is drawn only
+ * for someone who may change the Contract Template (`MAY_CHANGE`, Owner
+ * only): a Doula may change the Plan Templates and nothing after them.
+ */
+function nextLink() {
+	return testPage.getByRole('link', { name: 'Next, check your Contract Template' });
+}
+
+describe('plan-templates settings screen: the way on to the Contract Template (#2193)', () => {
+	it('links an Owner straight on to the Contract Template', async () => {
+		await setup();
+
+		await expect.element(nextLink()).toBeVisible();
+		await expect.element(nextLink()).toHaveAttribute('href', '/practices/practice-1/settings/contract-template');
+	});
+
+	it('draws no way on for a Doula, who may not change the Contract Template', async () => {
+		const ownerData = pageState.data;
+		pageState.data = toPageState({ ...fixture, ...asDoula }).data;
+		try {
+			await setup();
+			await expect.element(testPage.getByRole('button', { name: 'Save' })).toBeVisible();
+			expect(nextLink().query()).toBeNull();
+		} finally {
+			pageState.data = ownerData;
+		}
 	});
 });

@@ -24,7 +24,7 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { Template } from '#lib/planTemplate.js';
-import type { RouteFixture } from '../../../../routeFixture.js';
+import { practiceSession, type RouteFixture, type RouteVariant } from '../../../../routeFixture.js';
 import Page from './+page.svelte';
 
 export const careTemplate: Template = {
@@ -67,11 +67,22 @@ function respond(path: string) {
 	return jsonResponse(path.endsWith('/plan-templates/birth_plan') ? birthTemplate : careTemplate);
 }
 
+/*
+ * #2193: a Doula may change the Plan Templates but not the Contract
+ * Template, so her screen draws no way on to it.
+ */
+export const asDoula: RouteVariant = {
+	name: 'The Plan Template editor, as a Doula',
+	pageData: practiceSession(['doula'])
+};
+
 export const fixture: RouteFixture = {
 	name: 'The Plan Template editor',
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/settings/plan-templates',
+	pageData: practiceSession(['owner']),
 	respond,
-	readyText: 'Plan Templates'
+	readyText: 'Plan Templates',
+	variants: [asDoula]
 };
