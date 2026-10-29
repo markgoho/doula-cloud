@@ -175,16 +175,16 @@ Until this is built, the whole roster is unbuildable through the UI, and every P
 
 ### Stage 9 — Edit Plan Templates for the whole Practice
 
-**Thinking**: "Add the hospital-transfer question to every birth plan." **Pain points**: none identified.
+**Thinking**: "Add the hospital-transfer question to every birth plan." **Pain points**: adding a question takes three screens, not one: the Plan Templates list, the kind of answer, and the new question's own page, whose save returns her to the list. That is the founder's decision on [#2193](https://github.com/markgoho/doula-cloud/issues/2193) (2026-10-29): GOV.UK's "Add another" shape, one question per page, so that no screen shows every question's controls at once.
 
 **Budget**:
 
-* **Screens**: 1 (Hick's Law, Flow)
+* **Screens**: 3 (Hick's Law, Flow)
 * **Decisions**: 7 (Hick's Law, Miller's Law)
 * **Confirmation**: yes (Peak-End Rule)
 * **320px**: yes (ADR-0024)
 
-- **9.1** — `/practices/[practiceId]/settings/plan-templates`, `PUT /api/practices/{id}/plan-templates/{planType}` (owner-gated).
+- **9.1** — `/practices/[practiceId]/settings/plan-templates`, **Add a question**, its kind of answer, then the question's own page, whose save is `PUT /api/practices/{id}/plan-templates/{planType}` (owner-gated) with the one question added.
 - **9.2** — Confirm an already-filled Plan Instance is unchanged. It snapshots the field definitions at creation (`00012_plan_instances.sql`), so this **passes**.
 
 ## Gaps found

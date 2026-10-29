@@ -1,5 +1,5 @@
 /*
- * The Client Field Template editor, as the continuum check sees it
+ * The Client Fields list, as the continuum check sees it
  * (#595).
  *
  * A field's own `label` is a Practice's free text (what extra question
@@ -68,7 +68,7 @@ export const template: Template = {
  * plus a sentence of this repo's own copy.
  */
 export const asDoula: RouteVariant = {
-	name: 'The Client Field Template editor, as a Doula',
+	name: 'The Client Fields list, as a Doula',
 	pageData: practiceSession(['doula'])
 };
 
@@ -79,12 +79,12 @@ export const asDoula: RouteVariant = {
  * session draws no link.
  */
 export const noClientYet: RouteVariant = {
-	name: 'The Client Field Template editor, at a Practice with no Client yet',
+	name: 'The Client Fields list, at a Practice with no Client yet',
 	pageData: { session: { ...practiceSession(['owner']).session, hasClients: false } }
 };
 
 export const fixture: RouteFixture = {
-	name: 'The Client Field Template editor, as an Owner',
+	name: 'The Client Fields list, as an Owner',
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/settings/client-fields',

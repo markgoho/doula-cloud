@@ -1,5 +1,5 @@
 /*
- * The Plan Template editor, as the continuum check sees it (#595).
+ * The Plan Templates list, as the continuum check sees it (#595).
  *
  * A field's own `label` -- the question a Practice wants asked of every
  * Client's Birth Plan -- is its one free-text surface, so it carries
@@ -72,12 +72,12 @@ function respond(path: string) {
  * Template, so her screen draws no way on to it.
  */
 export const asDoula: RouteVariant = {
-	name: 'The Plan Template editor, as a Doula',
+	name: 'The Plan Templates list, as a Doula',
 	pageData: practiceSession(['doula'])
 };
 
 export const fixture: RouteFixture = {
-	name: 'The Plan Template editor',
+	name: 'The Plan Templates list',
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/settings/plan-templates',

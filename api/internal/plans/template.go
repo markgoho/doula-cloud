@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"slices"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -141,18 +142,8 @@ func PutTemplateHandler() http.Handler {
 			return
 		}
 
-		fieldsJSON, err := json.Marshal(fields)
-		if err != nil {
-			// coverage:ignore reason: Field always marshals cleanly, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		if _, err := tx.ExecContext(r.Context(),
-			`INSERT INTO plan_templates (practice_id, plan_type, fields) VALUES ($1, $2, $3)
-			 ON CONFLICT (practice_id, plan_type) DO UPDATE SET fields = EXCLUDED.fields`,
-			practiceID, planType, fieldsJSON,
-		); err != nil {
+		staffID, _ := staffauth.StaffID(r.Context())
+		if err := saveTemplateFields(r.Context(), tx, practiceID, staffID, planType, fields); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -160,6 +151,70 @@ func PutTemplateHandler() http.Handler {
 
 		apierr.WriteJSON(w, http.StatusOK, TemplateResponse{PlanType: planType, Fields: fields})
 	})
+}
+
+// saveTemplateFields upserts practiceID's planType template and, when
+// fields differs from what was stored, writes one activity row
+// (subject_kind 'plan_template', ADR-0022) naming who changed it and
+// holding both sides -- the audit trail CLAUDE.md asks every state change
+// to leave, the same shape clientfieldtemplate.saveFields writes. Each of
+// #2193's question pages saves the whole list with one question changed,
+// so one row is one question's change. A no-op PUT writes none.
+func saveTemplateFields(ctx context.Context, tx *sql.Tx, practiceID, staffID, planType string, fields []Field) error {
+	previous, _, err := fetchFields(ctx, tx, practiceID, planType)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return err
+	}
+
+	fieldsJSON, err := json.Marshal(fields)
+	if err != nil {
+		// coverage:ignore reason: Field always marshals cleanly, not exercised by unit tests
+		return fmt.Errorf("plans: marshal fields: %w", err)
+	}
+
+	var templateID string
+	if err := tx.QueryRowContext(ctx,
+		`INSERT INTO plan_templates (practice_id, plan_type, fields) VALUES ($1, $2, $3)
+		 ON CONFLICT (practice_id, plan_type) DO UPDATE SET fields = EXCLUDED.fields
+		 RETURNING id`,
+		practiceID, planType, fieldsJSON,
+	).Scan(&templateID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("plans: save fields: %w", err)
+	}
+
+	// A template with no row yet reads as an empty list, so its first
+	// save records what it was created with.
+	if previous == nil {
+		previous = []Field{}
+	}
+	previousJSON, err := json.Marshal(previous)
+	if err != nil {
+		// coverage:ignore reason: Field always marshals cleanly, not exercised by unit tests
+		return fmt.Errorf("plans: marshal previous fields: %w", err)
+	}
+	if string(previousJSON) == string(fieldsJSON) {
+		return nil
+	}
+
+	diff, err := json.Marshal(map[string]json.RawMessage{"before": previousJSON, "after": fieldsJSON})
+	if err != nil {
+		// coverage:ignore reason: both sides always marshal cleanly, not exercised by unit tests
+		return fmt.Errorf("plans: marshal diff: %w", err)
+	}
+	if err := activity.Record(ctx, tx, activity.Entry{
+		PracticeID:  practiceID,
+		SubjectKind: "plan_template",
+		SubjectID:   templateID,
+		Action:      "updated",
+		Diff:        diff,
+		Actor:       activity.StaffActor(staffID),
+	}); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("plans: record audit event: %w", err)
+	}
+	return nil
 }
 
 // normalizeFields validates fields against the ADR-0001 palette and

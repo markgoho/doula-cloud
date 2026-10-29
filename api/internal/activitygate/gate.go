@@ -195,6 +195,7 @@ var registry = map[string]Rule{
 // a considered omission from the bug this ticket fixed.
 var unregistered = map[string]string{
 	"client_field_template": "written by clientfieldtemplate.Save (which spells the kind as a literal, having no constant) and read back by nothing -- no handler queries activity WHERE subject_kind = 'client_field_template'. A reader added later must register a Rule before this gate will ever return true for it (#485's AC5).",
+	"plan_template":         "written by plans.saveTemplateFields (#2193, a literal like client_field_template's) as the audit trail of who changed a Plan Template and how, and read back by nothing yet -- no handler queries activity WHERE subject_kind = 'plan_template'. A reader added later must register a Rule before this gate will ever return true for it.",
 }
 
 // engagementRestrictedActions adapts activity.MoneyActions() (the write

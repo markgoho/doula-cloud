@@ -74,8 +74,8 @@
 		ariaControls?: string;
 		/*
 		 * Same mechanism as `Link`'s own `describedBy` (#515): a repeated
-		 * per-row Button -- DataTable's rowActions, PracticeQuestionsEditor's
-		 * "Move up"/"Move down"/"Remove" -- reads the same bare word on
+		 * per-row Button -- DataTable's rowActions, the Client Fields' archived
+		 * list's "Collect again" -- reads the same bare word on
 		 * every row to a screen-reader user tabbing through or scanning a
 		 * rotor's controls list. The caller joins this to a visually-hidden
 		 * sibling naming the row, the same way CheckAnswers's Change links

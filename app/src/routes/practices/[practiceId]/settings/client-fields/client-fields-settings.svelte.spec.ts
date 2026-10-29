@@ -1,19 +1,22 @@
+/*
+ * The Client Fields list (#2193): GOV.UK's "Add another" shape on the
+ * Plan Templates' component. A row per question still asked, a Change on
+ * each to its own page, one "Add a question", and the archived questions
+ * as a list of their own with "Collect again". What a question's save did
+ * is said here when it lands (#2194, #1710).
+ *
+ * Read is every Staff member (ADR-0017), write is Owner or Admin (#460).
+ */
 import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { Field } from '#lib/clientFieldTemplate.js';
 import Page from './+page.svelte';
-import { toPageState } from '../../../../routeFixture.js';
+import { practiceSession, toPageState } from '../../../../routeFixture.js';
 import { fixture, template } from './page.fixture.js';
+import { clientFieldsSavedMessage } from './clientFieldPages.js';
 
-/*
- * The Template this screen edits, and the `page` it reads, both come from
- * the route's own fixture (#596) -- so the screen this spec asserts on
- * and the screen the continuum sweep measures are one description.
- * `vi.mock` is hoisted above every import, so `pageState` is declared
- * empty and filled from the fixture once the imports have run.
- */
 const pageState = vi.hoisted(() => ({
 	params: {} as Record<string, string>,
 	url: new URL('https://example.test/'),
@@ -22,119 +25,164 @@ const pageState = vi.hoisted(() => ({
 vi.mock('$app/state', () => ({ page: pageState }));
 Object.assign(pageState, toPageState(fixture));
 
+const takeOutcome = vi.hoisted(() => vi.fn());
+vi.mock('#lib/outcome.js', () => ({ takeOutcome, gotoWithOutcome: vi.fn() }));
+
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
 	apiFetchWithSession
 }));
 
-const defaultFields: Field[] = template.fields;
-const [firstField] = defaultFields;
+const activeFields = template.fields.filter((field) => !field.archived);
+const archivedField = template.fields.find((field) => field.archived)!;
 
-interface MockOptions {
+interface SetupOptions {
 	fields?: Field[];
 	roles?: string[];
 	// Omitted is a session that does not say, which draws no link (#2183).
 	hasClients?: boolean;
+	outcome?: string;
+	putRefusal?: string;
 }
 
-/*
- * #461: read is every Staff member (ADR-0017), write is Owner or Admin
- * (#460's RequireOwnerOrAdmin) -- this mirrors the "load for everyone,
- * gate the write controls" test shape payments-settings.svelte.spec.ts
- * already uses for the same split. The Membership (roles) comes off
- * page.data.session (#835), not a fetch this mock has to answer.
- */
-function mockApi({ fields = defaultFields, roles = [], hasClients }: MockOptions = {}) {
-	pageState.data = {
-		session: {
-			practiceId: 'practice-1',
-			practiceName: 'Riverside Doula Collective',
-			roles,
-			isContractor: false,
-			hasClients
+// A PUT's own body, sent back as the saved template.
+function echo(init: RequestInit): Promise<Response> {
+	const sent: unknown = JSON.parse(String(init.body));
+	return Promise.resolve(jsonResponse(sent));
+}
+
+async function setup({ fields = template.fields, roles = ['owner'], hasClients, outcome, putRefusal }: SetupOptions = {}) {
+	pageState.data = { session: { ...practiceSession(roles).session, hasClients } };
+	takeOutcome.mockReturnValue(outcome);
+	apiFetchWithSession.mockImplementation((_path: string, init?: RequestInit) => {
+		if (init?.method === 'PUT') {
+			if (putRefusal) return Promise.resolve(jsonResponse({ message: putRefusal }, 400));
+			return echo(init);
 		}
-	};
-	apiFetchWithSession.mockImplementation(() => Promise.resolve(jsonResponse({ fields })));
+		return Promise.resolve(jsonResponse({ fields }));
+	});
+	await render(Page, {});
+}
+
+function changeLinks() {
+	return testPage.getByRole('link', { name: 'Change', exact: true });
+}
+
+function addLink() {
+	return testPage.getByRole('link', { name: 'Add a question' });
 }
 
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
+	takeOutcome.mockReset();
 });
 
-async function setup(options: MockOptions = {}) {
-	mockApi(options);
-	await render(Page, {});
-}
+describe('client fields settings screen (#2193)', () => {
+	it('lists each question still asked with a Change to its own page, for an Owner', async () => {
+		await setup();
 
-describe('client fields settings screen', () => {
-	it('shows the editor and a Save button for an Owner', async () => {
-		await setup({ roles: ['owner'] });
-
-		await expect.element(testPage.getByLabelText('Question', { exact: true }).first()).toHaveValue(firstField.label);
-		await expect.element(testPage.getByRole('button', { name: 'Save' })).toBeVisible();
+		expect(changeLinks().elements()).toHaveLength(activeFields.length);
+		await expect
+			.element(changeLinks().first())
+			.toHaveAttribute('href', `/practices/practice-1/settings/client-fields/${activeFields[0].id}`);
+		await expect.element(addLink()).toHaveAttribute('href', '/practices/practice-1/settings/client-fields/kind');
+		expect(testPage.getByRole('button', { name: 'Save' }).query()).toBeNull();
 	});
 
-	it('shows the editor and a Save button for an Admin', async () => {
+	it('lets an Admin change it too', async () => {
 		await setup({ roles: ['admin'] });
 
-		await expect.element(testPage.getByLabelText('Question', { exact: true }).first()).toHaveValue(firstField.label);
-		await expect.element(testPage.getByRole('button', { name: 'Save' })).toBeVisible();
+		await expect.element(addLink()).toBeVisible();
 	});
 
-	it('shows a read-only list and no Save button for a Doula', async () => {
+	it('shows a Doula the same list, with no way to change it and who can', async () => {
 		await setup({ roles: ['doula'] });
 
-		await expect.element(testPage.getByText(firstField.label)).toBeVisible();
-		await expect.element(testPage.getByLabelText('Question', { exact: true })).not.toBeInTheDocument();
-		await expect.element(testPage.getByRole('button', { name: 'Save' })).not.toBeInTheDocument();
-		await expect
-			.element(testPage.getByText('Ask a Practice Owner or Admin to edit Client fields.'))
-			.toBeVisible();
+		await expect.element(testPage.getByText(activeFields[1].label)).toBeVisible();
+		expect(changeLinks().query()).toBeNull();
+		expect(addLink().query()).toBeNull();
+		expect(testPage.getByRole('button', { name: 'Collect again' }).query()).toBeNull();
+		await expect.element(testPage.getByText('Ask a Practice Owner or Admin to change the Client Fields.')).toBeVisible();
 	});
 
-	it('marks an archived field in the read-only list', async () => {
-		await setup({
-			roles: ['doula'],
-			fields: [{ id: 'a', type: 'short_text', label: 'Old note', order: 0, archived: true }]
-		});
+	it('says what the save that landed here did', async () => {
+		await setup({ outcome: clientFieldsSavedMessage });
 
-		await expect.element(testPage.getByText('Old note (archived)')).toBeVisible();
+		await expect.element(testPage.getByRole('status').filter({ hasText: 'Client Fields saved.' })).toBeVisible();
+	});
+
+	it('says so when the template cannot be read', async () => {
+		apiFetchWithSession.mockImplementation(() =>
+			Promise.resolve(jsonResponse({ message: 'The Client Field Template could not be read.' }, 500))
+		);
+		pageState.data = { session: practiceSession(['owner']).session };
+		await render(Page, {});
+
+		await expect.element(testPage.getByText('The Client Field Template could not be read.')).toBeVisible();
 	});
 
 	it('warns once the template asks more than 20 questions', async () => {
-		const manyFields: Field[] = Array.from({ length: 21 }, (_, index) => ({
-			id: `f${index}`,
+		const many: Field[] = Array.from({ length: 21 }, (_, index) => ({
+			id: `field-${index}`,
 			type: 'short_text',
-			label: `Field ${index}`,
+			label: `Question ${index}`,
 			order: index,
 			archived: false
 		}));
-		await setup({ roles: ['owner'], fields: manyFields });
+		await setup({ fields: many });
 
-		await expect.element(testPage.getByText('21 questions', { exact: false })).toBeVisible();
+		await expect.element(testPage.getByText('This template asks a Client 21 questions', { exact: false })).toBeVisible();
 	});
 
 	it('shows no count warning at 20 questions or fewer', async () => {
-		await setup({ roles: ['owner'] });
+		await setup();
 
-		await expect.element(testPage.getByText('questions beyond the standard ones', { exact: false })).not.toBeInTheDocument();
+		await expect.element(addLink()).toBeVisible();
+		expect(testPage.getByText('questions beyond the standard ones', { exact: false }).query()).toBeNull();
+	});
+});
+
+describe('client fields settings screen: the archived questions (#461, #2193)', () => {
+	it('lists them apart, as no longer asked', async () => {
+		await setup();
+
+		await expect.element(testPage.getByRole('heading', { name: 'Archived questions' })).toBeVisible();
+		await expect.element(testPage.getByText('No longer asked')).toBeVisible();
+	});
+
+	it('collects one again from here, saving at once and saying so', async () => {
+		await setup();
+
+		await testPage.getByRole('button', { name: 'Collect again' }).click();
+
+		await expect.element(testPage.getByRole('status').filter({ hasText: 'Client Fields saved.' })).toBeVisible();
+		const put = apiFetchWithSession.mock.calls.find((call: unknown[]) => (call[1] as RequestInit | undefined)?.method === 'PUT');
+		const sent = (JSON.parse(String((put![1] as RequestInit).body)) as { fields: Field[] }).fields;
+		expect(sent.find((field) => field.id === archivedField.id)?.archived).toBe(false);
+		expect(testPage.getByRole('heading', { name: 'Archived questions' }).query()).toBeNull();
+		expect(changeLinks().elements()).toHaveLength(template.fields.length);
+	});
+
+	it('says what the boundary refused', async () => {
+		await setup({ putRefusal: 'The template could not be saved.' });
+
+		await testPage.getByRole('button', { name: 'Collect again' }).click();
+
+		await expect.element(testPage.getByText('The template could not be saved.')).toBeVisible();
+	});
+
+	it('draws no archived list when nothing is archived', async () => {
+		await setup({ fields: activeFields });
+
+		await expect.element(addLink()).toBeVisible();
+		expect(testPage.getByRole('heading', { name: 'Archived questions' }).query()).toBeNull();
 	});
 });
 
 /*
- * #865 gave all three template-editing settings screens one voice. This
- * screen already had an intro; the ticket aligned its wording and added
- * the archive reassurance, which is this screen's own answer to "can
- * editing here damage work already done?" -- GLOSSARY.md is explicit that a
- * Client's values are read live, never snapshotted, so archiving is the
- * only thing protecting a recorded fact. Asserted for every caller, not
- * only an Owner: orientation is not a write control, and a Doula who can
- * read the list needs to know what it is as much as the Owner who edits
- * it.
- */
-/*
- * `intro` matches a substring rather than the whole paragraph: the
- * assertion should fail when a fact goes missing, not when a comma moves.
+ * #865: the intro, for every caller -- orientation is not a write control.
+ * `intro` matches a substring, so it fails when a fact goes missing, not
+ * when a comma moves.
  */
 function intro(fact: string) {
 	return testPage.getByText(fact, { exact: false });
@@ -145,68 +193,31 @@ describe('client fields settings screen: it introduces itself (#865)', () => {
 		await setup({ roles: ['doula'] });
 
 		await expect
-			.element(
-				intro(
-					'The extra questions this Practice asks about every Client, beyond name, contact details and address'
-				)
-			)
+			.element(intro('The extra questions this Practice asks about every Client, beyond name, contact details and address'))
 			.toBeVisible();
 	});
 
 	it('says the list starts empty and that no Client ever sees a field', async () => {
 		await setup();
 
-		await expect
-			.element(intro('Nothing is here to start with, no Client ever sees one'))
-			.toBeVisible();
+		await expect.element(intro('Nothing is here to start with, no Client ever sees one')).toBeVisible();
 	});
 
 	it('says removing a field archives it rather than losing what was recorded', async () => {
 		await setup();
 
-		await expect
-			.element(intro('removing a field archives it, so what was already recorded stays'))
-			.toBeVisible();
+		await expect.element(intro('removing a field archives it, so what was already recorded stays')).toBeVisible();
 	});
 });
 
 /*
- * #2194 (MO-G13): the save said "Saved." and nothing else. The status
- * names what was saved and what it changes: a Client's values are read
- * live (GLOSSARY.md, Client Field Template), so the questions are on
- * every Client's record at once, new and existing, and an archived one
- * keeps what was recorded. It is a polite status in place and takes no
- * focus, because Save is still there. A Practice with no Client yet is
- * linked on to her first one.
+ * #2194: a Practice with no Client yet is linked on to her first one.
  */
-function saveButton() {
-	return testPage.getByRole('button', { name: 'Save' });
-}
-
 function firstClientLink() {
 	return testPage.getByRole('link', { name: 'Next, add your first Client' });
 }
 
-// The editor keeps a status region of its own, so the save's is the one
-// that says it saved.
-function savedStatus() {
-	return testPage.getByRole('status').filter({ hasText: 'Client Fields saved.' });
-}
-
-describe('client fields settings screen: what a save says (#2194)', () => {
-	it('says what was saved and what it changes from here', async () => {
-		await setup({ roles: ['owner'] });
-
-		await saveButton().click();
-
-		await expect
-			.element(savedStatus())
-			.toHaveTextContent(
-				"Client Fields saved. These questions are on every Client's record now, and an archived field keeps what was already recorded."
-			);
-		await expect.element(saveButton()).toHaveFocus();
-	});
-
+describe('client fields settings screen: the way on (#2194)', () => {
 	it('links an Admin on to her first Client while the Practice holds none', async () => {
 		await setup({ roles: ['admin'], hasClients: false });
 
@@ -216,16 +227,16 @@ describe('client fields settings screen: what a save says (#2194)', () => {
 	});
 
 	it('draws no link once the Practice holds a Client', async () => {
-		await setup({ roles: ['owner'], hasClients: true });
+		await setup({ hasClients: true });
 
-		await expect.element(saveButton()).toBeVisible();
+		await expect.element(addLink()).toBeVisible();
 		expect(firstClientLink().query()).toBeNull();
 	});
 
 	it('draws no link for a Doula, who cannot change the fields', async () => {
 		await setup({ roles: ['doula'], hasClients: false });
 
-		await expect.element(testPage.getByText('Ask a Practice Owner or Admin to edit Client fields.')).toBeVisible();
+		await expect.element(testPage.getByText('Ask a Practice Owner or Admin to change the Client Fields.')).toBeVisible();
 		expect(firstClientLink().query()).toBeNull();
 	});
 });

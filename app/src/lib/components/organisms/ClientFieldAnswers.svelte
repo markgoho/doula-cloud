@@ -3,9 +3,9 @@
 	 * A Practice's own questions, asked (#466) -- the one renderer for a
 	 * Practice-defined field, whoever is answering it.
 	 *
-	 * ## Why this is not `PracticeQuestionsEditor`
+	 * ## Why this is not `PracticeQuestionForm`
 	 *
-	 * That organism *defines* a Practice's fields -- an Owner naming
+	 * That organism *defines* a Practice's fields, one per page (#2193) -- an Owner naming
 	 * them, choosing types, adding options, reordering. This *collects*
 	 * values against fields somebody else already defined. They share a
 	 * type vocabulary and nothing else: one renders a label input beside

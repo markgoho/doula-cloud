@@ -893,6 +893,22 @@ const STAFF_ROUTES: SeededRoute<StaffSeed>[] = [
 		url: (s) => `/practices/${s.practiceId}/settings/plan-templates`,
 		h1: 'Plan Templates'
 	},
+	// #2193: "Add a question" asks the kind of answer on a page of its own,
+	// then opens the new question on its own page. A question not yet
+	// saved needs no seeded id, so it is the one scanned; a saved one adds
+	// the place select and Remove, both atoms already scanned elsewhere.
+	{
+		key: 'practices/[practiceId]/settings/plan-templates/[planType]/kind',
+		archetype: 'E',
+		url: (s) => `/practices/${s.practiceId}/settings/plan-templates/care_plan/kind`,
+		h1: 'What kind of answer do you need?'
+	},
+	{
+		key: 'practices/[practiceId]/settings/plan-templates/[planType]/[questionId]',
+		archetype: 'E',
+		url: (s) => `/practices/${s.practiceId}/settings/plan-templates/care_plan/new?kind=single_select`,
+		h1: 'Add a question'
+	},
 	// The settings screens from here down postdate #405's A-G survey --
 	// the first two arrived with #452's Settings hub -- so they are
 	// archetype F by shape rather than by that table.
@@ -907,6 +923,19 @@ const STAFF_ROUTES: SeededRoute<StaffSeed>[] = [
 		archetype: 'F',
 		url: (s) => `/practices/${s.practiceId}/settings/client-fields`,
 		h1: 'Client Fields'
+	},
+	// #2193: the Client Fields' own kind and question pages, as above.
+	{
+		key: 'practices/[practiceId]/settings/client-fields/kind',
+		archetype: 'E',
+		url: (s) => `/practices/${s.practiceId}/settings/client-fields/kind`,
+		h1: 'What kind of answer do you need?'
+	},
+	{
+		key: 'practices/[practiceId]/settings/client-fields/[questionId]',
+		archetype: 'E',
+		url: (s) => `/practices/${s.practiceId}/settings/client-fields/new?kind=multi_select`,
+		h1: 'Add a question'
 	},
 	{
 		// #871: postdates the #405 survey the same way website/client-fields

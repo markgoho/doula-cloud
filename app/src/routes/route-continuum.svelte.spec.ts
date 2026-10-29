@@ -177,6 +177,7 @@ vi.mock('$app/navigation', () => ({
 	invalidate: vi.fn(),
 	invalidateAll: vi.fn(),
 	pushState: vi.fn(),
+	replaceState: vi.fn(),
 	refreshAll: vi.fn(),
 }));
 
