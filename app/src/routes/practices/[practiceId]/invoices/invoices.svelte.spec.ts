@@ -218,3 +218,20 @@ describe('the page frame (#1576)', () => {
 		await expectOneFramedHeading(fixture.readyText);
 	});
 });
+
+// #2255: the screen draws what the URL already says before the read lands.
+async function setupLoading() {
+	await testPage.viewport(1440, 900);
+	await render(Page, {});
+}
+
+describe('the Practice-wide invoice list while its read runs (#2255)', () => {
+	it('draws the totals’ labels and the narrowing links, and says what it is loading', async () => {
+		await setupLoading();
+
+		await expect.element(testPage.getByText('Clients owe')).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: 'All invoices' })).toHaveAttribute('aria-current', 'page');
+		await expect.element(testPage.getByRole('link', { name: 'Overdue', exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('status', { name: 'Loading your invoices' })).toBeVisible();
+	});
+});

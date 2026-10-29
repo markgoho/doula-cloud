@@ -140,9 +140,18 @@ export const typical: RouteVariant<RouteParameters> = {
 	}
 };
 
+/*
+ * #2255: the screen while its read runs -- the totals' labels with a
+ * placeholder for each figure, the two links, and a row skeleton.
+ */
+export const loading: RouteVariant<RouteParameters> = {
+	name: 'The Practice-wide invoice list, while its read runs',
+	props: {}
+};
+
 export const fixture: RouteFixture<RouteParameters> = {
 	name: 'The Practice-wide invoice list',
-	variants: [narrowedToOverdue, typical],
+	variants: [narrowedToOverdue, typical, loading],
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/invoices',

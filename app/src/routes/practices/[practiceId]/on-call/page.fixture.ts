@@ -221,9 +221,18 @@ export const typical: RouteVariant<RouteParameters> = {
 	}
 };
 
+/*
+ * #2255: the screen while its read runs -- the days the URL names, and a
+ * row skeleton where the births will land.
+ */
+export const loading: RouteVariant<RouteParameters> = {
+	name: 'The on-call roster, while its read runs',
+	props: {}
+};
+
 export const fixture: RouteFixture<RouteParameters> = {
 	name: 'The on-call roster',
-	variants: [typical],
+	variants: [typical, loading],
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/on-call?from=2026-10-01&to=2026-10-31',

@@ -17,7 +17,7 @@ import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import '#lib/styles/app.css';
 import Page from './InvoicesScreen.svelte';
 import { toPageState } from '../../../routeFixture.js';
-import { data, fixture } from './page.fixture.js';
+import { data, fixture, narrowedToOverdue } from './page.fixture.js';
 
 const pageState = vi.hoisted(() => ({
 	params: {} as Record<string, string>,
@@ -35,6 +35,7 @@ const { practiceId } = fixture.params;
 
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
+	Object.assign(pageState, toPageState(fixture));
 });
 
 async function setup(page: PracticeInvoiceListData = data) {
@@ -141,6 +142,16 @@ describe('the overdue book (#768)', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: overdueInvoice.clientName }))
 			.toBeVisible();
+	});
+
+	it('marks the narrowing the URL names before the read lands (#2255)', async () => {
+		pageState.url = new URL(narrowedToOverdue.url!);
+		await testPage.viewport(1440, 900);
+		await render(Page, {});
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Overdue', exact: true }))
+			.toHaveAttribute('aria-current', 'page');
 	});
 
 	it('keeps the pages already loaded when the same read is handed back', async () => {

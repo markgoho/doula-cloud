@@ -1,9 +1,13 @@
 /*
  * The six Practice screens whose `load` hands its read over unawaited
- * (#2249): each `+page.svelte` draws its Template's loading state while
- * the read runs, the page `practices/+error.svelte` draws when it fails,
- * and its loaded screen once it lands. Each loaded screen has a spec of
- * its own, so here it is a stand-in.
+ * (#2249): each `+page.svelte` draws a loading state while the read runs,
+ * the page `practices/+error.svelte` draws when it fails, and its loaded
+ * screen once it lands. Each loaded screen has a spec of its own, so here
+ * it is a stand-in.
+ *
+ * Schedule, On call and Invoices draw their screen from the first frame
+ * (#2255): it draws what the URL already says, and its own placeholders
+ * until the read lands, so here the stand-in is drawn with no read yet.
  */
 import { page as testPage } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
@@ -46,27 +50,45 @@ vi.mock('./engagements/[engagementId]/EngagementScreen.svelte', async () => impo
 // none of these pages reads, so the spec hands over the read alone.
 type StreamingPage = Component<{ data: { read: Promise<StreamedRead<unknown>> } }>;
 
-const screens: [string, StreamingPage, string][] = [
+const templateLoading: [string, StreamingPage, string][] = [
 	['Credits', Credits as unknown as StreamingPage, 'Credits'],
-	['On call', OnCall as unknown as StreamingPage, 'On call'],
-	['Invoices', Invoices as unknown as StreamingPage, 'Invoices'],
 	['Contracts', Contracts as unknown as StreamingPage, 'Contracts'],
-	['Schedule', Schedule as unknown as StreamingPage, 'Schedule'],
 	['the Engagement', Engagement as unknown as StreamingPage, 'Clients']
 ];
+
+const screenLoading: [string, StreamingPage][] = [
+	['On call', OnCall as unknown as StreamingPage],
+	['Invoices', Invoices as unknown as StreamingPage],
+	['Schedule', Schedule as unknown as StreamingPage]
+];
+
+const screens: [string, StreamingPage][] = [...templateLoading, ...screenLoading].map(([name, screen]) => [
+	name,
+	screen
+]);
 
 async function setup(screen: StreamingPage, read: Promise<StreamedRead<unknown>>) {
 	await render(screen, { data: { read } });
 }
 
-describe.each(screens)('%s', (_name, screen, known) => {
+describe.each(templateLoading)('%s', (_name, screen, known) => {
 	it('draws what it knows while the read runs', async () => {
 		await setup(screen, new Promise(() => {}));
 
 		await expect.element(testPage.getByRole('status')).toBeVisible();
 		await expect.element(testPage.getByText(known, { exact: true }).first()).toBeVisible();
 	});
+});
 
+describe.each(screenLoading)('%s', (_name, screen) => {
+	it('draws its screen, with no read yet, while the read runs', async () => {
+		await setup(screen, new Promise(() => {}));
+
+		await expect.element(testPage.getByText('Loaded')).toHaveAttribute('title', '{}');
+	});
+});
+
+describe.each(screens)('%s', (_name, screen) => {
 	it('draws the refusal practices/+error.svelte would', async () => {
 		await setup(screen, Promise.resolve({ isLoaded: false, response: new Response('', { status: 403 }) }));
 

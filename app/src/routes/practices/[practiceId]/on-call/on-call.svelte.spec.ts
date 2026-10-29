@@ -175,3 +175,21 @@ describe('the on-call roster', () => {
 			.toBeVisible();
 	});
 });
+
+// #2255: the screen draws what the URL already says before the read lands.
+async function setupLoading() {
+	await testPage.viewport(1280, 900);
+	await render(Page, {});
+}
+
+describe('the on-call roster while its read runs (#2255)', () => {
+	it('draws the days the URL names, and says what it is loading', async () => {
+		await setupLoading();
+
+		await expect.element(testPage.getByLabelText('From')).toHaveValue('2026-10-01');
+		await expect.element(testPage.getByLabelText('To')).toHaveValue('2026-10-31');
+		await expect.element(testPage.getByRole('status', { name: 'Loading who is on call' })).toBeVisible();
+		await expect.element(testPage.getByText('Loading who is on call')).toBeVisible();
+		expect(testPage.getByRole('heading', { name: 'Doulas' }).elements()).toHaveLength(0);
+	});
+});

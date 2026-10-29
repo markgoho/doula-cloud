@@ -11,7 +11,7 @@
 import type { CursorPage } from '#lib/paginatedList.svelte.js';
 import type { ScheduledVisit } from '#lib/visitSchedule.js';
 import type { SchedulePageData } from './+page.js';
-import type { RouteFixture, RouteVariant } from '../../../routeFixture.js';
+import { practiceSession, type RouteFixture, type RouteVariant } from '../../../routeFixture.js';
 import { nth, TYPICAL_CLIENTS, TYPICAL_DOULAS } from '../../../typicalPilot.js';
 import type { RouteParams as RouteParameters } from './$types';
 import Page from './ScheduleScreen.svelte';
@@ -79,12 +79,25 @@ export const typical: RouteVariant<RouteParameters> = {
 	}
 };
 
+/*
+ * #2255: the screen while its read runs -- the filter bar the URL and the
+ * session already decide, and a row skeleton where the rows will land.
+ */
+export const loading: RouteVariant<RouteParameters> = {
+	name: 'The Practice-wide schedule, while its read runs',
+	props: {}
+};
+
 export const fixture: RouteFixture<RouteParameters> = {
 	name: 'The Practice-wide schedule',
-	variants: [typical],
+	variants: [typical, loading],
 	component: Page,
 	params: { practiceId: 'practice-1' },
-	url: 'https://example.test/practices/practice-1/schedule',
+	// The narrowing `data.filters` was read under: the screen's controls
+	// read it off the URL (#2255).
+	url: 'https://example.test/practices/practice-1/schedule?from=2026-09-07&to=2026-10-07',
+	// An Owner, so the Doula picker the roster read feeds is offered.
+	pageData: practiceSession(['owner']),
 	props: { data },
 	// The route takes its first page from `load` rather than from a fetch,
 	// so the screen is on the page as soon as it renders; the heading is

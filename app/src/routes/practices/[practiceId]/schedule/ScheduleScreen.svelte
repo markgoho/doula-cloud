@@ -23,66 +23,78 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { formatScheduledVisit } from '#lib/dates.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
+	import { isOwnerOrAdmin } from '#lib/roles.js';
 	import {
 		loadPracticeSchedule,
+		scheduleFiltersFromParameters,
 		scheduleHref,
 		scheduleResultSummary,
 		type ScheduledVisit
 	} from '#lib/visitSchedule.js';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Select from '#lib/components/atoms/Select.svelte';
+	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import FilterBar from '#lib/components/molecules/FilterBar.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
+	import type { PracticeSession } from '../+layout.js';
 	import type { SchedulePageData } from './+page.js';
 
-	let { data }: { data: SchedulePageData } = $props();
+	/*
+	 * `data` is the read once it lands (#2255). Until then the screen draws
+	 * what the URL and the session already say -- the filter bar -- and a
+	 * row skeleton where the rows will land.
+	 */
+	let { data }: { data?: SchedulePageData } = $props();
 
 	const practiceId = $derived(page.params.practiceId!);
 	const basePath = $derived(
 		resolve('/practices/[practiceId]/schedule', { practiceId: page.params.practiceId! })
 	);
+	const filters = $derived(scheduleFiltersFromParameters(page.url.searchParams));
+	// The picker's gate is the roster read's (`+page.ts`), so it holds its
+	// place before the Doulas land.
+	const isDoulaPickerOffered = $derived(
+		isOwnerOrAdmin((page.data as { session: PracticeSession }).session)
+	);
 
 	/*
-	 * Takes the load's first page and grows from there. `loadPage` reads
-	 * `data.filters` at call time rather than closing over the values it
-	 * was built with, so "Load more" always continues the narrowing
-	 * currently on screen.
+	 * Grows from the landed read's first page. `loadPage` reads the landed
+	 * read's own filters, so "Load more" continues the narrowing its rows
+	 * came from.
 	 */
+	const read = $derived(data);
 	const schedule = new PaginatedList<ScheduledVisit>({
-		first: untrack(() => data.page),
+		first: untrack(() => read?.page) ?? { items: [], hasMore: false },
 		loadPage: (cursor) =>
-			loadPracticeSchedule(apiFetchWithSession, page.params.practiceId!, data.filters, cursor),
+			loadPracticeSchedule(apiFetchWithSession, page.params.practiceId!, read?.filters ?? filters, cursor),
 		failureMessage: 'Failed to load more scheduled visits'
 	});
 
-	// The form's own values, seeded from the URL. Separate from
-	// `data.filters` because a reader edits them before she submits; the
-	// effect below is what puts them back in step after a navigation.
-	let fromValue = $state(untrack(() => data.filters.from));
-	let toValue = $state(untrack(() => data.filters.to));
-	let staffIdValue = $state(untrack(() => data.filters.staffId ?? ''));
+	let fromValue = $state(untrack(() => filters.from));
+	let toValue = $state(untrack(() => filters.to));
+	let staffIdValue = $state(untrack(() => filters.staffId ?? ''));
 
 	/*
 	 * A narrowing change is a navigation, so `load` runs again and hands
-	 * this component a fresh first page. Without this the list would keep
-	 * the previous narrowing's rows forever -- `PaginatedList` is
-	 * constructed once and owns its own items from then on. `reset`
-	 * abandons anything in flight at the same time, so a "Load more"
-	 * already running against the old filter can never merge into the new
-	 * one.
+	 * this component a fresh first page. `PaginatedList` owns its own
+	 * items, so without this it would keep the previous narrowing's rows.
+	 * `reset` abandons anything in flight at the same time.
 	 */
 	$effect(() => {
-		const first = data.page;
-		const filters = data.filters;
+		const landed = read;
+		if (landed) untrack(() => schedule.reset(landed.page));
+	});
+
+	$effect(() => {
+		const narrowing = filters;
 		untrack(() => {
-			schedule.reset(first);
-			fromValue = filters.from;
-			toValue = filters.to;
-			staffIdValue = filters.staffId ?? '';
+			fromValue = narrowing.from;
+			toValue = narrowing.to;
+			staffIdValue = narrowing.staffId ?? '';
 		});
 	});
 
@@ -97,7 +109,10 @@
 		);
 	}
 
-	const summary = $derived(scheduleResultSummary(schedule.items.length, schedule.hasMore));
+	const summary = $derived(
+		read ? scheduleResultSummary(schedule.items.length, schedule.hasMore) : 'Loading your schedule'
+	);
+	const doulaOptions = $derived([{ value: '', label: 'Every doula' }, ...(read?.doulas ?? [])]);
 
 	/*
 	 * Client first, because `DataTable` puts the row's link on its first
@@ -145,7 +160,7 @@
 			onSubmit={applyNarrowing}
 			legend="Narrow the schedule"
 			status={summary}
-			empty={schedule.items.length === 0}
+			empty={read !== undefined && schedule.items.length === 0}
 		>
 			<LabeledField label="From">
 				{#snippet children({ id, describedBy, invalid })}
@@ -173,7 +188,7 @@
 					/>
 				{/snippet}
 			</LabeledField>
-			{#if data.doulas.length > 0}
+			{#if isDoulaPickerOffered}
 				<LabeledField label="Doula" width={20}>
 					{#snippet children({ id, describedBy, invalid, width })}
 						<Select
@@ -182,7 +197,8 @@
 							{invalid}
 							{width}
 							name="staffId"
-							options={[{ value: '', label: 'Every doula' }, ...data.doulas]}
+							options={doulaOptions}
+							disabled={!read}
 							bind:value={staffIdValue}
 						/>
 					{/snippet}
@@ -190,15 +206,19 @@
 			{/if}
 		</FilterBar>
 
-		<DataTable
-			{columns}
-			rows={schedule.items}
-			rowHref={engagementHref}
-			hasMore={schedule.hasMore}
-			onLoadMore={() => schedule.loadMore()}
-			isLoadingMore={schedule.isLoadingMore}
-			emptyMessage="No visits are scheduled in this range. Widen the dates, or choose every doula, to see more."
-		/>
+		{#if read}
+			<DataTable
+				{columns}
+				rows={schedule.items}
+				rowHref={engagementHref}
+				hasMore={schedule.hasMore}
+				onLoadMore={() => schedule.loadMore()}
+				isLoadingMore={schedule.isLoadingMore}
+				emptyMessage="No visits are scheduled in this range. Widen the dates, or choose every doula, to see more."
+			/>
+		{:else}
+			<Skeleton variant="row" lines={6} label="Loading your schedule" />
+		{/if}
 
 		{#if schedule.loadMoreError}
 			<Notice message={schedule.loadMoreError} variant="error" />

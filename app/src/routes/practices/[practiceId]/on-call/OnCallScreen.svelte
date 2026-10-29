@@ -28,6 +28,7 @@
 		describeCoverage,
 		describeNoWindow,
 		doublyBooked,
+		rangeFromParameters,
 		rosterHref,
 		rosterSummary,
 		type CoverageGap,
@@ -38,6 +39,7 @@
 	} from '#lib/onCall.js';
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
+	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import FilterBar from '#lib/components/molecules/FilterBar.svelte';
@@ -46,20 +48,25 @@
 	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import type { OnCallPageData } from './+page.js';
 
-	let { data }: { data: OnCallPageData } = $props();
+	/*
+	 * `data` is the read once it lands (#2255). Until then the screen draws
+	 * the days the URL names and a row skeleton where the births will land.
+	 */
+	let { data }: { data?: OnCallPageData } = $props();
 
 	const practiceId = $derived(page.params.practiceId!);
 	const basePath = $derived(resolve('/practices/[practiceId]/on-call', { practiceId }));
+	const range = $derived(rangeFromParameters(page.url.searchParams));
 
 	// The form's own values, seeded from the URL and put back in step
 	// after every navigation -- a reader edits them before she submits.
-	let fromValue = $state(untrack(() => data.range.from));
-	let toValue = $state(untrack(() => data.range.to));
+	let fromValue = $state(untrack(() => range.from));
+	let toValue = $state(untrack(() => range.to));
 	$effect(() => {
-		const range = data.range;
+		const days = range;
 		untrack(() => {
-			fromValue = range.from;
-			toValue = range.to;
+			fromValue = days.from;
+			toValue = days.to;
 		});
 	});
 
@@ -68,8 +75,8 @@
 		await goto(rosterHref(basePath, { from: fromValue, to: toValue }));
 	}
 
-	const summary = $derived(rosterSummary(data.roster));
-	const stretched = $derived(doublyBooked(data.roster));
+	const summary = $derived(data ? rosterSummary(data.roster) : 'Loading who is on call');
+	const stretched = $derived(data ? doublyBooked(data.roster) : []);
 
 	function dayRange(range: DayRange): string {
 		return range.start === range.end
@@ -209,7 +216,7 @@
 			onSubmit={applyRange}
 			legend="Choose the days"
 			status={summary}
-			empty={data.roster.windows.length === 0}
+			empty={data !== undefined && data.roster.windows.length === 0}
 		>
 			<LabeledField label="From">
 				{#snippet children({ id, describedBy, invalid })}
@@ -239,58 +246,62 @@
 			</LabeledField>
 		</FilterBar>
 
-		<!--
-			hasMore is false and says something true: the roster is one whole
-			answer for the days chosen, not a page of a longer list. What
-			bounds it is the range itself, which the BFF caps at 92 days, and
-			the Practice's live births inside it -- a cursor here would break
-			the two things this screen exists to total, the holes and each
-			Doula's concurrent windows, since both are counted over the whole
-			answer rather than over whatever page arrived.
-		-->
-		<div class="roster-table">
-			<DataTable
-				{columns}
-				rows={data.roster.windows}
-				rowHref={engagementHref}
-				hasMore={false}
-				emptyMessage="No birth is on call in these days. Widen the dates to see more."
-			/>
-		</div>
-
-		{#if data.roster.noWindow.length > 0}
-			<section>
-				<Heading level={2} text="No window yet" />
-				<Text
-					text="These births are active and have a doula, and the product cannot say when on call starts for them."
-					tone="muted"
-				/>
+		{#if data}
+			<!--
+				hasMore is false and says something true: the roster is one whole
+				answer for the days chosen, not a page of a longer list. What
+				bounds it is the range itself, which the BFF caps at 92 days, and
+				the Practice's live births inside it -- a cursor here would break
+				the two things this screen exists to total, the holes and each
+				Doula's concurrent windows, since both are counted over the whole
+				answer rather than over whatever page arrived.
+			-->
+			<div class="roster-table">
 				<DataTable
-					columns={noWindowColumns}
-					rows={data.roster.noWindow}
+					{columns}
+					rows={data.roster.windows}
 					rowHref={engagementHref}
 					hasMore={false}
-					emptyMessage="None."
-				/>
-			</section>
-		{/if}
-
-		<section>
-			<Heading level={2} text="Doulas" />
-			{#if stretched.length > 0}
-				<Text
-					text={`${stretched.map((doula) => doula.name).join(', ')} ${stretched.length === 1 ? 'is' : 'are'} on more than one birth in these days.`}
-				/>
-			{/if}
-			<div class="doula-table">
-				<DataTable
-					columns={doulaColumns}
-					rows={data.roster.doulas}
-					hasMore={false}
-					emptyMessage="No doula is on this Practice's roster."
+					emptyMessage="No birth is on call in these days. Widen the dates to see more."
 				/>
 			</div>
-		</section>
+
+			{#if data.roster.noWindow.length > 0}
+				<section>
+					<Heading level={2} text="No window yet" />
+					<Text
+						text="These births are active and have a doula, and the product cannot say when on call starts for them."
+						tone="muted"
+					/>
+					<DataTable
+						columns={noWindowColumns}
+						rows={data.roster.noWindow}
+						rowHref={engagementHref}
+						hasMore={false}
+						emptyMessage="None."
+					/>
+				</section>
+			{/if}
+
+			<section>
+				<Heading level={2} text="Doulas" />
+				{#if stretched.length > 0}
+					<Text
+						text={`${stretched.map((doula) => doula.name).join(', ')} ${stretched.length === 1 ? 'is' : 'are'} on more than one birth in these days.`}
+					/>
+				{/if}
+				<div class="doula-table">
+					<DataTable
+						columns={doulaColumns}
+						rows={data.roster.doulas}
+						hasMore={false}
+						emptyMessage="No doula is on this Practice's roster."
+					/>
+				</div>
+			</section>
+		{:else}
+			<Skeleton variant="row" lines={6} label="Loading who is on call" />
+		{/if}
 	{/snippet}
 </ListPage>
 

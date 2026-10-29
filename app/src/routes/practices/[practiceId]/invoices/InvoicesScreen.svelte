@@ -28,36 +28,47 @@
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import type { PracticeInvoiceListData } from '#lib/invoice.js';
 
-	let { data }: { data: PracticeInvoiceListData } = $props();
+	/*
+	 * `data` is the read once it lands (#2255). Until then the screen draws
+	 * what the URL already says -- the totals' labels and the two links --
+	 * with placeholders where the figures and the rows will land.
+	 */
+	let { data }: { data?: PracticeInvoiceListData } = $props();
+
+	const isNarrowedToOverdue = $derived(page.url.searchParams.get('overdue') === 'true');
 
 	/*
-	 * Takes the load's first page and grows from there (#446). The list
-	 * owns its own cursor, in-flight guard and error text, so re-deriving
-	 * from `data` -- which would drop every page appended since -- is not
-	 * something this file can do by accident any more.
+	 * Grows from the landed read's first page (#446). The list owns its own
+	 * cursor, in-flight guard and error text, so re-deriving from `data` --
+	 * which would drop every page appended since -- is not something this
+	 * file can do by accident.
+	 *
+	 * #2254: a narrowing re-runs `load` without remounting this screen. The
+	 * derived holds back a rerender that hands back the same read.
 	 */
+	const read = $derived(data);
 	const invoices = new PaginatedList({
-		// untrack because capturing the load's page once is the whole point:
-		// re-deriving from `data` would drop every page appended since.
-		first: untrack(() => data),
-		// Every later page asks for the same narrowing the first one did
-		// (#768) -- otherwise "load more" on an overdue list would append
-		// the whole book underneath it.
+		first: untrack(() => read) ?? { items: [], hasMore: false },
+		// Every later page asks for the same narrowing its rows were read
+		// under (#768) -- otherwise "load more" on an overdue list would
+		// append the whole book underneath it.
 		loadPage: (cursor) =>
-			loadPracticeInvoices(apiFetchWithSession, page.params.practiceId!, cursor, data.isNarrowedToOverdue),
+			loadPracticeInvoices(
+				apiFetchWithSession,
+				page.params.practiceId!,
+				cursor,
+				read?.isNarrowedToOverdue ?? isNarrowedToOverdue
+			),
 		failureMessage: 'Failed to load more invoices'
 	});
-
-	// #2254: a narrowing re-runs `load` without remounting this screen. The
-	// derived holds back a rerender that hands back the same read.
-	const read = $derived(data);
 	$effect(() => {
-		const first = read;
-		untrack(() => invoices.reset(first));
+		const landed = read;
+		if (landed) untrack(() => invoices.reset(landed));
 	});
 
 	/*
@@ -65,26 +76,36 @@
 	 * the whole book's figures on every page, so paging must not make
 	 * "Clients owe" look like it is only what has been scrolled to.
 	 */
-	const isBookEmpty = $derived(!data.isNarrowedToOverdue && invoices.items.length === 0);
+	const isBookEmpty = $derived(
+		read !== undefined && !read.isNarrowedToOverdue && invoices.items.length === 0
+	);
 
-	const summary = $derived([
-		{ label: 'Clients owe', value: formatAmount(data.outstandingCents) },
-		{
-			label: 'Unpaid invoices',
-			value: String(data.outstandingCount)
-		},
-		{ label: 'Paid', value: formatAmount(data.paidCents) },
-		// #1009: a refunded Invoice stays 'paid' and still counts in Paid
-		// in full, so the money that went back is its own figure right
-		// beside it -- always shown, $0.00 included, so the block has one
-		// shape whatever the book holds.
-		{ label: 'Returned to Clients', value: formatAmount(data.refundedCents) },
-		// #768: the aging figure sits beside the owed one it is a
-		// slice of, so "who owes me, and for how long" is answered by the
-		// same block rather than by opening a second screen.
-		{ label: 'Overdue', value: formatAmount(data.overdueCents) },
-		{ label: 'Overdue invoices', value: String(data.overdueCount) }
-	]);
+	const summary = $derived(
+		read
+			? [
+					{ label: 'Clients owe', value: formatAmount(read.outstandingCents) },
+					{ label: 'Unpaid invoices', value: String(read.outstandingCount) },
+					{ label: 'Paid', value: formatAmount(read.paidCents) },
+					// #1009: a refunded Invoice stays 'paid' and still counts in
+					// Paid in full, so the money that went back is its own figure
+					// right beside it -- always shown, $0.00 included, so the block
+					// has one shape whatever the book holds.
+					{ label: 'Returned to Clients', value: formatAmount(read.refundedCents) },
+					// #768: the aging figure sits beside the owed one it is a
+					// slice of, so "who owes me, and for how long" is answered by
+					// the same block rather than by opening a second screen.
+					{ label: 'Overdue', value: formatAmount(read.overdueCents) },
+					{ label: 'Overdue invoices', value: String(read.overdueCount) }
+				]
+			: [
+					'Clients owe',
+					'Unpaid invoices',
+					'Paid',
+					'Returned to Clients',
+					'Overdue',
+					'Overdue invoices'
+				].map((label) => ({ label, value: '' }))
+	);
 
 	/*
 	 * #768: the narrowing is two links, not a control this page holds in
@@ -160,6 +181,10 @@
 	/>
 {/snippet}
 
+{#snippet pendingFigure()}
+	<Skeleton variant="text" lines={1} />
+{/snippet}
+
 {#snippet content()}
 	<!--
 		#2015: a book with no invoice in it has nothing to total and nothing
@@ -168,45 +193,50 @@
 		back to the whole book.
 	-->
 	{#if !isBookEmpty}
-		<SummaryList rows={summary} />
+		<SummaryList rows={summary} value={read ? undefined : pendingFigure} />
 
 		<!-- One cluster, so the two filters sit side by side as one control
 		     rather than as two rows of ListPage's stack. -->
 		<cluster-l space="var(--space-3)">
-			<Link href={invoicesHref} label="All invoices" variant="chip" current={!data.isNarrowedToOverdue} />
+			<Link href={invoicesHref} label="All invoices" variant="chip" current={!isNarrowedToOverdue} />
 			<Link
 				href="{invoicesHref}?overdue=true"
-				label="Overdue ({data.overdueCount})"
+				label={read ? `Overdue (${read.overdueCount})` : 'Overdue'}
 				variant="chip"
-				current={data.isNarrowedToOverdue}
+				current={isNarrowedToOverdue}
 			/>
 		</cluster-l>
 	{/if}
 
-	<!--
-		#270: a standing fact about the Practice, from the same aggregate
-		field the totals above already carry -- an empty book looks identical
-		whether nobody has billed anything yet or Clients cannot pay this
-		Practice at all, so this is the only thing on the page that tells the
-		two apart.
-	-->
-	{#if !data.clientsCanPay}
-		<Notice variant="info" message={clientsCannotPayMessage} />
+	{#if read}
+		<div class="invoices-table">
+			<DataTable
+				{columns}
+				rows={invoices.items}
+				rowHref={engagementHref}
+				hasMore={invoices.hasMore}
+				onLoadMore={() => invoices.loadMore()}
+				isLoadingMore={invoices.isLoadingMore}
+				emptyMessage={read.isNarrowedToOverdue
+					? 'Nothing is overdue. Every unpaid invoice is still within its payment terms.'
+					: 'No invoices yet. One appears here as soon as a contract is billed.'}
+			/>
+		</div>
+	{:else}
+		<Skeleton variant="row" lines={6} label="Loading your invoices" />
 	{/if}
 
-	<div class="invoices-table">
-		<DataTable
-			{columns}
-			rows={invoices.items}
-			rowHref={engagementHref}
-			hasMore={invoices.hasMore}
-			onLoadMore={() => invoices.loadMore()}
-			isLoadingMore={invoices.isLoadingMore}
-			emptyMessage={data.isNarrowedToOverdue
-				? 'Nothing is overdue. Every unpaid invoice is still within its payment terms.'
-				: 'No invoices yet. One appears here as soon as a contract is billed.'}
-		/>
-	</div>
+	<!--
+		#270: a standing fact about the Practice, from the same aggregate
+		field the totals already carry -- an empty book looks identical
+		whether nobody has billed anything yet or Clients cannot pay this
+		Practice at all, so this is the only thing on the page that tells the
+		two apart. Under the book, not over it (#2255): it is known only once
+		the read lands, and over the book it pushed the rows down.
+	-->
+	{#if read && !read.clientsCanPay}
+		<Notice variant="info" message={clientsCannotPayMessage} />
+	{/if}
 
 	{#if invoices.loadMoreError}
 		<Notice message={invoices.loadMoreError} variant="error" />

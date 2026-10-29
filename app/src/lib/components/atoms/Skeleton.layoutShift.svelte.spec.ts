@@ -4,7 +4,9 @@ import { cleanup, render } from 'vitest-browser-svelte';
 // DataTable's frame needs stack-l's display:block default (primitives.css)
 // to work as a container-query context -- see DataTable.svelte.spec.ts.
 import '#lib/styles/app.css';
+import SummaryList from '../molecules/SummaryList.svelte';
 import DataTable from '../organisms/DataTable.svelte';
+import SummaryListWithPendingValue from './harness/SummaryListWithPendingValue.svelte';
 import Skeleton from './Skeleton.svelte';
 
 /*
@@ -61,6 +63,14 @@ async function setup({ rows = 6 }: { rows?: number } = {}) {
 	return { placeholder, loaded };
 }
 
+/**
+ * The height of the one summary list row on the page, label and value.
+ */
+async function rowHeight(): Promise<number> {
+	const term = await page.getByRole('term').element();
+	return term.parentElement!.getBoundingClientRect().height;
+}
+
 describe('a skeleton reserves the space its content will take', () => {
 	it('stands in for a six-row list without changing the page height by more than one row', async () => {
 		const { placeholder, loaded } = await setup({ rows: 6 });
@@ -71,6 +81,21 @@ describe('a skeleton reserves the space its content will take', () => {
 		// rejects is the shape that actually jumps -- a placeholder sized
 		// by guess rather than by row count.
 		expect(Math.abs(loaded - placeholder)).toBeLessThanOrEqual(41);
+	});
+
+	// #2255: a figure in a summary list lands in a line of body copy.
+	it.each([320, 1280])('holds a summary list row at the height its figure takes, at %ipx', async (width) => {
+		await page.viewport(width, 900);
+		const label = 'Clients owe';
+		await render(SummaryListWithPendingValue, { label });
+		const pending = await rowHeight();
+		cleanup();
+
+		await render(SummaryList, { rows: [{ label, value: '$4,500.00' }] });
+		const landed = await rowHeight();
+		cleanup();
+
+		expect(pending).toBeCloseTo(landed, 0);
 	});
 
 	it('grows with the row count rather than staying a fixed block', async () => {
