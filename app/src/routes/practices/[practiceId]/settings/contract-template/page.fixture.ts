@@ -30,6 +30,17 @@ export const nonOwner: RouteVariant = {
 	pageData: practiceSession(['admin'])
 };
 
+/*
+ * #2194 (MO-G13): an Owner whose Practice holds no Client yet is linked
+ * on to her first one under Save, the next stage of a new Practice's
+ * journey. From the first Client on, the search is the door again
+ * (ADR-0017's amendment for #1516), so the base session draws no link.
+ */
+export const noClientYet: RouteVariant = {
+	name: 'The Contract Template editor, at a Practice with no Client yet',
+	pageData: { session: { ...practiceSession(['owner']).session, hasClients: false } }
+};
+
 export const fixture: RouteFixture = {
 	name: 'The Contract Template editor',
 	component: Page,
@@ -38,5 +49,5 @@ export const fixture: RouteFixture = {
 	respond: () => jsonResponse(template),
 	pageData: practiceSession(['owner']),
 	readyText: 'Contract Template',
-	variants: [nonOwner]
+	variants: [nonOwner, noClientYet]
 };

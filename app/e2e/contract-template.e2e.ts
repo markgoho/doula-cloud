@@ -43,7 +43,10 @@ test('Practice Owner can view the seeded contract template and edit/save it', as
 	// state is exercised elsewhere in this suite (plan-templates.e2e.ts).
 	await page.getByLabel('Contract template prose').fill('Updated agreement with {{client_name}}');
 	await page.getByRole('button', { name: 'Save' }).click();
-	await expect(page.getByText('Saved.')).toBeVisible();
+	await expect(page.getByRole('status').filter({ hasText: 'Contract Template saved.' })).toBeVisible();
+	// #2194: a founding Owner holds no Client yet, so she is linked on to
+	// her first one.
+	await expect(page.getByRole('link', { name: 'Next, add your first Client' })).toBeVisible();
 
 	// Back is the Settings hub now, not the Practice overview: the way in
 	// runs through it since the shell's six-item nav replaced the temporary

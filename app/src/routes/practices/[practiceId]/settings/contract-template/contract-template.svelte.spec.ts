@@ -15,8 +15,8 @@ import { page as testPage } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import Page from './+page.svelte';
-import { toApiResponder, toPageState, type RouteVariant } from '../../../../routeFixture.js';
-import { fixture, nonOwner } from './page.fixture.js';
+import { practiceSession, toApiResponder, toPageState, type RouteVariant } from '../../../../routeFixture.js';
+import { fixture, noClientYet, nonOwner } from './page.fixture.js';
 
 const pageState = vi.hoisted(() => ({
 	params: {} as Record<string, string>,
@@ -89,5 +89,66 @@ describe('contract-template settings screen: it introduces itself (#865)', () =>
 		await setup({ as: nonOwner });
 
 		await expect.element(intro(PURPOSE)).toBeVisible();
+	});
+});
+
+/*
+ * #2194 (MO-G13): the save said "Saved." and nothing else, which tells
+ * her something happened but not what, nor what it changes. The status
+ * names what was saved and what it reaches from here; it is a polite
+ * status in place, and takes no focus, because Save is still there
+ * (docs/design/govuk-alignment.md, Notification banner).
+ */
+const SAVED =
+	'Contract Template saved. Every Contract written from now on uses these terms, and a Contract already written keeps the terms it was written from.';
+
+function saveButton() {
+	return testPage.getByRole('button', { name: 'Save' });
+}
+
+function firstClientLink() {
+	return testPage.getByRole('link', { name: 'Next, add your first Client' });
+}
+
+describe('contract-template settings screen: what a save says (#2194)', () => {
+	it('says what was saved and what it changes from here', async () => {
+		await setup();
+
+		await saveButton().click();
+
+		await expect.element(testPage.getByRole('status')).toHaveTextContent(SAVED);
+	});
+
+	it('leaves focus on Save, which is still there', async () => {
+		await setup();
+
+		await saveButton().click();
+
+		await expect.element(testPage.getByRole('status')).toBeVisible();
+		await expect.element(saveButton()).toHaveFocus();
+	});
+
+	it('links an Owner on to her first Client while the Practice holds none', async () => {
+		await setup({ as: noClientYet });
+
+		await expect
+			.element(firstClientLink())
+			.toHaveAttribute('href', '/practices/practice-1/clients/new?from=contract-template');
+	});
+
+	it('draws no link once the Practice holds a Client', async () => {
+		await setup();
+
+		await expect.element(saveButton()).toBeVisible();
+		expect(firstClientLink().query()).toBeNull();
+	});
+
+	it('draws no link for a caller who cannot change the terms', async () => {
+		await setup({
+			as: { ...nonOwner, pageData: { session: { ...practiceSession(['admin']).session, hasClients: false } } }
+		});
+
+		await expect.element(intro(PURPOSE)).toBeVisible();
+		expect(firstClientLink().query()).toBeNull();
 	});
 });

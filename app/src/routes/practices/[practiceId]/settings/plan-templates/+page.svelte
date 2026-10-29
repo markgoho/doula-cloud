@@ -33,6 +33,7 @@
 	] as const;
 
 	let planType = $state<'care_plan' | 'birth_plan'>('care_plan');
+	const planLabel = $derived(planType === 'birth_plan' ? 'Birth Plan' : 'Care Plan');
 	let fields = $state<Field[]>([]);
 	let error = $state('');
 	let isSaved = $state(false);
@@ -165,9 +166,6 @@
 		{#if error}
 			<Notice variant="error" message={error} />
 		{/if}
-		{#if isSaved}
-			<Text text="Saved." />
-		{/if}
 
 		<PracticeQuestionsEditor
 			questions={fields}
@@ -192,9 +190,21 @@
 		does not read as an alternative to saving; it is drawn only for
 		someone who may change the Contract Template (`MAY_CHANGE`), since
 		a Doula may change the Plan Templates and nothing after them.
+
+		#2194 (MO-G13): between Save and the way on, the status names the
+		plan type saved and which plans it reaches, in the intro's own words
+		(ADR-0001's snapshot). It sits under Save so the person who pressed
+		it sees it without scrolling at 320px. A polite status in place,
+		never focused: Save is still there.
 	-->
 	<stack-l space="var(--space-4)">
 		<Button label="Save" onClick={save} />
+		{#if isSaved}
+			<Notice
+				variant="status"
+				message="{planLabel} questions saved. Every {planLabel} filled in from now on asks them, and a {planLabel} already filled in keeps the questions it had."
+			/>
+		{/if}
 		{#if canChangeContractTemplate}
 			<Link
 				href={resolve('/practices/[practiceId]/settings/contract-template', { practiceId: page.params.practiceId! })}

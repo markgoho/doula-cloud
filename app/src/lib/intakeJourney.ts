@@ -178,10 +178,13 @@ export const RECORD_QUERY = `${CHANGE_PARAMETER}=${RECORD_VALUE}`;
  * front of it (#1609, ADR-0017's amendment of 2026-10-02): the empty
  * Practice's overview, and the Clients list of a Practice that holds no
  * Client record. Anywhere else, intake is reached from the search.
+ * Since #2194, the Contract Template and Client Fields settings screens
+ * of a Practice that holds no Client record link on to her first one
+ * too: the same empty Practice, met one stage earlier in the journey.
  */
-export type IntakeOrigin = 'overview' | 'clients';
+export type IntakeOrigin = 'overview' | 'clients' | 'contract-template' | 'client-fields';
 
-const INTAKE_ORIGINS: readonly IntakeOrigin[] = ['overview', 'clients'];
+const INTAKE_ORIGINS: readonly IntakeOrigin[] = ['overview', 'clients', 'contract-template', 'client-fields'];
 
 /** The query a link that opens intake directly carries, so the name
  * question's Back goes to the screen she came from. The same `from` a
@@ -190,7 +193,7 @@ export function originQuery(origin: IntakeOrigin): string {
 	return `${CHANGE_PARAMETER}=${origin}`;
 }
 
-/** Which screen opened intake, read off the query string. Only the two
+/** Which screen opened intake, read off the query string. Only the
  * named values are accepted, so the URL can name a screen but can never
  * name an address for Back to go to. */
 export function intakeOrigin(search: Pick<URLSearchParams, 'get'>): IntakeOrigin | undefined {
