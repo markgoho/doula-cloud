@@ -53,6 +53,11 @@ The seven terms, in this order, each stated in the words [The Laws of UX](../des
 | **Cold** | `yes` | Usable cold, on the first visit, with no tour and no tooltip; help is inline, at the field. | Paradox of the Active User |
 | **320px** | `yes` | Every screen in the stage is complete and usable at 320px wide. | [ADR-0024](../adr/0024-layout-is-intrinsic-and-320px-is-a-conformance-commitment.md) |
 
+**How Decisions are counted.** Two rules, both settled:
+
+- A radio group, a select or a date input is one decision, not one per option ([#1649](https://github.com/markgoho/doula-cloud/issues/1649)'s note on Renata Alvarez's 0.B, applied on [#2184](https://github.com/markgoho/doula-cloud/issues/2184)).
+- On a hub page, each headed group of rows is one decision, however many **Change** links it holds. Settings is 5: its four groups and **Delete this Practice** (the founder's decision on [#2185](https://github.com/markgoho/doula-cloud/issues/2185), 2026-10-29). "Check your answers" is a single group, so each of its **Change** links still counts.
+
 **A budget is a number or a yes-or-no, never prose.** A reason a stage needs a looser number goes in Pain points, not on the budget line. A budget is a **target**, not a measurement: the walk measures it, and a number one walk recorded (Priya Raman's 0.83 screens of scroll and 1.7 s on a Pixel 7, [#237](https://github.com/markgoho/doula-cloud/issues/237)) is evidence that stays in the plan — in its Run log, or in the note on the budget step it bears on — never on the map.
 
 **A stage carries the lines that apply to it, and the moment-of-truth stage carries all seven.** Screens and 320px apply to every stage with a screen of the Persona's in it. Decisions applies where she fills or chooses something, Memory where a later step needs an earlier answer, Time where the act is one she repeats, Confirmation where the stage changes something, and Cold where she meets the screen for the first time. A stage with no screen of hers in it (an act another Persona does for her) carries no Budget.
