@@ -614,6 +614,23 @@ func StaffingActions() []EngagementAction {
 	return out
 }
 
+// BirthPlanActions returns every action that names a Birth Plan, sorted
+// for a deterministic query string. Unlike StaffingActions, these stay on
+// a Client's own ledger while her Engagement offers her a Birth Plan, and
+// leave it wherever engagement.OffersBirthPlan is false -- a loss, an
+// outcome never learned, a postpartum Engagement (#2219, #2277): GLOSSARY.md
+// says that where a Birth Plan does not apply she meets no mention of
+// it, and her history is one more place she would. A new Birth Plan
+// action belongs here as well as above, or it would name a document she
+// cannot open.
+func BirthPlanActions() []EngagementAction {
+	return []EngagementAction{
+		ActionBirthPlanAcknowledged,
+		ActionBirthPlanEdited,
+		ActionBirthPlanStarted,
+	}
+}
+
 // AmountDiff is the activity diff shape for a Contract's amount changing:
 // ActionContractPriced, ActionContractAmountOverridden and
 // ActionContractAmountRepriced all carry it (#1030).

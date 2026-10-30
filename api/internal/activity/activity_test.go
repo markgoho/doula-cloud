@@ -2,6 +2,7 @@ package activity_test
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
 	"time"
 
@@ -277,6 +278,28 @@ func TestStaffingActions_Sorted(t *testing.T) {
 	for i := 1; i < len(got); i++ {
 		if got[i-1] >= got[i] {
 			t.Fatalf("StaffingActions() not sorted at index %d: %v", i, got)
+		}
+	}
+}
+
+// TestBirthPlanActions_NamesEveryBirthPlanAction proves #2219's set holds
+// every action whose name carries the Birth Plan, sorted, and none of
+// them a staffing action: the portal reader adds the set only where a
+// Birth Plan is not offered, so one already excluded everywhere would
+// mean the Birth Plan was never on her ledger to begin with.
+func TestBirthPlanActions_NamesEveryBirthPlanAction(t *testing.T) {
+	got := activity.BirthPlanActions()
+	want := []activity.EngagementAction{
+		activity.ActionBirthPlanAcknowledged,
+		activity.ActionBirthPlanEdited,
+		activity.ActionBirthPlanStarted,
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("BirthPlanActions() = %v, want %v", got, want)
+	}
+	for _, a := range got {
+		if slices.Contains(activity.StaffingActions(), a) {
+			t.Errorf("%q is a staffing action; it would never reach her ledger at all", a)
 		}
 	}
 }

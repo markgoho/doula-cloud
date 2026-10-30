@@ -5,11 +5,13 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"slices"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/activityfeed"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/pagecursor"
 )
 
@@ -31,7 +33,22 @@ const activityPageSize = 30
 var staffingActions = buildStaffingActions()
 
 func buildStaffingActions() []string {
-	actions := activity.StaffingActions()
+	return actionNames(activity.StaffingActions())
+}
+
+// withoutBirthPlan is staffingActions with activity.BirthPlanActions()
+// added: the exclusion list for an Engagement that offers her no Birth
+// Plan (#2219, #2277). Built once like staffingActions, and chosen per
+// read from engagement.OffersBirthPlan -- the same derivation the portal
+// nav, the hub card and the Birth Plan route already ask -- so nothing
+// is stored to hide the rows and correcting an outcome back to a live
+// birth brings them back. The rows stay in activity, and every
+// Staff-side ledger still reads them; only this read leaves them out.
+// They leave in the query, not after it, so a page is still a full page
+// and the cursor still finds the rest.
+var withoutBirthPlan = slices.Concat(staffingActions, actionNames(activity.BirthPlanActions()))
+
+func actionNames(actions []activity.EngagementAction) []string {
 	names := make([]string, len(actions))
 	for i, a := range actions {
 		names[i] = string(a)
@@ -95,7 +112,7 @@ func ActivityHandler() http.Handler {
 		}
 		engagementID, _ := clientauth.EngagementID(r.Context())
 
-		practiceID, err := engagementPracticeID(r.Context(), tx, engagementID)
+		practiceID, birthPlan, err := engagementPracticeID(r.Context(), tx, engagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests -- clientauth.Middleware already confirmed this row exists
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -125,7 +142,11 @@ func ActivityHandler() http.Handler {
 			after = &c
 		}
 
-		resp, err := activityfeed.ListForSubject(r.Context(), tx, practiceID, activity.SubjectEngagement, engagementID, staffingActions, after, activityPageSize)
+		excluded := staffingActions
+		if !engagement.OffersBirthPlan(birthPlan) {
+			excluded = withoutBirthPlan
+		}
+		resp, err := activityfeed.ListForSubject(r.Context(), tx, practiceID, activity.SubjectEngagement, engagementID, excluded, after, activityPageSize)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -137,16 +158,21 @@ func ActivityHandler() http.Handler {
 	})
 }
 
-// engagementPracticeID reads engagementID's own practice_id --
-// clientauth.Middleware already confirmed this Engagement belongs to the
-// caller's Client before this handler runs (setClientAndCheckEngagement,
+// engagementPracticeID reads engagementID's own practice_id, and the two
+// facts engagement.OffersBirthPlan asks of it -- clientauth.Middleware
+// already confirmed this Engagement belongs to the caller's Client before
+// this handler runs (setClientAndCheckEngagement,
 // clientauth/middleware.go), so this is a lookup, not a second access
-// check.
-func engagementPracticeID(ctx context.Context, tx *sql.Tx, engagementID string) (string, error) {
-	var practiceID string
-	// coverage:ignore reason: DB query failure, not exercised by unit tests -- clientauth.Middleware already confirmed this row exists
-	if err := tx.QueryRowContext(ctx, `SELECT practice_id FROM engagements WHERE id = $1`, engagementID).Scan(&practiceID); err != nil {
-		return "", fmt.Errorf("portal: read engagement practice id: %w", err)
+// check. The kind and the birth outcome are read only to answer that
+// question and never reach the response: ADR-0015 keeps both staff-only.
+func engagementPracticeID(ctx context.Context, tx *sql.Tx, engagementID string) (string, engagement.BirthPlanInputs, error) {
+	var practiceID, kind string
+	var birthOutcome *string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT practice_id, kind::text, birth_outcome::text FROM engagements WHERE id = $1`,
+		engagementID).Scan(&practiceID, &kind, &birthOutcome); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests -- clientauth.Middleware already confirmed this row exists
+		return "", engagement.BirthPlanInputs{}, fmt.Errorf("portal: read engagement practice id: %w", err)
 	}
-	return practiceID, nil
+	return practiceID, engagement.BirthPlanInputs{Kind: engagement.Kind(kind), BirthOutcome: birthOutcome}, nil
 }
