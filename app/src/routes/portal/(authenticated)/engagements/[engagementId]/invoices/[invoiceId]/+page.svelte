@@ -36,7 +36,7 @@
 		try {
 			invoice = await loadClientInvoice(apiFetchWithSession, page.params.engagementId!, page.params.invoiceId!);
 		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Failed to load Invoice';
+			error = error_ instanceof Error ? error_.message : 'Failed to load invoice';
 			return;
 		}
 		// Only an open Stripe-rail Invoice can be paid here; asking for any
@@ -64,7 +64,7 @@
 	})}
 	backLabel="Back to {INVOICES_HEADING}"
 	loadError={error || undefined}
-	loading={invoice === undefined ? 'Loading Invoice' : undefined}
+	loading={invoice === undefined ? 'Loading invoice' : undefined}
 >
 	{#snippet content()}
 		<!-- `content` renders only once the Template's own states are past,

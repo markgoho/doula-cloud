@@ -179,7 +179,7 @@ describe('Client portal Engagement hub', () => {
 	it('offers no contract link before one is sent (#2007)', async () => {
 		await setupHub({ record: { ...detail, contract: undefined } });
 
-		await expect.element(page.getByText('No Contract has been sent for your care yet.')).toBeVisible();
+		await expect.element(page.getByText('No contract has been sent for your care yet.')).toBeVisible();
 		await expect.element(page.getByRole('link', { name: /contract|signed/i })).not.toBeInTheDocument();
 	});
 
@@ -377,7 +377,7 @@ describe('the Activity disclosure (#486)', () => {
 		// surfaces' "Contract sent" -- which is the raw action string with
 		// its underscore taken out, and a domain word ADR-0005 says a
 		// Client never meets.
-		await expect.element(tableView.getByText('Your Contract was sent to you.')).toBeVisible();
+		await expect.element(tableView.getByText('Your contract was sent to you.')).toBeVisible();
 		await expect.element(tableView.getByText('Your practice')).toBeVisible();
 	});
 
@@ -428,7 +428,7 @@ describe('the Activity disclosure (#486)', () => {
 
 		await page.getByText('Show what has happened').click();
 		const tableView = page.elementLocator(container.querySelector(':scope details .table-view')!);
-		await expect.element(tableView.getByText('Your Birth Plan was updated.')).toBeVisible();
+		await expect.element(tableView.getByText('Your birth plan was updated.')).toBeVisible();
 		expect(container.querySelector(':scope details')!.textContent).not.toContain('Plan instance edited');
 	});
 
@@ -597,7 +597,7 @@ describe('the hub after a loss (#2003)', () => {
 
 		await expect
 			.element(page.getByRole('link', { name: 'Read your contract' }))
-			.toHaveAccessibleDescription(`${practiceName} ended this Contract.`);
+			.toHaveAccessibleDescription(`${practiceName} ended this contract.`);
 	});
 });
 

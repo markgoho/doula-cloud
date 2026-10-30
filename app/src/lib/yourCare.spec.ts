@@ -92,13 +92,13 @@ describe('contractCard', () => {
 	it('says the Practice ended one that was voided', () => {
 		expect(contractCard({ status: 'voided' }, 'Rooted Birth Collective')).toEqual({
 			label: 'Read your contract',
-			description: 'Rooted Birth Collective ended this Contract.'
+			description: 'Rooted Birth Collective ended this contract.'
 		});
 	});
 
 	it('offers no link when none has been sent', () => {
 		expect(contractCard(undefined, 'Rooted Birth Collective')).toEqual({
-			description: 'No Contract has been sent for your care yet.'
+			description: 'No contract has been sent for your care yet.'
 		});
 	});
 });

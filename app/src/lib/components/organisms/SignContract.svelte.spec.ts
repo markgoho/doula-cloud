@@ -36,7 +36,7 @@ describe('SignContract.svelte', () => {
 
 		await expect.element(page.getByLabelText('Full legal name')).toBeInTheDocument();
 		await expect
-			.element(page.getByLabelText('I have read this Contract and I am signing it electronically'))
+			.element(page.getByLabelText('I have read this contract and I am signing it electronically'))
 			.toBeInTheDocument();
 	});
 
@@ -56,7 +56,7 @@ describe('SignContract.svelte', () => {
 		await expect
 			.element(
 				page.getByRole('link', {
-					name: 'Confirm that you have read the Contract and are signing it electronically'
+					name: 'Confirm that you have read the contract and are signing it electronically'
 				})
 			)
 			.toBeVisible();
@@ -73,7 +73,7 @@ describe('SignContract.svelte', () => {
 		// .first() -- #1228's ErrorSummary repeats the message as a link, so
 		// it now appears twice on screen (the summary and the field).
 		await expect
-			.element(page.getByText('Confirm that you have read the Contract and are signing it electronically').first())
+			.element(page.getByText('Confirm that you have read the contract and are signing it electronically').first())
 			.toBeVisible();
 	});
 
@@ -83,7 +83,7 @@ describe('SignContract.svelte', () => {
 
 		await page.getByLabelText('Full legal name').fill(' '.repeat(3));
 		await page
-			.getByLabelText('I have read this Contract and I am signing it electronically')
+			.getByLabelText('I have read this contract and I am signing it electronically')
 			.click();
 		await page.getByRole('button', { name: 'Sign' }).click();
 
@@ -97,7 +97,7 @@ describe('SignContract.svelte', () => {
 
 		await page.getByLabelText('Full legal name').fill('  Jamie Doe  ');
 		await page
-			.getByLabelText('I have read this Contract and I am signing it electronically')
+			.getByLabelText('I have read this contract and I am signing it electronically')
 			.click();
 		await page.getByRole('button', { name: 'Sign' }).click();
 
@@ -111,7 +111,7 @@ describe('SignContract.svelte', () => {
 
 		await page.getByLabelText('Full legal name').fill('Jamie Doe');
 		await page
-			.getByLabelText('I have read this Contract and I am signing it electronically')
+			.getByLabelText('I have read this contract and I am signing it electronically')
 			.click();
 		await page.getByRole('button', { name: 'Sign' }).click();
 
@@ -125,7 +125,7 @@ describe('SignContract.svelte', () => {
 
 		await page.getByLabelText('Full legal name').fill('Jamie Doe');
 		await page
-			.getByLabelText('I have read this Contract and I am signing it electronically')
+			.getByLabelText('I have read this contract and I am signing it electronically')
 			.click();
 		await page.getByRole('button', { name: 'Sign' }).click();
 
@@ -145,7 +145,7 @@ describe('SignContract.svelte', () => {
 		await affirmDisclosure();
 		await page.viewport(320, 700);
 
-		const labelText = 'I have read this Contract and I am signing it electronically';
+		const labelText = 'I have read this contract and I am signing it electronically';
 		const control = page.getByLabelText(labelText);
 		await control.click();
 

@@ -45,7 +45,7 @@
 		try {
 			contract = await loadClientContract(apiFetchWithSession, page.params.engagementId!);
 		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Failed to load Contract';
+			error = error_ instanceof Error ? error_.message : 'Failed to load contract';
 		}
 	});
 
@@ -65,7 +65,7 @@
 			const blob = await downloadClientSignedContractPdf(apiFetchWithSession, page.params.engagementId!);
 			triggerBlobDownload(blob, 'signed-contract.pdf');
 		} catch (error_) {
-			downloadError = error_ instanceof Error ? error_.message : 'Failed to download signed Contract';
+			downloadError = error_ instanceof Error ? error_.message : 'Failed to download signed contract';
 		} finally {
 			isDownloadingPdf = false;
 		}
@@ -77,7 +77,7 @@
 	serviceName={page.data.practiceName}
 	backHref={resolve('/portal/(authenticated)/engagements/[engagementId]', { engagementId: page.params.engagementId! })}
 	loadError={error || undefined}
-	loading={contract === undefined ? 'Loading Contract' : undefined}
+	loading={contract === undefined ? 'Loading contract' : undefined}
 	empty={contract === null ? NO_CONTRACT_MESSAGE : undefined}
 >
 	{#snippet content()}
@@ -110,7 +110,7 @@
 			-->
 			{#if contract.hasSignedPdf}
 				<Button
-					label="Download signed Contract (PDF)"
+					label="Download signed contract (PDF)"
 					icon="file-text"
 					variant="secondary"
 					onClick={handleDownloadSignedContractPdf}

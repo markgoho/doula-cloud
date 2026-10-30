@@ -30,13 +30,19 @@ import { QUOTED, quotedStringsInSource, regionLines } from './quotedCopy';
  * `src/routes` that is not a spec. A line that has to keep the lowercase
  * form puts `voice:ignore` and the reason on the same line.
  *
- * Two kinds of file are left out. A route fixture holds what a person
- * typed (a Client's note, a Message), which is not ours to capitalize.
- * And the screens a Client reads (`CLIENT_READ` in
- * `copy.secondPerson.usage.spec.ts`, and `yourCare.ts`, which only the
- * portal hub reads) follow the Client register, where GLOSSARY.md makes
- * "visits" her own word and whether Contract and Invoice take a capital is
- * open on #2327.
+ * A route fixture is left out: it holds what a person typed (a Client's
+ * note, a Message), which is not ours to capitalize.
+ *
+ * ## The screens a Client reads, the other way round (#2327)
+ *
+ * The screens a Client reads (`CLIENT_READ` below) follow the Client
+ * register, and there the founder decided on 2026-10-30 that Contract, Invoice and Birth Plan are written
+ * lowercase: "your contract", "your invoices", "your birth plan". So those
+ * files are left out of the check above and read for the opposite
+ * offense: a capitalized Contract or Invoice after another word in the
+ * same sentence, or a Birth Plan whose "Plan" is capitalized. The first
+ * word of a sentence, a heading or a label ("Invoices", "Contract signed")
+ * keeps its sentence-case capital, so it is not an offense.
  */
 
 const DOMAIN_NOUN =
@@ -44,20 +50,28 @@ const DOMAIN_NOUN =
 const LOWERCASE_NOUN = /\s(?:practice|engagement|invoice|contract|client|visit|credit)s?\b/;
 const MARKER_WITH_REASON = /voice:ignore\W*\w/;
 
+// A word, then a capitalized Contract or Invoice: not the first word of
+// its sentence. And "Birth Plan" wherever it stands, since sentence case
+// never capitalizes a second word.
+const CLIENT_CAPITAL = /(?<=\b\w[\w']*\s+)(?:Contract|Invoice)s?\b|\bBirth Plans?\b/g;
+
 const appRoot = fileURLToPath(new URL('../../', import.meta.url));
 
-// #2327 decides these. A narrower copy of `CLIENT_READ`, as a test: a
-// spec file may not export it.
+// The Client register's files (#2327): a copy of `CLIENT_READ`, as a spec
+// file may not export it, plus what only a Client reads outside its globs:
+// `yourCare.ts`, `portalDoor.ts`, and `SignContract`, which only the
+// portal's contract page renders.
 const CLIENT_READ =
-	/^src\/(?:routes\/portal\/|lib\/components\/.*\/Portal[^/]*\.svelte$|lib\/(?:clientRegister|clientInvoice|clientPayment|portalLanding|portalVisits|yourCare)\.ts$)/;
+	/^src\/(?:routes\/portal\/|lib\/components\/(?:.*\/Portal[^/]*|organisms\/SignContract)\.svelte$|lib\/(?:clientRegister|clientInvoice|clientPayment|portalDoor|portalLanding|portalVisits|yourCare)\.ts$)/;
 
-const svelteFiles = globFiles('src/{lib/components,routes}/**/*.svelte', { cwd: appRoot }).filter(
-	(file) => !CLIENT_READ.test(file)
+const allSvelteFiles = globFiles('src/{lib/components,routes}/**/*.svelte', { cwd: appRoot });
+const allModuleFiles = globFiles('src/{lib,routes}/**/*.ts', { cwd: appRoot }).filter(
+	(file) => !/\.(?:test|spec)\.ts$/.test(file) && !file.endsWith('.d.ts') && !file.endsWith('.fixture.ts')
 );
-const moduleFiles = globFiles('src/{lib,routes}/**/*.ts', { cwd: appRoot }).filter(
-	(file) =>
-		!/\.(?:test|spec)\.ts$/.test(file) && !file.endsWith('.d.ts') && !file.endsWith('.fixture.ts') && !CLIENT_READ.test(file)
-);
+const svelteFiles = allSvelteFiles.filter((file) => !CLIENT_READ.test(file));
+const moduleFiles = allModuleFiles.filter((file) => !CLIENT_READ.test(file));
+const clientSvelteFiles = allSvelteFiles.filter((file) => CLIENT_READ.test(file));
+const clientModuleFiles = allModuleFiles.filter((file) => CLIENT_READ.test(file));
 
 // A Svelte block's own words -- `{#each practices as practice}` -- are
 // code, not copy.
@@ -81,11 +95,24 @@ function lowercasePhrases(text: string): string[] {
 		.toArray();
 }
 
+/**
+The phrases in one line of a Client's copy that capitalize a noun the
+Client register writes lowercase (#2327).
+*/
+function capitalizedPhrases(text: string): string[] {
+	return text
+		.matchAll(CLIENT_CAPITAL)
+		.map((match) => match[0])
+		.toArray();
+}
+
+type Finder = (text: string) => string[];
+
 function isMarked(source: string, line: number): boolean {
 	return MARKER_WITH_REASON.test(source.split('\n')[line - 1]!);
 }
 
-function findInSvelte(file: string, source: string): Offense[] {
+function findInSvelte(file: string, source: string, find: Finder = lowercasePhrases): Offense[] {
 	return regionLines(source).flatMap(({ line, text, region }) => {
 		if (region === 'style' || isMarked(source, line)) return [];
 		const candidates =
@@ -95,14 +122,14 @@ function findInSvelte(file: string, source: string): Offense[] {
 						.map((match) => (match[1] ?? match[2] ?? match[3])!)
 						.toArray()
 				: [text.replaceAll(SVELTE_BLOCK, '')];
-		return candidates.flatMap((candidate) => lowercasePhrases(candidate).map((phrase) => ({ file, line, text: phrase })));
+		return candidates.flatMap((candidate) => find(candidate).map((phrase) => ({ file, line, text: phrase })));
 	});
 }
 
-function findInStrings(file: string, source: string): Offense[] {
+function findInStrings(file: string, source: string, find: Finder = lowercasePhrases): Offense[] {
 	return quotedStringsInSource(source)
 		.filter(({ line }) => !isMarked(source, line))
-		.flatMap(({ line, text }) => lowercasePhrases(text).map((phrase) => ({ file, line, text: phrase })));
+		.flatMap(({ line, text }) => find(text).map((phrase) => ({ file, line, text: phrase })));
 }
 
 // Read and scanned once, at module scope, for the reason
@@ -110,6 +137,10 @@ function findInStrings(file: string, source: string): Offense[] {
 const offenses = [
 	...svelteFiles.flatMap((file) => findInSvelte(file, readFileSync(`${appRoot}${file}`, 'utf8'))),
 	...moduleFiles.flatMap((file) => findInStrings(file, readFileSync(`${appRoot}${file}`, 'utf8')))
+];
+const clientOffenses = [
+	...clientSvelteFiles.flatMap((file) => findInSvelte(file, readFileSync(`${appRoot}${file}`, 'utf8'), capitalizedPhrases)),
+	...clientModuleFiles.flatMap((file) => findInStrings(file, readFileSync(`${appRoot}${file}`, 'utf8'), capitalizedPhrases))
 ];
 
 describe("a domain noun that points at one of the product's records takes its capital (#2247)", () => {
@@ -156,5 +187,49 @@ describe("a domain noun that points at one of the product's records takes its ca
 
 	it('finds no lowercase record in any copy', () => {
 		expect(offenses).toEqual([]);
+	});
+});
+
+describe('a Client reads Contract, Invoice and Birth Plan in lowercase (#2327)', () => {
+	it('reads every screen a Client reads', () => {
+		expect(clientSvelteFiles).toContain('src/routes/portal/(authenticated)/engagements/[engagementId]/+page.svelte');
+		expect(clientModuleFiles).toContain('src/lib/yourCare.ts');
+		expect(clientModuleFiles).toContain('src/lib/portalDoor.ts');
+		expect(clientSvelteFiles).toContain('src/lib/components/organisms/SignContract.svelte');
+		expect(clientModuleFiles).toContain('src/lib/clientRegister.ts');
+	});
+
+	it('finds a capital after another word, and a capitalized Birth Plan anywhere', () => {
+		const svelte = [
+			'<script>',
+			"const loading = 'Loading your Invoices';",
+			'</script>',
+			'<p>Read and sign your Contract.</p>',
+			'<h2>Birth Plan</h2>'
+		].join('\n');
+		expect(findInSvelte('a.svelte', svelte, capitalizedPhrases).map((offense) => offense.text)).toEqual([
+			'Invoices',
+			'Contract',
+			'Birth Plan'
+		]);
+		expect(findInStrings('a.ts', "const entry = 'Your Contract was signed.';", capitalizedPhrases)).toHaveLength(1);
+	});
+
+	it('leaves the first word of a sentence, a heading or a label, lowercase, and a marked line', () => {
+		const svelte = [
+			'<script>',
+			"const heading = 'Invoices';",
+			"const status = 'Signed. Contract copy below.';",
+			'</script>',
+			'<h2>Your contract</h2>',
+			'<p>Read your birth plan and your invoices.</p>',
+			'<p>Contract signed</p>',
+			'<p>the Contract <!-- voice:ignore: a quotation --></p>'
+		].join('\n');
+		expect(findInSvelte('a.svelte', svelte, capitalizedPhrases)).toEqual([]);
+	});
+
+	it('finds no capitalized Contract, Invoice or Birth Plan in any copy a Client reads', () => {
+		expect(clientOffenses).toEqual([]);
 	});
 });

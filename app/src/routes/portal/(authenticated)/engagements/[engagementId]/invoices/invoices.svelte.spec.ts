@@ -79,21 +79,21 @@ describe('Client-portal Invoices (#1564)', () => {
 		await setupInvoices(() => pageOf([paidByHandReturned, paidStripe]));
 
 		await expect
-			.element(page.getByText('You have paid every Invoice for this care. $250.00 of it was returned to you.').last())
+			.element(page.getByText('You have paid every invoice for this care. $250.00 of it was returned to you.').last())
 			.toBeVisible();
 	});
 
 	it('leaves out the returned sentence when nothing went back', async () => {
 		await setupInvoices(() => pageOf([paidStripe]));
 
-		await expect.element(page.getByText('You have paid every Invoice for this care.').last()).toBeVisible();
+		await expect.element(page.getByText('You have paid every invoice for this care.').last()).toBeVisible();
 		expect(page.getByText(/returned to you/).elements()).toHaveLength(0);
 	});
 
 	it('renders both empty sections when there are no Invoices at all', async () => {
 		await setupInvoices(() => pageOf([]));
 
-		await expect.element(page.getByText('There are no Invoices for this care.').last()).toBeVisible();
+		await expect.element(page.getByText('There are no invoices for this care.').last()).toBeVisible();
 		await expect.element(page.getByText('There are no Payments for this care.').last()).toBeVisible();
 		await expect.element(page.getByRole('heading', { name: 'What you no longer owe' })).not.toBeInTheDocument();
 	});
@@ -121,7 +121,7 @@ describe('Client-portal Invoices (#1564)', () => {
 	it('falls back to a generic sentence when the failure is not an Error', async () => {
 		await setupInvoices(() => Promise.reject('nope'));
 
-		await expect.element(page.getByText('Failed to load Invoices')).toBeVisible();
+		await expect.element(page.getByText('Failed to load invoices')).toBeVisible();
 	});
 
 	it('loads the next page on request', async () => {

@@ -71,7 +71,7 @@ export function contractStatusLabel(status: string): string {
  * be a fact the model does not hold -- exactly what ADR-0005 calls a lie
  * the first test run would have to assert. */
 export function contractVoidedNotice(practiceName: string): string {
-	return `${practiceName} ended this Contract.`;
+	return `${practiceName} ended this contract.`;
 }
 
 /** What she reads where the signing form stood, once she has signed
@@ -82,10 +82,10 @@ export function contractVoidedNotice(practiceName: string): string {
  * message to the Practice: signing sends none. */
 /** What the Contract page and the "Your care" card both say before any
  * Contract reaches her (#2007): one sentence, so the two cannot drift. */
-export const NO_CONTRACT_MESSAGE = 'No Contract has been sent for your care yet.';
+export const NO_CONTRACT_MESSAGE = 'No contract has been sent for your care yet.';
 
 export function contractSignedNotice(practiceName: string): string {
-	return `You signed this Contract. ${practiceName} can see it is signed, and your copy is ready to download.`;
+	return `You signed this contract. ${practiceName} can see it is signed, and your copy is ready to download.`;
 }
 
 /** The Engagement noun (GLOSSARY.md: "my care", heading form "Your care").
@@ -174,10 +174,10 @@ const CLIENT_ACTIVITY_PHRASES: Record<string, string> = {
 	// `voided`'s own fixed label ("No longer active") rather than
 	// borrowing `contractVoidedNotice`'s wording, which names the
 	// Practice -- a name this row does not carry.
-	contract_created: 'Your Contract was prepared.',
-	contract_sent: 'Your Contract was sent to you.',
-	contract_signed: 'Your Contract was signed.',
-	contract_voided: 'Your Contract is no longer active.',
+	contract_created: 'Your contract was prepared.',
+	contract_sent: 'Your contract was sent to you.',
+	contract_signed: 'Your contract was signed.',
+	contract_voided: 'Your contract is no longer active.',
 
 	// Its price. `contract_amount_overridden` (a person chose a different
 	// figure) and `contract_amount_repriced` (the Practice's rate card
@@ -185,9 +185,9 @@ const CLIENT_ACTIVITY_PHRASES: Record<string, string> = {
 	// between them is the Practice's own bookkeeping, and to a Client both
 	// mean her price changed -- the same reasoning GLOSSARY.md's Invoice
 	// entry gives for `void` and `uncollectible` sharing "You no longer owe this".
-	contract_priced: "Your Contract's price was set.",
-	contract_amount_overridden: "Your Contract's price changed.",
-	contract_amount_repriced: "Your Contract's price changed.",
+	contract_priced: "Your contract's price was set.",
+	contract_amount_overridden: "Your contract's price changed.",
+	contract_amount_repriced: "Your contract's price changed.",
 
 	// #971's two workflow acts -- a void request and its refusal -- are
 	// deliberately absent, and their absence is not a gap: #1096 put both
@@ -216,9 +216,9 @@ const CLIENT_ACTIVITY_PHRASES: Record<string, string> = {
 	// `care_plan_edited`) never reaches her: the portal reader leaves both
 	// out, since a Care Plan is never shown in the Client portal
 	// (GLOSSARY.md, #2066, #2133).
-	birth_plan_started: 'Your Birth Plan was started.',
-	birth_plan_edited: 'Your Birth Plan was updated.',
-	birth_plan_acknowledged: 'You marked your Birth Plan as read.',
+	birth_plan_started: 'Your birth plan was started.',
+	birth_plan_edited: 'Your birth plan was updated.',
+	birth_plan_acknowledged: 'You marked your birth plan as read.',
 
 	// Her money. `invoice_voided` and `invoice_written_off` share one
 	// phrase for GLOSSARY.md's own stated reason: "Written off" would tell
@@ -230,8 +230,8 @@ const CLIENT_ACTIVITY_PHRASES: Record<string, string> = {
 	// all, and whether the Invoice number ever reaches her is still #946's
 	// to decide. "You were sent an Invoice" would be a delivery the model
 	// does not hold.
-	invoice_raised: 'An Invoice was added to your care.',
-	invoice_paid: 'An Invoice was paid.',
+	invoice_raised: 'An invoice was added to your care.',
+	invoice_paid: 'An invoice was paid.',
 	payment_recorded: 'A payment from you was recorded.',
 	payment_reversed: 'A payment recorded earlier was removed.',
 	// #1009. "Returned to you", never "refunded": she hears a refund as a
@@ -240,8 +240,8 @@ const CLIENT_ACTIVITY_PHRASES: Record<string, string> = {
 	// about the money and silent on why, the same restraint the voided
 	// and written-off phrase below keeps.
 	payment_refunded: 'Money was returned to you.',
-	invoice_voided: 'You no longer owe an Invoice.',
-	invoice_written_off: 'You no longer owe an Invoice.',
+	invoice_voided: 'You no longer owe an invoice.',
+	invoice_written_off: 'You no longer owe an invoice.',
 
 	// Her way in. Never "portal": GLOSSARY.md's Portal Account entry says
 	// she meets a login and never the term, and no Client-facing copy in
@@ -308,8 +308,8 @@ export const NO_LONGER_OWED_HEADING = 'What you no longer owe';
 
 /** The three empty-state sentences (#982): each states the product's own
  * record and nothing about anyone's conduct. */
-export const ALL_INVOICES_PAID_MESSAGE = 'You have paid every Invoice for this care.';
-export const NO_INVOICES_MESSAGE = 'There are no Invoices for this care.';
+export const ALL_INVOICES_PAID_MESSAGE = 'You have paid every invoice for this care.';
+export const NO_INVOICES_MESSAGE = 'There are no invoices for this care.';
 export const NO_PAYMENTS_MESSAGE = 'There are no Payments for this care.';
 
 /** Money that went back to her (#1009, ruled on #333). Never "refunded":
@@ -326,7 +326,7 @@ export function returnedToYouSentence(money: string): string {
 /** What stands where a pay button would be on the by-hand rail (#983):
  * nothing to click, and the one thing she can act on. */
 export function byHandPaymentNotice(reference: string): string {
-	return `Your Practice collects this Invoice directly. Quote Invoice ${reference} when you pay.`;
+	return `Your Practice collects this invoice directly. Quote invoice ${reference} when you pay.`;
 }
 
 /** What stands where a pay button would be when the Practice cannot take a
@@ -348,4 +348,4 @@ export function payButtonLabel(amount: string): string {
  * what the product holds: the label stays "Not yet paid" until Stripe's
  * `invoice.paid` arrives, so this says the payment was sent and that the
  * Invoice will change, and never that it is paid. */
-export const PAYMENT_SENT_MESSAGE = 'Your payment was sent. This Invoice will show as Paid once it is confirmed.';
+export const PAYMENT_SENT_MESSAGE = 'Your payment was sent. This invoice will show as Paid once it is confirmed.';

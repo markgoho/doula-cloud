@@ -58,7 +58,7 @@
 			totalToPayCents = next.totalToPayCents;
 			return next;
 		},
-		failureMessage: 'Failed to load more Invoices'
+		failureMessage: 'Failed to load more invoices'
 	});
 
 	onMount(async () => {
@@ -68,7 +68,7 @@
 			invoices.reset(first);
 			isLoaded = true;
 		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Failed to load Invoices';
+			error = error_ instanceof Error ? error_.message : 'Failed to load invoices';
 		}
 	});
 
@@ -152,6 +152,6 @@
 				...(released.length > 0 ? [{ heading: NO_LONGER_OWED_HEADING, content: releasedSection }] : [])
 			]
 		: []}
-	loading={isLoaded || error ? undefined : 'Loading your Invoices'}
+	loading={isLoaded || error ? undefined : 'Loading your invoices'}
 	loadError={error || undefined}
 />

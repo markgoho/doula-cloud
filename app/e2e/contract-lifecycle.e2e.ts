@@ -70,7 +70,7 @@ test('A Contract can be built, sent, signed by the Client, and its Signed PDF re
 	await clientPage.getByRole('button', { name: 'I agree to sign electronically, continue' }).click();
 	await clientPage.getByLabel('Full legal name').fill('Pat Client');
 	await clientPage
-		.getByLabel('I have read this Contract and I am signing it electronically')
+		.getByLabel('I have read this contract and I am signing it electronically')
 		.check();
 	const [signResponse] = await Promise.all([
 		clientPage.waitForResponse(

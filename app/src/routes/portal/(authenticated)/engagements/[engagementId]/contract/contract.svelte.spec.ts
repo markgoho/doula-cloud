@@ -52,7 +52,7 @@ describe('Client-portal Contract status (#212, NH-G5)', () => {
 
 		await expect.element(page.getByText('No longer active')).toBeVisible();
 		// #2037: through Notice, as information -- nothing went wrong.
-		await expect.element(page.getByRole('status')).toHaveTextContent('Riverside Doula Collective ended this Contract.');
+		await expect.element(page.getByRole('status')).toHaveTextContent('Riverside Doula Collective ended this contract.');
 		// NH-G5: never the Staff ContractStatus component's own wording.
 		expect(page.getByText(/Voided —/).elements()).toHaveLength(0);
 	});
@@ -76,19 +76,19 @@ describe('Client-portal Contract signing ends in a Notice (#2037)', () => {
 
 		await page.getByRole('button', { name: 'I agree to sign electronically, continue' }).click();
 		await page.getByLabelText('Full legal name').fill('Anne-Marie Ochieng-Whitfield');
-		await page.getByLabelText('I have read this Contract and I am signing it electronically').click();
+		await page.getByLabelText('I have read this contract and I am signing it electronically').click();
 		await page.getByRole('button', { name: 'Sign', exact: true }).click();
 
 		const notice = page.getByRole('status');
 		await expect
 			.element(notice)
 			.toHaveTextContent(
-				'You signed this Contract. Riverside Doula Collective can see it is signed, and your copy is ready to download.'
+				'You signed this contract. Riverside Doula Collective can see it is signed, and your copy is ready to download.'
 			);
 		await expect.element(notice).toHaveFocus();
 		await expect.element(page.getByText('Signed', { exact: true })).toBeVisible();
 		expect(page.getByRole('button', { name: 'Sign', exact: true }).elements()).toHaveLength(0);
-		await expect.element(page.getByRole('button', { name: 'Download signed Contract (PDF)' })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Download signed contract (PDF)' })).toBeVisible();
 	});
 
 	it('announces nothing on a Contract that was already signed when the page opened', async () => {
@@ -109,7 +109,7 @@ describe('Client-portal signed Contract download (#302)', () => {
 		await setup();
 
 		await expect.element(page.getByText('Ready for your signature')).toBeVisible();
-		expect(page.getByRole('button', { name: 'Download signed Contract (PDF)' }).elements()).toHaveLength(0);
+		expect(page.getByRole('button', { name: 'Download signed contract (PDF)' }).elements()).toHaveLength(0);
 	});
 
 	it('offers a download of the signed Contract once signed, reachable by keyboard and naming the PDF', async () => {
@@ -118,7 +118,7 @@ describe('Client-portal signed Contract download (#302)', () => {
 				? new Response(new Blob(['%PDF-1.4'], { type: 'application/pdf' }), { status: 200 })
 				: jsonResponse({ ...contract, status: 'signed', hasSignedPdf: true })
 		);
-		const download = page.getByRole('button', { name: 'Download signed Contract (PDF)' });
+		const download = page.getByRole('button', { name: 'Download signed contract (PDF)' });
 		await expect.element(download).toBeVisible();
 
 		await download.click();
@@ -136,7 +136,7 @@ describe('Client-portal signed Contract download (#302)', () => {
 
 		await expect.element(page.getByText('No longer active')).toBeVisible();
 		await expect
-			.element(page.getByRole('button', { name: 'Download signed Contract (PDF)' }))
+			.element(page.getByRole('button', { name: 'Download signed contract (PDF)' }))
 			.toBeVisible();
 	});
 
@@ -144,7 +144,7 @@ describe('Client-portal signed Contract download (#302)', () => {
 		await setup(() => jsonResponse({ ...contract, status: 'voided', hasSignedPdf: false }));
 
 		await expect.element(page.getByText('No longer active')).toBeVisible();
-		expect(page.getByRole('button', { name: 'Download signed Contract (PDF)' }).elements()).toHaveLength(0);
+		expect(page.getByRole('button', { name: 'Download signed contract (PDF)' }).elements()).toHaveLength(0);
 	});
 
 	it('reports a failed PDF fetch in words rather than swallowing it (#305 is what fails this locally/in CI)', async () => {
@@ -153,7 +153,7 @@ describe('Client-portal signed Contract download (#302)', () => {
 				? new Response('signed PDF not found', { status: 500 })
 				: jsonResponse({ ...contract, status: 'signed', hasSignedPdf: true })
 		);
-		await page.getByRole('button', { name: 'Download signed Contract (PDF)' }).click();
+		await page.getByRole('button', { name: 'Download signed contract (PDF)' }).click();
 
 		await expect.element(page.getByRole('alert')).toHaveTextContent('signed PDF not found');
 	});
@@ -165,7 +165,7 @@ describe('Client-portal Contract names the screen in every state (#1574)', () =>
 	it('while it loads', async () => {
 		await setup(() => new Promise<Response>(() => {}));
 
-		await expect.element(page.getByRole('status', { name: 'Loading Contract' })).toBeVisible();
+		await expect.element(page.getByRole('status', { name: 'Loading contract' })).toBeVisible();
 		await expect.element(page.getByRole('heading', { level: 1, name: 'Contract' })).toBeVisible();
 		expect(page.getByRole('heading', { level: 1 }).elements()).toHaveLength(1);
 	});
@@ -181,13 +181,13 @@ describe('Client-portal Contract names the screen in every state (#1574)', () =>
 	it('falls back to a generic sentence when the failure is not an Error', async () => {
 		await setup(() => Promise.reject('nope'));
 
-		await expect.element(page.getByText('Failed to load Contract')).toBeVisible();
+		await expect.element(page.getByText('Failed to load contract')).toBeVisible();
 	});
 
 	it('when none has been sent yet', async () => {
 		await setup(() => new Response('none', { status: 404 }));
 
-		await expect.element(page.getByText('No Contract has been sent for your care yet.')).toBeVisible();
+		await expect.element(page.getByText('No contract has been sent for your care yet.')).toBeVisible();
 		await expect.element(page.getByRole('heading', { level: 1, name: 'Contract' })).toBeVisible();
 		expect(page.getByRole('heading', { level: 1 }).elements()).toHaveLength(1);
 	});
