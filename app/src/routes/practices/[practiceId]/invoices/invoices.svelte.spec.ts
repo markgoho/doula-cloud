@@ -12,6 +12,7 @@ import '#lib/styles/app.css';
 import { expectOneFramedHeading } from '#lib/components/templates/pageFrame.testing.js';
 import Page from './InvoicesScreen.svelte';
 import { toPageState } from '../../../routeFixture.js';
+import { PRACTICE_SESSION_DEPENDENCY } from '#lib/practiceSession.js';
 import { clientsCannotPay, data, fixture } from './page.fixture.js';
 
 /*
@@ -37,11 +38,15 @@ Object.assign(pageState, toPageState(fixture));
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
+const invalidate = vi.hoisted(() => vi.fn());
+vi.mock('$app/navigation', () => ({ invalidate }));
+
 const [openInvoice, paidInvoice] = data.items;
 const { practiceId } = fixture.params;
 
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
+	invalidate.mockReset();
 });
 
 async function setup(page: PracticeInvoiceListData = data) {
@@ -231,7 +236,7 @@ async function setupClientsCanPay(
 	};
 	pageState.data = { ...state, session: { ...state.session, ...session } };
 	await testPage.viewport(1440, 900);
-	await render(Page, read ? { data: read } : {});
+	return render(Page, read ? { data: { ...read, clientsCanPay: canPay } } : {});
 }
 
 function isBefore(earlier: Element, later: Element): boolean {
@@ -305,5 +310,44 @@ describe('whether Clients can pay this Practice (#270, #2293)', () => {
 		await setupClientsCanPay(true, data);
 		await expect.element(testPage.getByRole('table')).toBeVisible();
 		await expect.element(testPage.getByText(cannotPayText)).not.toBeInTheDocument();
+	});
+});
+
+async function setupReconcile(canPayPerSession: boolean) {
+	const { rerender } = await setupClientsCanPay(canPayPerSession, undefined);
+	return {
+		land: async (canPayPerRead: boolean) => {
+			await rerender({ data: { ...data, clientsCanPay: canPayPerRead } });
+			await expect.element(testPage.getByRole('table')).toBeVisible();
+		}
+	};
+}
+
+describe('keeping the session in step with the landed read (#2311)', () => {
+	afterEach(() => {
+		pageState.data = toPageState(fixture).data;
+	});
+
+	it.each([
+		{ canPayPerSession: false, canPayPerRead: true },
+		{ canPayPerSession: true, canPayPerRead: false }
+	])(
+		'reads the session again once when it says $canPayPerSession and the read says $canPayPerRead',
+		async ({ canPayPerSession, canPayPerRead }) => {
+			const { land } = await setupReconcile(canPayPerSession);
+			expect(invalidate).not.toHaveBeenCalled();
+
+			await land(canPayPerRead);
+
+			expect(invalidate).toHaveBeenCalledExactlyOnceWith(PRACTICE_SESSION_DEPENDENCY);
+		}
+	);
+
+	it.each([true, false])('leaves the session alone when both say %s', async (canPay) => {
+		const { land } = await setupReconcile(canPay);
+
+		await land(canPay);
+
+		expect(invalidate).not.toHaveBeenCalled();
 	});
 });

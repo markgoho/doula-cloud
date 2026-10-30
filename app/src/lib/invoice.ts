@@ -134,6 +134,10 @@ export interface PracticeInvoicePage {
 	 * total here. */
 	overdueCents: number;
 	overdueCount: number;
+	/**
+	The stored fact the Practice session carries (#2311).
+	*/
+	clientsCanPay: boolean;
 }
 
 /** What the Practice-wide Invoice route's `load` hands its page: one page

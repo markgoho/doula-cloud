@@ -76,6 +76,7 @@ export const data: PracticeInvoiceListData = {
 	refundedCents: 125_050,
 	overdueCents: 450_000,
 	overdueCount: 1,
+	clientsCanPay: true,
 	// #768: the unnarrowed list, so the fixture sweeps the "Payment due"
 	// column and both filter links in the state a Practice meets first.
 	isNarrowedToOverdue: false
@@ -158,6 +159,7 @@ const owner = practiceSession(['owner']).session;
  */
 export const clientsCannotPay: RouteVariant<RouteParameters> = {
 	name: 'The Practice-wide invoice list, at a Practice Clients cannot pay',
+	props: { data: { ...data, clientsCanPay: false } },
 	pageData: { session: { ...owner, clientsCanPay: false, billingMode: 'stripe' } }
 };
 

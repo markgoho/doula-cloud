@@ -25,7 +25,7 @@ const pageState = vi.hoisted(() => ({
 vi.mock('$app/state', () => ({ page: pageState }));
 
 const replaceState = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ replaceState, goto: vi.fn(), invalidate: vi.fn() }));
+vi.mock('$app/navigation', () => ({ replaceState, goto: vi.fn() }));
 
 const takeOutcome = vi.hoisted(() => vi.fn());
 vi.mock('#lib/outcome.js', () => ({ takeOutcome }));

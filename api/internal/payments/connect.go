@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/cardpayments"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/website"
 )
@@ -97,12 +96,6 @@ type ConnectStatusResponse struct {
 	// empty list rather than a missing one, so the client needs no
 	// null-check.
 	RequirementsDue []string `json:"requirementsDue"`
-	// ClientsCanPay is the stored fact the Practice session carries
-	// (cardpayments.ClientsCanPay), beside Stripe's live answer above: the
-	// app compares it with its session and reads the session again when
-	// they differ (#2295). It can trail CardPaymentsStatus until the
-	// Connect webhook lands.
-	ClientsCanPay bool `json:"clientsCanPay"`
 }
 
 // PostConnectHandler lets a Practice Owner start (or resume) Stripe
@@ -232,17 +225,15 @@ func GetConnectStatusHandler(client Client) http.Handler {
 		}
 
 		var accountID sql.NullString
-		var clientsCanPay bool
 		if err := tx.QueryRowContext(r.Context(),
-			`SELECT stripe_connect_account_id, `+cardpayments.ClientsCanPayExpr+` FROM practices WHERE id = $1`, practiceID,
-		).Scan(&accountID, &clientsCanPay); err != nil {
+			`SELECT stripe_connect_account_id FROM practices WHERE id = $1`, practiceID,
+		).Scan(&accountID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		out := ConnectStatusResponse{
-			ClientsCanPay:      clientsCanPay,
 			Status:             StatusNotConnected,
 			CardPaymentsStatus: CapabilityUnsupported,
 			PayoutsStatus:      CapabilityUnsupported,

@@ -10,7 +10,6 @@ import {
 	CONNECT_STATUS_POLL_DELAYS_MS
 } from '#lib/payments.js';
 import { gotoWithOutcome } from '#lib/outcome.js';
-import { PRACTICE_SESSION_DEPENDENCY } from '#lib/practiceSession.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../../routeFixture.js';
 import { fixture } from './page.fixture.js';
@@ -44,8 +43,7 @@ vi.mock('#lib/api.js', () => ({
 }));
 
 const goto = vi.hoisted(() => vi.fn());
-const invalidate = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto, invalidate }));
+vi.mock('$app/navigation', () => ({ goto }));
 
 interface MockOptions {
 	status?: string;
@@ -167,7 +165,6 @@ function mockApi({
 
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
-	invalidate.mockReset();
 	pageState.url = new URL(fixture.url);
 });
 
@@ -194,9 +191,7 @@ function returnRecordCalls(): unknown[][] {
 	return apiFetchWithSession.mock.calls.filter((call: unknown[]) => (call[0] as string).endsWith(RETURN_PATH_SUFFIX));
 }
 
-type StatusReply =
-	| 'error'
-	| { status: string; requirementsDue?: string[]; cardPaymentsStatus?: string; clientsCanPay?: boolean };
+type StatusReply = 'error' | { status: string; requirementsDue?: string[] };
 
 /* Answers the connect-status endpoint with one entry per call, holding on
    the last entry once the list runs out -- so a test can drive the exact
@@ -205,18 +200,9 @@ type StatusReply =
    already declared: these tests are about the Connect status re-read,
    not the website gates the existing describe blocks above already
    cover. */
-function mockApiSequence(
-	replies: StatusReply[],
-	{ roles = ['owner'], clientsCanPay }: { roles?: string[]; clientsCanPay?: boolean } = {}
-) {
+function mockApiSequence(replies: StatusReply[], { roles = ['owner'] }: { roles?: string[] } = {}) {
 	pageState.data = {
-		session: {
-			practiceId: 'practice-1',
-			practiceName: 'Riverside Doula Collective',
-			roles,
-			isContractor: false,
-			clientsCanPay
-		}
+		session: { practiceId: 'practice-1', practiceName: 'Riverside Doula Collective', roles, isContractor: false }
 	};
 	let call = 0;
 	apiFetchWithSession.mockImplementation((path: string) => {
@@ -257,10 +243,9 @@ function mockApiSequence(
 		return Promise.resolve(
 			jsonResponse({
 				status: reply.status,
-				cardPaymentsStatus: reply.cardPaymentsStatus ?? 'unsupported',
+				cardPaymentsStatus: 'unsupported',
 				payoutsStatus: 'unsupported',
-				requirementsDue: reply.requirementsDue ?? [],
-				clientsCanPay: reply.clientsCanPay
+				requirementsDue: reply.requirementsDue ?? []
 			})
 		);
 	});
@@ -290,7 +275,7 @@ async function setup(options: MockOptions = {}) {
  * screen is constructed from a sequence of replies rather than one
  * state. It returns the two handles that block does read -- `container`
  * for the live region, `unmount` for leaving the screen mid-poll. */
-async function setupSequence(replies: StatusReply[], options: { roles?: string[]; clientsCanPay?: boolean } = {}) {
+async function setupSequence(replies: StatusReply[], options: { roles?: string[] } = {}) {
 	mockApiSequence(replies, options);
 	const { container, unmount } = await render(Page, {});
 	return { container, unmount };
@@ -854,57 +839,6 @@ describe('payments settings screen: re-reading Connect status on return from Str
 
 		await expect.element(testPage.getByText(CONNECT_STATUS_CHECK_FAILED_MESSAGE)).toBeVisible();
 		await expect.element(testPage.getByText('Not connected')).toBeVisible();
-	});
-});
-
-describe('payments settings screen: keeping the Practice session in step with Connect status (#2295)', () => {
-	it('reads the session again when it says Clients cannot pay and the status says they can', async () => {
-		await setupSequence([{ status: 'active', cardPaymentsStatus: 'active', clientsCanPay: true }], {
-			clientsCanPay: false
-		});
-		await expect.element(testPage.getByText('Taking payments', { exact: true })).toBeVisible();
-
-		expect(invalidate).toHaveBeenCalledExactlyOnceWith(PRACTICE_SESSION_DEPENDENCY);
-	});
-
-	it('reads the session again when it says Clients can pay and a check finds they no longer can', async () => {
-		await setupSequence(
-			[
-				{ status: 'active', cardPaymentsStatus: 'active', clientsCanPay: true },
-				{ status: 'onboarding_incomplete', cardPaymentsStatus: 'restricted', clientsCanPay: false }
-			],
-			{ clientsCanPay: true }
-		);
-		await expect.element(testPage.getByText('Taking payments', { exact: true })).toBeVisible();
-		expect(invalidate).not.toHaveBeenCalled();
-
-		await testPage.getByRole('button', { name: 'Check status again' }).click();
-
-		await expect.element(testPage.getByText('Onboarding incomplete')).toBeVisible();
-		expect(invalidate).toHaveBeenCalledExactlyOnceWith(PRACTICE_SESSION_DEPENDENCY);
-	});
-
-	it('keeps checking after Stripe says active until the webhook catches up, then reads the session again', async () => {
-		vi.useFakeTimers();
-		returnedFromStripe('return');
-		await setupSequence(
-			[
-				{ status: 'active', cardPaymentsStatus: 'active', clientsCanPay: false },
-				{ status: 'active', cardPaymentsStatus: 'active', clientsCanPay: true }
-			],
-			{ clientsCanPay: false }
-		);
-		expect(connectCallCount()).toBe(1);
-		expect(invalidate).not.toHaveBeenCalled();
-
-		await vi.advanceTimersByTimeAsync(CONNECT_STATUS_POLL_DELAYS_MS[0]);
-
-		expect(connectCallCount()).toBe(2);
-		expect(invalidate).toHaveBeenCalledExactlyOnceWith(PRACTICE_SESSION_DEPENDENCY);
-
-		const totalDelay = CONNECT_STATUS_POLL_DELAYS_MS.reduce((sum, ms) => sum + ms, 0);
-		await vi.advanceTimersByTimeAsync(totalDelay);
-		expect(connectCallCount()).toBe(2);
 	});
 });
 

@@ -24,8 +24,7 @@ const status: ConnectStatusResult = {
 	status: 'payouts_restricted',
 	cardPaymentsStatus: 'active',
 	payoutsStatus: 'restricted',
-	requirementsDue: ['individual.verification.document', 'external_account', 'business_profile.url'],
-	clientsCanPay: true
+	requirementsDue: ['individual.verification.document', 'external_account', 'business_profile.url']
 };
 
 const website: PracticeWebsite = {
@@ -123,8 +122,7 @@ export const asAdminWithNoAccount: RouteVariant = {
 		status: 'not_connected',
 		cardPaymentsStatus: 'unsupported',
 		payoutsStatus: 'unsupported',
-		requirementsDue: [],
-		clientsCanPay: false
+		requirementsDue: []
 	})
 };
 
