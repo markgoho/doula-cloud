@@ -53,9 +53,10 @@ The seven terms, in this order, each stated in the words [The Laws of UX](../des
 | **Cold** | `yes` | Usable cold, on the first visit, with no tour and no tooltip; help is inline, at the field. | Paradox of the Active User |
 | **320px** | `yes` | Every screen in the stage is complete and usable at 320px wide. | [ADR-0024](../adr/0024-layout-is-intrinsic-and-320px-is-a-conformance-commitment.md) |
 
-**How Decisions are counted.** Three rules, all settled:
+**How Decisions are counted.** Four rules, all settled:
 
 - A radio group, a select or a date input is one decision, not one per option ([#1649](https://github.com/markgoho/doula-cloud/issues/1649)'s note on Renata Alvarez's 0.B, applied on [#2184](https://github.com/markgoho/doula-cloud/issues/2184)).
+- A choose-several question (a checkbox group) is one decision too, not one per box ([#2300](https://github.com/markgoho/doula-cloud/issues/2300), 2026-10-30). GOV.UK, the reference under ADR-0021, treats a checkboxes component as one question on one page, and [#2014](https://github.com/markgoho/doula-cloud/issues/2014) built `CheckboxGroup` as `RadioGroup`'s sibling, one fieldset under one legend. Miller's Law still limits how many boxes one group may hold.
 - On a hub page, each headed group of rows is one decision, however many **Change** links it holds. Settings is 5: its four groups and **Delete this Practice** (the founder's decision on [#2185](https://github.com/markgoho/doula-cloud/issues/2185), 2026-10-29). "Check your answers" is a single group, so each of its **Change** links still counts.
 - A list that grows with the Practice's own records (the questions on Plan Templates or Client Fields, the Clients list) is one decision, however many rows it holds, because picking which record to open is one choice. The Plan Templates list is 4: the tabs, the list, **Add a question** and **Next, check your Contract Template** (the founder's decision on [#2193](https://github.com/markgoho/doula-cloud/issues/2193), 2026-10-30). "Check your answers" is not such a list: it is a fixed set of the form's own answers, each **Change** a different answer to reconsider, so each one still counts.
 

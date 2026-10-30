@@ -57,7 +57,7 @@ Every budget line on a journey map ([the Budget line](../journeys/README.md#the-
 | Term | Mark | How it is measured |
 | --- | --- | --- |
 | **Screens** | `manual` | Count each distinct screen from the stage's entry to its end, on the device the stage names. A screen outside the product does not count. |
-| **Decisions** | `manual` | On each screen, count the fields to fill, options to choose and buttons that change what happens next, all visible at once; record the largest count. |
+| **Decisions** | `manual` | On each screen, count the fields to fill, questions to answer and buttons that change what happens next, all visible at once; record the largest count. A radio group, a select, a date input or a checkbox group is one decision, not one per option ([How Decisions are counted](../journeys/README.md#the-budget-line), [#2300](https://github.com/markgoho/doula-cloud/issues/2300)). |
 | **Memory** | `manual` | Walk the stage and note every later step that needs an earlier answer; `yes` if that answer is still on screen when it is needed. |
 | **Time** | `manual` | Time each routine act on the device the stage names, from the input to the result settled on screen, with DevTools' Performance panel (or the Network panel's request timing for a save), as [#237](https://github.com/markgoho/doula-cloud/issues/237) timed Priya Raman's Birth Plan; record the slowest act and whether an acknowledgment showed within 100 ms. |
 | **Confirmation** | `manual` | Read the screen the stage ends on; `yes` if it says what happened and what is next. |
