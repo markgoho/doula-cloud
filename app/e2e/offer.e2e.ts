@@ -72,10 +72,10 @@ test('Owner offers an Engagement to a Doula, who accepts it from her own inbox',
 	await enterPractice(context, page, doula.headers, practiceId);
 	await page.goto(`/practices/${practiceId}/offers`);
 	await expect(page.getByRole('heading', { name: 'Your offers' })).toBeVisible();
-	// exact: true -- #515's hidden "North side, due 2027-01-04" sibling
+	// exact: true -- #515's hidden "North side, due Jan 4, 2027" sibling
 	// (naming the Accept/Decline buttons) otherwise substring-matches too.
 	await expect(page.getByText('North side', { exact: true })).toBeVisible();
-	await expect(page.getByText('2027-01-04', { exact: true })).toBeVisible();
+	await expect(page.getByText('Jan 4, 2027', { exact: true })).toBeVisible();
 	await expect(page.getByText('Two prenatal visits, on call from 38 weeks.')).toBeVisible();
 	await expect(page.getByText('Rosa Martinez')).toHaveCount(0);
 
@@ -86,7 +86,7 @@ test('Owner offers an Engagement to a Doula, who accepts it from her own inbox',
 	// fields stop being served the moment the Offer leaves 'offered', so
 	// the row keeps her fee and loses the area and the date.
 	await expect(page.getByText('North side')).toHaveCount(0);
-	await expect(page.getByText('2027-01-04')).toHaveCount(0);
+	await expect(page.getByText('Jan 4, 2027')).toHaveCount(0);
 	await expect(page.getByText('$450.00')).toBeVisible();
 
 	// And the Practice side reads the same answer back. { exact: true }

@@ -14,6 +14,7 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiFetch } from '#lib/api.js';
+	import { formatCalendarDay } from '#lib/dates.js';
 	import {
 		declinePreAccountOffer,
 		formatFee,
@@ -65,7 +66,7 @@
 			rows.push(
 				{ label: 'Client', value: shown.clientFirstInitial },
 				{ label: 'Area', value: shown.clientArea },
-				{ label: 'Due date', value: shown.dueDate }
+				{ label: 'Due date', value: formatCalendarDay(shown.dueDate) }
 			);
 		}
 		rows.push({ label: 'Fee', value: formatFee(shown.amountCents) });
