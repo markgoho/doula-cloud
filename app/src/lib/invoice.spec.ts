@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
 	billableContractStatus,
+	cardPaymentsRefusal,
+	cardPaymentsWait,
 	createInvoice,
 	formatAmount,
 	invoiceRowStatusLabel,
@@ -127,11 +129,11 @@ describe('createInvoice', () => {
 	// function is always thrown like any other non-2xx response.
 	it('throws with the response body text when Clients cannot pay this Practice', async () => {
 		const fetcher = vi.fn().mockResolvedValue(
-			jsonResponse('Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe.', 409)
+			jsonResponse('Clients cannot pay this Practice by card yet. A Practice Owner has to connect Stripe.', 409)
 		);
 
 		await expect(createInvoice(fetcher, 'practice-1', 'eng-1')).rejects.toThrow(
-			'Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe.'
+			'Clients cannot pay this Practice by card yet. A Practice Owner has to connect Stripe.'
 		);
 	});
 
@@ -183,6 +185,40 @@ describe('createInvoice', () => {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ billingMode: 'by_hand' })
 		});
+	});
+});
+
+// #2200: who reads "Clients cannot pay by card" decides what it asks of
+// her. The Owner connects Stripe; an Admin can reach Getting paid, where
+// she can ask the Owners; anyone else is told who can.
+describe('cardPaymentsWait and cardPaymentsRefusal', () => {
+	const owner = { isOwner: true, isOwnerOrAdmin: true };
+	const admin = { isOwner: false, isOwnerOrAdmin: true };
+	const doula = { isOwner: false, isOwnerOrAdmin: false };
+
+	it('asks the Owner to connect Stripe on Getting paid', () => {
+		expect(cardPaymentsWait(owner)).toEqual({
+			message: 'Clients cannot pay you by card yet. To take card payments, connect Stripe.',
+			linkLabel: 'Connect Stripe on Getting paid'
+		});
+		expect(cardPaymentsRefusal(owner)).toBe('Connect Stripe on Getting paid before Clients can pay by card');
+	});
+
+	it('tells an Admin who connects it, and sends her to Getting paid', () => {
+		expect(cardPaymentsWait(admin)).toEqual({
+			message: 'Clients cannot pay this Practice by card yet. A Practice Owner has to connect Stripe.',
+			linkLabel: 'Go to Getting paid'
+		});
+		expect(cardPaymentsRefusal(admin)).toBe(
+			'A Practice Owner has to connect Stripe on Getting paid before Clients can pay by card'
+		);
+	});
+
+	it('tells anyone else who connects it, with nowhere to go', () => {
+		expect(cardPaymentsWait(doula)).toEqual({
+			message: 'Clients cannot pay this Practice by card yet. A Practice Owner has to connect Stripe.'
+		});
+		expect(cardPaymentsRefusal(doula)).toBe('A Practice Owner has to connect Stripe before Clients can pay by card');
 	});
 });
 

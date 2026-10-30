@@ -77,6 +77,12 @@ type PracticeSessionResponse struct {
 	// (#2293). The Practice's answer for every caller, as the Engagement
 	// read already gives it; PostInvoiceHandler's gate is what refuses.
 	ClientsCanPay bool `json:"clientsCanPay"`
+	// BillingMode is practices.billing_mode (#271), "stripe" or "by_hand",
+	// and left out until the Practice has chosen one. It rides beside
+	// ClientsCanPay for the same first-frame reason (#2200): Stripe not
+	// being connected stops nobody paying a Practice that bills by hand,
+	// so the Invoices list says so only where card payment is the rail.
+	BillingMode string `json:"billingMode,omitempty"`
 }
 
 // hasClientsQuery names practice_id itself rather than leaving the
@@ -87,8 +93,9 @@ type PracticeSessionResponse struct {
 const hasClientsQuery = `SELECT EXISTS (SELECT 1 FROM clients WHERE practice_id = $1 AND merged_into IS NULL)`
 
 // practiceQuery's second column is payments.ClientsCanPay's predicate,
-// written out here because payments imports this package.
-const practiceQuery = `SELECT name, stripe_connect_card_payments_status = 'active' FROM practices WHERE id = $1`
+// written out here because payments imports this package. The third is
+// the billing mode, ” while none is chosen.
+const practiceQuery = `SELECT name, stripe_connect_card_payments_status = 'active', COALESCE(billing_mode::text, '') FROM practices WHERE id = $1`
 
 // PracticeSessionHandler answers GET .../session: which Practice, which
 // roles, which employment type. Moved from routes_practice.go by #836 --
@@ -101,7 +108,8 @@ func PracticeSessionHandler() http.Handler {
 
 		var name string
 		var clientsCanPay bool
-		if err := tx.QueryRowContext(r.Context(), practiceQuery, practiceID).Scan(&name, &clientsCanPay); err != nil {
+		var billingMode string
+		if err := tx.QueryRowContext(r.Context(), practiceQuery, practiceID).Scan(&name, &clientsCanPay, &billingMode); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -134,6 +142,7 @@ func PracticeSessionHandler() http.Handler {
 			AgreementDue:    agreementDueFrom(r.Context()),
 			HasClients:      hasClients,
 			ClientsCanPay:   clientsCanPay,
+			BillingMode:     billingMode,
 		}
 		apierr.WriteJSON(w, http.StatusOK, resp)
 	})

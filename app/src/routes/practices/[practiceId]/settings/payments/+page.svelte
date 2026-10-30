@@ -331,11 +331,11 @@
 		}
 	> = {
 		not_connected: {
-			explanation: 'Clients cannot pay their invoices yet.',
+			explanation: 'Clients cannot pay by card yet.',
 			onboarding: 'always'
 		},
 		onboarding_incomplete: {
-			explanation: 'Stripe still needs some details before Clients can pay this Practice.',
+			explanation: 'Stripe still needs some details before Clients can pay by card.',
 			onboarding: 'always'
 		},
 		pending: {

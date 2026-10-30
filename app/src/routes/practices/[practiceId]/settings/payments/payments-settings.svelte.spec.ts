@@ -359,6 +359,17 @@ describe('payments settings screen', () => {
 		await expect.element(testPage.getByText('A Practice Owner has to connect Stripe.')).not.toBeInTheDocument();
 	});
 
+	// #2200: a Practice that bills by hand is paid with no Stripe at all,
+	// so what waits on Stripe is card payment, never payment.
+	it.each([
+		['not_connected', 'Clients cannot pay by card yet.'],
+		['onboarding_incomplete', 'Stripe still needs some details before Clients can pay by card.']
+	] as const)('says only card payment waits on Stripe while %s', async (status, words) => {
+		await setup({ status, roles: ['owner'] });
+
+		await expect.element(testPage.getByText(words, { exact: true })).toBeVisible();
+	});
+
 	it('offers to continue onboarding for an Owner mid-onboarding', async () => {
 		await setup({ status: 'onboarding_incomplete', roles: ['owner'] });
 

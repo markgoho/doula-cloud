@@ -34,6 +34,8 @@ interface SetupOptions {
 
 const paymentsSettingsHref = 'https://example.test/practices/practice-1/settings/payments';
 
+const cannotPayByCard = 'Clients cannot pay this Practice by card yet. A Practice Owner has to connect Stripe.';
+
 const invoiceOpen: Invoice = {
 	id: 'inv-1',
 	contractId: 'contract-1',
@@ -297,23 +299,34 @@ describe('InvoiceSection.svelte', () => {
 
 	// #270: clientsCanPay is a standing fact read before the form ever
 	// shows, replacing the old post-submit connectRequired/isOwner gate.
-	it('shows the cannot-pay Notice and a link to Payments settings for an Owner when Clients cannot pay', async () => {
-		await setup({ clientsCanPay: false, isOwner: true });
+	// #2200: what she reads turns on what she can do about it.
+	it('asks an Owner to connect Stripe, with a link to Getting paid, when Clients cannot pay by card', async () => {
+		await setup({ clientsCanPay: false, isOwner: true, isOwnerOrAdmin: true });
 
 		await expect
-			.element(page.getByText('Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe.'))
+			.element(page.getByText('Clients cannot pay you by card yet. To take card payments, connect Stripe.'))
 			.toBeVisible();
-		await expect.element(page.getByRole('link', { name: 'Go to Payments settings' })).toBeVisible();
+		await expect
+			.element(page.getByRole('link', { name: 'Connect Stripe on Getting paid' }))
+			.toHaveAttribute('href', paymentsSettingsHref);
 		await expect.element(page.getByRole('button', { name: 'Create Invoice' })).not.toBeInTheDocument();
 	});
 
-	it('shows the cannot-pay Notice with no link for a non-Owner when Clients cannot pay', async () => {
-		await setup({ clientsCanPay: false, isOwner: false });
+	it('tells an Admin who connects Stripe, with a link to Getting paid, when Clients cannot pay by card', async () => {
+		await setup({ clientsCanPay: false, isOwner: false, isOwnerOrAdmin: true });
 
+		await expect.element(page.getByText(cannotPayByCard)).toBeVisible();
 		await expect
-			.element(page.getByText('Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe.'))
-			.toBeVisible();
-		await expect.element(page.getByRole('link', { name: 'Go to Payments settings' })).not.toBeInTheDocument();
+			.element(page.getByRole('link', { name: 'Go to Getting paid' }))
+			.toHaveAttribute('href', paymentsSettingsHref);
+		await expect.element(page.getByRole('button', { name: 'Create Invoice' })).not.toBeInTheDocument();
+	});
+
+	it('tells a Doula who connects Stripe, with no link, when Clients cannot pay by card', async () => {
+		await setup({ clientsCanPay: false, isOwner: false, isOwnerOrAdmin: false });
+
+		await expect.element(page.getByText(cannotPayByCard)).toBeVisible();
+		expect(page.getByRole('link').elements()).toHaveLength(0);
 		await expect.element(page.getByRole('button', { name: 'Create Invoice' })).not.toBeInTheDocument();
 	});
 
@@ -362,7 +375,7 @@ describe('InvoiceSection.svelte', () => {
 	it('takes priority over the cannot-pay Notice on an unbillable Contract', async () => {
 		await setup({ contractStatus: 'voided', clientsCanPay: false, isOwner: true });
 
-		await expect.element(page.getByRole('link', { name: 'Go to Payments settings' })).not.toBeInTheDocument();
+		await expect.element(page.getByRole('link', { name: 'Connect Stripe on Getting paid' })).not.toBeInTheDocument();
 		await expect.element(page.getByText(/This Contract has been voided/)).toBeVisible();
 	});
 
@@ -416,7 +429,7 @@ describe('InvoiceSection.svelte', () => {
 			await expect.element(page.getByLabelText('By card, through Stripe.')).toBeVisible();
 			await expect.element(page.getByLabelText('By hand.')).toBeVisible();
 			await expect.element(page.getByRole('button', { name: 'Create Invoice' })).toBeVisible();
-			await expect.element(page.getByText(/Clients cannot pay this Practice/)).not.toBeInTheDocument();
+			await expect.element(page.getByText(/Clients cannot pay/)).not.toBeInTheDocument();
 		});
 
 		it('says the words of the question, the hint and both options (#1590)', async () => {
@@ -440,6 +453,54 @@ describe('InvoiceSection.svelte', () => {
 			await setupAsked({ billingMode: 'unset', clientsCanPay: false });
 
 			await expect.element(page.getByText('A Practice Owner must connect Stripe first.', { exact: false })).toBeVisible();
+		});
+
+		it('tells an Owner on the Stripe option to connect Stripe on Getting paid (#2200)', async () => {
+			await setupAsked({ billingMode: 'unset', clientsCanPay: false, isOwner: true, isOwnerOrAdmin: true });
+
+			await expect.element(page.getByText('Connect Stripe first, on Getting paid.', { exact: false })).toBeVisible();
+		});
+
+		// #2200: the walk chose By card before Stripe was connected and met
+		// the BFF's refusal. The question knows the answer will be refused,
+		// so it says so itself, sends nothing, and links to the fix for a
+		// reader who can open Getting paid.
+		it.each([
+			{
+				reader: 'an Owner',
+				isOwner: true,
+				isOwnerOrAdmin: true,
+				words: 'Connect Stripe on Getting paid before Clients can pay by card',
+				href: paymentsSettingsHref as string | null
+			},
+			{
+				reader: 'an Admin',
+				isOwner: false,
+				isOwnerOrAdmin: true,
+				words: 'A Practice Owner has to connect Stripe on Getting paid before Clients can pay by card',
+				href: paymentsSettingsHref as string | null
+			}
+		])('refuses By card before Stripe can take one, and links $reader to Getting paid', async ({ isOwner, isOwnerOrAdmin, words, href }) => {
+			const { onCreate } = await setupAsked({ billingMode: 'unset', clientsCanPay: false, isOwner, isOwnerOrAdmin });
+
+			await page.getByLabelText('By card, through Stripe.').click();
+			await page.getByRole('button', { name: 'Create Invoice' }).click();
+
+			expect(onCreate).not.toHaveBeenCalled();
+			await expect.element(page.getByRole('link', { name: words })).toHaveAttribute('href', href);
+		});
+
+		it('refuses By card before Stripe can take one, and tells a Doula who connects it (#2200)', async () => {
+			const { onCreate } = await setupAsked({ billingMode: 'unset', clientsCanPay: false });
+
+			await page.getByLabelText('By card, through Stripe.').click();
+			await page.getByRole('button', { name: 'Create Invoice' }).click();
+
+			expect(onCreate).not.toHaveBeenCalled();
+			await expect
+				.element(page.getByRole('alert'))
+				.toHaveTextContent('A Practice Owner has to connect Stripe before Clients can pay by card');
+			expect(page.getByRole('link', { name: /connect Stripe/ }).elements()).toHaveLength(0);
 		});
 
 		it('does not warn when Clients can already pay (#1590)', async () => {
@@ -495,7 +556,7 @@ describe('InvoiceSection.svelte', () => {
 			const onCreate = vi
 				.fn()
 				.mockRejectedValue(
-					new RefusalError('Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe.')
+					new RefusalError(cannotPayByCard)
 				);
 			await setupAsked({ billingMode: 'unset', onCreate });
 
@@ -505,7 +566,7 @@ describe('InvoiceSection.svelte', () => {
 			await expect.element(page.getByRole('heading', { name: 'There is a problem' })).toBeVisible();
 			await expect
 				.element(page.getByRole('alert'))
-				.toHaveTextContent('Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe.');
+				.toHaveTextContent(cannotPayByCard);
 		});
 
 		it('shows a refusal that names the billing-mode question against the group and in the summary (#1775)', async () => {
@@ -535,7 +596,7 @@ describe('InvoiceSection.svelte', () => {
 		await setup({ billingMode: 'by_hand', clientsCanPay: false, hasClientEmail: false });
 
 		await expect.element(page.getByRole('button', { name: 'Create Invoice' })).toBeVisible();
-		await expect.element(page.getByText(/Clients cannot pay this Practice/)).not.toBeInTheDocument();
+		await expect.element(page.getByText(/Clients cannot pay/)).not.toBeInTheDocument();
 		await expect.element(page.getByText(/no email address on file/)).not.toBeInTheDocument();
 	});
 

@@ -195,10 +195,13 @@ func billingModeOf(stripeInvoiceID sql.NullString) string {
 // non-Owner to ask one, both in the words of a person being refused
 // something. The frontend now carries that same routing decision itself,
 // from EngagementDetail.ClientsCanPay -- a standing fact read before the
-// form is ever shown -- so this is only reachable by a caller that
-// bypasses the UI (or a race against a webhook mid-flight), and needs no
-// role-specific wording of its own.
-const MsgClientsCannotPay = "Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe before an Invoice can be sent."
+// form is ever shown, and since #2200 the first Invoice's billing-mode
+// question refuses "By card" itself while it is false -- so this is only
+// reachable by a caller that bypasses the UI (or a race against a webhook
+// mid-flight), and needs no role-specific wording of its own. "By card"
+// because it is true whatever the Practice chose: a Practice that bills
+// by hand never reaches this rail.
+const MsgClientsCannotPay = "Clients cannot pay this Practice by card yet. A Practice Owner has to connect Stripe."
 
 // MsgClientNoEmail is the Stripe rail's 422 when the Client has no email
 // address (#430): Stripe mails the Invoice, so there is nowhere to send

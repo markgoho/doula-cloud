@@ -117,6 +117,29 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 		expect(result).toMatchObject({ session: { clientsCanPay: false } });
 	});
 
+	// #2200: the Invoices list says nothing about Stripe to a Practice
+	// that bills by hand.
+	it("carries the Practice's billing mode", async () => {
+		const { load } = await import('./+layout.js');
+		setup({
+			'/api/practices/practice-1/session': {
+				status: 200,
+				body: {
+					staffId: 'staff-9',
+					practiceName: 'Riverside Doula Collective',
+					roles: ['owner'],
+					isContractor: false,
+					clientsCanPay: false,
+					billingMode: 'by_hand'
+				}
+			}
+		});
+
+		const result = await load(loadArguments);
+
+		expect(result).toMatchObject({ session: { billingMode: 'by_hand' } });
+	});
+
 	// #2183: saving a Practice's first Client invalidates this name, so the
 	// session (and with it the top bar) is read again on the way out.
 	it('declares the dependency an act invalidates to read the session again', async () => {

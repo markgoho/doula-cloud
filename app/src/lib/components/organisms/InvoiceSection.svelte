@@ -37,7 +37,8 @@
 	import {
 		billableContractStatus,
 		clientHasNoEmailMessage,
-		clientsCannotPayMessage,
+		cardPaymentsRefusal,
+		cardPaymentsWait,
 		contractorInvoicesMessage,
 		formatAmount,
 		invoiceCreatedMessage,
@@ -106,7 +107,9 @@
 		 * timezone settings screen does (`loadPracticeTimezone`). */
 		practiceTimezone: string;
 		/** Gates Record payment/Void/Write off/Reverse payment/Return money -- ADR-0008's
-		 * Contract-money write row, Owner and Admin only. */
+		 * Contract-money write row, Owner and Admin only. Also who is linked
+		 * to Getting paid while Stripe cannot take a card (#2200): its
+		 * Connect status read is the same Owner-and-Admin pair. */
 		isOwnerOrAdmin: boolean;
 		/** False for a contractor Doula (#2002, #2094): ADR-0008 gives her
 		 * each Invoice's date and status and never its money, so the
@@ -145,10 +148,12 @@
 	// billingModeError is the billing-mode question's own error, from the
 	// empty-submit check or a BFF refusal naming `billingMode` (#1775).
 	// createError is the untargeted summary fallback: a refusal that names
-	// no field on screen, such as Stripe not connected.
+	// no field on screen, such as Stripe not connected. It is a whole
+	// FormError so that the one this form composes itself can carry the
+	// link to its fix (#2200).
 	let billingModeError = $state('');
 	let isCreating = $state(false);
-	let createError = $state('');
+	let createError = $state<FormError | undefined>();
 	// Set once a create works (#2002); cleared when the next one starts.
 	let hasCreated = $state(false);
 	function openBillingModeQuestion() {
@@ -160,7 +165,7 @@
 		isAskingBillingMode = false;
 		chosenBillingMode = undefined;
 		billingModeError = '';
-		createError = '';
+		createError = undefined;
 	}
 
 	const billingModeName = 'invoice-billing-mode';
@@ -173,7 +178,7 @@
 	const createFormErrors = $derived<FormError[]>(
 		[
 			billingModeError ? { message: billingModeError, targetId: billingModeFieldId } : undefined,
-			createError ? { message: createError } : undefined
+			createError
 		].filter((entry) => entry !== undefined)
 	);
 
@@ -187,8 +192,11 @@
 			billingModeError = error_.details.billingMode;
 			return;
 		}
-		createError = error_ instanceof Error ? error_.message : 'Failed to create invoice';
+		createError = { message: error_ instanceof Error ? error_.message : 'Failed to create invoice' };
 	}
+
+	// #2200: what an Owner, an Admin and anyone else can do about it.
+	const cardPaymentsWaitWords = $derived(cardPaymentsWait({ isOwner, isOwnerOrAdmin }));
 
 	const billingModeOptions = $derived([
 		{
@@ -196,7 +204,7 @@
 			label: 'By card, through Stripe.',
 			description: clientsCanPay
 				? 'DoulaCloud sends the bill and the Client pays by card.'
-				: 'DoulaCloud sends the bill and the Client pays by card. A Practice Owner must connect Stripe first.'
+				: `DoulaCloud sends the bill and the Client pays by card. ${isOwner ? 'Connect Stripe first, on Getting paid.' : 'A Practice Owner must connect Stripe first.'}`
 		},
 		{
 			value: 'by_hand' as const,
@@ -210,12 +218,24 @@
 	// validate before calling onCreate.
 	async function handleCreate(event: SubmitEvent) {
 		event.preventDefault();
-		createError = '';
+		createError = undefined;
 		billingModeError = '';
 		hasCreated = false;
 
 		if (billingMode === undefined && chosenBillingMode === undefined) {
 			billingModeError = 'Select how this Practice bills Clients';
+			return;
+		}
+
+		// #2200: the BFF refuses a card Invoice until Stripe can take one,
+		// and this form already knows that from the standing fact, so it
+		// says so itself, links to the fix where the reader can open it,
+		// and sends nothing.
+		if (billingMode === undefined && chosenBillingMode === 'stripe' && !clientsCanPay) {
+			createError = {
+				message: cardPaymentsRefusal({ isOwner, isOwnerOrAdmin }),
+				...(isOwnerOrAdmin && { href: paymentsSettingsHref })
+			};
 			return;
 		}
 
@@ -866,9 +886,9 @@
 		<Button label="Cancel" variant="secondary" onClick={closeBillingModeQuestion} />
 	</StackedForm>
 {:else if billingMode === 'stripe' && !clientsCanPay}
-	<Notice variant="info" message={clientsCannotPayMessage} />
-	{#if isOwner}
-		<Link href={paymentsSettingsHref} label="Go to Payments settings" />
+	<Notice variant="info" message={cardPaymentsWaitWords.message} />
+	{#if cardPaymentsWaitWords.linkLabel}
+		<Link href={paymentsSettingsHref} label={cardPaymentsWaitWords.linkLabel} />
 	{/if}
 {:else if billingMode === 'stripe' && !hasClientEmail}
 	<Notice variant="info" message={clientHasNoEmailMessage} />

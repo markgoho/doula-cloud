@@ -16,7 +16,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { formatCalendarDay } from '#lib/dates.js';
 	import {
-		clientsCannotPayMessage,
+		cardPaymentsWait,
 		dueLabel,
 		formatAmount,
 		invoiceRowStatusLabel,
@@ -33,6 +33,7 @@
 	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import type { PracticeInvoiceListData } from '#lib/invoice.js';
 	import type { PracticeSession } from '../+layout.js';
+	import { isOwner, isOwnerOrAdmin } from '#lib/roles.js';
 
 	/*
 	 * `data` is the read once it lands (#2255). Until then the screen draws
@@ -42,8 +43,17 @@
 	let { data }: { data?: PracticeInvoiceListData } = $props();
 
 	const isNarrowedToOverdue = $derived(page.url.searchParams.get('overdue') === 'true');
-	const canClientsPay = $derived(
-		(page.data as { session?: PracticeSession }).session?.clientsCanPay !== false
+	const session = $derived((page.data as { session?: PracticeSession }).session);
+	// #2200: Stripe not being connected stops a card payment, never a
+	// Practice that bills by hand, so that one is told nothing about it.
+	const isWaitingOnStripe = $derived(session?.clientsCanPay === false && session.billingMode !== 'by_hand');
+	// Owner/Admin read this screen (+page.ts), so each gets a way to
+	// Getting paid; cardPaymentsWait words it for which one she is.
+	const cardPaymentsWaitWords = $derived(
+		session ? cardPaymentsWait({ isOwner: isOwner(session), isOwnerOrAdmin: isOwnerOrAdmin(session) }) : undefined
+	);
+	const paymentsSettingsHref = $derived(
+		resolve('/practices/[practiceId]/settings/payments', { practiceId: page.params.practiceId! })
 	);
 
 	/*
@@ -218,8 +228,13 @@
 		From the session, so it is drawn on the first frame and the rows
 		never move under it (#2293).
 	-->
-	{#if !canClientsPay}
-		<Notice variant="info" message={clientsCannotPayMessage} />
+	{#if isWaitingOnStripe && cardPaymentsWaitWords}
+		<stack-l space="var(--space-related)">
+			<Notice variant="info" message={cardPaymentsWaitWords.message} />
+			{#if cardPaymentsWaitWords.linkLabel}
+				<Link href={paymentsSettingsHref} label={cardPaymentsWaitWords.linkLabel} />
+			{/if}
+		</stack-l>
 	{/if}
 
 	{#if read}
