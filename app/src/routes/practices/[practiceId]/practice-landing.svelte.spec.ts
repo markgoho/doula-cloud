@@ -71,7 +71,8 @@ const { practiceId } = fixture.params;
 interface SetupOptions {
 	roles?: string[];
 	clients?: unknown[];
-	overrides?: Record<string, Response>;
+	// A Promise holds that read open until the test settles it (#2245).
+	overrides?: Record<string, Response | Promise<Response>>;
 	secondFactor?: boolean;
 }
 
@@ -86,7 +87,7 @@ async function setup({
 	// The Membership (roles, practiceName) comes off page.data.session
 	// (#835), not a fetch this mock has to answer.
 	pageState.data = { session: { practiceId, practiceName, roles, isContractor: false, secondFactor } };
-	const answers: Record<string, Response> = {
+	const answers: Record<string, Response | Promise<Response>> = {
 		// The declined Offer has no counterpart in the fixture, which
 		// answers `/offers` with only the still-open one -- so it is
 		// written as a spread onto that same Offer rather than a second
@@ -798,5 +799,96 @@ describe('the Practice landing page', () => {
 			`/api/practices/${practiceId}/push-subscriptions`,
 			apiFetch
 		);
+	});
+});
+
+/*
+ * #2245, the Staff sibling of #2218: each list started as an empty array
+ * and drew its empty line until its read answered, so the Overview said
+ * nothing had happened and nobody was waiting while both were still on
+ * the wire. The page holds its loading state until both lists have
+ * answered, so neither empty line paints before the data does and no row
+ * arriving later moves the cards under it (ADR-0020). A read that fails
+ * says so in place of the list, never with the empty line under it.
+ */
+const NOTHING_HAPPENED = 'Nothing has happened yet.';
+const NOBODY_WAITING = 'Nobody is waiting on a reply.';
+
+function heldOpen(): { read: Promise<Response>; answer: (response: Response) => void } {
+	const { promise, resolve } = Promise.withResolvers<Response>();
+	return { read: promise, answer: resolve };
+}
+
+function loadingStatus() {
+	return testPage.getByRole('status', { name: 'Loading your Practice' });
+}
+
+describe('the Practice landing page while its lists are loading (#2245)', () => {
+	it('holds Recent activity until its read answers, then shows the rows', async () => {
+		await testPage.viewport(1440, 900);
+		const activity = heldOpen();
+		await setup({ overrides: { activity: activity.read } });
+
+		await expect.element(loadingStatus()).toBeVisible();
+		expect(testPage.getByText(NOTHING_HAPPENED).elements()).toHaveLength(0);
+		expect(testPage.getByText(NOBODY_WAITING).elements()).toHaveLength(0);
+
+		activity.answer(
+			jsonResponse({
+				items: [
+					{
+						subjectKind: 'engagement',
+						subjectId: 'e1',
+						subjectName: 'Amara',
+						action: 'invoice_raised',
+						actorKind: 'staff',
+						actorName: 'Mark Goho',
+						createdAt: new Date().toISOString()
+					}
+				],
+				hasMore: false
+			})
+		);
+
+		await expect.element(testPage.getByRole('cell', { name: 'Invoice created for Amara' })).toBeVisible();
+		expect(loadingStatus().elements()).toHaveLength(0);
+	});
+
+	it('holds Clients waiting on a reply until its read answers, then shows who is waiting', async () => {
+		await testPage.viewport(1440, 900);
+		const waiting = heldOpen();
+		await setup({ overrides: { 'awaiting-reply': waiting.read } });
+
+		await expect.element(loadingStatus()).toBeVisible();
+		expect(testPage.getByText(NOBODY_WAITING).elements()).toHaveLength(0);
+		expect(testPage.getByText(NOTHING_HAPPENED).elements()).toHaveLength(0);
+
+		waiting.answer(
+			jsonResponse({
+				items: [{ engagementId: 'engagement-9', clientName: 'Priya', lastMessageAt: new Date().toISOString() }],
+				hasMore: false
+			})
+		);
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Priya' }))
+			.toHaveAttribute('href', `/practices/${practiceId}/engagements/engagement-9`);
+		expect(loadingStatus().elements()).toHaveLength(0);
+	});
+
+	it('says the activity read failed, and not that nothing has happened', async () => {
+		await testPage.viewport(1440, 900);
+		await setup({ overrides: { activity: refusal('The activity could not be read.') } });
+
+		await expect.element(testPage.getByText('The activity could not be read.')).toBeVisible();
+		expect(testPage.getByText(NOTHING_HAPPENED).elements()).toHaveLength(0);
+	});
+
+	it('says the waiting read failed, and not that nobody is waiting', async () => {
+		await testPage.viewport(1440, 900);
+		await setup({ overrides: { 'awaiting-reply': refusal('Who is waiting could not be read.') } });
+
+		await expect.element(testPage.getByText('Who is waiting could not be read.')).toBeVisible();
+		expect(testPage.getByText(NOBODY_WAITING).elements()).toHaveLength(0);
 	});
 });

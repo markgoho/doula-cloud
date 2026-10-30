@@ -34,19 +34,24 @@ import type { Page, Response } from '@playwright/test';
 
 /**
  * Resolves once a tab has finished the Staff Practice landing screen's
- * mount chain. Two chains start concurrently: the authenticated layout's
- * who-am-I read, and the landing page's own three reads in sequence, whose
- * last is the "waiting on a reply" roll-up -- so awaiting that one covers
- * the two before it. Call it *before* the navigation, so the listeners are
- * attached when the responses arrive, and await it after.
+ * mount chain. The authenticated layout's who-am-I read starts first, and
+ * the landing page's own three reads -- its blocks, the activity ledger
+ * and the "waiting on a reply" roll-up -- run side by side (#2245), so no
+ * one response is the last. The page holds its "Loading your Practice"
+ * status until all three have answered, so once the two named list reads
+ * are in, that status going is the blocks' answer too. Call it *before*
+ * the navigation, so the listeners are attached when the responses
+ * arrive, and await it after.
  */
-export function staffLandingSettled(tab: Page, practiceId: string): Promise<Response[]> {
-	return Promise.all([
+export async function staffLandingSettled(tab: Page, practiceId: string): Promise<void> {
+	await Promise.all([
 		tab.waitForResponse((response) => response.url().includes('/api/staff/session')),
+		tab.waitForResponse((response) => response.url().includes(`/practices/${practiceId}/activity`)),
 		tab.waitForResponse((response) =>
 			response.url().includes(`/practices/${practiceId}/messages/awaiting-reply`)
 		)
 	]);
+	await tab.getByRole('status', { name: 'Loading your Practice' }).waitFor({ state: 'detached' });
 }
 
 /**
