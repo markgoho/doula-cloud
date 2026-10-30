@@ -6,6 +6,7 @@
 	 * late-night one, is the one shown, and the switch below shows the
 	 * others.
 	 */
+	import { PORTAL_DOOR_LINE } from '#lib/portalDoor.js';
 	import LandingPage from '#lib/components/templates/LandingPage.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import DoorLink from '#lib/components/atoms/DoorLink.svelte';
@@ -29,7 +30,7 @@
 			<DoorLink
 				href="/style-guide/landing-page"
 				label="Client portal sign in"
-				description="Your contract, your birth plan, and your invoices."
+				description={PORTAL_DOOR_LINE}
 			/>
 			<DoorLink
 				href="/style-guide/landing-page"

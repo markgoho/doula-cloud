@@ -58,7 +58,7 @@
 		{
 			value: 'attachment_granted',
 			label: 'From the day a doula takes the birth',
-			description: 'For a practice that is on call from the moment it is hired.'
+			description: 'For a Practice that is on call from the moment it is hired.'
 		}
 	];
 
@@ -170,7 +170,7 @@
 		tonight.
 	-->
 	<WarningText
-		message="Changing this moves every on-call window this practice is carrying, including births already under way."
+		message="Changing this moves every on-call window this Practice is carrying, including births already under way."
 	/>
 {/snippet}
 

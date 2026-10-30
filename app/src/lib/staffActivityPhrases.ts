@@ -68,11 +68,11 @@ const STAFF_ACTIVITY_PHRASES: Record<string, Phrase> = {
 	contract_sent: (name) => `Contract sent to ${client(name)}`,
 	contract_signed: (name) => `Contract signed by ${client(name)}`,
 	contract_voided: (name) => `Contract for ${client(name)} voided`,
-	contract_priced: (name) => `Price set on the contract for ${client(name)}`,
+	contract_priced: (name) => `Price set on the Contract for ${client(name)}`,
 	contract_amount_overridden: (name) => `Contract price for ${client(name)} changed by hand`,
 	contract_amount_repriced: (name) => `Contract price for ${client(name)} changed to the new rate`,
-	contract_void_requested: (name) => `Asked to void the contract for ${client(name)}`,
-	contract_void_declined: (name) => `Request to void the contract for ${client(name)} declined`,
+	contract_void_requested: (name) => `Asked to void the Contract for ${client(name)}`,
+	contract_void_declined: (name) => `Request to void the Contract for ${client(name)} declined`,
 
 	// Visits and the Birth Plan.
 	visit_logged: (name) => `Visit added for ${client(name)}`,

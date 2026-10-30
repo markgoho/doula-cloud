@@ -99,7 +99,7 @@
 
 			member = roster.members.find((entry) => entry.staffId === staffId);
 			if (!member) {
-				loadError = 'That Staff member is not on this practice roster.';
+				loadError = 'That Staff member is not on this Practice roster.';
 				return;
 			}
 
@@ -144,7 +144,7 @@
 	{#if !isOwner}
 		<Notice
 			variant="info"
-			message="Only a practice owner can send a recovery code. Ask an owner of this practice to do it."
+			message="Only a Practice owner can send a recovery code. Ask an owner of this Practice to do it."
 		/>
 	{:else if step === 'sent'}
 		<Notice variant="status" message={`We've sent a recovery code to ${ownAddress}.`} />
@@ -175,7 +175,7 @@
 			onCancel={() => (step = 'intro')}
 		/>
 	{:else}
-		<Text text={`${memberName} works at this practice as ${member?.email}.`} />
+		<Text text={`${memberName} works at this Practice as ${member?.email}.`} />
 		<Text
 			text={`Sending a recovery code emails it to you, at ${ownAddress}. It does not go to ${memberName}, and on its own it changes nothing about that account.`}
 		/>

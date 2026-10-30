@@ -55,7 +55,7 @@ export function membershipChangeSentence(change: MembershipChange): string {
 				: fallback(change.action);
 		}
 		case 'removed': {
-			return 'Removed from this practice';
+			return 'Removed from this Practice';
 		}
 		case 'sessions_ended': {
 			return 'Signed out of every device';

@@ -340,7 +340,7 @@ describe('ContractStatus.svelte', () => {
 
 			await expect
 				.element(page.getByRole('alert'))
-				.toHaveTextContent('Enter why this contract needs to be voided');
+				.toHaveTextContent('Enter why this Contract needs to be voided');
 			expect(onRequestVoid).not.toHaveBeenCalled();
 		});
 

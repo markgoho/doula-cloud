@@ -43,7 +43,7 @@
 		tone="variant"
 	/>
 	<Text
-		text="It is not a Notice. A Notice announces an outcome — an invoice sent, a Contract saved. This announces that a submission was refused, which is why the two never share a page region."
+		text="It is not a Notice. A Notice announces an outcome — an Invoice sent, a Contract saved. This announces that a submission was refused, which is why the two never share a page region."
 		tone="variant"
 	/>
 

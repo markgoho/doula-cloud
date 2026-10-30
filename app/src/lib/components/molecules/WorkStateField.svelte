@@ -41,7 +41,7 @@
 	{id}
 	{error}
 	label="Which state do you work from?"
-	hint="We need the state for sales tax on your practice's credits, not your address."
+	hint="We need the state for sales tax on your Practice's Credits, not your address."
 	width={20}
 >
 	<!-- 20 characters: the longest of the 51 names, "District of Columbia", and the placeholder (#1216). -->

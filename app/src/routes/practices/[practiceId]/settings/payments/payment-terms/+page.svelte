@@ -43,7 +43,7 @@
 
 	// Fixed, so the error summary's `<a href="#id">` reaches the box.
 	const NET_DAYS_ID = 'payment-terms-net-days';
-	const QUESTION = 'How many days does a Client have to pay an invoice?';
+	const QUESTION = 'How many days does a Client have to pay an Invoice?';
 
 	const session = $derived((page.data as { session: PracticeSession }).session);
 	const canChange = $derived(isOwnerOrAdmin(session));
@@ -111,7 +111,7 @@
 			backHref={gettingPaidHref}
 			caption="Getting paid"
 			question={{ as: 'label', text: QUESTION, for: NET_DAYS_ID }}
-			hint="Applies to the next invoice raised. An invoice already raised keeps the terms it was billed under."
+			hint="Applies to the next Invoice raised. An Invoice already raised keeps the terms it was billed under."
 			errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 		>
 			{#snippet content({ describedBy })}

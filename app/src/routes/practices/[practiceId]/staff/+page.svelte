@@ -178,7 +178,7 @@
 		     loads (#2248); bars hold each table's place. -->
 		<Heading level={2} text="Members" />
 		<Text
-			text="Work states are self-reported by each person and are not verified. They set how much sales tax your practice pays on credits."
+			text="Work states are self-reported by each person and are not verified. They set how much sales tax your Practice pays on Credits."
 		/>
 		{#if isLoaded}
 			<!-- hasMore is always false: the roster is a bounded population

@@ -37,7 +37,7 @@
 
 {#snippet intro()}
 	<Text
-		text="Work you have been offered. Accepting puts you on the birth; declining is final for that offer, and the practice may ask you again."
+		text="Work you have been offered. Accepting puts you on the birth; declining is final for that Offer, and the Practice may ask you again."
 		tone="variant"
 	/>
 {/snippet}

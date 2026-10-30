@@ -208,7 +208,7 @@
 				/>
 			{/if}
 			{#if hasNoCredits || isBalanceEmpty}
-				<Notice variant="error" message="There are no credits left on this Practice's balance." />
+				<Notice variant="error" message="There are no Credits left on this Practice's balance." />
 				<Link href={billingHref()} label="Buy credits" />
 			{/if}
 			{#if submission.errors.length > 0}
@@ -275,7 +275,7 @@
 {/snippet}
 
 <RecordDetail
-	title={detail ? `Approve work with ${fullName(detail.client)}` : 'Approve an engagement request'}
+	title={detail ? `Approve work with ${fullName(detail.client)}` : 'Approve an Engagement Request'}
 	summary={detail ? summary : undefined}
 	sections={detail
 		? [

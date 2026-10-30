@@ -362,7 +362,7 @@
 		{/if}
 
 		{#if isBalanceNoticeShown}
-			<Notice variant="error" message="There are no credits left on this Practice's balance." />
+			<Notice variant="error" message="There are no Credits left on this Practice's balance." />
 			<Link href={billingHref()} label="Buy credits" />
 		{:else if isApprover && balance !== undefined && !isBalanceEmpty}
 			<!--

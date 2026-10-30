@@ -239,7 +239,7 @@
 			summary: 'Two open Engagements',
 			lines: [
 				'Birth Engagement, contract signed, with Anne-Marie Ochieng-Whitfield',
-				'Postpartum Engagement awaiting a contract, with Anne-Marie Ochieng-Whitfield',
+				'Postpartum Engagement awaiting a Contract, with Anne-Marie Ochieng-Whitfield',
 				'Refused: https://highland-midwifery-group.example.org/policies/scheduling-and-availability#postpartum-capacity-window'
 			],
 			note: 'Undeliverable — the address bounced',
@@ -356,7 +356,7 @@
 
 	<section>
 		<h2>Default</h2>
-		<DataTable {columns} rows={clients} emptyMessage="No clients yet." />
+		<DataTable {columns} rows={clients} emptyMessage="No Clients yet." />
 	</section>
 
 	<section>
@@ -381,7 +381,7 @@
 
 	<section>
 		<h2>Load more</h2>
-		<DataTable {columns} rows={clients} {hasMore} {onLoadMore} emptyMessage="No clients yet." />
+		<DataTable {columns} rows={clients} {hasMore} {onLoadMore} emptyMessage="No Clients yet." />
 	</section>
 
 	<section>
@@ -395,7 +395,7 @@
 
 	<section>
 		<h2>Numeric column</h2>
-		<DataTable columns={creditColumns} rows={credits} emptyMessage="No credit history yet." />
+		<DataTable columns={creditColumns} rows={credits} emptyMessage="No Credit history yet." />
 	</section>
 
 	<!-- #2038: two tables of the same columns, one under the next, as the
@@ -404,12 +404,12 @@
 	<section>
 		<h2>Sibling tables that share one column plan</h2>
 		<stack-l space="var(--space-4)">
-			<DataTable columnWidths="even" columns={creditColumns} rows={credits} emptyMessage="No credit history yet." />
+			<DataTable columnWidths="even" columns={creditColumns} rows={credits} emptyMessage="No Credit history yet." />
 			<DataTable
 				columnWidths="even"
 				columns={creditColumns}
 				rows={[{ origin: 'Refund', quantity: 2 }]}
-				emptyMessage="No credit history yet."
+				emptyMessage="No Credit history yet."
 			/>
 		</stack-l>
 	</section>
@@ -454,7 +454,7 @@
 			{columns}
 			rows={clients}
 			rowActions={{ label: 'Actions', content: removeAction }}
-			emptyMessage="No clients yet."
+			emptyMessage="No Clients yet."
 		/>
 	</section>
 </stack-l>

@@ -149,7 +149,7 @@
 <ListPage title="Schedule">
 	{#snippet intro()}
 		<Text
-			text="Every visit this practice has scheduled, soonest first, across all clients and doulas. Open one to reach the engagement it belongs to."
+			text="Every Visit this Practice has scheduled, soonest first, across all Clients and doulas. Open one to reach the Engagement it belongs to."
 			tone="muted"
 		/>
 	{/snippet}
@@ -214,7 +214,7 @@
 				hasMore={schedule.hasMore}
 				onLoadMore={() => schedule.loadMore()}
 				isLoadingMore={schedule.isLoadingMore}
-				emptyMessage="No visits are scheduled in this range. Widen the dates, or choose every doula, to see more."
+				emptyMessage="No Visits are scheduled in this range. Widen the dates, or choose every doula, to see more."
 			/>
 		{:else}
 			<Skeleton variant="row" lines={6} label="Loading your schedule" />

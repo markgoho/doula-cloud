@@ -355,7 +355,7 @@
 	// Names {name} throughout rather than "her" -- #463's voice rule,
 	// checked by copy.pronoun.usage.spec.ts.
 	function eraseConsequence(): string {
-		return `This permanently erases ${name}'s name, email, phone, address and date of birth. ${name}'s Engagements, Contracts, Invoices and Visits stay in your Practice's financial and clinical record. Stripe can't erase a payment record until 90 days after its invoice. Messages, signed Contracts and Plan Instance answers keep their words as written, even where they name ${name}. This cannot be undone.`;
+		return `This permanently erases ${name}'s name, email, phone, address and date of birth. ${name}'s Engagements, Contracts, Invoices and Visits stay in your Practice's financial and clinical record. Stripe can't erase a payment record until 90 days after its Invoice. Messages, signed Contracts and Plan Instance answers keep their words as written, even where they name ${name}. This cannot be undone.`;
 	}
 
 	// Re-fetches the Client rather than merging ErasureResponse's own
@@ -433,7 +433,7 @@
 		{#if detail!.erasedAt}
 			<Notice
 				variant="info"
-				message="This client's data was erased on request on {formattedDate(detail!.erasedAt)}."
+				message="This Client's data was erased on request on {formattedDate(detail!.erasedAt)}."
 			/>
 			{#if detail!.stripeRedactionEligibleAt}
 				<Notice

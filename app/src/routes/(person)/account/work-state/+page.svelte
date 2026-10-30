@@ -100,7 +100,7 @@
 		steps={[]}
 		backHref={accountHref}
 		question={{ as: 'label', text: 'Which state do you work from?', for: workStateId }}
-		hint="We use it for sales tax on your practice's credits, from today. Past purchases are not re-priced."
+		hint="We use it for sales tax on your Practice's Credits, from today. Past purchases are not re-priced."
 		error={submission.errorFor(workStateId)}
 		errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 	>

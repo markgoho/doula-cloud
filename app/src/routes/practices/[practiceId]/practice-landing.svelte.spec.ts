@@ -498,7 +498,7 @@ describe('the Practice landing page', () => {
 		await expect
 			.element(
 				testPage.getByText(
-					"Nothing is here yet, because no Client is. Add one and this becomes the Client's birth plan, the visits with the Client, and the contract and invoices between the Client and your Practice.",
+					"Nothing is here yet, because no Client is. Add one and this becomes the Client's Birth Plan, the Visits with the Client, and the Contract and Invoices between the Client and your Practice.",
 					{ exact: true }
 				)
 			)
@@ -537,7 +537,7 @@ describe('the Practice landing page', () => {
 		await expect
 			.element(
 				testPage.getByText(
-					"Nothing is here yet, because no Client is. Add one and this becomes the Client's birth plan, the visits with the Client, and the contract and invoices between the Client and your Practice.",
+					"Nothing is here yet, because no Client is. Add one and this becomes the Client's Birth Plan, the Visits with the Client, and the Contract and Invoices between the Client and your Practice.",
 					{ exact: true }
 				)
 			)

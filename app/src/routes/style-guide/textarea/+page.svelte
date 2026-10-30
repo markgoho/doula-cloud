@@ -22,7 +22,7 @@
 
 	<section>
 		<h2>A taller starting height</h2>
-		<p>What a contract body asks for: <code>rows</code> is a starting height, not a cap.</p>
+		<p>What a Contract body asks for: <code>rows</code> is a starting height, not a cap.</p>
 		<Textarea value={prose} onInput={(value) => (prose = value)} rows={12} />
 	</section>
 

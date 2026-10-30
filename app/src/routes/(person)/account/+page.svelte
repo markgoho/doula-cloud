@@ -98,7 +98,7 @@
 				label: `Back to ${practice.practiceName}`
 			};
 		}
-		if (memberships.length > 1) return { href: resolve('/(signed-out)'), label: 'Back to your practices' };
+		if (memberships.length > 1) return { href: resolve('/(signed-out)'), label: 'Back to your Practices' };
 		return undefined;
 	});
 
@@ -501,7 +501,7 @@
 		/>
 	{:else}
 		<Text
-			text="You are the only owner of a practice, so nobody else can vouch for you. Recovery codes are how you get back in if you lose your authenticator app."
+			text="You are the only owner of a Practice, so nobody else can vouch for you. Recovery codes are how you get back in if you lose your authenticator app."
 		/>
 		<Text
 			text="They are shown once, when you ask for them. DoulaCloud keeps no copy it can read back to you."
@@ -538,11 +538,11 @@
 		message="Deleting your login ends your access to DoulaCloud everywhere, at once. It cannot be undone."
 	/>
 	<Text
-		text="This deletes your login and your membership of every practice you work at, and signs you out on every device."
+		text="This deletes your login and your membership of every Practice you work at, and signs you out on every device."
 		tone="variant"
 	/>
 	<Text
-		text="Everything you did stays with the practices you did it for &mdash; the messages you sent, the contracts you are named on, the visits you worked. DoulaCloud keeps its own record that this account existed and that you deleted it."
+		text="Everything you did stays with the Practices you did it for &mdash; the Messages you sent, the Contracts you are named on, the Visits you worked. DoulaCloud keeps its own record that this account existed and that you deleted it."
 		tone="variant"
 	/>
 	<Button
@@ -555,7 +555,7 @@
 	<ConfirmDialog
 		bind:open={isDeleteLoginDialogOpen}
 		title="Delete your login"
-		consequence="Your login, and your membership of every practice you work at, are deleted immediately. You cannot sign in again. Everything you did stays with those practices, and DoulaCloud keeps its own record that this account existed."
+		consequence="Your login, and your membership of every Practice you work at, are deleted immediately. You cannot sign in again. Everything you did stays with those Practices, and DoulaCloud keeps its own record that this account existed."
 		confirmLabel="Delete your login"
 		error={deleteLoginError}
 		onConfirm={handleDeleteLogin}
