@@ -3,6 +3,7 @@ package contracts
 import (
 	"bytes"
 	"fmt"
+	"time"
 
 	"github.com/go-pdf/fpdf"
 )
@@ -19,8 +20,43 @@ const contentTypePDF = "application/pdf"
 func fillProse(prose string, values MergeFieldValues) string {
 	return mergeFieldPattern.ReplaceAllStringFunc(prose, func(match string) string {
 		key := mergeFieldPattern.FindStringSubmatch(match)[1]
-		return values[key]
+		return fillValue(key, values[key])
 	})
+}
+
+// dateMergeFields are the merge fields that hold a calendar day -- the
+// Staff form asks for each with a date control, which sends YYYY-MM-DD.
+// Mirrors DATE_MERGE_FIELDS in app/src/lib/contractTemplate.ts.
+var dateMergeFields = map[string]bool{
+	mergeFieldStartDate: true,
+	mergeFieldEndDate:   true,
+}
+
+// The two date merge fields' keys, as the seeded template writes them.
+const (
+	mergeFieldStartDate = "engagement_start_date"
+	mergeFieldEndDate   = "engagement_end_date"
+)
+
+// calendarDayLayout prints a day the way app/src/lib/dates.ts's
+// formatCalendarDay does ("Oct 27, 2026"), so the signed PDF says what
+// the portal page and the Staff preview say (#2222). A calendar day
+// carries no zone, so nothing here can move it.
+const calendarDayLayout = "Jan 2, 2006"
+
+// fillValue is what one merge field prints as: a date field holding a
+// real YYYY-MM-DD day reads as a calendar day, and anything else -- a
+// value typed before the field was a date control, or any other field --
+// prints as it was entered.
+func fillValue(key, value string) string {
+	if !dateMergeFields[key] {
+		return value
+	}
+	day, err := time.Parse(time.DateOnly, value)
+	if err != nil {
+		return value
+	}
+	return day.Format(calendarDayLayout)
 }
 
 // renderContractPDF renders a Contract's filled prose/merge-field

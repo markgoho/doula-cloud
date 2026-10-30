@@ -427,12 +427,14 @@ const defaultBirthPlanFields = `[
 // match the tokens the contracts package/settings screen document as
 // available -- kept as a literal here, rather than importing the
 // contracts package, to avoid a staffauth<->contracts import cycle
-// (contracts imports staffauth for its own handlers).
+// (contracts imports staffauth for its own handlers). The Client signs it,
+// so its labels are her words: "Dates of care", never the team's
+// "Engagement" (GLOSSARY.md, #2222).
 const defaultContractTemplateProse = `This agreement is between {{practice_name}} and {{client_name}} for doula services.
 
 Scope of service: {{scope_of_service}}
 
-Engagement dates: {{engagement_start_date}} through {{engagement_end_date}}
+Dates of care: {{engagement_start_date}} through {{engagement_end_date}}
 
 Price: {{price}}
 

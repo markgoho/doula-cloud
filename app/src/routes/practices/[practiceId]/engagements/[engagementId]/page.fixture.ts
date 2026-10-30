@@ -290,8 +290,10 @@ export const contract: Contract = {
 		client_name: clientName,
 		scope_of_service:
 			'Two prenatal visits, continuous labor support from active labor through the first hour after birth, one postpartum visit in the home, and unlimited phone and message support from 37 weeks until two weeks after the birth.',
-		engagement_start_date: 'January 12, 2027',
-		engagement_end_date: 'March 29, 2027',
+		// #2222: a date field holds the day its date control sends, and the
+		// prose prints it as "Jan 12, 2027".
+		engagement_start_date: '2027-01-12',
+		engagement_end_date: '2027-03-29',
 		price: '$4,500.00'
 	},
 	// #968: the price moved after this Contract was created, so the
