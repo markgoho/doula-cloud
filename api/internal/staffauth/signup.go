@@ -399,6 +399,11 @@ func signup(r *http.Request, tx *sql.Tx, verified authn.VerifiedToken, req Signu
 // plans package (api/internal/plans/template.go) -- kept as a literal
 // here, rather than importing that package, to avoid a staffauth<->plans
 // import cycle (plans imports staffauth for its own handlers).
+//
+// Each plan is chunked under section_headers by what its questions are
+// about, so that no group asks more than seven decisions at once, a
+// choose-several question counted one per box (MO-G14, #2195):
+// TestSignupHandler_SeededPlansShowNoGroupOverSeven holds it.
 const defaultCarePlanFields = `[
 	{"id": "support-people", "type": "section_header", "label": "Support People", "order": 0},
 	{"id": "support-people-names", "type": "short_text", "label": "Who will be present for support?", "order": 1},
@@ -408,11 +413,12 @@ const defaultCarePlanFields = `[
 ]`
 
 const defaultBirthPlanFields = `[
-	{"id": "birth-setting", "type": "section_header", "label": "Birth Setting", "order": 0},
-	{"id": "location", "type": "single_select", "label": "Planned birth location", "options": ["Home", "Birth center", "Hospital"], "order": 1},
-	{"id": "notify", "type": "multi_select", "label": "People to notify when labor starts", "options": ["Partner", "Doula", "Midwife", "OB", "Family"], "order": 2},
-	{"id": "atmosphere", "type": "long_text", "label": "Preferences for atmosphere (music, lighting, etc.)", "order": 3},
-	{"id": "consent-photos", "type": "checkbox", "label": "OK to take photos/video during labor", "order": 4}
+	{"id": "labor-starts", "type": "section_header", "label": "When Labor Starts", "order": 0},
+	{"id": "notify", "type": "multi_select", "label": "People to notify when labor starts", "options": ["Partner", "Doula", "Midwife", "OB", "Family"], "order": 1},
+	{"id": "birth-setting", "type": "section_header", "label": "Birth Setting", "order": 2},
+	{"id": "location", "type": "single_select", "label": "Planned birth location", "options": ["Home", "Birth center", "Hospital"], "order": 3},
+	{"id": "atmosphere", "type": "long_text", "label": "Preferences for atmosphere (music, lighting, etc.)", "order": 4},
+	{"id": "consent-photos", "type": "checkbox", "label": "OK to take photos/video during labor", "order": 5}
 ]`
 
 // defaultContractTemplateProse is the Contract Template prose a new

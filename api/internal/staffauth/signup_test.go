@@ -27,6 +27,9 @@ const (
 	jamieEmail     = "jamie@example.com"
 	jamieName      = "Jamie"
 	ownerLastName  = "Owner"
+	// carePlanType and birthPlanType are the two seeded plan_templates.
+	carePlanType  = "care_plan"
+	birthPlanType = "birth_plan"
 	// placeholderLastName fills the last name for a test whose subject is
 	// something else.
 	placeholderLastName = "Last"
@@ -542,8 +545,74 @@ func TestSignupHandler_SeedsDefaultPlanTemplates(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatalf("iterate plan_templates rows: %v", err)
 	}
-	if len(planTypes) != 2 || planTypes[0] != "birth_plan" || planTypes[1] != "care_plan" {
+	if len(planTypes) != 2 || planTypes[0] != birthPlanType || planTypes[1] != carePlanType {
 		t.Fatalf("seeded plan_types = %v, want [birth_plan care_plan]", planTypes)
+	}
+}
+
+// TestSignupHandler_SeededPlansShowNoGroupOverSeven proves each seeded
+// plan is chunked so that no headed group asks more than seven decisions
+// at once -- stage 4's Decisions budget on the solo birth doula's map
+// (MO-G14, #2195). It counts the strict way the walk did: a choose-several
+// question one decision per box, and the form's Save and Cancel with the
+// last group, which they sit directly under.
+func TestSignupHandler_SeededPlansShowNoGroupOverSeven(t *testing.T) {
+	db := testdb.New(t)
+	srv := newSignupServer(authntest.Verifier{UID: "chunk-owner", Email: jamieEmail}, db)
+	defer srv.Close()
+
+	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY",
+		PracticeName: "Chunked Practice",
+		FirstName:    jamieName, LastName: ownerLastName,
+	})
+	defer resp.Body.Close()
+	var out staffauth.SignupResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	const budget = 7
+	const formButtons = 2 // Save and Cancel
+	for _, planType := range []string{carePlanType, birthPlanType} {
+		var raw []byte
+		if err := db.Admin.QueryRowContext(t.Context(),
+			`SELECT fields FROM plan_templates WHERE practice_id = $1 AND plan_type = $2`, out.PracticeID, planType,
+		).Scan(&raw); err != nil {
+			t.Fatalf("query %s template: %v", planType, err)
+		}
+		var fields []struct {
+			Type    string   `json:"type"`
+			Label   string   `json:"label"`
+			Options []string `json:"options"`
+		}
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			t.Fatalf("decode %s fields: %v", planType, err)
+		}
+
+		var groups []int
+		var headings []string
+		for _, field := range fields {
+			if field.Type == "section_header" {
+				groups = append(groups, 0)
+				headings = append(headings, field.Label)
+				continue
+			}
+			if len(groups) == 0 {
+				groups = append(groups, 0)
+				headings = append(headings, "(before any heading)")
+			}
+			decisions := 1
+			if field.Type == "multi_select" {
+				decisions = len(field.Options)
+			}
+			groups[len(groups)-1] += decisions
+		}
+		groups[len(groups)-1] += formButtons
+		for i, count := range groups {
+			if count > budget {
+				t.Errorf("%s group %q shows %d decisions at once, want at most %d", planType, headings[i], count, budget)
+			}
+		}
 	}
 }
 
@@ -577,7 +646,7 @@ func TestSignupHandler_SeededTemplatesRoundTripThroughPlansAPI(t *testing.T) {
 		t.Fatalf("decode signup response: %v", err)
 	}
 
-	for _, planType := range []string{"care_plan", "birth_plan"} {
+	for _, planType := range []string{carePlanType, birthPlanType} {
 		getReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
 			srv.URL+"/api/practices/"+signedUp.PracticeID+"/plan-templates/"+planType, nil)
 		if err != nil {
