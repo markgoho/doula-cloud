@@ -14,12 +14,7 @@ const (
 // occurrence, and whitespace inside the {{ }} delimiters is tolerated the
 // same way mergeFieldPattern already allows for extractMergeFields.
 func TestFillProse_SubstitutesAndBlanksUnfilled(t *testing.T) {
-	cases := []struct {
-		name   string
-		prose  string
-		values MergeFieldValues
-		want   string
-	}{
+	cases := []fillProseCase{
 		{
 			name:   "filled key substituted",
 			prose:  "Agreement for {{client_name}}.",
@@ -52,6 +47,54 @@ func TestFillProse_SubstitutesAndBlanksUnfilled(t *testing.T) {
 		},
 	}
 
+	runFillProseCases(t, cases)
+}
+
+// TestFillProse_PrintsADateFieldAsACalendarDay proves #2222 at fill time:
+// a date merge field holding a YYYY-MM-DD day is printed the way the
+// product prints a calendar day everywhere else ("Oct 27, 2026",
+// app/src/lib/dates.ts's formatCalendarDay), so the signed PDF reads like
+// the portal page. app/src/lib/contract.spec.ts asserts the same strings
+// for the same values. Anything else passes through as typed.
+func TestFillProse_PrintsADateFieldAsACalendarDay(t *testing.T) {
+	const isoDay = "2026-10-27"
+	runFillProseCases(t, []fillProseCase{
+		{
+			name:   "both date fields formatted",
+			prose:  "Dates of care: {{engagement_start_date}} through {{engagement_end_date}}",
+			values: MergeFieldValues{mergeFieldStartDate: isoDay, mergeFieldEndDate: "2027-04-05"},
+			want:   "Dates of care: Oct 27, 2026 through Apr 5, 2027",
+		},
+		{
+			name:   "a date field typed as words passes through",
+			prose:  "From {{engagement_start_date}}",
+			values: MergeFieldValues{mergeFieldStartDate: "next spring"},
+			want:   "From next spring",
+		},
+		{
+			name:   "an impossible day passes through",
+			prose:  "From {{engagement_start_date}}",
+			values: MergeFieldValues{mergeFieldStartDate: "2026-02-30"},
+			want:   "From 2026-02-30",
+		},
+		{
+			name:   "a field that is not a date is untouched",
+			prose:  "Scope: {{scope_of_service}}",
+			values: MergeFieldValues{"scope_of_service": isoDay},
+			want:   "Scope: " + isoDay,
+		},
+	})
+}
+
+type fillProseCase struct {
+	name   string
+	prose  string
+	values MergeFieldValues
+	want   string
+}
+
+func runFillProseCases(t *testing.T, cases []fillProseCase) {
+	t.Helper()
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := fillProse(tc.prose, tc.values)

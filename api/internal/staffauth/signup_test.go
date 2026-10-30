@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"doula-cloud/api/internal/apierrtest"
@@ -718,6 +719,14 @@ func TestSignupHandler_SeedsDefaultContractTemplate(t *testing.T) {
 	}
 	if prose == "" {
 		t.Fatal("expected a non-empty seeded contract template prose")
+	}
+	// #2222: the Client signs this, so its words are hers ("my care",
+	// GLOSSARY.md), never the team's "Engagement".
+	if want := "Dates of care: {{engagement_start_date}} through {{engagement_end_date}}"; !strings.Contains(prose, want) {
+		t.Errorf("seeded prose does not contain %q:\n%s", want, prose)
+	}
+	if strings.Contains(prose, "Engagement") {
+		t.Errorf("seeded prose names the Engagement to the Client:\n%s", prose)
 	}
 }
 

@@ -10,7 +10,8 @@ import type { Fetcher } from './fetcher.js';
 import type { CursorPage } from './paginatedList.svelte.js';
 import type { Stamp } from './stamp.js';
 
-import { MERGE_FIELDS } from './contractTemplate.js';
+import { DATE_MERGE_FIELDS, MERGE_FIELDS } from './contractTemplate.js';
+import { formatCalendarDay } from './dates.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
 import { fetchBlob } from './blobDownload.js';
 
@@ -134,7 +135,21 @@ const mergeFieldPattern = /\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g;
  * Client-portal Contract view's "filled Contract text" is this, not the
  * raw prose. */
 export function fillProse(prose: string, values: Record<string, string>): string {
-	return prose.replaceAll(mergeFieldPattern, (_match, key: string) => values[key] ?? '');
+	return prose.replaceAll(mergeFieldPattern, (_match, key: string) => fillValue(key, values[key] ?? ''));
+}
+
+const isoDay = /^\d{4}-\d{2}-\d{2}$/;
+
+/** What one merge field prints as -- mirrors the BFF's fillValue
+ * (api/internal/contracts/pdf.go) so the signed PDF says the same: a date
+ * field holding a real YYYY-MM-DD day reads as a calendar day ("Oct 27,
+ * 2026", #2222), and anything else prints as it was entered. */
+function fillValue(key: string, value: string): string {
+	if (!DATE_MERGE_FIELDS.has(key) || !isoDay.test(value)) return value;
+	const [year, month, day] = value.split('-').map(Number);
+	const date = new Date(year!, month! - 1, day!);
+	if (date.getMonth() !== month! - 1 || date.getDate() !== day) return value;
+	return formatCalendarDay(value);
 }
 
 function contractPath(practiceId: string, engagementId: string): string {

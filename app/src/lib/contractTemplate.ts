@@ -25,6 +25,12 @@ export const MERGE_FIELDS = [
 	{ token: '{{scope_of_service}}', label: 'Scope of service' }
 ] as const;
 
+/** The merge fields that hold a calendar day (#2222): the Staff form asks
+ * for each with a date control, and `fillProse` prints a YYYY-MM-DD value
+ * as the product prints any calendar day. Mirrors `dateMergeFields` in
+ * api/internal/contracts/pdf.go, which fills the signed PDF the same way. */
+export const DATE_MERGE_FIELDS: ReadonlySet<string> = new Set(['engagement_start_date', 'engagement_end_date']);
+
 export interface ContractTemplate {
 	prose: string;
 }

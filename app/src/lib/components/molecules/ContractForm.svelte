@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { mergeFieldLabel } from '#lib/contract.js';
+	import { DATE_MERGE_FIELDS } from '#lib/contractTemplate.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import LabeledField from './LabeledField.svelte';
 
@@ -23,10 +24,13 @@
 		<LabeledField label={mergeFieldLabel(key)}>
 			<!-- v8 ignore stop -->
 			{#snippet children({ id, describedBy, invalid })}
+				<!-- A date field is a day being chosen, so the native control asks for it (#2222):
+				     it stores YYYY-MM-DD, which fillProse prints as the product prints a calendar day. -->
 				<TextInput
 					{id}
 					{describedBy}
 					{invalid}
+					type={DATE_MERGE_FIELDS.has(key) ? 'date' : 'text'}
 					value={values[key] ?? ''}
 					disabled={readOnly}
 					onInput={(value) => onValueChange(key, value)}

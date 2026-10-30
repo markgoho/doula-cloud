@@ -388,6 +388,30 @@ describe('fillProse', () => {
 		const result = fillProse('Plain prose, no merge fields.', {});
 		expect(result).toBe('Plain prose, no merge fields.');
 	});
+
+	// #2222: the same values and the same strings as the BFF's
+	// TestFillProse_PrintsADateFieldAsACalendarDay, so the Staff preview,
+	// the portal page and the signed PDF agree.
+	it('prints a date field as a calendar day', () => {
+		const result = fillProse('Dates of care: {{engagement_start_date}} through {{engagement_end_date}}', {
+			engagement_start_date: '2026-10-27',
+			engagement_end_date: '2027-04-05'
+		});
+		expect(result).toBe('Dates of care: Oct 27, 2026 through Apr 5, 2027');
+	});
+
+	it('passes a date field through as typed when it is not a real day', () => {
+		expect(fillProse('From {{engagement_start_date}}', { engagement_start_date: 'next spring' })).toBe(
+			'From next spring'
+		);
+		expect(fillProse('From {{engagement_start_date}}', { engagement_start_date: '2026-02-30' })).toBe(
+			'From 2026-02-30'
+		);
+	});
+
+	it('leaves a field that is not a date untouched', () => {
+		expect(fillProse('Scope: {{scope_of_service}}', { scope_of_service: '2026-10-27' })).toBe('Scope: 2026-10-27');
+	});
 });
 
 describe('setMergeFieldValue', () => {

@@ -53,6 +53,24 @@ describe('ContractForm.svelte', () => {
 		expect(onValueChange).toHaveBeenCalledWith('client_name', 'Alex');
 	});
 
+	// #2222: a date field asks with a date control, so what is stored is a
+	// YYYY-MM-DD day that fillProse can print as a calendar day.
+	it('asks for each date field with a date control, and reports the day it holds', async () => {
+		const { onValueChange } = await setup({
+			mergeFields: ['engagement_start_date', 'engagement_end_date', 'price'],
+			values: { engagement_start_date: '2026-10-27' }
+		});
+
+		await expect.element(page.getByLabelText('Engagement start date')).toHaveAttribute('type', 'date');
+		await expect.element(page.getByLabelText('Engagement start date')).toHaveValue('2026-10-27');
+		await expect.element(page.getByLabelText('Engagement end date')).toHaveAttribute('type', 'date');
+		await expect.element(page.getByLabelText('Price')).toHaveAttribute('type', 'text');
+
+		await page.getByLabelText('Engagement end date').fill('2027-04-05');
+
+		expect(onValueChange).toHaveBeenCalledWith('engagement_end_date', '2027-04-05');
+	});
+
 	it('disables every input when readOnly is true', async () => {
 		await setup({ readOnly: true });
 
