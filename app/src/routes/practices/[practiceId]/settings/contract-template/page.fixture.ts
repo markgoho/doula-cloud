@@ -11,7 +11,8 @@
  * button a non-Owner could never complete would be a control the API
  * refuses but the screen still offers. That makes this a #913 case: the
  * base fixture is an Owner (the Save button renders), and the variant
- * below is everyone else (a Notice instead).
+ * below is everyone else (a Notice, and the terms as text with no
+ * field, #2244).
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ContractTemplate } from '#lib/contractTemplate.js';

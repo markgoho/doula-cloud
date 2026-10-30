@@ -14,7 +14,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
-import { toApiResponder, toPageState, type RouteFixture } from '../../../../routeFixture.js';
+import { practiceSession, toApiResponder, toPageState, type RouteFixture } from '../../../../routeFixture.js';
 import { asDoula, birthTemplate, careTemplate, fixture } from './page.fixture.js';
 
 const pageState = vi.hoisted(() => ({
@@ -222,7 +222,33 @@ describe('plan-templates settings screen: the way on to the Contract Template (#
 	it('draws no way on for a Doula, who may not change the Contract Template', async () => {
 		await setup({ subject: { ...fixture, ...asDoula } });
 
-		await expect.element(changeLinks().first()).toBeVisible();
+		await expect.element(testPage.getByText(careTemplate.fields[0].label)).toBeVisible();
 		expect(nextLink().query()).toBeNull();
+	});
+});
+
+/*
+ * #2244: the PUT is OwnerOnly (#1407), so a reader who is not an Owner
+ * gets the questions to read and no control whose save the BFF would
+ * refuse: no Change, no "Add a question", and a line that says who may.
+ */
+describe('plan-templates settings screen: a reader who may not change them (#2244)', () => {
+	it.each([
+		['a Doula', asDoula.pageData],
+		['an Admin', practiceSession(['admin'])]
+	])('lists the questions to %s, with nothing that changes them', async (_who, pageData) => {
+		await setup({ subject: { ...fixture, pageData } });
+
+		await expect.element(testPage.getByText(careTemplate.fields[0].label)).toBeVisible();
+		await expect.element(testPage.getByText('Only a Practice Owner can change these questions.')).toBeVisible();
+		expect(changeLinks().query()).toBeNull();
+		expect(testPage.getByRole('link', { name: 'Add a question' }).query()).toBeNull();
+	});
+
+	it('tells an Owner nothing about who may change them', async () => {
+		await setup();
+
+		await expect.element(changeLinks().first()).toBeVisible();
+		expect(testPage.getByText('Only a Practice Owner can change these questions.').query()).toBeNull();
 	});
 });

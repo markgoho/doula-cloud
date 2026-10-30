@@ -8,9 +8,10 @@
 	 * each to read.
 	 *
 	 * A row is drawn only for someone who may change it (`MAY_CHANGE`,
-	 * which names each write's role list): a Doula's Settings is the one
-	 * setting the BFF lets her write. The values come off the same loaders
-	 * each setting's screen reads (`loadSettingsSummary`), side by side.
+	 * which names each write's role list). A Doula who is neither Owner
+	 * nor Admin may change none (#2244), so hers is the empty state. The
+	 * values come off the same loaders each setting's screen reads
+	 * (`loadSettingsSummary`), side by side.
 	 *
 	 * Deletion is last and on its own, under its own heading: it is the one
 	 * act here that cannot be put back, and it must not read like "Rates".
@@ -176,14 +177,20 @@
 
 {#snippet empty()}
 	<!--
-		Unreachable in practice: every Staff member may change the Plan
-		Templates, so no session has an empty Settings. The region is
-		required by OverviewHub on purpose (#422).
+		#2244: a Doula who is neither Owner nor Admin may change no setting
+		(the Plan Templates were her one, until their write was found to be
+		OwnerOnly, #1407). She still reads both templates (ADR-0008), so her
+		Settings says who changes these and where she reads them, rather
+		than drawing a heading over nothing.
 	-->
-	<Text text="This Practice has no settings you can change." />
+	<stack-l space="var(--space-related)">
+		<Text text="Only a Practice Owner or Admin can change this Practice's settings." />
+		<Link href={resolve('/practices/[practiceId]/settings/plan-templates', { practiceId })} label="Plan Templates" />
+		<Link href={resolve('/practices/[practiceId]/settings/contract-template', { practiceId })} label="Contract Template" />
+	</stack-l>
 {/snippet}
 
-<OverviewHub title="Settings" isEmpty={false} {primary} {empty} />
+<OverviewHub title="Settings" isEmpty={groups.length === 0 && !isMayDelete} {primary} {empty} />
 
 <style>
 	@layer components {

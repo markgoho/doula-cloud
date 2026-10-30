@@ -6,7 +6,9 @@
  * change it (`MAY_CHANGE`), so the index depends on who is looking.
  *
  * Three subjects (#913). The Owner's is the widest. A Doula's is the
- * narrowest: one group, one row, Plan Templates. An Owner with no second
+ * narrowest: no row at all, since every setting's write is the Owner's or
+ * an Admin's (#2244), so it is the empty state, which says who changes
+ * them and links the two templates she reads. An Owner with no second
  * factor (#1532) draws a tree nobody else does, the export row's notice
  * and enrollment link in place of a download. The Admin's sits between
  * the Owner's and the Doula's and is a strict subset of the Owner's (it
@@ -17,7 +19,7 @@
  * at its longest: the hosted page's address is #530's long URL, the
  * rates are both set and in the thousands, the Connect state is the
  * longest of its five labels, and the plural forms are all reached. The
- * Doula's branch asks for the Plan Templates only, which this answers too.
+ * Doula's branch asks for nothing.
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { PracticeWebsite } from '#lib/website.js';

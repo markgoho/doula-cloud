@@ -46,7 +46,6 @@ export type SettingKey =
 	| 'delete';
 
 type Session = Pick<RoleSession, 'roles'> & { clientsCanPay?: boolean };
-const isAnyStaffMember = (): boolean => true;
 
 /**
 Who may change each setting: the role list on its write's mount line.
@@ -60,8 +59,9 @@ export const MAY_CHANGE: Readonly<Record<SettingKey, (session: Session) => boole
 	timezone: isOwnerOrAdmin,
 	// clientfieldtemplate/mount.go: OwnerAndAdmin.
 	clientFields: isOwnerOrAdmin,
-	// plans/mount.go: every Staff role (ADR-0008).
-	planTemplates: isAnyStaffMember,
+	// plans/mount.go: OwnerOnly (#1407). Every Staff role reads them
+	// (ADR-0008); only an Owner changes them (#2244).
+	planTemplates: isOwner,
 	// contracts/mount.go: OwnerOnly.
 	contractTemplate: isOwner,
 	// oncall/mount.go: OwnerAndAdmin.
