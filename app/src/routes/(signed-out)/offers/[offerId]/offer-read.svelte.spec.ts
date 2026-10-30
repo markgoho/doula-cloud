@@ -156,6 +156,8 @@ describe('the pre-account Offer read refuses its own submit', () => {
 		await openButton().click();
 
 		await expect.element(testPage.getByText('Brighton')).toBeVisible();
+		// #2236: the due date in the product's own format, not as stored.
+		await expect.element(testPage.getByText('Mar 14, 2027', { exact: true })).toBeVisible();
 		expect(calls).toEqual(['/api/offers/offer-1?token=offer-token-1&code=123456']);
 	});
 

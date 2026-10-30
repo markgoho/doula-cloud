@@ -47,10 +47,11 @@ describe('OfferInbox.svelte', () => {
 		await setup([openOffer]);
 
 		await expect.element(page.getByText('R', { exact: true })).toBeVisible();
-		// exact: true -- #515's hidden "North side, due 2027-01-04" sibling
+		// exact: true -- #515's hidden "North side, due Jan 4, 2027" sibling
 		// (naming the Accept/Decline buttons) otherwise substring-matches too.
 		await expect.element(page.getByText('North side', { exact: true })).toBeVisible();
-		await expect.element(page.getByText('2027-01-04', { exact: true })).toBeVisible();
+		// #2236: the product's own date format, not the stored 2027-01-04.
+		await expect.element(page.getByText('Jan 4, 2027', { exact: true })).toBeVisible();
 		await expect.element(page.getByText('$450.00')).toBeVisible();
 		await expect.element(page.getByText('Two prenatal visits, on call from 38 weeks.')).toBeVisible();
 	});
@@ -88,11 +89,11 @@ describe('OfferInbox.svelte', () => {
 		const { container } = await setup([openOffer, other]);
 
 		const accepts = page.getByRole('button', { name: 'Accept' });
-		expect(describedByText(container, accepts.first())).toBe('North side, due 2027-01-04');
-		expect(describedByText(container, accepts.nth(1))).toBe('South side, due 2027-02-10');
+		expect(describedByText(container, accepts.first())).toBe('North side, due Jan 4, 2027');
+		expect(describedByText(container, accepts.nth(1))).toBe('South side, due Feb 10, 2027');
 
 		const declines = page.getByRole('button', { name: 'Decline' });
-		expect(describedByText(container, declines.first())).toBe('North side, due 2027-01-04');
+		expect(describedByText(container, declines.first())).toBe('North side, due Jan 4, 2027');
 	});
 
 	it('offers no decision on an Offer that is already closed, and names its state', async () => {

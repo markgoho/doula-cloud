@@ -9,6 +9,7 @@
 	 * onDecide owns the API call and the resulting state change; this
 	 * component reports which Offer and which answer.
 	 */
+	import { formatCalendarDay } from '#lib/dates.js';
 	import { formatFee, isOpen, offerStateLabels, offerStateVariants, type Offer } from '#lib/offer.js';
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -37,7 +38,7 @@
 			rows.push(
 				{ label: 'Client', value: offer.clientFirstInitial },
 				{ label: 'Area', value: offer.clientArea },
-				{ label: 'Due date', value: offer.dueDate }
+				{ label: 'Due date', value: formatCalendarDay(offer.dueDate) }
 			);
 		}
 		rows.push({ label: 'Fee', value: formatFee(offer.amountCents) });
@@ -94,7 +95,7 @@
 						/>
 					</cluster-l>
 					<span class="visually-hidden" id="offer-{offer.offerId}-decide-name"
-						>{offer.clientArea}, due {offer.dueDate}</span
+						>{offer.clientArea}, due {formatCalendarDay(offer.dueDate)}</span
 					>
 					<!-- v8 ignore stop -->
 				{/if}
