@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/cardpayments"
 )
 
 // PracticeSessionResponse confirms to the frontend which Practice the
@@ -70,12 +71,12 @@ type PracticeSessionResponse struct {
 	// it would hide her Offers. It is not the count client.CountHandler
 	// withholds from her -- only whether the Practice has begun.
 	HasClients bool `json:"hasClients"`
-	// ClientsCanPay is payments.ClientsCanPay's fact (#270): the Practice's
-	// card payments capability is active. It rides on the session so the
-	// Invoices list can say "Clients cannot pay this Practice yet" above
-	// its rows from the first frame, before the list's own read lands
-	// (#2293). The Practice's answer for every caller, as the Engagement
-	// read already gives it; PostInvoiceHandler's gate is what refuses.
+	// ClientsCanPay is cardpayments.ClientsCanPay's fact (#270). It rides
+	// on the session so the Invoices list can say "Clients cannot pay this
+	// Practice yet" above its rows from the first frame, before the list's
+	// own read lands (#2293). The Practice's answer for every caller, as
+	// the Engagement read already gives it; PostInvoiceHandler's gate is
+	// what refuses.
 	ClientsCanPay bool `json:"clientsCanPay"`
 	// BillingMode is practices.billing_mode (#271), "stripe" or "by_hand",
 	// and left out until the Practice has chosen one. It rides beside
@@ -92,10 +93,9 @@ type PracticeSessionResponse struct {
 // nothing but keeps the read the same as the Client list's.
 const hasClientsQuery = `SELECT EXISTS (SELECT 1 FROM clients WHERE practice_id = $1 AND merged_into IS NULL)`
 
-// practiceQuery's second column is payments.ClientsCanPay's predicate,
-// written out here because payments imports this package. The third is
-// the billing mode, ” while none is chosen.
-const practiceQuery = `SELECT name, stripe_connect_card_payments_status = 'active', COALESCE(billing_mode::text, '') FROM practices WHERE id = $1`
+// practiceQuery's third column is the billing mode, empty while none is
+// chosen.
+const practiceQuery = `SELECT name, ` + cardpayments.ClientsCanPayExpr + `, COALESCE(billing_mode::text, '') FROM practices WHERE id = $1`
 
 // PracticeSessionHandler answers GET .../session: which Practice, which
 // roles, which employment type. Moved from routes_practice.go by #836 --

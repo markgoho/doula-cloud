@@ -22,7 +22,7 @@ const pageState = vi.hoisted(() => ({
 vi.mock('$app/state', () => ({ page: pageState }));
 
 const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto, replaceState: vi.fn() }));
+vi.mock('$app/navigation', () => ({ goto, replaceState: vi.fn(), invalidate: vi.fn() }));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));

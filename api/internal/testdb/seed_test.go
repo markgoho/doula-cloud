@@ -97,7 +97,7 @@ func TestSetPracticeTimezone(t *testing.T) {
 
 // TestSeedClientsCanPay proves the practices row flips to
 // stripe_connect_card_payments_status = 'active', the one column
-// payments.ClientsCanPay reads -- no stripe_connect_account_id, since
+// cardpayments.ClientsCanPay reads -- no stripe_connect_account_id, since
 // this fixture is for the readers that only ever consult that column.
 func TestSeedClientsCanPay(t *testing.T) {
 	db := testdb.New(t)

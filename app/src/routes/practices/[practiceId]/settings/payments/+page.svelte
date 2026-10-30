@@ -50,6 +50,7 @@
 		type PaymentTerms
 	} from '#lib/invoice.js';
 	import { takeOutcome } from '#lib/outcome.js';
+	import { refreshSessionIfClientsCanPayChanged } from '#lib/clientsCanPaySession.js';
 	import {
 		billingModeOptions,
 		billingModeSavedMessage,
@@ -215,6 +216,7 @@
 		}
 		try {
 			status = await loadConnectStatus(apiFetchWithSession, page.params.practiceId!);
+			refreshSessionIfClientsCanPayChanged(session, status.clientsCanPay);
 			website = await loadWebsite(apiFetchWithSession, page.params.practiceId!);
 		} catch (error_) {
 			error = error_ instanceof Error ? error_.message : 'Failed to load Stripe Connect status';
@@ -230,6 +232,7 @@
 			pollHandle = pollConnectStatus(apiFetchWithSession, page.params.practiceId!, status, {
 				onResult: (result) => {
 					status = result;
+					refreshSessionIfClientsCanPayChanged(session, result.clientsCanPay);
 					refreshError = '';
 				},
 				onError: () => {
@@ -261,6 +264,7 @@
 		isCheckingStatus = true;
 		try {
 			status = await loadConnectStatus(apiFetchWithSession, page.params.practiceId!);
+			refreshSessionIfClientsCanPayChanged(session, status.clientsCanPay);
 		} catch {
 			refreshError = CONNECT_STATUS_CHECK_FAILED_MESSAGE;
 		} finally {

@@ -18,6 +18,8 @@ package payments
 import (
 	"context"
 	"time"
+
+	"doula-cloud/api/internal/cardpayments"
 )
 
 // InvoiceLineItemDescription is the fixed line-item description and
@@ -38,20 +40,17 @@ const InvoiceLineItemDescription = "Professional services"
 // deliberate constant instead of a repeated literal.
 const diffKeyAmountCents = "amountCents"
 
-// CapabilityStatus is the status Stripe reports for one capability on a
-// v2 Account's merchant configuration -- four-valued, where v1's
-// equivalent was a boolean. Only Active means the capability actually
-// works; Pending is Stripe reviewing something the Owner has already
-// supplied, and Restricted means something is still outstanding (see
-// AccountStatus.RequirementsDue).
-type CapabilityStatus string
+// CapabilityStatus is cardpayments.Status, under the name this package's
+// Stripe port uses for it. Restricted's outstanding items are
+// AccountStatus.RequirementsDue.
+type CapabilityStatus = cardpayments.Status
 
 // The four values Stripe's capability `status` field takes.
 const (
-	CapabilityActive      CapabilityStatus = "active"
-	CapabilityPending     CapabilityStatus = "pending"
-	CapabilityRestricted  CapabilityStatus = "restricted"
-	CapabilityUnsupported CapabilityStatus = "unsupported"
+	CapabilityActive      = cardpayments.Active
+	CapabilityPending     = cardpayments.Pending
+	CapabilityRestricted  = cardpayments.Restricted
+	CapabilityUnsupported = cardpayments.Unsupported
 )
 
 // AccountStatus mirrors the subset of Stripe's v2 Account object payments

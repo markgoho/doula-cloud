@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/cardpayments"
 	"doula-cloud/api/internal/portalaccount"
 )
 
@@ -53,7 +54,7 @@ func SetPracticeTimezone(t *testing.T, db *DB, practiceID, zone string) {
 }
 
 // SeedClientsCanPay flips practiceID's stripe_connect_card_payments_status
-// straight to 'active' -- the shared fixture for payments.ClientsCanPay's
+// straight to 'active' -- the shared fixture for cardpayments.ClientsCanPay's
 // three readers (the Engagement read, the Practice-wide Invoice totals,
 // PostInvoiceHandler's own gate), which each need this exact state and
 // nothing else about a Connect account (no account id, no Stripe fixture
@@ -62,7 +63,7 @@ func SetPracticeTimezone(t *testing.T, db *DB, practiceID, zone string) {
 func SeedClientsCanPay(t *testing.T, db *DB, practiceID string) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE practices SET stripe_connect_card_payments_status = 'active' WHERE id = $1`, practiceID,
+		`UPDATE practices SET stripe_connect_card_payments_status = $2 WHERE id = $1`, practiceID, string(cardpayments.Active),
 	); err != nil {
 		// coverage:ignore reason: fixture update failure, not exercised by the happy-path test
 		t.Fatalf("testdb: seed clients-can-pay %q: %v", practiceID, err)

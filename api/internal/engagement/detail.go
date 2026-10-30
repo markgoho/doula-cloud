@@ -17,8 +17,8 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/cardpayments"
 	"doula-cloud/api/internal/client"
-	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -72,9 +72,8 @@ type Detail struct {
 	ClientEmailSuppressed    bool    `json:"clientEmailSuppressed"`
 	ClientHasEmail           bool    `json:"clientHasEmail"`
 
-	// ClientsCanPay (#270) is payments.ClientsCanPay -- one column,
-	// practices.stripe_connect_card_payments_status = 'active', no Stripe
-	// round-trip. A standing fact about the Practice's own billing
+	// ClientsCanPay (#270) is cardpayments.ClientsCanPay -- one column, no
+	// Stripe round-trip. A standing fact about the Practice's own billing
 	// readiness, not the Owner's Stripe Connect account state
 	// (ADR-0008's separate "Stripe Connect state" row): the Invoice
 	// section reads this to show the Create Invoice form or a Notice
@@ -210,7 +209,7 @@ func DetailHandler() http.Handler {
 		d.ClientEmailSuppressed = portalState.EmailSuppressed
 		d.ClientHasEmail = portalState.HasEmail
 
-		d.ClientsCanPay, err = payments.ClientsCanPay(r.Context(), tx, practiceID)
+		d.ClientsCanPay, err = cardpayments.ClientsCanPay(r.Context(), tx, practiceID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)

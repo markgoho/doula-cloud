@@ -72,6 +72,7 @@ function statusResult(overrides: Partial<ConnectStatusResult> = {}): ConnectStat
 		cardPaymentsStatus: 'pending',
 		payoutsStatus: 'pending',
 		requirementsDue: [],
+		clientsCanPay: false,
 		...overrides
 	};
 }
@@ -134,7 +135,32 @@ describe('canConnectStatusStillMove', () => {
 	});
 
 	it('is false once active, even with an empty requirementsDue', () => {
-		expect(canConnectStatusStillMove(statusResult({ status: 'active', requirementsDue: [] }))).toBe(false);
+		expect(
+			canConnectStatusStillMove(
+				statusResult({ status: 'active', cardPaymentsStatus: 'active', requirementsDue: [], clientsCanPay: true })
+			)
+		).toBe(false);
+	});
+
+	it('is true while the stored fact still says Clients cannot pay and Stripe says card payments are active', () => {
+		expect(
+			canConnectStatusStillMove(
+				statusResult({ status: 'active', cardPaymentsStatus: 'active', requirementsDue: [], clientsCanPay: false })
+			)
+		).toBe(true);
+	});
+
+	it('is true while the stored fact still says Clients can pay and Stripe says card payments are not active', () => {
+		expect(
+			canConnectStatusStillMove(
+				statusResult({
+					status: 'onboarding_incomplete',
+					cardPaymentsStatus: 'restricted',
+					requirementsDue: ['configuration.merchant.mcc'],
+					clientsCanPay: true
+				})
+			)
+		).toBe(true);
 	});
 });
 

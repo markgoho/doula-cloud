@@ -22,6 +22,7 @@ import { loadMfaRequirementImpact } from './mfaRequirement.js';
 import { loadOnCallSettings, type OnCallSettings } from './onCall.js';
 import { CONNECT_STATUS_BADGES, loadConnectStatus } from './payments.js';
 import { loadTemplate as loadPlanTemplate, type Field as PlanField } from './planTemplate.js';
+import { refreshSessionIfClientsCanPayChanged } from './clientsCanPaySession.js';
 import { loadPracticeTimezone } from './practiceTimezone.js';
 import { loadRates, type Rate } from './rates.js';
 import { isOwner, isOwnerOrAdmin, type RoleSession } from './roles.js';
@@ -44,7 +45,7 @@ export type SettingKey =
 	| 'export'
 	| 'delete';
 
-type Session = Pick<RoleSession, 'roles'>;
+type Session = Pick<RoleSession, 'roles'> & { clientsCanPay?: boolean };
 const isAnyStaffMember = (): boolean => true;
 
 /**
@@ -187,7 +188,8 @@ export async function loadSettingsSummary(
 		},
 		onCall: async () => onCallValue(await loadOnCallSettings(fetcher, practiceId)),
 		gettingPaid: async () => {
-			const { status } = await loadConnectStatus(fetcher, practiceId);
+			const { status, clientsCanPay } = await loadConnectStatus(fetcher, practiceId);
+			refreshSessionIfClientsCanPayChanged(session, clientsCanPay);
 			return CONNECT_STATUS_BADGES[status].label;
 		},
 		rates: async () => {

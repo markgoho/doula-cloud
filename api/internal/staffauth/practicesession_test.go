@@ -131,7 +131,7 @@ func TestPracticeSessionHandler_HasClients(t *testing.T) {
 }
 
 // TestPracticeSessionHandler_ClientsCanPay proves ClientsCanPay (#2293)
-// is payments.ClientsCanPay's fact: false until the Practice's card
+// is cardpayments.ClientsCanPay's fact: false until the Practice's card
 // payments capability is active, then true.
 func TestPracticeSessionHandler_ClientsCanPay(t *testing.T) {
 	db := testdb.New(t)

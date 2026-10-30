@@ -11,6 +11,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/cardpayments"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/overdue"
@@ -425,7 +426,7 @@ func createByHandInvoice(ctx context.Context, tx *sql.Tx, practiceID, contractID
 // real reference. created_at is raisedAt, the instant dueAt was counted
 // from (#1992).
 func createStripeInvoice(ctx context.Context, tx *sql.Tx, client Client, practiceID, engagementID, contractID string, amountCents int64, raisedAt, dueAt time.Time) (InvoiceView, error) {
-	canPay, err := ClientsCanPay(ctx, tx, practiceID)
+	canPay, err := cardpayments.ClientsCanPay(ctx, tx, practiceID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return InvoiceView{}, fmt.Errorf("payments: check clients can pay: %w", err)
