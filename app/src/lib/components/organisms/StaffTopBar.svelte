@@ -142,9 +142,23 @@
 				<AvatarMenu {firstName} {lastName} {email} {accountHref} {signOut} />
 			</div>
 		</div>
+		<!--
+			#2235: following a section shuts the sheet, or the page she chose
+			loads under it. It shuts as the link is pressed, before the router
+			runs, not once the new page is in: close() hands focus back to the
+			hamburger, and the router then resets focus for the new page as it
+			does after a press on the wide bar's nav. Shut after the
+			navigation, the sheet would take that focus back to the hamburger.
+		-->
 		<nav aria-label="Practice">
 			{#each navItems as item (item.href)}
-				<Link href={item.href} label={item.label} variant="sheet" current={item.current} />
+				<Link
+					href={item.href}
+					label={item.label}
+					variant="sheet"
+					current={item.current}
+					onClick={closeSheet}
+				/>
 			{/each}
 		</nav>
 		{#if hasPracticeToName}
