@@ -88,21 +88,34 @@ describe('the Settings index', () => {
 			.toHaveAttribute('href', '/api/practices/practice-1/export');
 	});
 
-	it('shows a Doula only what she may change: the Plan Templates', async () => {
+	/*
+	 * #2244: the Plan Templates were the one setting a Doula's index drew,
+	 * and their write is OwnerOnly (#1407), so she may change nothing here.
+	 * Her index says so, and points to the two templates she reads.
+	 */
+	it('tells a Doula she may change nothing here, and where she reads the templates', async () => {
 		await setup(asDoula);
 
-		await expect.element(testPage.getByRole('heading', { name: 'Clients and care' })).toBeVisible();
-		expect(actionFor('the Plan Templates').getAttribute('href')).toBe('/practices/practice-1/settings/plan-templates');
-		for (const hidden of ['Your Practice', 'Money', 'Security and data', 'Delete this Practice']) {
+		await expect.element(testPage.getByText("Only a Practice Owner or Admin can change this Practice's settings.")).toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Plan Templates' }))
+			.toHaveAttribute('href', '/practices/practice-1/settings/plan-templates');
+		await expect
+			.element(testPage.getByRole('link', { name: 'Contract Template' }))
+			.toHaveAttribute('href', '/practices/practice-1/settings/contract-template');
+		for (const hidden of ['Your Practice', 'Clients and care', 'Money', 'Security and data', 'Delete this Practice']) {
 			await expect.element(testPage.getByRole('heading', { name: hidden })).not.toBeInTheDocument();
 		}
-		await expect.element(testPage.getByText('Client Fields')).not.toBeInTheDocument();
-		await expect.element(testPage.getByText('Contract Template')).not.toBeInTheDocument();
+		expect(testPage.getByRole('link', { name: 'Change' }).query()).toBeNull();
 		// Nothing is read that her index does not show.
-		expect(apiFetchWithSession.mock.calls.map(([path]) => path as string).toSorted((a, b) => a.localeCompare(b))).toEqual([
-			'/api/practices/practice-1/plan-templates/birth_plan',
-			'/api/practices/practice-1/plan-templates/care_plan'
-		]);
+		expect(apiFetchWithSession).not.toHaveBeenCalled();
+	});
+
+	it('gives an Owner no line about who may change her settings', async () => {
+		await setup();
+
+		await expect.element(testPage.getByRole('heading', { name: 'Your Practice' })).toBeVisible();
+		expect(testPage.getByText("Only a Practice Owner or Admin can change this Practice's settings.").query()).toBeNull();
 	});
 
 	it('gives an Admin the Owner-or-Admin settings and none of the Owner-only ones', async () => {

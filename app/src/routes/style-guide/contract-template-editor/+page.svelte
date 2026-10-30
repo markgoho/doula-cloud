@@ -18,4 +18,11 @@
 		<h2>Default</h2>
 		<ContractTemplateEditor {prose} onProseChange={(next) => (prose = next)} />
 	</section>
+
+	<!-- #2244: a reader who may not change the terms is handed no
+		onProseChange, and reads them as text. -->
+	<section>
+		<h2>To read</h2>
+		<ContractTemplateEditor {prose} />
+	</section>
 </stack-l>

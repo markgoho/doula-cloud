@@ -165,6 +165,12 @@
 		{#if error}
 			<Notice variant="error" message={error} />
 		{/if}
+		<!-- #2244: the PUT is OwnerOnly (#1407). Anyone else reads the
+			questions, with no Change and no add, and is told why, as the
+			Contract Template tells her. -->
+		{#if !canChange}
+			<Notice variant="info" message="Only a Practice Owner can change these questions." />
+		{/if}
 		{#if isLoaded}
 			<PracticeQuestionList
 				questions={fields}

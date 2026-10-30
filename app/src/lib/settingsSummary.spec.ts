@@ -78,6 +78,16 @@ describe('the Settings index values', () => {
 		expect(MAY_CHANGE.delete({ roles: ['owner'] })).toBe(true);
 		expect(MAY_CHANGE.delete({ roles: ['admin'] })).toBe(false);
 	});
+
+	// #2244: plans/mount.go's PUT is OwnerOnly (#1407), so the Plan
+	// Templates are the Owner's to change, as the Contract Template is.
+	it('gives the Plan Templates and the Contract Template to an Owner alone', () => {
+		for (const key of ['planTemplates', 'contractTemplate'] as const) {
+			expect(MAY_CHANGE[key]({ roles: ['owner'] })).toBe(true);
+			expect(MAY_CHANGE[key]({ roles: ['admin'] })).toBe(false);
+			expect(MAY_CHANGE[key]({ roles: ['doula'] })).toBe(false);
+		}
+	});
 });
 
 describe('loadSettingsSummary', () => {

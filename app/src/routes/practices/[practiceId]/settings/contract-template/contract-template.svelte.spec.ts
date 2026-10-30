@@ -152,3 +152,33 @@ describe('contract-template settings screen: what a save says (#2194)', () => {
 		expect(firstClientLink().query()).toBeNull();
 	});
 });
+
+/*
+ * #2244: the PUT is OwnerOnly (#970), and a non-Owner used to get the
+ * same editable field an Owner does, with no Save: whatever she typed was
+ * thrown away when she left. She reads the terms now, as text, with the
+ * merge fields still explained; an Owner's editor is unchanged.
+ */
+const PROSE_START = 'This Contract is between {{practice_name}} and {{client_name}}';
+
+describe('contract-template settings screen: who gets the editor (#2244)', () => {
+	it('gives an Owner the prose to change, and Save', async () => {
+		await setup();
+
+		await expect.element(testPage.getByRole('textbox', { name: 'Contract template prose' })).toBeVisible();
+		await expect.element(saveButton()).toBeVisible();
+	});
+
+	it.each([
+		['an Admin', nonOwner],
+		['a Doula', { ...nonOwner, pageData: practiceSession(['doula']) }]
+	])('gives %s the terms to read, with no field and no Save', async (_who, as) => {
+		await setup({ as });
+
+		await expect.element(testPage.getByText(PROSE_START, { exact: false })).toBeVisible();
+		await expect.element(testPage.getByText('Only a Practice Owner can change these terms.')).toBeVisible();
+		await expect.element(testPage.getByRole('heading', { name: 'Merge-field placeholders' })).toBeVisible();
+		expect(testPage.getByRole('textbox').query()).toBeNull();
+		expect(saveButton().query()).toBeNull();
+	});
+});

@@ -68,8 +68,11 @@ function respond(path: string) {
 }
 
 /*
- * #2193: a Doula may change the Plan Templates but not the Contract
- * Template, so her screen draws no way on to it.
+ * #2244: only an Owner may change the Plan Templates (plans/mount.go's
+ * PUT is OwnerOnly, #1407), so a Doula reads the list: no Change, no
+ * "Add a question", no way on to the Contract Template, and a line that
+ * says who changes them. An Admin's screen is the same tree, so she is
+ * not a variant of her own.
  */
 export const asDoula: RouteVariant = {
 	name: 'The Plan Templates list, as a Doula',

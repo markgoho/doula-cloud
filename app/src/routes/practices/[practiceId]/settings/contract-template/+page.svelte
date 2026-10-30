@@ -15,9 +15,10 @@
 
 	// #970: the mount now refuses this write to everyone but an Owner
 	// (staffauth.OwnerOnly). The read stays open to every Staff member, so
-	// this screen keeps showing the template to all of them -- only the
-	// Save action a non-Owner could never complete disappears, in
-	// addition to the API's own refusal, never instead of it.
+	// this screen keeps showing the template to all of them -- a
+	// non-Owner reads it, with no field and no Save she could never
+	// complete (#2244), in addition to the API's own refusal, never
+	// instead of it.
 	const session = $derived((page.data as { session: PracticeSession }).session);
 	const isPracticeOwner = $derived(isOwner(session));
 
@@ -81,7 +82,12 @@
 	{#if !isPracticeOwner}
 		<Notice variant="info" message="Only a Practice Owner can change these terms." />
 	{/if}
-	<ContractTemplateEditor {prose} onProseChange={(value: string) => (prose = value)} />
+	<!-- #2244: a non-Owner reads the terms; she is handed no field whose
+		typing nothing would save. -->
+	<ContractTemplateEditor
+		{prose}
+		onProseChange={isPracticeOwner ? (value: string) => (prose = value) : undefined}
+	/>
 {/snippet}
 
 {#snippet actions()}
