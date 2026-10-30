@@ -33,6 +33,15 @@
 			font-size: var(--text-body-sm-size);
 		}
 
+		/* Off the printed sheet (#2212), as the top bars are: a printed
+		   Birth Plan goes to the hospital, and this footer is the app's
+		   chrome, not the plan. */
+		@media print {
+			footer {
+				display: none;
+			}
+		}
+
 		/* The brief's Density rule (no hit target under 44px) is the `Link`
 		   atom's own since #1828: the link is alone on its row, not inside
 		   a paragraph, so the atom gives it the full 44px. */

@@ -2,6 +2,7 @@ import { page } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '#lib/styles/app.css';
+import { inPrintMedia } from '#lib/testMedia.js';
 import PortalFooter from './PortalFooter.svelte';
 
 async function setup() {
@@ -50,5 +51,17 @@ describe('PortalFooter.svelte', () => {
 		await expect.element(page.getByRole('checkbox')).not.toBeInTheDocument();
 		await expect.element(page.getByRole('button')).not.toBeInTheDocument();
 		await expect.element(page.getByText(/agree/i)).not.toBeInTheDocument();
+	});
+});
+
+// #2212: a printed Birth Plan goes to the hospital, and the footer is the
+// app's chrome, not part of the plan.
+describe('PortalFooter.svelte, printed', () => {
+	inPrintMedia();
+
+	it('keeps itself off the printed sheet', async () => {
+		await setup();
+
+		await expect.element(page.getByRole('link', { name: /Privacy Policy/, includeHidden: true })).not.toBeVisible();
 	});
 });
