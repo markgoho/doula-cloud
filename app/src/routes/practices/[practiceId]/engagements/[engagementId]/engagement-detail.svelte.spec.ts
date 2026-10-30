@@ -1999,6 +1999,27 @@ describe('a voided Contract offers the next one (#2260)', () => {
 			`/api/practices/${fixture.params.practiceId}/engagements/${fixture.params.engagementId}/contract`,
 			expect.objectContaining({ method: 'POST' })
 		);
+		// The void and the new Draft are each on the ledger: it is read once
+		// with the page, then again after each act.
+		const activityReads = apiFetchWithSession.mock.calls.filter(([path]) => String(path).includes('/activity'));
+		expect(activityReads).toHaveLength(3);
+	});
+
+	it('keeps the voided Contract and says why when the next one is refused', async () => {
+		await setupWithContract(() => {
+			mockVoidedThenNext(birthRateOnly);
+			const voidedFirst = apiFetchWithSession.getMockImplementation()!;
+			apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) =>
+				path.endsWith('/contract') && init?.method === 'POST'
+					? Promise.resolve(jsonResponse('a Contract that is not voided already exists', 409))
+					: voidedFirst(path, init)
+			);
+		}, fixtureDetail, ownerSession);
+
+		await testPage.getByRole('button', { name: 'Create a Draft Contract' }).click();
+
+		await expect.element(testPage.getByText('a Contract that is not voided already exists')).toBeVisible();
+		await expect.element(testPage.getByText('Voided, no longer active')).toBeVisible();
 	});
 });
 

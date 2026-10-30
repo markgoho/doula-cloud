@@ -1190,7 +1190,10 @@
 			() => createContract(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!),
 			'Failed to create contract'
 		);
-		if (isCreated && contractEditableFields.length > 0) openContractForm();
+		if (!isCreated) return;
+		if (contractEditableFields.length > 0) openContractForm();
+		// "Contract drafted" is on the ledger now, under who did it.
+		await loadActivity();
 	}
 
 	function handleContractValueChange(key: string, value: string) {
@@ -1241,7 +1244,10 @@
 			page.params.practiceId!,
 			page.params.engagementId!
 		);
+		// The ledger has a new entry, and a voided Contract can be followed
+		// by the next one (#2260), whose Create waits on the rates.
 		await loadRatesWhenStartable();
+		await loadActivity();
 	}
 
 	// #971: a Doula's own path to a void, offered exactly where
