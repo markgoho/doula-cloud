@@ -220,7 +220,7 @@ export function describeNoWindow(reason: string): string {
 			return 'No due date recorded, so there is no window to work out.';
 		}
 		case 'nobody_attached': {
-			return 'Nobody is on this birth yet.';
+			return 'No doula is on this Engagement yet.';
 		}
 		case 'postpartum': {
 			return 'Postpartum care is not on-call work.';
@@ -229,10 +229,12 @@ export function describeNoWindow(reason: string): string {
 			return 'Care has ended.';
 		}
 		case 'ended_before_start': {
-			return 'The baby arrived before the window would have opened.';
+			// The BFF gives this reason after a loss and after an early live
+			// birth alike (#2220), so it says what is true of both.
+			return 'The pregnancy ended before the on-call window would have opened.';
 		}
 		default: {
-			return 'There is no on-call window for this birth.';
+			return 'There is no on-call window for this Engagement.';
 		}
 	}
 }

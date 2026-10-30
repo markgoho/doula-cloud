@@ -1585,7 +1585,9 @@
 
 	/* One row per Doula on the birth. A row carries `changes` -- and so a
 	   Change -- only for an Owner or an Admin, and only while there is a
-	   window to narrow; the endpoint refuses anyone else whatever is drawn. */
+	   window to narrow; the endpoint refuses anyone else whatever is drawn.
+	   With no window at all -- after a loss, say (#2220) -- the row names no
+	   window that never was. */
 	const onCallDoulaRows = $derived(
 		(onCall?.doulas ?? []).map(
 			(doula): OnCallDoulaRow => ({
@@ -1594,7 +1596,9 @@
 				value:
 					doula.onCallFrom && doula.onCallTo
 						? `On call ${formatCalendarDay(doula.onCallFrom)} to ${formatCalendarDay(doula.onCallTo)}`
-						: 'Not on call for any of this window',
+						: (onCall?.window
+							? 'Not on call for any of this window'
+							: 'Not on call'),
 				...(isPracticeOwnerOrAdmin &&
 					onCall?.window && {
 						changes: `on-call days for ${doula.name}`,
