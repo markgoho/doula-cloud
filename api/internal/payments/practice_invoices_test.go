@@ -225,6 +225,28 @@ func TestGetPracticeInvoicesHandler_EmptyBookIsAnEmptyList(t *testing.T) {
 	}
 }
 
+// TestGetPracticeInvoicesHandler_ClientsCanPayIsTheStoredFact proves the
+// envelope's clientsCanPay (#2311) is the stored column the Practice
+// session reads, on an empty book as on any other.
+func TestGetPracticeInvoicesHandler_ClientsCanPayIsTheStoredFact(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "practice-invoices-clients-can-pay"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+
+	srv, session := newPracticeInvoiceServer(t, db, uid)
+	defer srv.Close()
+
+	if out := readPracticeInvoices(t, srv, session, practiceID, "", false); out.ClientsCanPay {
+		t.Fatal("clientsCanPay = true before the column is active, want false")
+	}
+
+	testdb.SeedClientsCanPay(t, db, practiceID)
+
+	if out := readPracticeInvoices(t, srv, session, practiceID, "", false); !out.ClientsCanPay {
+		t.Fatal("clientsCanPay = false once the column is active, want true")
+	}
+}
+
 // TestGetPracticeInvoicesHandler_ByHandPaidOnIsTheTypedDay proves a paid
 // Invoice carries the day it was paid, so the list can say when rather
 // than only naming the status -- and that for a by-hand Payment it is the

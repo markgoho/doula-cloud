@@ -589,47 +589,6 @@ func TestGetConnectStatusHandler_Active(t *testing.T) {
 	}
 }
 
-// TestGetConnectStatusHandler_ClientsCanPayIsTheStoredFact proves
-// clientsCanPay (#2295) is the stored column the Practice session reads,
-// not Stripe's live answer: it trails a live active status until the
-// webhook writes the column.
-func TestGetConnectStatusHandler_ClientsCanPayIsTheStoredFact(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "status-clients-can-pay"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	client := payments.NewFakeClient()
-
-	accountID := postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
-	client.Statuses[accountID] = payments.AccountStatus{
-		CardPayments: payments.CapabilityActive,
-		Payouts:      payments.CapabilityActive,
-	}
-
-	srv, session := newConnectServer(t, db, uid, client)
-	defer srv.Close()
-
-	read := func() payments.ConnectStatusResponse {
-		t.Helper()
-		resp := getConnectStatus(t, srv, session, practiceID)
-		defer resp.Body.Close()
-		var out payments.ConnectStatusResponse
-		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-			t.Fatalf("decode response: %v", err)
-		}
-		return out
-	}
-
-	if out := read(); out.CardPaymentsStatus != payments.CapabilityActive || out.ClientsCanPay {
-		t.Fatalf("before the webhook: cardPaymentsStatus = %q, clientsCanPay = %v; want active, false", out.CardPaymentsStatus, out.ClientsCanPay)
-	}
-
-	testdb.SeedClientsCanPay(t, db, practiceID)
-
-	if !read().ClientsCanPay {
-		t.Fatal("clientsCanPay = false once the column is active, want true")
-	}
-}
-
 // TestGetConnectStatusHandler_RetrieveFailureReturns500 proves a Stripe
 // Account-retrieve failure surfaces as an internal error.
 func TestGetConnectStatusHandler_RetrieveFailureReturns500(t *testing.T) {

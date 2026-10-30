@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/cardpayments"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/overdue"
 	"doula-cloud/api/internal/personname"
@@ -101,6 +102,10 @@ type PracticeInvoicesResponse struct {
 	// been told the truth about its book and can page to find the fourth.
 	OverdueCents int64 `json:"overdueCents"`
 	OverdueCount int   `json:"overdueCount"`
+	// ClientsCanPay is the stored fact the Practice session carries, read
+	// here so the Invoices screen can read the session again when the two
+	// disagree (#2311).
+	ClientsCanPay bool `json:"clientsCanPay"`
 }
 
 // GetPracticeInvoicesHandler lists every Invoice the Practice has ever
@@ -179,6 +184,7 @@ func GetPracticeInvoicesHandler() http.Handler {
 			RefundedCents:    totals.refundedCents,
 			OverdueCents:     totals.overdueCents,
 			OverdueCount:     totals.overdueCount,
+			ClientsCanPay:    totals.clientsCanPay,
 		}
 		if hasMore {
 			next := encodeInvoiceCursor(items[len(items)-1].CreatedAt, items[len(items)-1].ID)
@@ -349,6 +355,7 @@ type invoiceTotals struct {
 	overdueCents     int64
 	overdueCount     int
 	refundedCents    int64
+	clientsCanPay    bool
 }
 
 // practiceInvoiceTotalsQuery reads every total in one pass with FILTER
@@ -369,7 +376,8 @@ const practiceInvoiceTotalsQuery = `SELECT
 		COUNT(*) FILTER (WHERE status = 'open' AND due_at < $2),
 		(SELECT COALESCE(-SUM(p.amount_cents), 0) FROM payments p
 		   JOIN invoices ri ON ri.id = p.invoice_id
-		  WHERE ri.practice_id = $1 AND p.kind = 'refund')
+		  WHERE ri.practice_id = $1 AND p.kind = 'refund'),
+		(SELECT ` + cardpayments.ClientsCanPayExpr + ` FROM practices WHERE id = $1)
 	FROM invoices WHERE practice_id = $1`
 
 // practiceInvoiceTotals sums the Practice's outstanding and paid money.
@@ -380,7 +388,7 @@ const practiceInvoiceTotalsQuery = `SELECT
 func practiceInvoiceTotals(ctx context.Context, tx *sql.Tx, practiceID string, overdueCutoff time.Time) (invoiceTotals, error) {
 	var t invoiceTotals
 	if err := tx.QueryRowContext(ctx, practiceInvoiceTotalsQuery, practiceID, overdueCutoff).
-		Scan(&t.outstandingCents, &t.outstandingCount, &t.paidCents, &t.overdueCents, &t.overdueCount, &t.refundedCents); err != nil {
+		Scan(&t.outstandingCents, &t.outstandingCount, &t.paidCents, &t.overdueCents, &t.overdueCount, &t.refundedCents, &t.clientsCanPay); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return invoiceTotals{}, fmt.Errorf("payments: practice invoice totals: %w", err)
 	}

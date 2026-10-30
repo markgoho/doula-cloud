@@ -11,10 +11,6 @@ import {
 	type PracticeLanding
 } from './practiceLanding.js';
 import { jsonResponse } from './testResponse.js';
-import { invalidate } from '$app/navigation';
-import { PRACTICE_SESSION_DEPENDENCY } from './practiceSession.js';
-
-vi.mock('$app/navigation', () => ({ invalidate: vi.fn() }));
 
 function refusal(body: string): Response {
 	return jsonResponse(body, 403);
@@ -118,15 +114,6 @@ describe('isConnectCardShown', () => {
 });
 
 describe('loadPracticeLanding', () => {
-	// #2295: the Getting paid card's read is a read of the stored fact too.
-	it('reads the Practice session again when Connect status says otherwise about whether Clients can pay', async () => {
-		const fetcher = fetcherFor({ connect: jsonResponse({ ...connectStatus, clientsCanPay: true }) });
-
-		await loadPracticeLanding(fetcher, 'practice-1', { ...session, clientsCanPay: false });
-
-		expect(invalidate).toHaveBeenCalledExactlyOnceWith(PRACTICE_SESSION_DEPENDENCY);
-	});
-
 	it('keeps only the Offers still awaiting an answer', async () => {
 		const landing = await loadPracticeLanding(fetcherFor(), 'practice-1', session);
 

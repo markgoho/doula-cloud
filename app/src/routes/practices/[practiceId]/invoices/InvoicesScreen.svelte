@@ -25,6 +25,7 @@
 	} from '#lib/invoice.js';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
+	import { refreshSessionIfClientsCanPayChanged } from '#lib/clientsCanPaySession.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -47,8 +48,8 @@
 	// #2200: Stripe not being connected stops a card payment, never a
 	// Practice that bills by hand, so that one is told nothing about it.
 	const isWaitingOnStripe = $derived(session?.clientsCanPay === false && session.billingMode !== 'by_hand');
-	// Owner/Admin read this screen (+page.ts), so each gets a way to
-	// Getting paid; cardPaymentsWait words it for which one she is.
+	// An Owner, an Admin and an employed Doula read this screen;
+	// cardPaymentsWait words it for which one she is.
 	const cardPaymentsWaitWords = $derived(
 		session ? cardPaymentsWait({ isOwner: isOwner(session), isOwnerOrAdmin: isOwnerOrAdmin(session) }) : undefined
 	);
@@ -82,7 +83,11 @@
 	});
 	$effect(() => {
 		const landed = read;
-		if (landed) untrack(() => invoices.reset(landed));
+		if (!landed) return;
+		untrack(() => {
+			invoices.reset(landed);
+			refreshSessionIfClientsCanPayChanged(session ?? {}, landed.clientsCanPay);
+		});
 	});
 
 	/*
@@ -226,7 +231,8 @@
 		#270: an empty book looks the same whether nobody has billed yet or
 		Clients cannot pay this Practice at all; this tells the two apart.
 		From the session, so it is drawn on the first frame and the rows
-		never move under it (#2293).
+		never move under it (#2293), unless the read finds the session out of
+		date (#2311).
 	-->
 	{#if isWaitingOnStripe && cardPaymentsWaitWords}
 		<stack-l space="var(--space-related)">
