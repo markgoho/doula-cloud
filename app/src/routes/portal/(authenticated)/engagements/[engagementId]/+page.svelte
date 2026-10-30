@@ -89,33 +89,46 @@
 	});
 	let visitsError = $state('');
 
+	/*
+	 * All three reads at once: none depends on another's answer, and each
+	 * list keeps its own failure. The sections paint only once all three
+	 * have answered (#2218). Until her Visits have, the page cannot know
+	 * whether anybody is coming, and painting first would say "No visit is
+	 * booked yet." and then swap in the next Visit and the rows under her.
+	 * A per-section skeleton could not hold the Visits table's space
+	 * either, since how many rows the first page brings is unknown until
+	 * it answers. So the page's own loading state stands until then. The
+	 * list reads catch their own failure, so neither can reject past here.
+	 */
 	onMount(async () => {
-		const response = await apiFetchWithSession(`/api/portal/engagements/${page.params.engagementId}`);
-		if (!response.ok) {
-			error = await apiErrorMessage(response);
-			return;
-		}
-
-		detail = await response.json();
-
-		// Both lists' first page at once: neither read depends on the
-		// other's answer, and each keeps its own failure.
-		await Promise.all([
+		const engagementId = page.params.engagementId!;
+		const detailRead = apiFetchWithSession(`/api/portal/engagements/${engagementId}`);
+		const listsRead = Promise.all([
 			(async () => {
 				try {
-					activity.reset(await loadPortalActivityPage(apiFetchWithSession, page.params.engagementId!, ''));
+					activity.reset(await loadPortalActivityPage(apiFetchWithSession, engagementId, ''));
 				} catch (error_) {
 					activityError = error_ instanceof Error ? error_.message : 'Failed to load activity';
 				}
 			})(),
 			(async () => {
 				try {
-					visits.reset(await loadPortalVisitsPage(apiFetchWithSession, page.params.engagementId!, ''));
+					visits.reset(await loadPortalVisitsPage(apiFetchWithSession, engagementId, ''));
 				} catch (error_) {
 					visitsError = error_ instanceof Error ? error_.message : 'Failed to load visits';
 				}
 			})()
 		]);
+
+		const response = await detailRead;
+		if (!response.ok) {
+			error = await apiErrorMessage(response);
+			return;
+		}
+
+		const record: Detail = await response.json();
+		await listsRead;
+		detail = record;
 	});
 
 	const next = $derived(whatHappensNext(nextVisit(visits.items), detail?.dueDate));
@@ -142,7 +155,13 @@
 		<div class="practice"><Text text={page.data.practiceName ?? ''} tone="variant" /></div>
 		<section class="next" aria-labelledby="what-happens-next"><!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
 			<Heading level={2} variant="card" text={NEXT_HEADING} id="what-happens-next" />
-			<Text text={next.lead} step="label" />
+			<!-- A Visits read that failed knows nothing about who is coming,
+			     so it says why rather than "No visit is booked yet." (#2218). -->
+			{#if visitsError}
+				<Notice variant="error" message={visitsError} />
+			{:else}
+				<Text text={next.lead} step="label" />
+			{/if}
 			{#if next.detail}
 				<Text text={next.detail} tone="variant" />
 			{/if}
@@ -171,16 +190,17 @@
 {#snippet visitsSection()}
 	{#if visitsError}
 		<Notice variant="error" message={visitsError} />
+	{:else}
+		<DataTable
+			columns={portalVisitColumns()}
+			rows={inReadingOrder(visits.items)}
+			hasMore={visits.hasMore}
+			onLoadMore={() => visits.loadMore()}
+			isLoadingMore={visits.isLoadingMore}
+			loadMoreError={visits.loadMoreError}
+			emptyMessage={noVisitsMessage}
+		/>
 	{/if}
-	<DataTable
-		columns={portalVisitColumns()}
-		rows={inReadingOrder(visits.items)}
-		hasMore={visits.hasMore}
-		onLoadMore={() => visits.loadMore()}
-		isLoadingMore={visits.isLoadingMore}
-		loadMoreError={visits.loadMoreError}
-		emptyMessage={noVisitsMessage}
-	/>
 {/snippet}
 
 {#snippet birthPlanSection()}
@@ -219,17 +239,18 @@
 {#snippet activitySection()}
 	{#if activityError}
 		<Notice variant="error" message={activityError} />
+	{:else}
+		<DataTable
+			disclosure="Show what has happened"
+			columns={clientActivityLedgerColumns()}
+			rows={activity.items}
+			hasMore={activity.hasMore}
+			onLoadMore={() => activity.loadMore()}
+			isLoadingMore={activity.isLoadingMore}
+			loadMoreError={activity.loadMoreError}
+			emptyMessage="Nothing has happened yet."
+		/>
 	{/if}
-	<DataTable
-		disclosure="Show what has happened"
-		columns={clientActivityLedgerColumns()}
-		rows={activity.items}
-		hasMore={activity.hasMore}
-		onLoadMore={() => activity.loadMore()}
-		isLoadingMore={activity.isLoadingMore}
-		loadMoreError={activity.loadMoreError}
-		emptyMessage="Nothing has happened yet."
-	/>
 {/snippet}
 
 <!--

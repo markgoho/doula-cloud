@@ -12,6 +12,8 @@ import '#lib/styles/app.css';
 import { toApiResponder, toPageState } from '../../../../routeFixture.js';
 import { createdAt, detail, fixture, practiceName, visits } from './page.fixture.js';
 import { engagementLabel } from '#lib/clientRegister.js';
+import { noVisitsMessage } from '#lib/portalVisits.js';
+import { NO_NEXT_VISIT_MESSAGE } from '#lib/yourCare.js';
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
 /*
@@ -545,7 +547,10 @@ describe('Your visits (#478)', () => {
 	it('says so when the visits cannot be read', async () => {
 		await setupVisits({ refusal: 'no visits for you' });
 
-		await expect.element(page.getByText('no visits for you')).toBeVisible();
+		// "What happens next" says it too (#2218), so this is the section's own.
+		await expect
+			.element(page.getByRole('region', { name: 'Your visits' }).getByText('no visits for you'))
+			.toBeVisible();
 	});
 
 	// The next Visit is the answer both journeys came for, so the
@@ -593,5 +598,58 @@ describe('the hub after a loss (#2003)', () => {
 		await expect
 			.element(page.getByRole('link', { name: 'Read your contract' }))
 			.toHaveAccessibleDescription(`${practiceName} ended this Contract.`);
+	});
+});
+
+/** The `#2218` block's setup: the fixture answers every read, but the
+ * Visits read is held open until the test lets it go, which no fixture
+ * content can express. `release` answers it with the fixture's own
+ * Visits. */
+async function setupHeldVisits() {
+	const held = Promise.withResolvers<Response>();
+	const answer = toApiResponder(fixture);
+	apiFetchWithSession.mockImplementation((path: string) => (path.includes('/visits') ? held.promise : answer(path)));
+	await render(Hub);
+	return { release: () => held.resolve(jsonResponse({ items: visits, hasMore: false })) };
+}
+
+// #2218: until her Visits have answered, the page does not know whether
+// anybody is coming, so it says neither "nobody" line. It holds its own
+// loading state until every read has answered, rather than painting the
+// sections and then swapping lines and rows in under her.
+describe('the hub while her Visits are loading (#2218)', () => {
+	it('says nobody is coming only once the Visits have answered', async () => {
+		const { release } = await setupHeldVisits();
+
+		await expect.element(page.getByRole('status', { name: 'Loading your care' })).toBeVisible();
+		await expect.element(page.getByText(NO_NEXT_VISIT_MESSAGE)).not.toBeInTheDocument();
+		await expect.element(page.getByText(noVisitsMessage)).not.toBeInTheDocument();
+		await expect.element(page.getByText('Nothing has happened yet.')).not.toBeInTheDocument();
+
+		release();
+
+		await expect
+			.element(page.getByRole('region', { name: 'What happens next' }))
+			.toHaveTextContent(`${visits[0]!.doulaName} is coming to you on`);
+		await expect.element(page.getByText(NO_NEXT_VISIT_MESSAGE)).not.toBeInTheDocument();
+	});
+
+	it('shows a failed Visits read as its error, never as nobody coming', async () => {
+		await setupVisits({ refusal: 'no visits for you' });
+
+		const next = page.getByRole('region', { name: 'What happens next' });
+		await expect.element(next.getByText('no visits for you')).toBeVisible();
+		await expect.element(page.getByText(NO_NEXT_VISIT_MESSAGE)).not.toBeInTheDocument();
+		await expect.element(page.getByText(noVisitsMessage)).not.toBeInTheDocument();
+	});
+
+	it('shows a failed ledger read as its error, never as nothing having happened', async () => {
+		const { container } = await setupActivity({ refusal: 'nope' });
+
+		await expect.element(page.getByText('nope')).toBeVisible();
+		// A closed `<details>` is outside the accessibility tree (this
+		// file's Activity block gives the reason), so the ledger's empty
+		// line is looked for in the DOM itself.
+		expect(container.textContent).not.toContain('Nothing has happened yet.');
 	});
 });
