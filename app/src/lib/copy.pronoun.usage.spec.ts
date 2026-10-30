@@ -43,11 +43,15 @@ import { copyCandidates, NOT_COPY } from './quotedCopy';
  *
  * Two limits, named rather than hidden:
  *
- * 1. **Singular "they/them" is not checked.** The brief's rule forbids
- *    every pronoun, not only a gendered one, but "they" is indistinguishable
- *    from the ordinary plural by a word-boundary regex -- flagging it would
- *    drown every legitimate plural in the app in false positives. A reviewer
- *    has to read for this one; nothing here can.
+ * 1. **Singular "they/them" is checked only in one shape.** The brief's
+ *    rule forbids every pronoun, not only a gendered one, but "they" is
+ *    indistinguishable from the ordinary plural by a word-boundary regex --
+ *    a trial run in #2198 flagged 37 lines, nearly all plurals of things
+ *    ("reorder them", "pay their invoices"). What is checked is "them" as
+ *    the person something is sent or told to (`SINGULAR_THEM`):
+ *    "An email has been sent to them" was the line #2198 found, and in
+ *    that shape "them" is a person every time. Every other "they", "them"
+ *    and "their" is still the reviewer's to read for.
  * 2. **A quoted third party is not exempted.** A Client's own words --
  *    "her partner and her mother" as something a Client wrote about her own
  *    household -- would trip this the same as house copy about a Client
@@ -70,6 +74,12 @@ import { copyCandidates, NOT_COPY } from './quotedCopy';
  */
 
 const PRONOUNS = ['she', 'her', 'hers', 'herself', 'he', 'him', 'his', 'himself'];
+
+// "them" as the one a message or a reminder goes to: a person, never a
+// plural of things (limit 1 above, #2198). Not "ask": "asks them" is
+// how a Plan Template says it asks its questions.
+const SINGULAR_THEM =
+	/\b(?:sends?|sent|emails?|emailed|tells?|told|invites?|invited|reminds?|reminded|messages?|messaged|notify|notifies|notified|lets?)\s+(?:to\s+)?them\b/i;
 
 const MARKER = 'voice:ignore';
 
@@ -96,6 +106,7 @@ function offensesIn(text: string): Pick<Offense, 'found' | 'text'>[] {
 			found.push({ found: word, text });
 		}
 	}
+	if (SINGULAR_THEM.test(text)) found.push({ found: 'them', text });
 	return found;
 }
 
@@ -169,6 +180,25 @@ describe('findOffensesInSource', () => {
 		expect(findOffensesInSource('fixture.ts', source)).toEqual([
 			{ file: 'fixture.ts', line: 3, found: 'her', text: 'Send her an Offer' }
 		]);
+	});
+
+	it('flags "them" as the person a message goes to (#2198)', () => {
+		const line = '<Text text="Invited. An email has been sent to them." />';
+
+		expect(findOffensesInSource('fixture.svelte', line)).toEqual([
+			{ file: 'fixture.svelte', line: 1, found: 'them', text: line }
+		]);
+		expect(findOffensesInSource('fixture.ts', "export const HINT = 'Remind them to sign';")).toHaveLength(1);
+	});
+
+	it('leaves "them" alone where it is a plural of things', () => {
+		const source = [
+			"export const A = 'Add, remove and reorder them.';",
+			"export const B = 'They are shown once, when you ask for them.';",
+			"export const C = 'This device is not receiving them.';"
+		].join('\n');
+
+		expect(findOffensesInSource('fixture.ts', source)).toEqual([]);
 	});
 
 	it('honors the marker with a reason on the same line', () => {

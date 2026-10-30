@@ -1271,6 +1271,15 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 
 		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeEnabled();
 		await expect.element(testPage.getByText('Invite pending')).toBeVisible();
+		// #2198: the confirmation names her, never "them".
+		await expect
+			.element(
+				testPage.getByText(
+					`Invited. ${fixtureDetail.clientName} has an email with the link. To share the link yourself, here it is:`
+				)
+			)
+			.toBeVisible();
+		await expect.element(testPage.getByText(/a-fresh-token/)).toBeVisible();
 	});
 });
 
