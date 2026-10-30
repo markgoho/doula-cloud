@@ -82,6 +82,15 @@
 	});
 	let waitingOnReplyError = $state('');
 
+	// #2245, the Staff sibling of #2218: both lists start empty, so drawn
+	// before their reads answer they said nothing had happened and nobody
+	// was waiting. The page stays on its loading state until both have
+	// answered, as Your care does (#2218), so neither empty line paints
+	// before the data and no row arriving later moves the cards under it
+	// (ADR-0020). The three reads run side by side, so the page waits for
+	// the slowest, not their sum.
+	let areListsAnswered = $state(false);
+
 	// Resolved once by practices/[practiceId]/+layout.ts (#835), not a
 	// fetch of loadPracticeLanding's own -- the Membership its roles are
 	// read off.
@@ -123,9 +132,8 @@
 	}
 
 	onMount(async () => {
-		await load();
-		await loadActivity();
-		await loadWaitingOnReply();
+		await Promise.all([load(), loadActivity(), loadWaitingOnReply()]);
+		areListsAnswered = true;
 
 		// Fire-and-forget: #61's "once per device after login" push
 		// registration is best-effort and must never block landing on the
@@ -303,21 +311,24 @@
 		today", for any Staff role.
 	-->
 	<Heading level={2} variant="section" text="Clients waiting on a reply" />
+	<!-- #2245: a failed read says so in place of the list, never above
+		an empty one that says nobody is waiting. -->
 	{#if waitingOnReplyError}
 		<Notice variant="error" message={waitingOnReplyError} />
+	{:else}
+		<div class="waiting-table">
+			<DataTable
+				columns={waitingOnReplyColumns}
+				rows={waitingOnReply.items}
+				rowHref={waitingOnReplyEngagementHref}
+				hasMore={waitingOnReply.hasMore}
+				onLoadMore={() => waitingOnReply.loadMore()}
+				isLoadingMore={waitingOnReply.isLoadingMore}
+				loadMoreError={waitingOnReply.loadMoreError}
+				emptyMessage="Nobody is waiting on a reply."
+			/>
+		</div>
 	{/if}
-	<div class="waiting-table">
-		<DataTable
-			columns={waitingOnReplyColumns}
-			rows={waitingOnReply.items}
-			rowHref={waitingOnReplyEngagementHref}
-			hasMore={waitingOnReply.hasMore}
-			onLoadMore={() => waitingOnReply.loadMore()}
-			isLoadingMore={waitingOnReply.isLoadingMore}
-			loadMoreError={waitingOnReply.loadMoreError}
-			emptyMessage="Nobody is waiting on a reply."
-		/>
-	</div>
 {/snippet}
 
 {#snippet rosterBlock()}
@@ -469,17 +480,19 @@
 	<section>
 		<stack-l space="var(--space-3)">
 			<Heading level={2} variant="card" text="Recent activity" />
+			<!-- #2245: in place of the list, never above an empty one. -->
 			{#if activityError}
 				<Notice variant="error" message={activityError} />
+			{:else}
+				<div class="activity-table">
+					<DataTable
+						columns={activityLedgerColumns()}
+						rows={recentActivity}
+						hasMore={false}
+						emptyMessage="Nothing has happened yet."
+					/>
+				</div>
 			{/if}
-			<div class="activity-table">
-				<DataTable
-					columns={activityLedgerColumns()}
-					rows={recentActivity}
-					hasMore={false}
-					emptyMessage="Nothing has happened yet."
-				/>
-			</div>
 			{#if recentActivity.length > 0}
 				<Link
 					href={resolve('/practices/[practiceId]/activity', { practiceId: page.params.practiceId! })}
@@ -574,7 +587,7 @@
 	feed={landing ? activityFeed : undefined}
 	links={quickLinks}
 	{empty}
-	loading={landing || error ? undefined : 'Loading your Practice'}
+	loading={error || (areListsAnswered && landing) ? undefined : 'Loading your Practice'}
 	isRailShown={isOwnerOrAdmin(session)}
 	loadError={error || undefined}
 	{outcome}
