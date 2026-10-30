@@ -374,6 +374,44 @@ describe('client detail hub', () => {
 		await expect.element(link).toHaveAttribute('href', '/practices/practice-1/engagements/e1');
 	});
 
+	// #2280: the approval is Renata's, at the time she approved, and
+	// Priya's asking stays readable beside it.
+	it('names who approved a Request and when, and keeps who asked and when', async () => {
+		await setup({
+			overrides: {
+				history: [
+					{
+						type: 'engagement_request',
+						at: '2026-01-02T00:00:00Z',
+						engagementRequest: {
+							requestId: 'r1',
+							kind: 'postpartum',
+							state: 'approved',
+							requestedBy: 'staff-priya',
+							requestedByName: 'Priya Raman',
+							requestedAt: '2026-01-02T00:00:00Z',
+							decidedBy: 'staff-renata',
+							decidedByName: 'Renata Alvarez',
+							decidedAt: '2026-01-03T00:00:00Z',
+							engagementId: 'e2'
+						}
+					}
+				]
+			}
+		});
+
+		const approvedRow = testPage.getByRole('row', { name: /Postpartum Engagement approved/ });
+		await expect.element(approvedRow.getByRole('cell', { name: 'Renata Alvarez' })).toBeVisible();
+		await expect
+			.element(approvedRow.getByText(formatActivityTimestamp('2026-01-03T00:00:00Z')))
+			.toHaveAttribute('datetime', '2026-01-03T00:00:00Z');
+		const askedRow = testPage.getByRole('row', { name: /Postpartum Engagement requested/ });
+		await expect.element(askedRow.getByRole('cell', { name: 'Priya Raman' })).toBeVisible();
+		await expect
+			.element(askedRow.getByText(formatActivityTimestamp('2026-01-02T00:00:00Z')))
+			.toHaveAttribute('datetime', '2026-01-02T00:00:00Z');
+	});
+
 	it('renders client_events and engagement_requests as one merged timeline', async () => {
 		await setup({
 			overrides: {
@@ -756,10 +794,30 @@ describe('the pending-request block: Withdraw (#504)', () => {
 	});
 
 	it('withdraws on click: the block disappears and a status notice announces it', async () => {
-		await setup({
-			overrides: { history: [requestedByHerself] },
-			sessionStaffId: 'staff-mendoza-riquelme'
+		// The Client is read again after the withdrawal (#2280), and the BFF
+		// then answers with the Request decided by the person who asked it.
+		const withdrawn: HistoryEntry = {
+			...requestedByHerself,
+			engagementRequest: {
+				...requestedByHerself.engagementRequest,
+				state: 'withdrawn',
+				decidedBy: 'staff-mendoza-riquelme',
+				decidedByName: 'Alejandra Mendoza-Riquelme',
+				decidedAt: '2026-01-04T08:00:00Z'
+			}
+		} as HistoryEntry;
+		let isWithdrawn = false;
+		apiFetchWithSession.mockImplementation((path: string) => {
+			if (path === '/api/staff/session') {
+				return Promise.resolve(jsonResponse({ staffId: 'staff-mendoza-riquelme' }));
+			}
+			if (path.endsWith('/withdraw')) {
+				isWithdrawn = true;
+				return Promise.resolve(jsonResponse({ requestId: 'request-mendoza-riquelme-postpartum', state: 'withdrawn' }));
+			}
+			return Promise.resolve(jsonResponse({ ...baseDetail, history: [isWithdrawn ? withdrawn : requestedByHerself] }));
 		});
+		await render(Page, {});
 
 		await testPage.getByRole('button', { name: 'Withdraw Postpartum request' }).click();
 
@@ -771,9 +829,38 @@ describe('the pending-request block: Withdraw (#504)', () => {
 		await expect
 			.element(testPage.getByText('Postpartum Engagement requested by Alejandra Mendoza-Riquelme'))
 			.not.toBeInTheDocument();
-		// The merged history row reflects the same withdrawal rather than
-		// staying frozen on "requested" until a reload.
-		await expect.element(testPage.getByRole('cell', { name: 'Postpartum Engagement request withdrawn' })).toBeVisible();
+		// The History gains the withdrawal, at the time the BFF recorded
+		// it, and keeps the asking beneath it.
+		const withdrawnRow = testPage.getByRole('row', { name: /Postpartum Engagement request withdrawn/ });
+		await expect
+			.element(withdrawnRow.getByText(formatActivityTimestamp('2026-01-04T08:00:00Z')))
+			.toHaveAttribute('datetime', '2026-01-04T08:00:00Z');
+		await expect.element(testPage.getByRole('cell', { name: 'Postpartum Engagement requested' })).toBeVisible();
+	});
+
+	it('names who refused a Request, with the reason, and keeps who asked', async () => {
+		await setup({
+			overrides: {
+				history: [
+					{
+						...requestedBySomeoneElse,
+						engagementRequest: {
+							...requestedBySomeoneElse.engagementRequest,
+							state: 'refused',
+							reason: 'No Doula is free that week',
+							decidedBy: 'staff-renata',
+							decidedByName: 'Renata Alvarez',
+							decidedAt: '2026-01-05T09:00:00Z'
+						}
+					} as HistoryEntry
+				]
+			}
+		});
+
+		const refusedRow = testPage.getByRole('row', { name: /Birth Engagement refused: No Doula is free that week/ });
+		await expect.element(refusedRow.getByRole('cell', { name: 'Renata Alvarez' })).toBeVisible();
+		const askedRow = testPage.getByRole('row', { name: /Birth Engagement requested/ });
+		await expect.element(askedRow.getByRole('cell', { name: 'Chidinma Okonkwo' })).toBeVisible();
 	});
 
 	it('shows the refusal text and leaves the block standing when withdraw fails', async () => {

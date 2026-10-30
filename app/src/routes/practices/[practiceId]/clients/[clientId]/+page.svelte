@@ -13,7 +13,8 @@
 		type ClientDetail,
 		type EngagementRequestSummary,
 		type EngagementSummary,
-		type HistoryEntry,
+		historyRows,
+		type HistoryRow,
 		type ResolvedField
 	} from '#lib/clientDetail.js';
 	import { canAddDetails, fieldSectionIndexes } from '#lib/clientDetailsJourney.js';
@@ -177,7 +178,7 @@
 	// accessor per column, so each column below switches on the row it is
 	// given rather than the two shapes getting two tables -- the AC is one
 	// merged timeline, not two lists.
-	function historyWho(entry: HistoryEntry): string {
+	function historyWho(entry: HistoryRow): string {
 		if (entry.type === 'client_event') {
 			// Every actor kind arrives named (#1150). This screen used to
 			// spell two of those names itself -- "DoulaCloud" for a system
@@ -186,8 +187,12 @@
 			// second place and gave one Practice two words for one absence.
 			return entry.clientEvent.actorName;
 		}
-		return entry.engagementRequest.requestedByName;
+		// #2280: the person who did this row's act -- the asker on the
+		// asking, the decider on the decision.
+		return entry.who;
 	}
+
+	const historyTableRows = $derived(detail ? historyRows(detail.history) : []);
 
 	// #813 (ADR-0040). A merged Client's history is two trails, not one,
 	// and it can never become one: each Client's entries are sealed under
@@ -220,11 +225,11 @@
 		return `This Client was combined with ${records}. Most recently on ${formatActivityTimestamp(last.mergedAt)}, by ${who}. The histories below stay separate: each record's own entries are labeled, and combining them never joined the two.`;
 	}
 
-	function historyWhat(entry: HistoryEntry): string {
+	function historyWhat(entry: HistoryRow): string {
 		return historyAction(entry) + (entry.fromMergedRecord ? MERGED_ENTRY_SUFFIX : '');
 	}
 
-	function historyAction(entry: HistoryEntry): string {
+	function historyAction(entry: HistoryRow): string {
 		if (entry.type === 'client_event') {
 			switch (entry.clientEvent.eventType) {
 				case 'created': {
@@ -244,10 +249,8 @@
 		}
 		const request = entry.engagementRequest;
 		const label = kindLabel(request.kind);
+		if (entry.act === 'asked') return `${label} Engagement requested`;
 		switch (request.state) {
-			case 'pending': {
-				return `${label} Engagement requested`;
-			}
 			case 'approved': {
 				return `${label} Engagement approved`;
 			}
@@ -267,11 +270,11 @@
 	// string, not this route's plain locale date -- the merged row union's
 	// own `at` also feeds the datetimeAccessor below, carrying the exact
 	// instant.
-	function historyWhen(entry: HistoryEntry): string {
+	function historyWhen(entry: HistoryRow): string {
 		return formatActivityTimestamp(entry.at);
 	}
 
-	function historyAt(entry: HistoryEntry): string {
+	function historyAt(entry: HistoryRow): string {
 		return entry.at;
 	}
 
@@ -292,9 +295,8 @@
 		}
 	}
 
-	// Withdraws request, then flips its own history entry to "withdrawn" in
-	// place rather than reloading the whole Client -- pendingRequests()
-	// re-derives from that same array, so the block disappears on the next
+	// Withdraws request, then reads the Client again -- pendingRequests()
+	// re-derives from the new history, so the block disappears on the next
 	// render for free. The disappearance itself is silent to a screen
 	// reader, which is why a role=status confirmation follows it (#504 AC:
 	// "keyboard-reachable and announced") rather than standing in as the
@@ -305,13 +307,11 @@
 		withdrawingRequestId = request.requestId;
 		try {
 			await withdrawRequest(apiFetchWithSession, page.params.practiceId!, request.requestId);
-			const entry = detail!.history.find(
-				(historyEntry) => historyEntry.type === 'engagement_request' && historyEntry.engagementRequest.requestId === request.requestId
-			);
-			if (entry?.type === 'engagement_request') {
-				entry.engagementRequest.state = 'withdrawn';
-			}
 			withdrawnConfirmation = `${kindLabel(request.kind)} Engagement request withdrawn`;
+			// #2280: read back rather than flipped in place, so the History's
+			// withdrawal row carries the time the BFF recorded it, as
+			// handleErase does for the same reason.
+			detail = await loadClientDetail(apiFetchWithSession, page.params.practiceId!, page.params.clientId!);
 		} catch (error_) {
 			withdrawError = error_ instanceof Error ? error_.message : 'Failed to withdraw request';
 		} finally {
@@ -658,7 +658,7 @@
 			{ label: 'What', accessor: historyWhat, variant: 'body' as const },
 			{ label: 'Who', accessor: historyWho, variant: 'muted' as const }
 		]}
-		rows={detail!.history}
+		rows={historyTableRows}
 		hasMore={false}
 		emptyMessage="No history yet."
 	/>

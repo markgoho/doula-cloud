@@ -223,6 +223,38 @@ export function resolvedFieldGroups(fields: ResolvedField[]): ResolvedFieldGroup
 	return groups;
 }
 
+type RequestEntry = Extract<HistoryEntry, { type: 'engagement_request' }>;
+
+/** One row of the History table (#2280). A Client event is one row as it
+ * arrives. An Engagement Request is up to two: asking for it and deciding
+ * it are two acts, each with its own who and when, so `act` says which
+ * one the row is and `at`/`who` are that act's. */
+export type HistoryRow =
+	| Extract<HistoryEntry, { type: 'client_event' }>
+	| (RequestEntry & { act: 'asked' | 'decided'; who: string });
+
+/** The History as rows, newest first (#2280, the audit-trail expectation
+ * in CLAUDE.md). The BFF dates a Request's entry at the asking, so a
+ * decided Request used to read as decided by whoever asked, at the time
+ * she asked. Here it is the asking, by the requester at `requestedAt`,
+ * and the decision, by the decider at `decidedAt`. Every decision records
+ * both (engagementrequest's approve, refuse and withdraw); one without
+ * them stays the one row of its asking rather than name the wrong
+ * person. */
+export function historyRows(history: HistoryEntry[]): HistoryRow[] {
+	const rows = history.flatMap((entry): HistoryRow[] => {
+		if (entry.type === 'client_event') return [entry];
+		const request = entry.engagementRequest;
+		const asking: HistoryRow = { ...entry, act: 'asked', at: request.requestedAt, who: request.requestedByName };
+		if (request.state === 'pending' || request.decidedAt === undefined || request.decidedByName === undefined) {
+			return [asking];
+		}
+		return [{ ...entry, act: 'decided', at: request.decidedAt, who: request.decidedByName }, asking];
+	});
+	// Stable, so rows written at one instant keep the BFF's order.
+	return rows.toSorted((a, b) => Date.parse(b.at) - Date.parse(a.at));
+}
+
 /** The Requests still open for this Client, one per kind -- the block
  * ADR-0017 names "the Client's record shows a pending-request block
  * naming who asked and when". */
