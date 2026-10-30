@@ -20,6 +20,7 @@ import {
 	session
 } from './page.fixture.js';
 import type { Contract } from '#lib/contract.js';
+import { OUTCOME_KEPT_ON_COMPLETED } from '#lib/engagementDetail.js';
 import type { Rate } from '#lib/rates.js';
 import { PREVIOUS_CONTRACT_PDF_NOTICE } from '#lib/components/molecules/ContractStatus.svelte';
 if (!customElements.get('center-l')) registerLayoutPrimitives();
@@ -606,6 +607,32 @@ describe('the status-move controls (#253)', () => {
 		await expect.element(testPage.getByText('The care phase is now Active.')).toHaveFocus();
 		expect(changeButton('care phase')).toHaveAttribute('aria-expanded', 'false');
 		expect(testPage.getByRole('button', { name: 'Mark care complete' }).elements()).toHaveLength(0);
+	});
+
+	// #2308: a completed Engagement keeps its outcome, so Remove points her
+	// at the summary's care phase, where Reopen is, and sends nothing.
+	it('sends an Owner removing a completed Engagement\'s outcome to the care phase first', async () => {
+		const requests: string[] = [];
+		await testPage.viewport(3200, 900);
+		const respond = toApiResponder(fixture);
+		apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
+			if (init?.method === 'PUT') requests.push(path);
+			return respond(path);
+		});
+		await render(Page, {
+			data: { ...fixtureDetail, status: 'completed', statusMoves: ['active'], session: sessionFor(['owner']) }
+		});
+
+		await testPage.getByRole('button', { name: 'Remove this record' }).click();
+
+		await expect.element(testPage.getByText(OUTCOME_KEPT_ON_COMPLETED)).toHaveFocus();
+		const link = testPage.getByRole('link', { name: 'Change the care phase' });
+		await expect.element(link).toHaveAttribute('href', '#engagement-summary');
+		// The target is the summary that holds the care phase's Change. An
+		// id is a fact about the document, not an accessible signal (the
+		// querySelector exception's third case).
+		expect(document.querySelector('#engagement-summary')?.textContent).toContain('Care phase');
+		expect(requests).toEqual([]);
 	});
 
 	it('asks for a reason before completing, and refuses to submit without one', async () => {

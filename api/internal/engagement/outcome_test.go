@@ -49,6 +49,7 @@ type outcomeResponseBody struct {
 	BirthOutcome     *string     `json:"birthOutcome"`
 	PregnancyEndedOn *string     `json:"pregnancyEndedOn,omitempty"`
 	Code             apierr.Code `json:"code"`
+	Message          string      `json:"message"`
 }
 
 // recordOutcomeAs PUTs a birth outcome as uid and returns the status
@@ -503,9 +504,17 @@ func TestRecordBirthOutcomeHandler_ClearingIsRefusedOnACompletedEngagement(t *te
 		t.Fatalf("complete engagement: %v", err)
 	}
 
-	status, _ := recordOutcomeAs(t, db, srv, uid, practiceID, engagementID, outcomeBody("", "", true))
+	status, body := recordOutcomeAs(t, db, srv, uid, practiceID, engagementID, outcomeBody("", "", true))
 	if status != http.StatusConflict {
 		t.Fatalf("status = %d, want 409", status)
+	}
+	// #2308: the hub shows these words as written, so they are a sentence
+	// for that screen, the same as the section's own line before it asks.
+	if body.Code != apierr.CodeBirthOutcomeRequired {
+		t.Fatalf("code = %q, want %s", body.Code, apierr.CodeBirthOutcomeRequired)
+	}
+	if body.Message != engagement.MsgOutcomeKeptOnCompleted {
+		t.Fatalf("message = %q, want %q", body.Message, engagement.MsgOutcomeKeptOnCompleted)
 	}
 	gotOutcome, gotEndedOn := readEngagementOutcome(t, db, engagementID)
 	if gotOutcome == nil || *gotOutcome != engagement.OutcomeLoss || gotEndedOn == nil {

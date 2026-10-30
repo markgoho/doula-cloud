@@ -312,7 +312,15 @@ func refuseClearOnCompleted(w http.ResponseWriter, current birthOutcomeRow, outc
 	if outcome != nil || current.status != StatusCompleted {
 		return false
 	}
-	apierr.Write(w, http.StatusConflict, apierr.CodeBirthOutcomeRequired,
-		"a completed Engagement keeps a birth outcome; reopen it first, then remove the record", nil)
+	apierr.Write(w, http.StatusConflict, apierr.CodeBirthOutcomeRequired, MsgOutcomeKeptOnCompleted, nil)
 	return true
 }
+
+// MsgOutcomeKeptOnCompleted is refuseClearOnCompleted's message, written
+// for the Engagement hub's Birth outcome section that shows it as it
+// stands (#2308): why the record stays, and the order that frees it. The
+// section says the same words, with a link to the care phase, before it
+// sends a clear on a completed Engagement (engagementDetail.ts's
+// OUTCOME_KEPT_ON_COMPLETED), so this is met only by a page whose reading
+// went stale.
+const MsgOutcomeKeptOnCompleted = "A completed Engagement keeps its birth outcome. Reopen it first, then remove the record."
