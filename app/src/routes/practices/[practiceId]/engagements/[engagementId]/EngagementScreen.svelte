@@ -18,6 +18,7 @@
 		doulaSummaryItem,
 		downloadAttachment,
 		endingReasons,
+		OUTCOME_BEFORE_COMPLETION,
 		loadAttachmentPreviews,
 		loadEngagement,
 		loadEngagementOffersOrNone as loadOffers,
@@ -1929,7 +1930,18 @@
 						{#if directMove.error}
 							<Notice variant="error" message={directMove.error} />
 						{/if}
-						{#if isCompleteFormShown}
+						{#if isCompleteFormShown && birthOutcome.birthOutcome === undefined}
+							<!--
+								#2199: ADR-0015 completes no Engagement whose birth outcome
+								is null (refuseUnexplainedCompletion), so she is told that
+								first, in the order the rule needs, rather than after she
+								has answered why it is ending. Once the outcome is recorded
+								on this page, the overlaid `birthOutcome` brings the
+								question in without a reload.
+							-->
+							<Notice variant="info" message={OUTCOME_BEFORE_COMPLETION} isFocusedOnAppear />
+							<Link href="#birth-outcome" label="Record what happened" />
+						{:else if isCompleteFormShown}
 							<StackedForm onSubmit={handleCompleteSubmit}>
 								{#if completeSubmission.errors.length > 0}
 									<ErrorSummary errors={completeSubmission.errors} />
