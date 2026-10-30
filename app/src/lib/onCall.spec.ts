@@ -102,17 +102,30 @@ describe('the range a reader is looking at', () => {
 describe('the words a reader meets', () => {
 	it('says why a birth has no window, in her language', () => {
 		expect(describeNoWindow('no_due_date')).toContain('No due date');
-		expect(describeNoWindow('nobody_attached')).toContain(
-			'Nobody is on this birth'
-		);
 		expect(describeNoWindow('postpartum')).toContain('Postpartum');
 		expect(describeNoWindow('completed')).toContain('Care has ended');
-		expect(describeNoWindow('ended_before_start')).toContain('arrived before');
+	});
+
+	// #2220: the same reason is given after a loss and after an early live
+	// birth, so the words are true for both and name no baby.
+	it('says the pregnancy ended, not that a baby arrived, when it ended before the window', () => {
+		expect(describeNoWindow('ended_before_start')).toBe(
+			'The pregnancy ended before the on-call window would have opened.'
+		);
+	});
+
+	// #2220: a reason the BFF can give after a loss names no birth that may
+	// not have happened.
+	it('names no baby and no birth in any reason that can follow a loss', () => {
+		expect(describeNoWindow('nobody_attached')).toBe('No doula is on this Engagement yet.');
+		for (const reason of ['no_due_date', 'nobody_attached', 'completed', 'ended_before_start', 'something_new']) {
+			expect(describeNoWindow(reason)).not.toMatch(/\b(baby|birth|arrived)\b/i);
+		}
 	});
 
 	it('states plainly that there is no window for a reason it has not met', () => {
 		expect(describeNoWindow('something_new')).toBe(
-			'There is no on-call window for this birth.'
+			'There is no on-call window for this Engagement.'
 		);
 	});
 

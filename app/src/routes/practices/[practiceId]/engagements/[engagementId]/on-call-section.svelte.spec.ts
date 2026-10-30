@@ -491,6 +491,27 @@ describe('the on-call section on a birth (#1093)', () => {
 			.toBeVisible();
 	});
 
+	// #2220: after a loss the BFF answers ended_before_start, and the page
+	// read on the morning after names no baby and no window that never was.
+	it('says the pregnancy ended, and names no window, when it ended before the window', async () => {
+		await setupOnCall((path) =>
+			path.endsWith('/on-call') && !path.includes('coverage')
+				? jsonResponse({
+						noWindowReason: 'ended_before_start',
+						rule: { startRule: 'gestational_week', startWeek: 37, graceDays: 14, overridden: false },
+						doulas: [{ staffId: 'doula-1', name: 'Maya Okonkwo' }],
+						gaps: []
+					})
+				: undefined
+		);
+
+		await expect
+			.element(testPage.getByText('The pregnancy ended before the on-call window would have opened.'))
+			.toBeVisible();
+		await expect.element(testPage.getByText('Not on call', { exact: true })).toBeVisible();
+		expect(testPage.getByText(/this window/).elements()).toHaveLength(0);
+	});
+
 	it('reports a section it could not read, rather than rendering nothing', async () => {
 		await setupOnCall((path) =>
 			path.endsWith('/on-call') ? jsonResponse('engagement not found', 404) : undefined
