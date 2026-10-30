@@ -122,9 +122,9 @@
 			return 'Every Staff member already has a second factor set up, so nobody will be signed out.';
 		}
 		if (count === 1) {
-			return '1 Staff member has no second factor, and will not be able to sign in to this Practice until they set one up.';
+			return '1 Staff member has no second factor yet, and will not be able to sign in to this Practice without one.';
 		}
-		return `${count} Staff members have no second factor, and will not be able to sign in to this Practice until they set one up.`;
+		return `${count} Staff members have no second factor yet, and will not be able to sign in to this Practice without one.`;
 	}
 
 	let confirmConsequence = $derived(
