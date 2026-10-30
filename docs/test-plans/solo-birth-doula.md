@@ -128,11 +128,11 @@ None. Maya's journey starts at a cold `/signup`, so this plan builds its own fix
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 8.1 | Send a message from the Engagement page | **Write a message** opens Message, Attachment, **Send**; sent, the message is appended to the one Engagement thread with "Message sent.", and it cannot be edited or deleted | `manual` |
+| 8.1 | Send a message from the Engagement page | **Write a message** opens Message, Attachment, **Send** and **Cancel**; sent, the message is appended to the one Engagement thread with "Message sent.", and it cannot be edited or deleted | `manual` |
 | 8.2 | Reply from the portal and reload Maya's view | One continuous thread, both sides in order | `manual` |
 | 8.2-a | With the portal thread open, deliver a push event | The open tab refetches and renders the new message | `automated (push-notification.e2e.ts)` |
 | 8.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
-| 8.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 2 (Hick's Law, Miller's Law) | `manual` |
+| 8.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 4 (Hick's Law, Miller's Law). Message, Attachment, **Send** and **Cancel**, after **Write a message** | `manual` |
 | 8.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
 | 8.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
 | 8.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
