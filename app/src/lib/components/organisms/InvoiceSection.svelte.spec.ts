@@ -365,9 +365,7 @@ describe('InvoiceSection.svelte', () => {
 		await setup({ contractStatus: 'voided' });
 
 		await expect
-			.element(
-				page.getByText('This Contract has been voided. Invoicing is unavailable until Staff issues a new Contract.')
-			)
+			.element(page.getByText('This Contract is voided. To invoice again, send a new Contract.'))
 			.toBeVisible();
 		await expect.element(page.getByRole('button', { name: 'Create Invoice' })).not.toBeInTheDocument();
 	});
@@ -376,7 +374,7 @@ describe('InvoiceSection.svelte', () => {
 		await setup({ contractStatus: 'voided', clientsCanPay: false, isOwner: true });
 
 		await expect.element(page.getByRole('link', { name: 'Connect Stripe on Getting paid' })).not.toBeInTheDocument();
-		await expect.element(page.getByText(/This Contract has been voided/)).toBeVisible();
+		await expect.element(page.getByText(/This Contract is voided/)).toBeVisible();
 	});
 
 	// #271: the first Invoice a Practice ever raises asks which rail it

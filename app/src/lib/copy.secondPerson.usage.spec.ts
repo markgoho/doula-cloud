@@ -30,6 +30,9 @@ import { QUOTED, quotedStringsInSource, regionLines } from './quotedCopy';
  *   reader is the Client, so "the Client's" and "owed" are about the reader.
  * - **The signed-in person's own screen**: `routes/(person)/account`. The
  *   reader is a Staff member and the subject is the same Staff member.
+ * - **Every screen and module**, for one form whose reader does not matter:
+ *   "Staff" followed by a verb, the Practice's own people as a third-person
+ *   actor (#2221). A Staff reader is "you", and a Client never meets the word.
  *
  * ## The override
  *
@@ -48,7 +51,8 @@ import { QUOTED, quotedStringsInSource, regionLines } from './quotedCopy';
  *    review cover the remainder.
  * 3. **Third person on a Staff screen about somebody else.** "The Client's
  *    birth plan" on a Staff screen is correct: the reader is Staff.
- * 4. **A `.ts` module outside the Client register modules named below.**
+ * 4. **A `.ts` module outside the Client register modules named below**,
+ *    except for the Staff-actor form, which every module is read for.
  */
 
 const MARKER = 'voice:ignore';
@@ -94,7 +98,21 @@ const STAFF_NOUN: Rule = {
 	instead: 'say "you" and "your" ("your login", not "the Staff member\'s login")'
 };
 
-const RULES: readonly Rule[] = [OWED, CLIENT_NOUN, STAFF_NOUN];
+// #2221: "Invoicing is unavailable until Staff issues a new Contract", read
+// by the Staff member who would issue it. "Staff" followed by a verb makes
+// the Practice's own people the third-person actor of a sentence, and that
+// is wrong on every screen: a Staff reader is "you", and a Client never meets
+// the word at all (GLOSSARY.md). So unlike the rules above, no reader has to
+// be known, and the rule reads every screen and module. Name the act ("send
+// a new Contract") or the reader ("you") instead.
+const STAFF_AS_ACTOR: Rule = {
+	id: 'Staff named as the one who acts, in copy a person reads',
+	pattern: /\bStaff\s+(?:issues?|sends?|creates?|records?|adds?|approves?|has|have|must|needs?|will|can|should|did|does)\b/,
+	globs: ['src/**/*.svelte', 'src/lib/**/*.ts'],
+	instead: 'name the act ("To invoice again, send a new Contract") or say "you"'
+};
+
+const RULES: readonly Rule[] = [OWED, CLIENT_NOUN, STAFF_NOUN, STAFF_AS_ACTOR];
 
 interface Offense {
 	file: string;
@@ -142,9 +160,11 @@ function findOffensesInSource(file: string, source: string, rules: readonly Rule
 // Read and scanned once, at module scope, so the cost of the whole-tree
 // read is paid on import rather than charged against one `it`'s timeout
 // (#1211).
+// A spec is not copy: it quotes the forms these rules forbid, this one
+// included, in order to test them.
 const scanned = RULES.map((rule) => ({
 	rule,
-	files: globFiles([...rule.globs], { cwd: appRoot })
+	files: globFiles([...rule.globs], { cwd: appRoot }).filter((file) => !file.endsWith('.spec.ts'))
 }));
 
 const offenses = scanned.flatMap(({ rule, files }) =>
@@ -238,6 +258,17 @@ describe('findOffensesInSource', () => {
 		expect(findOffensesInSource('fixture.svelte', source, [client])).toHaveLength(1);
 	});
 
+	it('flags Staff named as the one who acts, and leaves Staff as a noun alone', () => {
+		const source = [
+			"export const A = 'Invoicing is unavailable until Staff issues a new Contract.';",
+			"export const B = 'Staff';",
+			"export const C = 'Staff member';",
+			"export const D = 'Who is on your Staff';"
+		].join('\n');
+
+		expect(findOffensesInSource('fixture.ts', source, [STAFF_AS_ACTOR]).map((offense) => offense.line)).toEqual([1]);
+	});
+
 	it('matches whole words only, so "owe" and "Clientele" pass', () => {
 		const source = '<p>What you still owe, Clientele</p>';
 
@@ -250,6 +281,14 @@ const filesOf = (target: Rule) => scanned.find(({ rule }) => rule === target)!.f
 describe('the rules are scoped by who reads the file', () => {
 	it('keeps the Staff-screen rule on the account screen alone', () => {
 		expect(filesOf(STAFF_NOUN).every((file) => file.startsWith('src/routes/(person)/account/'))).toBe(true);
+	});
+
+	it('reads the Staff-actor rule on both sides, and never a spec', () => {
+		const files = filesOf(STAFF_AS_ACTOR);
+
+		expect(files).toContain('src/lib/invoice.ts');
+		expect(files.some((file) => file.startsWith('src/routes/portal/'))).toBe(true);
+		expect(files.some((file) => file.endsWith('.spec.ts'))).toBe(false);
 	});
 
 	it('keeps the Client rules off every Staff route', () => {

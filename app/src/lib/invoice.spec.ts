@@ -520,10 +520,10 @@ describe('invoiceStatusLabel', () => {
 });
 
 describe('unbillableContractMessage', () => {
-	it('names the voided Contract state specifically', () => {
-		expect(unbillableContractMessage('voided')).toBe(
-			'This Contract has been voided. Invoicing is unavailable until Staff issues a new Contract.'
-		);
+	// #2221: the reader is the Staff member who would send the new one, so
+	// the line names the act rather than "Staff".
+	it('names the voided Contract state specifically, and the act that invoices again', () => {
+		expect(unbillableContractMessage('voided')).toBe('This Contract is voided. To invoice again, send a new Contract.');
 	});
 
 	it('gives the same not-yet-signed message for draft and sent', () => {
