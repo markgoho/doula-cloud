@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { CLIENT_READ } from './clientRead';
 import { globFiles } from './globFiles';
 import { QUOTED, quotedStringsInSource, regionLines } from './quotedCopy';
 
@@ -25,8 +26,8 @@ import { QUOTED, quotedStringsInSource, regionLines } from './quotedCopy';
  * path is the only reader signal a regex can use. Each rule therefore names
  * the files whose reader it knows:
  *
- * - **Client-read copy**: the portal routes, the `Portal*` components, and
- *   the Client register modules (`clientRegister.ts` and its neighbors). The
+ * - **Client-read copy**: the files `clientRead.ts` lists, the one list
+ *   this spec shares with `copy.domainNoun.usage.spec.ts` (#2341). The
  *   reader is the Client, so "the Client's" and "owed" are about the reader.
  * - **The signed-in person's own screen**: `routes/(person)/account`. The
  *   reader is a Staff member and the subject is the same Staff member.
@@ -51,7 +52,7 @@ import { QUOTED, quotedStringsInSource, regionLines } from './quotedCopy';
  *    review cover the remainder.
  * 3. **Third person on a Staff screen about somebody else.** "The Client's
  *    birth plan" on a Staff screen is correct: the reader is Staff.
- * 4. **A `.ts` module outside the Client register modules named below**,
+ * 4. **A `.ts` module outside the Client register modules `clientRead.ts` names**,
  *    except for the Staff-actor form, which every module is read for.
  */
 
@@ -70,12 +71,6 @@ interface Rule {
 	// The second-person form that replaces it, shown in the failure message.
 	readonly instead: string;
 }
-
-const CLIENT_READ = [
-	'src/routes/portal/**/*.svelte',
-	'src/lib/components/**/Portal*.svelte',
-	'src/lib/{clientRegister,clientInvoice,clientPayment,portalLanding,portalVisits}.ts'
-];
 
 const OWED: Rule = {
 	id: 'impersonal "owed"',
@@ -161,10 +156,11 @@ function findOffensesInSource(file: string, source: string, rules: readonly Rule
 // read is paid on import rather than charged against one `it`'s timeout
 // (#1211).
 // A spec is not copy: it quotes the forms these rules forbid, this one
-// included, in order to test them.
+// included, in order to test them. Nor is a route fixture, which holds what
+// a person typed, or a type declaration.
 const scanned = RULES.map((rule) => ({
 	rule,
-	files: globFiles([...rule.globs], { cwd: appRoot }).filter((file) => !file.endsWith('.spec.ts'))
+	files: globFiles([...rule.globs], { cwd: appRoot }).filter((file) => !/\.(?:spec|fixture|d)\.ts$/.test(file))
 }));
 
 const offenses = scanned.flatMap(({ rule, files }) =>
@@ -289,6 +285,17 @@ describe('the rules are scoped by who reads the file', () => {
 		expect(files).toContain('src/lib/invoice.ts');
 		expect(files.some((file) => file.startsWith('src/routes/portal/'))).toBe(true);
 		expect(files.some((file) => file.endsWith('.spec.ts'))).toBe(false);
+	});
+
+	it('reads the Client rules on every file a Client reads, the one list both copy specs share (#2341)', () => {
+		for (const rule of [OWED, CLIENT_NOUN]) {
+			const files = filesOf(rule);
+
+			expect(files).toContain('src/lib/yourCare.ts');
+			expect(files).toContain('src/lib/portalDoor.ts');
+			expect(files).toContain('src/lib/components/organisms/SignContract.svelte');
+			expect(files.some((file) => file.endsWith('.fixture.ts'))).toBe(false);
+		}
 	});
 
 	it('keeps the Client rules off every Staff route', () => {

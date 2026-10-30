@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { CLIENT_READ } from './clientRead';
 import { globFiles } from './globFiles';
 import { QUOTED, quotedStringsInSource, regionLines } from './quotedCopy';
 
@@ -35,7 +36,7 @@ import { QUOTED, quotedStringsInSource, regionLines } from './quotedCopy';
  *
  * ## The screens a Client reads, the other way round (#2327)
  *
- * The screens a Client reads (`CLIENT_READ` below) follow the Client
+ * The screens a Client reads (`CLIENT_READ`, in `clientRead.ts`) follow the Client
  * register, and there the founder decided on 2026-10-30 that Contract, Invoice and Birth Plan are written
  * lowercase: "your contract", "your invoices", "your birth plan". So those
  * files are left out of the check above and read for the opposite
@@ -57,21 +58,19 @@ const CLIENT_CAPITAL = /(?<=\b\w[\w']*\s+)(?:Contract|Invoice)s?\b|\bBirth Plans
 
 const appRoot = fileURLToPath(new URL('../../', import.meta.url));
 
-// The Client register's files (#2327): a copy of `CLIENT_READ`, as a spec
-// file may not export it, plus what only a Client reads outside its globs:
-// `yourCare.ts`, `portalDoor.ts`, and `SignContract`, which only the
-// portal's contract page renders.
-const CLIENT_READ =
-	/^src\/(?:routes\/portal\/|lib\/components\/(?:.*\/Portal[^/]*|organisms\/SignContract)\.svelte$|lib\/(?:clientRegister|clientInvoice|clientPayment|portalDoor|portalLanding|portalVisits|yourCare)\.ts$)/;
+// The Client register's files (#2327), from the one list this spec shares
+// with `copy.secondPerson.usage.spec.ts` (#2341).
+const clientRead = new Set(globFiles([...CLIENT_READ], { cwd: appRoot }));
+const isClientRead = (file: string) => clientRead.has(file);
 
 const allSvelteFiles = globFiles('src/{lib/components,routes}/**/*.svelte', { cwd: appRoot });
 const allModuleFiles = globFiles('src/{lib,routes}/**/*.ts', { cwd: appRoot }).filter(
 	(file) => !/\.(?:test|spec)\.ts$/.test(file) && !file.endsWith('.d.ts') && !file.endsWith('.fixture.ts')
 );
-const svelteFiles = allSvelteFiles.filter((file) => !CLIENT_READ.test(file));
-const moduleFiles = allModuleFiles.filter((file) => !CLIENT_READ.test(file));
-const clientSvelteFiles = allSvelteFiles.filter((file) => CLIENT_READ.test(file));
-const clientModuleFiles = allModuleFiles.filter((file) => CLIENT_READ.test(file));
+const svelteFiles = allSvelteFiles.filter((file) => !isClientRead(file));
+const moduleFiles = allModuleFiles.filter((file) => !isClientRead(file));
+const clientSvelteFiles = allSvelteFiles.filter((file) => isClientRead(file));
+const clientModuleFiles = allModuleFiles.filter((file) => isClientRead(file));
 
 // A Svelte block's own words -- `{#each practices as practice}` -- are
 // code, not copy.
