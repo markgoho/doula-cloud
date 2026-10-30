@@ -21,6 +21,7 @@
 	import DocumentPage from '#lib/components/templates/DocumentPage.svelte';
 	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
+	import { INVOICES_HEADING, NO_CONTRACT_MESSAGE } from '#lib/clientRegister.js';
 
 	/*
 	 * The longest realistic values, not representative ones (ADR-0025): a
@@ -41,7 +42,7 @@
 {#snippet content()}
 	<SummaryList rows={facts} />
 	<Text
-		text="Pay this Invoice by check or bank transfer to Riverside Doulas & Postpartum Care Collective, and quote A4B2-0011-PERSEPHONE."
+		text="Pay this invoice by check or bank transfer to Riverside Doulas & Postpartum Care Collective, and quote A4B2-0011-PERSEPHONE."
 	/>
 {/snippet}
 
@@ -49,11 +50,11 @@
      the portal Invoice route passes it. An Invoice has no empty state, so
      the empty variant shows the Contract's instead. -->
 <DocumentPage
-	title={{ content: title, empty: 'Contract', loading: 'Invoices', loadError: 'Invoices' }[shown]}
+	title={{ content: title, empty: 'Contract', loading: INVOICES_HEADING, loadError: INVOICES_HEADING }[shown]}
 	backHref="#"
-	backLabel="Back to Invoices"
+	backLabel="Back to {INVOICES_HEADING}"
 	{content}
-	loading={shown === 'loading' ? 'Loading Invoice' : undefined}
-	loadError={shown === 'loadError' ? 'Failed to load Invoice' : undefined}
-	empty={shown === 'empty' ? 'No Contract has been sent for your care yet.' : undefined}
+	loading={shown === 'loading' ? 'Loading invoice' : undefined}
+	loadError={shown === 'loadError' ? 'Failed to load invoice' : undefined}
+	empty={shown === 'empty' ? NO_CONTRACT_MESSAGE : undefined}
 />

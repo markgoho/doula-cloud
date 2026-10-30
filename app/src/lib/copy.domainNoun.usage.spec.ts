@@ -60,7 +60,15 @@ const appRoot = fileURLToPath(new URL('../../', import.meta.url));
 
 // The Client register's files (#2327), from the one list this spec shares
 // with `copy.secondPerson.usage.spec.ts` (#2341).
-const clientRead = new Set(globFiles([...CLIENT_READ], { cwd: appRoot }));
+//
+// Plus the style-guide pages that demonstrate a portal component with the
+// portal's own copy (#2342): the portal bar, footer and feedback, the
+// signing form, and the Document page, whose demo is the portal's Invoice.
+// A Staff member reads the style guide, so these are not Client-read for
+// `copy.secondPerson.usage.spec.ts`; but their demo lines stand for what a
+// Client reads, and a copy that kept the old capitals would teach them.
+const CLIENT_REGISTER_DEMOS = 'src/routes/style-guide/{document-page,sign-contract,portal-*}/+page.svelte';
+const clientRead = new Set(globFiles([...CLIENT_READ, CLIENT_REGISTER_DEMOS], { cwd: appRoot }));
 const isClientRead = (file: string) => clientRead.has(file);
 
 const allSvelteFiles = globFiles('src/{lib/components,routes}/**/*.svelte', { cwd: appRoot });
@@ -196,6 +204,14 @@ describe('a Client reads Contract, Invoice and Birth Plan in lowercase (#2327)',
 		expect(clientModuleFiles).toContain('src/lib/portalDoor.ts');
 		expect(clientSvelteFiles).toContain('src/lib/components/organisms/SignContract.svelte');
 		expect(clientModuleFiles).toContain('src/lib/clientRegister.ts');
+	});
+
+	it("reads a style-guide page that demonstrates a portal component in the Client's register (#2342)", () => {
+		for (const demo of ['document-page', 'sign-contract', 'portal-top-bar', 'portal-footer', 'portal-feedback']) {
+			expect(clientSvelteFiles).toContain(`src/routes/style-guide/${demo}/+page.svelte`);
+			expect(svelteFiles).not.toContain(`src/routes/style-guide/${demo}/+page.svelte`);
+		}
+		expect(svelteFiles).toContain('src/routes/style-guide/labeled-field/+page.svelte');
 	});
 
 	it('finds a capital after another word, and a capitalized Birth Plan anywhere', () => {

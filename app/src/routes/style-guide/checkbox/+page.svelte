@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import { SIGN_CONSENT_LABEL } from '#lib/clientRegister.js';
 
 	const noop = () => {};
 
@@ -16,7 +17,7 @@
 	<section>
 		<h2>Default</h2>
 		<LabeledField label="Unchecked" orientation="inline">{#snippet children(control)}<Checkbox checked={isUnchecked} onChange={(value) => (isUnchecked = value)} {...control} />{/snippet}</LabeledField>
-		<LabeledField label="I have read this Contract and I am signing it electronically" orientation="inline">{#snippet children(control)}<Checkbox checked={isChecked} onChange={(value) => (isChecked = value)} {...control} />{/snippet}</LabeledField>
+		<LabeledField label={SIGN_CONSENT_LABEL} orientation="inline">{#snippet children(control)}<Checkbox checked={isChecked} onChange={(value) => (isChecked = value)} {...control} />{/snippet}</LabeledField>
 	</section>
 
 	<section>

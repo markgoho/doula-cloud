@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Text from '#lib/components/atoms/Text.svelte';
+	import { SIGN_CONSENT_LABEL } from '#lib/clientRegister.js';
 </script>
 
 <stack-l space="var(--space-6)">
@@ -14,7 +15,7 @@
 		<stack-l space="var(--space-4)">
 			<Text step="body" text="Body — prose, form values and list rows. Anne-Marie Ochieng-Whitfield asked for a home birth supported by Highland Midwifery &amp; Birth Support Collective." />
 			<Text step="body-sm" text="Body small — table cells and dense rows, such as anne-marie.ochieng-whitfield@highland-midwifery-group.example.org." />
-			<Text step="label" text="Label — field labels, nav items and buttons, such as I have read this Contract and I am signing it electronically." />
+			<Text step="label" text="Label — field labels, nav items and buttons, such as {SIGN_CONSENT_LABEL}." />
 			<Text step="meta" text="Meta — timestamps, attribution and help text, such as Sent by Anne-Marie Ochieng-Whitfield on Sep 14, 2027 at 9:42am." />
 		</stack-l>
 	</section>
