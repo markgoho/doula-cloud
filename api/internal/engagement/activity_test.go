@@ -185,6 +185,39 @@ func TestListActivityHandler_InvalidCursorRejected(t *testing.T) {
 	}
 }
 
+// TestListActivityHandler_KeepsBirthPlanRowsAfterALoss proves #2219's
+// Staff half: the portal leaves Birth Plan rows out wherever a Birth Plan
+// is not offered, but the Practice's own ledger still answers "who
+// started this Birth Plan, and when?" after a loss.
+func TestListActivityHandler_KeepsBirthPlanRowsAfterALoss(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "owner-activity-birth-plan-loss"
+	practiceID := testdb.SeedPractice(t, db, "Owner Activity Birth Plan Loss")
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "owner-activity-birth-plan-loss-client@example.com", "active")
+	for _, a := range activity.BirthPlanActions() {
+		testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(a), activity.StaffActor(ownerID))
+	}
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE engagements SET birth_outcome = 'loss', pregnancy_ended_on = '2027-03-04'::date WHERE id = $1`,
+		engagementID); err != nil {
+		t.Fatalf("record the loss: %v", err)
+	}
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
+	defer resp.Body.Close()
+	var got engagement.ActivityListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got.Items) != len(activity.BirthPlanActions()) {
+		t.Fatalf("Owner got %d items after a loss, want %d (every Birth Plan row kept)", len(got.Items), len(activity.BirthPlanActions()))
+	}
+}
+
 // TestListActivityHandler_PaginatesNewestFirst mirrors
 // visit.TestListHandler_PaginatesNewestFirst.
 func TestListActivityHandler_PaginatesNewestFirst(t *testing.T) {
