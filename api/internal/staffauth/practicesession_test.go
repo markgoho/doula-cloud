@@ -164,6 +164,40 @@ func TestPracticeSessionHandler_ClientsCanPay(t *testing.T) {
 	}
 }
 
+// TestPracticeSessionHandler_BillingMode proves BillingMode (#2200) is
+// practices.billing_mode as stored: empty until the Practice has chosen
+// one, then the word it chose.
+func TestPracticeSessionHandler_BillingMode(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "practice-session-billing-mode"
+	practiceID := testdb.SeedPractice(t, db, "Billing Mode Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, uid, []string{ownerRole}, employeeType)
+
+	srv, session := newPracticeSessionServer(t, db, uid)
+	defer srv.Close()
+
+	read := func() staffauth.PracticeSessionResponse {
+		t.Helper()
+		resp := getPracticeSession(t, srv, session, practiceID)
+		defer resp.Body.Close()
+		var out staffauth.PracticeSessionResponse
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		return out
+	}
+
+	if got := read().BillingMode; got != "" {
+		t.Fatalf("billingMode = %q before one is chosen, want empty", got)
+	}
+
+	testdb.SeedBillingMode(t, db, practiceID, "by_hand")
+
+	if got := read().BillingMode; got != "by_hand" {
+		t.Fatalf("billingMode = %q, want by_hand", got)
+	}
+}
+
 // TestPracticeSessionHandler_EmployeeNotContractor proves IsContractor
 // reads false for an employee Membership, not just true for a
 // contractor.

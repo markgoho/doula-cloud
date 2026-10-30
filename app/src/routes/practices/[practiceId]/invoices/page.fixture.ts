@@ -152,17 +152,19 @@ const owner = practiceSession(['owner']).session;
 
 /*
  * #2293: a Practice Clients cannot pay draws the Notice above the book,
- * from the session, both while the read runs and once it lands.
+ * from the session, both while the read runs and once it lands. It bills
+ * by card: one that bills by hand draws no Notice (#2200), the base's
+ * tree.
  */
 export const clientsCannotPay: RouteVariant<RouteParameters> = {
 	name: 'The Practice-wide invoice list, at a Practice Clients cannot pay',
-	pageData: { session: { ...owner, clientsCanPay: false } }
+	pageData: { session: { ...owner, clientsCanPay: false, billingMode: 'stripe' } }
 };
 
 export const clientsCannotPayWhileLoading: RouteVariant<RouteParameters> = {
 	name: 'The Practice-wide invoice list, at a Practice Clients cannot pay, while its read runs',
 	props: {},
-	pageData: { session: { ...owner, clientsCanPay: false } }
+	pageData: { session: { ...owner, clientsCanPay: false, billingMode: 'stripe' } }
 };
 
 export const fixture: RouteFixture<RouteParameters> = {

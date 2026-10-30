@@ -5,6 +5,7 @@ import { apiErrorMessage } from '#lib/apiErrorMessage.js';
 import { decideLanding, type SessionInfo } from '#lib/landing.js';
 import { PRACTICE_SESSION_DEPENDENCY } from '#lib/practiceSession.js';
 import { staffLoginAfterSessionEnded } from '#lib/sessionEnded.js';
+import type { BillingMode } from '#lib/invoice.js';
 import type { LayoutLoad } from './$types';
 
 /**
@@ -53,6 +54,10 @@ export interface PracticeSession {
 	// so the Invoices list draws its Notice above the rows on the first
 	// frame. This load always sets it; only `false` draws the Notice.
 	clientsCanPay?: boolean;
+	// #2200: practices.billing_mode, absent until the Practice has chosen
+	// one. A Practice that bills by hand is paid without Stripe, so the
+	// Invoices list's Notice is for the other two.
+	billingMode?: BillingMode;
 }
 
 /**
@@ -144,6 +149,7 @@ export const load: LayoutLoad = async ({ params, url, depends }): Promise<{ sess
 		agreementDue?: DueVersion[];
 		hasClients: boolean;
 		clientsCanPay: boolean;
+		billingMode?: BillingMode;
 	} = await response.json();
 
 	if (body.pendingDeletion && url.pathname !== deleteSettingsPath(params.practiceId)) {
@@ -172,7 +178,8 @@ export const load: LayoutLoad = async ({ params, url, depends }): Promise<{ sess
 			secondFactor: body.secondFactor,
 			agreementDue: body.agreementDue,
 			hasClients: body.hasClients,
-			clientsCanPay: body.clientsCanPay
+			clientsCanPay: body.clientsCanPay,
+			billingMode: body.billingMode
 		}
 	};
 };

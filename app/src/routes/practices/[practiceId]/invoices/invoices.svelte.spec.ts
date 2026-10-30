@@ -218,10 +218,18 @@ describe('the Practice-wide invoice list while its read runs (#2255)', () => {
 });
 
 // #270, #2293: from the session, so it is above the book on the first frame.
-const cannotPayText = 'Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe.';
+// #2200: the fixture's reader is the Owner, so hers is the ask.
+const cannotPayText = 'Clients cannot pay you by card yet. To take card payments, connect Stripe.';
 
-async function setupClientsCanPay(canPay: boolean, read: PracticeInvoiceListData | undefined) {
-	pageState.data = toPageState(canPay ? fixture : { ...fixture, ...clientsCannotPay }).data;
+async function setupClientsCanPay(
+	canPay: boolean,
+	read: PracticeInvoiceListData | undefined,
+	session: Record<string, unknown> = {}
+) {
+	const state = toPageState(canPay ? fixture : { ...fixture, ...clientsCannotPay }).data as {
+		session: Record<string, unknown>;
+	};
+	pageState.data = { ...state, session: { ...state.session, ...session } };
 	await testPage.viewport(1440, 900);
 	await render(Page, read ? { data: read } : {});
 }
@@ -258,6 +266,36 @@ describe('whether Clients can pay this Practice (#270, #2293)', () => {
 		await setupClientsCanPay(false, { ...data, items: [], outstandingCents: 0, outstandingCount: 0, paidCents: 0 });
 
 		await expect.element(testPage.getByText(cannotPayText)).toBeVisible();
+	});
+
+	it('links the Owner to Getting paid to connect Stripe (#2200)', async () => {
+		await setupClientsCanPay(false, data);
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Connect Stripe on Getting paid' }))
+			.toHaveAttribute('href', '/practices/practice-1/settings/payments');
+	});
+
+	it('tells an Admin who connects Stripe, and links her to Getting paid (#2200)', async () => {
+		await setupClientsCanPay(false, data, { roles: ['admin'] });
+
+		await expect
+			.element(
+				testPage.getByText('Clients cannot pay this Practice by card yet. A Practice Owner has to connect Stripe.')
+			)
+			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Go to Getting paid' }))
+			.toHaveAttribute('href', '/practices/practice-1/settings/payments');
+	});
+
+	// #2200: Clients pay a Practice that bills by hand without Stripe.
+	it('says nothing about Stripe at a Practice that bills by hand', async () => {
+		await setupClientsCanPay(false, data, { billingMode: 'by_hand' });
+
+		await expect.element(testPage.getByRole('table')).toBeVisible();
+		await expect.element(testPage.getByText(/Clients cannot pay/)).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('link', { name: /Getting paid/ })).not.toBeInTheDocument();
 	});
 
 	it('shows no Notice when Clients can pay, while the read runs or once it lands', async () => {

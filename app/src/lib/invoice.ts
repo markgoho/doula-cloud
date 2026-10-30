@@ -580,13 +580,46 @@ export function invoiceRowStatusVariant(invoice: InvoiceStanding): 'info' | 'suc
 	return invoice.daysOverdue > 0 ? 'warning' : invoiceStatusVariant(invoice.status);
 }
 
-/** The message InvoiceSection shows in place of the Create Invoice form
- * when Clients cannot pay this Practice yet (#270) -- a fact about the
- * Practice, not a refusal aimed at whoever is looking at the form, and
- * naming the role that clears it rather than fetching the Staff roster
- * to name a person (a Practice may have more than one Owner). */
-export const clientsCannotPayMessage =
-	'Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe.';
+/**
+ * Which of three readers meets "Clients cannot pay by card yet".
+ */
+export interface CardPaymentsReader {
+	isOwner: boolean;
+	isOwnerOrAdmin: boolean;
+}
+
+/** What a Practice that bills by card says while Stripe cannot take a
+ * card yet (#270), in place of the Create Invoice form and above the
+ * Invoices list, and the link that goes with it (#2200). It turns on the
+ * reader, because what she can do about it does. An Owner connects
+ * Stripe, so hers asks, in the landing card's words (#1589). An Admin
+ * cannot (POST payments/connect is Owner-only) but reads Getting paid,
+ * which says where it stands and lets her email the Owners (#917). Anyone
+ * else cannot read Getting paid, so is told only who can. The role, not a
+ * person, because a Practice may have more than one Owner. "By card",
+ * because a Practice that bills by hand is paid without Stripe. */
+export function cardPaymentsWait(reader: CardPaymentsReader): { message: string; linkLabel?: string } {
+	if (reader.isOwner) {
+		return {
+			message: 'Clients cannot pay you by card yet. To take card payments, connect Stripe.',
+			linkLabel: 'Connect Stripe on Getting paid'
+		};
+	}
+	const message = 'Clients cannot pay this Practice by card yet. A Practice Owner has to connect Stripe.';
+	return reader.isOwnerOrAdmin ? { message, linkLabel: 'Go to Getting paid' } : { message };
+}
+
+/** The error summary's entry when the first Invoice's billing-mode
+ * question is answered "By card" while Stripe cannot take a card yet
+ * (#2200). The entry links to Getting paid for a reader who can open it,
+ * so the words name the place. */
+export function cardPaymentsRefusal(reader: CardPaymentsReader): string {
+	if (reader.isOwner) return 'Connect Stripe on Getting paid before Clients can pay by card';
+	if (reader.isOwnerOrAdmin) {
+		return 'A Practice Owner has to connect Stripe on Getting paid before Clients can pay by card';
+	}
+	return 'A Practice Owner has to connect Stripe before Clients can pay by card';
+}
 
 /** The message InvoiceSection shows in place of the Create Invoice form
  * when the Client has no email on file (#270) -- moved ahead of the
