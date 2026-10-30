@@ -81,7 +81,7 @@
 		roster read that failed, which is not said in the same words.
 	-->
 	<section>
-		<h2>No one at the practice to pick</h2>
+		<h2>No one at the Practice to pick</h2>
 		<OfferSection offers={[]} doulas={[]} isFormOpen onCreate={async () => {}} onWithdraw={async () => {}} />
 	</section>
 

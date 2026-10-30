@@ -113,7 +113,7 @@
 {/snippet}
 
 {#snippet refusal()}
-	<Notice variant="info" message={`Only a practice owner can change ${subject}. Ask an owner of this practice to do it.`} />
+	<Notice variant="info" message={`Only a Practice owner can change ${subject}. Ask an owner of this Practice to do it.`} />
 {/snippet}
 
 {#snippet back()}

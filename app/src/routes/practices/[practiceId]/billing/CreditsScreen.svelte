@@ -148,7 +148,7 @@
 	/>
 
 	{#if approvalReturn}
-		<Link href={approvalReturn} label="Back to the engagement request you were deciding" />
+		<Link href={approvalReturn} label="Back to the Engagement Request you were deciding" />
 	{/if}
 
 	{#if checkoutStatus === 'success'}

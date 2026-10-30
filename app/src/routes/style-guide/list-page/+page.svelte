@@ -59,7 +59,7 @@
 
 {#snippet intro()}
 	<Text
-		text="Work states are self-reported by each person and are not verified. They set how much sales tax your practice pays on credits."
+		text="Work states are self-reported by each person and are not verified. They set how much sales tax your Practice pays on Credits."
 	/>
 {/snippet}
 

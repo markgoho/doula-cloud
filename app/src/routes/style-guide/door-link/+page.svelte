@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { PORTAL_DOOR_LINE } from '#lib/portalDoor.js';
 	import DoorLink from '#lib/components/atoms/DoorLink.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
@@ -28,7 +29,7 @@
 			<DoorLink
 				href="/style-guide/door-link"
 				label="Client portal sign in"
-				description="Your contract, your birth plan, and your invoices."
+				description={PORTAL_DOOR_LINE}
 			/>
 			<DoorLink
 				href="/style-guide/door-link"

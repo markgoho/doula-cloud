@@ -408,7 +408,7 @@
 		<stack-l space="var(--space-3)">
 			<Heading level={2} variant="card" text="Credits" />
 			{#if landing!.credit === 'unavailable'}
-				<Text text="Could not load your credit balance just now." tone="muted" />
+				<Text text="Could not load your Credit balance just now." tone="muted" />
 			{:else if landing!.credit}
 				<SummaryList rows={[{ label: 'Balance', value: String(landing!.credit.balance) }]} />
 				<Link
@@ -547,7 +547,7 @@
 			<Text text={EVERY_ROLE_SENTENCE} />
 		{/if}
 		<Text
-			text="Nothing is here yet, because no Client is. Add one and this becomes the Client's birth plan, the visits with the Client, and the contract and invoices between the Client and your Practice."
+			text="Nothing is here yet, because no Client is. Add one and this becomes the Client's Birth Plan, the Visits with the Client, and the Contract and Invoices between the Client and your Practice."
 		/>
 		<!--
 			What uses a Credit, and how many the Practice has, said at the

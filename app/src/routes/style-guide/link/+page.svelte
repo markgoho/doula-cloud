@@ -8,8 +8,8 @@
 	<section>
 		<h2>Variants</h2>
 		<cluster-l space="var(--space-4)">
-			<Link label="Back to the engagement request you were deciding" href="/style-guide" variant="primary" />
-			<Link label="Back to the engagement request you were deciding" href="/style-guide" variant="secondary" />
+			<Link label="Back to the Engagement Request you were deciding" href="/style-guide" variant="primary" />
+			<Link label="Back to the Engagement Request you were deciding" href="/style-guide" variant="secondary" />
 		</cluster-l>
 	</section>
 

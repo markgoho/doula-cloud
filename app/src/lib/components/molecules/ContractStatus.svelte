@@ -163,7 +163,7 @@
 	async function handleRequestVoid() {
 		requestError = '';
 		if (!requestReason.trim()) {
-			requestError = 'Enter why this contract needs to be voided';
+			requestError = 'Enter why this Contract needs to be voided';
 			return;
 		}
 		isRequestingVoid = true;
@@ -381,7 +381,7 @@
 			     requests at once), only from Svelte's own reactivity
 			     internals -- the same category OfferInbox.svelte's own
 			     comment already names. -->
-			<p>{request.requestedByName} asked to void this contract: {request.reason}</p>
+			<p>{request.requestedByName} asked to void this Contract: {request.reason}</p>
 			{#if declineFormRequestId === request.id}
 				<LabeledField label="Reason for declining">
 					{#snippet children({ id, describedBy, invalid })}

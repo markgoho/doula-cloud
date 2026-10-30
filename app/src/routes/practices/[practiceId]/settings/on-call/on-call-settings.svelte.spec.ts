@@ -57,7 +57,7 @@ describe('the on-call rule screen', () => {
 		await expect
 			.element(
 				testPage.getByText(
-					/moves every on-call window this practice is carrying, including births already under way/
+					/moves every on-call window this Practice is carrying, including births already under way/
 				)
 			)
 			.toBeVisible();

@@ -25,15 +25,15 @@ const WORDING: readonly (readonly [action: string, named: string, unnamed: strin
 		'Contract price for the Client changed to the new rate'
 	],
 	['contract_created', 'Contract drafted for Amara', 'Contract drafted for the Client'],
-	['contract_priced', 'Price set on the contract for Amara', 'Price set on the contract for the Client'],
+	['contract_priced', 'Price set on the Contract for Amara', 'Price set on the Contract for the Client'],
 	['contract_sent', 'Contract sent to Amara', 'Contract sent to the Client'],
 	['contract_signed', 'Contract signed by Amara', 'Contract signed by the Client'],
 	[
 		'contract_void_declined',
-		'Request to void the contract for Amara declined',
-		'Request to void the contract for the Client declined'
+		'Request to void the Contract for Amara declined',
+		'Request to void the Contract for the Client declined'
 	],
-	['contract_void_requested', 'Asked to void the contract for Amara', 'Asked to void the contract for the Client'],
+	['contract_void_requested', 'Asked to void the Contract for Amara', 'Asked to void the Contract for the Client'],
 	['contract_voided', 'Contract for Amara voided', 'Contract for the Client voided'],
 	['coverage_gap_cleared', 'Gap in on-call cover closed for Amara', 'Gap in on-call cover closed for the Client'],
 	['coverage_gap_created', 'Gap in on-call cover added for Amara', 'Gap in on-call cover added for the Client'],

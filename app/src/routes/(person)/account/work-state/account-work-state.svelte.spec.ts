@@ -64,7 +64,7 @@ describe('the work-state question', () => {
 
 		await expect
 			.element(stateSelect())
-			.toHaveAccessibleDescription(/sales tax on your practice's credits.*are not re-priced/);
+			.toHaveAccessibleDescription(/sales tax on your Practice's Credits.*are not re-priced/);
 	});
 
 	it('keeps a state she chose before the read landed', async () => {

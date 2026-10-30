@@ -28,7 +28,7 @@ export async function loadMember(fetcher: Fetcher, practiceId: string, staffId: 
 	const roster = await loadStaff(fetcher, practiceId);
 	const member = roster.members.find((entry) => entry.staffId === staffId);
 	if (!member) {
-		throw new Error('That Staff member is not on this practice roster.');
+		throw new Error('That Staff member is not on this Practice roster.');
 	}
 	return member;
 }

@@ -60,7 +60,7 @@ describe('membershipChangeSentence', () => {
 
 	it('says plainly that a Membership ended', () => {
 		expect(membershipChangeSentence(change({ action: 'removed', previousRoles: ['doula'] }))).toBe(
-			'Removed from this practice'
+			'Removed from this Practice'
 		);
 	});
 

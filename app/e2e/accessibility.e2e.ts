@@ -792,7 +792,7 @@ const STAFF_ROUTES: SeededRoute<StaffSeed>[] = [
 		// #528: the approval screen for the same pending Request above.
 		// Unlike the Engagement Request form's anchored row below, no
 		// regex/exact match is needed here even though the h1 changes
-		// once the record loads (from "Approve an engagement request"
+		// once the record loads (from "Approve an Engagement Request"
 		// to "Approve work with Casey Pending"): neither string is a
 		// substring of the other, so Playwright's default substring
 		// match can never lock onto the earlier, half-loaded heading.
@@ -868,7 +868,7 @@ const STAFF_ROUTES: SeededRoute<StaffSeed>[] = [
 		key: 'practices/[practiceId]/settings/payments/payment-terms',
 		archetype: 'E',
 		url: (s) => `/practices/${s.practiceId}/settings/payments/payment-terms`,
-		h1: 'How many days does a Client have to pay an invoice?'
+		h1: 'How many days does a Client have to pay an Invoice?'
 	},
 	{
 		key: 'practices/[practiceId]/settings/contract-template',

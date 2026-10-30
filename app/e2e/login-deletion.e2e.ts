@@ -47,8 +47,8 @@ test('a doula deletes her own login from /account, and cannot get back in', asyn
 	// What it destroys and what it keeps, stated before she presses
 	// anything -- the AC's own requirement, on the real page.
 	await expect(page.getByText(/ends your access to DoulaCloud everywhere/)).toBeVisible();
-	await expect(page.getByText(/membership of every practice you work at/).first()).toBeVisible();
-	await expect(page.getByText(/Everything you did stays with the practices/).first()).toBeVisible();
+	await expect(page.getByText(/membership of every Practice you work at/).first()).toBeVisible();
+	await expect(page.getByText(/Everything you did stays with the Practices/).first()).toBeVisible();
 
 	await page.getByRole('button', { name: 'Delete your login' }).first().click();
 

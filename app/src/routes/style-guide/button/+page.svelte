@@ -30,7 +30,7 @@
 		<h2>Variants</h2>
 		<cluster-l space="var(--space-4)">
 			<Button label="I agree to sign electronically, continue" variant="primary" onClick={noop} />
-			<Button label="Back to the engagement request you were deciding" variant="secondary" onClick={noop} />
+			<Button label="Back to the Engagement Request you were deciding" variant="secondary" onClick={noop} />
 			<Button label="Remove this Doula from the Practice" variant="destructive" onClick={noop} />
 		</cluster-l>
 	</section>
@@ -77,7 +77,7 @@
 			(the last Move down) draws the same.
 		</p>
 		<cluster-l space="var(--space-4)">
-			<Button label="Send this invoice to the Client" disabled onClick={noop} />
+			<Button label="Send this Invoice to the Client" disabled onClick={noop} />
 			<Button label="Move up" variant="secondary" disabled onClick={noop} />
 			<Button label="Remove this Doula from the Practice" variant="destructive" disabled onClick={noop} />
 			<Button label="Move down" variant="secondary" ariaDisabled onClick={noop} />
@@ -87,7 +87,7 @@
 	<section>
 		<h2>Loading</h2>
 		<cluster-l space="var(--space-4)">
-			<Button label="Sending this invoice to the Client" loading onClick={noop} />
+			<Button label="Sending this Invoice to the Client" loading onClick={noop} />
 		</cluster-l>
 	</section>
 

@@ -73,11 +73,11 @@
 {#snippet actions()}
 	<Badge label="Engagement active since Jan 12, 2027" variant="success" />
 	<Button label="Message" variant="secondary" size="sm" onClick={noop} />
-	<Button label="Send this invoice to the Client" size="sm" onClick={noop} />
+	<Button label="Send this Invoice to the Client" size="sm" onClick={noop} />
 {/snippet}
 
 {#snippet visitsSection()}
-	<DataTable columns={visitColumns} rows={visits} emptyMessage="No visits booked yet." />
+	<DataTable columns={visitColumns} rows={visits} emptyMessage="No Visits booked yet." />
 {/snippet}
 
 {#snippet birthPlanSection()}

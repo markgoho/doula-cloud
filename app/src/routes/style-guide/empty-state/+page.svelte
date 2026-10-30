@@ -32,7 +32,7 @@
 	<stack-l space="var(--space-4)">
 		<h2>A long line</h2>
 		<EmptyState
-			message="No visits are scheduled in this range. Widen the dates, or choose every doula, to see more."
+			message="No Visits are scheduled in this range. Widen the dates, or choose every doula, to see more."
 		/>
 	</stack-l>
 </stack-l>

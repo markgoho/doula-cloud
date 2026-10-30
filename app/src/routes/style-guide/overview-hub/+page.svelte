@@ -83,7 +83,7 @@
 		<stack-l space="var(--space-4)">
 			<Heading level={2} variant="section" text="Recent activity" />
 			<Text
-				text="Persephone Adeyemi-Wollstonecraft sent an invoice for $4,250.00 to Anne-Marie Ochieng-Whitfield — Mar 1, 2027, 9:14am."
+				text="Persephone Adeyemi-Wollstonecraft sent an Invoice for $4,250.00 to Anne-Marie Ochieng-Whitfield — Mar 1, 2027, 9:14am."
 				step="body-sm"
 				tone="variant"
 			/>
@@ -120,7 +120,7 @@
 		/>
 		<cluster-l space="var(--space-3)">
 			<Button label="Invite a doula" onClick={noop} />
-			<Button label="Add a client" variant="secondary" onClick={noop} />
+			<Button label="Add a Client" variant="secondary" onClick={noop} />
 		</cluster-l>
 	</stack-l>
 {/snippet}

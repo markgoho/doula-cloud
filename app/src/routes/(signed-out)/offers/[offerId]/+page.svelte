@@ -157,7 +157,7 @@
 {#snippet content()}
 	{#if !token}
 		<!-- #2025: the offer is in the Practice's hands, so the way on is to ask it again. -->
-		<UnusableLink message={LINK_NOT_COMPLETE} next={{ text: 'Ask the practice to send the offer again.' }} />
+		<UnusableLink message={LINK_NOT_COMPLETE} next={{ text: 'Ask the Practice to send the Offer again.' }} />
 	{:else if !offer}
 		<Text text="Enter the six-digit code from the email to open this offer." tone="variant" />
 		<StackedForm onSubmit={handleOpen}>
@@ -183,7 +183,7 @@
 		<SummaryList rows={offerFacts(offer)} />
 
 		{#if offer.state === 'offered'}
-			<Text text="Accepting this work means joining the practice, so that the offer can be recorded in your name." tone="variant" />
+			<Text text="Accepting this work means joining the Practice, so that the Offer can be recorded in your name." tone="variant" />
 			<Link href={`${resolve('/(signed-out)/accept-invite')}?token=${encodeURIComponent(token)}`} label="Join and accept" />
 			<Button label="Decline" variant="destructive" onClick={() => (isDeclineDialogOpen = true)} />
 			<ConfirmDialog

@@ -190,7 +190,7 @@
 
 {#snippet intro()}
 	<Text
-		text="Every invoice this practice has billed, newest first. Open one to reach the engagement it belongs to."
+		text="Every Invoice this Practice has billed, newest first. Open one to reach the Engagement it belongs to."
 		tone="muted"
 	/>
 {/snippet}
@@ -248,11 +248,11 @@
 				isLoadingMore={invoices.isLoadingMore}
 				emptyMessage={read.isNarrowedToOverdue
 					? 'Nothing is overdue. Every unpaid invoice is still within its payment terms.'
-					: 'No invoices yet. One appears here as soon as a contract is billed.'}
+					: 'No Invoices yet. One appears here as soon as a Contract is billed.'}
 			/>
 		</div>
 	{:else}
-		<Skeleton variant="row" lines={6} label="Loading your invoices" />
+		<Skeleton variant="row" lines={6} label="Loading your Invoices" />
 	{/if}
 
 	{#if invoices.loadMoreError}

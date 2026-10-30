@@ -48,7 +48,7 @@ export function billingModeSavedMessage(mode: BillingMode): string {
  * so "30" chosen and "30" inherited do not read the same (#768).
  */
 export function paymentTermsValue(terms: PaymentTerms): string {
-	const due = `Due ${terms.netDays} ${terms.netDays === 1 ? 'day' : 'days'} after an invoice is raised`;
+	const due = `Due ${terms.netDays} ${terms.netDays === 1 ? 'day' : 'days'} after an Invoice is raised`;
 	return terms.isDefault ? `${due}. This is the default.` : due;
 }
 

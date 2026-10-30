@@ -82,7 +82,7 @@
 			text="If you have lost the phone or the app holding your authenticator codes, a recovery code gets you back in."
 		/>
 		<Text
-			text="Use a code you wrote down when you set up your account, or one an owner of your practice has read out to you."
+			text="Use a code you wrote down when you set up your account, or one an owner of your Practice has read out to you."
 			tone="variant"
 		/>
 	</stack-l>
@@ -125,7 +125,7 @@
 
 	<stack-l space="var(--space-related)">
 		<Text
-			text="No code, and no owner above you? Ask the person who runs your practice to get in touch with DoulaCloud."
+			text="No code, and no owner above you? Ask the person who runs your Practice to get in touch with DoulaCloud."
 			tone="muted"
 			step="body-sm"
 		/>

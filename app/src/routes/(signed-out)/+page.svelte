@@ -58,6 +58,7 @@
 	 * paints one greeting and swaps to another, and nothing moves on it
 	 * that the reader did not cause.
 	 */
+	import { PORTAL_DOOR_LINE } from '#lib/portalDoor.js';
 	import { goto, refreshAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { apiFetch } from '#lib/api.js';
@@ -151,7 +152,7 @@
 			<DoorLink
 				href={resolve('/portal/(signed-out)/login')}
 				label="Client portal sign in"
-				description="Your contract, your birth plan, and your invoices."
+				description={PORTAL_DOOR_LINE}
 			/>
 			<!-- ADR-0042: signup grants three Credits with no card, one per Engagement. -->
 			<DoorLink

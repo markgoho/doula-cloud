@@ -431,7 +431,7 @@ describe('client detail hub', () => {
 		});
 
 		await expect
-			.element(testPage.getByText(/This client's data was erased on request/))
+			.element(testPage.getByText(/This Client's data was erased on request/))
 			.toBeVisible();
 		await expect
 			.element(testPage.getByText(/Payment records at Stripe are redactable from/))
@@ -645,7 +645,7 @@ describe('client detail hub', () => {
 	it('offers no Change on an erased record', async () => {
 		await setup({ overrides: { erasedAt: '2026-03-01T00:00:00Z' } });
 
-		await expect.element(testPage.getByText(/This client's data was erased on request/)).toBeVisible();
+		await expect.element(testPage.getByText(/This Client's data was erased on request/)).toBeVisible();
 		await expect.element(testPage.getByRole('link', { name: 'Change' })).not.toBeInTheDocument();
 	});
 
@@ -871,7 +871,7 @@ describe('erasing a Client (#691, ADR-0027)', () => {
 		await expect.element(dialog).toBeVisible();
 		await expect.element(dialog.getByText(/erases .*'s name, email, phone, address and date of birth\./)).toBeVisible();
 		await expect.element(dialog.getByText(/stay in your Practice's financial and clinical record\./)).toBeVisible();
-		await expect.element(dialog.getByText(/until 90 days after its invoice\./)).toBeVisible();
+		await expect.element(dialog.getByText(/until 90 days after its Invoice\./)).toBeVisible();
 		await expect.element(dialog.getByText(/Plan Instance answers keep their words as written/)).toBeVisible();
 		// #1744: the warning is read aloud, so it carries no typed double
 		// hyphen and names Stripe once.
@@ -937,7 +937,7 @@ describe('erasing a Client (#691, ADR-0027)', () => {
 			method: 'POST'
 		});
 		await expect
-			.element(testPage.getByText(/This client's data was erased on request/))
+			.element(testPage.getByText(/This Client's data was erased on request/))
 			.toBeVisible();
 		await expect
 			.element(testPage.getByText(/Payment records at Stripe are redactable from/))

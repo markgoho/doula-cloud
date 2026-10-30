@@ -416,7 +416,7 @@
 {#snippet content()}
 	{#if !inviteToken}
 		<!-- #2025: only the Practice can send another invite. -->
-		<UnusableLink message={LINK_NOT_COMPLETE} next={{ text: 'Ask the practice to send the invite again.' }} />
+		<UnusableLink message={LINK_NOT_COMPLETE} next={{ text: 'Ask the Practice to send the invite again.' }} />
 	{:else if step === 'identify'}
 		<!--
 			Step one asks only what tells us who she is. Nothing about her name

@@ -2927,7 +2927,7 @@
 				<LabeledField
 					id={gapFieldIds.reason}
 					label="Reason"
-					hint="Optional, and read only by this practice."
+					hint="Optional, and read only by this Practice."
 					error={gapSubmission.errorFor(gapFieldIds.reason)}
 				>
 					{#snippet children({ id, describedBy, invalid })}

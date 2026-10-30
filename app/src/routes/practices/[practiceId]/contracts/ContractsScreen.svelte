@@ -98,7 +98,7 @@
 
 {#snippet intro()}
 	<Text
-		text="Every Contract this practice is still waiting on, oldest first. Open one to reach the engagement it belongs to and send, void or invoice it there."
+		text="Every Contract this Practice is still waiting on, oldest first. Open one to reach the Engagement it belongs to and send, void or invoice it there."
 		tone="muted"
 	/>
 {/snippet}
@@ -111,7 +111,7 @@
 		hasMore={contracts.hasMore}
 		onLoadMore={() => contracts.loadMore()}
 		isLoadingMore={contracts.isLoadingMore}
-		emptyMessage="Nothing is waiting. Every contract has been signed or voided."
+		emptyMessage="Nothing is waiting. Every Contract has been signed or voided."
 	/>
 
 	{#if contracts.loadMoreError}
@@ -120,7 +120,7 @@
 
 	<Heading level={2} text="Void requests" />
 	<Text
-		text="Every void a Doula has asked for and nobody has decided yet, oldest first. Open one to reach the engagement it belongs to and void or decline it there."
+		text="Every void a Doula has asked for and nobody has decided yet, oldest first. Open one to reach the Engagement it belongs to and void or decline it there."
 		tone="muted"
 	/>
 

@@ -156,7 +156,7 @@
 		const sentence = change.previousWorkState
 			? `Changed from ${workStateName(change.previousWorkState)} to ${workStateName(change.workState)}`
 			: `Reported ${workStateName(change.workState)}`;
-		return change.beforeJoining ? `${sentence} (before joining this practice)` : sentence;
+		return change.beforeJoining ? `${sentence} (before joining this Practice)` : sentence;
 	}
 
 	// Offboarding or a lost device: ends every session this Staff member
@@ -215,7 +215,7 @@
 
 {#snippet workStateSection()}
 	<Text
-		text="Work states are self-reported by each person and are not verified. They set how much sales tax your practice pays on credits."
+		text="Work states are self-reported by each person and are not verified. They set how much sales tax your Practice pays on Credits."
 		tone="variant"
 	/>
 	{#if workStateHistory.entries}

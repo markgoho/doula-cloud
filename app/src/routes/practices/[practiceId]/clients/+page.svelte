@@ -116,7 +116,7 @@
 		voided: { label: 'Contract voided', variant: 'neutral' }
 	};
 
-	const NO_CONTRACT_BADGE: StatusBadge = { label: 'No contract yet', variant: 'neutral' };
+	const NO_CONTRACT_BADGE: StatusBadge = { label: 'No Contract yet', variant: 'neutral' };
 
 	// #2022: one open Engagement's status as badges -- its care phase, its
 	// Contract, and its money wherever the BFF's role gate let the field

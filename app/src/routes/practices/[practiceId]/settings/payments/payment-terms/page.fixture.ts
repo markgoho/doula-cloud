@@ -27,6 +27,6 @@ export const fixture: RouteFixture = {
 	url: 'https://example.test/practices/practice-1/settings/payments/payment-terms',
 	pageData: practiceSession(['owner']),
 	respond: () => jsonResponse(paymentTerms),
-	readyText: 'How many days does a Client have to pay an invoice?',
+	readyText: 'How many days does a Client have to pay an Invoice?',
 	variants: [asDoula]
 };
