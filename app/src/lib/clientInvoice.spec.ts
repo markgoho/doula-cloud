@@ -18,6 +18,7 @@ const base: ClientInvoice = {
 	reference: 'INV-1',
 	billingMode: 'stripe',
 	createdAt: '2027-01-01T12:00:00Z',
+	raisedOn: '2027-01-01',
 	refundedCents: 0
 };
 
@@ -43,6 +44,12 @@ describe('the money sections', () => {
 describe('invoiceFacts', () => {
 	it('lists only the facts an open Invoice has', () => {
 		expect(invoiceFacts(base).map((fact) => fact.label)).toEqual(['Amount', 'Invoice number', 'Status', 'Sent']);
+	});
+
+	it("prints Sent as the Practice's day the BFF sent, not the day of the instant (#2205)", () => {
+		// 00:03Z on Oct 28 is 8:03pm on Oct 27 in the Practice's New York.
+		const facts = invoiceFacts({ ...base, createdAt: '2026-10-28T00:03:00Z', raisedOn: '2026-10-27' });
+		expect(facts.find((fact) => fact.label === 'Sent')?.value).toBe('Oct 27, 2026');
 	});
 
 	it('adds when it was paid and how, where a manual record exists', () => {

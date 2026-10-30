@@ -40,6 +40,11 @@ type ClientInvoiceView struct {
 	Reference   string    `json:"reference"`
 	BillingMode string    `json:"billingMode"` // stripe | by_hand
 	CreatedAt   time.Time `json:"createdAt"`
+	// RaisedOn (#2205) is the day the Invoice was sent to her, YYYY-MM-DD:
+	// the day CreatedAt falls on in her Practice's zone, the same day the
+	// Practice's own screens print as Raised (#2146), whatever zone her
+	// browser is in.
+	RaisedOn string `json:"raisedOn"`
 	// PaidOn (#1965) is the day she paid, YYYY-MM-DD, in her Practice's
 	// zone -- the same day the Practice's own screens print
 	// (invoicePaidOn).
@@ -145,6 +150,7 @@ func scanClientInvoice(row interface{ Scan(dest ...any) error }, zone *time.Loca
 		&it.CreatedAt, &paidAt, &method, &it.RefundedCents); err != nil {
 		return ClientInvoiceView{}, fmt.Errorf("payments: scan client invoice: %w", err)
 	}
+	it.RaisedOn = practiceDay(it.CreatedAt, zone)
 	it.PaidOn = invoicePaidOn(paidAt, method.Valid, zone)
 	if method.Valid {
 		it.PaidMethod = &method.String

@@ -81,6 +81,38 @@ func TestClientGetInvoice_ReversedManualPaymentShowsNoMethod(t *testing.T) {
 	}
 }
 
+// TestClientInvoice_RaisedOnIsThePracticesDay is #2205's: an Invoice
+// raised at 8pm on Oct 25 in New York (00:00Z on Oct 26) reads as raised
+// on Oct 25 on her portal, the detail and the list alike -- the same day
+// the Practice's own screens print as Raised (#2146), whatever zone her
+// browser is in.
+func TestClientInvoice_RaisedOnIsThePracticesDay(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "client-raised-on"
+	me := seedClientMoney(t, db, uid, "Nadia Client", "nadia@example.com")
+	invoiceID := seedInvoice(t, db, me.practiceID, me.contractID, "in_cd_raised", invoiceStatusOpen, 5000,
+		time.Date(2026, 10, 26, 0, 0, 0, 0, time.UTC))
+
+	srv := newClientMoneyServer(t, db)
+	session := portalSession(t, db, uid)
+	status, body := getPortal(t, srv, session, clientInvoicesPath(me.engagementID, "/"+invoiceID))
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body %s", status, body)
+	}
+	var view payments.ClientInvoiceView
+	if err := json.Unmarshal([]byte(body), &view); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if view.RaisedOn != dayOct25 {
+		t.Fatalf("detail raisedOn = %q, want %s", view.RaisedOn, dayOct25)
+	}
+
+	list := readClientInvoices(t, srv, session, me.engagementID, "")
+	if len(list.Items) != 1 || list.Items[0].RaisedOn != dayOct25 {
+		t.Fatalf("list items = %+v, want raisedOn %s", list.Items, dayOct25)
+	}
+}
+
 // TestClientGetInvoice_RefusesWhatIsNotHers covers every way to ask for
 // an Invoice that is not the caller's: all read as the same 404.
 func TestClientGetInvoice_RefusesWhatIsNotHers(t *testing.T) {

@@ -17,7 +17,7 @@ import {
 	paidAndReturnedLabel,
 	TOTAL_TO_PAY_LABEL
 } from './clientRegister.js';
-import { formatCalendarDay, formatInstant } from './dates.js';
+import { formatCalendarDay } from './dates.js';
 import { formatMoney } from './money.js';
 import type { CursorPage } from './paginatedList.svelte.js';
 
@@ -35,6 +35,11 @@ export interface ClientInvoice {
 	reference: string;
 	billingMode: 'stripe' | 'by_hand';
 	createdAt: string;
+	/**
+	The day it was sent to her, `YYYY-MM-DD`, in the Practice's own timezone:
+	the day the Practice's screens print as Raised (#2205).
+	*/
+	raisedOn: string;
 	/**
 	The day it was paid, `YYYY-MM-DD`, in the Practice's own timezone (#1965).
 	*/
@@ -124,7 +129,7 @@ export function invoiceFacts(invoice: ClientInvoice): { label: string; value: st
 		{ label: 'Amount', value: formatMoney(invoice.amountCents, invoice.currency) },
 		{ label: 'Invoice number', value: invoice.reference },
 		{ label: 'Status', value: invoiceStatusText(invoice) },
-		{ label: 'Sent', value: formatInstant(invoice.createdAt) }
+		{ label: 'Sent', value: formatCalendarDay(invoice.raisedOn) }
 	];
 	if (invoice.paidOn) {
 		facts.push({
