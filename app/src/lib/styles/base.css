@@ -132,3 +132,16 @@ ol.prose-list {
 	list-style-type: decimal;
 	padding-inline-start: var(--space-6);
 }
+
+/*
+ * SvelteKit's route announcer, silenced (#2246). It reads `document.title`
+ * the instant a new page mounts, before a page titled from its own read
+ * knows its title, and a screen reader heard a placeholder or just
+ * "— DoulaCloud". `RouteAnnouncer`, in the root layout, speaks for every
+ * move in its place, once the title has settled. A live region that is not
+ * rendered is not read; `e2e/route-announcement.e2e.ts` holds this one
+ * hidden.
+ */
+#svelte-announcer {
+	display: none;
+}

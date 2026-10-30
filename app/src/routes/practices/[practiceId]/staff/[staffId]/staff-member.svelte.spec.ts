@@ -140,6 +140,8 @@ describe("a Staff member's page", () => {
 		await setup({ answer: (path) => (isRosterRead(path) ? jsonResponse({ ...roster, members: [contractor] }) : undefined) });
 
 		await expect.element(testPage.getByText('That Staff member is not on this practice roster.')).toBeVisible();
+		// Never just "— DoulaCloud", which is what a move here announced (#2246).
+		expect(document.title).toBe('Staff member — DoulaCloud');
 	});
 
 	it('says why the roster could not be read', async () => {

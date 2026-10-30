@@ -73,7 +73,7 @@
 	let { title, serviceName, intro, actions, content, outcome, loading, loadError }: Properties = $props();
 </script>
 
-<PageTitle page={title} {serviceName} />
+<PageTitle page={title} {serviceName} isPending={Boolean(loading) && !loadError} />
 
 <container-l>
 	<center-l max="none" gutters="var(--page-gutter)">
