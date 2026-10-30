@@ -60,7 +60,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import RadioGroup, { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
-	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
+	import { FormSubmission, orThrownMessage, type FormError } from '#lib/formSubmission.svelte.js';
 
 	const reasonId = 'engagement-request-refusal-reason';
 	const decisionName = 'engagement-request-decision';
@@ -79,7 +79,6 @@
 	let decision = $state<'approve' | 'refuse' | undefined>();
 	let reason = $state('');
 	const submission = new FormSubmission();
-	let hasNoCredits = $state(false);
 	// The empty-balance path is offered before the attempt as well as after
 	// it: the read already knows the balance, so an approver is told she
 	// must buy Credits rather than discovering it by pressing Approve.
@@ -88,7 +87,20 @@
 	// than the request form's own `balance <= 0` -- the same one-Credit
 	// assumption, read off a value that already has it applied.
 	const isBalanceEmpty = $derived(detail !== undefined && detail.balanceAfter < 0);
+	// #2284, as #2186 did on the Start work form: a press the balance
+	// refuses is an entry in the error summary, which takes focus and
+	// announces it, and the entry links to the Credits screen, where the
+	// fix is. While the summary says it, the notice the screen opened with
+	// does not say it a second time beside it.
+	const isCreditRefusalShown = $derived(submission.errors.some((entry) => entry.href === billingHref()));
+	const isBalanceNoticeShown = $derived(isBalanceEmpty && !isCreditRefusalShown);
 
+	function creditRefusal(): FormError {
+		return {
+			message: `Buy credits to approve work with ${firstName(detail!.client)}. This Practice has none left.`,
+			href: billingHref()
+		};
+	}
 
 	function facts(request: ApprovalDetail): { label: string; value: string }[] {
 		const items = [
@@ -149,7 +161,7 @@
 	// Remembered only while the way back is actually being offered, so a
 	// reader who never runs out of Credits never touches storage at all.
 	$effect(() => {
-		if (hasNoCredits || isBalanceEmpty) rememberApprovalReturn(approvalHref());
+		if (isBalanceEmpty) rememberApprovalReturn(approvalHref());
 	});
 
 	onMount(async () => {
@@ -175,7 +187,6 @@
 
 	async function handleDecide(event: SubmitEvent) {
 		event.preventDefault();
-		hasNoCredits = false;
 		await submission.run(async () => {
 			if (decision === undefined) {
 				return [{ message: 'Select whether you approve this work', targetId: decisionFieldId }];
@@ -190,8 +201,14 @@
 			}
 			const result = await approveRequest(apiFetchWithSession, page.params.practiceId!, page.params.requestId!);
 			if (result.noCredits) {
-				hasNoCredits = true;
-				return;
+				// The BFF is what refuses, even on a balance the screen
+				// already read as empty: Credits bought in another tab since
+				// it opened would make that read stale. In the race (a
+				// Credit at load, none at the press) the balance is read as
+				// empty now, which takes the stale "Balance after" off the
+				// screen and remembers the way back from buying Credits.
+				detail!.balanceAfter = -detail!.creditCost;
+				return [creditRefusal()];
 			}
 			await goto(engagementHref(result.outcome.engagementId));
 		}, orThrownMessage);
@@ -207,7 +224,7 @@
 					message="{firstName(detail.client)} already has a live engagement. That does not stop this approval."
 				/>
 			{/if}
-			{#if hasNoCredits || isBalanceEmpty}
+			{#if isBalanceNoticeShown}
 				<Notice variant="error" message="There are no Credits left on this Practice's balance." />
 				<Link href={billingHref()} label="Buy credits" />
 			{/if}

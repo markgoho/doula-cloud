@@ -218,8 +218,8 @@ describe('the approval screen', () => {
 		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/engagements/engagement-9`));
 	});
 
-	it('offers Buy credits inline on an empty balance, leaving the same screen intact', async () => {
-		await setup({ detail: { ...baseDetail, balance: 0, balanceAfter: -1 }, approveStatus: 402 });
+	it('offers Buy credits inline on an empty balance, before any press', async () => {
+		await setup({ detail: { ...baseDetail, balance: 0, balanceAfter: -1 } });
 
 		await expect.element(testPage.getByRole('link', { name: 'Buy credits' })).toHaveAttribute(
 			'href',
@@ -232,12 +232,47 @@ describe('the approval screen', () => {
 
 		// The hint under Approve says so too, without the negative number.
 		await expect.element(testPage.getByText('Uses 1 credit. There are none left.')).toBeVisible();
+	});
 
-		await approve();
+	/*
+	 * #2284, the approval sibling of #2186: a press the balance refuses
+	 * says so where she is looking. The error summary takes focus and
+	 * announces it, and its one entry links to the Credits screen. Both
+	 * paths end the same: a balance already empty when the screen opened,
+	 * and the race where it held a Credit then and none at the press.
+	 * Either way the BFF is what refuses, so both press through to its 402.
+	 */
+	describe('a press the balance refuses (#2284)', () => {
+		const creditRefusal = `Buy credits to approve work with ${clientFirstName}. This Practice has none left.`;
 
-		await expect.element(testPage.getByText("There are no credits left on this Practice's balance.")).toBeVisible();
-		await expect.element(testPage.getByText(`${baseDetail.requestedByName} on Aug 1, 2026`)).toBeVisible();
-		expect(goto).not.toHaveBeenCalled();
+		it.each([
+			['empty when the screen opened', { balance: 0, balanceAfter: -1 }],
+			['spent between opening the screen and pressing', { balance: 3, balanceAfter: 2 }]
+		])('moves focus to a refusal that links to Buy credits, on a balance %s', async (_, balances) => {
+			await setup({ detail: { ...baseDetail, ...balances }, approveStatus: 402 });
+
+			await approve();
+
+			const refusal = testPage.getByRole('link', { name: creditRefusal, exact: true });
+			await expect.element(refusal).toHaveAttribute('href', `/practices/${practiceId}/billing`);
+			await expect.element(testPage.getByRole('alert').filter({ hasText: creditRefusal })).toBeVisible();
+			// Focus is on the summary that holds the refusal, not on the
+			// button she pressed. The summary's container has no role of its
+			// own (ErrorSummary.svelte), so it is read off the DOM.
+			await expect.poll(() => document.activeElement?.contains(refusal.element())).toBe(true);
+			// Said once: the notice the screen opened with gives way to the
+			// summary, and no stale "Balance after" stays beside it.
+			expect(testPage.getByText("There are no Credits left on this Practice's balance.").elements()).toHaveLength(0);
+			expect(testPage.getByText('Balance after').elements()).toHaveLength(0);
+			await expect.element(testPage.getByText('Uses 1 credit. There are none left.')).toBeVisible();
+			// The screen is still the same decision, and the way back from
+			// buying Credits is remembered.
+			await expect.element(testPage.getByText(`${baseDetail.requestedByName} on Aug 1, 2026`)).toBeVisible();
+			expect(goto).not.toHaveBeenCalled();
+			expect(sessionStorage.getItem('engagement-request-approval-return')).toBe(
+				`/practices/${practiceId}/engagement-requests/${requestId}`
+			);
+		});
 	});
 
 	it('leaves the way back to this decision behind before sending her to buy credits', async () => {
