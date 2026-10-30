@@ -424,7 +424,7 @@ describe('the on-call section on a birth (#1093)', () => {
 			);
 
 			await expect
-				.element(testPage.getByText('Nobody has recorded a time they cannot be reached.'))
+				.element(testPage.getByText('No times recorded yet.'))
 				.toBeVisible();
 			await recordGapOpener().click();
 

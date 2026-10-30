@@ -2836,7 +2836,7 @@
 		<!-- One secondary opener; the form, and its one primary, only when asked. -->
 		{#if onCall.gaps.length === 0}
 			<EmptyState
-				message="Nobody has recorded a time they cannot be reached."
+				message="No times recorded yet."
 				action={canRecordGap && !isGapFormOpen
 					? {
 							label: 'Record a time a doula cannot be reached',

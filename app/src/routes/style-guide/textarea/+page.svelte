@@ -45,7 +45,7 @@
 		<h2>Inside a labeled field</h2>
 		<LabeledField
 			label="What your Practice offers"
-			hint="Say what kind of support you provide, where you work, and anything a Client should know before they get in touch."
+			hint="Say what kind of support you provide, where you work, and anything a Client should know before getting in touch."
 			error={labeled.length > 0 ? '' : 'Enter a description of what your Practice offers'}
 		>
 			{#snippet children({ id, describedBy, invalid })}

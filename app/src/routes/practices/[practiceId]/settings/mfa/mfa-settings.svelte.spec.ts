@@ -104,7 +104,7 @@ describe('MFA settings screen', () => {
 		await expect
 			.element(
 				dialog.getByText(
-					'6 Staff members have no second factor, and will not be able to sign in to this Practice until they set one up.'
+					'6 Staff members have no second factor yet, and will not be able to sign in to this Practice without one.'
 				)
 			)
 			.toBeVisible();
@@ -139,7 +139,7 @@ describe('MFA settings screen', () => {
 		await expect
 			.element(
 				dialog.getByText(
-					'1 Staff member has no second factor, and will not be able to sign in to this Practice until they set one up.'
+					'1 Staff member has no second factor yet, and will not be able to sign in to this Practice without one.'
 				)
 			)
 			.toBeVisible();
