@@ -114,6 +114,10 @@ async function setup(detail: Detail, activityResponse?: Response, outcome?: stri
 	});
 }
 
+// #2199: what the page and the BFF both say to completing an Engagement
+// with no birth outcome.
+const OUTCOME_FIRST = 'Record what happened to the pregnancy first. If the Practice never learned, that is an answer too.';
+
 // Renders directly rather than through setup(): that helper's own
 // activityResponse-less branch always overwrites apiFetchWithSession
 // with a blanket 403 (its "everything refuses by default" default),
@@ -688,25 +692,40 @@ describe('the status-move controls (#253)', () => {
 			.toBeVisible();
 	});
 
-	// #940: ADR-0015 will not let an Engagement reach 'completed' while
-	// its birth outcome is null, and the BFF says so as a named 409
-	// rather than letting the CHECK surface as a service problem. The
-	// words are the BFF's own -- it is the only thing that knows which of
-	// the two facts is missing -- and the control that answers them is
-	// this page's own birth-outcome section, a few hundred pixels down.
+	// #2199: ADR-0015 will not let an Engagement reach 'completed' while
+	// its birth outcome is null, so the page says so before it asks why
+	// the Engagement is ending, in the order the rule needs, and links to
+	// the section that answers it.
+	it('asks for the birth outcome before the ending reason when none is recorded', async () => {
+		const requests: unknown[] = [];
+		await renderWithFixtureResponder(
+			(path, init) => {
+				if (!init || init.method !== 'PATCH' || !path.endsWith('/status')) return;
+				requests.push(init.body);
+				return Promise.resolve(jsonResponse({ status: 'completed', statusMoves: ['active'] }));
+			},
+			{ ...fixtureDetail, birthOutcome: undefined, pregnancyEndedOn: undefined }
+		);
+
+		await openChange('care phase');
+		await testPage.getByRole('button', { name: 'Mark care complete' }).click();
+
+		await expect.element(testPage.getByText(OUTCOME_FIRST)).toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Record what happened' }))
+			.toHaveAttribute('href', '#birth-outcome');
+		expect(testPage.getByRole('radiogroup', { name: 'Why is this Engagement ending?' }).elements()).toHaveLength(0);
+		expect(testPage.getByRole('button', { name: 'Confirm completion' }).elements()).toHaveLength(0);
+		expect(requests).toHaveLength(0);
+	});
+
+	// #940: the BFF still refuses with a named 409 where the page's own
+	// reading was stale (an outcome removed in another tab), and its words
+	// are written for this screen (#2199).
 	it('shows the BFF refusal when the Engagement has no birth outcome recorded', async () => {
 		await renderWithFixtureResponder((path, init) => {
 			if (!init || init.method !== 'PATCH' || !path.endsWith('/status')) return;
-			return Promise.resolve(
-				jsonResponse(
-					{
-						code: 'BIRTH_OUTCOME_REQUIRED',
-						message:
-							'record what happened to the pregnancy before completing this Engagement; if the Practice never learned, say so, and that answer needs no date'
-					},
-					409
-				)
-			);
+			return Promise.resolve(jsonResponse({ code: 'BIRTH_OUTCOME_REQUIRED', message: OUTCOME_FIRST }, 409));
 		});
 
 		await openChange('care phase');
@@ -714,9 +733,7 @@ describe('the status-move controls (#253)', () => {
 		await testPage.getByLabelText('The work finished as agreed').click();
 		await testPage.getByRole('button', { name: 'Confirm completion' }).click();
 
-		await expect
-			.element(testPage.getByText(/record what happened to the pregnancy before completing/i))
-			.toBeVisible();
+		await expect.element(testPage.getByText(OUTCOME_FIRST)).toBeVisible();
 		// The completion form stays open behind the refusal: the reader's
 		// reason and note survive while she goes and records the outcome,
 		// rather than being thrown away by a page that reset itself.

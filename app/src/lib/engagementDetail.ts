@@ -178,6 +178,13 @@ export async function attachSelf(fetcher: Fetcher, reference: EngagementReferenc
 	return { doulas, canAttachSelf };
 }
 
+/** What the hub says to "Mark care complete" while no birth outcome is
+ * recorded (#2199): ADR-0015 completes no Engagement without one, and
+ * 'unknown' is an outcome too. The same words as the BFF's own refusal
+ * (engagement.MsgBirthOutcomeFirst), which a stale page still meets. */
+export const OUTCOME_BEFORE_COMPLETION =
+	'Record what happened to the pregnancy first. If the Practice never learned, that is an answer too.';
+
 /** ADR-0015's six named reasons a completed Engagement may carry, in the
  * order the hub's radio group offers them. */
 export const endingReasons: { value: string; label: string }[] = [

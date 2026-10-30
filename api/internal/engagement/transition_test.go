@@ -331,8 +331,10 @@ func TestTransitionHandler_CompletingRefusesWithNoBirthOutcome(t *testing.T) {
 	if body.Code != apierr.CodeBirthOutcomeRequired {
 		t.Fatalf("code = %q, want %s", body.Code, apierr.CodeBirthOutcomeRequired)
 	}
-	if body.Message == "" {
-		t.Fatal("refusal carried no message")
+	// #2199: the hub shows these words as written, so they are a sentence
+	// for that screen, the same as the hub's own line before it asks.
+	if body.Message != engagement.MsgBirthOutcomeFirst {
+		t.Fatalf("message = %q, want %q", body.Message, engagement.MsgBirthOutcomeFirst)
 	}
 
 	gotStatus, endingReason, _ := readEngagementStatus(t, db, engagementID)

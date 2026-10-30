@@ -149,11 +149,17 @@ func refuseUnexplainedCompletion(w http.ResponseWriter, current engagementStatus
 	if target != StatusCompleted || current.birthOutcome != nil {
 		return false
 	}
-	apierr.Write(w, http.StatusConflict, apierr.CodeBirthOutcomeRequired,
-		"record what happened to the pregnancy before completing this Engagement; "+
-			"if the Practice never learned, say so, and that answer needs no date", nil)
+	apierr.Write(w, http.StatusConflict, apierr.CodeBirthOutcomeRequired, MsgBirthOutcomeFirst, nil)
 	return true
 }
+
+// MsgBirthOutcomeFirst is refuseUnexplainedCompletion's message, written
+// for the Engagement hub that shows it as it stands (#2199): what to do
+// first, and that "never learned" is an answer. The hub says the same
+// words before it asks for an ending reason
+// (engagementDetail.ts's OUTCOME_BEFORE_COMPLETION), so this is met only
+// by a page whose reading went stale.
+const MsgBirthOutcomeFirst = "Record what happened to the pregnancy first. If the Practice never learned, that is an answer too."
 
 // TransitionHandler is the single Engagement status-transition endpoint
 // ADR-0015 specifies (#253), replacing the old completion-only endpoint:
