@@ -230,6 +230,34 @@ describe('the narrow sheet', () => {
 	});
 
 	/*
+	 * #2235: following a section left the sheet open over the page it
+	 * chose. The router is stood in for by a listener on the document,
+	 * where SvelteKit's own sits, so the press is a real link press that
+	 * does not take the test runner's frame with it. The sheet shuts
+	 * before the router runs, so the focus the router then resets to the
+	 * new page is not taken back to the hamburger by a later close.
+	 */
+	it.each(NAV_ITEMS.map((item) => item.label))('shuts when %s is followed', async (label) => {
+		const { hamburger } = await setupNarrow();
+		await hamburger.click();
+		let openWhenRouted: boolean | undefined;
+		const route = (event: MouseEvent) => {
+			event.preventDefault();
+			openWhenRouted = document.querySelector('dialog')?.open;
+		};
+		document.addEventListener('click', route);
+
+		try {
+			await page.getByRole('dialog').getByRole('link', { name: label }).click();
+		} finally {
+			document.removeEventListener('click', route);
+		}
+
+		await expect.element(page.getByRole('button', { name: 'Close menu' })).not.toBeInTheDocument();
+		expect(openWhenRouted).toBe(false);
+	});
+
+	/*
 	 * A bottom tab bar was drawn and rejected: five slots cannot carry six
 	 * sections without a `More`, and `More` is not a noun this domain has.
 	 */
