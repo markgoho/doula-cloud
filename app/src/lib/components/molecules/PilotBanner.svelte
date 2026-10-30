@@ -88,6 +88,15 @@
 			color: var(--color-on-surface);
 		}
 
+		/* Off the printed sheet (#2212), as the top bars are: a printed
+		   Birth Plan goes to the hospital, and this banner is the app's
+		   chrome, not the plan. */
+		@media print {
+			.banner {
+				display: none;
+			}
+		}
+
 		/*
 		 * The sentence and its inline control, as one shrinkable flex item
 		 * (ADR-0024): a flex item's automatic minimum size is its

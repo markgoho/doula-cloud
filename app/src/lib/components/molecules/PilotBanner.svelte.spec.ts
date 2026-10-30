@@ -2,6 +2,7 @@ import type { ComponentProps } from 'svelte';
 import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { inPrintMedia } from '#lib/testMedia.js';
 import PilotBanner from './PilotBanner.svelte';
 
 type SetupOptions = Partial<ComponentProps<typeof PilotBanner>>;
@@ -69,5 +70,18 @@ describe('PilotBanner.svelte', () => {
 		await expect
 			.element(page.getByRole('button'))
 			.toHaveAttribute('aria-controls', 'staff-feedback-drawer');
+	});
+});
+
+// #2212: a printed Birth Plan goes to the hospital, and the banner is the
+// app's chrome, not part of the plan.
+describe('PilotBanner.svelte, printed', () => {
+	inPrintMedia();
+
+	it('keeps itself off the printed sheet', async () => {
+		await setup();
+
+		await expect.element(page.getByText('Pilot')).not.toBeVisible();
+		await expect.element(page.getByRole('button', { includeHidden: true })).not.toBeVisible();
 	});
 });
