@@ -121,12 +121,12 @@ She is the negative-permission Persona. Half of this map is about what should be
 
 ### Stage 8 — Message the Client
 
-**Thinking**: "Confirm Thursday." **Pain points**: none identified. Push-triggered fetch wakes the Client's device (ADR-0002); Priya must not treat it as a substitute for a phone call in labor.
+**Thinking**: "Confirm Thursday." **Pain points**: the message form shows four decisions at once, Message, Attachment, **Send** and **Cancel**, each a recorded choice: the Engagement page shows a section's form only when asked, behind **Write a message** (#2004), with a **Cancel** that hands focus back to it (#2103), and a Message may carry an image or PDF (GLOSSARY.md, Message). The reasoning is on Maya Okonkwo's map, [MO-G16](solo-birth-doula.md#gaps-found) ([#2197](https://github.com/markgoho/doula-cloud/issues/2197)). Push-triggered fetch wakes the Client's device (ADR-0002); Priya must not treat it as a substitute for a phone call in labor.
 
 **Budget**:
 
 * **Screens**: 1 (Hick's Law, Flow)
-* **Decisions**: 2 (Hick's Law, Miller's Law)
+* **Decisions**: 4 (Hick's Law, Miller's Law)
 * **Time**: 400 ms, 100 ms (Doherty Threshold)
 * **Confirmation**: yes (Peak-End Rule)
 * **320px**: yes (ADR-0024)
