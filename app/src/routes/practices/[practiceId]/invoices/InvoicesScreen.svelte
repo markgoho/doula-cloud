@@ -48,8 +48,8 @@
 	// #2200: Stripe not being connected stops a card payment, never a
 	// Practice that bills by hand, so that one is told nothing about it.
 	const isWaitingOnStripe = $derived(session?.clientsCanPay === false && session.billingMode !== 'by_hand');
-	// Owner/Admin read this screen (+page.ts), so each gets a way to
-	// Getting paid; cardPaymentsWait words it for which one she is.
+	// An Owner, an Admin and an employed Doula read this screen;
+	// cardPaymentsWait words it for which one she is.
 	const cardPaymentsWaitWords = $derived(
 		session ? cardPaymentsWait({ isOwner: isOwner(session), isOwnerOrAdmin: isOwnerOrAdmin(session) }) : undefined
 	);

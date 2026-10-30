@@ -9,8 +9,8 @@ import type { PageLoad } from './$types';
 /**
  * Loads through SvelteKit's `load`, for the reason the Billing route's
  * `load` gives (#471), and hands the read over unawaited, so a click
- * changes screen at once (#2249). This read is Owner/Admin-only
- * (ADR-0006's money row, carried forward by ADR-0008), so a Doula who
+ * changes screen at once (#2249). This read is refused to a
+ * contractor Doula (ADR-0008's money row as amended by #282), so one who
  * types this URL gets a 403, which the screen draws as the page
  * `practices/+error.svelte` would.
  */

@@ -4,7 +4,7 @@
 //
 // It is a leaf of its own because payments imports staffauth, and both
 // read the fact: the Practice session in the same query as the Practice's
-// name, and payments' Invoice gate, Connect status and portal payment.
+// name, and payments' Invoice gate, Invoice list and portal payment.
 package cardpayments
 
 import (
