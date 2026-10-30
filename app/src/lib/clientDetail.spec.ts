@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+	historyRows,
 	loadClientDetail,
 	pendingRequests,
 	resolvedFieldGroups,
@@ -121,5 +122,83 @@ describe('pendingRequests', () => {
 
 	it('returns an empty array when nothing is pending', () => {
 		expect(pendingRequests([])).toEqual([]);
+	});
+});
+
+/*
+ * #2280: asking for an Engagement and deciding it are two acts, each with
+ * its own who and when, so a decided Request is two rows of the History.
+ */
+describe('historyRows', () => {
+	const asked = {
+		requestId: 'r1',
+		kind: 'postpartum',
+		requestedBy: 'staff-priya',
+		requestedByName: 'Priya Raman',
+		requestedAt: '2026-10-28T22:58:21Z'
+	} as const;
+	const created: HistoryEntry = {
+		type: 'client_event',
+		at: '2026-10-28T22:59:30Z',
+		clientEvent: { eventType: 'updated', diff: {}, actorKind: 'staff', actorName: 'Sam Owner', createdAt: '2026-10-28T22:59:30Z' }
+	};
+
+	it('splits a Request asked by one Staff member and approved by another into the asking and the deciding, newest first', () => {
+		const approved = {
+			...asked,
+			state: 'approved',
+			decidedBy: 'staff-renata',
+			decidedByName: 'Renata Alvarez',
+			decidedAt: '2026-10-28T22:58:59Z'
+		};
+		const history: HistoryEntry[] = [
+			created,
+			{ type: 'engagement_request', at: asked.requestedAt, engagementRequest: approved }
+		];
+
+		expect(historyRows(history)).toEqual([
+			created,
+			{
+				type: 'engagement_request',
+				act: 'decided',
+				at: '2026-10-28T22:58:59Z',
+				who: 'Renata Alvarez',
+				engagementRequest: approved
+			},
+			{
+				type: 'engagement_request',
+				act: 'asked',
+				at: '2026-10-28T22:58:21Z',
+				who: 'Priya Raman',
+				engagementRequest: approved
+			}
+		]);
+	});
+
+	it('places a decision after the entries written between the asking and it', () => {
+		const refused = {
+			...asked,
+			state: 'refused',
+			decidedBy: 'staff-renata',
+			decidedByName: 'Renata Alvarez',
+			decidedAt: '2026-10-28T23:10:00Z'
+		};
+		const rows = historyRows([created, { type: 'engagement_request', at: asked.requestedAt, engagementRequest: refused }]);
+
+		expect(rows.map((row) => row.at)).toEqual(['2026-10-28T23:10:00Z', created.at, asked.requestedAt]);
+	});
+
+	it('keeps a pending Request as the one row of its asking', () => {
+		const pending = { ...asked, state: 'pending' };
+		expect(historyRows([{ type: 'engagement_request', at: asked.requestedAt, engagementRequest: pending }])).toEqual([
+			{ type: 'engagement_request', act: 'asked', at: asked.requestedAt, who: 'Priya Raman', engagementRequest: pending }
+		]);
+	});
+
+	it('keeps a decided Request that carries no decision as the one row of its asking', () => {
+		const undated = { ...asked, state: 'withdrawn' };
+		expect(historyRows([{ type: 'engagement_request', at: asked.requestedAt, engagementRequest: undated }])).toHaveLength(1);
+		const unnamed = { ...undated, decidedAt: '2026-10-28T23:00:00Z' };
+		expect(historyRows([{ type: 'engagement_request', at: asked.requestedAt, engagementRequest: unnamed }])).toHaveLength(1);
 	});
 });
