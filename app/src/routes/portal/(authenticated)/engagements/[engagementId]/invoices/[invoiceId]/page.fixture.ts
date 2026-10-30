@@ -26,6 +26,7 @@ export const invoice: ClientInvoice = {
 	reference: 'INV-2027-Persephone-Ochieng-Whitfield-0011',
 	billingMode: 'stripe',
 	createdAt: '2027-02-01T15:00:00Z',
+	raisedOn: '2027-02-01',
 	refundedCents: 0
 };
 

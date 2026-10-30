@@ -25,6 +25,7 @@ export const openStripe: ClientInvoice = {
 	reference: 'A4B2-0011',
 	billingMode: 'stripe',
 	createdAt: '2027-02-01T15:00:00Z',
+	raisedOn: '2027-02-01',
 	refundedCents: 0
 };
 
@@ -36,6 +37,7 @@ export const paidByHandReturned: ClientInvoice = {
 	reference: 'INV-2027-Persephone-Ochieng-Whitfield-0007',
 	billingMode: 'by_hand',
 	createdAt: '2026-11-02T15:00:00Z',
+	raisedOn: '2026-11-02',
 	paidOn: '2026-11-04',
 	paidMethod: 'bank_transfer',
 	refundedCents: 25_000
@@ -49,6 +51,7 @@ export const paidStripe: ClientInvoice = {
 	reference: 'A4B2-0009',
 	billingMode: 'stripe',
 	createdAt: '2026-10-02T15:00:00Z',
+	raisedOn: '2026-10-02',
 	paidOn: '2026-10-03',
 	refundedCents: 0
 };
@@ -61,6 +64,7 @@ export const voided: ClientInvoice = {
 	reference: 'A4B2-0008',
 	billingMode: 'stripe',
 	createdAt: '2026-09-02T15:00:00Z',
+	raisedOn: '2026-09-02',
 	refundedCents: 0
 };
 

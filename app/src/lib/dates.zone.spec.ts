@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { formatCalendarDay, formatInstant } from './dates.js';
+import { invoiceFacts, type ClientInvoice } from './clientInvoice.js';
 import { dueLabel } from './invoice.js';
 
 /*
@@ -17,6 +18,23 @@ import { dueLabel } from './invoice.js';
  */
 
 const runnerZone = process.env.TZ;
+
+/**
+The portal's printed Sent day for an Invoice raised at `createdAt`.
+*/
+function sentDay(days: Pick<ClientInvoice, 'createdAt' | 'raisedOn'>): string | undefined {
+	const invoice: ClientInvoice = {
+		id: 'i',
+		status: 'open',
+		amountCents: 1000,
+		currency: 'usd',
+		reference: 'INV-1',
+		billingMode: 'stripe',
+		refundedCents: 0,
+		...days
+	};
+	return invoiceFacts(invoice).find((fact) => fact.label === 'Sent')?.value;
+}
 
 function inZone(zone: string): void {
 	beforeAll(() => {
@@ -47,6 +65,11 @@ describe('a date in a zone behind UTC (America/New_York)', () => {
 	it('still reads a real instant in the reader zone', () => {
 		expect(formatInstant('2026-10-25T00:00:00Z')).toBe('Oct 24, 2026');
 	});
+
+	it("prints an Invoice's Sent day as the Practice's day the BFF sent (#2205)", () => {
+		// 20:00Z on Oct 25 is Oct 25 here, but already Oct 26 for a Practice in Tokyo.
+		expect(sentDay({ createdAt: '2026-10-25T20:00:00Z', raisedOn: '2026-10-26' })).toBe('Oct 26, 2026');
+	});
 });
 
 describe('a date in a zone ahead of UTC (Asia/Tokyo)', () => {
@@ -67,5 +90,10 @@ describe('a date in a zone ahead of UTC (Asia/Tokyo)', () => {
 
 	it('still reads a real instant in the reader zone', () => {
 		expect(formatInstant('2026-10-25T20:00:00Z')).toBe('Oct 26, 2026');
+	});
+
+	it("prints an Invoice's Sent day as the Practice's day the BFF sent (#2205)", () => {
+		// 00:03Z on Oct 26 is Oct 26 here, but still Oct 25 for a Practice in New York.
+		expect(sentDay({ createdAt: '2026-10-26T00:03:00Z', raisedOn: '2026-10-25' })).toBe('Oct 25, 2026');
 	});
 });
