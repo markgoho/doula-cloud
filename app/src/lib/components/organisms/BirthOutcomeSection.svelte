@@ -33,6 +33,7 @@
 	 */
 	import {
 		BIRTH_OUTCOMES,
+		OUTCOME_KEPT_ON_COMPLETED,
 		birthOutcomeLabel,
 		type BirthOutcomeRequest,
 		type BirthOutcomeResult
@@ -50,6 +51,7 @@
 	import { SectionState } from '#lib/sectionState.svelte.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import DateFields from '#lib/components/molecules/DateFields.svelte';
@@ -74,6 +76,12 @@
 		/** Whether this reader is a Practice Owner, the one role ADR-0015
 		 * lets correct or clear a frozen outcome. */
 		canCorrect: boolean;
+		/** Where the care phase is changed, given only on a completed
+		 * Engagement (#2308). 00094 keeps an outcome on every completed row,
+		 * so "Remove this record" there sends nothing: it says to reopen
+		 * first and links here. Only an Owner is offered the clear, and an
+		 * Owner may always reopen, so the link never leads to a dead end. */
+		reopenHref?: string;
 		/** Owns the API call and whatever the page does with the result;
 		 * this component owns what was typed and what the answer looked
 		 * like on screen. */
@@ -88,7 +96,7 @@
 		) => Promise<BirthOutcomeResult>;
 	}
 
-	let { outcome, endedOn, canRecord, canCorrect, onRecord }: Properties = $props();
+	let { outcome, endedOn, canRecord, canCorrect, reopenHref, onRecord }: Properties = $props();
 
 	const isRecorded = $derived(outcome !== undefined);
 
@@ -132,6 +140,18 @@
 	// eslint-disable-next-line unicorn/no-null
 	let pendingRequest = $state<BirthOutcomeRequest>({ birthOutcome: null });
 	let isClearDialogShown = $state(false);
+	let isReopenFirstShown = $state(false);
+
+	/* #2308, the shape #2199 gave "Mark care complete": on a completed
+	   Engagement the clear would only be refused, so she is told the order
+	   that works before anything is sent, rather than after confirming. */
+	function askToClear() {
+		if (reopenHref === undefined) {
+			isClearDialogShown = true;
+			return;
+		}
+		isReopenFirstShown = true;
+	}
 
 	/* Which of the three boxes a date refusal belongs to, read back out of
 	   the one array `ErrorSummary` renders rather than tracked a second
@@ -291,10 +311,15 @@
 					label="Remove this record"
 					size="sm"
 					variant="secondary"
-					onClick={() => (isClearDialogShown = true)}
+					onClick={askToClear}
 				/>
 			{/if}
 		</cluster-l>
+	{/if}
+
+	{#if isReopenFirstShown && reopenHref !== undefined}
+		<Notice variant="info" message={OUTCOME_KEPT_ON_COMPLETED} isFocusedOnAppear />
+		<Link href={reopenHref} label="Change the care phase" />
 	{/if}
 
 	{#if isFormShown}

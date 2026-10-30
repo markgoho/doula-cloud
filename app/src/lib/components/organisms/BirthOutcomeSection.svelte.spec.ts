@@ -2,7 +2,7 @@ import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import BirthOutcomeSection from './BirthOutcomeSection.svelte';
-import type { BirthOutcomeResult } from '#lib/engagementDetail.js';
+import { OUTCOME_KEPT_ON_COMPLETED, type BirthOutcomeResult } from '#lib/engagementDetail.js';
 
 const recorded: BirthOutcomeResult = {
 	kind: 'recorded',
@@ -31,6 +31,7 @@ interface SetupOptions {
 	endedOn?: string;
 	canRecord?: boolean;
 	canCorrect?: boolean;
+	reopenHref?: string;
 	result?: BirthOutcomeResult;
 	/** What the *second* send answers, for the press-through: the first
 	 * is refused as frozen and the re-send with `correction: true` is a
@@ -43,6 +44,7 @@ async function setup({
 	endedOn,
 	canRecord = true,
 	canCorrect = true,
+	reopenHref,
 	result = recorded,
 	thenResult
 }: SetupOptions = {}) {
@@ -54,7 +56,7 @@ async function setup({
 		}
 		return thenResult;
 	});
-	await render(BirthOutcomeSection, { outcome, endedOn, canRecord, canCorrect, onRecord });
+	await render(BirthOutcomeSection, { outcome, endedOn, canRecord, canCorrect, reopenHref, onRecord });
 	return { onRecord };
 }
 
@@ -301,18 +303,34 @@ describe('BirthOutcomeSection', () => {
 			.toBeVisible();
 	});
 
+	// #2308: a completed Engagement keeps its outcome (00094), so the clear
+	// is never sent from here. She is told the order that works, where she
+	// pressed, and given the way to the care phase that reopens it.
+	it('tells an Owner on a completed Engagement to reopen it first, and sends nothing', async () => {
+		const { onRecord } = await setup({ outcome: 'loss', endedOn: '2026-08-14', reopenHref: '#engagement-summary' });
+		await page.getByRole('button', { name: 'Remove this record' }).click();
+
+		await expect.element(page.getByText(OUTCOME_KEPT_ON_COMPLETED)).toBeVisible();
+		await expect.element(page.getByText(OUTCOME_KEPT_ON_COMPLETED)).toHaveFocus();
+		await expect
+			.element(page.getByRole('link', { name: 'Change the care phase' }))
+			.toHaveAttribute('href', '#engagement-summary');
+		await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
+		expect(onRecord).not.toHaveBeenCalled();
+	});
+
 	it('reports a refused clear where it happened, not as a refused form', async () => {
+		// The BFF's own sentence for a page whose reading went stale: the
+		// Engagement was completed after this page loaded (#2308).
 		await setup({
 			outcome: 'loss',
 			endedOn: '2026-08-14',
-			result: { kind: 'errors', errors: [{ message: 'This Engagement has no birth outcome to correct' }] }
+			result: { kind: 'errors', errors: [{ message: OUTCOME_KEPT_ON_COMPLETED }] }
 		});
 		await page.getByRole('button', { name: 'Remove this record' }).click();
 		await page.getByRole('dialog').getByRole('button', { name: 'Remove this record' }).click();
 
-		await expect
-			.element(page.getByText('This Engagement has no birth outcome to correct').first())
-			.toBeVisible();
+		await expect.element(page.getByText(OUTCOME_KEPT_ON_COMPLETED).first()).toBeVisible();
 		// A Notice, not the summary: no field was filled in, so there is
 		// nothing to send her back to (#467).
 		await expect.element(page.getByText('There is a problem')).not.toBeInTheDocument();

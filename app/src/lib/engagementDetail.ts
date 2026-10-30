@@ -185,6 +185,13 @@ export async function attachSelf(fetcher: Fetcher, reference: EngagementReferenc
 export const OUTCOME_BEFORE_COMPLETION =
 	'Record what happened to the pregnancy first. If the Practice never learned, that is an answer too.';
 
+/** What the Birth outcome section says to "Remove this record" on a
+ * completed Engagement (#2308): 00094 keeps an outcome on every completed
+ * row, so reopening comes first. The same words as the BFF's own refusal
+ * (engagement.MsgOutcomeKeptOnCompleted), which a stale page still meets. */
+export const OUTCOME_KEPT_ON_COMPLETED =
+	'A completed Engagement keeps its birth outcome. Reopen it first, then remove the record.';
+
 /** ADR-0015's six named reasons a completed Engagement may carry, in the
  * order the hub's radio group offers them. */
 export const endingReasons: { value: string; label: string }[] = [

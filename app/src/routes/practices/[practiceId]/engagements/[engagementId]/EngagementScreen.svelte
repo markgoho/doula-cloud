@@ -1849,7 +1849,9 @@
 </script>
 
 {#snippet summary()}
-	<stack-l space="var(--space-4)">
+	<!-- #2308: the Birth outcome section links here to reopen a completed
+	     Engagement before its outcome can be removed. -->
+	<stack-l id="engagement-summary" space="var(--space-4)">
 		<!--
 			#1998: GOV.UK's Summary list with row actions, as the drawing
 			has it -- one bordered card, a Change at the end of each row
@@ -2994,6 +2996,7 @@
 		endedOn={birthOutcome.pregnancyEndedOn}
 		canRecord={canWriteFact}
 		canCorrect={isPracticeOwner}
+		reopenHref={displayStatus === 'completed' ? '#engagement-summary' : undefined}
 		onRecord={handleRecordBirthOutcome}
 	/>
 {/snippet}
