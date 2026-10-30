@@ -5,6 +5,7 @@
  * fact two ways.
  */
 import type { BillingMode, PaymentTerms } from '#lib/invoice.js';
+import type { PracticeWebsite } from '#lib/website.js';
 
 /**
  * The billing mode's two answers, in InvoiceSection's own labels for the
@@ -56,4 +57,21 @@ What a payment terms save says on Getting paid.
 */
 export function paymentTermsSavedMessage(terms: PaymentTerms): string {
 	return `Payment terms saved. The next invoice raised is due ${terms.netDays} ${terms.netDays === 1 ? 'day' : 'days'} after it is raised.`;
+}
+
+/**
+ * The query that marks a visit to Your website as one Getting paid sent
+ * (MO-G15, #2196), so its save comes back here rather than staying put.
+ * A fixed flag, not a return address: Getting paid is the one place it
+ * returns to, so nothing read off the URL is ever followed.
+ */
+export const FROM_GETTING_PAID_QUERY = 'from=getting-paid';
+
+/**
+What a website save says on Getting paid, for the answer it saved.
+*/
+export function websiteSavedMessage(mode: PracticeWebsite['mode']): string {
+	return mode === 'hosted'
+		? 'Your page is published. You can connect Stripe now.'
+		: 'Your website is saved. You can connect Stripe now.';
 }

@@ -39,6 +39,8 @@
 		MAX_FACT_LENGTH,
 		type PracticeWebsite
 	} from '#lib/website.js';
+	import { gotoWithOutcome } from '#lib/outcome.js';
+	import { FROM_GETTING_PAID_QUERY, websiteSavedMessage } from '../payments/gettingPaid.js';
 	import type { PracticeSession } from '../../+layout.js';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
@@ -75,6 +77,14 @@
 	let practiceName = $derived(session.practiceName);
 	let isPracticeOwner = $derived(isOwner(session));
 	let loadError = $state('');
+
+	/* MO-G15 (#2196): Getting paid sends her here before it offers Connect
+	   Stripe, and marks the link so. A save then takes her back there,
+	   saying what it did, instead of leaving her to find the way back. */
+	const isFromGettingPaid = $derived(page.url.search === `?${FROM_GETTING_PAID_QUERY}`);
+	const gettingPaidHref = $derived(
+		resolve('/practices/[practiceId]/settings/payments', { practiceId: page.params.practiceId! })
+	);
 
 	/* 'answers' collects, 'review' shows the assembled page back to her,
 	   'saved' is the state she lands in after a successful write and the
@@ -222,6 +232,10 @@
 					: { mode: 'own', ownUrl }
 			);
 			fieldErrors = {};
+			if (isFromGettingPaid) {
+				await gotoWithOutcome(gettingPaidHref, websiteSavedMessage(current.mode));
+				return;
+			}
 			step = 'saved';
 		} catch (error_) {
 			if (error_ instanceof WebsiteValidationError) {
