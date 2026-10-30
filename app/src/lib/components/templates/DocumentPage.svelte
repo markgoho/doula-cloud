@@ -74,7 +74,7 @@
 	}: Properties = $props();
 </script>
 
-<PageTitle page={title} {serviceName} />
+<PageTitle page={title} {serviceName} isPending={Boolean(loading) && !loadError} />
 
 <container-l>
 	<center-l max="var(--measure)" gutters="var(--page-gutter)">

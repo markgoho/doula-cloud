@@ -102,7 +102,7 @@
 	}
 </script>
 
-<PageTitle page={title} {serviceName} />
+<PageTitle page={title} {serviceName} isPending={Boolean(loading) && !loadError} />
 
 <container-l>
 	<!-- No cap: a record is a contents rail beside description lists and

@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import favicon from '#lib/assets/favicon.svg';
 	import { registerLayoutPrimitives } from '#lib/primitives/index.js';
+	import RouteAnnouncer from '#lib/components/RouteAnnouncer.svelte';
 	import '#lib/styles/app.css';
 
 	let { children } = $props();
@@ -16,3 +17,5 @@
 </svelte:head>
 
 {@render children()}
+
+<RouteAnnouncer />

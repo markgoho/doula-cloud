@@ -120,7 +120,7 @@
 	{/if}
 {/snippet}
 
-<PageTitle page={title} {serviceName} />
+<PageTitle page={title} {serviceName} isPending={Boolean(loading) && !loadError} />
 
 <container-l name="overview-hub">
 	<!-- No cap: a hub is cards, tables and a rail rather than prose, and

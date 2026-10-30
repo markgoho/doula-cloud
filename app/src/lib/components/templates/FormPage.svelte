@@ -103,7 +103,7 @@
 	}: Properties = $props();
 </script>
 
-<PageTitle page={title} {serviceName} isError={Boolean(errorSummary)} />
+<PageTitle page={title} {serviceName} isError={Boolean(errorSummary)} isPending={Boolean(loading) && !loadError} />
 
 <!-- Shared by all three states below (#256): a fixed purpose sentence,
      not data, so it renders the same way whether the fieldsets, a

@@ -114,7 +114,9 @@
 		}
 	});
 
-	const name = $derived(member?.name ?? '');
+	// Empty while she loads, which `RecordDetail` draws as a heading-shaped
+	// bar; a read that failed still names the page (#2246).
+	const name = $derived(member?.name ?? (loadError ? 'Staff member' : ''));
 
 	interface FactRow extends SummaryListRow {
 		href?: string;
