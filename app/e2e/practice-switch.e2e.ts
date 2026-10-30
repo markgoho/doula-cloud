@@ -54,7 +54,9 @@ test('switching Practice from the header draws the second Practice, with nothing
 	await expect(page).toHaveURL(new RegExp(`/practices/${other.practiceId}$`));
 	await page.getByRole('status', { name: 'Loading your Practice' }).waitFor({ state: 'detached' });
 
-	await expect(page.getByText('Nothing is here yet, because no Client is.')).toBeVisible();
+	// She is a contractor there, so its empty Overview says how work
+	// reaches her (#2273).
+	await expect(page.getByText(/Work at this Practice reaches you as an Offer/)).toBeVisible();
 	await expect(page.getByText(/Reese Bishop/)).toHaveCount(0);
 	await expect(page.getByRole('heading', { name: 'Recent activity' })).toHaveCount(0);
 });
