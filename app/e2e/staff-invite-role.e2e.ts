@@ -80,5 +80,5 @@ test('A Doula invited via the Staff invite route is refused an Owner-only action
 	await page.getByRole('checkbox', { name: 'Doula' }).check();
 	await page.getByRole('radio', { name: 'Employee' }).check();
 	await page.getByRole('button', { name: 'Send invite' }).click();
-	await expect(page.getByText('only a Practice Owner can do that')).toBeVisible();
+	await expect(page.getByText('You need to be an owner of this Practice to do that.')).toBeVisible();
 });
