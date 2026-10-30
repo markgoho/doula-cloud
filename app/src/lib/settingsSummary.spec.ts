@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { invalidate } from '$app/navigation';
 import { jsonResponse } from './testResponse.js';
+import { PRACTICE_SESSION_DEPENDENCY } from './practiceSession.js';
 import {
 	blockedAddressesValue,
 	loadSettingsSummary,
@@ -10,6 +12,22 @@ import {
 	websiteValue
 } from './settingsSummary.js';
 import type { PracticeWebsite } from './website.js';
+
+vi.mock('$app/navigation', () => ({ invalidate: vi.fn() }));
+
+function answerOnlyConnect(path: string): Promise<Response> {
+	return Promise.resolve(
+		path.endsWith('/payments/connect')
+			? jsonResponse({
+					status: 'active',
+					cardPaymentsStatus: 'active',
+					payoutsStatus: 'active',
+					requirementsDue: [],
+					clientsCanPay: true
+				})
+			: jsonResponse({ message: 'no' }, 500)
+	);
+}
 
 const unanswered: PracticeWebsite = {
 	mode: 'undeclared',
@@ -81,5 +99,16 @@ describe('loadSettingsSummary', () => {
 		expect(summary.contractTemplate).toEqual({ text: 'Not written yet' });
 		expect(summary.mfa).toEqual({ text: 'Off' });
 		expect(summary.website).toBe('unavailable');
+	});
+
+	// #2295: the Getting paid row's read is a read of the stored fact too.
+	it('reads the Practice session again when Connect status says otherwise about whether Clients can pay', async () => {
+		const summary = await loadSettingsSummary(answerOnlyConnect, 'practice-1', {
+			roles: ['owner'],
+			clientsCanPay: false
+		});
+
+		expect(summary.gettingPaid).toEqual({ text: 'Taking payments' });
+		expect(invalidate).toHaveBeenCalledExactlyOnceWith(PRACTICE_SESSION_DEPENDENCY);
 	});
 });

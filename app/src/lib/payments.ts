@@ -52,6 +52,9 @@ export interface ConnectStatusResult {
 	/** Stripe field paths still awaiting the Owner. Always present -- the
 	 * backend sends an empty list rather than omitting it. */
 	requirementsDue: string[];
+	/** The stored fact the Practice session carries (#2295), which trails
+	 * `cardPaymentsStatus` until Stripe's webhook lands. */
+	clientsCanPay: boolean;
 }
 
 function connectPath(practiceId: string): string {
@@ -75,9 +78,16 @@ export async function loadConnectStatus(fetcher: Fetcher, practiceId: string): P
  * `requirementsDue` on a status other than `active`). Once this is
  * false, either the account is already `active` or the Owner has to
  * supply something before the status will ever move again -- reading
- * again on a timer would only repeat today's answer. */
+ * again on a timer would only repeat today's answer.
+ *
+ * It can also still move while the stored `clientsCanPay` disagrees with
+ * Stripe's live card payments status: the webhook that writes it has not
+ * landed yet (#2295). */
 export function canConnectStatusStillMove(result: ConnectStatusResult): boolean {
-	return result.status !== 'active' && result.requirementsDue.length === 0;
+	const isAwaitingStripe = result.status !== 'active' && result.requirementsDue.length === 0;
+	const isLiveActive = result.cardPaymentsStatus === 'active';
+	const isAwaitingWebhook = result.clientsCanPay === !isLiveActive;
+	return isAwaitingStripe || isAwaitingWebhook;
 }
 
 /** What a failed re-read (poll or on-demand) tells the person. Exported

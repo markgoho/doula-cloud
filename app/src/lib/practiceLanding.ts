@@ -19,6 +19,7 @@ export type { Fetcher } from './fetcher.js';
 import { creditCount, loadBalance } from './billing.js';
 import { loadConnectStatus, type ConnectStatus } from './payments.js';
 import { loadBillingMode, type BillingMode } from './invoice.js';
+import { refreshSessionIfClientsCanPayChanged } from './clientsCanPaySession.js';
 import type { Fetcher } from './fetcher.js';
 import { hasSecondFactor, isDoula, isOwner } from './roles.js';
 import type { CursorPage } from './paginatedList.svelte.js';
@@ -258,7 +259,7 @@ async function loadRoster(fetcher: Fetcher, practiceId: string): Promise<RosterH
 export async function loadPracticeLanding(
 	fetcher: Fetcher,
 	practiceId: string,
-	session: { practiceName: string; roles: string[]; secondFactor?: boolean }
+	session: { practiceName: string; roles: string[]; secondFactor?: boolean; clientsCanPay?: boolean }
 ): Promise<PracticeLanding> {
 	const { roles } = session;
 
@@ -282,6 +283,7 @@ export async function loadPracticeLanding(
 						loadConnectStatus(fetcher, practiceId),
 						readBillingMode(fetcher, practiceId)
 					]);
+					refreshSessionIfClientsCanPayChanged(session, status.clientsCanPay);
 					return { status: status.status, requirementsDue: status.requirementsDue, billingMode };
 				})
 			: undefined,
