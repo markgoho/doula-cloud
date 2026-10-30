@@ -2057,7 +2057,7 @@
 		{/if}
 
 		{#if portalInviteLink}
-			<Text text="Invited. An email has been sent to them. If you need to share the link directly, here it is:" />
+			<Text text={`Invited. ${detail!.clientName} has an email with the link. To share the link yourself, here it is:`} />
 			<div><code>{portalInviteLink}</code></div>
 		{/if}
 	</stack-l>
