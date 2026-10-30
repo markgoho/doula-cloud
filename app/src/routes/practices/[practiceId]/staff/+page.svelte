@@ -8,7 +8,6 @@
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
-	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -19,6 +18,8 @@
 	import { takeOutcome } from '#lib/outcome.js';
 	import { workStateName, workStateReportedOn } from '#lib/workStates.js';
 	import { rolesLabel, employmentTypeLabel } from '#lib/roles.js';
+	import { errorKindForStatus, type ErrorKind } from '#lib/errorPage.js';
+	import FailedRead from '../FailedRead.svelte';
 	import { memberHref } from './[staffId]/member.js';
 
 	// What the act that led here did, if one did: a removal on a Staff
@@ -37,7 +38,16 @@
 		},
 		failureMessage: 'Failed to load more invitations'
 	});
-	let error = $state('');
+	// A roster read that failed draws the page `practices/+error.svelte`
+	// would, as Credits does (#2261): the roster is Owner-and-Admin, so a
+	// Doula who types the address meets "You cannot view this" and a way
+	// to her Practice, not the API's sentence under a link to invite
+	// somebody, which she is refused too. `loadStaff` carries the status
+	// as its Error's cause; a read that never reached the server carries
+	// none and is ours. The refusal codes with a page of their own (a
+	// second factor, a Practice being deleted) are caught by the Practice
+	// layout's own read before this one runs (`errorPage.ts`).
+	let failure = $state<ErrorKind>();
 	let isLoaded = $state(false);
 
 	let revokeError = $state<Record<string, string>>({});
@@ -96,7 +106,8 @@
 			invitations.reset(roster.invitations);
 			isLoaded = true;
 		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Failed to load the roster';
+			const status = error_ instanceof Error ? error_.cause : undefined;
+			failure = typeof status === 'number' ? errorKindForStatus(status) : 'problem';
 		}
 	}
 
@@ -168,55 +179,55 @@
 {/snippet}
 
 {#snippet content()}
-	{#if error}
-		<Notice variant="error" message={error} />
-	{:else}
-		<!-- Two groups, not one list: a pending invitation is an address that
-		     has been asked, with nobody behind it yet, and #261 found the
-		     single-list shape unable to tell that apart from a member holding
-		     no roles. The headings and the sentence are drawn while the roster
-		     loads (#2248); bars hold each table's place. -->
-		<Heading level={2} text="Members" />
-		<Text
-			text="Work states are self-reported by each person and are not verified. They set how much sales tax your Practice pays on Credits."
-		/>
-		{#if isLoaded}
-			<!-- hasMore is always false: the roster is a bounded population
-			     (server-capped at maxMembers, #446) and never paginates, unlike
-			     Invitations below. Either list's empty state is DataTable's own
-			     (#2015); the invite link above is the action for both. -->
-			<div class="members-table">
-				<DataTable
-					columns={memberColumns}
-					rows={members}
-					rowHref={(member: StaffSummary) => memberHref(page.params.practiceId!, member.staffId)}
-					hasMore={false}
-					emptyMessage="No Staff yet."
-				/>
-			</div>
-		{:else}
-			<Skeleton variant="row" lines={6} label="Loading your Staff" />
-		{/if}
-
-		<Heading level={2} text="Pending invitations" />
-		{#if isLoaded}
+	<!-- Two groups, not one list: a pending invitation is an address that
+	     has been asked, with nobody behind it yet, and #261 found the
+	     single-list shape unable to tell that apart from a member holding
+	     no roles. The headings and the sentence are drawn while the roster
+	     loads (#2248); bars hold each table's place. -->
+	<Heading level={2} text="Members" />
+	<Text
+		text="Work states are self-reported by each person and are not verified. They set how much sales tax your Practice pays on Credits."
+	/>
+	{#if isLoaded}
+		<!-- hasMore is always false: the roster is a bounded population
+		     (server-capped at maxMembers, #446) and never paginates, unlike
+		     Invitations below. Either list's empty state is DataTable's own
+		     (#2015); the invite link above is the action for both. -->
+		<div class="members-table">
 			<DataTable
-				columns={invitationColumns}
-				rows={invitations.items}
-				rowActions={{ label: 'Actions', content: invitationActions }}
-				hasMore={invitations.hasMore}
-				onLoadMore={() => invitations.loadMore()}
-				isLoadingMore={invitations.isLoadingMore}
-				loadMoreError={invitations.loadMoreError}
-				emptyMessage="No pending invitations."
+				columns={memberColumns}
+				rows={members}
+				rowHref={(member: StaffSummary) => memberHref(page.params.practiceId!, member.staffId)}
+				hasMore={false}
+				emptyMessage="No Staff yet."
 			/>
-		{:else}
-			<Skeleton variant="row" lines={2} />
-		{/if}
+		</div>
+	{:else}
+		<Skeleton variant="row" lines={6} label="Loading your Staff" />
+	{/if}
+
+	<Heading level={2} text="Pending invitations" />
+	{#if isLoaded}
+		<DataTable
+			columns={invitationColumns}
+			rows={invitations.items}
+			rowActions={{ label: 'Actions', content: invitationActions }}
+			hasMore={invitations.hasMore}
+			onLoadMore={() => invitations.loadMore()}
+			isLoadingMore={invitations.isLoadingMore}
+			loadMoreError={invitations.loadMoreError}
+			emptyMessage="No pending invitations."
+		/>
+	{:else}
+		<Skeleton variant="row" lines={2} />
 	{/if}
 {/snippet}
 
-<ListPage title="Staff" {outcome} {actions} {content} />
+{#if failure}
+	<FailedRead kind={failure} />
+{:else}
+	<ListPage title="Staff" {outcome} {actions} {content} />
+{/if}
 
 <style>
 	@layer components {

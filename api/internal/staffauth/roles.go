@@ -15,15 +15,18 @@ var validRoles = map[string]bool{roleOwner: true, roleAdmin: true, "doula": true
 
 // The 403 sentences a role refusal writes, named once so the in-handler
 // RequireOwner/RequireOwnerOrAdmin and the mount-level requireAnyRole can
-// never drift onto two wordings for the same refusal (#1031).
+// never drift onto two wordings for the same refusal (#1031). Each is the
+// sentence the screen shows as it is (#1884), so it speaks to the reader
+// and names who can, with the role lowercase as the Voice section's rule 2
+// writes a person not yet known (#2261).
 const (
-	msgOwnerOnlyRefused    = "only a Practice Owner can do that"
-	msgOwnerOrAdminRefused = "only a Practice Owner or Admin can do that"
+	msgOwnerOnlyRefused    = "You need to be an owner of this Practice to do that."
+	msgOwnerOrAdminRefused = "You need to be an owner or admin of this Practice to do that."
 	// msgRoleRefusedFallback is what refusalMessage says for a role list
 	// it has no seat-naming sentence for. It names no seat, so it stays
 	// true for any list, including one a future route declares -- a
 	// wrong seat in the sentence would be worse than none.
-	msgRoleRefusedFallback = "not permitted to do this"
+	msgRoleRefusedFallback = "Your role at this Practice does not let you do that."
 )
 
 // refusalMessage is the 403 sentence for a caller who holds none of roles.

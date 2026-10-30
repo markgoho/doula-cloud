@@ -57,13 +57,16 @@ const [liveInvitation, lapsedInvitation] = invitations;
 interface MockOptions {
 	roster?: { members: typeof members; invitations: typeof invitations };
 	listOk?: boolean;
+	// What a refused roster read answers with, in place of the 403; an
+	// Error is a read that never reached the server.
+	listResponse?: Response | Error;
 	revokeResponse?: Response;
 }
 
 // The API double is stateful: a successful revoke changes what the next
 // roster read returns, so a test can assert on the screen the Owner ends
 // up looking at rather than on the request that got her there.
-function mockApi({ roster = { members, invitations }, listOk = true, revokeResponse }: MockOptions = {}) {
+function mockApi({ roster = { members, invitations }, listOk = true, listResponse, revokeResponse }: MockOptions = {}) {
 	const state = structuredClone(roster);
 	apiFetchWithSession.mockImplementation((path: string) => {
 		if (path.endsWith('/revoke')) {
@@ -72,10 +75,11 @@ function mockApi({ roster = { members, invitations }, listOk = true, revokeRespo
 			state.invitations = state.invitations.filter((invitation) => invitation.invitationId !== invitationId);
 			return Promise.resolve(jsonResponse({}));
 		}
+		if (listResponse instanceof Error) return Promise.reject(listResponse);
 		return Promise.resolve(
 			listOk
 				? jsonResponse({ members: state.members, invitations: { items: state.invitations, hasMore: false } })
-				: textResponse('Server rejected the Staff list request')
+				: (listResponse ?? textResponse('Server rejected the Staff list request'))
 		);
 	});
 }
@@ -198,11 +202,33 @@ describe('staff screen', () => {
 		await expect.element(testPage.getByRole('table')).not.toBeInTheDocument();
 	});
 
-	it('shows an error notice when the roster fails to load', async () => {
+	// #2261: a Doula who types the address is refused the roster read, and
+	// the screen answers as Credits does -- the refusal page, with a way to
+	// her Practice -- rather than the API's own words under a heading and a
+	// link to invite somebody, which she is refused too.
+	it('draws the refusal page, with no invite link, when the roster read is refused', async () => {
 		await setup({ listOk: false });
 
-		await expect.element(testPage.getByText('Server rejected the Staff list request')).toBeVisible();
-		await expect.element(testPage.getByRole('table')).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('heading', { name: 'You cannot view this' })).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: 'Go to your Practice overview' })).toBeVisible();
+		expect(testPage.getByRole('link', { name: 'Invite a Staff member' }).elements()).toHaveLength(0);
+		expect(testPage.getByText('Server rejected the Staff list request').elements()).toHaveLength(0);
+		expect(testPage.getByRole('table').elements()).toHaveLength(0);
+	});
+
+	it('draws the problem page when the roster read fails on our side', async () => {
+		await setup({ listOk: false, listResponse: new Response('', { status: 500 }) });
+
+		await expect.element(testPage.getByRole('link', { name: 'Go to your Practice overview' })).toBeVisible();
+		expect(testPage.getByRole('heading', { name: 'You cannot view this' }).elements()).toHaveLength(0);
+		expect(testPage.getByRole('link', { name: 'Invite a Staff member' }).elements()).toHaveLength(0);
+	});
+
+	it('draws the problem page when the roster read never reaches the server', async () => {
+		await setup({ listOk: false, listResponse: new TypeError('Failed to fetch') });
+
+		await expect.element(testPage.getByRole('link', { name: 'Go to your Practice overview' })).toBeVisible();
+		expect(testPage.getByRole('heading', { name: 'You cannot view this' }).elements()).toHaveLength(0);
 	});
 
 	it('removes a revoked invitation from the pending group', async () => {

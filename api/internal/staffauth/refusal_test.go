@@ -36,9 +36,9 @@ func TestGatedRouter_MountGatedRefusalNamesTheSeat(t *testing.T) {
 	session := authntest.SeedSession(t, db.App, "refusal-doula")
 
 	for path, want := range map[string]string{
-		"owner-only":     "only a Practice Owner can do that",
-		"owner-or-admin": "only a Practice Owner or Admin can do that",
-		"admin-only":     "not permitted to do this",
+		"owner-only":     "You need to be an owner of this Practice to do that.",
+		"owner-or-admin": "You need to be an owner or admin of this Practice to do that.",
+		"admin-only":     "Your role at this Practice does not let you do that.",
 	} {
 		resp := postWithSession(t, srv.URL+"/practices/"+practiceID+"/"+path, session)
 		var body struct {
