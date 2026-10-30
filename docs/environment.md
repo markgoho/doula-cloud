@@ -385,11 +385,11 @@ cd app && bun run dev:full     # terminal 1
 bash scripts/stripe-listen.sh  # terminal 2
 ```
 
-`stripe-listen.sh` forwards straight to the BFF on `127.0.0.1:18080`, not through the vite proxy: a signature check reads the exact request bytes, and one hop fewer is one fewer thing to have rewritten them.
+`stripe-listen.sh` forwards straight to the BFF, not through the vite proxy: a signature check reads the exact request bytes, and one hop fewer is one fewer thing to have rewritten them. The BFF it forwards to is the worktree's own, on `127.0.0.1:<18080 + 100 × offset>`, where the offset is the number in the nearest `.port-offset` above the script, read the way `app/e2e/ports.ts` reads it ([#2201](https://github.com/markgoho/doula-cloud/issues/2201)). The main checkout has no file, so it is offset 0 and `18080`; offset 1 is `18180`. The script prints the address it chose. Run it from the same worktree as the `dev:full` it feeds.
 
-**All three local secrets are the same value, on purpose.** A single `stripe listen` session signs everything it forwards with its own one secret, whichever of `--forward-to`, `--forward-connect-to` or `--forward-thin-connect-to` the event goes to ([CLI reference](https://docs.stripe.com/cli/listen)). The secret does not change between restarts. Deployed, they really are three different secrets, because they come from three separately created destinations.
+**It runs two listeners.** One takes every snapshot event (`--all-snapshot`): the platform's go to `/api/stripe/webhook` (`--forward-to`) and the connected accounts' to `/api/stripe/connect-webhook` (`--forward-connect-to`). The other takes the one Accounts v2 thin event the account route handles, `v2.core.account[configuration.merchant].capability_status_updated`, to `/api/stripe/account-webhook`. It names that event in `--events` and forwards it with `--forward-to`. Since Stripe CLI 1.55, one session cannot send snapshot and thin events to different places. `--thin-events` and `--forward-thin-to` are deprecated, and the CLI says "Snapshot and thin events cannot share one destination". A `--forward-to` with none of `--events`, `--all-snapshot` or `--all-thin` is refused, and a thin event that no listener names is never delivered.
 
-Thin events need naming. `stripe listen` forwards nothing to `--forward-thin-connect-to` unless the event type is also listed in `--thin-events`; `stripe-listen.sh` already passes the one type the account route handles.
+**All three local secrets are the same value, on purpose.** The CLI signs everything it forwards with one secret, which belongs to its login and not to a session. Both listeners print the same secret, and it does not change between restarts. Deployed, they really are three different secrets, because they come from three separately created destinations.
 
 Read the current one back at any time with `stripe listen --print-secret`.
 

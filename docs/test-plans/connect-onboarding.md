@@ -27,7 +27,7 @@ Claude in Chrome works from a session in WSL, and the Windows Chrome reaches the
 ## Before starting
 
 - `bun run dev:full` in `app/`.
-- `./scripts/stripe-listen.sh`. **Check the secret it prints equals `STRIPE_WEBHOOK_SECRET` in `app/.env.local`**; all three webhook secrets there hold the one session secret locally. Read the log for `<--` lines, not `-->`: a `-->` with no `<--` means the event arrived and was never delivered.
+- `./scripts/stripe-listen.sh`, from the same worktree as `dev:full`. It forwards to that worktree's own BFF, `18080 + 100 × <.port-offset>` (no file is offset 0), and prints the address it chose; check that it is the port your `dev:full` listens on ([`docs/environment.md`](../environment.md#local-webhook-delivery)). **Check the secret it prints equals `STRIPE_WEBHOOK_SECRET` in `app/.env.local`**; all three webhook secrets there hold the CLI's one secret locally, and both of the script's listeners print it. Read the log for `<--` lines, not `-->`: a `-->` with no `<--` means the event arrived and was never delivered.
 - **Check `app/.env.local` has `STRIPE_PUBLISHABLE_KEY=pk_test_…`** ([`docs/environment.md`](../environment.md)) before `dev:full` starts. Without it the BFF refuses the Client's pay control in the portal ("Your Practice cannot take this payment yet."), even on an active account, and the Client can pay only on Stripe's hosted Invoice page. Adding it later means restarting the BFF.
 - The stack's Postgres is torn down with its volumes (`app/e2e/stack.ts`), so **a connected account does not survive the session that made it.** Do the onboarding after the day's last `dev:full` start, inside the session that needs it.
 
