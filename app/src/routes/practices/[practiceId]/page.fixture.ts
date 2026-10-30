@@ -26,7 +26,9 @@
  * Client yet (`asOwnerWithNoClient`). The first two differ by session and
  * share one `respond`. The third differs by what the Practice holds, so
  * it has a `respond` of its own; the comment beside it says which way
- * that went and why the Doula's empty tree is not a fourth subject.
+ * that went and why the Doula's empty tree is not a fourth subject. The
+ * contractor Doula's empty tree is one (#2273, `asContractorWithNoClient`):
+ * it draws her Offers in place of the Owner's words and link.
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { Offer } from '#lib/offer.js';
@@ -295,6 +297,32 @@ export const asOwnerWithNoClient: RouteVariant = {
 };
 
 /*
+ * The empty Overview of a contractor Doula who holds neither Owner nor
+ * Admin (#2273): a tree of its own, not a subset of the Owner's above.
+ * She is refused a Client of her own (ADR-0017), so in place of the
+ * Owner's words, Credit sentence and **Add your first Client** it says
+ * that work reaches her as an Offer, and draws the Offers that wait on
+ * her, with Accept and Decline. Her session is the base's Doula with
+ * `isContractor` set; `isAmbientContractor` is what the page branches on.
+ *
+ * Which way `respond` went: its own, for the one path that differs,
+ * `/clients/count` with no record, and every other path handed to the
+ * base's function, as `asOwnerWithNoClient` does and for the same
+ * reason. The base's `/offers` holds one open Offer, so the inbox is
+ * measured with a row in it.
+ */
+export const asContractorWithNoClient: RouteVariant = {
+	name: 'The Practice landing hub, as a contractor Doula with no Client yet',
+	pageData: {
+		session: { ...practiceSession(['doula'], { practiceName }).session, isContractor: true }
+	},
+	respond: (path) => {
+		if (path.includes('/clients/count')) return jsonResponse({ records: 0, active: 0 });
+		return respondForPopulatedPractice(path);
+	}
+};
+
+/*
  * The Getting paid card with no Stripe account (#1589): a sentence and one
  * link in place of a Badge, and the longest words that card carries (the
  * Owner's four sentences). The base answers `onboarding_incomplete`, so this
@@ -379,5 +407,5 @@ export const fixture: RouteFixture = {
 	pageData: practiceSession(['doula'], { practiceName }),
 	respond: respondForPopulatedPractice,
 	readyText: 'Overview',
-	variants: [asOwner, asOwnerWithNoClient, asOwnerNotConnected, asOwnerWithNoSecondFactor, typical]
+	variants: [asOwner, asOwnerWithNoClient, asContractorWithNoClient, asOwnerNotConnected, asOwnerWithNoSecondFactor, typical]
 };

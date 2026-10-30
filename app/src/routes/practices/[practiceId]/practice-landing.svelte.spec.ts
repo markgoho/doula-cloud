@@ -11,7 +11,14 @@ import Page from './+page.svelte';
 // root layout.
 import '#lib/styles/app.css';
 import { toApiResponder, toPageState } from '../../routeFixture.js';
-import { asOwner, asOwnerWithNoClient, fixture, offers, practiceName } from './page.fixture.js';
+import {
+	asContractorWithNoClient,
+	asOwner,
+	asOwnerWithNoClient,
+	fixture,
+	offers,
+	practiceName
+} from './page.fixture.js';
 
 // Rendering `+page.svelte` directly bypasses `+layout.svelte`, which is the
 // only place that calls this in the real app -- without it every layout
@@ -74,6 +81,7 @@ interface SetupOptions {
 	// A Promise holds that read open until the test settles it (#2245).
 	overrides?: Record<string, Response | Promise<Response>>;
 	secondFactor?: boolean;
+	isContractor?: boolean;
 }
 
 // An Owner who is also a Doula, the founder of a small agency and the
@@ -82,11 +90,12 @@ async function setup({
 	roles = ['owner', 'doula'],
 	clients = [{ clientId: 'c1' }],
 	overrides = {},
-	secondFactor
+	secondFactor,
+	isContractor = false
 }: SetupOptions = {}) {
 	// The Membership (roles, practiceName) comes off page.data.session
 	// (#835), not a fetch this mock has to answer.
-	pageState.data = { session: { practiceId, practiceName, roles, isContractor: false, secondFactor } };
+	pageState.data = { session: { practiceId, practiceName, roles, isContractor, secondFactor } };
 	const answers: Record<string, Response | Promise<Response>> = {
 		// The declined Offer has no counterpart in the fixture, which
 		// answers `/offers` with only the still-open one -- so it is
@@ -555,6 +564,53 @@ describe('the Practice landing page', () => {
 		// else) -- and an action is a link or a button, so both are counted.
 		expect(testPage.getByRole('link').elements()).toHaveLength(1);
 		expect(testPage.getByRole('button').elements()).toHaveLength(0);
+	});
+
+	/*
+	 * #2273: a contractor who holds neither Owner nor Admin originates
+	 * nothing (ADR-0017), so the BFF refuses her a Client of her own. Her
+	 * empty Overview says how work reaches her instead, offers no act she
+	 * is refused, says nothing of the agency's Credits, and never hides
+	 * an Offer that waits on her.
+	 */
+	const offerSentence = 'Work at this Practice reaches you as an Offer. Once you accept one, your work with the Client is here.';
+
+	it('tells a contractor with no Client that work reaches her as an Offer, and offers no Client to add', async () => {
+		await setup({
+			roles: ['doula'],
+			isContractor: true,
+			clients: [],
+			overrides: { offers: jsonResponse({ items: [] }) }
+		});
+
+		await expect.element(testPage.getByText(offerSentence, { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText('You have no offers.')).toBeVisible();
+		expect(testPage.getByRole('link', { name: 'Add your first Client' }).elements()).toHaveLength(0);
+		expect(testPage.getByText(/Nothing is here yet/).elements()).toHaveLength(0);
+		expect(testPage.getByText(/Credit/).elements()).toHaveLength(0);
+		expect(testPage.getByText(/your Practice/).elements()).toHaveLength(0);
+	});
+
+	it('shows a contractor with no Client her open Offer, with Accept and Decline', async () => {
+		await setup({ roles: ['doula'], isContractor: true, clients: [] });
+
+		await expect.element(testPage.getByText(offerSentence, { exact: true })).toBeVisible();
+		await expect
+			.element(testPage.getByRole('heading', { level: 2, name: 'Offers awaiting your answer' }))
+			.toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Accept' })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Decline' })).toBeVisible();
+	});
+
+	it('draws the contractor empty Overview from the fixture that sweeps her', async () => {
+		const realized = { ...fixture, ...asContractorWithNoClient };
+		Object.assign(pageState, toPageState(realized));
+		apiFetchWithSession.mockImplementation(toApiResponder(realized));
+		await render(Page, {});
+
+		await expect.element(testPage.getByText(offerSentence, { exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Accept' })).toBeVisible();
+		expect(testPage.getByRole('link', { name: 'Add your first Client' }).elements()).toHaveLength(0);
 	});
 
 	/*
