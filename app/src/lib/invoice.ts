@@ -539,7 +539,8 @@ export const billableContractStatus = 'signed';
  * only hiding it. */
 export function unbillableContractMessage(status: string): string {
 	if (status === 'voided') {
-		return 'This Contract has been voided. Invoicing is unavailable until Staff issues a new Contract.';
+		// The reader is the Staff member who would send it (#2221).
+		return 'This Contract is voided. To invoice again, send a new Contract.';
 	}
 	return 'Invoicing is unavailable until the Client signs this Contract.';
 }
