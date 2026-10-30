@@ -30,7 +30,14 @@
 		type WaitingOnReply
 	} from '#lib/practiceLanding.js';
 	import { CONNECT_STATUS_BADGES } from '#lib/payments.js';
-	import { EVERY_ROLE_SENTENCE, hasEveryRole, isDoula, isOwner, isOwnerOrAdmin } from '#lib/roles.js';
+	import {
+		EVERY_ROLE_SENTENCE,
+		hasEveryRole,
+		isAmbientContractor,
+		isDoula,
+		isOwner,
+		isOwnerOrAdmin
+	} from '#lib/roles.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import DoorLink from '#lib/components/atoms/DoorLink.svelte';
 	import { startHref } from './clients/new/intake.js';
@@ -278,6 +285,15 @@
 	}
 </script>
 
+{#snippet offerInbox()}
+	<Heading level={2} variant="section" text="Offers awaiting your answer" />
+	<Text
+		text="Work you have been offered. Accepting puts you on the birth; declining is final for that offer."
+		tone="variant"
+	/>
+	<OfferInbox offers={landing!.openOffers} onDecide={handleDecide} />
+{/snippet}
+
 {#snippet primary()}
 	<!--
 		#1533: first in the column, where she reads it before her work. Only
@@ -293,14 +309,7 @@
 	<!-- An Offer goes to a Doula (#2141): a Staff member without the role
 	     can never be offered work, so an inbox that could only ever say
 	     "You have no offers." is not drawn for her. -->
-	{#if isDoula(session)}
-		<Heading level={2} variant="section" text="Offers awaiting your answer" />
-		<Text
-			text="Work you have been offered. Accepting puts you on the birth; declining is final for that offer."
-			tone="variant"
-		/>
-		<OfferInbox offers={landing!.openOffers} onDecide={handleDecide} />
-	{/if}
+	{#if isDoula(session)}{@render offerInbox()}{/if}
 
 	<!--
 		#455: computed from thread authorship (the latest Message on the
@@ -536,40 +545,57 @@
 		untrue for an Owner who attends no births. One set of words is true
 		for the two of them.
 	-->
-	<stack-l space="var(--space-4)">
+	{#if isAmbientContractor(session)}
 		<!--
-			#290, moved here from signup by #2049: the person who set the
-			Practice up holds every role, and is told so on the first screen
-			she lands on. Only for a person who does: an invited Doula or
-			Admin on an empty Practice holds the roles she was given.
+			#2273: a contractor who holds neither Owner nor Admin originates
+			nothing (ADR-0017), so the BFF refuses her a Client of her own,
+			and the Practice's Credits are not hers to spend. Her empty
+			Overview says how work reaches her and draws the Offers that wait
+			on her, which an empty hub would otherwise hide: she is the person
+			whose work arrives as one.
 		-->
-		{#if hasEveryRole(session)}
-			<Text text={EVERY_ROLE_SENTENCE} />
-		{/if}
-		<Text
-			text="Nothing is here yet, because no Client is. Add one and this becomes the Client's Birth Plan, the Visits with the Client, and the Contract and Invoices between the Client and your Practice."
-		/>
-		<!--
-			What uses a Credit, and how many the Practice has, said at the
-			start point (#1612, GOV.UK's "Start using a service"): its own
-			paragraph, before the link. A fact, not a link and not a live
-			region, so the screen keeps its one action (ADR-0048). A person
-			who cannot read the balance (ADR-0008), or whose read of it
-			failed, gets the sentence with no number. No price: the Credits
-			screen is the one place that says one (#285).
-		-->
-		<Text text={creditSentence} />
-		<!--
-			Straight to the name question, not through the search (#1609,
-			ADR-0017's amendment of 2026-10-02). This snippet only shows while
-			the Practice holds no Client record, and then the search can find
-			nobody: it would be two presses and a screen with no result. The
-			collision check at the save still runs. From the first Client on,
-			the search is the only door again. `from` sends the name
-			question's Back here.
-		-->
-		<Link href={startHref(page.params.practiceId!, 'overview')} label="Add your first Client" variant="start" />
-	</stack-l>
+		<stack-l space="var(--space-4)">
+			<Text
+				text="Work at this Practice reaches you as an Offer. Once you accept one, your work with the Client is here."
+			/>
+			{@render offerInbox()}
+		</stack-l>
+	{:else}
+		<stack-l space="var(--space-4)">
+			<!--
+				#290, moved here from signup by #2049: the person who set the
+				Practice up holds every role, and is told so on the first screen
+				she lands on. Only for a person who does: an invited Doula or
+				Admin on an empty Practice holds the roles she was given.
+			-->
+			{#if hasEveryRole(session)}
+				<Text text={EVERY_ROLE_SENTENCE} />
+			{/if}
+			<Text
+				text="Nothing is here yet, because no Client is. Add one and this becomes the Client's Birth Plan, the Visits with the Client, and the Contract and Invoices between the Client and your Practice."
+			/>
+			<!--
+				What uses a Credit, and how many the Practice has, said at the
+				start point (#1612, GOV.UK's "Start using a service"): its own
+				paragraph, before the link. A fact, not a link and not a live
+				region, so the screen keeps its one action (ADR-0048). A person
+				who cannot read the balance (ADR-0008), or whose read of it
+				failed, gets the sentence with no number. No price: the Credits
+				screen is the one place that says one (#285).
+			-->
+			<Text text={creditSentence} />
+			<!--
+				Straight to the name question, not through the search (#1609,
+				ADR-0017's amendment of 2026-10-02). This snippet only shows while
+				the Practice holds no Client record, and then the search can find
+				nobody: it would be two presses and a screen with no result. The
+				collision check at the save still runs. From the first Client on,
+				the search is the only door again. `from` sends the name
+				question's Back here.
+			-->
+			<Link href={startHref(page.params.practiceId!, 'overview')} label="Add your first Client" variant="start" />
+		</stack-l>
+	{/if}
 {/snippet}
 
 <!--
