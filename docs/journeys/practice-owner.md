@@ -175,7 +175,7 @@ Until this is built, the whole roster is unbuildable through the UI, and every P
 
 ### Stage 9 — Edit Plan Templates for the whole Practice
 
-**Thinking**: "Add the hospital-transfer question to every birth plan." **Pain points**: adding a question takes three screens, not one: the Plan Templates list, the kind of answer, and the new question's own page, whose save returns her to the list. That is the founder's decision on [#2193](https://github.com/markgoho/doula-cloud/issues/2193) (2026-10-29): GOV.UK's "Add another" shape, one question per page, so that no screen shows every question's controls at once.
+**Thinking**: "Add the hospital-transfer question to every birth plan." **Pain points**: adding a question takes three screens, not one: the Plan Templates list, the kind of answer, and the new question's own page, whose save returns her to the list. That is the founder's decision on [#2193](https://github.com/markgoho/doula-cloud/issues/2193) (2026-10-29): GOV.UK's "Add another" shape, one question per page, so that no screen shows every question's controls at once. The list counts 4 decisions however many questions the Practice writes, because a list of the Practice's own records is one decision (the founder's decision on #2193, 2026-10-30, in the [README](README.md)'s count rules).
 
 **Budget**:
 
