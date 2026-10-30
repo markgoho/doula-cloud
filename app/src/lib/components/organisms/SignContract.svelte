@@ -40,7 +40,7 @@
 			}
 			if (!isAttestation) {
 				errors.push({
-					message: 'Confirm that you have read the Contract and are signing it electronically',
+					message: 'Confirm that you have read the contract and are signing it electronically',
 					targetId: attestationFieldId
 				});
 			}
@@ -62,8 +62,8 @@
 		<stack-l space="var(--space-field)">
 			<Heading level={2} id="esign-disclosure-heading" text="Electronic signature disclosure" />
 			<stack-l space="var(--space-related)">
-				<Text text="By choosing to sign electronically, you consent to sign this Contract using an electronic signature." />
-				<Text text="You have the right to receive a paper copy of this Contract instead. Contact your Practice if you'd like one." />
+				<Text text="By choosing to sign electronically, you consent to sign this contract using an electronic signature." />
+				<Text text="You have the right to receive a paper copy of this contract instead. Contact your Practice if you'd like one." />
 				<Text text="You may withdraw your consent to sign electronically at any time before you sign, with no penalty." />
 			</stack-l>
 			<cluster-l space="var(--space-3)">
@@ -92,7 +92,7 @@
 		</LabeledField>
 		<LabeledField
 			id={attestationFieldId}
-			label="I have read this Contract and I am signing it electronically"
+			label="I have read this contract and I am signing it electronically"
 			orientation="inline"
 			error={signSubmission.errorFor(attestationFieldId)}
 		>

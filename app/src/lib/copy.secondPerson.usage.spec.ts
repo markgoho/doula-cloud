@@ -88,7 +88,7 @@ const CLIENT_NOUN: Rule = {
 	id: 'the Client named as a noun on a screen the Client reads',
 	pattern: /\bClients?\b/,
 	globs: CLIENT_READ,
-	instead: 'say "you" and "your" ("your Contract", not "the Client\'s Contract")'
+	instead: 'say "you" and "your" ("your contract", not "the Client\'s contract")'
 };
 
 const STAFF_NOUN: Rule = {

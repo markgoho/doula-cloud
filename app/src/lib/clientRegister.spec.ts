@@ -91,7 +91,7 @@ describe('contractStatusLabel', () => {
 
 describe('contractVoidedNotice', () => {
 	it('names the Practice and makes no claim about an Invoice', () => {
-		expect(contractVoidedNotice('Rooted Birth Collective')).toBe('Rooted Birth Collective ended this Contract.');
+		expect(contractVoidedNotice('Rooted Birth Collective')).toBe('Rooted Birth Collective ended this contract.');
 	});
 });
 

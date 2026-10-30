@@ -1326,15 +1326,15 @@ const PORTAL_EMPTY_ROUTES: SeededRoute<PortalSeed>[] = [
 		key: 'portal/engagements/[engagementId]/birth-plan (empty)',
 		archetype: 'G',
 		url: (s) => `/portal/engagements/${s.engagementId}/birth-plan`,
-		h1: 'Birth Plan',
-		reach: (p) => expect(p.getByText('No Birth Plan has been created for your care yet.')).toBeVisible()
+		h1: 'Birth plan',
+		reach: (p) => expect(p.getByText('No birth plan has been created for your care yet.')).toBeVisible()
 	},
 	{
 		key: 'portal/engagements/[engagementId]/contract (empty)',
 		archetype: 'G',
 		url: (s) => `/portal/engagements/${s.engagementId}/contract`,
 		h1: 'Contract',
-		reach: (p) => expect(p.getByText('No Contract has been sent for your care yet.')).toBeVisible()
+		reach: (p) => expect(p.getByText('No contract has been sent for your care yet.')).toBeVisible()
 	}
 ];
 
@@ -1349,7 +1349,7 @@ const PORTAL_ROUTES: SeededRoute<PortalSeed>[] = [
 		key: 'portal/engagements/[engagementId]/birth-plan',
 		archetype: 'G',
 		url: (s) => `/portal/engagements/${s.engagementId}/birth-plan`,
-		h1: 'Birth Plan'
+		h1: 'Birth plan'
 	},
 	{
 		key: 'portal/engagements/[engagementId]/contract',

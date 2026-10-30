@@ -282,7 +282,7 @@ describe('clientActivityLedgerColumns (#708)', () => {
 	it('says the register phrase, not the raw action, for the row the ticket names', () => {
 		const what = clientActivityLedgerColumns()[1];
 
-		expect(what.accessor(entry({ action: 'birth_plan_edited' }))).toBe('Your Birth Plan was updated.');
+		expect(what.accessor(entry({ action: 'birth_plan_edited' }))).toBe('Your birth plan was updated.');
 	});
 
 	it("ignores a detail sentence, which is the staff register's own prose", () => {
@@ -300,7 +300,7 @@ describe('clientActivityLedgerColumns (#708)', () => {
 
 		expect(
 			what.accessor(entry({ action: 'birth_plan_edited', subjectName: 'Renata Alvarez' }))
-		).toBe('Your Birth Plan was updated.');
+		).toBe('Your birth plan was updated.');
 	});
 
 	it('refuses an action the register does not phrase', () => {

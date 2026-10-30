@@ -32,7 +32,7 @@
 		try {
 			instance = await loadClientBirthPlan(apiFetchWithSession, page.params.engagementId!);
 		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Failed to load Birth Plan';
+			error = error_ instanceof Error ? error_.message : 'Failed to load birth plan';
 		}
 	});
 
@@ -48,7 +48,7 @@
 			instance = await acknowledgeClientBirthPlan(apiFetchWithSession, page.params.engagementId!);
 			isAcknowledgedHere = true;
 		} catch (error_) {
-			acknowledgeError = error_ instanceof Error ? error_.message : 'Failed to confirm you read this Birth Plan';
+			acknowledgeError = error_ instanceof Error ? error_.message : 'Failed to confirm you read this birth plan';
 		} finally {
 			isAcknowledging = false;
 		}
@@ -66,7 +66,7 @@
 			const blob = await downloadClientBirthPlanPdf(apiFetchWithSession, page.params.engagementId!);
 			triggerBlobDownload(blob, 'birth-plan.pdf');
 		} catch (error_) {
-			downloadError = error_ instanceof Error ? error_.message : 'Failed to download Birth Plan';
+			downloadError = error_ instanceof Error ? error_.message : 'Failed to download birth plan';
 		} finally {
 			isDownloadingPdf = false;
 		}
@@ -87,12 +87,12 @@
 	/>
 {:else}
 	<DocumentPage
-		title="Birth Plan"
+		title="Birth plan"
 		serviceName={page.data.practiceName}
 		backHref={resolve('/portal/(authenticated)/engagements/[engagementId]', { engagementId: page.params.engagementId! })}
 		loadError={error || undefined}
-		loading={instance === undefined ? 'Loading Birth Plan' : undefined}
-		empty={instance === null ? 'No Birth Plan has been created for your care yet.' : undefined}
+		loading={instance === undefined ? 'Loading birth plan' : undefined}
+		empty={instance === null ? 'No birth plan has been created for your care yet.' : undefined}
 	>
 		{#snippet content()}
 			<!-- `content` renders only once the Template's own states are past,
@@ -104,7 +104,7 @@
 				<cluster-l class="no-print" space="var(--space-3)">
 					<Button label="Print" variant="secondary" onClick={() => print()} />
 					<Button
-						label="Download Birth Plan (PDF)"
+						label="Download birth plan (PDF)"
 						icon="file-text"
 						variant="secondary"
 						onClick={handleDownloadPdf}

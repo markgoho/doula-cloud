@@ -46,7 +46,7 @@ describe('Client-portal Birth Plan (#311)', () => {
 	it('shows the Birth Plan on an Engagement that calls for one', async () => {
 		await setup();
 
-		await expect.element(page.getByRole('heading', { name: 'Birth Plan' })).toBeVisible();
+		await expect.element(page.getByRole('heading', { name: 'Birth plan' })).toBeVisible();
 	});
 
 	// The applicable-but-not-yet-created case: a 404 from the real
@@ -59,7 +59,7 @@ describe('Client-portal Birth Plan (#311)', () => {
 		});
 
 		await expect
-			.element(page.getByText('No Birth Plan has been created for your care yet.'))
+			.element(page.getByText('No birth plan has been created for your care yet.'))
 			.toBeVisible();
 	});
 
@@ -102,7 +102,7 @@ async function setupDownload(pdfResponse: Response) {
 describe('Client-portal Birth Plan PDF download (#306)', () => {
 	it('offers a download of the Birth Plan, reachable by keyboard and naming the PDF', async () => {
 		await setupDownload(new Response(new Blob(['%PDF-1.4'], { type: 'application/pdf' }), { status: 200 }));
-		const download = page.getByRole('button', { name: 'Download Birth Plan (PDF)' });
+		const download = page.getByRole('button', { name: 'Download birth plan (PDF)' });
 		await expect.element(download).toBeVisible();
 
 		await download.click();
@@ -112,7 +112,7 @@ describe('Client-portal Birth Plan PDF download (#306)', () => {
 
 	it('reports a failed PDF fetch in words rather than swallowing it', async () => {
 		await setupDownload(new Response('no birth plan found for this engagement', { status: 500 }));
-		await page.getByRole('button', { name: 'Download Birth Plan (PDF)' }).click();
+		await page.getByRole('button', { name: 'Download birth plan (PDF)' }).click();
 
 		await expect.element(page.getByRole('alert')).toHaveTextContent('no birth plan found for this engagement');
 	});
@@ -173,8 +173,8 @@ describe('Client-portal Birth Plan names the screen in every state (#1574)', () 
 	it('while it loads', async () => {
 		await setup({ respond: () => new Promise<Response>(() => {}) });
 
-		await expect.element(page.getByRole('status', { name: 'Loading Birth Plan' })).toBeVisible();
-		await expect.element(page.getByRole('heading', { level: 1, name: 'Birth Plan' })).toBeVisible();
+		await expect.element(page.getByRole('status', { name: 'Loading birth plan' })).toBeVisible();
+		await expect.element(page.getByRole('heading', { level: 1, name: 'Birth plan' })).toBeVisible();
 		expect(page.getByRole('heading', { level: 1 }).elements()).toHaveLength(1);
 	});
 
@@ -182,21 +182,21 @@ describe('Client-portal Birth Plan names the screen in every state (#1574)', () 
 		await setup({ respond: () => new Response('the plan could not be read', { status: 500 }) });
 
 		await expect.element(page.getByText('the plan could not be read')).toBeVisible();
-		await expect.element(page.getByRole('heading', { level: 1, name: 'Birth Plan' })).toBeVisible();
+		await expect.element(page.getByRole('heading', { level: 1, name: 'Birth plan' })).toBeVisible();
 		expect(page.getByRole('heading', { level: 1 }).elements()).toHaveLength(1);
 	});
 
 	it('falls back to a generic sentence when the failure is not an Error', async () => {
 		await setup({ respond: () => Promise.reject('nope') });
 
-		await expect.element(page.getByText('Failed to load Birth Plan')).toBeVisible();
+		await expect.element(page.getByText('Failed to load birth plan')).toBeVisible();
 	});
 
 	it('when none has been created yet', async () => {
 		await setup({ respond: () => new Response('none', { status: 404 }) });
 
-		await expect.element(page.getByText('No Birth Plan has been created for your care yet.')).toBeVisible();
-		await expect.element(page.getByRole('heading', { level: 1, name: 'Birth Plan' })).toBeVisible();
+		await expect.element(page.getByText('No birth plan has been created for your care yet.')).toBeVisible();
+		await expect.element(page.getByRole('heading', { level: 1, name: 'Birth plan' })).toBeVisible();
 		expect(page.getByRole('heading', { level: 1 }).elements()).toHaveLength(1);
 	});
 

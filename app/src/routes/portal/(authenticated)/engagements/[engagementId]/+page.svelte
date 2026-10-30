@@ -226,7 +226,7 @@
 		<DoorLink
 			href={routes.invoices}
 			label={INVOICES_HEADING}
-			description="Each Invoice for your care, and the way to pay one that is due."
+			description="Each invoice for your care, and the way to pay one that is due."
 		/>
 	</div>
 {/snippet}

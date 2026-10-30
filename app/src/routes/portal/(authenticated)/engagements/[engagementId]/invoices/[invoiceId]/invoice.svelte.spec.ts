@@ -83,7 +83,7 @@ describe('Client-portal Invoice (#1564)', () => {
 		await expect
 			.element(
 				page.getByText(
-					`Your Practice collects this Invoice directly. Quote Invoice ${byHandInvoice.reference} when you pay.`
+					`Your Practice collects this invoice directly. Quote invoice ${byHandInvoice.reference} when you pay.`
 				)
 			)
 			.toBeVisible();
@@ -100,7 +100,7 @@ describe('Client-portal Invoice (#1564)', () => {
 		await expect.element(page.getByText('How you paid')).toBeVisible();
 		await expect.element(page.getByText('Bank transfer')).toBeVisible();
 		expect(document.querySelectorAll('[data-payment-element-mount]')).toHaveLength(0);
-		expect(page.getByText(/Quote Invoice/).elements()).toHaveLength(0);
+		expect(page.getByText(/Quote invoice/).elements()).toHaveLength(0);
 		expect(apiFetchWithSession).not.toHaveBeenCalledWith(expect.stringContaining('/payment'));
 	});
 
@@ -121,7 +121,7 @@ describe('Client-portal Invoice (#1564)', () => {
 	it('falls back to a generic sentence when the failure is not an Error', async () => {
 		await setupInvoice(() => Promise.reject('nope'));
 
-		await expect.element(page.getByText('Failed to load Invoice')).toBeVisible();
+		await expect.element(page.getByText('Failed to load invoice')).toBeVisible();
 	});
 
 	// #1574: the Invoice has no empty state -- a missing Invoice is a load
@@ -130,7 +130,7 @@ describe('Client-portal Invoice (#1564)', () => {
 	it('names the screen with one h1 while it loads', async () => {
 		await setupInvoice(() => new Promise<Response>(() => {}));
 
-		await expect.element(page.getByRole('status', { name: 'Loading Invoice' })).toBeVisible();
+		await expect.element(page.getByRole('status', { name: 'Loading invoice' })).toBeVisible();
 		await expect.element(page.getByRole('heading', { level: 1, name: 'Invoices' })).toBeVisible();
 		expect(page.getByRole('heading', { level: 1 }).elements()).toHaveLength(1);
 	});
@@ -138,7 +138,7 @@ describe('Client-portal Invoice (#1564)', () => {
 	it('names the screen with one h1 when the Invoice cannot be read', async () => {
 		await setupInvoice(() => Promise.reject('nope'));
 
-		await expect.element(page.getByText('Failed to load Invoice')).toBeVisible();
+		await expect.element(page.getByText('Failed to load invoice')).toBeVisible();
 		await expect.element(page.getByRole('heading', { level: 1, name: 'Invoices' })).toBeVisible();
 		expect(page.getByRole('heading', { level: 1 }).elements()).toHaveLength(1);
 	});
@@ -215,7 +215,7 @@ describe('paying a Stripe-rail Invoice in our own chrome (#1020)', () => {
 		await page.getByRole('button', { name: 'Pay $3,350.00' }).click();
 
 		await expect
-			.element(page.getByText('Your payment was sent. This Invoice will show as Paid once it is confirmed.'))
+			.element(page.getByText('Your payment was sent. This invoice will show as Paid once it is confirmed.'))
 			.toBeVisible();
 		expect(stripeDouble.stripe.confirmPayment).toHaveBeenCalledWith({
 			elements: stripeDouble.elements,
