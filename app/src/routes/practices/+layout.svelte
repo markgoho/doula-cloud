@@ -197,5 +197,14 @@
 	/>
 {/key}
 <main id="main" tabindex="-1">
-	{@render children()}
+	<!--
+		Keyed on the Practice (#2272): a move from one Practice's screen to
+		the same screen at another (the switcher's Overview to Overview)
+		reuses the route's component, so a page whose reads run on mount
+		kept the first Practice's Clients and activity under the second's
+		name. A new Practice is a new page, mounted from nothing.
+	-->
+	{#key practiceId}
+		{@render children()}
+	{/key}
 </main>
