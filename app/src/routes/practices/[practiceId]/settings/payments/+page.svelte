@@ -50,7 +50,13 @@
 		type PaymentTerms
 	} from '#lib/invoice.js';
 	import { takeOutcome } from '#lib/outcome.js';
-	import { billingModeOptions, billingModeSavedMessage, billingModeValue, paymentTermsValue } from './gettingPaid.js';
+	import {
+		billingModeOptions,
+		billingModeSavedMessage,
+		billingModeValue,
+		paymentTermsValue,
+		FROM_GETTING_PAID_QUERY
+	} from './gettingPaid.js';
 	import type { PracticeSession } from '../../+layout.js';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
@@ -380,8 +386,10 @@
 	   Practice passes through it on the way to `live`. */
 	let isPageFailed = $derived(website?.pageState === 'failed');
 
+	/* MO-G15 (#2196): the website's save brings her back here, so the
+	   detour costs her no hunt for the way back to Connect Stripe. */
 	let websiteHref = $derived(
-		resolve('/practices/[practiceId]/settings/website', { practiceId: page.params.practiceId! })
+		`${resolve('/practices/[practiceId]/settings/website', { practiceId: page.params.practiceId! })}?${FROM_GETTING_PAID_QUERY}`
 	);
 
 	/* What Stripe's hosted flow actually asks for, in the order it asks.

@@ -533,7 +533,11 @@ describe('payments settings screen: what #442 refuses and what it warns about', 
 				)
 			)
 			.toBeVisible();
-		await expect.element(testPage.getByRole('link', { name: 'Answer the website question' })).toBeVisible();
+		// MO-G15 (#2196): the link says where it came from, so the website's
+		// save brings her back here.
+		await expect
+			.element(testPage.getByRole('link', { name: 'Answer the website question' }))
+			.toHaveAttribute('href', '/practices/practice-1/settings/website?from=getting-paid');
 		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).not.toBeInTheDocument();
 	});
 
@@ -559,7 +563,9 @@ describe('payments settings screen: what #442 refuses and what it warns about', 
 		await expect
 			.element(testPage.getByText('The page published for this Practice is not loading', { exact: false }))
 			.toBeVisible();
-		await expect.element(testPage.getByRole('link', { name: 'Go to website settings' })).toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Go to website settings' }))
+			.toHaveAttribute('href', '/practices/practice-1/settings/website?from=getting-paid');
 		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).not.toBeInTheDocument();
 	});
 

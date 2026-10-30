@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { formatInstant } from '#lib/dates.js';
 import { jsonResponse } from '#lib/testResponse.js';
+import { captureLanding } from '#lib/testOutcome.js';
 import { expectOneFramedHeading } from '#lib/components/templates/pageFrame.testing.js';
 import type { PracticeWebsite } from '#lib/website.js';
 import Page from './+page.svelte';
@@ -28,6 +29,9 @@ const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
 	apiFetchWithSession
 }));
+
+const goto = vi.hoisted(() => vi.fn());
+vi.mock('$app/navigation', () => ({ goto }));
 
 const undeclared = undeclaredWebsite;
 
@@ -94,6 +98,70 @@ async function clickChange(changes: string) {
 
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
+	goto.mockReset();
+	pageState.url = new URL(fixture.url);
+});
+
+/*
+ * MO-G15 (#2196): Getting paid sends an Owner here before it offers
+ * Connect Stripe, and the save takes her back there, saying what it did,
+ * rather than leaving her to find her own way back.
+ */
+describe('website settings screen, reached from Getting paid', () => {
+	beforeEach(() => {
+		pageState.url = new URL(`${fixture.url}?from=getting-paid`);
+	});
+
+	it('returns her to Getting paid once her own site is saved', async () => {
+		const { puts } = await setup();
+		const landing = captureLanding(goto);
+
+		await testPage.getByRole('radio', { name: 'I have my own website or social profile' }).click();
+		await testPage.getByLabelText('The web address of your website or social profile').fill('instagram.com/okonkwobirth');
+		await testPage.getByRole('button', { name: 'Save' }).click();
+
+		await expect.poll(() => landing.href).toBe('/practices/practice-1/settings/payments');
+		expect(landing.message).toBe('Your website is saved. You can connect Stripe now.');
+		expect(puts.at(-1)).toMatchObject({ mode: 'own', ownUrl: 'instagram.com/okonkwobirth' });
+	});
+
+	it('returns her to Getting paid once her page is published', async () => {
+		await setup();
+		const landing = captureLanding(goto);
+
+		await testPage.getByRole('radio', { name: 'Publish a page for me' }).click();
+		await testPage.getByLabelText('What your Practice offers').fill('Birth and postpartum support in Monroe County.');
+		await testPage.getByLabelText('Your cancellation or refund policy').fill('The deposit is not refunded.');
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+		await testPage.getByRole('button', { name: 'Publish page' }).click();
+
+		await expect.poll(() => landing.href).toBe('/practices/practice-1/settings/payments');
+		expect(landing.message).toBe('Your page is published. You can connect Stripe now.');
+	});
+
+	it('stays on the questions when the save is refused', async () => {
+		await setup({ put: () => jsonResponse({ message: 'Something went wrong' }, 500) });
+
+		await testPage.getByRole('radio', { name: 'I have my own website or social profile' }).click();
+		await testPage.getByLabelText('The web address of your website or social profile').fill('instagram.com/okonkwobirth');
+		await testPage.getByRole('button', { name: 'Save' }).click();
+
+		await expect.element(testPage.getByText('Something went wrong').first()).toBeVisible();
+		expect(goto).not.toHaveBeenCalled();
+	});
+});
+
+describe('website settings screen, reached any other way', () => {
+	it('stays on the saved answers, with no navigation', async () => {
+		await setup();
+
+		await testPage.getByRole('radio', { name: 'I have my own website or social profile' }).click();
+		await testPage.getByLabelText('The web address of your website or social profile').fill('instagram.com/okonkwobirth');
+		await testPage.getByRole('button', { name: 'Save' }).click();
+
+		await expect.element(testPage.getByText('Last changed by Maya Chen on Aug 29, 2026')).toBeVisible();
+		expect(goto).not.toHaveBeenCalled();
+	});
 });
 
 describe('website settings screen', () => {
