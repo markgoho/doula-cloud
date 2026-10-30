@@ -1137,15 +1137,22 @@
 			'Failed to load contract'
 		);
 		isContractLoaded = true;
-		if (contractState.value === undefined) {
-			await ratesState.load(
-				async () => {
-					const { rates } = await loadRates(apiFetchWithSession, page.params.practiceId!);
-					return rates;
-				},
-				'Failed to load rates'
-			);
-		}
+		await loadRatesWhenStartable();
+	}
+
+	// The rates decide whether a Contract can be created, so they are read
+	// only while one can be: with no Contract, or with a voided one (#2260).
+	// Once, however many times the Contract is voided on this page.
+	async function loadRatesWhenStartable() {
+		const isStartable = contractState.value === undefined || contractState.value.status === 'voided';
+		if (!isStartable || ratesState.value !== undefined) return;
+		await ratesState.load(
+			async () => {
+				const { rates } = await loadRates(apiFetchWithSession, page.params.practiceId!);
+				return rates;
+			},
+			'Failed to load rates'
+		);
 	}
 
 	/*
@@ -1183,7 +1190,10 @@
 			() => createContract(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!),
 			'Failed to create contract'
 		);
-		if (isCreated && contractEditableFields.length > 0) openContractForm();
+		if (!isCreated) return;
+		if (contractEditableFields.length > 0) openContractForm();
+		// "Contract drafted" is on the ledger now, under who did it.
+		await loadActivity();
 	}
 
 	function handleContractValueChange(key: string, value: string) {
@@ -1234,6 +1244,10 @@
 			page.params.practiceId!,
 			page.params.engagementId!
 		);
+		// The ledger has a new entry, and a voided Contract can be followed
+		// by the next one (#2260), whose Create waits on the rates.
+		await loadRatesWhenStartable();
+		await loadActivity();
 	}
 
 	// #971: a Doula's own path to a void, offered exactly where
@@ -2448,6 +2462,26 @@
 	{@render planSectionBody('birth_plan', 'Birth Plan')}
 {/snippet}
 
+<!--
+	#1885: block over warn -- the reason a Contract cannot be created yet,
+	before the click, and the way out. Until the rates are known the action
+	stays withheld too: a click then could meet the same refusal. Shared by
+	the first Contract and the one after a void (#2260).
+-->
+{#snippet contractRateBlock()}
+	{#if ratesState.error}
+		<Notice variant="error" message={ratesState.error} />
+	{:else if isRateMissing}
+		<Notice variant="info" message={noRateMessage} />
+		{#if isPracticeOwnerOrAdmin}
+			<Link
+				href={resolve('/practices/[practiceId]/settings/rates', { practiceId: page.params.practiceId! })}
+				label={`Set the ${displayKind} rate`}
+			/>
+		{/if}
+	{/if}
+{/snippet}
+
 {#snippet contractSection()}
 	{#if isContractLoaded}
 		{#if contract && isContractFormOpen}
@@ -2533,6 +2567,24 @@
 					</cluster-l>
 				{/if}
 			</ContractStatus>
+			{#if contract.status === 'voided'}
+				<!--
+					#2260: a voided Contract ends nothing about the Engagement, and
+					the Invoices section below says to send a new one, so the
+					section offers the act its own message names, under the same
+					rate gate as the first (#1885). The API allows one Contract
+					that is not voided beside any number that are (#72); the new
+					Draft names the voided one's signed PDF as the earlier
+					Contract's (#1229). Create and void are each on the
+					Engagement's activity, with who did them.
+				-->
+				{@render contractRateBlock()}
+				{#if hasRateForKind}
+					<cluster-l space="var(--space-3)">
+						<Button label="Create a Draft Contract" variant="secondary" onClick={handleCreateContract} />
+					</cluster-l>
+				{/if}
+			{/if}
 		{:else}
 			<!--
 				#2003: the reader's own agreed fee, where the drawing puts it,
@@ -2546,22 +2598,7 @@
 			{#if contractError}
 				<Notice variant="error" message={contractError} />
 			{/if}
-			<!--
-				#1885: block over warn -- the reason before the click, and the
-				way out. Until the rates are known the action stays withheld
-				too: a click then could meet the same refusal.
-			-->
-			{#if ratesState.error}
-				<Notice variant="error" message={ratesState.error} />
-			{:else if isRateMissing}
-				<Notice variant="info" message={noRateMessage} />
-				{#if isPracticeOwnerOrAdmin}
-					<Link
-						href={resolve('/practices/[practiceId]/settings/rates', { practiceId: page.params.practiceId! })}
-						label={`Set the ${displayKind} rate`}
-					/>
-				{/if}
-			{/if}
+			{@render contractRateBlock()}
 			{#if contractInviteBlock}
 				<!--
 					#2146: a Client signs in the portal, so before there is a

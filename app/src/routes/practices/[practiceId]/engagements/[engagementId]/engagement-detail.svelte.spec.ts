@@ -1924,6 +1924,106 @@ describe('a recreated Draft names the PDF as a previous Contract\'s (#1229)', ()
 });
 
 /*
+ * #2260: once a Contract was voided, nothing on the page started the next
+ * one, although the Invoices section said to and the API allows one
+ * non-voided Contract beside voided ones (#72). The voided Contract's
+ * section now offers Create a Draft Contract under the gates the first
+ * one meets: a rate for the Engagement's kind.
+ */
+const voidedSigned: Contract = { ...fixtureContract, status: 'voided', hasSignedPdf: true };
+
+// The voided Contract on the first read, `rates` on /rates, and a new
+// Draft beside it on Create. The page reads the void's own answer, then
+// the Draft's.
+function mockVoidedThenNext(rates: Rate[], first: Contract = voidedSigned) {
+	respondFromFixture((path) => {
+		if (path.endsWith('/rates')) return jsonResponse({ rates });
+		return;
+	});
+	const fromFixture = apiFetchWithSession.getMockImplementation()!;
+	apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
+		if (path.endsWith('/contract/void')) return Promise.resolve(jsonResponse(voidedSigned));
+		if (path.endsWith('/contract') && init?.method === 'POST') {
+			return Promise.resolve(jsonResponse(draftOf({ hasSignedPdf: true })));
+		}
+		if (path.endsWith('/contract')) return Promise.resolve(jsonResponse(first));
+		return fromFixture(path, init);
+	});
+}
+
+describe('a voided Contract offers the next one (#2260)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it.each([
+		{ reader: 'an Owner', readerSession: ownerSession },
+		{ reader: 'an employee Doula', readerSession: sessionFor(['doula']) }
+	])('offers $reader Create a Draft Contract beside the voided one', async ({ readerSession }) => {
+		await setupWithContract(() => mockVoidedThenNext(birthRateOnly), fixtureDetail, readerSession);
+
+		await expect.element(testPage.getByText('Voided, no longer active')).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Create a Draft Contract' })).toBeVisible();
+	});
+
+	it('withholds it with the reason when the Engagement kind has no rate', async () => {
+		await setupWithContract(() => mockVoidedThenNext(noRates), fixtureDetail, ownerSession);
+
+		await expect
+			.element(testPage.getByText('Your Practice has no birth rate yet, so you cannot create a Contract.'))
+			.toBeVisible();
+		expect(testPage.getByRole('button', { name: 'Create a Draft Contract' }).elements()).toHaveLength(0);
+	});
+
+	it('voids a signed Contract, starts the next Draft, and names the signed PDF as the earlier one', async () => {
+		await setupWithContract(
+			() => mockVoidedThenNext(birthRateOnly, { ...fixtureContract, status: 'signed', hasSignedPdf: true }),
+			fixtureDetail,
+			ownerSession
+		);
+
+		await testPage.getByRole('button', { name: 'Void this Contract' }).click();
+		await testPage.getByRole('dialog').getByRole('button', { name: 'Void this Contract' }).click();
+		await expect.element(testPage.getByText('Voided, no longer active')).toBeVisible();
+
+		await testPage.getByRole('button', { name: 'Create a Draft Contract' }).click();
+		// A new Draft opens at its merge fields, as the first one does.
+		await expect.element(testPage.getByRole('heading', { level: 3, name: 'Change the Draft Contract' })).toHaveFocus();
+		await testPage.getByRole('button', { name: 'Cancel' }).click();
+
+		await expect.element(testPage.getByText('Draft, not sent yet')).toBeVisible();
+		await expect.element(testPage.getByText(PREVIOUS_CONTRACT_PDF_NOTICE)).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Download signed Contract (PDF)' })).toBeVisible();
+		expect(testPage.getByText('Voided, no longer active').elements()).toHaveLength(0);
+		expect(apiFetchWithSession).toHaveBeenCalledWith(
+			`/api/practices/${fixture.params.practiceId}/engagements/${fixture.params.engagementId}/contract`,
+			expect.objectContaining({ method: 'POST' })
+		);
+		// The void and the new Draft are each on the ledger: it is read once
+		// with the page, then again after each act.
+		const activityReads = apiFetchWithSession.mock.calls.filter(([path]) => String(path).includes('/activity'));
+		expect(activityReads).toHaveLength(3);
+	});
+
+	it('keeps the voided Contract and says why when the next one is refused', async () => {
+		await setupWithContract(() => {
+			mockVoidedThenNext(birthRateOnly);
+			const voidedFirst = apiFetchWithSession.getMockImplementation()!;
+			apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) =>
+				path.endsWith('/contract') && init?.method === 'POST'
+					? Promise.resolve(jsonResponse('a Contract that is not voided already exists', 409))
+					: voidedFirst(path, init)
+			);
+		}, fixtureDetail, ownerSession);
+
+		await testPage.getByRole('button', { name: 'Create a Draft Contract' }).click();
+
+		await expect.element(testPage.getByText('a Contract that is not voided already exists')).toBeVisible();
+		await expect.element(testPage.getByText('Voided, no longer active')).toBeVisible();
+	});
+});
+
+/*
  * #2004: the Care Plan and the Birth Plan are facts first -- how far each
  * is answered and, for the Birth Plan, whether the Client has read it --
  * with one action that opens its questions, and the Birth Plan's own
