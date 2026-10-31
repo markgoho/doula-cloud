@@ -323,11 +323,11 @@ jobs:
         id: key
         run: |
           set +e
-          found=$(gcloud secrets versions list "$KEY_SECRET" --project doula-cloud --filter='state:ENABLED' --limit=1 --format='value(name)' 2>&1)
+          found=$(gcloud secrets versions list "$KEY_SECRET" --project doula-cloud --filter='state:ENABLED' --limit=1 --format='value(name)' 2>list.err)
           list_exit=$?
           set -e
-          if [ "$list_exit" -ne 0 ] && ! grep -q NOT_FOUND <<< "$found"; then
-            echo "$found"
+          if [ "$list_exit" -ne 0 ] && ! grep -q NOT_FOUND list.err; then
+            cat list.err
             exit 1
           fi
           if [ "$list_exit" -ne 0 ] || [ -z "$found" ]; then
