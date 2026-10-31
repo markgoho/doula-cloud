@@ -295,6 +295,32 @@ describe('the Status column (#264, #2022)', () => {
 		await expect.element(table().getByText('No contract yet').first()).toBeVisible();
 	});
 
+	// #2232 (RA-G15): who covers each Engagement, on the list, so seeing
+	// it takes no Engagement opened.
+	it('names the Doula of each open Engagement in a Doula column, by kind where there are several', async () => {
+		// The fixture's first Client holds three open Engagements: two
+		// Doulas on the first, none on the second.
+		await setup();
+
+		await expect.element(testPage.getByRole('columnheader', { name: 'Doula' })).toBeVisible();
+		await expect
+			.element(table().getByText('Birth: Yolanda Okonkwo-Fitzgerald, Anne-Marie Ochieng-Whitfield'))
+			.toBeVisible();
+		await expect.element(table().getByText('Postpartum: No Doula yet')).toBeVisible();
+	});
+
+	it('names her alone where the Client holds one open Engagement, keeping a comma inside her name', async () => {
+		const [line] = clients[0].openEngagements ?? [];
+		await setup(
+			jsonResponse({
+				items: [{ ...clients[0], openEngagements: [{ ...line, doulaNames: ['Priya Raman, Jr.'] }] }],
+				hasMore: false
+			})
+		);
+
+		await expect.element(table().getByRole('cell', { name: 'Priya Raman, Jr.', exact: true })).toBeVisible();
+	});
+
 	// #2130: the BFF's one count (#2122) decides it, so a late Invoice
 	// reads Overdue here as on its Engagement and on Invoices.
 	it('reads "Overdue" once the BFF counts the open Invoice late', async () => {
