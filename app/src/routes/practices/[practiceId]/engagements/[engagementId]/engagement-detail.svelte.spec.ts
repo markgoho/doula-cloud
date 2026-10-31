@@ -3258,7 +3258,7 @@ describe('the Doula fees section (#2271)', () => {
 		await testPage.getByRole('button', { name: 'Continue' }).click();
 		await testPage.getByRole('button', { name: 'Confirm and record' }).click();
 
-		await expect.element(testPage.getByRole('status').filter({ hasText: /Anne-Marie Ochieng-Whitfield: Paid \$4,500\.00/ })).toBeVisible();
+		await expect.element(testPage.getByRole('status').filter({ hasText: /Recorded: Anne-Marie Ochieng-Whitfield paid \$4,500\.00/ })).toBeVisible();
 		expect(doulaFeeReads()).toHaveLength(2);
 	});
 

@@ -57,9 +57,16 @@ describe('DoulaFeeSection', () => {
 
 		await expect.element(page.getByText('Lena Vasquez', { exact: true }).last()).toBeVisible();
 		await expect.element(fact('Not recorded yet')).toBeVisible();
-		await expect.element(fact('Paid $600.00 on Aug 30, 2026, in cash')).toBeVisible();
+		await expect.element(fact('$600.00 on Aug 30, 2026, in cash')).toBeVisible();
 		await expect.element(fact('May 2, 2026 to Aug 14, 2026')).toBeVisible();
 		await expect.element(fact('Since Oct 27, 2026')).toBeVisible();
+	});
+
+	it('leaves the Note out when no record carries one', async () => {
+		await setup({ fees: [unpaid, { ...paid, paid: { ...paid.paid!, note: undefined } }] });
+
+		await expect.element(fact('$600.00 on Aug 30, 2026, in cash')).toBeVisible();
+		expect(page.getByRole('term').filter({ hasText: 'Note' }).all()).toHaveLength(0);
 	});
 
 	it('says so when no Doula has a fee', async () => {
@@ -80,7 +87,7 @@ describe('DoulaFeeSection', () => {
 
 		expect(onRecord).toHaveBeenCalledWith('attachment-1', { method: 'bank_transfer', paidOn: '2026-10-01' });
 		await expect
-			.element(page.getByRole('status').filter({ hasText: 'Lena Vasquez: Paid $450.00 on Oct 1, 2026, by bank transfer.' }))
+			.element(page.getByRole('status').filter({ hasText: 'Recorded: Lena Vasquez paid $450.00 on Oct 1, 2026, by bank transfer.' }))
 			.toBeVisible();
 	});
 

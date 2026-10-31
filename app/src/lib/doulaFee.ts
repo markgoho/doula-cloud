@@ -121,8 +121,8 @@ const paidHow: Readonly<Record<PaymentMethod, string>> = {
 	other: 'another way'
 };
 
-/** "Paid $450.00 on Mar 3, 2027, by bank transfer": one line, read by the
+/** "$450.00 on Mar 3, 2027, by bank transfer", under a Paid label: read by the
  * Owner on the Engagement and by the Doula on Your offers. */
 export function feePaidLine(paid: { amountCents: number; method: PaymentMethod; paidOn: string }): string {
-	return `Paid ${formatAmount(paid.amountCents)} on ${formatCalendarDay(paid.paidOn)}, ${paidHow[paid.method]}`;
+	return `${formatAmount(paid.amountCents)} on ${formatCalendarDay(paid.paidOn)}, ${paidHow[paid.method]}`;
 }

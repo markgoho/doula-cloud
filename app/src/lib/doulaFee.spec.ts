@@ -80,10 +80,10 @@ describe('removeDoulaFeePaid', () => {
 
 describe('feePaidLine', () => {
 	it.each([
-		['check', 'Paid $450.00 on Mar 3, 2027, by check'],
-		['bank_transfer', 'Paid $450.00 on Mar 3, 2027, by bank transfer'],
-		['cash', 'Paid $450.00 on Mar 3, 2027, in cash'],
-		['other', 'Paid $450.00 on Mar 3, 2027, another way']
+		['check', '$450.00 on Mar 3, 2027, by check'],
+		['bank_transfer', '$450.00 on Mar 3, 2027, by bank transfer'],
+		['cash', '$450.00 on Mar 3, 2027, in cash'],
+		['other', '$450.00 on Mar 3, 2027, another way']
 	] as const)('says how a %s payment was made', (method, want) => {
 		expect(feePaidLine({ amountCents: 45_000, method, paidOn: '2027-03-03' })).toBe(want);
 	});

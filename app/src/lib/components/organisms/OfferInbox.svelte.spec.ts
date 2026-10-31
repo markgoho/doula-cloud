@@ -69,7 +69,7 @@ describe('OfferInbox.svelte', () => {
 		it('says what the Practice recorded paying her', async () => {
 			await setup([{ ...accepted, feePaid: { amountCents: 45_000, method: 'bank_transfer', paidOn: '2027-03-03' } }]);
 
-			await expect.element(page.getByText('Paid $450.00 on Mar 3, 2027, by bank transfer')).toBeVisible();
+			await expect.element(page.getByText('$450.00 on Mar 3, 2027, by bank transfer')).toBeVisible();
 			await expect.element(page.getByText('Oct 27, 2026')).toBeVisible();
 		});
 

@@ -55,7 +55,7 @@
 	async function record(fee: DoulaFee, input: RecordPaymentInput) {
 		await onRecord(fee.attachmentId, input);
 		close();
-		status = `${fee.doulaName}: ${feePaidLine({ amountCents: fee.amountCents, ...input })}.`;
+		status = `Recorded: ${fee.doulaName} paid ${feePaidLine({ amountCents: fee.amountCents, ...input })}.`;
 	}
 
 	async function remove(fee: DoulaFee, paymentId: string, reason: string) {
@@ -68,7 +68,7 @@
 		return `doula-fee-${view}-${fee.attachmentId}`;
 	}
 
-	const columns = [
+	const allColumns = [
 		{ label: 'Doula', accessor: (fee: DoulaFee) => fee.doulaName },
 		{ label: 'Fee', accessor: (fee: DoulaFee) => formatAmount(fee.amountCents), numeric: true },
 		{
@@ -82,6 +82,9 @@
 		{ label: 'Recorded by', accessor: (fee: DoulaFee) => fee.paid?.recordedBy ?? '' },
 		{ label: 'Note', accessor: (fee: DoulaFee) => fee.paid?.note ?? '', variant: 'muted' as const, wraps: true }
 	];
+	// A Note column with nothing in it squeezes its own header to one
+	// letter a line, so it is drawn only when some record carries a note.
+	const columns = $derived(fees.some((fee) => fee.paid?.note) ? allColumns : allColumns.slice(0, -1));
 </script>
 
 {#snippet feeActions(fee: DoulaFee, view: DataTableView)}

@@ -155,11 +155,11 @@ Every plan has been executed once ([#209](https://github.com/markgoho/doula-clou
 | [practice-owner.md](practice-owner.md) | Renata Alvarez | 20 | 65 | 0 | 0 |
 | [non-doula-admin.md](non-doula-admin.md) | Dee Whitlock | 12 | 52 | 0 | 0 |
 | [employed-doula.md](employed-doula.md) | Priya Raman | 11 | 50 | 0 | 0 |
-| [contractor-doula.md](contractor-doula.md) | Lena Vasquez | 9 | 50 | 0 | 2 |
+| [contractor-doula.md](contractor-doula.md) | Lena Vasquez | 9 | 52 | 0 | 0 |
 | [loss-client.md](loss-client.md) | Nadia Haddad | 10 | 45 | 0 | 1 |
 | [first-time-client.md](first-time-client.md) | Hannah Sorensen | 16 | 51 | 0 | 5 |
 | [returning-postpartum-client.md](returning-postpartum-client.md) | Camille Boyd | 4 | 33 | 0 | 0 |
-| **Total** | | **119** | **434** | **0** | **19** |
+| **Total** | | **119** | **436** | **0** | **17** |
 
 Every `automated` step passed. **After the first run no plan carried a `blocked` step** — Stripe was the last holdout and [#242](https://github.com/markgoho/doula-cloud/issues/242) opened the Sandbox, after which Connect, Checkout and Invoices were all walked for real. The second run put two back: Maya Okonkwo's 7.1 and 7.2, walked from a browser Stripe's hosted onboarding challenges ([#2171](https://github.com/markgoho/doula-cloud/issues/2171)). Both cleared the next day, once the onboarding was finished in the founder's own Chrome, so no plan carries a `blocked` step again.
 

@@ -43,7 +43,7 @@
 			);
 		}
 		if (offer.state === 'accepted' && offer.decidedAt) {
-			rows.push({ label: 'Accepted', value: formatInstant(offer.decidedAt) });
+			rows.push({ label: 'Accepted on', value: formatInstant(offer.decidedAt) });
 		}
 		rows.push({ label: 'Fee', value: formatFee(offer.amountCents) });
 		// #2271: what the Practice recorded paying her, on the one screen
