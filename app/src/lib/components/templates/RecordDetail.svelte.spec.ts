@@ -262,6 +262,18 @@ describe('RecordDetail.svelte', () => {
 		expect(page.getByRole('status').all()).toHaveLength(1);
 	});
 
+	// Case 2 of the querySelector exception, as above.
+	it('holds the line of links a summary has under its card while loading (#2258)', async () => {
+		const { container } = await setup({
+			loading: 'Loading the Engagement',
+			summaryRows: [{ label: 'Care', value: 'Birth' }],
+			summaryLinks: ['View Client']
+		});
+
+		expect(container.querySelector(':scope .summary .summary-links')?.textContent).toBe('View Client');
+		expect(page.getByRole('link').all()).toHaveLength(0);
+	});
+
 	it('holds no summary card while loading a record that names no summary rows (#2251)', async () => {
 		const { container } = await setup({ loading: 'Loading the Client', summary: textSnippet('Due Mar 4') });
 

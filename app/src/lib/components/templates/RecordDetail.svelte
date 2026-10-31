@@ -71,6 +71,11 @@
 		 * and gets no placeholder.
 		 */
 		summaryRows?: readonly { label: string; value: string | readonly string[]; action?: string }[];
+		/**
+		 * The words of the links a summary has under its card, such as the
+		 * Engagement's "View Client" (#2258), held as a line while loading.
+		 */
+		summaryLinks?: readonly string[];
 		actions?: Snippet;
 		/**
 		 * The actions to draw beside the title while `loading`, for a
@@ -112,6 +117,7 @@
 		isBackPending = false,
 		summary,
 		summaryRows,
+		summaryLinks,
 		actions,
 		loadingActions,
 		sections,
@@ -213,7 +219,7 @@
 						{:else}
 							<!-- A name's words as a bar, so the actions keep the
 							     baseline and the wrap a loaded name gives them. -->
-							<span class="title-placeholder" aria-hidden="true"><span>Given Family-name</span></span>
+							<span class="title-placeholder" aria-hidden="true"><span>Given Family</span></span>
 						{/if}
 						<cluster-l space="var(--space-2)" align="center">{@render loadingActions()}</cluster-l>
 					</cluster-l>
@@ -241,6 +247,11 @@
 							{/snippet}
 							{#snippet action(row)}<span class="action-placeholder">{row.changes}</span>{/snippet}
 						</SummaryList>
+						{#if summaryLinks?.length}
+							<div class="summary-links">
+								{#each summaryLinks as link (link)}<span class="action-placeholder">{link}</span>{/each}
+							</div>
+						{/if}
 					</div>
 				{/if}
 			</div>
@@ -391,6 +402,13 @@
 			font-weight: var(--text-heading-lg-weight);
 			line-height: var(--text-heading-lg-leading);
 			letter-spacing: var(--text-heading-lg-tracking);
+		}
+
+		.summary-links {
+			display: flex;
+			flex-wrap: wrap;
+			gap: var(--space-4);
+			margin-block-start: var(--space-4);
 		}
 
 		.back-placeholder {
