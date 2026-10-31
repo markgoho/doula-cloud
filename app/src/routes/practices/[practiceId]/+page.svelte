@@ -213,16 +213,12 @@
 	}
 
 	function tonightRows(tonight: TonightHealth): SummaryListRow[] {
-		const rows: SummaryListRow[] = [
-			{ label: 'Free', value: names(tonight.free) || 'Nobody' },
-			{
-				label: 'On call',
-				value:
-					tonight.onCall.map((doula) => `${doula.name}, for ${names(doula.clients)}`).join('. ') ||
-					'No birth tonight'
-			}
-		];
+		const rows: SummaryListRow[] = [{ label: 'Free', value: names(tonight.free) || 'Nobody' }];
 		if (tonight.uncovered.length > 0) rows.push({ label: 'Needs cover', value: names(tonight.uncovered) });
+		if (tonight.onCall.length === 0) rows.push({ label: 'On call', value: 'No birth tonight' });
+		for (const doula of tonight.onCall) {
+			rows.push({ label: doula.name, value: `On call for ${names(doula.clients)}` });
+		}
 		if (tonight.away.length > 0) rows.push({ label: 'Cannot be reached', value: names(tonight.away) });
 		return rows;
 	}

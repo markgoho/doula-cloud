@@ -275,8 +275,9 @@ describe('the Practice landing page', () => {
 
 			await expect.element(tonight()).toBeVisible();
 			await expect.element(testPage.getByText('Charlene Boateng-Okonkwo and Joss Adeyemi')).toBeVisible();
+			await expect.element(testPage.getByText('Rowan Petrosyan-Abernathy')).toBeVisible();
 			await expect
-				.element(testPage.getByText('Rowan Petrosyan-Abernathy, for Anne-Marie Ochieng-Whitfield and Quinn Estrada'))
+				.element(testPage.getByText('On call for Anne-Marie Ochieng-Whitfield and Quinn Estrada'))
 				.toBeVisible();
 			await expect.element(testPage.getByText('Needs cover')).toBeVisible();
 			await expect.element(testPage.getByText('Morgan Grier')).toBeVisible();
