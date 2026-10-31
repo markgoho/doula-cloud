@@ -42,6 +42,7 @@
 		contractorInvoicesMessage,
 		formatAmount,
 		invoiceCreatedMessage,
+		paymentRecordedMessage,
 		invoiceRowStatusLabel,
 		invoiceRowStatusVariant,
 		paymentMethodLabels,
@@ -185,8 +186,12 @@
 	let createError = $state<FormError | undefined>();
 	// Set once a create works (#2002); cleared when the next one starts.
 	let hasCreated = $state(false);
+	// What the last Confirm and record wrote (#2241); cleared when another
+	// act on the section starts, so one status line stands at a time.
+	let paymentRecorded = $state('');
 	function openBillingModeQuestion() {
 		hasCreated = false;
+		paymentRecorded = '';
 		isAskingBillingMode = true;
 	}
 
@@ -250,6 +255,7 @@
 		createError = undefined;
 		billingModeError = '';
 		hasCreated = false;
+		paymentRecorded = '';
 
 		if (billingMode === undefined && chosenBillingMode === undefined) {
 			billingModeError = 'Select how this Practice bills Clients';
@@ -383,6 +389,7 @@
 	}
 
 	function startRecordingPayment(invoiceId: string) {
+		paymentRecorded = '';
 		payingInvoiceId = invoiceId;
 		paymentStep = 'form';
 		paymentMethod = undefined;
@@ -435,15 +442,19 @@
 	async function confirmPayment() {
 		isRecordingPayment = true;
 		resetPaymentErrors();
+		// Set: reviewPayment refuses an empty Method before the review
+		// step, and the step is drawn only for an Invoice in the list.
+		const method = paymentMethod!;
+		const { amountCents } = payingInvoice()!;
 		try {
 			await onRecordPayment(payingInvoiceId, {
-				// Set: reviewPayment refuses an empty Method before the
-				// review step, the only place this button is drawn.
-				method: paymentMethod!,
+				method,
 				note: paymentNote.trim() === '' ? undefined : paymentNote.trim(),
 				paidOn: paymentDate
 			});
 			payingInvoiceId = '';
+			hasCreated = false;
+			paymentRecorded = paymentRecordedMessage(amountCents, method, paymentDate);
 		} catch (error_) {
 			applyPaymentRefusal(error_);
 		} finally {
@@ -490,6 +501,7 @@
 	}
 
 	function startReversingPayment(invoiceId: string, paymentId: string) {
+		paymentRecorded = '';
 		reversingInvoiceId = invoiceId;
 		reversingPaymentId = paymentId;
 		reversalStep = 'form';
@@ -545,6 +557,7 @@
 	let refundingPaymentId = $state('');
 
 	function startRefundingPayment(invoiceId: string, paymentId: string) {
+		paymentRecorded = '';
 		refundingInvoiceId = invoiceId;
 		refundingPaymentId = paymentId;
 		cancelRecordingPayment();
@@ -584,10 +597,22 @@
 		{ label: 'Amount', accessor: (invoice: Invoice) => formatAmount(invoice.amountCents), numeric: true },
 		{ label: 'Status', accessor: (invoice: Invoice) => invoiceRowStatusLabel(invoice), content: invoiceStatus },
 		{ label: 'Paid', accessor: (invoice: Invoice) => (invoice.paidOn ? formatCalendarDay(invoice.paidOn) : '') },
+		// #2241: how a by-hand Payment was made, and its recorder's note.
+		{
+			label: 'Paid by',
+			accessor: (invoice: Invoice) =>
+				invoice.activePaymentMethod ? paymentMethodLabels[invoice.activePaymentMethod] : ''
+		},
 		{
 			label: 'Returned',
 			accessor: (invoice: Invoice) => (invoice.refundedCents > 0 ? formatAmount(invoice.refundedCents) : ''),
 			numeric: true
+		},
+		{
+			label: 'Note',
+			accessor: (invoice: Invoice) => invoice.activePaymentNote ?? '',
+			variant: 'muted' as const,
+			wraps: true
 		}
 	];
 
@@ -736,6 +761,10 @@
 	<Notice variant="status" message={invoiceCreatedMessage} isFocusedOnAppear />
 {/if}
 
+{#if paymentRecorded}
+	<Notice variant="status" message={paymentRecorded} isFocusedOnAppear />
+{/if}
+
 {#if !canReadInvoiceMoney}
 	<!--
 		#2094: her rows, dates and status only, so she can see what has
@@ -756,13 +785,15 @@
 		(#2017: no list item holds a control). At a narrow width DataTable
 		draws each Invoice as a card with its actions at the foot.
 	-->
-	<DataTable
-		columns={invoiceColumns}
-		rows={invoices}
-		rowId={invoiceRowId}
-		rowActions={isOwnerOrAdmin ? { label: 'Actions', content: invoiceActions } : undefined}
-		emptyMessage="No Invoices yet."
-	/>
+	<div class="invoice-table">
+		<DataTable
+			columns={invoiceColumns}
+			rows={invoices}
+			rowId={invoiceRowId}
+			rowActions={isOwnerOrAdmin ? { label: 'Actions', content: invoiceActions } : undefined}
+			emptyMessage="No Invoices yet."
+		/>
+	</div>
 {/if}
 
 {#if transitionError}
@@ -936,3 +967,30 @@
 		<Button label="Create Invoice" type="submit" loading={isCreating} />
 	</StackedForm>
 {/if}
+
+<style>
+	@layer components {
+		/* The table's own floor (#2241, #2376), as the Practice landing's
+		   tables set theirs. Measured 2026-10-31 by floor.svelte.spec.ts
+		   in Chromium: the style guide's Invoices, the Note column at its
+		   longest word, need about 1160px, so the table fits from 74rem.
+		   Below it, each Invoice is a card, where DataTable's default
+		   55rem drew a table that broke words in its headers. */
+		.invoice-table {
+			container: invoice-table / inline-size;
+		}
+
+		.invoice-table > :global(*) {
+			font-size: var(--text-body-size);
+			--data-table-table-display: none;
+			--data-table-records-display: block;
+		}
+
+		@container invoice-table (min-width: 74rem) {
+			.invoice-table > :global(*) {
+				--data-table-table-display: table;
+				--data-table-records-display: none;
+			}
+		}
+	}
+</style>

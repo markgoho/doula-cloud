@@ -121,7 +121,7 @@ The Billing screen is automated for an *Owner* (`billing.e2e.ts`); no spec reads
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 9.1 | Mark an Invoice paid after a bank transfer | **Record payment** on the Invoice's row asks Method (Check, Bank transfer, Cash, Other), Note and Date received, then a check step, **Confirm and record**. The row reads `Paid` with the date, and Activity names who recorded it ([DW-G3](https://github.com/markgoho/doula-cloud/issues/271), closed). The method and the note are read back nowhere ([DW-G12](https://github.com/markgoho/doula-cloud/issues/2241)) | `manual` |
+| 9.1 | Mark an Invoice paid after a bank transfer | **Record payment** on the Invoice's row asks Method (Check, Bank transfer, Cash, Other), Note and Date received, then a check step, **Confirm and record**. The row reads `Paid` with the date, and Activity names who recorded it ([DW-G3](https://github.com/markgoho/doula-cloud/issues/271), closed). A focused status line says how much was recorded, by what and on what day, and the Invoice reads **Paid by** and the **Note** ([DW-G12](https://github.com/markgoho/doula-cloud/issues/2241), closed) | `manual` |
 | 9.B-screens | Count the screens from the stage's entry to its end | **Screens**: 3 (Hick's Law, Flow). The Invoice, the form that records the Payment, and its check step: [#271](https://github.com/markgoho/doula-cloud/issues/271) asks for the check step, and the founder's ruling on [#1923](https://github.com/markgoho/doula-cloud/issues/1923) relies on it ([#2240](https://github.com/markgoho/doula-cloud/issues/2240)) | `manual` |
 | 9.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 5 (Hick's Law, Miller's Law). The date it arrived, how it was paid, a note, the save, and the cancel: [#271](https://github.com/markgoho/doula-cloud/issues/271) records the Invoice's whole amount, so there is no amount to ask, and puts an optional note on every method, which `other` requires ([#2240](https://github.com/markgoho/doula-cloud/issues/2240)) | `manual` |
 | 9.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory). The Invoice's amount and reference stay on screen while the Payment is recorded | `manual` |
@@ -155,6 +155,18 @@ Stages 8 and 9 sat either side of the `blocked` / `missing-feature` line on the 
 `admin-invite-role.e2e.ts` ([#965](https://github.com/markgoho/doula-cloud/issues/965)) reaches the app as an Admin who holds neither `owner` nor `doula`, invited and accepted through the real invite and accept screens. It drives 1.1 and 3.2, and asserts two things no step here names: her roster row reads `Admin` and nothing else, and the Owner-only invite send refuses her with `only a Practice Owner can do that`. Every other spec in the suite still runs as an Owner who signed up.
 
 ## Run log
+
+### 2026-10-31, later — 9.B-confirmation measured again ([#2241](https://github.com/markgoho/doula-cloud/issues/2241))
+
+**Stack**: `bun run --cwd app dev:full` from the #2241 worktree at port offset 3 (`http://localhost:5473`), freshly seeded Rooted Birth Collective. **Device**: headless Chrome driven by the chrome-devtools MCP, a fresh isolated context, signed in as the seeded `dee.whitlock@sim.doula.cloud`. Recorded at 1280x800, then read at 1920x900 and 320x700.
+
+Dee opened Imani Brooks's `INV-0003` ($950.00, by hand) from **Invoices** and recorded a bank transfer received Oct 26, 2026, with the note "Bank transfer from Imani Brooks, reference IB-0950, seen on the statement Oct 26."
+
+| Step | Budget | Measured | Pass |
+| --- | --- | --- | --- |
+| 9.B-confirmation | yes | **yes**. **Confirm and record** leaves a status line above the Invoices, focused and announced: "Payment of $950.00 recorded: bank transfer, received Oct 26, 2026." The Invoice reads `Paid`, Paid `Oct 26, 2026`, Paid by `Bank transfer` and the note, as a card at 1280 and 320 and as a table row at 1920 | yes |
+
+The Invoice read carries `activePaymentMethod` and `activePaymentNote` for an Owner, an Admin and an employee Doula, and a contractor's read carries neither (`invoice_payment_method_test.go`). Not re-measured: the other stage 9 steps.
 
 ### 2026-10-31 — 9.B-screens and 9.B-decisions measured again ([#2240](https://github.com/markgoho/doula-cloud/issues/2240))
 

@@ -96,6 +96,13 @@ type InvoiceView struct {
 	// its fee for a card one), and a Stripe-backed Invoice can carry
 	// either, so the rail alone cannot tell a screen which to ask.
 	ActivePaymentKind string `json:"activePaymentKind,omitempty"`
+	// ActivePaymentMethod and ActivePaymentNote (#2241) are how a by-hand
+	// Payment was made and what its recorder wrote, set only when
+	// ActivePaymentKind is "manual", so the Invoice can answer "how was
+	// this paid?". Never on a contractor's row (contractorInvoiceRows) nor
+	// the Client's, which carries the method and never the note (#981).
+	ActivePaymentMethod string `json:"activePaymentMethod,omitempty"`
+	ActivePaymentNote   string `json:"activePaymentNote,omitempty"`
 	// RefundedCents (#1009) is how much of this Invoice has gone back to
 	// the Client, as a positive number -- 0 when none has. The Invoice's
 	// own status says nothing about it and deliberately never will: a
@@ -839,7 +846,7 @@ func resolveStripeCustomer(ctx context.Context, tx *sql.Tx, stripeClient Client,
 // what a Staff screen cannot work out any other way: a Stripe-backed
 // Invoice can be covered by a card Payment or by one recorded by hand
 // against it, and a Refund of the two asks different questions.
-const activePaymentJoin = `LEFT JOIN LATERAL (SELECT p.id, p.kind::text AS kind FROM payments p
+const activePaymentJoin = `LEFT JOIN LATERAL (SELECT p.id, p.kind::text AS kind, p.method::text AS method, p.note FROM payments p
 	 WHERE p.invoice_id = i.id AND p.kind IN ('manual', 'stripe')
 	   AND NOT EXISTS (SELECT 1 FROM payments r WHERE r.target_payment_id = p.id AND r.kind = 'reversal')
 	 ORDER BY p.created_at DESC LIMIT 1) ap ON true`
@@ -854,14 +861,14 @@ const activePaymentJoin = `LEFT JOIN LATERAL (SELECT p.id, p.kind::text AS kind 
 const refundedCentsSubquery = `(SELECT COALESCE(-SUM(f.amount_cents), 0) FROM payments f
 	 WHERE f.invoice_id = i.id AND f.kind = 'refund') AS refunded_cents`
 
-const listInvoicesQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ap.id, ap.kind, ` + refundedCentsSubquery + `
+const listInvoicesQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ap.id, ap.kind, ap.method, ap.note, ` + refundedCentsSubquery + `
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
 	` + activePaymentJoin + `
 	WHERE c.engagement_id = $1
 	ORDER BY i.created_at DESC, i.id DESC LIMIT $2`
 
-const listInvoicesAfterQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ap.id, ap.kind, ` + refundedCentsSubquery + `
+const listInvoicesAfterQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ap.id, ap.kind, ap.method, ap.note, ` + refundedCentsSubquery + `
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
 	` + activePaymentJoin + `
@@ -892,8 +899,8 @@ func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *i
 		var paidAt sql.NullTime
 		var dueAt time.Time
 		var stripeInvoiceID sql.NullString
-		var activePaymentID, activePaymentKind sql.NullString
-		if err := rows.Scan(&it.ID, &it.ContractID, &it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &dueAt, &it.Reference, &stripeInvoiceID, &activePaymentID, &activePaymentKind, &it.RefundedCents); err != nil {
+		var activePaymentID, activePaymentKind, activePaymentMethod, activePaymentNote sql.NullString
+		if err := rows.Scan(&it.ID, &it.ContractID, &it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &dueAt, &it.Reference, &stripeInvoiceID, &activePaymentID, &activePaymentKind, &activePaymentMethod, &activePaymentNote, &it.RefundedCents); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, false, fmt.Errorf("payments: scan invoice row: %w", err)
 		}
@@ -904,6 +911,10 @@ func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *i
 		if activePaymentID.Valid {
 			it.ActivePaymentID = &activePaymentID.String
 			it.ActivePaymentKind = activePaymentKind.String
+		}
+		if activePaymentKind.String == paymentKindManual {
+			it.ActivePaymentMethod = activePaymentMethod.String
+			it.ActivePaymentNote = activePaymentNote.String
 		}
 		it.BillingMode = billingModeOf(stripeInvoiceID)
 		items = append(items, it)

@@ -54,6 +54,10 @@ export interface Invoice {
 	 * recorded by hand. A Stripe-backed Invoice can carry either, so the
 	 * rail alone cannot say which questions a Refund must ask. */
 	activePaymentKind?: ActivePaymentKind;
+	/** How a by-hand Payment was made, and what its recorder wrote
+	 * (#2241): present only when activePaymentKind is 'manual'. */
+	activePaymentMethod?: PaymentMethod;
+	activePaymentNote?: string;
 	/** How much of this Invoice has been returned to the Client (#1009),
 	 * as a positive number -- 0 when nothing has. The status stays 'paid'
 	 * after a Refund, exactly as Stripe's own does, so this is the only
@@ -560,6 +564,13 @@ export const contractorInvoicesMessage =
  * the press closed the form or the button she pressed, so a status that
  * takes focus says it worked, above the row it added. */
 export const invoiceCreatedMessage = 'Invoice created.';
+
+/** What a Staff member reads after Confirm and record works (#2241): the
+ * form is gone, so a status that takes focus says what was written. */
+export function paymentRecordedMessage(amountCents: number, method: PaymentMethod, paidOn: string): string {
+	const how = paymentMethodLabels[method].toLowerCase();
+	return `Payment of ${formatAmount(amountCents)} recorded: ${how}, received ${formatCalendarDay(paidOn)}.`;
+}
 
 /** What an Invoice row needs to say where it stands: its stored status
  * and the BFF's count of days late. `Invoice`, `ContractorInvoice` and

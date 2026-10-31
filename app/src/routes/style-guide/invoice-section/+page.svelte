@@ -56,6 +56,10 @@
 			billingMode: 'by_hand',
 			activePaymentId: 'pay_3',
 			activePaymentKind: 'manual',
+			// #2241: the widest method, and a note as a recorder types one.
+			activePaymentMethod: 'bank_transfer',
+			activePaymentNote:
+				"Zelle from the Client's partner, confirmation 8F2K9QXW7LMN3P, seen on the statement Dec 28 after two reminders.",
 			refundedCents: 387_550
 		},
 		{ ...invoices[0], id: 'in_4', activePaymentId: 'pay_4', activePaymentKind: 'stripe' }

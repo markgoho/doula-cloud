@@ -638,6 +638,75 @@ describe('InvoiceSection.svelte', () => {
 			await expect.element(page.getByRole('button', { name: 'Confirm and record' })).not.toBeInTheDocument();
 		});
 
+		// #2241: the form is gone once it works, so a focused status says
+		// what was written: how much, how, and on what day.
+		it('says the Payment was recorded, for how much, by what and when, and takes focus', async () => {
+			await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true });
+
+			await page.getByRole('button', { name: 'Record payment' }).click();
+			await page.getByLabelText('Bank transfer').click();
+			await page.getByLabelText('Date received').fill('2026-01-02');
+			await page.getByRole('button', { name: 'Continue' }).click();
+			await page.getByRole('button', { name: 'Confirm and record' }).click();
+
+			const recorded = page.getByRole('status').filter({ hasText: 'Payment of $150.00 recorded' });
+			await expect.element(recorded).toHaveTextContent('Payment of $150.00 recorded: bank transfer, received Jan 2, 2026.');
+			await expect.element(page.getByText('Payment of $150.00 recorded', { exact: false })).toHaveFocus();
+		});
+
+		it('says nothing was recorded when the record is refused', async () => {
+			await setup({
+				invoices: [invoiceOpen],
+				isOwnerOrAdmin: true,
+				onRecordPayment: vi.fn().mockRejectedValue(new Error('This Invoice is already paid'))
+			});
+
+			await page.getByRole('button', { name: 'Record payment' }).click();
+			await page.getByLabelText('Cash').click();
+			await page.getByRole('button', { name: 'Continue' }).click();
+			await page.getByRole('button', { name: 'Confirm and record' }).click();
+
+			await expect.element(page.getByText('This Invoice is already paid')).toBeVisible();
+			await expect.element(page.getByText(/recorded:/)).not.toBeInTheDocument();
+		});
+
+		it('clears the recorded line when the next act on the section starts', async () => {
+			await setup({ invoices: [invoiceOpen, invoicePaidByHand], isOwnerOrAdmin: true });
+
+			await page.getByRole('button', { name: 'Record payment' }).click();
+			await page.getByLabelText('Check').click();
+			await page.getByRole('button', { name: 'Continue' }).click();
+			await page.getByRole('button', { name: 'Confirm and record' }).click();
+			await expect.element(page.getByText(/recorded: check/)).toBeVisible();
+
+			await page.getByRole('button', { name: 'Reverse payment' }).click();
+			await expect.element(page.getByText(/recorded: check/)).not.toBeInTheDocument();
+
+			await page.getByRole('button', { name: 'Cancel' }).click();
+			await page.getByRole('button', { name: 'Record payment' }).click();
+			await page.getByLabelText('Check').click();
+			await page.getByRole('button', { name: 'Continue' }).click();
+			await page.getByRole('button', { name: 'Confirm and record' }).click();
+			await page.getByRole('button', { name: 'Return money' }).click();
+			await expect.element(page.getByText(/recorded: check/)).not.toBeInTheDocument();
+
+			await page.getByRole('button', { name: 'Cancel' }).click();
+			await page.getByRole('button', { name: 'Record payment' }).click();
+			await expect.element(page.getByText(/recorded: check/)).not.toBeInTheDocument();
+		});
+
+		it('reads how a by-hand Payment was made, and its note, on the paid Invoice', async () => {
+			await setup({
+				invoices: [
+					{ ...invoicePaidByHand, activePaymentMethod: 'bank_transfer', activePaymentNote: 'Reference IB-0950' }
+				],
+				isOwnerOrAdmin: true
+			});
+
+			await expect.element(invoiceFact('Bank transfer')).toBeVisible();
+			await expect.element(invoiceFact('Reference IB-0950')).toBeVisible();
+		});
+
 		it('Change returns from the review step to the form without losing what was entered', async () => {
 			await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true });
 

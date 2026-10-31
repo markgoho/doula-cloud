@@ -192,6 +192,18 @@ const CRITERIA: Readonly<Record<string, Criterion>> = {
 			'differently -- no intrinsic CSS mechanism swaps markup (ADR-0024), so a query is the only way ' +
 			'to pick between the two trees a route renders.'
 	},
+	/*
+	 * The Invoices section's own floor for DataTable's two trees (#2241,
+	 * #2376): eight columns of one-line facts and a Note, more than
+	 * DataTable's default floor holds without breaking words.
+	 */
+	'organisms/InvoiceSection.svelte#1': {
+		kind: 'overflow',
+		justification:
+			"The same choice DataTable's own query makes, a <table> or one card per Invoice, and no " +
+			'intrinsic mechanism swaps markup. The section sets its own floor because its table is wider ' +
+			"than DataTable's default holds."
+	},
 	'organisms/StaffTopBar.svelte#1': {
 		kind: 'overflow',
 		justification:
