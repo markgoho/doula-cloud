@@ -9,7 +9,7 @@
 		type MultiFactorResolver,
 		type UserCredential
 	} from 'firebase/auth';
-	import { goto } from '$app/navigation';
+	import { goto, preloadCode } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '#lib/appState.svelte.js';
 	import { getFirebaseAuth } from '#lib/firebase.js';
@@ -110,6 +110,8 @@
 	 * response here reads as "not signed in", not as an expired session.
 	 */
 	onMount(async () => {
+		// #2233: the Overview's code loads while she types, not after she presses Sign in.
+		void preloadCode('/practices/[practiceId]');
 		const session = await probeSession<SessionInfo>('/api/staff/session');
 		if (!session) return;
 

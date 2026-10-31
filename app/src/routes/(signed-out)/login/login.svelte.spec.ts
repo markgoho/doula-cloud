@@ -32,7 +32,8 @@ Object.assign(pageState, toPageState(fixture));
 // form's own submit flow is unchanged and untouched here.
 
 const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+const preloadCode = vi.hoisted(() => vi.fn());
+vi.mock('$app/navigation', () => ({ goto, preloadCode }));
 
 const signInWithEmailAndPassword = vi.hoisted(() => vi.fn());
 const signOut = vi.hoisted(() => vi.fn());
@@ -196,6 +197,15 @@ describe('Staff login -- on-load session probe (#283)', () => {
 		await expect.element(testPage.getByLabelText('Email address')).toBeVisible();
 		expect(testPage.getByText(/session/i).elements()).toHaveLength(0);
 		expect(goto).not.toHaveBeenCalled();
+	});
+
+	it('loads the Overview code while she is still on the form (#2233)', async () => {
+		apiFetch.mockResolvedValue(jsonResponse('no matching staff session', 404));
+
+		await setup();
+
+		await expect.element(testPage.getByRole('button', { name: 'Sign in' })).toBeVisible();
+		expect(preloadCode).toHaveBeenCalledWith('/practices/[practiceId]');
 	});
 
 	it('falls back to the ordinary form when the probe reports no session, network failure included', async () => {

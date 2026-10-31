@@ -19,10 +19,10 @@ test('Staff login lands an unenrolled Owner on her Practice', async ({ page, req
 	await expect(page).toHaveURL(practicePath);
 
 	// #149: the app exchanges the ID token for the session cookie and
-	// signs out of the Firebase JS SDK locally -- the SDK's default
-	// persistence (indexedDBLocalPersistence) is where a lingering
-	// credential would live, so a signed-out browser holds no records in
-	// its firebaseLocalStorage object store.
+	// signs out of the Firebase JS SDK locally. The SDK keeps its user in
+	// memory only (#2233), so the browser holds no records in the
+	// firebaseLocalStorage object store the SDK's default persistence
+	// would write.
 	const authRecordCount = await page.evaluate(
 		() =>
 			new Promise<number>((resolve) => {

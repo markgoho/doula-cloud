@@ -73,8 +73,8 @@ test('Signing up through the journey lands the new Owner on her Practice overvie
 	await expect(page.getByText('Riverside Doulas', { exact: true }).locator('visible=true')).toBeVisible();
 
 	// #149: the app exchanges the ID token for the session cookie and signs
-	// out of the Firebase JS SDK locally -- a lingering credential would show
-	// up in the SDK's default persistence, indexedDBLocalPersistence.
+	// out of the Firebase JS SDK locally, and the SDK keeps its user in memory
+	// only (#2233), so nothing shows up in indexedDBLocalPersistence's store.
 	const authRecordCount = await page.evaluate(
 		() =>
 			new Promise<number>((resolve) => {
