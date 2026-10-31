@@ -14,7 +14,7 @@
  * about money, and nothing promises a Visit nobody has booked (CB-G5).
  */
 
-import { NO_CONTRACT_MESSAGE, contractVoidedNotice } from './clientRegister.js';
+import { NO_CONTRACT_MESSAGE, contractVoidedNotice, engagementStatusLabel } from './clientRegister.js';
 import { formatCalendarDay, formatInstant, formatPortalVisit } from './dates.js';
 import { inReadingOrder, type PortalVisit } from './portalVisits.js';
 
@@ -65,15 +65,42 @@ export function nextVisit(items: PortalVisit[]): PortalVisit | undefined {
 	return inReadingOrder(items).find((each) => !each.hasHappened);
 }
 
-/** "What happens next": who is coming and when, then the due date where
- * there is one. The BFF already leaves the due date out once any birth
- * outcome is recorded, a loss (#2003) or a live birth (#2211) alike, so
- * this asks nothing about her history. */
-export function whatHappensNext(next: PortalVisit | undefined, dueDate: string | undefined): { lead: string; detail?: string } {
-	const lead = next
-		? `${next.doulaName} is coming to you on ${formatPortalVisit(next.scheduledAt, false)}.`
-		: NO_NEXT_VISIT_MESSAGE;
-	return dueDate ? { lead, detail: `Your due date is ${formatCalendarDay(dueDate)}.` } : { lead };
+/** "What happens next", line by line: `ended` once care has ended, `lead`
+ * for who is coming, `detail` for the due date. */
+export interface WhatHappensNext {
+	ended?: string;
+	lead?: string;
+	detail?: string;
+}
+
+/** "What happens next": that her care has ended, when it has, then who
+ * is coming and when, then the due date where there is one.
+ *
+ * Ended care leads with the register's one label for a `completed`
+ * Engagement, "Care ended" (#2217), the words the portal root list
+ * already shows, true for every Client after a loss included (ADR-0015).
+ * A Visit still booked stays named under it: completion ends no Visit
+ * (ADR-0015), so the booking is the Practice's and the line says what the
+ * record holds. With nothing booked the ended line stands alone, since
+ * "No visit is booked yet." promises a booking ended care does not hold.
+ *
+ * The BFF already leaves the due date out once any birth outcome is
+ * recorded, a loss (#2003) or a live birth (#2211) alike, and a completed
+ * Engagement always carries one (00094), so this asks nothing about her
+ * history. */
+export function whatHappensNext(
+	next: PortalVisit | undefined,
+	dueDate: string | undefined,
+	hasCareEnded = false
+): WhatHappensNext {
+	const out: WhatHappensNext = hasCareEnded ? { ended: engagementStatusLabel('completed') } : {};
+	if (next) {
+		out.lead = `${next.doulaName} is coming to you on ${formatPortalVisit(next.scheduledAt, false)}.`;
+	} else if (!hasCareEnded) {
+		out.lead = NO_NEXT_VISIT_MESSAGE;
+	}
+	if (dueDate) out.detail = `Your due date is ${formatCalendarDay(dueDate)}.`;
+	return out;
 }
 
 /** Her Birth Plan. Its acknowledgment is cleared by a Staff edit, so it

@@ -75,8 +75,8 @@ func TestDetailHandler_NoDueDateOnceAnOutcomeIsRecorded(t *testing.T) {
 		wantKeys bool
 	}{
 		{"nothing recorded yet", "portal-phase-none-uid", "", "", true},
-		{"a live birth", "portal-phase-live-uid", "live_birth", "2027-06-10", false},
-		{"a loss", "portal-phase-loss-uid", "loss", "2027-03-04", false},
+		{"a live birth", "portal-phase-live-uid", outcomeLiveBirth, "2027-06-10", false},
+		{"a loss", "portal-phase-loss-uid", outcomeLoss, "2027-03-04", false},
 		{"an unknown outcome", "portal-phase-unknown-uid", "unknown", "", false},
 	}
 	for _, tt := range tests {
@@ -142,8 +142,8 @@ func TestDetailHandler_BirthPlanFollowsTheOutcome(t *testing.T) {
 		want    bool
 	}{
 		{"nothing recorded yet -- the pregnancy is still expected", "portal-bp-none-uid", "", "", true},
-		{"a live birth", "portal-bp-live-uid", "live_birth", "2027-06-10", true},
-		{"a loss", "portal-bp-loss-uid", "loss", "2027-03-04", false},
+		{"a live birth", "portal-bp-live-uid", outcomeLiveBirth, "2027-06-10", true},
+		{"a loss", "portal-bp-loss-uid", outcomeLoss, "2027-03-04", false},
 		{"an unknown outcome", "portal-bp-unknown-uid", "unknown", "", false},
 	}
 	for _, tt := range tests {

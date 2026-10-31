@@ -41,6 +41,24 @@ describe('whatHappensNext', () => {
 	it('says nothing is booked, and leaves out a due date there is none of', () => {
 		expect(whatHappensNext(undefined, undefined)).toEqual({ lead: 'No visit is booked yet.' });
 	});
+
+	// #2217: once care has ended it says so first, in the register's one
+	// label for it. A Visit the Practice still holds booked stays named
+	// under it (ADR-0015 keeps Visits open after completion).
+	it('says care has ended, then a Visit still booked', () => {
+		const next = visit();
+
+		expect(whatHappensNext(next, undefined, true)).toEqual({
+			ended: 'Care ended',
+			lead: `Priya Raman is coming to you on ${formatPortalVisit(next.scheduledAt, false)}.`
+		});
+	});
+
+	// #2217: "No visit is booked yet." promises a booking ended care does
+	// not hold, so the ended line stands alone.
+	it('says only that care has ended when nothing is booked', () => {
+		expect(whatHappensNext(undefined, undefined, true)).toEqual({ ended: 'Care ended' });
+	});
 });
 
 describe('birthPlanCard', () => {
