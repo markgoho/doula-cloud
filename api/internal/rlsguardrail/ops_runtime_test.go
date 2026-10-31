@@ -213,7 +213,7 @@ func TestOpsRuntime_OperatorActsIsAppendOnlyForEveryRole(t *testing.T) {
 	}
 }
 
-func TestOpsRuntime_HoldsNoTableGrantButOperatorActs(t *testing.T) {
+func TestOpsRuntime_HoldsNoTableGrantButTheOperatorsOwnTables(t *testing.T) {
 	db := testdb.New(t)
 
 	rows, err := db.Admin.QueryContext(t.Context(),
@@ -236,7 +236,12 @@ func TestOpsRuntime_HoldsNoTableGrantButOperatorActs(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatalf("rows: %v", err)
 	}
-	want := []string{"operator_acts INSERT", "operator_acts SELECT"}
+	want := []string{
+		"operator_acts INSERT", "operator_acts SELECT",
+		"operator_sessions DELETE", "operator_sessions INSERT", "operator_sessions SELECT", "operator_sessions UPDATE",
+		"operators INSERT", "operators SELECT",
+	}
+	slices.Sort(got)
 	if !slices.Equal(got, want) {
 		t.Fatalf("ops_runtime table grants = %v, want %v", got, want)
 	}

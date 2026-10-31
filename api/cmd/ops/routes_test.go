@@ -21,6 +21,9 @@ func TestMain(m *testing.M) {
 // derived, so a route cannot be added unseen (ADR-0062).
 var wantRoutes = []string{
 	"GET /api/health",
+	"POST /api/session",
+	"GET /api/session",
+	"DELETE /api/session",
 }
 
 func TestRoutes_AreTheOnesOnTheRecord(t *testing.T) {
