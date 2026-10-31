@@ -54,6 +54,15 @@ export function formatCalendarDay(value: string): string {
 }
 
 /**
+ * A calendar month, `YYYY-MM`, built from its parts for the same reason
+ * as `formatCalendarDay`: "Feb 2027".
+ */
+export function formatCalendarMonth(value: string): string {
+	const [year, month] = value.split('-').map(Number);
+	return new Date(year!, month! - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+}
+
+/**
  * The activity ledger's own clock (ADR-0022): relative under seven days,
  * absolute beyond it, always on a 12-hour clock with a lowercase am/pm
  * and no periods -- "this product is used in the United States by people

@@ -198,6 +198,47 @@ func TestInboxHandler_CarriesTheFeePaymentOnHerAcceptedOffer(t *testing.T) {
 	}
 }
 
+// TestInboxHandler_KeepsTheDueMonthOnHerAcceptedOffer is #2383's
+// narrowing of #230: an accepted Offer on her own inbox keeps the due
+// month and nothing else of the Client's, a declined one keeps nothing,
+// and the Practice-side read of the same accepted Offer is unchanged.
+func TestInboxHandler_KeepsTheDueMonthOnHerAcceptedOffer(t *testing.T) {
+	f := newFixture(t)
+	body := offerBody(f.doulaID, 45000)
+	accepted := f.makeOffer(t, body)
+	expectStatus(t, do(t, http.MethodPost, f.offerURL(accepted, "accept"), f.doulaSession, nil), http.StatusOK)
+
+	var inbox offer.ListResponse
+	decode(t, do(t, http.MethodGet, f.srv+"/api/practices/"+f.practiceID+"/offers", f.doulaSession, nil),
+		http.StatusOK, &inbox)
+	got := inbox.Items[0]
+	if got.DueMonth != body.DueDate[:7] {
+		t.Fatalf("dueMonth = %q, want %q", got.DueMonth, body.DueDate[:7])
+	}
+	if got.ClientFirstInitial != "" || got.ClientArea != "" || got.DueDate != "" {
+		t.Fatalf("accepted offer serves more than the month: %+v", got)
+	}
+
+	var practiceSide offer.ListResponse
+	decode(t, do(t, http.MethodGet, f.offersURL(), f.ownerSession, nil), http.StatusOK, &practiceSide)
+	if m := practiceSide.Items[0].DueMonth; m != "" {
+		t.Fatalf("practice-side dueMonth = %q, want none", m)
+	}
+}
+
+func TestInboxHandler_DeclinedOfferHasNoDueMonth(t *testing.T) {
+	f := newFixture(t)
+	offerID := f.makeOffer(t, offerBody(f.doulaID, 45000))
+	expectStatus(t, do(t, http.MethodPost, f.offerURL(offerID, "decline"), f.doulaSession, nil), http.StatusOK)
+
+	var listed offer.ListResponse
+	decode(t, do(t, http.MethodGet, f.srv+"/api/practices/"+f.practiceID+"/offers", f.doulaSession, nil),
+		http.StatusOK, &listed)
+	if m := listed.Items[0].DueMonth; m != "" {
+		t.Fatalf("declined offer dueMonth = %q, want none", m)
+	}
+}
+
 // The list is one page deep with a cursor onto the next, the envelope
 // docs/api-design.md section 4 sets.
 func TestInboxHandler_PaginatesWithACursor(t *testing.T) {

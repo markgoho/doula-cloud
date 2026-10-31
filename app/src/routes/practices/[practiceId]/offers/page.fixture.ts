@@ -46,13 +46,15 @@ const offers: Offer[] = [
 		targetName: 'Persephone Ochieng-Whitfield'
 	},
 	// #2271: an accepted fee renders a third way, with the day she
-	// accepted and what the Practice recorded paying her.
+	// accepted and what the Practice recorded paying her. #2383: and the
+	// due month that tells it from another birth she worked.
 	{
 		offerId: 'offer-3',
 		state: 'accepted',
 		clientFirstInitial: '',
 		clientArea: '',
 		dueDate: '',
+		dueMonth: '2027-02',
 		amountCents: 450_000,
 		employmentType: 'contractor',
 		offeredAt: '2026-06-01T00:00:00Z',

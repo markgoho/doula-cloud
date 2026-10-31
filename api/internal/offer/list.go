@@ -18,17 +18,22 @@ import (
 // here, so this one DTO is safe to serve to her and informative enough
 // for the Owner who sent it.
 type Summary struct {
-	OfferID            string  `json:"offerId"`
-	State              string  `json:"state"`
-	ClientFirstInitial string  `json:"clientFirstInitial"`
-	ClientArea         string  `json:"clientArea"`
-	DueDate            string  `json:"dueDate"`
-	AmountCents        *int64  `json:"amountCents,omitempty"`
-	Terms              *string `json:"terms,omitempty"`
-	EmploymentType     string  `json:"employmentType"`
-	OfferedAt          string  `json:"offeredAt"`
-	ExpiresAt          string  `json:"expiresAt"`
-	DecidedAt          *string `json:"decidedAt,omitempty"`
+	OfferID            string `json:"offerId"`
+	State              string `json:"state"`
+	ClientFirstInitial string `json:"clientFirstInitial"`
+	ClientArea         string `json:"clientArea"`
+	DueDate            string `json:"dueDate"`
+	// DueMonth (#2383) is the due date's year and month, "2027-02", on an
+	// accepted Offer read from her own inbox only: the least identifying
+	// fact that tells one birth she worked from another after #230 has
+	// lapsed the rest. The Practice-side read never carries it.
+	DueMonth       string  `json:"dueMonth,omitempty"`
+	AmountCents    *int64  `json:"amountCents,omitempty"`
+	Terms          *string `json:"terms,omitempty"`
+	EmploymentType string  `json:"employmentType"`
+	OfferedAt      string  `json:"offeredAt"`
+	ExpiresAt      string  `json:"expiresAt"`
+	DecidedAt      *string `json:"decidedAt,omitempty"`
 	// TargetName and TargetAddress name who the Offer went to. Both are
 	// empty on the inbox read -- she knows who she is -- and filled on
 	// the Practice-side read, which is Owner/Admin only.
@@ -86,7 +91,8 @@ func InboxHandler() http.Handler {
 		page, err := list(r.Context(), tx,
 			`SELECT o.id, o.state::text, o.client_first_initial, o.client_area, o.due_date,
 			        o.amount_cents, o.terms, o.employment_type::text, o.offered_at, o.expires_at,
-			        o.decided_at, '', '', fp.amount_cents, fp.method, fp.paid_on::text
+			        o.decided_at, '', '', fp.amount_cents, fp.method, fp.paid_on::text,
+			        CASE WHEN o.state = 'accepted' THEN to_char(o.due_date, 'YYYY-MM') END
 			   FROM engagement_offers o
 			   -- The Attachment this Offer's acceptance granted: the latest
 			   -- one with a fee on the pair, opened no later than the
@@ -155,7 +161,7 @@ func EngagementListHandler() http.Handler {
 			`SELECT o.id, o.state::text, o.client_first_initial, o.client_area, o.due_date,
 			        o.amount_cents, o.terms, o.employment_type::text, o.offered_at, o.expires_at,
 			        o.decided_at, COALESCE(s.name, ''), COALESCE(s.email, pi.address, ''),
-			        NULL::bigint, NULL::text, NULL::text
+			        NULL::bigint, NULL::text, NULL::text, NULL::text
 			   FROM engagement_offers o
 			   LEFT JOIN staff s ON s.id = o.staff_id
 			   LEFT JOIN practice_invitations pi ON pi.id = o.invitation_id
@@ -189,7 +195,7 @@ func parseCursor(w http.ResponseWriter, r *http.Request) (*cursor, bool) {
 }
 
 // list runs one of the two queries above and scans one page of Summary
-// rows out of it. Both select the same sixteen columns in the same order
+// rows out of it. Both select the same seventeen columns in the same order
 // and take the same four parameters, which is what lets one scanner
 // serve both. It asks for pageSize+1 rows and returns pageSize, so
 // "is there another page" is answered without a second count query.
@@ -217,11 +223,11 @@ func list(ctx context.Context, tx *sql.Tx, query, arg string, after *cursor) (Li
 		var dueDate, offeredAt, expiresAt time.Time
 		var decidedAt sql.NullTime
 		var amountCents sql.NullInt64
-		var terms, paidMethod, paidOn sql.NullString
+		var terms, paidMethod, paidOn, dueMonth sql.NullString
 		var paidCents sql.NullInt64
 		if err := rows.Scan(&s.OfferID, &s.State, &s.ClientFirstInitial, &s.ClientArea, &dueDate,
 			&amountCents, &terms, &s.EmploymentType, &offeredAt, &expiresAt, &decidedAt,
-			&s.TargetName, &s.TargetAddress, &paidCents, &paidMethod, &paidOn); err != nil {
+			&s.TargetName, &s.TargetAddress, &paidCents, &paidMethod, &paidOn, &dueMonth); err != nil {
 			// coverage:ignore reason: DB scan failure, not exercised by unit tests
 			return ListResponse{}, fmt.Errorf("offer: scan offer row: %w", err)
 		}
@@ -239,8 +245,10 @@ func list(ctx context.Context, tx *sql.Tx, query, arg string, after *cursor) (Li
 		}
 		// #230: a terminal Offer keeps the fact of the asking and loses
 		// the Client's own fields, so a stale row in her history is not a
-		// stranger's due date sitting in it indefinitely.
+		// stranger's due date sitting in it indefinitely. #2383: an
+		// accepted Offer on her inbox keeps DueMonth.
 		lapseClientFields(s.State, &s.ClientFirstInitial, &s.ClientArea, &s.DueDate)
+		s.DueMonth = dueMonth.String
 		items = append(items, s)
 		offeredAts = append(offeredAts, offeredAt)
 	}

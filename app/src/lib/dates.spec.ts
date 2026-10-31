@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	formatActivityTimestamp,
 	formatCalendarDay,
+	formatCalendarMonth,
 	formatInstant,
 	formatInstantWithClock,
 	formatPortalVisit,
@@ -14,6 +15,10 @@ describe('the instant / calendar-day distinction', () => {
 	// as the day it was typed no matter which zone the reader sits in.
 	it('reads a calendar day as its own parts, not as UTC midnight', () => {
 		expect(formatCalendarDay('2027-03-01')).toBe('Mar 1, 2027');
+	});
+
+	it('reads a calendar month as its own parts', () => {
+		expect(formatCalendarMonth('2027-02')).toBe('Feb 2027');
 	});
 
 	// Noon UTC is the same calendar day in every zone from UTC-11 to
