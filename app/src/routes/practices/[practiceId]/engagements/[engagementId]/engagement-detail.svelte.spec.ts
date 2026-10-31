@@ -208,6 +208,13 @@ async function changeVisit(row: number) {
 	await visitsTable().getByRole('button', { name: 'Change' }).nth(row).click();
 }
 
+// #2231: a Visit row's Reassign, an Owner's or an Admin's.
+async function reassignVisit(row: number) {
+	await visitsTable().getByRole('button', { name: 'Reassign' }).nth(row).click();
+}
+
+const reassignPicker = () => testPage.getByLabelText('Who takes this Visit instead?');
+
 // A Visit as the BFF sends it, for the order case below (#1999).
 function visitRow(visitId: string, staffName: string, createdAt: string, scheduledAt?: string) {
 	return { visitId, staffId: 'staff-1', staffName, createdAt, ...(scheduledAt && { scheduledAt }), type: 'prenatal' };
@@ -2319,11 +2326,69 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 
 	it('offers a select, not a free-text staff id, for reassigning a Visit', async () => {
 		await setupWithRoster();
-		await changeVisit(0);
+		await reassignVisit(0);
 
-		const picker = testPage.getByLabelText('Who is this Visit for?');
+		const picker = reassignPicker();
 		await expect.element(picker).toBeVisible();
 		expect(picker.element().tagName).toBe('SELECT');
+	});
+
+	// #2231: Change is when and notes; who takes it is Reassign's question.
+	it('asks who takes a Visit only behind its Reassign, never on its Change', async () => {
+		await setupWithRoster();
+		await changeVisit(0);
+
+		await expect.element(testPage.getByLabelText('Notes')).toBeVisible();
+		expect(reassignPicker().elements()).toHaveLength(0);
+		expect(testPage.getByLabelText('Who is this Visit for?').elements()).toHaveLength(0);
+	});
+
+	// No Cancel: the row's Reassign closes its own form (#2230's shape), and
+	// one Visit form is open at a time.
+	it('opens one Visit form at a time, and the row Reassign closes its own', async () => {
+		await setupWithRoster();
+		await reassignVisit(0);
+		await expect
+			.element(testPage.getByRole('heading', { name: /^Reassign the Visit for Anne-Marie Ochieng-Whitfield on / }))
+			.toHaveFocus();
+		await expect.element(visitsTable().getByRole('button', { name: 'Reassign' }).nth(0)).toHaveAttribute('aria-expanded', 'true');
+		expect(testPage.getByRole('button', { name: 'Cancel' }).elements()).toHaveLength(0);
+
+		await changeVisit(0);
+		expect(reassignPicker().elements()).toHaveLength(0);
+		await reassignVisit(1);
+		await expect
+			.element(testPage.getByRole('heading', { name: 'Reassign the Visit for Jordan Reyes, not yet scheduled' }))
+			.toBeVisible();
+		expect(testPage.getByRole('button', { name: 'Save changes' }).elements()).toHaveLength(0);
+		await reassignVisit(1);
+		await expect.element(testPage.getByRole('button', { name: 'Reassign the Visit' })).not.toBeInTheDocument();
+	});
+
+	it('refuses a reassign with nobody chosen, without calling the API', async () => {
+		await setupWithRoster();
+		await reassignVisit(0);
+		await expect.element(reassignPicker()).toHaveValue('');
+		apiFetchWithSession.mockClear();
+
+		await testPage.getByRole('button', { name: 'Reassign the Visit' }).click();
+
+		expect(apiFetchWithSession).not.toHaveBeenCalled();
+		await expect.element(testPage.getByText('Select who takes this Visit instead').first()).toBeVisible();
+	});
+
+	it('says why a reassign was refused, and keeps the form open', async () => {
+		await setupWithRoster();
+		const respond = apiFetchWithSession.getMockImplementation()!;
+		apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) =>
+			init?.method === 'PATCH' ? Promise.resolve(jsonResponse('reassign is down', 500)) : respond(path, init)
+		);
+		await reassignVisit(0);
+		await reassignPicker().selectOptions('Jordan Reyes');
+		await testPage.getByRole('button', { name: 'Reassign the Visit' }).click();
+
+		await expect.element(testPage.getByText('reassign is down')).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Reassign the Visit' })).toBeVisible();
 	});
 
 	// The defect this replaces: no screen in the product prints a staff
@@ -2349,7 +2414,7 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 		await changeVisit(0);
 		await expect.element(testPage.getByLabelText('Notes')).toBeVisible();
 		expect(testPage.getByLabelText('Who is this Visit for?').elements()).toHaveLength(0);
-		expect(testPage.getByText('There is nobody else to reassign this Visit to.').elements()).toHaveLength(0);
+		expect(testPage.getByRole('button', { name: 'Reassign' }).elements()).toHaveLength(0);
 		expect(testPage.getByRole('alert').elements()).toHaveLength(0);
 	});
 
@@ -2464,18 +2529,16 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 		// either her own Visit back to her is a move that did not happen.
 		it("leaves a Visit's current assignee out of its own reassign picker", async () => {
 			await setupWithRoster();
-			const picker = testPage.getByLabelText('Who is this Visit for?');
+			const picker = reassignPicker();
 
-			// #1999: she is kept by the first option, which opens chosen and
-			// sends nothing, rather than offered as a move.
-			await changeVisit(0);
+			// #2231: it opens on nobody chosen.
+			await reassignVisit(0);
 			await expect.element(picker).toHaveValue('');
-			expect(picker.getByRole('option', { name: 'Keep Anne-Marie Ochieng-Whitfield' }).elements()).toHaveLength(1);
 			expect(
 				picker.getByRole('option', { name: 'Anne-Marie Ochieng-Whitfield (you)' }).elements()
 			).toHaveLength(0);
 			// She is still offered on a Visit that is not already hers.
-			await changeVisit(1);
+			await reassignVisit(1);
 			await expect
 				.poll(() => picker.getByRole('option', { name: 'Anne-Marie Ochieng-Whitfield (you)' }).elements())
 				.toHaveLength(1);
@@ -2495,9 +2558,9 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 		});
 
 		// A Practice whose only Doula is the person already holding the
-		// Visit: an empty picker with a placeholder and no explanation is
-		// the defect, so the control says what is true instead.
-		it('says there is nobody to reassign to rather than showing an empty picker', async () => {
+		// Visit: an empty picker is the defect, so that row offers no
+		// Reassign at all (#2231).
+		it('offers no Reassign on a Visit nobody else can take', async () => {
 			const soleDoula = {
 				items: [
 					{
@@ -2509,20 +2572,14 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 				]
 			};
 			await setupWithRoster(jsonResponse(soleDoula));
-			const nobodyElse = testPage.getByText('There is nobody else to reassign this Visit to.');
 
-			// #1999: said once, in the open change, where the question would
-			// be -- never as a line in every row.
-			await expect.element(visitsTable().getByRole('button', { name: 'Change' }).first()).toBeVisible();
-			expect(nobodyElse.elements()).toHaveLength(0);
-			await changeVisit(0);
-			await expect.element(nobodyElse).toBeVisible();
-			expect(testPage.getByLabelText('Who is this Visit for?').elements()).toHaveLength(0);
 			// visit-2 is Jordan Reyes's, and she is not on this roster, so
-			// its own change still offers the sole Doula.
-			await changeVisit(1);
-			await expect.element(testPage.getByLabelText('Who is this Visit for?')).toBeVisible();
-			expect(nobodyElse.elements()).toHaveLength(0);
+			// only its row offers the sole Doula.
+			await expect.poll(() => visitsTable().getByRole('button', { name: 'Reassign' }).elements()).toHaveLength(1);
+			await reassignVisit(0);
+			await expect
+				.element(testPage.getByRole('heading', { name: 'Reassign the Visit for Jordan Reyes, not yet scheduled' }))
+				.toBeVisible();
 		});
 	});
 
@@ -2552,15 +2609,32 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 
 	it('sends the chosen colleague on the reassign request, and says whose the Visit is now', async () => {
 		await setupWithRoster();
-		await changeVisit(0);
-		await testPage.getByLabelText('Who is this Visit for?').selectOptions('Jordan Reyes');
-		await testPage.getByRole('button', { name: 'Save changes' }).click();
+		await reassignVisit(0);
+		await reassignPicker().selectOptions('Jordan Reyes');
+		await testPage.getByRole('button', { name: 'Reassign the Visit' }).click();
 
 		expect(apiFetchWithSession).toHaveBeenCalledWith(
 			'/api/practices/practice-1/engagements/engagement-1/visits/visit-1',
 			expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ staffId: 'staff-2' }) })
 		);
-		await expect.element(testPage.getByText('The Visit for Jordan Reyes is saved.')).toBeVisible();
+		// From whom to whom, for which Visit (the #2231 persona consults).
+		await expect
+			.element(testPage.getByText(/The Visit on .+ is Jordan Reyes's now, not Anne-Marie Ochieng-Whitfield's\./))
+			.toHaveFocus();
+		await expect.element(testPage.getByRole('button', { name: 'Reassign the Visit' })).not.toBeInTheDocument();
+	});
+
+	it('names a Visit that is not yet scheduled as such once it is reassigned', async () => {
+		await setupWithRoster();
+		await reassignVisit(1);
+		await reassignPicker().selectOptions('Kanyakumari Balasubramanian');
+		await testPage.getByRole('button', { name: 'Reassign the Visit' }).click();
+
+		await expect
+			.element(
+				testPage.getByText("The Visit that is not yet scheduled is Kanyakumari Balasubramanian's now, not Jordan Reyes's.")
+			)
+			.toBeVisible();
 	});
 });
 
@@ -2987,9 +3061,9 @@ describe('who can be named on a Visit at this Engagement (#911)', () => {
 	// one page is the failure this ticket exists to close.
 	it('marks her the same way in the reassign picker', async () => {
 		await setupWithRoster();
-		await changeVisit(0);
+		await reassignVisit(0);
 
-		const picker = testPage.getByLabelText('Who is this Visit for?');
+		const picker = reassignPicker();
 		await expect.element(picker).toBeVisible();
 		expect(picker.getByRole('option', { name: unattachedOption }).elements()).toHaveLength(1);
 	});
@@ -3045,11 +3119,11 @@ describe('who can be named on a Visit at this Engagement (#911)', () => {
 
 	it('blocks the reassign submit the same way, with the summary once she has tried', async () => {
 		await setupWithRoster();
-		await changeVisit(0);
-		await testPage.getByLabelText('Who is this Visit for?').selectOptions(unattachedOption);
+		await reassignVisit(0);
+		await reassignPicker().selectOptions(unattachedOption);
 		await expect.element(testPage.getByRole('heading', { name: 'There is a problem' })).not.toBeInTheDocument();
 		apiFetchWithSession.mockClear();
-		await testPage.getByRole('button', { name: 'Save changes' }).click();
+		await testPage.getByRole('button', { name: 'Reassign the Visit' }).click();
 
 		expect(apiFetchWithSession).not.toHaveBeenCalled();
 		await expect.element(testPage.getByRole('heading', { name: 'There is a problem' })).toBeVisible();
@@ -3301,8 +3375,8 @@ describe('id uniqueness across DataTable two trees (#666)', () => {
 		// Each row's Change is described by a name span in both trees, and
 		// the open change form's ids sit beside them (#1999), so the
 		// assertion covers both.
-		await changeVisit(0);
-		await expect.element(testPage.getByLabelText('Who is this Visit for?')).toBeVisible();
+		await reassignVisit(0);
+		await expect.element(reassignPicker()).toBeVisible();
 
 		expect(findDuplicateIds(document)).toEqual([]);
 	});
