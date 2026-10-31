@@ -86,7 +86,7 @@ Dee is a domain expert on the business half and a stranger to the care half.
 
 ### Stage 5 — Put a Doula on the Engagement
 
-**Thinking**: "Priya has room in March." **Pain points**: an Engagement has no Doula on it, and nothing puts one there. See RA-G4. On a new Engagement the Doula is now named on the Start work form, by decision ([#1515](https://github.com/markgoho/doula-cloud/issues/1515)), which rejected naming her afterward on the Engagement, so the stage's screen is that form and its six decisions ([TB-G11](evaluator-doula.md#gaps-found) holds the reason). Putting a Doula on an Engagement that already exists is [RA-G13](practice-owner.md#gaps-found)'s, on Renata Alvarez's stage 4, under its own budget of 2.
+**Thinking**: "Priya has room in March." **Pain points**: an Engagement has no Doula on it, and nothing puts one there. See RA-G4. On a new Engagement the Doula is now named on the Start work form, by decision ([#1515](https://github.com/markgoho/doula-cloud/issues/1515)), which rejected naming her afterward *in place of* asking at the start, so the stage's screen is that form and its six decisions ([TB-G11](evaluator-doula.md#gaps-found) holds the reason). Putting a Doula on an Engagement that already exists is [RA-G13](practice-owner.md#gaps-found)'s, on Renata Alvarez's stage 4, under its own budget of 2: the Doula row's **Change**, "Who is the Doula?" and **Save the Doula** ([#2230](https://github.com/markgoho/doula-cloud/issues/2230)).
 
 **Budget**:
 

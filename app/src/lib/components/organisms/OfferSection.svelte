@@ -35,6 +35,7 @@
 		offers,
 		doulas,
 		clientName = '',
+		dueDate: engagementDueDate = '',
 		onCreate,
 		onWithdraw,
 		isFormOpen = $bindable(false)
@@ -56,6 +57,11 @@
 		 * Engagement already holds, and a prop asking for an initial that
 		 * is handed a whole name reads as a bug. */
 		clientName?: string;
+		/** The due date the Engagement holds, as YYYY-MM-DD, or empty where
+		 * it holds none (#2230). It seeds the form's own due date, as the
+		 * name seeds the initial: the Engagement already knows it, and the
+		 * sender should not type it again. */
+		dueDate?: string;
 		onCreate: (offer: NewOffer) => Promise<void>;
 		onWithdraw: (offerId: string) => Promise<void>;
 	} = $props();
@@ -75,7 +81,7 @@
 	// convenience at first render, not a binding to the Engagement.
 	let initial = $state(untrack(() => clientName).slice(0, 1));
 	let clientArea = $state('');
-	let dueDate = $state('');
+	let dueDate = $state(untrack(() => engagementDueDate));
 	let withdrawError = $state('');
 
 	// #1228: five of this form's controls carried `required`, the only
@@ -194,14 +200,15 @@
 			sentMessage = `Offer sent to ${isByEmail ? email : roster.find((d) => d.staffId === staffId)!.name}.`;
 			isFormOpen = false;
 			// Blank again for the next Offer, with nothing chosen: not the
-			// last answer, and not a default (#1914).
+			// last answer, and not a default (#1914). The due date goes back
+			// to the one the Engagement holds (#2230).
 			target = undefined;
 			staffId = '';
 			email = '';
 			feeDollars = '';
 			terms = '';
 			clientArea = '';
-			dueDate = '';
+			dueDate = engagementDueDate;
 		}, orThrownMessage);
 	}
 

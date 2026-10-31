@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
 	assigneeBlock,
+	attachableDoulaOptions,
 	CONTRACTOR_WITHOUT_ACCEPTED_OFFER,
 	doulaOptions,
 	loadVisitAssignees,
@@ -446,6 +447,28 @@ describe('loadVisitAssignees', () => {
 		await expect(loadVisitAssigneesOrNone(broken, 'practice-1', 'engagement-1')).rejects.toThrow(
 			'the database is down'
 		);
+	});
+});
+
+// #2230: who an Owner or an Admin can put on this Engagement without an
+// Offer -- the people the BFF names nameable, less the ones already on
+// it, with her own row first and marked.
+describe('attachableDoulaOptions', () => {
+	const caller = { staffId: 'staff-3', name: 'Renata Alvarez', employmentType: 'employee', nameable: true };
+
+	it('offers who can be put on, the caller first, and leaves out a contractor and anyone already on it', () => {
+		expect(
+			attachableDoulaOptions([nameableEmployee, unattachedContractor, caller], {
+				attachedStaffIds: [],
+				callerStaffId: 'staff-3'
+			})
+		).toEqual([
+			{ value: 'staff-3', label: 'Renata Alvarez (you)' },
+			{ value: 'staff-1', label: 'Bess Nakamura-Oduya' }
+		]);
+		expect(
+			attachableDoulaOptions([nameableEmployee, caller], { attachedStaffIds: ['staff-1'], callerStaffId: 'staff-3' })
+		).toEqual([{ value: 'staff-3', label: 'Renata Alvarez (you)' }]);
 	});
 });
 

@@ -471,6 +471,25 @@ export function visitAssigneeOptions(
 	);
 }
 
+/**
+ * Who an Owner or an Admin can put on one Engagement herself (#2230):
+ * the Doulas the BFF calls nameable here, less the ones already on it.
+ * Nameable is the same rule the write reads
+ * (`attachment.Membership.WhyNotAttachable`), so a contractor who holds
+ * neither Owner nor Admin is not offered: she goes on by an Offer. Her
+ * own row comes first, marked "(you)", as on the Start work form.
+ */
+export function attachableDoulaOptions(
+	assignees: readonly VisitAssignee[],
+	context: { attachedStaffIds: readonly string[]; callerStaffId?: string }
+): LabeledValue[] {
+	const attached = new Set(context.attachedStaffIds);
+	return doulaOptions(
+		assignees.filter((assignee) => assignee.nameable && !attached.has(assignee.staffId)),
+		{ callerStaffId: context.callerStaffId }
+	);
+}
+
 /** The hint the picker carries whenever it is offering somebody who
  * cannot be named: what the marker in those labels means, before a
  * reader has to choose one to find out. The empty string when everybody

@@ -7,9 +7,10 @@
 	import { detailsHref } from '../../clients/[clientId]/details/details.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { SectionState } from '#lib/sectionState.svelte.js';
-	import { FormSubmission, orThrownErrors } from '#lib/formSubmission.svelte.js';
+	import { FormSubmission, orThrownErrors, orThrownMessage } from '#lib/formSubmission.svelte.js';
 	import { triggerBlobDownload } from '#lib/blobDownload.js';
 	import {
+		attachDoula,
 		attachSelf,
 		changeEngagementDueDate,
 		changeEngagementKind,
@@ -43,6 +44,7 @@
 	import { kindLabel } from '#lib/engagementRequest.js';
 	import {
 		assigneeBlock,
+		attachableDoulaOptions,
 		loadVisitAssigneesOrNone,
 		unnameableHint,
 		visitAssigneeOptions,
@@ -128,7 +130,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
-	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
+	import RadioGroup, { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
 	import DateFields from '#lib/components/molecules/DateFields.svelte';
 	import {
 		EMPTY_DATE_PARTS,
@@ -259,6 +261,7 @@
 		kindChangedMessage = '';
 		selfAttachedMessage = '';
 		dueChangedMessage = '';
+		attachSubmission.errors = [];
 		if (openChange === 'due') openDueForm();
 	}
 
@@ -898,7 +901,61 @@
 	// a roster that could not be read is not a roster with nobody on it
 	// (#1432). Drawing only: the BFF refuses an Offer whose target is its
 	// sender (offer.resolveStaffTarget).
-	const offerDoulas = $derived(doulas?.filter((doula) => doula.staffId !== callerStaffId));
+	// #2230: nor a Doula already on it -- the work is hers already.
+	const offerDoulas = $derived(
+		doulas?.filter(
+			(doula) =>
+				doula.staffId !== callerStaffId && attachedDoulas.every((attached) => attached.staffId !== doula.staffId)
+		)
+	);
+
+	// #2230: an Owner or an Admin puts a Doula on from the same Change, one
+	// question and a save. GLOSSARY.md's Attachment entry: "An Admin may
+	// attach an employee directly". Who is offered is the BFF's
+	// visit-assignees answer (the rule its own write reads), less who is on
+	// it already, so a contractor who holds neither role is not offered:
+	// she goes on by an Offer. Only where somebody besides the reader could
+	// be chosen is it a question; otherwise the reader keeps the one press
+	// (#1598), since a question with one answer is not a question.
+	const attachOptions = $derived(
+		doulas === undefined || displayStatus === 'completed'
+			? []
+			: attachableDoulaOptions(doulas, {
+					attachedStaffIds: attachedDoulas.map((doula) => doula.staffId),
+					callerStaffId
+				})
+	);
+	const isAttachQuestion = $derived(attachOptions.some((option) => option.value !== callerStaffId));
+	const canChangeDoula = $derived(canAttachSelf || isAttachQuestion);
+	// Said under the question only where the roster holds somebody it
+	// leaves out for this reason, so the line is never about nobody.
+	const hasUnlistedContractor = $derived(doulas?.some((doula) => !doula.nameable) ?? false);
+	const ATTACH_GROUP = 'attach-doula';
+	let attachChoice = $state<string | undefined>();
+	const attachSubmission = new FormSubmission();
+
+	async function handleAttachSubmit(event: SubmitEvent) {
+		event.preventDefault();
+		selfAttachedMessage = '';
+		let isAttached = false;
+		await attachSubmission.run(async () => {
+			const chosen = attachOptions.find((option) => option.value === attachChoice);
+			if (!chosen) {
+				return [{ message: 'Select who the Doula is', targetId: radioFieldId(ATTACH_GROUP, attachOptions[0]!.value) }];
+			}
+			whoIsOnOverride = await attachDoula(apiFetchWithSession, reference, chosen.value);
+			openChange = undefined;
+			attachChoice = undefined;
+			selfAttachedMessage =
+				chosen.value === callerStaffId
+					? 'You are on this Engagement.'
+					: `${doulas!.find((doula) => doula.staffId === chosen.value)!.name} is on this Engagement.`;
+			isAttached = true;
+		}, orThrownMessage);
+		if (!isAttached) return;
+		await loadOnCall();
+		await loadActivity();
+	}
 
 	onDestroy(() => {
 		for (const url of Object.values(attachmentPreviewURLs)) {
@@ -971,7 +1028,7 @@
 		// #1598: who is on it. No row for a completed Engagement nobody is
 		// on (doulaSummaryItem).
 		const doulaItem = doulaSummaryItem(attachedDoulas, displayStatus);
-		if (doulaItem) rows.push({ ...doulaItem, ...changeable('doula', canAttachSelf) });
+		if (doulaItem) rows.push({ ...doulaItem, ...changeable('doula', canChangeDoula) });
 		rows.push(
 			{ label: 'Portal invite', value: portalInviteSummaryText(clientPortalState, hasClientEmailOnFile) },
 			// createdAt is an instant (engagement/detail.go).
@@ -2037,6 +2094,35 @@
 							</StackedForm>
 						{/if}
 					</stack-l>
+				{:else if isAttachQuestion}
+					<!--
+						#2230: which Doula, and the save. No Cancel: the row's
+						Change closes it, as it closes the care change above.
+					-->
+					<StackedForm onSubmit={handleAttachSubmit}>
+						{#if attachSubmission.errors.length > 0}
+							<ErrorSummary errors={attachSubmission.errors} />
+						{/if}
+						<RadioGroup
+							legend="Who is the Doula?"
+							hint={hasUnlistedContractor
+								? 'A contractor is not listed: a contractor goes on an Engagement by accepting an Offer.'
+								: undefined}
+							name={ATTACH_GROUP}
+							options={attachOptions}
+							value={attachChoice}
+							onChange={(value) => (attachChoice = value)}
+							error={attachSubmission.errorFor(radioFieldId(ATTACH_GROUP, attachOptions[0]!.value))}
+						/>
+						<cluster-l space="var(--space-3)">
+							<Button
+								label="Save the Doula"
+								type="submit"
+								size="sm"
+								loading={attachSubmission.isSubmitting}
+							/>
+						</cluster-l>
+					</StackedForm>
 				{:else}
 					<!--
 						#1598: "Put me on this Engagement", behind the Doula row's
@@ -2751,6 +2837,7 @@
 		{offers}
 		doulas={offerDoulas}
 		clientName={detail!.clientName}
+		dueDate={displayDueDate ?? ''}
 		onCreate={handleCreateOffer}
 		onWithdraw={handleWithdrawOffer}
 	/>
