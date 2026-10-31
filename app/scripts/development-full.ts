@@ -1,6 +1,7 @@
 // `bun run dev:full` -- brings up the local stack (Firebase Auth
-// emulator + the podman-compose Postgres/API stack, see e2e/stack.ts)
-// and then runs the SvelteKit dev server against it. Tears the stack
+// emulator + the podman-compose Postgres/API stack, with doula-ops on its
+// own port beside the BFF, see e2e/stack.ts) and then runs the SvelteKit
+// dev server against it. Tears the stack
 // down again on Ctrl-C or if the dev server exits on its own.
 //
 // It starts from a clean stack each time (#2010): a dev:full that was

@@ -22,11 +22,14 @@ import {
 	GCS_PORT,
 	MAILBOX_HOST,
 	MAILBOX_PORT,
+	E2E_OPS_HOST,
+	E2E_OPS_PORT,
 	PORT_OFFSET,
 	PORT_OFFSET_ROOT,
 	E2E_COMPOSE_FILE,
 	E2E_HEARTBEAT_INTERVAL_MS,
 	e2eApiBinaryPath,
+	e2eOpsBinaryPath,
 	e2eComposeProject,
 	e2eHeartbeatPath,
 	e2ePidfilePath
@@ -105,6 +108,8 @@ const CONTAINER_ENGINE = process.env.CONTAINER_ENGINE ?? 'podman';
 const EMULATOR_PIDFILE = e2ePidfilePath('firebase-emulator', PORT_OFFSET);
 const API_PIDFILE = e2ePidfilePath('api', PORT_OFFSET);
 const API_BINARY_PATH = e2eApiBinaryPath(PORT_OFFSET);
+const OPS_PIDFILE = e2ePidfilePath('ops', PORT_OFFSET);
+const OPS_BINARY_PATH = e2eOpsBinaryPath(PORT_OFFSET);
 const MAILBOX_PIDFILE = e2ePidfilePath('mailbox', PORT_OFFSET);
 const MAILBOX_SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'mailbox.ts');
 
@@ -239,11 +244,14 @@ export async function startStack(appOrigin: string) {
 	installSimClock();
 	runMigrations();
 	seedAppE2ERole();
+	seedOpsE2ERole();
 	openPilotGate();
-	grantSimClock();
+	grantSimClock('app_e2e');
+	grantSimClock('ops_e2e');
 	await seedGCSBucket();
 	await startMailbox();
 	await startAPI(appOrigin);
+	await startOps();
 	startHeartbeat();
 }
 
@@ -328,12 +336,12 @@ function installSimClock() {
 	});
 }
 
-// Points app_e2e's search_path at the sim schema installSimClock
-// created, and grants it the USAGE and SELECT sim.now() needs to run
-// under a non-superuser role. Must run after seedAppE2ERole -- the role
-// doesn't exist before that.
-function grantSimClock() {
-	execFileSync('go', ['run', './cmd/simclock', 'grant', 'app_e2e'], {
+// Points role's search_path at the sim schema installSimClock created,
+// and grants it the USAGE and SELECT sim.now() needs to run under a
+// non-superuser role. Must run after seedAppE2ERole and seedOpsE2ERole --
+// the roles don't exist before that.
+function grantSimClock(role: 'app_e2e' | 'ops_e2e') {
+	execFileSync('go', ['run', './cmd/simclock', 'grant', role], {
 		stdio: 'inherit',
 		cwd: '../api',
 		timeout: MIGRATE_TIMEOUT_MS,
@@ -396,6 +404,15 @@ function seedAppE2ERole() {
 	execSQL(
 		"DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_e2e') THEN " +
 			"CREATE ROLE app_e2e LOGIN PASSWORD 'app_e2e' IN ROLE app_runtime; END IF; END $$;"
+	);
+}
+
+// doula-ops's login (ADR-0062), made the same way: 00138 creates the
+// ops_runtime group role, and this is the member doula-ops signs in as.
+function seedOpsE2ERole() {
+	execSQL(
+		"DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'ops_e2e') THEN " +
+			"CREATE ROLE ops_e2e LOGIN PASSWORD 'ops_e2e' IN ROLE ops_runtime; END IF; END $$;"
 	);
 }
 
@@ -781,6 +798,8 @@ export function simulatedDateAfter(days: number): string {
 // error for each container it does not find, then exits 0.
 export function stopStack({ keepVolume = false, quiet = false }: { keepVolume?: boolean; quiet?: boolean } = {}) {
 	stopHeartbeat();
+	killPidfile(OPS_PIDFILE);
+	rmSync(OPS_BINARY_PATH, { force: true });
 	killPidfile(API_PIDFILE);
 	rmSync(API_BINARY_PATH, { force: true });
 	killPidfile(MAILBOX_PIDFILE);
@@ -947,6 +966,34 @@ async function spawnAPI(appOrigin: string, extraEnvironment: Record<string, stri
 	}
 
 	await waitForPort(E2E_API_HOST, E2E_API_PORT, READY_TIMEOUT_MS);
+}
+
+// doula-ops (api/cmd/ops, ADR-0062), built and run as a host process the
+// way startAPI runs the BFF, on its own port and as its own login.
+async function startOps() {
+	killPidfile(OPS_PIDFILE);
+
+	execFileSync('go', ['build', '-o', OPS_BINARY_PATH, './cmd/ops'], {
+		stdio: 'inherit',
+		cwd: '../api',
+		timeout: BUILD_TIMEOUT_MS
+	});
+
+	const child = spawn(OPS_BINARY_PATH, [], {
+		stdio: 'inherit',
+		detached: true,
+		env: {
+			...process.env,
+			DATABASE_URL: `postgres://ops_e2e:ops_e2e@${DB_HOST}:${DB_PORT}/app?sslmode=disable`,
+			PORT: String(E2E_OPS_PORT)
+		}
+	});
+	child.unref();
+	if (child.pid) {
+		writeFileSync(OPS_PIDFILE, String(child.pid));
+	}
+
+	await waitForPort(E2E_OPS_HOST, E2E_OPS_PORT, READY_TIMEOUT_MS);
 }
 
 // Kills whatever process the given pidfile points at (if any) and
