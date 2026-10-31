@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { load } from './+page.js';
 
 // #501, #539: every branch of the predicates themselves lives in
 // #lib/roles.spec.ts. This route's own `load` only has to prove the
@@ -6,7 +7,6 @@ import { describe, expect, it, vi } from 'vitest';
 // through `parent()`, rather than a second session fetch of its own.
 describe('clients/search/+page.ts load (#501)', () => {
 	it("derives the contractor gate from the ancestor layout's Membership", async () => {
-		const { load } = await import('./+page.js');
 		const parent = vi.fn().mockResolvedValue({
 			session: { practiceId: 'practice-1', practiceName: 'Test Practice', roles: ['doula'], isContractor: true }
 		});
@@ -18,7 +18,6 @@ describe('clients/search/+page.ts load (#501)', () => {
 	});
 
 	it('clears the gate for an owner', async () => {
-		const { load } = await import('./+page.js');
 		const parent = vi.fn().mockResolvedValue({
 			session: { practiceId: 'practice-1', practiceName: 'Test Practice', roles: ['owner'], isContractor: false }
 		});

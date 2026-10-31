@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { jsonResponse } from '#lib/testResponse.js';
 import { loadedValue, settledRead } from '#lib/testStreamedRead.js';
+import { load } from './+page.js';
 
 function setup(status: number, body: unknown) {
 	const fetchMock = vi.fn(async () => jsonResponse(body, status));
@@ -11,7 +12,6 @@ function setup(status: number, body: unknown) {
 const parameters = { practiceId: 'practice-1', engagementId: 'engagement-1' };
 
 async function callLoad() {
-	const { load } = await import('./+page.js');
 	return load({ params: parameters } as Parameters<typeof load>[0]);
 }
 

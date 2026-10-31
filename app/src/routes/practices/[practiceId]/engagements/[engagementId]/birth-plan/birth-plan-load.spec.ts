@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { jsonResponse } from '#lib/testResponse.js';
+import { load } from './+page.js';
 
 const goto = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ goto }));
@@ -13,7 +14,6 @@ function setup(status: number, body: unknown) {
 const parameters = { practiceId: 'practice-1', engagementId: 'engagement-1' };
 
 async function callLoad() {
-	const { load } = await import('./+page.js');
 	return load({ params: parameters } as Parameters<typeof load>[0]);
 }
 

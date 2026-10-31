@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { load } from './+page.js';
 
 // #465, mirroring clients-list-load.spec.ts (#539): every branch of the
 // predicates themselves lives in #lib/roles.spec.ts, so this route's own
@@ -6,7 +7,6 @@ import { describe, expect, it, vi } from 'vitest';
 // already-resolved Membership through `parent()`.
 describe('clients/[clientId]/+page.ts load (#465, #691)', () => {
 	it("derives the contractor gate from the ancestor layout's Membership", async () => {
-		const { load } = await import('./+page.js');
 		const parent = vi.fn().mockResolvedValue({
 			session: { practiceId: 'practice-1', practiceName: 'Test Practice', roles: ['doula'], isContractor: true }
 		});
@@ -18,7 +18,6 @@ describe('clients/[clientId]/+page.ts load (#465, #691)', () => {
 	});
 
 	it('flags isOwner for an Owner (#691)', async () => {
-		const { load } = await import('./+page.js');
 		const parent = vi.fn().mockResolvedValue({
 			session: { practiceId: 'practice-1', practiceName: 'Test Practice', roles: ['owner'], isContractor: false }
 		});
@@ -31,7 +30,6 @@ describe('clients/[clientId]/+page.ts load (#465, #691)', () => {
 	// #1532: erasing a Client needs a second factor, and the screen says so
 	// before she tries. Only a session that says `false` lacks one.
 	it('clears hasSecondFactor for a session with no second factor (#1532)', async () => {
-		const { load } = await import('./+page.js');
 		const parent = vi.fn().mockResolvedValue({
 			session: {
 				practiceId: 'practice-1',

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { load } from './+layout.js';
 
 // #1609: the predicate itself is covered once in #lib/roles.spec.ts. This
 // load only has to prove the wiring: it reads the ancestor layout's
@@ -9,7 +10,6 @@ describe('clients/new/+layout.ts load (#1609)', () => {
 		[['doula'], true, true],
 		[['owner'], false, false]
 	])('reads %j with isContractor %s as a contractor Doula: %s', async (roles, isContractor, expected) => {
-		const { load } = await import('./+layout.js');
 		const parent = vi.fn().mockResolvedValue({
 			session: { practiceId: 'practice-1', practiceName: 'Test Practice', roles, isContractor }
 		});
