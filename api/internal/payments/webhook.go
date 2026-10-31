@@ -136,24 +136,38 @@ func PostConnectWebhookHandler(db *sql.DB, client Client, webhookSecret string, 
 			return
 		}
 
-		switch event.Type {
-		case eventTypeInvoicePaid:
-			handleInvoicePaid(w, r, db, client, event, enq)
-		case eventTypeInvoicePaymentFailed:
-			handleInvoicePaymentFailed(w, r, db, client, event)
-		case eventTypeInvoiceMarkedUncollectible:
-			handleInvoiceMarkedUncollectible(w, r, db, event)
-		case eventTypePaymentIntentProcessing:
-			handlePaymentIntentProcessing(w, r, db, client, event)
-		case eventTypeCreditNoteCreated:
-			handleCreditNoteCreated(w, r, db, event)
-		case eventTypeRefundCreated:
-			handleRefundCreated(w, r, db, event)
-		default:
+		handle, ok := connectEventHandlers[event.Type]
+		if !ok {
 			log.Printf("payments: connect webhook: dropping unhandled event type %q (id %s)", event.Type, event.ID)
 			w.WriteHeader(http.StatusOK)
+			return
 		}
+		handle(w, r, db, client, event, enq)
 	})
+}
+
+type connectEventHandler func(w http.ResponseWriter, r *http.Request, db *sql.DB, client Client, event WebhookEvent, enq tasknudge.Enqueuer)
+
+// connectEventHandlers is every event type PostConnectWebhookHandler acts
+// on. stripe_destinations_test.go holds it equal to the connect route's
+// enabled_events in terraform/stripe/destinations.json (#2390).
+var connectEventHandlers = map[string]connectEventHandler{
+	eventTypeInvoicePaid: handleInvoicePaid,
+	eventTypeInvoicePaymentFailed: func(w http.ResponseWriter, r *http.Request, db *sql.DB, client Client, event WebhookEvent, _ tasknudge.Enqueuer) {
+		handleInvoicePaymentFailed(w, r, db, client, event)
+	},
+	eventTypeInvoiceMarkedUncollectible: func(w http.ResponseWriter, r *http.Request, db *sql.DB, _ Client, event WebhookEvent, _ tasknudge.Enqueuer) {
+		handleInvoiceMarkedUncollectible(w, r, db, event)
+	},
+	eventTypePaymentIntentProcessing: func(w http.ResponseWriter, r *http.Request, db *sql.DB, client Client, event WebhookEvent, _ tasknudge.Enqueuer) {
+		handlePaymentIntentProcessing(w, r, db, client, event)
+	},
+	eventTypeCreditNoteCreated: func(w http.ResponseWriter, r *http.Request, db *sql.DB, _ Client, event WebhookEvent, _ tasknudge.Enqueuer) {
+		handleCreditNoteCreated(w, r, db, event)
+	},
+	eventTypeRefundCreated: func(w http.ResponseWriter, r *http.Request, db *sql.DB, _ Client, event WebhookEvent, _ tasknudge.Enqueuer) {
+		handleRefundCreated(w, r, db, event)
+	},
 }
 
 // claimEvent begins a transaction and records eventID in

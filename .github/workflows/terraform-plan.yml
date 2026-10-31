@@ -275,3 +275,124 @@ jobs:
 
           echo "Terraform plan is non-empty -- see the job summary for which resources and attributes drifted."
           exit 1
+
+  # The Sandbox Stripe account against terraform/stripe-sandbox (#2390),
+  # with its own state under gs://doula-cloud-tfstate/stripe/sandbox and a
+  # read-only restricted key. Until that key's secret has a version, the
+  # plan steps are skipped and the job is green, so the check can be
+  # required before the founder creates the key. The live root is only
+  # validated here; #2463 adds its plan.
+  plan-stripe-sandbox:
+    if: github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      KEY_SECRET: doula-cloud-stripe-sandbox-plan-key
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: '~1.16'
+          terraform_wrapper: false
+
+      - name: Validate the Stripe roots
+        working-directory: terraform
+        run: |
+          for root in stripe-sandbox stripe-live; do
+            terraform -chdir="$root" init -backend=false -input=false -no-color > /dev/null
+            terraform -chdir="$root" validate -no-color
+          done
+
+      - name: Authenticate to Google Cloud
+        uses: ./.github/actions/gcp-auth
+        with:
+          project_id: doula-cloud
+          workload_identity_provider: projects/850855848778/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: terraform-plan@doula-cloud.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Look for the read-only Sandbox key
+        id: key
+        run: |
+          set +e
+          found=$(gcloud secrets versions list "$KEY_SECRET" --project doula-cloud --filter='state:ENABLED' --limit=1 --format='value(name)' 2>&1)
+          list_exit=$?
+          set -e
+          if [ "$list_exit" -ne 0 ] && ! grep -q NOT_FOUND <<< "$found"; then
+            echo "$found"
+            exit 1
+          fi
+          if [ "$list_exit" -ne 0 ] || [ -z "$found" ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "Skipped: Secret Manager \`$KEY_SECRET\` has no enabled version yet, so there is no key to plan the Sandbox with (#2390)." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "present=true" >> "$GITHUB_OUTPUT"
+
+      - name: Terraform plan, Sandbox Stripe
+        if: steps.key.outputs.present == 'true'
+        working-directory: terraform/stripe-sandbox
+        env:
+          TF_IN_AUTOMATION: 'true'
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          key=$(gcloud secrets versions access latest --secret="$KEY_SECRET" --project doula-cloud)
+          echo "::add-mask::$key"
+          case "$key" in
+            rk_test_*) ;;
+            *) echo "$KEY_SECRET does not hold a Sandbox restricted key (rk_test_...)."; exit 1 ;;
+          esac
+
+          terraform init -reconfigure -input=false -no-color > /dev/null
+
+          set +e
+          TF_VAR_stripe_api_key="$key" terraform plan -detailed-exitcode -input=false -no-color -lock-timeout=480s -out=tfplan > plan-raw.log 2>&1
+          plan_exit=$?
+          set -e
+
+          if [ "$plan_exit" -eq 1 ]; then
+            echo "terraform plan failed to run (not a drift finding):"
+            cat plan-raw.log
+            exit 1
+          fi
+
+          if [ "$plan_exit" -eq 0 ]; then
+            echo "No changes. The Sandbox Stripe account matches terraform/stripe-sandbox." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          terraform show -json tfplan > plan.json
+
+          drift_table=$(jq -r '
+            def changed_keys(b; a):
+              (b // {}) as $b | (a // {}) as $a |
+              (($b | keys) + ($a | keys) | unique) as $allkeys |
+              ($allkeys | map(select($b[.] != $a[.])));
+
+            [.resource_changes[] | select(.mode == "managed" and .change.actions != ["no-op"])] as $drifted
+            | ($drifted | length | tostring) + " Stripe resource(s) differ from the Sandbox account. Attribute NAMES only, never values.\n\n" +
+              "| Resource | Action | Changed attributes |\n|---|---|---|\n" +
+              ( [ $drifted[]
+                  | "| `" + .address + "` | " + (.change.actions | join(",")) + " | " + (changed_keys(.change.before; .change.after) | join(", ")) + " |"
+                ] | join("\n") )
+          ' plan.json)
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            git fetch --quiet origin trunk || true
+            merge_base=$(git merge-base HEAD origin/trunk 2>/dev/null || true)
+            if [ -n "$merge_base" ] && [ -n "$(git diff --name-only "$merge_base" origin/trunk -- . ../stripe)" ]; then
+              echo "This branch is behind \`trunk\` on a Stripe Terraform change. Rebase onto \`trunk\` and push; if the plan is still non-empty after that, it is drift." >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+
+          echo "$drift_table" >> "$GITHUB_STEP_SUMMARY"
+          echo "The Sandbox Stripe plan is non-empty -- see the job summary for which resources and attributes differ."
+          exit 1
