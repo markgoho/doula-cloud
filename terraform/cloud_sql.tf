@@ -59,14 +59,14 @@ resource "google_sql_database_instance" "doula_cloud_pg" {
     enable_google_ml_integration = false
     pricing_plan                 = "PER_USE"
     replication_lag_max_seconds  = 31536000
-    retain_backups_on_delete     = false
+    retain_backups_on_delete     = true
     tier                         = "db-f1-micro"
     user_labels                  = {}
 
     backup_configuration {
       binary_log_enabled             = false
       enabled                        = true
-      point_in_time_recovery_enabled = false
+      point_in_time_recovery_enabled = true
       start_time                     = "08:00"
       transaction_log_retention_days = 7
 
