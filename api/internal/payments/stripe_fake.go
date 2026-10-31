@@ -344,6 +344,12 @@ func (f *FakeClient) RetrieveInvoicePaymentReference(_ context.Context, _, invoi
 	return f.PaymentReferences[invoiceID], nil
 }
 
+// RetrieveInvoiceFailedPaymentMethodType reports no failed attempt, the
+// answer Stripe gives for an Invoice nobody has tried to pay.
+func (f *FakeClient) RetrieveInvoiceFailedPaymentMethodType(_ context.Context, _, _ string) (string, error) {
+	return "", nil
+}
+
 // FakeClientSecretCall is one RetrieveInvoiceClientSecret call.
 type FakeClientSecretCall struct {
 	AccountID, InvoiceID string

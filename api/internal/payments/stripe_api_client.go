@@ -471,6 +471,41 @@ func (c *StripeAPIClient) RetrieveInvoicePaymentReference(ctx context.Context, a
 	return "", nil
 }
 
+// RetrieveInvoiceFailedPaymentMethodType reads the type off the
+// last_payment_error of the first PaymentIntent behind invoiceID that has
+// one, newest first. Verified against the Sandbox (#2224): after a declined
+// card the Invoice stays open, its one InvoicePayment stays open, and the
+// PaymentIntent returns to requires_payment_method with the error set.
+func (c *StripeAPIClient) RetrieveInvoiceFailedPaymentMethodType(ctx context.Context, accountID, invoiceID string) (string, error) {
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	params := &stripe.InvoicePaymentListParams{Invoice: stripe.String(invoiceID)}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	params.AddExpand("data.payment.payment_intent")
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	params.StripeAccount = stripe.String(accountID)
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	for payment, err := range c.client.V1InvoicePayments.List(ctx, params).All(ctx) {
+		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+		if err != nil {
+			return "", fmt.Errorf("payments: list invoice payments: %w", err)
+		}
+		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+		if payment.Payment == nil || payment.Payment.PaymentIntent == nil || payment.Payment.PaymentIntent.LastPaymentError == nil {
+			continue
+		}
+		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+		failure := payment.Payment.PaymentIntent.LastPaymentError
+		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+		if failure.PaymentMethodType == "" && failure.PaymentMethod != nil {
+			return string(failure.PaymentMethod.Type), nil
+		}
+		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+		return string(failure.PaymentMethodType), nil
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	return "", nil
+}
+
 // RetrieveInvoiceClientSecret retrieves invoiceID with `confirmation_secret`
 // expanded and returns its client secret -- the one thing the Payment
 // Element needs to pay the Invoice (#1020). Verified against the Sandbox in

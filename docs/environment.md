@@ -346,17 +346,20 @@ Whether a sandbox carries every Connect capability is not something to take on t
 
 **Platform billing.** The Practice pays us. A Stripe Customer plus a Checkout Session over one flat Price. One event matters: `checkout.session.completed`. The `credit_ledger` is credited by `api/internal/billing/webhook.go` and by nothing else — never by the browser redirect.
 
-**Connect.** The Client pays the Practice. An **Accounts v2** connected account per Practice carrying the `merchant` configuration, onboarded through a hosted v2 Account Link, with Invoices raised on-behalf-of using the `Stripe-Account` header. Five events matter, and they do not all arrive the same way:
+**Connect.** The Client pays the Practice. An **Accounts v2** connected account per Practice carrying the `merchant` configuration, onboarded through a hosted v2 Account Link, with Invoices raised on-behalf-of using the `Stripe-Account` header. Six events matter, and they do not all arrive the same way:
 
 | Event | Kind | Route |
 | --- | --- | --- |
 | `v2.core.account[configuration.merchant].capability_status_updated` | thin | `/api/stripe/account-webhook` |
 | `invoice.paid` | snapshot | `/api/stripe/connect-webhook` |
 | `invoice.payment_failed` | snapshot | `/api/stripe/connect-webhook` |
+| `invoice.marked_uncollectible` | snapshot | `/api/stripe/connect-webhook` |
 | `credit_note.created` | snapshot | `/api/stripe/connect-webhook` |
 | `refund.created` | snapshot | `/api/stripe/connect-webhook` |
 
 The two Refund events (#1009) are both needed, and dropping either one is silent. A credit note a Practice issues from the Invoice page of her Stripe Dashboard fires `credit_note.created`; a refund she makes from the Payments page, against the charge, fires only `refund.created` and never creates a credit note. A card refund fires both, and `payments.refundReference` keys each on the same Refund object's id, so the second arrival finds the first's row. Verified in the Sandbox on #1009's issue comment.
+
+`invoice.payment_failed` fires on every failed attempt, and Stripe keeps the Invoice `open` for the next one, so the handler records the attempt and leaves the status alone. Only `invoice.marked_uncollectible`, which a Practice fires by marking the Invoice uncollectible in her own Stripe Dashboard, moves it to `uncollectible` (#2224). Leaving that event off the destination is silent too: the Invoice would stay open here while Stripe holds it written off.
 
 `account.updated` is no longer what we act on. A v2 account **does** still emit v1 snapshot `account.updated` on the connected account — an earlier #247 note claimed otherwise, from a check that listed the *platform's* `/v1/events` where connected-account events never appear. What is true is that the v1 payload carries the v1 model (three booleans), which cannot express the four-valued capability statuses the `practices` columns now hold. The authoritative v2 state comes as a thin event.
 
@@ -424,7 +427,7 @@ They point at the raw Cloud Run URL — the one `gcloud run services describe` r
 | --- | --- | --- | --- | --- |
 | `/api/stripe/webhook` | `checkout.session.completed` | snapshot | `@self` | `we_1U7NT01rKoVEA79vnOcBFqtV`, enabled |
 | `/api/stripe/account-webhook` | `v2.core.account[configuration.merchant].capability_status_updated` | thin | `@self` | `ed_test_61VGn5QffuUmiONhX16VGl100QSQI7KSJpC2tKXrs4xU`, enabled |
-| `/api/stripe/connect-webhook` | `invoice.paid`, `invoice.payment_failed`, `credit_note.created`, `refund.created` | snapshot | `@accounts` | `we_1U7Ocp1rKoVEA79vT9AXETKU`, enabled |
+| `/api/stripe/connect-webhook` | `invoice.paid`, `invoice.payment_failed`, `invoice.marked_uncollectible`, `credit_note.created`, `refund.created` | snapshot | `@accounts` | `we_1U7Ocp1rKoVEA79vT9AXETKU`, enabled |
 
 The two Connect rows are one feature, split by Stripe's own constraint: an event destination has one `event_payload`, and the account events are thin while the Invoice events are snapshot. The snapshot destination pins `snapshot_api_version` to `2026-07-29.dahlia`, the version `stripe-go v86.3.0` sends on every request (`api_version.go`), so a delivered object always deserializes into the structs the SDK ships.
 

@@ -24,6 +24,11 @@ func TestFakeClient_UnwiredMethods(t *testing.T) {
 	if event.ID != "" || event.Type != "" || event.Account != "" || event.Data != nil {
 		t.Fatalf("event = %+v, want zero value", event)
 	}
+
+	methodType, err := client.RetrieveInvoiceFailedPaymentMethodType(t.Context(), "acct_1", "in_1")
+	if err != nil || methodType != "" {
+		t.Fatalf("RetrieveInvoiceFailedPaymentMethodType = %q, %v, want no failed attempt", methodType, err)
+	}
 }
 
 // TestFakeClient_ErasureMethods exercises #394's two Stripe erasure acts

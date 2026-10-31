@@ -69,8 +69,10 @@ func newConnectWebhookServerWithEnqueuer(db *testdb.DB, client payments.Client, 
 // seam accountFetchClient uses for the thin-event route.
 type referenceClient struct {
 	*payments.StripeAPIClient
-	reference string
-	err       error
+	reference  string
+	err        error
+	methodType string
+	methodErr  error
 }
 
 func (c *referenceClient) RetrieveInvoicePaymentReference(_ context.Context, _, _ string) (string, error) {
@@ -78,6 +80,13 @@ func (c *referenceClient) RetrieveInvoicePaymentReference(_ context.Context, _, 
 		return "", c.err
 	}
 	return c.reference, nil
+}
+
+func (c *referenceClient) RetrieveInvoiceFailedPaymentMethodType(_ context.Context, _, _ string) (string, error) {
+	if c.methodErr != nil {
+		return "", c.methodErr
+	}
+	return c.methodType, nil
 }
 
 // buildConnectEventPayload assembles a raw Stripe event envelope around
@@ -1039,67 +1048,6 @@ func TestPostConnectWebhookHandler_InvoicePaidSurvivesNudgeEnqueueFailure(t *tes
 	paymentsRows := paymentsForInvoice(t, db, invoiceID)
 	if len(paymentsRows) != 1 {
 		t.Fatalf("payments for invoice = %d, want exactly 1 -- the write must have committed despite the enqueue failure", len(paymentsRows))
-	}
-}
-
-// TestPostConnectWebhookHandler_InvoicePaymentFailedFlipsStatusWithoutPayment
-// proves a validly-signed invoice.payment_failed event flips the matching
-// Invoice's status to uncollectible without creating any payments row.
-func TestPostConnectWebhookHandler_InvoicePaymentFailedFlipsStatusWithoutPayment(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := seedConnectedPractice(t, db, "Invoice Payment Failed Practice", "acct_invoice_failed")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedDraftContract(t, db, engagementID)
-	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_failed_test", invoiceStatusOpen, 5000, time.Now())
-	srv := newConnectWebhookServer(db)
-	defer srv.Close()
-
-	payload := invoicePaymentFailedPayload(t, "evt_invoice_failed", "acct_invoice_failed", "in_failed_test")
-	resp := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-
-	status, _ := invoiceStatusAndPaidAt(t, db, invoiceID)
-	if status != invoiceStatusUncollectible {
-		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusUncollectible)
-	}
-	if payments := paymentsForInvoice(t, db, invoiceID); len(payments) != 0 {
-		t.Fatalf("payments for invoice = %d, want 0", len(payments))
-	}
-}
-
-// TestPostConnectWebhookHandler_InvoicePaymentFailedReplayIsNoOp proves
-// replaying the same invoice.payment_failed event id twice is a no-op --
-// the second delivery must not error or re-log the transition.
-func TestPostConnectWebhookHandler_InvoicePaymentFailedReplayIsNoOp(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := seedConnectedPractice(t, db, "Invoice Payment Failed Replay Practice", "acct_invoice_failed_replay")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedDraftContract(t, db, engagementID)
-	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_failed_replay", invoiceStatusOpen, 5000, time.Now())
-	srv := newConnectWebhookServer(db)
-	defer srv.Close()
-
-	payload := invoicePaymentFailedPayload(t, "evt_invoice_failed_replay", "acct_invoice_failed_replay", "in_failed_replay")
-
-	first := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
-	_ = first.Body.Close()
-	if first.StatusCode != http.StatusOK {
-		t.Fatalf("first delivery status = %d, want %d", first.StatusCode, http.StatusOK)
-	}
-
-	second := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
-	_ = second.Body.Close()
-	if second.StatusCode != http.StatusOK {
-		t.Fatalf("replayed delivery status = %d, want %d", second.StatusCode, http.StatusOK)
-	}
-
-	status, _ := invoiceStatusAndPaidAt(t, db, invoiceID)
-	if status != invoiceStatusUncollectible {
-		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusUncollectible)
 	}
 }
 

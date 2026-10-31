@@ -249,6 +249,14 @@ type Client interface {
 	// error, if Stripe reports no payment for the invoice -- a missing
 	// reference must not fail an otherwise good webhook.
 	RetrieveInvoicePaymentReference(ctx context.Context, accountID, invoiceID string) (reference string, err error)
+	// RetrieveInvoiceFailedPaymentMethodType reports Stripe's payment
+	// method type ("card", "us_bank_account") behind invoiceID's latest
+	// failed attempt, for #2224's activity row. The invoice.payment_failed
+	// event does not carry it, for the same reason invoice.paid carries no
+	// reference: it lives on the PaymentIntent behind the InvoicePayment.
+	// Returns an empty string, and no error, if Stripe reports no failed
+	// attempt.
+	RetrieveInvoiceFailedPaymentMethodType(ctx context.Context, accountID, invoiceID string) (methodType string, err error)
 	// RetrieveInvoiceClientSecret reads the Payment Element's client secret
 	// for a finalized invoiceID on accountID's connected account: the
 	// PaymentIntent's `client_secret`, exposed on the Invoice as

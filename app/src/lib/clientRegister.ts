@@ -239,6 +239,9 @@ const CLIENT_ACTIVITY_PHRASES: Record<string, string> = {
 	// does not hold.
 	invoice_raised: 'An invoice was added to your care.',
 	invoice_paid: 'An invoice was paid.',
+	// #2224. A declined card or a bounced bank debit. It names no reason
+	// and asks nothing of her: the invoice is still there to pay.
+	invoice_payment_failed: "A payment you tried didn't go through.",
 	payment_recorded: 'A payment from you was recorded.',
 	payment_reversed: 'A payment recorded earlier was removed.',
 	// #1009. "Returned to you", never "refunded": she hears a refund as a

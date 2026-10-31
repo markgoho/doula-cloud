@@ -393,6 +393,16 @@ const (
 
 	ActionInvoiceRaised EngagementAction = "invoice_raised"
 	ActionInvoicePaid   EngagementAction = "invoice_paid"
+	// ActionInvoicePaymentFailed records one failed attempt to pay a
+	// Stripe-backed Invoice (#2224): a declined card, a bank debit that
+	// bounced. The Invoice stays 'open' and payable, as it does at Stripe.
+	// Always a ClientActor, as a payment is. Its diff carries
+	// DiffKeyPaymentMethodType when Stripe reported one.
+	ActionInvoicePaymentFailed EngagementAction = "invoice_payment_failed"
+
+	// DiffKeyPaymentMethodType is Stripe's own payment method type
+	// ("card", "us_bank_account") on an ActionInvoicePaymentFailed diff.
+	DiffKeyPaymentMethodType = "paymentMethodType"
 
 	// ActionPaymentRecorded records a manually recorded Payment (#271) --
 	// a check, a bank transfer, or cash, never money Stripe itself moved
@@ -404,7 +414,10 @@ const (
 	// Staff-initiated ways a by-hand Invoice leaves 'open' without being
 	// paid (#271) -- a mistyped amount, or one the Practice has given up
 	// collecting. Neither reverses a Payment; both act on an Invoice that
-	// was never paid.
+	// was never paid. ActionInvoiceWrittenOff is a SystemActor's instead
+	// when the Connect webhook records Stripe marking a Stripe-backed
+	// Invoice uncollectible (#2224), which a Practice does from her own
+	// Stripe Dashboard.
 	ActionInvoiceVoided     EngagementAction = "invoice_voided"
 	ActionInvoiceWrittenOff EngagementAction = "invoice_written_off"
 	// ActionPaymentReversed records reversing a manually recorded Payment
@@ -512,6 +525,7 @@ var moneyActions = map[EngagementAction]bool{
 	ActionContractAmountRepriced:   true,
 	ActionInvoiceRaised:            true,
 	ActionInvoicePaid:              true,
+	ActionInvoicePaymentFailed:     true,
 	ActionPaymentRecorded:          true,
 	ActionInvoiceVoided:            true,
 	ActionInvoiceWrittenOff:        true,

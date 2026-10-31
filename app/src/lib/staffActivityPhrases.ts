@@ -96,6 +96,7 @@ const STAFF_ACTIVITY_PHRASES: Record<string, Phrase> = {
 	// Money.
 	invoice_raised: (name) => `Invoice created for ${client(name)}`,
 	invoice_paid: (name) => `Invoice for ${client(name)} paid`,
+	invoice_payment_failed: (name) => `Payment from ${client(name)} didn't go through`,
 	payment_recorded: (name) => `Payment from ${client(name)} recorded`,
 	payment_reversed: (name) => `Payment from ${client(name)} removed`,
 	payment_refunded: (name) => `Money returned to ${client(name)}`,
