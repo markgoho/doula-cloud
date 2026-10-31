@@ -561,6 +561,26 @@ const typicalInvoices: Invoice[] = [
 		activePaymentKind: 'stripe',
 		refundedCents: 15_000,
 		daysOverdue: 0
+	},
+	// #2241: a by-hand Payment reads its method and its recorder's note.
+	{
+		id: 'invoice-retainer',
+		contractId: 'contract-1',
+		status: 'paid',
+		amountCents: 25_000,
+		currency: 'usd',
+		createdAt: '2026-08-01T15:00:00Z',
+		raisedOn: '2026-08-01',
+		dueOn: '2026-08-31',
+		paidOn: '2026-08-06',
+		reference: 'INV-0001',
+		billingMode: 'by_hand',
+		activePaymentId: 'payment-retainer',
+		activePaymentKind: 'manual',
+		activePaymentMethod: 'bank_transfer',
+		activePaymentNote: 'Zelle from her partner, reference 0806, seen on the statement Aug 6.',
+		refundedCents: 0,
+		daysOverdue: 0
 	}
 ];
 const typicalRoster = TYPICAL_STAFF.map((member) => ({

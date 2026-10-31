@@ -521,14 +521,15 @@
 		   so the wrapping column, the only one left with one, takes all of
 		   the shortfall, and the table still stops where its columns are
 		   satisfied (#542). A caller's snippet cell is left to wrap: it
-		   may be more than one line by design (#264). A row's controls
-		   still wrap between each other (#1981), but never inside a word:
-		   `anywhere` below let "Change" break into "Chang" and "e". */
+		   may be more than one line by design (#264). It and a row's
+		   controls (#1981) wrap between words, never inside one:
+		   `anywhere` below let "Change" break into "Chang" and "e", and a
+		   Paid Badge into "Pa" and "id" (#2241). */
 		.has-wrapping-column :is(th, td):not(.wraps, .content, .actions) {
 			white-space: nowrap;
 		}
 
-		.has-wrapping-column .actions {
+		.has-wrapping-column :is(.actions, .content) {
 			overflow-wrap: normal;
 		}
 
