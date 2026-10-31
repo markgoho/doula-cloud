@@ -40,10 +40,15 @@ type AcceptInviteRequest struct {
 }
 
 // AcceptInviteResponse identifies the Practice the caller just joined and
-// the staff row the acceptance resolved to -- new or pre-existing.
+// the staff row the acceptance resolved to -- new or pre-existing -- and
+// what the Membership was written with, which the screen she lands on
+// says back to her (#2239).
 type AcceptInviteResponse struct {
-	StaffID    string `json:"staffId"`
-	PracticeID string `json:"practiceId"`
+	StaffID        string   `json:"staffId"`
+	PracticeID     string   `json:"practiceId"`
+	PracticeName   string   `json:"practiceName"`
+	Roles          []string `json:"roles"`
+	EmploymentType string   `json:"employmentType"`
 }
 
 // AcceptInviteHandler turns a pending Invitation into a Membership. It
@@ -299,7 +304,19 @@ func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 		return AcceptInviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError, nil
 	}
 
-	return AcceptInviteResponse{StaffID: staffID, PracticeID: inv.practiceID}, http.StatusOK, "", nil
+	var practiceName string
+	if err := tx.QueryRowContext(ctx, `SELECT name FROM practices WHERE id = $1`, inv.practiceID).Scan(&practiceName); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return AcceptInviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError, nil
+	}
+
+	return AcceptInviteResponse{
+		StaffID:        staffID,
+		PracticeID:     inv.practiceID,
+		PracticeName:   practiceName,
+		Roles:          splitRoles(inv.roles),
+		EmploymentType: inv.employmentType,
+	}, http.StatusOK, "", nil
 }
 
 // resolveStaff returns the staff row for the caller's verified identity,

@@ -1,22 +1,19 @@
 <script lang="ts">
 	/*
-	 * Accepting a Staff Invitation, in two steps rather than one (#437).
+	 * Accepting a Staff Invitation, on one screen (#2238).
 	 *
-	 * The single-step form this replaces asked for a name and a work state
-	 * alongside the credentials, and the server discarded both whenever the
-	 * caller already had a Staff account -- a name and a work state are
-	 * facts about a person, not about a Membership, so someone joining her
-	 * second Practice keeps the ones she already asserted (#316, #415).
-	 * The screen had no way to know which case it was in until she had
-	 * signed in, so it asked everyone and threw half the answers away. That
-	 * is a form lying to the person filling it in.
+	 * The screen reads its own Invitation first, by the token in the link:
+	 * the Practice, the address it was sent to, what she joins as, and
+	 * whether that address already signs in to DoulaCloud. So it never asks
+	 * which of the two she is, and never asks for the address. A person new
+	 * here names herself, says where she works and creates a password; a
+	 * person who already has an account types her password and nothing
+	 * else, because her name and work state are facts about her, already
+	 * recorded (#415, #437).
 	 *
-	 * Signing in is what tells us. So step one is only the credentials, and
-	 * step two is whichever question is left: a new person names herself
-	 * and says where she works, and a person already Staff is shown what
-	 * she already asserted, read-only, with a link to the one screen that
-	 * can change it. Nothing asked is discarded, and nothing discarded is
-	 * asked.
+	 * The one exception is an account with no Staff record behind it,
+	 * which an abandoned acceptance can leave: the server refuses for want
+	 * of a name, and the same screen then asks for the name and work state.
 	 */
 	import {
 		createUserWithEmailAndPassword,
@@ -24,12 +21,17 @@
 		signOut,
 		type UserCredential
 	} from 'firebase/auth';
-	import { goto } from '$app/navigation';
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiBaseURL, apiFetch, apiFetchWithSession } from '#lib/api.js';
-	import { authRefusal, LINK_NOT_COMPLETE, refusalErrors, refusalOrConfirmable } from '#lib/formErrors.js';
+	import {
+		authRefusal,
+		LINK_EXPIRED_OR_USED,
+		LINK_NOT_COMPLETE,
+		refusalErrors,
+		refusalOrConfirmable
+	} from '#lib/formErrors.js';
 	import {
 		PASSWORD_HINT,
 		PASSWORD_RULES,
@@ -37,222 +39,126 @@
 		preloadCommonPasswords
 	} from '#lib/passwordRule.js';
 	import { FormSubmission, orServiceProblem, type FormError } from '#lib/formSubmission.svelte.js';
-	import { decideLanding, type Membership, type SessionInfo } from '#lib/landing.js';
+	import type { SessionInfo } from '#lib/landing.js';
+	import { gotoWithOutcome } from '#lib/outcome.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
-	import Text from '#lib/components/atoms/Text.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
+	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import StaffNameFields from '#lib/components/molecules/StaffNameFields.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
-	import RadioGroup, { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import UnusableLink from '#lib/components/molecules/UnusableLink.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
-	import { workStateCode, workStateName, workStateReportedOn } from '#lib/workStates.js';
+	import { workStateCode, workStateName } from '#lib/workStates.js';
 	import { privacyPolicyUrl } from '#lib/legal.js';
+	import { asRoles, joinedSentence } from './joined.js';
 
-	// A one-line hint under each answer (#2035), so she can tell which
-	// is hers without knowing what an "account" is here.
-	const modeOptions: { value: 'signup' | 'login'; label: string; description: string }[] = [
-		{
-			value: 'signup',
-			label: "I'm new here — create an account",
-			description: 'You have never signed in to DoulaCloud.'
-		},
-		{
-			value: 'login',
-			label: 'I already have an account — sign in',
-			description: 'You already sign in to DoulaCloud for another practice.'
-		}
-	];
+	interface Invitation {
+		practiceName: string;
+		address: string;
+		roles: string[];
+		employmentType: string;
+		hasAccount: boolean;
+	}
+
+	interface Accepted {
+		practiceId: string;
+		practiceName: string;
+		roles: string[];
+		employmentType: string;
+	}
 
 	const inviteToken = page.url.searchParams.get('token') ?? '';
 
-	const emailId = 'accept-invite-email';
 	const passwordId = 'accept-invite-password';
 	const firstNameId = 'accept-invite-first-name';
 	const lastNameId = 'accept-invite-last-name';
 	const workStateId = 'accept-invite-work-state';
-	// The summary entry for the account question points at its first
-	// option, GOV.UK's rule for a group.
-	const modeName = 'mode';
-	const modeFieldId = radioFieldId(modeName, 'signup');
-
 	// docs/api-design.md section 7's Details is keyed by the DTO's own
 	// JSON field name -- POST /api/staff/accept-invite's body, below.
 	const acceptFieldIds = { firstName: firstNameId, lastName: lastNameId, workState: workStateId };
 
-	let email = $state('');
+	let invitation = $state<Invitation | undefined>();
+	let lookup = $state<'loading' | 'ready' | 'unusable' | 'failed'>(inviteToken ? 'loading' : 'unusable');
+	let lookupErrors = $state<FormError[]>([]);
+
 	let password = $state('');
-	/*
-	 * Opens with nothing chosen (#1915, ADR-0055). A person who already
-	 * has an account and presses Continue without reading would otherwise
-	 * try to make a second one.
-	 */
-	let mode = $state<'signup' | 'login' | undefined>();
-	// The Invitation carries an address and a Membership, never a name --
-	// a person names herself here, but only if she has no Staff account
-	// already carrying one.
 	let firstName = $state('');
 	let lastName = $state('');
 	let workStateName_ = $state('');
-	/*
-	 * One `FormSubmission` for both steps: they never render at the same
-	 * time, and `run` resets `errors` before each starts, so an entry can
-	 * only ever describe the form on screen.
-	 */
+	// An account with no Staff record behind it: the server asked for a
+	// name, so the screen asks too.
+	let isMissingDetails = $state(false);
+
 	const submission = new FormSubmission();
-	// #1539: the list loads while she fills in the form, not on submit, so
-	// it is ready if she chooses the branch that sets a password.
 	preloadCommonPasswords();
-	let picker = $state<Membership[] | undefined>();
+
+	const isNew = $derived(invitation !== undefined && !invitation.hasAccount);
+	const isAskingDetails = $derived(isNew || isMissingDetails);
 
 	/*
-	 * The credential from step one, kept in memory across the two steps.
-	 *
-	 * It has to be: /api/staff/accept-invite authenticates by Bearer ID
-	 * token, not by the session cookie, so step two needs to ask this
-	 * credential for a fresh token. Which is why the signOut() that the
-	 * login screen fires straight after minting the cookie cannot be
-	 * copied here -- it stays where it has always been, after the accept
-	 * POST, on both outcomes.
+	 * Kept across a retry on the same screen: accept-invite reads a Bearer
+	 * ID token, not the cookie, and an account created on a first press
+	 * must not be created again on the second.
 	 */
-	// The email field is either establishing a new identity or naming an
-	// existing one, and the password field is either being set or being
-	// recalled -- `mode` is what tells the two apart (#469). Until she
-	// answers, neither is claimed: a guess would offer a saved password
-	// for a new account, or a new one for an account she has (#1915).
-	const autocompleteFor = {
-		signup: { email: 'email', password: 'new-password' },
-		login: { email: 'username', password: 'current-password' }
-	} as const;
-	const emailAutocomplete = $derived(mode && autocompleteFor[mode].email);
-	const passwordAutocomplete = $derived(mode && autocompleteFor[mode].password);
-	// Only when she is setting a new password: an existing password does
-	// not retroactively follow a rule stated for the one being created.
-	const passwordHint = $derived(mode === 'signup' ? PASSWORD_HINT : undefined);
-	// The same reason for Safari's generator (#1813): it suggests nothing for
-	// a password she is typing back in.
-	const passwordRules = $derived(mode === 'signup' ? PASSWORD_RULES : undefined);
-
 	let credential = $state<UserCredential | undefined>();
-	// What the session read after sign-in found: an existing Staff record,
-	// or nothing (a 404, meaning she is new here). Undefined until step one
-	// has run.
-	let existing = $state<SessionInfo | undefined>();
-	// #816: this multi-step form has no single Continue button to hang
-	// #610's cross-population warning on, so it hangs on step two's own
-	// final submit -- "Accept invite" is the deliberate press that mints a
-	// session, the same reasoning the sign-in page's Continue button uses.
-	let step = $state<'identify' | 'accept' | 'confirm-sign-out'>('identify');
+	let step = $state<'form' | 'confirm-sign-out'>('form');
 	let signOutWarning = $state<string | undefined>();
-	/*
-	 * No `if (!inviteToken)` guard in here any more: the markup refuses a
-	 * link with no token before it renders the first field, so this
-	 * handler cannot run without one. Guarding again would be guarding
-	 * against a branch that has no way to be reached, and a check nobody
-	 * can trip is a check nobody can trust.
-	 */
-	async function handleIdentify(event: SubmitEvent) {
-		event.preventDefault();
 
-		await submission.run(async () => {
-			// The question alone (#2035): the fields are not on the page
-			// until she answers it, so they cannot be refused yet either.
-			if (mode === undefined)
-				return [
-					{
-						message: 'Select whether you are new here or already have an account',
-						targetId: modeFieldId
-					}
-				];
-			const refusals: FormError[] = [];
-			if (email.trim() === '')
-				refusals.push({ message: 'Enter your email address', targetId: emailId });
-			if (password === '') {
-				refusals.push({ message: 'Enter your password', targetId: passwordId });
-			} else if (mode === 'signup') {
-				// Only on the signup branch: an existing account's password is
-				// whatever it already is, and refusing a short or a common one
-				// here would lock out anyone who set one before the rule existed.
-				const refusal = await passwordRefusal(password);
-				if (refusal) refusals.push({ message: refusal, targetId: passwordId });
-			}
-			if (refusals.length > 0) return refusals;
-
-			credential =
-				mode === 'signup'
-					? await createUserWithEmailAndPassword(getFirebaseAuth(), email, password)
-					: await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
-			const idToken = await credential.user.getIdToken();
-
-			// Exchange the Identity Platform ID token for the session cookie,
-			// because the staff session read right below authenticates by
-			// cookie (#149). A plain, one-off fetch: this token makes one trip
-			// and is never carried around the way apiFetchWithSession's cookie
-			// is (#150 deleted the shared ID-token helper).
-			const exchangeResponse = await fetch(`${apiBaseURL()}/api/session`, {
-				method: 'POST',
-				credentials: 'include',
-				headers: { Authorization: `Bearer ${idToken}` }
-			});
-			if (!exchangeResponse.ok) {
-				const refusal = await refusalErrors(exchangeResponse);
-				await signOut(getFirebaseAuth());
-				return refusal;
-			}
-
-			/*
-			 * apiFetch, not apiFetchWithSession: a 401 here means the cookie
-			 * we just minted did not take, and apiFetchWithSession would
-			 * answer that by navigating to the login screen -- throwing away
-			 * the invite token in the URL, which is the one thing on this
-			 * page that cannot be got back. An error she can read and retry
-			 * in place is the better failure.
-			 */
-			const sessionResponse = await apiFetch('/api/staff/session');
-			if (sessionResponse.ok) {
-				// She is Staff somewhere already. Step two shows her what she
-				// asserted rather than asking for it again.
-				existing = (await sessionResponse.json()) as SessionInfo;
-			} else if (sessionResponse.status === 404) {
-				// No staff row behind the verified identity: she is new here,
-				// and step two is the two questions only she can answer.
-				existing = undefined;
-			} else {
-				const refusal = await refusalErrors(sessionResponse);
-				await signOut(getFirebaseAuth());
-				return refusal;
-			}
-			step = 'accept';
-		}, mapIdentifyRefusal);
+	async function readInvitation() {
+		const response = await apiFetch('/api/staff/accept-invite/lookup', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ inviteToken })
+		});
+		if (response.ok) {
+			invitation = (await response.json()) as Invitation;
+			lookup = 'ready';
+		} else if (response.status === 404 || response.status === 410) {
+			lookup = 'unusable';
+		} else {
+			lookupErrors = await refusalErrors(response);
+			lookup = 'failed';
+		}
 	}
 
-	// Identity Platform's own words name a product and carry a banned
-	// adjective. `authRefusal` covers both modes this form handles --
-	// "already has an account" on the signup branch is the one it was worth
-	// mapping, since this screen offers the other branch right underneath
-	// (#467). The client-side check's own array passes straight through.
-	function mapIdentifyRefusal(refusal: unknown): FormError[] {
-		return Array.isArray(refusal) ? refusal : [authRefusal(refusal, { emailId, passwordId })];
+	async function loadInvitation() {
+		lookup = 'loading';
+		try {
+			await readInvitation();
+		} catch (error) {
+			lookupErrors = orServiceProblem(error);
+			lookup = 'failed';
+		}
 	}
 
-	/*
-	 * The POST every accept attempt runs, first unconfirmed and then --
-	 * if #816's cross-population check refuses it -- again with
-	 * X-Confirmed. Split out of handleAccept so the confirmed retry
-	 * re-runs exactly this.
-	 */
+	if (inviteToken) void loadInvitation();
+
+	function refuseEmpty(): FormError[] {
+		const refusals: FormError[] = [];
+		if (isAskingDetails) {
+			if (firstName.trim() === '') refusals.push({ message: 'Enter your first name', targetId: firstNameId });
+			if (lastName.trim() === '') refusals.push({ message: 'Enter your last name', targetId: lastNameId });
+			if (workStateName_ === '')
+				refusals.push({ message: 'Choose the state you work from', targetId: workStateId });
+		}
+		if (password === '') refusals.push({ message: 'Enter your password', targetId: passwordId });
+		return refusals;
+	}
+
+	async function signIn(current: Invitation): Promise<UserCredential> {
+		return current.hasAccount
+			? signInWithEmailAndPassword(getFirebaseAuth(), current.address, password)
+			: createUserWithEmailAndPassword(getFirebaseAuth(), current.address, password);
+	}
+
 	async function postAccept(isConfirmed: boolean) {
 		const idToken = await credential!.user.getIdToken();
-
-		// A plain, one-off fetch: this endpoint reads the Bearer token,
-		// not the session cookie, which is why the credential from step
-		// one is still in hand.
 		return fetch(`${apiBaseURL()}/api/staff/accept-invite`, {
 			method: 'POST',
 			headers: {
@@ -260,201 +166,129 @@
 				Authorization: `Bearer ${idToken}`,
 				...(isConfirmed && { 'X-Confirmed': 'true' })
 			},
+			// Empty when she already has a Staff record, which the server
+			// ignores there: what she asserted before stands.
 			body: JSON.stringify({
 				inviteToken,
-				// Empty on the existing-Staff branch, which the server
-				// already ignores there -- what she asserted before stands,
-				// and this screen never had a newer answer to offer.
-				firstName: existing ? '' : firstName,
-				lastName: existing ? '' : lastName,
-				workState: existing ? '' : workStateCode(workStateName_)
+				firstName: isAskingDetails ? firstName : '',
+				lastName: isAskingDetails ? lastName : '',
+				workState: isAskingDetails ? workStateCode(workStateName_) : ''
 			})
 		});
 	}
 
-	async function land(): Promise<FormError[] | undefined> {
-		// AcceptInviteHandler already set the session cookie on its own
-		// response (#145) -- no separate exchange needed, just drop the
-		// JS SDK credential before the session probe reads the cookie.
+	async function land(response: Response): Promise<FormError[] | undefined> {
+		const accepted = (await response.json()) as Accepted;
+		// AcceptInviteHandler set the session cookie on its own response
+		// (#145): drop the SDK credential before reading the session.
 		await signOut(getFirebaseAuth());
-
 		const sessionResponse = await apiFetchWithSession('/api/staff/session');
-		if (!sessionResponse.ok) {
-			return await refusalErrors(sessionResponse);
-		}
-		const session: SessionInfo = await sessionResponse.json();
-		const landing = decideLanding(session);
-		if (landing.type === 'redirect') {
-			await goto(resolve('/practices/[practiceId]', { practiceId: landing.practiceId }));
-		} else if (landing.type === 'no-practice') {
-			// Accepting an Invitation is what gives her a Membership, so
-			// arriving here with none means the acceptance reported
-			// success and left her with nothing. That is the same state
-			// #745's screen is for, and the same two ways on from it --
-			// not a picker with nothing in it.
-			await goto(resolve('/(signed-out)/no-practice'));
-		} else {
-			picker = landing.memberships;
-		}
+		if (!sessionResponse.ok) return await refusalErrors(sessionResponse);
+		const session = (await sessionResponse.json()) as SessionInfo;
+
+		// The Practice she just joined, not the one she used last (#2265),
+		// and the Overview says once what she joined as (#2239).
+		const carriedOver = invitation?.hasAccount && !isMissingDetails;
+		const message = joinedSentence({
+			practiceName: accepted.practiceName,
+			roles: accepted.roles,
+			employmentType: accepted.employmentType,
+			hasOtherPractices: session.memberships.length > 1,
+			workState: carriedOver ? workStateName(session.workState) : undefined
+		});
+		await gotoWithOutcome(resolve('/practices/[practiceId]', { practiceId: accepted.practiceId }), message);
 		return undefined;
 	}
 
 	async function handleAccept(event: SubmitEvent) {
 		event.preventDefault();
-		picker = undefined;
+		const current = invitation!;
 
 		await submission.run(async () => {
-			// Nothing to check on the existing-Staff branch: it asks no
-			// questions, it only shows what she already asserted.
-			if (!existing) {
-				const refusals: FormError[] = [];
-				if (firstName.trim() === '')
-					refusals.push({ message: 'Enter your first name', targetId: firstNameId });
-				if (lastName.trim() === '')
-					refusals.push({ message: 'Enter your last name', targetId: lastNameId });
-				if (workStateName_ === '')
-					refusals.push({ message: 'Choose the state you work from', targetId: workStateId });
-				if (refusals.length > 0) return refusals;
+			const refusals = refuseEmpty();
+			if (!credential && !current.hasAccount && refusals.length === 0) {
+				const refusal = await passwordRefusal(password);
+				if (refusal) refusals.push({ message: refusal, targetId: passwordId });
+			}
+			if (refusals.length > 0) return refusals;
+
+			if (!credential) {
+				try {
+					credential = await signIn(current);
+				} catch (error) {
+					return [authRefusal(error, { emailId: passwordId, passwordId })];
+				}
 			}
 
 			const acceptResponse = await postAccept(false);
 			if (!acceptResponse.ok) {
 				// #816: a live portal session in this browser is not a form
-				// error -- nothing is wrong with what she typed, and the same
-				// submit sent again with X-Confirmed goes through. Keep the JS
-				// SDK signed in for that retry, the credential step one already
-				// produced.
+				// error; the same press, confirmed, goes through.
 				const refusal = await refusalOrConfirmable(acceptResponse, acceptFieldIds);
 				if (refusal.kind === 'confirmable') {
 					signOutWarning = refusal.message;
 					step = 'confirm-sign-out';
 					return;
 				}
+				const isAskingForDetails = refusal.errors.some((error) =>
+					[firstNameId, lastNameId, workStateId].includes(error.targetId ?? '')
+				);
+				if (isAskingForDetails && !isMissingDetails && current.hasAccount) {
+					isMissingDetails = true;
+					return refusal.errors;
+				}
+				credential = undefined;
 				await signOut(getFirebaseAuth());
 				return refusal.errors;
 			}
 
-			return await land();
+			return await land(acceptResponse);
 		}, orServiceProblem);
 	}
 
-	/*
-	 * #816's press-through: the same accept, sent again with X-Confirmed,
-	 * on the same credential step one already produced.
-	 */
 	async function handleConfirmSignOut() {
 		await submission.run(async () => {
 			const acceptResponse = await postAccept(true);
 			if (!acceptResponse.ok) {
 				const refusal = await refusalErrors(acceptResponse, acceptFieldIds);
-				step = 'accept';
+				step = 'form';
+				credential = undefined;
 				await signOut(getFirebaseAuth());
 				return refusal;
 			}
-			return await land();
+			return await land(acceptResponse);
 		}, orServiceProblem);
 	}
 
-	/*
-	 * Backing out of #816's warning. Nothing was minted, so she is back on
-	 * step two, still signed into the credential step one produced -- and
-	 * the portal session she chose to keep is untouched.
-	 */
 	function handleCancelSignOut() {
 		signOutWarning = undefined;
-		step = 'accept';
+		step = 'form';
 	}
+
+	const title = $derived(invitation ? `Join ${invitation.practiceName}` : 'Accept your invite');
+	const lede = $derived(
+		invitation && `Your invite to join as ${asRoles(invitation.roles)} was sent to ${invitation.address}.`
+	);
 </script>
 
-
 {#snippet errorSummary()}
-	<!--
-		One summary above the <h1>, GOV.UK's position, serving whichever of
-		the two forms is on screen: they never render together, and each
-		handler clears the array before it runs.
-	-->
-	<ErrorSummary errors={submission.errors} />
-{/snippet}
-
-{#snippet credentials()}
-	<!-- Revealed under whichever answer she chose (#2035); the answer
-	     decides the autocomplete and whether the password rule applies. -->
-	<stack-l space="var(--space-5)">
-		<LabeledField id={emailId} label="Email address" error={submission.errorFor(emailId)}>
-			{#snippet children({ id, describedBy, invalid })}
-				<TextInput
-					{id}
-					{describedBy}
-					{invalid}
-					type="email"
-					value={email}
-					onInput={(value) => (email = value)}
-					required
-					autocomplete={emailAutocomplete}
-				/>
-			{/snippet}
-		</LabeledField>
-		<LabeledField id={passwordId} label="Password" hint={passwordHint} error={submission.errorFor(passwordId)}>
-			{#snippet children({ id, describedBy, invalid })}
-				<TextInput
-					{id}
-					{describedBy}
-					{invalid}
-					type="password"
-					value={password}
-					onInput={(value) => (password = value)}
-					required
-					minlength={6}
-					autocomplete={passwordAutocomplete}
-					passwordrules={passwordRules}
-				/>
-			{/snippet}
-		</LabeledField>
-	</stack-l>
+	<ErrorSummary errors={lookup === 'failed' ? lookupErrors : submission.errors} />
 {/snippet}
 
 {#snippet content()}
 	{#if !inviteToken}
 		<!-- #2025: only the Practice can send another invite. -->
 		<UnusableLink message={LINK_NOT_COMPLETE} next={{ text: 'Ask the Practice to send the invite again.' }} />
-	{:else if step === 'identify'}
-		<!--
-			Step one asks only what tells us who she is. Nothing about her name
-			or her work state can be answered honestly yet, because whether we
-			need those answers depends on whether she is Staff already, and
-			signing in is what settles that.
-		-->
-		<!-- `novalidate`: the page refuses the submit, not the browser (#467). -->
-		<StackedForm onSubmit={handleIdentify}>
-			<Text text="First, sign in or create an account with the address your invite was sent to." />
-			<!--
-				The question comes first (#1959): its answer says whether the
-				password below is a new one or the one she already has, and so
-				which autocomplete and which password rule apply.
-			-->
-			<!--
-				#2035: the fields are revealed under the answer, GOV.UK's
-				conditional reveal, so she makes one decision at a time. Both
-				answers reveal the same two fields; only the chosen one is
-				mounted, so their ids never appear twice, and what she typed
-				stays in this page's state if she changes her answer.
-			-->
-			<RadioGroup
-				legend="Do you already have a DoulaCloud account?"
-				name={modeName}
-				options={modeOptions.map((option) => ({ ...option, conditional: credentials }))}
-				value={mode}
-				onChange={(value) => (mode = value)}
-				error={submission.errorFor(modeFieldId)}
-			/>
-			<Button type="submit" label="Continue" loading={submission.isSubmitting} />
-		</StackedForm>
+	{:else if lookup === 'unusable'}
+		<UnusableLink message={LINK_EXPIRED_OR_USED} next={{ text: 'Ask the Practice to send the invite again.' }} />
+	{:else if lookup === 'loading'}
+		<Skeleton variant="text" lines={4} label="Loading your invite" />
+	{:else if lookup === 'failed'}
+		<Button type="button" label="Try again" onClick={loadInvitation} />
 	{:else if step === 'confirm-sign-out'}
 		<!--
 			#816: the warning goes on the button that acts, not on a screen
 			of its own -- see the sign-in page's own copy of this pattern.
-			Her form is already accepted, so there is nothing to re-render
-			here but the consequence and the two ways out of it.
 		-->
 		<Heading level={2} text="Before you continue" focusOnAppearing />
 		<WarningText message={signOutWarning ?? ''} />
@@ -465,41 +299,9 @@
 			onClick={handleConfirmSignOut}
 		/>
 		<Button type="button" label="Cancel" variant="secondary" onClick={handleCancelSignOut} />
-	{:else}
+	{:else if invitation}
 		<StackedForm onSubmit={handleAccept}>
-			<!--
-				Step two's heading takes focus the moment step two mounts: on
-				this page the change is the whole point, since what step two
-				asks depends on what step one found out (`Heading`'s
-				`focusOnAppearing`, #2018).
-			-->
-			<Heading
-				level={2}
-				text={existing ? 'Check your details' : 'Tell us about yourself'}
-				focusOnAppearing
-			/>
-
-			{#if existing}
-				<!--
-					Read as plain text, not as disabled form controls. A disabled
-					input still looks like a question, and a question she cannot
-					answer reads as a fault in the page rather than as a fact that
-					is already settled. These are hers, already recorded, and the
-					only honest thing to render is the value itself.
-				-->
-				<Text text="These come from the Staff account you already have, so we are not asking again." />
-				<Text text={existing.name} />
-				<Text
-					text={`You work from ${workStateName(existing.workState)}, self-reported ${workStateReportedOn(existing.workStateReportedAt)}.`}
-				/>
-				<!--
-					The correction lives on one screen, because the work state is
-					one fact about one person however many Practices she works at
-					(#437). Pointing at it here rather than reopening the field
-					keeps that true.
-				-->
-				<Link href={resolve('/(person)/account')} label="Change where you work" variant="secondary" />
-			{:else}
+			{#if isAskingDetails}
 				<StaffNameFields
 					bind:firstName
 					bind:lastName
@@ -508,18 +310,33 @@
 					firstError={submission.errorFor(firstNameId)}
 					lastError={submission.errorFor(lastNameId)}
 				/>
-				<WorkStateField
-					id={workStateId}
-					bind:value={workStateName_}
-					error={submission.errorFor(workStateId)}
-				/>
+				<WorkStateField id={workStateId} bind:value={workStateName_} error={submission.errorFor(workStateId)} />
 			{/if}
+			<LabeledField
+				id={passwordId}
+				label={isNew ? 'Create a password' : 'Password'}
+				hint={isNew ? PASSWORD_HINT : undefined}
+				error={submission.errorFor(passwordId)}
+			>
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						type="password"
+						value={password}
+						onInput={(value) => (password = value)}
+						required
+						minlength={6}
+						autocomplete={isNew ? 'new-password' : 'current-password'}
+						passwordrules={isNew ? PASSWORD_RULES : undefined}
+					/>
+				{/snippet}
+			</LabeledField>
 
 			<!--
-				A notice, not a consent (#1557): it says where her data is
-				described and asks her to agree to nothing, because a Practice
-				agrees through its Owner (ADR-0053). No checkbox, and nothing is
-				recorded for it. Both branches end on this button, so both carry it.
+				A notice, not a consent (#1557): a Practice agrees through its
+				Owner (ADR-0053), so nothing is recorded for it.
 			-->
 			<p>
 				The <Link href={privacyPolicyUrl} label="Privacy Policy" /> tells you what DoulaCloud holds
@@ -529,26 +346,11 @@
 			<Button type="submit" label="Accept invite" loading={submission.isSubmitting} />
 		</StackedForm>
 	{/if}
-
-	{#if picker}
-		<Heading level={2} variant="section" text="Choose a Practice" />
-		<!-- No preload (#2070): a hover would load that Practice's session,
-		     which the BFF records as her last-used Practice. -->
-		<ul data-sveltekit-preload-data="false">
-			{#each picker as membership (membership.practiceId)}
-				<li>
-					<Link
-						href={resolve('/practices/[practiceId]', { practiceId: membership.practiceId })}
-						label={membership.practiceName}
-					/>
-				</li>
-			{/each}
-		</ul>
-	{/if}
 {/snippet}
 
 <EntryPage
-	title="Accept your Staff invite"
-	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
+	{title}
+	lede={lede || undefined}
+	errorSummary={lookup === 'failed' || submission.errors.length > 0 ? errorSummary : undefined}
 	{content}
 />

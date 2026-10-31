@@ -51,22 +51,25 @@ test('A Doula invited via the Staff invite route is refused an Owner-only action
 	const inviteToken = await readStaffInviteToken(request, invitationId);
 
 	// Accepting is walked through the real screen too (#437's two-step
-	// form): a brand-new person, so the signup branch and both questions on
-	// step two.
+	// form): a brand-new person, asked everything on the one screen (#2238).
 	await page.goto(`/accept-invite?token=${inviteToken}`);
-	await page.getByRole('radio', { name: /I'm new here/ }).check();
-	await page.getByLabel('Email address').fill(doulaEmail);
-	await page.getByLabel('Password').fill(password);
-	await page.getByRole('button', { name: 'Continue' }).click();
-
-	await expect(page.getByRole('heading', { name: 'Tell us about yourself' })).toBeVisible();
+	await expect(page.getByText(`Your invite to join as a Doula was sent to ${doulaEmail}.`)).toBeVisible();
 	await page.getByLabel('First name').fill('Robin');
 	await page.getByLabel('Last name').fill('Doula');
 	await page.getByLabel('Which state do you work from?').selectOption('New York');
+	await page.getByLabel('Create a password').fill(password);
 	await page.getByRole('button', { name: 'Accept invite' }).click();
 
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 	await expect(page.locator('h1')).toHaveText('Overview');
+	// #2239: the Overview says she joined and as what, focused on arrival,
+	// and only on arrival.
+	const joined = page.getByRole('status').filter({ hasText: /You've joined .+\. You're a Doula, as an employee\./ });
+	await expect(joined).toBeVisible();
+	await expect(joined).toBeFocused();
+	await page.reload();
+	await expect(page.locator('h1')).toHaveText('Overview');
+	await expect(joined).toHaveCount(0);
 
 	// Still signed in as the Doula: the same Owner-only screen that just
 	// worked for Jamie refuses Robin outright -- the role rule PR-B2 names

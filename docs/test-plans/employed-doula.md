@@ -20,9 +20,9 @@ She is the negative-permission Persona, so half this plan is the [Permission bou
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 1.1 | Open the invite link on the device the email arrived on | The accept form renders on a small viewport, nothing overflowing sideways | `manual` |
-| 1.2 | Set email and password, press **Accept invite** | The accept screen is two steps: the account question with email and password, **Continue**, then first name, last name and work state, **Accept invite**. `POST /api/staff/accept-invite` creates the membership with the role the Invitation named (#316), and she lands on `Overview` | `automated (staff-invite-role.e2e.ts)` |
+| 1.2 | Give her name, work state and a new password, press **Accept invite** | On the one screen, "Join *Practice name*", whose line under the heading names the roles and the invited address: First name, Last name, "Which state do you work from?", "Create a password", **Accept invite**. No account question and no email field ([#2238](https://github.com/markgoho/doula-cloud/issues/2238)). `POST /api/staff/accept-invite` creates the membership with the role the Invitation named (#316), and she lands on `Overview`, which says "You've joined *Practice name*. You're {roles}, as an employee." once, focused ([#2239](https://github.com/markgoho/doula-cloud/issues/2239)) | `automated (staff-invite-role.e2e.ts)` |
 | 1.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). The accept form, then the Practice landing it signs her into | `manual` |
-| 1.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 3 (Hick's Law, Miller's Law) | `manual` |
+| 1.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 5 (Hick's Law, Miller's Law), set on [#2238](https://github.com/markgoho/doula-cloud/issues/2238) | `manual` |
 | 1.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
 | 1.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User) | `manual` |
 | 1.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
@@ -197,9 +197,9 @@ The plan's `automated` steps were **not** re-run as specs; 1.2 was walked anyway
 
 | Step | Budget | Measured | Met |
 | --- | --- | --- | --- |
-| 1.B-screens | 2 | **3**: the account question, "Tell us about yourself", the Overview | **no**, [DW-G9 (#2238)](https://github.com/markgoho/doula-cloud/issues/2238), cited |
-| 1.B-decisions | 3 | **4** on each accept screen (the account radio group, Email address, Password, **Continue**; First name, Last name, work state, **Accept invite**); the Overview's body 6 | **no**, [DW-G9 (#2238)](https://github.com/markgoho/doula-cloud/issues/2238), cited |
-| 1.B-confirmation | yes | **no**. The Overview names the Practice in the top bar and says nothing about joining or the role | **no**, [DW-G10 (#2239)](https://github.com/markgoho/doula-cloud/issues/2239), cited |
+| 1.B-screens | 2 | **3**: the account question, "Tell us about yourself", the Overview | **no**, [DW-G9 (#2238)](https://github.com/markgoho/doula-cloud/issues/2238), cited; built, waiting on a walk ([#2264](https://github.com/markgoho/doula-cloud/issues/2264)) |
+| 1.B-decisions | 3 | **4** on each accept screen (the account radio group, Email address, Password, **Continue**; First name, Last name, work state, **Accept invite**); the Overview's body 6 | **no**, [DW-G9 (#2238)](https://github.com/markgoho/doula-cloud/issues/2238), cited; built, waiting on a walk ([#2264](https://github.com/markgoho/doula-cloud/issues/2264)) |
+| 1.B-confirmation | yes | **no**. The Overview names the Practice in the top bar and says nothing about joining or the role | **no**, [DW-G10 (#2239)](https://github.com/markgoho/doula-cloud/issues/2239), cited; built, waiting on a walk ([#2264](https://github.com/markgoho/doula-cloud/issues/2264)) |
 | 1.B-cold | yes | yes, in a fresh phone context. Each question says what it is for | yes |
 | 3.B-screens | 2 | 2: `/login`, the Overview | yes |
 | 3.B-decisions | 3 | **6** in the Overview's body: four Quick links, Camille Boyd (waiting on a reply), **See all activity**. `/login` 3 | **no**, [RA-G11 (#2228)](https://github.com/markgoho/doula-cloud/issues/2228), cited |

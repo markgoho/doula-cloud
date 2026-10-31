@@ -17,10 +17,10 @@
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 1.1 | Open the invite link at `/accept-invite` | The accept form renders | `automated (admin-invite-role.e2e.ts)` |
-| 1.2 | Set email and password, press **Accept invite** | The accept screen is two steps: the account question with email and password, **Continue**, then first name, last name and work state, **Accept invite**. `POST /api/staff/accept-invite` creates the membership with the role the Invitation named (#316), she lands on `Overview`, and her roster row reads `Admin` | `automated (admin-invite-role.e2e.ts)` |
+| 1.2 | Give her name, work state and a new password, press **Accept invite** | On the one screen, "Join *Practice name*", whose line under the heading names the roles and the invited address: First name, Last name, "Which state do you work from?", "Create a password", **Accept invite**. No account question and no email field ([#2238](https://github.com/markgoho/doula-cloud/issues/2238)). `POST /api/staff/accept-invite` creates the membership with the role the Invitation named (#316), and she lands on `Overview`, which says "You've joined *Practice name*. You're {roles}, as an employee." once, focused ([#2239](https://github.com/markgoho/doula-cloud/issues/2239)), and her roster row reads `Admin` | `automated (admin-invite-role.e2e.ts)` |
 | 1.3 | Choose the Practice from the membership list | **Nothing to choose** — one membership, so `decideLanding` redirects straight to `/practices/[practiceId]` (`app/src/lib/landing.ts:24-26`) and the picker never renders. The picker needs a second membership, which only Lena Vasquez's journey gives a Persona | `manual` |
 | 1.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). The accept form, then the Practice landing; one membership needs no picker | `manual` |
-| 1.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 3 (Hick's Law, Miller's Law) | `manual` |
+| 1.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 5 (Hick's Law, Miller's Law), set on [#2238](https://github.com/markgoho/doula-cloud/issues/2238) | `manual` |
 | 1.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
 | 1.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User) | `manual` |
 | 1.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
@@ -232,9 +232,9 @@ The plan's `automated` steps were **not** re-run as specs; 1.1 and 1.2 were walk
 
 | Step | Budget | Measured | Met |
 | --- | --- | --- | --- |
-| 1.B-screens | 2 | **3**: the account question, "Tell us about yourself", the Overview | **no**, [DW-G9 (#2238)](https://github.com/markgoho/doula-cloud/issues/2238) |
-| 1.B-decisions | 3 | **4** on each accept screen (the account radio group, Email address, Password, **Continue**; First name, Last name, work state, **Accept invite**); the Overview's body 9 ([RA-G11](https://github.com/markgoho/doula-cloud/issues/2228), cited) | **no**, [DW-G9 (#2238)](https://github.com/markgoho/doula-cloud/issues/2238) |
-| 1.B-confirmation | yes | **no**. The Overview names the Practice in the top bar and says nothing about joining or the role | **no**, [DW-G10 (#2239)](https://github.com/markgoho/doula-cloud/issues/2239) |
+| 1.B-screens | 2 | **3**: the account question, "Tell us about yourself", the Overview | **no**, [DW-G9 (#2238)](https://github.com/markgoho/doula-cloud/issues/2238); built, waiting on a walk ([#2264](https://github.com/markgoho/doula-cloud/issues/2264)) |
+| 1.B-decisions | 3 | **4** on each accept screen (the account radio group, Email address, Password, **Continue**; First name, Last name, work state, **Accept invite**); the Overview's body 9 ([RA-G11](https://github.com/markgoho/doula-cloud/issues/2228), cited) | **no**, [DW-G9 (#2238)](https://github.com/markgoho/doula-cloud/issues/2238); built, waiting on a walk ([#2264](https://github.com/markgoho/doula-cloud/issues/2264)) |
+| 1.B-confirmation | yes | **no**. The Overview names the Practice in the top bar and says nothing about joining or the role | **no**, [DW-G10 (#2239)](https://github.com/markgoho/doula-cloud/issues/2239); built, waiting on a walk ([#2264](https://github.com/markgoho/doula-cloud/issues/2264)) |
 | 1.B-cold | yes | yes, in a fresh context. Each question says what it is for, and the refusal on an empty **Continue** names both fields | yes |
 | 3.B-screens | 2 | 2: the Overview, then Credits | yes |
 | 3.B-cold | yes | yes. Credits says what a Credit is and costs before the balance | yes |

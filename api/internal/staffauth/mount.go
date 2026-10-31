@@ -102,6 +102,14 @@ var tokenSpendRules = []ratelimit.Rule{
 	ratelimit.IPRule(50, time.Hour),
 }
 
+// inviteLookupRules limits the accept screen's read of its own
+// Invitation: tokenSpendRules' shape, looser per token because the screen
+// reads it on every load of the link.
+var inviteLookupRules = []ratelimit.Rule{
+	ratelimit.HashedJSONFieldRule("inviteToken", 30, time.Hour),
+	ratelimit.IPRule(100, time.Hour),
+}
+
 // mfaRecoverySpendRules is #615's AC read literally: "spend is throttled
 // per account on failed attempts, not only per IP" -- a short issued
 // code (8 decimal digits) read aloud over a phone call, live for 24
@@ -268,6 +276,10 @@ func mountSessionRoutes(g *GatedRouter, db *sql.DB, verifier authn.Verifier, acc
 	g.Write("PUT /api/staff/name", UpdateNameHandler(db))
 	g.Write("POST /api/staff/accept-invite",
 		ratelimit.Wrap(db, "staff_accept_invite", bootstrapRules)(AcceptInviteHandler(verifier, accounts, db, enq)))
+	// A read, but a POST so the token rides in the body and not the URL.
+	// Pre-account: the link's own token is the whole credential (#2238).
+	g.Write("POST /api/staff/accept-invite/lookup",
+		ratelimit.Wrap(db, "staff_accept_invite_lookup", inviteLookupRules)(LookupInvitationHandler(accounts, db)))
 	// #613: an email address, like a work state, is a fact about the
 	// person -- same "no {practiceId}, no staff id" shape as
 	// UpdateWorkStateHandler above. Not rate limited: gated by

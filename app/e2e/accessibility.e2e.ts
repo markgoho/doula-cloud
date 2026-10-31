@@ -313,7 +313,7 @@ const SIGNED_OUT_ROUTES: Route[] = [
 		key: 'accept-invite',
 		archetype: 'A',
 		url: '/accept-invite',
-		h1: 'Accept your Staff invite'
+		h1: 'Accept your invite'
 	},
 	{
 		key: 'offers/[offerId]',
