@@ -1,6 +1,25 @@
 package contracts
 
-import "testing"
+import (
+	"os"
+	"strings"
+	"testing"
+)
+
+// TestSignConsentLine_IsTheSigningFormsCheckbox proves the consent line
+// the signed PDF prints is, word for word, the checkbox the Client checked
+// on the signing form (SIGN_CONSENT_LABEL, app/src/lib/clientRegister.ts):
+// the PDF quotes what she confirmed, so the two cannot drift (#2214).
+func TestSignConsentLine_IsTheSigningFormsCheckbox(t *testing.T) {
+	src, err := os.ReadFile("../../../app/src/lib/clientRegister.ts")
+	if err != nil {
+		t.Fatalf("read clientRegister.ts: %v", err)
+	}
+	want := "export const SIGN_CONSENT_LABEL = '" + signConsentLine + "';"
+	if !strings.Contains(string(src), want) {
+		t.Fatalf("clientRegister.ts does not declare %s", want)
+	}
+}
 
 const (
 	fillProseTestName = "Jamie"
