@@ -219,7 +219,7 @@
 						{:else}
 							<!-- A name's words as a bar, so the actions keep the
 							     baseline and the wrap a loaded name gives them. -->
-							<span class="title-placeholder" aria-hidden="true"><span>Given Family</span></span>
+							<span class="title-placeholder" aria-hidden="true"><span data-words="Given Family"></span></span>
 						{/if}
 						<cluster-l space="var(--space-2)" align="center">{@render loadingActions()}</cluster-l>
 					</cluster-l>
@@ -242,7 +242,7 @@
 						>
 							{#snippet value(row)}
 								{#each row.lines as line, index (index)}
-									<span class="value-placeholder"><span>{line}</span></span>
+									<span class="value-placeholder"><span data-words={line}></span></span>
 								{/each}
 							{/snippet}
 							{#snippet action(row)}<span class="action-placeholder">{row.changes}</span>{/snippet}
@@ -428,6 +428,13 @@
 		.value-placeholder + .value-placeholder {
 			font-size: var(--text-meta-size);
 			line-height: var(--text-meta-leading);
+		}
+
+		/* The words are generated content, so no text query or page
+		   search meets a placeholder's sample value. */
+		.value-placeholder > span::before,
+		.title-placeholder > span::before {
+			content: attr(data-words);
 		}
 
 		.value-placeholder > span,
