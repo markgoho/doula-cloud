@@ -65,12 +65,12 @@ Her persona file calls `clients` having no `practice_id` a sign the schema suppo
 
 ### Stage 6 — One account, two Engagements — moment of truth
 
-**Thinking**: "Which one has the new thing in it?" **Pain points**: none. Her Portal Account reaches her Client, `engagements_identity_visibility` (`00082`) makes every Engagement that Client holds readable before any one of them is chosen, and `decidePortalLanding` sends a person with more than one to the portal root list rather than into one of them. The list names each Engagement with `engagementLabel` — **"{Practice}, started {date}"** — so two at Rooted Birth Collective are two distinguishable lines rather than two identical ones (CB-G4, closed with [#310](https://github.com/markgoho/doula-cloud/issues/310)). The chrome's own way back to that list carries the same label as its accessible name, but shows the Practice's name alone on screen, so the thing she reads inside one Engagement looks the same as inside the other — a smaller version of the old complaint, in the one place it survives.
+**Thinking**: "Which one has the new thing in it?" **Pain points**: none. Her Portal Account reaches her Client, `engagements_identity_visibility` (`00082`) makes every Engagement that Client holds readable before any one of them is chosen, and `decidePortalLanding` sends a person with more than one to the portal root list rather than into one of them. The list names each Engagement with `engagementLabel` — **"{Practice}, started {date}"** — so two at Rooted Birth Collective are two distinguishable lines rather than two identical ones (CB-G4, closed with [#310](https://github.com/markgoho/doula-cloud/issues/310)). The chrome's own way back to that list carries the same label as its accessible name, but shows the Practice's name alone on screen, so the thing she reads inside one Engagement looks the same as inside the other — a smaller version of the old complaint, in the one place it survives. Inside the birth Engagement, **Your care** holds five decisions at once, each one a recorded choice. Under the hub rule each headed group is one decision ([`README.md`](README.md#the-budget-line), "How Decisions are counted"). #2007 chose four of them, its cards for the Birth plan, the Contract, Messages and what she owes. The fifth is **Everything that has happened**, the Client's own Activity (`GLOSSARY.md`, Activity). Hannah Sorensen's stage 3 holds the same hub to 5 ([NH-G11](https://github.com/markgoho/doula-cloud/issues/2216)).
 
 **Budget**:
 
 * **Screens**: 3 (Hick's Law, Flow)
-* **Decisions**: 2 (Hick's Law, Miller's Law)
+* **Decisions**: 5 (Hick's Law, Miller's Law)
 * **Memory**: yes (Working Memory)
 * **Time**: 400 ms, 100 ms (Doherty Threshold)
 * **Confirmation**: yes (Peak-End Rule)

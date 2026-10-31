@@ -26,7 +26,7 @@ Her journey turns mid-way, so half this plan is walked as Maya on the staff side
 | 1.2 | Read the thread and send a message | One continuous thread on **Messages**, its own page, in order, immutable (ADR-0002), with no edit or delete control. Attachments upload both ways; each is a download button in the thread | `manual` |
 | 1.2-a | Find anything on screen saying this care is four months old | No status and no **Created** line. **Your care** says "Your due date is {day}." under "What happens next", and **Your visits** lists past Visits by day. The tab title reads "Your care — {Practice}, started {created day}", and **Show what has happened** opens with "Your care was set up." The Client record's own details (ADR-0017) are Staff-only | `manual` |
 | 1.B-screens | Count the screens from the stage's entry to its end | **Screens**: 4 (Hick's Law, Flow). `/portal/login`, the sign-in link page (**Continue**), **Your care**, then **Messages** (NH-G10, [#2215](https://github.com/markgoho/doula-cloud/issues/2215)) | `manual` |
-| 1.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 2 (Hick's Law, Miller's Law) | `manual` |
+| 1.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 5 (Hick's Law, Miller's Law). **Your care**, each headed group one decision: Your birth plan, Your contract, Messages, What you still owe, Everything that has happened (NH-G11, [#2216](https://github.com/markgoho/doula-cloud/issues/2216)) | `manual` |
 | 1.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
 | 1.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
@@ -102,7 +102,7 @@ Walked as Maya. Nadia is not in the app.
 | 7.2 | Continue the thread both ways | Unchanged and unchangeable — immutable by design, which is correct here | `manual` |
 | 7.2-a | Mark that the thread's subject has changed, or pause push | **Notifications** turns push on and off from her side ([NH-G7](https://github.com/markgoho/doula-cloud/issues/298) closed as a duplicate of #303). No subject-change control, by design: Messages are immutable | `manual` |
 | 7.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
-| 7.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 2 (Hick's Law, Miller's Law) | `manual` |
+| 7.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 3 (Hick's Law, Miller's Law). Message, Attachment and **Send**; the optional Attachment counts ([#2197](https://github.com/markgoho/doula-cloud/issues/2197); NH-G11, [#2216](https://github.com/markgoho/doula-cloud/issues/2216)) | `manual` |
 | 7.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
 | 7.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
 | 7.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (portal-320.e2e.ts)` |
