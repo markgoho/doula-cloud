@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+	clientFactRows,
 	createOffer,
+	decideDescription,
 	decideOffer,
 	declinePreAccountOffer,
 	formatFee,
@@ -196,5 +198,31 @@ describe('offerStateLabels', () => {
 
 	it('gives every one of them a badge variant, so neither screen keeps its own copy', () => {
 		expect(Object.keys(offerStateVariants)).toEqual(states);
+	});
+});
+
+const erased = { ...offer, clientFirstInitial: '', clientArea: '', dueDate: '' };
+
+describe('clientFactRows', () => {
+	it('gives the Client, Area and Due date rows', () => {
+		expect(clientFactRows(offer)).toEqual([
+			{ label: 'Client', value: 'R' },
+			{ label: 'Area', value: 'North side' },
+			{ label: 'Due date', value: 'Jan 4, 2027' }
+		]);
+	});
+
+	it('gives none once her Client is erased (#2385)', () => {
+		expect(clientFactRows(erased)).toEqual([]);
+	});
+});
+
+describe('decideDescription', () => {
+	it('names the Offer by where and when', () => {
+		expect(decideDescription(offer)).toBe('North side, due Jan 4, 2027');
+	});
+
+	it('names it by its fee once her Client is erased (#2385)', () => {
+		expect(decideDescription(erased)).toBe('$450.00');
 	});
 });

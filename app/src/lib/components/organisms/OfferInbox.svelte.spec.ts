@@ -159,6 +159,15 @@ describe('OfferInbox.svelte', () => {
 		await expect.element(page.getByText('$450.00')).toBeVisible();
 	});
 
+	// #2385: an erased Client's open Offer carries none of her fields.
+	it('leaves out the Client rows on an open Offer whose Client is erased, and names it by its fee', async () => {
+		const { container } = await setup([{ ...openOffer, clientFirstInitial: '', clientArea: '', dueDate: '' }]);
+
+		expect(page.getByText('Area').elements()).toHaveLength(0);
+		expect(page.getByText('Due date').elements()).toHaveLength(0);
+		expect(describedByText(container, page.getByRole('button', { name: 'Accept' }))).toBe('$450.00');
+	});
+
 	it('shows the error when onDecide throws', async () => {
 		const onDecide = vi.fn().mockRejectedValue(new Error('that offer is no longer open'));
 		await setup([openOffer], onDecide);

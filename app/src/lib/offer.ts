@@ -15,6 +15,7 @@ import type { FeePaid } from './doulaFee.js';
 import type { Fetcher } from './fetcher.js';
 
 import { apiErrorMessage } from './apiErrorMessage.js';
+import { formatCalendarDay } from './dates.js';
 import { formatMoney } from './money.js';
 
 /** One Offer as either side reads it. targetName/targetAddress are filled
@@ -220,6 +221,33 @@ export function formatFee(amountCents: number | undefined): string {
 		return 'No per-Engagement fee';
 	}
 	return formatMoney(amountCents, 'USD');
+}
+
+interface ClientFields {
+	clientFirstInitial: string;
+	clientArea: string;
+	dueDate: string;
+}
+
+/**
+ * An open Offer's Client rows, leaving out each one the BFF sends empty:
+ * all three are once her Client is erased (ADR-0027, #2385).
+ */
+export function clientFactRows(offer: ClientFields): { label: string; value: string }[] {
+	return [
+		{ label: 'Client', value: offer.clientFirstInitial },
+		{ label: 'Area', value: offer.clientArea },
+		{ label: 'Due date', value: offer.dueDate && formatCalendarDay(offer.dueDate) }
+	].filter((row) => row.value !== '');
+}
+
+/**
+ * Tells one open Offer's Accept and Decline from another's: where and
+ * when, or the fee when her Client is erased and neither is left.
+ */
+export function decideDescription(offer: ClientFields & { amountCents?: number }): string {
+	const due = offer.dueDate && `due ${formatCalendarDay(offer.dueDate)}`;
+	return [offer.clientArea, due].filter(Boolean).join(', ') || formatFee(offer.amountCents);
 }
 
 /**

@@ -75,7 +75,10 @@ type ErasureResponse struct {
 // this row survives the shredding of her history precisely because it
 // describes the act rather than her.
 type erasureScope struct {
-	Contracts       int `json:"contracts"`
+	Contracts int `json:"contracts"`
+	// Offers counts the Offers (#2385) whose copy of her initial, area
+	// and due date this erasure emptied.
+	Offers          int `json:"offers"`
 	StripeCustomers int `json:"stripeCustomers"`
 	// PortalAccount reads the same way ErasureResponse's own
 	// PortalAccountQueued does: her portal link at this Practice was
@@ -308,6 +311,11 @@ func Erase(ctx context.Context, tx *sql.Tx, practiceID, clientID string, actor a
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return ErasureResponse{}, err
 	}
+	offers, err := redactOfferClientFields(ctx, tx, clientID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return ErasureResponse{}, err
+	}
 	paymentNotes, err := redactPaymentNotes(ctx, tx, clientID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -349,6 +357,7 @@ func Erase(ctx context.Context, tx *sql.Tx, practiceID, clientID string, actor a
 
 	scope := erasureScope{
 		Contracts:                 contracts,
+		Offers:                    offers,
 		StripeCustomers:           len(customers) + absorbedCustomers,
 		PortalAccount:             portalQueued,
 		StripeRedactionEligibleAt: eligibleAt,
@@ -597,6 +606,18 @@ func redactContractMergeFields(ctx context.Context, tx *sql.Tx, clientID string)
 		return 0, fmt.Errorf("client: count redacted contracts: %w", err)
 	}
 	return int(n), nil
+}
+
+// redactOfferClientFields empties the initial, area and due date an
+// Offer copied from her at send (#2385): her own details sent to a
+// contractor, not a record of the Practice's work, so ADR-0027 redacts
+// them in place. engagements.due_date is the Practice's record and stays.
+func redactOfferClientFields(ctx context.Context, tx *sql.Tx, clientID string) (int, error) {
+	return redactAll(ctx, tx, "offer client fields", clientID,
+		`UPDATE engagement_offers
+		    SET client_first_initial = NULL, client_area = NULL, due_date = NULL
+		  WHERE engagement_id IN (SELECT id FROM engagements WHERE client_id = $1)
+		    AND (client_first_initial IS NOT NULL OR client_area IS NOT NULL OR due_date IS NOT NULL)`)
 }
 
 // redactPaymentNotes empties the free-text note on every payments row
