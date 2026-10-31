@@ -17,7 +17,8 @@ import {
 	asOwnerWithNoClient,
 	fixture,
 	offers,
-	practiceName
+	practiceName,
+	tonightRoster
 } from './page.fixture.js';
 
 // Rendering `+page.svelte` directly bypasses `+layout.svelte`, which is the
@@ -121,6 +122,7 @@ async function setup({
 			hasMore: false
 		}),
 		'awaiting-reply': jsonResponse({ items: [], hasMore: false }),
+		'on-call': jsonResponse(tonightRoster),
 		activity: jsonResponse({ items: [], hasMore: false }),
 		'second-factor-recommendation': jsonResponse({ recommended: true }),
 		...overrides
@@ -134,6 +136,11 @@ async function setup({
 	});
 
 	await render(Page, {});
+}
+
+// #2234's block, found by its heading.
+function tonight() {
+	return testPage.getByRole('heading', { name: 'Who is free tonight' });
 }
 
 // #1533's notice, found by its heading.
@@ -260,6 +267,63 @@ describe('the Practice landing page', () => {
 			expect(testPage.getByRole('heading', { name: heading }).elements()).toHaveLength(0);
 		}
 		expect(testPage.getByRole('complementary').elements()).toHaveLength(0);
+	});
+
+	describe('who is free tonight (#2234)', () => {
+		it('says who is free, who is on call for which birth, what needs cover and who cannot be reached', async () => {
+			await setup();
+
+			await expect.element(tonight()).toBeVisible();
+			await expect.element(testPage.getByText('Charlene Boateng-Okonkwo and Joss Adeyemi')).toBeVisible();
+			await expect.element(testPage.getByText('Rowan Petrosyan-Abernathy')).toBeVisible();
+			await expect
+				.element(testPage.getByText('On call for Anne-Marie Ochieng-Whitfield and Quinn Estrada'))
+				.toBeVisible();
+			await expect.element(testPage.getByText('Needs cover')).toBeVisible();
+			await expect.element(testPage.getByText('Morgan Grier')).toBeVisible();
+			await expect.element(testPage.getByText('Cannot be reached')).toBeVisible();
+			await expect.element(testPage.getByText('Marisol Terrazas')).toBeVisible();
+		});
+
+		it('says nobody is free and no birth is on call, and leaves out the lines with nothing in them', async () => {
+			await setup({
+				overrides: {
+					'on-call': jsonResponse({
+						...tonightRoster,
+						windows: [],
+						doulas: tonightRoster.doulas.map((doula) => ({ ...doula, available: true, concurrentWindows: 1 }))
+					})
+				}
+			});
+
+			await expect.element(tonight()).toBeVisible();
+			await expect.element(testPage.getByText('Nobody', { exact: true })).toBeVisible();
+			await expect.element(testPage.getByText('No birth tonight')).toBeVisible();
+			expect(testPage.getByText('Needs cover').elements()).toHaveLength(0);
+			expect(testPage.getByText('Cannot be reached').elements()).toHaveLength(0);
+		});
+
+		it('is not drawn for a Practice of one Doula', async () => {
+			await setup({
+				overrides: { 'on-call': jsonResponse({ ...tonightRoster, windows: [], doulas: tonightRoster.doulas.slice(0, 1) }) }
+			});
+
+			await expect.element(testPage.getByRole('heading', { name: 'Recent activity' })).toBeVisible();
+			expect(tonight().elements()).toHaveLength(0);
+		});
+
+		it('says so when the roster cannot be read', async () => {
+			await setup({ overrides: { 'on-call': refusal('no') } });
+
+			await expect.element(testPage.getByText('Could not load who is on call just now.')).toBeVisible();
+		});
+
+		it('is not drawn for a Doula, who reads On call itself', async () => {
+			await setup({ roles: ['doula'] });
+
+			await expect.element(testPage.getByRole('heading', { name: 'Recent activity' })).toBeVisible();
+			expect(tonight().elements()).toHaveLength(0);
+		});
 	});
 
 	// #2228: the balance is on the Credits screen the top bar opens, so a
@@ -532,6 +596,7 @@ describe('the Practice landing page', () => {
 
 		await expect.element(testPage.getByRole('heading', { name: 'Your people' })).toBeVisible();
 		await expect.element(testPage.getByText('4 invitations expired')).toBeVisible();
+		await expect.element(testPage.getByRole('heading', { name: 'Who is free tonight' })).toBeVisible();
 		await expect.element(testPage.getByText('30+ waiting')).toBeVisible();
 		await expect.element(testPage.getByText('Onboarding incomplete')).toBeVisible();
 		await expect
