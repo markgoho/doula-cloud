@@ -37,8 +37,9 @@ const (
 // starts a new headed group, a blank answer renders as "—" rather than an
 // empty line, a checkbox as "Yes"/"No", and a multi_select as its
 // selected options joined by ", ". Under the heading, before the first
-// question, it names the plan (#2209): her name, the Practice, and the day
-// it last changed, the same three lines the printed page opens with.
+// question, it names the plan (#2209, #2355): her name, her Doula while
+// anyone is on the Engagement, the Practice, and the day it last changed,
+// the same lines the printed page opens with.
 func renderPlanPDF(heading string, m masthead, fields []Field, answers Answers) ([]byte, error) {
 	pdf := fpdf.New("P", "mm", "A4", "")
 	tr := pdf.UnicodeTranslatorFromDescriptor("")
@@ -51,10 +52,13 @@ func renderPlanPDF(heading string, m masthead, fields []Field, answers Answers) 
 	pdf.SetFont("Arial", "", 12)
 	for _, line := range []string{
 		"Name: " + m.clientName,
-		"Doula: " + m.practiceName,
+		m.doulaLine(),
+		"Practice: " + m.practiceName,
 		"Last changed: " + m.changedOn.Format(changedOnLayout),
 	} {
-		pdf.MultiCell(0, 6, tr(line), "", "", false)
+		if line != "" {
+			pdf.MultiCell(0, 6, tr(line), "", "", false)
+		}
 	}
 	pdf.Ln(4)
 

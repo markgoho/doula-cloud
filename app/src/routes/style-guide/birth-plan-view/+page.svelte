@@ -56,6 +56,7 @@
 			}}
 			masthead={{
 				clientName: 'Anne-Marie Ochieng-Whitfield',
+				doulas: ['Persephone Abernathy-Castellanos', 'Lena Vasquez'],
 				practiceName: 'Highland Midwifery and Doula Group of the Finger Lakes',
 				changedOn: '2026-10-27'
 			}}

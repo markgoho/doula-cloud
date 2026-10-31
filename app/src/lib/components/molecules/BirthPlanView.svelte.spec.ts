@@ -12,6 +12,13 @@ const defaultFields: Field[] = [
 	{ id: 'notify', type: 'multi_select', label: 'Notify', options: ['Partner', 'Doula'], order: 4 }
 ];
 
+const masthead: Masthead = {
+	clientName: 'Hannah Sorensen',
+	doulas: [],
+	practiceName: 'Rooted Birth Collective',
+	changedOn: '2026-10-27'
+};
+
 interface SetupOptions {
 	fields?: Field[];
 	answers?: Answers;
@@ -29,15 +36,30 @@ function valueFor(label: string) {
 describe('BirthPlanView.svelte', () => {
 	// #2209: the page that prints names the plan before its first question,
 	// so a stranger in scrubs handed it knows whose it is and how current.
-	it('opens with whose plan it is, whose Practice, and the day it last changed', async () => {
-		await setup({
-			masthead: { clientName: 'Hannah Sorensen', practiceName: 'Rooted Birth Collective', changedOn: '2026-10-27' }
-		});
+	it('opens with whose plan it is, her Doula, whose Practice, and the day it last changed', async () => {
+		await setup({ masthead: { ...masthead, doulas: ['Maya Okonkwo'] } });
 
 		await expect.element(page.getByText('Name')).toBeVisible();
 		expect(valueFor('Name')).toHaveTextContent('Hannah Sorensen');
-		expect(valueFor('Doula')).toHaveTextContent('Rooted Birth Collective');
+		expect(valueFor('Doula')).toHaveTextContent('Maya Okonkwo');
+		expect(valueFor('Practice')).toHaveTextContent('Rooted Birth Collective');
 		expect(valueFor('Last changed')).toHaveTextContent('Oct 27, 2026');
+	});
+
+	// #2355: the label the Engagement hub uses for more than one Doula.
+	it('names every Doula on the Engagement under one Doulas row', async () => {
+		await setup({ masthead: { ...masthead, doulas: ['Maya Okonkwo', 'Lena Vasquez'] } });
+
+		await expect.element(page.getByText('Doulas', { exact: true })).toBeVisible();
+		expect(valueFor('Doulas')).toHaveTextContent('Maya Okonkwo, Lena Vasquez');
+	});
+
+	it('names only the Practice while nobody is on the Engagement', async () => {
+		await setup({ masthead });
+
+		await expect.element(page.getByText('Practice', { exact: true })).toBeVisible();
+		expect(page.getByText('Doula', { exact: true }).query()).toBeNull();
+		expect(page.getByText('Doulas', { exact: true }).query()).toBeNull();
 	});
 
 	it('renders no masthead when none is given', async () => {

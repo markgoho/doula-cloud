@@ -45,14 +45,17 @@ export interface Instance {
 	masthead?: Masthead;
 }
 
-/** Whose Birth Plan it is, whose Practice wrote it, and when it last
- * changed (#2209) -- the Go BFF's `plans.Masthead`, the same three facts
- * its PDF opens with. `clientName` is her legal name, the document name
- * (ADR-0017); `changedOn` is `YYYY-MM-DD`, already a day in the
+/** Whose Birth Plan it is, who her Doula is, whose Practice wrote it, and
+ * when it last changed (#2209, #2355) -- the Go BFF's `plans.Masthead`,
+ * the same facts its PDF opens with. `clientName` is her legal name, the
+ * document name (ADR-0017); `doulas` is everyone on the Engagement, the
+ * set the Engagement hub's Doula row names, and empty while nobody is;
+ * `changedOn` is `YYYY-MM-DD`, already a day in the
  * Practice's zone, so it is rendered with `formatCalendarDay`, never as
  * an instant. */
 export interface Masthead {
 	clientName: string;
+	doulas: string[];
 	practiceName: string;
 	changedOn: string;
 }
