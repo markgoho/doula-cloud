@@ -11,6 +11,7 @@ import (
 	"github.com/stripe/stripe-go/v86"
 
 	"doula-cloud/api/internal/billing"
+	"doula-cloud/api/internal/stripemode"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -32,7 +33,7 @@ const (
 
 func newWebhookServer(db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle("POST /stripe/webhook", billing.PostPurchaseWebhookHandler(db.App, webhookTestSecret))
+	mux.Handle("POST /stripe/webhook", billing.PostPurchaseWebhookHandler(db.App, webhookTestSecret, stripemode.Test))
 	return httptest.NewServer(mux)
 }
 
@@ -176,6 +177,34 @@ func TestPostPurchaseWebhookHandler_InvalidSignatureRejected(t *testing.T) {
 
 	payload := checkoutCompletedPayload(t, "evt_bad_sig", practiceID, 9, "paid")
 	resp := postWebhook(t, srv, payload, "whsec_wrong_secret")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+	if got := sumLedger(t, db, practiceID); got != 0 {
+		t.Fatalf("ledger sum = %d, want 0", got)
+	}
+}
+
+// TestPostPurchaseWebhookHandler_LiveEventRefusedOnTestKeys proves a
+// validly-signed live event is refused when the keys are in test mode.
+func TestPostPurchaseWebhookHandler_LiveEventRefusedOnTestKeys(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Live Event Practice")
+	srv := newWebhookServer(db)
+	defer srv.Close()
+
+	var body map[string]any
+	if err := json.Unmarshal(checkoutCompletedPayload(t, "evt_live", practiceID, 3, "paid"), &body); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	body["livemode"] = true
+	payload, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	resp := postWebhook(t, srv, payload, webhookTestSecret)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {

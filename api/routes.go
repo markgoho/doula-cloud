@@ -30,6 +30,7 @@ import (
 	"doula-cloud/api/internal/sitebuild"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/staffinvite"
+	"doula-cloud/api/internal/stripemode"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/welcomecredits"
 )
@@ -73,6 +74,9 @@ type Deps struct {
 
 	StripeClient        billing.StripeClient
 	StripeWebhookSecret string
+	// StripeMode is the mode the Stripe keys are in (#2361); every
+	// webhook route refuses an event from the other one.
+	StripeMode stripemode.Mode
 
 	PaymentsClient payments.Client
 	// StripePublishableKey is the platform's public Stripe key, handed to the

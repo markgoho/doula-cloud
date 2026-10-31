@@ -265,6 +265,12 @@ resource "google_cloud_run_v2_service" "doula_api" {
         name  = "STRIPE_CREDIT_PRICE_ID"
         value = "price_1U9yTw1rKoVEA79v6CcEaxZg"
       }
+      # #2361: the BFF refuses to start on Cloud Run without it, or when the
+      # Stripe keys are in the other mode.
+      env {
+        name  = "STRIPE_MODE"
+        value = "test"
+      }
       env {
         name  = "STRIPE_WEBHOOK_SECRET"
         value = null
@@ -342,7 +348,7 @@ resource "google_cloud_run_v2_service" "doula_api" {
   # run any plan that would destroy this resource, before an apply is ever
   # attempted. See the comment on `deletion_protection` above for how this
   # differs from the provider-level argument. Never removed; the service holds
-  # identity (its URL, its Cloud SQL attachment, its 21 environment variables
+  # identity (its URL, its Cloud SQL attachment, its 24 environment variables
   # and secret references) that nothing here should ever destroy.
   #
   # `ignore_changes` is the split between what Terraform owns (the shape of

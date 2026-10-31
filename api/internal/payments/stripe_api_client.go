@@ -204,6 +204,7 @@ func (c *StripeAPIClient) ParseAccountEvent(payload []byte, sigHeader, secret st
 		Type:      header.Type,
 		AccountID: related.RelatedObject.ID,
 		Created:   header.Created,
+		Livemode:  header.Livemode,
 	}, nil
 }
 
@@ -711,7 +712,7 @@ func (c *StripeAPIClient) VerifyWebhookSignature(payload []byte, sigHeader, secr
 	if err != nil {
 		return WebhookEvent{}, fmt.Errorf("payments: verify webhook signature: %w", err)
 	}
-	out := WebhookEvent{ID: event.ID, Type: string(event.Type), Account: event.Account}
+	out := WebhookEvent{ID: event.ID, Type: string(event.Type), Account: event.Account, Livemode: event.Livemode}
 	if event.Data != nil {
 		out.Data = event.Data.Raw
 	}
