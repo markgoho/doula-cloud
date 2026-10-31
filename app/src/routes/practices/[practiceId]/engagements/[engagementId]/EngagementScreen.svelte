@@ -130,6 +130,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
+	import PlanInstanceView from '#lib/components/molecules/PlanInstanceView.svelte';
 	import RadioGroup, { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
 	import DateFields from '#lib/components/molecules/DateFields.svelte';
 	import {
@@ -2616,6 +2617,8 @@
 						<Link href={birthPlanHref} label="Print for the hospital" icon="file-text" variant="secondary" />
 					{/if}
 				</cluster-l>
+				<!-- #2243: the answers read here; changing them stays its own act. -->
+				<PlanInstanceView fields={instance.fields} answers={instance.answers} headingLevel={3} />
 			{:else}
 				<EmptyState
 					message="The {heading} is not started yet."

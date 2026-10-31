@@ -255,7 +255,7 @@ The text of *Two named exits, and no third* and of the earlier amendments stays 
 Filed as [#1907](https://github.com/markgoho/doula-cloud/issues/1907), from [ADR-0058](0058-atomic-design-names-the-tiers-and-two-consumers-that-should-change-together-earn-a-variant.md), position 4, which the founder decided on [#1721](https://github.com/markgoho/doula-cloud/issues/1721) on 2026-10-24. *Template means the Atomic Design layer* above settles only the suffix: none, because "the directory carries the tier". This amendment writes the rest of the naming rule, as the code already follows it:
 
 - **Atoms and Templates are named by structure:** `Button`, `Notice`, `ListPage`, `RecordDetail`.
-- **A molecule or organism that exists for one domain thing is named for that thing,** in [`GLOSSARY.md`](../../GLOSSARY.md)'s words: `ContractForm`, `BirthPlanView`, `PracticeSwitcher`, `InvoiceSection`, `OfferInbox`, `ClientFieldTemplateEditor`.
+- **A molecule or organism that exists for one domain thing is named for that thing,** in [`GLOSSARY.md`](../../GLOSSARY.md)'s words: `ContractForm`, `PlanInstanceView`, `PracticeSwitcher`, `InvoiceSection`, `OfferInbox`, `ClientFieldTemplateEditor`.
 - **No name describes the look or is a metaphor.**
 - **No name carries a tier suffix**, as the suffix rule above says.
 

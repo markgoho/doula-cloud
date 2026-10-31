@@ -11,7 +11,17 @@
 	import { formatCalendarDay } from '#lib/dates.js';
 	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 
-	let { fields, answers, masthead }: { fields: Field[]; answers: Answers; masthead?: Masthead } = $props();
+	interface Properties {
+		fields: Field[];
+		answers: Answers;
+		masthead?: Masthead;
+		/**
+		The level of each section_header's heading: one under the heading the view sits under.
+		*/
+		headingLevel: 2 | 3 | 4 | 5 | 6;
+	}
+
+	let { fields, answers, masthead, headingLevel }: Properties = $props();
 
 	/*
 	 * #2209, #2355: what names the plan wherever it is printed -- whose it
@@ -100,8 +110,7 @@
 {/if}
 {#each sections as section (section.key)}
 	{#if section.heading !== undefined}
-		<!-- Level 2: both consumers render this directly under the page's <h1> (#2018). -->
-		<Heading level={2} text={section.heading} />
+		<Heading level={headingLevel} text={section.heading} />
 	{/if}
 	{#if section.fields.length > 0}
 		<SummaryList rows={rowsFor(section)} isStacked />

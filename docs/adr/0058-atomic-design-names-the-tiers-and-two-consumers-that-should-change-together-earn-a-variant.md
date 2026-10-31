@@ -51,7 +51,7 @@ Rejected: merging the two middle tiers, because #424's test already ends the arg
 The naming rule is written as the code already follows it:
 
 - Atoms and Templates are named by structure: `Button`, `Notice`, `ListPage`, `RecordDetail`.
-- A molecule or organism that exists for one domain thing is named for that thing, in [`GLOSSARY.md`](../../GLOSSARY.md)'s words: `ContractForm`, `BirthPlanView`, `PracticeSwitcher`, `InvoiceSection`, `OfferInbox`, `ClientFieldTemplateEditor`.
+- A molecule or organism that exists for one domain thing is named for that thing, in [`GLOSSARY.md`](../../GLOSSARY.md)'s words: `ContractForm`, `PlanInstanceView`, `PracticeSwitcher`, `InvoiceSection`, `OfferInbox`, `ClientFieldTemplateEditor`.
 - No name describes the look or is a metaphor.
 - No name carries a tier suffix, because ADR-0018 already says "the directory carries the tier".
 

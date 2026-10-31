@@ -93,7 +93,7 @@ Identical to Priya's stages 6–8 and marked there; walk [employed-doula.md](emp
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 6.1 | Read the Birth Plan | As Priya 6.1–6.2: the section shows progress, "Last edited" and whether the Client has read it, and the answers sit behind **Print for the hospital** ([DW-G14](https://github.com/markgoho/doula-cloud/issues/2243)). She may also start and change it | `manual` |
+| 6.1 | Read the Birth Plan | As Priya 6.1–6.2: the section shows progress, "Last edited" and whether the Client has read it, and every answer, read-only, with **Print for the hospital** beside **Change the Birth Plan** ([DW-G14](https://github.com/markgoho/doula-cloud/issues/2243)). She may also start and change it | `manual` |
 | 6.2 | Log a Visit | As Priya 7.1: **Add a Visit** asks only the scheduled date and time, the type is worked out ("Prenatal"), and the row's **Change** writes the date and notes. She logs it for herself; she reaches this Engagement only through the granted attachment her acceptance of the Offer opened. She may also write notes on another Doula's Visit on the same Engagement (the notes rule is "any Staff member who may read a Visit") | `manual` |
 | 6.3 | Message the Client | As Priya 8.1: **Write a message**, Message, Attachment, **Send**, **Cancel**; "Message sent." and her message in the thread. The thread opens only once the Client has accepted a portal invite | `manual` |
 | 6.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |

@@ -2,7 +2,7 @@
  * The Practice-side Birth Plan (#280), as the continuum check sees it
  * (#595). Mirrors the Client-portal Birth Plan's own fixture one
  * directory group over: same two field states (a `long_text` answer and
- * a `multi_select` answer, since `BirthPlanView`'s render branches on
+ * a `multi_select` answer, since `PlanInstanceView`'s render branches on
  * both), and the same hostile URL-in-free-text answer that broke a grid
  * track on #530.
  *

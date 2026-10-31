@@ -6,7 +6,7 @@
 	import { loadClientBirthPlan, acknowledgeClientBirthPlan, downloadClientBirthPlanPdf, type Instance } from '#lib/planInstance.js';
 	import { triggerBlobDownload } from '#lib/blobDownload.js';
 	import { formatInstant } from '#lib/dates.js';
-	import BirthPlanView from '#lib/components/molecules/BirthPlanView.svelte';
+	import PlanInstanceView from '#lib/components/molecules/PlanInstanceView.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import DocumentPage from '#lib/components/templates/DocumentPage.svelte';
@@ -114,7 +114,7 @@
 				{#if downloadError}
 					<div class="no-print"><Notice variant="error" message={downloadError} /></div>
 				{/if}
-				<BirthPlanView fields={instance.fields} answers={instance.answers} masthead={instance.masthead} />
+				<PlanInstanceView fields={instance.fields} answers={instance.answers} masthead={instance.masthead} headingLevel={2} />
 				<!--
 					#2036: the act that ends the task comes after the thing she
 					reads (Fitts's Law: a form's submit sits at the end), and it

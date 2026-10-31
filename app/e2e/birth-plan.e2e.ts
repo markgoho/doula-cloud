@@ -87,6 +87,10 @@ test('Staff fills a Birth Plan, and the Client portal shows the matching read-on
 	// it so the save has actually round-tripped before this test switches
 	// to the Client-portal session below.
 	await expect(page.getByText('Birth Plan saved.')).toBeVisible();
+	// #2243: the saved answer reads on the Engagement page, no editor open.
+	await expect(
+		page.getByRole('region', { name: 'Birth Plan', exact: true }).getByText('Soft lighting, calm music')
+	).toBeVisible();
 
 	// #2209: the Doula's printout names the Client in full, the Practice,
 	// and when the plan last changed, and the controls stay off the paper.
