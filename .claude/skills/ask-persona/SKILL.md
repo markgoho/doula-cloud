@@ -1,15 +1,23 @@
 ---
 name: ask-persona
-description: Ask one DoulaCloud persona a question she can answer by using the running app ("can a Client see her next Visit?"). Runs the blind persona-walker against the local stack and returns her answer with screenshots. Args: persona slug or name, then the question.
+description: Ask a DoulaCloud persona (hannah, renata, maya, any of the nine, by name or slug) a question. Answers in her voice from what the repo records about her, citing the source of each claim; walks the running app as her when the records are silent and the screen could answer. Args: name, then the question.
 ---
 
-Answer a question by putting one persona in front of the app. Use the recipe in `docs/agents/persona-walk.md`; this skill is its question branch, and differs only where it says so.
+Put one question to one persona. There are two branches: a **consult**, which is fast, reads the records and is always run first, and a **walk**, which is slow, uses the screen and runs only when the consult sends you there.
 
-1. **Pick the persona.** Match the argument to a slug in `docs/personas/` by slug or by name. A name that is no persona's (a Client "36 weeks pregnant" is not one) maps to the closest archetype in `docs/personas/README.md`'s tables, and the answer names which persona stood in.
-2. **Start the stack** (recipe step 1), with the seed on unless she signs up cold. A Client with no seeded account needs one made first, as that step says.
-3. **Conditions**: the recipe's defaults unless the question is about one condition (offline, keyboard, a wide screen).
-4. **Build the brief** (recipe step 3) with a `Question:` line holding the question as she would hear it, in place of the stages to walk. Keep the stages and Thinking lines: they tell her what she is in the app for.
-5. **Spawn** `persona-walker` with `model: "opus"`, in the foreground. The evaluator does not run: a question walk produces an answer, not a friction log.
-6. **Report** to the asker: her `## Answer` block, the persona who answered, the shots it cites, the walked SHA and the conditions profile. Close her pages and stop the stack.
+## Consult
 
-An answer is what one scripted persona saw on one walk. It settles what the screen shows, and never what Clients or doulas want ([`docs/personas/README.md`](../../../docs/personas/README.md)).
+1. Spawn her named agent (`hannah`, `camille`, `nadia`, `maya`, `renata`, `priya`, `lena`, `dee`, `tasha`) with `model: "opus"`, in the foreground, or `persona-consult` with the name when it is none of those. Pass the question, and the screen, wording or PR it is about, when the asker named one.
+2. Relay its reply to the asker whole: her answer, its Sources, and its Nothing on record list. Keep the agent's id: a follow-up goes to the same agent by `SendMessage`, so she answers it with the conversation so far.
+
+Stop here unless an item in Nothing on record says `walk it` and the asker wants it settled.
+
+## Walk
+
+The question goes to the blind `persona-walker`, which knows only its brief. Follow `docs/agents/persona-walk.md` steps 1 to 3, then:
+
+1. Write the brief's `Question:` line in place of the stages to walk, keeping the stages and Thinking lines, which tell her what she is in the app for. Write the question as a task and a reading, never as a choice between wordings. "Find your Birth Plan. Who is your doula?" is right; "Would you rather see the Practice name or the doula's?" is not, because a choice offered to her is answered by the asker's framing, and a reading is answered by the screen. Give her the start URL she would arrive from, and leave the way to the screen for her to find.
+2. Spawn `persona-walker` with `model: "opus"`, in the foreground. The evaluator does not run, because a question walk produces an answer and not a friction log.
+3. Relay her `## Answer` block, the shots it cites, the walked SHA and the conditions profile. Close her pages and stop the stack.
+
+Either answer is what the records hold or what one scripted persona saw on one walk: evidence to weigh, never a claim about what Clients or doulas want ([`docs/personas/README.md`](../../../docs/personas/README.md)).

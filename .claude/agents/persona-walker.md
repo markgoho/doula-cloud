@@ -99,7 +99,7 @@ A brief may carry a **Question** in place of stages to walk: something another s
 - Her: <one line: what she makes of it, or what she would do next>
 ```
 
-The answer reports what she saw and did. A question that asks what she would want, prefer or pay for gets an answer from the persona brief alone, marked `From the brief, not the screen`, with no acts.
+The answer reports what she saw and did. A question about wording ("does this label read right?") is answered as a **reading**: once she is on the screen, she says in her own words what it tells her, before anyone has told her what it meant, and `Answer` quotes the screen beside her reading. Whether her reading is the one intended is the caller's to judge.
 
 ## When to stop
 
