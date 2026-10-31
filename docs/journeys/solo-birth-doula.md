@@ -41,7 +41,7 @@ Maya is close to a domain expert but not inside the model.
 
 - **1.1** — Open `/signup`.
 - **1.2** — Answer three question pages ([#2049](https://github.com/markgoho/doula-cloud/issues/2049)), each with **Continue**: "About you" (First name, Last name, Email address, Password); "What is your Practice called? (optional)"; "Where do you work?" (the state she works from, Timezone). On "Check your answers", read her answers, each with a **Change** link, and the sentence above the button, "By creating your Practice, you agree to the Terms of Service and the Privacy Policy.", whose two links open in a new tab; press **Create your Practice** (`POST /api/staff/signup`). She works under her own name, so she can leave the Practice name empty: the BFF gives the Practice her own name, first name then last name, and she types it only once (#1536). Pressing the button is her Practice's agreement to the two documents, recorded as a `terms_accepted` Activity row with the version of each (#1547, ADR-0053). There is no checkbox.
-- **1.3** — Land on `/practices/[practiceId]`, whose first line now carries the role notice. She now holds Owner, Admin, and Doula on one membership, granted in a single statement (`signup.go:152`).
+- **1.3** — Land on `/practices/[practiceId]`, whose first line now carries the role notice. She now holds Owner, Admin, and Doula on one membership, granted in a single statement (`signup.go:320`).
 
 She is **not** a test of role separation. Every permission boundary rides on Renata's invite route instead.
 
@@ -60,7 +60,7 @@ She is **not** a test of role separation. Every permission boundary rides on Ren
 - **2.1** — Open `/practices/[practiceId]/settings/plan-templates`.
 - **2.2** — Review the seeded default Care Plan and Birth Plan fields.
 - **2.3** — Edit and save (`PUT /api/practices/{id}/plan-templates/{planType}`), owner-gated at `plans/template.go:220`. She is Owner, so this passes.
-- **2.4** — Review the seeded Contract Template at `/practices/[practiceId]/settings/contract-template`. Signup seeds all three templates in one transaction — Care Plan, Birth Plan, and Contract (`signup.go:160`, `signup.go:168`) — so no Practice ever has to create one before sending its first Contract.
+- **2.4** — Review the seeded Contract Template at `/practices/[practiceId]/settings/contract-template`. Signup seeds all three templates in one transaction — Care Plan, Birth Plan, and Contract (`signup.go:377`, `signup.go:385`) — so no Practice ever has to create one before sending its first Contract.
 
 ### Stage 3 — Add the first Client — moment of truth
 

@@ -23,7 +23,7 @@ An **act** is one thing she does to move toward her goal: following a link, subm
 2. **Do** the act through the input mode the brief names: `click`/`fill` for pointer, only `press_key` and `type_text` for keyboard-only.
 3. **Wait** for what she expects to see, with `wait_for`, or for 15 s at most when nothing she can name appears.
 4. **Read** the timer with `evaluate_script` and the Read function. Its `ms` goes in the log exactly as returned.
-5. **Shoot** with `take_screenshot`, `filePath` set to `<shots dir>/<slug>-<n>.png`, where `n` counts acts from 1.
+5. **Shoot** with `take_screenshot`, `filePath` set to `<shots dir>/<slug>-act-<n>.png`, where `<slug>` is the persona slug the brief gives, never her name, and `n` counts acts from 1.
 6. **Capture the exchange**: `list_network_requests` filtered to `fetch` and `xhr`, and for each request this act caused, write its method, path and status down. When the act was a full page load, take the `document` request too.
 7. **Write the entry** (format below), then go on to her next act.
 
@@ -110,7 +110,10 @@ Stop when every stage in the brief has been walked, or she has hit her goal's "d
 - Acts: <count>
 - Not captured: <count, and which acts>
 - Stages walked: <each stage, with the act numbers in it>
-- Stages not reached: <each, and why>
+- Stages outside the brief: <each stage listed that the brief did not ask her to walk, or "none">
+- Stages not reached: <each stage the brief asked her to walk that she never walked, and why, or "none">
 ```
+
+A stage outside the brief is not one she failed to reach, so it never goes under "not reached".
 
 Return the whole log as your final message. Your final message is the only thing that leaves this walk.
