@@ -67,7 +67,7 @@ The roles, from `api/db/migrations/`:
 
 Facts about RLS that bear on an operator role:
 
-- RLS is enabled on 44 tables. **`practices` has none** (no `ALTER TABLE practices ENABLE ROW LEVEL SECURITY` in any migration). `app_runtime` can list every Practice today.
+- RLS is enabled on 44 tables. **`practices` has none** (no `ALTER TABLE practices ENABLE ROW LEVEL SECURITY` in any migration). `app_runtime` can list every Practice today. Postgres applies a table's policies only once row security is enabled on it, so 00046's `practices_site_builder` policy has no effect today; `site_builder` reads `practices` through its grant alone.
 - No table uses `FORCE ROW LEVEL SECURITY`, so the table owner (the migration login) bypasses every policy, which is what makes a `SECURITY DEFINER` function work.
 - The BFF itself chooses `app.current_practice_id`. `api/internal/billing/monthly.go` and `dormancy.go` read every Practice's ledger as `app_runtime` by looping over Practices and calling `set_config('app.current_practice_id', id, true)` for each. So RLS protects one Practice from a request acting for another; it does not stop the BFF process from reading any Practice it decides to. What a separate role can add is a set of **functions and policies the Practice BFF's role is not granted at all**.
 
@@ -118,7 +118,7 @@ From [Cloud Run pricing](https://cloud.google.com/run/pricing), request-based bi
 
 Arithmetic (the researcher's, not Google's): one idle min instance at `doula-api`'s size, 1 vCPU and 0.5 GiB, for a 30-day month (2,592,000 seconds) is 2,592,000 × $0.0000025 = $6.48 of CPU plus 2,592,000 × 0.5 × $0.0000025 = $3.24 of memory, about **$9.72 a month** before any free-tier offset. At `min-instances=0`, an operator's few dozen requests a day are well inside the free tier and each first request after idle pays a cold start. The free tier is a spending discount shared across the billing account, which `doula-api` already draws on.
 
-Two repo-specific costs on top: a second Secret Manager secret for the ops DSN if it uses a password (Secret Manager is billed per active secret version), and the 60-second Hosting timeout, which matters for any operator read that loops over every Practice the way `billing.MonthlyCredits` does.
+Two repo-specific costs on top: a second Secret Manager secret for the ops DSN if it uses a password, and the 60-second Hosting timeout, which matters for any operator read that loops over every Practice the way `billing.MonthlyCredits` does.
 
 ## 3. Postgres roles on Cloud SQL for a second service
 
@@ -136,7 +136,7 @@ Two repo-specific costs on top: a second Secret Manager secret for the ops DSN i
 
 ### Keeping operator functions away from `app_runtime`
 
-PostgreSQL's own guidance ([CREATE FUNCTION, "Writing SECURITY DEFINER Functions Safely"](https://www.postgresql.org/docs/16/sql-createfunction.html)): "by default, execute privilege is granted to PUBLIC for newly created functions ... you must revoke the default PUBLIC privileges and then grant execute privilege selectively. To avoid having a window where the new function is accessible to all, create it and set the privileges within a single transaction." It also says to set `search_path` with `pg_temp` last. goose runs each migration in a transaction by default, so a migration that creates and revokes together meets the "single transaction" part.
+PostgreSQL's own guidance ([CREATE FUNCTION, "Writing SECURITY DEFINER Functions Safely"](https://www.postgresql.org/docs/16/sql-createfunction.html)): "by default, execute privilege is granted to PUBLIC for newly created functions ... you must revoke the default PUBLIC privileges and then grant execute privilege selectively. To avoid having a window where the new function is accessible to all, create it and set the privileges within a single transaction." It also says to set `search_path` with `pg_temp` last. goose runs "All statements within a single migration file ... within the same transaction" unless the file carries `-- +goose no transaction` ([goose annotations](https://pressly.github.io/goose/documentation/annotations/)), so a migration that creates and revokes together meets the "single transaction" part.
 
 [Row security](https://www.postgresql.org/docs/16/ddl-rowsecurity.html): permissive policies "are combined using OR"; "If no role is specified ... the policy applies to all users"; "Table owners normally bypass row security"; superusers and `BYPASSRLS` roles always do.
 
