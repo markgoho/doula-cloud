@@ -177,6 +177,20 @@ describe('RecordDetail.svelte', () => {
 		expect(strip.compareDocumentPosition(firstSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 	});
 
+	// #2257: on a phone the summary card pushed the strip below the first
+	// screen, so the strip now comes before the summary.
+	it('puts the jump-to strip between the title and the summary', async () => {
+		const { container } = await setup({ isContentsShown: true, summary: textSnippet('Due Mar 4') });
+
+		const title = page.getByRole('heading', { level: 1, name: 'Ada Lovelace' }).element();
+		const summary = page.getByText('Due Mar 4').element();
+		// Case 1 of the querySelector exception: the strip and the rail hold the same links.
+		const strip = container.querySelector('.contents-strip')!;
+
+		expect(title.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(strip.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
 	it('draws the back link, the title and a skeleton while loading, instead of the record (#480, #2248)', async () => {
 		const { container } = await setup({
 			loading: 'Loading the Engagement',
@@ -209,13 +223,18 @@ describe('RecordDetail.svelte', () => {
 		expect(page.getByRole('status').all()).toHaveLength(1);
 	});
 
-	it('reserves the contents rail column while loading, if the loaded record will have one (#480)', async () => {
+	// #2257: the headings a route names while loading are its sections', so
+	// the contents are drawn from them at once, and land where the loaded
+	// ones do. Case 1 of the querySelector exception: two copies of one list.
+	it('draws the contents from the named sections while loading, if the loaded record will have them (#480, #2257)', async () => {
 		const { container } = await setup({ loading: 'Loading the Engagement', isContentsShown: true });
 
-		expect(container.querySelector('.contents-rail')).not.toBeNull();
-		// No links yet: `sections` does not exist during loading, and a
-		// second "loading" announcement here would double the Skeleton's own.
-		expect(container.querySelector(':scope .contents-rail a')).toBeNull();
+		for (const region of ['.contents-rail', '.contents-strip']) {
+			const hrefs = [...container.querySelectorAll(`${region} a`)].map((anchor) => anchor.getAttribute('href'));
+			expect(hrefs).toEqual(['#visits', '#invoices']);
+		}
+		expect(container.querySelector('#invoices')).not.toBeNull();
+		expect(page.getByRole('status').all()).toHaveLength(1);
 	});
 
 	it('does not reserve a contents rail while loading a record with no rail', async () => {
