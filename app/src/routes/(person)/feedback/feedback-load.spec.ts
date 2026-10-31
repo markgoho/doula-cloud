@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { load } from './+page.js';
 
 const goto = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ goto }));
@@ -27,7 +28,6 @@ const mfaRequired = { code: 'MFA_REQUIRED', message: 'this page requires a secon
 const notFound = { code: 'NOT_FOUND', message: 'not found' };
 
 async function loadList() {
-	const { load } = await import('./+page.js');
 	return load({ params: {}, url: listUrl } as Parameters<typeof load>[0]);
 }
 

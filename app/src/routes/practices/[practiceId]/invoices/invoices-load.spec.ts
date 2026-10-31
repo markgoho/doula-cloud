@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { jsonResponse } from '#lib/testResponse.js';
 import { loadedValue, settledRead } from '#lib/testStreamedRead.js';
+import { load } from './+page.js';
 
 function setup(status: number, body: unknown) {
 	const fetchMock = vi.fn(async () => jsonResponse(body, status));
@@ -24,7 +25,6 @@ const emptyBook = {
 
 describe('invoices/+page.ts load', () => {
 	it('fetches the Practice-wide invoices path and hands over the page', async () => {
-		const { load } = await import('./+page.js');
 		const { fetchMock } = setup(200, emptyBook);
 
 		const data = await load({ params: { practiceId: 'practice-1' }, url: new URL('https://example.test/practices/practice-1/invoices') } as Parameters<typeof load>[0]);
@@ -39,7 +39,6 @@ describe('invoices/+page.ts load', () => {
 	// #768: the narrowing is in the URL, so the load reads it there and
 	// asks the BFF for the same slice the link named.
 	it('carries an overdue narrowing from the URL through to the BFF', async () => {
-		const { load } = await import('./+page.js');
 		const { fetchMock } = setup(200, emptyBook);
 
 		const data = await load({
@@ -57,7 +56,6 @@ describe('invoices/+page.ts load', () => {
 	// #2249: the screen has changed by the time a refusal lands, so the
 	// screen follows it; the read carries the response through unread.
 	it('hands a refusal to the screen rather than throwing mid-load', async () => {
-		const { load } = await import('./+page.js');
 		setup(403, { code: 'FORBIDDEN', message: 'not permitted to read this' });
 
 		const data = await load({ params: { practiceId: 'practice-1' }, url: new URL('https://example.test/practices/practice-1/invoices') } as Parameters<typeof load>[0]);

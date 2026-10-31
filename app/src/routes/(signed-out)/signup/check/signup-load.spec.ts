@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ComingVersion } from '#lib/legal.js';
+import { load as pageLoad } from './+page.js';
 
 const coming: ComingVersion[] = [{ document: 'terms', name: 'Terms of Service', version: '2026-11-30' }];
 
@@ -11,7 +12,6 @@ function setup(answer: (input: RequestInfo | URL) => Promise<Response>) {
 }
 
 async function load() {
-	const { load: pageLoad } = await import('./+page.js');
 	return pageLoad({} as Parameters<typeof pageLoad>[0]);
 }
 

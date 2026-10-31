@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { jsonResponse } from '#lib/testResponse.js';
 import { loadedValue, settledRead } from '#lib/testStreamedRead.js';
-import type { OnCallPageData } from './+page.js';
+import { load, type OnCallPageData } from './+page.js';
 import { defaultRange, type Roster } from '#lib/onCall.js';
 
 /*
@@ -56,13 +56,18 @@ function loadEvent(search = '') {
 	};
 }
 
+beforeEach(() => {
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date(2026, 9, 2, 9, 0));
+});
+
 afterEach(() => {
 	vi.unstubAllGlobals();
+	vi.useRealTimers();
 });
 
 describe('on-call/+page.ts load', () => {
 	it('asks for the days the URL names', async () => {
-		const { load } = await import('./+page.js');
 		const { fetchMock } = setup(200);
 
 		const data = await loadedValue<OnCallPageData>(await load(loadEvent('?from=2026-10-01&to=2026-10-31') as Parameters<typeof load>[0]));
@@ -75,7 +80,6 @@ describe('on-call/+page.ts load', () => {
 	});
 
 	it('opens on the next 30 days when the URL names none, so a first visit is not empty (#2026)', async () => {
-		const { load } = await import('./+page.js');
 		const { fetchMock } = setup(200);
 
 		const data = await loadedValue<OnCallPageData>(await load(loadEvent() as Parameters<typeof load>[0]));
@@ -89,7 +93,6 @@ describe('on-call/+page.ts load', () => {
 	// #2249: the screen has changed by the time a refusal lands, so the
 	// screen follows it; the read carries the response through unread.
 	it('hands a refusal to the screen rather than throwing mid-load', async () => {
-		const { load } = await import('./+page.js');
 		setup(400, 'Choose a range of 92 days or fewer');
 
 		const data = await load(loadEvent('?from=2026-01-01&to=2026-12-31') as Parameters<typeof load>[0]);

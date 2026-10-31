@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { jsonResponse } from '#lib/testResponse.js';
+import { load } from './+page.js';
 
 const goto = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ goto }));
@@ -21,7 +22,6 @@ afterEach(() => {
 
 describe('/+page.ts load', () => {
 	it('redirects a signed-in Staff visitor to her only Practice', async () => {
-		const { load } = await import('./+page.js');
 		setup({
 			'/api/staff/session': {
 				status: 200,
@@ -36,7 +36,6 @@ describe('/+page.ts load', () => {
 	});
 
 	it('hands back a Practice picker for a Staff visitor with several memberships and no last-used one', async () => {
-		const { load } = await import('./+page.js');
 		const memberships = [
 			{ practiceId: 'practice-1', practiceName: 'Riverside Doulas', roles: ['owner'] },
 			{ practiceId: 'practice-2', practiceName: 'Hilltop Doulas', roles: ['doula'] }
@@ -54,7 +53,6 @@ describe('/+page.ts load', () => {
 	// session that resolves to a person and to no Practice. That is a
 	// state with two ways out of it, not a picker with nothing in it.
 	it('sends a Staff visitor with no Membership to the no-Practice screen', async () => {
-		const { load } = await import('./+page.js');
 		setup({
 			'/api/staff/session': { status: 200, body: { memberships: [], lastPracticeId: undefined } }
 		});
@@ -70,7 +68,6 @@ describe('/+page.ts load', () => {
 	// out", and offering her the sign-up and sign-in links is offering the
 	// two things that have already stopped working for her.
 	it('sends a signed-in identity that belongs to neither population to the no-Practice screen', async () => {
-		const { load } = await import('./+page.js');
 		setup({
 			'/api/staff/session': { status: 404, body: 'no matching staff account' },
 			'/api/portal/session': { status: 404, body: 'no matching client account' }
@@ -83,7 +80,6 @@ describe('/+page.ts load', () => {
 	});
 
 	it('redirects a signed-in Client-portal visitor to her only Engagement, once no Staff session answers', async () => {
-		const { load } = await import('./+page.js');
 		setup({
 			'/api/staff/session': { status: 401, body: 'no session' },
 			'/api/portal/session': {
@@ -99,7 +95,6 @@ describe('/+page.ts load', () => {
 	});
 
 	it('hands back an Engagement picker for a Client-portal visitor with several Engagements', async () => {
-		const { load } = await import('./+page.js');
 		const engagements = [
 			{ engagementId: 'engagement-1', practiceName: 'Riverside Doulas', status: 'active' },
 			{ engagementId: 'engagement-2', practiceName: 'Hilltop Doulas', status: 'active' }
@@ -115,7 +110,6 @@ describe('/+page.ts load', () => {
 	});
 
 	it('lands a visitor with neither session on the signed-out page, without treating either 401 as an expired session', async () => {
-		const { load } = await import('./+page.js');
 		setup({
 			'/api/staff/session': { status: 401, body: 'no session' },
 			'/api/portal/session': { status: 401, body: 'no session' }
@@ -128,7 +122,6 @@ describe('/+page.ts load', () => {
 	});
 
 	it('fails toward the signed-out landing when a probe throws, rather than a broken page', async () => {
-		const { load } = await import('./+page.js');
 		const fetchMock = vi.fn(async () => {
 			throw new TypeError('Failed to fetch');
 		});

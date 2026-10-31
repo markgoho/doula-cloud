@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { jsonResponse } from '#lib/testResponse.js';
-import type { ClientsListGate } from './+page.js';
+import { load, type ClientsListGate } from './+page.js';
 
 // Only the row count matters to this load, so a row is its id and its work.
 const withWork = { clientId: 'client-1', hasWork: true };
@@ -18,7 +18,6 @@ function membership(roles: string[], isContractor = false) {
 }
 
 async function runLoad(roles: string[], isContractor = false) {
-	const { load } = await import('./+page.js');
 	const parent = vi.fn().mockResolvedValue(membership(roles, isContractor));
 	const result = (await load({
 		params: { practiceId },

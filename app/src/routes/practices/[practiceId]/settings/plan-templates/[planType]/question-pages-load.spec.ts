@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { load } from './+layout.js';
 
 vi.mock('$app/paths', () => ({
 	resolve: (route: string, parameters: Record<string, string>) =>
@@ -12,7 +13,6 @@ vi.mock('$app/paths', () => ({
  * arrives by address anyway to the list, which she may read.
  */
 async function run(roles: string[], planType = 'birth_plan') {
-	const { load } = await import('./+layout.js');
 	const parent = vi.fn().mockResolvedValue({ session: { practiceId: 'practice-1', roles } });
 	return load({ parent, params: { practiceId: 'practice-1', planType } } as unknown as Parameters<typeof load>[0]);
 }

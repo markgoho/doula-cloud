@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { jsonResponse } from '#lib/testResponse.js';
+import { load } from './+layout.js';
 
 const goto = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ goto }));
@@ -32,7 +33,6 @@ afterEach(() => {
 // descendant route reads that instead of fetching this endpoint itself.
 describe('practices/[practiceId]/+layout.ts load', () => {
 	it("fetches the Practice session and returns it as this navigation's Membership", async () => {
-		const { load } = await import('./+layout.js');
 		setup({
 			'/api/practices/practice-1/session': {
 				status: 200,
@@ -56,7 +56,6 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 	// #1532: the five screens whose act needs a second factor read this
 	// off the session, so they can say so before she tries.
 	it("carries the session's own second-factor fact", async () => {
-		const { load } = await import('./+layout.js');
 		setup({
 			'/api/practices/practice-1/session': {
 				status: 200,
@@ -77,7 +76,6 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 
 	// #2183: the Staff top bar reads this off the session on every screen.
 	it('carries whether the Practice holds any Client yet', async () => {
-		const { load } = await import('./+layout.js');
 		setup({
 			'/api/practices/practice-1/session': {
 				status: 200,
@@ -98,7 +96,6 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 
 	// #2293: the Invoices list reads this off the session on its first frame.
 	it('carries whether Clients can pay the Practice', async () => {
-		const { load } = await import('./+layout.js');
 		setup({
 			'/api/practices/practice-1/session': {
 				status: 200,
@@ -120,7 +117,6 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 	// #2200: the Invoices list says nothing about Stripe to a Practice
 	// that bills by hand.
 	it("carries the Practice's billing mode", async () => {
-		const { load } = await import('./+layout.js');
 		setup({
 			'/api/practices/practice-1/session': {
 				status: 200,
@@ -143,7 +139,6 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 	// #2183: saving a Practice's first Client invalidates this name, so the
 	// session (and with it the top bar) is read again on the way out.
 	it('declares the dependency an act invalidates to read the session again', async () => {
-		const { load } = await import('./+layout.js');
 		setup({
 			'/api/practices/practice-1/session': {
 				status: 200,
@@ -157,7 +152,6 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 	});
 
 	it('redirects to login on a 401, rather than reaching for goto mid-load', async () => {
-		const { load } = await import('./+layout.js');
 		setup({ '/api/practices/practice-1/session': { status: 401, body: 'no session' } });
 
 		await expect(load(loadArguments)).rejects.toMatchObject({ status: 303, location: '/login?sessionEnded=true' });
@@ -170,7 +164,6 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 	// (api.spec.ts's own `isMFARequired` tests use the same real
 	// `Response`, for the same reason) does not implement.
 	it('redirects to MFA enrollment on a 403 carrying MFA_REQUIRED, carrying returnTo', async () => {
-		const { load } = await import('./+layout.js');
 		vi.stubGlobal(
 			'fetch',
 			vi.fn(async () =>
@@ -186,7 +179,6 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 
 	// #748 AC1: removed from every Practice mid-session.
 	it('sends her to /no-practice when an ordinary 403 leaves no other Membership standing', async () => {
-		const { load } = await import('./+layout.js');
 		setup({
 			'/api/practices/practice-1/session': { status: 403, body: 'no membership at this practice' },
 			'/api/staff/session': { status: 200, body: { memberships: [], lastPracticeId: undefined } }
@@ -198,7 +190,6 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 	// #748 AC2: removed from this Practice, but another Membership still
 	// stands -- she lands somewhere she can still work, not /no-practice.
 	it('redirects to her one remaining Practice when a 404 leaves exactly one Membership standing', async () => {
-		const { load } = await import('./+layout.js');
 		setup({
 			'/api/practices/practice-1/session': { status: 404, body: 'no matching staff account' },
 			'/api/staff/session': {
@@ -211,7 +202,6 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 	});
 
 	it('sends her to the picker at / when several other Memberships remain and none is last-used', async () => {
-		const { load } = await import('./+layout.js');
 		setup({
 			'/api/practices/practice-1/session': { status: 403, body: 'no membership at this practice' },
 			'/api/staff/session': {
@@ -230,7 +220,6 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 	});
 
 	it('sends her to /no-practice when her Staff row itself is gone -- there is no session left to decide from', async () => {
-		const { load } = await import('./+layout.js');
 		setup({
 			'/api/practices/practice-1/session': { status: 404, body: 'no matching staff account' },
 			'/api/staff/session': { status: 404, body: 'no matching staff account' }
@@ -240,7 +229,6 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 	});
 
 	it('redirects to login if the fallback staff-session read itself finds the session ended', async () => {
-		const { load } = await import('./+layout.js');
 		setup({
 			'/api/practices/practice-1/session': { status: 403, body: 'no membership at this practice' },
 			'/api/staff/session': { status: 401, body: 'no session' }
@@ -255,7 +243,6 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 	// her reach, rather than falling through to #748's stale-Membership
 	// handling below.
 	it('redirects to settings/delete when the session response carries pendingDeletion: true', async () => {
-		const { load } = await import('./+layout.js');
 		setup({
 			'/api/practices/practice-1/session': {
 				status: 200,
@@ -276,7 +263,6 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 	});
 
 	it('does not redirect when already on settings/delete, returning the Membership so that screen can render', async () => {
-		const { load } = await import('./+layout.js');
 		setup({
 			'/api/practices/practice-1/session': {
 				status: 200,
@@ -320,7 +306,6 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 		};
 
 		it('redirects to the agreement screen', async () => {
-			const { load } = await import('./+layout.js');
 			setup({ '/api/practices/practice-1/session': { status: 200, body: ownerSession } });
 
 			await expect(load(loadArguments)).rejects.toMatchObject({ status: 303, location: '/practices/practice-1/agreement' });
@@ -329,7 +314,6 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 		it.each(['/practices/practice-1/agreement', '/practices/practice-1/settings/delete'])(
 			'lets %s render, carrying what is due',
 			async (pathname) => {
-				const { load } = await import('./+layout.js');
 				setup({ '/api/practices/practice-1/session': { status: 200, body: ownerSession } });
 
 				const result = await load({ ...loadArguments, url: new URL(`https://example.test${pathname}`) });
@@ -339,7 +323,6 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 		);
 
 		it('reads a refused session read as a wait on the agreement, not a stale Membership', async () => {
-			const { load } = await import('./+layout.js');
 			vi.stubGlobal(
 				'fetch',
 				vi.fn(async () => Response.json({ code: 'TERMS_AGREEMENT_REQUIRED', message: 'agree first' }, { status: 403 }))
@@ -350,7 +333,6 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 	});
 
 	it('throws with the response status on any other failure', async () => {
-		const { load } = await import('./+layout.js');
 		setup({ '/api/practices/practice-1/session': { status: 500, body: 'boom' } });
 
 		await expect(load(loadArguments)).rejects.toMatchObject({ status: 500 });
