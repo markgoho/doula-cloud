@@ -420,7 +420,9 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 // open too and she can pay it again. Creates no payments row. The method
 // she tried is asked of Stripe, since the event names none; a failure to
 // ask records the attempt without it rather than lose it, the rule
-// handleInvoicePaid follows for its reference.
+// handleInvoicePaid follows for its reference. It also arrives while a
+// redirect method waits on her (requires_action), which is no failure
+// and records nothing (#2225).
 func handleInvoicePaymentFailed(w http.ResponseWriter, r *http.Request, db *sql.DB, client Client, event WebhookEvent) {
 	var inv invoiceEventObject
 	if err := json.Unmarshal(event.Data, &inv); err != nil {
