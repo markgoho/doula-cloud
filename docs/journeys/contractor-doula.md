@@ -70,12 +70,12 @@ Joining is not taking a job. She becomes a member of Rooted Birth Collective onc
 
 The tension is the design problem, and it is not resolvable by leaving it to the phone call: an offer must say enough to be taken or refused — Client, dates, on-call terms, fee — while she is still an outsider with no claim on any of it. If she has to ring Renata to find out what she is being offered, the offer screen is a notification and the decision never left the phone.
 
-Once she has a Client at the Practice, she meets an Offer on the Overview, which holds three decisions at once, each headed group one under the hub rule: the Quick links ([#2006](https://github.com/markgoho/doula-cloud/issues/2006)), her Offers, and Recent activity ([#486](https://github.com/markgoho/doula-cloud/issues/486)). Each was chosen by its own record, so the budget is 3 ([#2228](https://github.com/markgoho/doula-cloud/issues/2228)).
+Once she has a Client at the Practice, she meets an Offer on the Overview, which holds two decisions at once, each headed group one under the hub rule: her Offers, and Recent activity ([#486](https://github.com/markgoho/doula-cloud/issues/486)). [#2228](https://github.com/markgoho/doula-cloud/issues/2228) raised the budget to 3 for the Quick links; the founder dropped them on 2026-10-31 ([#2398](https://github.com/markgoho/doula-cloud/issues/2398)), so it is 2 again.
 
 **Budget**:
 
 * **Screens**: 1 (Hick's Law, Flow)
-* **Decisions**: 3 (Hick's Law, Miller's Law)
+* **Decisions**: 2 (Hick's Law, Miller's Law)
 * **Memory**: yes (Working Memory)
 * **Time**: 400 ms, 100 ms (Doherty Threshold)
 * **Confirmation**: yes (Peak-End Rule)

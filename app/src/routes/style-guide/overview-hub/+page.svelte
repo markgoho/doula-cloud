@@ -20,11 +20,8 @@
 
 <script lang="ts">
 	import OverviewHub from '#lib/components/templates/OverviewHub.svelte';
-	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
-	import DoorLink from '#lib/components/atoms/DoorLink.svelte';
-	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 
@@ -42,9 +39,8 @@
 
 	/*
 	 * The longest realistic value, not a representative one (ADR-0025): the
-	 * hub's title is a Practice's registered name, and the two regions carry
-	 * Client names and activity lines in full -- which is what decides
-	 * whether the secondary region still fits beside the primary one.
+	 * hub's title is a Practice's registered name, and the column carries
+	 * Client names and activity lines in full.
 	 */
 	const offers: Offer[] = [
 		{
@@ -58,12 +54,6 @@
 			status: 'Awaiting reply'
 		},
 		{ client: 'Renata Chiamaka Okonkwo-Adeyemi', received: 'Feb 26, 2027', status: 'Accepted' }
-	];
-
-	const rosterItems = [
-		{ label: 'Doulas', value: '14' },
-		{ label: 'Taking new Clients', value: '9' },
-		{ label: 'Invitations still open', value: '2' }
 	];
 
 	const noop = () => {};
@@ -96,23 +86,6 @@
 	</section>
 {/snippet}
 
-{#snippet secondary()}
-	<section>
-		<stack-l space="var(--space-4)">
-			<Heading level={2} variant="card" text="Roster" />
-			<SummaryList rows={rosterItems} />
-		</stack-l>
-	</section>
-
-	<section>
-		<stack-l space="var(--space-4)">
-			<Heading level={2} variant="card" text="Payments" />
-			<Badge label="Payouts enabled, next on Mar 15, 2027" variant="success" />
-			<Text text="42 credits remaining." step="body-sm" tone="variant" />
-		</stack-l>
-	</section>
-{/snippet}
-
 {#snippet empty()}
 	<stack-l space="var(--space-4)">
 		<Text
@@ -125,32 +98,10 @@
 	</stack-l>
 {/snippet}
 
-<!-- #2006: the quick-link cards, as the Practice Overview draws them. -->
-{#snippet links()}
-	<nav aria-label="Quick links">
-		<grid-l min="var(--door-min)" space="var(--space-4)">
-			<DoorLink href="#clients" label="Clients" description="Find a Client's record and care." />
-			<DoorLink
-				href="#getting-paid"
-				label="Getting paid"
-				description="How this Practice gets paid, and what Stripe still wants from it."
-			/>
-			<DoorLink
-				href="#plan-templates"
-				label="Plan Templates"
-				description="The questions every birth plan and care plan starts from."
-			/>
-		</grid-l>
-	</nav>
-{/snippet}
-
 <OverviewHub
 	title="Highland Midwifery &amp; Birth Support Collective of Western New York"
 	{primary}
-	{secondary}
-	{links}
 	{isEmpty}
 	{empty}
 	loading={isLoading ? 'Loading your Practice' : undefined}
-	isRailShown
 />

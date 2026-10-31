@@ -44,7 +44,7 @@ export const primitiveSpecs: PrimitiveSpec<PropertyDefaults>[] = [
 		// injects nothing (#564) -- `side: 'end'` swaps which DOM child gets
 		// the fixed basis and which gets the dominant, wrap-triggering
 		// minimum, for a Sidebar whose sidebar is visually and structurally
-		// LAST (OverviewHub's secondary) without reordering the DOM.
+		// LAST without reordering the DOM.
 		defaults: { space: 'var(--space-4)', 'content-min': '50%', basis: '20rem', side: 'start' },
 		css: (v, s) => {
 			const sidebarChild = v.side === 'end' ? ':last-child' : ':first-child';

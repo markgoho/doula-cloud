@@ -34,3 +34,14 @@ describe.each(primitiveSpecs)('$tagName', (spec) => {
 		expect(style?.textContent).toContain(spec.css(overrides, `${spec.tagName}[data-i="${id}"]`));
 	});
 });
+
+describe('sidebar-l', () => {
+	it('gives the fixed basis to the last child, and the content minimum to the first, at side end', () => {
+		const sidebar = primitiveSpecs.find((spec) => spec.tagName === 'sidebar-l')!;
+
+		const css = sidebar.css({ ...sidebar.defaults, side: 'end' }, 'sidebar-l');
+
+		expect(css).toContain(`sidebar-l > :last-child { flex-basis: ${sidebar.defaults.basis};`);
+		expect(css).toContain(`sidebar-l > :first-child { flex-basis: 0; flex-grow: 999; min-inline-size: ${sidebar.defaults['content-min']}; }`);
+	});
+});
