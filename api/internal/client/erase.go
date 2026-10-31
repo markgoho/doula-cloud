@@ -608,8 +608,11 @@ func redactContractMergeFields(ctx context.Context, tx *sql.Tx, clientID string)
 // filters on no kind, so any later kind that gains a note is swept the
 // day it lands; a Stripe-webhook-written row never carries one, so this
 // reaches nothing it holds.
+//
+// A Fee Payment's note (#2271) is swept with it: the Practice's record of
+// paying a Doula for this Client's birth can name her just as easily.
 func redactPaymentNotes(ctx context.Context, tx *sql.Tx, clientID string) (int, error) {
-	res, err := tx.ExecContext(ctx,
+	return redactAll(ctx, tx, "payment notes", clientID,
 		`UPDATE payments SET note = NULL
 		 WHERE note IS NOT NULL
 		   AND invoice_id IN (
@@ -618,18 +621,33 @@ func redactPaymentNotes(ctx context.Context, tx *sql.Tx, clientID string) (int, 
 		       JOIN engagements e ON e.id = c.engagement_id
 		       WHERE e.client_id = $1
 		   )`,
-		clientID,
-	)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return 0, fmt.Errorf("client: redact payment notes: %w", err)
+		`UPDATE attachment_fee_payments SET note = NULL
+		 WHERE note IS NOT NULL
+		   AND attachment_id IN (
+		       SELECT ea.id FROM engagement_attachments ea
+		       JOIN engagements e ON e.id = ea.engagement_id
+		       WHERE e.client_id = $1
+		   )`)
+}
+
+// redactAll runs each of queries with clientID and returns how many rows
+// they changed between them.
+func redactAll(ctx context.Context, tx *sql.Tx, what, clientID string, queries ...string) (int, error) {
+	total := 0
+	for _, query := range queries {
+		res, err := tx.ExecContext(ctx, query, clientID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return 0, fmt.Errorf("client: redact %s: %w", what, err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			// coverage:ignore reason: lib/pq always reports RowsAffected, not exercised by unit tests
+			return 0, fmt.Errorf("client: count redacted %s: %w", what, err)
+		}
+		total += int(n)
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		// coverage:ignore reason: lib/pq always reports RowsAffected, not exercised by unit tests
-		return 0, fmt.Errorf("client: count redacted payment notes: %w", err)
-	}
-	return int(n), nil
+	return total, nil
 }
 
 // redactPaymentReversalReasons empties the free-text reason on every
@@ -639,8 +657,10 @@ func redactPaymentNotes(ctx context.Context, tx *sql.Tx, clientID string) (int, 
 // column. Only a 'reversal' row ever carries a reason
 // (payments_reason_matches_kind's own CHECK), so this reaches nothing a
 // 'manual' or 'stripe' row holds.
+//
+// A Fee Payment's reversal reason (#2271) is swept with it, as its note is.
 func redactPaymentReversalReasons(ctx context.Context, tx *sql.Tx, clientID string) (int, error) {
-	res, err := tx.ExecContext(ctx,
+	return redactAll(ctx, tx, "payment reversal reasons", clientID,
 		`UPDATE payments SET reason = NULL
 		 WHERE reason IS NOT NULL
 		   AND invoice_id IN (
@@ -649,18 +669,13 @@ func redactPaymentReversalReasons(ctx context.Context, tx *sql.Tx, clientID stri
 		       JOIN engagements e ON e.id = c.engagement_id
 		       WHERE e.client_id = $1
 		   )`,
-		clientID,
-	)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return 0, fmt.Errorf("client: redact payment reversal reasons: %w", err)
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		// coverage:ignore reason: lib/pq always reports RowsAffected, not exercised by unit tests
-		return 0, fmt.Errorf("client: count redacted payment reversal reasons: %w", err)
-	}
-	return int(n), nil
+		`UPDATE attachment_fee_payments SET reason = NULL
+		 WHERE reason IS NOT NULL
+		   AND attachment_id IN (
+		       SELECT ea.id FROM engagement_attachments ea
+		       JOIN engagements e ON e.id = ea.engagement_id
+		       WHERE e.client_id = $1
+		   )`)
 }
 
 // UnsettledInvoiceSummary is one invoice standing between a Client and

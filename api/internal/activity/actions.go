@@ -426,6 +426,17 @@ const (
 	// did it.
 	ActionPaymentRefunded EngagementAction = "payment_refunded"
 
+	// ActionContractorFeePaid records an Owner or Admin recording that the
+	// Practice paid a contractor Doula her accepted fee outside DoulaCloud
+	// (#2271, a Fee Payment in GLOSSARY.md), and
+	// ActionContractorFeePaymentReversed the additive row that undoes a
+	// mistaken one (#945's shape). Always a StaffActor. The diff carries
+	// only DiffKeyAttachedStaffID, never the amount: an employee Doula
+	// reads this ledger, and a contractor's fee is between her and the
+	// Practice (ADR-0008).
+	ActionContractorFeePaid            EngagementAction = "contractor_fee_paid"
+	ActionContractorFeePaymentReversed EngagementAction = "contractor_fee_payment_reversed"
+
 	// OriginStripeDashboard is a diff's "origin" when the Connect webhook
 	// recorded something the Practice did in her own Stripe account rather
 	// than here: a payment_refunded Refund she issued from her Stripe
@@ -510,7 +521,9 @@ const (
 	ActionDoulaAttached EngagementAction = "doula_attached"
 
 	// DiffKeyAttachedStaffID is the one key an ActionDoulaAttached diff
-	// carries: the id of the Staff member who was attached. A reader
+	// carries: the id of the Staff member who was attached. An
+	// ActionContractorFeePaid or ActionContractorFeePaymentReversed diff
+	// carries it too, naming the Doula whose fee it was (#2271). A reader
 	// resolves it to her name on the read, the way
 	// DiffKeyAssignedStaffIDAfter is resolved (#887). Here, and not in
 	// engagementrequest, because the write and the Engagement ledger's
@@ -546,6 +559,9 @@ var moneyActions = map[EngagementAction]bool{
 	ActionInvoiceWrittenOff:        true,
 	ActionPaymentReversed:          true,
 	ActionPaymentRefunded:          true,
+	// #2271: what the Practice paid one contractor is not another's to read.
+	ActionContractorFeePaid:            true,
+	ActionContractorFeePaymentReversed: true,
 }
 
 // MoneyActions returns every action ADR-0008 keeps Owner/Admin-only,
@@ -628,6 +644,9 @@ var staffingActions = map[EngagementAction]bool{
 	ActionCarePlanEdited: true,
 	// #2133: so is the fact that it was started.
 	ActionCarePlanStarted: true,
+	// #2271: what the Practice paid its Doula is the Practice's own books.
+	ActionContractorFeePaid:            true,
+	ActionContractorFeePaymentReversed: true,
 }
 
 // StaffingActions returns every action GLOSSARY.md's Activity entry keeps

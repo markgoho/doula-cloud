@@ -256,6 +256,9 @@ const CLIENT_ACTIVITY_PHRASES: Record<string, string> = {
 	payment_refunded: 'Money was returned to you.',
 	invoice_voided: 'You no longer owe an invoice.',
 	invoice_written_off: 'You no longer owe an invoice.',
+	// What the Practice paid its Doula (`contractor_fee_paid`,
+	// `contractor_fee_payment_reversed`, #2271) never reaches her: the
+	// portal reader leaves both out, as the Practice's own books.
 
 	// Her way in. Never "portal": GLOSSARY.md's Portal Account entry says
 	// she meets a login and never the term, and no Client-facing copy in

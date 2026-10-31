@@ -24,6 +24,8 @@ const (
 	colAmountCents    = "amount_cents"
 	colStaffID        = "staff_id"
 	colKind           = "kind"
+	colNote           = "note"
+	colReason         = "reason"
 )
 
 // entity is one file in the archive: a name, a one-line description of
@@ -129,7 +131,7 @@ func entities() []entity {
 		{
 			file:        "engagement_request.csv",
 			description: "Every Client's request for an Engagement, decided or still pending.",
-			header:      []string{"id", "client_id", colKind, colDueDate, "note", "state", "requested_by_staff_id", "requested_at", "decided_by_staff_id", "decided_at", "reason", colEngagementID},
+			header:      []string{"id", "client_id", colKind, colDueDate, colNote, "state", "requested_by_staff_id", "requested_at", "decided_by_staff_id", "decided_at", colReason, colEngagementID},
 			query: `SELECT id::text, client_id::text, kind::text, due_date::text, note, state::text,
 			               requested_by::text, requested_at::text, decided_by::text, decided_at::text,
 			               reason, engagement_id::text
@@ -163,6 +165,16 @@ func entities() []entity {
 			          JOIN engagements e ON e.id = a.engagement_id
 			         WHERE e.practice_id = $1
 			         ORDER BY a.attached_at`,
+		},
+		{
+			file:        "doula_fee_payment.csv",
+			description: "Every record that this Practice paid a contractor Doula her accepted fee, and every reversal of one.",
+			header:      []string{"id", "attachment_id", colKind, colAmountCents, "method", colNote, "paid_on", "target_id", colReason, "recorded_by_staff_id", "recorded_at"},
+			query: `SELECT f.id::text, f.attachment_id::text, f.kind, f.amount_cents::text, f.method::text, f.note,
+			               f.paid_on::text, f.target_id::text, f.reason, f.recorded_by::text, f.recorded_at::text
+			          FROM attachment_fee_payments f
+			         WHERE f.practice_id = $1
+			         ORDER BY f.recorded_at`,
 		},
 		{
 			file:        "visit.csv",
@@ -237,7 +249,7 @@ func entities() []entity {
 			// sweep, client.redactPaymentReversalReasons.
 			file:        "payment.csv",
 			description: "Every Payment recorded against one of this Practice's Invoices.",
-			header:      []string{"id", "invoice_id", "stripe_payment_reference", colKind, "method", "note", "target_payment_id", "reason", colAmountCents, "paid_at", colCreatedAt},
+			header:      []string{"id", "invoice_id", "stripe_payment_reference", colKind, "method", colNote, "target_payment_id", colReason, colAmountCents, "paid_at", colCreatedAt},
 			query: `SELECT p.id::text, p.invoice_id::text, p.stripe_payment_reference, p.kind::text, p.method::text, p.note,
 			               p.target_payment_id::text, p.reason,
 			               p.amount_cents::text, p.paid_at::text, p.created_at::text

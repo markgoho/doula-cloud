@@ -105,6 +105,9 @@ const STAFF_ACTIVITY_PHRASES: Record<string, Phrase> = {
 	payment_refunded: (name) => `Money returned to ${client(name)}`,
 	invoice_voided: (name) => `Invoice for ${client(name)} voided`,
 	invoice_written_off: (name) => `Invoice for ${client(name)} written off`,
+	// #2271: the row's Detail names the Doula; neither names the fee.
+	contractor_fee_paid: (name) => `Doula paid for ${clients(name)} care`,
+	contractor_fee_payment_reversed: (name) => `Doula payment for ${clients(name)} care removed`,
 
 	// The Client's own login and notifications.
 	portal_invite_sent: (name) => `${client(name)} invited to sign in`,

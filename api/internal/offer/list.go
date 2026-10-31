@@ -34,6 +34,18 @@ type Summary struct {
 	// the Practice-side read, which is Owner/Admin only.
 	TargetName    string `json:"targetName,omitempty"`
 	TargetAddress string `json:"targetAddress,omitempty"`
+	// FeePaid (#2271) is the Fee Payment that stands against the fee this
+	// accepted Offer put on her Attachment, open or ended. Only her own
+	// inbox carries it, and it is absent until one is recorded.
+	FeePaid *FeePaid `json:"feePaid,omitempty"`
+}
+
+// FeePaid is what she reads of a Fee Payment: how much, how, and the day
+// the Practice says it paid. The recorder's note is the Practice's own.
+type FeePaid struct {
+	AmountCents int64  `json:"amountCents"`
+	Method      string `json:"method"`
+	PaidOn      string `json:"paidOn"`
 }
 
 // ListResponse is the standard cursor-pagination envelope from
@@ -74,8 +86,28 @@ func InboxHandler() http.Handler {
 		page, err := list(r.Context(), tx,
 			`SELECT o.id, o.state::text, o.client_first_initial, o.client_area, o.due_date,
 			        o.amount_cents, o.terms, o.employment_type::text, o.offered_at, o.expires_at,
-			        o.decided_at, '', ''
+			        o.decided_at, '', '', fp.amount_cents, fp.method, fp.paid_on::text
 			   FROM engagement_offers o
+			   -- The Attachment this Offer's acceptance granted: the latest
+			   -- one with a fee on the pair, opened no later than the
+			   -- acceptance (staffauth.Grant writes both in one transaction).
+			   LEFT JOIN LATERAL (
+			        SELECT ea.id FROM engagement_attachments ea
+			         WHERE o.state = 'accepted'
+			           AND ea.engagement_id = o.engagement_id AND ea.staff_id = o.staff_id
+			           AND ea.origin = 'granted' AND ea.fee_amount_cents IS NOT NULL
+			           AND ea.attached_at <= o.decided_at
+			         ORDER BY ea.attached_at DESC
+			         LIMIT 1
+			   ) att ON true
+			   LEFT JOIN LATERAL (
+			        SELECT f.amount_cents, f.method::text AS method, f.paid_on
+			          FROM attachment_fee_payments f
+			         WHERE f.attachment_id = att.id AND f.kind = 'recorded'
+			           AND NOT EXISTS (SELECT 1 FROM attachment_fee_payments rv WHERE rv.target_id = f.id)
+			         ORDER BY f.recorded_at DESC
+			         LIMIT 1
+			   ) fp ON true
 			  WHERE o.staff_id = $1
 			    AND ($2::timestamptz IS NULL OR (o.offered_at, o.id) < ($2::timestamptz, $3::uuid))
 			  ORDER BY o.offered_at DESC, o.id DESC
@@ -122,7 +154,8 @@ func EngagementListHandler() http.Handler {
 		page, err := list(r.Context(), tx,
 			`SELECT o.id, o.state::text, o.client_first_initial, o.client_area, o.due_date,
 			        o.amount_cents, o.terms, o.employment_type::text, o.offered_at, o.expires_at,
-			        o.decided_at, COALESCE(s.name, ''), COALESCE(s.email, pi.address, '')
+			        o.decided_at, COALESCE(s.name, ''), COALESCE(s.email, pi.address, ''),
+			        NULL::bigint, NULL::text, NULL::text
 			   FROM engagement_offers o
 			   LEFT JOIN staff s ON s.id = o.staff_id
 			   LEFT JOIN practice_invitations pi ON pi.id = o.invitation_id
@@ -156,7 +189,7 @@ func parseCursor(w http.ResponseWriter, r *http.Request) (*cursor, bool) {
 }
 
 // list runs one of the two queries above and scans one page of Summary
-// rows out of it. Both select the same twelve columns in the same order
+// rows out of it. Both select the same sixteen columns in the same order
 // and take the same four parameters, which is what lets one scanner
 // serve both. It asks for pageSize+1 rows and returns pageSize, so
 // "is there another page" is answered without a second count query.
@@ -184,10 +217,11 @@ func list(ctx context.Context, tx *sql.Tx, query, arg string, after *cursor) (Li
 		var dueDate, offeredAt, expiresAt time.Time
 		var decidedAt sql.NullTime
 		var amountCents sql.NullInt64
-		var terms sql.NullString
+		var terms, paidMethod, paidOn sql.NullString
+		var paidCents sql.NullInt64
 		if err := rows.Scan(&s.OfferID, &s.State, &s.ClientFirstInitial, &s.ClientArea, &dueDate,
 			&amountCents, &terms, &s.EmploymentType, &offeredAt, &expiresAt, &decidedAt,
-			&s.TargetName, &s.TargetAddress); err != nil {
+			&s.TargetName, &s.TargetAddress, &paidCents, &paidMethod, &paidOn); err != nil {
 			// coverage:ignore reason: DB scan failure, not exercised by unit tests
 			return ListResponse{}, fmt.Errorf("offer: scan offer row: %w", err)
 		}
@@ -196,6 +230,9 @@ func list(ctx context.Context, tx *sql.Tx, query, arg string, after *cursor) (Li
 		s.ExpiresAt = expiresAt.UTC().Format(time.RFC3339)
 		s.AmountCents = nullableInt64(amountCents)
 		s.Terms = nullableString(terms)
+		if paidCents.Valid {
+			s.FeePaid = &FeePaid{AmountCents: paidCents.Int64, Method: paidMethod.String, PaidOn: paidOn.String}
+		}
 		if decidedAt.Valid {
 			decided := decidedAt.Time.UTC().Format(time.RFC3339)
 			s.DecidedAt = &decided

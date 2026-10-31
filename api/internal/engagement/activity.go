@@ -218,6 +218,10 @@ func entryDetail(action string, diff []byte, before, after sql.NullString) strin
 		return refundDetail(diff)
 	case string(activity.ActionDoulaAttached):
 		return attachmentDetail(after)
+	case string(activity.ActionContractorFeePaid):
+		return "Fee paid to " + staffDisplayName(after)
+	case string(activity.ActionContractorFeePaymentReversed):
+		return "Fee payment removed for " + staffDisplayName(after)
 	case string(activity.ActionInvoicePaymentFailed):
 		return paymentMethodDetail("Tried to pay by ", diff)
 	case string(activity.ActionInvoicePaymentProcessing):

@@ -165,6 +165,90 @@ func paidOnAfterPracticeToday(paidOn, at time.Time, loc *time.Location) bool {
 	return paidOn.After(practiceToday)
 }
 
+// DateNoun is the words a by-hand record form's date control is labeled
+// with, so a refusal of that date names it the way the form does: an
+// Invoice's Payment asks for the "date received", a Fee Payment (#2271)
+// for the "date paid".
+type DateNoun string
+
+// The two DateNoun values.
+const (
+	DateReceived DateNoun = "date received"
+	DatePaid     DateNoun = "date paid"
+)
+
+// ReadRecordPaymentRequest decodes and checks a by-hand record's method,
+// note and date: the questions a Payment recorded against an Invoice
+// (#271) and a Fee Payment (#2271) both ask, refused the same way and
+// keyed by the same `details` fields so one form reads either refusal.
+// On a refusal it writes the response and returns false.
+func ReadRecordPaymentRequest(w http.ResponseWriter, r *http.Request, tx *sql.Tx, practiceID string, dateNoun DateNoun) (RecordPaymentRequest, time.Time, bool) {
+	var req RecordPaymentRequest
+	if !apierr.DecodeJSON(w, r, &req) {
+		return req, time.Time{}, false
+	}
+	if !validPaymentMethods[req.Method] {
+		// Write, not WriteFieldError: the details value opens with
+		// "Select", not "method" -- the wire's own name for the field
+		// -- so it genuinely differs from the summary Message, which
+		// stays exactly as it was (#1037, #1189). The details value is
+		// the payment form's own empty-Method words (#1913): the form
+		// opens with no method chosen, so an absent method is the
+		// likeliest way here, and both places say the same thing.
+		apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
+			`method must be "check", "bank_transfer", "cash", or "other"`,
+			map[string]string{fieldMethod: "Select how the payment was made"})
+		return req, time.Time{}, false
+	}
+	if req.Method == PaymentMethodOther && req.Note == "" {
+		// The details value matches RecordPaymentForm.svelte's own
+		// client-side check for this exact condition rather than opening
+		// with "note", the wire's own name for the field (#1189). The
+		// summary Message a caller reads is left exactly as it was
+		// (#1037).
+		apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
+			`note is required when method is "other"`,
+			map[string]string{"note": `Enter a note for "Other"`})
+		return req, time.Time{}, false
+	}
+	paidOn, err := time.Parse(paidOnLayout, req.PaidOn)
+	if err != nil {
+		// Write, not WriteFieldError: the details value opens with the
+		// noun on the form's own date control, not "paidOn" -- so it
+		// genuinely differs from the summary Message, which stays
+		// exactly as it was (#1037, #1189).
+		apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
+			"paidOn must be a date in YYYY-MM-DD form",
+			map[string]string{"paidOn": "Enter the " + string(dateNoun) + " as a real date, like 2027-04-23"})
+		return req, time.Time{}, false
+	}
+	// The zone comes from practicetimezone, which owns it for every
+	// calendar-day comparison in the BFF (#1166): visit.DeriveType was
+	// the first reader, this guard is the second (#1167, ADR-0036).
+	zone, err := practicetimezone.Load(r.Context(), tx, practiceID)
+	if err != nil {
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return req, time.Time{}, false
+	}
+	if paidOnAfterPracticeToday(paidOn, clock.Now(r.Context()), zone) {
+		// The details value names no calendar day -- not "today", not a
+		// date (#1062). That choice is what keeps this wording correct
+		// across #1167's own change of comparison: it named no day when
+		// the comparison ran against UTC's, and still names none now
+		// that it runs against the Practice's own. Write, not
+		// WriteFieldError: the details value opens with "The date",
+		// matching RecordPaymentForm.svelte's own client-side check for
+		// this exact condition, rather than "paidOn", the wire's own
+		// name for the field -- so it genuinely differs from the
+		// summary Message, which stays exactly as it was (#1189).
+		apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
+			"paidOn cannot be in the future",
+			map[string]string{"paidOn": "The date cannot be in the future"})
+		return req, time.Time{}, false
+	}
+	return req, paidOn, true
+}
+
 // PostManualPaymentHandler records a Payment that did not come through
 // Stripe (#271) -- Owner and Admin only, matching ADR-0008's
 // Contract-money read row. Accepted only against an 'open' Invoice, for
@@ -191,69 +275,8 @@ func PostManualPaymentHandler(client Client) http.Handler {
 			return
 		}
 
-		var req RecordPaymentRequest
-		if !apierr.DecodeJSON(w, r, &req) {
-			return
-		}
-		if !validPaymentMethods[req.Method] {
-			// Write, not WriteFieldError: the details value opens with
-			// "Select", not "method" -- the wire's own name for the field
-			// -- so it genuinely differs from the summary Message, which
-			// stays exactly as it was (#1037, #1189). The details value is
-			// the payment form's own empty-Method words (#1913): the form
-			// opens with no method chosen, so an absent method is the
-			// likeliest way here, and both places say the same thing.
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
-				`method must be "check", "bank_transfer", "cash", or "other"`,
-				map[string]string{fieldMethod: "Select how the payment was made"})
-			return
-		}
-		if req.Method == PaymentMethodOther && req.Note == "" {
-			// The details value matches InvoiceSection.svelte's own
-			// client-side check for this exact condition (reviewPayment's
-			// `paymentNoteError = 'Enter a note for "Other"'`) rather than
-			// opening with "note", the wire's own name for the field
-			// (#1189). The summary Message a caller reads is left exactly
-			// as it was (#1037).
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
-				`note is required when method is "other"`,
-				map[string]string{"note": `Enter a note for "Other"`})
-			return
-		}
-		paidOn, err := time.Parse(paidOnLayout, req.PaidOn)
-		if err != nil {
-			// Write, not WriteFieldError: the details value opens with
-			// "Enter the date received", the noun on the "Date received"
-			// control, not "paidOn" -- so it genuinely differs from the
-			// summary Message, which stays exactly as it was (#1037,
-			// #1189).
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
-				"paidOn must be a date in YYYY-MM-DD form",
-				map[string]string{"paidOn": "Enter the date received as a real date, like 2027-04-23"})
-			return
-		}
-		// The zone comes from practicetimezone, which owns it for every
-		// calendar-day comparison in the BFF (#1166): visit.DeriveType was
-		// the first reader, this guard is the second (#1167, ADR-0036).
-		zone, err := practicetimezone.Load(r.Context(), tx, practiceID)
-		if err != nil {
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if paidOnAfterPracticeToday(paidOn, clock.Now(r.Context()), zone) {
-			// The details value names no calendar day -- not "today", not a
-			// date (#1062). That choice is what keeps this wording correct
-			// across #1167's own change of comparison: it named no day when
-			// the comparison ran against UTC's, and still names none now
-			// that it runs against the Practice's own. Write, not
-			// WriteFieldError: the details value opens with "The date",
-			// matching InvoiceSection.svelte's own client-side check for
-			// this exact condition, rather than "paidOn", the wire's own
-			// name for the field -- so it genuinely differs from the
-			// summary Message, which stays exactly as it was (#1189).
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
-				"paidOn cannot be in the future",
-				map[string]string{"paidOn": "The date cannot be in the future"})
+		req, paidOn, ok := ReadRecordPaymentRequest(w, r, tx, practiceID, DateReceived)
+		if !ok {
 			return
 		}
 

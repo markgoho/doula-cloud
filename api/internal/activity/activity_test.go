@@ -195,6 +195,8 @@ func TestMoneyActions_ContainsExactlyTheADR0008MoneySet(t *testing.T) {
 		activity.ActionInvoiceWrittenOff,
 		activity.ActionPaymentReversed,
 		activity.ActionPaymentRefunded,
+		activity.ActionContractorFeePaid,
+		activity.ActionContractorFeePaymentReversed,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("MoneyActions() = %v, want exactly %v", activity.MoneyActions(), want)
@@ -261,6 +263,9 @@ func TestStaffingActions_ContainsExactlyTheRosterSet(t *testing.T) {
 		activity.ActionCarePlanEdited,
 		// #2133: and so is its start.
 		activity.ActionCarePlanStarted,
+		// #2271: what the Practice paid its contractor Doula.
+		activity.ActionContractorFeePaid,
+		activity.ActionContractorFeePaymentReversed,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("StaffingActions() = %v, want exactly %v", activity.StaffingActions(), want)

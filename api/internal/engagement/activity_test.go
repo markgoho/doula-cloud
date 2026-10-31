@@ -494,3 +494,30 @@ func TestListActivityHandler_StaffStillSeeVoidDeliberation(t *testing.T) {
 		t.Fatalf("Items = %+v, want both void-deliberation rows on the Staff feed", got.Items)
 	}
 }
+
+// TestListActivityHandler_FeePaymentNamesTheDoula is #2271's read side:
+// a Fee Payment and its reversal name whose fee it was, never the amount.
+func TestListActivityHandler_FeePaymentNamesTheDoula(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "owner-activity-fee"
+	practiceID := testdb.SeedPractice(t, db, "Fee Names")
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
+	doulaID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "fee-doula", "Lena Vasquez", []string{doulaRole}, "contractor")
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "fee-client@example.com", "active")
+
+	testdb.SeedActivityWithDiff(t, db, practiceID, activity.SubjectEngagement, engagementID,
+		string(activity.ActionContractorFeePaid), activity.StaffActor(ownerID), attachedDiff(t, doulaID))
+	testdb.SeedActivityWithDiff(t, db, practiceID, activity.SubjectEngagement, engagementID,
+		string(activity.ActionContractorFeePaymentReversed), activity.StaffActor(ownerID), attachedDiff(t, doulaID))
+
+	details := map[string]string{}
+	for _, item := range readActivity(t, db, practiceID, engagementID, identityUID).Items {
+		details[item.Action] = item.Detail
+	}
+	if got := details[string(activity.ActionContractorFeePaid)]; got != "Fee paid to Lena Vasquez" {
+		t.Fatalf("paid detail = %q", got)
+	}
+	if got := details[string(activity.ActionContractorFeePaymentReversed)]; got != "Fee payment removed for Lena Vasquez" {
+		t.Fatalf("reversed detail = %q", got)
+	}
+}
