@@ -329,7 +329,14 @@
 	backHref={rosterHref(practiceId)}
 	backLabel="Staff"
 	{summary}
+	summaryRows={[
+		{ label: 'Email address', value: 'given.family@example.com' },
+		{ label: 'Roles', value: 'Doula', action: isOwner ? 'Change' : undefined },
+		{ label: 'Employment type', value: 'Employee', action: isOwner ? 'Change' : undefined },
+		{ label: 'Works from', value: 'New York, self-reported Oct 31, 2026' }
+	]}
 	actions={isOwner ? actions : undefined}
+	loadingActions={isOwner ? actions : undefined}
 	sections={[
 		{ heading: 'Work state history', content: workStateSection },
 		{ heading: 'Membership history', content: membershipSection },
