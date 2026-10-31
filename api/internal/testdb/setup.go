@@ -32,6 +32,9 @@ DO $$ BEGIN
 	IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '` + appUser + `') THEN
 		CREATE ROLE ` + appUser + ` LOGIN PASSWORD '` + appPassword + `' IN ROLE app_runtime;
 	END IF;
+	IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '` + opsUser + `') THEN
+		CREATE ROLE ` + opsUser + ` LOGIN PASSWORD '` + opsPassword + `' IN ROLE ops_runtime;
+	END IF;
 END $$;`
 
 var (

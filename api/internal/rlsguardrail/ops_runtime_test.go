@@ -1,0 +1,247 @@
+// The third shape this package holds (ADR-0062): the database boundary
+// between doula-api's app_runtime and doula-ops's ops_runtime, read from
+// the catalog rather than from any one table's rows.
+package rlsguardrail_test
+
+import (
+	"context"
+	"database/sql"
+	"slices"
+	"strings"
+	"testing"
+
+	"doula-cloud/api/internal/testdb"
+)
+
+// wantDefinerFunctions is every SECURITY DEFINER function each role may
+// execute, written out. A definer function runs with its owner's rights,
+// so one that reaches a role by a forgotten REVOKE ... FROM PUBLIC is a
+// door the role was never meant to hold.
+var wantDefinerFunctions = map[string][]string{
+	"app_runtime": {
+		"acknowledge_birth_plan(uuid)",
+		"client_portal_sees_staff(uuid)",
+		"current_staff_id()",
+		"engagement_doula_names(uuid)",
+		"erase_client_feedback(uuid)",
+		"erase_client_idempotency_keys(uuid)",
+		"erase_portal_account_feedback(text)",
+		"feedback_sender(uuid)",
+		"merge_client_portal_links(uuid,uuid)",
+		"pilot_admits(text)",
+		"portal_account_reaches_a_live_client(text)",
+		"portal_account_reuse_for_accept(text,uuid)",
+		"push_subscriptions_for_message_recipient(uuid,actor_type)",
+		"redact_absorbed_client(uuid)",
+		"staff_is_sole_owner(uuid)",
+		"staff_was_ever_a_member_at_practice(uuid,uuid)",
+		"sweep_expired_idempotency_keys(timestamp with time zone)",
+	},
+	"ops_runtime": {},
+}
+
+func TestOpsRuntime_DefinerFunctionsEachRoleCanExecuteAreTheOnesOnTheRecord(t *testing.T) {
+	db := testdb.New(t)
+
+	for role, want := range wantDefinerFunctions {
+		t.Run(role, func(t *testing.T) {
+			rows, err := db.Admin.QueryContext(t.Context(),
+				`SELECT p.oid::regprocedure::text
+				   FROM pg_proc p
+				   JOIN pg_namespace n ON n.oid = p.pronamespace
+				  WHERE p.prosecdef
+				    AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+				    AND has_function_privilege($1, p.oid, 'EXECUTE')
+				  ORDER BY 1`, role)
+			if err != nil {
+				t.Fatalf("read definer functions: %v", err)
+			}
+			defer rows.Close()
+			got := []string{}
+			for rows.Next() {
+				var fn string
+				if err := rows.Scan(&fn); err != nil {
+					t.Fatalf("scan: %v", err)
+				}
+				got = append(got, fn)
+			}
+			if err := rows.Err(); err != nil {
+				t.Fatalf("rows: %v", err)
+			}
+
+			wantSorted := slices.Sorted(slices.Values(want))
+			if !slices.Equal(got, wantSorted) {
+				t.Errorf("%s can execute these SECURITY DEFINER functions:\n%s\nwant:\n%s\n(a function off the list is usually a missing REVOKE EXECUTE ... FROM PUBLIC)",
+					role, strings.Join(got, "\n"), strings.Join(wantSorted, "\n"))
+			}
+		})
+	}
+}
+
+func TestOpsRuntime_NoAppRuntimeRoleIsAMember(t *testing.T) {
+	db := testdb.New(t)
+
+	if members := appRuntimeRolesInOpsRuntime(t, db); len(members) > 0 {
+		t.Fatalf("these app_runtime roles are members of ops_runtime: %v", members)
+	}
+
+	var checked int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM pg_roles WHERE pg_has_role(oid, 'app_runtime', 'MEMBER') AND NOT rolsuper`,
+	).Scan(&checked); err != nil {
+		t.Fatalf("count app_runtime roles: %v", err)
+	}
+	if checked < 2 {
+		t.Fatalf("checked %d app_runtime roles, want app_runtime and its test login at least", checked)
+	}
+}
+
+func TestOpsRuntime_AMembershipGrantedToAppRuntimeIsCaught(t *testing.T) {
+	db := testdb.New(t)
+	if _, err := db.Admin.ExecContext(t.Context(), `GRANT ops_runtime TO app_runtime`); err != nil {
+		t.Fatalf("grant: %v", err)
+	}
+	t.Cleanup(func() {
+		if _, err := db.Admin.ExecContext(context.Background(), `REVOKE ops_runtime FROM app_runtime`); err != nil {
+			t.Errorf("revoke: %v", err)
+		}
+	})
+
+	members := appRuntimeRolesInOpsRuntime(t, db)
+	if !slices.Contains(members, "app_runtime") || !slices.Contains(members, "app_test") {
+		t.Fatalf("after GRANT ops_runtime TO app_runtime the guard found %v, want app_runtime and app_test", members)
+	}
+}
+
+// appRuntimeRolesInOpsRuntime is every role that is app_runtime,
+// app_runtime_login or a member of app_runtime, and also holds
+// ops_runtime. app_runtime_login exists only in Cloud SQL; locally its
+// stand-ins are app_runtime's member logins.
+func appRuntimeRolesInOpsRuntime(t *testing.T, db *testdb.DB) []string {
+	t.Helper()
+	rows, err := db.Admin.QueryContext(t.Context(),
+		`SELECT r.rolname
+		   FROM pg_roles r
+		  WHERE (r.rolname IN ('app_runtime', 'app_runtime_login')
+		         OR pg_has_role(r.oid, 'app_runtime', 'MEMBER'))
+		    AND NOT r.rolsuper
+		    AND pg_has_role(r.oid, 'ops_runtime', 'MEMBER')`)
+	if err != nil {
+		t.Fatalf("read memberships: %v", err)
+	}
+	defer rows.Close()
+	var members []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		members = append(members, name)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows: %v", err)
+	}
+	return members
+}
+
+func TestOpsRuntime_OperatorActsIsAppendOnlyForEveryRole(t *testing.T) {
+	db := testdb.New(t)
+
+	var operatorID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO operators (identity_uid, name, email) VALUES ('op-append-only', 'Op', 'op@example.com') RETURNING id`,
+	).Scan(&operatorID); err != nil {
+		t.Fatalf("seed operator: %v", err)
+	}
+
+	var actID string
+	if err := db.Ops.QueryRowContext(t.Context(),
+		`INSERT INTO operator_acts (operator_id, action) VALUES ($1, 'sign_in') RETURNING id`, operatorID,
+	).Scan(&actID); err != nil {
+		t.Fatalf("ops_runtime INSERT into operator_acts: %v", err)
+	}
+	var count int
+	if err := db.Ops.QueryRowContext(t.Context(), `SELECT count(*) FROM operator_acts WHERE id = $1`, actID).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("ops_runtime SELECT on operator_acts: count %d, err %v", count, err)
+	}
+
+	connections := map[string]*sql.DB{"ops_runtime": db.Ops, "app_runtime": db.App, "the superuser owner": db.Admin}
+	for name, conn := range connections {
+		for _, statement := range []string{
+			`UPDATE operator_acts SET action = 'sign_out' WHERE id = $1`,
+			`DELETE FROM operator_acts WHERE id = $1`,
+			`TRUNCATE operator_acts`,
+		} {
+			var args []any
+			if strings.Contains(statement, "$1") {
+				args = []any{actID}
+			}
+			if _, err := conn.ExecContext(t.Context(), statement, args...); err == nil {
+				t.Errorf("%s ran %q on operator_acts, want it refused", name, statement)
+			}
+		}
+	}
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM operator_acts WHERE id = $1 AND action = 'sign_in'`, actID).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("the act row after every refused change: count %d, err %v", count, err)
+	}
+
+	var holders []string
+	rows, err := db.Admin.QueryContext(t.Context(),
+		`SELECT r.rolname FROM pg_roles r
+		  WHERE NOT r.rolsuper
+		    AND r.rolname NOT LIKE 'pg\_%'
+		    AND r.oid <> (SELECT relowner FROM pg_class WHERE oid = 'operator_acts'::regclass)
+		    AND (has_table_privilege(r.oid, 'operator_acts', 'UPDATE')
+		         OR has_table_privilege(r.oid, 'operator_acts', 'DELETE')
+		         OR has_table_privilege(r.oid, 'operator_acts', 'TRUNCATE'))`)
+	if err != nil {
+		t.Fatalf("read privileges: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		holders = append(holders, name)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows: %v", err)
+	}
+	if len(holders) > 0 {
+		t.Fatalf("these roles may UPDATE, DELETE or TRUNCATE operator_acts: %v", holders)
+	}
+}
+
+func TestOpsRuntime_HoldsNoTableGrantButOperatorActs(t *testing.T) {
+	db := testdb.New(t)
+
+	rows, err := db.Admin.QueryContext(t.Context(),
+		`SELECT table_name || ' ' || privilege_type
+		   FROM information_schema.role_table_grants
+		  WHERE grantee = 'ops_runtime'
+		  ORDER BY 1`)
+	if err != nil {
+		t.Fatalf("read grants: %v", err)
+	}
+	defer rows.Close()
+	got := []string{}
+	for rows.Next() {
+		var g string
+		if err := rows.Scan(&g); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		got = append(got, g)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows: %v", err)
+	}
+	want := []string{"operator_acts INSERT", "operator_acts SELECT"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("ops_runtime table grants = %v, want %v", got, want)
+	}
+
+	if _, err := db.Ops.ExecContext(t.Context(), `SELECT count(*) FROM practices`); err == nil || !strings.Contains(err.Error(), "permission denied") {
+		t.Fatalf("ops_runtime read practices: want permission denied, got %v", err)
+	}
+}

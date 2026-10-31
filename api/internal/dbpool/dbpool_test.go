@@ -27,12 +27,32 @@ func TestApplyCapsOpenConnectionsAtTheAPIShare(t *testing.T) {
 	}
 }
 
+func TestApplyOpsCapsOpenConnectionsAtTheOpsShare(t *testing.T) {
+	db, err := sql.Open("pgx", "postgres://nobody@127.0.0.1:1/none")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	dbpool.ApplyOps(db)
+
+	if got := db.Stats().MaxOpenConnections; got != 2 {
+		t.Fatalf("MaxOpenConnections = %d, want 2", got)
+	}
+}
+
 func TestEveryPoolFitsUnderMaxConnections(t *testing.T) {
 	usable := dbpool.MaxConnections - dbpool.ReservedConnections
-	used := dbpool.APIMaxInstances*dbpool.APIPerInstance + dbpool.OpsPoolShare + dbpool.MigrateLogins
+	used := dbpool.APIMaxInstances*dbpool.APIPerInstance + dbpool.OpsMaxInstances*dbpool.OpsPerInstance + dbpool.MigrateLogins
 	if used > usable {
-		t.Fatalf("%d doula-api instances x %d + doula-ops %d + migrate %d = %d, over the %d usable connections",
-			dbpool.APIMaxInstances, dbpool.APIPerInstance, dbpool.OpsPoolShare, dbpool.MigrateLogins, used, usable)
+		t.Fatalf("%d doula-api instances x %d + %d doula-ops instances x %d + migrate %d = %d, over the %d usable connections",
+			dbpool.APIMaxInstances, dbpool.APIPerInstance, dbpool.OpsMaxInstances, dbpool.OpsPerInstance, dbpool.MigrateLogins, used, usable)
+	}
+	if dbpool.OpsMaxInstances*dbpool.OpsPerInstance > dbpool.OpsPoolShare {
+		t.Fatalf("%d doula-ops instances x %d is over its share of %d", dbpool.OpsMaxInstances, dbpool.OpsPerInstance, dbpool.OpsPoolShare)
+	}
+	if dbpool.OpsPerInstance < 1 {
+		t.Fatalf("OpsPerInstance = %d; database/sql reads 0 as no limit at all", dbpool.OpsPerInstance)
 	}
 	if dbpool.APIPerInstance < 1 {
 		t.Fatalf("APIPerInstance = %d; database/sql reads 0 as no limit at all", dbpool.APIPerInstance)
