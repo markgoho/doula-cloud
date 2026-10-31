@@ -2,7 +2,7 @@ import { error, redirect } from '@sveltejs/kit';
 import { apiFetch } from '#lib/api.js';
 import { apiErrorMessage } from '#lib/apiErrorMessage.js';
 import { refuseRead } from '#lib/errorPage.js';
-import { staffLoginAfterSessionEnded } from '#lib/sessionEnded.js';
+import { staffLoginAfterRefusal } from '#lib/sessionEnded.js';
 import { engagementURL, type EngagementSummary } from '#lib/engagementDetail.js';
 import type { PageLoad } from './$types';
 
@@ -26,13 +26,13 @@ import type { PageLoad } from './$types';
  * and a slow or failed plan fetch never blocks the page that says who it
  * belongs to.
  */
-export const load: PageLoad = async ({ params }): Promise<EngagementSummary> => {
+export const load: PageLoad = async ({ params, url }): Promise<EngagementSummary> => {
 	const response = await apiFetch(
 		engagementURL({ practiceId: params.practiceId, engagementId: params.engagementId })
 	);
 
 	if (response.status === 401) {
-		redirect(303, staffLoginAfterSessionEnded());
+		redirect(303, staffLoginAfterRefusal(`${url.pathname}${url.search}`));
 	} else if (response.status === 403) {
 		await refuseRead(response);
 	} else if (!response.ok) {

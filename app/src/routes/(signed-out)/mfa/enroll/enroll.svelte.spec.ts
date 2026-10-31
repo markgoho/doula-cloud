@@ -360,8 +360,8 @@ describe('TOTP enrollment -- step two, the QR code and secret', () => {
 
 	// An open-redirect guard: a protocol-relative target is not a path on
 	// this app, so it is treated as absent rather than followed.
-	it('ignores a returnTo that is not a same-origin path', async () => {
-		pageState.url = urlWith('//evil.example.com');
+	it.each(['//evil.example.com', String.raw`/\evil.example.com`])('ignores a returnTo that is not a same-origin path: %s', async (target) => {
+		pageState.url = urlWith(target);
 		globalFetch.mockResolvedValue(jsonResponse({ ok: true }));
 		await goToSetupStep();
 

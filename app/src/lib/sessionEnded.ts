@@ -1,4 +1,5 @@
 import { resolve } from '$app/paths';
+import { withReturnTo } from './returnTo.js';
 
 /**
 The one place the "your session ended under you" convention is spelled.
@@ -65,10 +66,45 @@ export function staffLoginAfterSessionEnded(): string {
 	return `${resolve('/(signed-out)/login')}?${PARAM}=${FLAG_VALUE}`;
 }
 
+/*
+ * #2259: a refusal alone cannot say a session ended. A saved address
+ * opened on a device that never signed in is refused the same way, and
+ * the BFF cannot tell the two apart once the browser has dropped an
+ * expired cookie. What can tell is this document: it held a session if a
+ * credentialed request here was answered. Reset by sign-out.
+ */
+const held = { inThisDocument: false };
+
 /**
-The Client-portal login address to send someone to when her portal
-session ended.
+Records that this document is talking to the BFF with a live session.
 */
-export function portalLoginAfterSessionEnded(): string {
-	return `${resolve('/portal/(signed-out)/login')}?${PARAM}=${FLAG_VALUE}`;
+export function noteSessionHeld(): void {
+	held.inThisDocument = true;
+}
+
+/**
+Records that she signed out, so a refusal after it is not read as a
+session ending under her.
+*/
+export function forgetSessionHeld(): void {
+	held.inThisDocument = false;
+}
+
+/**
+The Staff login address for a request refused for want of a session:
+back to returnTo after sign-in, and saying the session ended only when
+this document held one.
+*/
+export function staffLoginAfterRefusal(returnTo: string): string {
+	const login = held.inThisDocument ? staffLoginAfterSessionEnded() : resolve('/(signed-out)/login');
+	return withReturnTo(login, returnTo);
+}
+
+/**
+The Client-portal login address for a request refused for want of a
+session, saying the session ended only when this document held one.
+*/
+export function portalLoginAfterRefusal(): string {
+	const login = resolve('/portal/(signed-out)/login');
+	return held.inThisDocument ? `${login}?${PARAM}=${FLAG_VALUE}` : login;
 }
