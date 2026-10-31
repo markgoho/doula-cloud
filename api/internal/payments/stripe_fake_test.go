@@ -26,17 +26,18 @@ func TestFakeClient_UnwiredMethods(t *testing.T) {
 	}
 }
 
-// TestFakeClient_FailedPaymentMethodType proves the double reports the
-// method a test set for an Invoice, and nothing for one it did not.
-func TestFakeClient_FailedPaymentMethodType(t *testing.T) {
+// TestFakeClient_FailedAttempt proves the double reports the attempt a
+// test set for an Invoice, and the zero value for one it did not.
+func TestFakeClient_FailedAttempt(t *testing.T) {
 	client := payments.NewFakeClient()
-	client.FailedPaymentMethodTypes = map[string]string{"in_1": methodUSBankAccount}
+	want := payments.FailedAttempt{PaymentMethodType: methodUSBankAccount}
+	client.FailedAttempts = map[string]payments.FailedAttempt{"in_1": want}
 
-	if got, err := client.RetrieveInvoiceFailedPaymentMethodType(t.Context(), "acct_1", "in_1"); err != nil || got != methodUSBankAccount {
-		t.Fatalf("RetrieveInvoiceFailedPaymentMethodType(in_1) = %q, %v, want us_bank_account", got, err)
+	if got, err := client.RetrieveInvoiceFailedAttempt(t.Context(), "acct_1", "in_1"); err != nil || got != want {
+		t.Fatalf("RetrieveInvoiceFailedAttempt(in_1) = %+v, %v, want %+v", got, err, want)
 	}
-	if got, err := client.RetrieveInvoiceFailedPaymentMethodType(t.Context(), "acct_1", "in_2"); err != nil || got != "" {
-		t.Fatalf("RetrieveInvoiceFailedPaymentMethodType(in_2) = %q, %v, want empty", got, err)
+	if got, err := client.RetrieveInvoiceFailedAttempt(t.Context(), "acct_1", "in_2"); err != nil || got != (payments.FailedAttempt{}) {
+		t.Fatalf("RetrieveInvoiceFailedAttempt(in_2) = %+v, %v, want the zero value", got, err)
 	}
 }
 

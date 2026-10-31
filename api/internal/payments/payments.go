@@ -249,14 +249,17 @@ type Client interface {
 	// error, if Stripe reports no payment for the invoice -- a missing
 	// reference must not fail an otherwise good webhook.
 	RetrieveInvoicePaymentReference(ctx context.Context, accountID, invoiceID string) (reference string, err error)
-	// RetrieveInvoiceFailedPaymentMethodType reports the Stripe payment
-	// method type -- "card", "us_bank_account", "klarna" and so on -- of
-	// the attempt that most recently failed on invoiceID, for the
-	// activity row the invoice.payment_failed webhook writes (#2224). The
-	// event names no method, for the reason RetrieveInvoicePaymentReference
-	// gives. Returns an empty string, and no error, when Stripe reports
-	// no failed attempt with a method.
-	RetrieveInvoiceFailedPaymentMethodType(ctx context.Context, accountID, invoiceID string) (methodType string, err error)
+	// RetrieveInvoiceFailedAttempt reads what the invoice.payment_failed
+	// webhook needs about invoiceID's latest attempt (#2224, #2225): the
+	// Stripe payment method type of the attempt that most recently failed
+	// -- "card", "us_bank_account" and so on, "" when Stripe names none --
+	// and whether the newest attempt is instead waiting on her, a redirect
+	// method (Klarna) or a card's 3-D Secure check she has not finished.
+	// Stripe sends invoice.payment_failed beside
+	// invoice.payment_action_required for that case too (seen in the
+	// Sandbox on #2225), and nothing has failed. The event names neither
+	// fact, for the reason RetrieveInvoicePaymentReference gives.
+	RetrieveInvoiceFailedAttempt(ctx context.Context, accountID, invoiceID string) (FailedAttempt, error)
 	// RetrievePaymentIntentInvoice reports which Invoice paymentIntentID
 	// pays on accountID's connected account, with the PaymentIntent's
 	// status as it is now and its method type, for the
@@ -308,6 +311,13 @@ type AccountEvent struct {
 	Type      string
 	AccountID string
 	Created   time.Time
+}
+
+// FailedAttempt is what Client.RetrieveInvoiceFailedAttempt reads about
+// an Invoice's latest attempt to be paid.
+type FailedAttempt struct {
+	PaymentMethodType string
+	AwaitingAction    bool
 }
 
 // InvoicePaymentIntent is what Client.RetrievePaymentIntentInvoice reads

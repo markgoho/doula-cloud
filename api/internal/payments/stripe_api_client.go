@@ -471,29 +471,47 @@ func (c *StripeAPIClient) RetrieveInvoicePaymentReference(ctx context.Context, a
 	return "", nil
 }
 
-// RetrieveInvoiceFailedPaymentMethodType reads the method of invoiceID's
-// most recent failed attempt from the InvoicePayment list, with each
-// payment's PaymentIntent expanded. After a failure Stripe detaches the
-// PaymentIntent's own payment_method, so last_payment_error's copy is the
-// one that still names it. The list is newest first.
-func (c *StripeAPIClient) RetrieveInvoiceFailedPaymentMethodType(ctx context.Context, accountID, invoiceID string) (string, error) {
+// RetrieveInvoiceFailedAttempt reads invoiceID's InvoicePayment list,
+// newest first, with each payment's PaymentIntent expanded. The newest
+// PaymentIntent's status says whether the attempt is waiting on her
+// (requires_action). After a failure Stripe detaches the PaymentIntent's
+// own payment_method, so last_payment_error's copy is the one that still
+// names the method.
+func (c *StripeAPIClient) RetrieveInvoiceFailedAttempt(ctx context.Context, accountID, invoiceID string) (FailedAttempt, error) {
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	params := &stripe.InvoicePaymentListParams{Invoice: stripe.String(invoiceID)}
 	params.StripeAccount = stripe.String(accountID)
 	params.AddExpand("data.payment.payment_intent")
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	var payments []*stripe.InvoicePayment
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	for payment, err := range c.client.V1InvoicePayments.List(ctx, params).All(ctx) {
 		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 		if err != nil {
-			return "", fmt.Errorf("payments: list invoice payments: %w", err)
+			return FailedAttempt{}, fmt.Errorf("payments: list invoice payments: %w", err)
 		}
 		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
-		if methodType := failedPaymentMethodType(payment); methodType != "" {
-			return methodType, nil
-		}
+		payments = append(payments, payment)
 	}
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
-	return "", nil
+	return failedAttemptOf(payments), nil
+}
+
+// failedAttemptOf reads a newest-first InvoicePayment list into a
+// FailedAttempt: waiting on her when the newest PaymentIntent requires
+// action, and the method of the most recent payment that failed.
+func failedAttemptOf(payments []*stripe.InvoicePayment) FailedAttempt {
+	var out FailedAttempt
+	if len(payments) > 0 && payments[0].Payment != nil && payments[0].Payment.PaymentIntent != nil {
+		out.AwaitingAction = payments[0].Payment.PaymentIntent.Status == stripe.PaymentIntentStatusRequiresAction
+	}
+	for _, payment := range payments {
+		if methodType := failedPaymentMethodType(payment); methodType != "" {
+			out.PaymentMethodType = methodType
+			break
+		}
+	}
+	return out
 }
 
 // failedPaymentMethodType is the method type an InvoicePayment's

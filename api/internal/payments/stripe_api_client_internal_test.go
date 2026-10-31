@@ -35,6 +35,39 @@ func TestFailedPaymentMethodType(t *testing.T) {
 	}
 }
 
+// TestFailedAttemptOf tells an attempt waiting on her from one that
+// failed (#2225): the newest PaymentIntent requiring action is a
+// redirect method she has not finished, and the method comes from the
+// most recent payment that failed.
+func TestFailedAttemptOf(t *testing.T) {
+	withIntent := func(intent *stripe.PaymentIntent) *stripe.InvoicePayment {
+		return &stripe.InvoicePayment{Payment: &stripe.InvoicePaymentPayment{PaymentIntent: intent}}
+	}
+	declined := withIntent(&stripe.PaymentIntent{
+		Status:           stripe.PaymentIntentStatusRequiresPaymentMethod,
+		LastPaymentError: &stripe.Error{PaymentMethod: &stripe.PaymentMethod{Type: stripe.PaymentMethodTypeCard}},
+	})
+	awaiting := withIntent(&stripe.PaymentIntent{Status: stripe.PaymentIntentStatusRequiresAction})
+	cases := []struct {
+		name     string
+		payments []*stripe.InvoicePayment
+		want     FailedAttempt
+	}{
+		{"a declined card", []*stripe.InvoicePayment{declined}, FailedAttempt{PaymentMethodType: "card"}},
+		{"a redirect she has not finished", []*stripe.InvoicePayment{awaiting}, FailedAttempt{AwaitingAction: true}},
+		{"a redirect after a decline", []*stripe.InvoicePayment{awaiting, declined}, FailedAttempt{PaymentMethodType: "card", AwaitingAction: true}},
+		{"no payments", nil, FailedAttempt{}},
+		{"a payment with no PaymentIntent", []*stripe.InvoicePayment{{}}, FailedAttempt{}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := failedAttemptOf(tc.payments); got != tc.want {
+				t.Fatalf("failedAttemptOf = %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestInvoicePaymentIntentOf reads the Invoice, the PaymentIntent's
 // current status and its method off one InvoicePayment as the
 // processing webhook's lookup returns it (#2225), and leaves blank

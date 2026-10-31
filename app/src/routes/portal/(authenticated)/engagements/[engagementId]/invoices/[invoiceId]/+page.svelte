@@ -77,9 +77,27 @@
 				payment = await loadClientPayment(apiFetchWithSession, page.params.engagementId!, page.params.invoiceId!);
 			} catch (error_) {
 				paymentError = error_ instanceof Error ? error_.message : 'We could not start this payment. Try again.';
+				await rereadAfterRefusal();
 			}
 		}
 	});
+
+	/** A refusal can mean the Invoice moved between the two reads: on her
+	 * way back from Klarna, Stripe's `invoice.paid` often lands in that
+	 * moment (seen on #2225's walk). Read it once more, and if it is no
+	 * longer waiting for a payment, show where it stands now in place of
+	 * the refusal. */
+	async function rereadAfterRefusal() {
+		try {
+			const now = await loadClientInvoice(apiFetchWithSession, page.params.engagementId!, page.params.invoiceId!);
+			if (now.status !== 'open' || now.paymentProcessing) {
+				invoice = now;
+				paymentError = '';
+			}
+		} catch {
+			// The refusal already on screen stands.
+		}
+	}
 
 	/** Stripe says her payment is on its way: the page says so where the
 	 * Element was, as it will once the webhook has recorded it. */

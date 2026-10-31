@@ -211,6 +211,37 @@ describe('paying a Stripe-rail Invoice in our own chrome (#1020)', () => {
 		await expect.element(page.getByRole('alert')).toHaveTextContent('This Invoice is not waiting for a payment.');
 	});
 
+	// #2225's walk: back from Klarna, invoice.paid landed between the
+	// Invoice read and the secret read, and she was shown a refusal for a
+	// payment that had gone through.
+	it('shows where the Invoice stands now when it was paid between the two reads', async () => {
+		let reads = 0;
+		await setupInvoice((path) => {
+			if (path.endsWith('/payment')) {
+				return Response.json({ code: 'FAILED_PRECONDITION', message: 'This Invoice is not waiting for a payment.' }, { status: 409 });
+			}
+			reads += 1;
+			return jsonResponse(reads === 1 ? invoice : { ...invoice, status: 'paid', paidOn: '2027-02-04' });
+		});
+
+		await expect.element(page.getByText('Paid', { exact: true }).first()).toBeVisible();
+		expect(page.getByRole('alert').elements()).toHaveLength(0);
+		expect(page.getByText('Not yet paid').elements()).toHaveLength(0);
+	});
+
+	it('keeps the refusal when the Invoice cannot be read again', async () => {
+		let reads = 0;
+		await setupInvoice((path) => {
+			if (path.endsWith('/payment')) {
+				return Response.json({ code: 'FAILED_PRECONDITION', message: 'This Invoice is not waiting for a payment.' }, { status: 409 });
+			}
+			reads += 1;
+			return reads === 1 ? jsonResponse(invoice) : Promise.reject(new Error('down'));
+		});
+
+		await expect.element(page.getByRole('alert')).toHaveTextContent('This Invoice is not waiting for a payment.');
+	});
+
 	it('falls back to a retry sentence when the secret cannot be fetched and no reason came back', async () => {
 		await setupInvoice((path) => (path.endsWith('/payment') ? Promise.reject('down') : jsonResponse(invoice)));
 

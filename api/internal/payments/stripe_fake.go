@@ -122,9 +122,9 @@ type FakeClient struct {
 	// RetrieveInvoicePaymentReference returns.
 	PaymentReferences map[string]string
 
-	// FailedPaymentMethodTypes, keyed by Stripe invoice id, is what
-	// RetrieveInvoiceFailedPaymentMethodType returns (#2224).
-	FailedPaymentMethodTypes map[string]string
+	// FailedAttempts, keyed by Stripe invoice id, is what
+	// RetrieveInvoiceFailedAttempt returns (#2224, #2225).
+	FailedAttempts map[string]FailedAttempt
 
 	// PaymentIntentInvoices, keyed by PaymentIntent id, is what
 	// RetrievePaymentIntentInvoice returns (#2225).
@@ -352,12 +352,12 @@ func (f *FakeClient) RetrieveInvoicePaymentReference(_ context.Context, _, invoi
 	return f.PaymentReferences[invoiceID], nil
 }
 
-// RetrieveInvoiceFailedPaymentMethodType returns the method type a test
-// set in FailedPaymentMethodTypes for the invoice id (empty if unset).
-func (f *FakeClient) RetrieveInvoiceFailedPaymentMethodType(_ context.Context, _, invoiceID string) (string, error) {
+// RetrieveInvoiceFailedAttempt returns what a test set in FailedAttempts
+// for the invoice id (the zero value if unset).
+func (f *FakeClient) RetrieveInvoiceFailedAttempt(_ context.Context, _, invoiceID string) (FailedAttempt, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.FailedPaymentMethodTypes[invoiceID], nil
+	return f.FailedAttempts[invoiceID], nil
 }
 
 // RetrievePaymentIntentInvoice returns what a test set in

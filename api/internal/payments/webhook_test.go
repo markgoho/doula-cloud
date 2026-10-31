@@ -73,6 +73,7 @@ type referenceClient struct {
 	reference string
 	err       error
 	method    string
+	awaiting  bool
 	methodErr error
 }
 
@@ -83,11 +84,11 @@ func (c *referenceClient) RetrieveInvoicePaymentReference(_ context.Context, _, 
 	return c.reference, nil
 }
 
-func (c *referenceClient) RetrieveInvoiceFailedPaymentMethodType(_ context.Context, _, _ string) (string, error) {
+func (c *referenceClient) RetrieveInvoiceFailedAttempt(_ context.Context, _, _ string) (payments.FailedAttempt, error) {
 	if c.methodErr != nil {
-		return "", c.methodErr
+		return payments.FailedAttempt{}, c.methodErr
 	}
-	return c.method, nil
+	return payments.FailedAttempt{PaymentMethodType: c.method, AwaitingAction: c.awaiting}, nil
 }
 
 // buildConnectEventPayload assembles a raw Stripe event envelope around
@@ -1185,6 +1186,36 @@ func TestPostConnectWebhookHandler_FailedAttemptRecordedWithoutAMethodItCannotRe
 	}
 	if _, ok := got[0].diff["paymentMethodType"]; ok {
 		t.Fatalf("diff = %v, want no method when Stripe could not be asked", got[0].diff)
+	}
+}
+
+// TestPostConnectWebhookHandler_AnAttemptWaitingOnHerIsNotAFailure is the
+// #2225 walk's finding. Stripe sends invoice.payment_failed beside
+// invoice.payment_action_required the moment a redirect method (Klarna)
+// sends her away to approve it, before she has done anything: nothing
+// failed, so nothing is recorded, and a payment on its way stays so.
+func TestPostConnectWebhookHandler_AnAttemptWaitingOnHerIsNotAFailure(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedConnectedPractice(t, db, "Awaiting Action Practice", "acct_awaiting_action")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedDraftContract(t, db, engagementID)
+	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_awaiting_action", invoiceStatusOpen, 5000, time.Now())
+	client := failedAttemptClient("", nil)
+	client.awaiting = true
+	srv := newConnectWebhookServerWith(db, client)
+	defer srv.Close()
+
+	resp := postConnectWebhook(t, srv, invoicePaymentFailedPayload(t, "evt_awaiting_action", "acct_awaiting_action", "in_awaiting_action"), stripeConnectWebhookSecret)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if status, _ := invoiceStatusAndPaidAt(t, db, invoiceID); status != invoiceStatusOpen {
+		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusOpen)
+	}
+	if got := activityRows(t, db, "invoice_payment_failed", engagementID); len(got) != 0 {
+		t.Fatalf("invoice_payment_failed rows = %d, want 0 -- she has not finished, nothing failed", len(got))
 	}
 }
 

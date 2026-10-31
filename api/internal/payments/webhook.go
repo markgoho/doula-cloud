@@ -458,6 +458,20 @@ func handleInvoicePaymentFailed(w http.ResponseWriter, r *http.Request, db *sql.
 		return
 	}
 
+	// Stripe asks before anything is written: the same event arrives the
+	// moment a redirect method sends her away to approve it, and that is
+	// not a failure (#2225). A failure to ask records the attempt without
+	// a method rather than lose it, the rule handleInvoicePaid follows.
+	attempt, err := client.RetrieveInvoiceFailedAttempt(r.Context(), event.Account, inv.ID)
+	if err != nil {
+		log.Printf("payments: connect webhook: invoice.payment_failed %s recorded without a payment method: %v", inv.ID, err)
+	}
+	if attempt.AwaitingAction {
+		log.Printf("payments: connect webhook: invoice.payment_failed for %q is waiting on the Client, not failed (event id %s)", inv.ID, event.ID)
+		commitAndAck(w, tx, &committed)
+		return
+	}
+
 	// A payment that was on its way (#2225) and did not go through is no
 	// longer on its way. The Invoice stays open for another try.
 	if _, err := tx.ExecContext(r.Context(),
@@ -469,11 +483,8 @@ func handleInvoicePaymentFailed(w http.ResponseWriter, r *http.Request, db *sql.
 	}
 
 	diff := map[string]string{}
-	methodType, err := client.RetrieveInvoiceFailedPaymentMethodType(r.Context(), event.Account, inv.ID)
-	if err != nil {
-		log.Printf("payments: connect webhook: invoice.payment_failed %s recorded without a payment method: %v", inv.ID, err)
-	} else if methodType != "" {
-		diff[activity.DiffKeyPaymentMethodType] = methodType
+	if attempt.PaymentMethodType != "" {
+		diff[activity.DiffKeyPaymentMethodType] = attempt.PaymentMethodType
 	}
 	diffJSON, err := json.Marshal(diff)
 	if err != nil {
