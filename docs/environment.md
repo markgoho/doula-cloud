@@ -304,6 +304,22 @@ The drain answers `200` only when every outbox succeeded, and `500` naming the o
 
 The three jobs that predated this — `process-portal-invite-outbox`, `process-site-build-outbox`, and #443's `verify-practice-pages` — are down to one: the first two were deleted as redundant once the drain covered them, and `verify-practice-pages` stays because it is not an outbox at all.
 
+## doula-ops
+
+`doula-ops` (`api/cmd/ops`, ADR-0062) reads its own set, and none of `doula-api`'s:
+
+| Variable | Holds | Local and CI (`app/e2e/stack.ts`) |
+|---|---|---|
+| `DATABASE_URL` | the `ops_runtime` login's DSN | `ops_e2e` |
+| `OPS_TENANT_ID` | the operator tenant; unset refuses to start | `operators-local`, which the stack makes in the Auth emulator with one seeded login |
+| `GCP_PROJECT_ID` | the Identity Platform project | `doula-cloud` |
+| `EXPECTED_ORIGINS` | the origins `csrf.Wrap` accepts | ops/'s dev and preview origins |
+| `FIREBASE_AUTH_EMULATOR_HOST` | the Auth emulator; while set, the emulator's phone factor counts in place of TOTP, since the emulator has none. `doula-ops` refuses to start with it set on Cloud Run (`K_SERVICE`) | the stack's emulator |
+| `E2E_CLOCK_FOLLOWS_SIM_OFFSET` | the session limits follow a simulated jump, as `doula-api`'s clock does | `1` |
+| `PORT` | the listen port; Cloud Run's 8080 when unset | `E2E_OPS_PORT` |
+
+ops/'s build reads `VITE_OPS_TENANT_ID` and, locally, `VITE_FIREBASE_AUTH_EMULATOR_HOST`. `bun run dev:full` serves ops/ at `OPS_DEV_SERVER_PORT` and prints the seeded login. Locally the screens stop at the code: the emulator has no TOTP, and only ops/'s e2e suite relabels its phone factor (`app/e2e/totpStub.ts`).
+
 ## Attachments bucket and VAPID push
 
 #245 provisioned the two variables `ci.yml`'s own comment had wrongly claimed were already set out of band: `GCS_ATTACHMENTS_BUCKET` (Contract PDFs and Message attachments, `objectstore.NewGCSStore` in `main.go`) and the VAPID keypair (`push.NewVAPIDPusher`, Web Push delivery).

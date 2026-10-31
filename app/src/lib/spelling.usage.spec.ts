@@ -411,6 +411,9 @@ const e2eFiles = globFiles('app/e2e/**/*.{ts,js}', { cwd: repoRoot });
 // app/src, and the same repoRoot-relative paths as the two trees above.
 const siteFiles = globFiles('site/src/**/*.{svelte,ts,js,css,svg,html,md}', { cwd: repoRoot });
 
+// #2469: the Platform operator's app (ADR-0062), and its e2e suite.
+const opsFiles = globFiles('ops/{src,e2e}/**/*.{svelte,ts,js,css,svg,html,md}', { cwd: repoRoot });
+
 // #1644: the hand-written documents. `CLAUDE.md` says documentation is
 // American English too, and #899, #921, #1154 and #1218 each swept the code
 // and left `docs/` to the next reader's eye, which is how an ADR kept the
@@ -462,6 +465,9 @@ const offenses = [
 	...siteFiles.flatMap((file) =>
 		findOffensesInLines(file, readFileSync(path.join(repoRoot, file), 'utf8'))
 	),
+	...opsFiles.flatMap((file) =>
+		findOffensesInLines(file, readFileSync(path.join(repoRoot, file), 'utf8'))
+	),
 	...documentFiles.flatMap((file) =>
 		findOffensesInLines(file, readFileSync(path.join(repoRoot, file), 'utf8'))
 	)
@@ -487,6 +493,10 @@ describe('the source trees and the hand-written documents spell every word the A
 
 	it('reads the whole site/src tree', () => {
 		expect(siteFiles.length).toBeGreaterThan(5);
+	});
+
+	it('reads the whole ops/src and ops/e2e trees', () => {
+		expect(opsFiles.length).toBeGreaterThan(10);
 	});
 
 	it('reads the hand-written documents under docs/ and at the repo root', () => {

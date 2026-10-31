@@ -187,6 +187,11 @@ export function developmentServerPidfilePath(offset: number): string {
 	return path.join(tmpdir(), `doula-cloud-dev-server${offset ? `-${offset}` : ''}.pid`);
 }
 
+// ops/'s dev server's pidfile, which dev:full writes and reads the same way.
+export function opsDevelopmentServerPidfilePath(offset: number): string {
+	return path.join(tmpdir(), `doula-cloud-ops-dev-server${offset ? `-${offset}` : ''}.pid`);
+}
+
 // The Go BFF binary startAPI builds and execs, offset-suffixed the same
 // way its pidfile is (see API_BINARY_PATH, e2e/stack.ts). Exported so the
 // pidfile reaper can reconstruct *any* offset's expected binary path --

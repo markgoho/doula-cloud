@@ -63,7 +63,16 @@ function findOffensesInSource(file: string, source: string): Offense[] {
 // Read and scanned once, at module scope, so the cost of the whole-tree
 // read is paid on import rather than charged against one `it`'s timeout
 // (#1211).
-const files = globFiles(GLOBS, { cwd: appRoot }).filter((file) => !NOT_COPY.test(file));
+
+// #2469: ops/ (ADR-0062) is held to the same voice. Its paths are made
+// relative to app/, so the read below resolves them as it does app/'s own.
+const opsCopyFiles = globFiles(['ops/src/**/*.svelte', 'ops/src/**/*.ts'], {
+	cwd: fileURLToPath(new URL('../../../', import.meta.url))
+})
+	.filter((file) => !NOT_COPY.test(file))
+	.map((file) => `../${file}`);
+
+const files = [...globFiles(GLOBS, { cwd: appRoot }).filter((file) => !NOT_COPY.test(file)), ...opsCopyFiles];
 
 const offenses = files.flatMap((file) =>
 	findOffensesInSource(file, readFileSync(new URL(file, `file://${appRoot}`), 'utf8'))
@@ -75,6 +84,7 @@ describe('rendered copy uses a dash, never two hyphens', () => {
 		// below pass while checking no copy at all.
 		expect(files.filter((file) => file.endsWith('.svelte')).length).toBeGreaterThan(50);
 		expect(files.filter((file) => file.endsWith('.ts')).length).toBeGreaterThan(50);
+		expect(opsCopyFiles.length).toBeGreaterThan(3);
 	});
 
 	it('finds no " -- " anywhere a person reads', () => {

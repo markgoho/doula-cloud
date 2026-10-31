@@ -1,5 +1,6 @@
 import { expect, test, type APIRequestContext } from '../../app/e2e/playwrightTest';
 import { EMULATOR_URL, enrollPhoneFactor, randomPhoneNumber } from '../../app/e2e/mfa';
+import { OPS_URL } from '../../app/e2e/ports';
 import { OPS_TENANT_ID, SEEDED_OPERATOR } from '../../app/e2e/stack';
 
 /*
@@ -57,9 +58,7 @@ test('An operator login cannot sign in outside its tenant', async ({ request }) 
 	expect(signedIn.error?.message).toBe('EMAIL_NOT_FOUND');
 });
 
-test('A login in the operator tenant enrolls the emulator factor, and its token carries both', async ({
-	request
-}) => {
+async function newOperatorLogin(request: APIRequestContext): Promise<Tokens> {
 	const email = `operator-${crypto.randomUUID()}@doula-cloud.invalid`;
 	const created = await request.post(
 		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/projects/doula-cloud/tenants/${OPS_TENANT_ID}/accounts`,
@@ -74,10 +73,65 @@ test('A login in the operator tenant enrolls the emulator factor, and its token 
 		password: 'operator-spec-password',
 		tenantId: OPS_TENANT_ID
 	});
+	return signedIn;
+}
+
+function exchange(request: APIRequestContext, idToken: string) {
+	return request.post(`${OPS_URL}/api/session`, { headers: { Authorization: `Bearer ${idToken}` } });
+}
+
+test('A login in the operator tenant enrolls the emulator factor, and its token carries both', async ({
+	request
+}) => {
+	const signedIn = await newOperatorLogin(request);
 
 	const enrolled = await enrollPhoneFactor(request, signedIn.idToken, randomPhoneNumber(), OPS_TENANT_ID);
 
 	const { firebase } = claimsOf(enrolled.idToken);
 	expect(firebase.tenant).toBe(OPS_TENANT_ID);
 	expect(firebase.sign_in_second_factor).toBe('phone');
+});
+
+test('doula-ops mints a session from an operator token that passed the emulator factor', async ({ request }) => {
+	const signedIn = await newOperatorLogin(request);
+	const enrolled = await enrollPhoneFactor(request, signedIn.idToken, randomPhoneNumber(), OPS_TENANT_ID);
+
+	const response = await exchange(request, enrolled.idToken);
+
+	expect(response.status()).toBe(200);
+	expect(await response.json()).toEqual({ name: 'Spec Operator', email: expect.stringContaining('@doula-cloud.invalid') });
+	// The cookie is Secure, which an API request context over http keeps
+	// to itself, so it is sent back by hand.
+	const cookie = (response.headers()['set-cookie'] ?? '').split(';', 1)[0];
+	const session = await request.get(`${OPS_URL}/api/session`, { headers: { Cookie: cookie } });
+	expect(session.status()).toBe(200);
+});
+
+test('doula-ops sends an operator token with no second factor to enroll', async ({ request }) => {
+	const signedIn = await newOperatorLogin(request);
+
+	const response = await exchange(request, signedIn.idToken);
+
+	expect(response.status()).toBe(403);
+	const refusal = await response.json();
+	expect(refusal.code).toBe('MFA_REQUIRED');
+});
+
+test('doula-ops refuses a Staff token, second factor and all', async ({ request }) => {
+	const email = `staff-${crypto.randomUUID()}@doula-cloud.invalid`;
+	const signUp = await request.post(`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`, {
+		data: { email, password: 'staff-spec-password', returnSecureToken: true }
+	});
+	const { idToken, localId } = await signUp.json();
+	await request.post(`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:update`, {
+		headers: { Authorization: 'Bearer owner' },
+		data: { localId, emailVerified: true }
+	});
+	const enrolled = await enrollPhoneFactor(request, idToken);
+
+	const response = await exchange(request, enrolled.idToken);
+
+	expect(response.status()).toBe(401);
+	const refusal = await response.json();
+	expect(refusal.code).toBe('UNAUTHORIZED');
 });

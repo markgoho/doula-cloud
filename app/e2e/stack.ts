@@ -24,6 +24,8 @@ import {
 	MAILBOX_PORT,
 	E2E_OPS_HOST,
 	E2E_OPS_PORT,
+	OPS_DEV_SERVER_ORIGIN,
+	OPS_PREVIEW_SERVER_ORIGIN,
 	PORT_OFFSET,
 	PORT_OFFSET_ROOT,
 	E2E_COMPOSE_FILE,
@@ -1040,6 +1042,12 @@ async function startOps() {
 		env: {
 			...process.env,
 			DATABASE_URL: `postgres://ops_e2e:ops_e2e@${DB_HOST}:${DB_PORT}/app?sslmode=disable`,
+			FIREBASE_AUTH_EMULATOR_HOST: `${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`,
+			GCP_PROJECT_ID: 'doula-cloud',
+			OPS_TENANT_ID,
+			EXPECTED_ORIGINS: `${OPS_DEV_SERVER_ORIGIN},${OPS_PREVIEW_SERVER_ORIGIN}`,
+			// Session limits follow a simulated jump, as doula-api's do.
+			E2E_CLOCK_FOLLOWS_SIM_OFFSET: '1',
 			PORT: String(E2E_OPS_PORT)
 		}
 	});
