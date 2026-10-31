@@ -4,6 +4,7 @@ import {
 	defaultRange,
 	describeCoverage,
 	describeNoWindow,
+	describeSavedOnCall,
 	doublyBooked,
 	engagementOnCallPath,
 	loadEngagementOnCall,
@@ -206,6 +207,40 @@ describe('the words a reader meets', () => {
 		];
 		expect(doublyBooked(roster([], doulas)).map((doula) => doula.name)).toEqual(
 			['Maya']
+		);
+	});
+});
+
+/*
+ * #2291: the On call save said only "Saved.". It now says the rule that
+ * was saved, and that every birth the Practice is carrying follows it,
+ * because nothing stores a window.
+ */
+describe('what an On call save says', () => {
+	const carried =
+		'for every birth this Practice is carrying, including births already under way.';
+
+	it('names the week on call opens and the days it runs past the due date', () => {
+		expect(
+			describeSavedOnCall({ startRule: 'gestational_week', startWeek: 39, graceDays: 10 })
+		).toBe(
+			`On call saved. On call now opens at week 39 of pregnancy and runs 10 days past the due date, ${carried}`
+		);
+	});
+
+	it('names the day a doula takes the birth, and says a single day as one', () => {
+		expect(
+			describeSavedOnCall({ startRule: 'attachment_granted', startWeek: 37, graceDays: 1 })
+		).toBe(
+			`On call saved. On call now opens on the day a doula takes the birth and runs 1 day past the due date, ${carried}`
+		);
+	});
+
+	it('says on call ends on the due date when it runs no days past it', () => {
+		expect(
+			describeSavedOnCall({ startRule: 'gestational_week', startWeek: 37, graceDays: 0 })
+		).toBe(
+			`On call saved. On call now opens at week 37 of pregnancy and ends on the due date, ${carried}`
 		);
 	});
 });

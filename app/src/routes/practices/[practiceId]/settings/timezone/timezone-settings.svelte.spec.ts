@@ -78,7 +78,14 @@ describe('the Timezone screen', () => {
 		await control().selectOptions('Mountain time (Denver)');
 		await save();
 
-		await expect.element(testPage.getByText('Saved.')).toBeVisible();
+		// #2291: a polite status that names the zone saved and what follows
+		// from it, and takes no focus while Save is still on the screen.
+		await expect
+			.element(testPage.getByRole('status').filter({ hasText: 'Timezone saved.' }))
+			.toHaveTextContent(
+				'Timezone saved. Visits now fall on the day it is in Mountain time (Denver), including Visits already recorded.'
+			);
+		await expect.element(testPage.getByRole('button', { name: 'Save' })).toHaveFocus();
 		const [path, init] = apiFetchWithSession.mock.calls[1];
 		expect(path).toBe(timezonePath);
 		expect(init.method).toBe('PUT');

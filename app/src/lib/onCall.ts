@@ -239,6 +239,22 @@ export function describeNoWindow(reason: string): string {
 	}
 }
 
+/** What the On call settings screen says once a rule is saved (#2291):
+ * the rule as saved, and that it reaches every birth the Practice is
+ * carrying, because nothing stores a window -- each is worked out on
+ * every read from the due date and this rule. */
+export function describeSavedOnCall(settings: OnCallSettings): string {
+	const opens =
+		settings.startRule === 'gestational_week'
+			? `at week ${settings.startWeek} of pregnancy`
+			: 'on the day a doula takes the birth';
+	const runs =
+		settings.graceDays === 0
+			? 'ends on the due date'
+			: `runs ${settings.graceDays} ${settings.graceDays === 1 ? 'day' : 'days'} past the due date`;
+	return `On call saved. On call now opens ${opens} and ${runs}, for every birth this Practice is carrying, including births already under way.`;
+}
+
 /** What one window's state says out loud, for the reader scanning the
  * roster and for the live region that announces a narrowing change. */
 export function describeCoverage(window: RosterWindow): string {
