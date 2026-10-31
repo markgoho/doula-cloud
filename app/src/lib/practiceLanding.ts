@@ -126,7 +126,7 @@ export async function loadWaitingOnReplyPage(
 }
 
 /**
- * One `secondary` block. `undefined` means the caller's roles do not
+ * One best-effort block. `undefined` means the caller's roles do not
  * reach it, so the block is not drawn at all; `'unavailable'` means she
  * may see it and the endpoint failed, so the block says so rather than
  * disappearing and leaving her to guess whether she has any credits.
@@ -141,9 +141,6 @@ export interface PracticeLanding {
 	 * primary region is "what needs me today". */
 	openOffers: Offer[];
 	hasClients: boolean;
-	/** How many Clients are in active care, for the Clients card's count
-	 * (#2095). The same read answers `hasClients`. */
-	activeClients: number;
 	roster: Block<RosterHealth>;
 	credit: Block<CreditHealth>;
 	connect: Block<ConnectHealth>;
@@ -206,7 +203,7 @@ export function canReadConnect(roles: string[]): boolean {
 }
 
 /** Resolves a best-effort block: its value, or `'unavailable'` when the
- * endpoint refused or the network did. Only the three `secondary` blocks
+ * endpoint refused or the network did. Only the best-effort blocks
  * use this; a failure in the critical path still fails the page. */
 async function block<T>(load: () => Promise<T>): Promise<Block<T>> {
 	try {
@@ -311,7 +308,6 @@ export async function loadPracticeLanding(
 		roles,
 		openOffers,
 		hasClients: clientCount.records > 0,
-		activeClients: clientCount.active,
 		roster,
 		credit,
 		connect,

@@ -235,7 +235,7 @@ describe('the Practice landing page', () => {
 	 * #2228: the Overview shows what needs her. On a day when nothing in
 	 * the Practice does, the blocks that would only repeat the top bar's
 	 * Staff, Credits and Settings are not drawn, and neither is a rail to
-	 * hold them. The balance is still on the Credits card.
+	 * hold them.
 	 */
 	it('draws only what needs her on a day when nothing in the Practice does', async () => {
 		await setup({
@@ -260,14 +260,12 @@ describe('the Practice landing page', () => {
 			expect(testPage.getByRole('heading', { name: heading }).elements()).toHaveLength(0);
 		}
 		expect(testPage.getByRole('complementary').elements()).toHaveLength(0);
-		await expect
-			.element(testPage.getByRole('navigation', { name: 'Quick links' }).getByRole('link', { name: 'Credits' }))
-			.toHaveAccessibleDescription('12 Credits');
 	});
 
-	// #2228: the balance is on the Credits card, so a block that says it
-	// again, with a link to the same screen, is not drawn.
-	it('draws no Credits block beside the Credits card', async () => {
+	// #2228: the balance is on the Credits screen the top bar opens, so a
+	// block that says it again, with a link to the same screen, is not
+	// drawn.
+	it('draws no Credits block', async () => {
 		await setup();
 
 		await expect.element(testPage.getByRole('heading', { name: 'Your people' })).toBeVisible();
@@ -275,19 +273,20 @@ describe('the Practice landing page', () => {
 		expect(testPage.getByRole('link', { name: 'Buy credits' }).elements()).toHaveLength(0);
 	});
 
-	// #2228 (Dee Whitlock's walk): an Offer goes to a Doula (#2141), so
-	// the card that counts hers is not offered to someone who cannot hold
-	// one.
+	// #2398: the founder dropped the Quick links on 2026-10-31. They only
+	// repeated the top bar's destinations, so no role is drawn them.
 	it.each([
-		['an Admin who is not a Doula', ['admin'], false],
-		['an Owner who is not a Doula', ['owner'], false],
-		['a Doula', ['doula'], true]
-	])('offers the Your offers card to %s: %s', async (_who, roles, isShown) => {
+		['an Owner who is Admin and Doula', ['owner', 'admin', 'doula']],
+		['an Admin', ['admin']],
+		['a Doula', ['doula']]
+	])('draws no Quick links for %s', async (_who, roles) => {
 		await setup({ roles });
 
-		const quickLinks = testPage.getByRole('navigation', { name: 'Quick links' });
-		await expect.element(quickLinks.getByRole('link', { name: 'Clients' })).toBeVisible();
-		expect(quickLinks.getByRole('link', { name: 'Your offers' }).elements()).toHaveLength(isShown ? 1 : 0);
+		await expect.element(testPage.getByRole('heading', { name: 'Recent activity' })).toBeVisible();
+		expect(testPage.getByRole('navigation', { name: 'Quick links' }).elements()).toHaveLength(0);
+		for (const label of ['Clients', 'Plan Templates', 'Contract Template']) {
+			expect(testPage.getByRole('link', { name: label, exact: true }).elements()).toHaveLength(0);
+		}
 	});
 
 	// #503: a pending Request stops a Doula from working, so the hub whose
@@ -385,10 +384,8 @@ describe('the Practice landing page', () => {
 			await setupCard({}, ['admin']);
 
 			await expect.element(testPage.getByText(adminWords, { exact: true })).toBeVisible();
-			// The second: the quick links (#2006) come first, and carry a
-			// Getting paid card of their own.
 			await expect
-				.element(testPage.getByRole('link', { name: 'Getting paid' }).nth(1))
+				.element(testPage.getByRole('link', { name: 'Getting paid' }))
 				.toHaveAttribute('href', `/practices/${practiceId}/settings/payments`);
 			expect(testPage.getByText('Not connected').elements()).toHaveLength(0);
 		});
@@ -827,71 +824,6 @@ describe('the Practice landing page', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: 'See all activity' }))
 			.toHaveAttribute('href', `/practices/${practiceId}/activity`);
-	});
-
-	// #2006: the drawing's quick-link cards, the places a person goes from
-	// here, offered only where the BFF will let that person in -- the same
-	// role split as the top bar's own sections.
-	it.each([
-		[
-			'an Owner who is a Doula',
-			['owner', 'doula'],
-			['Clients', 'Credits', 'Your offers', 'Staff', 'Plan Templates', 'Contract Template', 'Getting paid']
-		],
-		['a Doula', ['doula'], ['Clients', 'Your offers', 'Plan Templates', 'Contract Template']]
-	])('offers %s the quick links that person can open', async (_who, roles, labels) => {
-		await setup({ roles });
-
-		const quickLinks = testPage.getByRole('navigation', { name: 'Quick links' });
-		await expect.element(quickLinks).toBeVisible();
-		for (const label of labels) {
-			await expect.element(quickLinks.getByRole('link', { name: label, exact: true })).toBeVisible();
-		}
-		expect(quickLinks.getByRole('link').elements()).toHaveLength(labels.length);
-	});
-
-	// #2095: the three cards the drawing counts carry the count as their
-	// line, and every other card keeps its own.
-	it('counts the Clients in active care, the open Offers and the Credits on their cards', async () => {
-		await setup({ clients: [{ clientId: 'c1' }, { clientId: 'c2' }] });
-
-		const quickLinks = testPage.getByRole('navigation', { name: 'Quick links' });
-		await expect.element(quickLinks.getByRole('link', { name: 'Clients' })).toHaveAccessibleDescription('2 active');
-		await expect.element(quickLinks.getByRole('link', { name: 'Your offers' })).toHaveAccessibleDescription('1 waiting on you');
-		await expect.element(quickLinks.getByRole('link', { name: 'Credits' })).toHaveAccessibleDescription('12 Credits');
-		await expect
-			.element(quickLinks.getByRole('link', { name: 'Staff' }))
-			.toHaveAccessibleDescription('Who works here, and who is invited.');
-	});
-
-	it('says none where nothing is counted', async () => {
-		await setup({
-			clients: [{ clientId: 'c1' }],
-			overrides: {
-				clients: jsonResponse({ records: 1, active: 0 }),
-				offers: jsonResponse({ items: [] })
-			}
-		});
-
-		const quickLinks = testPage.getByRole('navigation', { name: 'Quick links' });
-		await expect.element(quickLinks.getByRole('link', { name: 'Clients' })).toHaveAccessibleDescription('None active');
-		await expect.element(quickLinks.getByRole('link', { name: 'Your offers' })).toHaveAccessibleDescription('None waiting on you');
-	});
-
-	it('keeps the line of the Credits card when the balance cannot be read', async () => {
-		await setup({ overrides: { billing: refusal('nope') } });
-
-		await expect
-			.element(testPage.getByRole('navigation', { name: 'Quick links' }).getByRole('link', { name: 'Credits' }))
-			.toHaveAccessibleDescription('Buy Credits and see the balance.');
-	});
-
-	it('sends the Clients card to the Clients list', async () => {
-		await setup();
-
-		await expect
-			.element(testPage.getByRole('navigation', { name: 'Quick links' }).getByRole('link', { name: 'Clients' }))
-			.toHaveAttribute('href', `/practices/${practiceId}/clients`);
 	});
 
 	it('says so when the activity feed cannot be read', async () => {

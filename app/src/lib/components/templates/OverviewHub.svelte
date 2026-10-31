@@ -29,57 +29,29 @@
 		 */
 		serviceName?: string;
 		primary: Snippet;
-		secondary?: Snippet;
 		/**
 		 * #486's Recent-activity feed: low-prominence and low on the page,
 		 * per the design brief's own #433 amendment ("it sits low on every
-		 * page it appears on"). Rendered last in the primary column
-		 * (#2020, #2063), so it starts under that column's last card: below
-		 * the whole split, a long rail set where it started and left a
-		 * blank band above it. Never in the rail, which is too narrow for
-		 * a table.
+		 * page it appears on"). Rendered last in the column (#2020, #2063),
+		 * after the work.
 		 *
-		 * Once the split wraps to one column (a phone), the feed comes
-		 * after the primary column's work and before the rail's cards, a
-		 * stated choice (#2063): the feed is the primary column's own
-		 * content, and moving it under the rail would need a query on the
-		 * very width `sidebar-l` reads for itself (#564). It is still the
-		 * last thing in its column, so it still sits low.
-		 *
-		 * The column is narrower than `DataTable`'s own 55rem floor below
-		 * about a 1366px window, so the caller gives the feed's table its
+		 * The column is narrower than `DataTable`'s own 55rem floor at
+		 * common window widths, so the caller gives the feed's table its
 		 * own floor (the Practice landing hub's `activity-table`).
 		 *
-		 * Absent while `isEmpty`, the same as `secondary`: a Practice with
-		 * no Client yet has no activity to show either.
+		 * Absent while `isEmpty`: a Practice with no Client yet has no
+		 * activity to show either.
 		 */
 		feed?: Snippet;
-		/**
-		 * The quick-link cards the drawing puts under the title (#2006):
-		 * the places a person goes from here, before the work. Absent while
-		 * `isEmpty`, the same as `secondary` and `feed`: the empty Practice
-		 * offers one act (ADR-0048).
-		 */
-		links?: Snippet;
 		isEmpty: boolean;
 		empty: Snippet;
 		/**
 		 * Presence, not a paired boolean: the value is also the Skeleton's
 		 * accessible label, so a caller cannot supply "loading" without
-		 * saying what is loading. The title and `links` are drawn while
-		 * loading (#2248), so a caller passes only ones that stand without
-		 * the data; bars hold the rest of the hub's space.
+		 * saying what is loading. The title is drawn while loading (#2248);
+		 * bars hold the rest of the hub's space.
 		 */
 		loading?: string;
-		/**
-		 * Whether the hub will have a `secondary` rail once loaded. Read
-		 * only while `loading`, to hold the rail's column so the primary
-		 * column does not narrow when the data lands, the same as
-		 * `RecordDetail`'s `isContentsShown`. A caller knows it before the
-		 * data does when the rail turns on who is reading, not on what
-		 * loads.
-		 */
-		isRailShown?: boolean;
 		/**
 		Same shape as `loading`: presence is the state, value is the message.
 		*/
@@ -99,31 +71,19 @@
 		title,
 		serviceName,
 		primary,
-		secondary,
 		feed,
-		links,
 		isEmpty,
 		empty,
 		loading,
-		isRailShown = false,
 		loadError,
 		outcome
 	}: Properties = $props();
 </script>
 
-<!-- The primary column's content, then the feed, last (#2063). Drawn
-     only while not `isEmpty`, so the feed needs no check of that here. -->
-{#snippet primaryColumn()}
-	{@render primary()}
-	{#if feed}
-		{@render feed()}
-	{/if}
-{/snippet}
-
 <PageTitle page={title} {serviceName} isPending={Boolean(loading) && !loadError} />
 
 <container-l name="overview-hub">
-	<!-- No cap: a hub is cards, tables and a rail rather than prose, and
+	<!-- No cap: a hub is cards and tables rather than prose, and
 	     past the ramp's plateau more room buys more content (#531, #541).
 	     Anything inside that needs a measure asks for one itself. -->
 	<center-l max="none" gutters="var(--page-gutter)">
@@ -132,19 +92,7 @@
 		{:else if loading}
 			<stack-l space="var(--space-section)">
 				<h1>{title}</h1>
-				{#if links}
-					{@render links()}
-				{/if}
-				{#if isRailShown}
-					<!-- The loaded split's own sidebar-l. The rail's bars are
-					     unlabeled: one load, one announcement. -->
-					<sidebar-l side="end" space="var(--space-section)" content-min="min(var(--measure), 100%)">
-						<Skeleton variant="text" lines={6} label={loading} />
-						<Skeleton variant="text" lines={4} />
-					</sidebar-l>
-				{:else}
-					<Skeleton variant="text" lines={6} label={loading} />
-				{/if}
+				<Skeleton variant="text" lines={6} label={loading} />
 			</stack-l>
 		{:else}
 			<stack-l space="var(--space-section)">
@@ -152,39 +100,16 @@
 					<Notice variant="status" message={outcome} isFocusedOnAppear />
 				{/if}
 				<h1>{title}</h1>
-
-				{#if !isEmpty && links}
-					{@render links()}
-				{/if}
-
 				{#if isEmpty}
 					<div class="empty">{@render empty()}</div>
-				{:else if secondary}
-					<!--
-						sidebar-l, side="end" (#564): primary is the dominant,
-						content-min-protected side; secondary is the fixed-basis
-						sidebar, kept SECOND in the DOM (side="end" swaps which
-						child gets which role instead of reordering). Wraps to a
-						stack on its own once the primary column cannot keep
-						--measure -- the same intent the removed @container
-						threshold measured, now read off the primitive's own
-						content quantities instead of an authored pixel.
-
-						content-min="min(var(--measure), 100%)", not a bare
-						var(--measure): --measure alone stays this template's
-						min-inline-size even once wrapped onto its own row,
-						which measurably overflowed a frame narrower than
-						--measure (a real, checked failure, not a theoretical
-						one -- primary read 521px inside a 320px frame before
-						this fix). "100%" caps the floor at whatever the row
-						actually has once alone.
-					-->
-					<sidebar-l side="end" space="var(--space-section)" content-min="min(var(--measure), 100%)">
-						<stack-l space="var(--space-group)">{@render primaryColumn()}</stack-l>
-						<aside><stack-l space="var(--space-group)">{@render secondary()}</stack-l></aside>
-					</sidebar-l>
 				{:else}
-					<stack-l space="var(--space-group)">{@render primaryColumn()}</stack-l>
+					<!-- The work, then the feed, last (#2063). -->
+					<stack-l space="var(--space-group)">
+						{@render primary()}
+						{#if feed}
+							{@render feed()}
+						{/if}
+					</stack-l>
 				{/if}
 			</stack-l>
 		{/if}
@@ -241,25 +166,5 @@
 				letter-spacing: var(--text-display-tracking);
 			}
 		}
-
-		/*
-		 * No @container query for the rail split, and no .body wrapper
-		 * (#564). The one query above picks a type step, never the
-		 * arrangement. The rail split is `sidebar-l`, Every Layout's own
-		 * Sidebar, wired in the markup above. #564's own map found the exact tension a measured
-		 * threshold cannot resolve -- sufficiency (never less room than
-		 * promised) and minimality (the smallest space that still works)
-		 * disagreeing by exactly the check's own probe depth on this
-		 * template's old floor, because the same font rasterizes to a
-		 * different `--measure` on a different platform. `sidebar-l`
-		 * side-steps the whole question: it reads `--measure` itself, on
-		 * whichever machine is rendering, and wraps the moment that
-		 * machine's own column can no longer honor it. No number is
-		 * authored for the split for any environment to disagree about.
-		 * The title's floor above does author one, and lives with that
-		 * spread: the floor check's minimality probe is 5% of the floor,
-		 * wider than any spread measured, and a title one step smaller
-		 * near the floor costs no content.
-		 */
 	}
 </style>

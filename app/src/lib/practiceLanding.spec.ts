@@ -143,13 +143,11 @@ describe('loadPracticeLanding', () => {
 		expect(landing.practiceName).toBe('Riverside Doula Collective');
 	});
 
-	// #2095: one count read answers both the empty state and the Clients
-	// card's number.
-	it('counts the Clients in active care, from the read that says whether there are any', async () => {
+	// #2095: one count read, not a page of rows, says whether there are any.
+	it('says whether the Practice holds a Client, from the count read', async () => {
 		const landing = await loadPracticeLanding(fetcherFor(), 'practice-1', session);
 
 		expect(landing.hasClients).toBe(true);
-		expect(landing.activeClients).toBe(2);
 	});
 
 	it('counts the roster and the invitations that have expired', async () => {

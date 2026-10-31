@@ -38,11 +38,9 @@
 		hasEveryRole,
 		isAmbientContractor,
 		isDoula,
-		isOwner,
-		isOwnerOrAdmin
+		isOwner
 	} from '#lib/roles.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
-	import DoorLink from '#lib/components/atoms/DoorLink.svelte';
 	import { startHref } from './clients/new/intake.js';
 	import {
 		activityLedgerColumns,
@@ -169,7 +167,7 @@
 
 	// The whole hub is reloaded rather than the one Offer patched out:
 	// accepting an Offer supersedes every other open Offer on the same
-	// Engagement, and it can spend a credit, so the rail is stale too.
+	// Engagement, and it can spend a credit, so the other blocks are stale too.
 	async function handleDecide(offerId: string, action: 'accept' | 'decline') {
 		await decideOffer(apiFetchWithSession, page.params.practiceId!, offerId, action);
 		await load();
@@ -207,86 +205,6 @@
 	const adminAsk = 'Clients cannot pay this Practice by card yet. A Practice Owner has to connect Stripe.';
 
 	const isPracticeOwner = $derived(isOwner(session));
-
-	interface QuickLinkCard {
-		label: string;
-		description: string;
-		href: string;
-	}
-
-	// #2095: the drawing gives three cards a count in place of their line
-	// ("14 active", "31 Credits"), so a person sees how much is there
-	// before going in. Each count comes from a read this page already
-	// makes; the active Clients from the one-row `/clients/count` that
-	// also says whether the Practice has a Client at all. Until a count is
-	// known the card keeps its own line.
-	function countLine(count: number | undefined, words: string): string | undefined {
-		if (count === undefined) return undefined;
-		return count === 0 ? `None ${words}` : `${count} ${words}`;
-	}
-
-	const quickLinkCards = $derived.by((): QuickLinkCard[] => {
-		const practiceId = page.params.practiceId!;
-		const isForOwnerOrAdmin = isOwnerOrAdmin(session);
-		return [
-			{
-				label: 'Clients',
-				description: countLine(landing?.activeClients, 'active') ?? "Find a Client's record and care.",
-				href: resolve('/practices/[practiceId]/clients', { practiceId })
-			},
-			...(isForOwnerOrAdmin
-				? [
-						{
-							label: 'Credits',
-							description:
-								landing?.credit && landing.credit !== 'unavailable'
-									? landing.credit.count
-									: 'Buy Credits and see the balance.',
-							href: resolve('/practices/[practiceId]/billing', { practiceId })
-						}
-					]
-				: []),
-			// An Offer goes to a Doula (#2141), so the card that counts hers is
-			// not offered to someone who can never hold one (#2228).
-			...(isDoula(session)
-				? [
-						{
-							label: 'Your offers',
-							description: countLine(landing?.openOffers.length, 'waiting on you') ?? 'Work you have been offered.',
-							href: resolve('/practices/[practiceId]/offers', { practiceId })
-						}
-					]
-				: []),
-			...(isForOwnerOrAdmin
-				? [
-						{
-							label: 'Staff',
-							description: 'Who works here, and who is invited.',
-							href: resolve('/practices/[practiceId]/staff', { practiceId })
-						}
-					]
-				: []),
-			{
-				label: 'Plan Templates',
-				description: 'The questions every birth plan and care plan starts from.',
-				href: resolve('/practices/[practiceId]/settings/plan-templates', { practiceId })
-			},
-			{
-				label: 'Contract Template',
-				description: 'The terms every Contract is written from.',
-				href: resolve('/practices/[practiceId]/settings/contract-template', { practiceId })
-			},
-			...(isForOwnerOrAdmin
-				? [
-						{
-							label: 'Getting paid',
-							description: 'How this Practice gets paid, and what Stripe still wants from it.',
-							href: resolve('/practices/[practiceId]/settings/payments', { practiceId })
-						}
-					]
-				: [])
-		];
-	});
 
 	function notConnectedWords(connect: ConnectHealth): string {
 		if (!isPracticeOwner) return adminAsk;
@@ -470,7 +388,7 @@
 	a meta date column, the event in body text, the actor muted, hairline
 	rows, no vertical column rule. Low prominence per the design brief's
 	own #433 amendment, which is why it renders through OverviewHub's
-	`feed` slot rather than inside `primary` or `secondary`.
+	`feed` slot rather than inside `primary`.
 -->
 {#snippet activityFeed()}
 	<section>
@@ -498,25 +416,6 @@
 			{/if}
 		</stack-l>
 	</section>
-{/snippet}
-
-<!--
-	#2006: the drawing's quick-link cards, under the title, at every width.
-	The same card the signed-out landing's doors are (`DoorLink`, #1645) in
-	the same `grid-l`, so the row wraps to as many columns as fit. Offered
-	only where that person can go: the role split is the top bar's own,
-	and the three settings cards say what the Settings hub says about them.
-	The drawing's Billing and Payments are named Credits and Getting paid
-	here, the names #256 and ADR-0032 gave them after it was drawn.
--->
-{#snippet quickLinks()}
-	<nav aria-label="Quick links">
-		<grid-l min="var(--door-min)" space="var(--space-4)">
-			{#each quickLinkCards as card (card.href)}
-				<DoorLink href={card.href} label={card.label} description={card.description} />
-			{/each}
-		</grid-l>
-	</nav>
 {/snippet}
 
 {#snippet empty()}
@@ -597,7 +496,6 @@
 	isEmpty={landing ? !landing.hasClients : false}
 	{primary}
 	feed={landing ? activityFeed : undefined}
-	links={quickLinks}
 	{empty}
 	loading={error || (areListsAnswered && landing) ? undefined : 'Loading your Practice'}
 	loadError={error || undefined}

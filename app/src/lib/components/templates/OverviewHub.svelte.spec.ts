@@ -71,55 +71,15 @@ describe('OverviewHub.svelte', () => {
 			.toBeVisible();
 	});
 
-	it('omits the complementary region when no secondary snippet is given', async () => {
-		const { container } = await setup();
-
-		expect(container.querySelector('aside')).toBeNull();
-	});
-
-	it('renders the secondary region beside the primary one when given', async () => {
-		const { container } = await setup({ secondary: textSnippet('Two doulas unassigned') });
-
-		await expect.element(page.getByText('Two doulas unassigned')).toBeVisible();
-		expect(container.querySelector('aside')).toContainElement(
-			page.getByText('Two doulas unassigned').element()
-		);
-	});
-
-	it('renders no secondary region when empty, whatever was passed', async () => {
-		const { container } = await setup({ isEmpty: true, secondary: textSnippet('Two doulas unassigned') });
-
-		expect(container.querySelector('aside')).toBeNull();
-	});
-
 	it('renders no feed region when no feed snippet is given', async () => {
 		await setup();
 
 		await expect.element(page.getByText('Six open Offers')).toBeVisible();
 	});
 
-	// #486: the Recent-activity feed sits low on the page -- not inside
-	// `secondary`'s own narrow rail, which is why this gets its own prop
-	// rather than becoming one more block a route appends to `secondary`.
-	// #2063: last in the primary column, so it starts under that column's
-	// last card and not under the whole split, where a long rail set it.
-	it('renders the feed last in the primary column, outside the rail', async () => {
-		await setup({
-			secondary: textSnippet('Two doulas unassigned'),
-			feed: textSnippet('Mark Goho sent the invoice')
-		});
-
-		const primary = page.getByText('Six open Offers');
-		const feed = page.getByText('Mark Goho sent the invoice');
-		await expect.element(primary).toBeVisible();
-		await expect.element(page.getByText('Two doulas unassigned')).toBeVisible();
-		await expect.element(feed).toBeVisible();
-		await expect.element(page.getByRole('complementary').getByText('Mark Goho sent the invoice')).not.toBeInTheDocument();
-		expect(feed.element().parentElement).toBe(primary.element().parentElement);
-		expect(primary.element().nextElementSibling).toBe(feed.element());
-	});
-
-	it('renders the feed last in the primary column when there is no rail', async () => {
+	// #486, #2063: the Recent-activity feed sits low on the page, last in
+	// the primary column.
+	it('renders the feed last in the primary column', async () => {
 		await setup({ feed: textSnippet('Mark Goho sent the invoice') });
 
 		expect(page.getByText('Six open Offers').element().nextElementSibling).toBe(
@@ -131,23 +91,6 @@ describe('OverviewHub.svelte', () => {
 		await setup({ isEmpty: true, feed: textSnippet('Mark Goho sent the invoice') });
 
 		await expect.element(page.getByText('Mark Goho sent the invoice')).not.toBeInTheDocument();
-	});
-
-	// #2006: the drawing's quick-link cards sit under the title, before
-	// the work, at every width.
-	it('renders the links region between the title and the primary region', async () => {
-		const { container } = await setup({ links: textSnippet('Clients card') });
-
-		await expect.element(page.getByText('Clients card')).toBeVisible();
-		const text = container.textContent ?? '';
-		expect(text.indexOf('Willow Birth Collective')).toBeLessThan(text.indexOf('Clients card'));
-		expect(text.indexOf('Clients card')).toBeLessThan(text.indexOf('Six open Offers'));
-	});
-
-	it('renders no links region when empty, whatever was passed', async () => {
-		await setup({ isEmpty: true, links: textSnippet('Clients card') });
-
-		await expect.element(page.getByText('Clients card')).not.toBeInTheDocument();
 	});
 
 	it('owns the page frame and renders no chrome', async () => {
@@ -180,21 +123,6 @@ describe('OverviewHub.svelte', () => {
 			.element(page.getByRole('heading', { level: 1, name: 'Willow Birth Collective' }))
 			.toBeVisible();
 		await expect.element(page.getByText('Six open Offers')).not.toBeInTheDocument();
-	});
-
-	it('draws the quick links while loading, since they stand without the data (#2248)', async () => {
-		await setup({ loading: 'Loading your Practice', links: textSnippet('Clients') });
-
-		await expect.element(page.getByText('Clients')).toBeVisible();
-	});
-
-	it('announces the load once when it holds the rail too (#2248)', async () => {
-		const { container } = await setup({ loading: 'Loading your Practice', isRailShown: true });
-
-		expect(page.getByRole('status').all()).toHaveLength(1);
-		// A deliberately non-accessible element (svelte-tests.md, case 2):
-		// the rail's bars are hidden so the load is not announced twice.
-		expect(container.querySelectorAll(':scope sidebar-l [aria-hidden="true"] > span').length).toBeGreaterThan(0);
 	});
 
 	it('reserves the page frame for a Notice on a load failure, instead of rendering the title or content (#480)', async () => {
