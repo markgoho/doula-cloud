@@ -54,6 +54,10 @@ Single-context — `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agent
 
 A book is evidence, and only the founder's recorded decision turns it into a rule. Until a book's read-back is on trunk, nothing cites it; until a value ADR or an adopt-or-not ADR names it, no book is the reason for anything. See `docs/adr/0041-a-book-enters-the-repo-as-evidence-and-becomes-a-rule-only-through-a-decision.md` for the decision and `docs/agents/literature.md` for the book table, the read-back template, and the review.
 
+### Persona walks
+
+Walking the app as a persona: `persona-walker`, which is blind, walks the screen, and `walk-evaluator`, which can see the repo, writes the friction log. See `docs/agents/persona-walk.md` for the brief that keeps the walker blind, the conditions profile, and the order.
+
 ### Prototypes
 
 A throwaway UI prototype for the founder to review: where its route lives, the single-file hash build that makes it an artifact, and the gates it trips with their overrides. See `docs/agents/prototype.md`.
