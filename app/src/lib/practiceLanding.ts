@@ -21,6 +21,7 @@ import { loadConnectStatus, type ConnectStatus } from './payments.js';
 import { loadBillingMode, type BillingMode } from './invoice.js';
 import type { Fetcher } from './fetcher.js';
 import { hasSecondFactor, isDoula, isOwner } from './roles.js';
+import type { Roster } from './onCall.js';
 import type { CursorPage } from './paginatedList.svelte.js';
 
 /*
@@ -95,6 +96,47 @@ export function isRequestBlockShown(requests: Block<RequestHealth>): requests is
 }
 
 /**
+ * Who is free tonight (#2234), from the on-call roster for today in the
+ * Practice's own zone. Free is on call for no birth and not away; nothing
+ * records who is at a birth now (#428).
+ */
+export interface TonightHealth {
+	onCall: { name: string; clients: string[] }[];
+	free: string[];
+	away: string[];
+	uncovered: string[];
+	doulas: number;
+}
+
+export function tonightFrom(roster: Roster): TonightHealth {
+	const onCall = new Map<string, { name: string; clients: string[] }>();
+	for (const window of roster.windows) {
+		for (const doula of window.onCall) {
+			const entry = onCall.get(doula.staffId) ?? { name: doula.name, clients: [] };
+			entry.clients.push(window.clientName);
+			onCall.set(doula.staffId, entry);
+		}
+	}
+	return {
+		onCall: onCall.values().toArray(),
+		free: roster.doulas
+			.filter((doula) => doula.available && doula.concurrentWindows === 0)
+			.map((doula) => doula.name),
+		away: roster.doulas.filter((doula) => !doula.available).map((doula) => doula.name),
+		uncovered: roster.windows.filter((window) => window.uncovered).map((window) => window.clientName),
+		doulas: roster.doulas.length
+	};
+}
+
+/** Drawn for a Practice with more than one Doula: a solo Practice's
+ * answer is always herself. A failed read still draws the block. */
+export function isTonightBlockShown(tonight: Block<TonightHealth>): tonight is TonightHealth | 'unavailable' {
+	if (tonight === undefined) return false;
+	if (tonight === 'unavailable') return true;
+	return tonight.doulas > 1;
+}
+
+/**
  * One Engagement whose thread's latest Message came from the Client --
  * awaiting a staff reply (#455). Computed server-side from thread
  * authorship, not read state: ADR-0028 (#454) settled that there is no
@@ -145,6 +187,7 @@ export interface PracticeLanding {
 	credit: Block<CreditHealth>;
 	connect: Block<ConnectHealth>;
 	requests: Block<RequestHealth>;
+	tonight: Block<TonightHealth>;
 	/** Whether the hub shows the notice that recommends a second factor
 	 * (#1533). The BFF decides it; see `isSecondFactorRecommended`. */
 	secondFactorRecommended: boolean;
@@ -252,6 +295,16 @@ async function loadRoster(fetcher: Fetcher, practiceId: string): Promise<RosterH
 	};
 }
 
+// No days named, so the BFF answers for today in the Practice's own zone,
+// whatever zone the phone reading it is in.
+async function loadTonightRoster(fetcher: Fetcher, practiceId: string): Promise<Roster> {
+	const response = await fetcher(`/api/practices/${practiceId}/on-call`);
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	return response.json();
+}
+
 /**
  * Loads everything the hub draws, in one call.
  *
@@ -267,7 +320,7 @@ export async function loadPracticeLanding(
 ): Promise<PracticeLanding> {
 	const { roles } = session;
 
-	const [openOffers, clientCount, roster, credit, connect, requests, secondFactorRecommended] = await Promise.all([
+	const [openOffers, clientCount, roster, credit, connect, requests, tonight, secondFactorRecommended] = await Promise.all([
 		// An Offer goes to a Doula (#2141), so a caller without the role has
 		// none to answer and the hub draws no inbox for her: nothing to read.
 		isDoula(session) ? readOpenOffers(fetcher, practiceId) : [],
@@ -298,6 +351,9 @@ export async function loadPracticeLanding(
 					return { count: page.items.length, hasMore: page.hasMore };
 				})
 			: undefined,
+		canReadRoster(roles)
+			? block(async () => tonightFrom(await loadTonightRoster(fetcher, practiceId)))
+			: undefined,
 		canBeRecommendedASecondFactor(session)
 			? isSecondFactorRecommended(fetcher, practiceId)
 			: false
@@ -312,6 +368,7 @@ export async function loadPracticeLanding(
 		credit,
 		connect,
 		requests,
+		tonight,
 		secondFactorRecommended
 	};
 }

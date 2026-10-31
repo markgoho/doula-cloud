@@ -24,12 +24,14 @@
 		isConnectCardShown,
 		isRequestBlockShown,
 		isRosterBlockShown,
+		isTonightBlockShown,
 		loadPracticeLanding,
 		loadWaitingOnReplyPage,
 		type ConnectHealth,
 		type PracticeLanding,
 		type RequestHealth,
 		type RosterHealth,
+		type TonightHealth,
 		type WaitingOnReply
 	} from '#lib/practiceLanding.js';
 	import { CONNECT_STATUS_BADGES } from '#lib/payments.js';
@@ -55,7 +57,7 @@
 	import OverviewHub from '#lib/components/templates/OverviewHub.svelte';
 	import SecondFactorRecommendation from '#lib/components/molecules/SecondFactorRecommendation.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
-	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
+	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
@@ -206,6 +208,25 @@
 
 	const isPracticeOwner = $derived(isOwner(session));
 
+	function names(list: string[]): string {
+		return list.length <= 1 ? (list[0] ?? '') : `${list.slice(0, -1).join(', ')} and ${list.at(-1)}`;
+	}
+
+	function tonightRows(tonight: TonightHealth): SummaryListRow[] {
+		const rows: SummaryListRow[] = [
+			{ label: 'Free', value: names(tonight.free) || 'Nobody' },
+			{
+				label: 'On call',
+				value:
+					tonight.onCall.map((doula) => `${doula.name}, for ${names(doula.clients)}`).join('. ') ||
+					'No birth tonight'
+			}
+		];
+		if (tonight.uncovered.length > 0) rows.push({ label: 'Needs cover', value: names(tonight.uncovered) });
+		if (tonight.away.length > 0) rows.push({ label: 'Cannot be reached', value: names(tonight.away) });
+		return rows;
+	}
+
 	function notConnectedWords(connect: ConnectHealth): string {
 		if (!isPracticeOwner) return adminAsk;
 		return connect.billingMode === 'stripe' ? ownerAskStart : `${ownerAskStart} ${ownerAskEnd}`;
@@ -233,6 +254,11 @@
 			onClose={closeRecommendation}
 		/>
 	{/if}
+	<!--
+		#2234: at 2 a.m. on her phone the Overview is the screen that says
+		who is free tonight, with nothing to press, so it adds no decision.
+	-->
+	{#if isTonightBlockShown(landing!.tonight)}{@render tonightBlock(landing!.tonight)}{/if}
 	<!-- An Offer goes to a Doula (#2141): a Staff member without the role
 	     can never be offered work, so an inbox that could only ever say
 	     "You have no offers." is not drawn for her. -->
@@ -276,6 +302,19 @@
 	{#if isRequestBlockShown(landing!.requests)}{@render requestBlock(landing!.requests)}{/if}
 	{#if isConnectCardShown(landing!.connect)}{@render connectBlock(landing!.connect)}{/if}
 	{#if isRosterBlockShown(landing!.roster)}{@render rosterBlock(landing!.roster)}{/if}
+{/snippet}
+
+{#snippet tonightBlock(tonight: TonightHealth | 'unavailable')}
+	<section>
+		<stack-l space="var(--space-3)">
+			<Heading level={2} variant="section" text="Who is free tonight" />
+			{#if tonight === 'unavailable'}
+				<Text text="Could not load who is on call just now." tone="muted" />
+			{:else}
+				<SummaryList rows={tonightRows(tonight)} />
+			{/if}
+		</stack-l>
+	</section>
 {/snippet}
 
 {#snippet rosterBlock(roster: RosterHealth | 'unavailable')}

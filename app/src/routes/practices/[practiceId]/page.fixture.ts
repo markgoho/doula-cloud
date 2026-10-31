@@ -81,6 +81,61 @@ export const asOwner: RouteVariant = {
 };
 
 /*
+ * #2234: tonight's roster, every line the Who is free tonight block
+ * draws at once -- one Doula on two births, a birth nobody covers, a
+ * Doula who cannot be reached, and two who are free, with #537's long
+ * double-barreled names.
+ */
+const onCallDoula = (staffId: string, name: string) => ({
+	staffId,
+	name,
+	from: '2026-10-31',
+	to: '2026-10-31',
+	narrowed: false
+});
+
+export const tonightRoster = {
+	from: '2026-10-31',
+	to: '2026-10-31',
+	windows: [
+		{
+			engagementId: 'engagement-1',
+			clientName: 'Anne-Marie Ochieng-Whitfield',
+			window: { start: '2026-10-10', end: '2026-11-14' },
+			onCall: [onCallDoula('staff-1', 'Rowan Petrosyan-Abernathy')],
+			gaps: [],
+			unstaffedDays: [],
+			uncovered: false
+		},
+		{
+			engagementId: 'engagement-2',
+			clientName: 'Quinn Estrada',
+			window: { start: '2026-10-20', end: '2026-11-24' },
+			onCall: [onCallDoula('staff-1', 'Rowan Petrosyan-Abernathy')],
+			gaps: [],
+			unstaffedDays: [],
+			uncovered: false
+		},
+		{
+			engagementId: 'engagement-3',
+			clientName: 'Morgan Grier',
+			window: { start: '2026-10-01', end: '2026-11-05' },
+			onCall: [],
+			gaps: [],
+			unstaffedDays: [{ start: '2026-10-31', end: '2026-10-31' }],
+			uncovered: true
+		}
+	],
+	noWindow: [],
+	doulas: [
+		{ staffId: 'staff-2', name: 'Charlene Boateng-Okonkwo', available: true, concurrentWindows: 0 },
+		{ staffId: 'staff-3', name: 'Marisol Terrazas', available: false, concurrentWindows: 0 },
+		{ staffId: 'staff-1', name: 'Rowan Petrosyan-Abernathy', available: true, concurrentWindows: 2 },
+		{ staffId: 'staff-4', name: 'Joss Adeyemi', available: true, concurrentWindows: 0 }
+	]
+};
+
+/*
  * Each read the hub makes on a Practice that has a Client, answered by
  * path. It is a named function and not a property of `fixture` because
  * two subjects call it (#1621): the base fixture, and through it
@@ -185,6 +240,9 @@ function respondForPopulatedPractice(path: string): Response {
 	 * would stay green, which is the failure this fixture is here to
 	 * stop.
 	 */
+	if (path.includes('/on-call')) {
+		return jsonResponse(tonightRoster);
+	}
 	if (path.includes('/staff')) {
 		return jsonResponse({
 			// A 14-doula agency is the pilot's own size, and four

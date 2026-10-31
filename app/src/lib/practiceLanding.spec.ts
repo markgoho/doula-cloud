@@ -7,6 +7,7 @@ import {
 	isConnectCardShown,
 	isRequestBlockShown,
 	isRosterBlockShown,
+	isTonightBlockShown,
 	loadPracticeLanding,
 	loadWaitingOnReplyPage
 } from './practiceLanding.js';
@@ -24,6 +25,37 @@ const decidedOffer = { offerId: 'offer-2', state: 'accepted' };
 const roster = {
 	members: [{ staffId: 'staff-1' }, { staffId: 'staff-2' }],
 	invitations: { items: [{ expired: false }, { expired: true }], hasMore: false }
+};
+
+const tonightRoster = {
+	from: '2026-10-31',
+	to: '2026-10-31',
+	windows: [
+		{
+			engagementId: 'engagement-1',
+			clientName: 'Casey Estrada',
+			window: { start: '2026-10-10', end: '2026-11-14' },
+			onCall: [{ staffId: 'staff-1', name: 'Rowan Petrosyan', from: '2026-10-31', to: '2026-10-31', narrowed: false }],
+			gaps: [],
+			unstaffedDays: [],
+			uncovered: false
+		},
+		{
+			engagementId: 'engagement-2',
+			clientName: 'Quinn Estrada',
+			window: { start: '2026-10-20', end: '2026-11-24' },
+			onCall: [{ staffId: 'staff-1', name: 'Rowan Petrosyan', from: '2026-10-31', to: '2026-10-31', narrowed: false }],
+			gaps: [],
+			unstaffedDays: [],
+			uncovered: true
+		}
+	],
+	noWindow: [],
+	doulas: [
+		{ staffId: 'staff-2', name: 'Joss Adeyemi', available: true, concurrentWindows: 0 },
+		{ staffId: 'staff-3', name: 'Marisol Terrazas', available: false, concurrentWindows: 0 },
+		{ staffId: 'staff-1', name: 'Rowan Petrosyan', available: true, concurrentWindows: 2 }
+	]
 };
 
 const connectStatus = {
@@ -44,6 +76,7 @@ function fetcherFor(overrides: Record<string, Response> = {}) {
 		'billing-mode': jsonResponse({ billingMode: 'stripe' }),
 		billing: jsonResponse({ balance: 7, ledger: { items: [], hasMore: false } }),
 		connect: jsonResponse(connectStatus),
+		'on-call': jsonResponse(tonightRoster),
 		'engagement-requests': jsonResponse({
 			items: [{ requestId: 'request-1' }, { requestId: 'request-2' }],
 			hasMore: false
@@ -87,6 +120,23 @@ describe('isRosterBlockShown', () => {
 	it('is drawn when the roster read failed, and not for a caller who may not read it', () => {
 		expect(isRosterBlockShown('unavailable')).toBe(true);
 		expect(isRosterBlockShown(undefined)).toBe(false);
+	});
+});
+
+describe('isTonightBlockShown', () => {
+	const tonight = { onCall: [], free: ['Joss Adeyemi', 'Rowan Petrosyan'], away: [], uncovered: [], doulas: 2 };
+
+	it('is drawn for a Practice with more than one Doula', () => {
+		expect(isTonightBlockShown(tonight)).toBe(true);
+	});
+
+	it('is not drawn for a Practice of one Doula, whose answer is always herself', () => {
+		expect(isTonightBlockShown({ ...tonight, free: ['Maya Okonkwo'], doulas: 1 })).toBe(false);
+	});
+
+	it('is drawn when the read failed, and not for a caller who may not read it', () => {
+		expect(isTonightBlockShown('unavailable')).toBe(true);
+		expect(isTonightBlockShown(undefined)).toBe(false);
 	});
 });
 
@@ -161,6 +211,32 @@ describe('loadPracticeLanding', () => {
 			billingMode: 'stripe'
 		});
 		expect(landing.requests).toEqual({ count: 2, hasMore: false });
+	});
+
+	// #2234: no days named, so the BFF answers for today in the Practice's zone.
+	it('reads who is free tonight from the roster for today', async () => {
+		const fetcher = fetcherFor();
+
+		const landing = await loadPracticeLanding(fetcher, 'practice-1', session);
+
+		expect(fetcher.mock.calls.map(([path]) => path)).toContain('/api/practices/practice-1/on-call');
+		expect(landing.tonight).toEqual({
+			onCall: [{ name: 'Rowan Petrosyan', clients: ['Casey Estrada', 'Quinn Estrada'] }],
+			free: ['Joss Adeyemi'],
+			away: ['Marisol Terrazas'],
+			uncovered: ['Quinn Estrada'],
+			doulas: 3
+		});
+	});
+
+	it('says the roster could not be read, rather than hiding it', async () => {
+		const landing = await loadPracticeLanding(
+			fetcherFor({ 'on-call': refusal('no') }),
+			'practice-1',
+			session
+		);
+
+		expect(landing.tonight).toBe('unavailable');
 	});
 
 	// The count is one page deep, so a Practice past that page reads as
