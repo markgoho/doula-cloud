@@ -56,10 +56,22 @@ func TestStripeDestinationsMatchConnectAndAccountHandlers(t *testing.T) {
 		[]string{eventTypeMerchantCapabilityStatusUpdated})
 }
 
+// unpinnedSnapshotRoutes are snapshot routes whose imported destination
+// has no snapshot_api_version. Provider 0.3.0 replaces a destination to
+// set one, which rolls its signing secret (#2390). PostPurchaseWebhookHandler
+// tolerates any version (stripe.WithIgnoreAPIVersionMismatch).
+var unpinnedSnapshotRoutes = map[string]bool{"/api/stripe/webhook": true}
+
 func TestStripeSnapshotDestinationsPinTheSDKsAPIVersion(t *testing.T) {
 	for route, d := range readStripeDestinations(t) {
 		switch d.EventPayload {
 		case "snapshot":
+			if unpinnedSnapshotRoutes[route] {
+				if d.SnapshotAPIVersion != nil {
+					t.Errorf("%s pins snapshot_api_version; remove it from unpinnedSnapshotRoutes", route)
+				}
+				continue
+			}
 			if d.SnapshotAPIVersion == nil || *d.SnapshotAPIVersion != stripe.APIVersion {
 				t.Errorf("%s: snapshot_api_version must be %q, the version stripe-go sends", route, stripe.APIVersion)
 			}

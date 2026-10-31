@@ -4,7 +4,7 @@
     "description": "Credit purchases on the platform (#77, #2390)",
     "event_payload": "snapshot",
     "events_from": ["@self"],
-    "snapshot_api_version": "2026-07-29.dahlia",
+    "snapshot_api_version": null,
     "enabled_events": ["checkout.session.completed"]
   },
   "/api/stripe/connect-webhook": {

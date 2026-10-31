@@ -8,9 +8,9 @@
 # without parsing HCL.
 #
 # Provider 0.3.0 always asks for the signing secret on create, so a created
-# destination's first secret lands in state. The founder rolls it in the
-# Dashboard straight after the apply, and only the rolled secret goes to
-# Secret Manager (docs/infrastructure.md, "Stripe state").
+# destination's first secret lands in state. The Sandbox's are imported;
+# live (#2463) rolls each in the Dashboard straight after the apply
+# (docs/infrastructure.md, "Stripe state").
 
 terraform {
   required_providers {
