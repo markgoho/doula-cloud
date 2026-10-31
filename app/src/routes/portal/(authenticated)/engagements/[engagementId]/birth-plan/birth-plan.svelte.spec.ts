@@ -49,6 +49,19 @@ describe('Client-portal Birth Plan (#311)', () => {
 		await expect.element(page.getByRole('heading', { name: 'Birth plan' })).toBeVisible();
 	});
 
+	// #2209: the print stylesheet hides the portal header, the only other
+	// place her Practice's name appears, so the plan itself names her, the
+	// Practice, and when it last changed -- outside every `.no-print`.
+	it('names whose plan it is, the Practice, and when it last changed, on paper too', async () => {
+		await setup();
+
+		const name = page.getByText('Anne-Marie Ochieng-Whitfield', { exact: true });
+		await expect.element(name).toBeVisible();
+		await expect.element(page.getByText('Highland Midwifery and Doula Group of the Finger Lakes')).toBeVisible();
+		await expect.element(page.getByText('Oct 27, 2026')).toBeVisible();
+		expect(name.element().closest('.no-print')).toBeNull();
+	});
+
 	// The applicable-but-not-yet-created case: a 404 from the real
 	// endpoint (loadClientBirthPlan's own null branch) still reads as "not
 	// yet", never as "not applicable" -- the two are different absences.

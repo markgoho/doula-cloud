@@ -134,6 +134,20 @@ describe('the page frame (#1576)', () => {
 		expect(page.getByRole('button', { name: 'Download Birth Plan (PDF)' }).element().closest('.no-print')).not.toBeNull();
 		expect(page.getByText('Who do you want with you, and what should we know about them?').element().closest('.no-print')).toBeNull();
 	});
+
+	// #2209: the sheet a Doula hands over names the Client in full, the
+	// Practice, and when the plan last changed -- not when the Engagement
+	// was created -- and all three print.
+	it('names whose plan it is, the Practice, and when it last changed, on paper too', async () => {
+		await setup();
+
+		const name = page.getByText('Anne-Marie Ochieng-Whitfield', { exact: true });
+		await expect.element(name).toBeVisible();
+		await expect.element(page.getByText('Highland Midwifery and Doula Group of the Finger Lakes')).toBeVisible();
+		await expect.element(page.getByText('Oct 27, 2026')).toBeVisible();
+		expect(name.element().closest('.no-print')).toBeNull();
+		expect(page.getByText(/Engagement created/).query()).toBeNull();
+	});
 });
 
 // #306: the same PDF the Client's own portal page downloads, from the

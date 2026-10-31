@@ -87,6 +87,11 @@ func ClientGetBirthPlanHandler() http.Handler {
 		}
 
 		out := InstanceResponse{EngagementID: engagementID, PlanType: birthPlanType, Fields: fields, Answers: answers.nonEmpty(), ClientAcknowledgedAt: clientAcknowledgedAt}
+		if err := withMasthead(r.Context(), tx, &out); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
 		apierr.WriteJSON(w, http.StatusOK, out)
 	})
 }
@@ -162,6 +167,11 @@ func ClientAcknowledgeBirthPlanHandler() http.Handler {
 		}
 
 		out := InstanceResponse{EngagementID: engagementID, PlanType: birthPlanType, Fields: fields, Answers: answers.nonEmpty(), ClientAcknowledgedAt: nullTimePtr(clientAcknowledgedAt)}
+		if err := withMasthead(r.Context(), tx, &out); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
 		apierr.WriteJSON(w, http.StatusOK, out)
 	})
 }

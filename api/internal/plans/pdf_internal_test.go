@@ -99,7 +99,7 @@ func TestRenderPlanPDF_ProducesAValidPDF(t *testing.T) {
 		"pain":    true,
 	}
 
-	out, err := renderPlanPDF("Birth Plan", fields, answers)
+	out, err := renderPlanPDF("Birth Plan", masthead{}, fields, answers)
 	if err != nil {
 		t.Fatalf("renderPlanPDF: %v", err)
 	}

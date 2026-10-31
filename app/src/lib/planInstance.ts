@@ -39,6 +39,22 @@ export interface Instance {
 	/** When this Plan was started and by whom (#2133). Absent for a Plan
 	 * started before the start was recorded, and on a Client-portal read. */
 	started?: Stamp;
+	/** What names a Birth Plan wherever it is printed (#2209). Present on
+	 * every Birth Plan response, Staff and Client alike; absent on a Care
+	 * Plan, which is never printed. */
+	masthead?: Masthead;
+}
+
+/** Whose Birth Plan it is, whose Practice wrote it, and when it last
+ * changed (#2209) -- the Go BFF's `plans.Masthead`, the same three facts
+ * its PDF opens with. `clientName` is her legal name, the document name
+ * (ADR-0017); `changedOn` is `YYYY-MM-DD`, already a day in the
+ * Practice's zone, so it is rendered with `formatCalendarDay`, never as
+ * an instant. */
+export interface Masthead {
+	clientName: string;
+	practiceName: string;
+	changedOn: string;
 }
 
 /** Reads fieldId's raw stored value out of answers as a string, or '' if

@@ -33,6 +33,13 @@ export const engagement = {
 export const instance: Instance = {
 	engagementId: 'engagement-1',
 	planType: 'birth_plan',
+	// #2209: a long Client name and a long Practice name, so the 320px
+	// sweep meets the masthead at its widest.
+	masthead: {
+		clientName: 'Anne-Marie Ochieng-Whitfield',
+		practiceName: 'Highland Midwifery and Doula Group of the Finger Lakes',
+		changedOn: '2026-10-27'
+	},
 	fields: [
 		{ id: 'support-people', type: 'long_text', label: 'Who do you want with you, and what should we know about them?', order: 1 },
 		{ id: 'people-present', type: 'multi_select', label: 'Who do you want in the room with you?', order: 2 }

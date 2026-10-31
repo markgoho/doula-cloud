@@ -36,14 +36,26 @@ const (
 // BirthPlanView.svelte's rendering rules exactly: a section_header field
 // starts a new headed group, a blank answer renders as "—" rather than an
 // empty line, a checkbox as "Yes"/"No", and a multi_select as its
-// selected options joined by ", ".
-func renderPlanPDF(heading string, fields []Field, answers Answers) ([]byte, error) {
+// selected options joined by ", ". Under the heading, before the first
+// question, it names the plan (#2209): her name, the Practice, and the day
+// it last changed, the same three lines the printed page opens with.
+func renderPlanPDF(heading string, m masthead, fields []Field, answers Answers) ([]byte, error) {
 	pdf := fpdf.New("P", "mm", "A4", "")
 	tr := pdf.UnicodeTranslatorFromDescriptor("")
 	pdf.AddPage()
 
 	pdf.SetFont("Arial", "B", 16)
 	pdf.MultiCell(0, 10, tr(heading), "", "", false)
+	pdf.Ln(2)
+
+	pdf.SetFont("Arial", "", 12)
+	for _, line := range []string{
+		"Name: " + m.clientName,
+		"Doula: " + m.practiceName,
+		"Last changed: " + m.changedOn.Format(changedOnLayout),
+	} {
+		pdf.MultiCell(0, 6, tr(line), "", "", false)
+	}
 	pdf.Ln(4)
 
 	for _, field := range fields {
@@ -98,11 +110,18 @@ func planFieldAnswerText(field Field, answers Answers) string {
 	}
 }
 
-// serveBirthPlanPDF renders fields/answers as the Birth Plan PDF and
-// writes it as a download response. Shared by GetBirthPlanPDFHandler and
+// serveBirthPlanPDF renders fields/answers as engagementID's Birth Plan
+// PDF, under the masthead read on the caller's own tx, and writes it as a
+// download response. Shared by GetBirthPlanPDFHandler and
 // ClientGetBirthPlanPDFHandler.
-func serveBirthPlanPDF(w http.ResponseWriter, fields []Field, answers Answers) {
-	pdfBytes, err := renderPlanPDF(birthPlanPDFHeading, fields, answers)
+func serveBirthPlanPDF(w http.ResponseWriter, r *http.Request, tx *sql.Tx, engagementID string, fields []Field, answers Answers) {
+	m, err := loadMasthead(r.Context(), tx, engagementID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+	pdfBytes, err := renderPlanPDF(birthPlanPDFHeading, m, fields, answers)
 	if err != nil {
 		// coverage:ignore reason: renderPlanPDF only fails on an internal fpdf encoding error, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -141,7 +160,7 @@ func GetBirthPlanPDFHandler() http.Handler {
 			return
 		}
 
-		serveBirthPlanPDF(w, fields, answers)
+		serveBirthPlanPDF(w, r, tx, engagementID, fields, answers)
 	})
 }
 
@@ -175,6 +194,6 @@ func ClientGetBirthPlanPDFHandler() http.Handler {
 			return
 		}
 
-		serveBirthPlanPDF(w, fields, answers.nonEmpty())
+		serveBirthPlanPDF(w, r, tx, engagementID, fields, answers.nonEmpty())
 	})
 }

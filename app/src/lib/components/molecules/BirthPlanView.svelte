@@ -1,9 +1,32 @@
 <script lang="ts">
 	import Heading from '#lib/components/atoms/Heading.svelte';
-	import { isAnswerChecked, answerOptions, answerText, type Answers, type Field } from '#lib/planInstance.js';
+	import {
+		isAnswerChecked,
+		answerOptions,
+		answerText,
+		type Answers,
+		type Field,
+		type Masthead
+	} from '#lib/planInstance.js';
+	import { formatCalendarDay } from '#lib/dates.js';
 	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 
-	let { fields, answers }: { fields: Field[]; answers: Answers } = $props();
+	let { fields, answers, masthead }: { fields: Field[]; answers: Answers; masthead?: Masthead } = $props();
+
+	/*
+	 * #2209: what names the plan wherever it is printed -- whose it is,
+	 * whose Practice, and when it last changed -- before its first
+	 * question, the same three lines its PDF opens with. A reader handed
+	 * the paper is not the person on the screen, so it is a plain label
+	 * and value, read the same by both.
+	 */
+	function mastheadRows(named: Masthead): SummaryListRow[] {
+		return [
+			{ label: 'Name', value: named.clientName },
+			{ label: 'Doula', value: named.practiceName },
+			{ label: 'Last changed', value: formatCalendarDay(named.changedOn) }
+		];
+	}
 
 	/**
 	 * A section_header and the fields that follow it, up to the next one.
@@ -67,6 +90,9 @@
 	}
 </script>
 
+{#if masthead}
+	<SummaryList rows={mastheadRows(masthead)} />
+{/if}
 {#each sections as section (section.key)}
 	{#if section.heading !== undefined}
 		<!-- Level 2: both consumers render this directly under the page's <h1> (#2018). -->

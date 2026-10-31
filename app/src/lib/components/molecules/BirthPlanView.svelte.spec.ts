@@ -2,7 +2,7 @@ import { page } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import BirthPlanView from './BirthPlanView.svelte';
-import type { Answers, Field } from '#lib/planInstance.js';
+import type { Answers, Field, Masthead } from '#lib/planInstance.js';
 
 const defaultFields: Field[] = [
 	{ id: 'heading', type: 'section_header', label: 'Birth Setting', order: 0 },
@@ -15,10 +15,11 @@ const defaultFields: Field[] = [
 interface SetupOptions {
 	fields?: Field[];
 	answers?: Answers;
+	masthead?: Masthead;
 }
 
-async function setup({ fields = defaultFields, answers = {} }: SetupOptions = {}) {
-	await render(BirthPlanView, { fields, answers });
+async function setup({ fields = defaultFields, answers = {}, masthead }: SetupOptions = {}) {
+	await render(BirthPlanView, { fields, answers, masthead });
 }
 
 function valueFor(label: string) {
@@ -26,6 +27,25 @@ function valueFor(label: string) {
 }
 
 describe('BirthPlanView.svelte', () => {
+	// #2209: the page that prints names the plan before its first question,
+	// so a stranger in scrubs handed it knows whose it is and how current.
+	it('opens with whose plan it is, whose Practice, and the day it last changed', async () => {
+		await setup({
+			masthead: { clientName: 'Hannah Sorensen', practiceName: 'Rooted Birth Collective', changedOn: '2026-10-27' }
+		});
+
+		await expect.element(page.getByText('Name')).toBeVisible();
+		expect(valueFor('Name')).toHaveTextContent('Hannah Sorensen');
+		expect(valueFor('Doula')).toHaveTextContent('Rooted Birth Collective');
+		expect(valueFor('Last changed')).toHaveTextContent('Oct 27, 2026');
+	});
+
+	it('renders no masthead when none is given', async () => {
+		await setup();
+
+		await expect.element(page.getByText('Planned birth location')).toBeVisible();
+		expect(page.getByText('Last changed').query()).toBeNull();
+	});
 	// Level 2: both consumers render the view directly under the page's
 	// <h1>, so a level-3 section heading skipped one (#2018).
 	it('renders a level-2 heading for a section_header field', async () => {
