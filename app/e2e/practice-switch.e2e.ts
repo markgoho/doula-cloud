@@ -54,6 +54,17 @@ test('switching Practice from the header draws the second Practice, with nothing
 	await expect(page).toHaveURL(new RegExp(`/practices/${other.practiceId}$`));
 	await page.getByRole('status', { name: 'Loading your Practice' }).waitFor({ state: 'detached' });
 
+	// #2335: the switcher's panel shut as she chose, rather than staying
+	// open over the new Overview, and focus is where the router puts it
+	// after any link: the body, the starting point for the new page's Tab
+	// order, not back on the switcher.
+	await expect(page.getByRole('link', { name: /Rooted Test Collective/ }).filter({ visible: true })).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Ridgeline Test Doulas' }).filter({ visible: true })).toHaveAttribute(
+		'aria-expanded',
+		'false'
+	);
+	await expect.poll(() => page.evaluate(() => document.activeElement === document.body)).toBe(true);
+
 	// She is a contractor there, so its empty Overview says how work
 	// reaches her (#2273).
 	await expect(page.getByText(/Work at this Practice reaches you as an Offer/)).toBeVisible();

@@ -9,8 +9,9 @@
 		<h2>A control that reveals a panel beside itself</h2>
 		<p>
 			Native <code>popover</code> does the work: the browser puts the panel in the top layer,
-			dismisses it on a click outside or on Escape, and returns focus to the trigger. The only
-			script in the component mirrors the open state onto <code>aria-expanded</code>.
+			dismisses it on a click outside or on Escape, and returns focus to the trigger. Script
+			mirrors the open state onto <code>aria-expanded</code>, and shuts the panel as a link inside
+			it is pressed, since a move within the app keeps the panel mounted.
 		</p>
 		<p>
 			Deliberately not <code>role="menu"</code>. That role promises arrow-key navigation between

@@ -1,4 +1,4 @@
-import { createRawSnippet } from 'svelte';
+import { createRawSnippet, type ComponentProps } from 'svelte';
 import { page, userEvent } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
@@ -8,15 +8,21 @@ interface SetupOptions {
 	label?: string;
 	align?: 'start' | 'end';
 	iconOnly?: boolean;
+	children?: ComponentProps<typeof MenuButton>['children'];
 }
 
-async function setup({ label = 'Open the menu', align, iconOnly }: SetupOptions = {}) {
+async function setup({
+	label = 'Open the menu',
+	align,
+	iconOnly,
+	children = createRawSnippet(() => ({ render: () => '<p>panel content</p>' }))
+}: SetupOptions = {}) {
 	await render(MenuButton, {
 		label,
 		align,
 		iconOnly,
 		icon: 'caret-down',
-		children: createRawSnippet(() => ({ render: () => '<p>panel content</p>' }))
+		children
 	});
 	return { trigger: page.getByRole('button', { name: label }) };
 }
@@ -90,6 +96,48 @@ describe('MenuButton', () => {
 		const { trigger } = await setup({ align });
 
 		await trigger.click();
+
+		await expect.element(page.getByText('panel content')).toBeVisible();
+	});
+
+	/*
+	 * #2335: a link in the panel that moves to another page left the panel
+	 * open over it. SvelteKit's client-side navigation keeps the top bar
+	 * mounted, so nothing a full page load does for free closes it. The
+	 * router is stood in for by a listener on the document, where
+	 * SvelteKit's own sits, so the press is a real link press that does not
+	 * take the test runner's frame with it. The panel shuts before the
+	 * router runs, so the focus the router then resets to the new page is
+	 * not taken back to the trigger by a later close (#2235's order).
+	 */
+	it('shuts as a link inside it is pressed, before the router runs', async () => {
+		const { trigger } = await setup({
+			children: createRawSnippet(() => ({ render: () => '<p><a href="/elsewhere">Somewhere else</a></p>' }))
+		});
+		await trigger.click();
+		let openWhenRouted: boolean | undefined;
+		const route = (event: MouseEvent) => {
+			event.preventDefault();
+			openWhenRouted = document.querySelector('[popover]')?.matches(':popover-open');
+		};
+		document.addEventListener('click', route);
+
+		try {
+			await page.getByRole('link', { name: 'Somewhere else' }).click();
+		} finally {
+			document.removeEventListener('click', route);
+		}
+
+		expect(openWhenRouted).toBe(false);
+		await expect.element(page.getByText('Somewhere else')).not.toBeVisible();
+		await expect.element(trigger).toHaveAttribute('aria-expanded', 'false');
+	});
+
+	it('stays open for a press inside it that is not on a link', async () => {
+		const { trigger } = await setup();
+		await trigger.click();
+
+		await page.getByText('panel content').click();
 
 		await expect.element(page.getByText('panel content')).toBeVisible();
 	});

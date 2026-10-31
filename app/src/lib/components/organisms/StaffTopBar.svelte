@@ -16,6 +16,7 @@
 		type PracticeOption
 	} from '#lib/components/molecules/PracticeSwitcher.svelte';
 	import type { SignOutOutcome } from '#lib/signOut.js';
+	import { closeOnLinkPress } from '#lib/closeOnLinkPress.js';
 
 	/*
 	 * The Staff shell's bar (#431, #452). Wide, it is two rows (#1772): the
@@ -92,6 +93,8 @@
 	function closeSheet() {
 		sheet?.close();
 	}
+
+	const shutOnLinkPress = closeOnLinkPress<HTMLDialogElement>((dialog) => dialog.close());
 </script>
 
 <!--
@@ -134,7 +137,17 @@
 </header>
 
 {#if hasSections}
-	<dialog bind:this={sheet} class="sheet" aria-label="Practice menu">
+	<!--
+		#2235, #2335: following any link in the sheet shuts it -- a section,
+		and a link in the sheet's own Practice switcher or avatar menu -- or
+		the page she chose loads under it. It shuts as the link is pressed,
+		before the router runs, not once the new page is in
+		(`closeOnLinkPress` says why): close() hands focus back to the
+		hamburger, and the router then resets focus for the new page as it
+		does after a press on the wide bar's nav. A menu's own panel inside
+		the sheet shuts first, on its own listener.
+	-->
+	<dialog bind:this={sheet} class="sheet" aria-label="Practice menu" {@attach shutOnLinkPress}>
 		<div class="sheet-bar">
 			<Button label="Close menu" icon="x" iconOnly variant="bare" onClick={closeSheet} />
 			<BrandLockup />
@@ -142,23 +155,9 @@
 				<AvatarMenu {firstName} {lastName} {email} {accountHref} {signOut} />
 			</div>
 		</div>
-		<!--
-			#2235: following a section shuts the sheet, or the page she chose
-			loads under it. It shuts as the link is pressed, before the router
-			runs, not once the new page is in: close() hands focus back to the
-			hamburger, and the router then resets focus for the new page as it
-			does after a press on the wide bar's nav. Shut after the
-			navigation, the sheet would take that focus back to the hamburger.
-		-->
 		<nav aria-label="Practice">
 			{#each navItems as item (item.href)}
-				<Link
-					href={item.href}
-					label={item.label}
-					variant="sheet"
-					current={item.current}
-					onClick={closeSheet}
-				/>
+				<Link href={item.href} label={item.label} variant="sheet" current={item.current} />
 			{/each}
 		</nav>
 		{#if hasPracticeToName}
