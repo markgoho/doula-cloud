@@ -42,9 +42,9 @@ func TestLoad_Accepts(t *testing.T) {
 		{"local test key", map[string]string{key: testSecret}, stripemode.Test},
 		{"local restricted test key with newline", map[string]string{key: testRestrct + "\n"}, stripemode.Test},
 		{"local test key with publishable and mode", map[string]string{key: testSecret, pub: testPub, modeVar: test}, stripemode.Test},
-		{"Cloud Run test", map[string]string{key: testSecret, modeVar: test, cloudRun: service}, stripemode.Test},
+		{"Cloud Run test", map[string]string{key: testSecret, pub: testPub, modeVar: test, cloudRun: service}, stripemode.Test},
 		{"Cloud Run live", map[string]string{key: liveSecret, pub: livePub, modeVar: live, cloudRun: service}, stripemode.Live},
-		{"Cloud Run restricted live", map[string]string{key: liveRestrct, modeVar: live, cloudRun: service}, stripemode.Live},
+		{"Cloud Run restricted live", map[string]string{key: liveRestrct, pub: livePub, modeVar: live, cloudRun: service}, stripemode.Live},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -70,9 +70,11 @@ func TestLoad_Refuses(t *testing.T) {
 		{"unrecognized publishable prefix", map[string]string{key: testSecret, pub: "sk_test_51SECRETVALUEtest"}, []string{pub}},
 		{"test key, live publishable key", map[string]string{key: testSecret, pub: livePub}, []string{key, pub}},
 		{"live key, test publishable key", map[string]string{key: liveSecret, pub: testPub, modeVar: live, cloudRun: service}, []string{key, pub}},
-		{"Cloud Run with no STRIPE_MODE", map[string]string{key: testSecret, cloudRun: service}, []string{modeVar, cloudRun}},
-		{"Cloud Run, STRIPE_MODE test, live key", map[string]string{key: liveSecret, modeVar: test, cloudRun: service}, []string{modeVar, key}},
-		{"Cloud Run, STRIPE_MODE live, test key", map[string]string{key: testSecret, modeVar: live, cloudRun: service}, []string{modeVar, key}},
+		{"Cloud Run with no STRIPE_MODE", map[string]string{key: testSecret, pub: testPub, cloudRun: service}, []string{modeVar, cloudRun}},
+		{"Cloud Run with no publishable key", map[string]string{key: testSecret, modeVar: test, cloudRun: service}, []string{pub, cloudRun}},
+		{"Cloud Run with a blank publishable key", map[string]string{key: liveSecret, pub: " \n", modeVar: live, cloudRun: service}, []string{pub, cloudRun}},
+		{"Cloud Run, STRIPE_MODE test, live key", map[string]string{key: liveSecret, pub: livePub, modeVar: test, cloudRun: service}, []string{modeVar, key}},
+		{"Cloud Run, STRIPE_MODE live, test key", map[string]string{key: testSecret, pub: testPub, modeVar: live, cloudRun: service}, []string{modeVar, key}},
 		{"local live key", map[string]string{key: liveSecret}, []string{key, cloudRun}},
 		{"local live key with STRIPE_MODE live", map[string]string{key: liveSecret, modeVar: live}, []string{key, cloudRun}},
 	}

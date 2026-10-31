@@ -53,8 +53,8 @@ func keyMode(value string, test, live []string) (Mode, bool) {
 
 // Load reads the mode from getenv, refusing an unrecognized key prefix, a
 // publishable key in the other mode, a STRIPE_MODE that is invalid or
-// disagrees with the key, a Cloud Run service with no STRIPE_MODE, and a
-// live key anywhere but Cloud Run.
+// disagrees with the key, a Cloud Run service with no STRIPE_MODE or no
+// publishable key, and a live key anywhere but Cloud Run.
 func Load(getenv func(string) string) (Mode, error) {
 	declared := Mode(strings.TrimSpace(getenv(ModeVar)))
 	if declared != "" && declared != Test && declared != Live {
@@ -70,7 +70,12 @@ func Load(getenv func(string) string) (Mode, error) {
 		return "", fmt.Errorf("%s has an unrecognized prefix: want sk_test_, rk_test_, sk_live_ or rk_live_", APIKeyVar)
 	}
 
-	if publishable := strings.TrimSpace(getenv(PublishableKeyVar)); publishable != "" {
+	onCloudRun := getenv(CloudRunVar) != ""
+	publishable := strings.TrimSpace(getenv(PublishableKeyVar))
+	if onCloudRun && publishable == "" {
+		return "", fmt.Errorf("%s must be set on Cloud Run (%s is set)", PublishableKeyVar, CloudRunVar)
+	}
+	if publishable != "" {
 		pkMode, ok := keyMode(publishable, []string{"pk_test_"}, []string{"pk_live_"})
 		if !ok {
 			return "", fmt.Errorf("%s has an unrecognized prefix: want pk_test_ or pk_live_", PublishableKeyVar)
@@ -80,7 +85,6 @@ func Load(getenv func(string) string) (Mode, error) {
 		}
 	}
 
-	onCloudRun := getenv(CloudRunVar) != ""
 	if onCloudRun && declared == "" {
 		return "", fmt.Errorf("%s must be set on Cloud Run (%s is set)", ModeVar, CloudRunVar)
 	}
