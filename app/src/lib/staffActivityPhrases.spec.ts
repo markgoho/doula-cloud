@@ -92,7 +92,8 @@ const WORDING: readonly (readonly [action: string, named: string, unnamed: strin
 	['visit_logged', 'Visit added for Amara', 'Visit added for the Client'],
 	['visit_notes_edited', 'Visit notes for Amara updated', 'Visit notes for the Client updated'],
 	['visit_reassigned', 'Visit for Amara given to another doula', 'Visit for the Client given to another doula'],
-	['visit_scheduled', 'Visit time for Amara updated', 'Visit time for the Client updated']
+	['visit_scheduled', 'Visit time for Amara updated', 'Visit time for the Client updated'],
+	['welcome_credits_email_sent', 'Practice Owners emailed about the Welcome credits', 'Practice Owners emailed about the Welcome credits']
 ];
 
 describe('staffActivityPhrase', () => {

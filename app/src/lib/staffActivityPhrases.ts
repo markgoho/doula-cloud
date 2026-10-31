@@ -149,7 +149,8 @@ const STAFF_ACTIVITY_PHRASES: Record<string, Phrase> = {
 	terms_accepted: fixed('Terms of Service and Privacy Policy agreed to'),
 	second_factor_refused: fixed('Stopped until two-factor authentication is set up'),
 	mfa_required_enabled: fixed('Two-factor authentication made a must for all Staff'),
-	mfa_required_disabled: fixed('Two-factor authentication no longer a must for all Staff')
+	mfa_required_disabled: fixed('Two-factor authentication no longer a must for all Staff'),
+	welcome_credits_email_sent: fixed('Practice Owners emailed about the Welcome credits')
 };
 
 /**

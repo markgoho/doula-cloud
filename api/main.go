@@ -44,6 +44,7 @@ import (
 	"doula-cloud/api/internal/staffinvite"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/website"
+	"doula-cloud/api/internal/welcomecredits"
 )
 
 func resolvePort() string {
@@ -290,6 +291,9 @@ func main() {
 	// voice, the same voice every other Practice-wide Notification here
 	// speaks.
 	practiceDeletionOutboxWorker := practicedeletion.Worker{Mailer: platformMailer}
+	// #1381: ADR-0011's shared Platform identity, a transactional message
+	// about an account she opened.
+	welcomeCreditsOutboxWorker := welcomecredits.Worker{Mailer: platformMailer}
 	// #1548: the email before a material change to the Terms or the
 	// Privacy Policy, Platform voice, so a reply asking for a refund
 	// reaches support@.
@@ -398,6 +402,7 @@ func main() {
 			Now:    now,
 		},
 		PracticeDeletionWorker: practiceDeletionOutboxWorker,
+		WelcomeCreditsWorker:   welcomeCreditsOutboxWorker,
 		LegalNoticeWorker:      legalNoticeOutboxWorker,
 		FeedbackIssueWorker:    feedbackIssueWorker,
 

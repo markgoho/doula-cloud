@@ -16,6 +16,7 @@ import (
 	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/sessionmint"
 	"doula-cloud/api/internal/tasknudge"
+	"doula-cloud/api/internal/welcomecredits"
 )
 
 // MsgNoMatchingStaffAccount is what a caller whose identity resolves to
@@ -312,6 +313,13 @@ func signup(r *http.Request, tx *sql.Tx, verified authn.VerifiedToken, req Signu
 		`INSERT INTO credit_ledger (practice_id, origin, quantity) VALUES ($1, 'signup_bonus', 3)`,
 		practiceID,
 	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return SignupResponse{}, &sessionmint.Refusal{Status: http.StatusInternalServerError, Message: apierr.MsgInternalError}
+	}
+
+	// #1381 (ADR-0043): the one email fourteen days out, on the date this
+	// signup fixes, rechecked at send.
+	if err := welcomecredits.Enqueue(ctx, tx, practiceID, clock.Now(ctx)); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return SignupResponse{}, &sessionmint.Refusal{Status: http.StatusInternalServerError, Message: apierr.MsgInternalError}
 	}

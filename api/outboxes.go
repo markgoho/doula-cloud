@@ -23,6 +23,9 @@ const (
 	// #871's Practice-deletion outbox, not nudged for the same reason as
 	// the two above.
 	practiceDeletionOutboxPath = "/api/internal/notifications/process-practice-deletion-outbox"
+	// #1381's one email fourteen days after signup, not nudged: its fire
+	// time is two weeks out.
+	welcomeCreditsOutboxPath = "/api/internal/notifications/process-welcome-credits-outbox"
 	// #1548's email before a material change to the Terms or the
 	// Privacy Policy, not nudged for the same reason: it goes out 30 days
 	// or more before the date it is about.
@@ -195,6 +198,14 @@ func outboxRegistrations(d Deps) []outbox.Registration {
 			Path:   practiceDeletionOutboxPath,
 			Door:   outbox.NotificationDoor,
 			Worker: d.PracticeDeletionWorker,
+		},
+		{
+			// #1381's one email to a Practice that started no Engagement,
+			// enqueued at signup fourteen days out (ADR-0043). No Nudge:
+			// Cloud Scheduler's drain fires it.
+			Path:   welcomeCreditsOutboxPath,
+			Door:   outbox.NotificationDoor,
+			Worker: d.WelcomeCreditsWorker,
 		},
 		{
 			// #1548's email to each Owner before a material change to the
