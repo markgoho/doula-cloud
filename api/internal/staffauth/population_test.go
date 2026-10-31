@@ -71,6 +71,7 @@ var staffFamilyGroups = map[string]routeGroup{
 	"POST /api/staff/password-reset/request":          groupPreAccount,
 	"POST /api/staff/password-reset":                  groupPreAccount,
 	"POST /api/staff/mfa-recovery/spend":              groupPreAccount,
+	"POST /api/staff/accept-invite/lookup":            groupPreAccount,
 }
 
 // refusal is the answer one group owes a live Client Portal session, and

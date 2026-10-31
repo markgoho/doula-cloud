@@ -69,6 +69,7 @@ var notSelfResolving = map[string]string{
 	"POST /api/staff/verify-email":           "pre-account: the emailed link's token is the whole credential and there is no session to resolve an identity from",
 	"POST /api/staff/password-reset/request": "public and pre-account, and must answer identically whether or not the address exists (#168)",
 	"POST /api/staff/password-reset":         "pre-account, same shape as the verification spend above",
+	"POST /api/staff/accept-invite/lookup":   "pre-account: the invitation's own token is the whole credential, and it reads the Invitation, not a staff row",
 	"POST /api/staff/mfa-recovery/spend":     "unauthenticated by construction -- a locked-out person cannot sign in first (#605), so the code itself names whose row it is",
 }
 

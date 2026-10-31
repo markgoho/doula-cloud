@@ -102,6 +102,14 @@ func TestAcceptInviteHandler_CreatesStaffAndMembership(t *testing.T) {
 	if accepted.PracticeID != practiceID {
 		t.Fatalf("practiceId = %q, want %q", accepted.PracticeID, practiceID)
 	}
+	// #2239: what the Membership was written with, for the landing to say.
+	var wantPracticeName string
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT name FROM practices WHERE id = $1`, practiceID).Scan(&wantPracticeName); err != nil {
+		t.Fatalf("read practice name: %v", err)
+	}
+	if accepted.PracticeName != wantPracticeName || len(accepted.Roles) != 1 || accepted.Roles[0] != doulaRole || accepted.EmploymentType != contractorType {
+		t.Fatalf("accepted = %+v, want %q as doula/contractor", accepted, wantPracticeName)
+	}
 
 	// The session cookie is minted on the accept response itself (#145),
 	// so the invitee is signed in without a second exchange.

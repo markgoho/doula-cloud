@@ -3,7 +3,7 @@ import { MAILBOX_DOMAIN, MAILBOX_URL } from './stack';
 import { drainOutbox, drainUntilMailArrives, readMailbox } from './outboxMail';
 import { API_URL } from './ports';
 import { enterPractice, signIn } from './auth';
-import { seedFoundingOwner, uniqueEmail, STAFF_PASSWORD } from './staffSignup';
+import { seedFoundingOwner, uniqueEmail } from './staffSignup';
 
 const STAFF_INVITE_OUTBOX = 'process-staff-invite-outbox';
 const INVITE_SUBJECT = "You've been invited to join a practice on DoulaCloud";
@@ -28,7 +28,6 @@ test('An invitation arrives as readable mail, and a complaint stops the next one
 }) => {
 	const doulaEmail = uniqueEmail('doula', MAILBOX_DOMAIN);
 	const complainerEmail = uniqueEmail('complainer', MAILBOX_DOMAIN);
-	const password = STAFF_PASSWORD;
 
 	// Fixture setup, not the seam under test (#207).
 	const { idToken: ownerIdToken, practiceId } = await seedFoundingOwner(request, {
@@ -78,12 +77,8 @@ test('An invitation arrives as readable mail, and a complaint stops the next one
 	await page.getByRole('link', { name: INVITE_SUBJECT }).click();
 	await page.getByRole('link', { name: /\/accept-invite\?token=/ }).click();
 
-	await expect(page.getByRole('radio', { name: /I'm new here/ })).toBeVisible();
-	await page.getByRole('radio', { name: /I'm new here/ }).check();
-	await page.getByLabel('Email address').fill(doulaEmail);
-	await page.getByLabel('Password').fill(password);
-	await page.getByRole('button', { name: 'Continue' }).click();
-	await expect(page.getByRole('heading', { name: 'Tell us about yourself' })).toBeVisible();
+	await expect(page.getByText(`was sent to ${doulaEmail}.`)).toBeVisible();
+	await expect(page.getByLabel('Create a password')).toBeVisible();
 
 	// Mailgun's event side. A complaint for an address suppresses it
 	// account-wide (ADR-0029), so an invitation to it after the complaint

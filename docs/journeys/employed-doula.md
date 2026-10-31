@@ -29,18 +29,18 @@ She is the negative-permission Persona. Half of this map is about what should be
 
 ### Stage 1 — Accept the invitation on the phone
 
-**Thinking**: "First impression of my new job's software." **Pain points**: no email is sent (RA-G1). Renata texts a raw URL, which is a poor first impression and an unverifiable one — Priya cannot tell it is genuine.
+**Thinking**: "First impression of my new job's software." **Pain points**: no email is sent (RA-G1). Renata texts a raw URL, which is a poor first impression and an unverifiable one — Priya cannot tell it is genuine. The accept screen is one screen since [#2238](https://github.com/markgoho/doula-cloud/issues/2238): it reads the Invitation by its token first, so it names the Practice, the roles and the invited address, and asks no account question and no email. A person new here still gives four answers only she can give, each on a founder record: her first name and last name ([#1537](https://github.com/markgoho/doula-cloud/issues/1537), decided on [#1493](https://github.com/markgoho/doula-cloud/issues/1493)), the state she works from ([#415](https://github.com/markgoho/doula-cloud/issues/415), decided on [#389](https://github.com/markgoho/doula-cloud/issues/389)) and a password (ADR-0026), and then presses **Accept invite**. Two screens of three would make three screens; one screen of five keeps the two, so the Decisions budget is 5.
 
 **Budget**:
 
 * **Screens**: 2 (Hick's Law, Flow)
-* **Decisions**: 3 (Hick's Law, Miller's Law)
+* **Decisions**: 5 (Hick's Law, Miller's Law)
 * **Confirmation**: yes (Peak-End Rule)
 * **Cold**: yes (Paradox of the Active User)
 * **320px**: yes (ADR-0024)
 
 - **1.1** — Open the invite link at `/accept-invite`, on whatever device the message arrived on.
-- **1.2** — Set email and password; press **Accept invite** (`POST /api/staff/accept-invite`). The membership is created with zero roles (`invite.go` inserts `'{}'`).
+- **1.2** — On the one accept screen, headed "Join *Practice name*", give first name, last name, the state she works from and a new password; press **Accept invite** (`POST /api/staff/accept-invite`). The Membership carries the roles and employment type the Invitation named, and the Overview she lands on says "You've joined *Practice name*. You're {roles}, as {an employee}." once, on arrival ([#2239](https://github.com/markgoho/doula-cloud/issues/2239)).
 
 ### Stage 2 — Receive the Doula role
 

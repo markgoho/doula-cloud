@@ -51,18 +51,13 @@ test('An Admin invited via the Staff invite route reaches the Credits and Staff 
 	// (#827).
 	const inviteToken = await readStaffInviteToken(request, invitationId);
 
-	// Accepting is walked through the real two-step screen (#437): a
-	// brand-new person, so the signup branch and both questions on step two.
+	// Accepting is walked through the real screen (#2238): a brand-new
+	// person, asked everything on the one screen.
 	await page.goto(`/accept-invite?token=${inviteToken}`);
-	await page.getByRole('radio', { name: /I'm new here/ }).check();
-	await page.getByLabel('Email address').fill(adminEmail);
-	await page.getByLabel('Password').fill(password);
-	await page.getByRole('button', { name: 'Continue' }).click();
-
-	await expect(page.getByRole('heading', { name: 'Tell us about yourself' })).toBeVisible();
 	await page.getByLabel('First name').fill('Avery');
 	await page.getByLabel('Last name').fill('Admin');
 	await page.getByLabel('Which state do you work from?').selectOption('New York');
+	await page.getByLabel('Create a password').fill(password);
 	await page.getByRole('button', { name: 'Accept invite' }).click();
 
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));

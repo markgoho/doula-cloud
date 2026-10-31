@@ -1,23 +1,16 @@
 import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { workStateReportedOn } from '#lib/workStates.js';
-import { jsonResponse as buildResponse } from '#lib/testResponse.js';
+import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../routeFixture.js';
-import { fixture } from './page.fixture.js';
+import { fixture, invitation, returningInvitation } from './page.fixture.js';
 
 /*
  * The `page` this screen reads comes from the route's own fixture (#596),
  * through the same `toPageState` the continuum sweep installs. `vi.mock`
  * is hoisted above every import, so the object is declared empty here and
  * filled once the imports have run.
- *
- * `pageState.url` stays mutable after that: the screen refuses outright
- * when the URL carries no invite token, and that branch -- plus every
- * other test -- needs to pick its own token without a second, drifting
- * URL literal. `urlWithToken` builds every one of those from the
- * fixture's own URL rather than a fresh one.
  */
 const pageState = vi.hoisted(() => ({
 	params: {} as Record<string, string>,
@@ -27,9 +20,6 @@ const pageState = vi.hoisted(() => ({
 vi.mock('$app/state', () => ({ page: pageState }));
 Object.assign(pageState, toPageState(fixture));
 
-// The token the fixture's own URL carries -- reused so a test that
-// asserts the outgoing request body names the same token the mocked page
-// was given, not a second value invented here.
 const inviteToken = new URL(fixture.url).searchParams.get('token') ?? '';
 
 function urlWithToken(token: string): URL {
@@ -39,8 +29,8 @@ function urlWithToken(token: string): URL {
 	return url;
 }
 
-const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+const gotoWithOutcome = vi.hoisted(() => vi.fn());
+vi.mock('#lib/outcome.js', () => ({ gotoWithOutcome }));
 
 const createUserWithEmailAndPassword = vi.hoisted(() => vi.fn());
 const signInWithEmailAndPassword = vi.hoisted(() => vi.fn());
@@ -60,28 +50,27 @@ vi.mock('#lib/api.js', () => ({
 	apiBaseURL: () => ''
 }));
 
-const REPORTED_AT = '2026-08-28T14:02:11Z';
-
-function jsonResponse(body: unknown): Response {
-	return buildResponse(body);
-}
+const PASSWORD = 'correct horse battery';
 
 function refusal(status: number, message: string): Response {
-	return buildResponse(message, status);
+	return jsonResponse(message, status);
 }
 
-const existingStaff = {
+const accepted = {
 	staffId: 'staff-1',
-	name: 'Priya Sharma',
-	workState: 'NY',
-	workStateReportedAt: REPORTED_AT,
-	lastPracticeId: undefined,
-	memberships: [{ practiceId: 'practice-1', practiceName: 'Rochester Doulas', roles: ['doula'] }]
+	practiceId: 'practice-9',
+	practiceName: invitation.practiceName,
+	roles: ['admin'],
+	employmentType: 'employee'
 };
 
-const landing = {
-	...existingStaff,
-	memberships: [{ practiceId: 'practice-9', practiceName: 'Rochester Doulas', roles: ['doula'] }]
+const session = {
+	staffId: 'staff-1',
+	name: 'Priya Sharma',
+	workState: 'NJ',
+	workStateReportedAt: '2026-08-28T14:02:11Z',
+	lastPracticeId: undefined,
+	memberships: [{ practiceId: 'practice-9', practiceName: invitation.practiceName, roles: ['admin'] }]
 };
 
 interface SetupOptions {
@@ -90,17 +79,13 @@ interface SetupOptions {
 	*/
 	token?: string;
 	/**
-	What GET /api/staff/session answers in step one.
+	What the Invitation read answers.
 	*/
-	probe?: Response;
+	lookup?: () => Response;
 	/**
-	Whether POST /api/session mints the cookie.
+	What each POST /api/staff/accept-invite answers, in order.
 	*/
-	exchangeOk?: boolean;
-	/**
-	What POST /api/staff/accept-invite answers.
-	*/
-	accept?: Response;
+	accepts?: (() => Response)[];
 	/**
 	What the session read after acceptance answers.
 	*/
@@ -113,30 +98,23 @@ vi.stubGlobal('fetch', globalFetch);
 
 async function setup({
 	token = inviteToken,
-	probe = refusal(404, 'no matching staff account'),
-	exchangeOk = true,
-	accept = jsonResponse({}),
-	afterAccept = jsonResponse(landing),
+	lookup = () => jsonResponse(invitation),
+	accepts = [() => jsonResponse(accepted)],
+	afterAccept = jsonResponse(session),
 	signInThrows = false
 }: SetupOptions = {}) {
 	pageState.url = urlWithToken(token);
 
 	const credential = { user: { getIdToken: () => Promise.resolve('id-token') } };
-	if (signInThrows) {
-		createUserWithEmailAndPassword.mockRejectedValue(new Error('auth/invalid-credential'));
-		signInWithEmailAndPassword.mockRejectedValue(new Error('auth/invalid-credential'));
-	} else {
-		createUserWithEmailAndPassword.mockResolvedValue(credential);
-		signInWithEmailAndPassword.mockResolvedValue(credential);
+	for (const mock of [createUserWithEmailAndPassword, signInWithEmailAndPassword]) {
+		if (signInThrows) mock.mockRejectedValue(new Error('auth/invalid-credential'));
+		else mock.mockResolvedValue(credential);
 	}
 	signOut.mockResolvedValue(undefined);
 
-	globalFetch.mockImplementation((url: string) =>
-		Promise.resolve(
-			url.endsWith('/api/session') ? (exchangeOk ? jsonResponse({}) : refusal(401, 'no')) : accept
-		)
-	);
-	apiFetch.mockResolvedValue(probe);
+	const queue = [...accepts];
+	globalFetch.mockImplementation(() => Promise.resolve((queue.length > 1 ? queue.shift()! : queue[0]!)()));
+	apiFetch.mockImplementation(() => Promise.resolve(lookup()));
 	apiFetchWithSession.mockResolvedValue(afterAccept);
 
 	await render(Page, {});
@@ -147,7 +125,7 @@ beforeEach(() => {
 		createUserWithEmailAndPassword,
 		signInWithEmailAndPassword,
 		signOut,
-		goto,
+		gotoWithOutcome,
 		globalFetch,
 		apiFetch,
 		apiFetchWithSession
@@ -155,569 +133,319 @@ beforeEach(() => {
 		mock.mockReset();
 });
 
-const emailField = () => testPage.getByLabelText('Email address');
-const passwordField = () => testPage.getByLabelText('Password');
-const continueButton = () => testPage.getByRole('button', { name: 'Continue' });
+const passwordField = (label = 'Create a password') => testPage.getByLabelText(label, { exact: true });
 const acceptButton = () => testPage.getByRole('button', { name: 'Accept invite' });
-
 const firstNameField = () => testPage.getByLabelText('First name');
 const lastNameField = () => testPage.getByLabelText('Last name');
 const stateField = () => testPage.getByRole('combobox', { name: 'Which state do you work from?' });
+const heading = () => testPage.getByRole('heading', { level: 1 });
 
-const newHereRadio = () => testPage.getByRole('radio', { name: /I'm new here/ });
-const hasAccountRadio = () => testPage.getByRole('radio', { name: /I already have an account/ });
-const accountQuestion = () =>
-	testPage.getByRole('group', { name: 'Do you already have a DoulaCloud account?' });
-
-async function summaryLinks(): Promise<string[]> {
-	const summary = testPage.getByRole('alert').first();
-	await expect.element(summary.getByRole('link').first()).toBeVisible();
-	return summary
-		.getByRole('link')
-		.elements()
-		.map((link) => link.textContent.trim());
+function acceptBody(call = 0): Record<string, string> {
+	return JSON.parse(globalFetch.mock.calls[call]![1].body as string) as Record<string, string>;
 }
 
-async function identify(mode: 'signup' | 'login' = 'signup') {
-	await (mode === 'login' ? hasAccountRadio() : newHereRadio()).click();
-	await emailField().fill('priya@example.com');
-	await passwordField().fill('correct horse battery');
-	await continueButton().click();
-}
-
-// Step two's two questions are `required`, so the browser refuses the
-// submit until both are answered -- which is the point of marking them
-// required, and means a test of what happens after acceptance has to
-// answer them the way a person would.
-async function identifyAsNewPerson() {
-	await identify('signup');
+async function answerAsNewPerson() {
+	await expect.element(firstNameField()).toBeVisible();
 	await firstNameField().fill('Priya');
 	await lastNameField().fill('Sharma');
 	await stateField().selectOptions('New Jersey');
+	await passwordField().fill(PASSWORD);
 }
 
-describe('step one -- the account question opens with nothing chosen (#1915)', () => {
-	it('chooses neither answer when the screen opens', async () => {
+describe('before she types -- the Invitation read (#2238)', () => {
+	it('reads the Invitation by the token in the link, in the body', async () => {
 		await setup();
 
-		await expect.element(newHereRadio()).not.toBeChecked();
-		await expect.element(hasAccountRadio()).not.toBeChecked();
+		await expect.element(heading()).toBeVisible();
+		expect(apiFetch).toHaveBeenCalledWith(
+			'/api/staff/accept-invite/lookup',
+			expect.objectContaining({ method: 'POST', body: JSON.stringify({ inviteToken }) })
+		);
 	});
 
-	// Until she says which, the screen asks for no email and no password
-	// (#2035): one decision at a time, and no password rule for a password
-	// it may not be setting.
-	it('draws no email, no password and no password rule until she answers', async () => {
+	it('names the Practice in the heading', async () => {
 		await setup();
 
-		await expect.element(accountQuestion()).toBeVisible();
-		await expect.element(emailField()).not.toBeInTheDocument();
-		await expect.element(passwordField()).not.toBeInTheDocument();
-		expect(
-			testPage.getByText('Must be 15 characters or more, and not a commonly used password').elements()
-		).toHaveLength(0);
+		await expect.element(heading()).toHaveTextContent(`Join ${invitation.practiceName}`);
 	});
 
-	it('refuses Continue with no answer, before anything is sent', async () => {
+	it('says what she joins as and the address the invite went to', async () => {
 		await setup();
 
-		await continueButton().click();
-
-		const message = 'Select whether you are new here or already have an account';
 		await expect
-			.element(testPage.getByRole('link', { name: message }))
-			.toHaveAttribute('href', '#mode-signup');
-		await expect.element(testPage.getByText(message).last()).toBeVisible();
-		expect(createUserWithEmailAndPassword).not.toHaveBeenCalled();
-		expect(signInWithEmailAndPassword).not.toHaveBeenCalled();
-		expect(globalFetch).not.toHaveBeenCalled();
+			.element(
+				testPage.getByText(`Your invite to join as an Owner, Admin and Doula was sent to ${invitation.address}.`)
+			)
+			.toBeVisible();
+	});
+
+	it('asks no account question and no email address', async () => {
+		await setup();
+
+		await expect.element(acceptButton()).toBeVisible();
+		await expect.element(testPage.getByRole('radio')).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('textbox', { name: 'Email address' })).not.toBeInTheDocument();
+	});
+
+	it('refuses outright when the URL carries no invite token', async () => {
+		await setup({ token: '' });
+
+		await expect.element(testPage.getByText('This link is not complete.')).toBeVisible();
+		await expect.element(heading()).toHaveTextContent('Accept your invite');
 		expect(apiFetch).not.toHaveBeenCalled();
 	});
 
-	// #2035: the fields are not on the page before the answer, so an empty
-	// submit reports the question alone.
-	it('reports only the question on an empty submit', async () => {
-		await setup();
+	it.each([
+		[404, 'invitation not found, already accepted, or revoked'],
+		[410, 'this invitation has expired -- ask for a new one']
+	])('says the link cannot be used when the read answers %i', async (status, message) => {
+		await setup({ lookup: () => refusal(status, message) });
 
-		await continueButton().click();
-
-		expect(await summaryLinks()).toEqual(['Select whether you are new here or already have an account']);
+		await expect.element(testPage.getByText('This link has expired or was already used.')).toBeVisible();
+		await expect.element(testPage.getByText('Ask the Practice to send the invite again.')).toBeVisible();
+		await expect.element(acceptButton()).not.toBeInTheDocument();
 	});
 
-	it('reports the empty fields, in field order, once the question is answered', async () => {
-		await setup();
-		await newHereRadio().click();
+	it('owns a read that fails some other way, and reads again on Try again', async () => {
+		await setup({ lookup: () => refusal(500, 'boom') });
 
-		await continueButton().click();
-
-		expect(await summaryLinks()).toEqual(['Enter your email address', 'Enter your password']);
-		expect(createUserWithEmailAndPassword).not.toHaveBeenCalled();
-	});
-
-	it('says under each answer who it is for', async () => {
-		await setup();
-
-		await expect.element(testPage.getByText('You have never signed in to DoulaCloud.')).toBeVisible();
 		await expect
-			.element(testPage.getByText('You already sign in to DoulaCloud for another practice.'))
-			.toBeVisible();
+			.element(testPage.getByRole('alert'))
+			.toHaveTextContent('There is a problem with the service. Try again in a few minutes.');
+		apiFetch.mockImplementation(() => Promise.resolve(jsonResponse(invitation)));
+		await testPage.getByRole('button', { name: 'Try again' }).click();
+
+		await expect.element(acceptButton()).toBeVisible();
+		expect(apiFetch).toHaveBeenCalledTimes(2);
+	});
+
+	it('owns a read that never reaches the server', async () => {
+		await setup({
+			lookup: () => {
+				throw new Error('the network dropped');
+			}
+		});
+
+		await expect
+			.element(testPage.getByRole('alert'))
+			.toHaveTextContent('There is a problem with the service. Try again in a few minutes.');
 	});
 });
 
-describe('step one -- the account question comes first (#1959)', () => {
-	it('asks the question in words a person would say', async () => {
+describe('a person who is new here', () => {
+	it('asks for her name, her work state and a new password, on the one screen', async () => {
 		await setup();
 
-		await expect.element(accountQuestion()).toBeVisible();
-	});
-
-	// The answer says what the password is for, so it is asked before she
-	// types one.
-	it('asks it before the email and the password', async () => {
-		await setup();
-		await newHereRadio().click();
-
-		await expect.element(emailField()).toBeVisible();
-		const question = accountQuestion().element();
-		for (const field of [emailField().element(), passwordField().element()])
-			expect(question.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-	});
-});
-
-describe('step one -- autocomplete follows which mode is picked (#469)', () => {
-	it('offers to fill a new email and set a new password once she says she is new', async () => {
-		await setup();
-
-		await newHereRadio().click();
-
-		await expect.element(emailField()).toHaveAttribute('autocomplete', 'email');
+		await expect.element(firstNameField()).toBeVisible();
+		await expect.element(lastNameField()).toBeVisible();
+		await expect.element(stateField()).toBeVisible();
 		await expect.element(passwordField()).toHaveAttribute('autocomplete', 'new-password');
-	});
-
-	it('asks for the account identifier and its existing password once she says she has one', async () => {
-		await setup();
-
-		await hasAccountRadio().click();
-
-		await expect.element(emailField()).toHaveAttribute('autocomplete', 'username');
-		await expect.element(passwordField()).toHaveAttribute('autocomplete', 'current-password');
-	});
-});
-
-describe('step one -- passwordrules follows which mode is picked (#1813)', () => {
-	it('tells Safari the rule when she is making a new account', async () => {
-		await setup();
-		await newHereRadio().click();
-
-		await expect.element(passwordField()).toHaveAttribute('passwordrules', 'minlength: 15;');
-	});
-
-	it('states no rule for a password she is only typing back in', async () => {
-		await setup();
-
-		await hasAccountRadio().click();
-
-		await expect.element(passwordField()).not.toHaveAttribute('passwordrules');
-	});
-});
-
-describe('step one -- the password rule (#1538)', () => {
-	it('states the rule before she types when she is making a new account', async () => {
-		await setup();
-		await newHereRadio().click();
-
+		await expect.element(passwordField()).toHaveAttribute('passwordrules');
 		await expect
 			.element(testPage.getByText('Must be 15 characters or more, and not a commonly used password'))
 			.toBeVisible();
 	});
 
-	it('refuses a commonly used password for a new account before the account is created (#1539)', async () => {
+	it('refuses each empty answer, in field order, before anything is sent', async () => {
 		await setup();
-		await newHereRadio().click();
-		await emailField().fill('priya@example.com');
+
+		await acceptButton().click();
+
+		const summary = testPage.getByRole('alert').first();
+		await expect.element(summary.getByRole('link').first()).toBeVisible();
+		expect(
+			summary
+				.getByRole('link')
+				.elements()
+				.map((link) => link.textContent.trim())
+		).toEqual(['Enter your first name', 'Enter your last name', 'Choose the state you work from', 'Enter your password']);
+		expect(createUserWithEmailAndPassword).not.toHaveBeenCalled();
+		expect(globalFetch).not.toHaveBeenCalled();
+	});
+
+	it('refuses a commonly used password before the account is created (#1539)', async () => {
+		await setup();
+		await answerAsNewPerson();
 		await passwordField().fill('passwordpassword');
-		await continueButton().click();
+
+		await acceptButton().click();
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'Password is too common. Enter a different password' }))
 			.toBeVisible();
 		expect(createUserWithEmailAndPassword).not.toHaveBeenCalled();
-		// The list is in the browser: checking a password against it is no request at all.
-		expect(globalFetch).not.toHaveBeenCalled();
-		expect(apiFetch).not.toHaveBeenCalled();
+	});
+
+	it('creates the account on the invited address and sends her answers with the Bearer token', async () => {
+		await setup();
+		await answerAsNewPerson();
+
+		await acceptButton().click();
+
+		await vi.waitFor(() => expect(gotoWithOutcome).toHaveBeenCalled());
+		expect(createUserWithEmailAndPassword).toHaveBeenCalledWith({}, invitation.address, PASSWORD);
+		expect(globalFetch.mock.calls[0]![0]).toBe('/api/staff/accept-invite');
+		expect(globalFetch.mock.calls[0]![1].headers).toMatchObject({ Authorization: 'Bearer id-token' });
+		expect(acceptBody()).toEqual({ inviteToken, firstName: 'Priya', lastName: 'Sharma', workState: 'NJ' });
 	});
 
 	it('gives the password to Identity Platform alone: no BFF request carries it (#1539)', async () => {
 		await setup();
-		await identifyAsNewPerson();
+		await answerAsNewPerson();
+
 		await acceptButton().click();
 
-		await vi.waitFor(() => expect(goto).toHaveBeenCalled());
-		expect(createUserWithEmailAndPassword).toHaveBeenCalledWith({}, 'priya@example.com', 'correct horse battery');
-		// Every request this screen made to the BFF, whatever its route.
-		const sent = JSON.stringify([
-			globalFetch.mock.calls,
-			apiFetch.mock.calls,
-			apiFetchWithSession.mock.calls
-		]);
-		expect(globalFetch).toHaveBeenCalled();
-		expect(sent).not.toContain('correct horse battery');
+		await vi.waitFor(() => expect(gotoWithOutcome).toHaveBeenCalled());
+		const sent = JSON.stringify([globalFetch.mock.calls, apiFetch.mock.calls, apiFetchWithSession.mock.calls]);
+		expect(sent).not.toContain(PASSWORD);
 	});
 
-	it('checks nothing against the list for an existing account password (#1539)', async () => {
-		await setup();
-		await hasAccountRadio().click();
-		await emailField().fill('priya@example.com');
-		await passwordField().fill('passwordpassword');
-		await continueButton().click();
-
-		await vi.waitFor(() =>
-			expect(signInWithEmailAndPassword).toHaveBeenCalledWith({}, 'priya@example.com', 'passwordpassword')
-		);
-		expect(testPage.getByText('Password is too common. Enter a different password').elements()).toHaveLength(0);
-	});
-
-	it('refuses a short password for a new account before anything is sent', async () => {
-		await setup();
-		await newHereRadio().click();
-		await emailField().fill('priya@example.com');
-		await passwordField().fill('a'.repeat(14));
-		await continueButton().click();
-
-		await expect
-			.element(testPage.getByRole('link', { name: 'Password must be 15 characters or more' }))
-			.toBeVisible();
-		expect(createUserWithEmailAndPassword).not.toHaveBeenCalled();
-	});
-
-	it('checks nothing about the length of an existing account password', async () => {
-		await setup();
-		await hasAccountRadio().click();
-		await emailField().fill('priya@example.com');
-		await passwordField().fill('short');
-		await continueButton().click();
-
-		await vi.waitFor(() => expect(signInWithEmailAndPassword).toHaveBeenCalled());
-		expect(testPage.getByText('Password must be 15 characters or more').elements()).toHaveLength(0);
-	});
-});
-
-describe('step one -- identifying yourself', () => {
-	// The name and the work state are deliberately absent here: which of
-	// them she still has to answer depends on whether she is Staff
-	// already, and signing in is what settles that (#437).
-	it('asks only for credentials, not for a name or a work state', async () => {
-		await setup();
-		await newHereRadio().click();
-
-		await expect.element(emailField()).toBeVisible();
-		await expect.element(passwordField()).toBeVisible();
-		expect(firstNameField().elements()).toHaveLength(0);
-		expect(lastNameField().elements()).toHaveLength(0);
-		expect(testPage.getByLabelText('Which state do you work from?').elements()).toHaveLength(0);
-	});
-
-	it('creates an account and mints the session cookie before reading the staff record', async () => {
-		await setup();
-
-		await identify('signup');
-
-		expect(createUserWithEmailAndPassword).toHaveBeenCalled();
-		expect(globalFetch).toHaveBeenCalledWith('/api/session', {
-			method: 'POST',
-			credentials: 'include',
-			headers: { Authorization: 'Bearer id-token' }
-		});
-		expect(apiFetch).toHaveBeenCalledWith('/api/staff/session');
-	});
-
-	it('logs in instead when she says she already has an account', async () => {
-		await setup();
-
-		await identify('login');
-
-		expect(signInWithEmailAndPassword).toHaveBeenCalled();
-		expect(createUserWithEmailAndPassword).not.toHaveBeenCalled();
-	});
-
-	// Refused before the first field rather than at the submit: there is
-	// nothing this screen can do with credentials when it has no invite to
-	// attach them to, so offering the form would be inviting wasted typing.
-	it('refuses outright when the URL carries no invite token', async () => {
-		await setup({ token: '' });
-
-		// #2025: what is wrong, then the one next step, in words a person says.
-		await expect.element(testPage.getByRole('alert')).toHaveTextContent('This link is not complete.');
-		await expect.element(testPage.getByText('Ask the practice to send the invite again.')).toBeVisible();
-		expect(emailField().elements()).toHaveLength(0);
-		expect(createUserWithEmailAndPassword).not.toHaveBeenCalled();
-	});
-
-	// #467: the SDK's own string names a product and carries a banned
-	// adjective, and the flat "Accept invite failed" that replaced it said
-	// nothing she could act on either.
 	it('reports a non-technical failure rather than whatever the auth SDK threw', async () => {
 		await setup({ signInThrows: true });
+		await answerAsNewPerson();
 
-		await identify();
+		await acceptButton().click();
 
-		await expect
-			.element(testPage.getByRole('alert'))
-			.toHaveTextContent('There is a problem with the service. Try again in a few minutes.');
-		await expect.element(continueButton()).toBeVisible();
-	});
-
-	it('stays on step one when the cookie exchange fails', async () => {
-		await setup({ exchangeOk: false });
-
-		await identify();
-
-		await expect.element(testPage.getByRole('alert')).toHaveTextContent('no');
-		expect(signOut).toHaveBeenCalled();
-		await expect.element(continueButton()).toBeVisible();
-	});
-
-	/*
-	 * Not a 404, so not "she is new here" -- and not a reason to navigate
-	 * away either, which would throw the invite token out of the URL.
-	 *
-	 * A 5xx is ours, and since #467 it is reported as ours: "the database
-	 * is having a moment" is a sentence about our infrastructure, and there
-	 * is nothing she can do with it.
-	 */
-	it('stays put and owns the failure when the staff read fails some other way', async () => {
-		await setup({ probe: refusal(500, 'the database is having a moment') });
-
-		await identify();
-
-		await expect
-			.element(testPage.getByRole('alert'))
-			.toHaveTextContent('There is a problem with the service. Try again in a few minutes.');
-		await expect.element(testPage.getByText('the database is having a moment')).not.toBeInTheDocument();
-		await expect.element(continueButton()).toBeVisible();
+		await expect.element(testPage.getByRole('alert')).toBeVisible();
+		await expect.element(testPage.getByRole('alert')).not.toHaveTextContent('auth/invalid-credential');
+		expect(globalFetch).not.toHaveBeenCalled();
 	});
 });
 
-describe('step two -- a person who is new here', () => {
-	it('asks for her name and her work state, because nobody has them yet', async () => {
-		await setup();
+describe('a person who already has an account', () => {
+	it('asks for her password only', async () => {
+		await setup({ lookup: () => jsonResponse(returningInvitation) });
 
-		await identify();
-
-		await expect
-			.element(testPage.getByRole('heading', { name: 'Tell us about yourself' }))
-			.toBeVisible();
-		await expect.element(firstNameField()).toBeVisible();
-		await expect.element(lastNameField()).toBeVisible();
-		await expect.element(stateField()).toBeVisible();
+		await expect.element(passwordField('Password')).toHaveAttribute('autocomplete', 'current-password');
+		await expect.element(passwordField('Password')).not.toHaveAttribute('passwordrules');
+		await expect.element(firstNameField()).not.toBeInTheDocument();
+		await expect.element(stateField()).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('link', { name: /where you work/ })).not.toBeInTheDocument();
 	});
 
-	it('offers to fill her own name from the browser (#469)', async () => {
-		await setup();
-
-		await identify();
-
-		await expect.element(firstNameField()).toHaveAttribute('autocomplete', 'given-name');
-		await expect.element(lastNameField()).toHaveAttribute('autocomplete', 'family-name');
-	});
-
-	// A step that replaces the form without moving focus leaves a keyboard
-	// or screen reader user tabbing through a page she was never told had
-	// changed.
-	it('moves focus to the new step when it appears', async () => {
-		await setup();
-
-		await identify();
-
-		await expect
-			.element(testPage.getByRole('heading', { name: 'Tell us about yourself' }))
-			.toHaveFocus();
-	});
-
-	it('refuses each empty name on its own, before anything is sent', async () => {
-		await setup();
-		await identify('signup');
-		await firstNameField().fill('Lena');
-		await stateField().selectOptions('New Jersey');
+	it('refuses an empty password before anything is sent', async () => {
+		await setup({ lookup: () => jsonResponse(returningInvitation) });
+		await expect.element(passwordField('Password')).toBeVisible();
 
 		await acceptButton().click();
 
-		await expect.element(testPage.getByRole('link', { name: 'Enter your last name' })).toBeVisible();
-		expect(testPage.getByRole('link', { name: 'Enter your first name' }).elements()).toHaveLength(0);
-		expect(globalFetch).not.toHaveBeenCalledWith('/api/staff/accept-invite', expect.anything());
+		await expect.element(testPage.getByRole('link', { name: 'Enter your password' })).toBeVisible();
+		expect(signInWithEmailAndPassword).not.toHaveBeenCalled();
 	});
 
-	it('sends the name and the USPS code she chose, with the Bearer token', async () => {
-		await setup();
+	it('signs in on the invited address and sends no name or work state', async () => {
+		await setup({ lookup: () => jsonResponse(returningInvitation) });
+		await passwordField('Password').fill('an older short one');
 
-		await identifyAsNewPerson();
 		await acceptButton().click();
 
-		expect(globalFetch).toHaveBeenCalledWith('/api/staff/accept-invite', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json', Authorization: 'Bearer id-token' },
-			body: JSON.stringify({ inviteToken, firstName: 'Priya', lastName: 'Sharma', workState: 'NJ' })
+		await vi.waitFor(() => expect(gotoWithOutcome).toHaveBeenCalled());
+		expect(signInWithEmailAndPassword).toHaveBeenCalledWith({}, returningInvitation.address, 'an older short one');
+		expect(createUserWithEmailAndPassword).not.toHaveBeenCalled();
+		expect(acceptBody()).toEqual({ inviteToken, firstName: '', lastName: '', workState: '' });
+	});
+
+	it('asks for her name and work state when her account has no Staff record behind it', async () => {
+		await setup({
+			lookup: () => jsonResponse(returningInvitation),
+			accepts: [
+				() =>
+					jsonResponse(
+						{
+							code: 'INVALID_ARGUMENT',
+							message: 'enter your first and last name',
+							details: { firstName: 'Enter your first name', lastName: 'Enter your last name' }
+						},
+						400
+					),
+				() => jsonResponse(accepted)
+			]
 		});
-	});
-});
-
-describe('step two -- a person who is Staff somewhere already', () => {
-	// Shown, not asked. The server discards a name and a work state from
-	// someone who already has a Staff account (#316, #415), so asking for
-	// them was the form telling a lie about what it would do with them.
-	it('shows the name and work state she already asserted, as plain text', async () => {
-		await setup({ probe: jsonResponse(existingStaff) });
-
-		await identify('login');
-
-		await expect
-			.element(testPage.getByRole('heading', { name: 'Check your details' }))
-			.toBeVisible();
-		await expect.element(testPage.getByText('Priya Sharma')).toBeVisible();
-		await expect
-			.element(
-				testPage.getByText(
-					`You work from New York, self-reported ${workStateReportedOn(REPORTED_AT)}.`
-				)
-			)
-			.toBeVisible();
-		await expect
-			.element(testPage.getByText(/come from the Staff account you already have/))
-			.toBeVisible();
-	});
-
-	// Not disabled form controls -- a disabled input still reads as a
-	// question, and these are settled facts, not questions.
-	it('offers no name or work state control at all on this branch', async () => {
-		await setup({ probe: jsonResponse(existingStaff) });
-
-		await identify('login');
-
-		expect(firstNameField().elements()).toHaveLength(0);
-		expect(lastNameField().elements()).toHaveLength(0);
-		expect(stateField().elements()).toHaveLength(0);
-	});
-
-	it('points at the one screen that can correct the work state', async () => {
-		await setup({ probe: jsonResponse(existingStaff) });
-
-		await identify('login');
-
-		const link = testPage.getByRole('link', { name: 'Change where you work' });
-		await expect.element(link).toBeVisible();
-		await expect.element(link).toHaveAttribute('href', '/account');
-	});
-
-	it('sends empty strings the server already ignores rather than a stale answer', async () => {
-		await setup({ probe: jsonResponse(existingStaff) });
-
-		await identify('login');
+		await passwordField('Password').fill(PASSWORD);
 		await acceptButton().click();
 
-		expect(globalFetch).toHaveBeenCalledWith(
-			'/api/staff/accept-invite',
-			expect.objectContaining({
-				body: JSON.stringify({ inviteToken, firstName: '', lastName: '', workState: '' })
-			})
-		);
+		await expect.element(firstNameField()).toBeVisible();
+		expect(signOut).not.toHaveBeenCalled();
+		await firstNameField().fill('Priya');
+		await lastNameField().fill('Sharma');
+		await stateField().selectOptions('New Jersey');
+		await acceptButton().click();
+
+		await vi.waitFor(() => expect(gotoWithOutcome).toHaveBeenCalled());
+		expect(signInWithEmailAndPassword).toHaveBeenCalledTimes(1);
+		expect(acceptBody(1)).toEqual({ inviteToken, firstName: 'Priya', lastName: 'Sharma', workState: 'NJ' });
+		const [, message] = gotoWithOutcome.mock.calls[0]!;
+		expect(message).not.toContain('still work from');
 	});
 });
 
-/*
- * #1557: the screen that accepts tells her where her data is described,
- * and asks her to agree to nothing -- a Practice agrees through its Owner
- * (ADR-0053). Both branches of step two carry it, because both end on the
- * same Accept invite button.
- */
-const privacyLink = () =>
-	testPage.getByRole('link', { name: 'Privacy Policy (opens in new tab)' });
-
-describe('step two -- the Privacy Policy notice (#1557)', () => {
-	it.each([
-		['a person who is new here', 'signup', refusal(404, 'no matching staff account')],
-		['a person who is Staff already', 'login', jsonResponse(existingStaff)]
-	] as const)('shows %s the notice with a new-tab link to /privacy', async (_, mode, probe) => {
-		await setup({ probe });
-
-		await identify(mode);
-
-		await expect
-			.element(testPage.getByText(/tells you what DoulaCloud holds\s+about you/))
-			.toBeVisible();
-		await expect.element(privacyLink()).toBeVisible();
-		await expect.element(privacyLink()).toHaveAttribute('href', 'https://doula.cloud/privacy');
-		await expect.element(privacyLink()).toHaveAttribute('target', '_blank');
-		await expect.element(acceptButton()).toBeVisible();
-	});
-
-	it('asks for no agreement: no words of agreement and no checkbox', async () => {
+describe('the Privacy Policy notice (#1557)', () => {
+	it('links /privacy in a new tab and asks for no agreement', async () => {
 		await setup();
-
-		await identify();
 
 		const notice = testPage.getByText(/tells you what DoulaCloud holds\s+about you/);
+		await expect.element(notice).toBeVisible();
 		await expect.element(notice).not.toHaveTextContent(/agree|consent|accept/i);
+		const link = testPage.getByRole('link', { name: 'Privacy Policy' });
+		await expect.element(link).toHaveAttribute('href', 'https://doula.cloud/privacy');
+		await expect.element(link).toHaveAttribute('target', '_blank');
 		await expect.element(testPage.getByRole('checkbox')).not.toBeInTheDocument();
 	});
 });
 
-describe('what happens after the invite is accepted', () => {
-	it('lands her straight on the Practice she just joined', async () => {
+describe('what happens after the invite is accepted (#2239)', () => {
+	it('lands on the Practice she joined and says she joined it, and as what', async () => {
 		await setup();
+		await answerAsNewPerson();
 
-		await identifyAsNewPerson();
 		await acceptButton().click();
 
-		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/practices/practice-9'));
+		await vi.waitFor(() =>
+			expect(gotoWithOutcome).toHaveBeenCalledWith(
+				'/practices/practice-9',
+				`You've joined ${invitation.practiceName}. You're an Admin, as an employee.`
+			)
+		);
+		expect(signOut).toHaveBeenCalled();
 	});
 
-	it('offers a picker when she now belongs to more than one Practice', async () => {
+	it('lands on the joined Practice, not the one she used last, and says the rest is unchanged', async () => {
 		await setup({
+			lookup: () => jsonResponse(returningInvitation),
+			accepts: [() => jsonResponse({ ...accepted, roles: ['doula'], employmentType: 'contractor' })],
 			afterAccept: jsonResponse({
-				...landing,
-				memberships: [
-					{ practiceId: 'practice-9', practiceName: 'Rochester Doulas', roles: ['doula'] },
-					{ practiceId: 'practice-8', practiceName: 'Finger Lakes Birth', roles: ['doula'] }
-				]
+				...session,
+				lastPracticeId: 'practice-1',
+				memberships: [...session.memberships, { practiceId: 'practice-1', practiceName: 'Rochester Doulas', roles: ['doula'] }]
 			})
 		});
+		await passwordField('Password').fill(PASSWORD);
 
-		await identifyAsNewPerson();
 		await acceptButton().click();
 
-		await expect
-			.element(testPage.getByRole('link', { name: 'Finger Lakes Birth' }))
-			.toBeVisible();
-		expect(goto).not.toHaveBeenCalled();
+		await vi.waitFor(() =>
+			expect(gotoWithOutcome).toHaveBeenCalledWith(
+				'/practices/practice-9',
+				`You've joined ${invitation.practiceName}. You're a Doula, as a contractor. Your other Practices are unchanged. You still work from New Jersey.`
+			)
+		);
 	});
 
-	// An acceptance that reports success and leaves her in no Practice is
-	// the state #745's screen exists for, reached a third way.
-	it('sends her to the no-Practice screen if the acceptance left her in none', async () => {
-		await setup({ afterAccept: jsonResponse({ ...landing, memberships: [] }) });
+	it("shows the server's own words when the invite is refused, and signs out", async () => {
+		await setup({ accepts: [() => refusal(410, 'this invitation has expired')] });
+		await answerAsNewPerson();
 
-		await identifyAsNewPerson();
 		await acceptButton().click();
 
-		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/no-practice'));
-	});
-
-	it("shows the server's own words when the invite is refused", async () => {
-		await setup({ accept: refusal(410, 'this invitation has expired') });
-
-		await identifyAsNewPerson();
-		await acceptButton().click();
-
-		await expect
-			.element(testPage.getByRole('alert'))
-			.toHaveTextContent('this invitation has expired');
+		await expect.element(testPage.getByRole('alert')).toHaveTextContent('this invitation has expired');
 		expect(signOut).toHaveBeenCalled();
+		expect(gotoWithOutcome).not.toHaveBeenCalled();
 	});
 
 	it('owns a session read that fails after an accepted invite', async () => {
 		await setup({ afterAccept: refusal(500, 'no session for you') });
+		await answerAsNewPerson();
 
-		await identifyAsNewPerson();
 		await acceptButton().click();
 
 		await expect
@@ -727,9 +455,9 @@ describe('what happens after the invite is accepted', () => {
 
 	it('owns the failure when the accept never reaches the server', async () => {
 		await setup();
-
-		await identifyAsNewPerson();
+		await answerAsNewPerson();
 		globalFetch.mockRejectedValue(new Error('the network dropped'));
+
 		await acceptButton().click();
 
 		await expect
@@ -738,29 +466,64 @@ describe('what happens after the invite is accepted', () => {
 	});
 });
 
+function evictionWarning(): Response {
+	return jsonResponse(
+		{
+			code: 'SESSION_EVICTION_UNCONFIRMED',
+			message: 'Continuing signs you out of the client portal in this browser.'
+		},
+		409
+	);
+}
+
 /*
  * #816: accepting over a live portal session ends that session, so the BFF
- * refuses the first accept and says what continuing costs. The form
- * unmounts with the button she pressed, so the warning's heading takes
- * focus (#2018 moved it onto the `Heading` atom).
+ * refuses the first accept and says what continuing costs.
  */
 describe('accepting over a live portal session (#816)', () => {
 	it('moves focus to the warning, since the button she pressed unmounted with the form', async () => {
-		await setup({
-			accept: buildResponse(
-				{
-					code: 'SESSION_EVICTION_UNCONFIRMED',
-					message: 'Continuing signs you out of the client portal in this browser.'
-				},
-				409
-			)
-		});
+		await setup({ accepts: [evictionWarning, () => jsonResponse(accepted)] });
+		await answerAsNewPerson();
 
-		await identifyAsNewPerson();
 		await acceptButton().click();
 
 		await expect
 			.element(testPage.getByRole('heading', { level: 2, name: 'Before you continue' }))
 			.toHaveFocus();
+	});
+
+	it('sends the same accept again, confirmed, on Continue and sign out', async () => {
+		await setup({ accepts: [evictionWarning, () => jsonResponse(accepted)] });
+		await answerAsNewPerson();
+		await acceptButton().click();
+
+		await testPage.getByRole('button', { name: 'Continue and sign out' }).click();
+
+		await vi.waitFor(() => expect(gotoWithOutcome).toHaveBeenCalled());
+		expect(globalFetch.mock.calls[1]![1].headers).toMatchObject({ 'X-Confirmed': 'true' });
+		expect(createUserWithEmailAndPassword).toHaveBeenCalledTimes(1);
+	});
+
+	it('goes back to the form on Cancel, with what she typed', async () => {
+		await setup({ accepts: [evictionWarning] });
+		await answerAsNewPerson();
+		await acceptButton().click();
+
+		await testPage.getByRole('button', { name: 'Cancel' }).click();
+
+		await expect.element(firstNameField()).toHaveValue('Priya');
+		expect(signOut).not.toHaveBeenCalled();
+	});
+
+	it('returns to the form with the refusal when the confirmed accept is refused', async () => {
+		await setup({ accepts: [evictionWarning, () => refusal(410, 'this invitation has expired')] });
+		await answerAsNewPerson();
+		await acceptButton().click();
+
+		await testPage.getByRole('button', { name: 'Continue and sign out' }).click();
+
+		await expect.element(testPage.getByRole('alert')).toHaveTextContent('this invitation has expired');
+		await expect.element(acceptButton()).toBeVisible();
+		expect(signOut).toHaveBeenCalled();
 	});
 });
