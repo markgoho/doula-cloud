@@ -136,8 +136,8 @@ A live Stripe account would not fix this step. It is not the out-of-scope Stripe
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 10.1 | Open an Engagement and read both plan sections | Both render. `GET .../plans/{planType}` has no role check, and per [ADR-0006](../adr/0006-read-follows-the-role.md) an Admin reading both is **correct**, not a leak | `manual` |
-| 10.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
+| 10.1 | Open an Engagement and read both plan sections | Both render, each with every question and its answer, read-only, and no field until **Change the Care Plan** or **Change the Birth Plan** ([#2243](https://github.com/markgoho/doula-cloud/issues/2243)). `GET .../plans/{planType}` has no role check, and per [ADR-0006](../adr/0006-read-follows-the-role.md) an Admin reading both is **correct**, not a leak | `manual` |
+| 10.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). The Clients list, then the Engagement from the row's **Birth** or **Postpartum** link, not the Client's name ([#2242](https://github.com/markgoho/doula-cloud/issues/2242)) | `manual` |
 | 10.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
 | 10.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 

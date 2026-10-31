@@ -5,7 +5,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadInstance, downloadBirthPlanPdf, type Instance } from '#lib/planInstance.js';
 	import { triggerBlobDownload } from '#lib/blobDownload.js';
-	import BirthPlanView from '#lib/components/molecules/BirthPlanView.svelte';
+	import PlanInstanceView from '#lib/components/molecules/PlanInstanceView.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import DocumentPage from '#lib/components/templates/DocumentPage.svelte';
@@ -106,7 +106,7 @@
 			<!-- #2209: the masthead names her in full, the Practice, and when
 			     the plan last changed, where this page once said when the
 			     Engagement was created. -->
-			<BirthPlanView fields={instance.fields} answers={instance.answers} masthead={instance.masthead} />
+			<PlanInstanceView fields={instance.fields} answers={instance.answers} masthead={instance.masthead} headingLevel={2} />
 		{/if}
 	{/snippet}
 </DocumentPage>

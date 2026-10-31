@@ -9,7 +9,7 @@
  * label is this screen's free text too, but the answer a Client pastes
  * in is the value that actually broke a grid track.
  *
- * Two Fields, not one (#720): `BirthPlanView`'s own render adds a whole
+ * Two Fields, not one (#720): `PlanInstanceView`'s own render adds a whole
  * `dd` shaped differently per `field.type` -- `multi_select` joins every
  * chosen option into one line rather than showing the single answer a
  * `long_text` field does -- so a fixture holding only a `long_text`

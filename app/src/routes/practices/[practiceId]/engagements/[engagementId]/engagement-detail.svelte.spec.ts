@@ -2120,12 +2120,28 @@ describe('the Care Plan and Birth Plan sections (#2004)', () => {
 		apiFetchWithSession.mockReset();
 	});
 
-	it('shows how far a Plan is answered, and no question until asked', async () => {
+	it('shows how far a Plan is answered, and no editor until asked', async () => {
 		await setupPlans({ care_plan: planOf('care_plan') });
 
 		await expect.element(planSection('Care Plan').getByText('1 of 2 questions answered')).toBeVisible();
 		expect(testPage.getByLabelText('Music').elements()).toHaveLength(0);
 		await expect.element(planSection('Care Plan').getByRole('button', { name: 'Change the Care Plan' })).toBeVisible();
+	});
+
+	// #2243: reading an answer is not changing one.
+	it.each([
+		['Care Plan', 'care_plan'],
+		['Birth Plan', 'birth_plan']
+	] as const)('reads every answer in the %s with no editor open', async (heading, planType) => {
+		await setupPlans({ [planType]: planOf(planType) });
+
+		const section = planSection(heading);
+		await expect.element(section.getByRole('heading', { level: 3, name: 'Labor' })).toBeVisible();
+		await expect.element(section.getByText('Music', { exact: true })).toBeVisible();
+		await expect.element(section.getByText('Quiet', { exact: true })).toBeVisible();
+		await expect.element(section.getByText('Lighting', { exact: true })).toBeVisible();
+		expect(section.getByRole('textbox').elements()).toHaveLength(0);
+		expect(testPage.getByRole('button', { name: `Save ${heading}` }).elements()).toHaveLength(0);
 	});
 
 	it("says by the Client's name whether the Birth Plan has been read", async () => {
@@ -2211,6 +2227,7 @@ describe('the Care Plan and Birth Plan sections (#2004)', () => {
 		await expect.element(testPage.getByRole('status').filter({ hasText: 'Birth Plan saved.' })).toHaveFocus();
 		expect(saved).toEqual({ music: 'Quiet', lights: 'Low' });
 		await expect.element(planSection('Birth Plan').getByText('Complete')).toBeVisible();
+		await expect.element(planSection('Birth Plan').getByText('Low', { exact: true })).toBeVisible();
 		// The save's answer carries no acknowledgment: a Staff edit clears it.
 		await expect
 			.element(planSection('Birth Plan').getByText(`${fixtureDetail.clientName} has not read this yet`))
