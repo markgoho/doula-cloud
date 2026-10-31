@@ -215,8 +215,10 @@ describe('Client portal Engagement hub', () => {
 		expect(document.title).toContain(engagementLabel({ practiceName, createdAt }));
 	});
 
-	// ADR-0017: a postpartum-only Engagement has no due date. #505 asks for
-	// nothing to show, not a blank row and not a placeholder -- the row is
+	// ADR-0017: a postpartum-only Engagement has no due date, and once any
+	// birth outcome is recorded -- a live birth (#2211) or a loss (#2003)
+	// -- the BFF sends none either (TestDetailHandler_NoDueDateOnceAnOutcomeIsRecorded).
+	// #505 asks for nothing to show, not a blank row and not a placeholder -- the row is
 	// left out of the SummaryList's own rows entirely, so there is no
 	// "Due date" label sitting over an empty value. Not the happy path --
 	// the fixture's own detail has a due date (see the previous test) --

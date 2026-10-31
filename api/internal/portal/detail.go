@@ -44,10 +44,13 @@ type Detail struct {
 	// width, and #293 found none true after a loss.
 	//
 	// DueDate is ADR-0017's `engagements.due_date`, nullable because a
-	// postpartum-only Engagement has none (#505). Absent too once the
-	// Engagement has no living or expected baby (#2003, as #293 decided):
-	// after a loss "Your care" shows no due date. The outcome itself never
-	// crosses (ADR-0015); only this absence does.
+	// postpartum-only Engagement has none (#505). Absent too once any
+	// birth outcome is recorded (engagement.IsBabyStillExpected): a due
+	// date forecasts a birth still to come, so after a loss (#2003, as
+	// #293 decided) and after a live birth (#2211) alike "Your care"
+	// shows none, and says nothing in its place. The outcome itself never
+	// crosses (ADR-0015), and because the date goes for every outcome,
+	// its absence does not tell one outcome from another.
 	DueDate *string `json:"dueDate,omitempty"`
 	// CreatedAt is when the Engagement itself began (#310): the portal's
 	// authenticated chrome names the Engagement she is in by it, the one
@@ -124,7 +127,7 @@ func DetailHandler() http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if dueDate.Valid && engagement.HasLivingOrExpectedBaby(birthOutcome) {
+		if dueDate.Valid && engagement.IsBabyStillExpected(birthOutcome) {
 			d.DueDate = &dueDate.String
 		}
 		d.OffersBirthPlan = engagement.OffersBirthPlan(engagement.BirthPlanInputs{

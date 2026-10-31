@@ -30,6 +30,29 @@ func TestHasLivingOrExpectedBaby(t *testing.T) {
 	}
 }
 
+// TestIsBabyStillExpected proves the due date's own question (#2211):
+// a baby is still expected only while no birth outcome is recorded, so
+// a live birth answers no as surely as a loss does.
+func TestIsBabyStillExpected(t *testing.T) {
+	tests := []struct {
+		name         string
+		birthOutcome *string
+		want         bool
+	}{
+		{"no outcome recorded yet", nil, true},
+		{"a live birth", new(engagement.OutcomeLiveBirth), false},
+		{"a loss", new(engagement.OutcomeLoss), false},
+		{"an unknown outcome", new(engagement.OutcomeUnknown), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := engagement.IsBabyStillExpected(tt.birthOutcome); got != tt.want {
+				t.Fatalf("IsBabyStillExpected(%v) = %v, want %v", tt.birthOutcome, got, tt.want)
+			}
+		})
+	}
+}
+
 // TestOffersBirthPlan proves ADR-0015's suppression rule over both of
 // its inputs: the kind half (#311) and the outcome half (#294). A
 // postpartum Engagement is refused whatever became of the pregnancy, so

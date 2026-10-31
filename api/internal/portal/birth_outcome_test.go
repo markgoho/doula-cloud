@@ -59,12 +59,14 @@ func TestDetailHandler_NeverShowsTheBirthOutcome(t *testing.T) {
 	}
 }
 
-// TestDetailHandler_NoCarePhaseOrDueDateAfterALoss is #2003, as #293
-// decided: once a Practice records that the pregnancy ended without a
-// living baby, "Your care" says nothing about a care phase or a due
-// date. The BFF leaves both keys out of the response, so no screen can
-// show them; an expected or a live birth keeps both.
-func TestDetailHandler_NoCarePhaseOrDueDateAfterALoss(t *testing.T) {
+// TestDetailHandler_NoDueDateOnceAnOutcomeIsRecorded is #2003 and
+// #2211: a due date forecasts a birth still to come, so once a Practice
+// records any birth outcome -- a live birth, a loss or unknown -- "Your
+// care" says nothing about it. The BFF leaves the key out, so no screen
+// can show it, and it is absent alike after every outcome, so its
+// absence tells the Client nothing about the staff-only outcome
+// (ADR-0015). No care phase crosses on any Engagement (#2007).
+func TestDetailHandler_NoDueDateOnceAnOutcomeIsRecorded(t *testing.T) {
 	tests := []struct {
 		name     string
 		uid      string
@@ -73,7 +75,7 @@ func TestDetailHandler_NoCarePhaseOrDueDateAfterALoss(t *testing.T) {
 		wantKeys bool
 	}{
 		{"nothing recorded yet", "portal-phase-none-uid", "", "", true},
-		{"a live birth", "portal-phase-live-uid", "live_birth", "2027-06-10", true},
+		{"a live birth", "portal-phase-live-uid", "live_birth", "2027-06-10", false},
 		{"a loss", "portal-phase-loss-uid", "loss", "2027-03-04", false},
 		{"an unknown outcome", "portal-phase-unknown-uid", "unknown", "", false},
 	}
