@@ -152,7 +152,7 @@ func main() {
 	// process when that switch is set anywhere else.
 	//
 	// coverage:ignore reason: main's wiring; stackswitch's own tests cover both switches and the gate
-	now, err := stackswitch.Clock(context.Background(), os.Getenv, db)
+	now, _, err := stackswitch.Clock(context.Background(), os.Getenv, db)
 	if err != nil {
 		// coverage:ignore reason: main's wiring; stackswitch's own tests cover the refusal
 		log.Fatalf("clock: %v", err)

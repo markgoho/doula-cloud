@@ -32,11 +32,13 @@ const (
 // same app_runtime role the running application connects as; it is the
 // connection RLS policies actually apply to, and the one tests should use
 // to prove tenant isolation. Ops connects as a member of ops_runtime, the
-// role doula-ops connects as (ADR-0062).
+// role doula-ops connects as (ADR-0062). AppURL is App's connection
+// string, for code that opens a pool of its own as the same login.
 type DB struct {
-	Admin *sql.DB
-	App   *sql.DB
-	Ops   *sql.DB
+	Admin  *sql.DB
+	App    *sql.DB
+	Ops    *sql.DB
+	AppURL string
 }
 
 // New clones a fresh database from the test process's shared, migrated
@@ -91,10 +93,12 @@ func New(t *testing.T) *DB {
 		}
 	})
 
+	appURL := *u
+	appURL.User = url.UserPassword(appUser, appPassword)
 	appDB := newLoginDB(t, u.String(), appUser, appPassword)
 	opsDB := newLoginDB(t, u.String(), opsUser, opsPassword)
 
-	return &DB{Admin: db, App: appDB, Ops: opsDB}
+	return &DB{Admin: db, App: appDB, Ops: opsDB, AppURL: appURL.String()}
 }
 
 // newLoginDB opens a connection to the clone as user, one of the shared

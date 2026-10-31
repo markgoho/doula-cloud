@@ -76,7 +76,7 @@ func newServer(ctx context.Context, getenv func(string) string, newVerifier veri
 	}
 	dbpool.ApplyOps(db)
 
-	now, err := stackswitch.Clock(ctx, getenv, db)
+	now, _, err := stackswitch.Clock(ctx, getenv, db)
 	if err != nil {
 		_ = db.Close()
 		return nil, nil, fmt.Errorf("doula-ops: %w", err)
