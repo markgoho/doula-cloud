@@ -148,11 +148,11 @@ func MonthlyCreditsHandler(db *sql.DB, auth *internalauth.Guard) http.Handler {
 
 		month, err := time.Parse(MonthLayout, r.URL.Query().Get("month"))
 		if err != nil {
-			apierr.WriteError(w, "month must be given as YYYY-MM", http.StatusBadRequest)
+			apierr.WriteError(w, "Give the month as YYYY-MM.", http.StatusBadRequest)
 			return
 		}
 		if month.After(monthStart(clock.Now(r.Context()))) {
-			apierr.WriteError(w, "month must not be in the future", http.StatusBadRequest)
+			apierr.WriteError(w, "The month cannot be in the future.", http.StatusBadRequest)
 			return
 		}
 
