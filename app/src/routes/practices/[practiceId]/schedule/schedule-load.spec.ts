@@ -1,7 +1,7 @@
-import { describe, expect, it, vi, afterEach } from 'vitest';
+import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
 import { jsonResponse } from '#lib/testResponse.js';
 import { loadedValue, settledRead } from '#lib/testStreamedRead.js';
-import type { SchedulePageData } from './+page.js';
+import { load, type SchedulePageData } from './+page.js';
 
 const goto = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ goto }));
@@ -62,6 +62,11 @@ function loadEvent(search = '', roles: string[] = ['owner']) {
 	};
 }
 
+beforeEach(() => {
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date(2026, 9, 2, 9, 0));
+});
+
 afterEach(() => {
 	vi.unstubAllGlobals();
 	vi.useRealTimers();
@@ -69,7 +74,6 @@ afterEach(() => {
 
 describe('schedule/+page.ts load', () => {
 	it('turns the URL’s calendar days into the half-open instant range the BFF takes', async () => {
-		const { load } = await import('./+page.js');
 		const { fetchMock } = setup(200, emptyPage);
 
 		const result = await loadedValue<SchedulePageData>(await load(loadEvent('?from=2026-09-12&to=2026-09-19&staffId=staff-1') as Parameters<typeof load>[0]));
@@ -87,13 +91,9 @@ describe('schedule/+page.ts load', () => {
 	});
 
 	it('falls back to the default window when the URL names no range', async () => {
-		// A fixed instant, not the wall clock (#1605): 9am local on October
-		// 2, so the window reaches across the night daylight saving ends in
-		// a zone that has one. Only `Date` is faked; the load's own promises
-		// still settle.
-		vi.useFakeTimers({ toFake: ['Date'] });
-		vi.setSystemTime(new Date(2026, 9, 2, 9, 0));
-		const { load } = await import('./+page.js');
+		// beforeEach's fixed instant, not the wall clock (#1605, #2368): 9am
+		// local on October 2, so the window reaches across the night
+		// daylight saving ends in a zone that has one.
 		const { fetchMock } = setup(200, emptyPage);
 
 		const result = await loadedValue<SchedulePageData>(await load(loadEvent() as Parameters<typeof load>[0]));
@@ -107,7 +107,6 @@ describe('schedule/+page.ts load', () => {
 	});
 
 	it('offers an Owner the Doulas on the roster, and never a Staff member a Visit cannot be assigned to', async () => {
-		const { load } = await import('./+page.js');
 		setup(200, emptyPage);
 
 		const result = await loadedValue<SchedulePageData>(await load(loadEvent() as Parameters<typeof load>[0]));
@@ -118,7 +117,6 @@ describe('schedule/+page.ts load', () => {
 	});
 
 	it('offers a Doula no Doula filter, because the roster read she would need is Owner/Admin only', async () => {
-		const { load } = await import('./+page.js');
 		const { fetchMock } = setup(200, emptyPage);
 
 		const result = await loadedValue<SchedulePageData>(await load(loadEvent('', ['doula']) as Parameters<typeof load>[0]));
@@ -128,7 +126,6 @@ describe('schedule/+page.ts load', () => {
 	});
 
 	it('starts the schedule and the roster together', async () => {
-		const { load } = await import('./+page.js');
 		const { fetchMock } = setup(200, emptyPage);
 
 		await load(loadEvent() as Parameters<typeof load>[0]);
@@ -142,7 +139,6 @@ describe('schedule/+page.ts load', () => {
 	// #2249: a refusal is the screen's to draw, after the screen has
 	// changed, so the read carries the response through unread.
 	it('hands a refused schedule read to the screen', async () => {
-		const { load } = await import('./+page.js');
 		setup(403, { code: 'FORBIDDEN', message: 'not permitted to read this' });
 
 		const data = await load(loadEvent() as Parameters<typeof load>[0]);
@@ -154,7 +150,6 @@ describe('schedule/+page.ts load', () => {
 	});
 
 	it('hands a refused roster read to the screen', async () => {
-		const { load } = await import('./+page.js');
 		vi.stubGlobal(
 			'fetch',
 			vi.fn(async (path: string) =>
