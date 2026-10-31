@@ -1,7 +1,7 @@
 import { page } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import BirthPlanView from './BirthPlanView.svelte';
+import PlanInstanceView from './PlanInstanceView.svelte';
 import type { Answers, Field, Masthead } from '#lib/planInstance.js';
 
 const defaultFields: Field[] = [
@@ -23,17 +23,18 @@ interface SetupOptions {
 	fields?: Field[];
 	answers?: Answers;
 	masthead?: Masthead;
+	headingLevel?: 2 | 3;
 }
 
-async function setup({ fields = defaultFields, answers = {}, masthead }: SetupOptions = {}) {
-	await render(BirthPlanView, { fields, answers, masthead });
+async function setup({ fields = defaultFields, answers = {}, masthead, headingLevel = 2 }: SetupOptions = {}) {
+	await render(PlanInstanceView, { fields, answers, masthead, headingLevel });
 }
 
 function valueFor(label: string) {
 	return page.getByText(label).element().nextElementSibling as HTMLElement;
 }
 
-describe('BirthPlanView.svelte', () => {
+describe('PlanInstanceView.svelte', () => {
 	// #2209: the page that prints names the plan before its first question,
 	// so a stranger in scrubs handed it knows whose it is and how current.
 	it('opens with whose plan it is, her Doula, whose Practice, and the day it last changed', async () => {
@@ -68,12 +69,18 @@ describe('BirthPlanView.svelte', () => {
 		await expect.element(page.getByText('Planned birth location')).toBeVisible();
 		expect(page.getByText('Last changed').query()).toBeNull();
 	});
-	// Level 2: both consumers render the view directly under the page's
-	// <h1>, so a level-3 section heading skipped one (#2018).
-	it('renders a level-2 heading for a section_header field', async () => {
+	// #2018, #2243: the print pages put it under the <h1>, the Engagement
+	// page under a section's <h2>.
+	it('renders a section_header field at the level it is given', async () => {
 		await setup();
 
 		await expect.element(page.getByRole('heading', { level: 2, name: 'Birth Setting' })).toBeVisible();
+	});
+
+	it('renders a level-3 heading under a section heading', async () => {
+		await setup({ headingLevel: 3 });
+
+		await expect.element(page.getByRole('heading', { level: 3, name: 'Birth Setting' })).toBeVisible();
 	});
 
 	it('renders the stored value for a text-shaped field', async () => {

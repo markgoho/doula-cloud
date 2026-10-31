@@ -1,5 +1,5 @@
 <script lang="ts">
-	import BirthPlanView from '#lib/components/molecules/BirthPlanView.svelte';
+	import PlanInstanceView from '#lib/components/molecules/PlanInstanceView.svelte';
 	import type { Field } from '#lib/planTemplate.js';
 
 	/*
@@ -41,12 +41,13 @@
 </script>
 
 <stack-l space="var(--space-6)">
-	<h1>Birth plan view</h1>
+	<h1>Plan instance view</h1>
 
 	<section>
 		<h2>Answered</h2>
-		<BirthPlanView
+		<PlanInstanceView
 			{fields}
+			headingLevel={3}
 			answers={{
 				pain: 'Epidural, as early as it can be given',
 				people: ['My partner, for the whole labor', 'My Doula from Highland Midwifery'],
@@ -65,6 +66,6 @@
 
 	<section>
 		<h2>Unanswered &mdash; every value falls back to an em dash</h2>
-		<BirthPlanView {fields} answers={{}} />
+		<PlanInstanceView {fields} answers={{}} headingLevel={3} />
 	</section>
 </stack-l>

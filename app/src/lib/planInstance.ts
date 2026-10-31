@@ -62,7 +62,7 @@ export interface Masthead {
 
 /** Reads fieldId's raw stored value out of answers as a string, or '' if
  * unset/mistyped -- shared by PlanInstanceForm.svelte (editable) and
- * BirthPlanView.svelte (read-only) so both read Answers the same way and
+ * PlanInstanceView.svelte (read-only) so both read Answers the same way and
  * only differ in how they format a missing value. */
 export function answerText(answers: Answers, fieldId: string): string {
 	const value = answers[fieldId];
