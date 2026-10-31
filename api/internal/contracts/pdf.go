@@ -59,18 +59,59 @@ func fillValue(key, value string) string {
 	return day.Format(calendarDayLayout)
 }
 
+// signConsentLine is the checkbox the Client checks on the signing form,
+// word for word: SIGN_CONSENT_LABEL in app/src/lib/clientRegister.ts,
+// which TestSignConsentLine_IsTheSigningFormsCheckbox holds this to. The
+// one checkbox is both her attestation that she read the Contract and her
+// consent to sign it electronically, so the PDF quotes it once (#2214).
+const signConsentLine = "I have read this contract and I am signing it electronically"
+
+// signedOnLayout prints the signing instant the way app/src/lib/dates.ts's
+// formatInstantWithClock does ("Oct 27, 2026, 2:05pm"), followed by the
+// zone's abbreviation. The page reads an instant in its reader's own zone;
+// a printed Contract has no reader's zone, so it names the Practice's
+// (ADR-0036), and anyone holding the paper elsewhere can still tell the
+// hour it was signed.
+const signedOnLayout = "Jan 2, 2006, 3:04pm MST"
+
+// signature is what the Sign transition prints below a Contract's prose:
+// the full legal name as the Client typed it, and the instant stored as
+// signed_at, already moved into the Practice's zone.
+type signature struct {
+	fullLegalName string
+	signedAt      time.Time
+}
+
+// lines are the signature block's printed lines, in order: that it was
+// signed electronically and by whom, when, and what she confirmed.
+func (s signature) lines() []string {
+	return []string{
+		"Signed electronically by: " + s.fullLegalName,
+		"Signed on: " + s.signedAt.Format(signedOnLayout),
+		"Confirmed: " + signConsentLine,
+	}
+}
+
 // renderContractPDF renders a Contract's filled prose/merge-field
-// snapshot (see fillProse) to PDF bytes -- the permanent record stored
-// alongside a Contract's sent -> signed transition. Uses cp1252 (fpdf's
-// UnicodeTranslatorFromDescriptor default), which covers the accented
-// Latin characters and typographic punctuation (em dash, curly quotes)
-// expected in Client names and free-text prose.
-func renderContractPDF(filledProse string) ([]byte, error) {
+// snapshot (see fillProse), then its signature block, to PDF bytes -- the
+// permanent record stored alongside a Contract's sent -> signed
+// transition. It is rendered once, at signing, and never again: a PDF
+// stored before #2214 added the signature block keeps the prose it was
+// stored with rather than being re-rendered, because the stored file is
+// the record of what was produced at that moment (#71). Uses cp1252
+// (fpdf's UnicodeTranslatorFromDescriptor default), which covers the
+// accented Latin characters and typographic punctuation (em dash, curly
+// quotes) expected in Client names and free-text prose.
+func renderContractPDF(filledProse string, sig signature) ([]byte, error) {
 	pdf := fpdf.New("P", "mm", "A4", "")
 	tr := pdf.UnicodeTranslatorFromDescriptor("")
 	pdf.AddPage()
 	pdf.SetFont("Arial", "", 12)
 	pdf.MultiCell(0, 8, tr(filledProse), "", "", false)
+	pdf.Ln(8)
+	for _, line := range sig.lines() {
+		pdf.MultiCell(0, 8, tr(line), "", "", false)
+	}
 
 	var buf bytes.Buffer
 	if err := pdf.Output(&buf); err != nil {

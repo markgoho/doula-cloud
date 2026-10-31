@@ -86,7 +86,9 @@ export const NO_CONTRACT_MESSAGE = 'No contract has been sent for your care yet.
 
 /** The consent checkbox on the signing form (`SignContract`). Spelled once
  * so the style-guide pages that show the longest inline label in the app
- * show this one, and cannot drift from it (#2342). */
+ * show this one, and cannot drift from it (#2342). The signed Contract PDF
+ * quotes it word for word as what she confirmed (`signConsentLine` in
+ * `api/internal/contracts/pdf.go`, held to this by a Go test, #2214). */
 export const SIGN_CONSENT_LABEL = 'I have read this contract and I am signing it electronically';
 
 export function contractSignedNotice(practiceName: string): string {

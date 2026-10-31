@@ -12,6 +12,7 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/pdftext"
 	"doula-cloud/api/internal/plans"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
@@ -100,7 +101,7 @@ func wantPDFNamesThePlan(t *testing.T, resp *http.Response) {
 	if err != nil {
 		t.Fatalf("read body: %v", err)
 	}
-	text := plans.PDFText(t, body)
+	text := pdftext.Text(body)
 	for _, want := range []string{"Name: Johanna Sorensen", "Doula: " + mastheadPractice, "Last changed: Oct 27, 2026"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("PDF text does not contain %q:\n%s", want, text)
