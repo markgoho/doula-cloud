@@ -171,6 +171,33 @@ func TestInboxHandler_LapsesTheClientFieldsOnATerminalOffer(t *testing.T) {
 	}
 }
 
+// TestInboxHandler_CarriesTheFeePaymentOnHerAcceptedOffer is #2271's read:
+// the Fee Payment the Practice recorded against the Attachment her
+// acceptance granted rides on that Offer, in her own inbox only.
+func TestInboxHandler_CarriesTheFeePaymentOnHerAcceptedOffer(t *testing.T) {
+	f := newFixture(t)
+	offerID := f.makeOffer(t, offerBody(f.doulaID, 45000))
+	expectStatus(t, do(t, http.MethodPost, f.offerURL(offerID, "accept"), f.doulaSession, nil), http.StatusOK)
+	if _, err := f.db.Admin.ExecContext(t.Context(),
+		`INSERT INTO attachment_fee_payments
+		     (practice_id, attachment_id, kind, amount_cents, method, paid_on, recorded_by, recorded_at)
+		 SELECT $1, ea.id, 'recorded', 45000, 'check', '2026-10-01', $2, now()
+		   FROM engagement_attachments ea WHERE ea.engagement_id = $3 AND ea.staff_id = $4`,
+		f.practiceID, f.ownerID, f.engagementID, f.doulaID,
+	); err != nil {
+		t.Fatalf("seed fee payment: %v", err)
+	}
+
+	var listed offer.ListResponse
+	decode(t, do(t, http.MethodGet, f.srv+"/api/practices/"+f.practiceID+"/offers", f.doulaSession, nil),
+		http.StatusOK, &listed)
+
+	paid := listed.Items[0].FeePaid
+	if paid == nil || paid.AmountCents != 45000 || paid.Method != "check" || paid.PaidOn != "2026-10-01" {
+		t.Fatalf("feePaid = %+v, want the recorded $450 check", paid)
+	}
+}
+
 // The list is one page deep with a cursor onto the next, the envelope
 // docs/api-design.md section 4 sets.
 func TestInboxHandler_PaginatesWithACursor(t *testing.T) {
