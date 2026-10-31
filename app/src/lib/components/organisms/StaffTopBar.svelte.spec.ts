@@ -258,6 +258,40 @@ describe('the narrow sheet', () => {
 	});
 
 	/*
+	 * #2335: the sheet carries two menus of its own, the Practice switcher
+	 * and the avatar menu. A link in either moves to another page too, so
+	 * it shuts the menu's panel and the sheet behind it, both before the
+	 * router runs, for the reason the sections above give.
+	 */
+	it.each([
+		['the Practice switcher', 'Riverside Doula Collective', 'Finger Lakes Birth Support'],
+		['the avatar menu', 'Your account, Mark Goho', 'Account']
+	])('shuts, with its panel, when a link in %s is followed', async (_menu, trigger, link) => {
+		const { hamburger } = await setupNarrow();
+		await hamburger.click();
+		const sheet = page.getByRole('dialog');
+		await sheet.getByRole('button', { name: trigger }).click();
+		let openWhenRouted: { sheet?: boolean; panel: boolean } | undefined;
+		const route = (event: MouseEvent) => {
+			event.preventDefault();
+			openWhenRouted = {
+				sheet: document.querySelector('dialog')?.open,
+				panel: document.querySelector(':popover-open') !== null
+			};
+		};
+		document.addEventListener('click', route);
+
+		try {
+			await sheet.getByRole('link', { name: link, exact: true }).click();
+		} finally {
+			document.removeEventListener('click', route);
+		}
+
+		expect(openWhenRouted).toEqual({ sheet: false, panel: false });
+		await expect.element(page.getByRole('button', { name: 'Close menu' })).not.toBeInTheDocument();
+	});
+
+	/*
 	 * A bottom tab bar was drawn and rejected: five slots cannot carry six
 	 * sections without a `More`, and `More` is not a noun this domain has.
 	 */

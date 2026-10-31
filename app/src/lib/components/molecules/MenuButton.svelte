@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
+	import { closeOnLinkPress } from '#lib/closeOnLinkPress.js';
 	import type { IconName } from '#lib/components/atoms/Icon/manifest.js';
 
 	/*
@@ -10,9 +11,11 @@
 	 * Native `popover` does the work. The browser puts the panel in the top
 	 * layer, dismisses it on a click outside or on Escape, and returns focus
 	 * to the trigger -- three behaviors that are otherwise a document
-	 * listener, a key handler and a stored element reference each. The only
+	 * listener, a key handler and a stored element reference each. The
 	 * script here mirrors the open state onto `aria-expanded`, which not
-	 * every engine yet derives from `popovertarget` on its own.
+	 * every engine yet derives from `popovertarget` on its own, pins the
+	 * fallback position, and shuts the panel when a link in it is pressed
+	 * (#2335), which a client-side navigation would not.
 	 *
 	 * Deliberately not `role="menu"`. That role is a promise of arrow-key
 	 * navigation between items, and these panels hold ordinary links and
@@ -87,6 +90,15 @@
 	function handleToggle(event: ToggleEvent) {
 		isOpen = event.newState === 'open';
 	}
+
+	/*
+	 * #2335: a link in the panel that moves to another page shuts the
+	 * panel as it is pressed, before the router runs (`closeOnLinkPress`
+	 * says why then). Hiding hands focus back to the trigger, and the
+	 * router then resets it for the new page. A button in the panel (Sign
+	 * out) is left to its own handler.
+	 */
+	const hideOnLinkPress = closeOnLinkPress<HTMLDivElement>((panel) => panel.hidePopover());
 </script>
 
 <div class="menu" bind:this={menu} style:anchor-name={anchorName}>
@@ -108,6 +120,7 @@
 		style:--menu-fallback-top={fallbackTop}
 		onbeforetoggle={handleBeforeToggle}
 		ontoggle={handleToggle}
+		{@attach hideOnLinkPress}
 	>
 		{@render children()}
 	</div>
