@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { formatInstantWithClock } from './dates.js';
 import {
 	clientFactRows,
 	createOffer,
@@ -218,11 +219,13 @@ describe('clientFactRows', () => {
 });
 
 describe('decideDescription', () => {
-	it('names the Offer by where and when', () => {
-		expect(decideDescription(offer)).toBe('North side, due Jan 4, 2027');
+	const sent = formatInstantWithClock(offer.offeredAt);
+
+	it('names the Offer by where, when, and when it was sent', () => {
+		expect(decideDescription(offer)).toBe(`North side, due Jan 4, 2027, sent ${sent}`);
 	});
 
-	it('names it by its fee once her Client is erased (#2385)', () => {
-		expect(decideDescription(erased)).toBe('$450.00');
+	it('names it by when it was sent once her Client is erased (#2385, #2389)', () => {
+		expect(decideDescription(erased)).toBe(`Sent ${sent}`);
 	});
 });

@@ -15,7 +15,7 @@ import type { FeePaid } from './doulaFee.js';
 import type { Fetcher } from './fetcher.js';
 
 import { apiErrorMessage } from './apiErrorMessage.js';
-import { formatCalendarDay } from './dates.js';
+import { formatCalendarDay, formatInstantWithClock } from './dates.js';
 import { formatMoney } from './money.js';
 
 /** One Offer as either side reads it. targetName/targetAddress are filled
@@ -243,11 +243,14 @@ export function clientFactRows(offer: ClientFields): { label: string; value: str
 
 /**
  * Tells one open Offer's Accept and Decline from another's: where and
- * when, or the fee when her Client is erased and neither is left.
+ * when, and always the minute it was sent, so two fee-less Offers from
+ * erased Clients still read apart (#2389).
  */
-export function decideDescription(offer: ClientFields & { amountCents?: number }): string {
+export function decideDescription(offer: ClientFields & { offeredAt: string }): string {
 	const due = offer.dueDate && `due ${formatCalendarDay(offer.dueDate)}`;
-	return [offer.clientArea, due].filter(Boolean).join(', ') || formatFee(offer.amountCents);
+	const sent = `sent ${formatInstantWithClock(offer.offeredAt)}`;
+	const description = [offer.clientArea, due, sent].filter(Boolean).join(', ');
+	return description.charAt(0).toUpperCase() + description.slice(1);
 }
 
 /**
