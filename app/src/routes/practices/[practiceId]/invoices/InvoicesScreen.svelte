@@ -185,11 +185,14 @@
 		}
 	];
 
+	// #2240: to the Invoice itself in its Engagement's Invoices section,
+	// not the top of the Engagement.
 	function engagementHref(invoice: PracticeInvoice): string {
-		return resolve('/practices/[practiceId]/engagements/[engagementId]', {
+		const engagement = resolve('/practices/[practiceId]/engagements/[engagementId]', {
 			practiceId: page.params.practiceId!,
 			engagementId: invoice.engagementId
 		});
+		return `${engagement}#invoice-${invoice.id}`;
 	}
 </script>
 

@@ -148,6 +148,12 @@
 		 * winning over it. Each property's own comment above says so.
 		 */
 		rowHref?: (row: T) => string;
+		/**
+		 * An id for each row, so a link can land on one (#2240). It names
+		 * the view, since both trees are always in the DOM (#666), and the
+		 * row takes `tabindex="-1"` so the caller can move focus to it.
+		 */
+		rowId?: (row: T, view: DataTableView) => string;
 		rowActions?: RowActions<T>;
 		hasMore?: boolean;
 		onLoadMore?: () => void;
@@ -189,6 +195,7 @@
 		columns,
 		rows,
 		rowHref,
+		rowId,
 		rowActions,
 		hasMore = false,
 		onLoadMore,
@@ -345,7 +352,7 @@
 			</thead>
 			<tbody>
 				{#each rows as row, index (index)}
-					<tr>
+					<tr id={rowId?.(row, 'table')} tabindex={rowId ? -1 : undefined}>
 						{#each columns as column, columnIndex (column.label)}
 							<!-- `content` has no counterpart on the record view's
 							     own `<dd>` below, and that asymmetry is deliberate:
@@ -394,7 +401,10 @@
 				     know the level its page needs, and the title is often the
 				     row's link, which the `Heading` atom does not hold. -->
 				{@const fields = recordRows(row)}
-				<div class="record">
+				<!-- The tabindex is only ever -1, which the check cannot see
+				     through the condition. -->
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+				<div class="record" id={rowId?.(row, 'record')} tabindex={rowId ? -1 : undefined}>
 					<div class="record-title">{@render cell(columns[0]!, 0, row, 'record')}</div>
 					{#if fields.length > 0}
 						<SummaryList rows={fields}>
@@ -770,6 +780,19 @@
 
 		/* Records are a group from the next, so the group step (#2020):
 		   28px at the floor, never the field step inside one. */
+		/* A row a link lands on (#2240) clears the top bar, as a record
+		   page's section does, and draws a Link's ring when focused. */
+		tr[id],
+		.record[id] {
+			scroll-margin-block-start: calc(var(--top-bar-height) + var(--space-4));
+		}
+
+		tr[id]:focus-visible,
+		.record[id]:focus-visible {
+			outline: var(--focus-ring-width) solid var(--color-primary);
+			outline-offset: var(--focus-ring-offset);
+		}
+
 		.record + .record {
 			margin-block-start: var(--space-group);
 		}

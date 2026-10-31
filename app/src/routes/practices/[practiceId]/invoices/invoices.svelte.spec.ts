@@ -104,12 +104,15 @@ describe('the Practice-wide invoice list (#265)', () => {
 		await expect.element(testPage.getByRole('cell', { name: 'Paid', exact: true })).toBeVisible();
 	});
 
-	it('names each Client as the way in to her Engagement', async () => {
+	it('names each Client as the way in to that Invoice on her Engagement', async () => {
 		await setup();
 
 		await expect
 			.element(testPage.getByRole('link', { name: openInvoice.clientName }))
-			.toHaveAttribute('href', `/practices/${practiceId}/engagements/${openInvoice.engagementId}`);
+			.toHaveAttribute(
+				'href',
+				`/practices/${practiceId}/engagements/${openInvoice.engagementId}#invoice-${openInvoice.id}`
+			);
 	});
 
 	it('shows what Clients owe across the Practice', async () => {

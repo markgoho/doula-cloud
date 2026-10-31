@@ -146,19 +146,19 @@ Dee is a domain expert on the business half and a stranger to the care half.
 
 ### Stage 9 — Record the Payment — moment of truth
 
-**Thinking**: "She paid by bank transfer. Mark it paid." **Pain points**: there is no way to. Payments are written only by the Stripe webhook. A check, a transfer, or a cash deposit — the normal case for a small practice — cannot be recorded at all, and no Stripe account exists either.
+**Thinking**: "She paid by bank transfer. Mark it paid." **Pain points**: on the first run there was no way to: a check, a transfer, or a cash deposit — the normal case for a small practice — could not be recorded at all. [DW-G3](https://github.com/markgoho/doula-cloud/issues/271) built **Record payment** on the Invoice's row. Its shape is by decision, and the budget follows it (DW-G11). [#271](https://github.com/markgoho/doula-cloud/issues/271) asks for a check step before the Payment is written, and the founder's ruling on [#1923](https://github.com/markgoho/doula-cloud/issues/1923) opens Date received on today because that step shows the date again, so the stage crosses three screens from the Invoice: the Invoice, the form, and its check step. #271 records the Invoice's whole amount, with no partial Payments, so the form asks no amount; it asks the date, how it was paid, and an optional note, which `other` requires, then the save or the cancel: five decisions. The **Invoices** list lands on the Invoice itself in its Engagement's Invoices section ([#2240](https://github.com/markgoho/doula-cloud/issues/2240)).
 
 **Budget**:
 
-* **Screens**: 2 (Hick's Law, Flow)
-* **Decisions**: 4 (Hick's Law, Miller's Law)
+* **Screens**: 3 (Hick's Law, Flow)
+* **Decisions**: 5 (Hick's Law, Miller's Law)
 * **Memory**: yes (Working Memory)
 * **Time**: 400 ms, 100 ms (Doherty Threshold)
 * **Confirmation**: yes (Peak-End Rule)
 * **Cold**: yes (Paradox of the Active User)
 * **320px**: yes (ADR-0024)
 
-- **9.1** — Look for a way to mark an Invoice paid. There is none.
+- **9.1** — Open the Invoice from **Invoices**, then **Record payment** on its row, the form, and its check step.
 
 ### Stage 10 — Read a filled Care Plan or Birth Plan
 
@@ -188,7 +188,7 @@ Record it as an open decision, not as a pass or a failure.
 | DW-G8 | every stage | Both | **No screen in the product has a title.** `document.title` is `""` on `/login`, the practice landing, Clients, Billing and the Engagement page, so every tab is blank and SvelteKit's own live region announces `untitled page` to a screen reader on each client-side navigation. Found on Dee's walk because it is on every screen Dee opens; it is app-wide, not theirs. | [#276](https://github.com/markgoho/doula-cloud/issues/276) |
 | DW-G9 | 1 | Interaction | **Accepting a Staff invite crosses three screens of four decisions each.** `**Screens**: 2 (Hick's Law, Flow)` — measured 3: **Accept your Staff invite** is two screens (the account question with email and password, then name and work state), then the Overview. `**Decisions**: 3 (Hick's Law, Miller's Law)` — measured 4 on each accept screen; the Overview's 9 is RA-G11's. Second walk, 2026-10-28. | [#2238](https://github.com/markgoho/doula-cloud/issues/2238) |
 | DW-G10 | 1 | Experience | **The screen after accepting never says she joined, or as what.** `**Confirmation**: yes (Peak-End Rule)` — measured no. The Overview names the Practice in the top bar and nothing else; "Joined as Admin (Employee)" is only on her own Staff page. The invitee's version of TB-G9. Second walk, 2026-10-28. | [#2239](https://github.com/markgoho/doula-cloud/issues/2239) |
-| DW-G11 | 9 | Interaction | **Recording a bank transfer crosses four screens, with five decisions on the form.** `**Screens**: 2 (Hick's Law, Flow). The Invoice, then the form that records the Payment` — measured 4: Invoices, the Engagement's Invoices section, **Record payment**, its check step. `**Decisions**: 4 (Hick's Law, Miller's Law). The amount, the date it arrived, how it was paid, and the save` — measured 5: Method, Note, Date received, **Continue**, **Cancel**; no amount field. Second walk, 2026-10-28. | [#2240](https://github.com/markgoho/doula-cloud/issues/2240) |
+| DW-G11 | 9 | Interaction | **Closed by a budget change.** Recording a bank transfer failed `**Screens**: 2 (Hick's Law, Flow). The Invoice, then the form that records the Payment` — measured 4: Invoices, the Engagement's Invoices section, **Record payment**, its check step — and `**Decisions**: 4 (Hick's Law, Miller's Law). The amount, the date it arrived, how it was paid, and the save` — measured 5: Method, Note, Date received, **Continue**, **Cancel**; no amount field. Second walk, 2026-10-28. Both lines were set before [#271](https://github.com/markgoho/doula-cloud/issues/271) chose the form's shape: its check step, which the founder's ruling on [#1923](https://github.com/markgoho/doula-cloud/issues/1923) relies on, and the Invoice's whole amount with no amount to ask. The budget is now 3 and 5, with the reason in stage 9's Pain points, and an **Invoices** row now lands on its Invoice, not the top of the Engagement. Measured again 2026-10-31: 3 and 5. | [#2240](https://github.com/markgoho/doula-cloud/issues/2240) |
 | DW-G12 | 9 | Both | **A recorded Payment never says how it was paid, and nothing confirms it.** `**Confirmation**: yes (Peak-End Rule). The Invoice reads paid, says by what and when, and the book is closed` — measured no. The row reads Paid and the date; the method and note are on no screen and not in the Invoice read, no message says it was recorded, and focus falls to the page. Second walk, 2026-10-28. | [#2241](https://github.com/markgoho/doula-cloud/issues/2241) |
 | DW-G13 | 10 | Interaction | **Reaching a Client's plans from the Clients list crosses three screens.** `**Screens**: 1 (Hick's Law, Flow)` — measured 3: Clients, the Client's record, the Engagement. RA-G13 counts the same path on Renata's stage 4. Second walk, 2026-10-28. | [#2242](https://github.com/markgoho/doula-cloud/issues/2242) |
 | DW-G14 | 10 | Experience | **A Care Plan's answers are read only through its editor.** Each plan section shows progress and who last edited it; reading an answer means **Change the Care Plan**, a form with **Save Care Plan**. The Birth Plan has **Print for the hospital**; the Care Plan has no read view on the Staff side. Second walk, 2026-10-28. | [#2243](https://github.com/markgoho/doula-cloud/issues/2243) |

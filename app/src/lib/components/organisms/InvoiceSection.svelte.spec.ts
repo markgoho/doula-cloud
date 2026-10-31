@@ -21,6 +21,7 @@ interface SetupOptions {
 	canReadInvoiceMoney?: boolean;
 	contractorInvoices?: ContractorInvoice[];
 	practiceTimezone?: string;
+	landOnInvoiceId?: string;
 	onCreate?: (billingMode?: BillingMode) => Promise<void>;
 	onRecordPayment?: (
 		invoiceId: string,
@@ -112,6 +113,7 @@ async function setup({
 	// tests use (ADR-0036) -- a zone behind UTC, which is the case the
 	// future-date boundary tests below exercise.
 	practiceTimezone = 'America/New_York',
+	landOnInvoiceId,
 	onCreate = vi.fn().mockResolvedValue(undefined),
 	onRecordPayment = vi.fn().mockResolvedValue(undefined),
 	onVoidInvoice = vi.fn().mockResolvedValue(undefined),
@@ -119,7 +121,7 @@ async function setup({
 	onReversePayment = vi.fn().mockResolvedValue(undefined),
 	onRefundPayment = vi.fn().mockResolvedValue(undefined)
 }: SetupOptions = {}) {
-	await render(InvoiceSection, {
+	const { rerender } = await render(InvoiceSection, {
 		invoices,
 		contractStatus,
 		billingMode: billingMode === 'unset' ? undefined : billingMode,
@@ -131,6 +133,7 @@ async function setup({
 		contractorInvoices,
 		practiceTimezone,
 		paymentsSettingsHref,
+		landOnInvoiceId,
 		onCreate,
 		onRecordPayment,
 		onVoidInvoice,
@@ -138,7 +141,7 @@ async function setup({
 		onReversePayment,
 		onRefundPayment
 	});
-	return { onCreate, onRecordPayment, onVoidInvoice, onWriteOffInvoice, onReversePayment, onRefundPayment };
+	return { rerender, onCreate, onRecordPayment, onVoidInvoice, onWriteOffInvoice, onReversePayment, onRefundPayment };
 }
 
 /* #2106: the billing-mode question is on the page only once Create Invoice
@@ -1305,5 +1308,54 @@ describe('InvoiceSection.svelte for a contractor Doula (#2002, #2094)', () => {
 		await setupAsked({ canReadInvoiceMoney: false, billingMode: 'unset' });
 
 		await expect.element(page.getByRole('group', { name: /How does this Practice bill Clients/ })).toBeVisible();
+	});
+});
+
+// #2240: a row on the Practice's Invoices list links to its Invoice here,
+// and the Invoices arrive after the page does.
+function isFocusOn(title: string): boolean {
+	return document.activeElement?.contains(invoiceTitle(title).element()) ?? false;
+}
+
+describe('InvoiceSection.svelte landing on a linked Invoice (#2240)', () => {
+	it('moves focus to that Invoice once it arrives', async () => {
+		const { rerender } = await setup({ isOwnerOrAdmin: true, landOnInvoiceId: invoicePaidByHand.id });
+
+		await rerender({ invoices: [invoiceOpen, invoicePaidByHand] });
+
+		await expect.poll(() => isFocusOn('INV-0003')).toBe(true);
+		expect(isFocusOn('STRIPE-in_1')).toBe(false);
+	});
+
+	it('does not take focus back when the Invoices are read again', async () => {
+		const { rerender } = await setup({
+			isOwnerOrAdmin: true,
+			invoices: [invoicePaidByHand],
+			landOnInvoiceId: invoicePaidByHand.id
+		});
+		await expect.poll(() => isFocusOn('INV-0003')).toBe(true);
+
+		const returnMoney = page.getByRole('button', { name: 'Return money' });
+		(returnMoney.element() as HTMLElement).focus();
+		await rerender({ invoices: [{ ...invoicePaidByHand }] });
+
+		await expect.element(returnMoney).toHaveFocus();
+	});
+
+	it('leaves focus where it is when the linked Invoice is not in this section', async () => {
+		await setup({ isOwnerOrAdmin: true, invoices: [invoiceOpen], landOnInvoiceId: 'inv-elsewhere' });
+
+		await expect.element(invoiceTitle('STRIPE-in_1')).toBeVisible();
+		expect(document.activeElement).toBe(document.body);
+	});
+
+	it('lands a contractor on her own row', async () => {
+		await setup({
+			canReadInvoiceMoney: false,
+			contractorInvoices: [contractorLate, contractorPaid],
+			landOnInvoiceId: contractorPaid.id
+		});
+
+		await expect.poll(() => isFocusOn('Jul 1, 2026')).toBe(true);
 	});
 });
