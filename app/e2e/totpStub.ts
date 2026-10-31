@@ -162,21 +162,22 @@ function claimsOf(idToken: string): { firebase?: Record<string, unknown>; [claim
 async function resolvePhoneChallenge(
 	request: APIRequestContext,
 	mfaPendingCredential: string,
-	mfaEnrollmentId: string
+	mfaEnrollmentId: string,
+	tenantId: string | undefined
 ): Promise<{ idToken: string; refreshToken: string }> {
 	const start = await request.post(`${EMULATOR_URL}/identitytoolkit.googleapis.com/v2/accounts/mfaSignIn:start?key=fake-key`, {
-		data: { mfaPendingCredential, mfaEnrollmentId }
+		data: { mfaPendingCredential, mfaEnrollmentId, tenantId }
 	});
 	expect(start.ok(), `mfaSignIn:start failed: ${start.status()} ${await start.text()}`).toBe(true);
 	const {
 		phoneResponseInfo: { sessionInfo }
 	} = await start.json();
 
-	const code = await readVerificationCode(request, sessionInfo);
+	const code = await readVerificationCode(request, sessionInfo, tenantId);
 
 	const finalize = await request.post(
 		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v2/accounts/mfaSignIn:finalize?key=fake-key`,
-		{ data: { mfaPendingCredential, phoneVerificationInfo: { sessionInfo, code } } }
+		{ data: { mfaPendingCredential, tenantId, phoneVerificationInfo: { sessionInfo, code } } }
 	);
 	expect(finalize.ok(), `mfaSignIn:finalize failed: ${finalize.status()} ${await finalize.text()}`).toBe(true);
 	return await finalize.json();
@@ -251,7 +252,7 @@ export async function stubTotpFactor(page: Page, request: APIRequestContext): Pr
 			await refuseMalformedCode(route);
 			return;
 		}
-		const enrolled = await enrollPhoneFactor(request, body.idToken);
+		const enrolled = await enrollPhoneFactor(request, body.idToken, undefined, body.tenantId);
 		await route.fulfill({
 			json: { idToken: relabelSecondFactor(enrolled.idToken), refreshToken: enrolled.refreshToken }
 		});
@@ -267,7 +268,12 @@ export async function stubTotpFactor(page: Page, request: APIRequestContext): Pr
 			await refuseMalformedCode(route);
 			return;
 		}
-		const { idToken, refreshToken } = await resolvePhoneChallenge(request, body.mfaPendingCredential, body.mfaEnrollmentId);
+		const { idToken, refreshToken } = await resolvePhoneChallenge(
+			request,
+			body.mfaPendingCredential,
+			body.mfaEnrollmentId,
+			body.tenantId
+		);
 		await route.fulfill({ json: { idToken: relabelSecondFactor(idToken), refreshToken } });
 	});
 

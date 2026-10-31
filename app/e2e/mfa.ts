@@ -127,11 +127,12 @@ export async function verifyEmail(request: APIRequestContext, localId: string): 
 export async function enrollPhoneFactor(
 	request: APIRequestContext,
 	idToken: string,
-	phoneNumber = randomPhoneNumber()
+	phoneNumber = randomPhoneNumber(),
+	tenantId?: string
 ): Promise<{ idToken: string; refreshToken: string }> {
 	const start = await request.post(
 		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v2/accounts/mfaEnrollment:start?key=fake-key`,
-		{ data: { idToken, phoneEnrollmentInfo: { phoneNumber } } }
+		{ data: { idToken, tenantId, phoneEnrollmentInfo: { phoneNumber } } }
 	);
 	const startBody = await start.text();
 	expect(start.ok(), `mfaEnrollment:start failed: ${start.status()} ${startBody}`).toBe(true);
@@ -139,11 +140,11 @@ export async function enrollPhoneFactor(
 		phoneSessionInfo: { sessionInfo }
 	} = JSON.parse(startBody);
 
-	const code = await readVerificationCode(request, sessionInfo);
+	const code = await readVerificationCode(request, sessionInfo, tenantId);
 
 	const finalize = await request.post(
 		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v2/accounts/mfaEnrollment:finalize?key=fake-key`,
-		{ data: { idToken, phoneVerificationInfo: { sessionInfo, code } } }
+		{ data: { idToken, tenantId, phoneVerificationInfo: { sessionInfo, code } } }
 	);
 	const finalizeBody = await finalize.text();
 	expect(finalize.ok(), `mfaEnrollment:finalize failed: ${finalize.status()} ${finalizeBody}`).toBe(true);
@@ -173,8 +174,15 @@ export async function enrollSecondFactor(
  * above and by totpStub.ts, which drives the sign-in-time MFA challenge
  * (mfaSignIn:start/finalize) rather than enrollment.
  */
-export async function readVerificationCode(request: APIRequestContext, sessionInfo: string): Promise<string> {
-	const response = await request.get(`${EMULATOR_URL}/emulator/v1/projects/${PROJECT_ID}/verificationCodes`);
+export async function readVerificationCode(
+	request: APIRequestContext,
+	sessionInfo: string,
+	tenantId?: string
+): Promise<string> {
+	// A tenant's codes are listed under the tenant, and the project's
+	// listing does not hold them.
+	const scope = tenantId ? `${PROJECT_ID}/tenants/${tenantId}` : PROJECT_ID;
+	const response = await request.get(`${EMULATOR_URL}/emulator/v1/projects/${scope}/verificationCodes`);
 	expect(response.ok(), `listing verification codes failed: ${response.status()}`).toBe(true);
 	const { verificationCodes } = await response.json();
 	const match = verificationCodes.find(

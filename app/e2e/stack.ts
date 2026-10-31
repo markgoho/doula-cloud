@@ -35,6 +35,11 @@ import {
 	e2ePidfilePath
 } from './ports';
 
+// Absolute, so ops/'s Playwright run, whose working directory is ops/,
+// brings up the same stack app/'s does.
+const APP_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const API_DIR = path.resolve(APP_DIR, '..', 'api');
+
 // The fake-gcs-server in compose.e2e.yaml, and the one bucket the BFF is
 // pointed at. Both halves matter to the Go storage SDK: it reads
 // STORAGE_EMULATOR_HOST as a bare host:port (see the SDK's own doc.go
@@ -49,7 +54,7 @@ const GCS_BUCKET = 'doula-cloud-e2e-attachments';
 // has to recognize these names to find the stack a killed session left
 // running and would go silently inert if the two ever drifted.
 const COMPOSE_PROJECT = e2eComposeProject(PORT_OFFSET);
-const COMPOSE_ARGS = ['compose', '-p', COMPOSE_PROJECT, '-f', E2E_COMPOSE_FILE];
+const COMPOSE_ARGS = ['compose', '-p', COMPOSE_PROJECT, '-f', path.join(APP_DIR, E2E_COMPOSE_FILE)];
 // compose.e2e.yaml reads these for its host port bindings and the gcs
 // service's -external-url; unset (offset 0) falls back to the compose
 // file's own defaults, so CI and the main checkout are unaffected.
@@ -240,6 +245,7 @@ function reapOrphans(): void {
 export async function startStack(appOrigin: string) {
 	reapOrphans();
 	await startEmulator();
+	await seedOperatorTenant();
 	await startDatabase();
 	installSimClock();
 	runMigrations();
@@ -327,7 +333,7 @@ async function seedGCSBucket() {
 function installSimClock() {
 	execFileSync('go', ['run', './cmd/simclock', 'install', 'app'], {
 		stdio: 'inherit',
-		cwd: '../api',
+		cwd: API_DIR,
 		timeout: MIGRATE_TIMEOUT_MS,
 		env: {
 			...process.env,
@@ -343,7 +349,7 @@ function installSimClock() {
 function grantSimClock(role: 'app_e2e' | 'ops_e2e') {
 	execFileSync('go', ['run', './cmd/simclock', 'grant', role], {
 		stdio: 'inherit',
-		cwd: '../api',
+		cwd: API_DIR,
 		timeout: MIGRATE_TIMEOUT_MS,
 		env: {
 			...process.env,
@@ -360,7 +366,7 @@ function grantSimClock(role: 'app_e2e' | 'ops_e2e') {
 function runMigrations() {
 	execFileSync('go', ['run', './cmd/migrate'], {
 		stdio: 'inherit',
-		cwd: '../api',
+		cwd: API_DIR,
 		timeout: MIGRATE_TIMEOUT_MS,
 		env: {
 			...process.env,
@@ -811,6 +817,55 @@ export function stopStack({ keepVolume = false, quiet = false }: { keepVolume?: 
 	});
 }
 
+// The operator tenant (ADR-0062) and the one operator login dev:full
+// seeds in it. The emulator makes a tenant with a chosen id when it is
+// first written to by that id, so the id is fixed here rather than read
+// back from a create.
+export const OPS_TENANT_ID = 'operators-local';
+export const SEEDED_OPERATOR = {
+	email: 'operator@doula-cloud.invalid',
+	password: 'operator-local-password',
+	name: 'Local Operator'
+} as const;
+
+const EMULATOR_ADMIN = { 'content-type': 'application/json', Authorization: 'Bearer owner' };
+
+// mfaConfig is MANDATORY with the emulator's one factor, phone: the
+// emulator has no TOTP, and refuses phone enrollment in a tenant whose
+// mfaConfig does not name PHONE_SMS. MANDATORY does not refuse an
+// unenrolled sign-in here; doula-ops does.
+async function seedOperatorTenant() {
+	const base = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}/identitytoolkit.googleapis.com`;
+	const tenant = await fetch(
+		`${base}/v2/projects/doula-cloud/tenants/${OPS_TENANT_ID}?updateMask=displayName,allowPasswordSignup,mfaConfig`,
+		{
+			method: 'PATCH',
+			headers: EMULATOR_ADMIN,
+			body: JSON.stringify({
+				displayName: 'operators',
+				allowPasswordSignup: true,
+				mfaConfig: { state: 'MANDATORY', enabledProviders: ['PHONE_SMS'] }
+			})
+		}
+	);
+	if (!tenant.ok) throw new Error(`stack: operator tenant: ${tenant.status} ${await tenant.text()}`);
+
+	const login = await fetch(`${base}/v1/projects/doula-cloud/tenants/${OPS_TENANT_ID}/accounts`, {
+		method: 'POST',
+		headers: EMULATOR_ADMIN,
+		body: JSON.stringify({
+			email: SEEDED_OPERATOR.email,
+			password: SEEDED_OPERATOR.password,
+			displayName: SEEDED_OPERATOR.name,
+			emailVerified: true
+		})
+	});
+	const refusal = login.ok ? '' : await login.text();
+	if (!login.ok && !refusal.includes('EMAIL_EXISTS')) {
+		throw new Error(`stack: operator login: ${login.status}`);
+	}
+}
+
 async function startEmulator() {
 	// A crashed previous run can leave the emulator holding its port.
 	// Clear it out before starting a fresh one instead of failing to bind.
@@ -830,7 +885,7 @@ async function startEmulator() {
 	const arguments_ = ['firebase-tools', 'emulators:start', '--only', 'auth', '--project', 'doula-cloud'];
 	if (configPath) arguments_.push('--config', configPath);
 
-	const child = spawn('bunx', arguments_, { stdio: 'ignore', detached: true });
+	const child = spawn('bunx', arguments_, { stdio: 'ignore', detached: true, cwd: APP_DIR });
 	child.unref();
 	if (child.pid) {
 		writeFileSync(EMULATOR_PIDFILE, String(child.pid));
@@ -872,7 +927,7 @@ async function startAPI(appOrigin: string) {
 
 	execFileSync('go', ['build', '-o', API_BINARY_PATH, '.'], {
 		stdio: 'inherit',
-		cwd: '../api',
+		cwd: API_DIR,
 		timeout: BUILD_TIMEOUT_MS
 	});
 
@@ -975,7 +1030,7 @@ async function startOps() {
 
 	execFileSync('go', ['build', '-o', OPS_BINARY_PATH, './cmd/ops'], {
 		stdio: 'inherit',
-		cwd: '../api',
+		cwd: API_DIR,
 		timeout: BUILD_TIMEOUT_MS
 	});
 

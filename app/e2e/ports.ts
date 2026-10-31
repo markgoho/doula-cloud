@@ -90,6 +90,9 @@ export const OPS_URL = `http://${E2E_OPS_HOST}:${E2E_OPS_PORT}`;
 
 export const DEV_SERVER_PORT = shift(5173);
 export const PREVIEW_SERVER_PORT = shift(4173);
+// ops/'s own two front-end servers, 1000 above app/'s dev server.
+export const OPS_DEV_SERVER_PORT = shift(6173);
+export const OPS_PREVIEW_SERVER_PORT = shift(7173);
 
 // The front-end origin each of the local BFF's two callers runs at --
 // `vite dev`'s port for `bun run dev:full`, and `vite preview`'s
@@ -99,6 +102,10 @@ export const PREVIEW_SERVER_PORT = shift(4173);
 // header on state-changing requests.
 export const DEV_SERVER_ORIGIN = `http://localhost:${DEV_SERVER_PORT}`;
 export const PREVIEW_SERVER_ORIGIN = `http://localhost:${PREVIEW_SERVER_PORT}`;
+// doula-ops's csrf.Wrap accepts both of ops/'s origins at once: dev:full
+// and an ops e2e run each start the stack, and either may call it.
+export const OPS_DEV_SERVER_ORIGIN = `http://localhost:${OPS_DEV_SERVER_PORT}`;
+export const OPS_PREVIEW_SERVER_ORIGIN = `http://localhost:${OPS_PREVIEW_SERVER_PORT}`;
 
 // Every port the local stack binds, unshifted -- i.e. what offset 0 uses.
 // Derived by undoing shift() rather than restating the numbers, so this
@@ -204,4 +211,6 @@ export const BASE_PORTS: readonly number[] = [
 	E2E_OPS_PORT,
 	DEV_SERVER_PORT,
 	PREVIEW_SERVER_PORT,
+	OPS_DEV_SERVER_PORT,
+	OPS_PREVIEW_SERVER_PORT,
 ].map(port => port - PORT_OFFSET * PORT_STEP);
