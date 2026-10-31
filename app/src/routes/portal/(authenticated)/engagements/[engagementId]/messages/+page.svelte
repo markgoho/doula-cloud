@@ -11,7 +11,7 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { apiErrorMessage } from '#lib/apiErrorMessage.js';
-	import { refusalError } from '#lib/formErrors.js';
+	import { CONNECTION_PROBLEM, refusalError } from '#lib/formErrors.js';
 	import { subscribeToThreadPushMessages } from '#lib/pushRefresh.js';
 	import MessageThread, { type Message } from '#lib/components/organisms/MessageThread.svelte';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
@@ -27,6 +27,17 @@
 	// caller's session cookie, which a plain <img src> can't send.
 	let attachmentPreviewURLs = $state<Record<string, string>>({});
 	let unsubscribePushMessages: () => void = () => {};
+
+	/*
+	 * #2210: at 11pm, with a photo, the question is "did that go through,
+	 * and will anyone see it tonight?". It says it went, to whom, where a
+	 * reply arrives, and that a message is not an alarm (ADR-0002), in
+	 * the Notifications screen's words for the same fact. No reply time
+	 * is promised: nothing records one.
+	 */
+	const sentConfirmation = $derived(
+		`Message sent to ${page.data.practiceName || 'your doula'}. A reply will show here. Do not rely on messages for anything urgent.`
+	);
 
 	onDestroy(() => {
 		for (const url of Object.values(attachmentPreviewURLs)) {
@@ -110,16 +121,29 @@
 	 * so MessageThread's compose form shows it against the field it names
 	 * (#1952). The thread holds the send's busy state and its refusals.
 	 */
+	/*
+	 * With no signal the browser's own request fails outright. The portal
+	 * keeps nothing on the device and queues no write (ADR-0059, position
+	 * 4), so the send is refused in position 5's words and the draft stays
+	 * in the box; only a stored Message is ever said to be sent.
+	 */
+	async function postMessage(init: RequestInit): Promise<Response> {
+		try {
+			return await apiFetchWithSession(messagesURL(), { method: 'POST', ...init });
+		} catch {
+			throw new Error(CONNECTION_PROBLEM);
+		}
+	}
+
 	async function sendThreadMessage(body: string, attachment: File | undefined): Promise<void> {
 		let response: Response;
 		if (attachment) {
 			const form = new FormData();
 			form.set('body', body);
 			form.set('attachment', attachment);
-			response = await apiFetchWithSession(messagesURL(), { method: 'POST', body: form });
+			response = await postMessage({ body: form });
 		} else {
-			response = await apiFetchWithSession(messagesURL(), {
-				method: 'POST',
+			response = await postMessage({
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ body })
 			});
@@ -159,6 +183,7 @@
 		onDownloadAttachment={handleDownloadAttachment}
 		{attachmentPreviewURLs}
 		readerSenderType="client"
+		{sentConfirmation}
 	/>
 {/snippet}
 

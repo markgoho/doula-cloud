@@ -28,6 +28,14 @@ import { PASSWORD_TOO_SHORT } from './passwordRule.js';
 export const SERVICE_PROBLEM = 'There is a problem with the service. Try again in a few minutes.';
 
 /*
+ * What the reader is told when a request never reached the service: the
+ * browser's own request failed outright, with no response at all
+ * (ADR-0059, position 5). Waiting a few minutes does not bring a signal
+ * back, so it names the step that works.
+ */
+export const CONNECTION_PROBLEM = 'We could not reach the service. Check your connection and try again.';
+
+/*
  * The two things worth reading out of a refused response: a message for
  * the submission as a whole, and -- where the BFF names one -- the
  * field-keyed map `docs/api-design.md` section 7 calls `APIError.details`.
@@ -386,7 +394,7 @@ export function authRefusal(
 			return { message: 'Too many attempts from this device. Wait a few minutes and try again.' };
 		}
 		case 'auth/network-request-failed': {
-			return { message: 'We could not reach the service. Check your connection and try again.' };
+			return { message: CONNECTION_PROBLEM };
 		}
 		default: {
 			return { message: SERVICE_PROBLEM };
@@ -415,7 +423,7 @@ export function passwordReauthRefusal(cause: unknown, passwordId: string): FormE
 			return { message: 'Too many attempts from this device. Wait a few minutes and try again.' };
 		}
 		case 'auth/network-request-failed': {
-			return { message: 'We could not reach the service. Check your connection and try again.' };
+			return { message: CONNECTION_PROBLEM };
 		}
 		case 'auth/unverified-email': {
 			// Identity Platform refuses a second factor for an address no
@@ -462,7 +470,7 @@ export function totpCodeRefusal(cause: unknown, codeId: string): FormError {
 			return { message: 'Too many attempts from this device. Wait a few minutes and try again.' };
 		}
 		case 'auth/network-request-failed': {
-			return { message: 'We could not reach the service. Check your connection and try again.' };
+			return { message: CONNECTION_PROBLEM };
 		}
 		default: {
 			return { message: SERVICE_PROBLEM };
