@@ -5,9 +5,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadInstance, downloadBirthPlanPdf, type Instance } from '#lib/planInstance.js';
 	import { triggerBlobDownload } from '#lib/blobDownload.js';
-	import { formatInstant } from '#lib/dates.js';
 	import BirthPlanView from '#lib/components/molecules/BirthPlanView.svelte';
-	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import DocumentPage from '#lib/components/templates/DocumentPage.svelte';
@@ -85,7 +83,6 @@
 		<!-- `content` renders only once the Template's own states are past,
 		     so `instance` is a loaded Birth Plan here. -->
 		{#if instance}
-			<Text text="Engagement created {formatInstant(data.createdAt)}" tone="muted" />
 			<!-- DocumentPage's own `.no-print` is scoped to that component and
 			     never reaches this snippet, so the route keeps its own (#1576),
 			     the same as the portal Birth Plan (#1574). -->
@@ -106,7 +103,10 @@
 					<Notice variant="error" message={downloadError} />
 				{/if}
 			</div>
-			<BirthPlanView fields={instance.fields} answers={instance.answers} />
+			<!-- #2209: the masthead names her in full, the Practice, and when
+			     the plan last changed, where this page once said when the
+			     Engagement was created. -->
+			<BirthPlanView fields={instance.fields} answers={instance.answers} masthead={instance.masthead} />
 		{/if}
 	{/snippet}
 </DocumentPage>

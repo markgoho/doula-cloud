@@ -13,6 +13,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/activitypage"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -51,6 +52,13 @@ type InstanceResponse struct {
 	// PostInstanceHandler records. Staff reads only. Nil for a Plan
 	// started before #2133 recorded the start.
 	Started *activitypage.Stamp `json:"started,omitempty"`
+
+	// Masthead names the plan wherever it is printed (#2209): whose it
+	// is, whose Practice, and when it last changed. Every Birth Plan
+	// response carries it, Staff and Client alike, so the page a read or
+	// a save leaves on screen names it the way its PDF does. Absent on a
+	// Care Plan, which is never printed for anyone (#306).
+	Masthead *Masthead `json:"masthead,omitempty"`
 }
 
 // planStamp reads action's newest row on engagementID from the activity
@@ -71,8 +79,12 @@ func planStamp(r *http.Request, tx *sql.Tx, engagementID string, action activity
 }
 
 // withTrail fills out's audit stamps -- the Plan's start and its last
-// save -- from the ledger.
+// save -- from the ledger, and a Birth Plan's masthead.
 func withTrail(r *http.Request, tx *sql.Tx, out *InstanceResponse) error {
+	if err := withMasthead(r.Context(), tx, out); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return err
+	}
 	started, err := planStamp(r, tx, out.EngagementID, startedAction(out.PlanType))
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
@@ -139,8 +151,8 @@ func PostInstanceHandler() http.Handler {
 		}
 
 		if _, err := tx.ExecContext(r.Context(),
-			`INSERT INTO plan_instances (engagement_id, plan_type, fields) VALUES ($1, $2, $3)`,
-			engagementID, planType, fieldsJSON,
+			`INSERT INTO plan_instances (engagement_id, plan_type, fields, changed_at) VALUES ($1, $2, $3, $4)`,
+			engagementID, planType, fieldsJSON, clock.Now(r.Context()),
 		); err != nil {
 			if pgerr.IsUniqueViolation(err) {
 				apierr.WriteError(w, "a plan instance already exists for this engagement and plan type", http.StatusConflict)
@@ -286,15 +298,20 @@ func PutInstanceHandler() http.Handler {
 		// compares the row's pre-update `answers` -- every SET expression
 		// in one UPDATE statement sees the same pre-update row -- against
 		// the incoming value, atomically, rather than a separate read-then-
-		// write that could race a concurrent PUT or acknowledge.
+		// write that could race a concurrent PUT or acknowledge. The same
+		// test moves changed_at (#2209) to the request clock: when the plan
+		// last changed is when an answer last did, so a save that changes
+		// nothing leaves the printed date where it was, though the ledger
+		// still records the save (LastEdited).
 		var clientAcknowledgedAt sql.NullTime
 		if err := tx.QueryRowContext(r.Context(),
 			`UPDATE plan_instances
 			 SET answers = $1::jsonb,
-			     client_acknowledged_at = CASE WHEN answers IS DISTINCT FROM $1::jsonb THEN NULL ELSE client_acknowledged_at END
+			     client_acknowledged_at = CASE WHEN answers IS DISTINCT FROM $1::jsonb THEN NULL ELSE client_acknowledged_at END,
+			     changed_at = CASE WHEN answers IS DISTINCT FROM $1::jsonb THEN $4 ELSE changed_at END
 			 WHERE engagement_id = $2 AND plan_type = $3
 			 RETURNING client_acknowledged_at`,
-			answersJSON, engagementID, planType,
+			answersJSON, engagementID, planType, clock.Now(r.Context()),
 		).Scan(&clientAcknowledgedAt); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)

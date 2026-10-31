@@ -52,7 +52,7 @@ func seedPlanTemplate(t *testing.T, db *testdb.DB, practiceID, planType, fieldsJ
 func seedInstance(t *testing.T, db *testdb.DB, engagementID, planType, fieldsJSON, answersJSON string) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO plan_instances (engagement_id, plan_type, fields, answers) VALUES ($1, $2, $3, $4)`,
+		`INSERT INTO plan_instances (engagement_id, plan_type, fields, answers, changed_at) VALUES ($1, $2, $3, $4, now())`,
 		engagementID, planType, fieldsJSON, answersJSON,
 	); err != nil {
 		t.Fatalf("seed instance: %v", err)

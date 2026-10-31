@@ -78,8 +78,8 @@ func TestDetailHandler_GlancesCarryHerDocumentsAndThread(t *testing.T) {
 		t.Fatalf("seed signed contract: %v", err)
 	}
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO plan_instances (engagement_id, plan_type, fields, client_acknowledged_at)
-		 VALUES ($1, 'birth_plan', '[]'::jsonb, '2026-08-20T12:00:00Z')`,
+		`INSERT INTO plan_instances (engagement_id, plan_type, fields, client_acknowledged_at, changed_at)
+		 VALUES ($1, 'birth_plan', '[]'::jsonb, '2026-08-20T12:00:00Z', now())`,
 		engagementID); err != nil {
 		t.Fatalf("seed birth plan: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestDetailHandler_BirthPlanGlanceOnlyWhereOffered(t *testing.T) {
 	const identityUID = "portal-glance-postpartum"
 	engagementID, _ := seedClientAtPracticeWithDueDateAndKind(t, db, identityUID, "Riverside Doulas", "", "postpartum")
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO plan_instances (engagement_id, plan_type, fields) VALUES ($1, 'birth_plan', '[]'::jsonb)`,
+		`INSERT INTO plan_instances (engagement_id, plan_type, fields, changed_at) VALUES ($1, 'birth_plan', '[]'::jsonb, now())`,
 		engagementID); err != nil {
 		t.Fatalf("seed birth plan: %v", err)
 	}

@@ -38,7 +38,7 @@ func TestClientBirthPlanGlance(t *testing.T) {
 	}
 
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO plan_instances (engagement_id, plan_type, fields) VALUES ($1, 'birth_plan', '[]'::jsonb)`,
+		`INSERT INTO plan_instances (engagement_id, plan_type, fields, changed_at) VALUES ($1, 'birth_plan', '[]'::jsonb, now())`,
 		engagementID); err != nil {
 		t.Fatalf("seed birth plan: %v", err)
 	}

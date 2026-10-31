@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { API_URL } from './ports';
 import { seedClientPortalUser, seedEngagement } from './stack';
 import { enterPractice, signIn } from './auth';
@@ -11,6 +11,27 @@ import { seedFoundingOwner, uniqueEmail } from './staffSignup';
 // the Client-portal account the same way client-portal-login.e2e.ts does
 // -- this test isn't re-proving login itself, just that both sides of the
 // Birth Plan feature agree.
+
+/**
+ * The printed Birth Plan, in print media (#2209): whose it is (her legal
+ * name), whose Practice (seedFoundingOwner's default), and the day it last
+ * changed. The day is the save this test just made, read in the Practice's
+ * zone, so only its shape is asserted here; the unit specs and the BFF's
+ * own tests pin the exact day.
+ */
+async function expectPrintedMasthead(page: Page) {
+	await page.emulateMedia({ media: 'print' });
+	const main = page.getByRole('main');
+	try {
+		await expect(main.getByText('Pat Client', { exact: true })).toBeVisible();
+		await expect(main.getByText('Riverside Doulas', { exact: true })).toBeVisible();
+		await expect(main.getByText('Last changed')).toBeVisible();
+		await expect(main.getByText(/^[A-Z][a-z]{2} \d{1,2}, \d{4}$/)).toBeVisible();
+		await expect(main.getByRole('button', { name: 'Print' })).toBeHidden();
+	} finally {
+		await page.emulateMedia({ media: 'screen' });
+	}
+}
 
 test('Staff fills a Birth Plan, and the Client portal shows the matching read-only view', async ({
 	page,
@@ -58,6 +79,11 @@ test('Staff fills a Birth Plan, and the Client portal shows the matching read-on
 	// to the Client-portal session below.
 	await expect(page.getByText('Birth Plan saved.')).toBeVisible();
 
+	// #2209: the Doula's printout names the Client in full, the Practice,
+	// and when the plan last changed, and the controls stay off the paper.
+	await page.goto(`/practices/${practiceId}/engagements/${engagementId}/birth-plan`);
+	await expectPrintedMasthead(page);
+
 	// Client side: a Portal Account (#617) linked to the same Client via
 	// client_portal_users, viewing the read-only Birth Plan.
 	seedClientPortalUser(clientEmail, clientId);
@@ -70,6 +96,9 @@ test('Staff fills a Birth Plan, and the Client portal shows the matching read-on
 	await page.getByRole('main').getByRole('link', { name: 'Read your birth plan' }).click();
 	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}/birth-plan$`));
 	await expect(page.getByText('Soft lighting, calm music')).toBeVisible();
+	// #2209: her own print says the same three things, with the portal
+	// header, the only other place the Practice is named, hidden on paper.
+	await expectPrintedMasthead(page);
 
 	// #301: she confirms she's read it -- the one control this v1 gives
 	// her -- and the confirmation replaces the button with a status line

@@ -114,7 +114,7 @@
 				{#if downloadError}
 					<div class="no-print"><Notice variant="error" message={downloadError} /></div>
 				{/if}
-				<BirthPlanView fields={instance.fields} answers={instance.answers} />
+				<BirthPlanView fields={instance.fields} answers={instance.answers} masthead={instance.masthead} />
 				<!--
 					#2036: the act that ends the task comes after the thing she
 					reads (Fitts's Law: a form's submit sits at the end), and it
