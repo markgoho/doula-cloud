@@ -635,19 +635,27 @@
 	// asked -- the add form, or one Visit's change, never both, so the
 	// section holds at most the one primary its open form submits with
 	// (#2019). The same shape as the On call section (#2042).
-	type VisitChange = 'add' | { visit: Visit };
+	// #2231: reassigning is its own act, apart from the change of when and
+	// notes, so it is a form of its own.
+	type VisitChange = 'add' | { visit: Visit; act: 'change' | 'reassign' };
 	let openVisitChange = $state<VisitChange | undefined>();
-	const changingVisit = $derived(typeof openVisitChange === 'object' ? openVisitChange.visit : undefined);
+	const changingVisit = $derived(
+		typeof openVisitChange === 'object' && openVisitChange.act === 'change' ? openVisitChange.visit : undefined
+	);
+	const reassigningVisit = $derived(
+		typeof openVisitChange === 'object' && openVisitChange.act === 'reassign' ? openVisitChange.visit : undefined
+	);
 	// What the last add or change did; it takes focus, because the control
 	// she pressed went with the form it was in.
 	let visitsSavedMessage = $state('');
 	// The open change's drafts, each starting on the Visit's current value
 	// when the change opens, so a field she leaves alone sends nothing.
-	// An empty `changeStaffId` is "keep who it is for".
 	let changeScheduledAt = $state('');
 	let changeNotes = $state('');
-	let changeStaffId = $state('');
 	const visitChange = new SectionState<void>(undefined);
+	let reassignStaffId = $state('');
+	let hasAttemptedReassign = $state(false);
+	const visitReassign = new SectionState<void>(undefined);
 	// #2103: which opener takes focus back after a Cancel -- 'add' for
 	// "Add a Visit", or the id of the Visit whose row Change opened the
 	// form. Only a Cancel sets it, so a save's status keeps focus.
@@ -658,17 +666,25 @@
 		refocusedVisitOpener = '';
 		visitsSavedMessage = '';
 		visitChange.error = '';
-		hasAttemptedChange = false;
+		visitReassign.error = '';
+		reassignStaffId = '';
+		hasAttemptedReassign = false;
 		if (typeof change === 'object') {
 			changeScheduledAt = toDatetimeLocalValue(change.visit.scheduledAt);
 			changeNotes = change.visit.notes ?? '';
-			changeStaffId = '';
 		}
 	}
 
 	function toggleVisitChange(visit: Visit) {
 		if (changingVisit?.visitId === visit.visitId) openVisitForm();
-		else openVisitForm({ visit });
+		else openVisitForm({ visit, act: 'change' });
+	}
+
+	// #2231: no Cancel; the row's Reassign closes it, as the Doula row's
+	// Change closes its question (#2230).
+	function toggleVisitReassign(visit: Visit) {
+		if (reassigningVisit?.visitId === visit.visitId) openVisitForm();
+		else openVisitForm({ visit, act: 'reassign' });
 	}
 
 	function cancelVisitChange(visit: Visit) {
@@ -1733,12 +1749,18 @@
 		);
 	}
 
-	// The same block the create picker carries (#911): the change form's
-	// Doula picker offers the same people from the same list, so it refuses
-	// the same choice with the same words. Nothing chosen is no refusal at
-	// all (#1999): it keeps the Visit with the Doula it is for.
-	const reassignBlock = $derived(changeStaffId ? assigneeBlock(doulas ?? [], changeStaffId) : '');
-	let hasAttemptedChange = $state(false);
+	// The same block the create picker carries (#911): the reassign picker
+	// offers the same people from the same list, so it refuses the same
+	// choice with the same words.
+	const reassignBlock = $derived(
+		reassignStaffId
+			? assigneeBlock(doulas ?? [], reassignStaffId)
+			: (hasAttemptedReassign ? 'Select who takes this Visit instead' : '')
+	);
+
+	function reassignOptionsFor(visit: Visit) {
+		return visitAssigneeOptions(doulas ?? [], { callerStaffId, currentAssigneeStaffId: visit.staffId });
+	}
 
 	async function handleCreateOffer(offer: NewOffer) {
 		await createOffer(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!, offer);
@@ -1866,28 +1888,19 @@
 
 	/*
 	 * #1999: one Visit's change, sent as the writes its fields call for --
-	 * a field she left alone sends nothing. The three writes are separate
-	 * endpoints (reassign #268, schedule #250, notes #251), so they go one
-	 * after the other, and a refusal stops the rest: what was already
-	 * written stays written, the rows are read again so they say so, and
-	 * the form stays open on what is left to send.
+	 * a field she left alone sends nothing. The two writes are separate
+	 * endpoints (schedule #250, notes #251), so they go one after the
+	 * other, and a refusal stops the rest: what was already written stays
+	 * written, the rows are read again so they say so, and the form stays
+	 * open on what is left to send.
 	 */
 	async function handleChangeVisit(event: SubmitEvent, visit: Visit) {
 		event.preventDefault();
-		hasAttemptedChange = true;
-		// #911, the same block the create form makes.
-		if (reassignBlock) return;
 		const scheduledAt = changeScheduledAt ? new Date(changeScheduledAt).toISOString() : undefined;
 		const isRescheduled = changeScheduledAt !== toDatetimeLocalValue(visit.scheduledAt);
 		const hasNewNotes = changeNotes !== (visit.notes ?? '');
-		const newStaffId = changeStaffId;
 		let hasWritten = false;
 		const wasSaved = await visitChange.mutate(async () => {
-			if (newStaffId) {
-				await reassignVisit(apiFetchWithSession, reference, visit.visitId, newStaffId);
-				changeStaffId = '';
-				hasWritten = true;
-			}
 			if (isRescheduled) {
 				// An empty control clears the schedule: `undefined` is
 				// scheduleVisit's own way of saying so (engagementDetail.ts).
@@ -1902,11 +1915,28 @@
 		if (wasSaved) openVisitForm();
 		if (!hasWritten) return;
 		await loadVisits();
-		if (wasSaved) {
-			visitsSavedMessage = `The Visit for ${newStaffId ? staffName(newStaffId) : visit.staffName} is saved.`;
-		}
+		if (wasSaved) visitsSavedMessage = `The Visit for ${visit.staffName} is saved.`;
 		if (isRescheduled) await refreshStatusAfterScheduling(scheduledAt);
-		if (newStaffId) await refreshWhoIsOn();
+	}
+
+	async function handleReassignVisit(event: SubmitEvent, visit: Visit) {
+		event.preventDefault();
+		hasAttemptedReassign = true;
+		const newStaffId = reassignStaffId;
+		if (!newStaffId || reassignBlock) return;
+		const wasSaved = await visitReassign.mutate(
+			() => reassignVisit(apiFetchWithSession, reference, visit.visitId, newStaffId),
+			'Failed to reassign the Visit'
+		);
+		if (!wasSaved) return;
+		openVisitForm();
+		await loadVisits();
+		const which = visit.scheduledAt
+			? `The Visit on ${formatScheduledVisit(visit.scheduledAt)}`
+			: 'The Visit that is not yet scheduled';
+		visitsSavedMessage = `${which} is ${staffName(newStaffId)}'s now, not ${visit.staffName}'s.`;
+		await refreshWhoIsOn();
+		await loadActivity();
 	}
 
 	// Reuses loadMessagesPage rather than re-fetching by hand: the query
@@ -2260,14 +2290,26 @@
 	<span class="visually-hidden" id="{view}-visit-{visit.visitId}-name"
 		>{visit.staffName}, {formatScheduledVisit(visit.scheduledAt)}</span
 	>
-	<Button
-		label="Change"
-		variant="link"
-		expanded={changingVisit?.visitId === visit.visitId}
-		describedBy="{view}-visit-{visit.visitId}-name"
-		onClick={() => toggleVisitChange(visit)}
-		focusOnAppearing={refocusedVisitOpener === visit.visitId}
-	/>
+	<cluster-l space="var(--space-3)">
+		<Button
+			label="Change"
+			variant="link"
+			expanded={changingVisit?.visitId === visit.visitId}
+			describedBy="{view}-visit-{visit.visitId}-name"
+			onClick={() => toggleVisitChange(visit)}
+			focusOnAppearing={refocusedVisitOpener === visit.visitId}
+		/>
+		<!-- #2231: an Owner's or an Admin's, where somebody else can take it. -->
+		{#if canAssignVisits && reassignOptionsFor(visit).length > 0}
+			<Button
+				label="Reassign"
+				variant="link"
+				expanded={reassigningVisit?.visitId === visit.visitId}
+				describedBy="{view}-visit-{visit.visitId}-name"
+				onClick={() => toggleVisitReassign(visit)}
+			/>
+		{/if}
+	</cluster-l>
 {/snippet}
 
 {#snippet addVisitForm()}
@@ -2342,63 +2384,68 @@
 	</StackedForm>
 {/snippet}
 
-{#snippet changeVisitForm(visit: Visit)}
-	{@const reassignFieldId = `change-visit-staff-${visit.visitId}`}
-	<StackedForm onSubmit={(event) => handleChangeVisit(event, visit)}>
-		{#key visit.visitId}
-			<Heading
-				level={3}
-				text={visit.scheduledAt
-					? `Change the Visit for ${visit.staffName} on ${formatScheduledVisit(visit.scheduledAt)}`
-					: `Change the Visit for ${visit.staffName}, not yet scheduled`}
-				focusOnAppearing
-			/>
-		{/key}
+{#snippet visitHeading(act: string, visit: Visit)}
+	{#key visit.visitId}
+		<Heading
+			level={3}
+			text={visit.scheduledAt
+				? `${act} the Visit for ${visit.staffName} on ${formatScheduledVisit(visit.scheduledAt)}`
+				: `${act} the Visit for ${visit.staffName}, not yet scheduled`}
+			focusOnAppearing
+		/>
+	{/key}
+{/snippet}
+
+{#snippet reassignVisitForm(visit: Visit)}
+	{@const reassignFieldId = `reassign-visit-staff-${visit.visitId}`}
+	{@const options = reassignOptionsFor(visit)}
+	<!--
+		#2231: who takes it instead, and the save. #268/#274: asked only of a
+		reader the roster read admits, the Owner/Admin rule the BFF applies
+		to the write. #909: the Doula it is for now is not offered. #911:
+		the rest are marked the way the add picker marks them.
+	-->
+	<StackedForm onSubmit={(event) => handleReassignVisit(event, visit)}>
+		{@render visitHeading('Reassign', visit)}
 		<!-- The same gate the add form's summary carries, for #1228's reason. -->
-		{#if hasAttemptedChange && reassignBlock}
+		{#if hasAttemptedReassign && reassignBlock}
 			<ErrorSummary errors={[{ message: reassignBlock, targetId: reassignFieldId }]} />
 		{/if}
+		{#if visitReassign.error}
+			<Notice variant="error" message={visitReassign.error} />
+		{/if}
+		<LabeledField
+			id={reassignFieldId}
+			label="Who takes this Visit instead?"
+			hint={assigneeHint}
+			error={reassignBlock}
+			width={widthToHold(options)}
+		>
+			{#snippet children({ id, describedBy, invalid, width })}
+				<Select
+					{id}
+					{describedBy}
+					{invalid}
+					{width}
+					{options}
+					placeholder="Choose a Doula"
+					value={reassignStaffId}
+					onChange={(value) => (reassignStaffId = value)}
+					required
+				/>
+			{/snippet}
+		</LabeledField>
+		<div>
+			<Button label="Reassign the Visit" type="submit" loading={visitReassign.isBusy} />
+		</div>
+	</StackedForm>
+{/snippet}
+
+{#snippet changeVisitForm(visit: Visit)}
+	<StackedForm onSubmit={(event) => handleChangeVisit(event, visit)}>
+		{@render visitHeading('Change', visit)}
 		{#if visitChange.error}
 			<Notice variant="error" message={visitChange.error} />
-		{/if}
-		<!--
-			#268/#274: who a Visit is for is asked only of a reader the
-			roster read admits, the same Owner/Admin rule the BFF applies to
-			the write itself. #909: the Doula it is for now is not a
-			reassignment, so she is kept by the first option rather than
-			offered again; where nobody else is left, the form says so here,
-			where the question would be (#1999), once rather than per row.
-			#911: what is left is marked the way the add picker marks it.
-		-->
-		{#if canAssignVisits}
-			{@const reassignOptions = visitAssigneeOptions(doulas ?? [], {
-				callerStaffId,
-				currentAssigneeStaffId: visit.staffId
-			})}
-			{#if reassignOptions.length === 0}
-				<Text text="There is nobody else to reassign this Visit to." />
-			{:else}
-				{@const options = [{ value: '', label: `Keep ${visit.staffName}` }, ...reassignOptions]}
-				<LabeledField
-					id={reassignFieldId}
-					label="Who is this Visit for?"
-					hint={assigneeHint}
-					error={reassignBlock}
-					width={widthToHold(options)}
-				>
-					{#snippet children({ id, describedBy, invalid, width })}
-						<Select
-							{id}
-							{describedBy}
-							{invalid}
-							{width}
-							{options}
-							value={changeStaffId}
-							onChange={(value) => (changeStaffId = value)}
-						/>
-					{/snippet}
-				</LabeledField>
-			{/if}
 		{/if}
 		<!-- #250: an empty value clears the schedule; emptying the control
 		     is the plainer way to ask for that than a separate Clear. -->
@@ -2505,6 +2552,8 @@
 		{@render addVisitForm()}
 	{:else if changingVisit}
 		{@render changeVisitForm(changingVisit)}
+	{:else if reassigningVisit && canAssignVisits}
+		{@render reassignVisitForm(reassigningVisit)}
 	{/if}
 {/snippet}
 
