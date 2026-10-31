@@ -76,7 +76,7 @@ She is the full-arc Client and the only Persona who walks every client-facing sc
 | 5.2 | Correct the two things she wants changed | She cannot correct it: it is staff-drafted and read-only to her, by decision (HS-G2 closed, [#301](https://github.com/markgoho/doula-cloud/issues/301)). She can press **I've read this**, which reads back "You confirmed you've read this on {date}." and shows Maya "Hannah read this on {date}"; a Staff edit clears it, and Maya's page returns to "Hannah has not read this yet" (#880) | `manual` |
 | 5.2-a | Message Maya about them instead | Succeeds. Her only route to a correction is a re-type by Staff, and nothing links the message to the document | `manual` |
 | 5.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
-| 5.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 2 (Hick's Law, Miller's Law). Correct what she wants changed, or tell Maya | `manual` |
+| 5.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 3 (Hick's Law, Miller's Law). **Print**, **Download birth plan (PDF)** and **I've read this**; the thread, for telling Maya, is in the top bar and not counted (HS-G8, closed by a budget change) | `manual` |
 | 5.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
 | 5.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (portal-320.e2e.ts)` |
 
@@ -89,7 +89,7 @@ She is the full-arc Client and the only Persona who walks every client-facing sc
 | 6.1-b | Press **Download Birth Plan (PDF)** | The PDF arrives (`GET .../birth-plan/pdf`, `200`, `application/pdf`), holding the sections and answers under "Birth Plan" and nothing else: no name, no Practice, no date (HS-G7 closed, [#306](https://github.com/markgoho/doula-cloud/issues/306); HS-G9) | `manual` |
 | 6.2 | Hand the paper over | Leaves the product entirely. The last mile is paper she remembered to print in advance, handed to a stranger in scrubs | `manual` |
 | 6.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow). The Birth Plan, then the browser's own print dialog, which does not count | `manual` |
-| 6.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 1 (Hick's Law, Miller's Law). **Print** | `manual` |
+| 6.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 3 (Hick's Law, Miller's Law). **Print**, **Download birth plan (PDF)**, and **I've read this** until she has confirmed or after a Staff edit (HS-G8, closed by a budget change) | `manual` |
 | 6.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory). Nothing she must remember to print in advance; the Birth Plan is one tap from her Engagement | `manual` |
 | 6.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
 | 6.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule). The printed page names her, her Practice and when the plan last changed, so the stranger in scrubs knows whose it is | `manual` |
