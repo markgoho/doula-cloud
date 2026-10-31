@@ -31,6 +31,8 @@ One profile per walk, held for the whole walk, and named in the walker's brief a
 
 Choose from what the persona file says about her, and quote the line that settles it: Maya "is on call. Anything that needs a laptop and twenty quiet minutes will not get done" is a phone walk. A throttled walk's timings still take the 1 s and 10 s bands, and are compared only with a walk under the same profile.
 
+Timezone is not a condition a walk can set: `emulate` has no timezone option, so the walking browser reports the machine's zone, UTC on the dev box. A value the product pre-fills from the browser's timezone, such as the one on `/signup/where`, is the harness's zone, not the persona's. The evaluator records it and never grades it.
+
 ## 3. Build the brief
 
 Run each of these and paste its output into the brief under its own heading. `<slug>` is the persona's file slug.
@@ -55,7 +57,7 @@ Run each of these and paste its output into the brief under its own heading. `<s
 
   Count the stages printed against the map's `### Stage` headings; a Thinking line written differently does not print, and is added by hand.
 
-Then add, in plain lines: the start URL on the dev origin; her email and the password `demo-password-local-only` when she has an account; the sandbox mailbox URL; the conditions profile; the stages to walk, all or a named few; any limit her persona states on her patience; and the shots directory, an absolute path in the scratchpad.
+Then add, in plain lines: the persona slug, which names her shots; the start URL on the dev origin; her email and the password `demo-password-local-only` when she has an account; the sandbox mailbox URL; the conditions profile; the stages to walk, by number, all or a named few, so any stage printed above and not named is outside her brief; any limit her persona states on her patience; and the shots directory, an absolute path in the scratchpad.
 
 Read the finished brief once for anything the persona would not know: a route other than her start URL, a button's name, a step. Take it out.
 
@@ -63,7 +65,7 @@ Read the finished brief once for anything the persona would not know: a route ot
 
 1. Spawn `persona-walker` with the brief, `model: "opus"`, in the foreground. One walk at a time.
 2. Save its final message to `<scratchpad>/<slug>-acts.md`.
-3. Spawn `walk-evaluator` with `model: "opus"`, naming: the act log, the shots directory, the slug, the conditions profile, the walked SHA, and the output file. A walk that is part of a simulation run writes to `docs/simulation/runs/<run-id>/<slug>.md` and its shots go to that run's `shots/`; any other walk writes to the scratchpad.
+3. Spawn `walk-evaluator` with `model: "opus"`, naming: the act log, the shots directory, the slug, the conditions profile, the walked SHA, and the output file. A walk that is part of a simulation run writes to `docs/simulation/runs/<run-id>/<slug>.md`, and the evaluator copies each shot it cites into that run's `shots/` as `<slug>-<entry-id>.png`; any other walk writes to the scratchpad and cites the walker's `<slug>-act-<n>.png` as it is.
 4. Close the walker's pages and stop the stack.
 
 The walk is admissible when the evaluator reports zero `u` entries. A `u` is a harness failure, so fix the capture before walking again rather than writing around it. Turning entries into filed issues is [`docs/simulation/findings.md`](../simulation/findings.md)'s pass, after the walk.
