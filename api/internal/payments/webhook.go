@@ -132,7 +132,7 @@ func PostConnectWebhookHandler(db *sql.DB, client Client, webhookSecret string, 
 		}
 		if !mode.Matches(event.Livemode) {
 			log.Printf("payments: connect webhook: refusing event %s: livemode %v, keys are in %s mode", event.ID, event.Livemode, mode)
-			apierr.WriteError(w, "event mode does not match", http.StatusBadRequest)
+			apierr.WriteError(w, "Event mode does not match the Stripe keys", http.StatusBadRequest)
 			return
 		}
 
@@ -733,7 +733,7 @@ func PostAccountWebhookHandler(db *sql.DB, client Client, webhookSecret string, 
 		}
 		if !mode.Matches(event.Livemode) {
 			log.Printf("payments: account webhook: refusing event %s: livemode %v, keys are in %s mode", event.ID, event.Livemode, mode)
-			apierr.WriteError(w, "event mode does not match", http.StatusBadRequest)
+			apierr.WriteError(w, "Event mode does not match the Stripe keys", http.StatusBadRequest)
 			return
 		}
 

@@ -48,7 +48,7 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string, mode stripemod
 		}
 		if !mode.Matches(event.Livemode) {
 			log.Printf("billing: purchase webhook: refusing event %s: livemode %v, keys are in %s mode", event.ID, event.Livemode, mode)
-			apierr.WriteError(w, "event mode does not match", http.StatusBadRequest)
+			apierr.WriteError(w, "Event mode does not match the Stripe keys", http.StatusBadRequest)
 			return
 		}
 
