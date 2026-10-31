@@ -36,10 +36,9 @@ if (!customElements.get('center-l')) registerLayoutPrimitives();
  * installation, through the same `toPageState`, as
  * `route-continuum.svelte.spec.ts`. `pageData.session` carries the
  * Membership `practices/[practiceId]/+layout.ts` resolves (#835); the
- * fixture's own `respond` answers the Owner's four `secondary` blocks as
- * well as what a Doula fetches, since #928 gave this route an Owner
- * variant and `block()` swallows an unanswered path into a "Could not
- * load" rail. The variant for an Owner with no Client (#1621) has a
+ * fixture's own `respond` answers the Owner's four reads as well as what
+ * a Doula fetches, since #928 gave this route an Owner variant and
+ * `block()` swallows an unanswered path into a "Could not load" line. The variant for an Owner with no Client (#1621) has a
  * `respond` of its own, which answers `/clients/count` with no record and hands
  * each other path to that same function, so those answers are still
  * written once. `setup()` below still installs its own answers rather than
@@ -221,17 +220,74 @@ describe('the Practice landing page', () => {
 			.toBeVisible();
 	});
 
-	it('shows the roster, the credit balance and the Stripe state to an Owner', async () => {
+	it('shows an Owner the expired invitations and what Stripe still wants', async () => {
 		await setup();
 
 		await expect.element(testPage.getByRole('heading', { name: 'Your people' })).toBeVisible();
 		await expect.element(testPage.getByText('1 invitation expired')).toBeVisible();
-		await expect.element(testPage.getByRole('heading', { name: 'Credits' })).toBeVisible();
-		await expect.element(testPage.getByText('12', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText('Onboarding incomplete')).toBeVisible();
 		await expect
 			.element(testPage.getByText('Stripe is waiting on 1 more detail.'))
 			.toBeVisible();
+	});
+
+	/*
+	 * #2228: the Overview shows what needs her. On a day when nothing in
+	 * the Practice does, the blocks that would only repeat the top bar's
+	 * Staff, Credits and Settings are not drawn, and neither is a rail to
+	 * hold them. The balance is still on the Credits card.
+	 */
+	it('draws only what needs her on a day when nothing in the Practice does', async () => {
+		await setup({
+			overrides: {
+				staff: jsonResponse({
+					members: [{ staffId: 's1' }],
+					invitations: { items: [{ expired: false }], hasMore: false }
+				}),
+				'billing-mode': jsonResponse({ billingMode: 'stripe' }),
+				connect: jsonResponse({
+					status: 'active',
+					cardPaymentsStatus: 'active',
+					payoutsStatus: 'active',
+					requirementsDue: []
+				}),
+				'engagement-requests': jsonResponse({ items: [], hasMore: false })
+			}
+		});
+
+		await expect.element(testPage.getByRole('heading', { name: 'Recent activity' })).toBeVisible();
+		for (const heading of ['Your people', 'Credits', 'Getting paid', 'Requests awaiting approval']) {
+			expect(testPage.getByRole('heading', { name: heading }).elements()).toHaveLength(0);
+		}
+		expect(testPage.getByRole('complementary').elements()).toHaveLength(0);
+		await expect
+			.element(testPage.getByRole('navigation', { name: 'Quick links' }).getByRole('link', { name: 'Credits' }))
+			.toHaveAccessibleDescription('12 Credits');
+	});
+
+	// #2228: the balance is on the Credits card, so a block that says it
+	// again, with a link to the same screen, is not drawn.
+	it('draws no Credits block beside the Credits card', async () => {
+		await setup();
+
+		await expect.element(testPage.getByRole('heading', { name: 'Your people' })).toBeVisible();
+		expect(testPage.getByRole('heading', { name: 'Credits' }).elements()).toHaveLength(0);
+		expect(testPage.getByRole('link', { name: 'Buy credits' }).elements()).toHaveLength(0);
+	});
+
+	// #2228 (Dee Whitlock's walk): an Offer goes to a Doula (#2141), so
+	// the card that counts hers is not offered to someone who cannot hold
+	// one.
+	it.each([
+		['an Admin who is not a Doula', ['admin'], false],
+		['an Owner who is not a Doula', ['owner'], false],
+		['a Doula', ['doula'], true]
+	])('offers the Your offers card to %s: %s', async (_who, roles, isShown) => {
+		await setup({ roles });
+
+		const quickLinks = testPage.getByRole('navigation', { name: 'Quick links' });
+		await expect.element(quickLinks.getByRole('link', { name: 'Clients' })).toBeVisible();
+		expect(quickLinks.getByRole('link', { name: 'Your offers' }).elements()).toHaveLength(isShown ? 1 : 0);
 	});
 
 	// #503: a pending Request stops a Doula from working, so the hub whose
@@ -259,12 +315,15 @@ describe('the Practice landing page', () => {
 		await expect.element(testPage.getByText('1+ waiting')).toBeVisible();
 	});
 
-	it('tells an approver nobody is waiting rather than drawing an empty block', async () => {
+	// #2032 took away the link to an inbox with nothing in it; #2228 takes
+	// the block with it, which then asked nothing of her.
+	it('draws no Requests block when nobody is waiting', async () => {
 		await setup({ overrides: { 'engagement-requests': jsonResponse({ items: [], hasMore: false }) } });
 
-		await expect.element(testPage.getByText('Nobody is waiting on you.')).toBeVisible();
-		// #2032: no link to an inbox with nothing in it.
-		await expect.element(testPage.getByRole('link', { name: 'Review requests' })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('heading', { name: 'Your people' })).toBeVisible();
+		expect(testPage.getByRole('heading', { name: 'Requests awaiting approval' }).elements()).toHaveLength(0);
+		expect(testPage.getByText('Nobody is waiting on you.').elements()).toHaveLength(0);
+		expect(testPage.getByRole('link', { name: 'Review requests' }).elements()).toHaveLength(0);
 	});
 
 	it('says so when the pending Requests cannot be read', async () => {
@@ -326,10 +385,10 @@ describe('the Practice landing page', () => {
 			await setupCard({}, ['admin']);
 
 			await expect.element(testPage.getByText(adminWords, { exact: true })).toBeVisible();
+			// The second: the quick links (#2006) come first, and carry a
+			// Getting paid card of their own.
 			await expect
-				// In the rail: the quick links (#2006) carry a Getting paid
-				// card of their own.
-				.element(testPage.getByRole('complementary').getByRole('link', { name: 'Getting paid' }))
+				.element(testPage.getByRole('link', { name: 'Getting paid' }).nth(1))
 				.toHaveAttribute('href', `/practices/${practiceId}/settings/payments`);
 			expect(testPage.getByText('Not connected').elements()).toHaveLength(0);
 		});
@@ -355,9 +414,9 @@ describe('the Practice landing page', () => {
 					}
 				});
 
-				// The rail has drawn: its other blocks are the proof the page is
-				// loaded, so the absence below is not just a slow render.
-				await expect.element(testPage.getByRole('heading', { name: 'Credits' })).toBeVisible();
+				// The blocks have drawn: another of them is the proof the page
+				// is loaded, so the absence below is not just a slow render.
+				await expect.element(testPage.getByRole('heading', { name: 'Your people' })).toBeVisible();
 				expect(testPage.getByRole('heading', { name: 'Getting paid' }).elements()).toHaveLength(0);
 			}
 		);
@@ -371,7 +430,9 @@ describe('the Practice landing page', () => {
 							status,
 							cardPaymentsStatus: 'inactive',
 							payoutsStatus: 'inactive',
-							requirementsDue: []
+							// An active account is drawn only while Stripe wants
+							// something more (#2228).
+							requirementsDue: status === 'active' ? ['individual.dob'] : []
 						})
 					}
 				});
@@ -446,7 +507,7 @@ describe('the Practice landing page', () => {
 		});
 	});
 
-	it('shows a Doula her Offers and no rail at all', async () => {
+	it('shows a Doula her Offers and none of the Owner blocks', async () => {
 		// A Doula is exactly the fixture's own happy path (see the comment
 		// above `pageState`), so this is the one test in the file that reads
 		// its content straight from the fixture instead of `setup()`'s own.
@@ -463,18 +524,17 @@ describe('the Practice landing page', () => {
 	 * sweep cannot be (#928). The sweep mounts `asOwner` and measures it,
 	 * but `block()` in `practiceLanding.ts` swallows a thrown `respond`
 	 * into "Could not load ..." -- so a fixture that stopped answering one
-	 * of the Owner's four reads would draw a smaller rail and stay green
-	 * there. This asserts the fixture's own answers actually fill it.
+	 * of the Owner's reads would draw fewer blocks and stay green there.
+	 * This asserts the fixture's own answers actually draw every one of
+	 * them (#2228: the three that ask something of her).
 	 */
-	it('fills the whole rail for an Owner from the fixture that sweeps her', async () => {
+	it('draws every Owner block from the fixture that sweeps her', async () => {
 		Object.assign(pageState, toPageState({ ...fixture, ...asOwner }));
 		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
 		await render(Page, {});
 
 		await expect.element(testPage.getByRole('heading', { name: 'Your people' })).toBeVisible();
 		await expect.element(testPage.getByText('4 invitations expired')).toBeVisible();
-		await expect.element(testPage.getByRole('heading', { name: 'Credits' })).toBeVisible();
-		await expect.element(testPage.getByText('1284', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText('30+ waiting')).toBeVisible();
 		await expect.element(testPage.getByText('Onboarding incomplete')).toBeVisible();
 		await expect
@@ -529,10 +589,10 @@ describe('the Practice landing page', () => {
 		expect(testPage.getByRole('heading', { name: 'Your people' }).elements()).toHaveLength(0);
 	});
 
-	it('says so when a rail block fails, rather than letting it vanish', async () => {
-		await setup({ overrides: { billing: refusal('nope') } });
+	it('says so when a block fails, rather than letting it vanish', async () => {
+		await setup({ overrides: { staff: refusal('nope') } });
 
-		await expect.element(testPage.getByText('Could not load your credit balance just now.')).toBeVisible();
+		await expect.element(testPage.getByText('Could not load the roster just now.')).toBeVisible();
 	});
 
 	it('names doula work and offers one action on a Practice with no Clients', async () => {
@@ -689,8 +749,8 @@ describe('the Practice landing page', () => {
 		await expect.element(testPage.getByText(noNumberSentence, { exact: true })).toBeVisible();
 		expect(testPage.getByText(costSentence).elements()).toHaveLength(0);
 		// The empty Practice keeps one action, and says nothing of a failed
-		// read: the rail that would say so is not drawn here.
-		expect(testPage.getByText('Could not load your credit balance just now.').elements()).toHaveLength(0);
+		// read: no block that would say so is drawn here.
+		expect(testPage.getByText(/Could not load/).elements()).toHaveLength(0);
 		await expect
 			.element(testPage.getByRole('link', { name: 'Add your first Client' }))
 			.toHaveAttribute('href', `/practices/${practiceId}/clients/new?from=overview`);
@@ -774,8 +834,8 @@ describe('the Practice landing page', () => {
 	// role split as the top bar's own sections.
 	it.each([
 		[
-			'an Owner',
-			['owner'],
+			'an Owner who is a Doula',
+			['owner', 'doula'],
 			['Clients', 'Credits', 'Your offers', 'Staff', 'Plan Templates', 'Contract Template', 'Getting paid']
 		],
 		['a Doula', ['doula'], ['Clients', 'Your offers', 'Plan Templates', 'Contract Template']]
@@ -850,7 +910,7 @@ describe('the Practice landing page', () => {
 	it('still registers this device for push once it has landed', async () => {
 		await setup();
 
-		await expect.element(testPage.getByRole('heading', { name: 'Credits' })).toBeVisible();
+		await expect.element(testPage.getByRole('heading', { name: 'Your people' })).toBeVisible();
 		expect(registerPushSubscription).toHaveBeenCalledWith(
 			`/api/practices/${practiceId}/push-subscriptions`,
 			apiFetch

@@ -69,9 +69,29 @@ export interface ConnectHealth {
 /** Whether the overview draws the Getting paid card (#1589). A Practice
  * that bills by hand answered the question, and a card that goes on
  * showing what it did not do reads its use back to it (ADR-0048) -- so
- * it is not drawn in any Connect state. */
+ * it is not drawn in any Connect state. Nor is it drawn once Stripe takes
+ * payments and wants nothing more (#2228): the Overview shows what needs
+ * her, and the Getting paid screen in Settings still says how it stands. */
 export function isConnectCardShown(connect: Block<ConnectHealth>): connect is ConnectHealth | 'unavailable' {
-	return connect !== undefined && (connect === 'unavailable' || connect.billingMode !== 'by_hand');
+	if (connect === undefined) return false;
+	if (connect === 'unavailable') return true;
+	if (connect.billingMode === 'by_hand') return false;
+	return connect.status !== 'active' || connect.requirementsDue.length > 0;
+}
+
+/*
+ * #2228: the Overview's other two blocks, drawn only where they ask
+ * something of her. With nothing to ask they would repeat the top bar's
+ * Staff and the Requests inbox, and each would be one more thing on the
+ * page at once (Hick's Law). A read that failed still draws its block,
+ * so the failure is said rather than hidden.
+ */
+export function isRosterBlockShown(roster: Block<RosterHealth>): roster is RosterHealth | 'unavailable' {
+	return roster === 'unavailable' || (roster !== undefined && roster.expiredInvitations > 0);
+}
+
+export function isRequestBlockShown(requests: Block<RequestHealth>): requests is RequestHealth | 'unavailable' {
+	return requests === 'unavailable' || (requests !== undefined && requests.count > 0);
 }
 
 /**
@@ -183,18 +203,6 @@ export function canReadRoster(roles: string[]): boolean {
  * answer about different endpoints, and one of them may narrow again. */
 export function canReadConnect(roles: string[]): boolean {
 	return roles.includes('owner') || roles.includes('admin');
-}
-
-/** Whether `OverviewHub`'s optional `secondary` region has anything in
- * it. A Doula reaches none of the three blocks, so she gets no rail at
- * all rather than an empty aside beside her Offers. */
-export function hasSecondary(landing: PracticeLanding): boolean {
-	return (
-		landing.roster !== undefined ||
-		landing.credit !== undefined ||
-		isConnectCardShown(landing.connect) ||
-		landing.requests !== undefined
-	);
 }
 
 /** Resolves a best-effort block: its value, or `'unavailable'` when the

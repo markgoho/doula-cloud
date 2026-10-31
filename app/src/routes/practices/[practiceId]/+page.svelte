@@ -21,12 +21,15 @@
 	import { decideOffer } from '#lib/offer.js';
 	import {
 		closeSecondFactorRecommendation,
-		hasSecondary,
 		isConnectCardShown,
+		isRequestBlockShown,
+		isRosterBlockShown,
 		loadPracticeLanding,
 		loadWaitingOnReplyPage,
 		type ConnectHealth,
 		type PracticeLanding,
+		type RequestHealth,
+		type RosterHealth,
 		type WaitingOnReply
 	} from '#lib/practiceLanding.js';
 	import { CONNECT_STATUS_BADGES } from '#lib/payments.js';
@@ -243,11 +246,17 @@
 						}
 					]
 				: []),
-			{
-				label: 'Your offers',
-				description: countLine(landing?.openOffers.length, 'waiting on you') ?? 'Work you have been offered.',
-				href: resolve('/practices/[practiceId]/offers', { practiceId })
-			},
+			// An Offer goes to a Doula (#2141), so the card that counts hers is
+			// not offered to someone who can never hold one (#2228).
+			...(isDoula(session)
+				? [
+						{
+							label: 'Your offers',
+							description: countLine(landing?.openOffers.length, 'waiting on you') ?? 'Work you have been offered.',
+							href: resolve('/practices/[practiceId]/offers', { practiceId })
+						}
+					]
+				: []),
 			...(isForOwnerOrAdmin
 				? [
 						{
@@ -338,32 +347,42 @@
 			/>
 		</div>
 	{/if}
+
+	<!--
+		#2228: what else needs her, each block only where it asks something
+		of her, so on a quiet day the page holds the work and the way out of
+		it. These used to sit in a rail beside the column, with a Credits
+		block and a roster that only repeated the top bar; in the column
+		they need no space held for them while the page loads.
+	-->
+	{#if isRequestBlockShown(landing!.requests)}{@render requestBlock(landing!.requests)}{/if}
+	{#if isConnectCardShown(landing!.connect)}{@render connectBlock(landing!.connect)}{/if}
+	{#if isRosterBlockShown(landing!.roster)}{@render rosterBlock(landing!.roster)}{/if}
 {/snippet}
 
-{#snippet rosterBlock()}
+{#snippet rosterBlock(roster: RosterHealth | 'unavailable')}
 	<section>
 		<stack-l space="var(--space-3)">
-			<Heading level={2} variant="card" text="Your people" />
-			{#if landing!.roster === 'unavailable'}
+			<Heading level={2} variant="section" text="Your people" />
+			{#if roster === 'unavailable'}
 				<Text text="Could not load the roster just now." tone="muted" />
-			{:else if landing!.roster}
+			{:else}
 				<SummaryList
 					rows={[
-						{ label: 'Members', value: String(landing!.roster.members) },
-						{ label: 'Invitations pending', value: String(landing!.roster.pendingInvitations) }
+						{ label: 'Members', value: String(roster.members) },
+						{ label: 'Invitations pending', value: String(roster.pendingInvitations) }
 					]}
 				/>
 				<!-- A cluster, not two stack children: `stack-l` spaces with
 				     `margin-block-start`, which an inline Badge and an inline
 				     Link ignore, so they would share a line with a single space
-				     between them. -->
+				     between them. Drawn only with an expired invitation
+				     (#2228), the one thing this block asks of her. -->
 				<cluster-l space="var(--space-3)" align="center">
-					{#if landing!.roster.expiredInvitations > 0}
-						<Badge
-							label={`${landing!.roster.expiredInvitations} invitation${landing!.roster.expiredInvitations === 1 ? '' : 's'} expired`}
-							variant="warning"
-						/>
-					{/if}
+					<Badge
+						label={`${roster.expiredInvitations} invitation${roster.expiredInvitations === 1 ? '' : 's'} expired`}
+						variant="warning"
+					/>
 					<Link
 						href={resolve('/practices/[practiceId]/staff', { practiceId: page.params.practiceId! })}
 						label="Manage staff"
@@ -380,51 +399,26 @@
 	Request stops her from doing any work at all, so the hub whose question
 	is "what needs me today" has to answer with it. The block counts and
 	hands off -- the decision itself is made on the inbox, one click on.
+	Drawn only where a Request waits (#2228; #2032 had already taken away
+	the link to an empty inbox).
 -->
-{#snippet requestBlock()}
+{#snippet requestBlock(requests: RequestHealth | 'unavailable')}
 	<section>
 		<stack-l space="var(--space-3)">
-			<Heading level={2} variant="card" text="Requests awaiting approval" />
-			{#if landing!.requests === 'unavailable'}
+			<Heading level={2} variant="section" text="Requests awaiting approval" />
+			{#if requests === 'unavailable'}
 				<Text text="Could not load pending requests just now." tone="muted" />
-			{:else if landing!.requests}
-				<!-- The link only where a request waits (#2032): with none, it
-				     would lead to an empty inbox, so the line stands alone. -->
-				{#if landing!.requests.count > 0}
-					<cluster-l space="var(--space-3)" align="center">
-						<Badge
-							label={`${landing!.requests.count}${landing!.requests.hasMore ? '+' : ''} waiting`}
-							variant="warning"
-						/>
-						<Link
-							href={resolve('/practices/[practiceId]/engagement-requests', {
-								practiceId: page.params.practiceId!
-							})}
-							label="Review requests"
-							variant="secondary"
-						/>
-					</cluster-l>
-				{:else}
-					<Text text="Nobody is waiting on you." tone="muted" />
-				{/if}
-			{/if}
-		</stack-l>
-	</section>
-{/snippet}
-
-{#snippet creditBlock()}
-	<section>
-		<stack-l space="var(--space-3)">
-			<Heading level={2} variant="card" text="Credits" />
-			{#if landing!.credit === 'unavailable'}
-				<Text text="Could not load your Credit balance just now." tone="muted" />
-			{:else if landing!.credit}
-				<SummaryList rows={[{ label: 'Balance', value: String(landing!.credit.balance) }]} />
-				<Link
-					href={resolve('/practices/[practiceId]/billing', { practiceId: page.params.practiceId! })}
-					label="Buy credits"
-					variant="secondary"
-				/>
+			{:else}
+				<cluster-l space="var(--space-3)" align="center">
+					<Badge label={`${requests.count}${requests.hasMore ? '+' : ''} waiting`} variant="warning" />
+					<Link
+						href={resolve('/practices/[practiceId]/engagement-requests', {
+							practiceId: page.params.practiceId!
+						})}
+						label="Review requests"
+						variant="secondary"
+					/>
+				</cluster-l>
 			{/if}
 		</stack-l>
 	</section>
@@ -433,7 +427,7 @@
 {#snippet connectBlock(connect: ConnectHealth | 'unavailable')}
 	<section>
 		<stack-l space="var(--space-3)">
-			<Heading level={2} variant="card" text="Getting paid" />
+			<Heading level={2} variant="section" text="Getting paid" />
 			{#if connect === 'unavailable'}
 				<Text text="Could not load your Stripe status just now." tone="muted" />
 			{:else if connect.status === 'not_connected'}
@@ -468,13 +462,6 @@
 			{/if}
 		</stack-l>
 	</section>
-{/snippet}
-
-{#snippet secondary()}
-	{#if landing!.requests !== undefined}{@render requestBlock()}{/if}
-	{#if landing!.roster !== undefined}{@render rosterBlock()}{/if}
-	{#if landing!.credit !== undefined}{@render creditBlock()}{/if}
-	{#if isConnectCardShown(landing!.connect)}{@render connectBlock(landing!.connect)}{/if}
 {/snippet}
 
 <!--
@@ -609,12 +596,10 @@
 	title="Overview"
 	isEmpty={landing ? !landing.hasClients : false}
 	{primary}
-	secondary={landing && hasSecondary(landing) ? secondary : undefined}
 	feed={landing ? activityFeed : undefined}
 	links={quickLinks}
 	{empty}
 	loading={error || (areListsAnswered && landing) ? undefined : 'Loading your Practice'}
-	isRailShown={isOwnerOrAdmin(session)}
 	loadError={error || undefined}
 	{outcome}
 />

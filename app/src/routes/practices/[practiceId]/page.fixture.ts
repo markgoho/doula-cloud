@@ -16,10 +16,9 @@
  * That is one of the two trees the populated hub draws, and it is the
  * smaller one (#928). `canReadRoster`/`canReadConnect` are the same
  * Owner-or-Admin pair, so an Owner and an Admin read the identical hub
- * and a Doula reads a hub with no `secondary` rail at all -- `hasSecondary`
- * withholds the region rather than drawing it empty. The Admin's tree is
- * the Owner's tree, so a variant for her would mount a screen already
- * measured.
+ * and a Doula reads a hub with none of the Owner's blocks. The Admin's
+ * tree is the Owner's tree, so a variant for her would mount a screen
+ * already measured.
  *
  * Three subjects are declared (#1621): the Doula's hub (the base), the
  * Owner's hub (`asOwner`), and the empty Practice of an Owner who has no
@@ -56,9 +55,12 @@ export const offers: Offer[] = [
 ];
 
 /*
- * The hub with its `secondary` rail drawn -- Requests, Your people,
- * Credits and Getting paid, none of which a Doula is asked about and none
- * of which had ever been mounted at any width (#928). What it renders
+ * The hub with the Owner's blocks drawn -- Requests, Getting paid and
+ * Your people, none of which a Doula is asked about and none of which had
+ * ever been mounted at any width (#928). Since #2228 each is drawn only
+ * where it asks something of her, so `respond` below answers each with
+ * the state that does: Requests waiting, Stripe wanting more, expired
+ * invitations. They sit in the primary column, not a rail. What it renders
  * that the base does not is this repo's own copy plus counts, so its
  * hostile content is in the counts themselves: the plural
  * expired-invitation Badge, the "30+ waiting" roll-up, the plural
@@ -179,7 +181,7 @@ function respondForPopulatedPractice(path: string): Response {
 	 * Doula's roles -- and because `block()` in `practiceLanding.ts`
 	 * SWALLOWS a throw and renders "Could not load ..." instead. A
 	 * variant carrying its own narrower `respond` that missed one of
-	 * these would mount a smaller rail than it declared and the sweep
+	 * these would mount fewer blocks than it declared and the sweep
 	 * would stay green, which is the failure this fixture is here to
 	 * stop.
 	 */
