@@ -275,6 +275,12 @@ resource "google_cloud_run_v2_service" "doula_api" {
         name  = "STRIPE_MODE"
         value = "test"
       }
+      # #1572: public by design, so a literal. It must come from the account
+      # that holds STRIPE_API_KEY; #2361 refuses a key in the other mode.
+      env {
+        name  = "STRIPE_PUBLISHABLE_KEY"
+        value = "pk_test_51U7N3e1rKoVEA79vkYPNTDV08wNqZOx0jTK0opzmYxa94sTciQckGi7LWH8BwSzclClaonPve3mF3Gi7b5esZns300A0pA6zzm"
+      }
       env {
         name  = "STRIPE_WEBHOOK_SECRET"
         value = null
@@ -352,7 +358,7 @@ resource "google_cloud_run_v2_service" "doula_api" {
   # run any plan that would destroy this resource, before an apply is ever
   # attempted. See the comment on `deletion_protection` above for how this
   # differs from the provider-level argument. Never removed; the service holds
-  # identity (its URL, its Cloud SQL attachment, its 24 environment variables
+  # identity (its URL, its Cloud SQL attachment, its 25 environment variables
   # and secret references) that nothing here should ever destroy.
   #
   # `ignore_changes` is the split between what Terraform owns (the shape of
