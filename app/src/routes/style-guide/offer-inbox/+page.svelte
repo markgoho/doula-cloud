@@ -31,6 +31,31 @@
 			offeredAt: '2026-06-01T00:00:00Z',
 			expiresAt: '2026-06-08T00:00:00Z',
 			decidedAt: '2026-06-02T00:00:00Z'
+		},
+		{
+			offerId: 'of_3',
+			state: 'accepted',
+			clientFirstInitial: '',
+			clientArea: '',
+			dueDate: '',
+			amountCents: 425_000,
+			employmentType: 'contractor',
+			offeredAt: '2026-04-01T00:00:00Z',
+			expiresAt: '2026-04-08T00:00:00Z',
+			decidedAt: '2026-04-02T00:00:00Z',
+			feePaid: { amountCents: 425_000, method: 'bank_transfer', paidOn: '2026-09-30' }
+		},
+		{
+			offerId: 'of_4',
+			state: 'accepted',
+			clientFirstInitial: '',
+			clientArea: '',
+			dueDate: '',
+			amountCents: 45_000,
+			employmentType: 'contractor',
+			offeredAt: '2026-05-01T00:00:00Z',
+			expiresAt: '2026-05-08T00:00:00Z',
+			decidedAt: '2026-05-02T00:00:00Z'
 		}
 	];
 </script>

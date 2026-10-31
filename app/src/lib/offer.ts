@@ -11,6 +11,7 @@
  * account yet.
  */
 
+import type { FeePaid } from './doulaFee.js';
 import type { Fetcher } from './fetcher.js';
 
 import { apiErrorMessage } from './apiErrorMessage.js';
@@ -36,6 +37,9 @@ export interface Offer {
 	decidedAt?: string;
 	targetName?: string;
 	targetAddress?: string;
+	/** What the Practice recorded paying her for this job (#2271): only
+	 * on her own inbox, only on an accepted Offer, and only once recorded. */
+	feePaid?: FeePaid;
 }
 
 /** The six states an Offer's lifecycle passes through -- the offer_state

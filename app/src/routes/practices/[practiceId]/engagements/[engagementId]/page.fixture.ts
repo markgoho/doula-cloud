@@ -36,6 +36,7 @@
  * list, which no other session draws, so she is `asContractor` below.
  */
 import type { Contract } from '#lib/contract.js';
+import type { DoulaFee } from '#lib/doulaFee.js';
 import type { ContractorInvoice, Invoice } from '#lib/invoice.js';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { EngagementOnCall } from '#lib/onCall.js';
@@ -468,6 +469,36 @@ export const contractorInvoices: ContractorInvoice[] = [
 	{ id: 'invoice-void', status: 'void', raisedOn: '2026-06-01', dueOn: '2026-07-01', daysOverdue: 0 }
 ];
 
+/*
+ * #2271: the Doula fees section, one row of each state it draws -- a
+ * contractor still on the birth and not paid, and one whose Attachment
+ * ended, paid another way with the longest note a Practice would write.
+ */
+export const doulaFees: DoulaFee[] = [
+	{
+		attachmentId: 'attachment-1',
+		doulaName: 'Anne-Marie Ochieng-Whitfield',
+		amountCents: 450_000,
+		acceptedOn: '2026-07-02'
+	},
+	{
+		attachmentId: 'attachment-2',
+		doulaName: 'Persephone Ochieng-Whitfield',
+		amountCents: 125_000,
+		acceptedOn: '2026-05-02',
+		endedOn: '2026-08-14',
+		paid: {
+			id: 'fee-payment-1',
+			amountCents: 125_000,
+			method: 'other',
+			note: 'Zelle to the business account, reference DC-2026-0814-backup-doula',
+			paidOn: '2026-08-30',
+			recordedBy: 'Anne-Marie Ochieng-Whitfield',
+			recordedAt: '2026-08-30T15:00:00Z'
+		}
+	}
+];
+
 export const asContractor: RouteVariant<RouteParameters> = {
 	name: 'The Staff-side Engagement detail hub, as a contractor Doula',
 	props: {
@@ -771,6 +802,7 @@ export const fixture: RouteFixture<RouteParameters> = {
 			});
 		}
 		if (path.endsWith('/offers')) return jsonResponse({ items: [] });
+		if (path.endsWith('/doula-fees')) return jsonResponse({ items: doulaFees });
 		if (path.endsWith('/staff')) return jsonResponse({ members: roster, invitations: { items: [] } });
 		// #486: the same ledger treatment, last in this page's own sections.
 		if (path.includes('/activity')) {

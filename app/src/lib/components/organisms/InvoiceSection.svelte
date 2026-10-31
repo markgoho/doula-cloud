@@ -46,30 +46,28 @@
 		invoiceRowStatusLabel,
 		invoiceRowStatusVariant,
 		paymentMethodLabels,
-		paymentMethodOptions,
 		unbillableContractMessage,
 		type BillingMode,
 		type ContractorInvoice,
 		type Invoice,
 		type InvoiceStanding,
 		type PaymentMethod,
+		type RecordPaymentInput,
 		type RefundPaymentInput
 	} from '#lib/invoice.js';
 	import { formatCalendarDay } from '#lib/dates.js';
+	import RecordPaymentForm from '#lib/components/organisms/RecordPaymentForm.svelte';
 	import RefundPaymentForm from '#lib/components/organisms/RefundPaymentForm.svelte';
+	import ReversePaymentForm from '#lib/components/organisms/ReversePaymentForm.svelte';
 	import { RefusalError, type FormError } from '#lib/formErrors.js';
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
-	import TextInput from '#lib/components/atoms/TextInput.svelte';
-	import Textarea from '#lib/components/atoms/Textarea.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
-	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import RadioGroup, { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
-	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 
 	let {
@@ -102,7 +100,7 @@
 		hasClientEmail: boolean;
 		isOwner: boolean;
 		/** The Practice's own IANA zone (`practices.timezone`, ADR-0036) --
-		 * what `todayIsoDate` reads "today" in, so the payment-date field's
+		 * what RecordPaymentForm reads "today" in, so the payment-date field's
 		 * default and its future-date ceiling agree with
 		 * `PostManualPaymentHandler`'s own guard (#1167, #1280) instead of
 		 * UTC's calendar day. The caller fetches it the same way the
@@ -207,7 +205,7 @@
 	// link lands on the first option, whichever one is checked.
 	const billingModeFieldId = radioFieldId(billingModeName, 'stripe');
 	// One list for both Create Invoice forms (#1775), the same shape as
-	// paymentFormErrors below, so a refusal is one ErrorSummary and never
+	// RecordPaymentForm's own list, so a refusal is one ErrorSummary and never
 	// a second, bare alert line beside it.
 	const createFormErrors = $derived<FormError[]>(
 		[
@@ -290,223 +288,45 @@
 		}
 	}
 
-	/** Today's date in the form TextInput type="date" reads and writes --
-	 * the default paymentDate, and the future-date guard's own ceiling.
-	 *
-	 * Read in the Practice's own zone (#1280), not UTC's: `en-CA` formats
-	 * `Intl.DateTimeFormat` as `YYYY-MM-DD` directly, so the offset zone
-	 * gives back exactly the calendar day this field wants, with no
-	 * further reassembly. Before this, `toISOString().slice(0, 10)` read
-	 * UTC's day, which for several evening hours in a zone behind UTC
-	 * (including America/New_York) disagreed with
-	 * `PostManualPaymentHandler`'s own guard (#1167) and refused a Staff
-	 * member's genuinely-today date. */
-	function todayIsoDate(): string {
-		return new Intl.DateTimeFormat('en-CA', { timeZone: practiceTimezone }).format(new Date());
-	}
-
-	// #271's recording flow: which Invoice (if any) is being settled, and
-	// which of its two steps -- fill in the details, then confirm them
-	// (the check-your-answers step #271 asks for) -- it is on. Only one
-	// Invoice's form is ever open at a time.
+	// #271's recording flow: which Invoice (if any) is being settled. Only
+	// one Invoice's form is ever open at a time; the form itself is
+	// RecordPaymentForm, shared with a Doula's fee (#2271).
 	let payingInvoiceId = $state('');
-	let paymentStep = $state<'form' | 'review'>('form');
-	// No method is chosen when the form opens (#1913, ADR-0055): how a
-	// Client paid is a fact the service does not know, and a Staff member
-	// who went straight to Continue used to record a check unasked.
-	let paymentMethod = $state<PaymentMethod | undefined>();
-	let paymentNote = $state('');
-	// Pre-filled with today on purpose: a recorded departure from GOV.UK's
-	// "nothing pre-filled" rule, decided 2026-10-24 on #1923 -- see "A
-	// pre-filled answer: Date received" under Where we depart on purpose in
-	// docs/design/govuk-alignment.md.
-	let paymentDate = $state(todayIsoDate());
-	// paymentError is the untargeted GOV.UK summary fallback (#1038): a
-	// refusal naming no field of this form -- a Stripe-side failure, an
-	// Invoice no longer open. The three below carry a refusal that does
-	// name a field, read into the LabeledField/RadioGroup it concerns and
-	// into the summary (#1228) alike -- one string, both places.
-	let paymentError = $state('');
-	let paymentMethodError = $state('');
-	let paymentNoteError = $state('');
-	let paymentDateError = $state('');
-	let isRecordingPayment = $state(false);
-
-	const paymentMethodName = 'record-payment-method';
-	// The first option's own id, the same trick `endingReasonFieldId`
-	// (above `completeSubmission`, on the Engagement detail page) uses: a
-	// radio group's refusal belongs to the question, not to whichever
-	// option happens to be checked, so the summary link always lands on
-	// the first one. Built through `radioFieldId` rather than a second
-	// hand-rolled copy of RadioGroup's own `${name}-${value}` template.
-	const paymentMethodFieldId = radioFieldId(paymentMethodName, paymentMethodOptions[0]!.value);
-	const paymentNoteFieldId = 'record-payment-note';
-	const paymentDateFieldId = 'record-payment-date';
-
-	// #1228: assembled from the same four strings the fields already show,
-	// so the summary and the field-level message cannot drift. Built only
-	// while the form step is on screen -- the review step shows a
-	// SummaryList, not these controls, so nothing here could be linked
-	// to during it.
-	const paymentFormErrors = $derived<FormError[]>(
-		[
-			paymentDateError ? { message: paymentDateError, targetId: paymentDateFieldId } : undefined,
-			paymentMethodError ? { message: paymentMethodError, targetId: paymentMethodFieldId } : undefined,
-			paymentNoteError ? { message: paymentNoteError, targetId: paymentNoteFieldId } : undefined,
-			paymentError ? { message: paymentError } : undefined
-		].filter((entry) => entry !== undefined)
-	);
-
-	function resetPaymentErrors() {
-		paymentError = '';
-		paymentMethodError = '';
-		paymentNoteError = '';
-		paymentDateError = '';
-	}
-
-	/** Reads a caught refusal into this form's field-level state, per
-	 * `formErrors.ts`'s GOV.UK rules: a `RefusalError` naming one of this
-	 * form's own fields (`method`/`note`/`paidOn`, PostManualPaymentHandler's
-	 * own `details` keys, #1037) is read onto that field; anything else --
-	 * no `details` at all, or a key none of these fields own -- stays the
-	 * single untargeted summary paragraph this form already showed. */
-	function applyPaymentRefusal(error_: unknown) {
-		resetPaymentErrors();
-		if (error_ instanceof RefusalError && error_.details) {
-			paymentMethodError = error_.details.method ?? '';
-			paymentNoteError = error_.details.note ?? '';
-			paymentDateError = error_.details.paidOn ?? '';
-			if (paymentMethodError || paymentNoteError || paymentDateError) {
-				// Back to the entry step: a field-level error is only
-				// wired into the field it concerns while that field is on
-				// screen, and the review step shows a SummaryList, not
-				// the form.
-				paymentStep = 'form';
-				return;
-			}
-		}
-		paymentError = error_ instanceof Error ? error_.message : 'Failed to record payment';
-	}
 
 	function startRecordingPayment(invoiceId: string) {
 		paymentRecorded = '';
 		payingInvoiceId = invoiceId;
-		paymentStep = 'form';
-		paymentMethod = undefined;
-		paymentNote = '';
-		paymentDate = todayIsoDate();
-		resetPaymentErrors();
 		cancelReversingPayment();
 		cancelRefundingPayment();
 	}
 
 	function cancelRecordingPayment() {
 		payingInvoiceId = '';
-		resetPaymentErrors();
 	}
 
-	/** Moves from the entry form to the review step, after the same
-	 * validation the BFF itself enforces -- so a Staff member sees the
-	 * refusal before, not after, typing the whole thing twice. Each check
-	 * targets the field it is about (#1038), the same as a refusal read
-	 * back off the BFF.
-	 *
-	 * The empty-date check used to be `required`'s job -- #1228 adopted
-	 * `StackedForm`, whose `novalidate` (ADR-0021) took that browser
-	 * refusal away, so this function covers emptiness now as well as the
-	 * semantic checks it already made. */
-	function reviewPayment(event: SubmitEvent) {
-		event.preventDefault();
-		resetPaymentErrors();
-		// Method first: it is the form's first question, and GOV.UK lists
-		// refusals in the order the fields are on the page.
-		if (paymentMethod === undefined) {
-			paymentMethodError = 'Select how the payment was made';
-			return;
-		}
-		if (paymentDate.trim() === '') {
-			paymentDateError = 'Enter the date the payment was received';
-			return;
-		}
-		if (paymentMethod === 'other' && paymentNote.trim() === '') {
-			paymentNoteError = 'Enter a note for "Other"';
-			return;
-		}
-		if (paymentDate > todayIsoDate()) {
-			paymentDateError = 'The date cannot be in the future';
-			return;
-		}
-		paymentStep = 'review';
-	}
-
-	async function confirmPayment() {
-		isRecordingPayment = true;
-		resetPaymentErrors();
-		// Set: reviewPayment refuses an empty Method before the review
-		// step, and the step is drawn only for an Invoice in the list.
-		const method = paymentMethod!;
+	async function confirmPayment(input: RecordPaymentInput) {
+		// Set: the form is drawn only for an Invoice in the list.
 		const { amountCents } = payingInvoice()!;
-		try {
-			await onRecordPayment(payingInvoiceId, {
-				method,
-				note: paymentNote.trim() === '' ? undefined : paymentNote.trim(),
-				paidOn: paymentDate
-			});
-			payingInvoiceId = '';
-			hasCreated = false;
-			paymentRecorded = paymentRecordedMessage(amountCents, method, paymentDate);
-		} catch (error_) {
-			applyPaymentRefusal(error_);
-		} finally {
-			isRecordingPayment = false;
-		}
+		await onRecordPayment(payingInvoiceId, input);
+		payingInvoiceId = '';
+		hasCreated = false;
+		paymentRecorded = paymentRecordedMessage(amountCents, input.method, input.paidOn);
 	}
 
 	function payingInvoice(): Invoice | undefined {
 		return invoices.find((invoice) => invoice.id === payingInvoiceId);
 	}
 
-	// #945's reversal flow: the same shape as payment recording above --
-	// which Invoice/Payment (if any) is being reversed, and which of its
-	// two steps -- fill in a reason, then confirm it -- it is on. Only one
-	// Invoice's form (recording or reversal) is ever open at a time.
+	// #945's reversal flow: which Invoice/Payment (if any) is being
+	// reversed. The form itself is ReversePaymentForm, shared with a
+	// Doula's fee (#2271). Only one Invoice's form of any kind is open.
 	let reversingInvoiceId = $state('');
 	let reversingPaymentId = $state('');
-	let reversalStep = $state<'form' | 'review'>('form');
-	let reversalReason = $state('');
-	// reversalError is the untargeted summary fallback (#1038) -- a
-	// Stripe-backed refusal, or a Payment already reversed; neither names
-	// the Reason field. reversalReasonError is that field's own error.
-	let reversalError = $state('');
-	let reversalReasonError = $state('');
-	let isReversingPayment = $state(false);
-
-	function resetReversalErrors() {
-		reversalError = '';
-		reversalReasonError = '';
-	}
-
-	/** As applyPaymentRefusal above: PostReversePaymentHandler's own
-	 * `reason` details key (#945) is read onto the Reason field; anything
-	 * else stays the untargeted summary paragraph. */
-	function applyReversalRefusal(error_: unknown) {
-		resetReversalErrors();
-		if (error_ instanceof RefusalError && error_.details?.reason) {
-			reversalReasonError = error_.details.reason;
-			// Back to the entry step, matching applyPaymentRefusal above.
-			reversalStep = 'form';
-			return;
-		}
-		reversalError = error_ instanceof Error ? error_.message : 'Failed to reverse this payment';
-	}
 
 	function startReversingPayment(invoiceId: string, paymentId: string) {
 		paymentRecorded = '';
 		reversingInvoiceId = invoiceId;
 		reversingPaymentId = paymentId;
-		reversalStep = 'form';
-		reversalReason = '';
-		resetReversalErrors();
 		cancelRecordingPayment();
 		cancelRefundingPayment();
 	}
@@ -514,35 +334,11 @@
 	function cancelReversingPayment() {
 		reversingInvoiceId = '';
 		reversingPaymentId = '';
-		resetReversalErrors();
 	}
 
-	/** Moves from the entry form to the review step, after the same
-	 * non-blank check the BFF itself enforces on the reason -- targeted at
-	 * the Reason field (#1038), the same as a refusal read back off the
-	 * BFF. */
-	function reviewReversal(event: SubmitEvent) {
-		event.preventDefault();
-		resetReversalErrors();
-		if (reversalReason.trim() === '') {
-			reversalReasonError = 'Enter a reason for reversing this payment';
-			return;
-		}
-		reversalStep = 'review';
-	}
-
-	async function confirmReversal() {
-		isReversingPayment = true;
-		resetReversalErrors();
-		try {
-			await onReversePayment(reversingInvoiceId, reversingPaymentId, reversalReason.trim());
-			reversingInvoiceId = '';
-			reversingPaymentId = '';
-		} catch (error_) {
-			applyReversalRefusal(error_);
-		} finally {
-			isReversingPayment = false;
-		}
+	async function confirmReversal(reason: string) {
+		await onReversePayment(reversingInvoiceId, reversingPaymentId, reason);
+		cancelReversingPayment();
 	}
 
 	function reversingInvoice(): Invoice | undefined {
@@ -808,70 +604,18 @@
 	     racing the form open, not a path a test can drive without faking
 	     that race. -->
 	{#if invoice}
-		<section aria-label="Record a payment">
-			<Heading level={3} text="Record a payment of {formatAmount(invoice.amountCents)}" />
-			<!--
-				Above the step switch, not inside the form branch: a refusal
-				that names no field (applyPaymentRefusal's untargeted
-				paymentError) leaves paymentStep at 'review', where the form
-				below is not even rendered, and this is still where it has to
-				show (#1228). One region for the whole section, matching
-				ErrorSummary's own "never two alert regions on one form" rule.
-			-->
-			{#if paymentFormErrors.length > 0}
-				<ErrorSummary errors={paymentFormErrors} />
-			{/if}
-			{#if paymentStep === 'form'}
-				<StackedForm onSubmit={reviewPayment}>
-					<RadioGroup
-						legend="Method"
-						name={paymentMethodName}
-						options={paymentMethodOptions}
-						value={paymentMethod}
-						onChange={(value) => (paymentMethod = value)}
-						error={paymentMethodError || undefined}
-					/>
-					<LabeledField id={paymentNoteFieldId} label="Note (optional)" error={paymentNoteError || undefined}>
-						{#snippet children({ id, describedBy, invalid })}
-							<Textarea {id} {describedBy} {invalid} value={paymentNote} onInput={(value) => (paymentNote = value)} />
-						{/snippet}
-					</LabeledField>
-					<LabeledField id={paymentDateFieldId} label="Date received" error={paymentDateError || undefined}>
-						{#snippet children({ id, describedBy, invalid })}
-							<TextInput
-								{id}
-								{describedBy}
-								{invalid}
-								type="date"
-								value={paymentDate}
-								onInput={(value) => (paymentDate = value)}
-								required
-							/>
-						{/snippet}
-					</LabeledField>
-					<Button label="Continue" type="submit" />
-					<Button label="Cancel" variant="secondary" onClick={cancelRecordingPayment} />
-				</StackedForm>
-			{:else}
-				<SummaryList
-					rows={[
-						{ label: 'Amount', value: formatAmount(invoice.amountCents) },
-						{ label: 'Method', value: paymentMethodLabels[paymentMethod!] },
-						{ label: 'Note', value: paymentNote.trim() === '' ? '—' : paymentNote },
-						{
-							label: 'Date received',
-							// The date input's own "YYYY-MM-DD" is a calendar day, so
-							// it is built from its parts rather than parsed as UTC
-							// midnight, which a Rochester, NY recorder would read
-							// back one day earlier.
-							value: formatCalendarDay(paymentDate)
-						}
-					]}
-				/>
-				<Button label="Confirm and record" onClick={confirmPayment} loading={isRecordingPayment} />
-				<Button label="Change" variant="secondary" onClick={() => (paymentStep = 'form')} />
-			{/if}
-		</section>
+		{#key payingInvoiceId}
+			<RecordPaymentForm
+				label="Record a payment"
+				heading="Record a payment of {formatAmount(invoice.amountCents)}"
+				amountCents={invoice.amountCents}
+				dateLabel="Date received"
+				dateMissingMessage="Enter the date the payment was received"
+				{practiceTimezone}
+				onConfirm={confirmPayment}
+				onCancel={cancelRecordingPayment}
+			/>
+		{/key}
 	{/if}
 	<!-- v8 ignore stop -->
 {/if}
@@ -884,32 +628,17 @@
 	     racing the form open, not a path a test can drive without faking
 	     that race. -->
 	{#if invoice}
-		<section aria-label="Reverse this payment">
-			<Heading level={3} text="Reverse a payment of {formatAmount(invoice.amountCents)}" />
-			{#if reversalStep === 'form'}
-				<StackedForm onSubmit={reviewReversal}>
-					<LabeledField label="Reason" error={reversalReasonError || undefined}>
-						{#snippet children({ id, describedBy, invalid })}
-							<Textarea {id} {describedBy} {invalid} value={reversalReason} onInput={(value) => (reversalReason = value)} />
-						{/snippet}
-					</LabeledField>
-					<Button label="Continue" type="submit" />
-					<Button label="Cancel" variant="secondary" onClick={cancelReversingPayment} />
-				</StackedForm>
-			{:else}
-				<SummaryList
-					rows={[
-						{ label: 'Amount', value: formatAmount(invoice.amountCents) },
-						{ label: 'Reason', value: reversalReason }
-					]}
-				/>
-				<Button label="Confirm and reverse" onClick={confirmReversal} loading={isReversingPayment} />
-				<Button label="Change" variant="secondary" onClick={() => (reversalStep = 'form')} />
-			{/if}
-			{#if reversalError}
-				<p role="alert">{reversalError}</p>
-			{/if}
-		</section>
+		{#key reversingInvoiceId}
+			<ReversePaymentForm
+				label="Reverse this payment"
+				heading="Reverse a payment of {formatAmount(invoice.amountCents)}"
+				amountCents={invoice.amountCents}
+				reasonMissingMessage="Enter a reason for reversing this payment"
+				confirmLabel="Confirm and reverse"
+				onConfirm={confirmReversal}
+				onCancel={cancelReversingPayment}
+			/>
+		{/key}
 	{/if}
 	<!-- v8 ignore stop -->
 {/if}

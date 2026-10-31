@@ -44,6 +44,21 @@ const offers: Offer[] = [
 		expiresAt: '2026-07-08T00:00:00Z',
 		decidedAt: '2026-07-05T00:00:00Z',
 		targetName: 'Persephone Ochieng-Whitfield'
+	},
+	// #2271: an accepted fee renders a third way, with the day she
+	// accepted and what the Practice recorded paying her.
+	{
+		offerId: 'offer-3',
+		state: 'accepted',
+		clientFirstInitial: '',
+		clientArea: '',
+		dueDate: '',
+		amountCents: 450_000,
+		employmentType: 'contractor',
+		offeredAt: '2026-06-01T00:00:00Z',
+		expiresAt: '2026-06-08T00:00:00Z',
+		decidedAt: '2026-06-02T00:00:00Z',
+		feePaid: { amountCents: 450_000, method: 'bank_transfer', paidOn: '2026-09-30' }
 	}
 ];
 
