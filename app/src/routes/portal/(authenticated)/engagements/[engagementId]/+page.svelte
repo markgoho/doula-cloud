@@ -4,7 +4,9 @@
 	 * order: what happens next, her Visits, her Birth Plan, her Contract,
 	 * her Messages, what she still owes, and everything that has happened.
 	 * No care phase, at any width: the drawings state none, and #293 found
-	 * none true after a loss, so the BFF no longer sends one.
+	 * none true after a loss, so the BFF no longer sends one. Ended care
+	 * is the exception (#2217): "Care ended" is true for every Client
+	 * (ADR-0015), so "What happens next" leads with it.
 	 *
 	 * The message thread used to render here and now has its own route
 	 * (#452). Push registration lives in `portal/(authenticated)/
@@ -59,6 +61,10 @@
 		 * postpartum-only Engagement, which never had one (#505). */
 		dueDate?: string;
 		offersBirthPlan: boolean;
+		/** True once the Engagement is `completed` (#2217): the one fact
+		 * about where her care stands that crosses, so "What happens next"
+		 * can lead with "Care ended". No other phase does (#2007). */
+		careEnded: boolean;
 		/** What she still owes on this care (#983); the Invoices route
 		 * holds the rest. */
 		totalToPayCents: number;
@@ -131,7 +137,7 @@
 		detail = record;
 	});
 
-	const next = $derived(whatHappensNext(nextVisit(visits.items), detail?.dueDate));
+	const next = $derived(whatHappensNext(nextVisit(visits.items), detail?.dueDate, detail?.careEnded));
 
 	const routes = $derived.by(() => {
 		const engagementId = page.params.engagementId!;
@@ -155,11 +161,15 @@
 		<div class="practice"><Text text={page.data.practiceName ?? ''} tone="variant" /></div>
 		<section class="next" aria-labelledby="what-happens-next"><!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
 			<Heading level={2} variant="card" text={NEXT_HEADING} id="what-happens-next" />
+			<!-- #2217: ended care says so first, above anything else here. -->
+			{#if next.ended}
+				<Text text={next.ended} step="label" />
+			{/if}
 			<!-- A Visits read that failed knows nothing about who is coming,
 			     so it says why rather than "No visit is booked yet." (#2218). -->
 			{#if visitsError}
 				<Notice variant="error" message={visitsError} />
-			{:else}
+			{:else if next.lead}
 				<Text text={next.lead} step="label" />
 			{/if}
 			{#if next.detail}

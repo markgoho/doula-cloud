@@ -13,7 +13,7 @@ import { toApiResponder, toPageState } from '../../../../routeFixture.js';
 import { createdAt, detail, fixture, practiceName, visits } from './page.fixture.js';
 import { engagementLabel } from '#lib/clientRegister.js';
 import { noVisitsMessage } from '#lib/portalVisits.js';
-import { NO_NEXT_VISIT_MESSAGE } from '#lib/yourCare.js';
+import { NEXT_HEADING, NO_NEXT_VISIT_MESSAGE } from '#lib/yourCare.js';
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
 /*
@@ -155,6 +155,34 @@ describe('Client portal Engagement hub', () => {
 
 		const next = page.getByRole('region', { name: 'What happens next' });
 		await expect.element(next.getByText('No visit is booked yet.')).toBeVisible();
+	});
+
+	// #2217: once the Practice marks care complete, "What happens next"
+	// says so first, and a Visit it still holds booked stays named under
+	// it. The portal never carries the birth outcome, so after a loss the
+	// hub is sent this same shape -- care ended, no due date (#2003) --
+	// as after a live birth: this case is Nadia Haddad's and Camille
+	// Boyd's alike.
+	it('says care has ended above anything else, then the Visit still booked (#2217)', async () => {
+		await setupHub({ record: { ...detail, careEnded: true, dueDate: undefined } });
+
+		const next = page.getByRole('region', { name: 'What happens next' });
+		await expect.element(next.getByText('Care ended', { exact: true })).toBeVisible();
+		// "Above anything else": the region reads its heading, then the
+		// ended line, then the Visit, in that order.
+		await expect
+			.element(next)
+			.toHaveTextContent(new RegExp(String.raw`^${NEXT_HEADING}\s*Care ended\s*${visits[0]!.doulaName} is coming to you on`));
+		await expect.element(next.getByText(/due date/i)).not.toBeInTheDocument();
+	});
+
+	it('says only that care has ended when nothing is booked (#2217)', async () => {
+		mockFetch({ ...detail, careEnded: true, dueDate: undefined }, [], []);
+		await render(Hub);
+
+		const next = page.getByRole('region', { name: 'What happens next' });
+		await expect.element(next.getByText('Care ended', { exact: true })).toBeVisible();
+		await expect.element(next.getByText('No visit is booked yet.')).not.toBeInTheDocument();
 	});
 
 	// #2007: one card per document, its state as the line under the way

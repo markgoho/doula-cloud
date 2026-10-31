@@ -27,6 +27,7 @@ export const detail = {
 	clientName: 'Anne-Marie Ochieng-Whitfield',
 	dueDate: '2027-03-01',
 	offersBirthPlan: true,
+	careEnded: false,
 	totalToPayCents: 335_000,
 	/*
 	 * #2007's three cards, each at its longest: a signed Contract, a

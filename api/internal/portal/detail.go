@@ -43,6 +43,15 @@ type Detail struct {
 	// No care phase crosses (#2007): the drawings state none at any
 	// width, and #293 found none true after a loss.
 	//
+	// CareEnded is the one exception, and it is a fact rather than a
+	// phase (#2217): true once the Engagement is `completed`, so "Your
+	// care" can say so in the register's one label for it, "Care ended".
+	// ADR-0015 holds that label true for every Client, after a loss
+	// included, and the root list already shows it. It crosses as a
+	// boolean, never as the status, so the hub still has no other phase
+	// it could print.
+	CareEnded bool `json:"careEnded"`
+	//
 	// DueDate is ADR-0017's `engagements.due_date`, nullable because a
 	// postpartum-only Engagement has none (#505). Absent too once any
 	// birth outcome is recorded (engagement.IsBabyStillExpected): a due
@@ -110,13 +119,14 @@ func DetailHandler() http.Handler {
 		err := tx.QueryRowContext(r.Context(),
 			`SELECT e.id, p.name,
 			        trim(concat_ws(' ', coalesce(c.preferred_name, c.given_name), c.family_name)),
-			        e.due_date::text, e.created_at, e.kind::text, e.birth_outcome::text
+			        e.due_date::text, e.created_at, e.kind::text, e.birth_outcome::text,
+			        e.status = 'completed'
 			 FROM engagements e
 			 JOIN practices p ON p.id = e.practice_id
 			 JOIN clients c ON c.id = e.client_id
 			 WHERE e.id = $1 AND e.client_id = $2`,
 			engagementID, clientID,
-		).Scan(&d.EngagementID, &d.PracticeName, &d.ClientName, &dueDate, &d.CreatedAt, &kind, &birthOutcome)
+		).Scan(&d.EngagementID, &d.PracticeName, &d.ClientName, &dueDate, &d.CreatedAt, &kind, &birthOutcome, &d.CareEnded)
 		if errors.Is(err, sql.ErrNoRows) {
 			// coverage:ignore reason: clientauth.Middleware already confirmed ownership; unreachable in practice
 			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
