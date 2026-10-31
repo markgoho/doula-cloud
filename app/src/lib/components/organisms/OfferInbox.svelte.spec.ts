@@ -56,6 +56,37 @@ describe('OfferInbox.svelte', () => {
 		await expect.element(page.getByText('Two prenatal visits, on call from 38 weeks.')).toBeVisible();
 	});
 
+	describe('an accepted fee (#2271)', () => {
+		const accepted: Offer = {
+			...openOffer,
+			state: 'accepted',
+			clientFirstInitial: '',
+			clientArea: '',
+			dueDate: '',
+			decidedAt: '2026-10-27T15:00:00Z'
+		};
+
+		it('says what the Practice recorded paying her', async () => {
+			await setup([{ ...accepted, feePaid: { amountCents: 45_000, method: 'bank_transfer', paidOn: '2027-03-03' } }]);
+
+			await expect.element(page.getByText('$450.00 on Mar 3, 2027, by bank transfer')).toBeVisible();
+			await expect.element(page.getByText('Oct 27, 2026')).toBeVisible();
+		});
+
+		it('says nothing is recorded yet', async () => {
+			await setup([accepted]);
+
+			await expect.element(page.getByText('Not recorded yet')).toBeVisible();
+		});
+
+		it('shows no Paid row on an accepted Offer with no fee', async () => {
+			await setup([{ ...accepted, amountCents: undefined, decidedAt: undefined }]);
+
+			expect(page.getByText('Not recorded yet').all()).toHaveLength(0);
+			expect(page.getByText('Accepted', { exact: true }).all()).toHaveLength(1);
+		});
+	});
+
 	it('leaves the terms row out when the Offer carries none', async () => {
 		await setup([{ ...openOffer, terms: undefined }]);
 

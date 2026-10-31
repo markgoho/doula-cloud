@@ -4,7 +4,7 @@
 - **Persona**: [contractor-doula.md](../personas/contractor-doula.md)
 - **A pass means**: the Engagement she took is finished, she can point to what she agreed and what she was paid, and she never saw a Client who was not hers.
 
-Every stage can be walked now except stage 7. Accepting a second Practice's invitation on an account she already holds succeeds. The Practice offers her the work, and she accepts or declines it on its own screen. She reaches only the work she accepted, and that reach ends when the Engagement completes. Nothing records what she was paid (LV-G3), so 7.1 still cannot be walked.
+Every stage can be walked now. Accepting a second Practice's invitation on an account she already holds succeeds. The Practice offers her the work, and she accepts or declines it on its own screen. She reaches only the work she accepted, and that reach ends when the Engagement completes. The Practice records paying her fee, and she reads it on **Your offers** after the job ends (LV-G3, closed by [#2271](https://github.com/markgoho/doula-cloud/issues/2271)).
 
 ## Preconditions
 
@@ -106,8 +106,8 @@ Identical to Priya's stages 6–8 and marked there; walk [employed-doula.md](emp
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 7.1 | Point to what she was paid for the February birth | No product step exists. The fee she accepted is recorded on the Offer and the attachment, but nothing records that the Practice paid it, so the two sides keep separate books. A payout itself is ruled out ([#391](https://github.com/markgoho/doula-cloud/issues/391)); a record of one is not decided | `missing-feature (LV-G3)` [#2271](https://github.com/markgoho/doula-cloud/issues/2271) |
-| 7.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow). One screen says what she was paid for the February birth | `missing-feature (LV-G3)` [#2271](https://github.com/markgoho/doula-cloud/issues/2271) |
+| 7.1 | Point to what she was paid for the February birth | Renata, on the Engagement's **Doula fees** (her Attachment ended or not): **Mark fee paid**, a Method, an optional Note and **Date paid**, **Continue**, **Confirm and record**: "Recorded: Lena Vasquez paid $450.00 on …, by bank transfer." Lena, on **Your offers**, on the accepted Offer: "Accepted on …", "Fee $450.00", "Paid $450.00 on …, by bank transfer", or "Not recorded yet". It still reads so after her Attachment ends. No money moves ([#391](https://github.com/markgoho/doula-cloud/issues/391)) | `manual` |
+| 7.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow). One screen says what she was paid for the February birth | `manual` |
 | 7.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 8 — The job ends
@@ -125,12 +125,34 @@ Identical to Priya's stages 6–8 and marked there; walk [employed-doula.md](emp
 | Mark | Steps |
 | --- | --- |
 | `automated` | 9 (8 of them [budget steps](README.md#budget-steps)) |
-| `manual` | 50 (13 on the plan as drafted, plus 2.3-a, 2.3-b, 4.1-a and 5.2-a appended by the first walk, plus 1.2-a re-marked 2026-09-20, plus 1.3, 2.2-a, 3.1, 3.2, 3.3, 5.3 and 8.1 re-marked by the second walk; 25 of them [budget steps](README.md#budget-steps)) |
-| `missing-feature` | 2 steps over 1 gap ([LV-G3](https://github.com/markgoho/doula-cloud/issues/2271); 1 of them a [budget step](README.md#budget-steps)) |
+| `manual` | 52 (13 on the plan as drafted, plus 2.3-a, 2.3-b, 4.1-a and 5.2-a appended by the first walk, plus 1.2-a re-marked 2026-09-20, plus 1.3, 2.2-a, 3.1, 3.2, 3.3, 5.3 and 8.1 re-marked by the second walk, plus 7.1 and 7.B-screens re-marked 2026-10-31; 26 of them [budget steps](README.md#budget-steps)) |
+| `missing-feature` | 0 |
 
 LV-G5 is observed at 4.2 rather than given a step of its own: the list opens, and what it shows is the finding. On the second walk it shows only her own work.
 
 ## Run log
+
+### 2026-10-31 — stage 7 walked ([#2271](https://github.com/markgoho/doula-cloud/issues/2271))
+
+**Stack**: `bun run --cwd app dev:full` from the #2271 worktree at port offset 3: the app at `http://localhost:5473`, in WSL2 with rootless Podman, on the branch that builds the Fee Payment. The seeded Rooted Birth Collective, fresh.
+
+**Devices**: headless Chrome inside WSL, driven by the chrome-devtools MCP, one isolated context for Renata Alvarez and one for Lena, each at 320x800 and 1280x900, in UTC. No throttling, on an unbundled Vite dev server.
+
+**Accounts and preconditions**: the seed's accepted Offer, Lena on **Reese Bishop**'s birth ($450, "Backup for the birth, on call from 38 weeks, one prenatal visit."). Only stage 7 and the 8.1 completion it needs were walked.
+
+| Step | Mark | Result | What was seen |
+| --- | --- | --- | --- |
+| 7.1 | `manual` (was `missing-feature (LV-G3)`) | **walked** | Renata, Reese's Engagement at 320px: **Doula fees**, a card "Lena Vasquez, Fee $450.00, On this birth Since Oct 31, 2026, Paid Not recorded yet", **Mark fee paid**. "Record paying Lena Vasquez $450.00": Method, Note (optional), Date paid (today, prefilled), **Continue**; the check step "Amount $450.00, Method Bank transfer, Note —, Date paid Oct 31, 2026", **Confirm and record**. The status line "Recorded: Lena Vasquez paid $450.00 on Oct 31, 2026, by bank transfer." and the card's Paid and "Recorded by Renata Alvarez". Activity: "Fee paid to Lena Vasquez", Renata Alvarez, with no amount. At 1280 the section is a table: Doula, Fee, On this birth, Paid, Recorded by, Actions. Renata then completed the Engagement (live birth, "The work finished as agreed"): the row reads "On this birth Oct 31, 2026 to Oct 31, 2026", and **Remove payment** with a reason ("Payment to Lena Vasquez removed.") and a second **Mark fee paid**, Other, Note "Zelle, confirmation 4471", both still work on the ended Attachment. Lena, after the end, on **Your offers** at 320 and 1280: "Accepted", "Accepted on Oct 31, 2026", "Fee $450.00", "Paid $450.00 on Oct 31, 2026, by bank transfer", "Terms …". Her read of the Engagement answers `404`, and `GET …/doula-fees` answers her `403` |
+
+**Re-marked**: 7.1 and 7.B-screens move from `missing-feature (LV-G3)` to `manual`. The Marks summary is recounted from 9 / 50 / 0 / 2 to 9 / 52 / 0 / 0, and [README.md](README.md)'s run-status row and Total move with it.
+
+| Step | Budget | Measured | Met |
+| --- | --- | --- | --- |
+| 7.B-screens | 1 | 1: **Your offers** holds the accepted Offer and what she was paid, before and after her Attachment ends | yes |
+
+Renata's acts, timed in the page from the press to the result on screen: **Remove payment** opens its form in 14 ms; **Confirm and remove** 55 ms and **Confirm and record** 51 ms to the status line, each with the row read again. The 320px step stays `automated (route-continuum.svelte.spec.ts)`; neither page scrolled sideways at 320px.
+
+**Is the journey completable end to end?** Stage 7 no longer stops it. Against "a pass means": she can point to what she agreed and what she was paid, on one screen, after the job ends. The other stages are as the 2026-10-28 walk left them; their open findings are not re-walked here. One thing the walk noticed: an accepted Offer names no Client (#230's lapse), so with two jobs she tells them apart by the day she accepted and the fee, not by "the February birth".
 
 ### 2026-10-28 — second manual walk ([#2177](https://github.com/markgoho/doula-cloud/issues/2177))
 

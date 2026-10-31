@@ -9,7 +9,8 @@
 	 * onDecide owns the API call and the resulting state change; this
 	 * component reports which Offer and which answer.
 	 */
-	import { formatCalendarDay } from '#lib/dates.js';
+	import { formatCalendarDay, formatInstant } from '#lib/dates.js';
+	import { feePaidLine } from '#lib/doulaFee.js';
 	import { formatFee, isOpen, offerStateLabels, offerStateVariants, type Offer } from '#lib/offer.js';
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -41,7 +42,15 @@
 				{ label: 'Due date', value: formatCalendarDay(offer.dueDate) }
 			);
 		}
+		if (offer.state === 'accepted' && offer.decidedAt) {
+			rows.push({ label: 'Accepted on', value: formatInstant(offer.decidedAt) });
+		}
 		rows.push({ label: 'Fee', value: formatFee(offer.amountCents) });
+		// #2271: what the Practice recorded paying her, on the one screen
+		// she keeps after the job ends. Only an accepted fee is ever paid.
+		if (offer.state === 'accepted' && offer.amountCents !== undefined) {
+			rows.push({ label: 'Paid', value: offer.feePaid ? feePaidLine(offer.feePaid) : 'Not recorded yet' });
+		}
 		if (offer.terms) {
 			rows.push({ label: 'Terms', value: offer.terms });
 		}

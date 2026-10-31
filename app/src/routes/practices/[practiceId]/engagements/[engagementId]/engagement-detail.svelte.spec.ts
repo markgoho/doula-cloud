@@ -1765,10 +1765,11 @@ describe('an Engagement with no Contract yet (#2146)', () => {
 
 // #2146: the order a Doula works in, Contract before the Visits.
 describe('the order of the sections (#2146)', () => {
-	it('runs On call, Birth outcome, Contract, Visits, Care Plan, Birth Plan, Invoices, Offers, Messages, Activity', async () => {
+	it('runs On call, Birth outcome, Contract, Visits, Care Plan, Birth Plan, Invoices, Offers, Doula fees, Messages, Activity', async () => {
 		await setupWithContract(() => respondFromFixture(), fixtureDetail, ownerSession);
-		// Offers is an Owner's or an Admin's, drawn once its read lands.
-		await expect.element(testPage.getByRole('heading', { level: 2, name: 'Offers' })).toBeVisible();
+		// Offers and Doula fees are an Owner's or an Admin's, drawn once
+		// each read lands.
+		await expect.element(testPage.getByRole('heading', { level: 2, name: 'Doula fees' })).toBeVisible();
 
 		const headings = testPage
 			.getByRole('heading', { level: 2 })
@@ -1783,6 +1784,7 @@ describe('the order of the sections (#2146)', () => {
 			'Birth Plan',
 			'Invoices',
 			'Offers',
+			'Doula fees',
 			'Messages',
 			'Activity'
 		]);
@@ -3226,6 +3228,80 @@ describe('what a reader sees about money (#2002, #2003)', () => {
 		await expect.element(testPage.getByText('No Invoices yet.')).toBeVisible();
 		await expect.element(testPage.getByText(/You contract for this Practice/)).not.toBeInTheDocument();
 		expect(invoiceListReads()).toHaveLength(1);
+	});
+});
+
+// #2271: each contractor's fee, and the Practice's record of paying it.
+function doulaFeesSection() {
+	return testPage.getByRole('region', { name: 'Doula fees', exact: true });
+}
+
+function doulaFeeReads(): unknown[] {
+	return apiFetchWithSession.mock.calls.filter(([path]) => String(path).endsWith('/doula-fees'));
+}
+
+describe('the Doula fees section (#2271)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('lists each fee for an Owner, records one paid, and reads the list again', async () => {
+		await setupMoney(sessionFor(['owner']), fixtureDetail, (path, init) =>
+			init?.method === 'POST' && path.endsWith('/doula-fees/attachment-1/payments')
+				? jsonResponse({ id: 'fee-payment-9' }, 201)
+				: undefined
+		);
+
+		await expect.element(doulaFeesSection()).toBeVisible();
+		await doulaFeesSection().getByRole('button', { name: 'Mark fee paid' }).click();
+		await testPage.getByRole('radio', { name: 'Check' }).click();
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+		await testPage.getByRole('button', { name: 'Confirm and record' }).click();
+
+		await expect.element(testPage.getByRole('status').filter({ hasText: /Recorded: Anne-Marie Ochieng-Whitfield paid \$4,500\.00/ })).toBeVisible();
+		expect(doulaFeeReads()).toHaveLength(2);
+	});
+
+	it('removes a payment recorded by mistake, and reads the list again', async () => {
+		await setupMoney(sessionFor(['owner']), fixtureDetail, (path, init) =>
+			init?.method === 'POST' && path.endsWith('/payments/fee-payment-1/reverse')
+				? jsonResponse({ id: 'fee-payment-10' }, 201)
+				: undefined
+		);
+
+		await doulaFeesSection().getByRole('button', { name: 'Remove payment' }).click();
+		await testPage.getByLabelText('Reason').fill('Paid twice by mistake');
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+		await testPage.getByRole('button', { name: 'Confirm and remove' }).click();
+
+		await expect.element(testPage.getByRole('status').filter({ hasText: 'Payment to Persephone Ochieng-Whitfield removed.' })).toBeVisible();
+		expect(doulaFeeReads()).toHaveLength(2);
+	});
+
+	it('leaves the section out for a reader the BFF refuses', async () => {
+		await setupMoney(contractorReader, fixtureDetail, (path) =>
+			path.endsWith('/doula-fees') ? jsonResponse({ code: 'FORBIDDEN', message: 'no' }, 403) : undefined
+		);
+
+		await expect.element(testPage.getByRole('region', { name: 'Messages', exact: true })).toBeVisible();
+		await expect.element(doulaFeesSection()).not.toBeInTheDocument();
+	});
+
+	it('leaves the section out when no Doula has a fee', async () => {
+		await setupMoney(sessionFor(['owner']), fixtureDetail, (path) =>
+			path.endsWith('/doula-fees') ? jsonResponse({ items: [] }) : undefined
+		);
+
+		await expect.element(testPage.getByRole('region', { name: 'Messages', exact: true })).toBeVisible();
+		await expect.element(doulaFeesSection()).not.toBeInTheDocument();
+	});
+
+	it('says so when the fees cannot be read', async () => {
+		await setupMoney(sessionFor(['owner']), fixtureDetail, (path) =>
+			path.endsWith('/doula-fees') ? jsonResponse({ message: 'Something went wrong' }, 500) : undefined
+		);
+
+		await expect.element(doulaFeesSection().getByText('Something went wrong')).toBeVisible();
 	});
 });
 

@@ -112,11 +112,14 @@
 		type ContractorInvoice,
 		type Invoice,
 		type PaymentMethod,
+		type RecordPaymentInput,
 		type RefundPaymentInput
 	} from '#lib/invoice.js';
 	import { loadPracticeTimezone } from '#lib/practiceTimezone.js';
 	import { loadRates, type Rate } from '#lib/rates.js';
 	import OfferSection from '#lib/components/organisms/OfferSection.svelte';
+	import DoulaFeeSection from '#lib/components/organisms/DoulaFeeSection.svelte';
+	import { loadDoulaFees, recordDoulaFeePaid, removeDoulaFeePaid, type DoulaFee } from '#lib/doulaFee.js';
 	import { createOffer, loadEngagementOffers, withdrawOffer, type NewOffer, type Offer } from '#lib/offer.js';
 	import { resolve } from '$app/paths';
 	import MessageThread, { type Message } from '#lib/components/organisms/MessageThread.svelte';
@@ -799,6 +802,13 @@
 	const offersState = new SectionState<unknown[] | undefined>(undefined);
 	const offers = $derived((offersState.value as Offer[] | undefined) ?? []);
 
+	// #2271: each contractor's fee and whether it was paid. Owner and Admin
+	// only: loadDoulaFees answers undefined for anyone the BFF refuses, and
+	// the section is then left out, as Offers is. Drawn only when some
+	// Doula on the Engagement has a fee, since there is nothing else to say.
+	const doulaFeesState = new SectionState<DoulaFee[] | undefined>(undefined);
+	const isDoulaFeesVisible = $derived((doulaFeesState.value?.length ?? 0) > 0 || doulaFeesState.error !== '');
+
 	// The Practice's Doulas, read once for the whole page (#268): the
 	// Offers section offers them, and so do the two Visit pickers. One
 	// read, so the two sections can never disagree about who is on the
@@ -1399,6 +1409,30 @@
 		await offersState.load(() => loadOffers(apiFetchWithSession, reference, loadEngagementOffers), '');
 	}
 
+	async function loadDoulaFeesSection() {
+		await doulaFeesState.load(
+			() => loadDoulaFees(apiFetchWithSession, reference.practiceId, reference.engagementId),
+			'We could not load the Doula fees.'
+		);
+	}
+
+	async function handleRecordDoulaFee(attachmentId: string, input: RecordPaymentInput) {
+		await recordDoulaFeePaid(apiFetchWithSession, reference.practiceId, reference.engagementId, attachmentId, input);
+		await loadDoulaFeesSection();
+	}
+
+	async function handleRemoveDoulaFee(attachmentId: string, paymentId: string, reason: string) {
+		await removeDoulaFeePaid(
+			apiFetchWithSession,
+			reference.practiceId,
+			reference.engagementId,
+			attachmentId,
+			paymentId,
+			reason
+		);
+		await loadDoulaFeesSection();
+	}
+
 	// Silent about a *refusal*, and only about a refusal: a roster read
 	// this reader's role does not admit her to is her role, not a failure,
 	// and loadVisitAssigneesOrNone answers it with `undefined` rather than
@@ -1691,6 +1725,7 @@
 		await loadRoster();
 		await loadOnCall();
 		await loadOffersSection();
+		await loadDoulaFeesSection();
 		await loadActivity();
 
 		// #61: an open service worker push message ("a new Message arrived
@@ -2721,6 +2756,22 @@
 	/>
 {/snippet}
 
+{#snippet doulaFeesSection()}
+	{#if doulaFeesState.error}
+		<Notice variant="error" message={doulaFeesState.error} />
+	{/if}
+	<!-- The date paid reads "today" in the Practice's zone, so the section
+	     waits for it, as InvoiceSection does. -->
+	{#if practiceTimezone}
+		<DoulaFeeSection
+			fees={doulaFeesState.value ?? []}
+			{practiceTimezone}
+			onRecord={handleRecordDoulaFee}
+			onRemove={handleRemoveDoulaFee}
+		/>
+	{/if}
+{/snippet}
+
 {#snippet messagesSection()}
 	<!--
 		#2104: the thread's two facts ahead of it, as drawn -- the newest
@@ -3055,6 +3106,7 @@
 		{ heading: 'Birth Plan', content: birthPlanSection },
 		{ heading: 'Invoices', content: invoicesSection },
 		...(isOffersVisible ? [{ heading: 'Offers', content: offersSection }] : []),
+		...(isDoulaFeesVisible ? [{ heading: 'Doula fees', content: doulaFeesSection }] : []),
 		{ heading: 'Messages', content: messagesSection },
 		{ heading: 'Activity', content: activitySection }
 	]}
