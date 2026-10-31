@@ -54,10 +54,10 @@ export interface OpenEngagement {
 	 * Absent when no Contract has been created yet for this Engagement.
 	 */
 	contractStatus?: string;
-	/** Absent when no Doula holds an open, granted attachment on this
-	 * Engagement -- rendered as an explicit state (`NO_DOULA_YET_LABEL`), the same
-	 * pattern as `portalInviteStatus`'s own absence ("Never invited"). */
-	doulaName?: string;
+	/** Each Doula on the Engagement, by surname (#2232). Absent when no
+	 * Doula holds an open, granted attachment on it -- rendered as an
+	 * explicit state (`NO_DOULA_YET_LABEL`). */
+	doulaNames?: string[];
 	/** Owner, Admin, or an employed Doula (ADR-0008's money row as
 	 * amended by #282) -- absent for a contractor Doula, even one
 	 * attached to this Engagement. */

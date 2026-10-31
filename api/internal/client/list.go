@@ -74,12 +74,10 @@ type ListItem struct {
 }
 
 // OpenEngagement is one rollup line of ListItem.OpenEngagements.
-// ContractStatus and DoulaName are nil when no Contract has been created
+// ContractStatus and DoulaNames are nil when no Contract has been created
 // yet, or no Doula holds an open, granted attachment on this Engagement,
-// respectively -- the frontend renders DoulaName's absence explicitly
-// (matching how it already renders "Never invited" for
-// ListItem.PortalInviteStatus's own nil), per the ticket's ask that an
-// unset Doula never read as a blank cell.
+// respectively -- the frontend renders DoulaNames' absence as "No Doula
+// yet", so an unset Doula never reads as a blank cell.
 //
 // InvoiceStatus/InvoiceAmountCents and FeeCents are populated in SQL
 // regardless of who is asking, then shaped away entirely (never merely
@@ -94,7 +92,8 @@ type OpenEngagement struct {
 	Kind             string  `json:"kind"`
 	EngagementStatus string  `json:"engagementStatus"`
 	ContractStatus   *string `json:"contractStatus,omitempty"`
-	DoulaName        *string `json:"doulaName,omitempty"`
+	// DoulaNames is a list so a comma inside one name never splits it.
+	DoulaNames []string `json:"doulaNames,omitempty"`
 
 	// InvoiceStatus/InvoiceAmountCents: Owner, Admin, and an employed
 	// Doula (ADR-0008 as amended by #282). Never set for a contractor
@@ -333,12 +332,14 @@ func listAttachedClients(ctx context.Context, tx *sql.Tx, practiceID, staffID st
 // every field SQL can produce, before shapeOpenEngagement decides which
 // of them reader may actually see.
 type rawOpenEngagement struct {
-	clientID           string
-	engagementID       string
-	kind               string
-	engagementStatus   string
-	contractStatus     sql.NullString
-	doulaName          sql.NullString
+	clientID         string
+	engagementID     string
+	kind             string
+	engagementStatus string
+	contractStatus   sql.NullString
+	// doulaNames is the names joined by doulaNameSeparator, which no name
+	// a person types holds.
+	doulaNames         sql.NullString
 	invoiceStatus      sql.NullString
 	invoiceAmountCents sql.NullInt64
 	invoiceDueAt       sql.NullTime
@@ -397,6 +398,10 @@ func attachOpenEngagements(ctx context.Context, tx *sql.Tx, practiceID string, l
 	return nil
 }
 
+// doulaNameSeparator is the ASCII unit separator the rollup query joins
+// Doula names with (its E'\x1f'), split again in shapeOpenEngagement.
+const doulaNameSeparator = "\x1f"
+
 // openEngagementRollupQueryTemplate is fetchOpenEngagements' query, with
 // two %-verbs standing in for placeholder indices that shift depending on
 // how many clientIDs the caller passes -- staffIdx and attachedOnlyIdx
@@ -423,7 +428,7 @@ func attachOpenEngagements(ctx context.Context, tx *sql.Tx, practiceID string, l
 // Invoices.
 const openEngagementRollupQueryTemplate = `
 	SELECT e.client_id, e.id, e.kind, e.status, ct.status,
-	       (SELECT string_agg(s.name, ', ' ORDER BY s.last_name, s.first_name)
+	       (SELECT string_agg(s.name, E'\x1f' ORDER BY s.last_name, s.first_name)
 	        FROM engagement_attachments ea
 	        JOIN staff s ON s.id = ea.staff_id
 	        WHERE ea.engagement_id = e.id AND ea.origin = 'granted' AND ea.ended_at IS NULL),
@@ -524,7 +529,7 @@ func fetchOpenEngagements(ctx context.Context, tx *sql.Tx, clientIDs []string, s
 		var raw rawOpenEngagement
 		if err := rows.Scan(
 			&raw.clientID, &raw.engagementID, &raw.kind, &raw.engagementStatus, &raw.contractStatus,
-			&raw.doulaName, &raw.invoiceStatus, &raw.invoiceAmountCents, &raw.invoiceDueAt, &raw.paymentProcessing, &raw.feeCents,
+			&raw.doulaNames, &raw.invoiceStatus, &raw.invoiceAmountCents, &raw.invoiceDueAt, &raw.paymentProcessing, &raw.feeCents,
 		); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("client: scan open engagement: %w", err)
@@ -559,9 +564,8 @@ func shapeOpenEngagement(reader staffauth.Reader, raw rawOpenEngagement, days in
 		status := raw.contractStatus.String
 		oe.ContractStatus = &status
 	}
-	if raw.doulaName.Valid {
-		name := raw.doulaName.String
-		oe.DoulaName = &name
+	if raw.doulaNames.Valid {
+		oe.DoulaNames = strings.Split(raw.doulaNames.String, doulaNameSeparator)
 	}
 	if !reader.IsAmbientContractor() {
 		if raw.invoiceStatus.Valid {

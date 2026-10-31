@@ -43,7 +43,8 @@ export const clients: ClientListItem[] = [
 				kind: 'birth',
 				engagementStatus: 'active',
 				contractStatus: 'sent',
-				doulaName: 'Yolanda Okonkwo-Fitzgerald',
+				// #2232: two Doulas, the longest a line's Doula text gets.
+				doulaNames: ['Yolanda Okonkwo-Fitzgerald', 'Anne-Marie Ochieng-Whitfield'],
 				invoiceStatus: 'open',
 				invoiceAmountCents: 450_000,
 				/*
@@ -190,7 +191,7 @@ const typicalClients: ClientListItem[] = TYPICAL_CLIENTS.slice(0, 8).map((person
 						kind,
 						engagementStatus: 'active',
 						contractStatus: 'signed',
-						doulaName: doula.name,
+						doulaNames: [doula.name],
 						invoiceStatus: 'open',
 						invoiceAmountCents: kind === 'birth' ? 150_000 : 90_000,
 						// #2130: one Invoice on the page is late, as one at a

@@ -5,7 +5,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { clientsResultSummary, loadClients, type ClientListItem, type OpenEngagement } from '#lib/client.js';
 	import type { ComponentProps } from 'svelte';
-	import { kindLabel } from '#lib/engagementRequest.js';
+	import { kindLabel, NO_DOULA_YET_LABEL } from '#lib/engagementRequest.js';
 	import { engagementStatusText } from '#lib/engagementDetail.js';
 	import { startHref } from './new/intake.js';
 	import { formatAmount, invoiceRowStatusLabel, invoiceRowStatusVariant, invoiceStatusLabel } from '#lib/invoice.js';
@@ -127,7 +127,7 @@
 	// The badges replace #264's sentence ("Contract: Signed · Doula: … ·
 	// Active · Outstanding ($1,500.00)"), whose one long line set this
 	// list's floor at 101.75rem, past what a desktop window holds. The
-	// Doula's name is on the Engagement's own page, one link away.
+	// Doula's name is in its own column (#2232).
 	//
 	// #741: `invoiceStatus`/`invoiceAmountCents` are the BFF's answer to
 	// "is anything outstanding under this Contract", not merely its newest
@@ -182,12 +182,41 @@
 		return [...lines, ...(pending ? [pending] : [])].join('; ');
 	}
 
+	// #2232 (RA-G15): who covers each open Engagement, so the list answers
+	// it with no Engagement opened. A column of its own, not words in the
+	// Status line, which then wrapped a typical row's money onto a second
+	// line at 1440px. "No Doula yet" is the Engagement page's own words
+	// (`doulaSummaryItem`), and always true here: a line is never a
+	// completed Engagement.
+	function doulaNamesText(line: OpenEngagement): string {
+		const names = line.doulaNames ?? [];
+		return names.length === 0 ? NO_DOULA_YET_LABEL : names.join(', ');
+	}
+
+	// One entry per open Engagement. Where a Client holds more than one,
+	// each names its kind, so a name is never read against the wrong one.
+	function doulaLines(client: ClientListItem): { engagementId: string; text: string }[] {
+		const lines = client.openEngagements ?? [];
+		return lines.map((line) => ({
+			engagementId: line.engagementId,
+			text: lines.length > 1 ? `${kindLabel(line.kind)}: ${doulaNamesText(line)}` : doulaNamesText(line)
+		}));
+	}
+
 	// #2022: Email and Portal invite are on the Client hub, where the
 	// Blocked email addresses link (#785) went with them, and a pending
 	// Request is a badge in Status. What is left fits a desktop.
 	const columns = $derived([
 		{ label: 'Name', accessor: (client: ClientListItem) => client.name },
 		{ label: 'Status', accessor: statusText, content: statusCell },
+		{
+			label: 'Doula',
+			accessor: (client: ClientListItem) =>
+				doulaLines(client)
+					.map((line) => line.text)
+					.join('; '),
+			content: doulaCell
+		},
 		...(isShowingEveryone ? [{ label: 'Work', accessor: workStatusText }] : [])
 	]);
 
@@ -312,6 +341,25 @@
 				     the warning. -->
 				<li><Badge label={pending} variant="warning" /></li>
 			{/if}
+		</ul>
+	{/if}
+{/snippet}
+
+{#snippet doulaCell(client: ClientListItem)}
+	<!--
+		#2232: one line per open Engagement, in the Status cell's order, so
+		a Client with two reads as two. Nothing for a Client with none, and
+		the accessor is empty for her too, so her record card leaves the
+		row out.
+	-->
+	{@const lines = doulaLines(client)}
+	{#if lines.length === 1}
+		{lines[0].text}
+	{:else if lines.length > 1}
+		<ul class="status-list">
+			{#each lines as line (line.engagementId)}
+				<li>{line.text}</li>
+			{/each}
 		</ul>
 	{/if}
 {/snippet}

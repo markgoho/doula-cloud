@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
@@ -1374,10 +1375,12 @@ func TestListHandler_OpenEngagementsRollup_MultipleOpenNoneDroppedCompletedExclu
 	practiceID := testdb.SeedPractice(t, db, "Test Practice")
 	const ownerUID = "staff-rollup-owner"
 	testdb.SeedStaffAtPractice(t, db, practiceID, ownerUID, []string{ownerRole}, "employee")
-	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-for-rollup", []string{doulaRole}, "employee")
+	doulaID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "doula-for-rollup", "Priya Raman, Jr.", []string{doulaRole}, "employee")
+	secondDoulaID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "second-doula-for-rollup", "Kimiko Nakashima", []string{doulaRole}, "employee")
 
 	clientID, birthEngagement := testdb.SeedEngagementInStatus(t, db, practiceID, "Rollup Client", "rollup@example.com", "active")
 	testdb.SeedGrantedAttachment(t, db, birthEngagement, doulaID)
+	testdb.SeedGrantedAttachment(t, db, birthEngagement, secondDoulaID)
 	contractID := seedClientContract(t, db, birthEngagement, "sent")
 	seedClientInvoice(t, db, practiceID, contractID, openInvoiceStatus, 50000)
 
@@ -1418,8 +1421,8 @@ func TestListHandler_OpenEngagementsRollup_MultipleOpenNoneDroppedCompletedExclu
 	if birth.ContractStatus == nil || *birth.ContractStatus != "sent" {
 		t.Fatalf("birth line contract status = %v, want \"sent\"", birth.ContractStatus)
 	}
-	if birth.DoulaName == nil || *birth.DoulaName != "Test Staff doula-for-rollup" {
-		t.Fatalf("birth line doula name = %v, want the seeded Doula's name", birth.DoulaName)
+	if want := []string{"Kimiko Nakashima", "Priya Raman, Jr."}; !slices.Equal(birth.DoulaNames, want) {
+		t.Fatalf("birth line doula names = %q, want %q", birth.DoulaNames, want)
 	}
 	if birth.InvoiceStatus == nil || *birth.InvoiceStatus != openInvoiceStatus {
 		t.Fatalf("birth line invoice status = %v, want \"open\" (Owner reads it)", birth.InvoiceStatus)
@@ -1444,8 +1447,8 @@ func TestListHandler_OpenEngagementsRollup_MultipleOpenNoneDroppedCompletedExclu
 	if postpartum.ContractStatus != nil {
 		t.Fatalf("postpartum line contract status = %v, want nil (no Contract created)", postpartum.ContractStatus)
 	}
-	if postpartum.DoulaName != nil {
-		t.Fatalf("postpartum line doula name = %v, want nil (no attachment)", postpartum.DoulaName)
+	if postpartum.DoulaNames != nil {
+		t.Fatalf("postpartum line doula names = %q, want nil (no attachment)", postpartum.DoulaNames)
 	}
 	if postpartum.InvoiceStatus != nil || postpartum.InvoiceAmountCents != nil {
 		t.Fatalf("postpartum line invoice = %v/%v, want nil/nil (no Invoice)", postpartum.InvoiceStatus, postpartum.InvoiceAmountCents)
@@ -1631,8 +1634,8 @@ func TestListHandler_OpenEngagementsRollup_EmployeeDoulaSeesInvoiceAndMoney(t *t
 	if line.ContractStatus == nil || *line.ContractStatus != "signed" {
 		t.Fatalf("contract status = %v, want \"signed\"", line.ContractStatus)
 	}
-	if line.DoulaName == nil {
-		t.Fatalf("doula name = nil, want the attached Doula's name")
+	if len(line.DoulaNames) != 1 {
+		t.Fatalf("doula names = %q, want the attached Doula's name", line.DoulaNames)
 	}
 	if line.InvoiceStatus == nil || *line.InvoiceStatus != "paid" {
 		t.Fatalf("invoice status = %v, want \"paid\" -- an employee Doula reads it now", line.InvoiceStatus)
@@ -1694,6 +1697,9 @@ func TestListHandler_OpenEngagementsRollup_ContractorSeesOwnFeeOnlyOnAttachedEng
 	}
 	if line.ContractStatus == nil || *line.ContractStatus != "signed" {
 		t.Fatalf("contract status = %v, want \"signed\" -- ungated scope field", line.ContractStatus)
+	}
+	if want := []string{"Test Staff " + contractorUID}; !slices.Equal(line.DoulaNames, want) {
+		t.Fatalf("doula names = %q, want %q -- she reads her own name on the line", line.DoulaNames, want)
 	}
 }
 
