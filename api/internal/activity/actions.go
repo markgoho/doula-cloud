@@ -94,6 +94,7 @@ const (
 	ActionSecondFactorRefused         PracticeAction = "second_factor_refused"
 	ActionMFARequiredEnabled          PracticeAction = "mfa_required_enabled"
 	ActionMFARequiredDisabled         PracticeAction = "mfa_required_disabled"
+	ActionWelcomeCreditsEmailSent     PracticeAction = "welcome_credits_email_sent"
 )
 
 // SubjectMembership is the subject_kind every write site that touches

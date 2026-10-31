@@ -31,6 +31,7 @@ import (
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/staffinvite"
 	"doula-cloud/api/internal/tasknudge"
+	"doula-cloud/api/internal/welcomecredits"
 )
 
 // Deps is everything the route table needs to build itself.
@@ -129,6 +130,9 @@ type Deps struct {
 	// PracticeDeletionWorker is #871's day-23 reminder and day-30
 	// finalization for a Practice deleting itself.
 	PracticeDeletionWorker practicedeletion.Worker
+	// WelcomeCreditsWorker is #1381's one email fourteen days after
+	// signup to a Practice that started no Engagement.
+	WelcomeCreditsWorker welcomecredits.Worker
 	// LegalNoticeWorker is #1548's email to each Owner before a material
 	// change to the Terms or the Privacy Policy takes effect.
 	LegalNoticeWorker legalnotice.Worker
