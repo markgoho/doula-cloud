@@ -210,8 +210,10 @@ jobs:
   # ~4-5 minutes each on Postgres, the Auth emulator, the Go suite and
   # Playwright -- can skip a change that uses none of them (#1466).
   #
-  # Docs-only is an ALLOWLIST: every changed path is under `docs/`, or is a
-  # `*.md` file at the repo root. Any other path, including one nobody
+  # Docs-only is an ALLOWLIST: every changed path is under `docs/`, is a
+  # `*.md` file at the repo root, or is a `*.md` file under `.claude/`
+  # (agents, skills, rules: nothing builds or tests them, #2356). Hooks and
+  # settings under `.claude/` are code. Any other path, including one nobody
   # expected, is code. `hugo/` content is code, because the site build
   # reads it. A rename counts both its old and its new path.
   #
@@ -253,6 +255,7 @@ jobs:
               [ -n "$path" ] || continue
               case "$path" in
                 docs/*) ;;
+                .claude/*.md) ;;
                 */*) echo "code: $path"; docs_only=false ;;
                 *.md) ;;
                 *) echo "code: $path"; docs_only=false ;;
