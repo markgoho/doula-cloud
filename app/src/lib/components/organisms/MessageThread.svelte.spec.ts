@@ -45,6 +45,7 @@ interface SetupOptions {
 	readerSenderType?: Message['senderType'];
 	composeOpener?: string;
 	cannotSendReason?: string;
+	sentConfirmation?: string;
 }
 
 async function setup({
@@ -56,7 +57,8 @@ async function setup({
 	attachmentPreviewURLs = {},
 	readerSenderType,
 	composeOpener,
-	cannotSendReason
+	cannotSendReason,
+	sentConfirmation
 }: SetupOptions = {}) {
 	const onLoadOlder = vi.fn();
 	const onDownloadAttachment = vi.fn();
@@ -71,7 +73,8 @@ async function setup({
 		attachmentPreviewURLs,
 		readerSenderType,
 		composeOpener,
-		cannotSendReason
+		cannotSendReason,
+		sentConfirmation
 	});
 	return { container, onLoadOlder, onSend, onDownloadAttachment };
 }
@@ -284,6 +287,46 @@ describe('MessageThread.svelte compose form', () => {
 		await expect.element(summary().getByText(SERVICE_PROBLEM)).toBeVisible();
 		await expect.element(summary().getByRole('link')).not.toBeInTheDocument();
 		await expect.element(messageField()).toHaveValue('New message');
+	});
+});
+
+// #2210: the thread's own page keeps its form open after a send, so the
+// status is announced and Send keeps focus: the control is still there.
+describe('MessageThread.svelte confirmation on the always-open form (#2210)', () => {
+	const words = 'Message sent. Riverside Doulas will see it and reply here.';
+
+	it('says the message was sent, in the words given, and leaves focus on Send', async () => {
+		await setup({ sentConfirmation: words });
+
+		await messageField().fill('Did that go through?');
+		await send();
+
+		await expect.element(page.getByRole('status').filter({ hasText: words })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Send', exact: true })).toHaveFocus();
+	});
+
+	it('says "Message sent." when no words are given', async () => {
+		await setup();
+
+		await messageField().fill('Did that go through?');
+		await send();
+
+		await expect.element(page.getByRole('status').filter({ hasText: 'Message sent.' })).toBeVisible();
+	});
+
+	it('takes back an earlier "sent" when the next send fails', async () => {
+		const onSend = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error(SERVICE_PROBLEM));
+		await setup({ onSend, sentConfirmation: words });
+
+		await messageField().fill('First');
+		await send();
+		await expect.element(page.getByRole('status').filter({ hasText: words })).toBeVisible();
+		await messageField().fill('Second');
+		await send();
+
+		await expect.element(summary().getByText(SERVICE_PROBLEM)).toBeVisible();
+		expect(page.getByRole('status').filter({ hasText: words }).elements()).toHaveLength(0);
+		await expect.element(messageField()).toHaveValue('Second');
 	});
 });
 

@@ -71,6 +71,7 @@
 			{onDownloadAttachment}
 			readerSenderType="client"
 			attachmentPreviewURLs={{ m2: previewImage }}
+			sentConfirmation="Message sent to Highland Midwifery and Doula Group of the Finger Lakes. A reply will show here. Do not rely on messages for anything urgent."
 		/>
 	</section>
 

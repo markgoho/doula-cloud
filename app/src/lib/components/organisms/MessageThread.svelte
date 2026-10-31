@@ -71,6 +71,16 @@
 		 * cannot read one. Set, no form is offered at all.
 		 */
 		cannotSendReason?: string;
+		/**
+		 * What the status says once a Message is away (#2210): that it
+		 * was sent, and what happens next for this reader. The portal's
+		 * thread names the Practice and says a message is not for
+		 * anything urgent (ADR-0002); left out, it says "Message sent.".
+		 * Said only after the server has stored the Message, so it is
+		 * never shown for a send that did not reach it (ADR-0059: the
+		 * portal queues nothing).
+		 */
+		sentConfirmation?: string;
 	}
 
 	let {
@@ -84,7 +94,8 @@
 		attachmentPreviewURLs,
 		readerSenderType,
 		composeOpener,
-		cannotSendReason
+		cannotSendReason,
+		sentConfirmation = 'Message sent.'
 	}: Properties = $props();
 
 	let isComposeOpen = $state(false);
@@ -137,6 +148,9 @@
 	// place for the person to correct and send again.
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
+		// An earlier send's status goes as this one starts, so a failure
+		// never sits under a "sent", and a second send is announced again.
+		sentMessage = '';
 		await submission.run(async () => {
 			const errors = composeErrors();
 			if (errors.length > 0) return errors;
@@ -145,10 +159,8 @@
 			body = '';
 			attachment = undefined;
 			sentCount += 1;
-			if (composeOpener !== undefined) {
-				isComposeOpen = false;
-				sentMessage = 'Message sent.';
-			}
+			if (composeOpener !== undefined) isComposeOpen = false;
+			sentMessage = sentConfirmation;
 		}, orThrownErrors(fieldIds));
 	}
 </script>
@@ -225,8 +237,13 @@
 		<Text text={cannotSendReason} />
 	{/if}
 
+	<!--
+		Focused only where the form has closed, so Send is gone (GOV.UK's
+		success-banner rule, #1598); with the form still open, Send keeps
+		focus and the status is announced (#2210).
+	-->
 	{#if sentMessage}
-		<Notice variant="status" message={sentMessage} isFocusedOnAppear />
+		<Notice variant="status" message={sentMessage} isFocusedOnAppear={composeOpener !== undefined} />
 	{/if}
 
 	{#if composeOpener !== undefined && !isComposeOpen && !cannotSendReason}
