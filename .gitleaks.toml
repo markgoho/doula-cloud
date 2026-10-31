@@ -1,0 +1,51 @@
+title = "DoulaCloud"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "stripemode_test.go fixtures: made-up keys spelled SECRETVALUE, testing prefix parsing only"
+targetRules = ["stripe-access-token"]
+regexes = ['''^[sr]k_(?:test|live)_51SECRETVALUE\w*$''']
+
+[[allowlists]]
+description = "accessibility.e2e.ts route key, a URL path rather than a credential"
+targetRules = ["generic-api-key"]
+regexes = ['''^signup/practice$''']
+
+[[allowlists]]
+description = "firebase-tools.test.ts stand-in JWT, base64 of the words 'stand', 'in', 'sig'"
+targetRules = ["generic-api-key"]
+regexes = ['''^eyJzdGFuZA\.eyJpbg\.c2ln$''']
+
+[[allowlists]]
+description = "Container image tag pinned to a commit SHA in Terraform"
+targetRules = ["generic-api-key"]
+regexTarget = "line"
+regexes = ['''docker\.pkg\.dev/\S+:[0-9a-f]{40}"''']
+
+[[allowlists]]
+description = "Stripe Sandbox (test mode) PaymentIntent client secret quoted in a research note; scoped to one test payment, grants no account access"
+targetRules = ["generic-api-key"]
+regexes = ['''^pi_3UDRIw''']
+
+[[allowlists]]
+description = "pen.dev fileToken, a cloud-side document handle rather than a credential; the .pen file and pen.dev left in PR #2000"
+targetRules = ["generic-api-key"]
+paths = ['''^docs/design/doula-cloud\.pen$''']
+
+[[allowlists]]
+description = "Identity Platform browser API key, public by design in every Firebase web app (see app/src/lib/firebase.ts)"
+targetRules = ["gcp-api-key", "generic-api-key"]
+regexes = ['''^AIzaSyABnAc22teViyKS0EzLmp1Gcxi-uQuU5UE$''']
+
+[[allowlists]]
+description = "curl -u reading a key from a shell variable, never a literal key"
+targetRules = ["curl-auth-user"]
+regexTarget = "match"
+regexes = ['''-u\s+"\$[A-Z_]+:"''']
+
+[[allowlists]]
+description = "Throwaway VAPID private key for the e2e stack (docs/environment.md); production's pair lives in Secret Manager"
+targetRules = ["generic-api-key"]
+regexes = ['''^Vb9fJN9OddK_iRPHqg4We5I2KIcppbZS9_-aoAELXI4$''']
