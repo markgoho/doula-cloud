@@ -42,7 +42,7 @@ Four webhook routes, all registered in `api/routes_webhook.go:17-26`:
 | **Mode mismatch** (live event, test keys or the reverse) | `billing: purchase webhook: refusing event %s: livemode %v, keys are in %s mode` (`billing/webhook.go:50`); same shape for `payments: connect webhook:` (`payments/webhook.go:134`) and `payments: account webhook:` (`:735`) | 400 | Nothing |
 | **Unhandled event type** | `payments: connect webhook: dropping unhandled event type %q (id %s)` (`payments/webhook.go:153`), and the account webhook's at `:744`. The purchase webhook acknowledges other types silently (`billing/webhook.go:60-63`). | 200 | Nothing |
 | **Event for an unknown invoice or account** | `dropping invoice.paid for unresolved invoice …` and siblings (`payments/webhook.go:336`, `:460`, `:548`, `:653`, `:810`) | 200 | Nothing |
-| **Handled successfully** | None | 200 | A `stripe_webhook_events` row: `event_id`, `processed_at` only, no type and no route (`api/db/migrations/00022_stripe_purchase_webhook.sql:11-14`) |
+| **Handled successfully** | None | 200 | Stripe routes: a `stripe_webhook_events` row, `event_id` and `processed_at` only, no type and no route (`api/db/migrations/00022_stripe_purchase_webhook.sql:11-14`). The Mailgun route does not use that table. |
 | **Internal error** (database, Stripe call) | Mostly none; `apierr.WriteError` with 500 | 500 | Rolled back |
 
 Two consequences:
@@ -53,7 +53,7 @@ Two consequences:
 ### Outbox worker
 
 - One Cloud Scheduler job, `process-outbox-drain`, calls `POST /api/internal/outboxes/drain` every five minutes with `retry_count = 0` (`terraform/scheduler.tf:21-56`). A second job, `verify-practice-pages`, runs every fifteen minutes (`terraform/scheduler.tf:58-88`).
-- The drain runs every registered outbox (22 registrations in `api/outboxes.go`), each in its own transaction. A failing outbox logs `outbox: drain %s: %v` with the outbox's path (`api/internal/outbox/drain.go:111`) and the response is 500 naming the failed paths (`drain.go:114-117`); otherwise 200. Route registered at `api/internal/outbox/registry.go:86`.
+- The drain runs every registered outbox (22 registrations in `api/outboxes.go`), each in its own transaction. A failing outbox logs `outbox: drain %s: %v` with the outbox's path (`api/internal/outbox/drain.go:111`) and the response is 500 naming the failed paths (`drain.go:116-121`); otherwise 200. Route registered at `api/internal/outbox/registry.go:86`.
 - **Dead-lettering logs nothing.** A row that exhausts its retries, or is dead-lettered on the spot for a suppressed address, gets `status = 'dead_lettered'` and `last_error` on the row (`api/internal/outbox/outbox.go:98-135`). The only place it is visible is the outbox table.
 - So the outbox has two signals available today: the drain's 500 in the request log (and its log line), and dead-lettered rows in the database. The first suits a log-based metric; the second needs a query.
 - **Unverified:** whether Cloud Scheduler exposes a built-in Monitoring metric for job attempts. The GCP metrics list for services starting with C did not show a `cloudscheduler.googleapis.com` metric when searched, and the Scheduler logging page fetched returned 404. The drain's own 500 in the Cloud Run request log does not depend on this.
@@ -107,7 +107,7 @@ All from [Google Cloud Observability pricing](https://cloud.google.com/stackdriv
 
 | Item | Price | Free |
 | --- | --- | --- |
-| Alerting policies | $0.35 a month per metric reference (each condition counts as one; a log-match policy has one condition), plus $0.50 per million points returned | Not charged before **September 1, 2027** at the earliest; 90- and 30-day notices first. Policies on uptime, billing or quota metrics are never charged. |
+| Alerting policies | $0.35 a month per metric reference (each metric-threshold or metric-absence condition counts as one), plus $0.50 per million points returned. Log-match policies have a single condition and return no points; the page does not say outright whether that condition is a chargeable reference. | Not charged before **September 1, 2027** at the earliest; 90- and 30-day notices first. Policies on uptime, billing or quota metrics are never charged. |
 | User-defined log-based metric | Billed as custom metric ingestion; a counter is 8 bytes per point, $0.2580/MiB past the allotment | First 150 MiB per billing account per month |
 | Logs ingestion | $0.50/GiB | First 50 GiB per project per month |
 | Uptime-check executions | $0.30 per 1,000 | 1 million per project per month |
