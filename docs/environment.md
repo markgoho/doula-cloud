@@ -430,11 +430,11 @@ They point at the raw Cloud Run URL — the one `gcloud run services describe` r
 | --- | --- | --- | --- | --- |
 | `/api/stripe/webhook` | `checkout.session.completed` | snapshot | `@self` | `we_1U7NT01rKoVEA79vnOcBFqtV`, enabled |
 | `/api/stripe/account-webhook` | `v2.core.account[configuration.merchant].capability_status_updated` | thin | `@self` | `ed_test_61VGn5QffuUmiONhX16VGl100QSQI7KSJpC2tKXrs4xU`, enabled |
-| `/api/stripe/connect-webhook` | `invoice.paid`, `invoice.payment_failed`, `invoice.marked_uncollectible`, `credit_note.created`, `refund.created` | snapshot | `@accounts` | `we_1U7Ocp1rKoVEA79vT9AXETKU`, enabled |
+| `/api/stripe/connect-webhook` | `invoice.paid`, `invoice.payment_failed`, `invoice.marked_uncollectible`, `credit_note.created`, `refund.created`, `payment_intent.processing` | snapshot | `@accounts` | `we_1U7Ocp1rKoVEA79vT9AXETKU`, enabled |
 
 `invoice.marked_uncollectible` was added to the Sandbox destination on 2026-10-31 for [#2224](https://github.com/markgoho/doula-cloud/issues/2224), with `POST /v2/core/event_destinations/{id}` and a JSON body that lists all five `enabled_events`, since the body replaces the list. The live-mode destination needs the same event when it is created.
 
-The Connect snapshot destination does not yet carry `payment_intent.processing`, which the handler has acted on since [#2225](https://github.com/markgoho/doula-cloud/issues/2225). Adding it is a write to the shared Sandbox that the command on that issue makes (it lists all six events, since it replaces the set); the row above gains it then.
+`payment_intent.processing` was added to the Sandbox destination on 2026-10-31 for [#2225](https://github.com/markgoho/doula-cloud/issues/2225), by the same `POST /v2/core/event_destinations/{id}` call with all six `enabled_events` listed, since the body replaces the list. The live-mode destination needs the same events; it copies this row at cutover ([#2384](https://github.com/markgoho/doula-cloud/issues/2384)).
 
 The two Connect rows are one feature, split by Stripe's own constraint: an event destination has one `event_payload`, and the account events are thin while the Invoice events are snapshot. The snapshot destination pins `snapshot_api_version` to `2026-07-29.dahlia`, the version `stripe-go v86.3.0` sends on every request (`api_version.go`), so a delivered object always deserializes into the structs the SDK ships.
 
