@@ -574,7 +574,14 @@
 	{outcome}
 	backHref={back?.href}
 	backLabel={back?.label}
+	isBackPending
 	{summary}
+	summaryRows={[
+		{ label: 'Name', value: 'Given Family-name', action: 'Change' },
+		{ label: 'Where you work', value: ['New York', 'Last confirmed'], action: 'Change' },
+		{ label: 'Email address', value: 'given.family@example.com', action: 'Send a new verification link' },
+		{ label: 'Two-factor authentication', value: 'Off', action: 'Set up' }
+	]}
 	sections={[
 		...(isSoleOwner && hasSecondFactor ? [{ heading: 'Recovery codes', content: savedCodesSection }] : []),
 		{ heading: 'Delete your login', content: deleteLoginSection }

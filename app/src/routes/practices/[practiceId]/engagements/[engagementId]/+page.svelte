@@ -4,6 +4,7 @@
 	import { takeOutcome } from '#lib/outcome.js';
 	import { Streamed } from '#lib/streamedRead.svelte.js';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
+	import { isOwnerOrAdmin } from '#lib/roles.js';
 	import FailedRead from '../../FailedRead.svelte';
 	import EngagementScreen from './EngagementScreen.svelte';
 	import type { PageProps as PageProperties } from './$types';
@@ -28,6 +29,18 @@
 		'Messages',
 		'Activity'
 	];
+
+	// The summary card's usual rows (#2251): Care, Due and Care phase with
+	// a Change, the Doula with one for an Owner or Admin, then Portal
+	// invite and Created. An Engagement with no due date has one row fewer.
+	const summaryRows = $derived([
+		{ label: 'Care', value: 'Birth', action: 'Change' },
+		{ label: 'Due', value: 'Nov 20, 2026', action: 'Change' },
+		{ label: 'Care phase', value: 'Care in progress', action: 'Change' },
+		{ label: 'Doula', value: 'Given Family-name', action: isOwnerOrAdmin(data.session) ? 'Change' : undefined },
+		{ label: 'Portal invite', value: 'Accepted' },
+		{ label: 'Created', value: 'Oct 27, 2026, 9:00 am' }
+	]);
 </script>
 
 {#snippet nothing()}{/snippet}
@@ -42,6 +55,7 @@
 		backHref={resolve('/practices/[practiceId]/clients', { practiceId: page.params.practiceId! })}
 		backLabel="Clients"
 		isContentsShown
+		{summaryRows}
 		sections={sectionHeadings.map((heading) => ({ heading, content: nothing }))}
 		loading="Loading the Engagement"
 	/>

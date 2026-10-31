@@ -7,7 +7,8 @@
 
 	/*
 	 * The record before it loads (#2248): its title is the Client's name,
-	 * the data itself, so a heading-shaped bar holds its line.
+	 * the data itself, so a heading-shaped bar holds its line, and its
+	 * summary's rows hold the card's height (#2251).
 	 */
 	export const variants: readonly DemoVariant<Properties>[] = [
 		{ name: 'Record detail, loading', props: { isLoading: true } }
@@ -67,7 +68,7 @@
 </script>
 
 {#snippet summary()}
-	<SummaryList rows={summaryItems} />
+	<SummaryList rows={summaryItems} isBordered />
 {/snippet}
 
 {#snippet actions()}
@@ -120,6 +121,7 @@
 	title={isLoading ? '' : 'Anne-Marie Ochieng-Whitfield'}
 	loading={isLoading ? 'Loading the Client' : undefined}
 	{summary}
+	summaryRows={summaryItems}
 	{actions}
 	isContentsShown
 	sections={[
