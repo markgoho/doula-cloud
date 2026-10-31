@@ -45,9 +45,10 @@ describe('matchHistory', () => {
 			matchHistory({
 				createdAt: ADDED,
 				engagements: [
-					// 03:00 UTC on the 15th, though its text sorts first.
-					engagement('completed', '2026-06-14T22:00:00-05:00'),
-					engagement('completed', '2026-06-14T23:00:00Z'),
+					// Noon UTC on the 15th, though its text sorts before the
+					// next one, which is noon UTC on the 14th.
+					engagement('completed', '2026-06-15T00:00:00-12:00'),
+					engagement('completed', '2026-06-15T02:00:00+14:00'),
 					engagement('completed')
 				]
 			})
