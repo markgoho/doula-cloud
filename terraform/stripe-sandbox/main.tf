@@ -52,6 +52,16 @@ import {
   id = "ed_test_61VGn5QffuUmiONhX16VGl100QSQI7KSJpC2tKXrs4xU"
 }
 
+import {
+  to = module.stripe.stripe_v2_core_event_destination.route["/api/stripe/connect-webhook"]
+  id = "we_1U7Ocp1rKoVEA79vT9AXETKU"
+}
+
+import {
+  to = module.stripe.stripe_v2_core_event_destination.route["/api/stripe/webhook"]
+  id = "we_1U7NT01rKoVEA79vnOcBFqtV"
+}
+
 output "credit_product_id" {
   value = module.stripe.credit_product_id
 }

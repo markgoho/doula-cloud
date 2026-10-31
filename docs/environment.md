@@ -431,15 +431,15 @@ They point at the raw Cloud Run URL — the one `gcloud run services describe` r
 
 | Endpoint | Events | Payload | `events_from` | Sandbox | Live |
 | --- | --- | --- | --- | --- | --- |
-| `/api/stripe/webhook` | `checkout.session.completed` | snapshot | `@self` | `we_1U7NT01rKoVEA79vnOcBFqtV`, enabled, until the cutover below replaces it with an event destination | created by [#2463](https://github.com/markgoho/doula-cloud/issues/2463) |
+| `/api/stripe/webhook` | `checkout.session.completed` | snapshot | `@self` | `we_1U7NT01rKoVEA79vnOcBFqtV`, enabled, imported | created by [#2463](https://github.com/markgoho/doula-cloud/issues/2463) |
 | `/api/stripe/account-webhook` | `v2.core.account[configuration.merchant].capability_status_updated` | thin | `@self` | `ed_test_61VGn5QffuUmiONhX16VGl100QSQI7KSJpC2tKXrs4xU`, enabled, imported | created by #2463 |
-| `/api/stripe/connect-webhook` | `invoice.paid`, `invoice.payment_failed`, `invoice.marked_uncollectible`, `credit_note.created`, `refund.created`, `payment_intent.processing` | snapshot | `@accounts` | `we_1U7Ocp1rKoVEA79vT9AXETKU`, enabled, until the cutover below replaces it with an event destination | created by #2463 |
+| `/api/stripe/connect-webhook` | `invoice.paid`, `invoice.payment_failed`, `invoice.marked_uncollectible`, `credit_note.created`, `refund.created`, `payment_intent.processing` | snapshot | `@accounts` | `we_1U7Ocp1rKoVEA79vT9AXETKU`, enabled, imported | created by #2463 |
 
-The two `we_…` rows are v1 webhook endpoints from before the module. The first Sandbox `apply` creates an event destination for each beside them, and they are deleted once the new signing secrets are pinned on `doula-api`. Until those pins land, events to the new destinations fail their signature check, so the swap is done in one sitting, in the order #2390's pull request lists. Each row's Sandbox id is updated here when that happens.
+The two `we_…` rows were created as v1 webhook endpoints, and Stripe lists them as v2 event destinations too, so the module imports them as it imports the `ed_test_` row. Their signing secrets do not change.
 
 `invoice.marked_uncollectible` (#2224) and `payment_intent.processing` (#2225) were added to the Sandbox destination by hand on 2026-10-31, with `POST /v2/core/event_destinations/{id}`. That gap, code a manual command ahead of the Sandbox and silently ahead of live, is what #2390 closes.
 
-The two Connect rows are one feature, split by Stripe's own constraint: an event destination has one `event_payload`, and the account events are thin while the Invoice events are snapshot. The snapshot destinations pin `snapshot_api_version` to `2026-07-29.dahlia`, the version `stripe-go v86.3.0` sends on every request (`api_version.go`), so a delivered object always deserializes into the structs the SDK ships.
+The two Connect rows are one feature, split by Stripe's own constraint: an event destination has one `event_payload`, and the account events are thin while the Invoice events are snapshot. The Connect snapshot destination pins `snapshot_api_version` to `2026-07-29.dahlia`, the version `stripe-go v86.3.0` sends on every request (`api_version.go`), so a delivered object always deserializes into the structs the SDK ships. The platform destination has no `snapshot_api_version`, so it renders at the account's default API version. Provider `0.3.0` can only set one by replacing the destination, which would roll its signing secret, and `PostPurchaseWebhookHandler` accepts any version (`stripe.WithIgnoreAPIVersionMismatch`). `unpinnedSnapshotRoutes` in `api/internal/payments/stripe_destinations_test.go` names this one exception.
 
 Both are created over `/v2/core/event_destinations`, not the v1 `/v1/webhook_endpoints` surface, and neither carries a `connect=true` flag — v2 replaced that with `events_from`.
 
@@ -472,7 +472,7 @@ Both Connect secrets are in Secret Manager and wired to the service. Two things 
 
 Set out of band on purpose, for the reason the section after next gives.
 
-A signing secret is returned **once**, in the create response — for an event destination, only if the request asks for it by name via `include: ["webhook_endpoint.signing_secret"]`. Neither retrieve nor list ever shows it again. If it is lost, roll it in the dashboard and add a new Secret Manager version, then name that version in `terraform/cloud_run.tf` (next section). A destination the module creates has its first secret in Terraform state, because provider `0.3.0` always asks for it on create, so that one is rolled at once and only the rolled secret goes to Secret Manager ([docs/infrastructure.md](infrastructure.md#stripe-state)).
+A signing secret is returned **once**, in the create response — for an event destination, only if the request asks for it by name via `include: ["webhook_endpoint.signing_secret"]`. Neither retrieve nor list ever shows it again. If it is lost, roll it in the dashboard and add a new Secret Manager version, then name that version in `terraform/cloud_run.tf` (next section). A destination the module creates, which is every live one ([#2463](https://github.com/markgoho/doula-cloud/issues/2463)), has its first secret in Terraform state, because provider `0.3.0` always asks for it on create. That one is rolled at once and only the rolled secret goes to Secret Manager ([docs/infrastructure.md](infrastructure.md#stripe-state)).
 
 ## The Stripe secrets are pinned to a version
 
