@@ -1202,6 +1202,56 @@ describe('a section fails on its own, independent of the others (#841)', () => {
 	});
 });
 
+// #2258: the sections read at once, not one after another, and each says
+// it is loading until its own read lands rather than drawing empty.
+async function renderWithHeldReads(roles: string[]) {
+	await testPage.viewport(3200, 900);
+	apiFetchWithSession.mockImplementation(() => new Promise(() => {}));
+	await render(Page, {
+		data: { ...fixtureDetail, session: sessionFor(roles) }
+	});
+}
+
+describe('the sections read at once and say they are loading (#2258)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('asks for every section before any answers', async () => {
+		await renderWithHeldReads(['owner']);
+
+		await expect.poll(() => apiFetchWithSession.mock.calls.length).toBeGreaterThanOrEqual(10);
+		const paths = apiFetchWithSession.mock.calls.map(([path]) => String(path));
+		for (const read of ['/visits', '/messages', '/activity', '/contract', '/plans/']) {
+			expect(paths.some((path) => path.includes(read))).toBe(true);
+		}
+	});
+
+	it('says Visits, Messages and Activity are loading, never that they are empty', async () => {
+		await renderWithHeldReads(['owner']);
+
+		for (const name of ['Loading the Visits', 'Loading the Messages', 'Loading the Activity']) {
+			await expect.element(testPage.getByRole('status', { name })).toBeInTheDocument();
+		}
+		await expect.element(testPage.getByText('No Visits yet.')).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('Nothing has happened yet.')).not.toBeInTheDocument();
+	});
+
+	it('names the Offers section for an Owner before its read lands', async () => {
+		await renderWithHeldReads(['owner']);
+
+		await expect.element(testPage.getByRole('status', { name: 'Loading the Offers' })).toBeInTheDocument();
+		await expect.element(testPage.getByRole('heading', { level: 2, name: 'Offers' })).toBeInTheDocument();
+	});
+
+	it('draws no Offers section for a Doula, whom its read refuses', async () => {
+		await renderWithHeldReads(['doula']);
+
+		await expect.element(testPage.getByRole('status', { name: 'Loading the Visits' })).toBeInTheDocument();
+		await expect.element(testPage.getByRole('heading', { level: 2, name: 'Offers' })).not.toBeInTheDocument();
+	});
+});
+
 function pdfBlobResponse(): Response {
 	return new Response(new Blob(['%PDF-1.4'], { type: 'application/pdf' }), { status: 200 });
 }
@@ -1300,8 +1350,9 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 		await setup({ ...fixtureDetail, clientHasEmail: false });
 
 		await expect.element(testPage.getByRole('button', { name: 'Send portal invite' })).not.toBeInTheDocument();
+		// The Contract section says it too, now that it reads beside the header (#2258).
 		await expect
-			.element(testPage.getByText('This Client has no email address on file. Add one before sending a portal invite.'))
+			.element(testPage.getByText('This Client has no email address on file. Add one before sending a portal invite.').first())
 			.toBeVisible();
 		await expect
 			.element(testPage.getByText(/no email on file, so the client cannot be invited yet/i))
@@ -3619,7 +3670,8 @@ describe('the Messages section (#2004)', () => {
 					: undefined
 		);
 
-		expect(messagesSection().getByLabelText('Message').elements()).toHaveLength(0);
+		await expect.element(messagesSection().getByRole('button', { name: 'Write a message' })).toBeVisible();
+		expect(messagesSection().getByLabelText('Message', { exact: true }).elements()).toHaveLength(0);
 		await messagesSection().getByRole('button', { name: 'Write a message' }).click();
 		await messagesSection().getByLabelText('Message').fill('See you Thursday.');
 		await messagesSection().getByRole('button', { name: 'Send', exact: true }).click();
