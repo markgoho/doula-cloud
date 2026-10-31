@@ -4,11 +4,11 @@ import {
 	canReadConnect,
 	closeSecondFactorRecommendation,
 	canReadRoster,
-	hasSecondary,
 	isConnectCardShown,
+	isRequestBlockShown,
+	isRosterBlockShown,
 	loadPracticeLanding,
-	loadWaitingOnReplyPage,
-	type PracticeLanding
+	loadWaitingOnReplyPage
 } from './practiceLanding.js';
 import { jsonResponse } from './testResponse.js';
 
@@ -71,27 +71,37 @@ describe('role gates', () => {
 	});
 });
 
-describe('hasSecondary', () => {
-	it('is false when no block is entitled', () => {
-		expect(
-			hasSecondary({
-				roster: undefined,
-				credit: undefined,
-				connect: undefined,
-				requests: undefined
-			} as PracticeLanding)
-		).toBe(false);
+// #2228: the Overview draws a block only where something needs her; a
+// block that would only repeat the top bar is left off.
+describe('isRosterBlockShown', () => {
+	const roster = { members: 4, pendingInvitations: 1 };
+
+	it('is drawn where an invitation has expired, the one thing it asks of her', () => {
+		expect(isRosterBlockShown({ ...roster, expiredInvitations: 1 })).toBe(true);
 	});
 
-	it('is true when a block failed, so the rail can say so', () => {
-		expect(
-			hasSecondary({
-				roster: 'unavailable',
-				credit: undefined,
-				connect: undefined,
-				requests: undefined
-			} as PracticeLanding)
-		).toBe(true);
+	it('is not drawn where every invitation is still good', () => {
+		expect(isRosterBlockShown({ ...roster, expiredInvitations: 0 })).toBe(false);
+	});
+
+	it('is drawn when the roster read failed, and not for a caller who may not read it', () => {
+		expect(isRosterBlockShown('unavailable')).toBe(true);
+		expect(isRosterBlockShown(undefined)).toBe(false);
+	});
+});
+
+describe('isRequestBlockShown', () => {
+	it('is drawn where a Request waits', () => {
+		expect(isRequestBlockShown({ count: 1, hasMore: false })).toBe(true);
+	});
+
+	it('is not drawn where nobody is waiting', () => {
+		expect(isRequestBlockShown({ count: 0, hasMore: false })).toBe(false);
+	});
+
+	it('is drawn when the read failed, and not for a caller who may not read it', () => {
+		expect(isRequestBlockShown('unavailable')).toBe(true);
+		expect(isRequestBlockShown(undefined)).toBe(false);
 	});
 });
 
@@ -110,6 +120,18 @@ describe('isConnectCardShown', () => {
 	it('is drawn when the Connect read failed, and not for a caller who may not read it', () => {
 		expect(isConnectCardShown('unavailable')).toBe(true);
 		expect(isConnectCardShown(undefined)).toBe(false);
+	});
+
+	it.each([
+		['onboarding_incomplete', [], true],
+		['pending', [], true],
+		['payouts_restricted', [], true],
+		['active', ['individual.dob'], true],
+		['active', [], false]
+	] as const)('with Stripe %s and %j due, is drawn: %s', (status, requirementsDue, shown) => {
+		expect(
+			isConnectCardShown({ status, requirementsDue: [...requirementsDue], billingMode: 'stripe' })
+		).toBe(shown);
 	});
 });
 
