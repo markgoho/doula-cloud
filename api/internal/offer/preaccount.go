@@ -249,16 +249,17 @@ func resolveByToken(ctx context.Context, tx *sql.Tx, offerID, token, code string
 	}
 
 	var o PreAccountOffer
-	var dueDate, expiresAt time.Time
+	var expiresAt time.Time
+	var dueDate sql.NullTime
 	var amountCents sql.NullInt64
-	var terms, codeDigest sql.NullString
+	var initial, area, terms, codeDigest sql.NullString
 	var attempts int
 	err := tx.QueryRowContext(ctx,
 		`SELECT id, state::text, client_first_initial, client_area, due_date, amount_cents, terms,
 		        expires_at, access_code_digest, access_code_attempts
 		   FROM engagement_offers WHERE id = $1`,
 		offerID,
-	).Scan(&o.OfferID, &o.State, &o.ClientFirstInitial, &o.ClientArea, &dueDate, &amountCents, &terms,
+	).Scan(&o.OfferID, &o.State, &initial, &area, &dueDate, &amountCents, &terms,
 		&expiresAt, &codeDigest, &attempts)
 	if errors.Is(err, sql.ErrNoRows) {
 		return PreAccountOffer{}, http.StatusNotFound, "", "offer not found"
@@ -290,7 +291,7 @@ func resolveByToken(ctx context.Context, tx *sql.Tx, offerID, token, code string
 		o.State = stateExpired
 	}
 
-	o.DueDate = dueDate.Format(time.DateOnly)
+	o.ClientFirstInitial, o.ClientArea, o.DueDate = clientFields(initial, area, dueDate)
 	o.ExpiresAt = expiresAt.UTC().Format(time.RFC3339)
 	o.AmountCents = nullableInt64(amountCents)
 	o.Terms = nullableString(terms)

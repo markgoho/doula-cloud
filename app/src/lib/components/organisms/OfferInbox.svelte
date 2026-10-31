@@ -9,9 +9,17 @@
 	 * onDecide owns the API call and the resulting state change; this
 	 * component reports which Offer and which answer.
 	 */
-	import { formatCalendarDay, formatCalendarMonth, formatInstant } from '#lib/dates.js';
+	import { formatCalendarMonth, formatInstant } from '#lib/dates.js';
 	import { feePaidLine } from '#lib/doulaFee.js';
-	import { formatFee, isOpen, offerStateLabels, offerStateVariants, type Offer } from '#lib/offer.js';
+	import {
+		clientFactRows,
+		decideDescription,
+		formatFee,
+		isOpen,
+		offerStateLabels,
+		offerStateVariants,
+		type Offer
+	} from '#lib/offer.js';
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -37,11 +45,7 @@
 	function offerFacts(offer: Offer): SummaryListRow[] {
 		const rows: SummaryListRow[] = [];
 		if (isOpen(offer)) {
-			rows.push(
-				{ label: 'Client', value: offer.clientFirstInitial },
-				{ label: 'Area', value: offer.clientArea },
-				{ label: 'Due date', value: formatCalendarDay(offer.dueDate) }
-			);
+			rows.push(...clientFactRows(offer));
 		}
 		if (offer.state === 'accepted' && offer.dueMonth) {
 			rows.push({ label: 'Due', value: formatCalendarMonth(offer.dueMonth) });
@@ -108,7 +112,7 @@
 						/>
 					</cluster-l>
 					<span class="visually-hidden" id="offer-{offer.offerId}-decide-name"
-						>{offer.clientArea}, due {formatCalendarDay(offer.dueDate)}</span
+						>{decideDescription(offer)}</span
 					>
 					<!-- v8 ignore stop -->
 				{/if}

@@ -132,6 +132,16 @@ func lapseClientFields(state string, clientFirstInitial, clientArea, dueDate *st
 	*dueDate = ""
 }
 
+// clientFields reads the three fields as stored. Each is NULL once the
+// Client is erased (ADR-0027, #2385) and reads as empty, as a lapsed one does.
+func clientFields(initial, area sql.NullString, dueDate sql.NullTime) (string, string, string) {
+	due := ""
+	if dueDate.Valid {
+		due = dueDate.Time.Format(time.DateOnly)
+	}
+	return initial.String, area.String, due
+}
+
 // pageSize is the fixed number of Offers one list page carries --
 // docs/api-design.md section 4, mirroring payments.invoicePageSize's
 // "fixed size is enough for paginated to be true" reasoning.

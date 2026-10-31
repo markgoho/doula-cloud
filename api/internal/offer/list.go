@@ -220,18 +220,18 @@ func list(ctx context.Context, tx *sql.Tx, query, arg string, after *cursor) (Li
 	offeredAts := []time.Time{}
 	for rows.Next() {
 		var s Summary
-		var dueDate, offeredAt, expiresAt time.Time
-		var decidedAt sql.NullTime
+		var offeredAt, expiresAt time.Time
+		var dueDate, decidedAt sql.NullTime
 		var amountCents sql.NullInt64
-		var terms, paidMethod, paidOn, dueMonth sql.NullString
+		var initial, area, terms, paidMethod, paidOn, dueMonth sql.NullString
 		var paidCents sql.NullInt64
-		if err := rows.Scan(&s.OfferID, &s.State, &s.ClientFirstInitial, &s.ClientArea, &dueDate,
+		if err := rows.Scan(&s.OfferID, &s.State, &initial, &area, &dueDate,
 			&amountCents, &terms, &s.EmploymentType, &offeredAt, &expiresAt, &decidedAt,
 			&s.TargetName, &s.TargetAddress, &paidCents, &paidMethod, &paidOn, &dueMonth); err != nil {
 			// coverage:ignore reason: DB scan failure, not exercised by unit tests
 			return ListResponse{}, fmt.Errorf("offer: scan offer row: %w", err)
 		}
-		s.DueDate = dueDate.Format(time.DateOnly)
+		s.ClientFirstInitial, s.ClientArea, s.DueDate = clientFields(initial, area, dueDate)
 		s.OfferedAt = offeredAt.UTC().Format(time.RFC3339)
 		s.ExpiresAt = expiresAt.UTC().Format(time.RFC3339)
 		s.AmountCents = nullableInt64(amountCents)

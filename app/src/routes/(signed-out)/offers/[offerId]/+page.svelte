@@ -14,8 +14,8 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiFetch } from '#lib/api.js';
-	import { formatCalendarDay } from '#lib/dates.js';
 	import {
+		clientFactRows,
 		declinePreAccountOffer,
 		formatFee,
 		offerStateLabels,
@@ -63,11 +63,7 @@
 	function offerFacts(shown: PreAccountOffer): SummaryListRow[] {
 		const rows: SummaryListRow[] = [];
 		if (shown.state === 'offered') {
-			rows.push(
-				{ label: 'Client', value: shown.clientFirstInitial },
-				{ label: 'Area', value: shown.clientArea },
-				{ label: 'Due date', value: formatCalendarDay(shown.dueDate) }
-			);
+			rows.push(...clientFactRows(shown));
 		}
 		rows.push({ label: 'Fee', value: formatFee(shown.amountCents) });
 		if (shown.terms) {

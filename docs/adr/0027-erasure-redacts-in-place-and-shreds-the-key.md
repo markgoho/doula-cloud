@@ -77,6 +77,16 @@ The liveness question crosses tenants by construction, so it cannot be asked und
 
 New York Medicaid's own six-to-ten-year record-retention requirement conflicts with this ADR's redact-in-place cascade on an Engagement that billed a claim. The shape of the hold — what survives, the trigger, the clock, what happens at expiry, and the copy a Client reads — is recorded as an amendment to [ADR-0031](0031-practice-deletion-is-a-thirty-day-window-then-the-erasure-cascade.md) rather than here, because [#1094](https://github.com/markgoho/doula-cloud/issues/1094) also has to settle what a departed Practice's Deletion owes the same obligation, and the two questions read better answered together. This ADR's own redact-in-place act is what a hold defers, not what decides it: nothing above this amendment changes for a Client with no billed Engagement, and the mechanism the amendment describes is layered onto the act this ADR already runs.
 
+## Amendment, 2026-10-31: an Offer's copy of her initial, area and due date goes with her row ([#2385](https://github.com/markgoho/doula-cloud/issues/2385))
+
+An Offer ([ADR-0008](0008-employment-type-gates-the-practice-attachment-gates-the-engagement.md)) carries three fields typed in at send from the Client: `engagement_offers.client_first_initial`, `client_area` and `due_date`. The section above did not name them, and erasure left them in place.
+
+**Erasure redacts all three to `NULL` on every Offer under her Engagements, open or decided.** The initial is a letter of the name this ADR replaces, the area is a copy of the address it nulls, and the Offer's due date is a copy of her own date sent to a contractor. None of them is a record of the Practice's work, so each goes the way the column it was copied from goes, as `contracts.merge_field_values` already does. The `erased` activity row counts the Offers reached (`offers`), as it counts Contracts.
+
+**`engagements.due_date` is kept.** The Engagement and every record of care stay whole under "The row is redacted, never deleted"; the Engagement's due date is part of the Practice's own record of the work, like a Visit's date.
+
+Migration 00137 lets the three columns take `NULL`; a sender still has to give all three. A redacted Offer reads with the three empty, as a terminal one already does under #230: an open one still opens and can still be decided, and an accepted one on the Doula's inbox carries no due month. The export writes them empty. [ADR-0031](0031-practice-deletion-is-a-thirty-day-window-then-the-erasure-cascade.md)'s deletion cascade runs the same act per Client under the Practice's own row-level context and inherits this unchanged.
+
 ## Considered and rejected
 
 **Deleting the `clients` row.** It would take every Invoice, Contract and Visit with it, or leave them dangling. The Practice's financial and clinical record is not hers to delete, and it is not the product's either.

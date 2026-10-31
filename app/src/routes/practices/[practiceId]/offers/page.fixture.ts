@@ -61,6 +61,20 @@ const offers: Offer[] = [
 		expiresAt: '2026-06-08T00:00:00Z',
 		decidedAt: '2026-06-02T00:00:00Z',
 		feePaid: { amountCents: 450_000, method: 'bank_transfer', paidOn: '2026-09-30' }
+	},
+	// #2385: an open Offer whose Client was erased carries none of her
+	// fields, so it renders without the Client rows and is told apart
+	// by its fee.
+	{
+		offerId: 'offer-4',
+		state: 'offered',
+		clientFirstInitial: '',
+		clientArea: '',
+		dueDate: '',
+		amountCents: 450_000,
+		employmentType: 'contractor',
+		offeredAt: '2026-05-01T00:00:00Z',
+		expiresAt: '2026-05-08T00:00:00Z'
 	}
 ];
 
