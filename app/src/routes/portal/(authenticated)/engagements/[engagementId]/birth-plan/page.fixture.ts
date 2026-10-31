@@ -25,10 +25,11 @@ import Page from './+page.svelte';
 export const instance: Instance = {
 	engagementId: 'engagement-1',
 	planType: 'birth_plan',
-	// #2209: a long Client name and a long Practice name, so the 320px
-	// sweep meets the masthead at its widest.
+	// #2209, #2355: a long Client name, two Doulas and a long Practice
+	// name, so the 320px sweep meets the masthead at its widest.
 	masthead: {
 		clientName: 'Anne-Marie Ochieng-Whitfield',
+		doulas: ['Persephone Abernathy-Castellanos', 'Lena Vasquez'],
 		practiceName: 'Highland Midwifery and Doula Group of the Finger Lakes',
 		changedOn: '2026-10-27'
 	},

@@ -13,8 +13,9 @@ import { seedFoundingOwner, uniqueEmail } from './staffSignup';
 // Birth Plan feature agree.
 
 /**
- * The printed Birth Plan, in print media (#2209): whose it is (her legal
- * name), whose Practice (seedFoundingOwner's default), and the day it last
+ * The printed Birth Plan, in print media (#2209, #2355): whose it is (her
+ * legal name), her Doula (the founding Owner, put on the Engagement below),
+ * whose Practice (seedFoundingOwner's default), and the day it last
  * changed. The day is the save this test just made, read in the Practice's
  * zone, so only its shape is asserted here; the unit specs and the BFF's
  * own tests pin the exact day.
@@ -24,6 +25,9 @@ async function expectPrintedMasthead(page: Page) {
 	const main = page.getByRole('main');
 	try {
 		await expect(main.getByText('Pat Client', { exact: true })).toBeVisible();
+		await expect(main.getByText('Doula', { exact: true })).toBeVisible();
+		await expect(main.getByText('Jamie Owner', { exact: true })).toBeVisible();
+		await expect(main.getByText('Practice', { exact: true })).toBeVisible();
 		await expect(main.getByText('Riverside Doulas', { exact: true })).toBeVisible();
 		await expect(main.getByText('Last changed')).toBeVisible();
 		await expect(main.getByText(/^[A-Z][a-z]{2} \d{1,2}, \d{4}$/)).toBeVisible();
@@ -54,6 +58,11 @@ test('Staff fills a Birth Plan, and the Client portal shows the matching read-on
 	);
 	const { id: clientId } = JSON.parse(createClientBody);
 	const engagementId = seedEngagement(clientId, practiceId);
+	const attach = await request.put(
+		`${API_URL}/api/practices/${practiceId}/engagements/${engagementId}/attachments/me`,
+		{ headers: staffHeaders }
+	);
+	expect(attach.ok(), `attach failed: ${attach.status()} ${await attach.text()}`).toBe(true);
 
 	// Staff side: create the Birth Plan (signup seeds a default template
 	// per Practice per #63), fill one field, and save.

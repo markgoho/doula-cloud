@@ -14,16 +14,21 @@
 	let { fields, answers, masthead }: { fields: Field[]; answers: Answers; masthead?: Masthead } = $props();
 
 	/*
-	 * #2209: what names the plan wherever it is printed -- whose it is,
-	 * whose Practice, and when it last changed -- before its first
-	 * question, the same three lines its PDF opens with. A reader handed
-	 * the paper is not the person on the screen, so it is a plain label
-	 * and value, read the same by both.
+	 * #2209, #2355: what names the plan wherever it is printed -- whose it
+	 * is, her Doula while anyone is on the Engagement, whose Practice, and
+	 * when it last changed -- before its first question, the same lines
+	 * its PDF opens with. A reader handed the paper is not the person on
+	 * the screen, so it is a plain label and value, read the same by both.
 	 */
 	function mastheadRows(named: Masthead): SummaryListRow[] {
+		const doulaRows: SummaryListRow[] =
+			named.doulas.length === 0
+				? []
+				: [{ label: named.doulas.length === 1 ? 'Doula' : 'Doulas', value: named.doulas.join(', ') }];
 		return [
 			{ label: 'Name', value: named.clientName },
-			{ label: 'Doula', value: named.practiceName },
+			...doulaRows,
+			{ label: 'Practice', value: named.practiceName },
 			{ label: 'Last changed', value: formatCalendarDay(named.changedOn) }
 		];
 	}

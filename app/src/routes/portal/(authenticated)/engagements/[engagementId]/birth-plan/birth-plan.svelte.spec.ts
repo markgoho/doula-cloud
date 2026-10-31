@@ -52,11 +52,12 @@ describe('Client-portal Birth Plan (#311)', () => {
 	// #2209: the print stylesheet hides the portal header, the only other
 	// place her Practice's name appears, so the plan itself names her, the
 	// Practice, and when it last changed -- outside every `.no-print`.
-	it('names whose plan it is, the Practice, and when it last changed, on paper too', async () => {
+	it('names whose plan it is, her Doulas, the Practice, and when it last changed, on paper too', async () => {
 		await setup();
 
 		const name = page.getByText('Anne-Marie Ochieng-Whitfield', { exact: true });
 		await expect.element(name).toBeVisible();
+		await expect.element(page.getByText('Persephone Abernathy-Castellanos, Lena Vasquez')).toBeVisible();
 		await expect.element(page.getByText('Highland Midwifery and Doula Group of the Finger Lakes')).toBeVisible();
 		await expect.element(page.getByText('Oct 27, 2026')).toBeVisible();
 		expect(name.element().closest('.no-print')).toBeNull();
