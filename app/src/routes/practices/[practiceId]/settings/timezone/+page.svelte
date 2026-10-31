@@ -33,7 +33,9 @@
 	const timezoneFieldIds = { timezone: timezoneId };
 
 	let timezone = $state('');
-	let isSaved = $state(false);
+	// The zone as the BFF saved it, not as the select reads now: a choice
+	// made after the save has not been saved.
+	let savedLabel = $state<string>();
 	/* Until the read answers, the zone is unknown: an empty select or an
 	   empty read-only row would say "no zone" when the truth is "not yet". */
 	let isLoaded = $state(false);
@@ -65,7 +67,7 @@
 	}
 
 	async function save() {
-		isSaved = false;
+		savedLabel = undefined;
 		await submission.run(async () => {
 			if (timezone === '') {
 				return [{ message: TIMEZONE_NEEDED, targetId: timezoneId }];
@@ -76,7 +78,7 @@
 				timezone
 			);
 			timezone = saved.timezone;
-			isSaved = true;
+			savedLabel = timezoneLabel;
 		}, mapRefusal);
 	}
 
@@ -98,9 +100,6 @@
 {/snippet}
 
 {#snippet fields()}
-	{#if isSaved}
-		<Text text="Saved." />
-	{/if}
 	<TimezoneField
 		id={timezoneId}
 		bind:value={timezone}
@@ -121,9 +120,22 @@
 	/>
 {/snippet}
 
+<!--
+	#2291, after #2194: the save names the zone saved and what it changes,
+	under Save so the person who pressed it sees it without scrolling at
+	320px. A polite status in place, never focused: Save is still there.
+-->
 {#snippet actions()}
 	{#if canChangeTimezone}
-		<Button label="Save" loading={submission.isSubmitting} onClick={save} />
+		<stack-l space="var(--space-4)">
+			<Button label="Save" loading={submission.isSubmitting} onClick={save} />
+			{#if savedLabel}
+				<Notice
+					variant="status"
+					message="Timezone saved. Visits now fall on the day it is in {savedLabel}, including Visits already recorded."
+				/>
+			{/if}
+		</stack-l>
 	{/if}
 {/snippet}
 

@@ -14,12 +14,13 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import {
+		describeSavedOnCall,
 		loadOnCallSettings,
 		saveOnCallSettings,
 		type OnCallSettings
 	} from '#lib/onCall.js';
 	import Button from '#lib/components/atoms/Button.svelte';
-	import Text from '#lib/components/atoms/Text.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
@@ -45,7 +46,9 @@
 	let startRule = $state<OnCallSettings['startRule']>('gestational_week');
 	let startWeek = $state('37');
 	let graceDays = $state('14');
-	let isSaved = $state(false);
+	// The sentence for the rule as the BFF saved it, not as the form reads
+	// now: a change typed after the save has not been saved.
+	let savedMessage = $state<string>();
 	const submission = new FormSubmission();
 
 	const startRuleOptions: { value: OnCallSettings['startRule']; label: string; description: string }[] = [
@@ -81,19 +84,18 @@
 	}
 
 	async function save() {
-		isSaved = false;
+		savedMessage = undefined;
 		await submission.run(async () => {
-			apply(
-				await saveOnCallSettings(apiFetchWithSession, page.params.practiceId!, {
-					startRule,
-					// The BFF holds the bounds and says them in its own words, so
-					// the screen sends what was typed rather than checking it
-					// twice and risking two different sentences for one rule.
-					startWeek: Number(startWeek),
-					graceDays: Number(graceDays)
-				})
-			);
-			isSaved = true;
+			const saved = await saveOnCallSettings(apiFetchWithSession, page.params.practiceId!, {
+				startRule,
+				// The BFF holds the bounds and says them in its own words, so
+				// the screen sends what was typed rather than checking it
+				// twice and risking two different sentences for one rule.
+				startWeek: Number(startWeek),
+				graceDays: Number(graceDays)
+			});
+			apply(saved);
+			savedMessage = describeSavedOnCall(saved);
 		}, mapRefusal);
 	}
 
@@ -107,9 +109,6 @@
 {/snippet}
 
 {#snippet fields()}
-	{#if isSaved}
-		<Text text="Saved." />
-	{/if}
 	<RadioGroup
 		name={startRuleId}
 		legend="When on call starts"
@@ -174,8 +173,19 @@
 	/>
 {/snippet}
 
+<!--
+	#2291, after #2194: the save says the rule saved and that every birth
+	follows it, under Save so the person who pressed it sees it without
+	scrolling at 320px. A polite status in place, never focused: Save is
+	still there.
+-->
 {#snippet actions()}
-	<Button label="Save" loading={submission.isSubmitting} onClick={save} />
+	<stack-l space="var(--space-4)">
+		<Button label="Save" loading={submission.isSubmitting} onClick={save} />
+		{#if savedMessage}
+			<Notice variant="status" message={savedMessage} />
+		{/if}
+	</stack-l>
 {/snippet}
 
 <FormPage

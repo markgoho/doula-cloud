@@ -32,6 +32,7 @@ const settingsPath = '/api/practices/practice-1/on-call-settings';
 const week = () => testPage.getByLabelText('Week of pregnancy', { exact: true });
 const grace = () => testPage.getByLabelText('Days on call after the due date', { exact: true });
 const save = () => testPage.getByRole('button', { name: 'Save' }).click();
+const savedStatus = () => testPage.getByRole('status').filter({ hasText: 'On call saved.' });
 
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
@@ -87,7 +88,14 @@ describe('the on-call rule screen', () => {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ startRule: 'gestational_week', startWeek: 39, graceDays: 10 })
 		});
-		await expect.element(testPage.getByText('Saved.')).toBeVisible();
+		// #2291: a polite status that says the rule saved and what follows
+		// it, and takes no focus while Save is still on the screen.
+		await expect
+			.element(savedStatus())
+			.toHaveTextContent(
+				'On call saved. On call now opens at week 39 of pregnancy and runs 10 days past the due date, for every birth this Practice is carrying, including births already under way.'
+			);
+		await expect.element(testPage.getByRole('button', { name: 'Save' })).toHaveFocus();
 	});
 
 	it('switches to the day a doula takes the birth, and stops sending a week for it', async () => {
@@ -100,7 +108,32 @@ describe('the on-call rule screen', () => {
 		await save();
 
 		await expect.element(testPage.getByLabelText('Week of pregnancy', { exact: true })).not.toBeInTheDocument();
-		await expect.element(testPage.getByText('Saved.')).toBeVisible();
+		await expect.element(savedStatus()).toHaveTextContent(/opens on the day a doula takes the birth and runs 14 days/);
+	});
+
+	it('says nothing about a save until one lands, and drops it when the next one starts', async () => {
+		await setup();
+		await expect.element(week()).toHaveValue(37);
+		expect(savedStatus().query()).toBeNull();
+
+		apiFetchWithSession.mockResolvedValueOnce(jsonResponse(settings));
+		await save();
+		await expect.element(savedStatus()).toBeVisible();
+
+		apiFetchWithSession.mockResolvedValueOnce(
+			jsonResponse(
+				{
+					code: 'INVALID_ARGUMENT',
+					message: 'The on-call rule could not be saved.',
+					details: { graceDays: 'Enter a number of days from 0 to 42.' }
+				},
+				400
+			)
+		);
+		await save();
+
+		await expect.element(testPage.getByText('Enter a number of days from 0 to 42.').first()).toBeVisible();
+		expect(savedStatus().query()).toBeNull();
 	});
 
 	it('puts the BFF’s own refusal on the control it names', async () => {
