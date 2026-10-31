@@ -34,6 +34,11 @@ const (
 	// msgClientPaymentUnavailable is the answer when Stripe itself could not
 	// be reached or would not give the Invoice a payment. She can try again.
 	msgClientPaymentUnavailable = "We could not start this payment. Try again."
+	// msgClientPaymentOnItsWay is the refusal while her payment on an open
+	// Invoice is still settling (#2225): there is nothing more for her to
+	// pay, and Stripe would refuse to confirm a processing PaymentIntent
+	// again.
+	msgClientPaymentOnItsWay = "Your payment is on its way."
 )
 
 // clientPaymentRules limits the pay-secret endpoint as a heavy one
@@ -65,7 +70,7 @@ type ClientPaymentResponse struct {
 // Practice's connected account behind it, in a single read through her own
 // Client-portal transaction: an Invoice outside her Engagement, and a
 // draft one, are zero rows.
-const payableInvoiceQuery = `SELECT i.status, i.stripe_invoice_id, p.stripe_connect_account_id, ` + cardpayments.ClientsCanPayExpr + `
+const payableInvoiceQuery = `SELECT i.status, i.stripe_invoice_id, p.stripe_connect_account_id, ` + cardpayments.ClientsCanPayExpr + `, ` + paymentProcessingExpr + `
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
 	JOIN engagements e ON e.id = c.engagement_id
@@ -79,7 +84,8 @@ const payableInvoiceQuery = `SELECT i.status, i.stripe_invoice_id, p.stripe_conn
 // separate route from the Invoice read (#1011) and is never cached.
 //
 // Refused: an Invoice that is not hers or not there (404, the same words
-// as the read), a by-hand Invoice, an Invoice that is not open, and a
+// as the read), a by-hand Invoice, an Invoice that is not open, one with
+// a payment already on its way (#2225), and a
 // Practice that cannot take a card yet, or a deployment with no publishable
 // key (each 409). publishableKey is the
 // platform's public key from configuration.
@@ -102,9 +108,9 @@ func ClientGetPaymentHandler(client Client, publishableKey string) http.Handler 
 
 		var status string
 		var stripeInvoiceID, accountID sql.NullString
-		var clientsCanPay bool
+		var clientsCanPay, paymentProcessing bool
 		err := tx.QueryRowContext(r.Context(), payableInvoiceQuery, engagementID, invoiceID).
-			Scan(&status, &stripeInvoiceID, &accountID, &clientsCanPay)
+			Scan(&status, &stripeInvoiceID, &accountID, &clientsCanPay, &paymentProcessing)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, msgClientInvoiceNotFound, http.StatusNotFound)
 			return
@@ -121,6 +127,9 @@ func ClientGetPaymentHandler(client Client, publishableKey string) http.Handler 
 			return
 		case status != invoiceStatusOpen:
 			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, msgClientInvoiceNotOpen, nil)
+			return
+		case paymentProcessing:
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, msgClientPaymentOnItsWay, nil)
 			return
 		// The Practice's own setup (#2039): a code of its own, so the
 		// portal states it as a fact about the Practice and not as an error.

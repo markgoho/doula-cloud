@@ -118,6 +118,11 @@ type InvoiceView struct {
 	// none. A screen reads Overdue from it and never judges lateness
 	// itself.
 	DaysOverdue int `json:"daysOverdue"`
+	// PaymentProcessing (#2225) is true while a payment on this open
+	// Invoice is on its way -- a bank debit, for days -- and false
+	// otherwise. The status stays open, as Stripe keeps it
+	// (paymentProcessingExpr).
+	PaymentProcessing bool `json:"paymentProcessing"`
 }
 
 // ContractorInvoiceView is one Invoice as a contractor Doula reads it on an
@@ -140,6 +145,9 @@ type ContractorInvoiceView struct {
 	// rather than counted again (#2122): 0 unless the Invoice is open and
 	// past its due day.
 	DaysOverdue int `json:"daysOverdue"`
+	// PaymentProcessing is InvoiceView's own (#2225): a status, never an
+	// amount, so hers to read under ADR-0008's #2094 amendment.
+	PaymentProcessing bool `json:"paymentProcessing"`
 }
 
 // ContractorInvoicesResponse is GetInvoicesHandler's 200 for a contractor
@@ -157,12 +165,13 @@ func contractorInvoiceRows(items []InvoiceView) []ContractorInvoiceView {
 	rows := make([]ContractorInvoiceView, 0, len(items))
 	for _, it := range items {
 		rows = append(rows, ContractorInvoiceView{
-			ID:          it.ID,
-			Status:      it.Status,
-			RaisedOn:    it.RaisedOn,
-			DueOn:       it.DueOn,
-			PaidOn:      it.PaidOn,
-			DaysOverdue: it.DaysOverdue,
+			ID:                it.ID,
+			Status:            it.Status,
+			RaisedOn:          it.RaisedOn,
+			DueOn:             it.DueOn,
+			PaidOn:            it.PaidOn,
+			DaysOverdue:       it.DaysOverdue,
+			PaymentProcessing: it.PaymentProcessing,
 		})
 	}
 	return rows
@@ -861,14 +870,23 @@ const activePaymentJoin = `LEFT JOIN LATERAL (SELECT p.id, p.kind::text AS kind,
 const refundedCentsSubquery = `(SELECT COALESCE(-SUM(f.amount_cents), 0) FROM payments f
 	 WHERE f.invoice_id = i.id AND f.kind = 'refund') AS refunded_cents`
 
-const listInvoicesQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ap.id, ap.kind, ap.method, ap.note, ` + refundedCentsSubquery + `
+// paymentProcessingExpr is whether a payment on an Invoice is on its way
+// (#2225): payment_intent.processing set payment_processing_since and
+// nothing has ended it yet. Only an open Invoice counts, so a value left
+// behind by a way out of 'open' that does not clear it -- a Payment
+// recorded by hand, a void -- never reads as a payment still coming. One
+// expression for every reader, Staff and Client, so no two screens
+// disagree.
+const paymentProcessingExpr = `(i.status = 'open' AND i.payment_processing_since IS NOT NULL) AS payment_processing`
+
+const listInvoicesQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ap.id, ap.kind, ap.method, ap.note, ` + refundedCentsSubquery + `, ` + paymentProcessingExpr + `
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
 	` + activePaymentJoin + `
 	WHERE c.engagement_id = $1
 	ORDER BY i.created_at DESC, i.id DESC LIMIT $2`
 
-const listInvoicesAfterQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ap.id, ap.kind, ap.method, ap.note, ` + refundedCentsSubquery + `
+const listInvoicesAfterQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ap.id, ap.kind, ap.method, ap.note, ` + refundedCentsSubquery + `, ` + paymentProcessingExpr + `
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
 	` + activePaymentJoin + `
@@ -900,7 +918,7 @@ func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *i
 		var dueAt time.Time
 		var stripeInvoiceID sql.NullString
 		var activePaymentID, activePaymentKind, activePaymentMethod, activePaymentNote sql.NullString
-		if err := rows.Scan(&it.ID, &it.ContractID, &it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &dueAt, &it.Reference, &stripeInvoiceID, &activePaymentID, &activePaymentKind, &activePaymentMethod, &activePaymentNote, &it.RefundedCents); err != nil {
+		if err := rows.Scan(&it.ID, &it.ContractID, &it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &dueAt, &it.Reference, &stripeInvoiceID, &activePaymentID, &activePaymentKind, &activePaymentMethod, &activePaymentNote, &it.RefundedCents, &it.PaymentProcessing); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, false, fmt.Errorf("payments: scan invoice row: %w", err)
 		}

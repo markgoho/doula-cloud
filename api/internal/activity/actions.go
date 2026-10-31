@@ -444,8 +444,18 @@ const (
 	// method was tried.
 	ActionInvoicePaymentFailed EngagementAction = "invoice_payment_failed"
 
-	// DiffKeyPaymentMethodType is ActionInvoicePaymentFailed's one diff
-	// key: Stripe's own payment method type ("card", "us_bank_account").
+	// ActionInvoicePaymentProcessing records a payment that is on its way
+	// (#2225): Stripe reported a PaymentIntent on a Stripe-backed Invoice
+	// as processing, as a bank debit is for days before it clears. The
+	// Invoice stays 'open', as Stripe keeps it. Its end is recorded by
+	// ActionInvoicePaid or ActionInvoicePaymentFailed. Always a
+	// ClientActor -- the payment was hers -- and its diff carries
+	// DiffKeyPaymentMethodType when Stripe names the method.
+	ActionInvoicePaymentProcessing EngagementAction = "invoice_payment_processing"
+
+	// DiffKeyPaymentMethodType is the one diff key of
+	// ActionInvoicePaymentFailed and ActionInvoicePaymentProcessing:
+	// Stripe's own payment method type ("card", "us_bank_account").
 	// Here because payments writes it and engagement's Staff-facing
 	// sentence reads it.
 	DiffKeyPaymentMethodType = "paymentMethodType"
@@ -530,6 +540,7 @@ var moneyActions = map[EngagementAction]bool{
 	ActionInvoiceRaised:            true,
 	ActionInvoicePaid:              true,
 	ActionInvoicePaymentFailed:     true,
+	ActionInvoicePaymentProcessing: true,
 	ActionPaymentRecorded:          true,
 	ActionInvoiceVoided:            true,
 	ActionInvoiceWrittenOff:        true,

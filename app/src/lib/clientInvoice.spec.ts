@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
 	havePaid,
 	invoiceFacts,
+	invoiceStatusText,
 	loadClientInvoice,
 	loadClientInvoicesPage,
 	noLongerOwed,
@@ -38,6 +39,18 @@ describe('the money sections', () => {
 
 	it('sums what went back to her across Invoices', () => {
 		expect(totalReturnedCents(all)).toBe(300);
+	});
+});
+
+describe('invoiceStatusText', () => {
+	it('reads an open Invoice as not yet paid', () => {
+		expect(invoiceStatusText(base)).toBe('Not yet paid');
+	});
+
+	// #2225: the label states what the model holds -- her payment is on
+	// its way -- and only while the Invoice is still open.
+	it('reads Payment on its way while her payment settles', () => {
+		expect(invoiceStatusText({ ...base, paymentProcessing: true })).toBe('Payment on its way');
 	});
 });
 

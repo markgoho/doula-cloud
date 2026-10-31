@@ -63,6 +63,29 @@ func TestEntryDetail_FailedPaymentNamesTheMethod(t *testing.T) {
 	}
 }
 
+// TestEntryDetail_PaymentOnItsWayNamesTheMethod pins #2225's sentence: a
+// payment on its way says which method it is coming by, in the words a
+// failed attempt uses, so a bank payment that will take days reads as one.
+func TestEntryDetail_PaymentOnItsWayNamesTheMethod(t *testing.T) {
+	none := sql.NullString{}
+	cases := []struct {
+		name string
+		diff string
+		want string
+	}{
+		{"a bank payment", `{"paymentMethodType":"us_bank_account"}`, "Paying by bank account"},
+		{"no method", `{}`, ""},
+		{unreadableDiff, notJSON, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := entryDetail("invoice_payment_processing", []byte(tc.diff), none, none); got != tc.want {
+				t.Fatalf("detail = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestEntryDetail_WrittenOffSaysWhereItWasDone pins #2224's sentence for
 // an Invoice Stripe marked uncollectible: its Who column reads
 // "DoulaCloud", so the row says it was done in the Practice's Stripe

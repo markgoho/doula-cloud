@@ -119,6 +119,11 @@ type OpenEngagement struct {
 	// this list exactly when it does on its Engagement and on the
 	// Invoices list. Set beside InvoiceStatus and gated with it.
 	DaysOverdue *int `json:"daysOverdue,omitempty"`
+	// PaymentProcessing (#2225) is whether a payment on the Invoice
+	// InvoiceStatus names is on its way -- a bank debit, for days -- by
+	// the rule every Staff read of an Invoice uses (payments'
+	// paymentProcessingExpr). Set beside InvoiceStatus and gated with it.
+	PaymentProcessing *bool `json:"paymentProcessing,omitempty"`
 
 	// FeeCents is the Reader's own agreed fee (ADR-0008's
 	// engagement_attachments.fee_amount_cents), set only when the Reader
@@ -337,6 +342,7 @@ type rawOpenEngagement struct {
 	invoiceStatus      sql.NullString
 	invoiceAmountCents sql.NullInt64
 	invoiceDueAt       sql.NullTime
+	paymentProcessing  sql.NullBool
 	feeCents           sql.NullInt64
 }
 
@@ -421,7 +427,7 @@ const openEngagementRollupQueryTemplate = `
 	        FROM engagement_attachments ea
 	        JOIN staff s ON s.id = ea.staff_id
 	        WHERE ea.engagement_id = e.id AND ea.origin = 'granted' AND ea.ended_at IS NULL),
-	       inv.status, inv.amount_cents, inv.due_at, att.fee_amount_cents
+	       inv.status, inv.amount_cents, inv.due_at, inv.payment_processing, att.fee_amount_cents
 	FROM engagements e
 	LEFT JOIN LATERAL (
 	    -- At most one Contract row per Engagement, because there can be
@@ -455,7 +461,9 @@ const openEngagementRollupQueryTemplate = `
 	    -- Invoice when the Contract has one, and only falls back to the
 	    -- newest Invoice of any other status (paid, void, uncollectible,
 	    -- or draft) once nothing is outstanding.
-	    SELECT i.status, i.amount_cents, i.due_at FROM invoices i
+	    SELECT i.status, i.amount_cents, i.due_at,
+	           (i.status = 'open' AND i.payment_processing_since IS NOT NULL) AS payment_processing
+	    FROM invoices i
 	    WHERE i.contract_id = ct.id
 	    ORDER BY (i.status <> 'open'), (CASE WHEN i.status = 'open' THEN i.created_at END), i.created_at DESC
 	    LIMIT 1
@@ -516,7 +524,7 @@ func fetchOpenEngagements(ctx context.Context, tx *sql.Tx, clientIDs []string, s
 		var raw rawOpenEngagement
 		if err := rows.Scan(
 			&raw.clientID, &raw.engagementID, &raw.kind, &raw.engagementStatus, &raw.contractStatus,
-			&raw.doulaName, &raw.invoiceStatus, &raw.invoiceAmountCents, &raw.invoiceDueAt, &raw.feeCents,
+			&raw.doulaName, &raw.invoiceStatus, &raw.invoiceAmountCents, &raw.invoiceDueAt, &raw.paymentProcessing, &raw.feeCents,
 		); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("client: scan open engagement: %w", err)
@@ -563,6 +571,8 @@ func shapeOpenEngagement(reader staffauth.Reader, raw rawOpenEngagement, days in
 			// Invoice status always carries its due instant.
 			late := overdue.Days(status, raw.invoiceDueAt.Time, days.now, days.zone)
 			oe.DaysOverdue = &late
+			processing := raw.paymentProcessing.Bool
+			oe.PaymentProcessing = &processing
 		}
 		if raw.invoiceAmountCents.Valid {
 			amount := raw.invoiceAmountCents.Int64

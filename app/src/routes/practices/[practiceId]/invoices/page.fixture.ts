@@ -67,11 +67,29 @@ export const data: PracticeInvoiceListData = {
 			// the BFF counts no lateness on a settled Invoice.
 			dueOn: '2026-07-31',
 			daysOverdue: 0
+		},
+		{
+			// #2225: a bank payment on its way, so the Status column carries
+			// its longest words. Still open, so it counts as outstanding.
+			id: 'inv-3',
+			engagementId: 'eng-3',
+			contractId: 'contract-3',
+			clientName: 'Imani Brooks',
+			status: 'open',
+			amountCents: 180_000,
+			currency: 'usd',
+			createdAt: '2026-08-20T00:00:00Z',
+			raisedOn: '2026-08-20',
+			reference: 'DC-0101',
+			billingMode: 'stripe',
+			dueOn: '2026-09-19',
+			daysOverdue: 0,
+			paymentProcessing: true
 		}
 	],
 	hasMore: false,
-	outstandingCents: 450_000,
-	outstandingCount: 1,
+	outstandingCents: 630_000,
+	outstandingCount: 2,
 	paidCents: 250_000,
 	refundedCents: 125_050,
 	overdueCents: 450_000,

@@ -67,13 +67,14 @@
 
 	/*
 	 * #2094: a contractor's rows, one of each state they draw differently --
-	 * late (Overdue, the longest status word, and the widest day), paid (a
-	 * Paid day) and void.
+	 * late (Overdue, and the widest day), paid (a Paid day), void, and one
+	 * with a payment on its way (#2225), the longest status words.
 	 */
 	const contractorInvoices: ContractorInvoice[] = [
 		{ id: 'in_5', status: 'open', raisedOn: '2027-09-14', dueOn: '2027-10-14', daysOverdue: 12 },
 		{ id: 'in_6', status: 'paid', raisedOn: '2027-11-30', dueOn: '2027-12-30', paidOn: '2027-12-28', daysOverdue: 0 },
-		{ id: 'in_7', status: 'void', raisedOn: '2027-12-31', dueOn: '2028-01-30', daysOverdue: 0 }
+		{ id: 'in_7', status: 'void', raisedOn: '2027-12-31', dueOn: '2028-01-30', daysOverdue: 0 },
+		{ id: 'in_8', status: 'open', raisedOn: '2028-01-04', dueOn: '2028-02-03', daysOverdue: 0, paymentProcessing: true }
 	];
 
 	const paymentsSettingsHref ='https://example.test/practices/practice-1/settings/payments';

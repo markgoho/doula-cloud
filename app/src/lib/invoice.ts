@@ -69,6 +69,11 @@ export interface Invoice {
 	 * carries an Invoice, so one Invoice reads Overdue on every Staff
 	 * screen or on none. */
 	daysOverdue: number;
+	/** True while a payment on this open Invoice is on its way (#2225) --
+	 * a bank payment, for days. The status stays 'open', as Stripe keeps
+	 * it. The BFF always sends it; a fixture that leaves it out reads as
+	 * nothing on its way. */
+	paymentProcessing?: boolean;
 }
 
 /** One Invoice as a contractor Doula reads it on her own Engagement
@@ -87,6 +92,9 @@ export interface ContractorInvoice {
 	/** The count `Invoice.daysOverdue` carries, copied by the BFF rather
 	 * than counted again. */
 	daysOverdue: number;
+	/** `Invoice.paymentProcessing`: a status, never an amount, so hers to
+	 * read (#2225). */
+	paymentProcessing?: boolean;
 }
 
 /** The two kinds of Payment that can cover an Invoice -- see
@@ -575,7 +583,12 @@ export function paymentRecordedMessage(amountCents: number, method: PaymentMetho
 /** What an Invoice row needs to say where it stands: its stored status
  * and the BFF's count of days late. `Invoice`, `ContractorInvoice` and
  * `PracticeInvoice` all carry both. */
-export type InvoiceStanding = Pick<Invoice, 'status' | 'daysOverdue'>;
+export type InvoiceStanding = Pick<Invoice, 'status' | 'daysOverdue' | 'paymentProcessing'>;
+
+/**
+What every Staff screen reads while a payment settles (#2225).
+*/
+export const PAYMENT_ON_ITS_WAY_STATUS = 'Payment on its way';
 
 /** The status every Staff screen shows for an Invoice (#2094, #2122):
  * Overdue in place of Open once the BFF counts it late, because lateness
@@ -585,14 +598,21 @@ export type InvoiceStanding = Pick<Invoice, 'status' | 'daysOverdue'>;
  * Clients list's rollup line (#2130), so one Invoice cannot read Overdue
  * on one Staff screen and Open on the next.
  * Never the Client portal's: ADR-0038 keeps Overdue off it, and she
- * reads "Not yet paid" (clientInvoiceStatusLabel). */
+ * reads "Not yet paid" (clientInvoiceStatusLabel).
+ *
+ * A payment on its way (#2225) comes first, ahead of Overdue: the Client
+ * has paid and the money is clearing, so calling the Invoice late or
+ * merely open would say something the model does not hold. */
 export function invoiceRowStatusLabel(invoice: InvoiceStanding): string {
+	if (invoice.paymentProcessing) return PAYMENT_ON_ITS_WAY_STATUS;
 	return invoice.daysOverdue > 0 ? 'Overdue' : invoiceStatusLabel(invoice.status);
 }
 
 /** The Badge variant beside invoiceRowStatusLabel: Overdue is the
- * warning, as late money is. */
+ * warning, as late money is. A payment on its way is information, as
+ * Open is. */
 export function invoiceRowStatusVariant(invoice: InvoiceStanding): 'info' | 'success' | 'warning' | 'neutral' {
+	if (invoice.paymentProcessing) return 'info';
 	return invoice.daysOverdue > 0 ? 'warning' : invoiceStatusVariant(invoice.status);
 }
 

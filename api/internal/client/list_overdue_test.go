@@ -128,3 +128,33 @@ func TestListHandler_OpenEngagementsRollup_ContractorReadsNoLateness(t *testing.
 		t.Fatalf("a contractor's list carries lateness: %s", raw)
 	}
 }
+
+// TestListHandler_OpenEngagementsRollup_PaymentOnItsWay proves #2225 on
+// the Clients list: a late Invoice whose bank payment is on its way says
+// so, the same fact every other Staff read of it carries, so the line
+// does not read "Owes" or Overdue for money the Client has sent.
+func TestListHandler_OpenEngagementsRollup_PaymentOnItsWay(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "On Its Way Rollup Practice")
+	const ownerUID = "staff-on-its-way-rollup-owner"
+	testdb.SeedStaffAtPractice(t, db, practiceID, ownerUID, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Imani Brooks", "imani@example.com", "active")
+	contractID := seedClientContract(t, db, engagementID, "signed")
+	seedClientInvoiceDue(t, db, practiceID, contractID, lateDueAt)
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE invoices SET payment_processing_since = now() WHERE contract_id = $1`, contractID,
+	); err != nil {
+		t.Fatalf("mark payment processing: %v", err)
+	}
+
+	srv, session := newServerAt(t, db, ownerUID, overdueNow)
+	defer srv.Close()
+	list, _ := listAt(t, srv, session, practiceID)
+
+	if len(list.Items) != 1 || len(list.Items[0].OpenEngagements) != 1 {
+		t.Fatalf("list = %+v, want one line", list.Items)
+	}
+	if got := list.Items[0].OpenEngagements[0].PaymentProcessing; got == nil || !*got {
+		t.Fatalf("paymentProcessing = %v, want true", got)
+	}
+}

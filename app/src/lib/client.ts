@@ -68,6 +68,9 @@ export interface OpenEngagement {
 	 * carries (`Invoice.daysOverdue`, #2122), present wherever
 	 * `invoiceStatus` is. */
 	daysOverdue?: number;
+	/** Whether a payment on that Invoice is on its way (#2225) -- a bank
+	 * debit, for days -- present wherever `invoiceStatus` is. */
+	paymentProcessing?: boolean;
 	/** The reader's own agreed fee (ADR-0008) -- present only when she is
 	 * a contractor Doula attached to this Engagement. */
 	feeCents?: number;

@@ -48,6 +48,7 @@ const WORDING: readonly (readonly [action: string, named: string, unnamed: strin
 	['erased', 'Client record erased', 'Client record erased'],
 	['invoice_paid', 'Invoice for Amara paid', 'Invoice for the Client paid'],
 	['invoice_payment_failed', 'Payment from Amara did not go through', 'Payment from the Client did not go through'],
+	['invoice_payment_processing', 'Payment from Amara on its way', 'Payment from the Client on its way'],
 	['invoice_raised', 'Invoice created for Amara', 'Invoice created for the Client'],
 	['invoice_voided', 'Invoice for Amara voided', 'Invoice for the Client voided'],
 	['invoice_written_off', 'Invoice for Amara written off', 'Invoice for the Client written off'],

@@ -15,6 +15,7 @@ import {
 	clientInvoiceStatusLabel,
 	clientPaymentMethodLabel,
 	paidAndReturnedLabel,
+	PAYMENT_ON_ITS_WAY_LABEL,
 	TOTAL_TO_PAY_LABEL
 } from './clientRegister.js';
 import { formatCalendarDay } from './dates.js';
@@ -52,6 +53,11 @@ export interface ClientInvoice {
 	Money that went back to her, 0 when none did (#1009).
 	*/
 	refundedCents: number;
+	/** True while her payment on this open Invoice is on its way (#2225):
+	 * a bank payment takes days to clear, and the status stays open until
+	 * it does. The BFF always sends it; a fixture that leaves it out reads
+	 * as nothing on its way. */
+	paymentProcessing?: boolean;
 }
 
 /** One page of the list, with the whole-Engagement figure the server
@@ -105,8 +111,11 @@ export const totalReturnedCents = (items: ClientInvoice[]) =>
 	items.reduce((sum, each) => sum + each.refundedCents, 0);
 
 /** The row's status wording. A refunded paid Invoice stays `paid` and
- * reads it with the amount that came back (#333's #1009 pointer). */
+ * reads it with the amount that came back (#333's #1009 pointer). An open
+ * one with her payment on its way says so (#2225), because "Not yet paid"
+ * would ask her to pay what she has already sent. */
 export function invoiceStatusText(invoice: ClientInvoice): string {
+	if (invoice.status === 'open' && invoice.paymentProcessing) return PAYMENT_ON_ITS_WAY_LABEL;
 	return invoice.status === 'paid' && invoice.refundedCents > 0
 		? paidAndReturnedLabel(formatMoney(invoice.refundedCents, invoice.currency))
 		: clientInvoiceStatusLabel(invoice.status);
