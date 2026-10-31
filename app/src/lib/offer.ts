@@ -29,6 +29,10 @@ export interface Offer {
 	clientFirstInitial: string;
 	clientArea: string;
 	dueDate: string;
+	/** The due date's month, `YYYY-MM` (#2383): only on her own inbox and
+	 * only on an accepted Offer, so she can tell one birth she worked from
+	 * another after the fields above have lapsed. */
+	dueMonth?: string;
 	amountCents?: number;
 	terms?: string;
 	employmentType: string;

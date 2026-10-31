@@ -79,6 +79,18 @@ describe('OfferInbox.svelte', () => {
 			await expect.element(page.getByText('Not recorded yet')).toBeVisible();
 		});
 
+		it('names the due month on an accepted Offer (#2383)', async () => {
+			await setup([{ ...accepted, dueMonth: '2027-02' }]);
+
+			await expect.element(page.getByText('Feb 2027')).toBeVisible();
+		});
+
+		it('shows no due month when the read carries none', async () => {
+			await setup([accepted]);
+
+			expect(page.getByText('Due', { exact: true }).all()).toHaveLength(0);
+		});
+
 		it('shows no Paid row on an accepted Offer with no fee', async () => {
 			await setup([{ ...accepted, amountCents: undefined, decidedAt: undefined }]);
 

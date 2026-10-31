@@ -25,6 +25,7 @@ In the order they landed. Some are written into the section they change, and som
 - [#1515](https://github.com/markgoho/doula-cloud/issues/1515): [a third path writes a granted attachment, the Doula named when the Engagement starts](#amendment-a-third-path-writes-a-granted-attachment-the-doula-named-when-the-engagement-starts), and a fourth, *Put me on this Engagement*.
 - [#1625](https://github.com/markgoho/doula-cloud/issues/1625): [an Owner or an Admin may be a contractor, and the Offer rule is for the contractor who holds neither role](#amendment-an-owner-or-an-admin-may-be-a-contractor-and-the-offer-rule-is-for-the-contractor-who-holds-neither-role).
 - [#2094](https://github.com/markgoho/doula-cloud/issues/2094), 2026-10-26: [a contractor reads each Invoice's date and status, never its money](#amendment-a-contractor-reads-each-invoices-date-and-status-never-its-money).
+- [#2383](https://github.com/markgoho/doula-cloud/issues/2383), 2026-10-31: an accepted Offer keeps its due month on her own inbox, narrowing #230. In [`engagement_offers` — new table](#engagement_offers--new-table).
 
 Supersedes [ADR-0006](0006-read-follows-the-role.md)'s read table. ADR-0006 keeps its own argument — why read-follows-write and one-practice-one-view both lost, and why the Staff roster and Templates cells fall where they do — and gains a pointer to this document. Only its table is superseded.
 
@@ -171,6 +172,8 @@ CREATE UNIQUE INDEX engagement_offers_one_open_per_invitation
 ```
 
 The state set, the fan-out-with-first-yes-wins rule the two partial indexes only half enforce (the accept handler owns the race — see Mechanism), the six-state lifecycle, `expires_at` defaulting to 7 days, and completion closing every open Offer as `withdrawn` are all [#229](https://github.com/markgoho/doula-cloud/issues/229). The four decidable facts — Client first initial, general area, exact due date, fee — and their exemption from Contract or Client joins (they are typed into the Offer at send, a copy, not a view) are [#230](https://github.com/markgoho/doula-cloud/issues/230). The Offer is *never* refreshed after it is sent; a changed fact means withdraw and re-offer.
+
+**Amended 2026-10-31 on [#2383](https://github.com/markgoho/doula-cloud/issues/2383): an accepted Offer keeps its due month on her own inbox.** #230 stops serving the three Client fields the moment an Offer leaves `offered`, however it ends, so a stale Offer is not a stranger's due date in her history. #230's reasoning did not separate an accepted Offer, which is a Client she worked for. The founder decided that an accepted Offer, read from the Doula's own inbox, carries the due date's year and month (`dueMonth`, "Due Feb 2027"), so a contractor whose Attachment has ended can still tell which birth a fee and a payment belong to. It is the least identifying fact that tells two births apart: no name, initial or area comes back. A declined, withdrawn, superseded or expired Offer keeps nothing, the pre-account read is unchanged, and the Practice-side list of an Engagement's Offers is unchanged. The month is derived at read time from `engagement_offers.due_date`, so it is erased exactly when that column is.
 
 This document makes the following calls, not made in either ticket:
 

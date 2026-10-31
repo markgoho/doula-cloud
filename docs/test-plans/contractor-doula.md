@@ -106,7 +106,7 @@ Identical to Priya's stages 6–8 and marked there; walk [employed-doula.md](emp
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 7.1 | Point to what she was paid for the February birth | Renata, on the Engagement's **Doula fees** (her Attachment ended or not): **Mark fee paid**, a Method, an optional Note and **Date paid**, **Continue**, **Confirm and record**: "Recorded: Lena Vasquez paid $450.00 on …, by bank transfer." Lena, on **Your offers**, on the accepted Offer: "Accepted on …", "Fee $450.00", "Paid $450.00 on …, by bank transfer", or "Not recorded yet". It still reads so after her Attachment ends. No money moves ([#391](https://github.com/markgoho/doula-cloud/issues/391)) | `manual` |
+| 7.1 | Point to what she was paid for the February birth | Renata, on the Engagement's **Doula fees** (her Attachment ended or not): **Mark fee paid**, a Method, an optional Note and **Date paid**, **Continue**, **Confirm and record**: "Recorded: Lena Vasquez paid $450.00 on …, by bank transfer." Lena, on **Your offers**, on the accepted Offer: "Due Feb 2027", the month that tells it from her other accepted jobs ([#2383](https://github.com/markgoho/doula-cloud/issues/2383)), "Accepted on …", "Fee $450.00", "Paid $450.00 on …, by bank transfer", or "Not recorded yet". It still reads so after her Attachment ends. No money moves ([#391](https://github.com/markgoho/doula-cloud/issues/391)) | `manual` |
 | 7.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow). One screen says what she was paid for the February birth | `manual` |
 | 7.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
@@ -131,6 +131,22 @@ Identical to Priya's stages 6–8 and marked there; walk [employed-doula.md](emp
 LV-G5 is observed at 4.2 rather than given a step of its own: the list opens, and what it shows is the finding. On the second walk it shows only her own work.
 
 ## Run log
+
+### 2026-10-31 — 7.1 walked again with two accepted jobs ([#2383](https://github.com/markgoho/doula-cloud/issues/2383))
+
+**Stack**: `bun run --cwd app dev:full` from the #2383 worktree at port offset 1: the app at `http://localhost:5273`, in WSL2 with rootless Podman, on the branch that adds the due month, based on trunk at `a80f2192`. The seeded Rooted Birth Collective, fresh.
+
+**Devices**: headless Chrome inside WSL, driven by the chrome-devtools MCP, one isolated context for Renata Alvarez and one for Lena, Lena's at 320x800 and 1280x900, in UTC. No throttling, on an unbundled Vite dev server.
+
+**Accounts and preconditions**: the seed's accepted Offer, Lena on **Reese Bishop**'s birth ($450). The seed moves each due date by the days since the World's day zero, so on this day that birth is due in March 2027, not February; the March job stands in for "the February birth". Renata then sent Lena a second Offer from **Casey Estrada**'s Engagement (**Offer this work**, Lena Vasquez, Fee 600, General area "Irondequoit", Due date Nov 1, 2026, Terms "Backup for the birth, on call now."): "Offer sent to Lena Vasquez." Lena accepted it on **Your offers**. Only 7.1 was walked.
+
+| Step | Mark | Result | What was seen |
+| --- | --- | --- | --- |
+| 7.1 | `manual` | **walked** | Lena, on **Your offers** at 320 and 1280, two accepted Offers, both "Accepted on Oct 31, 2026" and both "Paid Not recorded yet". Before this change they differed only by the fee. Now the first reads "Due Nov 2026", "Fee $600.00", and the second "Due Mar 2027", "Fee $450.00", so she points to the March birth by its month. Neither shows a Client initial, an area or a full due date. Her inbox read answers `dueMonth` `2026-11` and `2027-03` with `dueDate`, `clientFirstInitial` and `clientArea` empty. Renata's read of Casey's Offers answers the accepted Offer with an empty `dueDate` and no `dueMonth`, as before. At 320 the page's scroll width is 320, with no sideways scroll |
+
+**Not walked again**: the Fee Payment half of 7.1 and the read after her Attachment ends, both walked by the stage 7 entry below. The due month is read from the Offer itself, with no join to her Attachment, so ending it does not change what this row shows.
+
+**Is the journey completable end to end?** Unchanged by this walk. The gap the stage 7 entry noticed is closed: with two jobs she tells them apart by the birth's month.
 
 ### 2026-10-31 — stage 7 walked ([#2271](https://github.com/markgoho/doula-cloud/issues/2271))
 

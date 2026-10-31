@@ -102,7 +102,8 @@ const (
 // isTerminal reports whether an Offer has stopped being decidable.
 // #230 hangs a rule on this: the Client's own fields stop being served
 // the moment an Offer reaches any terminal state, so a stale link opens
-// a closed Offer rather than a stranger's due date.
+// a closed Offer rather than a stranger's due date. An accepted Offer on
+// her own inbox keeps only the due month (#2383, lapseClientFields).
 func isTerminal(state string) bool {
 	return state != stateOffered
 }
@@ -116,6 +117,12 @@ func isTerminal(state string) bool {
 // the rule for a contractor: an employee reads the Engagement itself, so
 // lapsing her copy costs her nothing and spares the model a second rule
 // about which reader gets which fields.
+//
+// #2383 narrows the rule for one reader and one state: an accepted Offer
+// on her own inbox also carries Summary.DueMonth, the due date's month,
+// because a Client she worked for is not a stranger. That field is
+// selected by InboxHandler's query alone, so this function, the
+// Practice-side read and the pre-account read are unchanged.
 func lapseClientFields(state string, clientFirstInitial, clientArea, dueDate *string) {
 	if !isTerminal(state) {
 		return

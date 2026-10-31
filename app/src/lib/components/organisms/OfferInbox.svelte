@@ -9,7 +9,7 @@
 	 * onDecide owns the API call and the resulting state change; this
 	 * component reports which Offer and which answer.
 	 */
-	import { formatCalendarDay, formatInstant } from '#lib/dates.js';
+	import { formatCalendarDay, formatCalendarMonth, formatInstant } from '#lib/dates.js';
 	import { feePaidLine } from '#lib/doulaFee.js';
 	import { formatFee, isOpen, offerStateLabels, offerStateVariants, type Offer } from '#lib/offer.js';
 	import Badge from '#lib/components/atoms/Badge.svelte';
@@ -30,8 +30,9 @@
 	 * An Offer's facts, through `SummaryList` (#2021). The Client's own
 	 * fields stop being served once an Offer goes terminal (#230), so a
 	 * past Offer reads as the fact of the asking rather than as three
-	 * blank rows. `terms` is a Practice's own free text and may be a
-	 * pasted URL (#595); the list's value column breaks it.
+	 * blank rows. An accepted one keeps its due month (#2383), so two
+	 * births she worked read apart. `terms` is a Practice's own free text
+	 * and may be a pasted URL (#595); the list's value column breaks it.
 	 */
 	function offerFacts(offer: Offer): SummaryListRow[] {
 		const rows: SummaryListRow[] = [];
@@ -41,6 +42,9 @@
 				{ label: 'Area', value: offer.clientArea },
 				{ label: 'Due date', value: formatCalendarDay(offer.dueDate) }
 			);
+		}
+		if (offer.state === 'accepted' && offer.dueMonth) {
+			rows.push({ label: 'Due', value: formatCalendarMonth(offer.dueMonth) });
 		}
 		if (offer.state === 'accepted' && offer.decidedAt) {
 			rows.push({ label: 'Accepted on', value: formatInstant(offer.decidedAt) });
