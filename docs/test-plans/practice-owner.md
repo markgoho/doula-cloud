@@ -163,6 +163,19 @@ RA-G2 and RA-G3 are observed at 3.3 and 3.2 rather than given steps of their own
 
 ## Run log
 
+### 2026-10-31 — 7.B-time and 8.B-time measured again ([#2233](https://github.com/markgoho/doula-cloud/issues/2233))
+
+**Stack**: `bun run --cwd app dev:full` from the #2233 worktree at port offset 1 (`http://localhost:5273`), freshly seeded Rooted Birth Collective, WSL2 with rootless Podman. **Device**: headless Chrome driven by the chrome-devtools MCP, a fresh isolated context per press, signed in as the seeded `renata.alvarez@sim.doula.cloud`. Unbundled Vite dev server, every route warm, as the second walk. The phone is 390x844 (3x, mobile and touch) and an emulated Pixel 7 (412x915, its Android Chrome user agent).
+
+The sign-in press waited on three things the product does not need. The Identity Platform SDK saved the signed-in user to IndexedDB and then cleared it, about 95 ms and 50 ms, though the app signs the SDK out as soon as the session cookie is minted (#149). On a mobile browser or Safari the SDK also loaded its sign-in iframe before the exchange could start, for popups this app never opens: about 180 ms on the emulator, and on the deployed app a cross-origin load from the auth domain on every phone. And the Overview's code loaded only after the press. The SDK now keeps its user in memory with no popup resolver, and `/login` loads the Overview's code while she types.
+
+| Step | Budget | Measured | Pass |
+| --- | --- | --- | --- |
+| 7.B-time | 400 ms, 100 ms | **Invoices** from the top bar at 1280x900, five presses: acknowledged in 17 to 73 ms (the heading and row skeleton, [#2249](https://github.com/markgoho/doula-cloud/issues/2249)), settled in 106 to 167 ms | yes |
+| 8.B-time | 400 ms, 100 ms | **Sign in** settled on the Overview in **207 ms** at 390x844 and **224 ms and 239 ms** on the Pixel 7, busy within 5 ms; at 1280x900, 183 ms. Before the change, on the same stack: 398 and 411 ms at 390x844, 535 ms on the Pixel 7 | yes |
+
+Under the slowest profile `docs/agents/persona-walk.md` names short of offline (the Pixel 7, `Slow 4G`, CPU 4x), the same press settled in 15.3 s before the change and 5.5 s after, most of what is left being the dev server's hundred-odd unbundled modules. Neither is graded: that profile's 1 s band is for the deployed bundle, which is not measured here. Not re-measured: the other stage 7 and 8 steps.
+
 ### 2026-10-28 — second manual walk ([#2174](https://github.com/markgoho/doula-cloud/issues/2174))
 
 **Stack**: the shared walk stack, `bun run --cwd app dev:full` from the main checkout at port offset 0: the app at `http://localhost:5173`, the BFF at `127.0.0.1:18080`, the mail catcher at `http://127.0.0.1:19080`, on trunk at `f32f7b23`, in WSL2 with rootless Podman. `scripts/stripe-listen.sh` was running against it. Not restarted. Nothing on this walk touched Stripe or **Getting paid**.
