@@ -45,7 +45,7 @@ func LookupInvitationHandler(accounts authn.AccountManager, db *sql.DB) http.Han
 		}
 		req.InviteToken = strings.TrimSpace(req.InviteToken)
 		if req.InviteToken == "" {
-			apierr.WriteError(w, "inviteToken is required", http.StatusBadRequest)
+			apierr.WriteError(w, "The invite link is not complete", http.StatusBadRequest)
 			return
 		}
 
@@ -94,14 +94,14 @@ func lookupInvitation(ctx context.Context, db *sql.DB, token string) (LookupInvi
 		TokenDigest(token), clock.Now(ctx),
 	).Scan(&resp.PracticeName, &resp.Address, &roles, &resp.EmploymentType, &expired)
 	if errors.Is(err, sql.ErrNoRows) {
-		return LookupInvitationResponse{}, http.StatusNotFound, "invitation not found, already accepted, or revoked"
+		return LookupInvitationResponse{}, http.StatusNotFound, "This invitation was not found, was already accepted, or was revoked"
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return LookupInvitationResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	if expired {
-		return LookupInvitationResponse{}, http.StatusGone, "this invitation has expired -- ask for a new one"
+		return LookupInvitationResponse{}, http.StatusGone, "This invitation has expired. Ask for a new one"
 	}
 	resp.Address = NormalizeAddress(resp.Address)
 	resp.Roles = splitRoles(roles)
