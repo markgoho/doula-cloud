@@ -237,6 +237,66 @@ describe('RecordDetail.svelte', () => {
 		expect(page.getByRole('status').all()).toHaveLength(1);
 	});
 
+	// #2251: a SummaryList summary has a shape the route knows before its
+	// data, so a card of its rows holds the summary's place. Case 2 of the
+	// querySelector exception: the card is hidden from assistive technology,
+	// since the section Skeleton already says the record is loading.
+	it('holds a card of the summary rows a route names while loading (#2251)', async () => {
+		const { container } = await setup({
+			loading: 'Loading the Staff member',
+			summaryRows: [
+				{ label: 'Email address', value: 'given.family@example.com' },
+				{ label: 'Roles', value: 'Doula', action: 'Change' },
+				{ label: 'Works from', value: ['New York', 'Last confirmed'] }
+			]
+		});
+
+		const card = container.querySelector(':scope .summary[aria-hidden="true"] dl')!;
+		expect([...card.querySelectorAll('dt')].map((term) => term.textContent)).toEqual([
+			'Email address',
+			'Roles',
+			'Works from'
+		]);
+		expect(card.querySelectorAll('.action')).toHaveLength(1);
+		expect(card.querySelectorAll('.value-placeholder')).toHaveLength(4);
+		expect(page.getByRole('status').all()).toHaveLength(1);
+	});
+
+	it('holds no summary card while loading a record that names no summary rows (#2251)', async () => {
+		const { container } = await setup({ loading: 'Loading the Client', summary: textSnippet('Due Mar 4') });
+
+		expect(container.querySelector('.summary')).toBeNull();
+	});
+
+	// Case 2 of the querySelector exception: a box with no role, holding a line.
+	it('holds the Back link line while loading a record whose Back link is its own data (#2251)', async () => {
+		const { container } = await setup({ loading: 'Loading your account', isBackPending: true });
+
+		expect(container.querySelector('.back-placeholder')).not.toBeNull();
+		expect(page.getByRole('link').all()).toHaveLength(0);
+	});
+
+	it('draws the actions a route says do not wait on its record, beside a title bar, while loading (#2251)', async () => {
+		await setup({
+			title: '',
+			loading: 'Loading the Staff member',
+			loadingActions: createRawSnippet(() => ({ render: () => '<a href="/recovery">Send a recovery code</a>' }))
+		});
+
+		await expect.element(page.getByRole('link', { name: 'Send a recovery code' })).toBeVisible();
+		await expect.element(page.getByRole('heading', { level: 1 })).not.toBeInTheDocument();
+	});
+
+	it('draws the actions beside a known title while loading', async () => {
+		await setup({
+			loading: 'Loading the Staff member',
+			loadingActions: createRawSnippet(() => ({ render: () => '<a href="/recovery">Send a recovery code</a>' }))
+		});
+
+		await expect.element(page.getByRole('heading', { level: 1, name: 'Ada Lovelace' })).toBeVisible();
+		await expect.element(page.getByRole('link', { name: 'Send a recovery code' })).toBeVisible();
+	});
+
 	it('does not reserve a contents rail while loading a record with no rail', async () => {
 		const { container } = await setup({ loading: 'Loading the Engagement' });
 

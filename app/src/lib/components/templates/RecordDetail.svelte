@@ -20,6 +20,7 @@
 	import BackLink from '#lib/components/molecules/BackLink.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 
 	interface Section {
 		heading: string;
@@ -50,8 +51,33 @@
 		 */
 		backHref?: string;
 		backLabel?: string;
+		/**
+		 * The record will have a Back link whose target is its own data,
+		 * such as the Practice Your account came from (#2251). While
+		 * `loading`, its line is held so the title does not move when it
+		 * lands.
+		 */
+		isBackPending?: boolean;
 		summary?: Snippet;
+		/**
+		 * The shape of a `SummaryList` summary, known before its data
+		 * (#2251), as `isContentsShown` is: one entry per row, with its
+		 * label, a value as long as a usual one (with a note under it as
+		 * a second line, such as "Last confirmed"), and the words of its
+		 * row action if it has one.
+		 * While `loading`, a bordered card of these rows holds the
+		 * summary's space, each value drawn as bars that wrap where its
+		 * words would. A summary of another shape, or none, passes nothing
+		 * and gets no placeholder.
+		 */
+		summaryRows?: readonly { label: string; value: string | readonly string[]; action?: string }[];
 		actions?: Snippet;
+		/**
+		 * The actions to draw beside the title while `loading`, for a
+		 * route whose actions do not wait on its record (#2251), so the
+		 * title row does not grow when they land. Usually `actions` itself.
+		 */
+		loadingActions?: Snippet;
 		sections: Section[];
 		/**
 		 * The contents region, ADR-0018's 2026-08-29 amendment. A boolean and
@@ -83,8 +109,11 @@
 		outcome,
 		backHref,
 		backLabel,
+		isBackPending = false,
 		summary,
+		summaryRows,
 		actions,
+		loadingActions,
 		sections,
 		isContentsShown = false,
 		loading,
@@ -174,13 +203,46 @@
 			<div class="record-header">
 				{#if backHref}
 					<div class="back"><BackLink href={backHref} label={backLabel} /></div>
+				{:else if isBackPending}
+					<div class="back back-placeholder" aria-hidden="true"></div>
 				{/if}
-				{#if title}
+				{#if loadingActions}
+					<cluster-l space="var(--space-4)" justify="space-between" align="baseline">
+						{#if title}
+							<Heading level={1} variant="page" text={title} />
+						{:else}
+							<!-- A name's words as a bar, so the actions keep the
+							     baseline and the wrap a loaded name gives them. -->
+							<span class="title-placeholder" aria-hidden="true"><span>Given Family-name</span></span>
+						{/if}
+						<cluster-l space="var(--space-2)" align="center">{@render loadingActions()}</cluster-l>
+					</cluster-l>
+				{:else if title}
 					<Heading level={1} variant="page" text={title} />
 				{:else}
 					<Skeleton variant="heading" lines={1} />
 				{/if}
 				{#if isContentsShown}{@render contentsStrip()}{/if}
+				{#if summaryRows?.length}
+					<div class="summary" aria-hidden="true">
+						<SummaryList
+							rows={summaryRows.map((row) => ({
+								label: row.label,
+								value: '',
+								changes: row.action,
+								lines: typeof row.value === 'string' ? [row.value] : row.value
+							}))}
+							isBordered
+						>
+							{#snippet value(row)}
+								{#each row.lines as line, index (index)}
+									<span class="value-placeholder"><span>{line}</span></span>
+								{/each}
+							{/snippet}
+							{#snippet action(row)}<span class="action-placeholder">{row.changes}</span>{/snippet}
+						</SummaryList>
+					</div>
+				{/if}
 			</div>
 		{/snippet}
 
@@ -322,6 +384,57 @@
 		/* The drawing's --space-4 between the Back link and the title row. */
 		.back {
 			margin-block-end: var(--space-4);
+		}
+
+		.title-placeholder {
+			font-size: var(--text-heading-lg-size);
+			font-weight: var(--text-heading-lg-weight);
+			line-height: var(--text-heading-lg-leading);
+			letter-spacing: var(--text-heading-lg-tracking);
+		}
+
+		.back-placeholder {
+			min-block-size: var(--hit-target-min);
+		}
+
+		/*
+		 * A value's words as bars: transparent text on the Skeleton's own
+		 * color, broken per line, so a placeholder wraps where its words
+		 * would and holds their height at every width. Held back by
+		 * `--loading-delay`, as `Skeleton` is.
+		 */
+		.value-placeholder {
+			display: block;
+		}
+
+		.value-placeholder + .value-placeholder {
+			font-size: var(--text-meta-size);
+			line-height: var(--text-meta-leading);
+		}
+
+		.value-placeholder > span,
+		.title-placeholder > span {
+			color: transparent;
+			background-color: var(--color-surface-container-high);
+			border-radius: var(--radius);
+			box-decoration-break: clone;
+			/* motion:ignore -- Skeleton's held-back reveal: nothing moves. */
+			animation: value-placeholder-appears 0s var(--loading-delay) backwards;
+		}
+
+		/* motion:ignore -- the reveal above; it changes opacity once. */
+		@keyframes value-placeholder-appears {
+			from {
+				opacity: 0;
+			}
+		}
+
+		/* Holds a row's action: its words, and its 44px target. */
+		.action-placeholder {
+			display: inline-flex;
+			align-items: center;
+			min-block-size: var(--hit-target-min);
+			visibility: hidden;
 		}
 
 		/* A section is a summary list or prose, capped at a reading measure

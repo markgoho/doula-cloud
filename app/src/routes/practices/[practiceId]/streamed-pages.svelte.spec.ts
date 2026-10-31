@@ -46,8 +46,9 @@ vi.mock('./contracts/ContractsScreen.svelte', async () => import('#lib/TestLoade
 vi.mock('./schedule/ScheduleScreen.svelte', async () => import('#lib/TestLoaded.svelte'));
 vi.mock('./engagements/[engagementId]/EngagementScreen.svelte', async () => import('#lib/TestLoaded.svelte'));
 
-// Each page's `data` also carries the Practice layout's session, which
-// none of these pages reads, so the spec hands over the read alone.
+// Each page's `data` also carries the Practice layout's session. Only the
+// Engagement reads it, for the shape of the summary it holds while loading
+// (#2251), so the spec hands it a Doula's and the others the read alone.
 type StreamingPage = Component<{ data: { read: Promise<StreamedRead<unknown>> } }>;
 
 const templateLoading: [string, StreamingPage, string][] = [
@@ -68,7 +69,8 @@ const screens: [string, StreamingPage][] = [...templateLoading, ...screenLoading
 ]);
 
 async function setup(screen: StreamingPage, read: Promise<StreamedRead<unknown>>) {
-	await render(screen, { data: { read } });
+	const session = screen === (Engagement as unknown as StreamingPage) ? { session: { roles: ['doula'] } } : {};
+	await render(screen, { data: { read, ...session } });
 }
 
 describe.each(templateLoading)('%s', (_name, screen, known) => {
