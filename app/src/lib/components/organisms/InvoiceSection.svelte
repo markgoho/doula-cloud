@@ -84,6 +84,7 @@
 		isAskingBillingMode = $bindable(false),
 		practiceTimezone,
 		paymentsSettingsHref,
+		landOnInvoiceId,
 		onCreate,
 		onRecordPayment,
 		onVoidInvoice,
@@ -125,6 +126,9 @@
 		 * OfferSection's isFormOpen, so a demo can draw it open. */
 		isAskingBillingMode?: boolean;
 		paymentsSettingsHref: string;
+		/** The Invoice a link named (#2240): its row takes focus, once,
+		 * when it arrives, so the Invoices list lands on it. */
+		landOnInvoiceId?: string;
 		onCreate: (billingMode?: BillingMode) => Promise<void>;
 		onRecordPayment: (
 			invoiceId: string,
@@ -140,6 +144,31 @@
 	} = $props();
 
 	const isBillable = $derived(contractStatus === billableContractStatus);
+
+	function invoiceRowId(invoice: { id: string }, view: DataTableView): string {
+		return `invoice-row-${view}-${invoice.id}`;
+	}
+
+	// Once only: invoices is read again after every record, void and
+	// reverse, and a later read must not pull focus back to the row.
+	let hasLanded = false;
+	$effect(() => {
+		if (hasLanded || !landOnInvoiceId) {
+			return;
+		}
+		const rows: { id: string }[] = canReadInvoiceMoney ? invoices : contractorInvoices;
+		const invoice = rows.find((row) => row.id === landOnInvoiceId);
+		if (!invoice) {
+			return;
+		}
+		hasLanded = true;
+		const views: DataTableView[] = ['table', 'record'];
+		const shownRow = views
+			.map((view) => document.querySelector<HTMLElement>(`#${CSS.escape(invoiceRowId(invoice, view))}`))
+			.find((row) => row !== null && row.getClientRects().length > 0);
+		shownRow?.scrollIntoView({ block: 'start' });
+		shownRow?.focus({ preventScroll: true });
+	});
 
 	// No option is selected when the question opens (#1590): a default
 	// carries authority, and a Staff member who presses the button without
@@ -713,7 +742,12 @@
 		already been billed before she raises another. No row actions: every
 		act on an Invoice is an Owner's or an Admin's.
 	-->
-	<DataTable columns={contractorInvoiceColumns} rows={contractorInvoices} emptyMessage="No Invoices yet." />
+	<DataTable
+		columns={contractorInvoiceColumns}
+		rows={contractorInvoices}
+		rowId={invoiceRowId}
+		emptyMessage="No Invoices yet."
+	/>
 	<Notice variant="info" message={contractorInvoicesMessage} />
 {:else}
 	<!--
@@ -725,6 +759,7 @@
 	<DataTable
 		columns={invoiceColumns}
 		rows={invoices}
+		rowId={invoiceRowId}
 		rowActions={isOwnerOrAdmin ? { label: 'Actions', content: invoiceActions } : undefined}
 		emptyMessage="No Invoices yet."
 	/>

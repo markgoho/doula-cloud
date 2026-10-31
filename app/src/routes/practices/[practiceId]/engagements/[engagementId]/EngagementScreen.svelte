@@ -189,6 +189,8 @@
 	const paymentsSettingsHref = $derived(
 		resolve('/practices/[practiceId]/settings/payments', { practiceId: page.params.practiceId! })
 	);
+	// #2240: an Invoices list row links here with `#invoice-<id>`.
+	const landOnInvoiceId = $derived(/^#invoice-(.+)$/.exec(page.url.hash)?.[1]);
 
 	// #1998: the drawing's "← Clients" back link, to the Practice's
 	// Clients list, where every Engagement is reached from.
@@ -2686,6 +2688,7 @@
 			contractorInvoices={contractorInvoicesState.value}
 			{practiceTimezone}
 			{paymentsSettingsHref}
+			{landOnInvoiceId}
 			onCreate={handleCreateInvoice}
 			onRecordPayment={handleRecordPayment}
 			onReversePayment={handleReversePayment}
