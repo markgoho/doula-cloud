@@ -123,9 +123,16 @@ describe('the Practice-wide invoice list (#265)', () => {
 		// which is exactly why an unscoped getByText would not say which is
 		// the whole book's.
 		const totals = testPage.getByRole('definition');
-		await expect.element(totals.nth(0)).toHaveTextContent('$4,500.00');
-		await expect.element(totals.nth(1)).toHaveTextContent('1');
+		await expect.element(totals.nth(0)).toHaveTextContent('$6,300.00');
+		await expect.element(totals.nth(1)).toHaveTextContent('2');
 		await expect.element(totals.nth(2)).toHaveTextContent('$2,500.00');
+	});
+
+	// #2225: the BFF says a payment is on its way, and the row says so.
+	it('reads a bank payment that is still clearing as on its way', async () => {
+		await setup();
+
+		await expect.element(testPage.getByText('Payment on its way').first()).toBeVisible();
 	});
 
 	it('says so plainly when nothing has been billed yet', async () => {

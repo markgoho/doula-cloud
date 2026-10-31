@@ -304,6 +304,21 @@ describe('the Status column (#264, #2022)', () => {
 		await expect.element(table().getByText('Owes $4,500.00')).not.toBeInTheDocument();
 	});
 
+	// #2225: she has paid and the money is clearing, so it is neither late
+	// nor owed.
+	it('reads "Payment on its way" while a payment settles, even on a late Invoice', async () => {
+		const [line] = clients[0].openEngagements ?? [];
+		await setup(
+			jsonResponse({
+				items: [{ ...clients[0], openEngagements: [{ ...line, paymentProcessing: true }] }],
+				hasMore: false
+			})
+		);
+
+		await expect.element(table().getByText('Payment on its way $4,500.00')).toBeVisible();
+		await expect.element(table().getByText(/^(Overdue|Owes)/)).not.toBeInTheDocument();
+	});
+
 	it('still reads "Owes" for an open Invoice that is not late', async () => {
 		const [line] = clients[0].openEngagements ?? [];
 		await setup(

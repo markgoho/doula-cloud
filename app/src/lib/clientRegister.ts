@@ -243,6 +243,9 @@ const CLIENT_ACTIVITY_PHRASES: Record<string, string> = {
 	// sentence is true: its Pay button is still there. Hannah, Camille and
 	// Nadia each chose this line because it says what to do next.
 	invoice_payment_failed: 'Your payment did not go through. You can try again.',
+	// #2225. Its end is the next line on her history: paid, or did not go
+	// through.
+	invoice_payment_processing: 'Your payment is on its way.',
 	payment_recorded: 'A payment from you was recorded.',
 	payment_reversed: 'A payment recorded earlier was removed.',
 	// #1009. "Returned to you", never "refunded": she hears a refund as a
@@ -360,3 +363,20 @@ export function payButtonLabel(amount: string): string {
  * `invoice.paid` arrives, so this says the payment was sent and that the
  * Invoice will change, and never that it is paid. */
 export const PAYMENT_SENT_MESSAGE = 'Your payment was sent. This invoice will show as Paid once it is confirmed.';
+
+/** An open Invoice's status while her payment settles (#2225). Not a
+ * value of `invoice_status`: Stripe keeps the Invoice open, so this is
+ * the BFF's `paymentProcessing` fact read beside it. */
+export const PAYMENT_ON_ITS_WAY_LABEL = 'Payment on its way';
+
+/** What she reads after a payment that takes days to clear, and on the
+ * Invoice while it does (#2225). The time is Stripe's for a US bank
+ * debit (ACH Direct Debit, standard settlement: up to 4 business days),
+ * and never a date the model does not hold. */
+export const PAYMENT_ON_ITS_WAY_MESSAGE =
+	'Your payment is on its way. A bank payment usually takes up to 4 business days to clear. This invoice will show as Paid then.';
+
+/** What she reads when a payment she tried did not go through (#1020,
+ * #2225): after a decline with no message of Stripe's own, and on her
+ * return from a payment method that left the page and did not finish. */
+export const PAYMENT_NOT_THROUGH_MESSAGE = 'Your payment did not go through. Try again.';

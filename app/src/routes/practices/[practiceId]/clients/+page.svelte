@@ -148,8 +148,14 @@
 			// #2130: a late Invoice reads Overdue, from the BFF's one count
 			// and through the label pair every Staff screen reads, so it
 			// says here what it says on its Engagement and on Invoices.
-			const standing = { status: line.invoiceStatus, daysOverdue: line.daysOverdue ?? 0 };
-			if (standing.daysOverdue > 0) {
+			// #2225: a payment on its way reads so here too, ahead of both
+			// Overdue and "Owes" -- she has paid and the money is clearing.
+			const standing = {
+				status: line.invoiceStatus,
+				daysOverdue: line.daysOverdue ?? 0,
+				paymentProcessing: line.paymentProcessing ?? false
+			};
+			if (standing.paymentProcessing || standing.daysOverdue > 0) {
 				badges.push({ label: `${invoiceRowStatusLabel(standing)}${amount}`, variant: invoiceRowStatusVariant(standing) });
 			} else if (line.invoiceStatus === 'open') {
 				badges.push({ label: `Owes${amount}`, variant: 'warning' });

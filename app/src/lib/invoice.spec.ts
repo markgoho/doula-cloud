@@ -97,6 +97,17 @@ describe('invoiceRowStatusLabel and invoiceRowStatusVariant (#2094, #2122)', () 
 		expect(invoiceRowStatusVariant(paid)).toBe('success');
 		expect(invoiceRowStatusLabel({ status: 'open', daysOverdue: 0 })).toBe('Open');
 	});
+
+	// #2225: she has paid and the money is coming, so it is neither Open
+	// nor Overdue -- the BFF says a payment is on its way, and that wins.
+	it('reads Payment on its way, as information, while a payment settles, even past its due day', () => {
+		for (const daysOverdue of [0, 3]) {
+			const settling = { status: 'open', daysOverdue, paymentProcessing: true };
+
+			expect(invoiceRowStatusLabel(settling)).toBe('Payment on its way');
+			expect(invoiceRowStatusVariant(settling)).toBe('info');
+		}
+	});
 });
 
 describe('createInvoice', () => {

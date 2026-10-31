@@ -97,6 +97,9 @@ const STAFF_ACTIVITY_PHRASES: Record<string, Phrase> = {
 	invoice_raised: (name) => `Invoice created for ${client(name)}`,
 	invoice_paid: (name) => `Invoice for ${client(name)} paid`,
 	invoice_payment_failed: (name) => `Payment from ${client(name)} did not go through`,
+	// #2225: a bank payment takes days to clear, and the Invoice stays
+	// open meanwhile. The detail line names the method.
+	invoice_payment_processing: (name) => `Payment from ${client(name)} on its way`,
 	payment_recorded: (name) => `Payment from ${client(name)} recorded`,
 	payment_reversed: (name) => `Payment from ${client(name)} removed`,
 	payment_refunded: (name) => `Money returned to ${client(name)}`,

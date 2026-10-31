@@ -58,6 +58,11 @@ type ClientInvoiceView struct {
 	// positive number, 0 when none has (#1009). A refunded Invoice stays
 	// 'paid', so this is the only thing that says money came back.
 	RefundedCents int64 `json:"refundedCents"`
+	// PaymentProcessing (#2225) is true while her payment on this open
+	// Invoice is on its way -- a bank payment, for days -- so the portal
+	// says so rather than "Not yet paid". Status stays open, as Stripe's
+	// does.
+	PaymentProcessing bool `json:"paymentProcessing"`
 }
 
 // ClientInvoicesResponse is the docs/api-design.md section 4 envelope
@@ -83,7 +88,7 @@ type ClientInvoicesResponse struct {
 // c.engagement_id = $1 and status <> 'draft' are the handler's own
 // filters on top of the RLS the Client session already carries.
 const clientInvoiceSelect = `SELECT i.id, i.status, i.amount_cents, i.currency, i.reference, i.stripe_invoice_id,
-		i.created_at, i.paid_at, mp.method, ` + refundedCentsSubquery + `
+		i.created_at, i.paid_at, mp.method, ` + refundedCentsSubquery + `, ` + paymentProcessingExpr + `
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
 	LEFT JOIN LATERAL (SELECT p.method::text AS method FROM payments p
@@ -147,7 +152,7 @@ func scanClientInvoice(row interface{ Scan(dest ...any) error }, zone *time.Loca
 	var paidAt sql.NullTime
 	var stripeInvoiceID, method sql.NullString
 	if err := row.Scan(&it.ID, &it.Status, &it.AmountCents, &it.Currency, &it.Reference, &stripeInvoiceID,
-		&it.CreatedAt, &paidAt, &method, &it.RefundedCents); err != nil {
+		&it.CreatedAt, &paidAt, &method, &it.RefundedCents, &it.PaymentProcessing); err != nil {
 		return ClientInvoiceView{}, fmt.Errorf("payments: scan client invoice: %w", err)
 	}
 	it.RaisedOn = practiceDay(it.CreatedAt, zone)

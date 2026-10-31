@@ -40,6 +40,21 @@ func TestFakeClient_FailedPaymentMethodType(t *testing.T) {
 	}
 }
 
+// TestFakeClient_PaymentIntentInvoice proves the double reports what a
+// test set for a PaymentIntent, and the zero value for one it did not.
+func TestFakeClient_PaymentIntentInvoice(t *testing.T) {
+	client := payments.NewFakeClient()
+	want := payments.InvoicePaymentIntent{StripeInvoiceID: "in_1", Status: paymentIntentStatusProcessing, PaymentMethodType: methodUSBankAccount}
+	client.PaymentIntentInvoices = map[string]payments.InvoicePaymentIntent{"pi_1": want}
+
+	if got, err := client.RetrievePaymentIntentInvoice(t.Context(), "acct_1", "pi_1"); err != nil || got != want {
+		t.Fatalf("RetrievePaymentIntentInvoice(pi_1) = %+v, %v, want %+v", got, err, want)
+	}
+	if got, err := client.RetrievePaymentIntentInvoice(t.Context(), "acct_1", "pi_2"); err != nil || got != (payments.InvoicePaymentIntent{}) {
+		t.Fatalf("RetrievePaymentIntentInvoice(pi_2) = %+v, %v, want the zero value", got, err)
+	}
+}
+
 // TestFakeClient_ErasureMethods exercises #394's two Stripe erasure acts
 // on the fake. Their real callers live in package client (the erasure
 // outbox worker), which cannot import this package -- payments already

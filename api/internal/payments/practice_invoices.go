@@ -58,6 +58,8 @@ type PracticeInvoiceView struct {
 	// own doc comment; the same two facts, on the Practice-wide row.
 	Reference   string `json:"reference"`
 	BillingMode string `json:"billingMode"`
+	// PaymentProcessing is InvoiceView's own (#2225).
+	PaymentProcessing bool `json:"paymentProcessing"`
 }
 
 // PracticeInvoicesResponse is the cursor-pagination envelope from
@@ -210,7 +212,7 @@ func GetPracticeInvoicesHandler() http.Handler {
 // covering Payment's kind is what says whether paid_at holds a typed day
 // or Stripe's instant (#1965, invoicePaidOn).
 const practiceInvoiceColumns = `SELECT i.id, e.id, i.contract_id, cl.given_name, cl.preferred_name, cl.family_name,
-		i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ap.kind
+		i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ap.kind, ` + paymentProcessingExpr + `
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
 	JOIN engagements e ON e.id = c.engagement_id
@@ -322,7 +324,7 @@ func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, af
 		var dueAt time.Time
 		var stripeInvoiceID, activePaymentKind sql.NullString
 		if err := rows.Scan(&it.ID, &it.EngagementID, &it.ContractID, &givenName, &preferredName, &familyName,
-			&it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &dueAt, &it.Reference, &stripeInvoiceID, &activePaymentKind); err != nil {
+			&it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &dueAt, &it.Reference, &stripeInvoiceID, &activePaymentKind, &it.PaymentProcessing); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, false, fmt.Errorf("payments: scan practice invoice row: %w", err)
 		}

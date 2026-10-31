@@ -32,6 +32,8 @@ var contractorInvoiceKeys = map[string]bool{
 	"dueOn":       true,
 	"paidOn":      true,
 	"daysOverdue": true,
+	// #2225: whether a payment is on its way is a status, never an amount.
+	"paymentProcessing": true,
 }
 
 // TestGetInvoicesHandler_AContractorReadsDatesAndStatusNeverMoney proves

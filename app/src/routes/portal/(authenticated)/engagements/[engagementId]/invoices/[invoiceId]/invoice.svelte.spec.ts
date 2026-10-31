@@ -2,7 +2,16 @@ import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { toApiResponder, toPageState } from '../../../../../../routeFixture.js';
-import { asByHand, asPaidAndReturned, byHandInvoice, fixture, invoice, payment, paymentRefusal } from './page.fixture.js';
+import {
+	asByHand,
+	asPaidAndReturned,
+	asPaymentOnItsWay,
+	byHandInvoice,
+	fixture,
+	invoice,
+	payment,
+	paymentRefusal
+} from './page.fixture.js';
 import Page from './+page.svelte';
 // The loading Skeleton reserves space with `var(--text-body-size)`, which
 // only exists once the tokens are loaded -- the real app loads them in the
@@ -23,6 +32,9 @@ const pageState = vi.hoisted(() => ({
 vi.mock('$app/state', () => ({ page: pageState }));
 Object.assign(pageState, toPageState(fixture));
 
+const replaceState = vi.hoisted(() => vi.fn());
+vi.mock('$app/navigation', () => ({ replaceState }));
+
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
 	apiFetchWithSession
@@ -31,7 +43,7 @@ vi.mock('#lib/api.js', () => ({
 const stripeDouble = vi.hoisted(() => {
 	const element = { on: vi.fn(), mount: vi.fn() };
 	const elements = { create: vi.fn(() => element) };
-	const stripe = { elements: vi.fn(() => elements), confirmPayment: vi.fn() };
+	const stripe = { elements: vi.fn(() => elements), confirmPayment: vi.fn(), retrievePaymentIntent: vi.fn() };
 	return { element, elements, stripe, loadStripe: vi.fn() };
 });
 vi.mock('@stripe/stripe-js', () => ({ loadStripe: stripeDouble.loadStripe }));
@@ -40,12 +52,33 @@ function jsonResponse(body: unknown) {
 	return { ok: true, json: () => Promise.resolve(body) } as Response;
 }
 
-async function setupInvoice(respond: (path: string) => Promise<Response> | Response = toApiResponder(fixture)) {
+/**
+What Stripe answers for the PaymentIntent she came back with: a status, an error, or no answer at all.
+*/
+type Returned = 'unreachable' | { status: string } | { error: { message: string } };
+
+const succeeded: Returned = { status: 'succeeded' };
+
+async function setupInvoice(
+	respond: (path: string) => Promise<Response> | Response = toApiResponder(fixture),
+	url: string = fixture.url!,
+	returned: Returned = succeeded
+) {
+	pageState.url = new URL(url);
+	replaceState.mockReset();
 	apiFetchWithSession.mockReset();
 	apiFetchWithSession.mockImplementation(respond);
 	stripeDouble.loadStripe.mockReset();
 	stripeDouble.loadStripe.mockResolvedValue(stripeDouble.stripe);
 	stripeDouble.stripe.confirmPayment.mockReset();
+	stripeDouble.stripe.retrievePaymentIntent.mockReset();
+	if (returned === 'unreachable') {
+		stripeDouble.stripe.retrievePaymentIntent.mockRejectedValue(new Error('network'));
+	} else {
+		stripeDouble.stripe.retrievePaymentIntent.mockResolvedValue(
+			'status' in returned ? { paymentIntent: { status: returned.status } } : returned
+		);
+	}
 	stripeDouble.element.on.mockReset();
 	stripeDouble.element.mount.mockReset();
 	await render(Page);
@@ -208,7 +241,7 @@ describe('paying a Stripe-rail Invoice in our own chrome (#1020)', () => {
 
 	it('confirms the payment and says only that it was sent, never that the Invoice is paid', async () => {
 		await setupInvoice(payable);
-		stripeDouble.stripe.confirmPayment.mockResolvedValue({});
+		stripeDouble.stripe.confirmPayment.mockResolvedValue({ paymentIntent: { status: 'succeeded' } });
 		await expect.element(page.getByRole('button', { name: 'Pay $3,350.00' })).toBeVisible();
 		await markElementReady();
 
@@ -225,6 +258,33 @@ describe('paying a Stripe-rail Invoice in our own chrome (#1020)', () => {
 		expect(page.getByRole('button', { name: /Pay/ }).elements()).toHaveLength(0);
 		// The label is the model's, and it has not changed yet.
 		await expect.element(page.getByText('Not yet paid')).toBeVisible();
+	});
+
+	// #2225: a bank debit is processing for days, so the page says it is
+	// on its way and when to expect it, never that it is done.
+	it('says a bank payment is on its way and when to expect it, and offers nothing more to pay', async () => {
+		await setupInvoice(payable);
+		stripeDouble.stripe.confirmPayment.mockResolvedValue({ paymentIntent: { status: 'processing' } });
+		await markElementReady();
+
+		await page.getByRole('button', { name: 'Pay $3,350.00' }).click();
+
+		await expect.element(page.getByRole('status').filter({ hasText: onItsWayMessage })).toBeVisible();
+		await expect.element(page.getByText('Payment on its way')).toBeVisible();
+		expect(page.getByText('Not yet paid').elements()).toHaveLength(0);
+		expect(page.getByRole('button', { name: /Pay/ }).elements()).toHaveLength(0);
+		expect(page.getByText(/Your payment was sent/).elements()).toHaveLength(0);
+	});
+
+	it('says it did not go through when Stripe answers with no error but nothing paid', async () => {
+		await setupInvoice(payable);
+		stripeDouble.stripe.confirmPayment.mockResolvedValue({ paymentIntent: { status: 'requires_payment_method' } });
+		await markElementReady();
+
+		await page.getByRole('button', { name: 'Pay $3,350.00' }).click();
+
+		await expect.element(page.getByText('Your payment did not go through. Try again.')).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Pay $3,350.00' })).toBeEnabled();
 	});
 
 	it("shows Stripe's own message when the payment is declined, and lets her try again", async () => {
@@ -276,5 +336,75 @@ describe('paying a Stripe-rail Invoice in our own chrome (#1020)', () => {
 		await render(Page);
 
 		await expect.element(page.getByText('We could not load the payment form. Try again.')).toBeVisible();
+	});
+});
+
+const onItsWayMessage =
+	'Your payment is on its way. A bank payment usually takes up to 4 business days to clear. This invoice will show as Paid then.';
+
+describe('a payment on its way (#2225)', () => {
+	it('stands in place of the pay form, and the server is never asked for a secret', async () => {
+		await setupInvoice(asPaymentOnItsWay.respond);
+
+		await expect.element(page.getByRole('status').filter({ hasText: onItsWayMessage })).toBeVisible();
+		await expect.element(page.getByText('Payment on its way')).toBeVisible();
+		expect(page.getByRole('button').elements()).toHaveLength(0);
+		expect(apiFetchWithSession).not.toHaveBeenCalledWith(expect.stringContaining('/payment'));
+	});
+});
+
+/**
+Where Stripe brings her back from a method that left the page.
+*/
+const returnedUrl = `${fixture.url!}?payment_intent=pi_1&payment_intent_client_secret=pi_1_secret_x&redirect_status=succeeded`;
+
+describe('coming back from a payment method that left the page (#2225)', () => {
+	it("takes Stripe's query off the address and pays back to the bare page", async () => {
+		await setupInvoice(payable, returnedUrl);
+
+		await vi.waitFor(() => expect(replaceState).toHaveBeenCalledTimes(1));
+		expect(String(replaceState.mock.calls[0]![0])).toBe(fixture.url);
+	});
+
+	it('reads the real outcome from Stripe by the secret, never from redirect_status', async () => {
+		await setupInvoice(payable, returnedUrl, { status: 'requires_payment_method' });
+
+		await expect.element(page.getByText('Your payment did not go through. Try again.')).toBeVisible();
+		expect(stripeDouble.stripe.retrievePaymentIntent).toHaveBeenCalledWith('pi_1_secret_x');
+		await expect.element(page.getByRole('button', { name: 'Pay $3,350.00' })).toBeVisible();
+	});
+
+	it('says her payment was sent when it succeeded', async () => {
+		await setupInvoice(payable, returnedUrl, { status: 'succeeded' });
+
+		await expect
+			.element(page.getByText('Your payment was sent. This invoice will show as Paid once it is confirmed.'))
+			.toBeVisible();
+	});
+
+	it('says it is on its way when it is still processing', async () => {
+		await setupInvoice(payable, returnedUrl, { status: 'processing' });
+
+		await expect.element(page.getByRole('status').filter({ hasText: onItsWayMessage })).toBeVisible();
+	});
+
+	it('says it did not go through when Stripe cannot say', async () => {
+		await setupInvoice(payable, returnedUrl, { error: { message: 'No such payment_intent' } });
+
+		await expect.element(page.getByText('Your payment did not go through. Try again.')).toBeVisible();
+	});
+
+	it('says it did not go through when Stripe cannot be reached', async () => {
+		await setupInvoice(payable, returnedUrl, 'unreachable');
+
+		await expect.element(page.getByText('Your payment did not go through. Try again.')).toBeVisible();
+	});
+
+	it('leaves an address with no query as it is', async () => {
+		await setupInvoice(payable);
+
+		await expect.element(page.getByRole('button', { name: 'Pay $3,350.00' })).toBeVisible();
+		expect(replaceState).not.toHaveBeenCalled();
+		expect(stripeDouble.stripe.retrievePaymentIntent).not.toHaveBeenCalled();
 	});
 });

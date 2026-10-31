@@ -1,11 +1,13 @@
 /*
  * One Client-portal Invoice, as the continuum check sees it (#1564).
  *
- * Three trees, because the page branches three ways and only the base
+ * Four trees, because the page branches four ways and only the base
  * would otherwise be swept: an open Stripe-rail Invoice (the marked
  * place for #1020's Payment Element), an open by-hand Invoice (the
  * Invoice-number sentence and nothing to press), and a paid, partly
- * returned by-hand Invoice (every optional fact present at once). The
+ * returned by-hand Invoice (every optional fact present at once), and an
+ * open Stripe-rail Invoice with her bank payment on its way (#2225), where
+ * the longest sentence on the page stands in place of the Element. The
  * by-hand and paid ones are variants that restate `respond`, since the
  * Invoice itself is what differs. The reference is a long unbreakable
  * value a Practice could type (#537).
@@ -63,6 +65,13 @@ export const paidReturnedInvoice: ClientInvoice = {
 	refundedCents: 25_000
 };
 
+export const onItsWayInvoice: ClientInvoice = { ...invoice, paymentProcessing: true };
+
+export const asPaymentOnItsWay: RouteVariant = {
+	name: 'The Client-portal Invoice, payment on its way',
+	respond: () => jsonResponse(onItsWayInvoice)
+};
+
 export const asByHand: RouteVariant = {
 	name: 'The Client-portal Invoice, by-hand rail',
 	respond: () => jsonResponse(byHandInvoice)
@@ -84,5 +93,5 @@ export const fixture: RouteFixture = {
 			? Response.json(paymentRefusal, { status: 409 })
 			: jsonResponse(invoice),
 	readyText: 'Invoice INV-2027-Persephone-Ochieng-Whitfield-0011',
-	variants: [asByHand, asPaidAndReturned]
+	variants: [asByHand, asPaidAndReturned, asPaymentOnItsWay]
 };

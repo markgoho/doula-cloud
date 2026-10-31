@@ -509,6 +509,61 @@ func failedPaymentMethodType(payment *stripe.InvoicePayment) string {
 	return string(failure.PaymentMethod.Type)
 }
 
+// RetrievePaymentIntentInvoice reads the InvoicePayment list filtered by
+// paymentIntentID, with the PaymentIntent and its payment method
+// expanded: the one read that names the Invoice a PaymentIntent pays
+// under this SDK's API version, and says where the payment stands now.
+// The reverse lookup and the four-level expand were verified against a
+// paid Invoice on a Sandbox connected account (#2225).
+func (c *StripeAPIClient) RetrievePaymentIntentInvoice(ctx context.Context, accountID, paymentIntentID string) (InvoicePaymentIntent, error) {
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	params := paymentIntentInvoiceParams(accountID, paymentIntentID)
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	for payment, err := range c.client.V1InvoicePayments.List(ctx, params).All(ctx) {
+		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+		if err != nil {
+			return InvoicePaymentIntent{}, fmt.Errorf("payments: list invoice payments for payment intent: %w", err)
+		}
+		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+		return invoicePaymentIntentOf(payment), nil
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	return InvoicePaymentIntent{}, nil
+}
+
+// paymentIntentInvoiceParams builds RetrievePaymentIntentInvoice's list
+// request, split out so its filter and expand are testable without
+// Stripe.
+func paymentIntentInvoiceParams(accountID, paymentIntentID string) *stripe.InvoicePaymentListParams {
+	params := &stripe.InvoicePaymentListParams{
+		Payment: &stripe.InvoicePaymentListPaymentParams{
+			Type:          stripe.String("payment_intent"),
+			PaymentIntent: stripe.String(paymentIntentID),
+		},
+	}
+	params.StripeAccount = stripe.String(accountID)
+	params.AddExpand("data.payment.payment_intent.payment_method")
+	return params
+}
+
+// invoicePaymentIntentOf reads one InvoicePayment, its PaymentIntent
+// expanded, into what the processing webhook needs.
+func invoicePaymentIntentOf(payment *stripe.InvoicePayment) InvoicePaymentIntent {
+	var out InvoicePaymentIntent
+	if payment.Invoice != nil {
+		out.StripeInvoiceID = payment.Invoice.ID
+	}
+	if payment.Payment == nil || payment.Payment.PaymentIntent == nil {
+		return out
+	}
+	intent := payment.Payment.PaymentIntent
+	out.Status = string(intent.Status)
+	if intent.PaymentMethod != nil {
+		out.PaymentMethodType = string(intent.PaymentMethod.Type)
+	}
+	return out
+}
+
 // RetrieveInvoiceClientSecret retrieves invoiceID with `confirmation_secret`
 // expanded and returns its client secret -- the one thing the Payment
 // Element needs to pay the Invoice (#1020). Verified against the Sandbox in

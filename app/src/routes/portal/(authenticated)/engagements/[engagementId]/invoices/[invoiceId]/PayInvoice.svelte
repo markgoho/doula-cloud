@@ -11,16 +11,25 @@
 	 * nothing typed into them reaches this code. The only thing we hold is
 	 * the client secret, which the server hands out per Invoice.
 	 *
-	 * What a Client reads after `confirmPayment` succeeds claims only what
-	 * we hold: her payment was sent. The Invoice stays "Not yet paid" until
-	 * the `invoice.paid` webhook lands, and the sentence says so rather than
-	 * flipping the label early. #333 records the wording of that moment as
-	 * still open.
+	 * What a Client reads afterwards turns on the PaymentIntent's status
+	 * (#2225), never on the mere absence of an error. `succeeded` (a card)
+	 * says her payment was sent: the Invoice stays "Not yet paid" until the
+	 * `invoice.paid` webhook lands, and the sentence says so rather than
+	 * flipping the label early. `processing` (a bank debit, for days) is
+	 * handed to the page through `onProcessing`, which says the payment is
+	 * on its way and when to expect it. `requires_payment_method` did not
+	 * go through, and she can try again.
+	 *
+	 * A method that leaves the page (Klarna, Cash App Pay) comes back to
+	 * `returnUrl` with the PaymentIntent's client secret in the address.
+	 * The page hands it over as `returnedClientSecret`, and the outcome is
+	 * read from Stripe by that secret -- never from `redirect_status`,
+	 * which is only words in a URL anyone can type.
 	 */
 	import { onMount } from 'svelte';
-	import { loadStripe, type Stripe, type StripeElements } from '@stripe/stripe-js';
+	import { loadStripe, type PaymentIntent, type Stripe, type StripeElements } from '@stripe/stripe-js';
 	import type { ClientPayment } from '#lib/clientPayment.js';
-	import { PAYMENT_SENT_MESSAGE, payButtonLabel } from '#lib/clientRegister.js';
+	import { PAYMENT_NOT_THROUGH_MESSAGE, PAYMENT_SENT_MESSAGE, payButtonLabel } from '#lib/clientRegister.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 
@@ -34,9 +43,18 @@
 		Where a payment method that leaves the page brings her back.
 		*/
 		returnUrl: string;
+		/**
+		The client secret Stripe put in the address on her way back from a method that left the page, if she is
+		returning from one.
+		*/
+		returnedClientSecret?: string;
+		/**
+		Her payment is on its way: Stripe reported it `processing`.
+		*/
+		onProcessing: () => void;
 	}
 
-	let { payment, amount, returnUrl }: Properties = $props();
+	let { payment, amount, returnUrl, returnedClientSecret, onProcessing }: Properties = $props();
 
 	let mountNode: HTMLElement;
 	let stripe: Stripe | undefined;
@@ -45,6 +63,19 @@
 	let isPaying = $state(false);
 	let isSent = $state(false);
 	let error = $state('');
+
+	/** States the outcome Stripe reports for her payment. A status this
+	 * screen has no sentence for is read as sent, the claim that holds for
+	 * every outcome that is not a failure: the label stays the model's. */
+	function settle(status: PaymentIntent.Status | undefined) {
+		if (status === 'processing') {
+			onProcessing();
+		} else if (status === 'requires_payment_method') {
+			error = PAYMENT_NOT_THROUGH_MESSAGE;
+		} else {
+			isSent = true;
+		}
+	}
 
 	onMount(async () => {
 		try {
@@ -56,6 +87,15 @@
 			element.mount(mountNode);
 		} catch {
 			error = 'We could not load the payment form. Try again.';
+			return;
+		}
+		if (returnedClientSecret) {
+			try {
+				const result = await stripe.retrievePaymentIntent(returnedClientSecret);
+				settle(result.paymentIntent?.status ?? 'requires_payment_method');
+			} catch {
+				error = PAYMENT_NOT_THROUGH_MESSAGE;
+			}
 		}
 	});
 
@@ -70,12 +110,12 @@
 			});
 			if (result.error) {
 				// Stripe's own message is written for the person paying.
-				error = result.error.message ?? 'Your payment did not go through. Try again.';
+				error = result.error.message ?? PAYMENT_NOT_THROUGH_MESSAGE;
 			} else {
-				isSent = true;
+				settle(result.paymentIntent?.status);
 			}
 		} catch {
-			error = 'Your payment did not go through. Try again.';
+			error = PAYMENT_NOT_THROUGH_MESSAGE;
 		} finally {
 			isPaying = false;
 		}

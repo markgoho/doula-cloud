@@ -26,7 +26,7 @@ const maxWebhookBodyBytes = 1 << 20 // 1 MiB
 
 // The v1 snapshot event types the Connect endpoint handles: #82's
 // invoice.paid / invoice.payment_failed below, #2224's
-// invoice.marked_uncollectible, and #1009's
+// invoice.marked_uncollectible, #2225's payment_intent.processing, and #1009's
 // credit_note.created / refund.created (refund_webhook.go). Any other
 // event type is logged and dropped. WebhookEvent.Type is a plain string (the Client port
 // abstracts away *stripe.Event), so stripe-go's own typed constants are
@@ -44,7 +44,12 @@ const (
 	eventTypeInvoicePaid                = string(stripe.EventTypeInvoicePaid)
 	eventTypeInvoicePaymentFailed       = string(stripe.EventTypeInvoicePaymentFailed)
 	eventTypeInvoiceMarkedUncollectible = string(stripe.EventTypeInvoiceMarkedUncollectible)
+	eventTypePaymentIntentProcessing    = string(stripe.EventTypePaymentIntentProcessing)
 )
+
+// paymentIntentStatusProcessing is a PaymentIntent's status while its
+// money is on its way -- a bank debit, for days (#2225).
+const paymentIntentStatusProcessing = string(stripe.PaymentIntentStatusProcessing)
 
 // eventTypeMerchantCapabilityStatusUpdated is the one v2 thin event type
 // PostAccountWebhookHandler acts on: a capability on the account's
@@ -93,7 +98,8 @@ type invoiceEventObject struct {
 // account field): invoice.paid flips it to paid and creates exactly one
 // payments row; invoice.payment_failed records the failed attempt and
 // leaves it open, as Stripe does (#2224); invoice.marked_uncollectible
-// moves it to uncollectible. An event for an
+// moves it to uncollectible; payment_intent.processing marks a payment
+// on its way and leaves it open (#2225). An event for an
 // unrecognized account id, an Invoice not found in DoulaCloud, or any
 // event type not handled here, is logged and dropped rather than
 // treated as an error -- Stripe retries indefinitely on anything but a
@@ -131,6 +137,8 @@ func PostConnectWebhookHandler(db *sql.DB, client Client, webhookSecret string, 
 			handleInvoicePaymentFailed(w, r, db, client, event)
 		case eventTypeInvoiceMarkedUncollectible:
 			handleInvoiceMarkedUncollectible(w, r, db, event)
+		case eventTypePaymentIntentProcessing:
+			handlePaymentIntentProcessing(w, r, db, client, event)
 		case eventTypeCreditNoteCreated:
 			handleCreditNoteCreated(w, r, db, event)
 		case eventTypeRefundCreated:
@@ -373,7 +381,7 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 		return
 	}
 	if _, err := tx.ExecContext(r.Context(),
-		`UPDATE invoices SET status = 'paid', paid_at = $1 WHERE id = $2`, paidAt, invoiceID,
+		`UPDATE invoices SET status = 'paid', paid_at = $1, payment_processing_since = NULL WHERE id = $2`, paidAt, invoiceID,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -445,6 +453,16 @@ func handleInvoicePaymentFailed(w http.ResponseWriter, r *http.Request, db *sql.
 			commitAndAck(w, tx, &committed)
 			return
 		}
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+
+	// A payment that was on its way (#2225) and did not go through is no
+	// longer on its way. The Invoice stays open for another try.
+	if _, err := tx.ExecContext(r.Context(),
+		`UPDATE invoices SET payment_processing_since = NULL WHERE id = $1`, invoiceID,
+	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
@@ -532,7 +550,7 @@ func handleInvoiceMarkedUncollectible(w http.ResponseWriter, r *http.Request, db
 	}
 
 	if _, err := tx.ExecContext(r.Context(),
-		`UPDATE invoices SET status = 'uncollectible' WHERE id = $1`, invoiceID,
+		`UPDATE invoices SET status = 'uncollectible', payment_processing_since = NULL WHERE id = $1`, invoiceID,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -545,6 +563,111 @@ func handleInvoiceMarkedUncollectible(w http.ResponseWriter, r *http.Request, db
 		return
 	}
 	if err := recordInvoiceEvent(r.Context(), tx, practiceID, invoiceID, activity.ActionInvoiceWrittenOff, diff, false); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+
+	commitAndAck(w, tx, &committed)
+}
+
+// paymentIntentEventObject is the subset of a payment_intent.* event's
+// PaymentIntent object #2225's handler reads: its id. It names no
+// Invoice under API version 2026-07-29.dahlia, so the handler asks.
+type paymentIntentEventObject struct {
+	ID string `json:"id"`
+}
+
+// handlePaymentIntentProcessing marks a payment on its way (#2225). A
+// bank debit is 'processing' for days, and Stripe keeps its Invoice open
+// meanwhile, so the status stays 'open' and payment_processing_since
+// holds the fact beside it until invoice.paid or invoice.payment_failed
+// clears it. The attempt is recorded as hers, with the method she used.
+//
+// The PaymentIntent names no Invoice, so Stripe is asked which one it
+// pays -- and asked first, before the event is claimed: without that
+// answer nothing can be applied, so a failure is a 500 Stripe retries,
+// not a replay swallowed later (handleCapabilityStatusUpdated's rule).
+// The same answer carries the PaymentIntent's status now, so a delivery
+// that arrives after the payment already succeeded or failed marks
+// nothing.
+func handlePaymentIntentProcessing(w http.ResponseWriter, r *http.Request, db *sql.DB, client Client, event WebhookEvent) {
+	var pi paymentIntentEventObject
+	if err := json.Unmarshal(event.Data, &pi); err != nil {
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+
+	intent, err := client.RetrievePaymentIntentInvoice(r.Context(), event.Account, pi.ID)
+	if err != nil {
+		log.Printf("payments: connect webhook: payment_intent.processing %s: invoice lookup failed: %v", pi.ID, err)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+
+	tx, alreadyProcessed, err := claimEvent(r.Context(), db, event.ID)
+	if err != nil {
+		// coverage:ignore reason: claimEvent's own failures are DB failures, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+	committed := false
+	defer func() {
+		// coverage:ignore reason: only reached after a DB failure; every failure path below is itself coverage:ignore'd, so this rollback is never exercised by unit tests
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+	if alreadyProcessed {
+		commitAndAck(w, tx, &committed)
+		return
+	}
+	if intent.StripeInvoiceID == "" || intent.Status != paymentIntentStatusProcessing {
+		log.Printf("payments: connect webhook: payment_intent.processing %s pays no invoice or is now %q, leaving it (event id %s)", pi.ID, intent.Status, event.ID)
+		commitAndAck(w, tx, &committed)
+		return
+	}
+
+	invoiceID, practiceID, err := resolveInvoiceForEvent(r.Context(), tx, intent.StripeInvoiceID, event.Account)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			log.Printf("payments: connect webhook: dropping payment_intent.processing for unresolved invoice %q (account %q, event id %s)", intent.StripeInvoiceID, event.Account, event.ID)
+			commitAndAck(w, tx, &committed)
+			return
+		}
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+
+	// Only an open Invoice has a payment on its way: one paid by hand or
+	// voided here meanwhile is left as it is.
+	result, err := tx.ExecContext(r.Context(),
+		`UPDATE invoices SET payment_processing_since = $1 WHERE id = $2 AND status = 'open'`,
+		clock.Now(r.Context()), invoiceID,
+	)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+	if rows, err := result.RowsAffected(); err != nil || rows == 0 {
+		log.Printf("payments: connect webhook: payment_intent.processing for %q on an invoice that is not open, leaving it (event id %s)", intent.StripeInvoiceID, event.ID)
+		commitAndAck(w, tx, &committed)
+		return
+	}
+
+	diff := map[string]string{}
+	if intent.PaymentMethodType != "" {
+		diff[activity.DiffKeyPaymentMethodType] = intent.PaymentMethodType
+	}
+	diffJSON, err := json.Marshal(diff)
+	if err != nil {
+		// coverage:ignore reason: a map of strings always marshals
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+	if err := recordInvoiceEvent(r.Context(), tx, practiceID, invoiceID, activity.ActionInvoicePaymentProcessing, diffJSON, true); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return

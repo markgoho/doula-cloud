@@ -257,6 +257,15 @@ type Client interface {
 	// gives. Returns an empty string, and no error, when Stripe reports
 	// no failed attempt with a method.
 	RetrieveInvoiceFailedPaymentMethodType(ctx context.Context, accountID, invoiceID string) (methodType string, err error)
+	// RetrievePaymentIntentInvoice reports which Invoice paymentIntentID
+	// pays on accountID's connected account, with the PaymentIntent's
+	// status as it is now and its method type, for the
+	// payment_intent.processing webhook (#2225). Under API version
+	// 2026-07-29.dahlia a PaymentIntent names no Invoice, so the answer is
+	// read from the InvoicePayment list filtered by the PaymentIntent.
+	// Returns the zero value, and no error, when Stripe lists no Invoice
+	// for it.
+	RetrievePaymentIntentInvoice(ctx context.Context, accountID, paymentIntentID string) (InvoicePaymentIntent, error)
 	// RetrieveInvoiceClientSecret reads the Payment Element's client secret
 	// for a finalized invoiceID on accountID's connected account: the
 	// PaymentIntent's `client_secret`, exposed on the Invoice as
@@ -299,6 +308,18 @@ type AccountEvent struct {
 	Type      string
 	AccountID string
 	Created   time.Time
+}
+
+// InvoicePaymentIntent is what Client.RetrievePaymentIntentInvoice reads
+// about one PaymentIntent (#2225): the Stripe Invoice it pays ("" when it
+// pays none), its status at the moment it was asked -- which is what
+// tells a late delivery of payment_intent.processing from a payment
+// still on its way -- and its payment method type ("us_bank_account"),
+// "" when Stripe names none.
+type InvoicePaymentIntent struct {
+	StripeInvoiceID   string
+	Status            string
+	PaymentMethodType string
 }
 
 // WebhookEvent is the subset of a verified Stripe event #80's Connect

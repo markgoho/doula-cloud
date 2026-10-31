@@ -126,6 +126,10 @@ type FakeClient struct {
 	// RetrieveInvoiceFailedPaymentMethodType returns (#2224).
 	FailedPaymentMethodTypes map[string]string
 
+	// PaymentIntentInvoices, keyed by PaymentIntent id, is what
+	// RetrievePaymentIntentInvoice returns (#2225).
+	PaymentIntentInvoices map[string]InvoicePaymentIntent
+
 	CreateAccountErr     error
 	CreateAccountLinkErr error
 	RetrieveAccountErr   error
@@ -354,6 +358,15 @@ func (f *FakeClient) RetrieveInvoiceFailedPaymentMethodType(_ context.Context, _
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.FailedPaymentMethodTypes[invoiceID], nil
+}
+
+// RetrievePaymentIntentInvoice returns what a test set in
+// PaymentIntentInvoices for the PaymentIntent id (the zero value if
+// unset).
+func (f *FakeClient) RetrievePaymentIntentInvoice(_ context.Context, _, paymentIntentID string) (InvoicePaymentIntent, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.PaymentIntentInvoices[paymentIntentID], nil
 }
 
 // FakeClientSecretCall is one RetrieveInvoiceClientSecret call.

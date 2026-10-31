@@ -219,7 +219,9 @@ func entryDetail(action string, diff []byte, before, after sql.NullString) strin
 	case string(activity.ActionDoulaAttached):
 		return attachmentDetail(after)
 	case string(activity.ActionInvoicePaymentFailed):
-		return failedPaymentDetail(diff)
+		return paymentMethodDetail("Tried to pay by ", diff)
+	case string(activity.ActionInvoicePaymentProcessing):
+		return paymentMethodDetail("Paying by ", diff)
 	case string(activity.ActionInvoiceWrittenOff):
 		return writtenOffDetail(diff)
 	}
@@ -269,10 +271,12 @@ var paymentMethodNames = map[string]string{
 	"amazon_pay":      "Amazon Pay",
 }
 
-// failedPaymentDetail says which method a failed attempt used (#2224),
-// so "what happened to this Invoice?" names it -- a card declined at once
-// reads differently from a bank debit that bounced days later.
-func failedPaymentDetail(diff []byte) string {
+// paymentMethodDetail says which method a payment used, after lead: a
+// failed attempt's (#2224), so "what happened to this Invoice?" names it
+// -- a card declined at once reads differently from a bank debit that
+// bounced days later -- and a payment on its way (#2225), so one that
+// will take days reads as a bank payment.
+func paymentMethodDetail(lead string, diff []byte) string {
 	var fields map[string]string
 	if err := json.Unmarshal(diff, &fields); err != nil {
 		return ""
@@ -281,7 +285,7 @@ func failedPaymentDetail(diff []byte) string {
 	if !ok {
 		return ""
 	}
-	return "Tried to pay by " + name
+	return lead + name
 }
 
 // writtenOffDetail says an Invoice was marked uncollectible in the
