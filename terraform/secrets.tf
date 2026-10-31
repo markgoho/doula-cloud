@@ -398,6 +398,28 @@ resource "google_secret_manager_secret_iam_member" "stripe_webhook_secret_runtim
   secret_id = google_secret_manager_secret.stripe_webhook_secret.id
 }
 
+# The Sandbox's read-only restricted key, read by terraform-plan.yml's
+# Stripe plan (#2390). Granted to terraform-plan@ alone.
+resource "google_secret_manager_secret" "stripe_sandbox_plan_key" {
+  project   = "doula-cloud"
+  secret_id = "doula-cloud-stripe-sandbox-plan-key"
+
+  replication {
+    auto {}
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "google_secret_manager_secret_iam_member" "stripe_sandbox_plan_key_plan_accessor" {
+  member    = google_service_account.terraform_plan.member
+  project   = "doula-cloud"
+  role      = "roles/secretmanager.secretAccessor"
+  secret_id = google_secret_manager_secret.stripe_sandbox_plan_key.id
+}
+
 resource "google_secret_manager_secret" "vapid_private_key" {
   annotations         = {}
   deletion_policy     = "DELETE"

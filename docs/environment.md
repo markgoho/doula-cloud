@@ -389,14 +389,14 @@ A version that charges more per Credit than the version before it counts only on
 
 The Terms promise: "If the price of a Credit ever rises, we email each Owner at least 60 days before, with the reason. A rise never changes a Credit you already bought: it keeps the price you paid for it, and until the new price starts you can buy as many Credits as you like at the old one." A rise is carried out in this order:
 
-1. **A new Price.** Create it on the same Product, in the Sandbox and in live mode, at any time before the date: `stripe prices create --product prod_… --currency usd --unit-amount 2500 --tax-behavior exclusive`. Stripe cannot edit `unit_amount` on an existing Price, and `automatic_tax` refuses to compute on a Price without `tax_behavior: exclusive`. Keep the old Price active: checkout charges it until the date.
+1. **A new Price.** Add the new amount to `credit_prices` in both `terraform/stripe-sandbox` and `terraform/stripe-live`, beside the old one (`{ "2000" = true, "2500" = true }`), and `apply` each, at any time before the date. The module creates it on the same Product with `tax_behavior: exclusive`. Stripe cannot edit `unit_amount` on an existing Price, and `automatic_tax` refuses to compute on a Price without `tax_behavior: exclusive`. Keep the old amount in the list: checkout charges it until the date.
 2. **A new version of the Terms.** One commit adds the new text (a new `TermsOfService<date>.svelte` in `site/src/lib/legalTexts/`, stating the new price), a `legal.Version` with `Material: true`, the new `CreditPriceCents`, and the `PriceRise` reason, and its mirror in `site/src/lib/legal.ts`. The version's date is the day the new price starts, at midnight UTC. The same commit changes every other place that states the price by hand, since nothing can print it there:
    - `docs/copy/terms-of-service-page.md`, the copy of the newest text, which this commit rewrites for the new version anyway.
    - `docs/copy/pilot-terms-page.md`, the copy `/pilot-terms` was built from. The page itself prints the price of the version in force at each build, so it changes on the date with no edit.
 
    `site/src/lib/creditPriceCopies.spec.ts` fails when either document states a price other than the newest version's, and when this list leaves one out. `site/src/lib/legalTexts.svelte.spec.ts` fails when a version's text states a price other than its own `CreditPriceCents`. Every page that states the price reads it and needs no edit: `/pilot-terms` prints it with `creditPrice` from `site/src/lib/legal.ts` at each build, so it changes at the first daily build on or after the date, the Billing screen gets it from the BFF, and the marketing site's pricing copy is to print it with `creditPrice` when [#868](https://github.com/markgoho/doula-cloud/issues/868) and [#284](https://github.com/markgoho/doula-cloud/issues/284) build it. `GLOSSARY.md` (**Credit**) and step 2.1-a of `docs/test-plans/evaluator-doula.md` name the Terms as the price, not a number. The records of what was decided or found on a date keep the price they were written with: the ADRs, `docs/research/`, `docs/journeys/`, and a closed gap's row in a test plan.
 3. **Publication 60 days ahead.** `POST /api/internal/legal/publish` with `{"document": "terms", "version": "<date>", "publishedBy": "<your name>"}`. It refuses a rise fewer than 60 days before its date, and refuses any version of the Terms whose price no active Price from step 1 charges, so a forgotten Price is found now and not on the date. It queues the email to each Owner with the reason, and its `legal_version_publications` row records who published the rise and when. From then on the Billing screen shows the new price and its date under today's price.
-4. **The switch on the date.** Nobody acts. At midnight UTC on the date, checkout charges the new amount and so picks the new Price. Archive the old Price after that, not before; `STRIPE_CREDIT_PRICE_ID` can keep naming it, since an archived Price still names its Product.
+4. **The switch on the date.** Nobody acts. At midnight UTC on the date, checkout charges the new amount and so picks the new Price. Archive the old Price after that, not before, by setting its entry in `credit_prices` to `false` in both roots and applying; `STRIPE_CREDIT_PRICE_ID` can keep naming it, since an archived Price still names its Product.
 
 A Credit already bought keeps its price: each lot stores the `unit_price_cents` it was paid at (migration 00052), and each Checkout Session carries the `terms_version` that set its price in its metadata.
 
@@ -427,19 +427,33 @@ They point at the raw Cloud Run URL — the one `gcloud run services describe` r
 
 `csrf.Wrap` lets them through: a Stripe POST carries no `Origin` header, and the rule is "no Origin, no rejection" (`api/internal/csrf/wrap.go:26`, enforced at `wrap.go:44`; the origin list is resolved in `api/main.go:47-70`).
 
-| Endpoint | Events | Payload | `events_from` | State |
-| --- | --- | --- | --- | --- |
-| `/api/stripe/webhook` | `checkout.session.completed` | snapshot | `@self` | `we_1U7NT01rKoVEA79vnOcBFqtV`, enabled |
-| `/api/stripe/account-webhook` | `v2.core.account[configuration.merchant].capability_status_updated` | thin | `@self` | `ed_test_61VGn5QffuUmiONhX16VGl100QSQI7KSJpC2tKXrs4xU`, enabled |
-| `/api/stripe/connect-webhook` | `invoice.paid`, `invoice.payment_failed`, `invoice.marked_uncollectible`, `credit_note.created`, `refund.created`, `payment_intent.processing` | snapshot | `@accounts` | `we_1U7Ocp1rKoVEA79vT9AXETKU`, enabled |
+**`terraform/stripe` is the authority for this table** ([#2390](https://github.com/markgoho/doula-cloud/issues/2390), [ADR-0034](adr/0034-terraform-owns-the-shape-not-the-image-and-apply-stays-off-ci.md)'s 2026-10-31 amendment). Each route's events, payload, `events_from` and `snapshot_api_version` are in `terraform/stripe/destinations.json`, and the module applies them to both accounts. `api/internal/payments/stripe_destinations_test.go` and `api/internal/billing/stripe_destinations_test.go` fail when a handler takes an event its route is not subscribed to, or the route is subscribed to one no handler takes, and when a snapshot route pins any version but the one `stripe-go` sends. `api/stripe_destinations_test.go` holds the routes to the ones `routes_webhook.go` mounts. So adding a handled event is one line in `destinations.json` and an `apply` in each account, never a by-hand `POST`. `terraform/stripe-sandbox` and `terraform/stripe-live` differ only in the key and the mode; [docs/infrastructure.md](infrastructure.md#stripe-state) has the state and the keys.
 
-`invoice.marked_uncollectible` was added to the Sandbox destination on 2026-10-31 for [#2224](https://github.com/markgoho/doula-cloud/issues/2224), with `POST /v2/core/event_destinations/{id}` and a JSON body that lists all five `enabled_events`, since the body replaces the list. The live-mode destination needs the same event when it is created.
+| Endpoint | Events | Payload | `events_from` | Sandbox | Live |
+| --- | --- | --- | --- | --- | --- |
+| `/api/stripe/webhook` | `checkout.session.completed` | snapshot | `@self` | `we_1U7NT01rKoVEA79vnOcBFqtV`, enabled, until the cutover below replaces it with an event destination | created by [#2463](https://github.com/markgoho/doula-cloud/issues/2463) |
+| `/api/stripe/account-webhook` | `v2.core.account[configuration.merchant].capability_status_updated` | thin | `@self` | `ed_test_61VGn5QffuUmiONhX16VGl100QSQI7KSJpC2tKXrs4xU`, enabled, imported | created by #2463 |
+| `/api/stripe/connect-webhook` | `invoice.paid`, `invoice.payment_failed`, `invoice.marked_uncollectible`, `credit_note.created`, `refund.created`, `payment_intent.processing` | snapshot | `@accounts` | `we_1U7Ocp1rKoVEA79vT9AXETKU`, enabled, until the cutover below replaces it with an event destination | created by #2463 |
 
-`payment_intent.processing` was added to the Sandbox destination on 2026-10-31 for [#2225](https://github.com/markgoho/doula-cloud/issues/2225), by the same `POST /v2/core/event_destinations/{id}` call with all six `enabled_events` listed, since the body replaces the list. The live-mode destination needs the same events; it copies this row at cutover ([#2384](https://github.com/markgoho/doula-cloud/issues/2384)).
+The two `we_…` rows are v1 webhook endpoints from before the module. The first Sandbox `apply` creates an event destination for each beside them, and they are deleted once the new signing secrets are pinned on `doula-api`. Until those pins land, events to the new destinations fail their signature check, so the swap is done in one sitting, in the order #2390's pull request lists. Each row's Sandbox id is updated here when that happens.
 
-The two Connect rows are one feature, split by Stripe's own constraint: an event destination has one `event_payload`, and the account events are thin while the Invoice events are snapshot. The snapshot destination pins `snapshot_api_version` to `2026-07-29.dahlia`, the version `stripe-go v86.3.0` sends on every request (`api_version.go`), so a delivered object always deserializes into the structs the SDK ships.
+`invoice.marked_uncollectible` (#2224) and `payment_intent.processing` (#2225) were added to the Sandbox destination by hand on 2026-10-31, with `POST /v2/core/event_destinations/{id}`. That gap, code a manual command ahead of the Sandbox and silently ahead of live, is what #2390 closes.
+
+The two Connect rows are one feature, split by Stripe's own constraint: an event destination has one `event_payload`, and the account events are thin while the Invoice events are snapshot. The snapshot destinations pin `snapshot_api_version` to `2026-07-29.dahlia`, the version `stripe-go v86.3.0` sends on every request (`api_version.go`), so a delivered object always deserializes into the structs the SDK ships.
 
 Both are created over `/v2/core/event_destinations`, not the v1 `/v1/webhook_endpoints` surface, and neither carries a `connect=true` flag — v2 replaced that with `events_from`.
+
+### What `terraform/stripe` cannot hold
+
+Provider `0.3.0` manages Products, Prices and event destinations, and not the account itself, so these stay by hand in each account and nothing turns red when one changes. Sandbox state read with `stripe get /v1/account` on 2026-10-31; a row it cannot show says so.
+
+| Setting | Where | Sandbox | Live |
+| --- | --- | --- | --- |
+| Connect settings: Accounts v2, the `merchant` configuration, direct charges, hosted onboarding | Dashboard, Connect settings | Set up for #247; not readable through the API | By hand before the switch, [#2384](https://github.com/markgoho/doula-cloud/issues/2384) |
+| Platform profile: name, website, statement descriptor | Dashboard, Business details | `business_profile.name` "Doula Cloud sandbox", `url` `https://doula.cloud`, statement descriptor `DOULA.CLOUD` | [#387](https://github.com/markgoho/doula-cloud/issues/387) | <!-- brand:ignore: the name Stripe has stored on the Sandbox account, quoted as read -->
+| Business details: legal entity, address, bank account | Dashboard, activation | Not required in a Sandbox | #387 |
+| Tax settings: origin address, Stripe Tax registrations | Dashboard, Tax | Off; SaaS sales tax is a launch question (below) | #387 |
+| `support_address` | Dashboard only | `null` | #387 |
 
 ### `events_from` is not the same for the two Connect destinations
 
@@ -458,7 +472,7 @@ Both Connect secrets are in Secret Manager and wired to the service. Two things 
 
 Set out of band on purpose, for the reason the section after next gives.
 
-A signing secret is returned **once**, in the create response — for an event destination, only if the request asks for it by name via `include: ["webhook_endpoint.signing_secret"]`. Neither retrieve nor list ever shows it again. If it is lost, roll it in the dashboard and add a new Secret Manager version, then name that version in `terraform/cloud_run.tf` (next section).
+A signing secret is returned **once**, in the create response — for an event destination, only if the request asks for it by name via `include: ["webhook_endpoint.signing_secret"]`. Neither retrieve nor list ever shows it again. If it is lost, roll it in the dashboard and add a new Secret Manager version, then name that version in `terraform/cloud_run.tf` (next section). A destination the module creates has its first secret in Terraform state, because provider `0.3.0` always asks for it on create, so that one is rolled at once and only the rolled secret goes to Secret Manager ([docs/infrastructure.md](infrastructure.md#stripe-state)).
 
 ## The Stripe secrets are pinned to a version
 

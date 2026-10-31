@@ -89,6 +89,7 @@ api/.golangci-cache
 # never locally or in git. .terraform.lock.hcl is the one file in this family
 # that IS committed; it lives outside this block.
 terraform/.terraform/
+terraform/*/.terraform/
 *.tfstate
 *.tfstate.*
 *.tfplan

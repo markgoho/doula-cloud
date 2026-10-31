@@ -1,0 +1,33 @@
+{
+  "/api/stripe/webhook": {
+    "name": "doula-cloud platform billing events",
+    "description": "Credit purchases on the platform (#77, #2390)",
+    "event_payload": "snapshot",
+    "events_from": ["@self"],
+    "snapshot_api_version": "2026-07-29.dahlia",
+    "enabled_events": ["checkout.session.completed"]
+  },
+  "/api/stripe/connect-webhook": {
+    "name": "doula-cloud connect invoice events",
+    "description": "Invoice paid/failed/uncollectible and Refunds on connected accounts (#82, #247, #1009, #2224, #2225)",
+    "event_payload": "snapshot",
+    "events_from": ["@accounts"],
+    "snapshot_api_version": "2026-07-29.dahlia",
+    "enabled_events": [
+      "invoice.paid",
+      "invoice.payment_failed",
+      "invoice.marked_uncollectible",
+      "credit_note.created",
+      "refund.created",
+      "payment_intent.processing"
+    ]
+  },
+  "/api/stripe/account-webhook": {
+    "name": "doula-cloud account events",
+    "description": "v2 Connect account capability changes (#247)",
+    "event_payload": "thin",
+    "events_from": ["@self"],
+    "snapshot_api_version": null,
+    "enabled_events": ["v2.core.account[configuration.merchant].capability_status_updated"]
+  }
+}
