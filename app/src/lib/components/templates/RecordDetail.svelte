@@ -128,10 +128,42 @@
 							<cluster-l space="var(--space-2)" align="center">{@render actions()}</cluster-l>
 						{/if}
 					</cluster-l>
+					{#if isContentsShown}{@render contentsStrip()}{/if}
 					{#if summary}
 						<div class="summary">{@render summary()}</div>
 					{/if}
 				</div>
+		{/snippet}
+
+		<!-- #2257: on a narrow page the contents sit under the title and
+		     above the summary, so the way to every section is on a phone's
+		     first screen. -->
+		{#snippet contentsStrip()}
+			<div class="contents-strip">
+				<stack-l space="var(--space-2)">
+					<p class="contents-heading">Jump to</p>
+					<cluster-l space="var(--space-2)">
+						{#each sections as section (section.heading)}
+							<Link href="#{anchorId(section.heading)}" label={section.heading} variant="chip" />
+						{/each}
+					</cluster-l>
+				</stack-l>
+			</div>
+		{/snippet}
+
+		{#snippet contentsRail()}
+			<div class="contents">
+				<div class="contents-rail">
+					<stack-l space="var(--space-3)">
+						<p class="contents-heading">On this page</p>
+						<div class="contents-links">
+							{#each sections as section (section.heading)}
+								<Link href="#{anchorId(section.heading)}" label={section.heading} variant="rail" />
+							{/each}
+						</div>
+					</stack-l>
+				</div>
+			</div>
 		{/snippet}
 
 		<!-- What the header is before the record loads (#2248): the back
@@ -148,6 +180,7 @@
 				{:else}
 					<Skeleton variant="heading" lines={1} />
 				{/if}
+				{#if isContentsShown}{@render contentsStrip()}{/if}
 			</div>
 		{/snippet}
 
@@ -158,12 +191,14 @@
 			<div class="sections">
 				<stack-l space="var(--space-section)">
 					{#each sections as section, index (section.heading)}
-						<stack-l space="var(--space-4)">
-							<Heading level={2} variant="section" text={section.heading} />
-							<div class="loading-bars">
-								<Skeleton variant="text" lines={3} label={index === 0 ? loading : undefined} />
-							</div>
-						</stack-l>
+						<section id={anchorId(section.heading)}>
+							<stack-l space="var(--space-4)">
+								<Heading level={2} variant="section" text={section.heading} />
+								<div class="loading-bars">
+									<Skeleton variant="text" lines={3} label={index === 0 ? loading : undefined} />
+								</div>
+							</stack-l>
+						</section>
 					{:else}
 						<div class="loading-bars"><Skeleton variant="text" lines={6} label={loading} /></div>
 					{/each}
@@ -212,13 +247,12 @@
 			{#if isContentsShown}
 				<!-- The loaded record's own grid (#2248), so the rail's column
 				     sits where the loaded rail does and flips at the same
-				     width. The rail is an empty placeholder rather than
-				     placeholder links: `sections`, and so the links, do not
-				     exist yet. -->
+				     width. The contents are drawn from the headings the route
+				     already names (#2257). -->
 				<div class="record">
 					<div class="record-grid">
 						{@render loadingHeader()}
-						<div class="contents"><div class="contents-rail"></div></div>
+						{@render contentsRail()}
 						{@render loadingSections()}
 					</div>
 				</div>
@@ -237,8 +271,9 @@
 				the sections column can hold a reading measure beside it, the
 				contents are the drawing's "On this page" rail to the left of
 				the header and the sections; below that, the drawing's narrow
-				"Jump to" strip under the header, where a Doula reading at
-				arm's length in a corridor finds it (PR-G5). Before #2004 the
+				"Jump to" strip under the title and above the summary, on
+				a phone's first screen, where a Doula reading at arm's length
+				in a corridor finds it (PR-G5, #2257). Before #2004 the
 				narrow page stacked the rail under the last section, the full
 				height of the page away from the title.
 
@@ -253,29 +288,7 @@
 				<div class="record-grid">
 					{@render recordHeader()}
 
-					<div class="contents">
-						<div class="contents-strip">
-							<stack-l space="var(--space-2)">
-								<p class="contents-heading">Jump to</p>
-								<cluster-l space="var(--space-2)">
-									{#each sections as section (section.heading)}
-										<Link href="#{anchorId(section.heading)}" label={section.heading} variant="chip" />
-									{/each}
-								</cluster-l>
-							</stack-l>
-						</div>
-
-						<div class="contents-rail">
-							<stack-l space="var(--space-3)">
-								<p class="contents-heading">On this page</p>
-								<div class="contents-links">
-									{#each sections as section (section.heading)}
-										<Link href="#{anchorId(section.heading)}" label={section.heading} variant="rail" />
-									{/each}
-								</div>
-							</stack-l>
-						</div>
-					</div>
+					{@render contentsRail()}
 
 					{@render recordSections()}
 				</div>
@@ -331,7 +344,9 @@
 			display: grid;
 		}
 
+		/* Proximity again: the strip is the title's, as the summary is. */
 		.contents-strip {
+			margin-block-start: var(--space-4);
 			padding: var(--space-3) var(--space-4);
 			border: var(--border-thin) solid var(--color-outline-variant);
 			border-radius: var(--radius);
@@ -361,15 +376,15 @@
 			font-size: var(--text-body-size);
 		}
 
-		/* Narrow: one column -- the header, the Jump to strip, the
-		   sections -- with the gap between sections between each. */
+		/* Narrow: one column -- the header, with the Jump to strip in it,
+		   then the sections -- with the gap between sections between each. */
 		.record-grid {
 			display: grid;
 			grid-template-columns: minmax(0, 1fr);
 			row-gap: var(--space-section);
 		}
 
-		.contents-rail {
+		.contents {
 			display: none;
 		}
 
@@ -405,12 +420,9 @@
 			}
 
 			.contents {
+				display: block;
 				grid-area: contents;
 				align-self: start;
-			}
-
-			.contents-rail {
-				display: block;
 			}
 
 			.contents-strip {
