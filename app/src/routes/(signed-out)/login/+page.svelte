@@ -16,6 +16,7 @@
 	import { apiBaseURL, apiFetchWithSession, probeSession } from '#lib/api.js';
 	import { decideLanding, type Membership, type SessionInfo } from '#lib/landing.js';
 	import { didSessionEnd } from '#lib/sessionEnded.js';
+	import { readReturnTo } from '#lib/returnTo.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
@@ -128,6 +129,16 @@
 	 * empty picker.
 	 */
 	async function land(session: SessionInfo) {
+		// #2259: the address she opened signed out, if it is one on this app.
+		const returnTo = readReturnTo(page.url);
+		if (returnTo) {
+			try {
+				await goto(returnTo);
+				return;
+			} catch {
+				// No route answers it (SvelteKit 3's `goto` rejects); she lands as if there were none.
+			}
+		}
 		const landing = decideLanding(session);
 		if (landing.type === 'redirect') {
 			await goto(resolve('/practices/[practiceId]', { practiceId: landing.practiceId }));

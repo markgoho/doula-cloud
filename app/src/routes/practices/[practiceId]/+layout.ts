@@ -4,7 +4,7 @@ import { apiFetch, isMFARequired, isTermsAgreementRequired } from '#lib/api.js';
 import { apiErrorMessage } from '#lib/apiErrorMessage.js';
 import { decideLanding, type SessionInfo } from '#lib/landing.js';
 import { PRACTICE_SESSION_DEPENDENCY } from '#lib/practiceSession.js';
-import { staffLoginAfterSessionEnded } from '#lib/sessionEnded.js';
+import { staffLoginAfterRefusal } from '#lib/sessionEnded.js';
 import type { BillingMode } from '#lib/invoice.js';
 import type { LayoutLoad } from './$types';
 
@@ -124,8 +124,9 @@ export const load: LayoutLoad = async ({ params, url, depends }): Promise<{ sess
 	depends(PRACTICE_SESSION_DEPENDENCY);
 	const response = await apiFetch(`/api/practices/${params.practiceId}/session`);
 
+	const returnTo = `${url.pathname}${url.search}`;
 	if (response.status === 401) {
-		redirect(303, staffLoginAfterSessionEnded());
+		redirect(303, staffLoginAfterRefusal(returnTo));
 	} else if (await isMFARequired(response)) {
 		redirect(303, `${resolve('/(signed-out)/mfa/enroll')}?returnTo=${encodeURIComponent(url.pathname)}`);
 	} else if (await isTermsAgreementRequired(response)) {
@@ -134,7 +135,7 @@ export const load: LayoutLoad = async ({ params, url, depends }): Promise<{ sess
 		// stale Membership.
 		redirect(303, agreementPath(params.practiceId));
 	} else if (response.status === 403 || response.status === 404) {
-		await redirectAwayFromStalePractice();
+		await redirectAwayFromStalePractice(returnTo);
 	} else if (!response.ok) {
 		error(response.status, await apiErrorMessage(response));
 	}
@@ -189,11 +190,11 @@ export const load: LayoutLoad = async ({ params, url, depends }): Promise<{ sess
  * refused it. Always throws -- either a redirect to where she still
  * belongs, or to `/no-practice` once there is nowhere left.
  */
-async function redirectAwayFromStalePractice(): Promise<never> {
+async function redirectAwayFromStalePractice(returnTo: string): Promise<never> {
 	const staffResponse = await apiFetch('/api/staff/session');
 
 	if (staffResponse.status === 401) {
-		redirect(303, staffLoginAfterSessionEnded());
+		redirect(303, staffLoginAfterRefusal(returnTo));
 	}
 
 	if (staffResponse.ok) {

@@ -1,4 +1,5 @@
 import type { Fetcher } from './fetcher.js';
+import { forgetSessionHeld } from './sessionEnded.js';
 
 /**
  * What a person sees when sign-out did not go through. Deliberately says
@@ -82,6 +83,7 @@ export async function signOutOfSession({
 	} catch {
 		return { ok: false, message: SIGN_OUT_FAILED_MESSAGE };
 	}
+	forgetSessionHeld();
 	return { ok: true };
 }
 

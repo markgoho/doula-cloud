@@ -43,6 +43,7 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiBaseURL, apiFetchWithSession, probeSession } from '#lib/api.js';
+	import { readReturnTo } from '#lib/returnTo.js';
 	import {
 		isUnverifiedEmail,
 		passwordReauthRefusal,
@@ -117,18 +118,13 @@
 	// them, chiefly leaving the page.
 	onMount(() => signOutOfFirebaseSDK);
 
-	function safeReturnTo(): string | undefined {
-		const target = page.url.searchParams.get('returnTo');
-		return target && target.startsWith('/') && !target.startsWith('//') ? target : undefined;
-	}
-
 	// SvelteKit 3's `goto` rejects a path that no route answers, where
 	// SvelteKit 2 rendered the 404 page. `returnTo` comes off the URL, so a
 	// stale or hand-edited one must not leave a person who has just enrolled
 	// on this screen with a failure: it lands on the root, as no `returnTo`
 	// does.
 	async function landAfterEnrollment(): Promise<void> {
-		const returnTo = safeReturnTo();
+		const returnTo = readReturnTo(page.url);
 		if (returnTo) {
 			try {
 				await goto(returnTo);

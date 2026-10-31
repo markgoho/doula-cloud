@@ -499,6 +499,64 @@ async function setupSessionEnded({ hasSessionEnded = true } = {}) {
 	await render(Page, {});
 }
 
+const birthPlan = '/practices/practice-1/engagements/engagement-1/birth-plan';
+
+function loginReturningTo(target: string): URL {
+	const url = new URL(fixture.url);
+	url.searchParams.set('returnTo', target);
+	return url;
+}
+
+async function signInReturningTo(target: string) {
+	pageState.url = loginReturningTo(target);
+	apiFetch.mockResolvedValue(jsonResponse('no session', 401));
+	signInWithEmailAndPassword.mockResolvedValue({ user: { getIdToken: async () => 'id-token' } });
+	vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({}, 200)));
+	apiFetchWithSession.mockResolvedValue(jsonResponse({ ...session, memberships: [firstMembership] }));
+	await setup();
+
+	await testPage.getByLabelText('Email address').fill('priya@example.com');
+	await testPage.getByLabelText('Password').fill('correct horse');
+	await testPage.getByRole('button', { name: 'Sign in' }).click();
+}
+
+describe('Staff login -- back to the address she opened (#2259)', () => {
+	it('lands her on the address she opened signed out, not the Overview', async () => {
+		await signInReturningTo(birthPlan);
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith(birthPlan));
+		expect(goto).toHaveBeenCalledTimes(1);
+	});
+
+	it('sends a visitor already signed in there too, past the chooser', async () => {
+		pageState.url = loginReturningTo(birthPlan);
+		apiFetch.mockImplementation(toApiResponder(fixture));
+		await setup();
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith(birthPlan));
+		expect(testPage.getByRole('heading', { name: 'Choose a Practice' }).elements()).toHaveLength(0);
+	});
+
+	it('ignores an address on another site and lands her as usual', async () => {
+		await signInReturningTo('//evil.example.com/practices');
+
+		await vi.waitFor(() =>
+			expect(goto).toHaveBeenCalledWith(`/practices/${firstMembership.practiceId}`)
+		);
+		expect(goto).toHaveBeenCalledTimes(1);
+	});
+
+	it('lands her as usual when no screen answers the address', async () => {
+		goto.mockRejectedValueOnce(new Error('no route'));
+		await signInReturningTo('/no-such-screen');
+
+		await vi.waitFor(() =>
+			expect(goto).toHaveBeenCalledWith(`/practices/${firstMembership.practiceId}`)
+		);
+		expect(goto).toHaveBeenCalledWith('/no-such-screen');
+	});
+});
+
 describe('Staff login -- the session-ended notice (#757)', () => {
 	const NOTICE = 'For your security, we signed you out. Sign in again to continue.';
 

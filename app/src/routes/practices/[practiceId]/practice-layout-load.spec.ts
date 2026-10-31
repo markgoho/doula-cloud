@@ -1,3 +1,4 @@
+import { forgetSessionHeld } from '#lib/sessionEnded.js';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { jsonResponse } from '#lib/testResponse.js';
 import { load } from './+layout.js';
@@ -154,7 +155,11 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 	it('redirects to login on a 401, rather than reaching for goto mid-load', async () => {
 		setup({ '/api/practices/practice-1/session': { status: 401, body: 'no session' } });
 
-		await expect(load(loadArguments)).rejects.toMatchObject({ status: 303, location: '/login?sessionEnded=true' });
+		forgetSessionHeld();
+		await expect(load(loadArguments)).rejects.toMatchObject({
+			status: 303,
+			location: '/login?returnTo=%2Fpractices%2Fpractice-1%2Fbilling'
+		});
 	});
 
 	// #606: a live session barred from *this* Practice only -- not a
@@ -234,7 +239,11 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 			'/api/staff/session': { status: 401, body: 'no session' }
 		});
 
-		await expect(load(loadArguments)).rejects.toMatchObject({ status: 303, location: '/login?sessionEnded=true' });
+		forgetSessionHeld();
+		await expect(load(loadArguments)).rejects.toMatchObject({
+			status: 303,
+			location: '/login?returnTo=%2Fpractices%2Fpractice-1%2Fbilling'
+		});
 	});
 
 	// #871: a live Membership at a Practice mid-deletion is not a

@@ -1,3 +1,4 @@
+import { forgetSessionHeld } from '#lib/sessionEnded.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { jsonResponse } from '#lib/testResponse.js';
 import { load } from './+page.js';
@@ -14,7 +15,10 @@ function setup(status: number, body: unknown) {
 const parameters = { practiceId: 'practice-1', engagementId: 'engagement-1' };
 
 async function callLoad() {
-	return load({ params: parameters } as Parameters<typeof load>[0]);
+	return load({
+		params: parameters,
+		url: new URL('https://example.test/practices/practice-1/engagements/engagement-1/birth-plan')
+	} as Parameters<typeof load>[0]);
 }
 
 afterEach(() => {
@@ -44,10 +48,11 @@ describe('engagements/[engagementId]/birth-plan/+page.ts load', () => {
 
 	it('redirects to login on a 401, rather than reaching for goto mid-load', async () => {
 		setup(401, 'no session');
+		forgetSessionHeld();
 
 		await expect(callLoad()).rejects.toMatchObject({
 			status: 303,
-			location: '/login?sessionEnded=true'
+			location: '/login?returnTo=%2Fpractices%2Fpractice-1%2Fengagements%2Fengagement-1%2Fbirth-plan'
 		});
 	});
 

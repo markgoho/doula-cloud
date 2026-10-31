@@ -46,17 +46,15 @@ test('a Staff member signs out and can no longer reach an authenticated screen',
 		'browser still holds a __session cookie after signing out'
 	).toBeFalsy();
 
-	// Going back to an authenticated screen bounces to login -- this time
-	// through api.ts's central 401 path, which carries sessionEnded=true.
+	// Going back to an authenticated screen bounces to login, carrying the
+	// address to come back to. She signed out herself, so nothing says she
+	// was signed out (#2259); return-after-sign-in.e2e.ts has the case that does.
 	await page.goto(`/practices/${practiceId}`);
-	await expect(page).toHaveURL(/\/login\?sessionEnded=true$/);
+	await expect(page).toHaveURL(new RegExp(String.raw`/login\?returnTo=%2Fpractices%2F${practiceId}$`));
 	await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
-
-	// #757: the flag in that URL is the whole reason it is carried -- the
-	// screen says what happened rather than leaving her at a bare form.
 	await expect(
 		page.getByText('For your security, we signed you out. Sign in again to continue.')
-	).toBeVisible();
+	).toHaveCount(0);
 });
 
 // The stale-tab case from #152: two tabs share one cookie, so the second
@@ -139,6 +137,6 @@ test('a second tab loses access once the first tab signs out, without itself sig
 	// the case that matters: no tab is left holding live access once the
 	// shared cookie is gone.
 	await secondTab.goto(`/practices/${practiceId}`);
-	await expect(secondTab).toHaveURL(/\/login\?sessionEnded=true$/);
+	await expect(secondTab).toHaveURL(new RegExp(String.raw`/login\?returnTo=%2Fpractices%2F${practiceId}$`));
 	await expect(secondTab.getByRole('heading', { name: 'Sign in' })).toBeVisible();
 });
