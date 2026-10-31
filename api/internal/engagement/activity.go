@@ -211,13 +211,17 @@ func listEngagementActivity(ctx context.Context, tx *sql.Tx, practiceID, engagem
 }
 
 // entryDetail picks the one-sentence Detail an entry carries, if any.
-// Three actions have something to add beyond their own name today.
+// A few actions have something to add beyond their own name.
 func entryDetail(action string, diff []byte, before, after sql.NullString) string {
 	switch action {
 	case string(activity.ActionPaymentRefunded):
 		return refundDetail(diff)
 	case string(activity.ActionDoulaAttached):
 		return attachmentDetail(after)
+	case string(activity.ActionInvoicePaymentFailed):
+		return failedPaymentDetail(diff)
+	case string(activity.ActionInvoiceWrittenOff):
+		return writtenOffDetail(diff)
 	}
 	return reassignmentDetail(action, before, after)
 }
@@ -246,10 +250,53 @@ func refundDetail(diff []byte) string {
 	var fields struct {
 		Origin string `json:"origin"`
 	}
-	if err := json.Unmarshal(diff, &fields); err != nil || fields.Origin != activity.RefundOriginStripeDashboard {
+	if err := json.Unmarshal(diff, &fields); err != nil || fields.Origin != activity.OriginStripeDashboard {
 		return ""
 	}
 	return "Payment refunded from the Practice's Stripe Dashboard"
+}
+
+// paymentMethodNames is Stripe's payment method type in the words a
+// Practice uses for it (#2224). A type not named here gets no sentence
+// rather than Stripe's identifier.
+var paymentMethodNames = map[string]string{
+	"card":            "card",
+	"us_bank_account": "bank account",
+	"cashapp":         "Cash App Pay",
+	"klarna":          "Klarna",
+	"affirm":          "Affirm",
+	"link":            "Link",
+	"amazon_pay":      "Amazon Pay",
+}
+
+// failedPaymentDetail says which method a failed attempt used (#2224),
+// so "what happened to this Invoice?" names it -- a card declined at once
+// reads differently from a bank debit that bounced days later.
+func failedPaymentDetail(diff []byte) string {
+	var fields map[string]string
+	if err := json.Unmarshal(diff, &fields); err != nil {
+		return ""
+	}
+	name, ok := paymentMethodNames[fields[activity.DiffKeyPaymentMethodType]]
+	if !ok {
+		return ""
+	}
+	return "Tried to pay by " + name
+}
+
+// writtenOffDetail says an Invoice was marked uncollectible in the
+// Practice's own Stripe account (#2224). Its Who column reads
+// "DoulaCloud", which alone would read as DoulaCloud giving up on the
+// money; refundDetail's reason. One an Owner or Admin wrote off here
+// names her in the Who column already and gets no sentence.
+func writtenOffDetail(diff []byte) string {
+	var fields struct {
+		Origin string `json:"origin"`
+	}
+	if err := json.Unmarshal(diff, &fields); err != nil || fields.Origin != activity.OriginStripeDashboard {
+		return ""
+	}
+	return "Marked as uncollectible in the Practice's Stripe account"
 }
 
 // reassignmentDetail renders a visit_reassigned entry as the move it

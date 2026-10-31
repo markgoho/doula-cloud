@@ -80,15 +80,24 @@ export const visits = [
  * before it measures, so these rows are the ones it lays out at 320px and
  * the private copy is gone.
  *
- * Two rows, because two things about this column can be worst-case: the
- * longest phrase the Client register holds (`payment_reversed`,
- * pinned in `activityPhrases.usage.spec.ts`), and the longest single
+ * Three rows, because three things about this column can be worst-case:
+ * the longest phrase the Client register holds (`invoice_payment_failed`,
+ * pinned in `activityPhrases.usage.spec.ts`), the longest Who a Client
+ * reads ("Your practice", on `payment_reversed`), and the longest single
  * unbreakable word among them, which is what a 320px track actually
  * cannot split -- "notifications", on a row whose actor is her own name
  * rather than "Your practice", so the Who column is swept under a real
  * Client's name too.
  */
 export const activity = [
+	{
+		subjectKind: 'engagement',
+		subjectId: detail.engagementId,
+		action: 'invoice_payment_failed',
+		actorKind: 'client',
+		actorName: detail.clientName,
+		createdAt: '2026-08-31T09:00:00Z'
+	},
 	{
 		subjectKind: 'engagement',
 		subjectId: detail.engagementId,

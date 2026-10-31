@@ -471,6 +471,44 @@ func (c *StripeAPIClient) RetrieveInvoicePaymentReference(ctx context.Context, a
 	return "", nil
 }
 
+// RetrieveInvoiceFailedPaymentMethodType reads the method of invoiceID's
+// most recent failed attempt from the InvoicePayment list, with each
+// payment's PaymentIntent expanded. After a failure Stripe detaches the
+// PaymentIntent's own payment_method, so last_payment_error's copy is the
+// one that still names it. The list is newest first.
+func (c *StripeAPIClient) RetrieveInvoiceFailedPaymentMethodType(ctx context.Context, accountID, invoiceID string) (string, error) {
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	params := &stripe.InvoicePaymentListParams{Invoice: stripe.String(invoiceID)}
+	params.StripeAccount = stripe.String(accountID)
+	params.AddExpand("data.payment.payment_intent")
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	for payment, err := range c.client.V1InvoicePayments.List(ctx, params).All(ctx) {
+		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+		if err != nil {
+			return "", fmt.Errorf("payments: list invoice payments: %w", err)
+		}
+		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+		if methodType := failedPaymentMethodType(payment); methodType != "" {
+			return methodType, nil
+		}
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	return "", nil
+}
+
+// failedPaymentMethodType is the method type an InvoicePayment's
+// expanded PaymentIntent last failed with, or "" when it carries none.
+func failedPaymentMethodType(payment *stripe.InvoicePayment) string {
+	if payment.Payment == nil || payment.Payment.PaymentIntent == nil {
+		return ""
+	}
+	failure := payment.Payment.PaymentIntent.LastPaymentError
+	if failure == nil || failure.PaymentMethod == nil {
+		return ""
+	}
+	return string(failure.PaymentMethod.Type)
+}
+
 // RetrieveInvoiceClientSecret retrieves invoiceID with `confirmation_secret`
 // expanded and returns its client secret -- the one thing the Payment
 // Element needs to pay the Invoice (#1020). Verified against the Sandbox in

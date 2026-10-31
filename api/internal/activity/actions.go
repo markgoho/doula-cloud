@@ -426,12 +426,29 @@ const (
 	// did it.
 	ActionPaymentRefunded EngagementAction = "payment_refunded"
 
-	// RefundOriginStripeDashboard is a payment_refunded diff's "origin"
-	// when the Connect webhook recorded a Refund the Practice issued from
-	// her own Stripe Dashboard (#1009). Named here, on the write side, so
-	// payments (which writes it) and engagement (whose Staff-facing
-	// sentence reads it) spell it once.
-	RefundOriginStripeDashboard = "stripe_dashboard"
+	// OriginStripeDashboard is a diff's "origin" when the Connect webhook
+	// recorded something the Practice did in her own Stripe account rather
+	// than here: a payment_refunded Refund she issued from her Stripe
+	// Dashboard (#1009), or an invoice_written_off Stripe marked
+	// uncollectible (#2224). Named here, on the write side, so payments
+	// (which writes it) and engagement (whose Staff-facing sentence reads
+	// it) spell it once.
+	OriginStripeDashboard = "stripe_dashboard"
+
+	// ActionInvoicePaymentFailed records one failed attempt to pay a
+	// Stripe-backed Invoice (#2224): a declined card, a bank debit that
+	// bounced, a redirect method she abandoned. The Invoice stays 'open',
+	// as Stripe keeps it, so she can try again. Always a ClientActor -- the
+	// attempt was hers, the same reasoning ActionInvoicePaid carries. Its
+	// diff carries DiffKeyPaymentMethodType when Stripe could say which
+	// method was tried.
+	ActionInvoicePaymentFailed EngagementAction = "invoice_payment_failed"
+
+	// DiffKeyPaymentMethodType is ActionInvoicePaymentFailed's one diff
+	// key: Stripe's own payment method type ("card", "us_bank_account").
+	// Here because payments writes it and engagement's Staff-facing
+	// sentence reads it.
+	DiffKeyPaymentMethodType = "paymentMethodType"
 
 	ActionPortalInviteSent EngagementAction = "portal_invite_sent"
 
@@ -512,6 +529,7 @@ var moneyActions = map[EngagementAction]bool{
 	ActionContractAmountRepriced:   true,
 	ActionInvoiceRaised:            true,
 	ActionInvoicePaid:              true,
+	ActionInvoicePaymentFailed:     true,
 	ActionPaymentRecorded:          true,
 	ActionInvoiceVoided:            true,
 	ActionInvoiceWrittenOff:        true,

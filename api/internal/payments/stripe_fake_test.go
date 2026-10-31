@@ -26,6 +26,20 @@ func TestFakeClient_UnwiredMethods(t *testing.T) {
 	}
 }
 
+// TestFakeClient_FailedPaymentMethodType proves the double reports the
+// method a test set for an Invoice, and nothing for one it did not.
+func TestFakeClient_FailedPaymentMethodType(t *testing.T) {
+	client := payments.NewFakeClient()
+	client.FailedPaymentMethodTypes = map[string]string{"in_1": methodUSBankAccount}
+
+	if got, err := client.RetrieveInvoiceFailedPaymentMethodType(t.Context(), "acct_1", "in_1"); err != nil || got != methodUSBankAccount {
+		t.Fatalf("RetrieveInvoiceFailedPaymentMethodType(in_1) = %q, %v, want us_bank_account", got, err)
+	}
+	if got, err := client.RetrieveInvoiceFailedPaymentMethodType(t.Context(), "acct_1", "in_2"); err != nil || got != "" {
+		t.Fatalf("RetrieveInvoiceFailedPaymentMethodType(in_2) = %q, %v, want empty", got, err)
+	}
+}
+
 // TestFakeClient_ErasureMethods exercises #394's two Stripe erasure acts
 // on the fake. Their real callers live in package client (the erasure
 // outbox worker), which cannot import this package -- payments already

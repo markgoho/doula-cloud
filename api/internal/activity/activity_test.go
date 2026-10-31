@@ -188,6 +188,7 @@ func TestMoneyActions_ContainsExactlyTheADR0008MoneySet(t *testing.T) {
 		activity.ActionContractAmountRepriced,
 		activity.ActionInvoiceRaised,
 		activity.ActionInvoicePaid,
+		activity.ActionInvoicePaymentFailed,
 		activity.ActionPaymentRecorded,
 		activity.ActionInvoiceVoided,
 		activity.ActionInvoiceWrittenOff,
