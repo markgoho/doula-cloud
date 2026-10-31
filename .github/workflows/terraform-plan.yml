@@ -351,7 +351,7 @@ jobs:
             *) echo "$KEY_SECRET does not hold a Sandbox restricted key (rk_test_...)."; exit 1 ;;
           esac
 
-          terraform init -input=false -no-color > /dev/null
+          terraform init -reconfigure -input=false -no-color > /dev/null
 
           set +e
           TF_VAR_stripe_api_key="$key" terraform plan -detailed-exitcode -input=false -no-color -lock-timeout=480s -out=tfplan > plan-raw.log 2>&1
