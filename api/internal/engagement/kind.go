@@ -53,6 +53,17 @@ func HasLivingOrExpectedBaby(birthOutcome *string) bool {
 	return *birthOutcome == OutcomeLiveBirth
 }
 
+// IsBabyStillExpected answers the question a due date presumes -- is a
+// birth still to come? -- and the answer is yes only while no birth
+// outcome is recorded (#2211). Any recorded value, a live birth
+// included, means the pregnancy is no longer expected, the same reading
+// refuseUpgradeAfterBirth makes. It is narrower than
+// HasLivingOrExpectedBaby, which answers yes after a live birth because
+// the Birth Plan stays readable then (ADR-0015).
+func IsBabyStillExpected(birthOutcome *string) bool {
+	return birthOutcome == nil
+}
+
 // OffersBirthPlan answers ADR-0015's suppression question -- does this
 // Engagement call for a Birth Plan? -- once, so every surface that
 // offers, links to or announces a Birth Plan agrees with every other.

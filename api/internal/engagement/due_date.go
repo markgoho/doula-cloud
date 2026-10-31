@@ -46,9 +46,9 @@ type DueDateChangeResponse struct {
 // recorded. ADR-0015's freeze names client_id, birth_outcome and
 // pregnancy_ended_on, and not the due date; once the pregnancy has ended
 // the On-call window ends on pregnancy_ended_on, and the portal already
-// hides a due date after a loss (portal.DetailHandler,
-// HasLivingOrExpectedBaby), so a later correction changes no Client
-// surface that presumes a baby. It sets a date and never clears one:
+// hides a due date once any birth outcome is recorded
+// (portal.DetailHandler, IsBabyStillExpected), so a later correction
+// changes no Client surface that presumes a baby. It sets a date and never clears one:
 // intake demands a due date on birth work, and nothing yet asks for a
 // way to remove one.
 //

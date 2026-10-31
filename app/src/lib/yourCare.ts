@@ -66,8 +66,9 @@ export function nextVisit(items: PortalVisit[]): PortalVisit | undefined {
 }
 
 /** "What happens next": who is coming and when, then the due date where
- * there is one. The BFF already leaves the due date out after a loss
- * (#2003), so this asks nothing about her history. */
+ * there is one. The BFF already leaves the due date out once any birth
+ * outcome is recorded, a loss (#2003) or a live birth (#2211) alike, so
+ * this asks nothing about her history. */
 export function whatHappensNext(next: PortalVisit | undefined, dueDate: string | undefined): { lead: string; detail?: string } {
 	const lead = next
 		? `${next.doulaName} is coming to you on ${formatPortalVisit(next.scheduledAt, false)}.`
