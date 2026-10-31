@@ -26,20 +26,21 @@ const (
 	stripeObjectV2Event = "v2.core.event"
 	// requirementMCC is one real Stripe requirement path, used across
 	// both the status-read and webhook-persist tests.
-	requirementMCC                      = "configuration.merchant.mcc"
-	stripeObjectAccount                 = "account"
-	stripeObjectInvoice                 = "invoice"
-	stripeEventTypeCapabilityStatus     = "v2.core.account[configuration.merchant].capability_status_updated"
-	stripeEventTypeAccountCreated       = "v2.core.account.created"
-	stripeEventTypeInvoicePaid          = "invoice.paid"
-	stripeEventTypeInvoicePaymentFailed = "invoice.payment_failed"
-	stripeEventTypeUnhandled            = "customer.updated"
-	stripeConnectWebhookSecret          = webhookTestSecret
-	stripeAccountWebhookSecret          = webhookTestSecret
-	objectKey                           = "object"
-	typeKey                             = "type"
-	dataKey                             = "data"
-	accountKey                          = "account"
+	requirementMCC                            = "configuration.merchant.mcc"
+	stripeObjectAccount                       = "account"
+	stripeObjectInvoice                       = "invoice"
+	stripeEventTypeCapabilityStatus           = "v2.core.account[configuration.merchant].capability_status_updated"
+	stripeEventTypeAccountCreated             = "v2.core.account.created"
+	stripeEventTypeInvoicePaid                = "invoice.paid"
+	stripeEventTypeInvoicePaymentFailed       = "invoice.payment_failed"
+	stripeEventTypeInvoiceMarkedUncollectible = "invoice.marked_uncollectible"
+	stripeEventTypeUnhandled                  = "customer.updated"
+	stripeConnectWebhookSecret                = webhookTestSecret
+	stripeAccountWebhookSecret                = webhookTestSecret
+	objectKey                                 = "object"
+	typeKey                                   = "type"
+	dataKey                                   = "data"
+	accountKey                                = "account"
 )
 
 func newConnectWebhookServer(db *testdb.DB) *httptest.Server {
@@ -71,6 +72,8 @@ type referenceClient struct {
 	*payments.StripeAPIClient
 	reference string
 	err       error
+	method    string
+	methodErr error
 }
 
 func (c *referenceClient) RetrieveInvoicePaymentReference(_ context.Context, _, _ string) (string, error) {
@@ -78,6 +81,13 @@ func (c *referenceClient) RetrieveInvoicePaymentReference(_ context.Context, _, 
 		return "", c.err
 	}
 	return c.reference, nil
+}
+
+func (c *referenceClient) RetrieveInvoiceFailedPaymentMethodType(_ context.Context, _, _ string) (string, error) {
+	if c.methodErr != nil {
+		return "", c.methodErr
+	}
+	return c.method, nil
 }
 
 // buildConnectEventPayload assembles a raw Stripe event envelope around
@@ -1042,64 +1052,278 @@ func TestPostConnectWebhookHandler_InvoicePaidSurvivesNudgeEnqueueFailure(t *tes
 	}
 }
 
-// TestPostConnectWebhookHandler_InvoicePaymentFailedFlipsStatusWithoutPayment
-// proves a validly-signed invoice.payment_failed event flips the matching
-// Invoice's status to uncollectible without creating any payments row.
-func TestPostConnectWebhookHandler_InvoicePaymentFailedFlipsStatusWithoutPayment(t *testing.T) {
+// methodUSBankAccount is Stripe's payment method type for a US bank
+// (ACH) debit.
+const methodUSBankAccount = "us_bank_account"
+
+// failedAttemptClient builds the referenceClient a failed-attempt test
+// injects: real signature verification over a stubbed lookup of the
+// method the attempt used.
+func failedAttemptClient(method string, err error) *referenceClient {
+	return &referenceClient{
+		StripeAPIClient: payments.NewStripeAPIClient("sk_test_unused", "https://app.test"),
+		method:          method,
+		methodErr:       err,
+	}
+}
+
+// activityRow is one activity row as a webhook test reads it back.
+type activityRow struct {
+	diff      map[string]any
+	actorKind string
+	clientID  sql.NullString
+}
+
+// activityRows reads every row of action recorded against engagementID,
+// oldest first, through the superuser Admin connection.
+func activityRows(t *testing.T, db *testdb.DB, action, engagementID string) []activityRow {
+	t.Helper()
+	rows, err := db.Admin.QueryContext(t.Context(),
+		`SELECT diff, actor_kind::text, actor_client_id::text FROM activity WHERE action = $1 AND subject_id = $2 ORDER BY created_at`,
+		action, engagementID)
+	if err != nil {
+		t.Fatalf("query activity: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []activityRow
+	for rows.Next() {
+		var raw []byte
+		var row activityRow
+		if err := rows.Scan(&raw, &row.actorKind, &row.clientID); err != nil {
+			t.Fatalf("scan activity: %v", err)
+		}
+		row.diff = map[string]any{}
+		if err := json.Unmarshal(raw, &row.diff); err != nil {
+			t.Fatalf("unmarshal diff: %v", err)
+		}
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate activity: %v", err)
+	}
+	return out
+}
+
+// TestPostConnectWebhookHandler_FailedAttemptLeavesInvoicePayable is
+// #2224. Stripe sends invoice.payment_failed on every failed attempt and
+// keeps the Invoice open for another, so ours stays open too: a declined
+// card in the portal and a bank debit that bounces days later both leave
+// it payable, write no payments row, and record the attempt -- hers, by
+// the method she tried -- on the Engagement's ledger.
+func TestPostConnectWebhookHandler_FailedAttemptLeavesInvoicePayable(t *testing.T) {
+	cases := []struct {
+		name   string
+		method string
+	}{
+		{"a declined card", "card"},
+		{"a failed bank debit", methodUSBankAccount},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := testdb.New(t)
+			account := "acct_failed_attempt_" + tc.method
+			stripeInvoiceID := "in_failed_attempt_" + tc.method
+			practiceID := seedConnectedPractice(t, db, "Failed Attempt Practice", account)
+			clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+			contractID := seedDraftContract(t, db, engagementID)
+			invoiceID := seedInvoice(t, db, practiceID, contractID, stripeInvoiceID, invoiceStatusOpen, 5000, time.Now())
+			srv := newConnectWebhookServerWith(db, failedAttemptClient(tc.method, nil))
+			defer srv.Close()
+
+			payload := invoicePaymentFailedPayload(t, "evt_failed_attempt_"+tc.method, account, stripeInvoiceID)
+			resp := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+			}
+			if status, _ := invoiceStatusAndPaidAt(t, db, invoiceID); status != invoiceStatusOpen {
+				t.Fatalf("invoice status = %q, want %q -- Stripe keeps it open for another try", status, invoiceStatusOpen)
+			}
+			if rows := paymentsForInvoice(t, db, invoiceID); len(rows) != 0 {
+				t.Fatalf("payments for invoice = %d, want 0", len(rows))
+			}
+			got := activityRows(t, db, "invoice_payment_failed", engagementID)
+			if len(got) != 1 {
+				t.Fatalf("invoice_payment_failed rows = %d, want 1", len(got))
+			}
+			if got[0].actorKind != "client" || got[0].clientID.String != clientID {
+				t.Fatalf("actor = %s/%v, want the Client %s -- the attempt was hers", got[0].actorKind, got[0].clientID, clientID)
+			}
+			if got[0].diff["paymentMethodType"] != tc.method {
+				t.Fatalf("diff = %v, want paymentMethodType %q", got[0].diff, tc.method)
+			}
+		})
+	}
+}
+
+// TestPostConnectWebhookHandler_FailedAttemptRecordedWithoutAMethodItCannotRead
+// proves a failure to ask Stripe which method was tried does not lose
+// the record of the attempt: the row is written with no method and the
+// event acknowledged, the rule invoice.paid follows for its reference.
+func TestPostConnectWebhookHandler_FailedAttemptRecordedWithoutAMethodItCannotRead(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedConnectedPractice(t, db, "Invoice Payment Failed Practice", "acct_invoice_failed")
+	practiceID := seedConnectedPractice(t, db, "Failed Attempt No Method Practice", "acct_failed_no_method")
 	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	contractID := seedDraftContract(t, db, engagementID)
-	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_failed_test", invoiceStatusOpen, 5000, time.Now())
-	srv := newConnectWebhookServer(db)
+	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_failed_no_method", invoiceStatusOpen, 5000, time.Now())
+	srv := newConnectWebhookServerWith(db, failedAttemptClient("", errRetrieveFailed))
 	defer srv.Close()
 
-	payload := invoicePaymentFailedPayload(t, "evt_invoice_failed", "acct_invoice_failed", "in_failed_test")
-	resp := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
+	resp := postConnectWebhook(t, srv, invoicePaymentFailedPayload(t, "evt_failed_no_method", "acct_failed_no_method", "in_failed_no_method"), stripeConnectWebhookSecret)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
-
-	status, _ := invoiceStatusAndPaidAt(t, db, invoiceID)
-	if status != invoiceStatusUncollectible {
-		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusUncollectible)
+	if status, _ := invoiceStatusAndPaidAt(t, db, invoiceID); status != invoiceStatusOpen {
+		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusOpen)
 	}
-	if payments := paymentsForInvoice(t, db, invoiceID); len(payments) != 0 {
-		t.Fatalf("payments for invoice = %d, want 0", len(payments))
+	got := activityRows(t, db, "invoice_payment_failed", engagementID)
+	if len(got) != 1 {
+		t.Fatalf("invoice_payment_failed rows = %d, want 1", len(got))
+	}
+	if _, ok := got[0].diff["paymentMethodType"]; ok {
+		t.Fatalf("diff = %v, want no method when Stripe could not be asked", got[0].diff)
 	}
 }
 
 // TestPostConnectWebhookHandler_InvoicePaymentFailedReplayIsNoOp proves
-// replaying the same invoice.payment_failed event id twice is a no-op --
-// the second delivery must not error or re-log the transition.
+// replaying the same invoice.payment_failed event id twice records the
+// attempt once.
 func TestPostConnectWebhookHandler_InvoicePaymentFailedReplayIsNoOp(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedConnectedPractice(t, db, "Invoice Payment Failed Replay Practice", "acct_invoice_failed_replay")
 	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	contractID := seedDraftContract(t, db, engagementID)
 	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_failed_replay", invoiceStatusOpen, 5000, time.Now())
-	srv := newConnectWebhookServer(db)
+	srv := newConnectWebhookServerWith(db, failedAttemptClient("card", nil))
 	defer srv.Close()
 
 	payload := invoicePaymentFailedPayload(t, "evt_invoice_failed_replay", "acct_invoice_failed_replay", "in_failed_replay")
-
-	first := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
-	_ = first.Body.Close()
-	if first.StatusCode != http.StatusOK {
-		t.Fatalf("first delivery status = %d, want %d", first.StatusCode, http.StatusOK)
+	for _, delivery := range []string{"original", "replayed"} {
+		resp := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s delivery status = %d, want %d", delivery, resp.StatusCode, http.StatusOK)
+		}
 	}
 
-	second := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
-	_ = second.Body.Close()
-	if second.StatusCode != http.StatusOK {
-		t.Fatalf("replayed delivery status = %d, want %d", second.StatusCode, http.StatusOK)
+	if status, _ := invoiceStatusAndPaidAt(t, db, invoiceID); status != invoiceStatusOpen {
+		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusOpen)
+	}
+	if got := activityRows(t, db, "invoice_payment_failed", engagementID); len(got) != 1 {
+		t.Fatalf("invoice_payment_failed rows = %d, want 1 after a replay", len(got))
+	}
+}
+
+// invoiceMarkedUncollectiblePayload builds a raw
+// invoice.marked_uncollectible event body referencing stripeInvoiceID.
+func invoiceMarkedUncollectiblePayload(t *testing.T, eventID, accountID, stripeInvoiceID string) []byte {
+	t.Helper()
+	return buildConnectEventPayload(t, eventID, stripeEventTypeInvoiceMarkedUncollectible, accountID, map[string]any{
+		"id":      stripeInvoiceID,
+		objectKey: stripeObjectInvoice,
+	})
+}
+
+// TestPostConnectWebhookHandler_MarkedUncollectibleWritesOffAnOpenInvoice
+// is the one way a Stripe-backed Invoice reaches uncollectible (#2224):
+// Stripe says so, because the Practice wrote it off in her own Stripe
+// Dashboard. Nobody in DoulaCloud did it, so the row's actor is
+// DoulaCloud and its diff says where it came from.
+func TestPostConnectWebhookHandler_MarkedUncollectibleWritesOffAnOpenInvoice(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedConnectedPractice(t, db, "Marked Uncollectible Practice", "acct_marked_uncollectible")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedDraftContract(t, db, engagementID)
+	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_marked_uncollectible", invoiceStatusOpen, 5000, time.Now())
+	srv := newConnectWebhookServer(db)
+	defer srv.Close()
+
+	payload := invoiceMarkedUncollectiblePayload(t, "evt_marked_uncollectible", "acct_marked_uncollectible", "in_marked_uncollectible")
+	for _, delivery := range []string{"original", "replayed"} {
+		resp := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s delivery status = %d, want %d", delivery, resp.StatusCode, http.StatusOK)
+		}
 	}
 
-	status, _ := invoiceStatusAndPaidAt(t, db, invoiceID)
-	if status != invoiceStatusUncollectible {
+	if status, _ := invoiceStatusAndPaidAt(t, db, invoiceID); status != invoiceStatusUncollectible {
 		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusUncollectible)
+	}
+	got := activityRows(t, db, "invoice_written_off", engagementID)
+	if len(got) != 1 {
+		t.Fatalf("invoice_written_off rows = %d, want 1 after a replay", len(got))
+	}
+	if got[0].actorKind != "system" {
+		t.Fatalf("actor_kind = %q, want system -- no Staff member of this system wrote it off", got[0].actorKind)
+	}
+	if got[0].diff["origin"] != "stripe_dashboard" {
+		t.Fatalf("diff = %v, want origin stripe_dashboard", got[0].diff)
+	}
+}
+
+// TestPostConnectWebhookHandler_MarkedUncollectibleLeavesASettledInvoiceAlone
+// proves the event moves only an open Invoice. One already paid or
+// voided here keeps its status and gains no row; the event is
+// acknowledged, since Stripe retries anything else.
+func TestPostConnectWebhookHandler_MarkedUncollectibleLeavesASettledInvoiceAlone(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedConnectedPractice(t, db, "Marked Uncollectible Paid Practice", "acct_marked_uncollectible_paid")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedDraftContract(t, db, engagementID)
+	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_marked_uncollectible_paid", invoiceStatusPaid, 5000, time.Now())
+	srv := newConnectWebhookServer(db)
+	defer srv.Close()
+
+	resp := postConnectWebhook(t, srv, invoiceMarkedUncollectiblePayload(t, "evt_marked_uncollectible_paid", "acct_marked_uncollectible_paid", "in_marked_uncollectible_paid"), stripeConnectWebhookSecret)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if status, _ := invoiceStatusAndPaidAt(t, db, invoiceID); status != invoiceStatusPaid {
+		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusPaid)
+	}
+	if got := activityRows(t, db, "invoice_written_off", engagementID); len(got) != 0 {
+		t.Fatalf("invoice_written_off rows = %d, want 0", len(got))
+	}
+}
+
+// TestPostConnectWebhookHandler_MarkedUncollectibleUnknownInvoiceDroppedButAcknowledged
+// proves an invoice.marked_uncollectible for an Invoice DoulaCloud never
+// raised is logged and dropped.
+func TestPostConnectWebhookHandler_MarkedUncollectibleUnknownInvoiceDroppedButAcknowledged(t *testing.T) {
+	db := testdb.New(t)
+	seedConnectedPractice(t, db, "Marked Uncollectible Unknown Practice", "acct_marked_uncollectible_unknown")
+	srv := newConnectWebhookServer(db)
+	defer srv.Close()
+
+	resp := postConnectWebhook(t, srv, invoiceMarkedUncollectiblePayload(t, "evt_marked_uncollectible_unknown", "acct_marked_uncollectible_unknown", "in_does_not_exist"), stripeConnectWebhookSecret)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+}
+
+// TestPostConnectWebhookHandler_MarkedUncollectibleMalformedObjectRejected
+// proves a data.object that cannot be read is refused rather than
+// applied with zero values.
+func TestPostConnectWebhookHandler_MarkedUncollectibleMalformedObjectRejected(t *testing.T) {
+	db := testdb.New(t)
+	srv := newConnectWebhookServer(db)
+	defer srv.Close()
+
+	payload := buildConnectEventPayload(t, "evt_marked_uncollectible_malformed", stripeEventTypeInvoiceMarkedUncollectible, "acct_malformed",
+		map[string]any{"id": 12345})
+	resp := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
 	}
 }
 
@@ -1201,7 +1425,7 @@ func TestPostConnectWebhookHandler_InvoicePaymentFailedMalformedObjectRejected(t
 	defer srv.Close()
 
 	// id as a number (instead of a string) fails to unmarshal into
-	// invoicePaymentFailedObject.
+	// invoiceEventObject.
 	payload := buildConnectEventPayload(t, "evt_invoice_failed_malformed", stripeEventTypeInvoicePaymentFailed, "acct_malformed",
 		map[string]any{"id": 12345})
 

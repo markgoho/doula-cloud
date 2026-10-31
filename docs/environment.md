@@ -346,15 +346,18 @@ Whether a sandbox carries every Connect capability is not something to take on t
 
 **Platform billing.** The Practice pays us. A Stripe Customer plus a Checkout Session over one flat Price. One event matters: `checkout.session.completed`. The `credit_ledger` is credited by `api/internal/billing/webhook.go` and by nothing else — never by the browser redirect.
 
-**Connect.** The Client pays the Practice. An **Accounts v2** connected account per Practice carrying the `merchant` configuration, onboarded through a hosted v2 Account Link, with Invoices raised on-behalf-of using the `Stripe-Account` header. Five events matter, and they do not all arrive the same way:
+**Connect.** The Client pays the Practice. An **Accounts v2** connected account per Practice carrying the `merchant` configuration, onboarded through a hosted v2 Account Link, with Invoices raised on-behalf-of using the `Stripe-Account` header. Six events matter, and they do not all arrive the same way:
 
 | Event | Kind | Route |
 | --- | --- | --- |
 | `v2.core.account[configuration.merchant].capability_status_updated` | thin | `/api/stripe/account-webhook` |
 | `invoice.paid` | snapshot | `/api/stripe/connect-webhook` |
 | `invoice.payment_failed` | snapshot | `/api/stripe/connect-webhook` |
+| `invoice.marked_uncollectible` | snapshot | `/api/stripe/connect-webhook` |
 | `credit_note.created` | snapshot | `/api/stripe/connect-webhook` |
 | `refund.created` | snapshot | `/api/stripe/connect-webhook` |
+
+`invoice.payment_failed` changes no status ([#2224](https://github.com/markgoho/doula-cloud/issues/2224)). Stripe sends it on every failed attempt, a declined card or a bank debit that bounces days later, and keeps the Invoice `open` for the next try, so ours stays open and the attempt is recorded on the Engagement's activity with the method tried. A Stripe-backed Invoice becomes `uncollectible` only on `invoice.marked_uncollectible`, which the Practice causes in her own Stripe Dashboard. Without that subscription a write-off there never reaches DoulaCloud.
 
 The two Refund events (#1009) are both needed, and dropping either one is silent. A credit note a Practice issues from the Invoice page of her Stripe Dashboard fires `credit_note.created`; a refund she makes from the Payments page, against the charge, fires only `refund.created` and never creates a credit note. A card refund fires both, and `payments.refundReference` keys each on the same Refund object's id, so the second arrival finds the first's row. Verified in the Sandbox on #1009's issue comment.
 
@@ -425,6 +428,8 @@ They point at the raw Cloud Run URL — the one `gcloud run services describe` r
 | `/api/stripe/webhook` | `checkout.session.completed` | snapshot | `@self` | `we_1U7NT01rKoVEA79vnOcBFqtV`, enabled |
 | `/api/stripe/account-webhook` | `v2.core.account[configuration.merchant].capability_status_updated` | thin | `@self` | `ed_test_61VGn5QffuUmiONhX16VGl100QSQI7KSJpC2tKXrs4xU`, enabled |
 | `/api/stripe/connect-webhook` | `invoice.paid`, `invoice.payment_failed`, `credit_note.created`, `refund.created` | snapshot | `@accounts` | `we_1U7Ocp1rKoVEA79vT9AXETKU`, enabled |
+
+The Connect snapshot destination does not yet carry `invoice.marked_uncollectible`, which the handler has acted on since [#2224](https://github.com/markgoho/doula-cloud/issues/2224). Adding it is a write to the shared Sandbox that the command on that issue makes; the row above gains it then.
 
 The two Connect rows are one feature, split by Stripe's own constraint: an event destination has one `event_payload`, and the account events are thin while the Invoice events are snapshot. The snapshot destination pins `snapshot_api_version` to `2026-07-29.dahlia`, the version `stripe-go v86.3.0` sends on every request (`api_version.go`), so a delivered object always deserializes into the structs the SDK ships.
 

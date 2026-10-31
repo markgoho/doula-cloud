@@ -122,6 +122,10 @@ type FakeClient struct {
 	// RetrieveInvoicePaymentReference returns.
 	PaymentReferences map[string]string
 
+	// FailedPaymentMethodTypes, keyed by Stripe invoice id, is what
+	// RetrieveInvoiceFailedPaymentMethodType returns (#2224).
+	FailedPaymentMethodTypes map[string]string
+
 	CreateAccountErr     error
 	CreateAccountLinkErr error
 	RetrieveAccountErr   error
@@ -342,6 +346,14 @@ func (f *FakeClient) RetrieveInvoicePaymentReference(_ context.Context, _, invoi
 	}
 	// coverage:ignore reason: PostConnectWebhookHandler's tests inject referenceClient rather than FakeClient, so this double's implementation is never called
 	return f.PaymentReferences[invoiceID], nil
+}
+
+// RetrieveInvoiceFailedPaymentMethodType returns the method type a test
+// set in FailedPaymentMethodTypes for the invoice id (empty if unset).
+func (f *FakeClient) RetrieveInvoiceFailedPaymentMethodType(_ context.Context, _, invoiceID string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.FailedPaymentMethodTypes[invoiceID], nil
 }
 
 // FakeClientSecretCall is one RetrieveInvoiceClientSecret call.

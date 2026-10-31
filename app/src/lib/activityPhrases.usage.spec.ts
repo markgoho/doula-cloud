@@ -153,9 +153,9 @@ describe('the Client register holds every action a Client can reach (#708)', () 
 		expect(jargon).toEqual([]);
 	});
 
-	it('still has payment_reversed as its longest phrase', () => {
-		// The Client-portal hub's own 320px sweep opens the disclosure on a
-		// `payment_reversed` row specifically, because that is the widest
+	it('still has invoice_payment_failed as its longest phrase', () => {
+		// The Client-portal hub's own 320px sweep opens the disclosure on an
+		// `invoice_payment_failed` row specifically, because that is the widest
 		// string this column can be asked to lay out (ADR-0024/0025). A
 		// longer phrase added here would quietly demote that sweep to
 		// measuring an average case, so the choice is pinned rather than
@@ -166,11 +166,14 @@ describe('the Client register holds every action a Client can reach (#708)', () 
 		// register entirely. 39 characters is a real weakening of what the
 		// sweep measures, and it is the honest one: the sweep measures the
 		// true worst case, never a retired phrase kept alive for it.
+		//
+		// `invoice_payment_failed` (51 characters, #2224) took it from
+		// `payment_reversed`; the hub's fixture carries a row of each.
 		const byWidth = clientReachableActions().toSorted(
 			(a, b) => clientActivityPhrase(b).length - clientActivityPhrase(a).length
 		);
 
-		expect(byWidth[0]).toBe('payment_reversed');
+		expect(byWidth[0]).toBe('invoice_payment_failed');
 	});
 
 	it('never puts a team noun or a raw status value in a phrase', () => {

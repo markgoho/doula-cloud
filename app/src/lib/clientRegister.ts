@@ -239,6 +239,10 @@ const CLIENT_ACTIVITY_PHRASES: Record<string, string> = {
 	// does not hold.
 	invoice_raised: 'An invoice was added to your care.',
 	invoice_paid: 'An invoice was paid.',
+	// #2224. A failed attempt leaves the invoice open, so the second
+	// sentence is true: its Pay button is still there. Hannah, Camille and
+	// Nadia each chose this line because it says what to do next.
+	invoice_payment_failed: 'Your payment did not go through. You can try again.',
 	payment_recorded: 'A payment from you was recorded.',
 	payment_reversed: 'A payment recorded earlier was removed.',
 	// #1009. "Returned to you", never "refunded": she hears a refund as a

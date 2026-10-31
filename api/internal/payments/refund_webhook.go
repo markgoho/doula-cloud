@@ -128,7 +128,7 @@ func recordStripeRefund(ctx context.Context, tx *sql.Tx, practiceID, invoiceID, 
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("payments: insert stripe refund: %w", err)
 	}
-	return recordRefundActivity(ctx, tx, practiceID, engagementID, targetPaymentID, -amountCents, sql.NullString{}, activity.SystemActor(), activity.RefundOriginStripeDashboard)
+	return recordRefundActivity(ctx, tx, practiceID, engagementID, targetPaymentID, -amountCents, sql.NullString{}, activity.SystemActor(), activity.OriginStripeDashboard)
 }
 
 // finishRefundEvent turns recordStripeRefund's outcome into the webhook's

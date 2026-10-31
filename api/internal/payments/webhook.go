@@ -25,7 +25,8 @@ import (
 const maxWebhookBodyBytes = 1 << 20 // 1 MiB
 
 // The v1 snapshot event types the Connect endpoint handles: #82's
-// invoice.paid / invoice.payment_failed below, and #1009's
+// invoice.paid / invoice.payment_failed below, #2224's
+// invoice.marked_uncollectible, and #1009's
 // credit_note.created / refund.created (refund_webhook.go). Any other
 // event type is logged and dropped. WebhookEvent.Type is a plain string (the Client port
 // abstracts away *stripe.Event), so stripe-go's own typed constants are
@@ -40,8 +41,9 @@ const maxWebhookBodyBytes = 1 << 20 // 1 MiB
 // reaches this endpoint falls through to the default branch and is
 // logged and dropped.
 const (
-	eventTypeInvoicePaid          = string(stripe.EventTypeInvoicePaid)
-	eventTypeInvoicePaymentFailed = string(stripe.EventTypeInvoicePaymentFailed)
+	eventTypeInvoicePaid                = string(stripe.EventTypeInvoicePaid)
+	eventTypeInvoicePaymentFailed       = string(stripe.EventTypeInvoicePaymentFailed)
+	eventTypeInvoiceMarkedUncollectible = string(stripe.EventTypeInvoiceMarkedUncollectible)
 )
 
 // eventTypeMerchantCapabilityStatusUpdated is the one v2 thin event type
@@ -72,10 +74,11 @@ type invoicePaidObject struct {
 	} `json:"status_transitions"`
 }
 
-// invoicePaymentFailedObject is the subset of an invoice.payment_failed
-// event's Invoice object #82's handler needs -- just enough to resolve
-// the matching invoices row; no Payment is ever created on this event.
-type invoicePaymentFailedObject struct {
+// invoiceEventObject is the subset of an invoice.payment_failed or
+// invoice.marked_uncollectible event's Invoice object their handlers
+// need -- just enough to resolve the matching invoices row; no Payment
+// is ever created on either event.
+type invoiceEventObject struct {
 	ID string `json:"id"`
 }
 
@@ -85,12 +88,14 @@ type invoicePaymentFailedObject struct {
 // type with its own signing secret. It verifies the Stripe-Signature
 // header itself via client.VerifyWebhookSignature (no staffauth.Middleware
 // in front of it -- there is no Practice session to authenticate), then
-// dispatches on the event type: #82's invoice.paid/invoice.payment_failed
-// resolve the matching invoices row (via its stored Stripe invoice id,
-// scoped by the event's account field) and update its status --
-// invoice.paid also creates exactly one payments row. An event for an
+// dispatches on the event type. Each Invoice event resolves the matching
+// invoices row (via its stored Stripe invoice id, scoped by the event's
+// account field): invoice.paid flips it to paid and creates exactly one
+// payments row; invoice.payment_failed records the failed attempt and
+// leaves it open, as Stripe does (#2224); invoice.marked_uncollectible
+// moves it to uncollectible. An event for an
 // unrecognized account id, an Invoice not found in DoulaCloud, or any
-// event type other than these two, is logged and dropped rather than
+// event type not handled here, is logged and dropped rather than
 // treated as an error -- Stripe retries indefinitely on anything but a
 // 2xx. Replays of the same Stripe event id are recorded in
 // stripe_webhook_events (#77's idempotency table, reused here per #80's
@@ -123,7 +128,9 @@ func PostConnectWebhookHandler(db *sql.DB, client Client, webhookSecret string, 
 		case eventTypeInvoicePaid:
 			handleInvoicePaid(w, r, db, client, event, enq)
 		case eventTypeInvoicePaymentFailed:
-			handleInvoicePaymentFailed(w, r, db, event)
+			handleInvoicePaymentFailed(w, r, db, client, event)
+		case eventTypeInvoiceMarkedUncollectible:
+			handleInvoiceMarkedUncollectible(w, r, db, event)
 		case eventTypeCreditNoteCreated:
 			handleCreditNoteCreated(w, r, db, event)
 		case eventTypeRefundCreated:
@@ -237,6 +244,15 @@ func resolveInvoiceForEvent(ctx context.Context, tx *sql.Tx, stripeInvoiceID, ac
 // resolveInvoiceForEvent, called just above this in the caller, so no
 // further scoping is needed here.
 func recordInvoicePaid(ctx context.Context, tx *sql.Tx, practiceID, invoiceID string) error {
+	return recordInvoiceEvent(ctx, tx, practiceID, invoiceID, activity.ActionInvoicePaid, nil, true)
+}
+
+// recordInvoiceEvent writes one Engagement activity row for something
+// Stripe reported about invoiceID, reaching the Engagement and its
+// Client through invoices -> contracts -> engagements. byClient picks the
+// actor: the Client herself for her own payment or attempt, DoulaCloud
+// for what the Practice did in her own Stripe account (ADR-0022).
+func recordInvoiceEvent(ctx context.Context, tx *sql.Tx, practiceID, invoiceID string, action activity.EngagementAction, diff json.RawMessage, byClient bool) error {
 	var engagementID, clientID string
 	if err := tx.QueryRowContext(ctx,
 		`SELECT e.id, e.client_id
@@ -247,17 +263,22 @@ func recordInvoicePaid(ctx context.Context, tx *sql.Tx, practiceID, invoiceID st
 		invoiceID,
 	).Scan(&engagementID, &clientID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("payments: resolve engagement for invoice paid: %w", err)
+		return fmt.Errorf("payments: resolve engagement for %s: %w", action, err)
+	}
+	actor := activity.SystemActor()
+	if byClient {
+		actor = activity.ClientActor(clientID)
 	}
 	if err := activity.Record(ctx, tx, activity.Entry{
 		PracticeID:  practiceID,
 		SubjectKind: activity.SubjectEngagement,
 		SubjectID:   engagementID,
-		Action:      string(activity.ActionInvoicePaid),
-		Actor:       activity.ClientActor(clientID),
+		Action:      string(action),
+		Diff:        diff,
+		Actor:       actor,
 	}); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("payments: record invoice paid: %w", err)
+		return fmt.Errorf("payments: record %s: %w", action, err)
 	}
 	return nil
 }
@@ -384,12 +405,16 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 	}
 }
 
-// handleInvoicePaymentFailed applies #82's invoice.payment_failed
-// handling: resolves the matching invoices row and flips its status to
-// uncollectible, per 00024_invoices.sql's documented open -> paid/
-// uncollectible transitions. Creates no payments row.
-func handleInvoicePaymentFailed(w http.ResponseWriter, r *http.Request, db *sql.DB, event WebhookEvent) {
-	var inv invoicePaymentFailedObject
+// handleInvoicePaymentFailed records one failed attempt to pay an
+// Invoice (#2224) and leaves its status alone. Stripe sends this event on
+// every failed attempt -- a declined card, a bank debit that bounces days
+// later -- and keeps the Invoice open for the next one, so ours stays
+// open too and she can pay it again. Creates no payments row. The method
+// she tried is asked of Stripe, since the event names none; a failure to
+// ask records the attempt without it rather than lose it, the rule
+// handleInvoicePaid follows for its reference.
+func handleInvoicePaymentFailed(w http.ResponseWriter, r *http.Request, db *sql.DB, client Client, event WebhookEvent) {
+	var inv invoiceEventObject
 	if err := json.Unmarshal(event.Data, &inv); err != nil {
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
@@ -413,7 +438,7 @@ func handleInvoicePaymentFailed(w http.ResponseWriter, r *http.Request, db *sql.
 		return
 	}
 
-	invoiceID, _, err := resolveInvoiceForEvent(r.Context(), tx, inv.ID, event.Account)
+	invoiceID, practiceID, err := resolveInvoiceForEvent(r.Context(), tx, inv.ID, event.Account)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			log.Printf("payments: connect webhook: dropping invoice.payment_failed for unresolved invoice %q (account %q, event id %s)", inv.ID, event.Account, event.ID)
@@ -425,9 +450,101 @@ func handleInvoicePaymentFailed(w http.ResponseWriter, r *http.Request, db *sql.
 		return
 	}
 
+	diff := map[string]string{}
+	methodType, err := client.RetrieveInvoiceFailedPaymentMethodType(r.Context(), event.Account, inv.ID)
+	if err != nil {
+		log.Printf("payments: connect webhook: invoice.payment_failed %s recorded without a payment method: %v", inv.ID, err)
+	} else if methodType != "" {
+		diff[activity.DiffKeyPaymentMethodType] = methodType
+	}
+	diffJSON, err := json.Marshal(diff)
+	if err != nil {
+		// coverage:ignore reason: a map of strings always marshals
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+	if err := recordInvoiceEvent(r.Context(), tx, practiceID, invoiceID, activity.ActionInvoicePaymentFailed, diffJSON, true); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+
+	commitAndAck(w, tx, &committed)
+}
+
+// handleInvoiceMarkedUncollectible is the one way a Stripe-backed
+// Invoice reaches 'uncollectible' (#2224): Stripe says it was marked so,
+// whether the Practice wrote it off in her own Stripe Dashboard or a
+// rule she set there did it. It moves an open Invoice and records
+// invoice_written_off with DoulaCloud as the actor -- no Staff member of
+// this system did it -- and an origin saying where it was done, the
+// footing a Dashboard Refund stands on (#1009). An Invoice already paid
+// or voided here is logged and acknowledged, unchanged.
+func handleInvoiceMarkedUncollectible(w http.ResponseWriter, r *http.Request, db *sql.DB, event WebhookEvent) {
+	var inv invoiceEventObject
+	if err := json.Unmarshal(event.Data, &inv); err != nil {
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+
+	tx, alreadyProcessed, err := claimEvent(r.Context(), db, event.ID)
+	if err != nil {
+		// coverage:ignore reason: claimEvent's own failures are DB failures, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+	committed := false
+	defer func() {
+		// coverage:ignore reason: only reached after a DB failure; every failure path below is itself coverage:ignore'd, so this rollback is never exercised by unit tests
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+	if alreadyProcessed {
+		commitAndAck(w, tx, &committed)
+		return
+	}
+
+	invoiceID, practiceID, err := resolveInvoiceForEvent(r.Context(), tx, inv.ID, event.Account)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			log.Printf("payments: connect webhook: dropping invoice.marked_uncollectible for unresolved invoice %q (account %q, event id %s)", inv.ID, event.Account, event.ID)
+			commitAndAck(w, tx, &committed)
+			return
+		}
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+
+	var currentStatus string
+	if err := tx.QueryRowContext(r.Context(),
+		`SELECT status FROM invoices WHERE id = $1 FOR UPDATE`, invoiceID,
+	).Scan(&currentStatus); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests -- resolveInvoiceForEvent already proved this row exists
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+	if currentStatus != invoiceStatusOpen {
+		log.Printf("payments: connect webhook: invoice.marked_uncollectible for %q at status %q, leaving it (event id %s)", inv.ID, currentStatus, event.ID)
+		commitAndAck(w, tx, &committed)
+		return
+	}
+
 	if _, err := tx.ExecContext(r.Context(),
 		`UPDATE invoices SET status = 'uncollectible' WHERE id = $1`, invoiceID,
 	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+	diff, err := json.Marshal(map[string]string{"origin": activity.OriginStripeDashboard})
+	if err != nil {
+		// coverage:ignore reason: a map of strings always marshals
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+	if err := recordInvoiceEvent(r.Context(), tx, practiceID, invoiceID, activity.ActionInvoiceWrittenOff, diff, false); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
