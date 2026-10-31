@@ -38,8 +38,9 @@ concurrency:
 jobs:
   check:
     # Dependabot's pull requests cannot mint an OIDC token
-    # (terraform-plan.yml has the detail).
-    if: github.actor != 'dependabot[bot]'
+    # (terraform-plan.yml has the detail). Keyed on the PR's author, not
+    # `github.actor`, which becomes whoever updates the branch (#2396).
+    if: github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:

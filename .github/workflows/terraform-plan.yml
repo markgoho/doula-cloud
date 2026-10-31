@@ -81,14 +81,22 @@ jobs:
     # pull_request event opened by Dependabot, so id-token: write is
     # unavailable and google-github-actions/auth fails outright -- not a
     # drift finding, just a token Dependabot's own PRs can never mint.
-    # Skipping the whole job for that one actor keeps every other trigger
-    # (trunk push, a human's PR, the schedule) authenticating and running
-    # normally, and it keeps this usable as a required check on Dependabot
-    # PRs: GitHub reports a job skipped by its own `if:` as a successful
-    # status check, unlike a workflow that never triggers at all (a
-    # path/branch filter on `on:`), which would stay pending forever.
+    # Skipping the whole job for that one PR author keeps every other trigger
+    # (trunk push, a human's PR, the schedule, a manual dispatch)
+    # authenticating and running normally -- none of those has a
+    # pull_request object, so the event_name test lets them through before
+    # the author is ever read. It keeps this usable as a required check on
+    # Dependabot PRs: GitHub reports a job skipped by its own `if:` as a
+    # successful status check, unlike a workflow that never triggers at all
+    # (a path/branch filter on `on:`), which would stay pending forever.
     # Verified against #1023, an open Dependabot PR, before relying on it.
-    if: github.actor != 'dependabot[bot]'
+    #
+    # The PR's author, not `github.actor` (#2396): the actor is whoever
+    # triggered this run, so a person running `gh pr update-branch` on a
+    # BEHIND Dependabot PR becomes the actor, the old skip did not fire, and
+    # Google Cloud auth failed on a required check (#2207, run 41211979038).
+    # The author stays Dependabot whoever updates the branch.
+    if: github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-26.04
     # 10 -> 15: room for the 480s `-lock-timeout` in the "Terraform plan"
     # step below, plus setup, on top of the plan itself. `timeout-minutes`
