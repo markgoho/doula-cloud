@@ -2,6 +2,7 @@ import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import OfferInbox from './OfferInbox.svelte';
+import { formatInstantWithClock } from '#lib/dates.js';
 import type { Offer } from '#lib/offer.js';
 
 const openOffer: Offer = {
@@ -16,6 +17,7 @@ const openOffer: Offer = {
 	offeredAt: '2026-08-01T00:00:00Z',
 	expiresAt: '2026-08-08T00:00:00Z'
 };
+const sent = formatInstantWithClock(openOffer.offeredAt);
 
 async function setup(
 	offers: Offer[] = [],
@@ -132,11 +134,30 @@ describe('OfferInbox.svelte', () => {
 		const { container } = await setup([openOffer, other]);
 
 		const accepts = page.getByRole('button', { name: 'Accept' });
-		expect(describedByText(container, accepts.first())).toBe('North side, due Jan 4, 2027');
-		expect(describedByText(container, accepts.nth(1))).toBe('South side, due Feb 10, 2027');
+		expect(describedByText(container, accepts.first())).toBe(`North side, due Jan 4, 2027, sent ${sent}`);
+		expect(describedByText(container, accepts.nth(1))).toBe(`South side, due Feb 10, 2027, sent ${sent}`);
 
 		const declines = page.getByRole('button', { name: 'Decline' });
-		expect(describedByText(container, declines.first())).toBe('North side, due Jan 4, 2027');
+		expect(describedByText(container, declines.first())).toBe(`North side, due Jan 4, 2027, sent ${sent}`);
+	});
+
+	// #2389: two employee Offers from erased Clients have no area, due date
+	// or fee to tell them apart, so the minute each was sent does.
+	it('names two fee-less Offers from erased Clients apart by when each was sent', async () => {
+		const erased = { ...openOffer, clientFirstInitial: '', clientArea: '', dueDate: '', amountCents: undefined };
+		const { container } = await setup([
+			erased,
+			{ ...erased, offerId: 'offer-2', offeredAt: '2026-08-03T15:30:00Z' }
+		]);
+
+		const descriptions = [
+			...page.getByRole('button', { name: 'Accept' }).all(),
+			...page.getByRole('button', { name: 'Decline' }).all()
+		].map((button) => describedByText(container, button));
+		expect(descriptions[0]).toBe(`Sent ${sent}`);
+		expect(descriptions[1]).toBe(`Sent ${formatInstantWithClock('2026-08-03T15:30:00Z')}`);
+		expect(descriptions[0]).not.toBe(descriptions[1]);
+		expect(descriptions[2]).not.toBe(descriptions[3]);
 	});
 
 	it('offers no decision on an Offer that is already closed, and names its state', async () => {
@@ -160,12 +181,12 @@ describe('OfferInbox.svelte', () => {
 	});
 
 	// #2385: an erased Client's open Offer carries none of her fields.
-	it('leaves out the Client rows on an open Offer whose Client is erased, and names it by its fee', async () => {
+	it('leaves out the Client rows on an open Offer whose Client is erased, and names it by when it was sent', async () => {
 		const { container } = await setup([{ ...openOffer, clientFirstInitial: '', clientArea: '', dueDate: '' }]);
 
 		expect(page.getByText('Area').elements()).toHaveLength(0);
 		expect(page.getByText('Due date').elements()).toHaveLength(0);
-		expect(describedByText(container, page.getByRole('button', { name: 'Accept' }))).toBe('$450.00');
+		expect(describedByText(container, page.getByRole('button', { name: 'Accept' }))).toBe(`Sent ${sent}`);
 	});
 
 	it('shows the error when onDecide throws', async () => {
