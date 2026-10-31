@@ -84,6 +84,11 @@ export function contractVoidedNotice(practiceName: string): string {
  * Contract reaches her (#2007): one sentence, so the two cannot drift. */
 export const NO_CONTRACT_MESSAGE = 'No contract has been sent for your care yet.';
 
+/** The consent checkbox on the signing form (`SignContract`). Spelled once
+ * so the style-guide pages that show the longest inline label in the app
+ * show this one, and cannot drift from it (#2342). */
+export const SIGN_CONSENT_LABEL = 'I have read this contract and I am signing it electronically';
+
 export function contractSignedNotice(practiceName: string): string {
 	return `You signed this contract. ${practiceName} can see it is signed, and your copy is ready to download.`;
 }

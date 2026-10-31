@@ -169,7 +169,7 @@ describe('LabeledField.svelte', () => {
 	 */
 	it('keeps a long inline label beside its control instead of dropping it to its own line, at 320px', async () => {
 		await page.viewport(320, 400);
-		const longLabel = 'I have read this Contract and I am signing it electronically';
+		const longLabel = 'I have read this contract and I am signing it electronically';
 		await setup({ orientation: 'inline', label: longLabel });
 
 		const control = page.getByLabelText(longLabel).element();

@@ -9,6 +9,7 @@
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
 	import type { FormError } from '#lib/formErrors.js';
+	import { SIGN_CONSENT_LABEL } from '#lib/clientRegister.js';
 
 	let {
 		onSign
@@ -92,7 +93,7 @@
 		</LabeledField>
 		<LabeledField
 			id={attestationFieldId}
-			label="I have read this contract and I am signing it electronically"
+			label={SIGN_CONSENT_LABEL}
 			orientation="inline"
 			error={signSubmission.errorFor(attestationFieldId)}
 		>

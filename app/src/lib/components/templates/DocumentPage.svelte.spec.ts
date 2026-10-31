@@ -98,12 +98,12 @@ describe('DocumentPage.svelte', () => {
 	});
 
 	it('renders the title, the back link and the "none yet" sentence when the document does not exist yet', async () => {
-		const { container } = await setup({ empty: 'No Contract has been sent for your care yet.' });
+		const { container } = await setup({ empty: 'No contract has been sent for your care yet.' });
 
 		expect(container.querySelector('center-l')).toHaveAttribute('max', 'var(--measure)');
 		await expect.element(page.getByRole('link', { name: 'Back' })).toBeVisible();
 		await expect.element(page.getByRole('heading', { level: 1, name: 'Contract' })).toBeVisible();
-		await expect.element(page.getByText('No Contract has been sent for your care yet.')).toBeVisible();
+		await expect.element(page.getByText('No contract has been sent for your care yet.')).toBeVisible();
 		await expect.element(page.getByText('The agreed scope of service')).not.toBeInTheDocument();
 		expect(container.querySelector('[data-load-error]')).toBeNull();
 		expect(h1Count(container)).toBe(1);

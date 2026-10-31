@@ -2,6 +2,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
+	import { SIGN_CONSENT_LABEL } from '#lib/clientRegister.js';
 
 	let name = $state('');
 	let email = $state('');
@@ -81,7 +82,7 @@
 				inline field carries anywhere in the app (ADR-0025).
 			-->
 			<LabeledField
-				label="I have read this Contract and I am signing it electronically"
+				label={SIGN_CONSENT_LABEL}
 				orientation="inline"
 			>
 				{#snippet children({ id, describedBy, invalid })}
