@@ -18,6 +18,7 @@ var wantInternalRoutes = []string{
 	"POST /api/internal/billing/founding-grants",
 	"POST /api/internal/billing/refunds",
 	"GET /api/internal/billing/dormant-practices",
+	"GET /api/internal/billing/monthly-credits",
 	"POST /api/internal/clients/process-erasure-outbox",
 	"POST /api/internal/feedback/process-issue-outbox",
 	"POST /api/internal/idempotency/sweep-expired-keys",
