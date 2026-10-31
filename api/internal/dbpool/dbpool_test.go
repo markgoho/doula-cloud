@@ -22,8 +22,8 @@ func TestApplyCapsOpenConnectionsAtTheAPIShare(t *testing.T) {
 
 	dbpool.Apply(db)
 
-	if got := db.Stats().MaxOpenConnections; got != 1 {
-		t.Fatalf("MaxOpenConnections = %d, want 1", got)
+	if got := db.Stats().MaxOpenConnections; got != 4 {
+		t.Fatalf("MaxOpenConnections = %d, want 4", got)
 	}
 }
 
@@ -62,5 +62,9 @@ func TestTerraformScalesDoulaAPINoWiderThanTheBudget(t *testing.T) {
 		if n > dbpool.APIMaxInstances {
 			t.Errorf("doula_api max_instance_count = %d, over dbpool.APIMaxInstances = %d", n, dbpool.APIMaxInstances)
 		}
+	}
+	concurrency := regexp.MustCompile(`max_instance_request_concurrency\s*=\s*(\d+)`).FindStringSubmatch(block)
+	if concurrency == nil || concurrency[1] != strconv.Itoa(dbpool.APIRequestConcurrency) {
+		t.Errorf("doula_api max_instance_request_concurrency = %v, want dbpool.APIRequestConcurrency = %d", concurrency, dbpool.APIRequestConcurrency)
 	}
 }

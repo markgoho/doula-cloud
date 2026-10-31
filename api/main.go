@@ -21,6 +21,7 @@ import (
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/dbpool"
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/feedback"
 	"doula-cloud/api/internal/internalauth"
@@ -141,6 +142,7 @@ func main() {
 		// coverage:ignore reason: requires a real DATABASE_URL and network access, not exercised by unit tests
 		log.Fatalf("open db: %v", err)
 	}
+	dbpool.Apply(db)
 
 	// now is #773's Clock seam, wired once here and threaded to every
 	// worker that already carried its own Now field, plus Deps.Now,

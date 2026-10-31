@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/dbpool"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -540,6 +541,7 @@ func TestBegin_ConcurrentRenewalsDoNotBlock(t *testing.T) {
 	stale := time.Now().Add(-7 * time.Hour)
 	first := authntest.SeedSessionAt(t, db.App, "first-browser", stale)
 	second := authntest.SeedSessionAt(t, db.App, "second-browser", stale)
+	dbpool.Apply(db.App)
 
 	firstTx, _, _, ok := authn.Begin(httptest.NewRecorder(), requestWithSession(t.Context(), first), db.App, authn.TierStaff)
 	if !ok {

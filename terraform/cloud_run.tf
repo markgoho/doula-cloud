@@ -65,7 +65,7 @@ resource "google_cloud_run_v2_service" "doula_api" {
   }
   scaling {
     manual_instance_count = 0
-    max_instance_count    = 20
+    max_instance_count    = 4
     min_instance_count    = 0
     scaling_mode          = null
   }
@@ -80,7 +80,7 @@ resource "google_cloud_run_v2_service" "doula_api" {
       managed-by            = "github-actions"
       stripe-account-secret = "v2"
     }
-    max_instance_request_concurrency = 80
+    max_instance_request_concurrency = 8
     revision                         = null
     # #1051. This was `850855848778-compute@developer.gserviceaccount.com`,
     # the Google-created default compute account, which held project
@@ -337,7 +337,7 @@ resource "google_cloud_run_v2_service" "doula_api" {
       }
     }
     scaling {
-      max_instance_count = 20
+      max_instance_count = 4
       min_instance_count = 1
     }
     volumes {

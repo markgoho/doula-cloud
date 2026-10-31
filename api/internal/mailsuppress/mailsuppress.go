@@ -106,9 +106,14 @@ type Sender struct {
 	DB    Querier
 }
 
-// Send delivers msg unless msg.To is suppressed.
+// Send delivers msg unless msg.To is suppressed. It reads through the
+// sender's own transaction when mail.WithTx put one on ctx.
 func (s Sender) Send(ctx context.Context, msg mail.Message) error {
-	suppressed, err := Active(ctx, s.DB, msg.To)
+	q := s.DB
+	if tx, ok := mail.TxFrom(ctx); ok {
+		q = tx
+	}
+	suppressed, err := Active(ctx, q, msg.To)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return err

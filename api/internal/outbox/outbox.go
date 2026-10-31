@@ -250,6 +250,7 @@ func (w Worker) HandlePending[R any](
 		return fmt.Errorf("outbox: close %s rows: %w", w.Table, err)
 	}
 
+	ctx = mail.WithTx(ctx, tx)
 	for _, r := range pending {
 		if err := handle(ctx, tx, w, r, now); err != nil {
 			return err

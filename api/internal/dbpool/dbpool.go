@@ -15,12 +15,13 @@ import (
 // use. APIPerInstance is what is left once doula-ops and migrate take
 // their share, split across every doula-api instance.
 const (
-	MaxConnections      = 25
-	ReservedConnections = 3
-	MigrateLogins       = 1
-	OpsPoolShare        = 1
-	APIMaxInstances     = 20
-	IdleTimeout         = 5 * time.Minute
+	MaxConnections        = 25
+	ReservedConnections   = 3
+	MigrateLogins         = 1
+	OpsPoolShare          = 2
+	APIMaxInstances       = 4
+	APIRequestConcurrency = 8
+	IdleTimeout           = 5 * time.Minute
 
 	APIPerInstance = (MaxConnections - ReservedConnections - MigrateLogins - OpsPoolShare) / APIMaxInstances
 )

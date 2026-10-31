@@ -97,13 +97,10 @@ func BearerToken(r *http.Request) (string, bool) {
 	return token, true
 }
 
-// Begin opens a transaction on db, resolves the caller's session cookie
-// inside it, and returns the transaction, the caller's UID, and whether
-// that session carries a second factor (#606 -- read once here, off the
-// session row, rather than re-derived per caller). The transaction comes
-// first because the session cookie is verified by reading the sessions
-// table, so the credential check and everything the handler does
-// afterwards share one connection and one round trip budget. The session
+// Begin resolves the caller's session cookie, opens a transaction on db,
+// and returns the transaction, the caller's UID, and whether that
+// session carries a second factor (#606 -- read once here, off the
+// session row, rather than re-derived per caller). The session
 // cookie is the only credential it reads: since #151 no route behind
 // Begin accepts a Bearer ID token, so no request on this path costs a
 // network verify against Identity Platform. The three bootstrap
@@ -124,16 +121,19 @@ func BearerToken(r *http.Request) (string, bool) {
 // its caller up in `staff` and find nothing -- fail-closed by accident,
 // and POST /api/staff/verify-email/request, which looked nothing up,
 // was the case that proved it.
+//
+// The credential is read, and renewed, on the pool before the
+// transaction opens, so a request never holds two connections at once
+// (#2432).
 func Begin(w http.ResponseWriter, r *http.Request, db *sql.DB, population Tier) (*sql.Tx, string, bool, bool) {
-	tx, ok := beginTx(w, r, db)
+	uid, secondFactor, ok := sessionCredential(w, r, db, population)
 	if !ok {
-		// coverage:ignore reason: DB connection failure, not exercised by unit tests
 		return nil, "", false, false
 	}
 
-	uid, secondFactor, ok := sessionCredential(w, r, tx, db, population)
+	tx, ok := beginTx(w, r, db)
 	if !ok {
-		_ = tx.Rollback()
+		// coverage:ignore reason: DB connection failure, not exercised by unit tests
 		return nil, "", false, false
 	}
 
@@ -202,7 +202,7 @@ const MsgInvalidSession = "invalid session"
 // never is, which is why the tier check sits above renewIfStale rather
 // than after Begin returns: a refused request must not walk away with a
 // freshly extended cookie.
-func sessionCredential(w http.ResponseWriter, r *http.Request, tx *sql.Tx, db *sql.DB, population Tier) (string, bool, bool) {
+func sessionCredential(w http.ResponseWriter, r *http.Request, db *sql.DB, population Tier) (string, bool, bool) {
 	cookie, err := r.Cookie(SessionCookieName)
 	if err != nil {
 		apierr.WriteError(w, "missing credential", http.StatusUnauthorized)
@@ -218,7 +218,7 @@ func sessionCredential(w http.ResponseWriter, r *http.Request, tx *sql.Tx, db *s
 	// deliberately reads no clock this package injects (see
 	// FirebaseVerifier.VerifyIDToken's doc comment for that exemption).
 	now := clock.Now(r.Context())
-	uid, expiresAt, secondFactor, err := lookupSession(r.Context(), tx, cookie.Value, now)
+	uid, expiresAt, secondFactor, err := lookupSession(r.Context(), db, cookie.Value, now)
 	if errors.Is(err, errNoSession) {
 		apierr.WriteError(w, MsgInvalidSession, http.StatusUnauthorized)
 		return "", false, false
