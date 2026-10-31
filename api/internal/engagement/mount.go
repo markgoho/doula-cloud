@@ -7,7 +7,7 @@ import (
 
 // Mount registers the Engagement detail read, its activity ledger, its
 // status transition, its birth-outcome write, its kind change, and the
-// caller's own Attachment (#1598). AnyStaff mirrors
+// caller's own Attachment (#1598) and a named Doula's (#2230). AnyStaff mirrors
 // visit.ListHandler: the money
 // filter (Owner/Admin see every entry, everyone else never sees a
 // Contract-price or Invoice/payment one, per ADR-0008) runs inside the
@@ -49,4 +49,11 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router) {
 	ir.Exempt("PUT /api/practices/{practiceId}/engagements/{engagementId}/attachments/me",
 		"naturally idempotent (docs/api-design.md rule 4): a PUT by a caller who is already on the Engagement writes nothing and returns the same 200",
 		false, AttachSelfHandler())
+	// AttachDoulaHandler (#2230) carries no staffauth.AttachingWrite, for
+	// AttachSelfHandler's reason. Putting somebody else on is the Owner's
+	// or the Admin's act, a flat role list, so the mount declares it.
+	// "me" above is the more specific pattern, so it keeps its handler.
+	ir.ExemptGated("PUT /api/practices/{practiceId}/engagements/{engagementId}/attachments/{staffId}",
+		"naturally idempotent (docs/api-design.md rule 4): a PUT for a Doula who is already on the Engagement writes nothing and returns the same 200",
+		false, staffauth.OwnerAndAdmin, AttachDoulaHandler())
 }

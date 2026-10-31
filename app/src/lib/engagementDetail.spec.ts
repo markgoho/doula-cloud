@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { errorsFromCause } from './formErrors.js';
 import { jsonResponse } from './testResponse.js';
 import {
+	attachDoula,
 	attachSelf,
 	birthOutcomeLabel,
 	birthOutcomeURL,
@@ -334,6 +335,29 @@ describe('attachSelf', () => {
 		await expect(attachSelf(fetcher, reference)).rejects.toThrow(
 			'You contract for this Practice, so you go on an Engagement by accepting an Offer.'
 		);
+	});
+});
+
+// #2230: an Owner or an Admin puts a named Doula on the Engagement.
+describe('attachDoula', () => {
+	it('puts with no body at her own path, and answers who is on the Engagement', async () => {
+		const answer = {
+			engagementId: 'engagement-1',
+			doulas: [{ staffId: 'staff-2', name: 'Priya Raman' }],
+			canAttachSelf: true
+		};
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse(answer));
+
+		const result = await attachDoula(fetcher, reference, 'staff-2');
+
+		expect(fetcher).toHaveBeenCalledWith(`${base}/attachments/staff-2`, { method: 'PUT' });
+		expect(result).toEqual({ doulas: answer.doulas, canAttachSelf: true });
+	});
+
+	it('throws a refusal', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('Lena Vasquez contracts for this Practice.', 422));
+
+		await expect(attachDoula(fetcher, reference, 'staff-3')).rejects.toThrow('Lena Vasquez contracts for this Practice.');
 	});
 });
 

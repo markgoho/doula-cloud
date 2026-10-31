@@ -178,6 +178,23 @@ export async function attachSelf(fetcher: Fetcher, reference: EngagementReferenc
 	return { doulas, canAttachSelf };
 }
 
+/**
+ * Puts a named Doula on the Engagement (#2230): the Doula row's Change,
+ * for an Owner or an Admin. `PUT` at the Doula's own path, no body and no
+ * `Idempotency-Key`: a Doula already on it is a 200 that writes nothing
+ * (docs/api-design.md rule 4).
+ */
+export async function attachDoula(
+	fetcher: Fetcher,
+	reference: EngagementReference,
+	staffId: string
+): Promise<WhoIsOn> {
+	const response = await fetcher(`${engagementURL(reference)}/attachments/${encodeURIComponent(staffId)}`, { method: 'PUT' });
+	if (!response.ok) throw new Error(await apiErrorMessage(response));
+	const { doulas, canAttachSelf } = (await response.json()) as WhoIsOn;
+	return { doulas, canAttachSelf };
+}
+
 /** What the hub says to "Mark care complete" while no birth outcome is
  * recorded (#2199): ADR-0015 completes no Engagement without one, and
  * 'unknown' is an outcome too. The same words as the BFF's own refusal

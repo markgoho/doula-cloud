@@ -18,20 +18,21 @@ import (
 const reasonPortalWrite = "clientauth.Middleware-scoped portal write, not a Staff population write ADR-0008's write table governs"
 
 var exemptEngagementWriteRoutes = map[string]string{
-	"PATCH /api/practices/{practiceId}/engagements/{engagementId}/status":        "engagement.TransitionHandler runs its own ADR-0008 cascade on reaching 'completed' (ending every open attachment); it is an Engagement lifecycle transition, not one of #350's four named write surfaces",
-	"PUT /api/practices/{practiceId}/engagements/{engagementId}/birth-outcome":   "engagement.RecordBirthOutcomeHandler gates the same way the status transition beside it does -- ADR-0015's role table, which refuses a contractor Doula outright rather than testing her attachment; it is not one of #350's four named write surfaces",
-	"PUT /api/practices/{practiceId}/engagements/{engagementId}/kind":            "engagement.ChangeKindHandler gates the same way the birth outcome and status writes beside it do -- ADR-0015's role table, which refuses a contractor Doula outright rather than testing her attachment; it is not one of #350's four named write surfaces",
-	"PUT /api/practices/{practiceId}/engagements/{engagementId}/due-date":        "engagement.ChangeDueDateHandler gates the same way the kind change beside it does -- ADR-0015's role table, which refuses a contractor Doula outright rather than testing her attachment; it is not one of #350's four named write surfaces",
-	"PUT /api/practices/{practiceId}/engagements/{engagementId}/contract/amount": "contracts.PutContractAmountHandler gates on staffauth.RequireOwnerOrAdmin inside the handler, the same ambient-reach declaration practicerate.PutRateHandler's own mount carries -- an Owner or Admin bypasses Attachment entirely, so there is no contractor write to gate; it is not one of #350's four named write surfaces",
-	"PUT /api/practices/{practiceId}/engagements/{engagementId}/attachments/me":  "engagement.AttachSelfHandler is itself a writer of a granted attachment (#1598, ADR-0008's amendment on #1515), which the AttachingWrite seam must never mint; it refuses a contractor Doula outright through attachment.Membership.WhyNotAttachable rather than testing her attachment, and it is not one of #350's four named write surfaces",
-	"POST /api/practices/{practiceId}/engagements/{engagementId}/offers":         "offer.CreateHandler is the Practice side of the Offer flow (Owner/Admin, per its own Mount comment); it is not one of #350's four named write surfaces",
-	"POST /api/practices/{practiceId}/engagements/{engagementId}/portal-invite":  "portalinvite.InviteHandler invites the Client to the portal; it is not one of #350's four named write surfaces",
-	"POST /api/portal/engagements/{engagementId}/birth-plan/acknowledge":         reasonPortalWrite,
-	"POST /api/portal/engagements/{engagementId}/contract/sign":                  reasonPortalWrite,
-	"POST /api/portal/engagements/{engagementId}/messages":                       reasonPortalWrite,
-	"POST /api/portal/engagements/{engagementId}/push-subscriptions":             reasonPortalWrite,
-	"DELETE /api/portal/engagements/{engagementId}/push-subscriptions":           reasonPortalWrite,
-	"PUT /api/portal/engagements/{engagementId}/notification-preference":         reasonPortalWrite,
+	"PATCH /api/practices/{practiceId}/engagements/{engagementId}/status":              "engagement.TransitionHandler runs its own ADR-0008 cascade on reaching 'completed' (ending every open attachment); it is an Engagement lifecycle transition, not one of #350's four named write surfaces",
+	"PUT /api/practices/{practiceId}/engagements/{engagementId}/birth-outcome":         "engagement.RecordBirthOutcomeHandler gates the same way the status transition beside it does -- ADR-0015's role table, which refuses a contractor Doula outright rather than testing her attachment; it is not one of #350's four named write surfaces",
+	"PUT /api/practices/{practiceId}/engagements/{engagementId}/kind":                  "engagement.ChangeKindHandler gates the same way the birth outcome and status writes beside it do -- ADR-0015's role table, which refuses a contractor Doula outright rather than testing her attachment; it is not one of #350's four named write surfaces",
+	"PUT /api/practices/{practiceId}/engagements/{engagementId}/due-date":              "engagement.ChangeDueDateHandler gates the same way the kind change beside it does -- ADR-0015's role table, which refuses a contractor Doula outright rather than testing her attachment; it is not one of #350's four named write surfaces",
+	"PUT /api/practices/{practiceId}/engagements/{engagementId}/contract/amount":       "contracts.PutContractAmountHandler gates on staffauth.RequireOwnerOrAdmin inside the handler, the same ambient-reach declaration practicerate.PutRateHandler's own mount carries -- an Owner or Admin bypasses Attachment entirely, so there is no contractor write to gate; it is not one of #350's four named write surfaces",
+	"PUT /api/practices/{practiceId}/engagements/{engagementId}/attachments/me":        "engagement.AttachSelfHandler is itself a writer of a granted attachment (#1598, ADR-0008's amendment on #1515), which the AttachingWrite seam must never mint; it refuses a contractor Doula outright through attachment.Membership.WhyNotAttachable rather than testing her attachment, and it is not one of #350's four named write surfaces",
+	"PUT /api/practices/{practiceId}/engagements/{engagementId}/attachments/{staffId}": "engagement.AttachDoulaHandler is itself a writer of a granted attachment (#2230), which the AttachingWrite seam must never mint; its mount admits only an Owner or an Admin, who bypass Attachment entirely, and it is not one of #350's four named write surfaces",
+	"POST /api/practices/{practiceId}/engagements/{engagementId}/offers":               "offer.CreateHandler is the Practice side of the Offer flow (Owner/Admin, per its own Mount comment); it is not one of #350's four named write surfaces",
+	"POST /api/practices/{practiceId}/engagements/{engagementId}/portal-invite":        "portalinvite.InviteHandler invites the Client to the portal; it is not one of #350's four named write surfaces",
+	"POST /api/portal/engagements/{engagementId}/birth-plan/acknowledge":               reasonPortalWrite,
+	"POST /api/portal/engagements/{engagementId}/contract/sign":                        reasonPortalWrite,
+	"POST /api/portal/engagements/{engagementId}/messages":                             reasonPortalWrite,
+	"POST /api/portal/engagements/{engagementId}/push-subscriptions":                   reasonPortalWrite,
+	"DELETE /api/portal/engagements/{engagementId}/push-subscriptions":                 reasonPortalWrite,
+	"PUT /api/portal/engagements/{engagementId}/notification-preference":               reasonPortalWrite,
 }
 
 // TestRoutes_NoEngagementWriteBypassesTheAttachingWriteGate is #350's

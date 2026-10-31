@@ -22,6 +22,7 @@ import {
 import type { Contract } from '#lib/contract.js';
 import { OUTCOME_KEPT_ON_COMPLETED } from '#lib/engagementDetail.js';
 import type { Rate } from '#lib/rates.js';
+import { CONTRACTOR_WITHOUT_ACCEPTED_OFFER, type VisitAssignee } from '#lib/staff.js';
 import { PREVIOUS_CONTRACT_PDF_NOTICE } from '#lib/components/molecules/ContractStatus.svelte';
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
@@ -234,7 +235,11 @@ function changeButton(changes: string): HTMLButtonElement | undefined {
 
 async function openChange(changes: string) {
 	await vi.waitFor(() => expect(changeButton(changes)).toBeDefined());
-	await testPage.elementLocator(changeButton(changes)!).click();
+	// By position among the page's Change buttons: each row's carries the
+	// same name, and an element's own locator can resolve to two (#2230
+	// gave the Doula row a Change beside the care phase's).
+	const everyChange = [...document.querySelectorAll('button')].filter((button) => button.textContent?.trim() === 'Change');
+	await testPage.getByRole('button', { name: 'Change', exact: true }).nth(everyChange.indexOf(changeButton(changes)!)).click();
 }
 
 // #2118: a birth Engagement with no due date and no birth outcome yet --
@@ -2597,8 +2602,10 @@ describe('the Offers form does not list the person at the screen (#1598)', () =>
 		await testPage.getByLabelText('Someone already at this Practice').click();
 
 		const doulaPick = testPage.getByRole('group', { name: 'Doula', exact: true });
-		await expect.element(doulaPick.getByLabelText('Jordan Reyes')).toBeVisible();
+		await expect.element(doulaPick.getByLabelText('Priyanka Venkataraman-Solberg')).toBeVisible();
 		expect(doulaPick.getByLabelText('Anne-Marie Ochieng-Whitfield').elements()).toHaveLength(0);
+		// #2230: nor a Doula already on it (`staff-2` is, in the fixture).
+		expect(doulaPick.getByLabelText('Jordan Reyes').elements()).toHaveLength(0);
 
 		await openAddVisit();
 		const visitPicker = testPage.getByLabelText('Who is this Visit for?');
@@ -2756,6 +2763,16 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 				isVisitAdded = true;
 				return Promise.resolve(jsonResponse({ visitId: 'visit-3' }, 201));
 			}
+			// The reader is the only Doula she could put on, so the Change
+			// holds the one press (#2230 asks a question only where somebody
+			// else could be chosen).
+			if (path.endsWith('/visit-assignees')) {
+				return Promise.resolve(
+					jsonResponse({
+						items: [{ staffId: 'staff-1', name: 'Anne-Marie Ochieng-Whitfield', employmentType: 'employee', nameable: true }]
+					})
+				);
+			}
 			if (/\/engagements\/engagement-1$/.test(path)) {
 				return Promise.resolve(
 					jsonResponse(
@@ -2783,6 +2800,152 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 
 		await expect.element(putMeOnIt()).not.toBeInTheDocument();
 		expect(testPage.getByText('No Doula yet', { exact: true }).elements()).toHaveLength(0);
+	});
+});
+
+// #2230: an Owner or an Admin puts an employee Doula on the Engagement
+// from the Doula row's Change, one question and a save. GLOSSARY.md's
+// Attachment entry: "An Admin may attach an employee directly". A
+// contractor who holds neither role is not offered: she goes on by an
+// Offer. Who is offered comes from the BFF's visit-assignees read, the
+// rule its own write reads.
+const whoIsTheDoula = () => testPage.getByRole('group', { name: 'Who is the Doula?' });
+const saveTheDoula = () => testPage.getByRole('button', { name: 'Save the Doula' });
+
+const roster: VisitAssignee[] = [
+	{ staffId: 'staff-1', name: 'Renata Alvarez', employmentType: 'employee', nameable: true },
+	{ staffId: 'staff-2', name: 'Priya Raman', employmentType: 'employee', nameable: true },
+	{
+		staffId: 'staff-3',
+		name: 'Lena Vasquez',
+		employmentType: 'contractor',
+		nameable: false,
+		reason: CONTRACTOR_WITHOUT_ACCEPTED_OFFER
+	}
+];
+
+const priyaIsOn = () =>
+	jsonResponse({ engagementId: 'engagement-1', doulas: [{ staffId: 'staff-2', name: 'Priya Raman' }], canAttachSelf: true });
+
+async function setupPutOn(
+	detail: Detail,
+	roles: string[],
+	{ attachResponse = priyaIsOn, assignees = roster }: { attachResponse?: () => Response; assignees?: VisitAssignee[] } = {}
+) {
+	await testPage.viewport(3200, 900);
+	apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
+		if (path.endsWith('/visit-assignees')) return Promise.resolve(jsonResponse({ items: assignees }));
+		if (init?.method === 'PUT' && /\/attachments\/[^/]+$/.test(path)) return Promise.resolve(attachResponse());
+		return Promise.resolve(jsonResponse('not available', 403));
+	});
+	await render(Page, { data: { ...detail, session: sessionFor(roles, 'staff-1') } });
+}
+
+describe('putting a Doula on the Engagement (#2230)', () => {
+	const nobodyOnIt: Detail = { ...fixtureDetail, doulas: [], canAttachSelf: true };
+
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('asks who the Doula is, with the reader first and no contractor, and says how a contractor goes on', async () => {
+		await setupPutOn(nobodyOnIt, ['owner', 'admin', 'doula']);
+		await openChange('Doula');
+
+		await expect.element(whoIsTheDoula()).toBeVisible();
+		await expect.element(testPage.getByRole('radio', { name: 'Renata Alvarez (you)' })).toBeVisible();
+		await expect.element(testPage.getByRole('radio', { name: 'Priya Raman' })).not.toBeChecked();
+		expect(testPage.getByRole('radio', { name: /Lena Vasquez/ }).elements()).toHaveLength(0);
+		await expect
+			.element(testPage.getByText('A contractor is not listed: a contractor goes on an Engagement by accepting an Offer.'))
+			.toBeVisible();
+		expect(putMeOnIt().elements()).toHaveLength(0);
+	});
+
+	it('offers the question to an Admin who holds no Doula role, without "(you)"', async () => {
+		await setupPutOn({ ...nobodyOnIt, canAttachSelf: false }, ['admin'], { assignees: roster.slice(1) });
+		await openChange('Doula');
+
+		await expect.element(testPage.getByRole('radio', { name: 'Priya Raman' })).toBeVisible();
+		expect(testPage.getByRole('radio', { name: /\(you\)/ }).elements()).toHaveLength(0);
+	});
+
+	it('leaves out a Doula who is already on it', async () => {
+		const jo: VisitAssignee = { staffId: 'staff-4', name: 'Jo Mercer', employmentType: 'employee', nameable: true };
+		await setupPutOn({ ...nobodyOnIt, doulas: [{ staffId: 'staff-2', name: 'Priya Raman' }] }, ['owner', 'doula'], {
+			assignees: [...roster, jo]
+		});
+		await openChange('Doula');
+
+		await expect.element(testPage.getByRole('radio', { name: 'Jo Mercer' })).toBeVisible();
+		expect(testPage.getByRole('radio', { name: 'Priya Raman' }).elements()).toHaveLength(0);
+	});
+
+	it('refuses a save with nobody chosen, and points at the question', async () => {
+		await setupPutOn(nobodyOnIt, ['owner', 'doula']);
+		await openChange('Doula');
+		apiFetchWithSession.mockClear();
+
+		await saveTheDoula().click();
+
+		await expect.element(testPage.getByRole('link', { name: 'Select who the Doula is' })).toBeVisible();
+		expect(apiFetchWithSession).not.toHaveBeenCalledWith(expect.stringContaining('/attachments/'), { method: 'PUT' });
+	});
+
+	it('puts the chosen Doula on, names her, says so, and reads On call and the ledger again', async () => {
+		await setupPutOn(nobodyOnIt, ['owner', 'doula']);
+		await openChange('Doula');
+		apiFetchWithSession.mockClear();
+
+		await testPage.getByRole('radio', { name: 'Priya Raman' }).click();
+		await saveTheDoula().click();
+
+		expect(apiFetchWithSession).toHaveBeenCalledWith(
+			'/api/practices/practice-1/engagements/engagement-1/attachments/staff-2',
+			{ method: 'PUT' }
+		);
+		await expect.element(testPage.getByText('Priya Raman is on this Engagement.')).toHaveFocus();
+		await expect.element(testPage.getByText('Priya Raman', { exact: true })).toBeVisible();
+		await vi.waitFor(() => {
+			expect(apiFetchWithSession).toHaveBeenCalledWith('/api/practices/practice-1/engagements/engagement-1/on-call');
+			expect(apiFetchWithSession).toHaveBeenCalledWith('/api/practices/practice-1/engagements/engagement-1/activity');
+		});
+	});
+
+	it('says "You are on this Engagement." when the reader chooses herself', async () => {
+		await setupPutOn(nobodyOnIt, ['owner', 'doula'], {
+			attachResponse: () =>
+				jsonResponse({ engagementId: 'engagement-1', doulas: [{ staffId: 'staff-1', name: 'Renata Alvarez' }], canAttachSelf: false })
+		});
+		await openChange('Doula');
+
+		await testPage.getByRole('radio', { name: 'Renata Alvarez (you)' }).click();
+		await saveTheDoula().click();
+
+		await expect.element(testPage.getByText('You are on this Engagement.')).toHaveFocus();
+	});
+
+	it('shows the refusal and keeps the question open when the BFF refuses', async () => {
+		await setupPutOn(nobodyOnIt, ['owner', 'doula'], {
+			attachResponse: () => jsonResponse('This Engagement has completed, so nobody can be put on it.', 409)
+		});
+		await openChange('Doula');
+
+		await testPage.getByRole('radio', { name: 'Priya Raman' }).click();
+		await saveTheDoula().click();
+
+		await expect
+			.element(testPage.getByText('This Engagement has completed, so nobody can be put on it.').first())
+			.toBeVisible();
+		await expect.element(whoIsTheDoula()).toBeVisible();
+	});
+
+	it('keeps the one press for a reader who is the only Doula she could put on', async () => {
+		await setupPutOn(nobodyOnIt, ['owner', 'doula'], { assignees: [roster[0]!, roster[2]!] });
+		await openChange('Doula');
+
+		await expect.element(putMeOnIt()).toBeVisible();
+		expect(whoIsTheDoula().elements()).toHaveLength(0);
 	});
 });
 

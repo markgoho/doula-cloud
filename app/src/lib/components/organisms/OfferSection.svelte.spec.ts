@@ -30,6 +30,7 @@ interface SetupOptions {
 	 * absent, which a destructuring default cannot tell apart. */
 	doulas?: { staffId: string; name: string; employmentType: string }[] | undefined;
 	clientName?: string;
+	dueDate?: string;
 	onCreate?: (offer: NewOffer) => Promise<void>;
 	onWithdraw?: (offerId: string) => Promise<void>;
 	/** The form opens only when asked (#2004); most cases are about the
@@ -41,6 +42,7 @@ async function setup(options: SetupOptions = {}) {
 	const {
 		offers = [],
 		clientName = 'Rosa Martinez',
+		dueDate,
 		onCreate = vi.fn().mockResolvedValue(undefined),
 		onWithdraw = vi.fn().mockResolvedValue(undefined)
 	} = options;
@@ -49,6 +51,7 @@ async function setup(options: SetupOptions = {}) {
 		offers,
 		doulas,
 		clientName,
+		dueDate,
 		onCreate,
 		onWithdraw
 	});
@@ -235,6 +238,23 @@ describe('OfferSection.svelte', () => {
 		await setup();
 
 		await expect.element(page.getByLabelText("Client's first initial")).toHaveValue('R');
+	});
+
+	// #2230: the Engagement already knows its due date, so the form does
+	// not ask for it again from blank. It stays a field: what is sent is
+	// what the sender saw (#230).
+	it('pre-fills the due date the Engagement holds, and seeds the next Offer with it again', async () => {
+		const { onCreate } = await setup({ dueDate: '2027-01-29' });
+
+		await expect.element(page.getByLabelText('Due date')).toHaveValue('2027-01-29');
+		await chooseSomeoneHere();
+		await page.getByLabelText('Dana Okafor').click();
+		await page.getByLabelText('General area').fill('North side');
+		await page.getByRole('button', { name: 'Send Offer' }).click();
+
+		expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ dueDate: '2027-01-29' }));
+		await openForm();
+		await expect.element(page.getByLabelText('Due date')).toHaveValue('2027-01-29');
 	});
 
 	it('asks for a fee once a contractor is chosen, and sends it in cents', async () => {

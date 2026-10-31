@@ -4,8 +4,9 @@
 //
 // It is a package of its own because two packages need it and neither
 // may own it: engagementrequest names a Doula when an Engagement starts
-// (#1596), and engagement lets a Doula put herself on one (#1598).
-// ADR-0008's amendments on #1515 name them as the third and the fourth
+// (#1596), and engagement lets a Doula put herself on one (#1598) and an
+// Owner or an Admin put a named Doula on one (#2230). ADR-0008's
+// amendments on #1515 and #2230 name them as the third, fourth and fifth
 // writer of a granted Attachment. One rule and one write, so the two
 // cannot come to disagree about who is attachable or about what the
 // Engagement's ledger says afterward. visit reads the rule too (#1625),
@@ -89,7 +90,9 @@ type Membership struct {
 // none owns a second copy: the request write, approval (which asks again
 // because days can pass between the ask and the decision), the Start
 // work form's own list, the Engagement's "Put me on this Engagement"
-// control with the write behind it, and the Visit that names a Doula
+// control with the write behind it, the Doula row's question an Owner or
+// an Admin answers (engagement.AttachDoulaHandler), and the Visit that
+// names a Doula
 // (visit.decideNameable and visit.resolveAssignee). So no screen can
 // offer what its write refuses, and no two writers can disagree about
 // who is attachable.
@@ -156,8 +159,9 @@ func ReadMembership(ctx context.Context, tx *sql.Tx, practiceID, staffID string)
 // because a fee is only ever copied from an Offer.
 //
 // attachedBy is the person whose decision it is: the approver of a
-// Request that names the Doula, or the Doula herself where she pressed
-// "Put me on this Engagement". She is attached_by on the row and the
+// Request that names the Doula, the Doula herself where she pressed
+// "Put me on this Engagement", or the Owner or Admin who chose her on the
+// Doula row. She is attached_by on the row and the
 // actor on the activity entry, the diff names the Doula, and the row's
 // created_at is the instant.
 //
