@@ -231,13 +231,17 @@ resource "google_cloud_run_v2_service" "doula_api" {
       # shared-string path into `/api/internal/**` at all. The variable
       # survives only in `app/e2e/stack.ts`, which runs the BFF against a
       # local Postgres with no metadata server to mint a token with.
+      # #2406: the Stripe secrets and VAPID_PRIVATE_KEY are pinned, not
+      # `latest`: each must agree with a value in this file (STRIPE_MODE,
+      # VAPID_PUBLIC_KEY), and Cloud Run resolves `latest` at every instance
+      # start, so a new version would take effect with no review.
       env {
         name  = "STRIPE_ACCOUNT_WEBHOOK_SECRET"
         value = null
         value_source {
           secret_key_ref {
             secret  = "doula-cloud-stripe-account-webhook-secret"
-            version = "latest"
+            version = "2"
           }
         }
       }
@@ -247,7 +251,7 @@ resource "google_cloud_run_v2_service" "doula_api" {
         value_source {
           secret_key_ref {
             secret  = "doula-cloud-stripe-api-key"
-            version = "latest"
+            version = "1"
           }
         }
       }
@@ -257,7 +261,7 @@ resource "google_cloud_run_v2_service" "doula_api" {
         value_source {
           secret_key_ref {
             secret  = "doula-cloud-stripe-connect-webhook-secret"
-            version = "latest"
+            version = "1"
           }
         }
       }
@@ -277,7 +281,7 @@ resource "google_cloud_run_v2_service" "doula_api" {
         value_source {
           secret_key_ref {
             secret  = "doula-cloud-stripe-webhook-secret"
-            version = "latest"
+            version = "1"
           }
         }
       }
@@ -287,7 +291,7 @@ resource "google_cloud_run_v2_service" "doula_api" {
         value_source {
           secret_key_ref {
             secret  = "doula-cloud-vapid-private-key"
-            version = "latest"
+            version = "1"
           }
         }
       }

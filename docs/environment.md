@@ -332,7 +332,7 @@ gcloud secrets add-iam-policy-binding doula-cloud-vapid-private-key \
   --role=roles/secretmanager.secretAccessor
 gcloud run services update doula-api --region us-central1 \
   --update-env-vars GCS_ATTACHMENTS_BUCKET=doula-cloud-attachments,VAPID_PUBLIC_KEY=<public key>,VAPID_SUBSCRIBER=mailto:admin@doula.cloud \
-  --update-secrets VAPID_PRIVATE_KEY=doula-cloud-vapid-private-key:latest
+  --update-secrets VAPID_PRIVATE_KEY=doula-cloud-vapid-private-key:1
 ```
 
 ## Say Sandbox, not test mode
@@ -454,11 +454,26 @@ The Invoice destination's `@accounts` is **not** verified this way — that need
 Both Connect secrets are in Secret Manager and wired to the service. Two things that were not obvious when setting them up:
 
 - **A new secret needs its own IAM binding.** Cloud Run's runtime service account (`doula-api-runtime@doula-cloud.iam.gserviceaccount.com`) is granted `roles/secretmanager.secretAccessor` **per secret**, not at the project level, so a freshly created secret is unreadable and the deploy fails with `Permission denied on secret`. Grant it with `gcloud secrets add-iam-policy-binding <name> --member=serviceAccount:… --role=roles/secretmanager.secretAccessor`.
-- **`:latest` re-resolves per revision, not per version.** Adding a new secret version changes nothing on a running service; a new revision has to be created for it to be picked up.
+- **`:latest` resolves at every instance start.** A secret exposed as an environment variable is read when Cloud Run starts an instance, not when the revision is created ([Cloud Run: configure secrets](https://cloud.google.com/run/docs/configuring/services/secrets)), so a new version under `latest` reaches the next instance that scales up, with no deploy. That is why the Stripe secrets are pinned; see the next section.
 
-Set out of band on purpose, for the reason the next section gives.
+Set out of band on purpose, for the reason the section after next gives.
 
-A signing secret is returned **once**, in the create response — for an event destination, only if the request asks for it by name via `include: ["webhook_endpoint.signing_secret"]`. Neither retrieve nor list ever shows it again. If it is lost, roll it in the dashboard and add a new Secret Manager version.
+A signing secret is returned **once**, in the create response — for an event destination, only if the request asks for it by name via `include: ["webhook_endpoint.signing_secret"]`. Neither retrieve nor list ever shows it again. If it is lost, roll it in the dashboard and add a new Secret Manager version, then name that version in `terraform/cloud_run.tf` (next section).
+
+## The Stripe secrets are pinned to a version
+
+Since [#2406](https://github.com/markgoho/doula-cloud/issues/2406), `terraform/cloud_run.tf` attaches each of the four Stripe secrets at a version number, not `latest`:
+
+| Secret | Version |
+| --- | --- |
+| `doula-cloud-stripe-api-key` | 1 |
+| `doula-cloud-stripe-webhook-secret` | 1 |
+| `doula-cloud-stripe-connect-webhook-secret` | 1 |
+| `doula-cloud-stripe-account-webhook-secret` | 2 (version 1 is still enabled, and unused) |
+
+**Adding a version to one of them has no effect until a PR names it.** The new value sits in Secret Manager unused; the service changes only when a PR changes the number in `cloud_run.tf` and the founder runs `terraform apply` (ADR-0034). That matters because of the #2361 guard: `STRIPE_MODE` is a plain value in the same file, and an `sk_live_` key under `latest` with `STRIPE_MODE=test` would make every new instance refuse to start. Pinned, the live secrets can be added ahead of the go-live switch, and the switch is one PR changing four version numbers and `STRIPE_MODE` together. A rollback is the same PR reverted.
+
+`VAPID_PRIVATE_KEY` is pinned for the same reason: its pair, `VAPID_PUBLIC_KEY`, is a plain value in the same file. The other secrets stay at `latest`. `DATABASE_URL` is named `:latest` by `ci.yml`'s deploy step on every push, so a pin here would be undone by the next deploy. `MAILGUN_API_KEY`, `MAILGUN_WEBHOOK_SIGNING_KEY`, `GITHUB_DISPATCH_TOKEN` and `GITHUB_FEEDBACK_TOKEN` each stand alone, with nothing in this repo they must agree with, and a new version of one is a rotation meant to take effect.
 
 ## Why the deployed Stripe values are set out of band
 
