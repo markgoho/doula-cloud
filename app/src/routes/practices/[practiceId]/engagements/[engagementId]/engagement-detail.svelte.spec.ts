@@ -1244,6 +1244,18 @@ describe('the sections read at once and say they are loading (#2258)', () => {
 		await expect.element(testPage.getByRole('heading', { level: 2, name: 'Offers' })).toBeInTheDocument();
 	});
 
+	it("says why when an Owner's Offers read fails, rather than loading for ever", async () => {
+		await testPage.viewport(3200, 900);
+		const respond = toApiResponder(fixture);
+		apiFetchWithSession.mockImplementation((path: string) =>
+			path.endsWith('/offers') ? Promise.reject(new Error('Offers are down')) : respond(path)
+		);
+		await render(Page, { data: { ...fixtureDetail, session: sessionFor(['owner']) } });
+
+		await expect.element(testPage.getByText('We could not load the Offers.')).toBeVisible();
+		await expect.element(testPage.getByRole('status', { name: 'Loading the Offers' })).not.toBeInTheDocument();
+	});
+
 	it('draws no Offers section for a Doula, whom its read refuses', async () => {
 		await renderWithHeldReads(['doula']);
 

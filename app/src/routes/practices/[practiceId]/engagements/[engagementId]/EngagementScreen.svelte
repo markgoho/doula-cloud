@@ -2901,8 +2901,13 @@
 		onMount awaits loadRoster before loadOffersSection, and this
 		section is drawn only once the Offers have landed.
 	-->
-	{#if offersState.value === undefined}
+	{#if !offersState.hasSettled}
 		<Skeleton label="Loading the Offers" />
+	{:else if offersState.value === undefined}
+		<!-- The section stands before its read lands for an Owner or an
+		     Admin (#2258), whom the read never refuses, so nothing back is
+		     a failure, said as Doula fees says one. -->
+		<Notice variant="error" message="We could not load the Offers." />
 	{:else}
 	<OfferSection
 		{offers}
