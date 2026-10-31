@@ -183,6 +183,30 @@ gcloud storage buckets update gs://doula-cloud-tfstate --versioning
 
 Read on the state bucket used to mean holding the internal worker secret, for as long as the jobs carried it — one principal and one service account, and the price of catching the next #481. ADR-0037 stopped paying that price rather than keeping it justified, and #1183 is the apply that did it.
 
+## Stripe state
+
+Since [#2390](https://github.com/markgoho/doula-cloud/issues/2390), the Stripe configuration is Terraform too ([ADR-0034](adr/0034-terraform-owns-the-shape-not-the-image-and-apply-stays-off-ci.md)'s 2026-10-31 amendment). One module, `terraform/stripe`, holds the credit Product, its Prices and the three event destinations, with each route's events in `terraform/stripe/destinations.json`. Two roots apply it:
+
+| Root | Account | State | Applied |
+| --- | --- | --- | --- |
+| `terraform/stripe-sandbox` | Sandbox, `acct_1U7N3e…` | `gs://doula-cloud-tfstate/stripe/sandbox` | From the founder's laptop, after #2390 merges |
+| `terraform/stripe-live` | Live, `acct_1U7N3X…` | `gs://doula-cloud-tfstate/stripe/live` | Never by #2390. [#2463](https://github.com/markgoho/doula-cloud/issues/2463) applies it, the day before the switch |
+
+**Separate from the GCP state, in the same bucket.** Each root has its own prefix, so its own state file and its own lock. A GCP `plan` needs no Stripe key, a Stripe `apply` never holds the GCP lock, and a Stripe key never reaches a run that only plans GCP. The bucket is the same because `terraform-plan@` already reads it through `roles/storage.objectUser`, and no new grant is needed.
+
+**The keys.** Each root takes its key from `TF_VAR_stripe_api_key` and refuses one in the other mode. The live root takes only a restricted key (`rk_live_`). The Sandbox root also takes the Sandbox `sk_test_` that is already on the laptop.
+
+- `plan`: a restricted key with Read on Products, Prices and Event destinations, nothing else. The Sandbox one lives in Secret Manager `doula-cloud-stripe-sandbox-plan-key`, granted to `terraform-plan@` alone (`terraform/secrets.tf`). `terraform-plan.yml`'s `plan-stripe-sandbox` job reads it, and skips its plan, green, while the secret has no enabled version. The live one is #2463's.
+- `apply`: a restricted key with Write on those three resources, pasted into the shell for the one command and never written to a file.
+
+**What is in it.** The Product, the Prices and the destinations, none of them secret, and one thing that is: provider `0.3.0` always asks Stripe for a destination's signing secret when it creates one, so each created destination's first signing secret is in state. The founder rolls the secret in the Dashboard straight after the apply that creates the destination, with the old one expiring now, and puts only the rolled secret in Secret Manager. The copy in state then verifies nothing. The provider never reads the secret again.
+
+**The provider does not read a destination's URL back.** Its read of an event destination does not ask Stripe for `webhook_endpoint.url`, so a URL changed in the Dashboard does not show as drift. Imported destinations show `+ url` on their first plan for the same reason, and the first apply writes it.
+
+```sh
+read -rsp 'Sandbox key: ' TF_VAR_stripe_api_key && export TF_VAR_stripe_api_key && terraform -chdir=terraform/stripe-sandbox init && terraform -chdir=terraform/stripe-sandbox apply
+```
+
 ## Making the first apply safe
 
 **The danger is not a wrong apply. It is a half-written configuration and a right-looking apply.** Terraform deletes what it manages and no longer sees. A configuration that covers eleven of the thirteen secrets, or the Cloud Run service without its Cloud SQL attachment, produces a plan that reads as reasonable and takes the live API down. There are no users yet, and the January 2027 target is what makes that survivable — but the database is real, and `doula-cloud-pg` had `deletionProtectionEnabled: false` before mechanism 3 below turned it on.

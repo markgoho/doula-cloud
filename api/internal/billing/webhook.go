@@ -21,6 +21,11 @@ import (
 // endpoint.
 const maxWebhookBodyBytes = 1 << 20 // 1 MiB
 
+// purchaseEventType is the one event type PostPurchaseWebhookHandler acts
+// on. stripe_destinations_test.go holds it equal to the platform route's
+// enabled_events in terraform/stripe/destinations.json (#2390).
+const purchaseEventType = stripe.EventTypeCheckoutSessionCompleted
+
 // PostPurchaseWebhookHandler receives Stripe's Customer/Checkout events --
 // a new, platform-level webhook endpoint, entirely separate from #38's
 // (not yet implemented) Connect webhook, which is a different Stripe
@@ -58,7 +63,7 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string, mode stripemod
 		// ignored. Crediting off both would double-credit a single
 		// purchase, since dedupe is keyed by event id, not by the
 		// underlying Checkout Session.
-		if event.Type != stripe.EventTypeCheckoutSessionCompleted {
+		if event.Type != purchaseEventType {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
