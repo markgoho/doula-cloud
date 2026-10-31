@@ -16,6 +16,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/stripemode"
 	"doula-cloud/api/internal/tasknudge"
 )
 
@@ -116,7 +117,7 @@ type invoiceEventObject struct {
 // outright (verified against the Sandbox, #247) -- so the v2 account
 // events go to PostAccountWebhookHandler on its own route, with its own
 // secret.
-func PostConnectWebhookHandler(db *sql.DB, client Client, webhookSecret string, enq tasknudge.Enqueuer) http.Handler {
+func PostConnectWebhookHandler(db *sql.DB, client Client, webhookSecret string, mode stripemode.Mode, enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxWebhookBodyBytes))
 		if err != nil {
@@ -127,6 +128,11 @@ func PostConnectWebhookHandler(db *sql.DB, client Client, webhookSecret string, 
 		event, err := client.VerifyWebhookSignature(body, r.Header.Get("Stripe-Signature"), webhookSecret)
 		if err != nil {
 			apierr.WriteError(w, "invalid signature", http.StatusBadRequest)
+			return
+		}
+		if !mode.Matches(event.Livemode) {
+			log.Printf("payments: connect webhook: refusing event %s: livemode %v, keys are in %s mode", event.ID, event.Livemode, mode)
+			apierr.WriteError(w, "event mode does not match", http.StatusBadRequest)
 			return
 		}
 
@@ -712,7 +718,7 @@ func handlePaymentIntentProcessing(w http.ResponseWriter, r *http.Request, db *s
 // stripe_webhook_events so a retry is a no-op, and an unrecognized
 // account or unhandled type logged and dropped with a 200 rather than
 // erroring, because Stripe retries indefinitely on anything else.
-func PostAccountWebhookHandler(db *sql.DB, client Client, webhookSecret string, enq tasknudge.Enqueuer) http.Handler {
+func PostAccountWebhookHandler(db *sql.DB, client Client, webhookSecret string, mode stripemode.Mode, enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxWebhookBodyBytes))
 		if err != nil {
@@ -723,6 +729,11 @@ func PostAccountWebhookHandler(db *sql.DB, client Client, webhookSecret string, 
 		event, err := client.ParseAccountEvent(body, r.Header.Get("Stripe-Signature"), webhookSecret)
 		if err != nil {
 			apierr.WriteError(w, "invalid signature", http.StatusBadRequest)
+			return
+		}
+		if !mode.Matches(event.Livemode) {
+			log.Printf("payments: account webhook: refusing event %s: livemode %v, keys are in %s mode", event.ID, event.Livemode, mode)
+			apierr.WriteError(w, "event mode does not match", http.StatusBadRequest)
 			return
 		}
 

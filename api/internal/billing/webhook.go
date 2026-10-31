@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -11,6 +12,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/stripemode"
 )
 
 // maxWebhookBodyBytes bounds how much of a webhook request body
@@ -30,7 +32,7 @@ const maxWebhookBodyBytes = 1 << 20 // 1 MiB
 // Stripe event id are recorded in stripe_webhook_events and skipped, so a
 // retried delivery never double-credits the ledger. db must be the same
 // low-privilege app_runtime connection staffauth.Middleware uses.
-func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string) http.Handler {
+func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string, mode stripemode.Mode) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxWebhookBodyBytes))
 		if err != nil {
@@ -42,6 +44,11 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string) http.Handler {
 			stripe.WithIgnoreAPIVersionMismatch())
 		if err != nil {
 			apierr.WriteError(w, "invalid signature", http.StatusBadRequest)
+			return
+		}
+		if !mode.Matches(event.Livemode) {
+			log.Printf("billing: purchase webhook: refusing event %s: livemode %v, keys are in %s mode", event.ID, event.Livemode, mode)
+			apierr.WriteError(w, "event mode does not match", http.StatusBadRequest)
 			return
 		}
 

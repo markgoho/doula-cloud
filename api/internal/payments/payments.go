@@ -311,6 +311,7 @@ type AccountEvent struct {
 	Type      string
 	AccountID string
 	Created   time.Time
+	Livemode  bool
 }
 
 // FailedAttempt is what Client.RetrieveInvoiceFailedAttempt reads about
@@ -337,8 +338,9 @@ type InvoicePaymentIntent struct {
 // stripe_webhook_events), its type, the connected account it occurred on,
 // and its raw object payload to unmarshal further.
 type WebhookEvent struct {
-	ID      string
-	Type    string
-	Account string
-	Data    []byte
+	ID       string
+	Type     string
+	Account  string
+	Data     []byte
+	Livemode bool
 }

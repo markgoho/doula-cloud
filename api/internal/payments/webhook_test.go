@@ -14,6 +14,7 @@ import (
 	"github.com/stripe/stripe-go/v86"
 
 	"doula-cloud/api/internal/payments"
+	"doula-cloud/api/internal/stripemode"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
@@ -61,7 +62,7 @@ func newConnectWebhookServerWith(db *testdb.DB, client payments.Client) *httptes
 // use this to inject a FakeEnqueuer configured to fail.
 func newConnectWebhookServerWithEnqueuer(db *testdb.DB, client payments.Client, enq tasknudge.Enqueuer) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle("POST /stripe/connect-webhook", payments.PostConnectWebhookHandler(db.App, client, stripeConnectWebhookSecret, enq))
+	mux.Handle("POST /stripe/connect-webhook", payments.PostConnectWebhookHandler(db.App, client, stripeConnectWebhookSecret, stripemode.Test, enq))
 	return httptest.NewServer(mux)
 }
 
@@ -327,7 +328,7 @@ func newAccountWebhookServer(db *testdb.DB, client payments.Client) *httptest.Se
 // newConnectWebhookServerWithEnqueuer.
 func newAccountWebhookServerWithEnqueuer(db *testdb.DB, client payments.Client, enq tasknudge.Enqueuer) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle("POST /stripe/account-webhook", payments.PostAccountWebhookHandler(db.App, client, stripeAccountWebhookSecret, enq))
+	mux.Handle("POST /stripe/account-webhook", payments.PostAccountWebhookHandler(db.App, client, stripeAccountWebhookSecret, stripemode.Test, enq))
 	return httptest.NewServer(mux)
 }
 
@@ -698,6 +699,32 @@ func TestPostAccountWebhookHandler_InvalidSignatureRejected(t *testing.T) {
 	}
 }
 
+// TestPostAccountWebhookHandler_LiveEventRefusedOnTestKeys proves a
+// validly-signed live thin event is refused when the keys are in test
+// mode, before any Stripe call.
+func TestPostAccountWebhookHandler_LiveEventRefusedOnTestKeys(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedConnectedPractice(t, db, "Account Live Event Practice", "acct_live_event")
+	client := activeAccountClient()
+	srv := newAccountWebhookServer(db, client)
+	defer srv.Close()
+
+	payload := asLive(t, capabilityStatusPayload(t, "evt_account_live", "acct_live_event"))
+	resp := postAccountWebhook(t, srv, payload, stripeAccountWebhookSecret)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+	if len(client.fetched) != 0 {
+		t.Fatalf("fetched = %v, want no Stripe call on a refused event", client.fetched)
+	}
+	cardPayments, _, _, _ := connectState(t, db, practiceID)
+	if cardPayments != string(payments.CapabilityUnsupported) {
+		t.Fatalf("card_payments = %q, want the default to stand", cardPayments)
+	}
+}
+
 // TestPostAccountWebhookHandler_UnrecognizedAccountDroppedButAcknowledged
 // proves an event for an account no Practice claims is dropped with a
 // 200 -- Stripe retries indefinitely on anything else.
@@ -827,6 +854,47 @@ func TestPostConnectWebhookHandler_InvalidSignatureRejected(t *testing.T) {
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
+// asLive marks a raw event payload as coming from the live account.
+func asLive(t *testing.T, payload []byte) []byte {
+	t.Helper()
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	body["livemode"] = true
+	b, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	return b
+}
+
+// TestPostConnectWebhookHandler_LiveEventRefusedOnTestKeys proves a
+// validly-signed live event is refused when the keys are in test mode.
+func TestPostConnectWebhookHandler_LiveEventRefusedOnTestKeys(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedConnectedPractice(t, db, "Live Invoice Practice", "acct_live_invoice")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedDraftContract(t, db, engagementID)
+	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_live_test", invoiceStatusOpen, 5000, time.Now())
+	srv := newConnectWebhookServerWith(db, &referenceClient{
+		StripeAPIClient: payments.NewStripeAPIClient("sk_test_unused", "https://app.test"),
+		reference:       "pi_live_1",
+	})
+	defer srv.Close()
+
+	payload := asLive(t, invoicePaidPayload(t, "evt_live_invoice", "acct_live_invoice", "in_live_test", time.Now()))
+	resp := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+	if status, _ := invoiceStatusAndPaidAt(t, db, invoiceID); status != invoiceStatusOpen {
+		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusOpen)
 	}
 }
 

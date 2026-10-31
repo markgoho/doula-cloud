@@ -42,6 +42,7 @@ import (
 	"doula-cloud/api/internal/stackswitch"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/staffinvite"
+	"doula-cloud/api/internal/stripemode"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/website"
 	"doula-cloud/api/internal/welcomecredits"
@@ -126,6 +127,13 @@ func internalCallerAuth(getenv func(string) string) tasknudge.CallerAuth {
 
 func main() {
 	port := resolvePort()
+
+	// coverage:ignore reason: main's wiring; stripemode's own tests cover every refusal
+	stripeMode, err := stripemode.Load(os.Getenv)
+	if err != nil {
+		// coverage:ignore reason: main's wiring; stripemode's own tests cover every refusal
+		log.Fatalf("stripe mode: %v", err)
+	}
 
 	// coverage:ignore reason: requires a real DATABASE_URL and network access, not exercised by unit tests
 	db, err := sql.Open("pgx", os.Getenv("DATABASE_URL"))
@@ -361,6 +369,7 @@ func main() {
 
 		StripeClient:        stripeClient,
 		StripeWebhookSecret: os.Getenv("STRIPE_WEBHOOK_SECRET"),
+		StripeMode:          stripeMode,
 
 		PaymentsClient:               paymentsClient,
 		StripePublishableKey:         os.Getenv("STRIPE_PUBLISHABLE_KEY"),
