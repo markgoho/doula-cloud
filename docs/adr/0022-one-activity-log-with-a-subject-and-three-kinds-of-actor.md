@@ -75,3 +75,18 @@ So the rule this ADR sets is about Practice-scoped history, which is all the his
 A Staff member reads the three facts on the Engagement's own Activity ledger (`engagement.ListActivityHandler`), through the same `reader.CanAccessEngagement` gate as every other entry there. The ledger shows each entry as the change it records, for example "Kind changed: Birth to Postpartum". The Practice-wide feed shows the action name without the diff, as it does for every other subject.
 
 **The rule this sets.** A new fact that must stay away from a Client is a new action in `StaffingActions()`. It is not a new table. The second paragraph of "One log, keyed by subject" gives the cost of a new table, and `engagement_events` paid it: one more table with no reader, and no shared cursor for the feed.
+
+
+## Amendment, 2026-10-31: a fourth kind of actor, the Platform operator ([#2418](https://github.com/markgoho/doula-cloud/issues/2418))
+
+**`actor_kind` is `staff | client | system | operator`.** The section "Three kinds of actor" stopped at three because three were all the product had. The Platform operator (`GLOSSARY.md`) is a person acting for DoulaCloud itself, and that person is none of the three. Not Staff, because an operator holds no seat at any Practice. Not a Client. Not DoulaCloud either, which is the product acting with nobody asking.
+
+**When one is written.** An operator act that touches one Practice writes one `activity` row on that Practice, alongside the operator's own record in ops. Today there are three such acts: a refund, a founding grant, and resetting a Staff member's two-step sign-in (support-clear). Opening the pilot gate, adding to the allowlist and publishing a legal version touch no single Practice, so they write no Practice Activity. A legal publish already emails every Owner.
+
+**How it reads.** The actor is shown as the person's name with DoulaCloud, for example *"Mark Goho at DoulaCloud refunded 3 Credits, as you asked on Oct 30"*. It is never shown as "DoulaCloud" alone. That is the display name for the `system` kind, and the GLOSSARY requires an act a person decided to carry that person's name.
+
+**Who reads it.** The rule in "The log is read through the same gate as the thing it describes" holds unchanged. Each of these entries is read through the same gate as the billing and sign-in entries beside it, and each is an action in `StaffingActions()`, so no Client sees one.
+
+**How it is written.** `activity`'s policy gates `INSERT` on `app.current_practice_id`, and the ops service's database role has no table grants. The row is written by a `SECURITY DEFINER` function granted to that role alone, so the one comparison the table's isolation rests on is left whole. Kept like every other `activity` row: append-only, and kept through Practice Deletion (ADR-0031).
+
+**Rejected: showing the act as `system`.** It would make "who refunded these Credits?" answer "DoulaCloud", the answer the GLOSSARY rules out. **Rejected: leaving the act off the Practice's log.** The Owner could not see something done to her own Practice.
