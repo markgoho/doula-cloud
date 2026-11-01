@@ -33,10 +33,7 @@ var (
 	ErrStripeRefused = errors.New("billing: stripe refused the refund")
 )
 
-// RefundQuote is what one refund would give back right now: Credits
-// from the oldest purchase still unspent and inside the window, what
-// that is worth including the sales tax charged on them, and the most
-// Credits that purchase can give back.
+// RefundQuote is what one refund would give back right now.
 type RefundQuote struct {
 	Credits         int    `json:"credits"`
 	AmountCents     int64  `json:"amountCents"`
@@ -55,8 +52,7 @@ type RefundReceipt struct {
 	PaymentIntentID string `json:"paymentIntentId"`
 }
 
-// RefundOrder is one refund asked for: the Practice, how many Credits,
-// and the request key that names it, so a retry is the same refund.
+// RefundOrder is one refund asked for; RequestKey makes a retry the same refund.
 type RefundOrder struct {
 	PracticeID string
 	Credits    int
@@ -68,8 +64,6 @@ type RefundOrder struct {
 // the refund's ledger row.
 type RecordAct func(ctx context.Context, quote RefundQuote) (operatorActID string, err error)
 
-// refundByRequestKey returns the refund already issued under requestKey
-// at the Practice, if there is one.
 func refundByRequestKey(ctx context.Context, tx *sql.Tx, practiceID, requestKey string) (RefundReceipt, bool, error) {
 	var receipt RefundReceipt
 	err := tx.QueryRowContext(ctx,
@@ -107,10 +101,7 @@ func refundableLots(lots []lot, now time.Time) []lot {
 	return refundable
 }
 
-// planRefund is the lot a refund of credits draws from and what it gives
-// back. credits 0 asks for everything that lot still holds.
-//
-// It draws from **one** lot: the oldest purchase that is unspent and
+// planRefund draws from **one** lot: the oldest purchase that is unspent and
 // inside the window. A refund is a reversal of a payment, and two
 // purchases are two payments -- issuing one refund across both would mean
 // two Stripe calls that cannot both be undone if the second fails. A
@@ -146,17 +137,15 @@ func planRefund(ctx context.Context, tx *sql.Tx, practiceID string, credits int,
 	}, nil
 }
 
-// QuoteRefund is what a refund of credits would give back today,
-// computed from the ledger alone, with no call to Stripe. credits 0 asks
-// for everything the oldest refundable purchase still holds.
+// QuoteRefund is what a refund of credits would give back today, without
+// calling Stripe. credits 0 asks for all the oldest refundable purchase holds.
 func QuoteRefund(ctx context.Context, tx *sql.Tx, practiceID string, credits int, now time.Time) (RefundQuote, error) {
 	_, q, err := planRefund(ctx, tx, practiceID, credits, now)
 	return q, err
 }
 
-// Refund gives order.Credits back to a Practice, at the price she paid
-// for them and with the sales tax charged on them, against the payment
-// they arrived on, on an ops_runtime transaction (ADR-0062).
+// Refund gives order.Credits back to a Practice against the payment they
+// arrived on.
 //
 // Issuing it against the original PaymentIntent is what makes Stripe Tax
 // reverse the tax it reported; a refund moved any other way leaves the
@@ -170,8 +159,6 @@ func Refund(ctx context.Context, tx *sql.Tx, client StripeClient, order RefundOr
 		return RefundReceipt{}, fmt.Errorf("billing: refund quantity must be at least 1")
 	}
 
-	// A retry under the same key gets the refund already made instead of
-	// a second one.
 	if receipt, found, err := refundByRequestKey(ctx, tx, order.PracticeID, order.RequestKey); err != nil || found {
 		return receipt, err
 	}

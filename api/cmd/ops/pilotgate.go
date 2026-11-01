@@ -17,19 +17,14 @@ const (
 	msgGateOpenRaced   = "The pilot gate was opened while this opening was being made, so nothing has changed."
 )
 
-// pilotGateState is the gate as the check page reads it, and what the
-// opening says it changed: when it was opened, or null while closed.
 type pilotGateState struct {
 	OpenedAt *time.Time `json:"openedAt"`
 }
 
-// pilotGateActDetails is the opening's operator_acts details: the request
-// key a retry is matched on.
 type pilotGateActDetails struct {
 	RequestKey string `json:"requestKey"`
 }
 
-// pilotGateRead answers the check page through ops_pilot_gate_opened_at.
 func pilotGateRead(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var gate pilotGateState
@@ -42,10 +37,6 @@ func pilotGateRead(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-// pilotGateOpenAct opens the pilot gate for everyone, for good (ADR-0043,
-// ADR-0062's act table): behind a fresh code, under an Idempotency-Key so
-// a retry is the same opening. It is recorded as an operator_acts row the
-// gate keys. Nothing closes it again.
 func pilotGateOpenAct(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		requestKey, ok := requestKeyOf(w, r, "opening")

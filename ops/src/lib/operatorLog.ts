@@ -17,10 +17,7 @@ export type LogRow = {
 
 export type LogPage = { items: LogRow[]; nextCursor?: string; hasMore: boolean };
 
-/**
-Each action operator_acts can hold, as the Operator log names it. A new
-action in the table's CHECK needs its words here.
-*/
+// A new action in operator_acts' CHECK needs its words here.
 export const ACTION_LABELS: Record<string, string> = {
 	sign_in: 'Signed in',
 	sign_out: 'Signed out',
@@ -58,9 +55,6 @@ function refundDetail(row: LogRow): string {
 	return `${credits(d.credits)}, ${money(d.amountCents)} back, ${money(d.taxCents)} of it tax. Asked for by ${owner} on ${longDate(d.requestedOn)}`;
 }
 
-/**
-What a row's details say, in words, or nothing for a row whose kind says it all.
-*/
 export function logDetail(row: LogRow): string | undefined {
 	switch (row.action) {
 		case 'step_up_refused': {
@@ -94,18 +88,12 @@ export function logDetail(row: LogRow): string | undefined {
 	return undefined;
 }
 
-/**
-The Practice or Staff member a row acted on, named, or by id once no longer on file.
-*/
 export function subjectFact(subject: LogSubject): { label: string; value: string } {
 	const label = subject.kind === 'practice' ? 'Practice' : 'Staff member';
 	if (subject.name === null) return { label, value: `No longer on file (${subject.id})` };
 	return { label, value: subject.deleted ? `${subject.name} (deleted)` : subject.name };
 }
 
-/**
-One page of the Operator log, newest first, after cursor.
-*/
 export async function readOperatorLog(cursor: string | undefined, fetcher: typeof fetch = fetch): Promise<Outcome<LogPage>> {
 	const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
 	const response = await fetcher('/api/operator-log' + query, { credentials: 'include' });

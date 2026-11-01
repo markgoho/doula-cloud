@@ -17,9 +17,6 @@ export type MonthlyCredits = {
 	totals: { creditsBought: number; creditsSpent: number; practicesBoughtAgain: number };
 };
 
-/**
-"2026-09" as "September 2026".
-*/
 export function monthName(month: Month): string {
 	const [year, number] = month.split('-').map(Number);
 	return new Date(Date.UTC(year, number - 1, 1)).toLocaleDateString('en-US', {
@@ -29,9 +26,6 @@ export function monthName(month: Month): string {
 	});
 }
 
-/**
-One closed month's Credits bought and spent per Practice, the last closed month when month is undefined.
-*/
 export async function readMonthlyCredits(
 	month: Month | undefined,
 	fetcher: typeof fetch = fetch

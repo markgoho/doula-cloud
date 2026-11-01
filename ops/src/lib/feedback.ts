@@ -49,9 +49,6 @@ const KIND_LABELS: Record<string, string> = {
 
 const ROLE_LABELS: Record<string, string> = { owner: 'Owner', admin: 'Admin', doula: 'Doula' };
 
-/**
-The instant a piece was sent, to the minute, in New York.
-*/
 export function sentAt(instant: Instant): string {
 	const at = new Date(instant);
 	const zone = { timeZone: 'America/New_York' } as const;
@@ -60,9 +57,6 @@ export function sentAt(instant: Instant): string {
 	return `${date} at ${time}`;
 }
 
-/**
-What became of a piece's GitHub issue, in one line.
-*/
 export function issueLabel(issue: IssueStatus): string {
 	switch (issue.state) {
 		case 'opened': {
@@ -86,9 +80,7 @@ function kindLabel(kind: string): string {
 	return KIND_LABELS[kind] ?? kind;
 }
 
-/**
-What the list shows for one piece: never the words, and nobody's name.
-*/
+// Never the words, and nobody's name.
 export function summaryFacts(summary: FeedbackSummary): Fact[] {
 	const facts = [
 		{ label: 'Kind', value: kindLabel(summary.kind) },
@@ -112,9 +104,6 @@ function role(piece: FeedbackPiece): string {
 		.join(', ');
 }
 
-/**
-Every stored field of a piece but its words, which the page prints on their own.
-*/
 export function pieceFacts(piece: FeedbackPiece): Fact[] {
 	return [
 		{ label: 'Kind', value: kindLabel(piece.kind) },
@@ -131,9 +120,6 @@ export function pieceFacts(piece: FeedbackPiece): Fact[] {
 	];
 }
 
-/**
-One page of every piece, or of the pieces whose issue did not open, newest first, after cursor.
-*/
 export async function readFeedback(
 	list: FeedbackList,
 	cursor: string | undefined,
@@ -148,9 +134,6 @@ export async function readFeedback(
 	return refusal(response);
 }
 
-/**
-One piece. doula-ops records the read before it answers.
-*/
 export async function readFeedbackPiece(id: string, fetcher: typeof fetch = fetch): Promise<Outcome<FeedbackPiece>> {
 	const response = await fetcher(`/api/feedback/${encodeURIComponent(id)}`, { credentials: 'include' });
 	if (response.ok) return { kind: 'ok', value: await response.json() };

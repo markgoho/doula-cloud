@@ -14,7 +14,6 @@ import (
 	"doula-cloud/api/internal/pagecursor"
 )
 
-// practicePageSize is how many Practices one page of either list carries.
 const practicePageSize = 50
 
 const msgBadCursor = "This page of the list cannot be found. Start from the first page."
@@ -32,8 +31,7 @@ type practiceConnect struct {
 	UpdatedAt       *time.Time `json:"updatedAt"`
 }
 
-// practiceGrant names its giver only when ops gave it; a grant given
-// before ops named its giver in a column that is gone.
+// A grant given before ops has no giver: the column that named one is gone.
 type practiceGrant struct {
 	Credits int        `json:"credits"`
 	GivenBy *string    `json:"givenBy"`
@@ -46,8 +44,7 @@ type practiceDeletion struct {
 	DeletedAt   *time.Time `json:"deletedAt"`
 }
 
-// practiceRow is one Practice as either list prints it (ADR-0062). Source
-// is always null until #1393 records one.
+// Source is always null until #1393 records one.
 type practiceRow struct {
 	ID                 string            `json:"id"`
 	Name               string            `json:"name"`
@@ -69,15 +66,11 @@ type practicePage struct {
 	HasMore    bool          `json:"hasMore"`
 }
 
-// ownerContactRead is the details of the read row a list page writes:
-// which list, and the Practices whose Owners it showed.
 type ownerContactRead struct {
 	List        string   `json:"list"`
 	PracticeIDs []string `json:"practiceIds"`
 }
 
-// listCursor reads a list page's cursor, both nil for the first page,
-// and refuses one that is not a time and a Practice id.
 func listCursor(w http.ResponseWriter, r *http.Request) (afterAt, afterID any, ok bool) {
 	raw := r.URL.Query().Get("cursor")
 	if raw == "" {
@@ -125,9 +118,7 @@ func scanPractice(rows *sql.Rows) (practiceRow, error) {
 	return p, nil
 }
 
-// practiceList answers one page of the live list or the Deleted list,
-// newest signup first. Both show Owners' contacts, so the page is
-// recorded as an owner_contact_read row in the same transaction.
+// Owners' contacts are shown, so the page is recorded as an owner_contact_read row in the same transaction.
 func practiceList(db *sql.DB, deleted bool) http.HandlerFunc {
 	list := "practices"
 	if deleted {

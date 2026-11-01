@@ -31,34 +31,26 @@ const (
 	msgCreditsOverLimit = "Number of Credits must be %d or fewer"
 )
 
-// fieldCredits is the request DTO's name for the number of Credits.
 const fieldCredits = "credits"
 
-// refundOwner is an Owner of the Practice, as the check page lists them
-// to name who asked.
 type refundOwner struct {
 	StaffID string `json:"staffId"`
 	Name    string `json:"name"`
 }
 
-// refundCheck is what the check page states before the act: the
-// Practice, its Owners, and what a refund would give back, or nil when
-// nothing can be.
 type refundCheck struct {
 	PracticeName string               `json:"practiceName"`
 	Owners       []refundOwner        `json:"owners"`
 	Quote        *billing.RefundQuote `json:"quote"`
 }
 
-// refundRequest is the act's body. The operator comes from the session,
-// never from here (ADR-0062).
+// The operator comes from the session, never from the body.
 type refundRequest struct {
 	Credits     int    `json:"credits"`
 	RequestedBy string `json:"requestedBy"`
 	RequestedOn string `json:"requestedOn"`
 }
 
-// refundResult says what changed.
 type refundResult struct {
 	PracticeName    string `json:"practiceName"`
 	Credits         int    `json:"credits"`
@@ -68,8 +60,6 @@ type refundResult struct {
 	RequestedOn     string `json:"requestedOn"`
 }
 
-// refundActDetails is the refund's operator_acts details: the request
-// that asked for it and what it gave back.
 type refundActDetails struct {
 	RequestKey         string `json:"requestKey"`
 	RequestedByStaffID string `json:"requestedByStaffId"`
@@ -85,8 +75,6 @@ type refundDiff struct {
 	TaxCents    int64 `json:"taxCents"`
 }
 
-// readRefundPractice reads the Practice's name and Owners through
-// ops_refund_practice (00147).
 func readRefundPractice(ctx context.Context, tx *sql.Tx, practiceID string) (string, []refundOwner, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT practice_name, owner_staff_id, owner_name FROM ops_refund_practice($1)`, practiceID)
 	if err != nil {
@@ -129,9 +117,6 @@ func writeOverLimit(ctx context.Context, w http.ResponseWriter, tx *sql.Tx, prac
 		map[string]string{fieldCredits: fmt.Sprintf(msgCreditsOverLimit, most.MaxCredits)})
 }
 
-// refundCheckRead answers the check page: what a refund of ?credits=N
-// would give back, or of everything the oldest refundable purchase
-// holds when N is absent.
 func refundCheckRead(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		practiceID, ok := practiceIDFrom(w, r)
@@ -185,7 +170,6 @@ func refundCheckRead(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-// answerErrors checks the refund's answers that need no database.
 func answerErrors(req refundRequest, now time.Time) map[string]string {
 	details := map[string]string{}
 	if req.Credits < 1 {
@@ -204,11 +188,6 @@ func answerErrors(req refundRequest, now time.Time) map[string]string {
 	return details
 }
 
-// refundAct refunds a Practice's purchased Credits on an Owner's
-// recorded request (ADR-0062's act table): behind a fresh code, under an
-// Idempotency-Key that names the request so a retry is the same refund,
-// recorded as an operator_acts row the ledger row keys, and in the
-// Practice's Activity under the operator.
 func refundAct(d Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		practiceID, ok := practiceIDFrom(w, r)
@@ -324,5 +303,4 @@ func refundAct(d Deps) http.HandlerFunc {
 	}
 }
 
-// refundFields are the only fields a refund's body may name.
 var refundFields = map[string]bool{fieldCredits: true, "requestedBy": true, "requestedOn": true}

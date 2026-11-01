@@ -43,9 +43,7 @@ func monthOf(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, businessZone)
 }
 
-// monthlyCredits answers one closed month's Credits bought and spent per
-// Practice (ADR-0046), the last closed month when none is asked for. The
-// current month is refused: no figure for it is shown anywhere.
+// The current month is refused: no figure for it is shown anywhere.
 func monthlyCredits(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		lastClosed := monthOf(clock.Now(r.Context())).AddDate(0, -1, 0)

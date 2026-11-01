@@ -13,17 +13,9 @@ import (
 	"doula-cloud/api/internal/clock"
 )
 
-// freshSignInWindow is how recent the sign-in behind a step-up's token
-// must be. The check page signs in again with the password and a code
-// the moment the operator presses the act's button, so five minutes
-// covers that round trip, as staffauth's recentAuthWindow does, while a
-// token cached from the session's own sign-in cannot pass.
+// The check page signs in again on the button press; a token cached from the session's own sign-in must not pass.
 const freshSignInWindow = 5 * time.Minute
 
-// stepUpLimit is how long a step-up waits to admit the one act it is
-// for (spendStepUp). The check page steps up and sends the act in one
-// press, so five minutes is ample, and short enough that a session left
-// open does not keep the power (ADR-0062).
 const stepUpLimit = 5 * time.Minute
 
 const (
@@ -31,7 +23,6 @@ const (
 	msgStepUpRequired = "Enter the code your authenticator app shows now to do this."
 )
 
-// Why a step-up was refused, as its step_up_refused act records it.
 const (
 	refusedNoSignIn      = "no_sign_in"
 	refusedNotVerified   = "not_verified"
@@ -44,13 +35,7 @@ type stepUpRefusal struct {
 	Reason string `json:"reason"`
 }
 
-// stepUp stamps the session's step_up_at once the operator proves a
-// fresh authenticator-app code: a Bearer token from a sign-in just now,
-// by the session's own operator, that passed a second factor. A code
-// Identity Platform refused leaves the browser with no token, so it
-// arrives here with none and is recorded like any other refusal. No
-// idempotency key: a repeated stamp is the same stamp, and each refusal
-// is its own try.
+// A code Identity Platform refused leaves the browser with no token, so it arrives as none and is recorded as a refusal.
 func stepUp(d Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		op := signedIn(r)
@@ -90,18 +75,13 @@ func stepUpRefusalReason(r *http.Request, d Deps, op operator) string {
 	if !passedSecondFactor(identity.SecondFactor, d.AcceptEmulatorFactor) {
 		return refusedNoCode
 	}
-	// #773 exemption, as staffauth/reauth.go's: auth_time is Identity
-	// Platform's real wall time, so it is read against real time, never
-	// a simulated clock the sign-in never ran on.
-	if time.Since(identity.AuthTime) > freshSignInWindow { //nolint:forbidigo // #773: see above
+	if time.Since(identity.AuthTime) > freshSignInWindow { //nolint:forbidigo // #773: auth_time is Identity Platform's real wall time, never a simulated clock
 		return refusedStaleSignIn
 	}
 	return ""
 }
 
-// requireStepUp admits an act on a session stepped up within
-// stepUpLimit, or a retry of an act this operator already took under the
-// request's Idempotency-Key, which replays and needs no new code.
+// A retry under the act's Idempotency-Key replays and needs no new code.
 func requireStepUp(db *sql.DB, action string, next http.Handler) http.Handler {
 	return requireSession(db, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		op := signedIn(r)
@@ -125,16 +105,9 @@ func requireStepUp(db *sql.DB, action string, next http.Handler) http.Handler {
 	}))
 }
 
-// errStepUpSpent is spendStepUp's answer when the stamp the act was
-// admitted on is no longer the session's: another act spent it first, or
-// a newer step-up replaced it.
 var errStepUpSpent = errors.New("the step-up this act was admitted on is spent")
 
-// spendStepUp clears the session's stamp inside the act's own
-// transaction, only while it is still the one the act was admitted on,
-// so each code admits one act (ADR-0062) and two acts sent on one stamp
-// cannot both pass: the second waits on the first's row lock and finds
-// the stamp gone. On errStepUpSpent the act answers writeStepUpRequired.
+// Cleared only while still the admitting stamp, so two acts on one stamp cannot both pass: the second waits on the row lock and finds it gone.
 func spendStepUp(ctx context.Context, tx *sql.Tx, op operator) error {
 	res, err := tx.ExecContext(ctx,
 		`UPDATE operator_sessions SET step_up_at = NULL WHERE token_hash = $1 AND step_up_at = $2`,
@@ -149,8 +122,6 @@ func spendStepUp(ctx context.Context, tx *sql.Tx, op operator) error {
 	return nil
 }
 
-// writeStepUpRequired is the refusal of an act whose session has no
-// unspent step-up within stepUpLimit.
 func writeStepUpRequired(w http.ResponseWriter) {
 	apierr.Write(w, http.StatusForbidden, apierr.CodeSecondFactorRequired, msgStepUpRequired, nil)
 }

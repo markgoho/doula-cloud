@@ -14,9 +14,6 @@ export type DormantPractice = {
 
 export type DormantPage = { items: DormantPractice[]; nextCursor?: string; hasMore: boolean };
 
-/**
-Each field the dormant list shows for one Practice, as a summary list's rows.
-*/
 export function dormantFacts(row: DormantPractice): { label: string; value: string }[] {
 	return [
 		{ label: 'Signed up', value: newYorkDay(row.signedUpAt) },
@@ -25,9 +22,6 @@ export function dormantFacts(row: DormantPractice): { label: string; value: stri
 	];
 }
 
-/**
-One page of the dormant list, newest signup first, after cursor.
-*/
 export async function readDormantPractices(
 	cursor: string | undefined,
 	fetcher: typeof fetch = fetch

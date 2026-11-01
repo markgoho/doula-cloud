@@ -57,9 +57,6 @@ function deletion({ deletion: d }: PracticeRow): string {
 	return 'Not asked for';
 }
 
-/**
-Each field the Practice list shows for one Practice, as a summary list's rows.
-*/
 export function practiceFacts(row: PracticeRow): { label: string; value: string }[] {
 	return [
 		{ label: 'Signed up', value: newYorkDay(row.signedUpAt) },
@@ -75,9 +72,6 @@ export function practiceFacts(row: PracticeRow): { label: string; value: string 
 	];
 }
 
-/**
-One page of the live list or the Deleted list, newest signup first, after cursor.
-*/
 export async function readPractices(
 	list: PracticeList,
 	cursor: string | undefined,

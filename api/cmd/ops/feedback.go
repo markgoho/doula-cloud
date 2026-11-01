@@ -15,8 +15,6 @@ import (
 	"doula-cloud/api/internal/pagecursor"
 )
 
-// feedbackPageSize is how many pieces one page of the Feedback list
-// carries.
 const feedbackPageSize = 50
 
 const (
@@ -24,8 +22,6 @@ const (
 	msgBadIssueFilter   = "The list can be narrowed only to Feedback whose issue did not open."
 )
 
-// feedbackSummary is one row of the Feedback list. It names nobody: the
-// list is for finding a piece, and opening one is the recorded read.
 type feedbackSummary struct {
 	ID      string               `json:"id"`
 	Kind    string               `json:"kind"`
@@ -46,8 +42,6 @@ type feedbackSender struct {
 	Email string `json:"email"`
 }
 
-// feedbackPiece is every stored field of one piece but client_id, with
-// its sender named (ADR-0062's Feedback exception).
 type feedbackPiece struct {
 	ID           string               `json:"id"`
 	Kind         string               `json:"kind"`
@@ -64,9 +58,7 @@ type feedbackPiece struct {
 	Issue        feedback.IssueStatus `json:"issue"`
 }
 
-// feedbackList answers one page of every piece, or with ?issue=unopened
-// of the pieces whose issue open has failed. It shows nobody's name, so
-// it writes no read row.
+// It shows nobody's name, so it writes no read row.
 func feedbackList(db *sql.DB, repo string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		filter := r.URL.Query().Get("issue")
@@ -124,9 +116,7 @@ func readFeedbackPage(r *http.Request, db *sql.DB, repo string, unopened bool, a
 	return page, nil
 }
 
-// feedbackRead answers one piece and records the read as a feedback_read
-// row in the same transaction, so a piece is never shown without its
-// record. The row holds the piece's id and the time, never its content.
+// The read row is written in the same transaction, so a piece is never shown without its record, and never holds the content.
 func feedbackRead(db *sql.DB, repo string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("feedbackId")

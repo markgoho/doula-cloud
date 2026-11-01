@@ -63,8 +63,7 @@ func Mark(ctx context.Context, outcome Outcome) {
 	}
 }
 
-// Record wraps a webhook route's handler so each request writes one
-// arrival row for route.
+// Record wraps a webhook route's handler so each request writes one arrival row.
 func Record(db *sql.DB, route Route, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		arrivedAt := clock.Now(r.Context())
@@ -171,8 +170,7 @@ func (s *statusRecorder) Write(b []byte) (int, error) {
 // without the drain's worker door.
 type Sweeper struct{}
 
-// ProcessPending deletes every row that arrived before clock.Now(ctx)
-// less Retention.
+// ProcessPending deletes every row older than Retention.
 func (Sweeper) ProcessPending(ctx context.Context, tx *sql.Tx) error {
 	if _, err := tx.ExecContext(ctx, `SELECT sweep_webhook_arrivals($1)`, clock.Now(ctx).Add(-Retention)); err != nil {
 		return fmt.Errorf("webhookarrival: sweep: %w", err)

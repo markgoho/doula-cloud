@@ -32,11 +32,6 @@ func registerInternalRoutes(g *staffauth.GatedRouter, d Deps) {
 	// workflow. The cadence is what covers a build that fails and
 	// produces no deploy and no callback at all.
 	g.Write("POST /api/internal/site/verify-pages", sitebuild.VerifyHandler(d.DB, d.PageVerifier, d.InternalAuth))
-	// #449's founding grant moved to doula-ops (#2482, ADR-0062), and
-	// #605's support-clear with it (#2483), #1394's monthly Credits read
-	// (#2476), #420's dormant-Practices list (#2477) and the refund
-	// (#2481), #1790's pilot allowlist add (#2484) and gate opening
-	// (#2485), and #1548's legal publish (#2486).
 }
 
 // legalDocuments is the version history the BFF publishes and mails

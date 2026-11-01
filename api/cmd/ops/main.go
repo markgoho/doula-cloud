@@ -1,6 +1,4 @@
-// Command ops runs doula-ops, the Platform operator's service at
-// ops.doula.cloud (ADR-0062). It connects to Postgres as an ops_runtime
-// login, never as app_runtime, and shares no wiring with doula-api.
+// Command ops runs doula-ops at ops.doula.cloud, connecting to Postgres as ops_runtime, never app_runtime.
 package main
 
 import (
@@ -14,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	// Registers the "pgx" driver with database/sql; never referenced by name.
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"doula-cloud/api/internal/authn"
@@ -39,7 +36,6 @@ func main() {
 	}
 }
 
-// The variables newServer reads beyond the database and the port.
 const (
 	emulatorHostVar = stackswitch.MarkerVar
 	tenantVar       = "OPS_TENANT_ID"
@@ -55,11 +51,8 @@ var errEmulatorOnCloudRun = errors.New("doula-ops: " + emulatorHostVar + " must 
 
 type verifierFactory func(ctx context.Context, projectID, tenantID string) (Verifier, error)
 
-// accountsFactory builds Identity Platform admin on the Staff pool.
 type accountsFactory func(ctx context.Context, projectID string) (authn.AccountManager, error)
 
-// newStaffAccounts is doula-api's own Admin SDK seam, on the project's
-// Staff pool rather than the operator tenant.
 func newStaffAccounts(ctx context.Context, projectID string) (authn.AccountManager, error) {
 	// coverage:ignore reason: requires GCP credentials or the Auth emulator, not exercised by unit tests
 	accounts, err := authn.NewFirebaseVerifier(ctx, projectID)
@@ -71,10 +64,7 @@ func newStaffAccounts(ctx context.Context, projectID string) (authn.AccountManag
 	return accounts, nil
 }
 
-// newServer builds doula-ops from the environment: its pool capped at
-// dbpool's share for doula-ops, on PORT, or Cloud Run's 8080 when unset.
-// It refuses the emulator's host on Cloud Run, since that is what admits
-// the emulator's phone factor in place of an authenticator app.
+// The emulator's host is refused on Cloud Run, since it is what admits the emulator's phone factor.
 func newServer(ctx context.Context, getenv func(string) string, newVerifier verifierFactory, newAccounts accountsFactory) (*http.Server, *sql.DB, error) {
 	emulator := getenv(emulatorHostVar) != ""
 	if emulator && getenv(stripemode.CloudRunVar) != "" {
@@ -107,8 +97,6 @@ func newServer(ctx context.Context, getenv func(string) string, newVerifier veri
 		return nil, nil, fmt.Errorf("doula-ops: %w", err)
 	}
 
-	// The shipped Terms and Privacy Policy, or on the end-to-end stack a
-	// copy with a version appended, so a walk can publish a material one.
 	history, err := stackswitch.Legal(ctx, getenv, db, shippedLegal)
 	if err != nil {
 		_ = db.Close()
@@ -137,11 +125,7 @@ func newServer(ctx context.Context, getenv func(string) string, newVerifier veri
 	}, db, nil
 }
 
-// stripeClient is the Stripe a refund moves money through, and that legal
-// publish asks for the Price a version's Credit costs, which it finds on
-// the Product creditPriceID names. The
-// end-to-end stack has no Stripe, so with the emulator and no key it is
-// the in-memory fake; newServer already refuses the emulator on Cloud Run.
+// The end-to-end stack has no Stripe, so with the emulator and no key this is the in-memory fake.
 func stripeClient(apiKey, creditPriceID string, emulator bool) billing.StripeClient {
 	if emulator && apiKey == "" {
 		return billing.NewFakeStripeClient()
@@ -149,8 +133,7 @@ func stripeClient(apiKey, creditPriceID string, emulator bool) billing.StripeCli
 	return billing.NewStripeAPIClient(apiKey, creditPriceID, "")
 }
 
-// origins reads a comma-separated origin list; unset is none, which
-// refuses every state-changing request that names an origin.
+// Unset is none, which refuses every state-changing request that names an origin.
 func origins(raw string) []string {
 	var list []string
 	for part := range strings.SplitSeq(raw, ",") {

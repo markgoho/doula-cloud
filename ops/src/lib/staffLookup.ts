@@ -5,9 +5,6 @@ export const LOOKUP_EMAIL_FIELD = 'lookup-email';
 
 export type FoundStaff = { staffId: string; name: string; email: string; practiceNames: string[] };
 
-/**
-What is missing from the email before doula-ops is asked.
-*/
 export function lookupErrors(email: string): FormError[] {
 	const trimmed = email.trim();
 	if (trimmed === '') return [{ message: 'Enter the email address the person signs in with', targetId: LOOKUP_EMAIL_FIELD }];
@@ -18,9 +15,6 @@ export function lookupErrors(email: string): FormError[] {
 	return [];
 }
 
-/**
-Each Staff member who signs in with email. doula-ops records that their contacts were shown.
-*/
 export async function findStaff(email: string, fetcher: typeof fetch = fetch): Promise<Outcome<FoundStaff[]>> {
 	const response = await fetcher(`/api/staff?email=${encodeURIComponent(email.trim())}`, { credentials: 'include' });
 	if (!response.ok) return refusal(response, { email: LOOKUP_EMAIL_FIELD });

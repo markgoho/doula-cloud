@@ -20,8 +20,6 @@ const (
 	msgRosterChanged  = "This Practice's Staff changed while the grant was being given, so nothing has changed. Check the grant again."
 )
 
-// foundingGrantCheck is what the check page states before the act: the
-// Practice, the grant its roster sizes, and the grant it already holds.
 type foundingGrantCheck struct {
 	PracticeName   string `json:"practiceName"`
 	StaffCount     int    `json:"staffCount"`
@@ -29,15 +27,12 @@ type foundingGrantCheck struct {
 	GrantedCredits *int   `json:"grantedCredits"`
 }
 
-// foundingGrantResult says what changed.
 type foundingGrantResult struct {
 	PracticeName string `json:"practiceName"`
 	StaffCount   int    `json:"staffCount"`
 	Credits      int    `json:"credits"`
 }
 
-// foundingGrantActDetails is the grant's operator_acts details: what it
-// gave, and the request key a retry is matched on.
 type foundingGrantActDetails struct {
 	StaffCount int    `json:"staffCount"`
 	Credits    int    `json:"credits"`
@@ -49,7 +44,6 @@ type foundingGrantDiff struct {
 	Credits    int `json:"credits"`
 }
 
-// grantPractice is ops_founding_grant_practice's one row (00148).
 type grantPractice struct {
 	foundingGrantCheck
 	grantedActID sql.NullString
@@ -75,8 +69,6 @@ func readGrantPractice(ctx context.Context, tx *sql.Tx, practiceID string) (gran
 	return p, nil
 }
 
-// beginGrantRead opens the request's one transaction and reads the
-// Practice, answering the refusal itself when it cannot.
 func beginGrantRead(w http.ResponseWriter, r *http.Request, db *sql.DB, practiceID string) (*sql.Tx, grantPractice, bool) {
 	tx, err := db.BeginTx(r.Context(), nil)
 	if err != nil {
@@ -99,7 +91,6 @@ func beginGrantRead(w http.ResponseWriter, r *http.Request, db *sql.DB, practice
 	return tx, p, true
 }
 
-// foundingGrantCheckRead answers the check page.
 func foundingGrantCheckRead(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		practiceID, ok := practiceIDFrom(w, r)
@@ -115,8 +106,6 @@ func foundingGrantCheckRead(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-// grantedUnder reads the act that gave an existing grant, and reports
-// whether it was taken under requestKey.
 func grantedUnder(ctx context.Context, tx *sql.Tx, actID, requestKey string) (foundingGrantActDetails, bool, error) {
 	var raw []byte
 	if err := tx.QueryRowContext(ctx, `SELECT details FROM operator_acts WHERE id = $1`, actID).Scan(&raw); err != nil {
@@ -128,11 +117,6 @@ func grantedUnder(ctx context.Context, tx *sql.Tx, actID, requestKey string) (fo
 	return details, details.RequestKey == requestKey, nil
 }
 
-// foundingGrantAct gives a Practice its founding grant (ADR-0062's act
-// table), sized from its roster and never typed, under an
-// Idempotency-Key that names the request so a retry is the same grant.
-// It is recorded as an operator_acts row the ledger row keys, and in the
-// Practice's Activity under the operator.
 func foundingGrantAct(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		practiceID, ok := practiceIDFrom(w, r)

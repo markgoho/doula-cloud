@@ -17,15 +17,11 @@ import (
 	"doula-cloud/api/internal/clock"
 )
 
-// An operator session ends an hour after its last use, and eight hours
-// after it began whatever its use (ADR-0062).
 const (
 	idleLimit     = time.Hour
 	absoluteLimit = 8 * time.Hour
 )
 
-// factorTOTP is an authenticator app's provider in a token's
-// firebase.sign_in_second_factor claim.
 const factorTOTP = "totp"
 
 const (
@@ -34,10 +30,7 @@ const (
 	msgSessionEnded        = "Your session has ended. Sign in again."
 )
 
-// Identity is what an operator token says once its tenant has verified
-// it. SecondFactor is the provider of the second factor this sign-in
-// passed, empty when it passed none. AuthTime is when that sign-in
-// happened, in real wall time.
+// Identity is what a verified operator token says.
 type Identity struct {
 	UID          string
 	Email        string
@@ -46,14 +39,11 @@ type Identity struct {
 	AuthTime     time.Time
 }
 
-// Verifier checks an ID token against the operator tenant, and refuses a
-// token from any other tenant or from none, which every Staff token is.
+// Verifier verifies an ID token against the operator tenant only, so a Staff token is refused.
 type Verifier interface {
 	Verify(ctx context.Context, idToken string) (Identity, error)
 }
 
-// operator is the signed-in operator, as the session middleware found
-// them. StepUpAt is the session's last step-up, nil before its first.
 type operator struct {
 	ID          string
 	Name        string
@@ -65,24 +55,16 @@ type operator struct {
 
 type operatorKey struct{}
 
-// sessionView is what GET /api/session and a sign-in answer: the
-// operator's own name and email, for the page header.
 type sessionView struct {
 	Name  string `json:"name"`
 	Email string `json:"email"`
 }
 
-// passedSecondFactor reports whether a sign-in's second factor is one
-// ops accepts: an authenticator app, or the emulator's phone factor while
-// the emulator is the identity provider, since the emulator has no TOTP.
+// The emulator has no TOTP, so its phone factor stands in while it is the identity provider.
 func passedSecondFactor(provider string, acceptEmulatorFactor bool) bool {
 	return provider == factorTOTP || (acceptEmulatorFactor && provider == "phone")
 }
 
-// signIn exchanges a verified operator token for a session. The first
-// sign-in records the operator's name and email; every sign-in is an
-// operator_acts row. No idempotency key: it runs before there is a
-// session to key one on (docs/api-design.md section 3).
 func signIn(d Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		idToken, ok := authn.BearerToken(r)
@@ -117,8 +99,6 @@ func signIn(d Deps) http.HandlerFunc {
 	}
 }
 
-// mintSession records the operator if this is their first sign-in, the
-// session, and the sign_in act, in one transaction on one connection.
 func mintSession(ctx context.Context, db *sql.DB, identity Identity, name, token string, now time.Time) (sessionView, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -160,10 +140,7 @@ func mintSession(ctx context.Context, db *sql.DB, identity Identity, name, token
 	return view, nil
 }
 
-// requireSession admits a request whose cookie names a live operator
-// session and moves its idle limit on, never past its absolute one. One
-// statement on the pool, so no request holds a second connection for it
-// (#2432).
+// One statement on the pool, so no request holds a second connection (#2432).
 func requireSession(db *sql.DB, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cookie, err := r.Cookie(authn.SessionCookieName)
@@ -208,8 +185,6 @@ func session() http.HandlerFunc {
 	}
 }
 
-// signOut ends this browser's session and records the sign_out act.
-// DELETE is idempotent by method, so it takes no idempotency key.
 func signOut(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		op := signedIn(r)
@@ -246,9 +221,7 @@ func endSession(ctx context.Context, db *sql.DB, op operator, now time.Time) err
 	return nil
 }
 
-// sessionCookie is the session's cookie, or with maxAge -1 its removal.
-// The name is __session because Firebase Hosting strips every other
-// cookie on the /api/** rewrite (authn.SessionCookieName).
+// Firebase Hosting strips every cookie but __session on the /api/** rewrite.
 func sessionCookie(token string, maxAge int) *http.Cookie {
 	return &http.Cookie{
 		Name:     authn.SessionCookieName,

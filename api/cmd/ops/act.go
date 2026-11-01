@@ -14,9 +14,6 @@ import (
 	"doula-cloud/api/internal/apierr"
 )
 
-// headerIdempotencyKey names the request an act retries under. Every
-// ops act requires one, and its replay is read back from operator_acts
-// (docs/api-design.md, "Ops acts").
 const headerIdempotencyKey = "Idempotency-Key"
 
 const (
@@ -24,7 +21,6 @@ const (
 	msgPracticeNotFound = "There is no Practice at this address."
 )
 
-// The operator_acts actions (00160's check constraint).
 const (
 	actSignIn                = "sign_in"
 	actSignOut               = "sign_out"
@@ -42,8 +38,6 @@ const (
 
 var errNoPractice = errors.New("no such practice")
 
-// requestKeyOf reads the act's Idempotency-Key, refusing a request with
-// none. what names the act in the refusal: "the refund".
 func requestKeyOf(w http.ResponseWriter, r *http.Request, what string) (string, bool) {
 	key := r.Header.Get(headerIdempotencyKey)
 	if key == "" {
@@ -53,13 +47,10 @@ func requestKeyOf(w http.ResponseWriter, r *http.Request, what string) (string, 
 	return key, true
 }
 
-// writeInternal is every ops 500.
 func writeInternal(w http.ResponseWriter) {
 	apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 }
 
-// practiceIDFrom reads the path's Practice id, answering 404 for one
-// that is not a uuid.
 func practiceIDFrom(w http.ResponseWriter, r *http.Request) (string, bool) {
 	id := r.PathValue("practiceId")
 	if _, err := uuid.Parse(id); err != nil {
@@ -69,8 +60,7 @@ func practiceIDFrom(w http.ResponseWriter, r *http.Request) (string, bool) {
 	return id, true
 }
 
-// decodeDeclared is apierr.DecodeJSON refusing a field the body does not
-// declare, so a request naming its own actor is refused, not ignored.
+// A request naming its own actor is refused, not ignored.
 func decodeDeclared(w http.ResponseWriter, r *http.Request, declared map[string]bool, msgOther string, target any) bool {
 	var fields map[string]json.RawMessage
 	if !apierr.DecodeJSON(w, r, &fields) {
@@ -90,7 +80,6 @@ func decodeDeclared(w http.ResponseWriter, r *http.Request, declared map[string]
 	return true
 }
 
-// actSubject is the Practice or Staff member an act is about.
 type actSubject struct {
 	Kind string
 	ID   string
@@ -102,8 +91,6 @@ func staffSubject(id string) *actSubject { return &actSubject{Kind: "staff", ID:
 
 func feedbackSubject(id string) *actSubject { return &actSubject{Kind: "feedback", ID: id} }
 
-// recordAct writes the act's operator_acts row and returns its id.
-// details nil is the column's empty object.
 func recordAct(ctx context.Context, q rowQuerier, op operator, action string, subject *actSubject, details any, stepUpAt *time.Time, at time.Time) (string, error) {
 	raw := []byte("{}")
 	if details != nil {
@@ -128,7 +115,6 @@ type rowQuerier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-// isReplay reports whether operator op already took action under key.
 func isReplay(ctx context.Context, q rowQuerier, op operator, action, key string) (bool, error) {
 	var found bool
 	if err := q.QueryRowContext(ctx,
@@ -140,9 +126,7 @@ func isReplay(ctx context.Context, q rowQuerier, op operator, action, key string
 	return found, nil
 }
 
-// spendUnlessReplay spends the session's step-up for a new act, and
-// leaves it alone for a retry of one already taken under key: a replay
-// answers what the first request did, and needs no code of its own.
+// A replay answers what the first request did and needs no code of its own.
 func spendUnlessReplay(ctx context.Context, tx *sql.Tx, op operator, action, key string) error {
 	replay, err := isReplay(ctx, tx, op, action, key)
 	if err != nil || replay {

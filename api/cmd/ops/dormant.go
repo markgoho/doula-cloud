@@ -11,18 +11,9 @@ import (
 	"doula-cloud/api/internal/pagecursor"
 )
 
-// dormancyNoticeYears is how long without contact makes a Practice's
-// unspent balance worth writing to her about.
-//
-// Two years, not three: APL 1315(1-b) escheats the balance at three
-// years' dormancy, and the due-diligence mailing has to reach the owner
-// before that, not after. A year's warning is what turns an escheat into
-// a Practice spending her own Credits.
+// Two years, not three: APL 1315(1-b) escheats at three, and the due-diligence mailing has to reach the Owner first.
 const dormancyNoticeYears = 2
 
-// dormantPractice is a Practice holding unspent Credits that nobody has
-// been seen using: the row the annual balance notice and the
-// December/January due-diligence mailings are addressed from.
 type dormantPractice struct {
 	ID            string     `json:"id"`
 	Name          string     `json:"name"`
@@ -37,10 +28,7 @@ type dormantPage struct {
 	HasMore    bool              `json:"hasMore"`
 }
 
-// dormantList answers one page of the Practices holding Credits whose
-// Staff nobody has seen for dormancyNoticeYears, newest signup first. A
-// Practice nobody has ever seen counts. Read only: nothing writes a
-// balance off. It shows nobody's contact, so it writes no read row.
+// A Practice nobody has ever seen counts. It shows nobody's contact, so it writes no read row.
 func dormantList(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		afterAt, afterID, ok := listCursor(w, r)

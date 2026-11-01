@@ -28,9 +28,6 @@ const FIELD_OF: Record<string, string> = {
 	requestedOn: REQUESTED_ON_TARGET
 };
 
-/**
-The three date boxes as YYYY-MM-DD, or undefined when they are not one real date.
-*/
 export function requestedOn({ day, month, year }: Pick<RefundAnswers, 'day' | 'month' | 'year'>): string | undefined {
 	if ([day, month, year].some((part) => !/^\d+$/.test(part.trim())) || year.trim().length !== 4) return undefined;
 	const [d, m, y] = [day, month, year].map((part) => Number(part.trim()));
@@ -39,9 +36,6 @@ export function requestedOn({ day, month, year }: Pick<RefundAnswers, 'day' | 'm
 	return date.toISOString().slice(0, 10);
 }
 
-/**
-What is missing from the answers before doula-ops is asked anything.
-*/
 export function answerErrors(answers: RefundAnswers): FormError[] {
 	const errors: FormError[] = [];
 	if (!/^\d+$/.test(answers.credits.trim()) || Number(answers.credits) < 1) {
@@ -52,9 +46,6 @@ export function answerErrors(answers: RefundAnswers): FormError[] {
 	return errors;
 }
 
-/**
-What the check page states: the Practice, its Owners, and what a refund of credits gives back.
-*/
 export async function readRefundCheck(practiceId: string, credits?: number, fetcher: Fetch = fetch): Promise<Outcome<RefundCheck>> {
 	const query = credits === undefined ? '' : `?credits=${credits}`;
 	const response = await fetcher(`/api/practices/${practiceId}/refund${query}`, { credentials: 'include' });
@@ -62,10 +53,6 @@ export async function readRefundCheck(practiceId: string, credits?: number, fetc
 	return refusal(response, FIELD_OF);
 }
 
-/**
- * Sends the refund under key, the name of this one request: a retry with
- * the same key is answered with the refund already made.
- */
 export async function sendRefund(
 	practiceId: string,
 	order: { credits: number; requestedBy: string; requestedOn: string },

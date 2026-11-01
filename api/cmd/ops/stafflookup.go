@@ -18,8 +18,6 @@ const (
 	msgCorrectLookup   = "Correct the answer marked below."
 )
 
-// foundStaff is one Staff member a lookup found: her contact and her
-// Practices, so the operator can tell who is on the call.
 type foundStaff struct {
 	StaffID       string   `json:"staffId"`
 	Name          string   `json:"name"`
@@ -31,8 +29,6 @@ type staffLookupResult struct {
 	Staff []foundStaff `json:"staff"`
 }
 
-// staffLookupRead is the staff_lookup row: what was asked and whose
-// contact it showed.
 type staffLookupRead struct {
 	Email    string   `json:"email"`
 	StaffIDs []string `json:"staffIds"`
@@ -69,10 +65,7 @@ func findStaff(ctx context.Context, tx *sql.Tx, email string) ([]foundStaff, err
 	return found, nil
 }
 
-// staffLookup finds a Staff member by the sign-in email she gives on the
-// call, the first step of a two-factor reset (#2483). It shows her
-// contact, so it is recorded as a staff_lookup row in the same
-// transaction.
+// It shows her contact, so it is recorded as a staff_lookup row in the same transaction.
 func staffLookup(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		email := strings.TrimSpace(r.URL.Query().Get("email"))

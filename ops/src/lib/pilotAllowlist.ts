@@ -5,9 +5,6 @@ export const ADDRESS_FIELD = 'pilot-address';
 
 export type PilotAddressResult = { address: string; addedAt: string };
 
-/**
-GOV.UK's email-address rule, the one doula-ops applies: an @ with something either side.
-*/
 export function addressErrors(address: string): FormError[] {
 	const trimmed = address.trim();
 	if (trimmed === '') return [{ message: 'Enter an email address', targetId: ADDRESS_FIELD }];
@@ -18,11 +15,6 @@ export function addressErrors(address: string): FormError[] {
 	return [];
 }
 
-/**
- * Adds address to the pilot allowlist under key, the name of this one
- * request: a retry with the same key is answered with the add already made.
- * The body names no one; doula-ops takes the operator from the session.
- */
 export async function sendPilotAddress(
 	address: string,
 	key: string,

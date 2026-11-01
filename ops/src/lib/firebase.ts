@@ -22,9 +22,6 @@ const firebaseConfig = {
 	authDomain: 'doula-cloud.firebaseapp.com'
 };
 
-/**
-The emulator URL connectAuthEmulator takes, or undefined for Identity Platform.
-*/
 export function emulatorURL(host: string | undefined): string | undefined {
 	return host ? `http://${host}` : undefined;
 }
@@ -43,12 +40,7 @@ export function getOperatorAuth(): Auth {
 	return auth;
 }
 
-/**
- * Signs in again with the password and an authenticator-app code, and
- * hands back the fresh ID token for doula-ops's step-up. Identity
- * Platform has no code-only re-authentication, so the password comes
- * first. Throws Identity Platform's own refusal.
- */
+// Identity Platform has no code-only re-authentication, so the password comes first.
 export async function freshIdToken(email: string, password: string, code: string): Promise<string> {
 	const auth = getOperatorAuth();
 	let credential: UserCredential;

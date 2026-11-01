@@ -29,13 +29,8 @@ const (
 	msgNoStripePrice     = "No Stripe Price charges the %s a Credit costs in this version. Create it first (docs/environment.md, \"A rise in the price of a Credit\"). Nothing has changed."
 )
 
-// shippedLegal is the version history in api/internal/legal, the one
-// place a version's date, whether it is material, and its one line of
-// change come from. A version is written there and on the site in one
-// commit; ops publishes it.
 var shippedLegal = []legal.Document{legal.Terms, legal.Privacy}
 
-// legalVersion is one version as the list states it.
 type legalVersion struct {
 	Document     string     `json:"document"`
 	DocumentName string     `json:"documentName"`
@@ -49,8 +44,6 @@ type legalVersionList struct {
 	Items []legalVersion `json:"items"`
 }
 
-// legalVersionCheck is what the check page states before the act: the
-// version, and how many Owners publishing it now emails.
 type legalVersionCheck struct {
 	Document     string     `json:"document"`
 	DocumentName string     `json:"documentName"`
@@ -61,7 +54,6 @@ type legalVersionCheck struct {
 	PublishedAt  *time.Time `json:"publishedAt"`
 }
 
-// legalPublication is what the act changed.
 type legalPublication struct {
 	Document     string    `json:"document"`
 	DocumentName string    `json:"documentName"`
@@ -71,7 +63,6 @@ type legalPublication struct {
 	Queued       int       `json:"queued"`
 }
 
-// legalActDetails is the publication's operator_acts details.
 type legalActDetails struct {
 	RequestKey string `json:"requestKey"`
 	Document   string `json:"document"`
@@ -90,8 +81,6 @@ type querier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 }
 
-// publicationsOf reads every published version through
-// ops_legal_publications, keyed "document version".
 func publicationsOf(ctx context.Context, q querier) (map[string]publicationRow, error) {
 	rows, err := q.QueryContext(ctx,
 		`SELECT document, version, material, published_at, operator_act_id, queued FROM ops_legal_publications()`)
@@ -118,8 +107,6 @@ func publicationsOf(ctx context.Context, q querier) (map[string]publicationRow, 
 	return published, nil
 }
 
-// legalVersions lists every version in the history, each document's
-// newest first, and when each was published.
 func legalVersions(db *sql.DB, docs []legal.Document) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		published, err := publicationsOf(r.Context(), db)
@@ -142,7 +129,6 @@ func legalVersions(db *sql.DB, docs []legal.Document) http.HandlerFunc {
 	}
 }
 
-// versionFrom is the version the address names, or a 404 written.
 func versionFrom(w http.ResponseWriter, r *http.Request, docs []legal.Document) (legal.Document, legal.Version, bool) {
 	doc, version, ok := legalnotice.Find(docs, r.PathValue("document"), r.PathValue("version"))
 	if !ok {
@@ -151,9 +137,6 @@ func versionFrom(w http.ResponseWriter, r *http.Request, docs []legal.Document) 
 	return doc, version, ok
 }
 
-// legalVersionCheckRead answers the check page. The Owners are counted
-// by ops_legal_notice_owner_count, which reads the rule the emails are
-// queued by.
 func legalVersionCheckRead(db *sql.DB, docs []legal.Document) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		doc, version, ok := versionFrom(w, r, docs)
@@ -177,11 +160,7 @@ func legalVersionCheckRead(db *sql.DB, docs []legal.Document) http.HandlerFunc {
 	}
 }
 
-// legalRefusal is why the Terms do not let version be published at now,
-// or "" when they do (ADR-0053, #1817, #1834). A version of the Terms
-// states the price of a Credit, and from its date checkout charges it
-// through a Stripe Price at that amount, so a missing Price is found now
-// rather than on the date.
+// A Terms version's price is charged through a Stripe Price from its date, so a missing Price is refused now rather than found on the date.
 func legalRefusal(ctx context.Context, prices billing.StripeClient, version legal.Version, now time.Time) string {
 	on := longDate(version.Effective)
 	if version.PriceRise != "" && !legalnotice.LeavesNotice(version.Effective, now, legalnotice.PriceRiseLead) {
@@ -199,8 +178,6 @@ func legalRefusal(ctx context.Context, prices billing.StripeClient, version lega
 	return ""
 }
 
-// longDate writes a version's date the way the site does, "January 1,
-// 2027". A version is a calendar date, so no zone moves it.
 func longDate(isoDate string) string {
 	day, err := time.Parse(time.DateOnly, isoDate)
 	// coverage:ignore reason: legal_test.go holds every version's Effective to a date
@@ -210,11 +187,6 @@ func longDate(isoDate string) string {
 	return day.Format(longDateLayout)
 }
 
-// legalPublishAct publishes one version (#1548, ADR-0062's act table):
-// behind a fresh code, under an Idempotency-Key so a retry is the same
-// publication. It is recorded as an operator_acts row the publication
-// keys, and a material version's emails are queued in the same
-// transaction by ops_publish_legal_version.
 func legalPublishAct(d Deps) http.HandlerFunc {
 	docs := d.legalHistory()
 	return func(w http.ResponseWriter, r *http.Request) {

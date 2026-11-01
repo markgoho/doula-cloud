@@ -12,8 +12,6 @@ import (
 	"doula-cloud/api/internal/pagecursor"
 )
 
-// operatorLogPageSize is how many rows one page of the Operator log
-// carries.
 const operatorLogPageSize = 50
 
 const (
@@ -21,8 +19,7 @@ const (
 	subjectStaff    = "staff"
 )
 
-// logSubject is what a row acted on. Name is null for a Feedback piece,
-// which has none, and for a Staff member no longer on file.
+// Name is null for a Feedback piece, and for a Staff member no longer on file.
 type logSubject struct {
 	Kind    string  `json:"kind"`
 	ID      string  `json:"id"`
@@ -35,8 +32,6 @@ type logOwner struct {
 	Name *string `json:"name"`
 }
 
-// logRow is one operator_acts row as the Operator log shows it. Details
-// pass through as recorded; ops says each action in words.
 type logRow struct {
 	ID          string          `json:"id"`
 	At          time.Time       `json:"at"`
@@ -53,8 +48,7 @@ type logPage struct {
 	HasMore    bool     `json:"hasMore"`
 }
 
-// operatorLog answers one page of operator_acts, newest first. It shows
-// names only, so it writes no read row (ADR-0062).
+// It shows names only, so it writes no read row.
 func operatorLog(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		afterAt, afterID, ok := listCursor(w, r)
@@ -133,8 +127,6 @@ type subjectName struct {
 	deleted bool
 }
 
-// nameSubjects fills each row's Practice and Staff names, and a refund's
-// requesting Owner, through ops_operator_log_names (00156).
 func nameSubjects(ctx context.Context, tx *sql.Tx, items []logRow) error {
 	practiceIDs, staffIDs := []string{}, []string{}
 	for _, row := range items {

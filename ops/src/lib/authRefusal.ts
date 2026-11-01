@@ -8,17 +8,11 @@ function codeOf(error: unknown): string | undefined {
 	return typeof error.code === 'string' ? error.code : undefined;
 }
 
-/**
-Whether Identity Platform accepted the password and waits on a second factor.
-*/
 export function isSecondFactorRequired(error: unknown): boolean {
 	return codeOf(error) === 'auth/multi-factor-auth-required';
 }
 
-/**
- * What a refused email-and-password sign-in tells the operator. Identity
- * Platform does not say which of the two was wrong, so neither does this.
- */
+// Identity Platform does not say which of the two was wrong, so neither does this.
 export function credentialRefusal(error: unknown, passwordField: string): FormError {
 	switch (codeOf(error)) {
 		case 'auth/invalid-credential':
@@ -37,9 +31,6 @@ export function credentialRefusal(error: unknown, passwordField: string): FormEr
 	}
 }
 
-/**
-What a refused authenticator-app code tells the operator.
-*/
 export function codeRefusal(error: unknown, codeField: string): FormError {
 	switch (codeOf(error)) {
 		case 'auth/invalid-verification-code':
@@ -55,9 +46,6 @@ export function codeRefusal(error: unknown, codeField: string): FormError {
 	}
 }
 
-/**
-The empty-field error for a code field, or none for six digits.
-*/
 export function codeFieldError(code: string, codeField: string): FormError | undefined {
 	const trimmed = code.replaceAll(/\s/g, '');
 	if (trimmed === '') return { message: 'Enter the 6-digit code from your authenticator app', targetId: codeField };

@@ -7,10 +7,7 @@ import (
 	"doula-cloud/api/internal/activity"
 )
 
-// SeedOperatorAct records a Platform operator named name and one
-// operator_acts row of theirs, and returns the act's id. The row's
-// action is 'sign_in', the one every operator has; a test about one
-// act's own action writes that row itself.
+// SeedOperatorAct records an operator named name and one sign_in act of theirs, and returns the act's id.
 func SeedOperatorAct(t *testing.T, db *DB, name string) (operatorActID string) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -27,10 +24,7 @@ func SeedOperatorAct(t *testing.T, db *DB, name string) (operatorActID string) {
 	return operatorActID
 }
 
-// SeedOperatorActivity writes one operator-kind activity row at
-// practiceID, as ops writes it: through activity.Record on an ops_runtime
-// transaction, keyed to a fresh act of an operator named operatorName.
-// It returns the act's id.
+// SeedOperatorActivity writes one operator-kind activity row the way ops does, and returns the act's id.
 func SeedOperatorActivity(t *testing.T, db *DB, practiceID, subjectKind, subjectID, action, operatorName string, at time.Time) (operatorActID string) {
 	t.Helper()
 	operatorActID = SeedOperatorAct(t, db, operatorName)
@@ -58,9 +52,7 @@ func SeedOperatorActivity(t *testing.T, db *DB, practiceID, subjectKind, subject
 	return operatorActID
 }
 
-// SeedFoundingGrant writes a founding grant of credits Credits at
-// practiceID, created at at and keyed to a fresh act of an operator, as
-// ops writes one. It returns the ledger row's id.
+// SeedFoundingGrant writes a founding grant the way ops does, and returns the ledger row's id.
 func SeedFoundingGrant(t *testing.T, db *DB, practiceID string, credits int, at time.Time) (lotID string) {
 	t.Helper()
 	actID := SeedOperatorAct(t, db, "Mark Goho")
@@ -74,8 +66,7 @@ func SeedFoundingGrant(t *testing.T, db *DB, practiceID string, credits int, at 
 	return lotID
 }
 
-// SeedPilotAddress puts address on the pilot allowlist in the spelling
-// ops stores, keyed to a fresh act of an operator, as ops adds one.
+// SeedPilotAddress adds address to the pilot allowlist the way ops does.
 func SeedPilotAddress(t *testing.T, db *DB, address string) {
 	t.Helper()
 	actID := SeedOperatorAct(t, db, "Mark Goho")
@@ -87,10 +78,7 @@ func SeedPilotAddress(t *testing.T, db *DB, address string) {
 	}
 }
 
-// SeedLegalPublication publishes document's version at at the way ops
-// does: keyed to a fresh act of an operator, through
-// ops_publish_legal_version, which queues a material version's emails.
-// It returns how many emails it queued.
+// SeedLegalPublication publishes a version the way ops does, and returns how many emails it queued.
 func SeedLegalPublication(t *testing.T, db *DB, document, version string, material bool, at time.Time) (queued int) {
 	t.Helper()
 	actID := SeedOperatorAct(t, db, "Mark Goho")

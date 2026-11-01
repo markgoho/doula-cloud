@@ -27,23 +27,16 @@ type pilotAddressRequest struct {
 	Address string `json:"address"`
 }
 
-// pilotAddressResult says what changed: the address, as stored, and when.
 type pilotAddressResult struct {
 	Address string    `json:"address"`
 	AddedAt time.Time `json:"addedAt"`
 }
 
-// pilotAddressActDetails is the add's operator_acts details: the address
-// it added, and the request key a retry is matched on.
 type pilotAddressActDetails struct {
 	Address    string `json:"address"`
 	RequestKey string `json:"requestKey"`
 }
 
-// pilotAddressAct adds an address to the pilot allowlist (ADR-0062's act
-// table): add only, under an Idempotency-Key that names the request so a
-// retry is the same add. It is recorded as an operator_acts row the
-// allowlist row keys.
 func pilotAddressAct(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		requestKey, ok := requestKeyOf(w, r, "address")
