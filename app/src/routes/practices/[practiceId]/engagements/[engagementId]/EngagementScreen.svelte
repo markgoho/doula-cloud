@@ -34,6 +34,7 @@
 		sortVisits,
 		visitTypeLabel,
 		engagementStatusText,
+		engagementURL,
 		yourFeeRows,
 		type BirthOutcomeFacts,
 		type BirthOutcomeRequest,
@@ -359,8 +360,40 @@
 		fieldIds: Record<string, string>
 	) {
 		const result = await recordBirthOutcome(apiFetchWithSession, reference, request, fieldIds);
-		if (result.kind === 'recorded') birthOutcomeOverride = result.facts;
+		if (result.kind === 'recorded') {
+			birthOutcomeOverride = result.facts;
+			void refreshBirthPlanOffer();
+		}
 		return result;
+	}
+
+	// #2277, #2317: whether a Birth Plan can be started, and whether the
+	// Client is shown one, as the BFF answers it. A kind change or a
+	// recorded outcome on this page view reads the answer again rather
+	// than re-spelling ADR-0015's rule here.
+	let birthPlanOfferOverride = $state<Pick<EngagementSummary, 'offersBirthPlanToStart' | 'offersBirthPlan'>>();
+	const birthPlanOffer = $derived(
+		birthPlanOfferOverride ?? {
+			offersBirthPlanToStart: detail.offersBirthPlanToStart,
+			offersBirthPlan: detail.offersBirthPlan
+		}
+	);
+
+	const NO_BIRTH_PLAN_ON_POSTPARTUM = 'No Birth Plan. This is postpartum care.';
+	const NO_BIRTH_PLAN_AFTER_OUTCOME = 'No Birth Plan. The birth outcome is recorded.';
+
+	async function refreshBirthPlanOffer() {
+		try {
+			const response = await apiFetchWithSession(engagementURL(reference));
+			if (!response.ok) return;
+			const fresh: EngagementSummary = await response.json();
+			birthPlanOfferOverride = {
+				offersBirthPlanToStart: fresh.offersBirthPlanToStart,
+				offersBirthPlan: fresh.offersBirthPlan
+			};
+		} catch {
+			// The write refuses a stale Start on its own.
+		}
 	}
 
 	// #874: what the Practice sold, overlaid on the load-time read once a
@@ -392,6 +425,7 @@
 		await kindChange.mutate(async () => {
 			const result = await changeEngagementKind(apiFetchWithSession, reference, target);
 			kindOverride = result.kind;
+			void refreshBirthPlanOffer();
 			openChange = undefined;
 			kindChangedMessage = `Now set to ${kindLabel(result.kind)}.`;
 		}, 'Failed to change what the Practice sold');
@@ -1133,6 +1167,7 @@
 	 * her name. A Care Plan instance never carries clientAcknowledgedAt,
 	 * so only the Birth Plan draws this row. */
 	function birthPlanReadText(instance: Instance): string {
+		if (!birthPlanOffer.offersBirthPlan) return `Not shown to ${detail.clientName}`;
 		return instance.clientAcknowledgedAt
 			? `${detail.clientName} read this on ${formatInstant(instance.clientAcknowledgedAt)}`
 			: `${detail.clientName} has not read this yet`;
@@ -2631,12 +2666,14 @@
 						#280: the reading and taking-away surface -- its own
 						address. Editing stays here.
 					-->
-					{#if planType === 'birth_plan'}
+					{#if planType === 'birth_plan' && birthPlanOffer.offersBirthPlan}
 						<Link href={birthPlanHref} label="Print for the hospital" icon="file-text" variant="secondary" />
 					{/if}
 				</cluster-l>
 				<!-- #2243: the answers read here; changing them stays its own act. -->
 				<PlanInstanceView fields={instance.fields} answers={instance.answers} headingLevel={3} />
+			{:else if planType === 'birth_plan' && !birthPlanOffer.offersBirthPlanToStart}
+				<EmptyState message={displayKind === 'birth' ? NO_BIRTH_PLAN_AFTER_OUTCOME : NO_BIRTH_PLAN_ON_POSTPARTUM} />
 			{:else}
 				<EmptyState
 					message="The {heading} is not started yet."

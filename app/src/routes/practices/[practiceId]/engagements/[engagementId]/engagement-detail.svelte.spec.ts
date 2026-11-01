@@ -65,6 +65,8 @@ interface Detail {
 	statusMoves: string[];
 	birthOutcome?: string;
 	pregnancyEndedOn?: string;
+	offersBirthPlanToStart: boolean;
+	offersBirthPlan: boolean;
 	clientPortalInviteStatus?: string;
 	clientEmailSuppressed?: boolean;
 	clientHasEmail?: boolean;
@@ -2158,7 +2160,8 @@ function planOf(planType: string, overrides: Record<string, unknown> = {}) {
 async function setupPlans(
 	plans: Partial<Record<'care_plan' | 'birth_plan', ReturnType<typeof planOf>>>,
 	onPut?: (planType: string, body: { answers: Record<string, unknown> }) => Response,
-	onPost?: (planType: string) => Response
+	onPost?: (planType: string) => Response,
+	detailOverride: Partial<Detail> = {}
 ) {
 	await testPage.viewport(3200, 900);
 	const respond = toApiResponder(fixture);
@@ -2174,7 +2177,7 @@ async function setupPlans(
 		}
 		return respond(path);
 	});
-	await render(Page, { data: { ...fixtureDetail, session: sessionFor() } });
+	await render(Page, { data: { ...fixtureDetail, ...detailOverride, session: sessionFor() } });
 }
 
 function planSection(heading: string) {
@@ -2240,6 +2243,70 @@ describe('the Care Plan and Birth Plan sections (#2004)', () => {
 				`/practices/${fixture.params.practiceId}/engagements/${fixture.params.engagementId}/birth-plan`
 			);
 		expect(testPage.getByRole('button', { name: 'Download Birth Plan (PDF)' }).elements()).toHaveLength(0);
+	});
+
+	// #2277, #2317: ADR-0015's create side, as the BFF answers it.
+	const expected = { kind: 'birth', birthOutcome: undefined, pregnancyEndedOn: undefined, offersBirthPlanToStart: true };
+
+	it('offers to start the Birth Plan while the birth is still expected', async () => {
+		await setupPlans({}, undefined, undefined, expected);
+
+		await expect.element(planSection('Birth Plan').getByText('The Birth Plan is not started yet.')).toBeVisible();
+		await expect.element(planSection('Birth Plan').getByRole('button', { name: 'Start the Birth Plan' })).toBeVisible();
+	});
+
+	it('offers no Birth Plan on postpartum care', async () => {
+		await setupPlans({}, undefined, undefined, {
+			...expected,
+			kind: 'postpartum',
+			offersBirthPlanToStart: false,
+			offersBirthPlan: false
+		});
+
+		await expect.element(planSection('Birth Plan').getByText('No Birth Plan. This is postpartum care.')).toBeVisible();
+		expect(planSection('Birth Plan').getByRole('button').elements()).toHaveLength(0);
+		await expect.element(planSection('Care Plan').getByRole('button', { name: 'Start the Care Plan' })).toBeVisible();
+	});
+
+	it.each([
+		['a live birth', true],
+		['a loss', false]
+	])('offers no new Birth Plan once %s is recorded', async (_outcome, offersBirthPlan) => {
+		await setupPlans({}, undefined, undefined, { offersBirthPlanToStart: false, offersBirthPlan });
+
+		await expect
+			.element(planSection('Birth Plan').getByText('No Birth Plan. The birth outcome is recorded.'))
+			.toBeVisible();
+		expect(planSection('Birth Plan').getByRole('button').elements()).toHaveLength(0);
+	});
+
+	it('shows a Birth Plan the Client is not shown, and says so, with no hospital print', async () => {
+		await setupPlans({ birth_plan: planOf('birth_plan') }, undefined, undefined, {
+			birthOutcome: 'loss',
+			offersBirthPlanToStart: false,
+			offersBirthPlan: false
+		});
+
+		await expect
+			.element(planSection('Birth Plan').getByText(`Not shown to ${fixtureDetail.clientName}`))
+			.toBeVisible();
+		expect(planSection('Birth Plan').getByText(/has not read this yet/).elements()).toHaveLength(0);
+		expect(testPage.getByRole('link', { name: 'Print for the hospital' }).elements()).toHaveLength(0);
+		await expect.element(planSection('Birth Plan').getByText('Quiet', { exact: true })).toBeVisible();
+	});
+
+	it('says why a Start from a page opened before the outcome was recorded is refused', async () => {
+		const refusal = "A Birth Plan can't be started now: the birth outcome is recorded.";
+		await setupPlans(
+			{},
+			undefined,
+			() => jsonResponse({ code: 'conflict', message: refusal }, 409),
+			expected
+		);
+
+		await planSection('Birth Plan').getByRole('button', { name: 'Start the Birth Plan' }).click();
+
+		await expect.element(planSection('Birth Plan').getByText(refusal)).toBeVisible();
 	});
 
 	it('says a Plan is not started, and starts it at its questions', async () => {

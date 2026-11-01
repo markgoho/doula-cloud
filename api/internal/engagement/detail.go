@@ -53,6 +53,12 @@ type Detail struct {
 	// Client-facing, and portal.Detail's own read is what enforces it.
 	BirthOutcome     *string `json:"birthOutcome,omitempty"`
 	PregnancyEndedOn *string `json:"pregnancyEndedOn,omitempty"`
+	// OffersBirthPlanToStart and OffersBirthPlan are kind.go's two answers
+	// (#2277, #2317): whether plans.PostInstanceHandler would start a Birth
+	// Plan here, and whether the Client is shown one. The hub draws its
+	// Birth Plan section off them and holds no copy of the rule.
+	OffersBirthPlanToStart bool `json:"offersBirthPlanToStart"`
+	OffersBirthPlan        bool `json:"offersBirthPlan"`
 	// StatusMoves (#253) is legalMoves(reader, Status) -- exactly the
 	// target statuses this caller may move to from Status, per ADR-0015's
 	// six-move table narrowed by its role table. TransitionHandler
@@ -258,6 +264,9 @@ func DetailHandler() http.Handler {
 			d.DueDate = &dueDate.String
 		}
 		d.StatusMoves = legalMoves(reader, d.Status)
+		birthPlan := BirthPlanInputs{Kind: Kind(d.Kind), BirthOutcome: d.BirthOutcome}
+		d.OffersBirthPlanToStart = OffersBirthPlanToStart(birthPlan)
+		d.OffersBirthPlan = OffersBirthPlan(birthPlan)
 
 		portalState, err := client.FetchPortalInviteState(r.Context(), tx, d.ClientID)
 		if err != nil {
