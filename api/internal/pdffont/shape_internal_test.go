@@ -2,6 +2,7 @@ package pdffont
 
 import (
 	"bytes"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -95,8 +96,8 @@ func TestDrawShaped_KeepsOutlinesAndTextOnOnePage(t *testing.T) {
 		t.Fatalf("pages = %d, want the paragraph to cross a page", d.PageCount())
 	}
 	for i, stream := range bytes.Split(buf.Bytes(), []byte("endstream")) {
-		fills, layers, resets := bytes.Count(stream, []byte("\nf\n")), bytes.Count(stream, []byte("3 Tr ")), bytes.Count(stream, []byte("0 Tr 100 Tz"))
-		if fills != layers || layers != resets {
+		fills, layers, resets := bytes.Count(stream, []byte("\nf\n")), bytes.Count(stream, []byte("3 Tr")), bytes.Count(stream, []byte("0 Tr 100 Tz"))
+		if (fills == 0) != (layers == 0) || layers != resets {
 			t.Fatalf("stream %d: %d outline fills, %d text layers, %d resets", i, fills, layers, resets)
 		}
 	}
@@ -118,7 +119,7 @@ func TestDrawShaped_SkipsTheTextLayerWhenItMeasuresNothing(t *testing.T) {
 	d := New()
 	d.use(arabicFace, Regular, 12)
 	x := d.GetX()
-	d.drawShaped(arabicFace, Regular, 12, 8, "\u200d", false)
+	d.drawShaped(arabicFace, Regular, 12, 8, "\u200d")
 	if d.GetX() < x {
 		t.Fatalf("x moved back from %v to %v", x, d.GetX())
 	}
@@ -175,7 +176,7 @@ func TestDrawShaped_CarriesACharacterOutsideTheBMPAsActualText(t *testing.T) {
 		return buf.Bytes()
 	}
 	baby := content("Ada \U0001F476")
-	for _, want := range []string{"/Span <</ActualText <FEFFD83DDC76>>> BDC\n3 Tr ", "(\xff\xfd)Tj ET\n0 Tr 100 Tz\n\nEMC\n"} {
+	for _, want := range []string{"/Span <</ActualText <FEFFD83DDC76>>> BDC\n", "(\xff\xfd)Tj ET\nEMC\n"} {
 		if !bytes.Contains(baby, []byte(want)) {
 			t.Fatalf("content stream has no %q", want)
 		}
@@ -208,10 +209,34 @@ func TestBidiLevels_TakesTheParagraphFromItsFirstLetter(t *testing.T) {
 	}
 }
 
-// A right-to-left run's stored text is its letters in reverse, each with
-// its marks.
-func TestVisualOrder_KeepsMarksWithTheirLetter(t *testing.T) {
-	if got, want := visualOrder("بِسم"), "مسبِ"; got != want {
-		t.Fatalf("visualOrder = %q, want %q", got, want)
+// #2546: a line holding right-to-left text is laid in the order typed.
+// The Latin label is written in one piece, then each Arabic letter, with
+// the mark after it, to the left of the one before; the space and the
+// heart between two Arabic words are written left to right in one piece.
+func TestTypedLayer_WritesEachRightToLeftLetterLeftOfTheLast(t *testing.T) {
+	d := New()
+	d.SetCompression(false)
+	d.Paragraph(Regular, 12, 8, "by: بِس ❤ سا")
+	var buf bytes.Buffer
+	if err := d.Output(&buf); err != nil {
+		t.Fatal(err)
+	}
+	var xs []float64
+	for line := range strings.SplitSeq(buf.String(), "\n") {
+		var x, y float64
+		if n, _ := fmt.Sscanf(line, "BT %f %f Td", &x, &y); n == 2 {
+			xs = append(xs, x)
+		}
+	}
+	// The label, ب with its mark, س, the space in the Arabic face, the heart
+	// and space in the first face, س, ا.
+	if len(xs) != 7 {
+		t.Fatalf("x = %v, want seven pieces", xs)
+	}
+	if !(xs[2] < xs[1] && xs[6] < xs[5]) {
+		t.Fatalf("x = %v, want each Arabic letter left of the one typed before it", xs)
+	}
+	if xs[4] <= xs[3] {
+		t.Fatalf("x = %v, want the neutral stretch left to right", xs)
 	}
 }

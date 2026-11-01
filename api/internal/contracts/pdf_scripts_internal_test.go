@@ -24,6 +24,7 @@ func TestRenderContractPDF_PrintsEveryScriptAsTyped(t *testing.T) {
 		{"Cyrillic", "Анна Петрова", "Договор между Доула Москва и Анна Петрова."},
 		{"emoji (#2544)", "Ada ❤️ Lovelace 👶", "This agreement is between Rooted Birth ❤️ and Ada ❤️ Lovelace 👶."},
 		{"Arabic with brackets (#2544)", "سارة (سارة) الحداد", "هذه الاتفاقية (العقد) بين دولا المدينة وسارة الحداد."},
+		{"Arabic ending in a closing bracket (#2546)", "سارة (سارة) [الحداد]", "هذه الاتفاقية بين دولا المدينة وسارة 👶 [الحداد]."},
 		{"a combining mark", "Zoë Brontë", "This agreement is between Rooted Birth Collective and Zoë Brontë."},
 	}
 	signedAt := time.Date(2026, time.October, 27, 14, 5, 0, 0, time.UTC)
