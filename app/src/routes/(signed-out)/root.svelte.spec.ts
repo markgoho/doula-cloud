@@ -122,7 +122,7 @@ describe('/+page.svelte', () => {
 		await expect.element(testPage.getByText('Welcome to DoulaCloud.')).not.toBeInTheDocument();
 	});
 
-	it("offers a signed-in Staff visitor's several Practices as doors, each with the roles held there", async () => {
+	it("offers a signed-in Staff visitor's several Practices as doors, each with what she is there", async () => {
 		await setup();
 
 		// #2027: a door per Practice, the name as the link and the roles
@@ -132,10 +132,10 @@ describe('/+page.svelte', () => {
 		const link = testPage.getByRole('link', { name: firstMembership.practiceName });
 		await expect.element(link).toBeVisible();
 		expect(link.element()).toHaveAttribute('href', `/practices/${firstMembership.practiceId}`);
-		await expect.element(link).toHaveAccessibleDescription('Owner, Admin, Doula');
+		await expect.element(link).toHaveAccessibleDescription('Owner, Admin and Doula, as an employee');
 		await expect
 			.element(testPage.getByRole('link', { name: secondMembership.practiceName }))
-			.toHaveAccessibleDescription('Doula');
+			.toHaveAccessibleDescription('Doula, as a contractor');
 	});
 
 	// #745 removed this screen's own empty-picker branch: a Staff visitor

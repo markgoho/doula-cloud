@@ -12,12 +12,13 @@ import (
 	"doula-cloud/api/internal/authn"
 )
 
-// Membership is one Practice a Staff member belongs to, and the roles
-// they hold there.
+// Membership is one Practice a Staff member belongs to, the roles
+// they hold there, and their employment type there (#2266).
 type Membership struct {
-	PracticeID   string   `json:"practiceId"`
-	PracticeName string   `json:"practiceName"`
-	Roles        []string `json:"roles"`
+	PracticeID     string   `json:"practiceId"`
+	PracticeName   string   `json:"practiceName"`
+	Roles          []string `json:"roles"`
+	EmploymentType string   `json:"employmentType"`
 }
 
 // SessionResponse is what the frontend needs to decide where to land a
@@ -146,7 +147,7 @@ func resolveSession(r *http.Request, tx *sql.Tx, self selfStaff, secondFactor bo
 
 func listMemberships(ctx context.Context, tx *sql.Tx, staffID string) ([]Membership, error) {
 	rows, err := tx.QueryContext(ctx,
-		`SELECT pm.practice_id, p.name, array_to_string(pm.roles, ',')
+		`SELECT pm.practice_id, p.name, array_to_string(pm.roles, ','), pm.employment_type::text
 		 FROM practice_memberships pm
 		 JOIN practices p ON p.id = pm.practice_id
 		 WHERE pm.staff_id = $1
@@ -163,7 +164,7 @@ func listMemberships(ctx context.Context, tx *sql.Tx, staffID string) ([]Members
 	for rows.Next() {
 		var m Membership
 		var roles string
-		if err := rows.Scan(&m.PracticeID, &m.PracticeName, &roles); err != nil {
+		if err := rows.Scan(&m.PracticeID, &m.PracticeName, &roles, &m.EmploymentType); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("staffauth: scan membership row: %w", err)
 		}

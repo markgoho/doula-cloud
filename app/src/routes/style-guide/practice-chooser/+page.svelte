@@ -23,12 +23,14 @@
 				practiceId: 'practice-1',
 				practiceName: 'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake',
 				roles: ['owner', 'admin', 'doula'],
+				employmentType: 'employee',
 				href: '/style-guide/practice-chooser'
 			},
 			{
 				practiceId: 'practice-2',
 				practiceName: 'Hilltop Doulas',
 				roles: ['doula'],
+				employmentType: 'contractor',
 				href: '/style-guide/practice-chooser'
 			}
 		]}

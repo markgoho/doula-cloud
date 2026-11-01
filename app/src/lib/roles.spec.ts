@@ -9,6 +9,8 @@ import {
 	EMPLOYMENT_TYPE_LABELS,
 	roleLabel,
 	rolesLabel,
+	rolesInWords,
+	membershipLabel,
 	employmentTypeLabel,
 	type RoleSession
 } from './roles';
@@ -127,6 +129,27 @@ describe('rolesLabel', () => {
 		[[], '']
 	])('writes %s as "%s"', (roles, expected) => {
 		expect(rolesLabel(roles)).toBe(expected);
+	});
+});
+
+describe('rolesInWords', () => {
+	it.each([
+		[['doula'], 'Doula'],
+		[['owner', 'doula'], 'Owner and Doula'],
+		[['owner', 'admin', 'doula'], 'Owner, Admin and Doula'],
+		[[], '']
+	])('writes %s as "%s"', (roles, expected) => {
+		expect(rolesInWords(roles)).toBe(expected);
+	});
+});
+
+describe('membershipLabel (#2266)', () => {
+	it.each([
+		[['doula'], 'contractor', 'Doula, as a contractor'],
+		[['doula'], 'employee', 'Doula, as an employee'],
+		[['owner', 'admin', 'doula'], 'employee', 'Owner, Admin and Doula, as an employee']
+	])('writes %s and %s as "%s"', (roles, employmentType, expected) => {
+		expect(membershipLabel(roles, employmentType)).toBe(expected);
 	});
 });
 

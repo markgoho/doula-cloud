@@ -6,25 +6,29 @@
 	/*
 	 * The longest realistic value, not a representative one (ADR-0025): a
 	 * Practice registers under its legal name, which is longer than the one
-	 * it puts on a sign, and this control has to show all of it.
+	 * it puts on a sign, and this control has to show all of it. The line
+	 * under each name holds every role and both employment types (#2266).
 	 */
 	const several: PracticeOption[] = [
 		{
 			practiceId: 'p1',
 			practiceName: 'Highland Midwifery & Birth Support Collective of Western New York',
-			roles: ['owner', 'admin'],
+			roles: ['owner', 'admin', 'doula'],
+			employmentType: 'employee',
 			href: '#riverside'
 		},
 		{
 			practiceId: 'p2',
 			practiceName: 'Finger Lakes Birth Support and Postpartum Care Cooperative',
 			roles: ['doula'],
+			employmentType: 'contractor',
 			href: '#finger-lakes'
 		},
 		{
 			practiceId: 'p3',
 			practiceName: 'Genesee Valley Midwifery and Lactation Consultants',
 			roles: ['doula'],
+			employmentType: 'employee',
 			href: '#genesee'
 		}
 	];

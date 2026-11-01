@@ -24,8 +24,8 @@ const NAV_ITEMS = [
 ];
 
 const PRACTICES: PracticeOption[] = [
-	{ practiceId: 'p1', practiceName: 'Riverside Doula Collective', roles: ['owner'], href: '/p1' },
-	{ practiceId: 'p2', practiceName: 'Finger Lakes Birth Support', roles: ['doula'], href: '/p2' }
+	{ practiceId: 'p1', practiceName: 'Riverside Doula Collective', roles: ['owner'], employmentType: 'employee', href: '/p1' },
+	{ practiceId: 'p2', practiceName: 'Finger Lakes Birth Support', roles: ['doula'], employmentType: 'contractor', href: '/p2' }
 ];
 
 /*
@@ -342,11 +342,12 @@ describe('StaffTopBar, on a screen that offers no section (#1837)', () => {
  */
 const LONG_NAME = 'Highland Midwifery & Birth Support Collective of Western New York';
 const LONG_PRACTICES: PracticeOption[] = [
-	{ practiceId: 'p1', practiceName: LONG_NAME, roles: ['owner', 'admin'], href: '/p1' },
+	{ practiceId: 'p1', practiceName: LONG_NAME, roles: ['owner', 'admin'], employmentType: 'employee', href: '/p1' },
 	{
 		practiceId: 'p2',
 		practiceName: 'Finger Lakes Birth Support and Postpartum Care Cooperative',
 		roles: ['doula'],
+		employmentType: 'contractor',
 		href: '/p2'
 	}
 ];

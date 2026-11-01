@@ -1,4 +1,4 @@
-import { employmentTypeLabel, rolesLabel } from '#lib/roles.js';
+import { employmentTypeLabel, rolesInWords } from '#lib/roles.js';
 
 function withArticle(word: string): string {
 	return `${/^[aeiou]/i.test(word) ? 'an' : 'a'} ${word}`;
@@ -8,9 +8,7 @@ function withArticle(word: string): string {
 "an Admin", "a Doula", "an Owner, Admin and Doula".
 */
 export function asRoles(roles: readonly string[]): string {
-	const labels = rolesLabel(roles).split(', ');
-	const last = labels.pop() ?? '';
-	return withArticle(labels.length > 0 ? `${labels.join(', ')} and ${last}` : last);
+	return withArticle(rolesInWords(roles));
 }
 
 export interface Joined {
