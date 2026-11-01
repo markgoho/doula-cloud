@@ -17,14 +17,15 @@ test('An operator reads the Practice list and the Deleted list', async ({ page, 
 	const liveId = seedPracticeWithStaff(live, 3);
 	await signedInOperator(page, request, 'operator-list-password', 'List Operator');
 
-	await page.getByRole('link', { name: 'Practices' }).click();
+	await page.getByRole('navigation', { name: 'Operations' }).getByRole('link', { name: 'Practices' }).click();
 
 	await expect(page.getByRole('heading', { name: 'Practices', level: 1 })).toBeVisible();
-	const practice = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: live }) });
-	await expect(practice.getByText(/^Staff 1, staff-.+@doula-cloud\.invalid$/)).toBeVisible();
-	await expect(practice.getByText('Not recorded yet')).toBeVisible();
-	await expect(practice.getByText('Not given')).toBeVisible();
-	await expect(page.getByRole('heading', { name: gone })).toHaveCount(0);
+	await expect(page.getByRole('navigation', { name: 'Operations' }).getByRole('link', { name: 'Practices' })).toHaveAttribute('aria-current', 'page');
+	const practice = page.getByRole('row').filter({ has: page.getByRole('cell', { name: live, exact: true }) });
+	await expect(practice.getByRole('cell', { name: /^Staff 1, staff-.+@doula-cloud\.invalid$/ })).toBeVisible();
+	await expect(practice.getByRole('cell', { name: 'Not recorded yet' })).toBeVisible();
+	await expect(practice.getByRole('cell', { name: 'Not given' })).toBeVisible();
+	await expect(page.getByRole('cell', { name: gone })).toHaveCount(0);
 	await expect(practice.getByRole('link', { name: `Give a founding grant to ${live}` })).toHaveAttribute(
 		'href',
 		`/practices/${liveId}/founding-grant`
@@ -33,8 +34,8 @@ test('An operator reads the Practice list and the Deleted list', async ({ page, 
 	await page.getByRole('link', { name: 'Deleted Practices' }).click();
 
 	await expect(page.getByRole('heading', { name: 'Deleted Practices', level: 1 })).toBeVisible();
-	const deleted = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: gone }) });
-	await expect(deleted.getByText(/^Deleted /)).toBeVisible();
+	const deleted = page.getByRole('row').filter({ has: page.getByRole('cell', { name: gone }) });
+	await expect(deleted.getByRole('cell', { name: /^Deleted / })).toBeVisible();
 	await expect(deleted.getByRole('link')).toHaveCount(0);
-	await expect(page.getByRole('heading', { name: live })).toHaveCount(0);
+	await expect(page.getByRole('cell', { name: live })).toHaveCount(0);
 });

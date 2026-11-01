@@ -1,33 +1,30 @@
 <script lang="ts">
 	import '../../../app/src/lib/styles/app.css';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
+	import ServiceNavigation from '#lib/components/ServiceNavigation.svelte';
+	import type { Operator } from '#lib/session.js';
 
 	let { children } = $props();
+
+	const operator = $derived(page.data.operator as Operator | undefined);
 </script>
 
-<header>
-	<p class="service">DoulaCloud operations</p>
-</header>
+<ServiceNavigation {operator} pathname={page.url.pathname} onsignedout={() => goto(resolve('/signed-out'))} />
 <main id="main">
-	<center-l>
-		<stack-l>
-			{@render children()}
-		</stack-l>
-	</center-l>
+	<stack-l>
+		{@render children()}
+	</stack-l>
 </main>
 
 <style>
-	header {
-		padding: var(--space-3) var(--space-4);
-		color: var(--color-on-primary);
-		background-color: var(--color-primary);
-	}
-
-	.service {
-		font-weight: bold;
-	}
-
 	main {
 		padding: var(--space-6) var(--space-4);
+	}
+
+	main :global(p) {
+		max-inline-size: var(--measure);
 	}
 
 	@layer base {
