@@ -422,6 +422,11 @@ resource "google_cloud_run_v2_service_iam_member" "doula_api_allusers_invoker" {
 # both `:<sha>` and `:trunk`, so the tag exists before the first apply, and
 # `ignore_changes` keeps every later deploy's `:<sha>` out of the diff.
 #
+# Terraform created this service, so the provider stamps
+# `goog-terraform-provisioned=true` on it and `deploy-ops` copies that label
+# into every revision template. It is not declared, so it is ignored too;
+# `doula_api` was imported and never carried it.
+#
 # One instance at most: `dbpool.OpsMaxInstances` sizes the ops pool for one
 # (api/internal/dbpool/dbpool_test.go reads this block). None kept warm; the
 # founder is the only caller.
@@ -532,6 +537,7 @@ resource "google_cloud_run_v2_service" "doula_ops" {
       client_version,
       template[0].containers[0].image,
       template[0].labels["commit-sha"],
+      template[0].labels["goog-terraform-provisioned"],
     ]
   }
 }
