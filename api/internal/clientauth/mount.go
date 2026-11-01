@@ -92,6 +92,12 @@ func Mount(g *staffauth.GatedRouter, ir PortalWriteRouter, db *sql.DB, nudge tas
 	// Not rate limited: gated by authn.Begin's own __session cookie check
 	// -- there is no bootstrap window here for an attacker to spend.
 	g.OpenGet("/api/portal/session", PortalPopulation, SessionHandler(db))
+	// #2536: a signed-in Client who opens a dead link of her own lands
+	// on the page it was asked for from. A POST only so the token stays
+	// out of request logs; it reads and changes nothing.
+	ir.PortalExempt("POST /api/portal/session/prior-link",
+		"a read; it changes nothing, so a repeat answers the same",
+		PriorLinkReturnHandler(db))
 	// #618, ADR-0026: her own "sign out everywhere". Naturally idempotent
 	// -- ending zero sessions is as much a success as ending several --
 	// so this carries no Idempotency-Key handling, and is gated by the
