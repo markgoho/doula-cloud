@@ -73,7 +73,8 @@ describe('OfferInbox.svelte', () => {
 			clientFirstInitial: '',
 			clientArea: '',
 			dueDate: '',
-			decidedAt: '2026-10-27T15:00:00Z'
+			decidedAt: '2026-10-27T15:00:00Z',
+			acceptedOn: '2026-10-27'
 		};
 
 		it('links to the Engagement while she still reaches it (#2269)', async () => {
@@ -90,6 +91,14 @@ describe('OfferInbox.svelte', () => {
 			await expect.element(page.getByText('Ended', { exact: true })).toBeVisible();
 			await expect.element(page.getByText('Oct 31, 2026', { exact: true })).toBeVisible();
 			await expect.element(page.getByRole('link')).not.toBeInTheDocument();
+		});
+
+		it("says the Practice's day it was accepted, not the reader's (#2513)", async () => {
+			await setup([{ ...accepted, decidedAt: '2026-11-01T03:30:00Z', acceptedOn: '2026-10-31', endedOn: '2026-10-31' }]);
+
+			await expect.element(page.getByText('Accepted on', { exact: true })).toBeVisible();
+			expect(page.getByText('Oct 31, 2026', { exact: true }).all()).toHaveLength(2);
+			expect(page.getByText('Nov 1, 2026', { exact: true }).all()).toHaveLength(0);
 		});
 
 		it('says what the Practice recorded paying her', async () => {
@@ -118,7 +127,7 @@ describe('OfferInbox.svelte', () => {
 		});
 
 		it('shows no Paid row on an accepted Offer with no fee', async () => {
-			await setup([{ ...accepted, amountCents: undefined, decidedAt: undefined }]);
+			await setup([{ ...accepted, amountCents: undefined, decidedAt: undefined, acceptedOn: undefined }]);
 
 			expect(page.getByText('Not recorded yet').all()).toHaveLength(0);
 			expect(page.getByText('Accepted', { exact: true }).all()).toHaveLength(1);

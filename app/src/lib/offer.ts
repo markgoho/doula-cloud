@@ -51,6 +51,9 @@ export interface Offer {
 	/** `YYYY-MM-DD`, the Practice's day the Attachment this accepted
 	 * Offer granted ended (#2270): only on her own inbox. */
 	endedOn?: string;
+	/** `YYYY-MM-DD`, the Practice's day an accepted Offer was accepted
+	 * (#2513, ADR-0036): only on her own inbox. */
+	acceptedOn?: string;
 }
 
 /** The six states an Offer's lifecycle passes through -- the offer_state

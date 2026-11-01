@@ -10,7 +10,7 @@
 	 * component reports which Offer and which answer.
 	 */
 	import { tick } from 'svelte';
-	import { formatCalendarDay, formatCalendarMonth, formatInstant } from '#lib/dates.js';
+	import { formatCalendarDay, formatCalendarMonth } from '#lib/dates.js';
 	import { feePaidLine } from '#lib/doulaFee.js';
 	import {
 		clientFactRows,
@@ -70,8 +70,9 @@
 		if (offer.state === 'accepted' && offer.dueMonth) {
 			rows.push({ label: 'Due', value: formatCalendarMonth(offer.dueMonth) });
 		}
-		if (offer.state === 'accepted' && offer.decidedAt) {
-			rows.push({ label: 'Accepted on', value: formatInstant(offer.decidedAt) });
+		// #2513: the Practice's day, as Ended beside it is.
+		if (offer.state === 'accepted' && offer.acceptedOn) {
+			rows.push({ label: 'Accepted on', value: formatCalendarDay(offer.acceptedOn) });
 		}
 		// #2270: the day the work ended, beside the day it began.
 		if (offer.state === 'accepted' && offer.endedOn) {
