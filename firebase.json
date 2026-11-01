@@ -38,6 +38,28 @@
           "destination": "/200.html"
         }
       ]
+    },
+    {
+      "target": "ops",
+      "public": "ops/build",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "/api/**",
+          "run": {
+            "serviceId": "doula-ops",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "**",
+          "destination": "/200.html"
+        }
+      ]
     }
   ],
   "storage": {
