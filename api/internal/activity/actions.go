@@ -159,6 +159,11 @@ const (
 	// back would leave the one Membership event with no reader at all,
 	// and an Owner performed it against a named person on a date.
 	ActionSessionsEnded MembershipAction = "sessions_ended"
+
+	// ActionSecondFactorCleared records a Platform operator resetting a
+	// person's two-factor authentication from ops (#2483), written at
+	// each Practice she belongs to. Diff "{}", as sessions_ended's.
+	ActionSecondFactorCleared MembershipAction = "second_factor_cleared"
 )
 
 // MembershipActions returns every action a write site records against
@@ -173,6 +178,7 @@ func MembershipActions() []MembershipAction {
 		ActionEmploymentTypeChanged,
 		ActionMembershipRemoved,
 		ActionSessionsEnded,
+		ActionSecondFactorCleared,
 	}
 	slices.Sort(out)
 	return out

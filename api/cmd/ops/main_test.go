@@ -9,14 +9,41 @@ import (
 	"strings"
 	"testing"
 
+	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/dbpool"
 	"doula-cloud/api/internal/stackswitch"
 )
 
-const testTenant = "operators"
+const (
+	testTenant  = "operators"
+	testProject = "doula-cloud"
+)
 
 func fakeFactory(_ context.Context, _, _ string) (Verifier, error) { return fakeVerifier{}, nil }
+
+func fakeAccounts(context.Context, string) (authn.AccountManager, error) {
+	return authntest.NewFakeAccountManager(), nil
+}
+
+func TestNewServer_HandsTheStaffAccountsTheProject(t *testing.T) {
+	var gotProject string
+	refusal := errors.New("no admin credentials")
+	accounts := func(_ context.Context, project string) (authn.AccountManager, error) {
+		gotProject = project
+		return nil, refusal
+	}
+
+	_, _, err := newServer(t.Context(), envOf(map[string]string{tenantVar: testTenant, "GCP_PROJECT_ID": testProject}), fakeFactory, accounts)
+
+	if !errors.Is(err, refusal) {
+		t.Fatalf("err = %v, want the factory's", err)
+	}
+	if gotProject != testProject {
+		t.Errorf("factory got %q, want doula-cloud", gotProject)
+	}
+}
 
 func envOf(env map[string]string) func(string) string {
 	return func(k string) string { return env[k] }
@@ -24,7 +51,7 @@ func envOf(env map[string]string) func(string) string {
 
 func TestNewServer_ListensOnPORTWithThePoolCappedAtTheOpsShare(t *testing.T) {
 	env := map[string]string{"PORT": "20080", tenantVar: testTenant, databaseURLVar: "postgres://nobody@127.0.0.1:1/none?connect_timeout=1"}
-	server, db, err := newServer(t.Context(), envOf(env), fakeFactory)
+	server, db, err := newServer(t.Context(), envOf(env), fakeFactory, fakeAccounts)
 	if err != nil {
 		t.Fatalf("newServer: %v", err)
 	}
@@ -45,7 +72,7 @@ func TestNewServer_ListensOnPORTWithThePoolCappedAtTheOpsShare(t *testing.T) {
 }
 
 func TestNewServer_DefaultsToCloudRunsPort(t *testing.T) {
-	server, db, err := newServer(t.Context(), envOf(map[string]string{tenantVar: testTenant}), fakeFactory)
+	server, db, err := newServer(t.Context(), envOf(map[string]string{tenantVar: testTenant}), fakeFactory, fakeAccounts)
 	if err != nil {
 		t.Fatalf("newServer: %v", err)
 	}
@@ -59,7 +86,7 @@ func TestNewServer_DefaultsToCloudRunsPort(t *testing.T) {
 func TestNewServer_RefusesTheEmulatorHostOnCloudRun(t *testing.T) {
 	env := map[string]string{tenantVar: testTenant, "K_SERVICE": "doula-ops", "FIREBASE_AUTH_EMULATOR_HOST": "127.0.0.1:9099"}
 
-	_, _, err := newServer(t.Context(), envOf(env), fakeFactory)
+	_, _, err := newServer(t.Context(), envOf(env), fakeFactory, fakeAccounts)
 
 	if !errors.Is(err, errEmulatorOnCloudRun) {
 		t.Fatalf("err = %v, want %v", err, errEmulatorOnCloudRun)
@@ -67,7 +94,7 @@ func TestNewServer_RefusesTheEmulatorHostOnCloudRun(t *testing.T) {
 }
 
 func TestNewServer_RefusesNoTenant(t *testing.T) {
-	_, _, err := newServer(t.Context(), envOf(map[string]string{}), fakeFactory)
+	_, _, err := newServer(t.Context(), envOf(map[string]string{}), fakeFactory, fakeAccounts)
 
 	if err == nil || !strings.Contains(err.Error(), tenantVar) {
 		t.Fatalf("err = %v, want one naming OPS_TENANT_ID", err)
@@ -82,12 +109,12 @@ func TestNewServer_HandsTheVerifierTheProjectAndTenant(t *testing.T) {
 		return nil, refusal
 	}
 
-	_, _, err := newServer(t.Context(), envOf(map[string]string{tenantVar: " " + testTenant + " ", "GCP_PROJECT_ID": "doula-cloud"}), factory)
+	_, _, err := newServer(t.Context(), envOf(map[string]string{tenantVar: " " + testTenant + " ", "GCP_PROJECT_ID": testProject}), factory, fakeAccounts)
 
 	if !errors.Is(err, refusal) {
 		t.Fatalf("err = %v, want the factory's", err)
 	}
-	if gotProject != "doula-cloud" || gotTenant != "operators" {
+	if gotProject != testProject || gotTenant != "operators" {
 		t.Errorf("factory got %q %q, want doula-cloud operators", gotProject, gotTenant)
 	}
 }
@@ -95,7 +122,7 @@ func TestNewServer_HandsTheVerifierTheProjectAndTenant(t *testing.T) {
 func TestNewServer_RefusesTheSimClockOutsideTheStack(t *testing.T) {
 	env := map[string]string{tenantVar: testTenant, stackswitch.ClockVar: "1"}
 
-	_, _, err := newServer(t.Context(), envOf(env), fakeFactory)
+	_, _, err := newServer(t.Context(), envOf(env), fakeFactory, fakeAccounts)
 
 	if !errors.Is(err, stackswitch.ErrNotTheStack) {
 		t.Fatalf("err = %v, want %v", err, stackswitch.ErrNotTheStack)
@@ -112,7 +139,7 @@ func TestNewServer_AcceptsTheEmulatorFactorOnlyWithTheEmulatorHost(t *testing.T)
 		{map[string]string{tenantVar: testTenant, databaseURLVar: unreachable}, http.StatusForbidden},
 	} {
 		factory := func(context.Context, string, string) (Verifier, error) { return tokens, nil }
-		server, db, err := newServer(t.Context(), envOf(tc.env), factory)
+		server, db, err := newServer(t.Context(), envOf(tc.env), factory, fakeAccounts)
 		if err != nil {
 			t.Fatalf("newServer: %v", err)
 		}

@@ -93,6 +93,11 @@ const WORDING: readonly (readonly [action: string, named: string, unnamed: strin
 	['push_notifications_enabled', 'Notifications turned on by Amara', 'Notifications turned on by the Client'],
 	['removed', 'Amara removed from the Practice', 'A Staff member removed from the Practice'],
 	['roles_changed', 'Roles changed for Amara', 'Roles changed for a Staff member'],
+	[
+		'second_factor_cleared',
+		'Two-factor authentication reset for Amara',
+		'Two-factor authentication reset for a Staff member'
+	],
 	['second_factor_refused', 'Stopped until two-factor authentication is set up', 'Stopped until two-factor authentication is set up'],
 	['sessions_ended', 'Amara signed out of every device', 'A Staff member signed out of every device'],
 	['stripe_connect_form_returned', 'Came back from the Stripe setup form', 'Came back from the Stripe setup form'],

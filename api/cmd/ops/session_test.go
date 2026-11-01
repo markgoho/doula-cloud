@@ -35,9 +35,10 @@ const (
 )
 
 var (
-	opsStart = time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC)
-	justNow  = time.Now() //nolint:forbidigo // #773: an Identity Platform auth_time is real wall time, as staffauth/reauth.go says
-	tokens   = fakeVerifier{
+	testOrigin = "http://localhost:7173"
+	opsStart   = time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC)
+	justNow    = time.Now() //nolint:forbidigo // #773: an Identity Platform auth_time is real wall time, as staffauth/reauth.go says
+	tokens     = fakeVerifier{
 		"totp-token":  {UID: opUID, Email: opEmail, Name: opName, SecondFactor: factorTOTP},
 		"phone-token": {UID: opUID, Email: opEmail, Name: opName, SecondFactor: "phone"},
 		"bare-token":  {UID: opUID, Email: opEmail, Name: opName},
@@ -68,7 +69,7 @@ func newOpsStack(t *testing.T, acceptEmulatorFactor bool) *opsStack {
 		Now:                  func() time.Time { return s.now },
 		Verifier:             tokens,
 		AcceptEmulatorFactor: acceptEmulatorFactor,
-		Origins:              []string{"http://localhost:7173"},
+		Origins:              []string{testOrigin},
 	})
 	return s
 }

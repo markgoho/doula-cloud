@@ -29,6 +29,8 @@ var wantRoutes = []string{
 	"POST /api/practices/{practiceId}/refunds",
 	"GET /api/practices/{practiceId}/founding-grant",
 	"POST /api/practices/{practiceId}/founding-grants",
+	"GET /api/staff/{staffId}/second-factor",
+	"POST /api/staff/{staffId}/second-factor-clears",
 }
 
 func TestRoutes_AreTheOnesOnTheRecord(t *testing.T) {

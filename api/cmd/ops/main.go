@@ -17,6 +17,7 @@ import (
 	// Registers the "pgx" driver with database/sql; never referenced by name.
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/dbpool"
 	"doula-cloud/api/internal/stackswitch"
@@ -24,7 +25,7 @@ import (
 )
 
 func main() {
-	server, _, err := newServer(context.Background(), os.Getenv, newTenantVerifier)
+	server, _, err := newServer(context.Background(), os.Getenv, newTenantVerifier, newStaffAccounts)
 	// coverage:ignore reason: main's wiring; newServer's own tests cover it
 	if err != nil {
 		// coverage:ignore reason: main's wiring; newServer's own tests cover it
@@ -52,11 +53,27 @@ var errEmulatorOnCloudRun = errors.New("doula-ops: " + emulatorHostVar + " must 
 
 type verifierFactory func(ctx context.Context, projectID, tenantID string) (Verifier, error)
 
+// accountsFactory builds Identity Platform admin on the Staff pool.
+type accountsFactory func(ctx context.Context, projectID string) (authn.AccountManager, error)
+
+// newStaffAccounts is doula-api's own Admin SDK seam, on the project's
+// Staff pool rather than the operator tenant.
+func newStaffAccounts(ctx context.Context, projectID string) (authn.AccountManager, error) {
+	// coverage:ignore reason: requires GCP credentials or the Auth emulator, not exercised by unit tests
+	accounts, err := authn.NewFirebaseVerifier(ctx, projectID)
+	if err != nil {
+		// coverage:ignore reason: requires GCP credentials or the Auth emulator, not exercised by unit tests
+		return nil, fmt.Errorf("staff accounts: %w", err)
+	}
+	// coverage:ignore reason: requires GCP credentials or the Auth emulator, not exercised by unit tests
+	return accounts, nil
+}
+
 // newServer builds doula-ops from the environment: its pool capped at
 // dbpool's share for doula-ops, on PORT, or Cloud Run's 8080 when unset.
 // It refuses the emulator's host on Cloud Run, since that is what admits
 // the emulator's phone factor in place of an authenticator app.
-func newServer(ctx context.Context, getenv func(string) string, newVerifier verifierFactory) (*http.Server, *sql.DB, error) {
+func newServer(ctx context.Context, getenv func(string) string, newVerifier verifierFactory, newAccounts accountsFactory) (*http.Server, *sql.DB, error) {
 	emulator := getenv(emulatorHostVar) != ""
 	if emulator && getenv(stripemode.CloudRunVar) != "" {
 		return nil, nil, errEmulatorOnCloudRun
@@ -66,6 +83,10 @@ func newServer(ctx context.Context, getenv func(string) string, newVerifier veri
 		return nil, nil, fmt.Errorf("doula-ops: %s must be set", tenantVar)
 	}
 	verifier, err := newVerifier(ctx, getenv(projectVar), tenantID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("doula-ops: %w", err)
+	}
+	accounts, err := newAccounts(ctx, getenv(projectVar))
 	if err != nil {
 		return nil, nil, fmt.Errorf("doula-ops: %w", err)
 	}
@@ -95,6 +116,7 @@ func newServer(ctx context.Context, getenv func(string) string, newVerifier veri
 		AcceptEmulatorFactor: emulator,
 		Origins:              origins(getenv(originsVar)),
 		Stripe:               stripeClient(getenv(stripeKeyVar), emulator),
+		Accounts:             accounts,
 	})
 	return &http.Server{
 		Addr:              ":" + port,

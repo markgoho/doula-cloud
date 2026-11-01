@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/csrf"
@@ -23,6 +24,9 @@ type Deps struct {
 	Origins []string
 	// Stripe moves a refund's money back (#2481).
 	Stripe billing.StripeClient
+	// Accounts is Identity Platform admin on the Staff pool, which a
+	// second-factor reset clears (#2483).
+	Accounts authn.AccountManager
 }
 
 // router mounts a route and records it, so routes() can hand back the
@@ -52,6 +56,8 @@ func routes(d Deps) (http.Handler, []string) {
 	r.handle(http.MethodPost, "/api/practices/{practiceId}/refunds", requireStepUp(d.DB, refundAct(d)))
 	r.handle(http.MethodGet, "/api/practices/{practiceId}/founding-grant", requireSession(d.DB, foundingGrantCheckRead(d.DB)))
 	r.handle(http.MethodPost, "/api/practices/{practiceId}/founding-grants", requireSession(d.DB, foundingGrantAct(d.DB)))
+	r.handle(http.MethodGet, "/api/staff/{staffId}/second-factor", requireSession(d.DB, secondFactorCheckRead(d.DB)))
+	r.handle(http.MethodPost, "/api/staff/{staffId}/second-factor-clears", requireStepUp(d.DB, secondFactorClearAct(d)))
 	return clock.Middleware(d.Now)(csrf.Wrap(d.Origins, r.mux)), r.routes
 }
 

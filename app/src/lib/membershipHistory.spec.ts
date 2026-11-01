@@ -70,6 +70,12 @@ describe('membershipChangeSentence', () => {
 		);
 	});
 
+	it('says what a two-factor reset did', () => {
+		expect(membershipChangeSentence(change({ action: 'second_factor_cleared' }))).toBe(
+			'Two-factor authentication reset, and signed out of every device'
+		);
+	});
+
 	/*
 	 * An entry always carries the facts its own action moved -- the BFF
 	 * omits a field only when it did not move -- so the three cases below

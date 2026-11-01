@@ -39,7 +39,7 @@ func newRefundStack(t *testing.T) *refundStack {
 		DB:       s.db.Ops,
 		Now:      func() time.Time { return s.now },
 		Verifier: tokens,
-		Origins:  []string{"http://localhost:7173"},
+		Origins:  []string{testOrigin},
 		Stripe:   s.stripe,
 	})
 	s.practiceID = testdb.SeedPractice(t, s.db, refundPracticeName)
