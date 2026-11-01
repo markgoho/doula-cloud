@@ -537,7 +537,7 @@ describe('a red run', () => {
       expect(body).toContain('- `terraform/cloud_run.tf`');
       expect(body).not.toContain('README.md');
       expect(body).toContain('git pull');
-      expect(body).toContain('cd terraform && terraform apply');
+      expect(body).toContain('terraform -chdir=terraform apply');
       expect(body).toContain('gh run rerun 7001 --failed');
       expect(body).toContain('- **plan** - failed at step _Terraform plan_');
       expect(body).toContain(marker(TERRAFORM));
@@ -563,7 +563,7 @@ describe('a red run', () => {
       expect(body).toContain('- `terraform/stripe/products.tf`');
       expect(body).toContain('- `terraform/stripe-sandbox/main.tf`');
       expect(body).not.toContain('cloud_run.tf');
-      expect(body).toContain('cd terraform/stripe-sandbox && terraform apply');
+      expect(body).toContain('terraform -chdir=terraform/stripe-sandbox apply');
     });
 
     test('the Sandbox plan ignores a change to the root only', () => {

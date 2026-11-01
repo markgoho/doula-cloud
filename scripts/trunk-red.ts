@@ -287,7 +287,7 @@ function awaitingApply(jobs: Job[] | null): string {
   return [
     `**This commit changed Terraform and is waiting for its apply.** ${run.name} is red until the laptop \`apply\` from trunk lands; that is the expected wait, not a new failure.`,
     `Changed files:\n\n${changed.map((file) => `- \`${file}\``).join('\n')}`,
-    `To clear it:\n\n\`\`\`sh\ngit pull\n${waiting.map((job) => `cd ${job.folder} && terraform apply`).join('\n')}\ngh run rerun ${run.id} --failed\n\`\`\``,
+    `To clear it:\n\n\`\`\`sh\ngit pull\n${waiting.map((job) => `terraform -chdir=${job.folder} apply`).join('\n')}\ngh run rerun ${run.id} --failed\n\`\`\``,
   ].join('\n\n');
 }
 
