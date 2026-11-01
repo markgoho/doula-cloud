@@ -50,10 +50,22 @@ test('An Owner sets up an authenticator app and lands on the Practice she was se
 	// and enrolls when she chooses to, from a link that carries where to
 	// send her back (SecondFactorNeeded's own shape).
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
+	// #2506: the session probe answers only after Continue is pressed, as
+	// on a slow connection, so step one must wait for her email.
+	let releaseSessionProbe!: () => void;
+	const sessionProbeHeld = new Promise<void>((resolve) => (releaseSessionProbe = resolve));
+	await page.route(
+		(url) => url.pathname === '/api/staff/session',
+		async (route) => {
+			await sessionProbeHeld;
+			await route.continue();
+		}
+	);
 	await page.goto(`/mfa/enroll?returnTo=${encodeURIComponent(`/practices/${practiceId}`)}`);
 
 	await page.getByLabel('Password').fill(password);
 	await page.getByRole('button', { name: 'Continue' }).click();
+	releaseSessionProbe();
 
 	// #606's own AC: a person enrolling on the device she is reading the
 	// screen on cannot scan her own screen, so the key is offered as text
