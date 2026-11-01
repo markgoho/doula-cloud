@@ -623,6 +623,24 @@ export function backdateInvoice(invoiceId: string, days: number): void {
 }
 
 /**
+ * Seeds a Practice that signed up the month before the last closed one
+ * and bought 4 Credits in the last closed one, both in New York time,
+ * the read ops's monthly Credits page shows (#2476). Returns that month
+ * as YYYY-MM.
+ */
+export function seedMonthlyCreditsPractice(name: string): string {
+	const practiceId = sqlLiteral(randomUUID());
+	const month = `date_trunc('month', sim.now() AT TIME ZONE 'America/New_York') - interval '1 month'`;
+	execSQL(
+		`INSERT INTO practices (id, name, timezone, created_at)
+		 VALUES (${practiceId}, ${sqlLiteral(name)}, 'America/New_York', (${month} - interval '1 month' + interval '12 hours') AT TIME ZONE 'America/New_York');
+		 INSERT INTO credit_ledger (practice_id, origin, quantity, unit_price_cents, tax_cents, stripe_payment_intent_id, created_at)
+		 VALUES (${practiceId}, 'purchase', 4, 2000, 0, ${sqlLiteral(`pi_e2e_monthly_${randomUUID()}`)}, (${month} + interval '10 days 12 hours') AT TIME ZONE 'America/New_York');`
+	);
+	return querySQLValue(`SELECT to_char(${month}, 'YYYY-MM')`);
+}
+
+/**
  * Gives a Practice its founding grant the way ops does (#2482): an
  * operator's act, then ops_record_founding_grant sizing it from the
  * roster, then the Practice's Activity row under the operator. ops is the
