@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { actKey } from '#lib/act.js';
 	import Button from '$ui/atoms/Button.svelte';
 	import { onMount, tick } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -22,7 +23,7 @@
 	let result = $state<FoundingGrantResult | undefined>();
 	let errors = $state<FormError[]>([]);
 	let isSending = $state(false);
-	const requestKey = crypto.randomUUID();
+	const requestKey = actKey();
 
 	async function signedOut() {
 		await goto(resolve('/sign-in'));

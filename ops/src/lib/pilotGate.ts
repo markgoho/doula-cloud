@@ -1,4 +1,4 @@
-import { refusal, type Outcome } from './act.ts';
+import { postAct, refusal, type Outcome } from './act.ts';
 
 /**
 The pilot gate: when it was opened, or null while it is closed.
@@ -34,12 +34,7 @@ export async function readPilotGate(fetcher: Fetch = fetch): Promise<Outcome<Pil
  * names no one; doula-ops takes the operator from the session.
  */
 export async function sendPilotGateOpening(key: string, fetcher: Fetch = fetch): Promise<Outcome<PilotGate>> {
-	const response = await fetcher('/api/pilot-gate/openings', {
-		method: 'POST',
-		credentials: 'include',
-		headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
-		body: '{}'
-	});
+	const response = await postAct('/api/pilot-gate/openings', key, {}, fetcher);
 	if (response.ok) return { kind: 'ok', value: await response.json() };
 	return refusal(response);
 }

@@ -1,4 +1,4 @@
-import { refusal, type Outcome } from './act.ts';
+import { postAct, refusal, type Outcome } from './act.ts';
 
 /**
 The Staff member whose two-factor authentication is reset, and each Practice whose Activity records it.
@@ -23,12 +23,7 @@ export async function readSecondFactorCheck(staffId: string, fetcher: Fetch = fe
  * operator from the session.
  */
 export async function sendSecondFactorClear(staffId: string, key: string, fetcher: Fetch = fetch): Promise<Outcome<SecondFactorStaff>> {
-	const response = await fetcher(`/api/staff/${staffId}/second-factor-clears`, {
-		method: 'POST',
-		credentials: 'include',
-		headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
-		body: '{}'
-	});
+	const response = await postAct(`/api/staff/${staffId}/second-factor-clears`, key, {}, fetcher);
 	if (response.ok) return { kind: 'ok', value: await response.json() };
 	return refusal(response);
 }

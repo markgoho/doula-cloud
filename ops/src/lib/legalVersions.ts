@@ -1,4 +1,4 @@
-import { refusal, type Outcome } from './act.ts';
+import { postAct, refusal, type Outcome } from './act.ts';
 
 /**
 One version of the Terms of Service or the Privacy Policy, named by the date it takes effect.
@@ -79,12 +79,7 @@ export async function sendLegalPublication(
 	key: string,
 	fetcher: Fetch = fetch
 ): Promise<Outcome<LegalPublication>> {
-	const response = await fetcher(`${versionPath(document, version)}/publications`, {
-		method: 'POST',
-		credentials: 'include',
-		headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
-		body: '{}'
-	});
+	const response = await postAct(`${versionPath(document, version)}/publications`, key, {}, fetcher);
 	if (response.ok) return { kind: 'ok', value: await response.json() };
 	return refusal(response);
 }

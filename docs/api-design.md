@@ -64,6 +64,15 @@ func CreateVisitHandler(service VisitService) http.HandlerFunc {
 }
 ```
 
+### Ops acts (`doula-ops`, ADR-0062)
+
+`doula-ops`, the Platform operator's service in `api/cmd/ops`, follows its own rule, not `idempotency.Wrap`'s:
+
+1. **The key is required on every ops act.** A `POST` that changes state (a refund, a founding grant, a pilot address, the pilot gate's opening, a legal publication, a second-factor reset) is refused with 400 without an `Idempotency-Key`. One helper reads it, `requestKeyOf`, with one message, "Send an Idempotency-Key header with the *act*." Sign-in, sign-out and the step-up take no key: a repeated stamp is the same stamp, and each refusal is its own try.
+2. **The replay comes from `operator_acts`, which is kept forever.** Each act writes its row through `recordAct` with the key in `details.requestKey`. A retry under the same key finds that row and answers what the first request did, writing nothing. There is no TTL and no sweep: the table is append-only and a row is the act's audit record, so a key is never forgotten.
+3. **A replay needs no new code.** On the four acts behind a step-up (refund, pilot gate, legal publication, second-factor reset), `requireStepUp` admits a request whose key this operator already acted under even when the session holds no unspent step-up, and `spendUnlessReplay` leaves any stamp the session does hold unspent. A retry after a lost response returns the original answer without spending a code or asking for one.
+4. **The client seam sends the key.** `ops/src/lib/act.ts`'s `postAct` is the only place the header is set, and `actKey()` the only place a key is made. A check page takes one key per visit and sends it with every press, so a resubmit replays.
+
 ---
 
 ## 4. Cursor-Based Pagination for Scalable Collections

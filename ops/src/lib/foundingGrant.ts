@@ -1,4 +1,4 @@
-import { refusal, type Outcome } from './act.ts';
+import { postAct, refusal, type Outcome } from './act.ts';
 
 export type FoundingGrantCheck = {
 	practiceName: string;
@@ -32,12 +32,7 @@ export async function readFoundingGrantCheck(practiceId: string, fetcher: Fetch 
  * nothing; doula-ops sizes the grant and takes the operator from the session.
  */
 export async function sendFoundingGrant(practiceId: string, key: string, fetcher: Fetch = fetch): Promise<Outcome<FoundingGrantResult>> {
-	const response = await fetcher(`/api/practices/${practiceId}/founding-grants`, {
-		method: 'POST',
-		credentials: 'include',
-		headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
-		body: '{}'
-	});
+	const response = await postAct(`/api/practices/${practiceId}/founding-grants`, key, {}, fetcher);
 	if (response.ok) return { kind: 'ok', value: await response.json() };
 	return refusal(response);
 }

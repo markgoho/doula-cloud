@@ -1,5 +1,5 @@
 import type { FormError } from './authRefusal.ts';
-import { refusal, type Outcome } from './act.ts';
+import { postAct, refusal, type Outcome } from './act.ts';
 
 export const ADDRESS_FIELD = 'pilot-address';
 
@@ -28,12 +28,7 @@ export async function sendPilotAddress(
 	key: string,
 	fetcher: typeof fetch = fetch
 ): Promise<Outcome<PilotAddressResult>> {
-	const response = await fetcher('/api/pilot-allowlist', {
-		method: 'POST',
-		credentials: 'include',
-		headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
-		body: JSON.stringify({ address })
-	});
+	const response = await postAct('/api/pilot-allowlist', key, { address }, fetcher);
 	if (response.ok) return { kind: 'ok', value: await response.json() };
 	return refusal(response, { address: ADDRESS_FIELD });
 }

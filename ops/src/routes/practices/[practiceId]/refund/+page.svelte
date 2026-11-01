@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { actKey } from '#lib/act.js';
 	import LabeledField from '$ui/molecules/LabeledField.svelte';
 	import TextInput from '$ui/atoms/TextInput.svelte';
 	import Button from '$ui/atoms/Button.svelte';
@@ -95,7 +96,7 @@
 				return;
 			}
 			quote = outcome.value.quote ?? undefined;
-			requestKey = crypto.randomUUID();
+			requestKey = actKey();
 			password = '';
 			code = '';
 			await show('check');

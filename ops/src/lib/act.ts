@@ -36,3 +36,23 @@ export async function refusal<T>(response: Response, fieldOf: Record<string, str
 	}
 	return { kind: 'refused', errors: [{ message: await refusalMessage(response) }] };
 }
+
+/**
+ * A new act's Idempotency-Key. A check page takes one per visit and sends
+ * it with every press, so a resubmit after a lost answer replays the act.
+ */
+export function actKey(): string {
+	return crypto.randomUUID();
+}
+
+/**
+The one place an ops act is sent: a POST of body under key.
+*/
+export function postAct(path: string, key: string, body: unknown = {}, fetcher: typeof fetch = fetch): Promise<Response> {
+	return fetcher(path, {
+		method: 'POST',
+		credentials: 'include',
+		headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
+		body: JSON.stringify(body)
+	});
+}
