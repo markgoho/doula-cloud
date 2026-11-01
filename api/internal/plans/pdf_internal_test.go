@@ -52,10 +52,10 @@ func TestPlanFieldAnswerText_MirrorsBirthPlanView(t *testing.T) {
 			want:    "No",
 		},
 		{
-			name:    "checkbox unanswered defaults to No",
+			name:    "checkbox unanswered renders em dash",
 			field:   Field{ID: "f1", Type: fieldTypeCheckbox},
 			answers: Answers{},
-			want:    "No",
+			want:    "—",
 		},
 		{
 			name:    "multi_select empty renders em dash",

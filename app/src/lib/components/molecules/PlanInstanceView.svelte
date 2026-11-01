@@ -80,6 +80,7 @@
 	}
 
 	function checkboxValue(field: Field): string {
+		if (answers[field.id] === undefined) return '—';
 		return isAnswerChecked(answers, field.id) ? 'Yes' : 'No';
 	}
 
