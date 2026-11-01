@@ -6,8 +6,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import type { FormError } from '#lib/authRefusal.js';
-	import { readSession } from '#lib/session.js';
-	import {
+		import {
 		credits,
 		readFoundingGrantCheck,
 		sendFoundingGrant,
@@ -30,7 +29,6 @@
 	}
 
 	onMount(async () => {
-		if (!(await readSession())) return signedOut();
 		const outcome = await readFoundingGrantCheck(practiceId);
 		if (outcome.kind === 'signed-out') return signedOut();
 		if (outcome.kind === 'ok') check = outcome.value;

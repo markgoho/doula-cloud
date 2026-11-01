@@ -11,7 +11,7 @@
 	import { page } from '$app/state';
 	import type { FormError } from '#lib/authRefusal.js';
 	import { freshIdToken } from '#lib/firebase.js';
-	import { readSession, type Operator } from '#lib/session.js';
+	import { type Operator } from '#lib/session.js';
 	import { stepUp } from '#lib/stepUp.js';
 	import {
 		answerErrors,
@@ -36,7 +36,7 @@
 
 	const practiceId = $derived(page.params.practiceId ?? '');
 
-	let operator = $state<Operator | undefined>();
+	const operator = $derived(page.data.operator as Operator);
 	let check = $state<RefundCheck | undefined>();
 	let step = $state<'answers' | 'check' | 'done'>('answers');
 	let errors = $state<FormError[]>([]);
@@ -64,8 +64,6 @@
 	}
 
 	onMount(async () => {
-		operator = await readSession();
-		if (!operator) return signedOut();
 		const outcome = await readRefundCheck(practiceId);
 		if (outcome.kind === 'signed-out') return signedOut();
 		if (outcome.kind === 'ok') {

@@ -6,14 +6,12 @@
 	import { readLegalVersions, type LegalVersion } from '#lib/legalVersions.js';
 	import { newYorkDay } from '#lib/dates.js';
 	import { longDate } from '#lib/dates.js';
-	import { readSession } from '#lib/session.js';
-	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
+		import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
 
 	let versions = $state<LegalVersion[] | undefined>();
 	let errors = $state<FormError[]>([]);
 
 	onMount(async () => {
-		if (!(await readSession())) return goto(resolve('/sign-in'));
 		const outcome = await readLegalVersions();
 		if (outcome.kind === 'signed-out') return goto(resolve('/sign-in'));
 		if (outcome.kind === 'ok') versions = outcome.value;
@@ -71,14 +69,5 @@
 	h2 {
 		margin: 0;
 		font-size: inherit;
-	}
-
-	.visually-hidden {
-		position: absolute;
-		inline-size: 1px;
-		block-size: 1px;
-		overflow: hidden;
-		clip-path: inset(50%);
-		white-space: nowrap;
 	}
 </style>

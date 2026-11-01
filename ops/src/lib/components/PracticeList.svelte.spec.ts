@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
+import '../../../../app/src/lib/styles/app.css';
 import PracticeList from './PracticeList.svelte';
 import type { PracticeRow } from '../practices.ts';
 

@@ -7,7 +7,7 @@
 	import { page } from '$app/state';
 	import type { FormError } from '#lib/authRefusal.js';
 	import { freshIdToken } from '#lib/firebase.js';
-	import { readSession, type Operator } from '#lib/session.js';
+	import { type Operator } from '#lib/session.js';
 	import { stepUp } from '#lib/stepUp.js';
 	import {
 		practiceList,
@@ -21,7 +21,7 @@
 
 	const staffId = $derived(page.params.staffId ?? '');
 
-	let operator = $state<Operator | undefined>();
+	const operator = $derived(page.data.operator as Operator);
 	let check = $state<SecondFactorStaff | undefined>();
 	let result = $state<SecondFactorStaff | undefined>();
 	let errors = $state<FormError[]>([]);
@@ -35,8 +35,6 @@
 	}
 
 	onMount(async () => {
-		operator = await readSession();
-		if (!operator) return signedOut();
 		const outcome = await readSecondFactorCheck(staffId);
 		if (outcome.kind === 'signed-out') return signedOut();
 		if (outcome.kind === 'ok') check = outcome.value;

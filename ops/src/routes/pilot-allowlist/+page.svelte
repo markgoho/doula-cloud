@@ -1,19 +1,18 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { actKey } from '#lib/act.js';
 	import LabeledField from '$ui/molecules/LabeledField.svelte';
 	import TextInput from '$ui/atoms/TextInput.svelte';
 	import Button from '$ui/atoms/Button.svelte';
-	import { onMount, tick } from 'svelte';
+	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import type { FormError } from '#lib/authRefusal.js';
-	import { readSession } from '#lib/session.js';
-	import { ADDRESS_FIELD, addressErrors, sendPilotAddress, type PilotAddressResult } from '#lib/pilotAllowlist.js';
+		import { ADDRESS_FIELD, addressErrors, sendPilotAddress, type PilotAddressResult } from '#lib/pilotAllowlist.js';
 	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
 	import SummaryList from '$ui/molecules/SummaryList.svelte';
 
-	let isSignedIn = $state(false);
-	let step = $state<'answers' | 'check' | 'done'>('answers');
+		let step = $state<'answers' | 'check' | 'done'>('answers');
 	let errors = $state<FormError[]>([]);
 	let isSending = $state(false);
 	let address = $state('');
@@ -27,10 +26,6 @@
 		await goto(resolve('/sign-in'));
 	}
 
-	onMount(async () => {
-		if (!(await readSession())) return signedOut();
-		isSignedIn = true;
-	});
 
 	async function show(next: typeof step, focus?: string) {
 		step = next;
@@ -107,7 +102,7 @@
 			<Button label="Add the address" type="submit" loading={isSending} />
 		</stack-l>
 	</form>
-{:else if isSignedIn}
+{:else if page.data.operator}
 	<h1 tabindex="-1">Add an address to the pilot allowlist</h1>
 	<form novalidate onsubmit={continueToCheck}>
 		<stack-l>

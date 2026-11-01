@@ -1,20 +1,16 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import Button from '$ui/atoms/Button.svelte';
-	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { endSession, readSession, SERVICE_PROBLEM, type Operator } from '#lib/session.js';
+	import { endSession, SERVICE_PROBLEM, type Operator } from '#lib/session.js';
 	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
 	import type { FormError } from '#lib/authRefusal.js';
 
-	let operator = $state<Operator | undefined>();
+	const operator = $derived(page.data.operator as Operator);
 	let errors = $state<FormError[]>([]);
 	let isSigningOut = $state(false);
 
-	onMount(async () => {
-		operator = await readSession();
-		if (!operator) await goto(resolve('/sign-in'));
-	});
 
 	async function signOut(event: SubmitEvent) {
 		event.preventDefault();

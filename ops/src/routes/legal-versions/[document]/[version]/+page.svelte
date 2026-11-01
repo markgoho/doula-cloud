@@ -16,7 +16,7 @@
 	} from '#lib/legalVersions.js';
 	import { newYorkDay } from '#lib/dates.js';
 	import { longDate } from '#lib/dates.js';
-	import { readSession, type Operator } from '#lib/session.js';
+	import { type Operator } from '#lib/session.js';
 	import { stepUp } from '#lib/stepUp.js';
 	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
 	import StepUpFields from '#lib/components/StepUpFields.svelte';
@@ -25,7 +25,7 @@
 	const document_ = $derived(page.params.document ?? '');
 	const version = $derived(page.params.version ?? '');
 
-	let operator = $state<Operator | undefined>();
+	const operator = $derived(page.data.operator as Operator);
 	let check = $state<LegalVersionCheck | undefined>();
 	let result = $state<LegalPublication | undefined>();
 	let errors = $state<FormError[]>([]);
@@ -39,8 +39,6 @@
 	}
 
 	onMount(async () => {
-		operator = await readSession();
-		if (!operator) return signedOut();
 		const outcome = await readLegalVersionCheck(document_, version);
 		if (outcome.kind === 'signed-out') return signedOut();
 		if (outcome.kind === 'ok') check = outcome.value;

@@ -107,7 +107,7 @@
 
 <style>
 	.qr {
-		inline-size: 200px;
+		inline-size: var(--thumb-max-inline);
 		max-inline-size: 100%;
 		block-size: auto;
 	}

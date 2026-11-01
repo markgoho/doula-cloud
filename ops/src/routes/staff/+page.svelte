@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import Button from '$ui/atoms/Button.svelte';
@@ -7,11 +7,9 @@
 	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
 	import LabeledField from '$ui/molecules/LabeledField.svelte';
 	import type { FormError } from '#lib/authRefusal.js';
-	import { readSession } from '#lib/session.js';
-	import { findStaff, LOOKUP_EMAIL_FIELD, lookupErrors, type FoundStaff } from '#lib/staffLookup.js';
+		import { findStaff, LOOKUP_EMAIL_FIELD, lookupErrors, type FoundStaff } from '#lib/staffLookup.js';
 
-	let isSignedIn = $state(false);
-	let email = $state('');
+		let email = $state('');
 	let errors = $state<FormError[]>([]);
 	let isSending = $state(false);
 	let found = $state<FoundStaff[] | undefined>();
@@ -22,10 +20,6 @@
 		await goto(resolve('/sign-in'));
 	}
 
-	onMount(async () => {
-		if (!(await readSession())) return signedOut();
-		isSignedIn = true;
-	});
 
 	async function lookUp(event: SubmitEvent) {
 		event.preventDefault();
@@ -46,7 +40,7 @@
 
 <svelte:head><title>Reset two-factor authentication – DoulaCloud operations</title></svelte:head>
 
-{#if isSignedIn}
+{#if page.data.operator}
 	<ErrorSummary {errors} />
 	<h1>Reset two-factor authentication</h1>
 	<p>Ask the person on the call for the email address they sign in with.</p>
@@ -69,13 +63,13 @@
 		</stack-l>
 	</form>
 	{#if found}
-		<section aria-labelledby="found-heading" role="status">
+		<section role="status">
 			<stack-l>
 				{#if found.length === 0}
-					<h2 id="found-heading">No one signs in with that email address</h2>
+					<h2>No one signs in with that email address</h2>
 					<p>Check the spelling with the person. A Staff member who was deleted is not found.</p>
 				{:else}
-					<h2 id="found-heading">Who signs in with {email.trim()}</h2>
+					<h2>Who signs in with {email.trim()}</h2>
 					<ul class="found">
 						{#each found as staff (staff.staffId)}
 							<li>

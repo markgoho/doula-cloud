@@ -109,13 +109,4 @@
 		outline: var(--focus-ring-width) solid var(--color-primary);
 		outline-offset: var(--focus-ring-offset);
 	}
-
-	.visually-hidden {
-		position: absolute;
-		inline-size: 1px;
-		block-size: 1px;
-		overflow: hidden;
-		clip-path: inset(50%);
-		white-space: nowrap;
-	}
 </style>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { newYorkDay } from '#lib/dates.js';
 	import { actKey } from '#lib/act.js';
 	import Button from '$ui/atoms/Button.svelte';
@@ -8,12 +9,12 @@
 	import type { FormError } from '#lib/authRefusal.js';
 	import { freshIdToken } from '#lib/firebase.js';
 	import { readPilotGate, sendPilotGateOpening, type PilotGate } from '#lib/pilotGate.js';
-	import { readSession, type Operator } from '#lib/session.js';
+	import { type Operator } from '#lib/session.js';
 	import { stepUp } from '#lib/stepUp.js';
 	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
 	import StepUpFields from '#lib/components/StepUpFields.svelte';
 
-	let operator = $state<Operator | undefined>();
+	const operator = $derived(page.data.operator as Operator);
 	let gate = $state<PilotGate | undefined>();
 	let result = $state<PilotGate | undefined>();
 	let errors = $state<FormError[]>([]);
@@ -27,8 +28,6 @@
 	}
 
 	onMount(async () => {
-		operator = await readSession();
-		if (!operator) return signedOut();
 		const outcome = await readPilotGate();
 		if (outcome.kind === 'signed-out') return signedOut();
 		if (outcome.kind === 'ok') gate = outcome.value;
