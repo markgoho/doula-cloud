@@ -15,6 +15,7 @@ package pdftext
 import (
 	"bytes"
 	"compress/zlib"
+	"encoding/hex"
 	"io"
 	"slices"
 	"strings"
@@ -60,13 +61,17 @@ func Text(pdf []byte) string {
 
 // drawnLines walks one content stream's tokens. It remembers the last
 // two numbers before a Td as the baseline, and each literal string a Tj
-// shows is added to the line on that baseline. A byte outside a string
-// that no content stream holds ends the walk with nothing: the stream is
-// binary, not drawing.
+// shows is added to the line on that baseline. Inside a marked-content
+// span with an ActualText, as pdffont writes around a character outside
+// the BMP (#2544), the span's first Tj shows the ActualText in place of
+// its own string and the rest show nothing, the way a reader copies it. A
+// byte outside a string that no content stream holds ends the walk with
+// nothing: the stream is binary, not drawing.
 func drawnLines(content []byte) []string {
 	var lines []string
 	var numbers []string
-	var pending string
+	var pending, hexText, actual string
+	inSpan := false
 	baseline, lineBaseline := "", "\x00"
 	for i := 0; i < len(content); {
 		c := content[i]
@@ -74,6 +79,14 @@ func drawnLines(content []byte) []string {
 		case c == '(':
 			s, next := literal(content, i+1)
 			pending, i = s, next
+		case c == '<' && i+1 < len(content) && content[i+1] == '<', c == '>' && i+1 < len(content) && content[i+1] == '>':
+			i += 2
+		case c == '<':
+			end := bytes.IndexByte(content[i:], '>')
+			if end < 0 {
+				return nil
+			}
+			hexText, i = decodeHex(content[i+1:i+end]), i+end+1
 		case c == ' ' || c == '\n' || c == '\r' || c == '\t':
 			i++
 		case c < 0x20 || c > 0x7e:
@@ -89,7 +102,16 @@ func drawnLines(content []byte) []string {
 				if len(numbers) >= 1 {
 					baseline = numbers[len(numbers)-1]
 				}
+			case "BDC":
+				if len(numbers) > 0 && numbers[len(numbers)-1] == "/ActualText" {
+					actual, inSpan = hexText, true
+				}
+			case "EMC":
+				inSpan = false
 			case "Tj":
+				if inSpan {
+					pending, actual = actual, ""
+				}
 				if baseline == lineBaseline && len(lines) > 0 {
 					lines[len(lines)-1] += pending
 				} else {
@@ -189,7 +211,17 @@ func reversed(text string) string {
 }
 
 func isDelimiter(c byte) bool {
-	return c == ' ' || c == '\n' || c == '\r' || c == '\t' || c == '(' || c == ')'
+	return c == ' ' || c == '\n' || c == '\r' || c == '\t' || c == '(' || c == ')' || c == '<' || c == '>'
+}
+
+// decodeHex decodes a hexadecimal string's UTF-16BE, after its byte order
+// mark.
+func decodeHex(digits []byte) string {
+	raw, err := hex.DecodeString(string(digits))
+	if err != nil {
+		return ""
+	}
+	return decodeUTF16(bytes.TrimPrefix(raw, []byte{0xFE, 0xFF}))
 }
 
 // literal reads a PDF literal string starting just after its "(", undoing

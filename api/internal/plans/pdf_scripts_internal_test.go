@@ -20,6 +20,8 @@ func TestRenderPlanPDF_PrintsEveryScriptAsTyped(t *testing.T) {
 		{"Chinese", "分娩计划", "王小明", "北京导乐", "在家"},
 		{"Devanagari", "जन्म योजना", "प्रिया शर्मा", "जन्म सहयोग", "घर पर"},
 		{"Cyrillic", "План родов", "Анна Петрова", "Доула Москва", "Дома"},
+		{"emoji (#2544)", "Birth Plan 👶", "Ada ❤️ Lovelace 👶", "Rooted Birth ❤️", "At home 👩‍🍼 with music 🎶"},
+		{"Arabic with brackets (#2544)", "خطة (الولادة) الأولى", "سارة (سارة) الحداد", "دولا المدينة", "في المنزل (مع زوجي) أولا"},
 		{"a combining mark", "Birth Plan", "Zoë Brontë", "Rooted Birth Collective", "At home"},
 	}
 	fields := []Field{

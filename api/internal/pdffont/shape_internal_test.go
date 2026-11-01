@@ -124,6 +124,67 @@ func TestDrawShaped_SkipsTheTextLayerWhenItMeasuresNothing(t *testing.T) {
 	}
 }
 
+// #2544: in a right-to-left run a bracket draws as its mirror, by the
+// Unicode Bidi Mirroring property, so "(" opens on the right.
+func TestShape_MirrorsBracketsRightToLeft(t *testing.T) {
+	d := New()
+	for typed, mirror := range map[string]string{"(": ")", "[": "]", "«": "»"} {
+		if got, want := glyphIDs(d, 0, typed, true), glyphIDs(d, 0, mirror, false); !slices.Equal(got, want) {
+			t.Fatalf("%q right to left drew %v, want the glyph of %q, %v", typed, got, mirror, want)
+		}
+	}
+}
+
+// #2544: an emoji sequence joined by U+200D, an emoji with a skin tone
+// and a flag each draw as one glyph.
+func TestShape_JoinsEmojiSequences(t *testing.T) {
+	d := New()
+	if faces[emojiFace].family != "NotoEmoji" {
+		t.Fatalf("face %d is %s, want NotoEmoji", emojiFace, faces[emojiFace].family)
+	}
+	for _, sequence := range []string{"👩‍🍼", "👍🏽", "🇺🇸"} {
+		if got := glyphIDs(d, emojiFace, sequence, false); len(got) != 1 {
+			t.Fatalf("%q drew %d glyphs, want 1", sequence, len(got))
+		}
+	}
+}
+
+// #2544: the joiner inside an emoji sequence stays with its emoji, the
+// space after an emoji goes back to Noto Sans, and a digit asking for its
+// emoji form is a keycap in the emoji face.
+func TestRuns_KeepsAnEmojiSequenceWholeAndItsSpaceOut(t *testing.T) {
+	got := runs("a 👩‍🍼 b 1️⃣")
+	want := []run{{face: 0, text: "a ", start: 0}, {face: emojiFace, text: "👩‍🍼", start: 2}, {face: 0, text: " b ", start: 5}, {face: emojiFace, text: "1️⃣", start: 8}}
+	if !slices.Equal(got, want) {
+		t.Fatalf("runs = %+v, want %+v", got, want)
+	}
+}
+
+// #2544: a character outside the BMP is shown as U+FFFD in the invisible
+// text, inside a span whose ActualText is the character in UTF-16 with a
+// surrogate pair; text inside the BMP has no span.
+func TestDrawShaped_CarriesACharacterOutsideTheBMPAsActualText(t *testing.T) {
+	content := func(text string) []byte {
+		d := New()
+		d.SetCompression(false)
+		d.Paragraph(Regular, 12, 8, text)
+		var buf bytes.Buffer
+		if err := d.Output(&buf); err != nil {
+			t.Fatal(err)
+		}
+		return buf.Bytes()
+	}
+	baby := content("Ada \U0001F476")
+	for _, want := range []string{"/Span <</ActualText <FEFFD83DDC76>>> BDC\n3 Tr ", "(\xff\xfd)Tj ET\n0 Tr 100 Tz\n\nEMC\n"} {
+		if !bytes.Contains(baby, []byte(want)) {
+			t.Fatalf("content stream has no %q", want)
+		}
+	}
+	if heart := content("Ada ❤️"); bytes.Contains(heart, []byte("ActualText")) {
+		t.Fatal("a heart, inside the BMP, was given an ActualText")
+	}
+}
+
 // Rule L2: the highest level is reversed first, then each lower odd one.
 func TestReorder_ReversesFromTheHighestLevelDown(t *testing.T) {
 	segments := []segment{{text: "a", level: 0}, {text: "b", level: 1}, {text: "1", level: 2}, {text: "c", level: 1}, {text: "d", level: 0}}
