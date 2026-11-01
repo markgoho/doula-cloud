@@ -590,6 +590,11 @@ What every Staff screen reads while a payment settles (#2225).
 */
 export const PAYMENT_ON_ITS_WAY_STATUS = 'Payment on its way';
 
+/**
+Where Record payment would be while a payment settles (#2381).
+*/
+export const paymentOnItsWayLine = 'You can record a payment by hand if this bank payment does not go through.';
+
 /** The status every Staff screen shows for an Invoice (#2094, #2122):
  * Overdue in place of Open once the BFF counts it late, because lateness
  * is the one status the stored value does not say. Every other status
