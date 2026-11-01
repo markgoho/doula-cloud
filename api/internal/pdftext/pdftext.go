@@ -9,7 +9,9 @@
 // packages. It is a reader for the PDFs pdffont writes, not a general PDF
 // parser: it knows only the "x y Td (...) Tj" form fpdf emits, with each
 // string in UTF-16BE, which is how fpdf writes text in an embedded
-// Unicode font (#2359).
+// Unicode font (#2359). pdffont writes each line's text in the order it
+// was typed, right-to-left text included (#2546), so a line reads back in
+// the order its strings are shown.
 package pdftext
 
 import (
@@ -17,12 +19,8 @@ import (
 	"compress/zlib"
 	"encoding/hex"
 	"io"
-	"slices"
 	"strings"
-	"unicode"
 	"unicode/utf16"
-
-	"github.com/go-text/typesetting/bidi"
 )
 
 // Text inflates every content stream in pdf and returns its drawn text,
@@ -126,88 +124,7 @@ func drawnLines(content []byte) []string {
 			i = j
 		}
 	}
-	for i, line := range lines {
-		lines[i] = typedOrder(line)
-	}
 	return lines
-}
-
-// typedOrder is what a PDF reader does with a line holding right-to-left
-// text. pdffont stores a line in the order it is drawn, left to right
-// (#2538), and a reader copying or searching it runs the Unicode
-// Bidirectional Algorithm over it, reversing each right-to-left stretch,
-// each letter with its marks, and putting the stretches back in the order
-// they were typed.
-func typedOrder(line string) string {
-	if !strings.ContainsFunc(line, isRightToLeft) {
-		return line
-	}
-	direction := bidi.LeftToRight
-	for _, r := range line {
-		if isRightToLeft(r) {
-			direction = bidi.RightToLeft
-			break
-		}
-		if unicode.IsLetter(r) {
-			break
-		}
-	}
-	runes := []rune(line)
-	var p bidi.Paragraph
-	segments := p.Segment(runes, direction)
-	type stretch struct {
-		text  string
-		level bidi.Level
-	}
-	var stretches []stretch
-	highest, lowestOdd := bidi.Level(0), bidi.Level(127)
-	for i := range segments.NumRuns() {
-		r := segments.Run(i)
-		text := string(runes[r.Start:r.End])
-		if r.Level%2 == 1 {
-			text = reversed(text)
-			lowestOdd = min(lowestOdd, r.Level)
-		}
-		highest = max(highest, r.Level)
-		stretches = append(stretches, stretch{text, r.Level})
-	}
-	for level := highest; level >= lowestOdd && level > 0; level-- {
-		for i := 0; i < len(stretches); {
-			if stretches[i].level < level {
-				i++
-				continue
-			}
-			j := i
-			for j < len(stretches) && stretches[j].level >= level {
-				j++
-			}
-			slices.Reverse(stretches[i:j])
-			i = j
-		}
-	}
-	var b strings.Builder
-	for _, s := range stretches {
-		b.WriteString(s.text)
-	}
-	return b.String()
-}
-
-func isRightToLeft(r rune) bool {
-	return unicode.In(r, unicode.Arabic, unicode.Hebrew, unicode.Syriac, unicode.Thaana, unicode.Nko)
-}
-
-// reversed is text with each letter and its marks in reverse order.
-func reversed(text string) string {
-	var clusters []string
-	for _, r := range text {
-		if n := len(clusters); n > 0 && unicode.In(r, unicode.Mn, unicode.Me, unicode.Mc) {
-			clusters[n-1] += string(r)
-			continue
-		}
-		clusters = append(clusters, string(r))
-	}
-	slices.Reverse(clusters)
-	return strings.Join(clusters, "")
 }
 
 func isDelimiter(c byte) bool {

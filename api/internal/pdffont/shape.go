@@ -3,10 +3,8 @@ package pdffont
 import (
 	"bytes"
 	"fmt"
-	"slices"
 	"strings"
 	"sync"
-	"unicode"
 	"unicode/utf16"
 	"unicode/utf8"
 
@@ -112,17 +110,36 @@ func (d *Doc) shapedWidth(i int, style Style, size float64, text string, rtl boo
 
 func fromFixed(v fixed.Int26_6) float64 { return float64(v) / 64 }
 
-// drawShaped draws text in face i as its shaped glyph outlines, filled in
-// the text color on the baseline fpdf would give a cell on this line, then
-// lays the same text over it invisibly (text render mode 3), stretched to
-// the drawn width, so the PDF still holds the characters typed.
-//
-// fpdf writes text as two-byte codes, one per BMP character, so a
-// character outside the BMP cannot be a code of its own. The invisible
-// text holds U+FFFD in its place, wrapped in a marked-content span whose
-// ActualText (ISO 32000-1, 14.9.4) is the text as typed, in UTF-16 with
-// surrogate pairs; a reader copies and searches that instead.
-func (d *Doc) drawShaped(i int, style Style, size, lineHeight float64, text string, rtl bool) {
+// drawShaped draws text in face i as its shaped glyph outlines, then lays
+// the same text over it invisibly (text render mode 3), stretched to the
+// drawn width, so the PDF still holds the characters typed.
+func (d *Doc) drawShaped(i int, style Style, size, lineHeight float64, text string) {
+	x := d.GetX()
+	width := d.drawOutlines(i, style, size, lineHeight, text, false)
+	d.use(layerFace(i), style, size)
+	natural := d.GetStringWidth(shownText(text))
+	if natural <= 0 {
+		d.SetX(x + width)
+		return
+	}
+	d.RawWriteStr(fmt.Sprintf("3 Tr %.3f Tz\n", 100*max(width, zeroWidth)/natural))
+	d.layer(text, width, lineHeight)
+	d.RawWriteStr("0 Tr 100 Tz\n")
+}
+
+// layerFace is the face text in face i is laid in invisibly: the first
+// face for one fpdf never registers.
+func layerFace(i int) int {
+	if faces[i].outlinesOnly {
+		return 0
+	}
+	return i
+}
+
+// drawOutlines fills text's shaped glyph outlines in face i, in the text
+// color on the baseline fpdf would give a cell on this line, and returns
+// the width drawn. The position is left where it was.
+func (d *Doc) drawOutlines(i int, style Style, size, lineHeight float64, text string, rtl bool) float64 {
 	sf, out := d.shape(i, style, text, rtl)
 	scale := d.unitsPerFontUnit(sf, size)
 	x, y := d.GetX(), d.GetY()
@@ -146,37 +163,33 @@ func (d *Doc) drawShaped(i int, style Style, size, lineHeight float64, text stri
 	d.SetFillColor(fr, fg, fb)
 	// fpdf's path calls move its current position to the last point drawn.
 	d.SetXY(x, y)
+	return pen - x
+}
 
-	width := pen - x
-	stored := text
-	if rtl {
-		stored = visualOrder(text)
+// layer writes text into the invisible text layer at the current
+// position. fpdf writes text as two-byte codes, one per BMP character, so
+// a character outside the BMP cannot be a code of its own: the layer holds
+// U+FFFD in its place, wrapped in a marked-content span whose ActualText
+// (ISO 32000-1, 14.9.4) is the text as typed, in UTF-16 with surrogate
+// pairs, which a reader copies and searches instead.
+func (d *Doc) layer(text string, width, lineHeight float64) {
+	shown := shownText(text)
+	if shown != text {
+		d.RawWriteStr("/Span <</ActualText <FEFF" + utf16Hex(text) + ">>> BDC")
 	}
-	layer := i
-	if faces[i].outlinesOnly {
-		layer = 0
+	d.cell(shown, width, lineHeight)
+	if shown != text {
+		d.RawWriteStr("EMC")
 	}
-	shown := strings.Map(func(r rune) rune {
+}
+
+func shownText(text string) string {
+	return strings.Map(func(r rune) rune {
 		if outsideBMP(r) {
 			return utf8.RuneError
 		}
 		return r
-	}, stored)
-	d.use(layer, style, size)
-	natural := d.GetStringWidth(shown)
-	if natural <= 0 {
-		d.SetX(x + width)
-		return
-	}
-	if shown != stored {
-		d.RawWriteStr("/Span <</ActualText <FEFF" + utf16Hex(stored) + ">>> BDC")
-	}
-	d.RawWriteStr(fmt.Sprintf("3 Tr %.3f Tz\n", 100*max(width, zeroWidth)/natural))
-	d.cell(shown, width, lineHeight)
-	d.RawWriteStr("0 Tr 100 Tz\n")
-	if shown != stored {
-		d.RawWriteStr("EMC")
-	}
+	}, text)
 }
 
 func utf16Hex(text string) string {
@@ -212,31 +225,4 @@ func (d *Doc) outline(o font.GlyphOutline, x, y, scale float64) bool {
 		}
 	}
 	return len(o.Segments) > 0
-}
-
-// visualOrder is a right-to-left run as it reads on the page, left to
-// right: each letter with its marks, in reverse. A PDF holds text in the
-// order it is drawn, and a reader reverses a right-to-left run back to
-// the order it was typed when the text is copied or searched.
-func visualOrder(text string) string {
-	clusters := marked(text)
-	slices.Reverse(clusters)
-	var b bytes.Buffer
-	for _, c := range clusters {
-		b.WriteString(c)
-	}
-	return b.String()
-}
-
-// marked splits text into each letter and the marks that follow it.
-func marked(text string) []string {
-	var out []string
-	for _, r := range text {
-		if n := len(out); n > 0 && unicode.In(r, unicode.Mn, unicode.Me, unicode.Mc) {
-			out[n-1] += string(r)
-			continue
-		}
-		out = append(out, string(r))
-	}
-	return out
 }

@@ -39,6 +39,9 @@ var names = []struct{ script, name string }{
 	{"an emoji sequence, a skin tone, a keycap and a flag", "👩‍🍼 Ada 👍🏽 1️⃣ 🇺🇸"},
 	{"Arabic with brackets", "سارة (سارة) الحداد"},
 	{"Arabic and an emoji", "سارة 👶 الحداد"},
+	{"Arabic ending in a closing bracket", "سارة (سارة) [الحداد]"},
+	{"Arabic and a heart", "سارة ❤️ الحداد"},
+	{"Arabic with marks", "بِسمِ سارة"},
 }
 
 func TestParagraph_PrintsANameInAnyScriptAsTyped(t *testing.T) {
