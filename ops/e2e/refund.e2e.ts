@@ -1,7 +1,7 @@
 import { expect, test, type APIRequestContext, type Page } from '../../app/e2e/playwrightTest';
-import { EMULATOR_URL } from '../../app/e2e/mfa';
-import { OPS_TENANT_ID, seedRefundablePractice } from '../../app/e2e/stack';
-import { STUB_TOTP_CODE, stubTotpFactor } from '../../app/e2e/totpStub';
+import { seedRefundablePractice } from '../../app/e2e/stack';
+import { STUB_TOTP_CODE } from '../../app/e2e/totpStub';
+import { signedInOperator } from './operator';
 
 /*
  * A refund walked through its check page against the local stack. The
@@ -13,30 +13,13 @@ import { STUB_TOTP_CODE, stubTotpFactor } from '../../app/e2e/totpStub';
 
 const password = 'operator-refund-password';
 
-async function signedInOperator(page: Page, request: APIRequestContext): Promise<string> {
-	const email = `operator-${crypto.randomUUID()}@doula-cloud.invalid`;
-	const created = await request.post(
-		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/projects/doula-cloud/tenants/${OPS_TENANT_ID}/accounts`,
-		{
-			headers: { Authorization: 'Bearer owner' },
-			data: { email, password, displayName: 'Refund Operator', emailVerified: true }
-		}
-	);
-	expect(created.ok()).toBe(true);
-	await stubTotpFactor(page, request);
-	await page.goto('/sign-in');
-	await page.getByLabel('Email address').fill(email);
-	await page.getByLabel('Password').fill(password);
-	await page.getByRole('button', { name: 'Sign in' }).click();
-	await page.getByLabel('Authenticator app code').fill(STUB_TOTP_CODE);
-	await page.getByRole('button', { name: 'Confirm and sign in' }).click();
-	await expect(page.getByText('You are signed in as Refund Operator')).toBeVisible();
-	return email;
+function signedIn(page: Page, request: APIRequestContext): Promise<string> {
+	return signedInOperator(page, request, password, 'Refund Operator');
 }
 
 test('An operator refunds two Credits on the check page with a fresh code', async ({ page, request }) => {
 	const practiceId = seedRefundablePractice('Lakeside Birth Collective', 'Renata', 'Alvarez');
-	await signedInOperator(page, request);
+	await signedIn(page, request);
 
 	await page.goto(`/practices/${practiceId}/refund`);
 	await expect(page.getByRole('heading', { name: 'Refund Credits' })).toBeVisible();
@@ -73,7 +56,7 @@ test('An operator refunds two Credits on the check page with a fresh code', asyn
 });
 
 test('More Credits than the purchase holds are refused before the check page', async ({ page, request }) => {
-	await signedInOperator(page, request);
+	await signedIn(page, request);
 	const practiceId = seedRefundablePractice('Spent Practice', 'Maya', 'Okonkwo');
 
 	await page.goto(`/practices/${practiceId}/refund`);

@@ -32,7 +32,7 @@ import { API_URL, DEV_SERVER_ORIGIN, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from
 import { retryPastRateLimit } from '../e2e/rateLimit';
 import { provisionTail, type DoulaSession, type ProvisionedClient } from '../e2e/simulation/provision';
 import { describeWorld, type SeededClient } from '../e2e/simulation/world';
-import { backdateInvoice, countPracticesNamed, MAILBOX_URL, readStaffInviteToken, simulatedDateAfter, WORKER_SECRET } from '../e2e/stack';
+import { backdateInvoice, countPracticesNamed, MAILBOX_URL, readStaffInviteToken, seedFoundingGrant, simulatedDateAfter } from '../e2e/stack';
 import { acceptStaffInvite } from '../e2e/staffSignup';
 import { TYPICAL_PRACTICE_NAME, TYPICAL_STAFF, type TypicalStaff } from '../src/routes/typicalPilot';
 
@@ -271,12 +271,9 @@ async function buildRoster(request: APIRequestContext): Promise<Roster> {
 		staff[slugOf(member)] = await joinStaff(request, practiceId, owner, member);
 	}
 	// The pilot's founding grant (#439), sized from the roster just built:
-	// three Credits a Staff member. An operator endpoint, so it takes the
-	// stack's internal secret rather than a session.
-	await send(request, 'POST', '/api/internal/billing/founding-grants', { 'X-Internal-Secret': WORKER_SECRET }, {
-		practiceId,
-		grantedBy: 'local demo seed (#1994)'
-	});
+	// three Credits a Staff member. ops gives it (#2482), so the seed
+	// writes the operator's act directly.
+	seedFoundingGrant(practiceId, 'Local demo seed');
 	// A Contract takes its price from the rate for its kind (#967).
 	await send(request, 'PUT', `/api/practices/${practiceId}/rates/birth`, owner, { amountCents: 150_000 });
 	await send(request, 'PUT', `/api/practices/${practiceId}/rates/postpartum`, owner, { amountCents: 95_000 });

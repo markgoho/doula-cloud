@@ -500,6 +500,28 @@ export function seedRefundablePractice(name: string, ownerFirstName: string, own
 	return practiceId;
 }
 
+/**
+ * Seeds a Practice with staffCount Staff and no Credits, the roster a
+ * founding grant in ops is sized from (#2482). Returns the Practice's id.
+ */
+export function seedPracticeWithStaff(name: string, staffCount: number): string {
+	const practiceId = randomUUID();
+	const statements = [
+		`INSERT INTO practices (id, name, timezone) VALUES (${sqlLiteral(practiceId)}, ${sqlLiteral(name)}, 'America/New_York');`
+	];
+	for (let index = 0; index < staffCount; index++) {
+		const staffId = randomUUID();
+		statements.push(
+			`INSERT INTO staff (id, identity_uid, first_name, last_name, email, work_state)
+			 VALUES (${sqlLiteral(staffId)}, ${sqlLiteral(`grant-staff-${staffId}`)}, 'Staff', ${sqlLiteral(String(index + 1))}, ${sqlLiteral(`staff-${staffId}@doula-cloud.invalid`)}, 'NY');
+			 INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type)
+			 VALUES (${sqlLiteral(practiceId)}, ${sqlLiteral(staffId)}, ARRAY[${sqlLiteral(index === 0 ? 'owner' : 'doula')}]::practice_role[], 'employee');`
+		);
+	}
+	execSQL(statements.join('\n'));
+	return practiceId;
+}
+
 // Seeds an Engagement directly: #397 decoupled Client creation from
 // Engagement creation (ADR-0017 -- an Engagement now comes from a
 // separate Engagement Request, not built yet), so POST .../clients no
@@ -563,6 +585,42 @@ export function backdateInvoice(invoiceId: string, days: number): void {
 	}
 	execSQL(
 		`UPDATE invoices SET created_at = created_at - interval '${days + 30} days', due_at = due_at - interval '${days + 30} days' WHERE id = ${sqlLiteral(invoiceId)}`
+	);
+}
+
+/**
+ * Gives a Practice its founding grant the way ops does (#2482): an
+ * operator's act, then ops_record_founding_grant sizing it from the
+ * roster, then the Practice's Activity row under the operator. ops is the
+ * one way in, and it takes an operator signed in with a second factor, so
+ * the demo seed (scripts/demo-practice.ts) writes the act as the superuser
+ * instead.
+ */
+export function seedFoundingGrant(practiceId: string, operatorName: string): void {
+	const practice = sqlLiteral(practiceId);
+	execSQL(
+		`DO $$
+		 DECLARE
+		     v_operator uuid;
+		     v_act uuid;
+		     v_staff integer;
+		     v_credits integer;
+		 BEGIN
+		     INSERT INTO operators (identity_uid, name, email)
+		     VALUES ('seed-operator-' || gen_random_uuid(), ${sqlLiteral(operatorName)}, 'seed-operator@doula-cloud.invalid')
+		     RETURNING id INTO v_operator;
+		     SELECT staff_count, credits INTO v_staff, v_credits FROM ops_founding_grant_practice(${practice});
+		     INSERT INTO operator_acts (operator_id, action, subject_kind, subject_id, details)
+		     VALUES (v_operator, 'founding_grant', 'practice', ${practice},
+		             jsonb_build_object('staffCount', v_staff, 'credits', v_credits, 'requestKey', 'seed'))
+		     RETURNING id INTO v_act;
+		     IF ops_record_founding_grant(${practice}, v_act, v_credits, now()) IS NULL THEN
+		         RAISE EXCEPTION 'practice % was not given a founding grant', ${practice};
+		     END IF;
+		     PERFORM record_operator_activity(${practice}, 'practice', ${practice}, 'founding_grant_issued',
+		         jsonb_build_object('staffCount', v_staff, 'credits', v_credits), v_act, now());
+		 END
+		 $$`
 	);
 }
 

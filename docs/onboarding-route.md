@@ -222,7 +222,7 @@ One path was not in the map's list, and the decision on #1492 makes it matter: *
 
 A pilot Practice walks the same route. There is no second signup form, and nothing in `/signup` knows that a Practice is a pilot (the map's charting answers; fact 6 of the walk on [Walk the real route from signup to First Value as a new Owner, and count every act (#1488)](https://github.com/markgoho/doula-cloud/issues/1488)).
 
-- **The founding grant is an operator's call after signup**: `POST /api/internal/billing/founding-grants`, with the Practice's id and the grantor's name.
+- **The founding grant is an operator's call after signup**: given on the ops screen `/practices/<id>/founding-grant` since [#2482](https://github.com/markgoho/doula-cloud/issues/2482), with the operator taken from the session (`docs/environment.md`, "Giving a Practice its founding grant").
 - **Its size is fixed at the moment it is issued**: three Credits for each Staff member then on the roster. A second grant is refused. An agency's grant is the correct size only if it is issued after its Doulas have accepted their Invitations.
 - **The three Welcome credits from signup are separate**, so a solo pilot Practice holds six. After a founding grant the balance is not the signup bonus alone, so the two Credits sentences say "N Credits".
 - **No pilot Practice signs up before `/terms` and `/privacy` are live** (#1494).
