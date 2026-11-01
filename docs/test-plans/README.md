@@ -220,7 +220,7 @@ Every `automated` step passed. **After the first run no plan carried a `blocked`
 | Renata Alvarez | Yes | — |
 | Dee Whitlock | Yes | — |
 | Priya Raman | Yes | — |
-| Lena Vasquez | No | 7.1: nothing records what she was paid (LV-G3, [#2271](https://github.com/markgoho/doula-cloud/issues/2271)) |
+| Lena Vasquez | Yes, since 2026-11-01. No on 2026-10-28 | — (7.1, what she was paid, is recorded since LV-G3's Fee Payment, [#2271](https://github.com/markgoho/doula-cloud/issues/2271), and was walked again for [#2264](https://github.com/markgoho/doula-cloud/issues/2264)) |
 | Nadia Haddad | Yes | — |
 | Hannah Sorensen | Yes | — |
 | Camille Boyd | Yes | — |
