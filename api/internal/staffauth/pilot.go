@@ -6,11 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/clock"
-	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/sessionmint"
 )
 
@@ -21,19 +18,14 @@ import (
 // fallback if it ever meets the refusal without the code.
 const MsgPilotNotOpen = "DoulaCloud opens in January 2027. Until then, only a Practice in the pilot can sign up."
 
-// pilotOperatorDoor is the transaction-local setting 00125's pilot_gate
-// policies read. Only the gate endpoint below sets it, and only after the
-// internal guard has admitted the caller.
-const pilotOperatorDoor = `SELECT set_config('app.pilot_operator_trusted', 'true', true)`
-
 // pilotNotOpen is signup's refusal of an address pilotAdmits says no to.
 func pilotNotOpen() *sessionmint.Refusal {
 	return &sessionmint.Refusal{Status: http.StatusForbidden, Code: apierr.CodePilotNotOpen, Message: MsgPilotNotOpen}
 }
 
 // pilotAdmits answers whether address may create a Practice: yes while
-// the pilot gate is open, and otherwise only if the founder has added it
-// to the allowlist (in ops, #2484). address is already in NormalizeAddress's spelling,
+// the pilot gate is open (opened in ops, #2485), and otherwise only if
+// the founder has added it to the allowlist (in ops, #2484). address is already in NormalizeAddress's spelling,
 // which is the spelling 00125 stores, so the match is case-insensitive.
 //
 // It reads through pilot_admits (00125), a yes-or-no question about one
@@ -46,85 +38,6 @@ func pilotAdmits(ctx context.Context, tx *sql.Tx, address string) (bool, error) 
 		return false, fmt.Errorf("staffauth: ask pilot_admits: %w", err)
 	}
 	return admitted, nil
-}
-
-// PilotGateOpenRequest is the body of a POST to PilotGateOpenHandler: who
-// is opening the pilot gate.
-type PilotGateOpenRequest struct {
-	OpenedBy string `json:"openedBy"`
-}
-
-// PilotGate is the pilot gate once it is open: who opened it, and when.
-type PilotGate struct {
-	OpenedBy string    `json:"openedBy"`
-	OpenedAt time.Time `json:"openedAt"`
-}
-
-// PilotGateOpenHandler opens the pilot gate (#1790): from then on signup
-// does not ask the allowlist.
-//
-// It is the one deliberate act ADR-0043 asks for -- the gate opens in
-// January because the founder opened it, not because a date passed --
-// and the row records who did it and when. An environment variable would
-// leave only the deploy history to answer that. Opening an open gate
-// succeeds and keeps the first record, and nothing closes it again.
-func PilotGateOpenHandler(db *sql.DB, auth *internalauth.Guard) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !auth.Require(w, r) {
-			return
-		}
-
-		var req PilotGateOpenRequest
-		if !apierr.DecodeJSON(w, r, &req) {
-			return
-		}
-		openedBy := strings.TrimSpace(req.OpenedBy)
-		if openedBy == "" {
-			apierr.WriteError(w, "openedBy is required", http.StatusBadRequest)
-			return
-		}
-
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		// A no-op once Commit below has run: every refusal on this
-		// endpoint is answered before the transaction begins.
-		defer func() { _ = tx.Rollback() }()
-
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		if _, err := tx.ExecContext(r.Context(), pilotOperatorDoor); err != nil {
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		if _, err := tx.ExecContext(r.Context(),
-			`UPDATE pilot_gate SET opened_by = $1, opened_at = $2 WHERE opened_at IS NULL`,
-			openedBy, clock.Now(r.Context()),
-		); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		var gate PilotGate
-		if err := tx.QueryRowContext(r.Context(),
-			`SELECT opened_by, opened_at FROM pilot_gate`,
-		).Scan(&gate.OpenedBy, &gate.OpenedAt); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		apierr.WriteJSON(w, http.StatusOK, gate)
-	})
 }
 
 // LooksLikeAddress is GOV.UK's own email-address rule, no more: an "@"

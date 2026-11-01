@@ -189,7 +189,7 @@ gcloud run services update doula-api --region us-central1 \
 
 ### The boundary on `/api/internal/**`
 
-Twenty-seven addresses sit under `/api/internal/**` — the drain, twenty-one `process-*` outbox endpoints, #443's page probe, the idempotency-key sweep, the webhook-arrival sweep, and two operator endpoints. `api/routes_internal_guardrail_test.go` holds the list, read from the router rather than written from memory, and asserts that every one of them answers `401` to a request carrying nothing.
+Twenty-six addresses sit under `/api/internal/**` — the drain, twenty-one `process-*` outbox endpoints, #443's page probe, the idempotency-key sweep, the webhook-arrival sweep, and one operator endpoint. `api/routes_internal_guardrail_test.go` holds the list, read from the router rather than written from memory, and asserts that every one of them answers `401` to a request carrying nothing.
 
 `doula-api` is `allUsers` → `roles/run.invoker` and stays that way — it serves the app and three webhooks that arrive with no Google credential — and Cloud Run's IAM is per-service, so the boundary can only be inside the process. [ADR-0037](adr/0037-the-internal-boundary-is-a-caller-identity-not-a-shared-secret.md) makes it a caller identity: `internalauth.Guard` verifies a Google-signed OIDC ID token against `INTERNAL_OIDC_AUDIENCE` and then the token's own `email` claim against `INTERNAL_OIDC_CALLERS`.
 
@@ -204,7 +204,7 @@ gcloud auth print-identity-token \
   --include-email
 ```
 
-Both flags are load-bearing. `--audiences` is the service's base URL and not the endpoint's own URL, because one audience has to serve all twenty-seven addresses — and it is the same trap in the infrastructure, where Cloud Scheduler and Cloud Tasks each default an unset `audience` to the full target URI. `--include-email` is what puts the `email` claim on the token; the guard refuses a token that carries none, so its absence reads as a 401 from an otherwise valid token.
+Both flags are load-bearing. `--audiences` is the service's base URL and not the endpoint's own URL, because one audience has to serve all twenty-six addresses — and it is the same trap in the infrastructure, where Cloud Scheduler and Cloud Tasks each default an unset `audience` to the full target URI. `--include-email` is what puts the `email` claim on the token; the guard refuses a token that carries none, so its absence reads as a 401 from an otherwise valid token.
 
 ### Refunding a Practice's Credits
 
@@ -222,23 +222,7 @@ Until January 2027, `POST /api/staff/signup` creates a Practice only for an addr
 
 **Let a doula into the pilot.** Do this after you have spoken with the doula. It takes no token. Since [#2484](https://github.com/markgoho/doula-cloud/issues/2484) an address is added only in ops ([ADR-0062](adr/0062-the-platform-operator-works-in-a-separate-app-at-ops-doula-cloud-with-its-own-service-and-database-role.md)). Sign in at `https://ops.doula.cloud`, open **Pilot allowlist** (`/pilot-allowlist`), and enter the address the doula will sign up with; case and spaces do not matter. The check page states the address. Press **Add**. The add is recorded in the Operator log under your name, and the allowlist row keys that act. An address already on the list is refused, with the date it was added, and nothing changes. There is no way to take an address off. If the doula was refused before you added the address, signing up again now goes through.
 
-The gate below takes a token minted with the command above. It records who opened it and when, and cannot be undone through the API.
-
-**Open the pilot gate in January.** The one deliberate act that opens signup to everyone ([ADR-0043](adr/0043-a-date-is-a-trigger-only-when-someone-set-it.md)). From then on, signup does not read the allowlist. Opening it a second time answers `200` and keeps the first record. There is no endpoint that closes it again.
-
-```sh
-TOKEN=$(gcloud auth print-identity-token \
-  --impersonate-service-account=internal-caller@doula-cloud.iam.gserviceaccount.com \
-  --audiences=https://doula-api-850855848778.us-central1.run.app \
-  --include-email)
-
-curl -s -X POST 'https://doula-api-850855848778.us-central1.run.app/api/internal/staffauth/pilot-gate/open' \
-  -H "Authorization: Bearer $TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"openedBy": "<your name>"}'
-```
-
-The answer is the gate's record: `{"openedBy", "openedAt"}`.
+**Open the pilot gate in January.** The one deliberate act that opens signup to everyone ([ADR-0043](adr/0043-a-date-is-a-trigger-only-when-someone-set-it.md)). It takes no token. Since [#2485](https://github.com/markgoho/doula-cloud/issues/2485) the gate is opened only in ops. Sign in at `https://ops.doula.cloud` and open **Pilot gate** (`/pilot-gate`). The check page states that anyone who signs up can then create a Practice, and that the gate stays open for good. Enter your password and a new authenticator-app code, then press **Open the pilot gate**. From then on, signup does not read the allowlist. The opening is recorded in the Operator log under your name, and the gate keys that act. Once the gate is open, the page says when it was opened, and an opening sent again is refused with that date and changes nothing. Nothing closes it again.
 
 ### The monthly Credits read
 

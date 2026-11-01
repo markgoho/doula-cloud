@@ -29,7 +29,8 @@ export const ACTION_LABELS: Record<string, string> = {
 	second_factor_cleared: 'Two-step sign-in reset',
 	owner_contact_read: 'Read Owners’ contacts',
 	feedback_read: 'Read a piece of Feedback',
-	pilot_address_added: 'Added to the pilot allowlist'
+	pilot_address_added: 'Added to the pilot allowlist',
+	pilot_gate_opened: 'Opened the pilot gate'
 };
 
 const REFUSAL_REASONS: Record<string, string> = {

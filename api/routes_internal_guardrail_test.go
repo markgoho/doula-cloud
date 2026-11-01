@@ -40,7 +40,6 @@ var wantInternalRoutes = []string{
 	"POST /api/internal/outboxes/drain",
 	"POST /api/internal/site/process-build-outbox",
 	"POST /api/internal/site/verify-pages",
-	"POST /api/internal/staffauth/pilot-gate/open",
 	"POST /api/internal/webhooks/sweep-arrivals",
 }
 

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -12,68 +11,27 @@ import (
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
-	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
 const (
-	pilotTestSecret  = "pilot-internal-test-secret"
-	pilotGateOpenURL = "/api/internal/staffauth/pilot-gate/open"
-	pilotFounder     = "Mark"
-	pilotPractice    = "Pilot Practice"
-	anaAddress       = "ana@example.com"
-	anaMixedCase     = "Ana@Example.com"
+	pilotPractice = "Pilot Practice"
+	anaAddress    = "ana@example.com"
+	anaMixedCase  = "Ana@Example.com"
 )
 
-// newPilotServer mounts signup (on one verified identity) beside the gate
-// endpoint, so a test can refuse a signup, let the address in, and retry
-// on the same identity against one database.
+// newPilotServer mounts signup on one verified identity, so a test can
+// refuse a signup, let the address in, and retry on the same identity
+// against one database.
 func newPilotServer(t *testing.T, db *testdb.DB, uid, email string) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
 	staffauth.Mount(g, ir, db.App, authntest.Verifier{UID: uid, Email: email}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{}, neverSuppressed)
-	guard := internalauth.FromSecret(pilotTestSecret)
-	mux.Handle("POST "+pilotGateOpenURL, staffauth.PilotGateOpenHandler(db.App, guard))
 	return httptest.NewServer(mux)
-}
-
-func postPilot(t *testing.T, srv *httptest.Server, path, secret, body string) *http.Response {
-	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+path, strings.NewReader(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if secret != "" {
-		req.Header.Set("X-Internal-Secret", secret)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
-}
-
-func openPilotGate(t *testing.T, srv *httptest.Server, openedBy string) staffauth.PilotGate {
-	t.Helper()
-	body, err := json.Marshal(staffauth.PilotGateOpenRequest{OpenedBy: openedBy})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := postPilot(t, srv, pilotGateOpenURL, pilotTestSecret, string(body))
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("open gate: status = %d, want 200", resp.StatusCode)
-	}
-	var gate staffauth.PilotGate
-	if err := json.NewDecoder(resp.Body).Decode(&gate); err != nil {
-		t.Fatalf("decode gate: %v", err)
-	}
-	return gate
 }
 
 func pilotSignup(t *testing.T, srv *httptest.Server) *http.Response {
@@ -223,68 +181,6 @@ func TestPilotSignup_InvitationAcceptanceIsNotGated(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
-	}
-}
-
-func TestPilotGate_RefusesWithoutTheInternalCredential(t *testing.T) {
-	db := testdb.New(t)
-	testdb.ClosePilotGate(t, db)
-	srv := newPilotServer(t, db, someUID, testStaffEmail)
-	defer srv.Close()
-
-	for _, secret := range []string{"", "wrong-secret"} {
-		resp := postPilot(t, srv, pilotGateOpenURL, secret, `{"openedBy": "Mark"}`)
-		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusUnauthorized {
-			t.Errorf("secret %q: status = %d, want 401", secret, resp.StatusCode)
-		}
-	}
-	if n := countRows(t, db, `SELECT count(*) FROM pilot_gate WHERE opened_at IS NULL`); n != 1 {
-		t.Fatalf("gate is open after a refused request")
-	}
-}
-
-// Opening the gate records who and when, and from then on signup does
-// not ask the allowlist. Opening it again keeps the first record.
-func TestPilotGate_OpeningLetsEveryoneSignUpAndKeepsTheFirstRecord(t *testing.T) {
-	db := testdb.New(t)
-	testdb.ClosePilotGate(t, db)
-	srv := newPilotServer(t, db, "january-uid", "january@example.com")
-	defer srv.Close()
-
-	before := time.Now().Add(-time.Minute)
-	first := openPilotGate(t, srv, "  "+pilotFounder+" ")
-	if first.OpenedBy != pilotFounder || first.OpenedAt.Before(before) {
-		t.Fatalf("gate = %+v, want opened by %q now", first, pilotFounder)
-	}
-	second := openPilotGate(t, srv, "Someone Else")
-	if second.OpenedBy != first.OpenedBy || !second.OpenedAt.Equal(first.OpenedAt) {
-		t.Fatalf("second open = %+v, want the first record %+v", second, first)
-	}
-
-	resp := pilotSignup(t, srv)
-	defer resp.Body.Close()
-	assertSignedUpWithWelcomeCredits(t, db, resp)
-}
-
-func TestPilotGate_RefusesABadRequest(t *testing.T) {
-	db := testdb.New(t)
-	testdb.ClosePilotGate(t, db)
-	srv := newPilotServer(t, db, someUID, testStaffEmail)
-	defer srv.Close()
-
-	for name, body := range map[string]string{
-		"truncated json": `{"openedBy": `,
-		"no openedBy":    `{"openedBy": " "}`,
-	} {
-		resp := postPilot(t, srv, pilotGateOpenURL, pilotTestSecret, body)
-		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Errorf("%s: status = %d, want 400", name, resp.StatusCode)
-		}
-	}
-	if n := countRows(t, db, `SELECT count(*) FROM pilot_gate WHERE opened_at IS NULL`); n != 1 {
-		t.Fatalf("gate is open after a refused request")
 	}
 }
 

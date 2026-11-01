@@ -423,9 +423,15 @@ function seedOpsE2ERole() {
 // added may create a Practice before January; here every spec signs up
 // a Practice with an address of its own, and the gate would refuse them
 // all. `WHERE opened_at IS NULL` keeps the first record on a long-lived
-// `dev:full` stack, the same rule the operator endpoint follows.
-function openPilotGate() {
-	execSQL("UPDATE pilot_gate SET opened_by = 'e2e stack', opened_at = now() WHERE opened_at IS NULL");
+// `dev:full` stack, the same rule ops's opening follows. It is opened
+// with no act on record, as a gate opened before ops had the act was.
+export function openPilotGate() {
+	execSQL('UPDATE pilot_gate SET opened_at = now() WHERE opened_at IS NULL');
+}
+
+// Closes the gate again, for ops's walk of opening it (#2485).
+export function closePilotGate() {
+	execSQL('UPDATE pilot_gate SET operator_act_id = NULL, opened_at = NULL');
 }
 
 // Links a fresh Portal Account to clientID via client_portal_users, with

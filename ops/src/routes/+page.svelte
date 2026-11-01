@@ -39,6 +39,7 @@
 	<p><a href={resolve('/credits')}>Monthly Credits</a></p>
 	<p><a href={resolve('/feedback')}>Feedback</a></p>
 	<p><a href={resolve('/pilot-allowlist')}>Pilot allowlist</a></p>
+	<p><a href={resolve('/pilot-gate')}>Pilot gate</a></p>
 	<p><a href={resolve('/operator-log')}>Operator log</a></p>
 	<form onsubmit={signOut}>
 		<button class="ops-button" type="submit" disabled={isSigningOut}>Sign out</button>
