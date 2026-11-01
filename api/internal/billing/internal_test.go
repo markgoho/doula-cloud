@@ -19,7 +19,6 @@ const internalTestSecret = "internal-test-secret"
 func newInternalBillingServer(db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.Handle("GET /api/internal/billing/dormant-practices", billing.DormantPracticesHandler(db.App, internalauth.FromSecret(internalTestSecret)))
-	mux.Handle("POST /api/internal/billing/founding-grants", billing.FoundingGrantHandler(db.App, internalauth.FromSecret(internalTestSecret)))
 	return httptest.NewServer(mux)
 }
 

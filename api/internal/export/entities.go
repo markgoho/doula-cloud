@@ -277,10 +277,10 @@ func entities() []entity {
 		{
 			file:        "credit_ledger.csv",
 			description: "This Practice's Credit ledger: every grant, purchase, consumption and refund.",
-			header:      []string{"id", "origin", "quantity", "unit_price_cents", "tax_cents", "consumed_engagement_id", "consumed_at", "stripe_payment_intent_id", "stripe_refund_id", "drawn_lot_id", "refund_request_key", "granted_by", colCreatedAt},
+			header:      []string{"id", "origin", "quantity", "unit_price_cents", "tax_cents", "consumed_engagement_id", "consumed_at", "stripe_payment_intent_id", "stripe_refund_id", "drawn_lot_id", "refund_request_key", "operator", colCreatedAt},
 			query: `SELECT id::text, origin::text, quantity::text, unit_price_cents::text, tax_cents::text,
 			               consumed_engagement_id::text, consumed_at::text, stripe_payment_intent_id,
-			               stripe_refund_id, drawn_lot_id::text, refund_request_key, granted_by, created_at::text
+			               stripe_refund_id, drawn_lot_id::text, refund_request_key, operator_act_actor_name(operator_act_id), created_at::text
 			          FROM credit_ledger WHERE practice_id = $1
 			         ORDER BY created_at`,
 		},

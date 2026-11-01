@@ -30,3 +30,23 @@ func TestSeedOperatorActivity(t *testing.T) {
 		t.Fatalf("row = (%s, %s, %s, %v), want (Mark Goho, operator, credits_refunded, %v)", operatorName, actorKind, action, createdAt, at)
 	}
 }
+
+func TestSeedFoundingGrant(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Seed Grant Practice")
+	at := time.Date(2026, 10, 30, 14, 0, 0, 0, time.UTC)
+
+	lotID := testdb.SeedFoundingGrant(t, db, practiceID, 6, at)
+
+	var quantity int
+	var createdAt time.Time
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT l.quantity, l.created_at FROM credit_ledger l JOIN operator_acts oa ON oa.id = l.operator_act_id
+		  WHERE l.id = $1 AND l.practice_id = $2 AND l.origin = 'founding_grant'`, lotID, practiceID,
+	).Scan(&quantity, &createdAt); err != nil {
+		t.Fatalf("read seeded grant: %v", err)
+	}
+	if quantity != 6 || !createdAt.Equal(at) {
+		t.Fatalf("grant = (%d, %v), want (6, %v)", quantity, createdAt, at)
+	}
+}

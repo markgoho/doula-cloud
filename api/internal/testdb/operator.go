@@ -57,3 +57,19 @@ func SeedOperatorActivity(t *testing.T, db *DB, practiceID, subjectKind, subject
 	}
 	return operatorActID
 }
+
+// SeedFoundingGrant writes a founding grant of credits Credits at
+// practiceID, created at at and keyed to a fresh act of an operator, as
+// ops writes one. It returns the ledger row's id.
+func SeedFoundingGrant(t *testing.T, db *DB, practiceID string, credits int, at time.Time) (lotID string) {
+	t.Helper()
+	actID := SeedOperatorAct(t, db, "Mark Goho")
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO credit_ledger (practice_id, origin, quantity, operator_act_id, created_at)
+		 VALUES ($1, 'founding_grant', $2, $3, $4) RETURNING id`, practiceID, credits, actID, at,
+	).Scan(&lotID); err != nil {
+		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
+		t.Fatalf("testdb: seed founding grant: %v", err)
+	}
+	return lotID
+}

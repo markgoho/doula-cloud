@@ -25,7 +25,7 @@ type SupportClearRequest struct {
 // ID against the identity-verified representative on her Practice's
 // Stripe Connect account (ADR-0007) -- proof this endpoint has no way to
 // check itself, which is exactly why the AC asks for no product surface.
-// Shaped like billing.FoundingGrantHandler: internal-caller-gated,
+// Internal-caller-gated,
 // invoked by an operator's own tooling, never a screen a Practice can
 // reach -- "no self-service endpoint" means no Staff or Owner session
 // can call this, not that it has to be an ad-hoc INSERT. No mandatory

@@ -45,19 +45,15 @@ func registerInternalRoutes(g *staffauth.GatedRouter, d Deps) {
 	g.OpenGet("/api/internal/billing/monthly-credits",
 		"An internal caller identity, not a session -- the founder's monthly read of the Credit ledger (#1394, ADR-0046), the same position every /api/internal endpoint holds",
 		billing.MonthlyCreditsHandler(d.DB, d.InternalAuth))
-	// #449's founding grant, on the same guard again. A pilot Practice's
-	// Credits are issued by a person, by hand, roughly a dozen times in
-	// total -- so this is an operator endpoint that records who issued
-	// them, not a screen and not an ad-hoc INSERT.
-	g.Write("POST /api/internal/billing/founding-grants", billing.FoundingGrantHandler(d.DB, d.InternalAuth))
+	// #449's founding grant moved to doula-ops (#2482, ADR-0062).
+	//
 	// #605's support path: an operator clears a sole Owner's enrollment
 	// after a live video call and government-ID match against her
 	// Practice's Stripe Connect identity (ADR-0007), per
-	// docs/runbooks/mfa-recovery-support.md. Same guard, same shape as
-	// founding-grants above -- an operator endpoint, deliberately not a
-	// screen (#615's AC: "no product surface").
+	// docs/runbooks/mfa-recovery-support.md. Same guard -- an operator
+	// endpoint, deliberately not a screen (#615's AC: "no product surface").
 	g.Write("POST /api/internal/staffauth/mfa-recovery/support-clear", staffauth.SupportClearHandler(d.AccountManager, d.DB, d.InternalAuth))
-	// #1790's pilot gate, on the same guard and in founding-grants'
+	// #1790's pilot gate, on the same guard and in the support path's
 	// shape. Until January only an address the founder added can create
 	// a Practice: the first endpoint adds one, the second opens the gate
 	// for everyone -- the one deliberate act ADR-0043 asks for. Both

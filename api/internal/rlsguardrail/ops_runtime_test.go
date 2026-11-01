@@ -39,6 +39,8 @@ var wantDefinerFunctions = map[string][]string{
 		"sweep_expired_idempotency_keys(timestamp with time zone)",
 	},
 	"ops_runtime": {
+		"ops_founding_grant_practice(uuid)",
+		"ops_record_founding_grant(uuid,uuid,integer,timestamp with time zone)",
 		"ops_record_refund(uuid,uuid,integer,integer,text,text,uuid,timestamp with time zone)",
 		"ops_refund_by_request_key(uuid,text)",
 		"ops_refund_lots(uuid)",
@@ -282,5 +284,25 @@ func TestOpsRuntime_AppRuntimeCannotWriteARefundRow(t *testing.T) {
 		 VALUES ($1, 'refund', -1, 2000, 0, 're_boundary', $2, 'key-boundary', $3)`, practiceID, lotID, actID)
 	if err == nil || !strings.Contains(err.Error(), "row-level security") {
 		t.Fatalf("app_runtime wrote a refund row: want a row-level security refusal, got %v", err)
+	}
+}
+
+func TestOpsRuntime_AppRuntimeCannotWriteAFoundingGrantRow(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Grant Boundary")
+	actID := testdb.SeedOperatorAct(t, db, "Mark Goho")
+
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
+		t.Fatalf("set practice: %v", err)
+	}
+	_, err = tx.ExecContext(t.Context(),
+		`INSERT INTO credit_ledger (practice_id, origin, quantity, operator_act_id) VALUES ($1, 'founding_grant', 3, $2)`, practiceID, actID)
+	if err == nil || !strings.Contains(err.Error(), "row-level security") {
+		t.Fatalf("app_runtime wrote a founding grant row: want a row-level security refusal, got %v", err)
 	}
 }

@@ -38,12 +38,12 @@ func setPracticeCreated(t *testing.T, db *testdb.DB, practiceID string, created 
 	}
 }
 
-func seedGrantAt(t *testing.T, db *testdb.DB, practiceID, origin string, quantity int, grantedBy any, when time.Time) {
+func seedSignupBonusAt(t *testing.T, db *testdb.DB, practiceID string, quantity int, when time.Time) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO credit_ledger (practice_id, origin, quantity, granted_by, created_at)
-		 VALUES ($1, $2, $3, $4, $5)`, practiceID, origin, quantity, grantedBy, when); err != nil {
-		t.Fatalf("seed %s: %v", origin, err)
+		`INSERT INTO credit_ledger (practice_id, origin, quantity, created_at)
+		 VALUES ($1, 'signup_bonus', $2, $3)`, practiceID, quantity, when); err != nil {
+		t.Fatalf("seed signup bonus: %v", err)
 	}
 }
 
@@ -71,8 +71,8 @@ func TestMonthlyCreditsHandler_CountsPurchasesAndConsumptionsMonthByMonth(t *tes
 	setPracticeCreated(t, db, practiceID, at(time.January, 10))
 	engagements := seedEngagements(t, db, practiceID, 3)
 
-	seedGrantAt(t, db, practiceID, "signup_bonus", 3, nil, at(time.January, 10))
-	seedGrantAt(t, db, practiceID, "founding_grant", 6, "Founder", at(time.January, 12))
+	seedSignupBonusAt(t, db, practiceID, 3, at(time.January, 10))
+	testdb.SeedFoundingGrant(t, db, practiceID, 6, at(time.January, 12))
 	firstLot := seedPurchase(t, db, practiceID, 5, 2000, 0, "pi_monthly_feb", at(time.February, 3))
 	seedConsumptionAt(t, db, practiceID, engagements[0], firstLot, at(time.February, 20))
 	seedConsumptionAt(t, db, practiceID, engagements[1], firstLot, at(time.April, 2))
