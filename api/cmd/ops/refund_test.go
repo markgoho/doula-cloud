@@ -43,7 +43,7 @@ func newRefundStack(t *testing.T) *refundStack {
 		Stripe:   s.stripe,
 	})
 	s.practiceID = testdb.SeedPractice(t, s.db, refundPracticeName)
-	s.ownerID = testdb.SeedNamedStaffAtPractice(t, s.db, s.practiceID, "refund-owner", refundOwnerName, []string{"owner"}, "employee")
+	s.ownerID = testdb.SeedNamedStaffAtPractice(t, s.db, s.practiceID, "refund-owner", refundOwnerName, []string{ownerRole}, "employee")
 	if err := s.db.Admin.QueryRowContext(t.Context(),
 		`INSERT INTO credit_ledger (practice_id, origin, quantity, unit_price_cents, tax_cents, stripe_payment_intent_id, created_at)
 		 VALUES ($1, 'purchase', 5, 2000, 686, 'pi_lakeside', $2) RETURNING id`,

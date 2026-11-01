@@ -157,8 +157,8 @@ type Deps struct {
 	Now clock.Clock
 
 	// LegalDocuments is the version history of the Terms of Service and
-	// the Privacy Policy the routes publish from and read the price of a
-	// Credit from. Nil, every test's zero value and Cloud Run's, is the
+	// the Privacy Policy the routes read the price of a Credit and the
+	// emails from. Nil, every test's zero value and Cloud Run's, is the
 	// shipped history in api/internal/legal; the end-to-end stack hands
 	// main one with a version appended (stackswitch.Legal, #1833).
 	LegalDocuments []legal.Document

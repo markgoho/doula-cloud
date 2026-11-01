@@ -129,6 +129,16 @@ func TestNewServer_RefusesTheSimClockOutsideTheStack(t *testing.T) {
 	}
 }
 
+func TestNewServer_RefusesAnAppendedLegalVersionOutsideTheStack(t *testing.T) {
+	env := map[string]string{tenantVar: testTenant, stackswitch.LegalVar: `[{"document":"privacy","effective":"2030-06-01","material":true,"change":"A test."}]`}
+
+	_, _, err := newServer(t.Context(), envOf(env), fakeFactory, fakeAccounts)
+
+	if !errors.Is(err, stackswitch.ErrNotTheStack) {
+		t.Fatalf("err = %v, want %v", err, stackswitch.ErrNotTheStack)
+	}
+}
+
 func TestNewServer_AcceptsTheEmulatorFactorOnlyWithTheEmulatorHost(t *testing.T) {
 	const unreachable = "postgres://nobody@127.0.0.1:1/none?connect_timeout=1"
 	for _, tc := range []struct {
@@ -160,14 +170,14 @@ func TestNewServer_AcceptsTheEmulatorFactorOnlyWithTheEmulatorHost(t *testing.T)
 }
 
 func TestStripeClient_IsTheFakeOnlyOnTheStackWithNoKey(t *testing.T) {
-	if _, ok := stripeClient("", true).(*billing.FakeStripeClient); !ok {
+	if _, ok := stripeClient("", "", true).(*billing.FakeStripeClient); !ok {
 		t.Error("the emulator with no key: want the fake")
 	}
 	for _, c := range []struct {
 		key      string
 		emulator bool
 	}{{"sk_test_x", true}, {"sk_test_x", false}, {"", false}} {
-		if _, ok := stripeClient(c.key, c.emulator).(*billing.StripeAPIClient); !ok {
+		if _, ok := stripeClient(c.key, "price_x", c.emulator).(*billing.StripeAPIClient); !ok {
 			t.Errorf("key %q, emulator %v: want the Stripe API client", c.key, c.emulator)
 		}
 	}

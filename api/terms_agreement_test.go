@@ -43,11 +43,7 @@ func TestAgreementGate_RealRoutes(t *testing.T) {
 	clientID := testdb.SeedNamedClient(t, db, practiceID, "Sarah", "sarah@example.test")
 	testdb.SeedActivityWithDiff(t, db, practiceID, activity.SubjectPractice, practiceID, staffauth.ActionTermsAccepted,
 		activity.StaffActor(ownerID), json.RawMessage(`{"termsVersion":"2026-09-29","privacyVersion":"2026-10-22","ipAddress":"127.0.0.1"}`))
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO legal_version_publications (document, version, material, published_by, published_at)
-		 VALUES ('terms', '2026-11-01', true, 'Mark', now())`); err != nil {
-		t.Fatalf("publish: %v", err)
-	}
+	testdb.SeedLegalPublication(t, db, "terms", "2026-11-01", true, now)
 
 	deps := testDeps()
 	deps.DB = db.App

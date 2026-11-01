@@ -18,7 +18,6 @@ var wantInternalRoutes = []string{
 	"POST /api/internal/clients/process-erasure-outbox",
 	"POST /api/internal/feedback/process-issue-outbox",
 	"POST /api/internal/idempotency/sweep-expired-keys",
-	"POST /api/internal/legal/publish",
 	"POST /api/internal/notifications/process-connect-nudge-outbox",
 	"POST /api/internal/notifications/process-coverage-gap-outbox",
 	"POST /api/internal/notifications/process-engagement-request-outbox",

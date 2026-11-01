@@ -71,3 +71,23 @@ func TestSeedPilotAddress(t *testing.T) {
 		t.Fatalf("admitted = %v, keyed rows = %d, want true and 1", admitted, keyed)
 	}
 }
+
+func TestSeedLegalPublication(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Seed Publication Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "seed-publication-owner", []string{"owner"}, "employee")
+	at := time.Date(2026, 10, 30, 14, 0, 0, 0, time.UTC)
+
+	queued := testdb.SeedLegalPublication(t, db, "terms", "2026-12-01", true, at)
+
+	var keyed int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM legal_version_publications p JOIN operator_acts oa ON oa.id = p.operator_act_id
+		  WHERE p.document = 'terms' AND p.version = '2026-12-01' AND p.material AND p.published_at = $1`, at,
+	).Scan(&keyed); err != nil {
+		t.Fatalf("read the publication: %v", err)
+	}
+	if queued != 1 || keyed != 1 {
+		t.Fatalf("queued = %d, keyed publications = %d, want 1 and 1", queued, keyed)
+	}
+}

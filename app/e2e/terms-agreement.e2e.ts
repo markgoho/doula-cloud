@@ -19,7 +19,7 @@ import { signIn } from './auth';
 import { API_URL, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT, PREVIEW_SERVER_ORIGIN } from './ports';
 import { seedClient } from './portalClient';
 import { jump } from './simulation/clock';
-import { WORKER_SECRET, readStaffInviteToken, restartAPI, simulatedDateAfter } from './stack';
+import { WORKER_SECRET, publishLegalVersion, readStaffInviteToken, restartAPI, simulatedDateAfter } from './stack';
 import { STAFF_PASSWORD, acceptStaffInvite, seedFoundingOwner, uniqueEmail } from './staffSignup';
 
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
@@ -68,12 +68,7 @@ test.describe('After a material change to the Terms starts', () => {
 			E2E_LEGAL_VERSIONS: JSON.stringify([{ document: 'terms', effective, material: true, change: CHANGE }])
 		});
 
-		const published = await request.post(`${API_URL}/api/internal/legal/publish`, {
-			headers: { 'X-Internal-Secret': WORKER_SECRET },
-			data: { document: 'terms', version: effective, publishedBy: 'terms-agreement.e2e.ts' }
-		});
-		expect(published.ok(), `publish failed: ${published.status()} ${await published.text()}`).toBe(true);
-		expect(await published.json()).toMatchObject({ document: 'terms', version: effective, material: true });
+		publishLegalVersion('terms', effective, true, 'terms-agreement.e2e.ts');
 
 		await jump({ value: NOTICE_DAYS, unit: 'days' }, { label: 'terms-agreement: the new Terms start', workerSecret: WORKER_SECRET });
 

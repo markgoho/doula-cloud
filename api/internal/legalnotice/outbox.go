@@ -72,7 +72,7 @@ func compose(mailer outbox.Mailer, docs []legal.Document) func(context.Context, 
 		if p.loginDeleted {
 			return "", "", "", &outbox.DeadLetterError{Reason: "the Owner's login was deleted before the email was sent"}
 		}
-		doc, version, ok := find(docs, p.document, p.version)
+		doc, version, ok := Find(docs, p.document, p.version)
 		if !ok {
 			return "", "", "", &outbox.DeadLetterError{Reason: "no version " + p.version + " of " + p.document + " in the history"}
 		}

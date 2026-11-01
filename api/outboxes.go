@@ -214,7 +214,7 @@ func outboxRegistrations(d Deps) []outbox.Registration {
 		{
 			// #1548's email to each Owner before a material change to the
 			// Terms or the Privacy Policy, whose write site is
-			// legalnotice.PublishHandler. No Nudge, for the same reason as
+			// ops_publish_legal_version (#2486). No Nudge, for the same reason as
 			// #871's above: the email is due 30 days or more before the
 			// date it is about, so Cloud Scheduler's cadence is soon
 			// enough.

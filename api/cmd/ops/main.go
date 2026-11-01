@@ -47,6 +47,7 @@ const (
 	originsVar      = "EXPECTED_ORIGINS"
 	databaseURLVar  = "DATABASE_URL"
 	stripeKeyVar    = "STRIPE_API_KEY"
+	creditPriceVar  = "STRIPE_CREDIT_PRICE_ID" // #nosec G101 -- an environment variable's name, not a credential
 	feedbackRepoVar = "GITHUB_FEEDBACK_REPO"
 )
 
@@ -106,6 +107,14 @@ func newServer(ctx context.Context, getenv func(string) string, newVerifier veri
 		return nil, nil, fmt.Errorf("doula-ops: %w", err)
 	}
 
+	// The shipped Terms and Privacy Policy, or on the end-to-end stack a
+	// copy with a version appended, so a walk can publish a material one.
+	history, err := stackswitch.Legal(ctx, getenv, db, shippedLegal)
+	if err != nil {
+		_ = db.Close()
+		return nil, nil, fmt.Errorf("doula-ops: %w", err)
+	}
+
 	port := getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -116,9 +125,10 @@ func newServer(ctx context.Context, getenv func(string) string, newVerifier veri
 		Verifier:             verifier,
 		AcceptEmulatorFactor: emulator,
 		Origins:              origins(getenv(originsVar)),
-		Stripe:               stripeClient(getenv(stripeKeyVar), emulator),
+		Stripe:               stripeClient(getenv(stripeKeyVar), getenv(creditPriceVar), emulator),
 		Accounts:             accounts,
 		FeedbackRepo:         strings.TrimSpace(getenv(feedbackRepoVar)),
+		Legal:                history,
 	})
 	return &http.Server{
 		Addr:              ":" + port,
@@ -127,14 +137,16 @@ func newServer(ctx context.Context, getenv func(string) string, newVerifier veri
 	}, db, nil
 }
 
-// stripeClient is the Stripe a refund moves money through. The
+// stripeClient is the Stripe a refund moves money through, and that legal
+// publish asks for the Price a version's Credit costs, which it finds on
+// the Product creditPriceID names. The
 // end-to-end stack has no Stripe, so with the emulator and no key it is
 // the in-memory fake; newServer already refuses the emulator on Cloud Run.
-func stripeClient(apiKey string, emulator bool) billing.StripeClient {
+func stripeClient(apiKey, creditPriceID string, emulator bool) billing.StripeClient {
 	if emulator && apiKey == "" {
 		return billing.NewFakeStripeClient()
 	}
-	return billing.NewStripeAPIClient(apiKey, "", "")
+	return billing.NewStripeAPIClient(apiKey, creditPriceID, "")
 }
 
 // origins reads a comma-separated origin list; unset is none, which

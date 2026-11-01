@@ -4,7 +4,7 @@ The copy below is the email each Owner of each Practice gets when DoulaCloud pub
 
 ## Where it comes from
 
-- The operator publishes the version through `POST /api/internal/legal/publish`. A material version queues one row in `legal_notice_outbox` for each Owner of each Practice that is not deleted and not in its deletion window.
+- The operator publishes the version in ops (#2486). A material version queues one row in `legal_notice_outbox` for each Owner of each Practice that is not deleted and not in its deletion window, the rule `legal_notice_owners()` (migration 00155) holds.
 - One email for each Owner of each Practice. An Owner of two Practices gets two emails, one for each Practice, because each Practice agrees on its own (ADR-0053).
 - Platform voice (ADR-0011): from `notifications@`, and a reply goes to `support@`, a monitored inbox. That is why "reply to this email" is how a refund is asked for: the Terms say "To ask for a refund, email us."
 

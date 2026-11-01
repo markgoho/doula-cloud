@@ -9,6 +9,7 @@ import (
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/csrf"
+	"doula-cloud/api/internal/legal"
 )
 
 // Deps is everything doula-ops's route table needs.
@@ -30,6 +31,18 @@ type Deps struct {
 	// FeedbackRepo is GITHUB_FEEDBACK_REPO, owner/name, which a Feedback
 	// issue's link is built from. Empty leaves the link off.
 	FeedbackRepo string
+	// Legal is the version history legal publish reads. Nil is the
+	// shipped history; the end-to-end stack appends a version
+	// (stackswitch.Legal).
+	Legal []legal.Document
+}
+
+// legalHistory is d.Legal, or the shipped history when unset.
+func (d Deps) legalHistory() []legal.Document {
+	if d.Legal != nil {
+		return d.Legal
+	}
+	return shippedLegal
 }
 
 // router mounts a route and records it, so routes() can hand back the
@@ -69,6 +82,9 @@ func routes(d Deps) (http.Handler, []string) {
 	r.handle(http.MethodPost, "/api/pilot-allowlist", requireSession(d.DB, pilotAddressAct(d.DB)))
 	r.handle(http.MethodGet, "/api/pilot-gate", requireSession(d.DB, pilotGateRead(d.DB)))
 	r.handle(http.MethodPost, "/api/pilot-gate/openings", requireStepUp(d.DB, pilotGateOpenAct(d.DB)))
+	r.handle(http.MethodGet, "/api/legal-versions", requireSession(d.DB, legalVersions(d.DB, d.legalHistory())))
+	r.handle(http.MethodGet, "/api/legal-versions/{document}/{version}", requireSession(d.DB, legalVersionCheckRead(d.DB, d.legalHistory())))
+	r.handle(http.MethodPost, "/api/legal-versions/{document}/{version}/publications", requireStepUp(d.DB, legalPublishAct(d)))
 	r.handle(http.MethodGet, "/api/staff/{staffId}/second-factor", requireSession(d.DB, secondFactorCheckRead(d.DB)))
 	r.handle(http.MethodPost, "/api/staff/{staffId}/second-factor-clears", requireStepUp(d.DB, secondFactorClearAct(d)))
 	return clock.Middleware(d.Now)(csrf.Wrap(d.Origins, r.mux)), r.routes

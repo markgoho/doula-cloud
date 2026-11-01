@@ -429,6 +429,51 @@ export function openPilotGate() {
 	execSQL('UPDATE pilot_gate SET opened_at = now() WHERE opened_at IS NULL');
 }
 
+/**
+ * Publishes a version the way ops does (#2486): an operator's act, then
+ * ops_publish_legal_version, which queues a material version's email to
+ * each Owner. ops is the one way in, and it takes an operator signed in
+ * with a fresh code, so a spec about what follows a publication writes
+ * the act as the superuser instead.
+ */
+export function publishLegalVersion(document: string, version: string, isMaterial: boolean, operatorName: string): void {
+	execSQL(
+		`DO $$
+		 DECLARE
+		     v_operator uuid;
+		     v_act uuid;
+		 BEGIN
+		     INSERT INTO operators (identity_uid, name, email)
+		     VALUES ('seed-operator-' || gen_random_uuid(), ${sqlLiteral(operatorName)}, 'seed-operator@doula-cloud.invalid')
+		     RETURNING id INTO v_operator;
+		     INSERT INTO operator_acts (operator_id, action, details)
+		     VALUES (v_operator, 'legal_version_published',
+		             jsonb_build_object('document', ${sqlLiteral(document)}, 'version', ${sqlLiteral(version)}, 'material', ${isMaterial}, 'requestKey', 'seed'))
+		     RETURNING id INTO v_act;
+		     IF ops_publish_legal_version(v_act, ${sqlLiteral(document)}, ${sqlLiteral(version)}::date, ${isMaterial}, now()) IS NULL THEN
+		         RAISE EXCEPTION 'version % of % was already published', ${sqlLiteral(version)}, ${sqlLiteral(document)};
+		     END IF;
+		 END
+		 $$`
+	);
+}
+
+// How many emails a publication queued.
+export function countLegalNotices(document: string, version: string): number {
+	return Number(
+		querySQLValue(
+			`SELECT count(*) FROM legal_notice_outbox WHERE document = ${sqlLiteral(document)} AND version = ${sqlLiteral(version)}`
+		)
+	);
+}
+
+// Takes a publication back, with the emails it queued, for ops's walk
+// of publishing OPS_LEGAL_VERSION (#2486), which doula-api cannot send.
+export function unpublishLegalVersion(document: string, version: string): void {
+	const where = `document = ${sqlLiteral(document)} AND version = ${sqlLiteral(version)}`;
+	execSQL(`DELETE FROM legal_notice_outbox WHERE ${where}; DELETE FROM legal_version_publications WHERE ${where}`);
+}
+
 // Closes the gate again, for ops's walk of opening it (#2485).
 export function closePilotGate() {
 	execSQL('UPDATE pilot_gate SET operator_act_id = NULL, opened_at = NULL');
@@ -1183,6 +1228,15 @@ async function spawnAPI(appOrigin: string, extraEnvironment: Record<string, stri
 	await waitForPort(E2E_API_HOST, E2E_API_PORT, READY_TIMEOUT_MS);
 }
 
+// The version doula-ops's history holds beyond the shipped one: material,
+// and far enough off that the 30 days of notice always hold.
+export const OPS_LEGAL_VERSION = {
+	document: 'privacy',
+	effective: '2030-06-01',
+	material: true,
+	change: 'Names a new processor of your data.'
+};
+
 // doula-ops (api/cmd/ops, ADR-0062), built and run as a host process the
 // way startAPI runs the BFF, on its own port and as its own login.
 async function startOps() {
@@ -1206,6 +1260,9 @@ async function startOps() {
 			EXPECTED_ORIGINS: `${OPS_DEV_SERVER_ORIGIN},${OPS_PREVIEW_SERVER_ORIGIN}`,
 			// Session limits follow a simulated jump, as doula-api's do.
 			E2E_CLOCK_FOLLOWS_SIM_OFFSET: '1',
+			// A material version ops's walk publishes (#2486). doula-api's
+			// history does not hold it, so the walk deletes what it queued.
+			E2E_LEGAL_VERSIONS: JSON.stringify([OPS_LEGAL_VERSION]),
 			PORT: String(E2E_OPS_PORT)
 		}
 	});

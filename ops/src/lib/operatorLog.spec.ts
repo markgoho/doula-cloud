@@ -103,6 +103,16 @@ describe('logDetail', () => {
 		);
 	});
 
+	it('says which version was published, and whether it was material', () => {
+		const details = { document: 'privacy', version: '2027-01-01', material: true, requestKey: 'k' };
+		expect(logDetail(row({ action: 'legal_version_published', details }))).toBe(
+			'The Privacy Policy that takes effect January 1, 2027, material'
+		);
+		expect(logDetail(row({ action: 'legal_version_published', details: { ...details, document: 'terms', material: false } }))).toBe(
+			'The Terms of Service that take effect January 1, 2027, not material'
+		);
+	});
+
 	it('says which list showed Owners’ contacts, and for how many Practices', () => {
 		expect(logDetail(row({ action: 'owner_contact_read', details: { list: 'practices', practiceIds: ['p-1', 'p-2'] } }))).toBe(
 			'The Practices list, 2 Practices'

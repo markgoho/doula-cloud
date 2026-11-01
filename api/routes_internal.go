@@ -2,14 +2,13 @@ package main
 
 import (
 	"doula-cloud/api/internal/legal"
-	"doula-cloud/api/internal/legalnotice"
 	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/sitebuild"
 	"doula-cloud/api/internal/staffauth"
 )
 
 // The endpoints nobody signs in to reach: ADR-0010's outboxes, #443's
-// page verifier, and the operator endpoints.
+// page verifier and sweeps. Every operator act is in doula-ops.
 //
 // Cloud Scheduler and Cloud Tasks call these on a cadence, authenticated
 // by a caller identity rather than by a session (ADR-0037), so they sit
@@ -36,14 +35,8 @@ func registerInternalRoutes(g *staffauth.GatedRouter, d Deps) {
 	// #449's founding grant moved to doula-ops (#2482, ADR-0062), and
 	// #605's support-clear with it (#2483), #1394's monthly Credits read
 	// (#2476), #420's dormant-Practices list (#2477) and the refund
-	// (#2481), and #1790's pilot allowlist add (#2484) and gate opening
-	// (#2485).
-	// #1548's publish act, on the same guard and in the shape the pilot gate's
-	// opening had: a new version of the Terms or the Privacy Policy is written
-	// into api/internal/legal, and the founder then publishes it by name.
-	// A material version queues the email to each Owner, and is refused
-	// fewer than 30 days before it takes effect.
-	g.Write("POST /api/internal/legal/publish", legalnotice.PublishHandler(d.DB, d.InternalAuth, d.legalHistory(), d.StripeClient))
+	// (#2481), #1790's pilot allowlist add (#2484) and gate opening
+	// (#2485), and #1548's legal publish (#2486).
 }
 
 // legalDocuments is the version history the BFF publishes and mails

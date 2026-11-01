@@ -86,3 +86,19 @@ func SeedPilotAddress(t *testing.T, db *DB, address string) {
 		t.Fatalf("testdb: seed pilot address: %v", err)
 	}
 }
+
+// SeedLegalPublication publishes document's version at at the way ops
+// does: keyed to a fresh act of an operator, through
+// ops_publish_legal_version, which queues a material version's emails.
+// It returns how many emails it queued.
+func SeedLegalPublication(t *testing.T, db *DB, document, version string, material bool, at time.Time) (queued int) {
+	t.Helper()
+	actID := SeedOperatorAct(t, db, "Mark Goho")
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT ops_publish_legal_version($1, $2, $3, $4, $5)`, actID, document, version, material, at,
+	).Scan(&queued); err != nil {
+		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
+		t.Fatalf("testdb: seed legal publication: %v", err)
+	}
+	return queued
+}

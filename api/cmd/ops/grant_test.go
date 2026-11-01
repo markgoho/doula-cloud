@@ -29,7 +29,7 @@ func newGrantStack(t *testing.T) *grantStack {
 	t.Helper()
 	s := &grantStack{opsStack: newOpsStack(t, false)}
 	s.practiceID = testdb.SeedPractice(t, s.db, grantPracticeName)
-	testdb.SeedStaffAtPractice(t, s.db, s.practiceID, "grant-owner", []string{"owner"}, "employee")
+	testdb.SeedStaffAtPractice(t, s.db, s.practiceID, "grant-owner", []string{ownerRole}, "employee")
 	for _, uid := range []string{"grant-doula-a", "grant-doula-b", "grant-doula-c"} {
 		testdb.SeedStaffAtPractice(t, s.db, s.practiceID, uid, []string{doulaRole}, "contractor")
 	}

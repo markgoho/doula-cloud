@@ -30,8 +30,11 @@ export const ACTION_LABELS: Record<string, string> = {
 	owner_contact_read: 'Read Owners’ contacts',
 	feedback_read: 'Read a piece of Feedback',
 	pilot_address_added: 'Added to the pilot allowlist',
-	pilot_gate_opened: 'Opened the pilot gate'
+	pilot_gate_opened: 'Opened the pilot gate',
+	legal_version_published: 'Published a legal version'
 };
+
+const LEGAL_DOCUMENTS: Record<string, string> = { terms: 'The Terms of Service', privacy: 'The Privacy Policy' };
 
 const REFUSAL_REASONS: Record<string, string> = {
 	no_sign_in: 'No sign-in came with the code',
@@ -68,6 +71,11 @@ export function logDetail(row: LogRow): string | undefined {
 		case 'founding_grant': {
 			const d = row.details as { staffCount: number; credits: number };
 			return `${credits(d.credits)} for ${d.staffCount} Staff`;
+		}
+		case 'legal_version_published': {
+			const d = row.details as { document: string; version: string; material: boolean };
+			const takes = d.document === 'terms' ? 'take' : 'takes';
+			return `${LEGAL_DOCUMENTS[d.document]} that ${takes} effect ${longDate(d.version)}, ${d.material ? 'material' : 'not material'}`;
 		}
 		case 'pilot_address_added': {
 			return String(row.details.address);
