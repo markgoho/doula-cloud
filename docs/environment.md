@@ -200,16 +200,9 @@ Twenty-six addresses sit under `/api/internal/**` — the drain, twenty-two `pro
 
 `X-Internal-Secret` remains the mechanism for the local stack and the end-to-end suite, which run the BFF with no metadata server to mint a token with. It is refused outright wherever `NOTIFICATION_WORKER_SECRET` is unset, so a deployment that carries no secret accepts no header.
 
-The deployed service accepts a token and nothing else, since [#1183](https://github.com/markgoho/doula-cloud/issues/1183) set the three `INTERNAL_OIDC_*` variables on Cloud Run and removed `NOTIFICATION_WORKER_SECRET` from it. An operator endpoint is reached by minting a token rather than pasting a secret:
+The deployed service accepts a token and nothing else, since [#1183](https://github.com/markgoho/doula-cloud/issues/1183) set the three `INTERNAL_OIDC_*` variables on Cloud Run and removed `NOTIFICATION_WORKER_SECRET` from it. Its callers are Cloud Scheduler, Cloud Tasks and the deploy workflow; no person calls one of these addresses, since every operator act is taken in ops.
 
-```sh
-gcloud auth print-identity-token \
-  --impersonate-service-account=internal-caller@doula-cloud.iam.gserviceaccount.com \
-  --audiences=https://doula-api-850855848778.us-central1.run.app \
-  --include-email
-```
-
-Both flags are load-bearing. `--audiences` is the service's base URL and not the endpoint's own URL, because one audience has to serve all twenty-five addresses — and it is the same trap in the infrastructure, where Cloud Scheduler and Cloud Tasks each default an unset `audience` to the full target URI. `--include-email` is what puts the `email` claim on the token; the guard refuses a token that carries none, so its absence reads as a 401 from an otherwise valid token.
+The token's `aud` is the service's base URL and not an endpoint's own URL, because one audience has to serve all twenty-six addresses. That is a trap in the infrastructure, where Cloud Scheduler and Cloud Tasks each default an unset `audience` to the full target URI. The token must also carry an `email` claim: the guard refuses a token with none, so its absence reads as a 401 from an otherwise valid token.
 
 ### Refunding a Practice's Credits
 

@@ -90,3 +90,7 @@ Weighed for: ADR-0030; *This Is Marketing*'s test of how many people would reach
 - [#361](https://github.com/markgoho/doula-cloud/issues/361) writes the Welcome email as the only notice of the founding grant a subscriber ever gets; #1003 records "during" as one email and "after" as two dated emails with a third only on an event, and names an act as every item's signal.
 - A Practice-scheduled Client reminder and the internal list of quiet Practices are fog on the billing map, not tickets, until the pilot gives either a reason to be built.
 - Where a later grilling session on another theme touches when a message goes out, this ADR is the record it tests against, and a change lands as a superseding ADR, not an edit here.
+
+## Amendment, 2026-11-01: the dormancy list moved to ops
+
+`api/internal/billing/dormancy.go`, which this ADR names twice as the shape of a read-only list a person acts on, is gone. Its list became ops' Dormant Practices list, `api/cmd/ops/dormant.go`, on [#2477](https://github.com/markgoho/doula-cloud/issues/2477) under [ADR-0062](0062-the-platform-operator-works-in-a-separate-app-at-ops-doula-cloud-with-its-own-service-and-database-role.md). The rule is unchanged: the list is read-only, it sends nothing, and the two-year notice is still sent by a person from it. Read the two mentions above as that file.
