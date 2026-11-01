@@ -1,5 +1,17 @@
 import { getApp, getApps, initializeApp } from 'firebase/app';
-import { connectAuthEmulator, getAuth, initializeAuth, inMemoryPersistence, type Auth } from 'firebase/auth';
+import {
+	connectAuthEmulator,
+	getAuth,
+	getMultiFactorResolver,
+	initializeAuth,
+	inMemoryPersistence,
+	signInWithEmailAndPassword,
+	signOut,
+	TotpMultiFactorGenerator,
+	type Auth,
+	type MultiFactorError,
+	type UserCredential
+} from 'firebase/auth';
 
 // The doula-cloud web app's browser key, the same public key app/ uses:
 // it names the project, and token verification in doula-ops is the
@@ -29,5 +41,28 @@ export function getOperatorAuth(): Auth {
 		if (url) connectAuthEmulator(auth, url, { disableWarnings: true });
 	}
 	return auth;
+}
+
+/**
+ * Signs in again with the password and an authenticator-app code, and
+ * hands back the fresh ID token for doula-ops's step-up. Identity
+ * Platform has no code-only re-authentication, so the password comes
+ * first. Throws Identity Platform's own refusal.
+ */
+export async function freshIdToken(email: string, password: string, code: string): Promise<string> {
+	const auth = getOperatorAuth();
+	let credential: UserCredential;
+	try {
+		credential = await signInWithEmailAndPassword(auth, email, password);
+	} catch (error) {
+		if ((error as { code?: unknown }).code !== 'auth/multi-factor-auth-required') throw error;
+		const resolver = getMultiFactorResolver(auth, error as MultiFactorError);
+		credential = await resolver.resolveSignIn(TotpMultiFactorGenerator.assertionForSignIn(resolver.hints[0].uid, code));
+	}
+	try {
+		return await credential.user.getIdToken();
+	} finally {
+		await signOut(auth);
+	}
 }
 /* v8 ignore stop */

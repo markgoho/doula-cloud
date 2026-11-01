@@ -17,7 +17,10 @@ export const SERVICE_PROBLEM = 'Sorry, there is a problem with the service. Try 
 
 type Fetch = typeof fetch;
 
-async function refusalMessage(response: Response): Promise<string> {
+/**
+doula-ops's refusal in its own words, or the service problem for a 5xx or a body that is not one.
+*/
+export async function refusalMessage(response: Response): Promise<string> {
 	try {
 		const body: { message?: unknown } = await response.json();
 		return typeof body.message === 'string' && response.status < 500 ? body.message : SERVICE_PROBLEM;

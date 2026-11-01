@@ -135,3 +135,38 @@ test('doula-ops refuses a Staff token, second factor and all', async ({ request 
 	const refusal = await response.json();
 	expect(refusal.code).toBe('UNAUTHORIZED');
 });
+
+async function operatorSession(request: APIRequestContext): Promise<{ idToken: string; cookie: string }> {
+	const signedIn = await newOperatorLogin(request);
+	const enrolled = await enrollPhoneFactor(request, signedIn.idToken, randomPhoneNumber(), OPS_TENANT_ID);
+	const response = await exchange(request, enrolled.idToken);
+	expect(response.status()).toBe(200);
+	return { idToken: enrolled.idToken, cookie: (response.headers()['set-cookie'] ?? '').split(';', 1)[0] };
+}
+
+test("#2471: doula-ops steps a session up on a sign-in just now by the session's own operator", async ({
+	request
+}) => {
+	const { idToken, cookie } = await operatorSession(request);
+
+	const response = await request.post(`${OPS_URL}/api/session/step-up`, {
+		headers: { Cookie: cookie, Authorization: `Bearer ${idToken}` }
+	});
+
+	expect(response.status()).toBe(204);
+});
+
+test('#2471: doula-ops refuses a step-up with no fresh sign-in, or with another operator', async ({ request }) => {
+	const mine = await operatorSession(request);
+	const theirs = await operatorSession(request);
+
+	const none = await request.post(`${OPS_URL}/api/session/step-up`, { headers: { Cookie: mine.cookie } });
+	const other = await request.post(`${OPS_URL}/api/session/step-up`, {
+		headers: { Cookie: mine.cookie, Authorization: `Bearer ${theirs.idToken}` }
+	});
+
+	expect(none.status()).toBe(401);
+	const refusal = await none.json();
+	expect(refusal.code).toBe('UNAUTHORIZED');
+	expect(other.status()).toBe(401);
+});
