@@ -3,6 +3,7 @@ package pdffont
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"testing"
@@ -161,10 +162,10 @@ func TestRuns_KeepsAnEmojiSequenceWholeAndItsSpaceOut(t *testing.T) {
 	}
 }
 
-// #2544: a character outside the BMP is shown as U+FFFD in the invisible
-// text, inside a span whose ActualText is the character in UTF-16 with a
-// surrogate pair; text inside the BMP has no span.
-func TestDrawShaped_CarriesACharacterOutsideTheBMPAsActualText(t *testing.T) {
+// #2550: a character outside the BMP is shown in the invisible text as
+// its code, scaled to the width of the U+FFFD the layout measured, and
+// with no ActualText span.
+func TestDrawShaped_ShowsACharacterOutsideTheBMPAsItsCode(t *testing.T) {
 	content := func(text string) []byte {
 		d := New()
 		d.SetCompression(false)
@@ -176,13 +177,23 @@ func TestDrawShaped_CarriesACharacterOutsideTheBMPAsActualText(t *testing.T) {
 		return buf.Bytes()
 	}
 	baby := content("Ada \U0001F476")
-	for _, want := range []string{"/Span <</ActualText <FEFFD83DDC76>>> BDC\n", "(\xff\xfd)Tj ET\nEMC\n"} {
-		if !bytes.Contains(baby, []byte(want)) {
-			t.Fatalf("content stream has no %q", want)
+	if !bytes.Contains(baby, []byte("(\xfd\xd0)Tj ET\n")) {
+		t.Fatal("the layer does not show U+1F476 as its code")
+	}
+	if bytes.Contains(baby, []byte("ActualText")) {
+		t.Fatal("U+1F476 was given an ActualText")
+	}
+	var tz []float64
+	for line := range strings.SplitSeq(string(baby), "\n") {
+		var v float64
+		if _, err := fmt.Sscanf(strings.TrimPrefix(line, "3 Tr "), "%f Tz", &v); err == nil && strings.HasSuffix(line, " Tz") {
+			tz = append(tz, v)
 		}
 	}
-	if heart := content("Ada ❤️"); bytes.Contains(heart, []byte("ActualText")) {
-		t.Fatal("a heart, inside the BMP, was given an ActualText")
+	// U+FFFD is 1000 units wide in Noto Sans, and a code it lacks 600, so
+	// the code's scaling is the layer's times 1000/600.
+	if len(tz) < 2 || math.Abs(tz[1]/tz[0]-1000.0/600) > 0.01 {
+		t.Fatalf("Tz = %v, want the code widened to U+FFFD's width", tz)
 	}
 }
 

@@ -93,6 +93,20 @@ func TestText_ReadsAnActualTextInPlaceOfItsStrings(t *testing.T) {
 	}
 }
 
+// #2550: a code that a ToUnicode CMap's beginbfchar maps to one
+// character reads as that character; a code mapped to more than one, and
+// a line that is not an entry, are passed over.
+func TestText_ReadsACodeAsWhatToUnicodeMapsItTo(t *testing.T) {
+	var doc bytes.Buffer
+	doc.WriteString("stream\n3 beginbfchar\n<FDD0> <D83DDC76>\n<FDD1> <00660069>\nnot an entry\nendbfchar\nendstream\n")
+	doc.WriteString("stream\n")
+	doc.Write(deflate(t, "BT 0 9 Td (\x00a\xfd\xd0\xfd\xd1)Tj ET"))
+	doc.WriteString("endstream\n")
+	if got, want := pdftext.Text(doc.Bytes()), "a\U0001F476\uFDD1"; got != want {
+		t.Fatalf("Text = %q, want %q", got, want)
+	}
+}
+
 func deflate(t *testing.T, content string) []byte {
 	t.Helper()
 	var out bytes.Buffer

@@ -122,8 +122,9 @@ func (d *Doc) drawShaped(i int, style Style, size, lineHeight float64, text stri
 		d.SetX(x + width)
 		return
 	}
-	d.RawWriteStr(fmt.Sprintf("3 Tr %.3f Tz\n", 100*max(width, zeroWidth)/natural))
-	d.layer(text, width, lineHeight)
+	scale := max(width, zeroWidth) / natural
+	d.RawWriteStr(fmt.Sprintf("3 Tr %.3f Tz\n", 100*scale))
+	d.layer(text, width, lineHeight, scale)
 	d.RawWriteStr("0 Tr 100 Tz\n")
 }
 
@@ -167,22 +168,31 @@ func (d *Doc) drawOutlines(i int, style Style, size, lineHeight float64, text st
 }
 
 // layer writes text into the invisible text layer at the current
-// position. fpdf writes text as two-byte codes, one per BMP character, so
-// a character outside the BMP cannot be a code of its own: the layer holds
-// U+FFFD in its place, wrapped in a marked-content span whose ActualText
-// (ISO 32000-1, 14.9.4) is the text as typed, in UTF-16 with surrogate
-// pairs, which a reader copies and searches instead.
-func (d *Doc) layer(text string, width, lineHeight float64) {
-	shown := shownText(text)
-	if shown != text {
+// position and horizontal scaling. Each character outside the BMP is
+// shown as its code (tounicode.go), scaled to the width of the U+FFFD it
+// is measured as. Once the codes run out, the text is wrapped in a
+// marked-content span whose ActualText (ISO 32000-1, 14.9.4) is the text
+// as typed.
+func (d *Doc) layer(text string, width, lineHeight, scale float64) {
+	shown, coded := d.layerText(text)
+	measured := shownText(text)
+	if shown != measured {
+		d.RawWriteStr(fmt.Sprintf("%.3f Tz", 100*scale*d.GetStringWidth(measured)/d.GetStringWidth(shown)))
+	}
+	if !coded {
 		d.RawWriteStr("/Span <</ActualText <FEFF" + utf16Hex(text) + ">>> BDC")
 	}
 	d.cell(shown, width, lineHeight)
-	if shown != text {
+	if !coded {
 		d.RawWriteStr("EMC")
+	}
+	if shown != measured {
+		d.RawWriteStr(fmt.Sprintf("%.3f Tz", 100*scale))
 	}
 }
 
+// shownText is text as the layout measures it, each character outside
+// the BMP as U+FFFD.
 func shownText(text string) string {
 	return strings.Map(func(r rune) rune {
 		if outsideBMP(r) {
