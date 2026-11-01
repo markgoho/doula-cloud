@@ -51,6 +51,10 @@ type Summary struct {
 	// EndedOn (#2270) is the Practice's calendar day the Attachment this
 	// accepted Offer granted ended, on her own inbox only.
 	EndedOn string `json:"endedOn,omitempty"`
+	// AcceptedOn (#2513) is the Practice's calendar day an accepted Offer
+	// was accepted (ADR-0036), on her own inbox only, so it reads on the
+	// same calendar as EndedOn.
+	AcceptedOn string `json:"acceptedOn,omitempty"`
 }
 
 // FeePaid is what she reads of a Fee Payment: how much, how, and the day
@@ -108,7 +112,9 @@ func InboxHandler() http.Handler {
 			        CASE WHEN o.state = 'accepted'
 			              AND (NOT $5::boolean OR (att.id IS NOT NULL AND att.ended_at IS NULL))
 			             THEN o.engagement_id::text END,
-			        to_char((att.ended_at AT TIME ZONE p.timezone)::date, 'YYYY-MM-DD')
+			        to_char((att.ended_at AT TIME ZONE p.timezone)::date, 'YYYY-MM-DD'),
+			        CASE WHEN o.state = 'accepted'
+			             THEN to_char((o.decided_at AT TIME ZONE p.timezone)::date, 'YYYY-MM-DD') END
 			   FROM engagement_offers o
 			   JOIN engagements e ON e.id = o.engagement_id
 			   JOIN practices p ON p.id = e.practice_id
@@ -180,7 +186,7 @@ func EngagementListHandler() http.Handler {
 			`SELECT o.id, o.state::text, o.client_first_initial, o.client_area, o.due_date,
 			        o.amount_cents, o.terms, o.employment_type::text, o.offered_at, o.expires_at,
 			        o.decided_at, COALESCE(s.name, ''), COALESCE(s.email, pi.address, ''),
-			        NULL::bigint, NULL::text, NULL::text, NULL::text, NULL::text, NULL::text
+			        NULL::bigint, NULL::text, NULL::text, NULL::text, NULL::text, NULL::text, NULL::text
 			   FROM engagement_offers o
 			   LEFT JOIN staff s ON s.id = o.staff_id
 			   LEFT JOIN practice_invitations pi ON pi.id = o.invitation_id
@@ -214,7 +220,7 @@ func parseCursor(w http.ResponseWriter, r *http.Request) (*cursor, bool) {
 }
 
 // list runs one of the two queries above and scans one page of Summary
-// rows out of it. Both select the same nineteen columns in the same order
+// rows out of it. Both select the same twenty columns in the same order
 // and take the same first four parameters, which is what lets one scanner
 // serve both; extra is the inbox's fifth. It asks for pageSize+1 rows and returns pageSize, so
 // "is there another page" is answered without a second count query.
@@ -242,12 +248,12 @@ func list(ctx context.Context, tx *sql.Tx, query, arg string, after *cursor, ext
 		var offeredAt, expiresAt time.Time
 		var dueDate, decidedAt sql.NullTime
 		var amountCents sql.NullInt64
-		var initial, area, terms, paidMethod, paidOn, dueMonth, engagementID, endedOn sql.NullString
+		var initial, area, terms, paidMethod, paidOn, dueMonth, engagementID, endedOn, acceptedOn sql.NullString
 		var paidCents sql.NullInt64
 		if err := rows.Scan(&s.OfferID, &s.State, &initial, &area, &dueDate,
 			&amountCents, &terms, &s.EmploymentType, &offeredAt, &expiresAt, &decidedAt,
 			&s.TargetName, &s.TargetAddress, &paidCents, &paidMethod, &paidOn, &dueMonth,
-			&engagementID, &endedOn); err != nil {
+			&engagementID, &endedOn, &acceptedOn); err != nil {
 			// coverage:ignore reason: DB scan failure, not exercised by unit tests
 			return ListResponse{}, fmt.Errorf("offer: scan offer row: %w", err)
 		}
@@ -271,6 +277,7 @@ func list(ctx context.Context, tx *sql.Tx, query, arg string, after *cursor, ext
 		s.DueMonth = dueMonth.String
 		s.EngagementID = engagementID.String
 		s.EndedOn = endedOn.String
+		s.AcceptedOn = acceptedOn.String
 		items = append(items, s)
 		offeredAts = append(offeredAts, offeredAt)
 	}

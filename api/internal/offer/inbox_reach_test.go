@@ -67,6 +67,41 @@ func TestInboxHandler_ContractorLinksToTheEngagementUntilHerAttachmentEnds(t *te
 	}
 }
 
+// TestInboxHandler_AcceptedOnIsThePracticesDay proves #2513: an Offer
+// accepted late in the evening, Practice time, reads that day, though
+// the instant has already crossed into the next day in UTC.
+func TestInboxHandler_AcceptedOnIsThePracticesDay(t *testing.T) {
+	f := newFixture(t)
+	offerID := f.makeOffer(t, offerBody(f.doulaID, 45000))
+	if got := inbox(t, f, f.doulaSession); got.AcceptedOn != "" {
+		t.Fatalf("open offer acceptedOn = %q, want none", got.AcceptedOn)
+	}
+	expectStatus(t, do(t, http.MethodPost, f.offerURL(offerID, "accept"), f.doulaSession, nil), http.StatusOK)
+
+	var utcDay string
+	if err := f.db.Admin.QueryRowContext(t.Context(),
+		`UPDATE engagement_offers o
+		    SET decided_at = timestamp '2026-10-31 23:30' AT TIME ZONE p.timezone
+		   FROM engagements e JOIN practices p ON p.id = e.practice_id
+		  WHERE o.id = $1 AND e.id = o.engagement_id
+		RETURNING (o.decided_at AT TIME ZONE 'UTC')::date::text`, offerID,
+	).Scan(&utcDay); err != nil {
+		t.Fatalf("move the acceptance to the evening: %v", err)
+	}
+	if utcDay != "2026-11-01" {
+		t.Fatalf("fixture Practice zone puts the acceptance on %s in UTC, want 2026-11-01", utcDay)
+	}
+
+	if got := inbox(t, f, f.doulaSession); got.AcceptedOn != "2026-10-31" {
+		t.Fatalf("acceptedOn = %q, want 2026-10-31 (the Practice's day)", got.AcceptedOn)
+	}
+	var practiceSide offer.ListResponse
+	decode(t, do(t, http.MethodGet, f.offersURL(), f.ownerSession, nil), http.StatusOK, &practiceSide)
+	if p := practiceSide.Items[0]; p.AcceptedOn != "" {
+		t.Fatalf("practice-side acceptedOn = %q, want none", p.AcceptedOn)
+	}
+}
+
 func TestInboxHandler_EmployeeKeepsTheLinkAfterCompletion(t *testing.T) {
 	f := newFixture(t)
 	employeeID := testdb.SeedStaffAtPractice(t, f.db, f.practiceID, "uid-employee-reach", []string{doulaRole}, employeeType)

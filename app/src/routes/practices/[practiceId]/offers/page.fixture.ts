@@ -60,6 +60,7 @@ const offers: Offer[] = [
 		offeredAt: '2026-06-01T00:00:00Z',
 		expiresAt: '2026-06-08T00:00:00Z',
 		decidedAt: '2026-06-02T00:00:00Z',
+		acceptedOn: '2026-06-02',
 		feePaid: { amountCents: 450_000, method: 'bank_transfer', paidOn: '2026-09-30' },
 		// #2270: the work ended, so no link to it.
 		endedOn: '2026-10-31'
@@ -77,6 +78,7 @@ const offers: Offer[] = [
 		offeredAt: '2026-04-01T00:00:00Z',
 		expiresAt: '2026-04-08T00:00:00Z',
 		decidedAt: '2026-04-02T00:00:00Z',
+		acceptedOn: '2026-04-02',
 		engagementId: 'engagement-5'
 	},
 	// #2385: an open Offer whose Client was erased carries none of her
