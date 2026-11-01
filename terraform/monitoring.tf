@@ -12,7 +12,7 @@
 # A later policy (#2417) joins by using `local.founder_phone_channels` and
 # adding itself to `local.waking_hours_alert_policies`.
 locals {
-  founder_phone_channel_exists = false
+  founder_phone_channel_exists = true
 
   founder_phone_channels = local.founder_phone_channel_exists ? [data.google_monitoring_notification_channel.founder_phone[0].name] : []
 
