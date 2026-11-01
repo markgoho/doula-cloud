@@ -267,3 +267,7 @@ The reason: a `ContractForm` holds the Contract's fields and nothing else does, 
 - `organisms/ContractTemplateEditor`: "Contract Template" is not a `GLOSSARY.md` term, though **Plan Template** and **Client Field Template** are.
 
 Names of a known structure, such as `Skeleton`, `Drawer`, `Badge` and `StepRail`, and GOV.UK's `CheckAnswers` and `WarningText`, read as structure. `PageTitle.svelte` sits outside every tier directory, so the rule does not reach it.
+
+## Amendment, 2026-11-01: `sidebar-l` is no longer one of the primitives
+
+Filed as [#2400](https://github.com/markgoho/doula-cloud/issues/2400). *What a Template owns* names `sidebar-l` among the primitives a Template is built from. No Template, route or component draws one any more: `OverviewHub` lost its rail on #2398, and `QuestionPage` and `CheckAnswers` gave theirs up on #585 and #2005. With no consumer and no recorded design that names a screen needing one, the primitive is removed (ADR-0003's amendment of the same date). The text above stays as written.

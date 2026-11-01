@@ -82,7 +82,7 @@ function fetcherFor(overrides: Record<string, Response> = {}) {
 		// Before `offers`: its path holds `/offers` (#2508).
 		'offers/declined': jsonResponse({ items: [declinedOffer], hasMore: false }),
 		offers: jsonResponse({ items: [openOffer, decidedOffer] }),
-		clients: jsonResponse({ records: 3, active: 2 }),
+		clients: jsonResponse({ records: 3 }),
 		staff: jsonResponse(roster),
 		// Before `billing`: its path holds `/billing` (#1589).
 		'billing-mode': jsonResponse({ billingMode: 'stripe' }),
@@ -268,7 +268,7 @@ describe('loadPracticeLanding', () => {
 
 	it('reports a Practice with no Clients as empty', async () => {
 		const landing = await loadPracticeLanding(
-			fetcherFor({ clients: jsonResponse({ records: 0, active: 0 }) }),
+			fetcherFor({ clients: jsonResponse({ records: 0 }) }),
 			'practice-1',
 			session
 		);

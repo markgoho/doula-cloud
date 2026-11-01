@@ -146,9 +146,6 @@
 			rail-column-and-nothing #543 already called out; collapsed
 			above the question, the journey costs one line at every
 			width and the reader opens it when they want it.
-
-			CheckAnswers keeps its sidebar-l: there the whole answered
-			journey IS the page's content, so it earns the column.
 		-->
 		<div class="column">
 			<stack-l space="var(--space-field)">
