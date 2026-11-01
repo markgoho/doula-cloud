@@ -51,7 +51,8 @@ type segment struct {
 // changes and joined where neighbors share a face and a level, so a
 // shaped run is shaped whole; the trailing space is dropped (rule L1);
 // and the pieces are reordered for reading (rule L2), each right-to-left
-// piece drawn in its own order reversed. A right-to-left paragraph's line
+// piece shaped right to left, with its brackets mirrored (rule L4). A
+// right-to-left paragraph's line
 // is set against the right margin.
 func (d *Doc) flush(line []run, levels []bidi.Level, base bidi.Level, style Style, size, lineHeight float64) {
 	segments := cut(line, levels)
@@ -79,7 +80,7 @@ func (d *Doc) flush(line []run, levels []bidi.Level, base bidi.Level, style Styl
 
 	var total float64
 	for i := range segments {
-		segments[i].width = d.width(segments[i].face, style, size, segments[i].text)
+		segments[i].width = d.drawnWidth(segments[i].face, style, size, segments[i].text, segments[i].level%2 == 1)
 		total += segments[i].width
 	}
 	if base%2 == 1 {
@@ -89,16 +90,12 @@ func (d *Doc) flush(line []run, levels []bidi.Level, base bidi.Level, style Styl
 	}
 	for _, s := range segments {
 		rtl := s.level%2 == 1
-		if faces[s.face].script != nil {
+		if outlined(s.face, s.text, rtl) {
 			d.drawShaped(s.face, style, size, lineHeight, s.text, rtl)
 			continue
 		}
-		text := s.text
-		if rtl {
-			text = visualOrder(text)
-		}
 		d.use(s.face, style, size)
-		d.cell(text, s.width, lineHeight)
+		d.cell(s.text, s.width, lineHeight)
 	}
 }
 

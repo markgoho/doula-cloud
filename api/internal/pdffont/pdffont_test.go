@@ -35,6 +35,10 @@ var names = []struct{ script, name string }{
 	{"Devanagari", "प्रिया शर्मा"},
 	{"a combining mark", "Zoë Brontë"},
 	{"Latin and CJK on one line", "Mei 王 Lin"},
+	{"a heart and a baby emoji", "Ada ❤️ Lovelace 👶"},
+	{"an emoji sequence and a skin tone", "👩‍🍼 Ada 👍🏽"},
+	{"Arabic with brackets", "سارة (سارة) الحداد"},
+	{"Arabic and an emoji", "سارة 👶 الحداد"},
 }
 
 func TestParagraph_PrintsANameInAnyScriptAsTyped(t *testing.T) {
@@ -52,14 +56,14 @@ func TestParagraph_PrintsANameInAnyScriptAsTyped(t *testing.T) {
 	}
 }
 
-// fpdf writes UTF-16 with no surrogate pairs, so a character outside the
-// Basic Multilingual Plane prints as U+FFFD rather than corrupting the
-// line around it.
-func TestParagraph_ReplacesWhatFpdfCannotEncode(t *testing.T) {
+// #2544: a character outside the BMP that no face has, a rare CJK
+// ideograph, still reads back as typed, and only invalid UTF-8 prints as
+// U+FFFD.
+func TestParagraph_ReplacesOnlyInvalidUTF8(t *testing.T) {
 	out := render(t, func(d *pdffont.Doc) {
-		d.Paragraph(pdffont.Regular, 12, 8, "Ada \U0001F476 Lovelace \xff")
+		d.Paragraph(pdffont.Regular, 12, 8, "Ada \U00020BB7 Lovelace \xff")
 	})
-	if got, want := pdftext.Text(out), "Ada � Lovelace �"; got != want {
+	if got, want := pdftext.Text(out), "Ada \U00020BB7 Lovelace �"; got != want {
 		t.Fatalf("Text = %q, want %q", got, want)
 	}
 }
@@ -111,6 +115,9 @@ func TestParagraph_EmbedsOnlyWhatTheDocumentUses(t *testing.T) {
 	}
 	if len(mixed) > 200_000 {
 		t.Fatalf("a Contract naming every script is %d bytes, want at most 200000", len(mixed))
+	}
+	if bytes.Contains(mixed, []byte("/BaseFont /utf8notoemoji")) {
+		t.Fatal("the emoji face was embedded; its glyphs are drawn as outlines")
 	}
 	t.Logf("Latin-only: %d bytes; every script: %d bytes", len(latin), len(mixed))
 }

@@ -70,6 +70,29 @@ func TestText_ReadsAnEscapedReturnAndAStringCutShort(t *testing.T) {
 	}
 }
 
+// #2544: inside a span with an ActualText, the span's first Tj reads as
+// the ActualText and its others as nothing; a span with other properties
+// reads its own strings; a hexadecimal string that is not hexadecimal
+// reads as nothing, and one never closed ends the stream's text.
+func TestText_ReadsAnActualTextInPlaceOfItsStrings(t *testing.T) {
+	stream := func(content string) []byte {
+		doc := append([]byte("stream\n"), deflate(t, content)...)
+		return append(doc, []byte("endstream\n")...)
+	}
+	for name, tc := range map[string]struct{ content, want string }{
+		"ActualText": {"BT 0 9 Td (\x00a)Tj ET /Span <</ActualText <FEFFD83DDC76>>> BDC BT 9 9 Td (\xff\xfd)Tj (\xff\xfd)Tj ET EMC BT 18 9 Td (\x00b)Tj ET", "a\U0001F476b"},
+		"other span": {"/OC <</Name /x>> BDC BT 0 9 Td (\x00c)Tj ET EMC", "c"},
+		"bad hex":    {"/Span <</ActualText <ZZ>>> BDC BT 0 9 Td (\x00d)Tj ET EMC", ""},
+		"open hex":   {"BT 0 9 Td (\x00e)Tj ET <FEFF", ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := pdftext.Text(stream(tc.content)); got != tc.want {
+				t.Fatalf("Text = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func deflate(t *testing.T, content string) []byte {
 	t.Helper()
 	var out bytes.Buffer

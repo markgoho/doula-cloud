@@ -15,14 +15,18 @@
 // short-i sign before its consonant. A run in either face is shaped
 // instead (shape.go, #2538) and drawn as its glyph outlines, with the same
 // text laid invisibly over it so it still copies out and searches as
-// typed.
+// typed. Emoji are drawn the same way, in a monochrome face (#2544).
 //
 // The faces, and the license each is embedded and redistributed under,
 // sit in fonts/ beside their license text:
 //
-//   - Noto Sans (Latin, Greek, Cyrillic, Vietnamese), Noto Sans Arabic and
-//     Noto Sans Devanagari: SIL Open Font License 1.1, which permits
-//     embedding, subsetting and redistribution, bundled or not.
+//   - Noto Sans (Latin, Greek, Cyrillic, Vietnamese), Noto Sans Arabic,
+//     Noto Sans Devanagari and Noto Emoji: SIL Open Font License 1.1,
+//     which permits embedding, subsetting and redistribution, bundled or
+//     not. Noto Emoji is the variable font's regular instance with its
+//     vertical metrics and glyph names dropped (fonttools varLib.instancer
+//     wght=400, then pyftsubset --unicodes='*' --layout-features='*'
+//     --no-hinting --name-IDs='*' --drop-tables+=vhea,vmtx,STAT).
 //   - Droid Sans Fallback (Chinese and Japanese): Apache License 2.0, with
 //     its NOTICE.
 //   - Nanum Gothic (Korean): SIL Open Font License 1.1. Its Reserved Font
@@ -53,11 +57,15 @@ var fontFiles embed.FS
 
 // face is one embedded typeface, as the fpdf family it is registered as.
 // A face with a script is shaped rather than drawn character by character.
+// A face that is outlines only is never registered with fpdf, whose font
+// parser reads only a face's BMP characters: its invisible text is set in
+// the first face.
 type face struct {
-	family  string
-	regular string
-	bold    string
-	script  *script
+	family       string
+	regular      string
+	bold         string
+	script       *script
+	outlinesOnly bool
 }
 
 // faces in the order a character is looked for: the first that has a
@@ -70,23 +78,25 @@ var faces = []face{
 	{family: "DroidSansFallback", regular: "fonts/DroidSansFallbackFull.ttf", bold: "fonts/DroidSansFallbackFull.ttf"},
 	// Hangul, which Droid Sans Fallback does not have.
 	{family: "NanumGothic", regular: "fonts/NanumGothic-Regular.ttf", bold: "fonts/NanumGothic-Bold.ttf"},
+	// Last, since it also has digits, "#" and "©". One weight only.
+	{family: "NotoEmoji", regular: "fonts/NotoEmoji-Regular.ttf", bold: "fonts/NotoEmoji-Regular.ttf", script: &common, outlinesOnly: true},
 }
 
-var (
-	coverageOnce sync.Once
-	coverage     []*sfnt.Font
-)
+type coverageFont struct {
+	once sync.Once
+	font *sfnt.Font
+}
+
+// coverage is each face parsed the first time a character is looked for
+// in it, so a document that never reaches the emoji face never parses it.
+var coverage = make([]coverageFont, len(faces))
 
 // covers reports whether face i has a glyph for r.
 func covers(i int, r rune) bool {
-	coverageOnce.Do(func() {
-		coverage = make([]*sfnt.Font, len(faces))
-		for j, f := range faces {
-			coverage[j] = mustParse(f.regular)
-		}
-	})
+	c := &coverage[i]
+	c.once.Do(func() { c.font = mustParse(faces[i].regular) })
 	var buf sfnt.Buffer
-	index, err := coverage[i].GlyphIndex(&buf, r)
+	index, err := c.font.GlyphIndex(&buf, r)
 	return err == nil && index != 0
 }
 
@@ -220,15 +230,31 @@ func (d *Doc) wordWidth(word []run, style Style, size float64) float64 {
 	return width
 }
 
-// width is how wide text draws in face i: shaped where the face is
-// shaped, fpdf's own measure otherwise.
+// width is how wide text draws in face i, in the face's own direction.
 func (d *Doc) width(i int, style Style, size float64, text string) float64 {
-	if faces[i].script != nil {
-		return d.shapedWidth(i, style, size, text)
+	rtl := faces[i].script != nil && faces[i].script.rtl
+	return d.drawnWidth(i, style, size, text, rtl)
+}
+
+// drawnWidth is how wide text draws in face i: shaped where it is drawn
+// as outlines, fpdf's own measure otherwise.
+func (d *Doc) drawnWidth(i int, style Style, size float64, text string, rtl bool) float64 {
+	if outlined(i, text, rtl) {
+		return d.shapedWidth(i, style, size, text, rtl)
 	}
 	d.use(i, style, size)
 	return d.GetStringWidth(text)
 }
+
+// outlined reports whether text in face i is drawn as shaped outlines
+// rather than as fpdf text: in a shaped face; right to left, so HarfBuzz
+// mirrors a bracket by the Unicode Bidi Mirroring property; or with a
+// character outside the BMP, which fpdf cannot encode.
+func outlined(i int, text string, rtl bool) bool {
+	return faces[i].script != nil || rtl || strings.ContainsFunc(text, outsideBMP)
+}
+
+func outsideBMP(r rune) bool { return r > 0xFFFF }
 
 // cell draws text at the current position in a cell width wide. fpdf
 // reads a cell width of 0 as "to the right margin", so text that is only
@@ -289,17 +315,19 @@ type run struct {
 
 // runs splits text into the longest stretches one face can draw. Each
 // character goes to the first face that has it, so a Latin word after a
-// Korean one is back in Noto Sans; a space or a combining mark stays in
-// the face drawing the run it follows, when that face has it, so it sits
-// beside the letters around it. A character no face has stays where it
-// is and prints as that face's missing glyph.
+// Korean one is back in Noto Sans; a space, a combining mark or a format
+// character (the joiner inside an emoji sequence) stays in the face
+// drawing the run it follows, when that face has it, so it sits beside
+// the letters around it. A space after an emoji is the exception: the
+// emoji face's space is an emoji wide. A character no face has stays
+// where it is and prints as that face's missing glyph.
 func runs(text string) []run {
 	var out []run
 	var b strings.Builder
 	current, start, index := -1, 0, 0
 	for _, r := range text {
 		next := current
-		if current < 0 || (!unicode.IsSpace(r) && !unicode.Is(unicode.Mn, r)) || !covers(current, r) {
+		if current < 0 || !stays(current, r) {
 			next = firstFace(r, current)
 		}
 		if next != current && b.Len() > 0 {
@@ -317,6 +345,11 @@ func runs(text string) []run {
 	return out
 }
 
+func stays(current int, r rune) bool {
+	space := unicode.IsSpace(r) && !faces[current].outlinesOnly
+	return (space || unicode.In(r, unicode.Mn, unicode.Cf)) && covers(current, r)
+}
+
 func firstFace(r rune, fallback int) int {
 	for i := range faces {
 		if covers(i, r) {
@@ -331,22 +364,8 @@ func firstFace(r rune, fallback int) int {
 
 // printable is text in Unicode's composed form, so a letter typed with a
 // combining mark ("e" and U+0308) prints as the one precomposed glyph
-// ("ë") rather than as a mark fpdf cannot place over its letter. It also
-// drops what fpdf cannot write: fpdf encodes text as UTF-16 without
-// surrogate pairs, so a character outside the Basic Multilingual Plane
-// (an emoji, a rare CJK ideograph) would corrupt the line. Each prints as
-// U+FFFD instead, and invalid UTF-8 likewise. No embedded face has a
-// glyph for any of them, so a face drawing its outline would print a box
-// all the same (#2538).
+// ("ë") rather than as a mark fpdf cannot place over its letter. Invalid
+// UTF-8 prints as U+FFFD.
 func printable(text string) string {
-	text = norm.NFC.String(text)
-	if !strings.ContainsFunc(text, func(r rune) bool { return r > 0xFFFF || r == utf8.RuneError }) {
-		return text
-	}
-	return strings.Map(func(r rune) rune {
-		if r > 0xFFFF {
-			return utf8.RuneError
-		}
-		return r
-	}, text)
+	return strings.ToValidUTF8(norm.NFC.String(text), string(utf8.RuneError))
 }

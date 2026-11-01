@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 	"unicode"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/go-text/typesetting/di"
 	"github.com/go-text/typesetting/font"
@@ -26,6 +29,9 @@ type script struct {
 var (
 	arabic     = script{rtl: true, script: language.Arabic, language: language.NewLanguage("ar")}
 	devanagari = script{script: language.Devanagari, language: language.NewLanguage("hi")}
+	// common is what emoji, and a face with no script of its own drawn as
+	// outlines, are shaped as.
+	common = script{script: language.Common}
 )
 
 // parsed holds each shaped face's file parsed once per process. A
@@ -74,6 +80,9 @@ func (d *Doc) shapingFace(i int, style Style) *shapingFace {
 func (d *Doc) shape(i int, style Style, text string, rtl bool) (*shapingFace, shaping.Output) {
 	sf := d.shapingFace(i, style)
 	s := faces[i].script
+	if s == nil {
+		s = &common
+	}
 	direction := di.DirectionLTR
 	if rtl {
 		direction = di.DirectionRTL
@@ -96,8 +105,8 @@ func (d *Doc) unitsPerFontUnit(sf *shapingFace, size float64) float64 {
 	return size / d.GetConversionRatio() / sf.upem
 }
 
-func (d *Doc) shapedWidth(i int, style Style, size float64, text string) float64 {
-	sf, out := d.shape(i, style, text, faces[i].script.rtl)
+func (d *Doc) shapedWidth(i int, style Style, size float64, text string, rtl bool) float64 {
+	sf, out := d.shape(i, style, text, rtl)
 	return fromFixed(out.Advance) * d.unitsPerFontUnit(sf, size)
 }
 
@@ -107,6 +116,12 @@ func fromFixed(v fixed.Int26_6) float64 { return float64(v) / 64 }
 // the text color on the baseline fpdf would give a cell on this line, then
 // lays the same text over it invisibly (text render mode 3), stretched to
 // the drawn width, so the PDF still holds the characters typed.
+//
+// fpdf writes text as two-byte codes, one per BMP character, so a
+// character outside the BMP cannot be a code of its own. The invisible
+// text holds U+FFFD in its place, wrapped in a marked-content span whose
+// ActualText (ISO 32000-1, 14.9.4) is the text as typed, in UTF-16 with
+// surrogate pairs; a reader copies and searches that instead.
 func (d *Doc) drawShaped(i int, style Style, size, lineHeight float64, text string, rtl bool) {
 	sf, out := d.shape(i, style, text, rtl)
 	scale := d.unitsPerFontUnit(sf, size)
@@ -137,15 +152,39 @@ func (d *Doc) drawShaped(i int, style Style, size, lineHeight float64, text stri
 	if rtl {
 		stored = visualOrder(text)
 	}
-	d.use(i, style, size)
-	natural := d.GetStringWidth(stored)
+	layer := i
+	if faces[i].outlinesOnly {
+		layer = 0
+	}
+	shown := strings.Map(func(r rune) rune {
+		if outsideBMP(r) {
+			return utf8.RuneError
+		}
+		return r
+	}, stored)
+	d.use(layer, style, size)
+	natural := d.GetStringWidth(shown)
 	if natural <= 0 {
 		d.SetX(x + width)
 		return
 	}
+	if shown != stored {
+		d.RawWriteStr("/Span <</ActualText <FEFF" + utf16Hex(stored) + ">>> BDC")
+	}
 	d.RawWriteStr(fmt.Sprintf("3 Tr %.3f Tz\n", 100*max(width, zeroWidth)/natural))
-	d.cell(stored, width, lineHeight)
+	d.cell(shown, width, lineHeight)
 	d.RawWriteStr("0 Tr 100 Tz\n")
+	if shown != stored {
+		d.RawWriteStr("EMC")
+	}
+}
+
+func utf16Hex(text string) string {
+	var b strings.Builder
+	for _, unit := range utf16.Encode([]rune(text)) {
+		fmt.Fprintf(&b, "%04X", unit)
+	}
+	return b.String()
 }
 
 // outline adds one glyph's contours to the current path, its origin at
