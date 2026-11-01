@@ -39,7 +39,7 @@ test('a saved Birth Plan address opened signed out lands on that Birth Plan afte
 	await page.getByRole('button', { name: 'Sign in' }).click();
 
 	await expect(page).toHaveURL(endsWith(birthPlan));
-	await expect(page.getByRole('heading', { level: 1, name: "Pat's Birth Plan" })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: "Pat Client's Birth Plan" })).toBeVisible();
 });
 
 // #757's notice still says so when the session ends under her in the app,
