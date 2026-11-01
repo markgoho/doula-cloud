@@ -14,6 +14,7 @@ import (
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/staffinvite"
+	"doula-cloud/api/internal/staffnotice"
 	"doula-cloud/api/internal/tasknudge"
 )
 
@@ -58,7 +59,8 @@ type CreateResponse struct {
 // CreateHandler makes an Offer of one Engagement's work. Owner or Admin
 // only. Must be mounted behind staffauth.Middleware.
 //
-// enq is ADR-0013's Cloud Tasks nudge for the email path's outbox row,
+// enq is ADR-0013's Cloud Tasks nudge for the outbox row either target
+// queues (the Offer mail, or a staffnotice row for a Staff target),
 // registered rather than fired because Middleware's commit -- which
 // decides whether that row survives at all -- runs after this handler
 // has returned.
@@ -110,6 +112,8 @@ func CreateHandler(enq tasknudge.Enqueuer) http.Handler {
 		}
 		if req.StaffID == "" {
 			tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.EngagementOffer))
+		} else {
+			tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.StaffNotice))
 		}
 
 		apierr.WriteJSON(w, status, resp)
@@ -280,6 +284,18 @@ func create(ctx context.Context, tx *sql.Tx, practiceID, engagementID, actorStaf
 		return CreateResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError, nil
 	}
 
+	if target.staffID.Valid {
+		if err := staffnotice.Queue(ctx, tx, staffnotice.Notice{
+			PracticeID:       practiceID,
+			RecipientStaffID: target.staffID.String,
+			Kind:             staffnotice.KindOfferReceived,
+			SubjectID:        offerID,
+			TriggeredBy:      actorStaffID,
+		}); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return CreateResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError, nil
+		}
+	}
 	if target.invitationID.Valid {
 		if err := queue(ctx, tx, offerID, target.inviteToken, target.accessCode); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests

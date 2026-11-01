@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import OfferInbox from './OfferInbox.svelte';
 import { formatInstantWithClock } from '#lib/dates.js';
-import type { Offer } from '#lib/offer.js';
+import type { Offer, OfferDecision } from '#lib/offer.js';
 
 const openOffer: Offer = {
 	offerId: 'offer-1',
@@ -21,11 +21,19 @@ const sent = formatInstantWithClock(openOffer.offeredAt);
 
 async function setup(
 	offers: Offer[] = [],
-	onDecide: (offerId: string, action: 'accept' | 'decline') => Promise<void> = vi
+	onDecide: (offerId: string, action: 'accept' | 'decline') => Promise<OfferDecision> = vi
 		.fn()
-		.mockResolvedValue(undefined)
+		.mockImplementation(async (offerId: string, action: 'accept' | 'decline') => ({
+			offerId,
+			state: action === 'accept' ? 'accepted' : 'declined'
+		}))
 ) {
-	const { container } = await render(OfferInbox, { offers, onDecide });
+	const { container } = await render(OfferInbox, {
+		offers,
+		onDecide,
+		practiceName: 'Rooted Birth Collective',
+		engagementHref: (engagementId: string) => `/engagements/${engagementId}`
+	});
 	return { container, onDecide };
 }
 
@@ -121,12 +129,53 @@ describe('OfferInbox.svelte', () => {
 		expect(onDecide).toHaveBeenCalledWith('offer-1', 'accept');
 	});
 
-	it('calls onDecide with decline', async () => {
+	// #2268: declining is final, so it is confirmed first.
+	it('asks before it declines, and declines on the confirm', async () => {
 		const { onDecide } = await setup([openOffer]);
 
 		await page.getByRole('button', { name: 'Decline' }).click();
+		await expect.element(page.getByRole('heading', { name: 'Decline this offer?' })).toBeVisible();
+		await expect
+			.element(page.getByText("You can't undo this. Rooted Birth Collective can send you a new offer later."))
+			.toBeVisible();
+		expect(onDecide).not.toHaveBeenCalled();
+
+		await page.getByRole('button', { name: 'Decline offer' }).click();
 
 		expect(onDecide).toHaveBeenCalledWith('offer-1', 'decline');
+		const status = page.getByRole('status');
+		await expect.element(status).toHaveTextContent('You declined. Rooted Birth Collective can see that on the Client\'s page.');
+		await expect.element(status).toHaveFocus();
+	});
+
+	it('keeps the offer when she backs out of declining', async () => {
+		const { onDecide } = await setup([openOffer]);
+
+		await page.getByRole('button', { name: 'Decline' }).click();
+		await page.getByRole('button', { name: 'Keep the offer' }).click();
+
+		expect(onDecide).not.toHaveBeenCalled();
+		await expect.element(page.getByRole('button', { name: 'Decline', exact: true })).toBeVisible();
+	});
+
+	it('says the work is hers on an accept, and links to it', async () => {
+		const onDecide = vi.fn().mockResolvedValue({
+			offerId: 'offer-1',
+			state: 'accepted',
+			engagementId: 'eng-1',
+			engagementKind: 'birth',
+			clientName: 'Adaeze Nwosu'
+		});
+		await setup([openOffer], onDecide);
+
+		await page.getByRole('button', { name: 'Accept' }).click();
+
+		const status = page.getByRole('status');
+		await expect.element(status).toHaveTextContent("You accepted. You're on Adaeze Nwosu's birth.");
+		await expect.element(status).toHaveFocus();
+		await expect
+			.element(page.getByRole('link', { name: "Open Adaeze Nwosu's birth" }))
+			.toHaveAttribute('href', '/engagements/eng-1');
 	});
 
 	it('names the Accept and Decline buttons by which Offer they answer', async () => {
@@ -202,7 +251,7 @@ describe('OfferInbox.svelte', () => {
 		const onDecide = vi.fn().mockRejectedValue('boom');
 		await setup([openOffer], onDecide);
 
-		await page.getByRole('button', { name: 'Decline' }).click();
+		await page.getByRole('button', { name: 'Accept' }).click();
 
 		await expect.element(page.getByText('Failed to answer this offer')).toBeVisible();
 	});
