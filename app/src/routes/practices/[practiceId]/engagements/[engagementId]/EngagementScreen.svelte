@@ -1977,6 +1977,7 @@
 					: 'Your Visit is added.';
 			await refreshStatusAfterScheduling(scheduledAt);
 			await refreshWhoIsOn();
+			await loadOnCall();
 			await loadActivity();
 		}
 	}
@@ -2036,6 +2037,7 @@
 		const told = emailedNames.length > 0 ? ` We emailed ${emailedNames.join(' and ')} to say so.` : '';
 		visitsSavedMessage = `${which} is ${staffName(newStaffId)}'s now, not ${visit.staffName}'s.${told}`;
 		await refreshWhoIsOn();
+		await loadOnCall();
 		await loadActivity();
 	}
 
