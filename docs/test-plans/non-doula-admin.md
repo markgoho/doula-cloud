@@ -62,7 +62,7 @@ The Billing screen is automated for an *Owner* (`billing.e2e.ts`); no spec reads
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 5.1 | Open the Engagement and look for a control that puts a Doula on it | On a new Engagement, the Start work form's **Who is the Doula?** puts an employee Doula on directly, and the Engagement's Doula row and Activity name her ([RA-G4](https://github.com/markgoho/doula-cloud/issues/225), closed). On an existing one, the Doula row's **Change** asks **Who is the Doula?**, listing each Doula who can go on without an Offer and none already on it, with no "(you)" for an Admin who holds no Doula role; **Save the Doula** puts her on at once ([RA-G13](https://github.com/markgoho/doula-cloud/issues/2230)). A contractor goes on through **Offer this work** | `manual` |
+| 5.1 | Open the Engagement and look for a control that puts a Doula on it | On a new Engagement, the Start work form's **Who is the Doula?** puts an employee Doula on directly, and the Engagement's Doula row and Activity name her ([RA-G4](https://github.com/markgoho/doula-cloud/issues/225), closed). On an existing one, the Doula row's **Change** asks **Who is the Doula?**, listing each Doula who can go on without an Offer and none already on it, with no "(you)" for an Admin who holds no Doula role; **Save the Doula** puts her on at once, beside any Doula already on it ([RA-G13](https://github.com/markgoho/doula-cloud/issues/2230)). Nothing takes a Doula off ([#2596](https://github.com/markgoho/doula-cloud/issues/2596)). A contractor goes on through **Offer this work** | `manual` |
 | 5.2 | Create a Visit naming the Doula instead | **It works, and it is her act.** The form asks **Who is this Visit for?** and `resolveAssignee` (`api/internal/visit/roles.go`) puts naming a colleague with the Owner and the Admin — a plain Doula cannot read the roster, so she has nobody to pick from. What Dee cannot do is log a Visit for *herself*, holding no Doula role, and the screen offers her no control for that rather than a button that 403s ([DW-G6](https://github.com/markgoho/doula-cloud/issues/274) closed) | `manual` |
 | 5.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
 | 5.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 6 (Hick's Law, Miller's Law). On a new Engagement, which Doula is a question on the Start work form ([#1515](https://github.com/markgoho/doula-cloud/issues/1515)), so the largest screen is that form's six, as 4.B-decisions counts them | `manual` |
@@ -155,6 +155,58 @@ Stages 8 and 9 sat either side of the `blocked` / `missing-feature` line on the 
 `admin-invite-role.e2e.ts` ([#965](https://github.com/markgoho/doula-cloud/issues/965)) reaches the app as an Admin who holds neither `owner` nor `doula`, invited and accepted through the real invite and accept screens. It drives 1.1 and 3.2, and asserts two things no step here names: her roster row reads `Admin` and nothing else, and the Owner-only invite send refuses her with `only a Practice Owner can do that`. Every other spec in the suite still runs as an Owner who signed up.
 
 ## Run log
+
+### 2026-11-01 — the fixed steps walked again ([#2264](https://github.com/markgoho/doula-cloud/issues/2264))
+
+**Stack**: `bun run --cwd app dev:full` from a worktree at port offset 1 (the app at `http://localhost:5273`, the mail catcher at `http://127.0.0.1:19180`), freshly seeded Rooted Birth Collective, on trunk at `71b5dd42`, in WSL2 with rootless Podman.
+
+**How it was walked**: by the blind `persona-walker` and the sighted `walk-evaluator` ([`docs/agents/persona-walk.md`](../agents/persona-walk.md)), at `1280x800x1`, pointer input, no throttling. Her persona file settles the desk: Dee "live[s] in the app all day". One walk, 22 acts, all captured. The evaluator graded 17 completed, 3 completed with friction (4.1-c, the name typed again; 5.1-a, the Note shown nowhere; 5.1-d, Charlene kept on), 0 refused and 2 stuck (5.1-e and 5.1-f, looking for a way to take Charlene off), with no `u` entry and no act over 1 s. Moving down a page was done with **PageDown**, never by script.
+
+- **Stage 1**: Renata invited `dee.rewalk@sim.doula.cloud` from **Invite a Staff member** with **Admin** and **Employee**. The walker opened the mail in the catcher and accepted it as Dee Whitlock, New York, in a fresh context, so it is stage 1's Cold walk too. Stages 4, 5 and 10 were walked as her, in the same session.
+- **Stage 4**: a new Client, Lucia Ferreira, birth, due Mar 18, 2027, Doula Priya Raman, with the Note "Heard about us from her midwife."
+- **Stage 5**: Lucia's Engagement as above, then Morgan Dunmore's existing birth Engagement (due Mar 23, 2027, Charlene Boateng on it), which the brief asked her to move to Priya Raman.
+- **Stage 10**: Camille Boyd's Engagement, from the Clients list.
+
+The orchestrating agent made the reads the blind walker could not make, signed in as `dee.rewalk@sim.doula.cloud` in its own context: each walked screen's `scrollWidth` at 320x640, the Doula row's question on Morgan's Engagement at 320x640, and the accept screen at 320x640 on a second invitation that was opened and not accepted.
+
+| Step | Mark | Result | What was seen |
+| --- | --- | --- | --- |
+| 1.1 | `automated (admin-invite-role.e2e.ts)` | as the spec asserts | The mail's link opened "Join Rooted Birth Collective", "Your invite to join as an Admin was sent to dee.rewalk@sim.doula.cloud." (`POST /api/staff/accept-invite/lookup` `200`) |
+| 1.2 | `automated (admin-invite-role.e2e.ts)` | as expected | First name, Last name, "Which state do you work from?", "Create a password", **Accept invite**. No account question and no email field. She landed on Overview with "You've joined Rooted Birth Collective. You're an Admin, as an employee." before the heading. After a reload the line was gone and the page was otherwise the same. Recent activity: "Dee Whitlock joined the Practice" |
+| 1.3 | `manual` | as expected | One membership, so the accept went straight to the Overview |
+| 4.1 | `manual` | as expected | **Find or add a Client**, the search ("No matches"), **Add a new Client**: "You searched for "Lucia Ferreira". Type the name into the fields below.", with both name fields empty, as the founder decided on [#1716](https://github.com/markgoho/doula-cloud/issues/1716) and [#1758](https://github.com/markgoho/doula-cloud/issues/1758). The date of birth, email and phone were listed under it |
+| 4.2 | `manual` | as expected | "Lucia saved as a Client." on "Start work with Lucia Ferreira", 14 Credits to 13. **Start work with Lucia**: "Work with Lucia started." The Note she wrote is shown nowhere afterward: not on the Engagement, not on Lucia's record, not in Activity ([#2597](https://github.com/markgoho/doula-cloud/issues/2597)) |
+| 5.1 | `manual` | as expected, and short of her goal | On Lucia's new Engagement, "Who is the Doula?" on the Start work form put Priya on: Doula "Priya Raman", Activity "Put on this Engagement as the Doula: Priya Raman", Dee Whitlock. On Morgan's, the Doula row's **Change** asked "Who is the Doula?" with nine employee Doulas, Renata Alvarez among them with no "(you)", and not Charlene, who was already on it. **Save the Doula**: "Priya Raman is on this Engagement.", with the same Activity line. Charlene stayed on: the row read "Doulas: Charlene Boateng, Priya Raman", and both were on call. Nothing on the page takes a Doula off ([#2596](https://github.com/markgoho/doula-cloud/issues/2596)). She moved Charlene's Nov 3 Visit to Priya with **Reassign** and stopped there |
+| 10.1 | `manual` | as expected | Camille Boyd's Engagement, from the row's **Birth** link: the Care Plan ("2 of 4 questions answered", "Last edited Nov 1, 2026 by Renata Alvarez") and the Birth Plan (the same, by Priya Raman, "Camille has not read this yet", **Print for the hospital**) each list every question and its answer, read-only, under **Change the Care Plan** and **Change the Birth Plan**. Neither section holds a field, at 1280x800 or at 320x640 |
+
+#### Budget steps — measured
+
+Decisions are counted as `docs/journeys/README.md`'s "How Decisions are counted" says, on a quiet day ([#2570](https://github.com/markgoho/doula-cloud/issues/2570)): what is enabled in the page body, with a radio group, a select or a date as one, and each headed group on a hub as one. A headed group with nothing to press counts as none. The skip link, **Back**, **Show password**, the Staff top bar, the account menu and the pilot banner's feedback button are not counted.
+
+| Step | Budget | Measured | Met |
+| --- | --- | --- | --- |
+| 1.B-screens | 2 | **2**: the accept screen, then the Overview | **yes**, [DW-G9 (#2238)](https://github.com/markgoho/doula-cloud/issues/2238) closed |
+| 1.B-decisions | 5 | **5** on the accept screen: First name, Last name, the work state, the password and **Accept invite** (at 1280x800 the button's top sits at the fold). The Overview is **2**, the count [RA-G11 (#2228)](https://github.com/markgoho/doula-cloud/issues/2228) asks of Dee: Clients waiting on a reply, and Recent activity. Who is free tonight holds no control, and no second-factor notice is drawn for an Admin. Read at 1280x800 and again at 320x640 | **yes**, [DW-G9 (#2238)](https://github.com/markgoho/doula-cloud/issues/2238) closed |
+| 1.B-confirmation | yes | **yes**. "You've joined Rooted Birth Collective. You're an Admin, as an employee." before `Overview`, on arrival only, and gone after a reload | **yes**, [DW-G10 (#2239)](https://github.com/markgoho/doula-cloud/issues/2239) closed |
+| 4.B-decisions | 6 | **6** on the Start work form, counted as the note counts: Kind of work, Due date, "Who is the Doula?", the Note, **Start work with Lucia** and **Go to Lucia's record without starting work**. At 1280x800 only Kind of work and Due date are in view at once. Find a Client is 5, and the name question 4 | **yes** ([TB-G11 (#2184)](https://github.com/markgoho/doula-cloud/issues/2184), closed by a budget change) |
+| 5.B-decisions | 6 | **6** on the Start work form, as 4.B-decisions counts it. The Doula row's question on an existing Engagement is 2: "Who is the Doula?" and **Save the Doula** | **yes** ([TB-G11 (#2184)](https://github.com/markgoho/doula-cloud/issues/2184); RA-G13's 2 on [#2230](https://github.com/markgoho/doula-cloud/issues/2230)) |
+| 10.B-screens | 2 | **2**: the Clients list, then the Engagement from Camille Boyd's **Birth** link | **yes**, [DW-G13 (#2242)](https://github.com/markgoho/doula-cloud/issues/2242) closed; the plans read in place, [DW-G14 (#2243)](https://github.com/markgoho/doula-cloud/issues/2243) closed |
+
+**320px**: each walked screen read `scrollWidth` 320 at 320x640: the accept screen, the Overview, the Clients list, Find a Client, the name question, the Start work form, Lucia's Client record and Engagement, Morgan's Engagement with the Doula row's question open, and Camille's Engagement. The numbers above are from 1280x800 unless the row names 320x640.
+
+**Re-marked**: none. **Failed**: none. Every budget step walked reads yes.
+
+**What Dee said, in the walker's words**:
+
+- On the invite mail: "Doesn't say it's from Renata or which practice, but Renata said she'd send it, so I click."
+- On the name question: "It kept her birthday, email and phone but makes me retype the name I just typed."
+- On Lucia's Engagement: "where did my midwife note go? I can't see it."
+- On Morgan's: "Wait, it added Priya and kept Charlene. Charlene can't do it. I need her off."
+- On Camille's plans: "Readable, short, and nothing I can break by looking."
+
+**Not filed, with the record that explains each**: the Staff invite mail names no Practice and no inviter, because no Notification names a Practice ([ADR-0009](../adr/0009-notification-is-one-term-two-voices-keyed-by-recipient.md), [#221](https://github.com/markgoho/doula-cloud/issues/221)). The searched name fills neither name field, by the founder's decision on [#1716](https://github.com/markgoho/doula-cloud/issues/1716), and the line naming it is [#1758](https://github.com/markgoho/doula-cloud/issues/1758)'s.
+
+**Findings filed**: [#2596](https://github.com/markgoho/doula-cloud/issues/2596) (nothing takes a Doula off an Engagement) and [#2597](https://github.com/markgoho/doula-cloud/issues/2597) (a self-approved Start work form's Note is shown nowhere). Evidence added to [#2590](https://github.com/markgoho/doula-cloud/issues/2590) (`window.fetch` in load, on the accept-invite landing) and [#2591](https://github.com/markgoho/doula-cloud/issues/2591) (the three 404s, on an old Engagement as well as a new one).
 
 ### 2026-10-31, later — 9.B-confirmation measured again ([#2241](https://github.com/markgoho/doula-cloud/issues/2241))
 
