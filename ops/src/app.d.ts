@@ -10,4 +10,11 @@ declare global {
 	}
 }
 
+// app/'s TextInput, shared through $ui, passes Safari's `passwordrules` (app/src/app.d.ts).
+declare module 'svelte/elements' {
+	export interface HTMLInputAttributes {
+		passwordrules?: string | undefined | null;
+	}
+}
+
 export {};

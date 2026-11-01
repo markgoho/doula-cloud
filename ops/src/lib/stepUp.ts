@@ -19,7 +19,7 @@ const PASSWORD_REFUSALS = new Set(['auth/invalid-credential', 'auth/invalid-logi
 function refusalOf(error: unknown): FormError {
 	const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
 	if (typeof code === 'string' && PASSWORD_REFUSALS.has(code)) {
-		return { message: 'Enter the correct password', field: STEP_UP_PASSWORD_FIELD };
+		return { message: 'Enter the correct password', targetId: STEP_UP_PASSWORD_FIELD };
 	}
 	if (code === 'auth/too-many-requests') return credentialRefusal(error, STEP_UP_PASSWORD_FIELD);
 	return codeRefusal(error, STEP_UP_CODE_FIELD);
@@ -35,7 +35,7 @@ function refusalOf(error: unknown): FormError {
 export async function stepUp(answers: StepUpAnswers, { freshIdToken, fetcher = fetch }: StepUpDependencies): Promise<FormError[]> {
 	const code = answers.code.replaceAll(/\s/g, '');
 	const empty: FormError[] = [];
-	if (answers.password === '') empty.push({ message: 'Enter your password', field: STEP_UP_PASSWORD_FIELD });
+	if (answers.password === '') empty.push({ message: 'Enter your password', targetId: STEP_UP_PASSWORD_FIELD });
 	const codeError = codeFieldError(code, STEP_UP_CODE_FIELD);
 	if (codeError) empty.push(codeError);
 	if (empty.length > 0) return empty;

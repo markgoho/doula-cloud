@@ -19,14 +19,14 @@ for (const width of [320, 1280]) {
 		await page.getByRole('link', { name: 'Pilot allowlist' }).click();
 		await expect(page.getByRole('heading', { name: 'Add an address to the pilot allowlist', level: 1 })).toBeVisible();
 		await page.getByRole('button', { name: 'Continue' }).click();
-		await expect(page.getByRole('alert')).toContainText('Enter an email address');
+		await expect(page.getByRole('alert').filter({ hasText: 'There is a problem' })).toContainText('Enter an email address');
 
 		await page.getByLabel('Email address').fill(`  ${local.toUpperCase()}@Example.com `);
 		await page.getByRole('button', { name: 'Continue' }).click();
 
 		await expect(page.getByRole('heading', { name: 'Check the address before you add it' })).toBeVisible();
 		await expect(page.getByRole('definition').filter({ hasText: address })).toBeVisible();
-		await page.getByRole('button', { name: 'Change email address' }).click();
+		await page.getByRole('button', { name: 'Change', exact: true }).click();
 		await expect(page.getByLabel('Email address')).toBeFocused();
 		await page.getByRole('button', { name: 'Continue' }).click();
 
@@ -39,7 +39,7 @@ for (const width of [320, 1280]) {
 		await page.getByLabel('Email address').fill(address);
 		await page.getByRole('button', { name: 'Continue' }).click();
 		await page.getByRole('button', { name: 'Add the address' }).click();
-		await expect(page.getByRole('alert')).toContainText(`${address} is already on the pilot allowlist.`);
+		await expect(page.getByRole('alert').filter({ hasText: 'There is a problem' })).toContainText(`${address} is already on the pilot allowlist.`);
 
 		await page.goto('/operator-log');
 		const newest = page.getByRole('listitem').filter({ hasText: name }).first();

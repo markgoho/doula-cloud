@@ -19,7 +19,7 @@ describe('credentialRefusal', () => {
 		(code) => {
 			expect(credentialRefusal({ code }, 'password')).toEqual({
 				message: 'Enter a correct email address and password',
-				field: 'password'
+				targetId: 'password'
 			});
 		}
 	);
@@ -39,9 +39,9 @@ describe('codeRefusal', () => {
 	it('asks for the code the app shows now when a code is refused', () => {
 		expect(codeRefusal({ code: 'auth/invalid-verification-code' }, 'code')).toEqual({
 			message: 'Enter the 6-digit code your authenticator app shows now',
-			field: 'code'
+			targetId: 'code'
 		});
-		expect(codeRefusal({ code: 'auth/missing-code' }, 'code').field).toBe('code');
+		expect(codeRefusal({ code: 'auth/missing-code' }, 'code').targetId).toBe('code');
 	});
 
 	it('says an expired code has expired', () => {
@@ -57,11 +57,11 @@ describe('codeRefusal', () => {
 
 describe('codeFieldError', () => {
 	it('asks for a code when there is none', () => {
-		expect(codeFieldError('  ', 'code')).toEqual({ message: 'Enter the 6-digit code from your authenticator app', field: 'code' });
+		expect(codeFieldError('  ', 'code')).toEqual({ message: 'Enter the 6-digit code from your authenticator app', targetId: 'code' });
 	});
 
 	it('asks for 6 digits when the code is not 6 digits', () => {
-		expect(codeFieldError('12345', 'code')).toEqual({ message: 'Enter the code as 6 digits', field: 'code' });
+		expect(codeFieldError('12345', 'code')).toEqual({ message: 'Enter the code as 6 digits', targetId: 'code' });
 	});
 
 	it('takes 6 digits with spaces in them', () => {

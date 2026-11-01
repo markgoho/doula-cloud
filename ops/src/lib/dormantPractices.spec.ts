@@ -19,17 +19,17 @@ const quiet: DormantPractice = {
 describe('dormantFacts', () => {
 	it('states when the Practice signed up, the Credits it holds and its last contact', () => {
 		expect(dormantFacts(quiet)).toEqual([
-			{ key: 'Signed up', value: 'May 1, 2023' },
-			{ key: 'Credits held', value: '4 Credits' },
-			{ key: 'Last contact', value: 'October 1, 2024' }
+			{ label: 'Signed up', value: 'May 1, 2023' },
+			{ label: 'Credits held', value: '4 Credits' },
+			{ label: 'Last contact', value: 'October 1, 2024' }
 		]);
 	});
 
 	it('says nobody has ever been seen at a Practice with no contact on record', () => {
 		expect(dormantFacts({ ...quiet, balance: 1, lastContactAt: null })).toEqual([
-			{ key: 'Signed up', value: 'May 1, 2023' },
-			{ key: 'Credits held', value: '1 Credit' },
-			{ key: 'Last contact', value: 'Never' }
+			{ label: 'Signed up', value: 'May 1, 2023' },
+			{ label: 'Credits held', value: '1 Credit' },
+			{ label: 'Last contact', value: 'Never' }
 		]);
 	});
 });

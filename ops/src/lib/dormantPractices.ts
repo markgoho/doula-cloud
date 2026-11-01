@@ -17,11 +17,11 @@ export type DormantPage = { items: DormantPractice[]; nextCursor?: string; hasMo
 /**
 Each field the dormant list shows for one Practice, as a summary list's rows.
 */
-export function dormantFacts(row: DormantPractice): { key: string; value: string }[] {
+export function dormantFacts(row: DormantPractice): { label: string; value: string }[] {
 	return [
-		{ key: 'Signed up', value: day(row.signedUpAt) },
-		{ key: 'Credits held', value: credits(row.balance) },
-		{ key: 'Last contact', value: row.lastContactAt ? day(row.lastContactAt) : 'Never' }
+		{ label: 'Signed up', value: day(row.signedUpAt) },
+		{ label: 'Credits held', value: credits(row.balance) },
+		{ label: 'Last contact', value: row.lastContactAt ? day(row.lastContactAt) : 'Never' }
 	];
 }
 

@@ -131,26 +131,26 @@ describe('logDetail', () => {
 describe('subjectFact', () => {
 	it('names a Practice, and says when its Deletion finalized', () => {
 		expect(subjectFact({ kind: 'practice', id: 'p-1', name: 'Rooted Birth Collective', deleted: false })).toEqual({
-			key: 'Practice',
+			label: 'Practice',
 			value: 'Rooted Birth Collective'
 		});
 		expect(subjectFact({ kind: 'practice', id: 'p-2', name: 'Gone Births', deleted: true })).toEqual({
-			key: 'Practice',
+			label: 'Practice',
 			value: 'Gone Births (deleted)'
 		});
 	});
 
 	it('names a Staff member, or says by id that one is no longer on file', () => {
 		expect(subjectFact({ kind: 'staff', id: 's-1', name: 'Priya Raman', deleted: false })).toEqual({
-			key: 'Staff member',
+			label: 'Staff member',
 			value: 'Priya Raman'
 		});
 		expect(subjectFact({ kind: 'staff', id: 's-2', name: null, deleted: false })).toEqual({
-			key: 'Staff member',
+			label: 'Staff member',
 			value: 'No longer on file (s-2)'
 		});
 		expect(subjectFact({ kind: 'practice', id: 'p-3', name: null, deleted: false })).toEqual({
-			key: 'Practice',
+			label: 'Practice',
 			value: 'No longer on file (p-3)'
 		});
 	});

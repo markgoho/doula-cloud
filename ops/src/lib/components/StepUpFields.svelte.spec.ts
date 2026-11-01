@@ -19,13 +19,13 @@ describe('StepUpFields', () => {
 
 	it('shows a refused code in plain words beside the code', async () => {
 		render(StepUpFields, {
-			errors: [{ message: 'Enter the 6-digit code your authenticator app shows now', field: STEP_UP_CODE_FIELD }]
+			errors: [{ message: 'Enter the 6-digit code your authenticator app shows now', targetId: STEP_UP_CODE_FIELD }]
 		});
 
 		const code = page.getByLabelText('Authenticator app code');
 		await expect.element(code).toHaveAttribute('aria-invalid', 'true');
 		await expect.element(page.getByText('Enter the 6-digit code your authenticator app shows now')).toBeVisible();
-		await expect.element(page.getByLabelText('Password')).not.toHaveAttribute('aria-invalid');
+		await expect.element(page.getByLabelText('Password')).toHaveAttribute('aria-invalid', 'false');
 	});
 
 	it('keeps what the operator types', async () => {
@@ -39,7 +39,7 @@ describe('StepUpFields', () => {
 	});
 
 	it('shows a refused password beside the password', async () => {
-		render(StepUpFields, { errors: [{ message: 'Enter the correct password', field: STEP_UP_PASSWORD_FIELD }] });
+		render(StepUpFields, { errors: [{ message: 'Enter the correct password', targetId: STEP_UP_PASSWORD_FIELD }] });
 
 		await expect.element(page.getByLabelText('Password')).toHaveAttribute('aria-invalid', 'true');
 		await expect.element(page.getByText('Enter the correct password')).toBeVisible();

@@ -62,37 +62,37 @@ describe('issueLabel', () => {
 describe('summaryFacts', () => {
 	it('states the kind, route and issue, and the last error where an attempt failed', () => {
 		expect(summaryFacts(deadLettered)).toEqual([
-			{ key: 'Kind', value: 'Something is not working' },
-			{ key: 'Route', value: '/portal/[clientId]' },
-			{ key: 'Issue', value: 'Not opened: all 8 attempts failed, and nothing will try again' },
-			{ key: 'Last error', value: '401 Bad credentials' }
+			{ label: 'Kind', value: 'Something is not working' },
+			{ label: 'Route', value: '/portal/[clientId]' },
+			{ label: 'Issue', value: 'Not opened: all 8 attempts failed, and nothing will try again' },
+			{ label: 'Last error', value: '401 Bad credentials' }
 		]);
 		expect(summaryFacts({ ...deadLettered, kind: 'something_else', issue: { state: 'pending', attempts: 0 } })).toEqual([
-			{ key: 'Kind', value: 'Something else' },
-			{ key: 'Route', value: '/portal/[clientId]' },
-			{ key: 'Issue', value: 'Waiting to open' }
+			{ label: 'Kind', value: 'Something else' },
+			{ label: 'Route', value: '/portal/[clientId]' },
+			{ label: 'Issue', value: 'Waiting to open' }
 		]);
 	});
 
 	it('prints a kind it does not know as its own value', () => {
-		expect(summaryFacts({ ...deadLettered, kind: 'praise' })[0]).toEqual({ key: 'Kind', value: 'praise' });
+		expect(summaryFacts({ ...deadLettered, kind: 'praise' })[0]).toEqual({ label: 'Kind', value: 'praise' });
 	});
 });
 
 describe('pieceFacts', () => {
 	it('states every stored field but the words, with the sender named', () => {
 		expect(pieceFacts(piece)).toEqual([
-			{ key: 'Kind', value: 'An idea or a request' },
-			{ key: 'Sent', value: 'September 20, 2026 at 10:30 AM EDT' },
-			{ key: 'Sender', value: 'Renata Alvarez' },
-			{ key: 'Email address', value: 'renata@example.com' },
-			{ key: 'Role', value: 'Owner, Doula' },
-			{ key: 'Practice', value: 'Rooted Birth Collective' },
-			{ key: 'Page', value: '/practices/x/invoices' },
-			{ key: 'Route', value: '/practices/[practiceId]/invoices' },
-			{ key: 'App build', value: 'abc1234' },
-			{ key: 'Screen width', value: '1280px' },
-			{ key: 'Browser', value: 'Firefox 131' }
+			{ label: 'Kind', value: 'An idea or a request' },
+			{ label: 'Sent', value: 'September 20, 2026 at 10:30 AM EDT' },
+			{ label: 'Sender', value: 'Renata Alvarez' },
+			{ label: 'Email address', value: 'renata@example.com' },
+			{ label: 'Role', value: 'Owner, Doula' },
+			{ label: 'Practice', value: 'Rooted Birth Collective' },
+			{ label: 'Page', value: '/practices/x/invoices' },
+			{ label: 'Route', value: '/practices/[practiceId]/invoices' },
+			{ label: 'App build', value: 'abc1234' },
+			{ label: 'Screen width', value: '1280px' },
+			{ label: 'Browser', value: 'Firefox 131' }
 		]);
 	});
 
@@ -104,22 +104,22 @@ describe('pieceFacts', () => {
 			sender: { kind: 'client', name: '', email: '' }
 		});
 		expect(facts.slice(2, 6)).toEqual([
-			{ key: 'Sender', value: 'A Client with no name on record' },
-			{ key: 'Email address', value: 'No address on record' },
-			{ key: 'Role', value: 'No role' },
-			{ key: 'Practice', value: 'None: sent from a screen outside any Practice' }
+			{ label: 'Sender', value: 'A Client with no name on record' },
+			{ label: 'Email address', value: 'No address on record' },
+			{ label: 'Role', value: 'No role' },
+			{ label: 'Practice', value: 'None: sent from a screen outside any Practice' }
 		]);
 	});
 
 	it('names a Client sender by her name, and her role as Client', () => {
 		const facts = pieceFacts({ ...piece, role: 'Client', sender: { kind: 'client', name: 'Nadia Haddad', email: 'n@example.com' } });
-		expect(facts[2]).toEqual({ key: 'Sender', value: 'Nadia Haddad, a Client' });
-		expect(facts[4]).toEqual({ key: 'Role', value: 'Client' });
+		expect(facts[2]).toEqual({ label: 'Sender', value: 'Nadia Haddad, a Client' });
+		expect(facts[4]).toEqual({ label: 'Role', value: 'Client' });
 	});
 
 	it('names a Staff sender with no name on record', () => {
 		expect(pieceFacts({ ...piece, sender: { kind: 'staff', name: '', email: 'x@example.com' } })[2]).toEqual({
-			key: 'Sender',
+			label: 'Sender',
 			value: 'No name on record'
 		});
 	});

@@ -9,13 +9,13 @@ function answering(status: number, body?: unknown) {
 
 describe('addressErrors', () => {
 	it('asks for an address when none is entered', () => {
-		expect(addressErrors('  ')).toEqual([{ message: 'Enter an email address', field: ADDRESS_FIELD }]);
+		expect(addressErrors('  ')).toEqual([{ message: 'Enter an email address', targetId: ADDRESS_FIELD }]);
 	});
 
 	it('asks for an address in the right format', () => {
 		for (const address of ['ana.example.com', 'ana@', '@example.com']) {
 			expect(addressErrors(address)).toEqual([
-				{ message: 'Enter an email address in the correct format, like name@example.com', field: ADDRESS_FIELD }
+				{ message: 'Enter an email address in the correct format, like name@example.com', targetId: ADDRESS_FIELD }
 			]);
 		}
 	});
@@ -57,7 +57,7 @@ describe('sendPilotAddress', () => {
 
 		expect(await sendPilotAddress('ana@', 'key-1', answering(422, refusal))).toEqual({
 			kind: 'refused',
-			errors: [{ message: refusal.details.address, field: ADDRESS_FIELD }]
+			errors: [{ message: refusal.details.address, targetId: ADDRESS_FIELD }]
 		});
 	});
 

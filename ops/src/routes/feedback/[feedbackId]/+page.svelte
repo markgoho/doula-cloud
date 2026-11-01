@@ -5,7 +5,7 @@
 	import { page } from '$app/state';
 	import type { FormError } from '#lib/authRefusal.js';
 	import { readFeedbackPiece, sentAt, type FeedbackPiece as Piece } from '#lib/feedback.js';
-	import ErrorSummary from '#lib/components/ErrorSummary.svelte';
+	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
 	import FeedbackPiece from '#lib/components/FeedbackPiece.svelte';
 
 	const feedbackId = $derived(page.params.feedbackId ?? '');

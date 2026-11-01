@@ -1,9 +1,10 @@
 <script lang="ts">
+	import Button from '$ui/atoms/Button.svelte';
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import type { FormError } from '../authRefusal.ts';
 	import { monthName, readMonthlyCredits, type MonthlyCredits } from '../monthlyCredits.ts';
-	import ErrorSummary from './ErrorSummary.svelte';
+	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
 
 	let {
 		month,
@@ -41,7 +42,7 @@
 				<option value={option}>{monthName(option)}</option>
 			{/each}
 		</select>
-		<button class="ops-button" type="submit">Show month</button>
+		<Button label="Show month" type="submit" />
 	</form>
 
 	{#if read.practices.length === 0}

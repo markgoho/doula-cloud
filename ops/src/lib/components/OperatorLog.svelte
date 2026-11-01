@@ -1,11 +1,12 @@
 <script lang="ts">
+	import Button from '$ui/atoms/Button.svelte';
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import type { FormError } from '../authRefusal.ts';
 	import { sentAt } from '../feedback.ts';
 	import { ACTION_LABELS, logDetail, readOperatorLog, subjectFact, type LogRow } from '../operatorLog.ts';
-	import ErrorSummary from './ErrorSummary.svelte';
-	import SummaryList from './SummaryList.svelte';
+	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
+	import SummaryList from '$ui/molecules/SummaryList.svelte';
 
 	let { onsignedout, fetcher = fetch }: { onsignedout: () => void; fetcher?: typeof fetch } = $props();
 
@@ -15,14 +16,14 @@
 	let isLoading = $state(false);
 	let errors = $state<FormError[]>([]);
 
-	function facts(row: LogRow): { key: string; value: string }[] {
+	function facts(row: LogRow): { label: string; value: string }[] {
 		const out = [
-			{ key: 'Operator', value: row.operator },
-			{ key: 'Time', value: sentAt(row.at) }
+			{ label: 'Operator', value: row.operator },
+			{ label: 'Time', value: sentAt(row.at) }
 		];
 		if (row.subject && row.subject.kind !== 'feedback') out.push(subjectFact(row.subject));
 		const detail = logDetail(row);
-		if (detail) out.push({ key: 'Details', value: detail });
+		if (detail) out.push({ label: 'Details', value: detail });
 		return out;
 	}
 
@@ -71,7 +72,7 @@
 			{/each}
 		</ul>
 		{#if nextCursor}
-			<button class="ops-button" type="button" disabled={isLoading} onclick={() => load(nextCursor)}>Show more</button>
+			<Button label="Show more" loading={isLoading} onClick={() => load(nextCursor)} />
 		{/if}
 	{/if}
 {/if}

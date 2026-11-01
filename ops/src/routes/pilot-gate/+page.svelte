@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Button from '$ui/atoms/Button.svelte';
 	import { onMount, tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -7,7 +8,7 @@
 	import { openedOn, readPilotGate, sendPilotGateOpening, type PilotGate } from '#lib/pilotGate.js';
 	import { readSession, type Operator } from '#lib/session.js';
 	import { stepUp } from '#lib/stepUp.js';
-	import ErrorSummary from '#lib/components/ErrorSummary.svelte';
+	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
 	import StepUpFields from '#lib/components/StepUpFields.svelte';
 
 	let operator = $state<Operator | undefined>();
@@ -41,7 +42,7 @@
 			const outcome = await sendPilotGateOpening(requestKey);
 			if (outcome.kind === 'signed-out') return signedOut();
 			if (outcome.kind === 'step-up') {
-				errors = [{ message: 'Enter the code your authenticator app shows now to do this.', field: 'step-up-code' }];
+				errors = [{ message: 'Enter the code your authenticator app shows now to do this.', targetId: 'step-up-code' }];
 				return;
 			}
 			if (outcome.kind === 'refused') {
@@ -85,7 +86,7 @@
 	<form novalidate onsubmit={open}>
 		<stack-l>
 			<StepUpFields {errors} bind:password bind:code />
-			<button class="ops-button" type="submit" disabled={isSending}>Open the pilot gate</button>
+			<Button label="Open the pilot gate" type="submit" loading={isSending} />
 		</stack-l>
 	</form>
 {/if}

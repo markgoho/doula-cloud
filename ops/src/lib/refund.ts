@@ -3,7 +3,8 @@ import type { FormError } from './authRefusal.ts';
 
 export const CREDITS_FIELD = 'credits';
 export const REQUESTED_BY_FIELD = 'requested-by';
-export const REQUESTED_ON_FIELD = 'requested-on-day';
+export const REQUESTED_ON_FIELD = 'requested-on';
+export const REQUESTED_ON_TARGET = `${REQUESTED_ON_FIELD}-month`;
 
 export type RefundOwner = { staffId: string; name: string };
 export type RefundQuote = { credits: number; amountCents: number; taxCents: number; maxCredits: number };
@@ -24,7 +25,7 @@ type Fetch = typeof fetch;
 const FIELD_OF: Record<string, string> = {
 	credits: CREDITS_FIELD,
 	requestedBy: REQUESTED_BY_FIELD,
-	requestedOn: REQUESTED_ON_FIELD
+	requestedOn: REQUESTED_ON_TARGET
 };
 
 const dollars = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
@@ -66,10 +67,10 @@ What is missing from the answers before doula-ops is asked anything.
 export function answerErrors(answers: RefundAnswers): FormError[] {
 	const errors: FormError[] = [];
 	if (!/^\d+$/.test(answers.credits.trim()) || Number(answers.credits) < 1) {
-		errors.push({ message: 'Enter the number of Credits to refund, 1 or more', field: CREDITS_FIELD });
+		errors.push({ message: 'Enter the number of Credits to refund, 1 or more', targetId: CREDITS_FIELD });
 	}
-	if (answers.requestedBy === '') errors.push({ message: 'Choose the Owner who asked for the refund', field: REQUESTED_BY_FIELD });
-	if (!requestedOn(answers)) errors.push({ message: 'Enter the date the request arrived', field: REQUESTED_ON_FIELD });
+	if (answers.requestedBy === '') errors.push({ message: 'Choose the Owner who asked for the refund', targetId: REQUESTED_BY_FIELD });
+	if (!requestedOn(answers)) errors.push({ message: 'Enter the date the request arrived', targetId: REQUESTED_ON_TARGET });
 	return errors;
 }
 

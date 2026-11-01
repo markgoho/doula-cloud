@@ -35,10 +35,10 @@ export function day(instant: Instant): string {
 	return longDate(instant.slice(0, 10));
 }
 
-function owners(row: PracticeRow): { key: string; value: string } {
+function owners(row: PracticeRow): { label: string; value: string } {
 	const named = row.owners.map((owner) => `${owner.name}, ${owner.email}`);
-	if (named.length === 0) return { key: 'Owner', value: 'No Owner' };
-	return { key: named.length === 1 ? 'Owner' : 'Owners', value: named.join('; ') };
+	if (named.length === 0) return { label: 'Owner', value: 'No Owner' };
+	return { label: named.length === 1 ? 'Owner' : 'Owners', value: named.join('; ') };
 }
 
 function stripeConnect({ stripeConnect: connect }: PracticeRow): string {
@@ -64,18 +64,18 @@ function deletion({ deletion: d }: PracticeRow): string {
 /**
 Each field the Practice list shows for one Practice, as a summary list's rows.
 */
-export function practiceFacts(row: PracticeRow): { key: string; value: string }[] {
+export function practiceFacts(row: PracticeRow): { label: string; value: string }[] {
 	return [
-		{ key: 'Signed up', value: day(row.signedUpAt) },
+		{ label: 'Signed up', value: day(row.signedUpAt) },
 		owners(row),
-		{ key: 'Staff', value: String(row.staffCount) },
-		{ key: 'Stripe Connect', value: stripeConnect(row) },
-		{ key: 'Credits held', value: credits(row.creditsHeld) },
-		{ key: 'Engagements started', value: String(row.engagementsStarted) },
-		{ key: 'Founding grant', value: foundingGrant(row) },
-		{ key: 'Deletion', value: deletion(row) },
-		{ key: 'Source', value: row.source ?? 'Not recorded yet' },
-		{ key: 'Open Feedback', value: String(row.openFeedback) }
+		{ label: 'Staff', value: String(row.staffCount) },
+		{ label: 'Stripe Connect', value: stripeConnect(row) },
+		{ label: 'Credits held', value: credits(row.creditsHeld) },
+		{ label: 'Engagements started', value: String(row.engagementsStarted) },
+		{ label: 'Founding grant', value: foundingGrant(row) },
+		{ label: 'Deletion', value: deletion(row) },
+		{ label: 'Source', value: row.source ?? 'Not recorded yet' },
+		{ label: 'Open Feedback', value: String(row.openFeedback) }
 	];
 }
 

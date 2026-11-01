@@ -39,7 +39,7 @@ export type FeedbackPage = { items: FeedbackSummary[]; nextCursor?: string; hasM
 
 export type FeedbackList = 'all' | 'unopened';
 
-type Fact = { key: string; value: string };
+type Fact = { label: string; value: string };
 
 const KIND_LABELS: Record<string, string> = {
 	not_working: 'Something is not working',
@@ -91,11 +91,11 @@ What the list shows for one piece: never the words, and nobody's name.
 */
 export function summaryFacts(summary: FeedbackSummary): Fact[] {
 	const facts = [
-		{ key: 'Kind', value: kindLabel(summary.kind) },
-		{ key: 'Route', value: summary.routeId },
-		{ key: 'Issue', value: issueLabel(summary.issue) }
+		{ label: 'Kind', value: kindLabel(summary.kind) },
+		{ label: 'Route', value: summary.routeId },
+		{ label: 'Issue', value: issueLabel(summary.issue) }
 	];
-	if (summary.issue.lastError) facts.push({ key: 'Last error', value: summary.issue.lastError });
+	if (summary.issue.lastError) facts.push({ label: 'Last error', value: summary.issue.lastError });
 	return facts;
 }
 
@@ -117,17 +117,17 @@ Every stored field of a piece but its words, which the page prints on their own.
 */
 export function pieceFacts(piece: FeedbackPiece): Fact[] {
 	return [
-		{ key: 'Kind', value: kindLabel(piece.kind) },
-		{ key: 'Sent', value: sentAt(piece.sentAt) },
-		{ key: 'Sender', value: sender(piece) },
-		{ key: 'Email address', value: piece.sender.email || 'No address on record' },
-		{ key: 'Role', value: role(piece) },
-		{ key: 'Practice', value: piece.practiceName ?? 'None: sent from a screen outside any Practice' },
-		{ key: 'Page', value: piece.pageUrl },
-		{ key: 'Route', value: piece.routeId },
-		{ key: 'App build', value: piece.appBuild },
-		{ key: 'Screen width', value: `${piece.screenWidth}px` },
-		{ key: 'Browser', value: piece.browser }
+		{ label: 'Kind', value: kindLabel(piece.kind) },
+		{ label: 'Sent', value: sentAt(piece.sentAt) },
+		{ label: 'Sender', value: sender(piece) },
+		{ label: 'Email address', value: piece.sender.email || 'No address on record' },
+		{ label: 'Role', value: role(piece) },
+		{ label: 'Practice', value: piece.practiceName ?? 'None: sent from a screen outside any Practice' },
+		{ label: 'Page', value: piece.pageUrl },
+		{ label: 'Route', value: piece.routeId },
+		{ label: 'App build', value: piece.appBuild },
+		{ label: 'Screen width', value: `${piece.screenWidth}px` },
+		{ label: 'Browser', value: piece.browser }
 	];
 }
 

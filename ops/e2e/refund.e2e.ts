@@ -24,8 +24,8 @@ test('An operator refunds two Credits on the check page with a fresh code', asyn
 	await page.goto(`/practices/${practiceId}/refund`);
 	await expect(page.getByRole('heading', { name: 'Refund Credits' })).toBeVisible();
 	await page.getByRole('button', { name: 'Continue' }).click();
-	await expect(page.getByRole('alert')).toContainText('Choose the Owner who asked for the refund');
-	await expect(page.getByRole('alert')).toContainText('Enter the date the request arrived');
+	await expect(page.getByRole('alert').filter({ hasText: 'There is a problem' })).toContainText('Choose the Owner who asked for the refund');
+	await expect(page.getByRole('alert').filter({ hasText: 'There is a problem' })).toContainText('Enter the date the request arrived');
 
 	await page.getByLabel('Number of Credits').fill('2');
 	await page.getByLabel('Renata Alvarez').check();
@@ -42,7 +42,7 @@ test('An operator refunds two Credits on the check page with a fresh code', asyn
 	await expect(answers.filter({ hasText: 'October 1, 2026' })).toBeVisible();
 
 	await page.getByRole('button', { name: 'Refund $42.74' }).click();
-	await expect(page.getByRole('alert')).toContainText('Enter your password');
+	await expect(page.getByRole('alert').filter({ hasText: 'There is a problem' })).toContainText('Enter your password');
 
 	await page.getByLabel('Password').fill(password);
 	await page.getByLabel('Authenticator app code').fill(STUB_TOTP_CODE);
@@ -67,5 +67,5 @@ test('More Credits than the purchase holds are refused before the check page', a
 	await page.getByLabel('Year').fill('2026');
 	await page.getByRole('button', { name: 'Continue' }).click();
 
-	await expect(page.getByRole('alert')).toContainText('Number of Credits must be 5 or fewer');
+	await expect(page.getByRole('alert').filter({ hasText: 'There is a problem' })).toContainText('Number of Credits must be 5 or fewer');
 });

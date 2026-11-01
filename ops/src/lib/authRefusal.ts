@@ -1,9 +1,7 @@
+import type { FormError } from '$ui/molecules/ErrorSummary.svelte';
 import { SERVICE_PROBLEM } from './session.ts';
 
-/**
-One error a form shows: in its summary, and beside the field it names.
-*/
-export type FormError = { message: string; field?: string };
+export type { FormError } from '$ui/molecules/ErrorSummary.svelte';
 
 function codeOf(error: unknown): string | undefined {
 	if (typeof error !== 'object' || error === null || !('code' in error)) return undefined;
@@ -28,10 +26,10 @@ export function credentialRefusal(error: unknown, passwordField: string): FormEr
 		case 'auth/user-not-found':
 		case 'auth/wrong-password':
 		case 'auth/invalid-email': {
-			return { message: 'Enter a correct email address and password', field: passwordField };
+			return { message: 'Enter a correct email address and password', targetId: passwordField };
 		}
 		case 'auth/too-many-requests': {
-			return { message: 'Too many tries. Wait a few minutes, then try again', field: passwordField };
+			return { message: 'Too many tries. Wait a few minutes, then try again', targetId: passwordField };
 		}
 		default: {
 			return { message: SERVICE_PROBLEM };
@@ -46,10 +44,10 @@ export function codeRefusal(error: unknown, codeField: string): FormError {
 	switch (codeOf(error)) {
 		case 'auth/invalid-verification-code':
 		case 'auth/missing-code': {
-			return { message: 'Enter the 6-digit code your authenticator app shows now', field: codeField };
+			return { message: 'Enter the 6-digit code your authenticator app shows now', targetId: codeField };
 		}
 		case 'auth/code-expired': {
-			return { message: 'That code has expired. Enter the code your authenticator app shows now', field: codeField };
+			return { message: 'That code has expired. Enter the code your authenticator app shows now', targetId: codeField };
 		}
 		default: {
 			return { message: SERVICE_PROBLEM };
@@ -62,7 +60,7 @@ The empty-field error for a code field, or none for six digits.
 */
 export function codeFieldError(code: string, codeField: string): FormError | undefined {
 	const trimmed = code.replaceAll(/\s/g, '');
-	if (trimmed === '') return { message: 'Enter the 6-digit code from your authenticator app', field: codeField };
-	if (!/^\d{6}$/.test(trimmed)) return { message: 'Enter the code as 6 digits', field: codeField };
+	if (trimmed === '') return { message: 'Enter the 6-digit code from your authenticator app', targetId: codeField };
+	if (!/^\d{6}$/.test(trimmed)) return { message: 'Enter the code as 6 digits', targetId: codeField };
 	return undefined;
 }

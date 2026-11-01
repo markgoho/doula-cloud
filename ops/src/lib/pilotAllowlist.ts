@@ -10,10 +10,10 @@ GOV.UK's email-address rule, the one doula-ops applies: an @ with something eith
 */
 export function addressErrors(address: string): FormError[] {
 	const trimmed = address.trim();
-	if (trimmed === '') return [{ message: 'Enter an email address', field: ADDRESS_FIELD }];
+	if (trimmed === '') return [{ message: 'Enter an email address', targetId: ADDRESS_FIELD }];
 	const at = trimmed.indexOf('@');
 	if (at <= 0 || at === trimmed.length - 1) {
-		return [{ message: 'Enter an email address in the correct format, like name@example.com', field: ADDRESS_FIELD }];
+		return [{ message: 'Enter an email address in the correct format, like name@example.com', targetId: ADDRESS_FIELD }];
 	}
 	return [];
 }

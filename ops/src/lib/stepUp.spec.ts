@@ -36,8 +36,8 @@ describe('stepUp', () => {
 		const errors = await stepUp({ email: 'mark@doula.cloud', password: '', code: '' }, { freshIdToken, fetcher });
 
 		expect(errors).toEqual([
-			{ message: 'Enter your password', field: STEP_UP_PASSWORD_FIELD },
-			{ message: 'Enter the 6-digit code from your authenticator app', field: STEP_UP_CODE_FIELD }
+			{ message: 'Enter your password', targetId: STEP_UP_PASSWORD_FIELD },
+			{ message: 'Enter the 6-digit code from your authenticator app', targetId: STEP_UP_CODE_FIELD }
 		]);
 		expect(freshIdToken).not.toHaveBeenCalled();
 		expect(fetcher).not.toHaveBeenCalled();
@@ -55,7 +55,7 @@ describe('stepUp', () => {
 		);
 
 		expect(errors).toEqual([
-			{ message: 'Enter the 6-digit code your authenticator app shows now', field: STEP_UP_CODE_FIELD }
+			{ message: 'Enter the 6-digit code your authenticator app shows now', targetId: STEP_UP_CODE_FIELD }
 		]);
 		expect(fetcher).toHaveBeenCalledWith('/api/session/step-up', { method: 'POST', credentials: 'include' });
 	});
@@ -71,7 +71,7 @@ describe('stepUp', () => {
 			{ freshIdToken, fetcher }
 		);
 
-		expect(errors).toEqual([{ message: 'Enter the correct password', field: STEP_UP_PASSWORD_FIELD }]);
+		expect(errors).toEqual([{ message: 'Enter the correct password', targetId: STEP_UP_PASSWORD_FIELD }]);
 		expect(fetcher).toHaveBeenCalledOnce();
 	});
 
@@ -87,7 +87,7 @@ describe('stepUp', () => {
 		);
 
 		expect(errors).toEqual([
-			{ message: 'Too many tries. Wait a few minutes, then try again', field: STEP_UP_PASSWORD_FIELD }
+			{ message: 'Too many tries. Wait a few minutes, then try again', targetId: STEP_UP_PASSWORD_FIELD }
 		]);
 	});
 
@@ -143,7 +143,7 @@ describe('stepUp', () => {
 		expect(errors).toEqual([
 			{
 				message: 'That code has expired. Enter the code your authenticator app shows now',
-				field: STEP_UP_CODE_FIELD
+				targetId: STEP_UP_CODE_FIELD
 			}
 		]);
 	});

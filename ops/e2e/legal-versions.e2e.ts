@@ -42,7 +42,7 @@ for (const width of [320, 1280]) {
 		expect(counted).toBeGreaterThan(0);
 
 		await page.getByRole('button', { name: 'Publish' }).click();
-		await expect(page.getByRole('alert')).toContainText('Enter your password');
+		await expect(page.getByRole('alert').filter({ hasText: 'There is a problem' })).toContainText('Enter your password');
 
 		await page.getByLabel('Password').fill(password);
 		await page.getByLabel('Authenticator app code').fill(STUB_TOTP_CODE);
@@ -76,6 +76,6 @@ test('A version published while its check page shows is refused in words', async
 	await page.getByLabel('Authenticator app code').fill(STUB_TOTP_CODE);
 	await page.getByRole('button', { name: 'Publish' }).click();
 
-	await expect(page.getByRole('alert')).toContainText('This version was already published on');
-	await expect(page.getByRole('alert')).toContainText('nothing has changed');
+	await expect(page.getByRole('alert').filter({ hasText: 'There is a problem' })).toContainText('This version was already published on');
+	await expect(page.getByRole('alert').filter({ hasText: 'There is a problem' })).toContainText('nothing has changed');
 });

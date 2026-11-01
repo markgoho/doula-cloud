@@ -27,7 +27,7 @@ for (const width of [320, 1280]) {
 		await expect(page.getByText('The gate stays open for good.', { exact: false })).toBeVisible();
 
 		await page.getByRole('button', { name: 'Open the pilot gate' }).click();
-		await expect(page.getByRole('alert')).toContainText('Enter your password');
+		await expect(page.getByRole('alert').filter({ hasText: 'There is a problem' })).toContainText('Enter your password');
 
 		await page.getByLabel('Password').fill(password);
 		await page.getByLabel('Authenticator app code').fill(STUB_TOTP_CODE);
@@ -58,6 +58,6 @@ test('A gate opened while its check page shows is refused in words', async ({ pa
 	await page.getByLabel('Authenticator app code').fill(STUB_TOTP_CODE);
 	await page.getByRole('button', { name: 'Open the pilot gate' }).click();
 
-	await expect(page.getByRole('alert')).toContainText('The pilot gate is already open.');
-	await expect(page.getByRole('alert')).toContainText('nothing has changed');
+	await expect(page.getByRole('alert').filter({ hasText: 'There is a problem' })).toContainText('The pilot gate is already open.');
+	await expect(page.getByRole('alert').filter({ hasText: 'There is a problem' })).toContainText('nothing has changed');
 });

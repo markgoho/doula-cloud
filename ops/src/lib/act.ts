@@ -30,7 +30,7 @@ export async function refusal<T>(response: Response, fieldOf: Record<string, str
 	if (response.status < 500 && typeof body.details === 'object' && body.details !== null) {
 		const errors = Object.entries(body.details as Record<string, string>).map(([field, message]) => ({
 			message,
-			field: fieldOf[field]
+			targetId: fieldOf[field]
 		}));
 		return { kind: 'refused', errors };
 	}

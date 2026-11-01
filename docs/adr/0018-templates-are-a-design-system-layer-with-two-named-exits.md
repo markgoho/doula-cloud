@@ -271,3 +271,12 @@ Names of a known structure, such as `Skeleton`, `Drawer`, `Badge` and `StepRail`
 ## Amendment, 2026-11-01: `sidebar-l` is no longer one of the primitives
 
 Filed as [#2400](https://github.com/markgoho/doula-cloud/issues/2400). *What a Template owns* names `sidebar-l` among the primitives a Template is built from. No Template, route or component draws one any more: `OverviewHub` lost its rail on #2398, and `QuestionPage` and `CheckAnswers` gave theirs up on #585 and #2005. With no consumer and no recorded design that names a screen needing one, the primitive is removed (ADR-0003's amendment of the same date). The text above stays as written.
+
+## Amendment, 2026-11-01: a component both apps need lives in `app/src/lib/components/`, and `ops/` imports it
+
+Decided by the founder on 2026-11-01, in the review of [#2464](https://github.com/markgoho/doula-cloud/issues/2464). [ADR-0062](0062-the-platform-operator-works-in-a-separate-app-at-ops-doula-cloud-with-its-own-service-and-database-role.md)'s `ops/` is the second app that draws forms, and it had copied six components rather than import them.
+
+- **The shared library is `app/src/lib/components/`'s `atoms/` and `molecules/`.** A component `app/` and `ops/` both need lives there, in the tier this ADR and ADR-0058 give it, and `ops/` imports it as `$ui/atoms/...` or `$ui/molecules/...`. It is not copied into `ops/`, and a variant `ops/` needs is a variant of the shared component, under this ADR's bar.
+- **Organisms and Templates are not shared.** They hold a page's work, and ops' pages are its own. A shared atom or molecule imports only other atoms and molecules and `#lib` modules with no app state (`intakeDate.ts`), never `#lib/api` or a session.
+- **Why it stays inside `app/` rather than a top-level package.** The repo has no bun workspace: `app/`, `ops/` and `site/` each install their own `node_modules`, and `site/` and `ops/` already take `app.css` by relative path (ADR-0051). The six components' imports reach `Icon`, its generated set and `app/`'s icon sync script, `Badge`, `Heading`, `Link` and `intakeDate.ts`. A top-level directory with no `node_modules` of its own could not type-check its specs, and a fifth installed package would need its own lockfile, provisioning, CI job and coverage gate for no boundary gained. Inside `app/`, the shared components stay under `app/`'s 100% coverage gate and the spelling and copy specs that already read `app/src`.
+- **`ops/` owns what is only its own**: `StepUpFields` and its list components, built from the shared ones.

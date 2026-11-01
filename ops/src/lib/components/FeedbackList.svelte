@@ -1,10 +1,11 @@
 <script lang="ts">
+	import Button from '$ui/atoms/Button.svelte';
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import type { FormError } from '../authRefusal.ts';
 	import { readFeedback, sentAt, summaryFacts, type FeedbackList, type FeedbackSummary } from '../feedback.ts';
-	import ErrorSummary from './ErrorSummary.svelte';
-	import SummaryList from './SummaryList.svelte';
+	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
+	import SummaryList from '$ui/molecules/SummaryList.svelte';
 
 	let {
 		list,
@@ -59,9 +60,7 @@
 			{/each}
 		</ul>
 		{#if nextCursor}
-			<button class="ops-button" type="button" disabled={isLoading} onclick={() => load(nextCursor)}>
-				Show more Feedback
-			</button>
+			<Button label="Show more Feedback" loading={isLoading} onClick={() => load(nextCursor)} />
 		{/if}
 	{/if}
 {/if}

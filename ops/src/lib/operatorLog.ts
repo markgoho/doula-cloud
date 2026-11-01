@@ -91,10 +91,10 @@ export function logDetail(row: LogRow): string | undefined {
 /**
 The Practice or Staff member a row acted on, named, or by id once no longer on file.
 */
-export function subjectFact(subject: LogSubject): { key: string; value: string } {
-	const key = subject.kind === 'practice' ? 'Practice' : 'Staff member';
-	if (subject.name === null) return { key, value: `No longer on file (${subject.id})` };
-	return { key, value: subject.deleted ? `${subject.name} (deleted)` : subject.name };
+export function subjectFact(subject: LogSubject): { label: string; value: string } {
+	const label = subject.kind === 'practice' ? 'Practice' : 'Staff member';
+	if (subject.name === null) return { label, value: `No longer on file (${subject.id})` };
+	return { label, value: subject.deleted ? `${subject.name} (deleted)` : subject.name };
 }
 
 /**

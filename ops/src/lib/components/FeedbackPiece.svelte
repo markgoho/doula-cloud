@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { issueLabel, pieceFacts, type FeedbackPiece } from '../feedback.ts';
-	import SummaryList from './SummaryList.svelte';
+	import SummaryList from '$ui/molecules/SummaryList.svelte';
 
 	let { piece }: { piece: FeedbackPiece } = $props();
 

@@ -46,24 +46,24 @@ const brandNew: PracticeRow = {
 describe('practiceFacts', () => {
 	it('states every field the list shows, with the source marked as not yet recorded', () => {
 		expect(practiceFacts(rooted)).toEqual([
-			{ key: 'Signed up', value: 'September 14, 2026' },
-			{ key: 'Owners', value: 'Renata Alvarez, renata@example.com; Ada Bell, ada@example.com' },
-			{ key: 'Staff', value: '3' },
+			{ label: 'Signed up', value: 'September 14, 2026' },
+			{ label: 'Owners', value: 'Renata Alvarez, renata@example.com; Ada Bell, ada@example.com' },
+			{ label: 'Staff', value: '3' },
 			{
-				key: 'Stripe Connect',
+				label: 'Stripe Connect',
 				value: 'Card payments active, payouts pending. Still due: external_account, business_profile.url. Updated September 15, 2026'
 			},
-			{ key: 'Credits held', value: '12 Credits' },
-			{ key: 'Engagements started', value: '2' },
-			{ key: 'Founding grant', value: '9 Credits, given by Mark Goho on September 15, 2026' },
-			{ key: 'Deletion', value: 'Not asked for' },
-			{ key: 'Source', value: 'Not recorded yet' },
-			{ key: 'Open Feedback', value: '2' }
+			{ label: 'Credits held', value: '12 Credits' },
+			{ label: 'Engagements started', value: '2' },
+			{ label: 'Founding grant', value: '9 Credits, given by Mark Goho on September 15, 2026' },
+			{ label: 'Deletion', value: 'Not asked for' },
+			{ label: 'Source', value: 'Not recorded yet' },
+			{ label: 'Open Feedback', value: '2' }
 		]);
 	});
 
 	it('says what a new Practice does not have yet', () => {
-		const facts = Object.fromEntries(practiceFacts(brandNew).map((fact) => [fact.key, fact.value]));
+		const facts = Object.fromEntries(practiceFacts(brandNew).map((fact) => [fact.label, fact.value]));
 
 		expect(facts['Owner']).toBe('No Owner');
 		expect(facts['Stripe Connect']).toBe('Not connected');
@@ -78,7 +78,7 @@ describe('practiceFacts', () => {
 				owners: [rooted.owners[0]],
 				stripeConnect: { ...rooted.stripeConnect, requirementsDue: [], updatedAt: null },
 				foundingGrant: { credits: 6, givenBy: null, givenAt: '2026-09-15T10:00:00Z' }
-			}).map((fact) => [fact.key, fact.value])
+			}).map((fact) => [fact.label, fact.value])
 		);
 
 		expect(facts['Owner']).toBe('Renata Alvarez, renata@example.com');
@@ -96,8 +96,8 @@ describe('practiceFacts', () => {
 			deletion: { requestedAt: '2026-09-15T10:00:00Z', finalizesAt: '2026-10-15T10:00:00Z', deletedAt: '2026-10-15T10:05:00Z' }
 		});
 
-		expect(pending).toContainEqual({ key: 'Deletion', value: 'Asked for September 15, 2026. Finalizes October 15, 2026' });
-		expect(deleted).toContainEqual({ key: 'Deletion', value: 'Deleted October 15, 2026' });
+		expect(pending).toContainEqual({ label: 'Deletion', value: 'Asked for September 15, 2026. Finalizes October 15, 2026' });
+		expect(deleted).toContainEqual({ label: 'Deletion', value: 'Deleted October 15, 2026' });
 	});
 });
 

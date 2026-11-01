@@ -41,7 +41,7 @@ describe('readMonthlyCredits', () => {
 
 		await expect(readMonthlyCredits('2026-11', fetcher)).resolves.toEqual({
 			kind: 'refused',
-			errors: [{ message, field: undefined }]
+			errors: [{ message, targetId: undefined }]
 		});
 	});
 

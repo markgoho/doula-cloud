@@ -1,10 +1,11 @@
 <script lang="ts">
+	import Button from '$ui/atoms/Button.svelte';
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import type { FormError } from '../authRefusal.ts';
 	import { practiceFacts, readPractices, type PracticeList, type PracticeRow } from '../practices.ts';
-	import ErrorSummary from './ErrorSummary.svelte';
-	import SummaryList from './SummaryList.svelte';
+	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
+	import SummaryList from '$ui/molecules/SummaryList.svelte';
 
 	let {
 		list,
@@ -77,9 +78,7 @@
 			{/each}
 		</ul>
 		{#if nextCursor}
-			<button class="ops-button" type="button" disabled={isLoading} onclick={() => load(nextCursor)}>
-				Show more Practices
-			</button>
+			<Button label="Show more Practices" loading={isLoading} onClick={() => load(nextCursor)} />
 		{/if}
 	{/if}
 {/if}

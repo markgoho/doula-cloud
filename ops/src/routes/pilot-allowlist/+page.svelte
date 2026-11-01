@@ -1,13 +1,15 @@
 <script lang="ts">
+	import LabeledField from '$ui/molecules/LabeledField.svelte';
+	import TextInput from '$ui/atoms/TextInput.svelte';
+	import Button from '$ui/atoms/Button.svelte';
 	import { onMount, tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import type { FormError } from '#lib/authRefusal.js';
 	import { readSession } from '#lib/session.js';
 	import { ADDRESS_FIELD, addressErrors, sendPilotAddress, type PilotAddressResult } from '#lib/pilotAllowlist.js';
-	import ErrorSummary from '#lib/components/ErrorSummary.svelte';
-	import SummaryList from '#lib/components/SummaryList.svelte';
-	import TextField from '#lib/components/TextField.svelte';
+	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
+	import SummaryList from '$ui/molecules/SummaryList.svelte';
 
 	let isSignedIn = $state(false);
 	let step = $state<'answers' | 'check' | 'done'>('answers');
@@ -18,7 +20,7 @@
 	let requestKey = '';
 
 	const stored = $derived(address.trim().toLowerCase());
-	const errorFor = (field: string) => errors.find((error) => error.field === field)?.message;
+	const errorFor = (field: string) => errors.find((error) => error.targetId === field)?.message;
 
 	async function signedOut() {
 		await goto(resolve('/sign-in'));
@@ -52,7 +54,7 @@
 			if (outcome.kind === 'signed-out') return signedOut();
 			if (outcome.kind === 'refused') {
 				errors = outcome.errors;
-				if (errors.some((error) => error.field === ADDRESS_FIELD)) await show('answers', ADDRESS_FIELD);
+				if (errors.some((error) => error.targetId === ADDRESS_FIELD)) await show('answers', ADDRESS_FIELD);
 				return;
 			}
 			if (outcome.kind === 'ok') {
@@ -90,31 +92,38 @@
 	<p><a href={resolve('/')}>Back to DoulaCloud operations</a></p>
 {:else if step === 'check'}
 	<h1 tabindex="-1">Check the address before you add it</h1>
-	<SummaryList rows={[{ key: 'Email address', value: stored, onchange: () => show('answers', ADDRESS_FIELD) }]} />
+	<SummaryList rows={[{ label: 'Email address', value: stored, changes: 'email address', onchange: () => show('answers', ADDRESS_FIELD) }]}>
+		{#snippet action(row, describedBy)}
+			<Button variant="link" label="Change" {describedBy} onClick={row.onchange} />
+		{/snippet}
+	</SummaryList>
 	<form novalidate onsubmit={add}>
 		<stack-l>
 			<p>
 				A doula who signs up with this address can create a Practice before January. An address cannot be taken off
 				the list once it is added.
 			</p>
-			<button class="ops-button" type="submit" disabled={isSending}>Add the address</button>
+			<Button label="Add the address" type="submit" loading={isSending} />
 		</stack-l>
 	</form>
 {:else if isSignedIn}
 	<h1 tabindex="-1">Add an address to the pilot allowlist</h1>
 	<form novalidate onsubmit={continueToCheck}>
 		<stack-l>
-			<TextField
-				id={ADDRESS_FIELD}
-				label="Email address"
-				hint="The address the doula will sign up with. Add it once you have spoken with the doula."
-				type="email"
-				autocomplete="off"
-				spellcheck="false"
-				bind:value={address}
-				error={errorFor(ADDRESS_FIELD)}
-			/>
-			<button class="ops-button" type="submit">Continue</button>
+			<LabeledField id={ADDRESS_FIELD} label="Email address" hint="The address the doula will sign up with. Add it once you have spoken with the doula." error={errorFor(ADDRESS_FIELD)}>
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						type="email"
+						autocomplete="off"
+						value={address}
+						onInput={(next) => (address = next)}
+					/>
+				{/snippet}
+			</LabeledField>
+			<Button label="Continue" type="submit" />
 		</stack-l>
 	</form>
 {/if}

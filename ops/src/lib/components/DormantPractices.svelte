@@ -1,9 +1,10 @@
 <script lang="ts">
+	import Button from '$ui/atoms/Button.svelte';
 	import { onMount } from 'svelte';
 	import type { FormError } from '../authRefusal.ts';
 	import { dormantFacts, readDormantPractices, type DormantPractice } from '../dormantPractices.ts';
-	import ErrorSummary from './ErrorSummary.svelte';
-	import SummaryList from './SummaryList.svelte';
+	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
+	import SummaryList from '$ui/molecules/SummaryList.svelte';
 
 	let { onsignedout, fetcher = fetch }: { onsignedout: () => void; fetcher?: typeof fetch } = $props();
 
@@ -54,9 +55,7 @@
 			{/each}
 		</ul>
 		{#if nextCursor}
-			<button class="ops-button" type="button" disabled={isLoading} onclick={() => load(nextCursor)}>
-				Show more Practices
-			</button>
+			<Button label="Show more Practices" loading={isLoading} onClick={() => load(nextCursor)} />
 		{/if}
 	{/if}
 {/if}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Button from '$ui/atoms/Button.svelte';
 	import { onMount, tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -13,9 +14,9 @@
 		sendSecondFactorClear,
 		type SecondFactorStaff
 	} from '#lib/secondFactor.js';
-	import ErrorSummary from '#lib/components/ErrorSummary.svelte';
+	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
 	import StepUpFields from '#lib/components/StepUpFields.svelte';
-	import SummaryList from '#lib/components/SummaryList.svelte';
+	import SummaryList from '$ui/molecules/SummaryList.svelte';
 
 	const staffId = $derived(page.params.staffId ?? '');
 
@@ -50,7 +51,7 @@
 			const outcome = await sendSecondFactorClear(staffId, requestKey);
 			if (outcome.kind === 'signed-out') return signedOut();
 			if (outcome.kind === 'step-up') {
-				errors = [{ message: 'Enter the code your authenticator app shows now to do this.', field: 'step-up-code' }];
+				errors = [{ message: 'Enter the code your authenticator app shows now to do this.', targetId: 'step-up-code' }];
 				return;
 			}
 			if (outcome.kind === 'refused') {
@@ -87,8 +88,8 @@
 	<h1 tabindex="-1">Check before you reset two-factor authentication</h1>
 	<SummaryList
 		rows={[
-			{ key: 'Staff member', value: check.staffName },
-			{ key: 'Practices', value: practiceList(check.practiceNames) }
+			{ label: 'Staff member', value: check.staffName },
+			{ label: 'Practices', value: practiceList(check.practiceNames) }
 		]}
 	/>
 	<stack-l>
@@ -112,7 +113,7 @@
 				Every authenticator app on this sign-in is removed, every device is signed out, and an email says so at once. A
 				reset cannot be undone.
 			</p>
-			<button class="ops-button" type="submit" disabled={isSending}>Reset two-factor authentication</button>
+			<Button label="Reset two-factor authentication" type="submit" loading={isSending} />
 		</stack-l>
 	</form>
 {/if}

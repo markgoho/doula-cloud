@@ -1,9 +1,10 @@
 <script lang="ts">
+	import Button from '$ui/atoms/Button.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { endSession, readSession, SERVICE_PROBLEM, type Operator } from '#lib/session.js';
-	import ErrorSummary from '#lib/components/ErrorSummary.svelte';
+	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
 	import type { FormError } from '#lib/authRefusal.js';
 
 	let operator = $state<Operator | undefined>();
@@ -43,6 +44,6 @@
 	<p><a href={resolve('/legal-versions')}>Legal versions</a></p>
 	<p><a href={resolve('/operator-log')}>Operator log</a></p>
 	<form onsubmit={signOut}>
-		<button class="ops-button" type="submit" disabled={isSigningOut}>Sign out</button>
+		<Button label="Sign out" type="submit" loading={isSigningOut} />
 	</form>
 {/if}

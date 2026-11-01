@@ -6,7 +6,7 @@ import {
 	money,
 	readRefundCheck,
 	REQUESTED_BY_FIELD,
-	REQUESTED_ON_FIELD,
+	REQUESTED_ON_TARGET,
 	requestedOn,
 	sendRefund
 } from './refund.ts';
@@ -50,11 +50,11 @@ describe('answerErrors', () => {
 
 	it('says what to enter for each empty answer', () => {
 		expect(answerErrors({ credits: '0', requestedBy: '', day: '', month: '', year: '' })).toEqual([
-			{ message: 'Enter the number of Credits to refund, 1 or more', field: CREDITS_FIELD },
-			{ message: 'Choose the Owner who asked for the refund', field: REQUESTED_BY_FIELD },
-			{ message: 'Enter the date the request arrived', field: REQUESTED_ON_FIELD }
+			{ message: 'Enter the number of Credits to refund, 1 or more', targetId: CREDITS_FIELD },
+			{ message: 'Choose the Owner who asked for the refund', targetId: REQUESTED_BY_FIELD },
+			{ message: 'Enter the date the request arrived', targetId: REQUESTED_ON_TARGET }
 		]);
-		expect(answerErrors({ ...answers, credits: 'two' })[0].field).toBe(CREDITS_FIELD);
+		expect(answerErrors({ ...answers, credits: 'two' })[0].targetId).toBe(CREDITS_FIELD);
 	});
 });
 
@@ -85,7 +85,7 @@ describe('readRefundCheck', () => {
 			answering(422, { code: 'INVALID_ARGUMENT', message: 'Correct the answers marked below.', details: { credits: 'Number of Credits must be 5 or fewer' } })
 		);
 
-		expect(outcome).toEqual({ kind: 'refused', errors: [{ message: 'Number of Credits must be 5 or fewer', field: CREDITS_FIELD }] });
+		expect(outcome).toEqual({ kind: 'refused', errors: [{ message: 'Number of Credits must be 5 or fewer', targetId: CREDITS_FIELD }] });
 	});
 
 	it('shows a refusal with no field as it is', async () => {

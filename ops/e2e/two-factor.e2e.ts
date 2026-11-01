@@ -56,14 +56,14 @@ test('An operator checks and sends a two-factor reset with a fresh code', async 
 	await expect(page.getByText(/government photo ID shown on that call matches/)).toBeVisible();
 
 	await page.getByRole('button', { name: 'Reset two-factor authentication' }).click();
-	await expect(page.getByRole('alert')).toContainText('Enter your password');
+	await expect(page.getByRole('alert').filter({ hasText: 'There is a problem' })).toContainText('Enter your password');
 	expect(await secondFactorCount(request, localId)).toBe(1);
 
 	await page.getByLabel('Password').fill(password);
 	await page.getByLabel('Authenticator app code').fill(STUB_TOTP_CODE);
 	await page.getByRole('button', { name: 'Reset two-factor authentication' }).click();
 
-	await expect(page.getByRole('alert')).toContainText(
+	await expect(page.getByRole('alert').filter({ hasText: 'There is a problem' })).toContainText(
 		'Identity Platform did not reset two-factor authentication, so nothing has changed. Try again.'
 	);
 	await expect(page.getByRole('heading', { name: 'Check before you reset two-factor authentication' })).toBeVisible();

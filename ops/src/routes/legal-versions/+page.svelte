@@ -7,7 +7,7 @@
 	import { openedOn } from '#lib/pilotGate.js';
 	import { longDate } from '#lib/refund.js';
 	import { readSession } from '#lib/session.js';
-	import ErrorSummary from '#lib/components/ErrorSummary.svelte';
+	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
 
 	let versions = $state<LegalVersion[] | undefined>();
 	let errors = $state<FormError[]>([]);

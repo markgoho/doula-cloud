@@ -126,3 +126,12 @@ Decided on [How is each Platform operator read and act recorded? (#2418)](https:
 - The build is filed as tickets under #2409. The skeleton (role, guards, service, app, sign-in) comes first. The System section can ship ahead of the rest for go-live. Each of the eight endpoints moves in its own ticket, with its screen, its actor key and its Activity row.
 - Two services now share one small Postgres instance's connections, so both pools are capped ([#2432](https://github.com/markgoho/doula-cloud/issues/2432) for `doula-api`).
 - The founder's monthly spreadsheet stays the monthly page. Ops is where its counts are read.
+
+## Amendment, 2026-11-01: ops imports the shared atoms and molecules
+
+Decided by the founder on 2026-11-01, in the review of [#2464](https://github.com/markgoho/doula-cloud/issues/2464)'s integration branch. The build copied six of `app/`'s components into `ops/src/lib/components/` (`ErrorSummary`, `SummaryList`, `RadioGroup`, `DateFields`, a `TextField` standing in for `LabeledField` and `TextInput`, and a global `.ops-button` class standing in for `Button`), so that ops took nothing from `app/` but the stylesheet. Two copies of one pattern drift, and the review found they already had: a different error shape (`field` in place of `targetId` and `href`), different ids, a different Change. So:
+
+- **`ops/` imports `app/`'s atoms and molecules through the `$ui` alias** (`app/src/lib/components`), set in `ops/vite.config.ts`'s `sveltekit()` options, beside the stylesheet it already took by relative import. The copies are deleted, and every ops call site uses `app/`'s props.
+- **What lives there is [ADR-0018](0018-templates-are-a-design-system-layer-with-two-named-exits.md)'s, as amended today**: a component both apps need is an atom or molecule under `app/src/lib/components/`, tested under `app/`'s coverage gate.
+- **`ops/` resolves `svelte` once**: `resolve.dedupe: ['svelte']`, since a shared component would otherwise load `app/node_modules`' runtime beside `ops/`' own. `server.fs.allow` widens from `app/src/lib/styles` to `app/src/lib`.
+- **The boundary this ADR draws is unchanged.** It is a database role and a second service, not a separate set of buttons. Ops still imports nothing from `app/`'s routes, its `#lib/api` client, or its session.

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Button from '$ui/atoms/Button.svelte';
 	import { onMount, tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -12,8 +13,8 @@
 		type FoundingGrantCheck,
 		type FoundingGrantResult
 	} from '#lib/foundingGrant.js';
-	import ErrorSummary from '#lib/components/ErrorSummary.svelte';
-	import SummaryList from '#lib/components/SummaryList.svelte';
+	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
+	import SummaryList from '$ui/molecules/SummaryList.svelte';
 
 	const practiceId = $derived(page.params.practiceId ?? '');
 
@@ -84,9 +85,9 @@
 		<h1 tabindex="-1">Check the founding grant before you give it</h1>
 		<SummaryList
 			rows={[
-				{ key: 'Practice', value: check.practiceName },
-				{ key: 'Staff', value: String(check.staffCount) },
-				{ key: 'Credits', value: `${credits(check.credits)}, 3 for each Staff member` }
+				{ label: 'Practice', value: check.practiceName },
+				{ label: 'Staff', value: String(check.staffCount) },
+				{ label: 'Credits', value: `${credits(check.credits)}, 3 for each Staff member` }
 			]}
 		/>
 		<form novalidate onsubmit={give}>
@@ -95,7 +96,7 @@
 					The Credits go on the Practice's ledger at once, and are spent before any it buys. A founding grant is given
 					once and cannot be undone.
 				</p>
-				<button class="ops-button" type="submit" disabled={isSending}>Give {credits(check.credits)}</button>
+				<Button label="Give {credits(check.credits)}" type="submit" loading={isSending} />
 			</stack-l>
 		</form>
 	{/if}

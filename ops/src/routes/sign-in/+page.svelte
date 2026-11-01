@@ -1,4 +1,7 @@
 <script lang="ts">
+	import LabeledField from '$ui/molecules/LabeledField.svelte';
+	import TextInput from '$ui/atoms/TextInput.svelte';
+	import Button from '$ui/atoms/Button.svelte';
 	import {
 		getMultiFactorResolver,
 		signInWithEmailAndPassword,
@@ -19,8 +22,7 @@
 		isSecondFactorRequired,
 		type FormError
 	} from '#lib/authRefusal.js';
-	import ErrorSummary from '#lib/components/ErrorSummary.svelte';
-	import TextField from '#lib/components/TextField.svelte';
+	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
 
 	const emailId = 'email';
 	const passwordId = 'password';
@@ -34,7 +36,7 @@
 	let isSubmitting = $state(false);
 	let resolver: MultiFactorResolver | undefined;
 
-	const errorFor = (field: string) => errors.find((error) => error.field === field)?.message;
+	const errorFor = (field: string) => errors.find((error) => error.targetId === field)?.message;
 
 	async function submit(work: () => Promise<FormError[]>) {
 		isSubmitting = true;
@@ -61,8 +63,8 @@
 		event.preventDefault();
 		void submit(async () => {
 			const empty: FormError[] = [];
-			if (email.trim() === '') empty.push({ message: 'Enter your email address', field: emailId });
-			if (password === '') empty.push({ message: 'Enter your password', field: passwordId });
+			if (email.trim() === '') empty.push({ message: 'Enter your email address', targetId: emailId });
+			if (password === '') empty.push({ message: 'Enter your password', targetId: passwordId });
 			if (empty.length > 0) return empty;
 			try {
 				return await finish(await signInWithEmailAndPassword(getOperatorAuth(), email.trim(), password));
@@ -102,41 +104,53 @@
 	<p>For DoulaCloud's own operator logins.</p>
 	<form novalidate onsubmit={signIn}>
 		<stack-l>
-			<TextField
-				id={emailId}
-				label="Email address"
-				type="email"
-				autocomplete="username"
-				spellcheck="false"
-				bind:value={email}
-				error={errorFor(emailId)}
-			/>
-			<TextField
-				id={passwordId}
-				label="Password"
-				type="password"
-				autocomplete="current-password"
-				bind:value={password}
-				error={errorFor(passwordId)}
-			/>
-			<button class="ops-button" type="submit" disabled={isSubmitting}>Sign in</button>
+			<LabeledField id={emailId} label="Email address" error={errorFor(emailId)}>
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						type="email"
+						autocomplete="username"
+						value={email}
+						onInput={(next) => (email = next)}
+					/>
+				{/snippet}
+			</LabeledField>
+			<LabeledField id={passwordId} label="Password" error={errorFor(passwordId)}>
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						type="password"
+						autocomplete="current-password"
+						value={password}
+						onInput={(next) => (password = next)}
+					/>
+				{/snippet}
+			</LabeledField>
+			<Button label="Sign in" type="submit" loading={isSubmitting} />
 		</stack-l>
 	</form>
 {:else}
 	<h1>Enter the code from your authenticator app</h1>
 	<form novalidate onsubmit={answerChallenge}>
 		<stack-l>
-			<TextField
-				id={codeId}
-				label="Authenticator app code"
-				hint="The 6-digit code your app shows for DoulaCloud operations."
-				inputmode="numeric"
-				autocomplete="one-time-code"
-				spellcheck="false"
-				bind:value={code}
-				error={errorFor(codeId)}
-			/>
-			<button class="ops-button" type="submit" disabled={isSubmitting}>Continue</button>
+			<LabeledField id={codeId} label="Authenticator app code" hint="The 6-digit code your app shows for DoulaCloud operations." error={errorFor(codeId)}>
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						inputmode="numeric"
+						autocomplete="one-time-code"
+						value={code}
+						onInput={(next) => (code = next)}
+					/>
+				{/snippet}
+			</LabeledField>
+			<Button label="Continue" type="submit" loading={isSubmitting} />
 		</stack-l>
 	</form>
 {/if}

@@ -82,14 +82,14 @@ test('A wrong password is refused on the sign-in screen', async ({ page, request
 	await page.getByLabel('Password').fill('not-the-password');
 	await page.getByRole('button', { name: 'Sign in' }).click();
 
-	await expect(page.getByRole('alert')).toContainText('Enter a correct email address and password');
+	await expect(page.getByRole('alert').filter({ hasText: 'There is a problem' })).toContainText('Enter a correct email address and password');
 });
 
 test('Signing in with nothing entered says what to enter', async ({ page }) => {
 	await page.goto('/sign-in');
 	await page.getByRole('button', { name: 'Sign in' }).click();
 
-	const summary = page.getByRole('alert');
+	const summary = page.getByRole('alert').filter({ hasText: 'There is a problem' });
 	await expect(summary).toContainText('Enter your email address');
 	await expect(summary).toContainText('Enter your password');
 });

@@ -11,16 +11,18 @@ export default defineConfig({
 			compilerOptions: {
 				runes: ({ filename }) => (filename.split(/[/\\]/).includes('node_modules') ? undefined : true)
 			},
-			adapter: adapter({ fallback: '200.html' })
+			adapter: adapter({ fallback: '200.html' }),
+			alias: { '$ui': '../app/src/lib/components' }
 		})
 	],
+	resolve: { dedupe: ['svelte'] },
 	server: {
 		port: OPS_DEV_SERVER_PORT,
 		strictPort: true,
 		proxy: { '/api': OPS_URL },
 		fs: {
-			// The stylesheet is app/'s (src/routes/+layout.svelte), as site/'s is.
-			allow: [fileURLToPath(new URL('../app/src/lib/styles', import.meta.url))]
+			// app/'s stylesheet and its shared atoms and molecules (ADR-0018, ADR-0062).
+			allow: [fileURLToPath(new URL('../app/src/lib', import.meta.url))]
 		}
 	},
 	preview: {

@@ -1,39 +1,40 @@
 <script lang="ts">
+	import LabeledField from '$ui/molecules/LabeledField.svelte';
+	import TotpCodeField from '$ui/molecules/TotpCodeField.svelte';
+	import TextInput from '$ui/atoms/TextInput.svelte';
 	import type { FormError } from '../authRefusal.ts';
 	import { STEP_UP_CODE_FIELD, STEP_UP_PASSWORD_FIELD } from '../stepUp.ts';
-	import TextField from './TextField.svelte';
 
-	// The fresh code an act's check page asks for, above its button. The
-	// page owns the ErrorSummary and calls stepUp() with what these hold.
 	let {
 		errors,
 		password = $bindable(''),
 		code = $bindable('')
 	}: { errors: FormError[]; password?: string; code?: string } = $props();
 
-	const errorFor = (field: string) => errors.find((error) => error.field === field)?.message;
+	const errorFor = (field: string) => errors.find((error) => error.targetId === field)?.message;
 </script>
 
 <fieldset>
 	<legend>Confirm it is you</legend>
 	<stack-l>
 		<p>This act needs a new code, even though you are signed in.</p>
-		<TextField
-			id={STEP_UP_PASSWORD_FIELD}
-			label="Password"
-			type="password"
-			autocomplete="current-password"
-			bind:value={password}
-			error={errorFor(STEP_UP_PASSWORD_FIELD)}
-		/>
-		<TextField
+		<LabeledField id={STEP_UP_PASSWORD_FIELD} label="Password" error={errorFor(STEP_UP_PASSWORD_FIELD)}>
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					type="password"
+					autocomplete="current-password"
+					value={password}
+					onInput={(next) => (password = next)}
+				/>
+			{/snippet}
+		</LabeledField>
+		<TotpCodeField
 			id={STEP_UP_CODE_FIELD}
-			label="Authenticator app code"
-			hint="The 6-digit code your app shows for DoulaCloud operations."
-			inputmode="numeric"
-			autocomplete="one-time-code"
-			spellcheck="false"
-			bind:value={code}
+			value={code}
+			onInput={(next) => (code = next)}
 			error={errorFor(STEP_UP_CODE_FIELD)}
 		/>
 	</stack-l>
