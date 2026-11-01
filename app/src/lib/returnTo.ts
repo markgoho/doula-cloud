@@ -38,6 +38,24 @@ export function sameOriginPath(target: string | null | undefined, origin: string
 	return `${resolved.pathname}${resolved.search}${resolved.hash}`;
 }
 
+const PRIOR_LINK_PARAM = 'priorLink';
+
+/**
+address naming a portal sign-in link that expired or was used (#2534). The
+token is only a handle: the BFF looks up the page it stored for that link,
+for the account asking, so nothing here names an address.
+*/
+export function withPriorLink(address: string, token: string): string {
+	const url = new URL(address, 'https://origin.invalid');
+	url.searchParams.set(PRIOR_LINK_PARAM, token);
+	return `${url.pathname}${url.search}`;
+}
+
+// The dead sign-in link url names, or `undefined`.
+export function readPriorLink(url: Address): string | undefined {
+	return url.searchParams.get(PRIOR_LINK_PARAM) || undefined;
+}
+
 /**
 address with `returnTo` set to path, kept beside any query address already has.
 */

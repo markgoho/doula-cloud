@@ -239,6 +239,27 @@ describe('Client-portal login -- the page she asked for (#2496)', () => {
 		);
 	});
 
+	// #2534: from a link that expired or was used, only its token rides.
+	it('sends the dead link with the request, and no address of its own', async () => {
+		Object.assign(
+			pageState,
+			toPageState({ ...fixture, url: 'https://example.test/portal/login?priorLink=dead-token-1' })
+		);
+		apiFetch.mockImplementation(toApiResponder(fixture));
+		const request = vi.fn(async () => jsonResponse({}, 202));
+		vi.stubGlobal('fetch', request);
+
+		await render(Page, {});
+		await testPage.getByLabelText('Email address').fill('priya@example.com');
+		await testPage.getByRole('button', { name: 'Send me a sign-in link' }).click();
+
+		await expect.element(testPage.getByText(/we have sent a sign-in link/i)).toBeVisible();
+		expect(request).toHaveBeenCalledWith(
+			'/api/portal/magic-link/request',
+			expect.objectContaining({ body: JSON.stringify({ email: 'priya@example.com', priorToken: 'dead-token-1' }) })
+		);
+	});
+
 	it('sends a visitor already signed in straight to that page', async () => {
 		apiFetch.mockResolvedValue(jsonResponse(session));
 
