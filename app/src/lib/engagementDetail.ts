@@ -73,6 +73,11 @@ export interface EngagementSummary {
 	 * the outcome, and distinct from the day a Staff member typed it in.
 	 * Absent for an `unknown` outcome, and for one not yet recorded. */
 	pregnancyEndedOn?: string;
+	/** Whether a Birth Plan can be started here, and whether the Client is
+	 * shown one (#2277, #2317): the BFF's two answers to ADR-0015's rule,
+	 * so the hub holds no copy of it. */
+	offersBirthPlanToStart: boolean;
+	offersBirthPlan: boolean;
 	/** The Client's portal-invite state (#255), using the same
 	 * derivation the Clients list's own ClientListItem.portalInviteStatus
 	 * carries -- absent when she has never been invited. */

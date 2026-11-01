@@ -217,6 +217,10 @@ export const detail = {
 	// BirthOutcomeSection's own style-guide page sweeps it directly.
 	birthOutcome: 'live_birth',
 	pregnancyEndedOn: '2026-08-14',
+	// #2277, #2317: the BFF's answers for a live birth -- the Client still
+	// reads her Birth Plan, and no new one is started.
+	offersBirthPlanToStart: false,
+	offersBirthPlan: true,
 	// #1598: who is on this Engagement. Two Doulas, the on-call panel's
 	// own primary and backup, so the summary's row holds its busiest
 	// state: the plural label and two names on one line, the first of
