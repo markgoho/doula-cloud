@@ -889,6 +889,14 @@ func TestListHandler_PortalInviteStatusVariants(t *testing.T) {
 	); err != nil {
 		t.Fatalf("seed portal user with no outbox row: %v", err)
 	}
+	// #2522: an accept refused because her login reaches another record.
+	refused, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Refused Client", "refused@example.com", "active")
+	seedPendingOutboxRow(t, db, refused)
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE client_portal_users SET access_refused_at = now() WHERE client_id = $1`, refused,
+	); err != nil {
+		t.Fatalf("mark refused: %v", err)
+	}
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -915,6 +923,9 @@ func TestListHandler_PortalInviteStatusVariants(t *testing.T) {
 	}
 	if byID[portalUserNoOutbox].PortalInviteStatus != nil {
 		t.Fatalf("no-outbox status = %v, want nil", byID[portalUserNoOutbox].PortalInviteStatus)
+	}
+	if got := byID[refused].PortalInviteStatus; got == nil || *got != client.PortalInviteRefused {
+		t.Fatalf("refused status = %v, want %q", got, client.PortalInviteRefused)
 	}
 }
 

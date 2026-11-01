@@ -18,6 +18,7 @@ import (
 type PortalInviteState struct {
 	// Status mirrors ListItem.PortalInviteStatus exactly: nil when the
 	// Client has never been invited, "accepted" once she has, otherwise
+	// PortalInviteRefused once an accept was refused (#2522), otherwise
 	// the pending invite's own outbox status.
 	Status *string
 	// EmailSuppressed mirrors ListItem.EmailSuppressed: whether the
@@ -48,11 +49,16 @@ type PortalInviteState struct {
 // invitation refused rather than sent.
 const portalUserForClient = `
 		 LEFT JOIN LATERAL (
-		     SELECT pu2.id, pu2.identity_uid FROM client_portal_users pu2
+		     SELECT pu2.id, pu2.identity_uid, pu2.access_refused_at FROM client_portal_users pu2
 		      WHERE pu2.client_id = c.id
 		      ORDER BY (pu2.identity_uid IS NOT NULL) DESC, pu2.id
 		      LIMIT 1
 		 ) pu ON true`
+
+// PortalInviteRefused is the status of an invite whose accept ADR-0015
+// refused because her login already reaches another Client at this
+// Practice (#2522).
+const PortalInviteRefused = "refused"
 
 // FetchPortalInviteState reads clientID's current portal-invite state,
 // the single-Client counterpart of the batched query ListHandler runs
@@ -61,10 +67,10 @@ const portalUserForClient = `
 // exists (an Engagement's own client_id, resolved by the caller's own
 // scoped read), so that case is never the ordinary "never invited" one.
 func FetchPortalInviteState(ctx context.Context, tx *sql.Tx, clientID string) (PortalInviteState, error) {
-	var hasPortalUser, accepted, emailSuppressed, hasEmail bool
+	var hasPortalUser, accepted, refused, emailSuppressed, hasEmail bool
 	var outboxStatus sql.NullString
 	err := tx.QueryRowContext(ctx,
-		`SELECT pu.id IS NOT NULL, pu.identity_uid IS NOT NULL, latest.status,
+		`SELECT pu.id IS NOT NULL, pu.identity_uid IS NOT NULL, pu.access_refused_at IS NOT NULL, latest.status,
 		        `+emailSuppressedExpr+`, c.email IS NOT NULL
 		 FROM clients c`+portalUserForClient+`
 		 LEFT JOIN LATERAL (
@@ -74,13 +80,13 @@ func FetchPortalInviteState(ctx context.Context, tx *sql.Tx, clientID string) (P
 		 ) latest ON true
 		 WHERE c.id = $1`,
 		clientID,
-	).Scan(&hasPortalUser, &accepted, &outboxStatus, &emailSuppressed, &hasEmail)
+	).Scan(&hasPortalUser, &accepted, &refused, &outboxStatus, &emailSuppressed, &hasEmail)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return PortalInviteState{}, fmt.Errorf("client: fetch portal invite state: %w", err)
 	}
 	return PortalInviteState{
-		Status:          PortalInviteStatus(hasPortalUser, accepted, outboxStatus),
+		Status:          PortalInviteStatus(hasPortalUser, accepted, refused, outboxStatus),
 		EmailSuppressed: emailSuppressed,
 		HasEmail:        hasEmail,
 	}, nil

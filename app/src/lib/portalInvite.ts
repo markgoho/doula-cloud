@@ -26,8 +26,22 @@ export const portalInviteStatusLabel: Record<string, string> = {
 	bounced: 'Bounced — needs re-invite',
 	dead_lettered: 'Dead-lettered — needs re-invite',
 	complained: 'Marked as spam (no action needed)',
-	accepted: 'Accepted'
+	accepted: 'Accepted',
+	refused: 'Invite refused: signs in through another record'
 };
+
+/** #2522: the way on from a refused invite. It names no other record and
+ * links to none: which record her login reaches is legible only from a
+ * portal session (GLOSSARY.md, Portal Account). Combining starts from a
+ * details save (ADR-0040), and the record kept is decided there. */
+export const refusedInviteWayOn =
+	"Combine the two records: save this Client's details, and you will be asked whether the other record is the same person.";
+
+/** Whether subject's accept was refused because her login already
+ * reaches another Client at this Practice (#2522). */
+export function isRefusedInvite(subject: PortalInviteSubject): boolean {
+	return subject.portalInviteStatus === 'refused';
+}
 
 /** #785: the same two failed states read differently once the address is
  * suppressed (ADR-0029). `portalInviteStatusLabel` predates #733's

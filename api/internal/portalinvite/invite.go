@@ -202,7 +202,7 @@ func invite(ctx context.Context, tx *sql.Tx, clientID string) (resp InviteRespon
 	default:
 		inviteToken := uuid.NewString()
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE client_portal_users SET invite_token = $1, invite_token_expires_at = $2 WHERE id = $3`,
+			`UPDATE client_portal_users SET invite_token = $1, invite_token_expires_at = $2, access_refused_at = NULL WHERE id = $3`,
 			inviteToken, expiresAt, existingID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests

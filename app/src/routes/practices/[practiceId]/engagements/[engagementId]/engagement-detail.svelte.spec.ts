@@ -1322,6 +1322,32 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 		await expect.element(testPage.getByText('Invite pending')).toBeVisible();
 	});
 
+	// #2522: an accept refused because her login reaches another record.
+	it('reads a refused invite, with the way on', async () => {
+		await setup({ ...fixtureDetail, clientPortalInviteStatus: 'refused' });
+
+		await expect
+			.element(
+				testPage.getByText(
+					"Invite refused: signs in through another record. Combine the two records: save this Client's details, and you will be asked whether the other record is the same person."
+				)
+			)
+			.toBeVisible();
+		expect(testPage.getByText('Invite pending').elements()).toHaveLength(0);
+	});
+
+	it('withholds Send Contract while the invite is refused, as never invited does', async () => {
+		await setupWithContract(
+			() => mockContract(draftContract),
+			{ ...fixtureDetail, clientPortalInviteStatus: 'refused' }
+		);
+
+		await expect
+			.element(testPage.getByText(/signs in through another record, so cannot sign a Contract sent from this one/).first())
+			.toBeVisible();
+		expect(testPage.getByRole('button', { name: 'Send Contract' }).elements()).toHaveLength(0);
+	});
+
 	it('offers "Send portal invite" while never invited', async () => {
 		await setup(fixtureDetail);
 
