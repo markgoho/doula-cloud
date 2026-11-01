@@ -152,7 +152,7 @@ func TestWorker_MailsAnOfferToHerWithTheLinkToThatPractice(t *testing.T) {
 	}
 
 	r := f.read(t)
-	if r.status != "sent" || r.address == nil || *r.address != doulaAddress {
+	if r.status != statusSent || r.address == nil || *r.address != doulaAddress {
 		t.Fatalf("row = (%s, %v), want sent to %s", r.status, r.address, doulaAddress)
 	}
 }
@@ -198,7 +198,7 @@ func TestWorker_MailsNothingOnceTheOfferIsNoLongerOpen(t *testing.T) {
 			if sent := f.run(t, now).Sent(); len(sent) != 0 {
 				t.Fatalf("sent %d messages, want none", len(sent))
 			}
-			if r := f.read(t); r.status != "sent" || r.address != nil {
+			if r := f.read(t); r.status != statusSent || r.address != nil {
 				t.Fatalf("row = (%s, %v), want sent with no address", r.status, r.address)
 			}
 		})
