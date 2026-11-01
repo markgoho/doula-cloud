@@ -99,17 +99,17 @@ Nothing here is an oversight. Each line is a decision, and the reason is the poi
 | # | Step | Done |
 | --- | --- | --- |
 | 1 | Allow tenants on `doula-cloud`'s Identity Platform (console) | Yes, 2026-11-01 |
-| 2 | Create the operator tenant: id `operators-fj5ur`, display name `operators`, password sign-in on, email link off, `mfaConfig.state` `MANDATORY` with TOTP | Yes, 2026-11-01 |
-| 3 | Add the founder's operator login, `mark@doula.cloud`, to tenant `operators-fj5ur`. Its authenticator app is set up at the first sign-in on `ops.doula.cloud`, after step 11 | Yes, 2026-11-01 |
+| 2 | Create the operator tenant: id `operators-fj5ur`, display name `operators`, password sign-in on, email link off, `mfaConfig.state` `MANDATORY` with TOTP, and self-signup off (`client.permissions.disabledUserSignup` true). Self-signup off is not `allowPasswordSignup` false: on a tenant, that turns off password sign-in itself. doula-ops makes any login in the tenant an operator, so an open signup lets anyone in ([#2610](https://github.com/markgoho/doula-cloud/issues/2610)) | Yes, 2026-11-01; signup closed the same day |
+| 3 | Add the founder's operator login, `mark@doula.cloud`, to tenant `operators-fj5ur`, with its email marked verified (`accounts:update` `emailVerified` true): Identity Platform refuses an authenticator app to an unverified email, and `/enroll` then shows only a service problem. Its authenticator app is set up at the first sign-in on `ops.doula.cloud`, after step 11 | Yes, 2026-11-01 |
 | 4 | Create the `dc-ops` Hosting site, which `.firebaserc`'s `ops` target names | Yes, 2026-11-01 |
 | 5 | Connect `ops.doula.cloud` to `dc-ops`, and add its CNAME in Squarespace DNS | Yes, 2026-11-01 |
-| 6 | Create the Cloud SQL login `ops_runtime_login` with `gcloud sql users create`, then, as `postgres`, `GRANT ops_runtime TO ops_runtime_login` (00143 made the `ops_runtime` role) | No |
-| 7 | `terraform apply -target=google_secret_manager_secret.pg_ops_runtime_dsn`, so the secret's shell exists to hold a value | No |
-| 8 | Add the DSN as the secret's first version: `postgres://ops_runtime_login:<password>@/doula_cloud?host=/cloudsql/doula-cloud:us-central1:doula-cloud-pg&sslmode=disable`, the shape `doula-cloud-pg-app-runtime-dsn` has | No |
-| 9 | A trunk run's `deploy-ops` has pushed `doula-ops:trunk`, the image Terraform creates the service from. Until step 10, the job pushes the image and skips the deploy with a warning | On the first trunk run after #2472 merges |
-| 10 | `terraform apply`: the service account, its grants, `doula-ops`, its invoker, and `doula-api`'s `OPS_BASE_URL` and its #2432 scaling. If it fails on the service after creating it, `terraform untaint google_cloud_run_v2_service.doula_ops` before applying again, or the next plan proposes a replace that `prevent_destroy` refuses | No |
-| 11 | Re-run that trunk run's `deploy-ops`, which now deploys, then `deploy-ops-site` | No |
-| 12 | Add `ops` to the trunk ruleset's required status checks | No |
+| 6 | Create the Cloud SQL login `ops_runtime_login` with `gcloud sql users create`, then, as `postgres`, `GRANT ops_runtime TO ops_runtime_login` (00143 made the `ops_runtime` role) | Yes, 2026-11-01 |
+| 7 | `terraform apply -target=google_secret_manager_secret.pg_ops_runtime_dsn`, so the secret's shell exists to hold a value | Yes, 2026-11-01 |
+| 8 | Add the DSN as the secret's first version: `postgres://ops_runtime_login:<password>@/doula_cloud?host=/cloudsql/doula-cloud:us-central1:doula-cloud-pg&sslmode=disable`, the shape `doula-cloud-pg-app-runtime-dsn` has | Yes, 2026-11-01 |
+| 9 | A trunk run's `deploy-ops` has pushed `doula-ops:trunk`, the image Terraform creates the service from. Until step 10, the job pushes the image and skips the deploy with a warning | Yes, 2026-11-01 |
+| 10 | `terraform apply`: the service account, its grants, `doula-ops`, its invoker, and `doula-api`'s `OPS_BASE_URL` and its #2432 scaling. If it fails on the service after creating it, `terraform untaint google_cloud_run_v2_service.doula_ops` before applying again, or the next plan proposes a replace that `prevent_destroy` refuses | Yes, 2026-11-01 |
+| 11 | Re-run that trunk run's `deploy-ops`, which now deploys, then `deploy-ops-site` | Yes, 2026-11-01 |
+| 12 | Add `ops` to the trunk ruleset's required status checks | Yes, 2026-11-01 |
 
 ## The Cloud Run image conflict
 
