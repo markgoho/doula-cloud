@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/sessionmint"
@@ -195,6 +196,42 @@ func priorReturnPath(ctx context.Context, tx *sql.Tx, identifier, priorToken str
 	}
 	returnTo, ok := portalReturnPath(stored)
 	return returnTo, ok, nil
+}
+
+// PriorLinkRequest names a sign-in link she opened that had expired or
+// was already used (#2536).
+type PriorLinkRequest struct {
+	Token string `json:"token"`
+}
+
+type priorLinkResponse struct {
+	ReturnTo string `json:"returnTo,omitempty"`
+}
+
+// PriorLinkReturnHandler is #2534's carry-over for a Client who is
+// already signed in: the page a dead link was asked for from, read for
+// her own session's account only, so a link from another account names
+// nothing.
+func PriorLinkReturnHandler(db *sql.DB) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tx, uid, _, ok := authn.Begin(w, r, db, authn.TierPortal)
+		if !ok {
+			return
+		}
+		defer func() { _ = tx.Rollback() }()
+
+		var req PriorLinkRequest
+		if !apierr.DecodeJSON(w, r, &req) {
+			return
+		}
+		returnTo, _, err := priorReturnPath(r.Context(), tx, uid, req.Token)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		apierr.WriteJSON(w, http.StatusOK, priorLinkResponse{ReturnTo: returnTo})
+	})
 }
 
 // RedeemMagicLinkRequest is the body of a sign-in link spend: the token
