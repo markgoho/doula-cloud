@@ -59,6 +59,7 @@ func routes(d Deps) (http.Handler, []string) {
 	r.handle(http.MethodGet, "/api/practices/deleted", requireSession(d.DB, practiceList(d.DB, true)))
 	r.handle(http.MethodGet, "/api/practices/dormant", requireSession(d.DB, dormantList(d.DB)))
 	r.handle(http.MethodGet, "/api/credits/monthly", requireSession(d.DB, monthlyCredits(d.DB)))
+	r.handle(http.MethodGet, "/api/operator-log", requireSession(d.DB, operatorLog(d.DB)))
 	r.handle(http.MethodGet, "/api/feedback", requireSession(d.DB, feedbackList(d.DB, d.FeedbackRepo)))
 	r.handle(http.MethodGet, "/api/feedback/{feedbackId}", requireSession(d.DB, feedbackRead(d.DB, d.FeedbackRepo)))
 	r.handle(http.MethodGet, "/api/practices/{practiceId}/refund", requireSession(d.DB, refundCheckRead(d.DB)))

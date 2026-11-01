@@ -29,6 +29,7 @@ var wantRoutes = []string{
 	"GET /api/practices/deleted",
 	"GET /api/practices/dormant",
 	"GET /api/credits/monthly",
+	"GET /api/operator-log",
 	"GET /api/feedback",
 	"GET /api/feedback/{feedbackId}",
 	"GET /api/practices/{practiceId}/refund",
