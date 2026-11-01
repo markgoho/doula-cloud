@@ -674,10 +674,23 @@ jobs:
 
       - name: Start throwaway Postgres for the boot smoke test
         run: |
+          image=mirror.gcr.io/library/postgres:16-alpine
+          pulled=false
+          for attempt in 1 2 3; do
+            if docker pull "$image"; then
+              pulled=true
+              break
+            fi
+            echo "Postgres image pull attempt ${attempt} failed; retrying in 10s..."
+            sleep 10
+          done
+          if [ "$pulled" != true ]; then
+            exit 1
+          fi
           docker network create api-smoke
           docker run -d --name api-smoke-db --network api-smoke \
             -e POSTGRES_USER=app -e POSTGRES_PASSWORD=app -e POSTGRES_DB=app \
-            postgres:16-alpine
+            "$image"
 
       # DATABASE_URL/GCP_PROJECT_ID/FIREBASE_AUTH_EMULATOR_HOST/
       # STORAGE_EMULATOR_HOST/GCS_ATTACHMENTS_BUCKET/VAPID_* mirror
