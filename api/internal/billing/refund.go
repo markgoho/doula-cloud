@@ -28,6 +28,9 @@ var (
 	// than the lot being drawn from still holds. A refund reverses one
 	// payment, so it never spans two purchases -- see Refund.
 	ErrRefundExceedsLot = errors.New("billing: refund exceeds the credits available on the purchase it draws against")
+	// ErrStripeRefused is returned when Stripe did not make the refund,
+	// so the caller's transaction must write nothing.
+	ErrStripeRefused = errors.New("billing: stripe refused the refund")
 )
 
 // RefundQuote is what one refund would give back right now: Credits
@@ -189,7 +192,7 @@ func Refund(ctx context.Context, tx *sql.Tx, client StripeClient, order RefundOr
 	// than moving the money twice.
 	refundID, err := client.RefundPayment(ctx, q.PaymentIntentID, order.RequestKey, q.AmountCents)
 	if err != nil {
-		return RefundReceipt{}, fmt.Errorf("billing: refund %d cents to practice %s: %w", q.AmountCents, order.PracticeID, err)
+		return RefundReceipt{}, fmt.Errorf("%w: %d cents to practice %s: %w", ErrStripeRefused, q.AmountCents, order.PracticeID, err)
 	}
 
 	if _, err := tx.ExecContext(ctx,

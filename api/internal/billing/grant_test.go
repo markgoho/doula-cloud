@@ -224,7 +224,7 @@ func TestFoundingGrantHandler_IssuesTheGrant(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Grant Endpoint")
 	seedRoster(t, db, practiceID, 4)
-	srv := newInternalBillingServer(db, billing.NewFakeStripeClient())
+	srv := newInternalBillingServer(db)
 
 	status, body := internalRequest(t, srv, http.MethodPost, "/api/internal/billing/founding-grants", internalTestSecret,
 		`{"practiceId":"`+practiceID+`","grantedBy":"`+testGrantor+`"}`)
@@ -251,7 +251,7 @@ func TestFoundingGrantHandler_RefusesTheSecondRequest(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Twice Over HTTP")
 	seedRoster(t, db, practiceID, 1)
-	srv := newInternalBillingServer(db, billing.NewFakeStripeClient())
+	srv := newInternalBillingServer(db)
 	body := `{"practiceId":"` + practiceID + `","grantedBy":"` + testGrantor + `"}`
 
 	if status, out := internalRequest(t, srv, http.MethodPost, "/api/internal/billing/founding-grants", internalTestSecret, body); status != http.StatusOK {
@@ -280,7 +280,7 @@ func TestFoundingGrantHandler_RefusesTheSecondRequest(t *testing.T) {
 func TestFoundingGrantHandler_Refusals(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Endpoint Refusals")
-	srv := newInternalBillingServer(db, billing.NewFakeStripeClient())
+	srv := newInternalBillingServer(db)
 	staffed := testdb.SeedPractice(t, db, "Endpoint Refusals Staffed")
 	seedRoster(t, db, staffed, 1)
 

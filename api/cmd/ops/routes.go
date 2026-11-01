@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/csrf"
 )
@@ -20,6 +21,8 @@ type Deps struct {
 	AcceptEmulatorFactor bool
 	// Origins are the front-end origins csrf.Wrap treats as same-site.
 	Origins []string
+	// Stripe moves a refund's money back (#2481).
+	Stripe billing.StripeClient
 }
 
 // router mounts a route and records it, so routes() can hand back the
@@ -45,6 +48,8 @@ func routes(d Deps) (http.Handler, []string) {
 	r.handle(http.MethodGet, "/api/session", requireSession(d.DB, session()))
 	r.handle(http.MethodDelete, "/api/session", requireSession(d.DB, signOut(d.DB)))
 	r.handle(http.MethodPost, "/api/session/step-up", requireSession(d.DB, stepUp(d)))
+	r.handle(http.MethodGet, "/api/practices/{practiceId}/refund", requireSession(d.DB, refundCheckRead(d.DB)))
+	r.handle(http.MethodPost, "/api/practices/{practiceId}/refunds", requireStepUp(d.DB, refundAct(d)))
 	return clock.Middleware(d.Now)(csrf.Wrap(d.Origins, r.mux)), r.routes
 }
 

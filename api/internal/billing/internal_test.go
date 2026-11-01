@@ -16,7 +16,7 @@ import (
 
 const internalTestSecret = "internal-test-secret"
 
-func newInternalBillingServer(db *testdb.DB, client billing.StripeClient) *httptest.Server {
+func newInternalBillingServer(db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.Handle("GET /api/internal/billing/dormant-practices", billing.DormantPracticesHandler(db.App, internalauth.FromSecret(internalTestSecret)))
 	mux.Handle("POST /api/internal/billing/founding-grants", billing.FoundingGrantHandler(db.App, internalauth.FromSecret(internalTestSecret)))
@@ -56,7 +56,7 @@ func TestDormantPracticesHandler_ListsBalancesNobodyHasTouched(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Dormant Endpoint")
 	seedPurchase(t, db, practiceID, 2, 2000, 0, "pi_dormant_endpoint", time.Now().AddDate(-3, 0, 0))
-	srv := newInternalBillingServer(db, billing.NewFakeStripeClient())
+	srv := newInternalBillingServer(db)
 
 	if status, _ := internalRequest(t, srv, http.MethodGet, "/api/internal/billing/dormant-practices", "", ""); status != http.StatusUnauthorized {
 		t.Fatalf("status without the secret = %d, want 401", status)

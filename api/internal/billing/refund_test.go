@@ -47,7 +47,7 @@ func newRefunder(t *testing.T, db *testdb.DB, client *billing.FakeStripeClient) 
 
 func (r *refunder) refund(practiceID, key string, credits int, now time.Time) (billing.RefundReceipt, error) {
 	r.t.Helper()
-	return billing.Refund(r.t.Context(), r.tx, r.client,
+	return billing.Refund(r.t.Context(), r.tx, r.client, //nolint:wrapcheck // test helper; callers match the error with errors.Is
 		billing.RefundOrder{PracticeID: practiceID, Credits: credits, RequestKey: key}, now,
 		func(_ context.Context, q billing.RefundQuote) (string, error) {
 			r.quotes = append(r.quotes, q)

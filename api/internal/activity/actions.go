@@ -95,6 +95,9 @@ const (
 	ActionMFARequiredEnabled          PracticeAction = "mfa_required_enabled"
 	ActionMFARequiredDisabled         PracticeAction = "mfa_required_disabled"
 	ActionWelcomeCreditsEmailSent     PracticeAction = "welcome_credits_email_sent"
+	// ActionCreditsRefunded is a Platform operator's refund of purchased
+	// Credits, from ops (#2481) -- diff credits, amountCents, taxCents.
+	ActionCreditsRefunded PracticeAction = "credits_refunded"
 )
 
 // SubjectMembership is the subject_kind every write site that touches

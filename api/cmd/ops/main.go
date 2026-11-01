@@ -17,6 +17,7 @@ import (
 	// Registers the "pgx" driver with database/sql; never referenced by name.
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/dbpool"
 	"doula-cloud/api/internal/stackswitch"
 	"doula-cloud/api/internal/stripemode"
@@ -44,6 +45,7 @@ const (
 	projectVar      = "GCP_PROJECT_ID"
 	originsVar      = "EXPECTED_ORIGINS"
 	databaseURLVar  = "DATABASE_URL"
+	stripeKeyVar    = "STRIPE_API_KEY"
 )
 
 var errEmulatorOnCloudRun = errors.New("doula-ops: " + emulatorHostVar + " must not be set on Cloud Run (" + stripemode.CloudRunVar + " is set)")
@@ -92,12 +94,23 @@ func newServer(ctx context.Context, getenv func(string) string, newVerifier veri
 		Verifier:             verifier,
 		AcceptEmulatorFactor: emulator,
 		Origins:              origins(getenv(originsVar)),
+		Stripe:               stripeClient(getenv(stripeKeyVar), emulator),
 	})
 	return &http.Server{
 		Addr:              ":" + port,
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}, db, nil
+}
+
+// stripeClient is the Stripe a refund moves money through. The
+// end-to-end stack has no Stripe, so with the emulator and no key it is
+// the in-memory fake; newServer already refuses the emulator on Cloud Run.
+func stripeClient(apiKey string, emulator bool) billing.StripeClient {
+	if emulator && apiKey == "" {
+		return billing.NewFakeStripeClient()
+	}
+	return billing.NewStripeAPIClient(apiKey, "", "")
 }
 
 // origins reads a comma-separated origin list; unset is none, which

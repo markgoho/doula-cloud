@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/dbpool"
 	"doula-cloud/api/internal/stackswitch"
 )
@@ -127,6 +128,20 @@ func TestNewServer_AcceptsTheEmulatorFactorOnlyWithTheEmulatorHost(t *testing.T)
 		// before the database is asked.
 		if w.Code != tc.want {
 			t.Errorf("env %v: status = %d, want %d", tc.env, w.Code, tc.want)
+		}
+	}
+}
+
+func TestStripeClient_IsTheFakeOnlyOnTheStackWithNoKey(t *testing.T) {
+	if _, ok := stripeClient("", true).(*billing.FakeStripeClient); !ok {
+		t.Error("the emulator with no key: want the fake")
+	}
+	for _, c := range []struct {
+		key      string
+		emulator bool
+	}{{"sk_test_x", true}, {"sk_test_x", false}, {"", false}} {
+		if _, ok := stripeClient(c.key, c.emulator).(*billing.StripeAPIClient); !ok {
+			t.Errorf("key %q, emulator %v: want the Stripe API client", c.key, c.emulator)
 		}
 	}
 }
