@@ -53,7 +53,7 @@ func SystemActor() Actor { return Actor{Kind: ActorSystem} }
 
 // OperatorActor is a Platform operator acting on one Practice from ops,
 // keyed to the operator_acts row that records the act. Record writes it
-// through record_operator_activity (00146), which only ops_runtime may
+// through record_operator_activity (00147), which only ops_runtime may
 // execute; set Entry.CreatedAt from clock.Now(ctx).
 func OperatorActor(operatorActID string) Actor {
 	return Actor{Kind: ActorOperator, OperatorActID: operatorActID}

@@ -1,4 +1,4 @@
-# 00138_ops_runtime_and_operator_tables
+# 00143_ops_runtime_and_operator_tables.sql
 
 ## DO block
 
