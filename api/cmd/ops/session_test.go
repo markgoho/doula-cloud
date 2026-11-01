@@ -36,11 +36,18 @@ const (
 
 var (
 	opsStart = time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC)
+	justNow  = time.Now() //nolint:forbidigo // #773: an Identity Platform auth_time is real wall time, as staffauth/reauth.go says
 	tokens   = fakeVerifier{
 		"totp-token":  {UID: opUID, Email: opEmail, Name: opName, SecondFactor: factorTOTP},
 		"phone-token": {UID: opUID, Email: opEmail, Name: opName, SecondFactor: "phone"},
 		"bare-token":  {UID: opUID, Email: opEmail, Name: opName},
 		"other-token": {UID: "op-uid-2", Email: "second@doula.cloud", SecondFactor: factorTOTP},
+		// A step-up's tokens: a sign-in just now, its auth_time real wall
+		// time as Identity Platform's is.
+		"fresh-totp-token":  {UID: opUID, Email: opEmail, Name: opName, SecondFactor: factorTOTP, AuthTime: justNow},
+		"fresh-phone-token": {UID: opUID, Email: opEmail, Name: opName, SecondFactor: "phone", AuthTime: justNow},
+		"fresh-bare-token":  {UID: opUID, Email: opEmail, Name: opName, AuthTime: justNow},
+		"fresh-other-token": {UID: "op-uid-2", Email: "second@doula.cloud", SecondFactor: factorTOTP, AuthTime: justNow},
 	}
 )
 

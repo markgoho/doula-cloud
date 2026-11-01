@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"time"
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/auth"
@@ -49,7 +50,11 @@ func (v *tenantVerifier) Verify(ctx context.Context, idToken string) (Identity, 
 		return Identity{}, fmt.Errorf("verify operator token: %w", err)
 	}
 	// coverage:ignore reason: requires a real operator token, exercised by ops/'s e2e suite
-	return identityOf(token.UID, token.Claims), nil
+	identity := identityOf(token.UID, token.Claims)
+	// coverage:ignore reason: requires a real operator token, exercised by ops/'s e2e suite
+	identity.AuthTime = time.Unix(token.AuthTime, 0)
+	// coverage:ignore reason: requires a real operator token, exercised by ops/'s e2e suite
+	return identity, nil
 }
 
 // identityOf reads the claims an operator token carries: email, name,

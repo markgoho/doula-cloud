@@ -44,6 +44,7 @@ func routes(d Deps) (http.Handler, []string) {
 	r.handle(http.MethodPost, "/api/session", signIn(d))
 	r.handle(http.MethodGet, "/api/session", requireSession(d.DB, session()))
 	r.handle(http.MethodDelete, "/api/session", requireSession(d.DB, signOut(d.DB)))
+	r.handle(http.MethodPost, "/api/session/step-up", requireSession(d.DB, stepUp(d)))
 	return clock.Middleware(d.Now)(csrf.Wrap(d.Origins, r.mux)), r.routes
 }
 

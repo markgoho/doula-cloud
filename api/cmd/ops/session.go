@@ -36,12 +36,14 @@ const (
 
 // Identity is what an operator token says once its tenant has verified
 // it. SecondFactor is the provider of the second factor this sign-in
-// passed, empty when it passed none.
+// passed, empty when it passed none. AuthTime is when that sign-in
+// happened, in real wall time.
 type Identity struct {
 	UID          string
 	Email        string
 	Name         string
 	SecondFactor string
+	AuthTime     time.Time
 }
 
 // Verifier checks an ID token against the operator tenant, and refuses a
@@ -51,12 +53,14 @@ type Verifier interface {
 }
 
 // operator is the signed-in operator, as the session middleware found
-// them.
+// them. StepUpAt is the session's last step-up, nil before its first.
 type operator struct {
-	ID    string
-	Name  string
-	Email string
-	token string
+	ID          string
+	Name        string
+	Email       string
+	StepUpAt    *time.Time
+	identityUID string
+	token       string
 }
 
 type operatorKey struct{}
@@ -185,9 +189,10 @@ func requireSession(db *sql.DB, next http.Handler) http.Handler {
 			     UPDATE operator_sessions
 			        SET idle_expires_at = LEAST($3, expires_at)
 			      WHERE token_hash = $1 AND idle_expires_at > $2 AND expires_at > $2
-			  RETURNING operator_id)
-			 SELECT o.id, o.name, o.email FROM renewed JOIN operators o ON o.id = renewed.operator_id`,
-			tokenHash(cookie.Value), now, now.Add(idleLimit)).Scan(&op.ID, &op.Name, &op.Email)
+			  RETURNING operator_id, step_up_at)
+			 SELECT o.id, o.name, o.email, o.identity_uid, renewed.step_up_at
+			   FROM renewed JOIN operators o ON o.id = renewed.operator_id`,
+			tokenHash(cookie.Value), now, now.Add(idleLimit)).Scan(&op.ID, &op.Name, &op.Email, &op.identityUID, &op.StepUpAt)
 		if errors.Is(err, sql.ErrNoRows) {
 			http.SetCookie(w, sessionCookie("", -1))
 			apierr.Write(w, http.StatusUnauthorized, apierr.CodeUnauthorized, msgSessionEnded, nil)
