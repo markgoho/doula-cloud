@@ -910,7 +910,7 @@
 	// makes an unrelated roster outage take the Offers section down with
 	// it, and it re-decides who may see Offers in a place that is not
 	// about Offers. Each section answers for its own read.
-	const isOffersVisible = $derived(offersState.value !== undefined);
+	const isOffersVisible = $derived(isPracticeOwnerOrAdmin || offersState.value !== undefined);
 	// #1598: nobody offers herself work, so the Offers form does not list
 	// the person at the screen. The filter is on what the form is handed
 	// and not on the roster: the Visit pickers read the same roster and
@@ -1792,21 +1792,29 @@
 		}
 	}
 
+	async function loadRosterThenOffers() {
+		await loadRoster();
+		await loadOffersSection();
+	}
+
 	onMount(async () => {
 		void loadClientRecord();
-		// The Engagement is already here, from load. What remains is the
-		// seven sections that fill in behind it, each rendering as it lands.
-		await loadVisits();
-		await loadMessages();
-		await Promise.all(planSections.map((section) => loadPlan(section.type)));
-		await loadContractSection();
-		await loadInvoicesSection();
-		await loadPracticeTimezoneSection();
-		await loadRoster();
-		await loadOnCall();
-		await loadOffersSection();
-		await loadDoulaFeesSection();
-		await loadActivity();
+		// The Engagement is already here, from load. The sections behind it
+		// read at once and each renders as it lands (#2258); one after
+		// another, a phone waited up to 0.8 s for the last. Only the Offers
+		// wait, on the roster their form offers the work to.
+		await Promise.all([
+			loadVisits(),
+			loadMessages(),
+			...planSections.map((section) => loadPlan(section.type)),
+			loadContractSection(),
+			loadInvoicesSection(),
+			loadPracticeTimezoneSection(),
+			loadRosterThenOffers(),
+			loadOnCall(),
+			loadDoulaFeesSection(),
+			loadActivity()
+		]);
 
 		// #61: an open service worker push message ("a new Message arrived
 		// on this Engagement") triggers a refetch, the same content-free
@@ -2512,6 +2520,11 @@
 					focusOnAppearing: refocusedVisitOpener === 'add'
 				}
 			: undefined}
+	{#if !visitsLoad.hasSettled}
+		<!-- #2258: until the read lands the section says it is loading,
+		     never "No Visits yet.". -->
+		<Skeleton label="Loading the Visits" />
+	{:else}
 	<DataTable
 		columns={[
 			{ label: 'Date', accessor: (visit: Visit) => formatScheduledVisit(visit.scheduledAt) },
@@ -2533,6 +2546,7 @@
 		emptyMessage="No Visits yet."
 		emptyAction={addOpener}
 	/>
+	{/if}
 
 	{#if visitsSavedMessage}
 		<Notice variant="status" message={visitsSavedMessage} isFocusedOnAppear />
@@ -2869,6 +2883,8 @@
 			onVoidInvoice={handleVoidInvoice}
 			onWriteOffInvoice={handleWriteOffInvoice}
 		/>
+	{:else if !practiceTimezoneState.error}
+		<Skeleton label="Loading the Invoices" />
 	{/if}
 {/snippet}
 
@@ -2885,6 +2901,14 @@
 		onMount awaits loadRoster before loadOffersSection, and this
 		section is drawn only once the Offers have landed.
 	-->
+	{#if !offersState.hasSettled}
+		<Skeleton label="Loading the Offers" />
+	{:else if offersState.value === undefined}
+		<!-- The section stands before its read lands for an Owner or an
+		     Admin (#2258), whom the read never refuses, so nothing back is
+		     a failure, said as Doula fees says one. -->
+		<Notice variant="error" message="We could not load the Offers." />
+	{:else}
 	<OfferSection
 		{offers}
 		doulas={offerDoulas}
@@ -2893,6 +2917,7 @@
 		onCreate={handleCreateOffer}
 		onWithdraw={handleWithdrawOffer}
 	/>
+	{/if}
 {/snippet}
 
 {#snippet doulaFeesSection()}
@@ -2917,9 +2942,12 @@
 		message, and whether the Client is waiting on a reply (GLOSSARY.md,
 		Unanswered). Unanswered is a row only while it is true.
 	-->
-	{#if messageThreadRows.length > 0}
+	{#if !messagesLoad.hasSettled}
+		<Skeleton label="Loading the Messages" />
+	{:else if messageThreadRows.length > 0}
 		<SummaryList rows={messageThreadRows} />
 	{/if}
+	{#if messagesLoad.hasSettled}
 	<MessageThread
 		{messages}
 		error={messagesError}
@@ -2932,6 +2960,7 @@
 		composeOpener="Write a message"
 		cannotSendReason={messageBlock}
 	/>
+	{/if}
 	<!-- The way out the block names, beside it (#2004). -->
 	{#if messageBlock && hasNeverInvitedClient && hasClientEmailOnFile}
 		<div>
@@ -3198,6 +3227,9 @@
 	{#if activityError}
 		<Notice variant="error" message={activityError} />
 	{/if}
+	{#if !activityLoad.hasSettled}
+		<Skeleton label="Loading the Activity" />
+	{:else}
 	<DataTable
 		columns={activityLedgerColumns()}
 		rows={shownActivity}
@@ -3207,6 +3239,7 @@
 		loadMoreError={activity.loadMoreError}
 		emptyMessage="Nothing has happened yet."
 	/>
+	{/if}
 {/snippet}
 
 <!--

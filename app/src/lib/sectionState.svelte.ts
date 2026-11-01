@@ -36,6 +36,11 @@ export class SectionState<T> {
 	Whether a `load` or `mutate` is in flight.
 	*/
 	isBusy = $state(false);
+	/**
+	Whether a `load` or `mutate` has finished at least once, either way:
+	until then a section has nothing to say, empty or not (#2258).
+	*/
+	hasSettled = $state(false);
 
 	constructor(initial: T) {
 		this.value = initial;
@@ -52,6 +57,7 @@ export class SectionState<T> {
 			return false;
 		} finally {
 			this.isBusy = false;
+			this.hasSettled = true;
 		}
 	}
 

@@ -11,6 +11,20 @@ describe('SectionState', () => {
 		expect(section.isBusy).toBe(false);
 	});
 
+	// #2258: a section says it is loading until its first read settles.
+	it('has settled only once a load has finished, either way', async () => {
+		const section = new SectionState<string | undefined>(undefined);
+		expect(section.hasSettled).toBe(false);
+
+		const pending = section.load(async () => {
+			throw new Error('down');
+		}, 'Failed to load');
+		expect(section.hasSettled).toBe(false);
+		await pending;
+
+		expect(section.hasSettled).toBe(true);
+	});
+
 	describe('load', () => {
 		it('stores what the loader resolves to', async () => {
 			const section = new SectionState<string | undefined>(undefined);

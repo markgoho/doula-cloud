@@ -4,6 +4,7 @@
 	import { takeOutcome } from '#lib/outcome.js';
 	import { Streamed } from '#lib/streamedRead.svelte.js';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
 	import { isOwnerOrAdmin } from '#lib/roles.js';
 	import FailedRead from '../../FailedRead.svelte';
 	import EngagementScreen from './EngagementScreen.svelte';
@@ -16,9 +17,9 @@
 	// navigation runs, which ends before the read lands.
 	const outcome = takeOutcome(page.url);
 
-	// EngagementScreen's sections, in its order. Offers is left out: it
-	// shows only once its own read lands, after the Engagement's.
-	const sectionHeadings = [
+	// EngagementScreen's sections, in its order. Offers is an Owner's or
+	// an Admin's (#2258); Doula fees shows only once its own read lands.
+	const sectionHeadings = $derived([
 		'On call',
 		'Birth outcome',
 		'Contract',
@@ -26,9 +27,10 @@
 		'Care Plan',
 		'Birth Plan',
 		'Invoices',
+		...(isOwnerOrAdmin(data.session) ? ['Offers'] : []),
 		'Messages',
 		'Activity'
-	];
+	]);
 
 	// The summary card's usual rows (#2251): Care, Due and Care phase with
 	// a Change, the Doula with one for an Owner or Admin, then Portal
@@ -45,6 +47,11 @@
 
 {#snippet nothing()}{/snippet}
 
+<!-- The header's one action that waits on nothing (#2258). -->
+{#snippet messageTheClient()}
+	<Link href="#messages" label="Message the Client" variant="secondary" />
+{/snippet}
+
 {#if engagement.failure}
 	<FailedRead kind={engagement.failure} />
 {:else if engagement.value}
@@ -56,6 +63,8 @@
 		backLabel="Clients"
 		isContentsShown
 		{summaryRows}
+		summaryLinks={['View Client']}
+		loadingActions={messageTheClient}
 		sections={sectionHeadings.map((heading) => ({ heading, content: nothing }))}
 		loading="Loading the Engagement"
 	/>
