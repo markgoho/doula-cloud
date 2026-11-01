@@ -1347,6 +1347,7 @@
 		if (!isSaved) return;
 		isContractFormOpen = false;
 		contractSavedMessage = 'Contract saved.';
+		await loadActivity();
 	}
 
 	async function handleSendContract() {

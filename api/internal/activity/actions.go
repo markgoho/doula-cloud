@@ -276,6 +276,13 @@ const (
 	ActionContractSigned  EngagementAction = "contract_signed"
 	ActionContractVoided  EngagementAction = "contract_voided"
 
+	// ActionContractEdited records a save that moved a Draft Contract's
+	// merge-field values (#2520); a save that moves none records nothing.
+	// The diff names the changed fields, never their values. In
+	// staffingActions below: she never reads a Draft, so nothing of hers
+	// changed until it is sent.
+	ActionContractEdited EngagementAction = "contract_edited"
+
 	// ActionContractPriced records a Contract's amount being set for the
 	// first time, at creation -- PostContractHandler's own write,
 	// alongside (never instead of) ActionContractCreated (#972). Diff
@@ -656,6 +663,8 @@ var staffingActions = map[EngagementAction]bool{
 	ActionContractorFeePaymentReversed: true,
 	// #2279: a refused accept changes nothing of hers.
 	ActionPortalInviteRefused: true,
+	// #2520: a Draft she has not been sent.
+	ActionContractEdited: true,
 }
 
 // StaffingActions returns every action GLOSSARY.md's Activity entry keeps

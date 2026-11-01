@@ -422,7 +422,7 @@ func PutContractHandler() http.Handler {
 			return
 		}
 
-		id, prose, status, _, amountCents, amountChangedAt, err := fetchContract(r.Context(), tx, engagementID)
+		id, prose, status, storedValues, amountCents, amountChangedAt, err := fetchContract(r.Context(), tx, engagementID)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
 			return
@@ -469,6 +469,28 @@ func PutContractHandler() http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
+		if changed := changedMergeFields(storedValues.nonEmpty(), req.Values); len(changed) > 0 {
+			diff, err := json.Marshal(map[string][]string{"fields": changed})
+			if err != nil {
+				// coverage:ignore reason: a map of string slices always marshals cleanly, not exercised by unit tests
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+				return
+			}
+			practiceID, _ := staffauth.PracticeID(r.Context())
+			staffID, _ := staffauth.StaffID(r.Context())
+			if err := activity.Record(r.Context(), tx, activity.Entry{
+				PracticeID:  practiceID,
+				SubjectKind: activity.SubjectEngagement,
+				SubjectID:   engagementID,
+				Action:      string(activity.ActionContractEdited),
+				Diff:        diff,
+				Actor:       activity.StaffActor(staffID),
+			}); err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+				return
+			}
+		}
 
 		out := ContractResponse{
 			EngagementID:    engagementID,
@@ -480,6 +502,26 @@ func PutContractHandler() http.Handler {
 		}
 		writeContract(w, r, tx, http.StatusOK, out)
 	})
+}
+
+// changedMergeFields names, sorted, every merge field whose value a save
+// moves from before to after -- set, cleared or rewritten (#2520). Only
+// the keys: a value such as the scope of service is free text the
+// Activity diff never carries.
+func changedMergeFields(before, after MergeFieldValues) []string {
+	changed := []string{}
+	for key, value := range after {
+		if before[key] != value {
+			changed = append(changed, key)
+		}
+	}
+	for key, value := range before {
+		if _, kept := after[key]; !kept && value != "" {
+			changed = append(changed, key)
+		}
+	}
+	slices.Sort(changed)
+	return changed
 }
 
 // fetchContract reads the id, prose snapshot, status, and merge field
