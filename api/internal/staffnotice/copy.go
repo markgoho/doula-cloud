@@ -35,3 +35,29 @@ func putOnEngagementText(link string) string {
 		link + "\n\n" +
 		"If you have questions, reply to this email.\n"
 }
+
+// visitReassignedToSubject, visitReassignedFromSubject and their texts
+// are the mail to a Doula someone else moved a Visit onto, or off (#2436).
+// ADR-0009 as putOnEngagementText keeps it: no Client, colleague,
+// Practice, date or kind of Visit; the Engagement page, one sign-in away,
+// lists the Visit and who has it. "A visit", not "the client", for the
+// one taken off her: she may still be on the Client. Worded from the
+// persona consults on #2436.
+const (
+	visitReassignedToSubject   = "You've been put on a visit on DoulaCloud"
+	visitReassignedFromSubject = "You've been taken off a visit on DoulaCloud"
+)
+
+func visitReassignedToText(link string) string {
+	return "Hello,\n\n" +
+		"You've been put on a visit at your practice on DoulaCloud. This link opens that client's page at your practice, where the visit is listed:\n\n" +
+		link + "\n\n" +
+		"If you have questions, reply to this email.\n"
+}
+
+func visitReassignedFromText(link string) string {
+	return "Hello,\n\n" +
+		"You've been taken off a visit at your practice on DoulaCloud. Someone else has it now. This link opens that client's page at your practice:\n\n" +
+		link + "\n\n" +
+		"If you have questions, reply to this email.\n"
+}

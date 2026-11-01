@@ -2016,17 +2016,21 @@
 		hasAttemptedReassign = true;
 		const newStaffId = reassignStaffId;
 		if (!newStaffId || reassignBlock) return;
-		const wasSaved = await visitReassign.mutate(
-			() => reassignVisit(apiFetchWithSession, reference, visit.visitId, newStaffId),
-			'Failed to reassign the Visit'
-		);
+		let emailed: string[] = [];
+		const wasSaved = await visitReassign.mutate(async () => {
+			emailed = await reassignVisit(apiFetchWithSession, reference, visit.visitId, newStaffId);
+		}, 'Failed to reassign the Visit');
 		if (!wasSaved) return;
 		openVisitForm();
 		await loadVisits();
 		const which = visit.scheduledAt
 			? `The Visit on ${formatScheduledVisit(visit.scheduledAt)}`
 			: 'The Visit that is not yet scheduled';
-		visitsSavedMessage = `${which} is ${staffName(newStaffId)}'s now, not ${visit.staffName}'s.`;
+		// #2436: who was emailed, never that anyone knows: an email can be
+		// sent and still not be read.
+		const emailedNames = emailed.map((id) => (id === newStaffId ? staffName(newStaffId) : visit.staffName));
+		const told = emailedNames.length > 0 ? ` We emailed ${emailedNames.join(' and ')} to say so.` : '';
+		visitsSavedMessage = `${which} is ${staffName(newStaffId)}'s now, not ${visit.staffName}'s.${told}`;
 		await refreshWhoIsOn();
 		await loadActivity();
 	}
