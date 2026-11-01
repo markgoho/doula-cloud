@@ -130,6 +130,7 @@ describe('website settings screen, reached from Getting paid', () => {
 		const landing = captureLanding(goto);
 
 		await testPage.getByRole('radio', { name: 'Publish a page for me' }).click();
+		await testPage.getByRole('button', { name: 'Continue' }).click();
 		await testPage.getByLabelText('What your Practice offers').fill('Birth and postpartum support in Monroe County.');
 		await testPage.getByLabelText('Your cancellation or refund policy').fill('The deposit is not refunded.');
 		await testPage.getByRole('button', { name: 'Continue' }).click();
@@ -262,11 +263,18 @@ describe('website settings screen', () => {
 			.toBeVisible();
 	});
 
-	it('asks for exactly two things when she wants a page published', async () => {
+	// #2302: the two facts are a follow-up with more than one part, so they
+	// are asked on a page of their own after the radio question.
+	it('asks for exactly two things, on a page of their own, when she wants a page published', async () => {
 		await setup();
 
 		await testPage.getByRole('radio', { name: 'Publish a page for me' }).click();
 
+		await expect.element(testPage.getByLabelText('What your Practice offers')).not.toBeInTheDocument();
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+
+		await expect.element(testPage.getByRole('heading', { level: 1, name: 'What your page will say' })).toBeVisible();
+		await expect.element(testPage.getByRole('radio', { name: 'Publish a page for me' })).not.toBeInTheDocument();
 		await expect.element(testPage.getByLabelText('What your Practice offers')).toBeVisible();
 		await expect.element(testPage.getByLabelText('Your cancellation or refund policy')).toBeVisible();
 		await expect
@@ -278,6 +286,7 @@ describe('website settings screen', () => {
 		await setup();
 
 		await testPage.getByRole('radio', { name: 'Publish a page for me' }).click();
+		await testPage.getByRole('button', { name: 'Continue' }).click();
 		await expect
 			.element(testPage.getByText('You have 500 characters remaining').first())
 			.toBeVisible();
@@ -300,6 +309,7 @@ describe('website settings screen', () => {
 		const { puts } = await setup();
 
 		await testPage.getByRole('radio', { name: 'Publish a page for me' }).click();
+		await testPage.getByRole('button', { name: 'Continue' }).click();
 		await testPage.getByLabelText('What your Practice offers').fill('Birth and postpartum support.');
 		await testPage.getByLabelText('Your cancellation or refund policy').fill('Two weeks notice.');
 		await testPage.getByRole('button', { name: 'Continue' }).click();
@@ -324,7 +334,9 @@ describe('website settings screen', () => {
 		const { puts } = await setup();
 
 		await testPage.getByRole('radio', { name: 'Publish a page for me' }).click();
+		await testPage.getByRole('button', { name: 'Continue' }).click();
 		await testPage.getByLabelText('What your Practice offers').fill('a'.repeat(501));
+		await testPage.getByRole('button', { name: 'Back' }).click();
 		await testPage.getByRole('radio', { name: 'I have my own website or social profile' }).click();
 		await testPage
 			.getByLabelText('The web address of your website or social profile')
@@ -341,6 +353,7 @@ describe('website settings screen', () => {
 		await setup();
 
 		await testPage.getByRole('radio', { name: 'Publish a page for me' }).click();
+		await testPage.getByRole('button', { name: 'Continue' }).click();
 		await testPage.getByLabelText('What your Practice offers').fill('Birth support.');
 		await testPage.getByLabelText('Your cancellation or refund policy').fill('Two weeks notice.');
 		await testPage.getByRole('button', { name: 'Continue' }).click();
@@ -374,6 +387,7 @@ describe('website settings screen', () => {
 
 		await clickChange('how Clients find you');
 		await expect.element(testPage.getByRole('radio', { name: 'Publish a page for me' })).toBeChecked();
+		await testPage.getByRole('button', { name: 'Continue' }).click();
 		await expect.element(testPage.getByLabelText('What your Practice offers')).toBeVisible();
 	});
 
@@ -553,5 +567,35 @@ describe('website settings screen', () => {
 		await testPage.getByRole('button', { name: 'Save' }).click();
 
 		await expect.element(testPage.getByText(/only a Practice Owner can do that/)).toBeVisible();
+	});
+
+	// #2302: a fact the server refuses is put back on the page that asks it.
+	it('returns a refused fact to the page that asks it', async () => {
+		const refusal = 'Enter a description of what your Practice offers';
+		await setup({
+			put: () =>
+				jsonResponse({ code: 'INVALID_ARGUMENT', message: 'invalid request body', details: { serviceDescription: refusal } }, 400)
+		});
+
+		await testPage.getByRole('radio', { name: 'Publish a page for me' }).click();
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+		await testPage.getByLabelText('What your Practice offers').fill('Birth support.');
+		await testPage.getByLabelText('Your cancellation or refund policy').fill('Two weeks notice.');
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+		await testPage.getByRole('button', { name: 'Publish page' }).click();
+
+		await expect.element(testPage.getByRole('heading', { level: 1, name: 'What your page will say' })).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: refusal })).toHaveAttribute('href', '#serviceDescription-input');
+	});
+
+	it('goes back from the check page to the one question a Change opened', async () => {
+		await setup({ website: fixtureWebsite });
+
+		await clickChange('what you offer');
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+		await testPage.getByRole('button', { name: 'Back' }).click();
+
+		await expect.element(testPage.getByLabelText('What your Practice offers')).toBeVisible();
+		await expect.element(testPage.getByLabelText('Your cancellation or refund policy')).not.toBeInTheDocument();
 	});
 });
