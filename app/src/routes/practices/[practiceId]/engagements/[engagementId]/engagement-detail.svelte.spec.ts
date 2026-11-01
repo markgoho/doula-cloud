@@ -1078,6 +1078,24 @@ describe('the Visits section Date column and schedule control (#250)', () => {
 		await expect.element(testPage.getByRole('button', { name: 'Add a Visit' })).toBeVisible();
 	});
 
+	// #2540: the Doula a new Visit names is emailed, and the line says so.
+	it('says the Doula a new Visit names was emailed', async () => {
+		await renderWithFixtureResponder((path, init) => {
+			if (!init || init.method !== 'POST' || !path.endsWith('/visits')) return;
+			return Promise.resolve(
+				jsonResponse({ visitId: 'visit-3', staffId: 'staff-2', notifiedStaffIds: ['staff-2'] }, 201)
+			);
+		});
+
+		await testPage.getByRole('button', { name: 'Add a Visit' }).click();
+		await testPage.getByLabelText('Who is this Visit for?').selectOptions('Jordan Reyes');
+		await testPage.getByRole('button', { name: 'Save Visit' }).click();
+
+		await expect
+			.element(testPage.getByText('The Visit for Jordan Reyes is added. We emailed Jordan Reyes to say so.'))
+			.toHaveFocus();
+	});
+
 	it('says why an add was refused, in the add form', async () => {
 		await renderWithFixtureResponder((path, init) =>
 			init?.method === 'POST' && path.endsWith('/visits')

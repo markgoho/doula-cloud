@@ -142,12 +142,13 @@ func ReassignHandler(enq tasknudge.Enqueuer) http.Handler {
 		// grantAssignee's rule, shared with the create path. It runs
 		// only here, below the locking read's own sql.ErrNoRows 404, so a
 		// reassign that matched no Visit attaches nobody.
-		if !grantAssignee(w, r, c, engagementID, staffID, grants) {
+		putOn, ok := grantAssignee(w, r, c, engagementID, staffID, grants)
+		if !ok {
 			// coverage:ignore reason: grantAssignee only reports false on a DB write failure, not exercised by unit tests
 			return
 		}
 
-		notified, err := queueReassignNotices(r, c, visitID, previousStaffID, staffID)
+		notified, err := queueReassignNotices(r, c, engagementID, visitID, previousStaffID, staffID, putOn)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -165,33 +166,32 @@ func ReassignHandler(enq tasknudge.Enqueuer) http.Handler {
 // and to the one it moved off (#2436), in the reassignment's own
 // transaction, and returns who they are. A move onto the person already
 // holding it tells nobody, and nobody is told about a move she made
-// herself.
-func queueReassignNotices(r *http.Request, c visitWriteContext, visitID, previousStaffID, staffID string) ([]string, error) {
+// herself. The one it moved onto gets queueAssigneeNotice's one email.
+func queueReassignNotices(r *http.Request, c visitWriteContext, engagementID, visitID, previousStaffID, staffID string, putOn bool) ([]string, error) {
 	notified := []string{}
 	if previousStaffID == staffID {
 		return notified, nil
 	}
-	for _, n := range []struct {
-		recipient string
-		kind      staffnotice.Kind
-	}{
-		{staffID, staffnotice.KindVisitReassignedTo},
-		{previousStaffID, staffnotice.KindVisitReassignedFrom},
-	} {
-		if n.recipient == c.staffID {
-			continue
-		}
-		if err := staffnotice.Queue(r.Context(), c.tx, staffnotice.Notice{
-			PracticeID:       c.practiceID,
-			RecipientStaffID: n.recipient,
-			Kind:             n.kind,
-			SubjectID:        visitID,
-			TriggeredBy:      c.staffID,
-		}); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return nil, fmt.Errorf("visit: queue reassign notice: %w", err)
-		}
-		notified = append(notified, n.recipient)
+	queued, err := queueAssigneeNotice(r, c, engagementID, visitID, staffID, putOn)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, err
 	}
-	return notified, nil
+	if queued {
+		notified = append(notified, staffID)
+	}
+	if previousStaffID == c.staffID {
+		return notified, nil
+	}
+	if err := staffnotice.Queue(r.Context(), c.tx, staffnotice.Notice{
+		PracticeID:       c.practiceID,
+		RecipientStaffID: previousStaffID,
+		Kind:             staffnotice.KindVisitReassignedFrom,
+		SubjectID:        visitID,
+		TriggeredBy:      c.staffID,
+	}); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, fmt.Errorf("visit: queue reassign notice: %w", err)
+	}
+	return append(notified, previousStaffID), nil
 }
