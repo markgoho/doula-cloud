@@ -67,7 +67,7 @@ func openLots(ctx context.Context, tx *sql.Tx, practiceID string) ([]lot, error)
 }
 
 // refundLots is openLots as ops_runtime reads it, through
-// ops_refund_lots (00143), which also locks the Practice row the way
+// ops_refund_lots (00147), which also locks the Practice row the way
 // ConsumeCredit does, so two refunds cannot both read one lot as unspent.
 func refundLots(ctx context.Context, tx *sql.Tx, practiceID string) ([]lot, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT * FROM ops_refund_lots($1)`, practiceID)

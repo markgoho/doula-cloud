@@ -91,7 +91,7 @@ type refundDiff struct {
 var errNoPractice = errors.New("no such practice")
 
 // readRefundPractice reads the Practice's name and Owners through
-// ops_refund_practice (00143).
+// ops_refund_practice (00147).
 func readRefundPractice(ctx context.Context, tx *sql.Tx, practiceID string) (string, []refundOwner, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT practice_name, owner_staff_id, owner_name FROM ops_refund_practice($1)`, practiceID)
 	if err != nil {

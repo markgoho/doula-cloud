@@ -361,7 +361,7 @@ type rowKey struct {
 //
 // An operator reads as the person's name with DoulaCloud (ADR-0022's
 // amendment of 2026-10-31), and as DoulaCloud alone only when
-// operator_act_actor_name (00142) gave no name, which it does for a
+// operator_act_actor_name (00146) gave no name, which it does for a
 // reader at any other Practice.
 func ActorName(actorKind string, staffName, clientGivenName, clientPreferredName, clientFamilyName, operatorName sql.NullString, form ClientActorForm) string {
 	switch activity.ActorKind(actorKind) {
@@ -383,6 +383,6 @@ func ActorName(actorKind string, staffName, clientGivenName, clientPreferredName
 		}
 		return activity.OperatorActorName(operatorName.String)
 	}
-	// coverage:ignore reason: actor_kind is a four-value Postgres enum (00051, 00141) and the switch above names all four, so this is the compiler's floor rather than a reachable case
+	// coverage:ignore reason: actor_kind is a four-value Postgres enum (00051, 00145) and the switch above names all four, so this is the compiler's floor rather than a reachable case
 	return activity.SystemActorName
 }

@@ -53,7 +53,7 @@ type foundingGrantDiff struct {
 	Credits    int `json:"credits"`
 }
 
-// grantPractice is ops_founding_grant_practice's one row (00144).
+// grantPractice is ops_founding_grant_practice's one row (00148).
 type grantPractice struct {
 	foundingGrantCheck
 	grantedActID sql.NullString

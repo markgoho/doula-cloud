@@ -52,7 +52,7 @@ func staffIDFrom(w http.ResponseWriter, r *http.Request) (string, bool) {
 }
 
 // readSecondFactorStaff reads the Staff member through
-// ops_second_factor_staff (00145).
+// ops_second_factor_staff (00149).
 func readSecondFactorStaff(ctx context.Context, tx *sql.Tx, staffID string) (secondFactorStaff, error) {
 	staff := secondFactorStaff{PracticeNames: []string{}}
 	rows, err := tx.QueryContext(ctx, `SELECT staff_name, practice_id, practice_name FROM ops_second_factor_staff($1)`, staffID)

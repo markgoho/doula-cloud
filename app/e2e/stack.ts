@@ -409,7 +409,7 @@ function seedAppE2ERole() {
 	);
 }
 
-// doula-ops's login (ADR-0062), made the same way: 00138 creates the
+// doula-ops's login (ADR-0062), made the same way: 00142 creates the
 // ops_runtime group role, and this is the member doula-ops signs in as.
 function seedOpsE2ERole() {
 	execSQL(

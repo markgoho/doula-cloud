@@ -134,7 +134,7 @@ type subjectName struct {
 }
 
 // nameSubjects fills each row's Practice and Staff names, and a refund's
-// requesting Owner, through ops_operator_log_names (00152).
+// requesting Owner, through ops_operator_log_names (00156).
 func nameSubjects(ctx context.Context, tx *sql.Tx, items []logRow) error {
 	practiceIDs, staffIDs := []string{}, []string{}
 	for _, row := range items {
