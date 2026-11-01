@@ -523,6 +523,16 @@ export function seedPracticeWithStaff(name: string, staffCount: number): string 
 }
 
 /**
+ * Marks a seeded Practice's Deletion finalized, so ops lists it on the
+ * Deleted list (#2475).
+ */
+export function finalizePracticeDeletion(practiceId: string): void {
+	execSQL(
+		`UPDATE practices SET deletion_requested_at = now() - interval '30 days', deletion_finalize_at = now(), deleted_at = now() WHERE id = ${sqlLiteral(practiceId)};`
+	);
+}
+
+/**
  * Seeds a Staff member on identityUID, an Identity Platform account the
  * caller has already made, at one new Practice per name: whose
  * two-factor authentication an operator resets in ops (#2483). Returns
