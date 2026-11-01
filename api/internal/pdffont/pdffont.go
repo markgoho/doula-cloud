@@ -39,6 +39,17 @@
 // A character outside the BMP, such as 👶, copies out in all four
 // (#2550, tounicode.go; astral_test.go checks it in PDFium).
 //
+// Keeping MuPDF exact puts some of the layer away from its outlines
+// (#2551). A neutral stretch, every run of characters that is not strong
+// right-to-left, is written left to right in one piece from its leftmost
+// character. One that crosses from a right-to-left segment into a
+// left-to-right one ("]. The doula…") lays its English over the Arabic,
+// so a selection there highlights the wrong place and poppler interleaves
+// the two; one inside a right-to-left segment (" 👶 [") sits reversed
+// within its own box. Splitting the stretch where its segment changes puts
+// each piece where it is drawn, but MuPDF then reads a space at the split,
+// even with a direction mark between the pieces.
+//
 // The faces, and the license each is embedded and redistributed under,
 // sit in fonts/ beside their license text:
 //
