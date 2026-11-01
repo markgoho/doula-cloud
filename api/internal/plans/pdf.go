@@ -8,10 +8,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/go-pdf/fpdf"
-
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/pdffont"
 )
 
 // contentTypePDF is the Birth Plan PDF's Content-Type -- this package's
@@ -41,15 +40,11 @@ const (
 // anyone is on the Engagement, the Practice, and the day it last changed,
 // the same lines the printed page opens with.
 func renderPlanPDF(heading string, m masthead, fields []Field, answers Answers) ([]byte, error) {
-	pdf := fpdf.New("P", "mm", "A4", "")
-	tr := pdf.UnicodeTranslatorFromDescriptor("")
-	pdf.AddPage()
+	pdf := pdffont.New()
 
-	pdf.SetFont("Arial", "B", 16)
-	pdf.MultiCell(0, 10, tr(heading), "", "", false)
+	pdf.Paragraph(pdffont.Bold, 16, 10, heading)
 	pdf.Ln(2)
 
-	pdf.SetFont("Arial", "", 12)
 	for _, line := range []string{
 		"Name: " + m.clientName,
 		m.doulaLine(),
@@ -57,22 +52,19 @@ func renderPlanPDF(heading string, m masthead, fields []Field, answers Answers) 
 		"Last changed: " + m.changedOn.Format(changedOnLayout),
 	} {
 		if line != "" {
-			pdf.MultiCell(0, 6, tr(line), "", "", false)
+			pdf.Paragraph(pdffont.Regular, 12, 6, line)
 		}
 	}
 	pdf.Ln(4)
 
 	for _, field := range fields {
 		if field.Type == fieldTypeSectionHeader {
-			pdf.SetFont("Arial", "B", 13)
-			pdf.MultiCell(0, 8, tr(field.Label), "", "", false)
+			pdf.Paragraph(pdffont.Bold, 13, 8, field.Label)
 			pdf.Ln(2)
 			continue
 		}
-		pdf.SetFont("Arial", "B", 12)
-		pdf.MultiCell(0, 6, tr(field.Label), "", "", false)
-		pdf.SetFont("Arial", "", 12)
-		pdf.MultiCell(0, 6, tr(planFieldAnswerText(field, answers)), "", "", false)
+		pdf.Paragraph(pdffont.Bold, 12, 6, field.Label)
+		pdf.Paragraph(pdffont.Regular, 12, 6, planFieldAnswerText(field, answers))
 		pdf.Ln(3)
 	}
 

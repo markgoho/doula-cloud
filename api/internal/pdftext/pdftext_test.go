@@ -6,46 +6,37 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-pdf/fpdf"
-
+	"doula-cloud/api/internal/pdffont"
 	"doula-cloud/api/internal/pdftext"
 )
 
-// TestText_ReadsBackWhatFpdfDrew proves Text returns every line an fpdf
-// document draws, in order, with fpdf's escapes for "(", ")" and "\"
-// undone.
+// TestText_ReadsBackWhatFpdfDrew proves Text returns every line a
+// pdffont document draws, in order, with fpdf's escapes for "(", ")"
+// and "\" undone, and a line drawn in two faces read back as one line.
 func TestText_ReadsBackWhatFpdfDrew(t *testing.T) {
-	pdf := fpdf.New("P", "mm", "A4", "")
-	pdf.AddPage()
-	pdf.SetFont("Arial", "", 12)
-	pdf.MultiCell(0, 8, "Rooted (Birth) Collective", "", "", false)
-	pdf.MultiCell(0, 8, `A back\slash`, "", "", false)
+	d := pdffont.New()
+	d.Paragraph(pdffont.Regular, 12, 8, "Rooted (Birth) Collective")
+	d.Paragraph(pdffont.Regular, 12, 8, `A back\slash`)
+	d.Paragraph(pdffont.Regular, 12, 8, "Mei 王 Lin")
 	var buf bytes.Buffer
-	if err := pdf.Output(&buf); err != nil {
+	if err := d.Output(&buf); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 
 	got := pdftext.Text(buf.Bytes())
-	want := "Rooted (Birth) Collective\n" + `A back\slash`
+	want := "Rooted (Birth) Collective\n" + `A back\slash` + "\nMei 王 Lin"
 	if got != want {
 		t.Fatalf("Text = %q, want %q", got, want)
 	}
 }
 
 // TestText_SkipsWhatIsNotDrawnText proves a stream that is not
-// zlib-compressed, one cut short mid-inflate, a content line that shows
-// no text, and a stream with no "endstream" are each passed over rather
-// than failing the read.
+// zlib-compressed, one cut short mid-inflate, one that inflates to binary
+// rather than drawing, and a stream with no "endstream" are each passed
+// over rather than failing the read.
 func TestText_SkipsWhatIsNotDrawnText(t *testing.T) {
-	var drawn bytes.Buffer
-	w := zlib.NewWriter(&drawn)
-	if _, err := w.Write([]byte("BT 0 0 Td\n(kept)Tj\nET")); err != nil {
-		t.Fatalf("compress: %v", err)
-	}
-	if err := w.Close(); err != nil {
-		t.Fatalf("compress: %v", err)
-	}
-	truncated := drawn.Bytes()[:2] // a zlib header and nothing after it
+	drawn := deflate(t, "BT 0 0 Td\n) (\x00k\x00e\x00p\x00t)Tj\nET")
+	truncated := drawn[:2] // a zlib header and nothing after it
 
 	var doc bytes.Buffer
 	doc.WriteString("stream\nnot zlib at all\nendstream\n")
@@ -53,7 +44,10 @@ func TestText_SkipsWhatIsNotDrawnText(t *testing.T) {
 	doc.Write(truncated)
 	doc.WriteString("endstream\n")
 	doc.WriteString("stream\n")
-	doc.Write(drawn.Bytes())
+	doc.Write(deflate(t, "\x01\x02 binary (\x00x)Tj"))
+	doc.WriteString("endstream\n")
+	doc.WriteString("stream\n")
+	doc.Write(drawn)
 	doc.WriteString("endstream\n")
 	doc.WriteString("stream\nnever closed")
 
@@ -63,4 +57,28 @@ func TestText_SkipsWhatIsNotDrawnText(t *testing.T) {
 	if strings.Contains(pdftext.Text(nil), "kept") {
 		t.Fatal("Text of no bytes drew something")
 	}
+}
+
+// TestText_ReadsAnEscapedReturnAndAStringCutShort proves fpdf's escape
+// for a carriage return reads back as one, and a string with no closing
+// parenthesis, which no Tj shows, draws nothing.
+func TestText_ReadsAnEscapedReturnAndAStringCutShort(t *testing.T) {
+	doc := append([]byte("stream\n"), deflate(t, "BT 0 9 Td (\x00a\x00\\r)Tj ET BT 0 8 Td (\x00c\\")...)
+	doc = append(doc, []byte("endstream\n")...)
+	if got, want := pdftext.Text(doc), "a\r"; got != want {
+		t.Fatalf("Text = %q, want %q", got, want)
+	}
+}
+
+func deflate(t *testing.T, content string) []byte {
+	t.Helper()
+	var out bytes.Buffer
+	w := zlib.NewWriter(&out)
+	if _, err := w.Write([]byte(content)); err != nil {
+		t.Fatalf("compress: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("compress: %v", err)
+	}
+	return out.Bytes()
 }

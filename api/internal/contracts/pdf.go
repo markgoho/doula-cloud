@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/go-pdf/fpdf"
+	"doula-cloud/api/internal/pdffont"
 )
 
 // contentTypePDF is the Signed PDF's Content-Type, shared by the Sign
@@ -98,19 +98,15 @@ func (s signature) lines() []string {
 // transition. It is rendered once, at signing, and never again: a PDF
 // stored before #2214 added the signature block keeps the prose it was
 // stored with rather than being re-rendered, because the stored file is
-// the record of what was produced at that moment (#71). Uses cp1252
-// (fpdf's UnicodeTranslatorFromDescriptor default), which covers the
-// accented Latin characters and typographic punctuation (em dash, curly
-// quotes) expected in Client names and free-text prose.
+// the record of what was produced at that moment (#71). Text goes
+// through pdffont's embedded Unicode faces, so a name or prose in any
+// script prints as typed (#2359).
 func renderContractPDF(filledProse string, sig signature) ([]byte, error) {
-	pdf := fpdf.New("P", "mm", "A4", "")
-	tr := pdf.UnicodeTranslatorFromDescriptor("")
-	pdf.AddPage()
-	pdf.SetFont("Arial", "", 12)
-	pdf.MultiCell(0, 8, tr(filledProse), "", "", false)
+	pdf := pdffont.New()
+	pdf.Paragraph(pdffont.Regular, 12, 8, filledProse)
 	pdf.Ln(8)
 	for _, line := range sig.lines() {
-		pdf.MultiCell(0, 8, tr(line), "", "", false)
+		pdf.Paragraph(pdffont.Regular, 12, 8, line)
 	}
 
 	var buf bytes.Buffer
