@@ -147,7 +147,8 @@ test('#2470: doula-api refuses an operator token, second factor and all', async 
 	// The emulator refuses this at verify, before the tenant check runs, so
 	// this proves the outcome; api/'s operatortoken specs prove the check.
 	expect(response.status()).toBe(401);
-	expect((await response.json()).code).toBe('UNAUTHORIZED');
+	const refusal = await response.json();
+	expect(refusal.code).toBe('UNAUTHORIZED');
 	expect(response.headers()['set-cookie']).toBeUndefined();
 });
 

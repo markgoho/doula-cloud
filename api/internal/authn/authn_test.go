@@ -350,6 +350,18 @@ func TestBeginBootstrap_InvalidToken(t *testing.T) {
 	assertUnauthorized(t, rec, "invalid token")
 }
 
+func TestBeginBootstrap_RefusesAVerifiedOperatorToken(t *testing.T) {
+	db := testdb.New(t)
+
+	rec, _, ok := bootstrapRequest(t, db, authntest.Verifier{UID: testUID, Tenant: "operators-local"}, func(req *http.Request) {
+		req.Header.Set("Authorization", "Bearer operator-token")
+	})
+	if ok {
+		t.Fatal("expected ok=false, got true")
+	}
+	assertUnauthorized(t, rec, authn.MsgOperatorToken)
+}
+
 // TestBeginBootstrap_SessionCookieIsNotACredential pins that the
 // bootstrap path is Bearer-only in the other direction too: a live
 // session cookie does not stand in for the ID token, because a caller
