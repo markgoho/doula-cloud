@@ -32,9 +32,12 @@
 //     that touches an Arabic letter and puts a mark before its letter.
 //   - PDFium 156 (Chrome, Edge) reorders each line by position with its
 //     own bidi pass: on a left-to-right line Arabic words come out left to
-//     right, and a bracket closing an Arabic run comes out turned.
+//     right, a bracket closing an Arabic run comes out turned, and an emoji
+//     between Arabic words is dropped.
 //
 // A PDF Chromium prints from the same text does no better in any of them.
+// A character outside the BMP, such as 👶, copies out in all four
+// (#2550, tounicode.go; astral_test.go checks it in PDFium).
 //
 // The faces, and the license each is embedded and redistributed under,
 // sit in fonts/ beside their license text:
@@ -159,12 +162,13 @@ type Doc struct {
 	registered map[string]bool
 	shaper     shaping.HarfbuzzShaper
 	shapers    map[string]*shapingFace
+	astral     map[rune]rune
 }
 
 // New starts a Doc with its first page added. Cells carry no inner
 // margin, so the runs of one line sit flush against each other.
 func New() *Doc {
-	d := &Doc{Fpdf: fpdf.New("P", "mm", "A4", ""), registered: map[string]bool{}, shapers: map[string]*shapingFace{}}
+	d := &Doc{Fpdf: fpdf.New("P", "mm", "A4", ""), registered: map[string]bool{}, shapers: map[string]*shapingFace{}, astral: map[rune]rune{}}
 	d.SetCellMargin(0)
 	d.AddPage()
 	return d
@@ -393,7 +397,13 @@ func firstFace(r rune, fallback int) int {
 // printable is text in Unicode's composed form, so a letter typed with a
 // combining mark ("e" and U+0308) prints as the one precomposed glyph
 // ("ë") rather than as a mark fpdf cannot place over its letter. Invalid
-// UTF-8 prints as U+FFFD.
+// UTF-8, and a noncharacter from the range the layer's codes are drawn
+// from (tounicode.go), prints as U+FFFD.
 func printable(text string) string {
-	return strings.ToValidUTF8(norm.NFC.String(text), string(utf8.RuneError))
+	return strings.Map(func(r rune) rune {
+		if r >= firstAstralCode && r <= lastAstralCode {
+			return utf8.RuneError
+		}
+		return r
+	}, strings.ToValidUTF8(norm.NFC.String(text), string(utf8.RuneError)))
 }

@@ -28,8 +28,11 @@ import (
 // another on the same baseline, as fpdf draws a line written in more than
 // one font, are joined into one line. A stream that is not
 // zlib-compressed, or does not read as a content stream (an embedded
-// font, say), is skipped.
+// font, say), is skipped. A code a ToUnicode CMap maps one by one, as
+// pdffont maps a character outside the BMP (#2550), reads as what it maps
+// to.
 func Text(pdf []byte) string {
+	codes := mappedCodes(pdf)
 	var lines []string
 	rest := pdf
 	for {
@@ -52,9 +55,43 @@ func Text(pdf []byte) string {
 		if err != nil && len(content) == 0 {
 			continue
 		}
-		lines = append(lines, drawnLines(content)...)
+		for _, line := range drawnLines(content) {
+			lines = append(lines, strings.Map(func(r rune) rune {
+				if m, ok := codes[r]; ok {
+					return m
+				}
+				return r
+			}, line))
+		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+// mappedCodes reads every beginbfchar entry of pdf's ToUnicode CMaps,
+// which fpdf writes uncompressed, that maps one code to one character.
+func mappedCodes(pdf []byte) map[rune]rune {
+	codes := map[rune]rune{}
+	rest := pdf
+	for {
+		start := bytes.Index(rest, []byte("beginbfchar\n"))
+		if start < 0 {
+			return codes
+		}
+		rest = rest[start+len("beginbfchar\n"):]
+		var entries []byte
+		entries, rest, _ = bytes.Cut(rest, []byte("endbfchar"))
+		for line := range strings.SplitSeq(string(entries), "\n") {
+			from, to, ok := strings.Cut(line, " ")
+			if !ok {
+				continue
+			}
+			code := []rune(decodeHex([]byte(strings.Trim(from, "<>"))))
+			char := []rune(decodeHex([]byte(strings.Trim(to, "<>"))))
+			if len(code) == 1 && len(char) == 1 {
+				codes[code[0]] = char[0]
+			}
+		}
+	}
 }
 
 // drawnLines walks one content stream's tokens. It remembers the last

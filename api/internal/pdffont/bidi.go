@@ -197,7 +197,7 @@ func (d *Doc) typedLayer(segments []segment, style Style, size, lineHeight float
 			// line's own.
 			y := d.GetY()
 			d.SetXY(x, y+0.3*size*(1-c.stretch)/d.GetConversionRatio())
-			d.layer(b.String(), w, lineHeight)
+			d.layer(b.String(), w, lineHeight, scale)
 			d.SetY(y)
 			chained = true
 			i = j
@@ -224,7 +224,7 @@ func (d *Doc) typedLayer(segments []segment, style Style, size, lineHeight float
 			d.use(stretch[k].face, style, size)
 			w := d.GetStringWidth(shownText(b.String())) * scale
 			d.SetX(x)
-			d.layer(b.String(), w, lineHeight)
+			d.layer(b.String(), w, lineHeight, scale)
 			x += w
 			k = l
 		}

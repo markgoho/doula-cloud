@@ -27,7 +27,7 @@ var readerCases = map[string][]string{
 	"digits":    {"شارع 12 رقم 3", "العنوان: 12 Main St, شقة 4"},
 	"mixedname": {"This agreement is between Rooted Birth Collective and سارة الحداد for doula services."},
 	"plan":      {"خطة الولادة ❤️", "Doula: Lena (سارة)", "Practice: دولا [المدينة]", "في المنزل 12 34 (مع زوجي) 👶"},
-	"latin":     {"Signed electronically by: Ada Lovelace", "प्रिया शर्मा", "Ada ❤️ Lovelace 👶"},
+	"latin":     {"Signed electronically by: Ada Lovelace", "प्रिया शर्मा", babyLine},
 }
 
 const pdfPath = "{pdf}"
