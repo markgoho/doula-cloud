@@ -11,7 +11,7 @@
 # shared string was the boundary. A service account address is not a secret,
 # so state now carries none at all.
 
-# `prevent_destroy` is deliberately not set on any of the four resources in
+# `prevent_destroy` is deliberately not set on any resource in
 # this file. None holds data or identity: a Scheduler job is a schedule and a
 # target URL, re-created from this configuration in one apply, and the queue
 # and its IAM binding are the same. A plan that proposes to recreate one of
@@ -118,4 +118,78 @@ resource "google_cloud_tasks_queue_iam_member" "notification_nudge_runtime_enque
   name     = google_cloud_tasks_queue.notification_nudge.id
   project  = "doula-cloud"
   role     = "roles/cloudtasks.enqueuer"
+}
+
+# #1403's waking-hours window: every policy in
+# `local.waking_hours_alert_policies` (monitoring.tf) is switched off at
+# 22:00 and on at 07:00 America/New_York. A failure overnight is found at
+# 07:00, when the re-enabled policy evaluates and opens its incident. The
+# call is a Monitoring API PATCH, so the token is an OAuth access token for
+# `alert-window@`, not an OIDC token for `internal-caller@`.
+resource "google_cloud_scheduler_job" "alerts_off" {
+  for_each = local.waking_hours_alert_policies
+
+  attempt_deadline = "180s"
+  deletion_policy  = "DELETE"
+  description      = "#1403: switches off the ${each.key} alert policy at the end of the founder's waking hours"
+  name             = "alerts-off-${each.key}"
+  paused           = false
+  project          = "doula-cloud"
+  region           = "us-central1"
+  schedule         = "0 22 * * *"
+  time_zone        = "America/New_York"
+
+  http_target {
+    body        = base64encode(jsonencode({ enabled = false }))
+    headers     = { "Content-Type" = "application/json" }
+    http_method = "PATCH"
+    uri         = "https://monitoring.googleapis.com/v3/${each.value}?updateMask=enabled"
+
+    oauth_token {
+      scope                 = "https://www.googleapis.com/auth/monitoring"
+      service_account_email = google_service_account.alert_window.email
+    }
+  }
+
+  retry_config {
+    retry_count          = 3
+    max_retry_duration   = "0s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "3600s"
+    max_doublings        = 5
+  }
+}
+
+resource "google_cloud_scheduler_job" "alerts_on" {
+  for_each = local.waking_hours_alert_policies
+
+  attempt_deadline = "180s"
+  deletion_policy  = "DELETE"
+  description      = "#1403: switches on the ${each.key} alert policy at the start of the founder's waking hours"
+  name             = "alerts-on-${each.key}"
+  paused           = false
+  project          = "doula-cloud"
+  region           = "us-central1"
+  schedule         = "0 7 * * *"
+  time_zone        = "America/New_York"
+
+  http_target {
+    body        = base64encode(jsonencode({ enabled = true }))
+    headers     = { "Content-Type" = "application/json" }
+    http_method = "PATCH"
+    uri         = "https://monitoring.googleapis.com/v3/${each.value}?updateMask=enabled"
+
+    oauth_token {
+      scope                 = "https://www.googleapis.com/auth/monitoring"
+      service_account_email = google_service_account.alert_window.email
+    }
+  }
+
+  retry_config {
+    retry_count          = 3
+    max_retry_duration   = "0s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "3600s"
+    max_doublings        = 5
+  }
 }
