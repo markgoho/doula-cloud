@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -214,6 +215,7 @@ func clearSecondFactor(w http.ResponseWriter, r *http.Request, d Deps, tx *sql.T
 		return false
 	}
 	if err := d.Accounts.ClearSecondFactors(ctx, identityUID.String); err != nil {
+		log.Printf("doula-ops: reset two-factor authentication: %v", err)
 		apierr.Write(w, http.StatusBadGateway, apierr.CodeInternal, msgIdentityRefused, nil)
 		return false
 	}

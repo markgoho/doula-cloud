@@ -522,6 +522,30 @@ export function seedPracticeWithStaff(name: string, staffCount: number): string 
 	return practiceId;
 }
 
+/**
+ * Seeds a Staff member on identityUID, an Identity Platform account the
+ * caller has already made, at one new Practice per name: whose
+ * two-factor authentication an operator resets in ops (#2483). Returns
+ * the Staff member's id.
+ */
+export function seedStaffAtPractices(identityUID: string, firstName: string, lastName: string, practiceNames: string[]): string {
+	const staffId = randomUUID();
+	const statements = [
+		`INSERT INTO staff (id, identity_uid, first_name, last_name, email, work_state)
+		 VALUES (${sqlLiteral(staffId)}, ${sqlLiteral(identityUID)}, ${sqlLiteral(firstName)}, ${sqlLiteral(lastName)}, ${sqlLiteral(`staff-${staffId}@doula-cloud.invalid`)}, 'NY');`
+	];
+	for (const name of practiceNames) {
+		const practiceId = randomUUID();
+		statements.push(
+			`INSERT INTO practices (id, name, timezone) VALUES (${sqlLiteral(practiceId)}, ${sqlLiteral(name)}, 'America/New_York');
+			 INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type)
+			 VALUES (${sqlLiteral(practiceId)}, ${sqlLiteral(staffId)}, ARRAY['owner']::practice_role[], 'employee');`
+		);
+	}
+	execSQL(statements.join('\n'));
+	return staffId;
+}
+
 // Seeds an Engagement directly: #397 decoupled Client creation from
 // Engagement creation (ADR-0017 -- an Engagement now comes from a
 // separate Engagement Request, not built yet), so POST .../clients no

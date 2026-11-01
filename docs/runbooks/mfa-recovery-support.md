@@ -1,6 +1,6 @@
 # Runbook: MFA recovery, DoulaCloud support action
 
-[#615](https://github.com/markgoho/doula-cloud/issues/615)'s third recovery path: a DoulaCloud operator clears a person's TOTP enrollment by hand, after every other path has failed her. [#605](https://github.com/markgoho/doula-cloud/issues/605)'s resolution comment records why this exists and why it has no screen — read that first if you have not.
+[#615](https://github.com/markgoho/doula-cloud/issues/615)'s third recovery path: a DoulaCloud operator clears a person's TOTP enrollment in ops, after every other path has failed her. [#605](https://github.com/markgoho/doula-cloud/issues/605)'s resolution comment records why this exists and why no Practice can reach it — read that first if you have not. It has no screen in the product a Practice uses; its one screen is in ops ([#2483](https://github.com/markgoho/doula-cloud/issues/2483)).
 
 **When this applies.** A Practice's sole Owner has lost both her phone (the TOTP enrollment) and her saved recovery codes ([#615](https://github.com/markgoho/doula-cloud/issues/615)'s second path). She has no Owner above her to vouch for her (the first path). Nothing else in the product can get her back in.
 
@@ -21,29 +21,17 @@ That match is the whole authorization. There is no lesser standard, and no subst
 
 ## Running it
 
-There is no screen for this — deliberately, per #615's AC. It is one authenticated HTTP call, made by an operator who can mint a token for `internal-caller@doula-cloud.iam.gserviceaccount.com` (ADR-0037: the boundary is a caller identity, not a shared secret, and the token expires within the hour rather than being a string somebody keeps):
+Since [#2483](https://github.com/markgoho/doula-cloud/issues/2483) the reset is taken only in ops ([ADR-0062](../adr/0062-the-platform-operator-works-in-a-separate-app-at-ops-doula-cloud-with-its-own-service-and-database-role.md)). `doula-api` no longer serves it, and there is no token to mint and no name to type: who ran it comes from your operator sign-in.
 
-```bash
-TOKEN=$(gcloud auth print-identity-token \
-  --impersonate-service-account=internal-caller@doula-cloud.iam.gserviceaccount.com \
-  --audiences=https://doula-api-850855848778.us-central1.run.app \
-  --include-email)
+1. Sign in at `https://ops.doula.cloud`.
+2. Open `/staff/<the staff row id>/two-factor`. The id is the `staff.id` UUID of the person whose enrollment you are clearing, **not** a Practice id.
+3. The check page names the Staff member and every Practice she belongs to, and restates the two conditions above. Check the name against the person on the call before you go on.
+4. Enter your password and a new authenticator-app code, then press **Reset two-factor authentication**. The code admits this one act.
 
-curl -s -o /dev/null -w '%{http_code}\n' \
-  -X POST 'https://doula-api-850855848778.us-central1.run.app/api/internal/staffauth/mfa-recovery/support-clear' \
-  -H "Authorization: Bearer $TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"staffId": "<the staff row id>", "operator": "<your name>"}'
-```
-
-`--audiences` is the service's **base** URL, not this endpoint's own URL, and `--include-email` is required: the guard checks the token's `email` claim against the allowlist, and a token minted without that flag carries none. Getting either wrong produces a `401` from a token that is otherwise perfectly valid.
-
-- `staffId` is the `staff.id` UUID of the person whose enrollment you are clearing — find it from the Practice's roster in a support tool, or by asking engineering to look it up by email if you only have that. It is **not** a Practice id.
-- `operator` is your own name, plain text. It becomes `staff_auth_events.actor_operator` — the permanent record of who ran this and cannot be blank. Use a name a colleague reading the audit trail later would recognize, not an initials or a ticket number.
-- A `204` means it worked: the enrollment is cleared, every session for that identity is ended, and the person has been mailed a notice. A `404` means the `staffId` does not name a real Staff row — double-check it before retrying. A `401` means the token is wrong — most often an expired one, a missing `--include-email`, or an `--audiences` carrying this endpoint's path rather than the base URL. Mint a fresh one rather than reusing a stale copy.
+The result page says the reset is done: every authenticator on her sign-in is removed, every session for that identity is ended, and she has been mailed a notice. A refusal says why in plain words. "There is no Staff member at this address" means the id names no live Staff row — check it before retrying. If Identity Platform refuses, nothing has changed; try again. Pressing the button twice on one page is the same reset, not a second one.
 
 **What happens next, for the person.** She receives an email that her two-factor authenticator was reset and every session was signed out. She signs in with her password — Identity Platform no longer challenges for a second factor once none is enrolled — and [#606](https://github.com/markgoho/doula-cloud/issues/606)'s Practice gate refuses her at any Practice boundary that requires MFA until she enrolls a new authenticator. No extra step is needed from you; this is the same gate every other recovery path relies on.
 
 ## Recording it
 
-The `staff_auth_events` row this call writes (`reason = 'support'`) is the permanent record. There is nothing further to file — do not also open a support ticket restating what the row already says, and do not note this in any Practice-facing channel. If the Stripe Connect match was unusually difficult to make (an expired ID, a name mismatch you resolved some other way, anything that would make a future reviewer ask "how did we know it was really her?"), say so in your own team's incident notes — the audit row records *that* the match was made, not the details of how.
+The reset writes three records, and they are the permanent record: an `operator_acts` row (`second_factor_cleared`, with the time of your fresh code), the `staff_auth_events` row (`reason = 'support'`) keyed to that act, and a row in each of her Practices' Activity that shows the reset under your name with DoulaCloud. There is nothing further to file — do not also open a support ticket restating what the rows already say, and do not note this in any Practice-facing channel. If the Stripe Connect match was unusually difficult to make (an expired ID, a name mismatch you resolved some other way, anything that would make a future reviewer ask "how did we know it was really her?"), say so in your own team's incident notes — the records say *that* the match was made, not the details of how.
