@@ -18,7 +18,7 @@
 		practicePushSubscriptionsPath,
 		registerPushSubscription
 	} from '#lib/pushRegistration.js';
-	import { decideOffer } from '#lib/offer.js';
+	import { decideOffer, type DecisionOutcome } from '#lib/offer.js';
 	import {
 		closeSecondFactorRecommendation,
 		isConnectCardShown,
@@ -171,9 +171,18 @@
 	// accepting an Offer supersedes every other open Offer on the same
 	// Engagement, and it can spend a credit, so the other blocks are stale too.
 	async function handleDecide(offerId: string, action: 'accept' | 'decline') {
-		await decideOffer(apiFetchWithSession, page.params.practiceId!, offerId, action);
+		const decision = await decideOffer(apiFetchWithSession, page.params.practiceId!, offerId, action);
 		await load();
+		return decision;
 	}
+
+	let offerOutcome = $state<DecisionOutcome>();
+
+	const offerEngagementHref = (engagementId: string) =>
+		resolve('/practices/[practiceId]/engagements/[engagementId]', {
+			practiceId: page.params.practiceId!,
+			engagementId
+		});
 
 	// #455: the roll-up of Engagements whose thread's latest Message came
 	// from the Client. rowHref makes the Client's own name (accessor's
@@ -235,7 +244,13 @@
 		text="Work you have been offered. Accepting puts you on the birth; declining is final for that offer."
 		tone="variant"
 	/>
-	<OfferInbox offers={landing!.openOffers} onDecide={handleDecide} />
+	<OfferInbox
+		offers={landing!.openOffers}
+		onDecide={handleDecide}
+		practiceName={session.practiceName}
+		engagementHref={offerEngagementHref}
+		bind:outcome={offerOutcome}
+	/>
 {/snippet}
 
 {#snippet primary()}

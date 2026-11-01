@@ -36,6 +36,7 @@
 		title: string;
 		consequence: string;
 		confirmLabel: string;
+		cancelLabel?: string;
 		error?: string;
 		onConfirm: () => void | Promise<void>;
 		onCancel?: () => void;
@@ -46,6 +47,7 @@
 		title,
 		consequence,
 		confirmLabel,
+		cancelLabel = 'Cancel',
 		error,
 		onConfirm,
 		onCancel
@@ -80,7 +82,7 @@
 			<Notice variant="error" message={error} />
 		{/if}
 		<div class="actions">
-			<Button label="Cancel" variant="secondary" onClick={handleCancel} />
+			<Button label={cancelLabel} variant="secondary" onClick={handleCancel} />
 			<Button
 				label={confirmLabel}
 				variant="destructive"
