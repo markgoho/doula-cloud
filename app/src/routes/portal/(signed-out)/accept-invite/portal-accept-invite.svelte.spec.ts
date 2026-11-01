@@ -17,7 +17,8 @@ const goto = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ goto }));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
-vi.mock('#lib/api.js', () => ({ apiBaseURL: () => '', apiFetchWithSession }));
+const apiFetch = vi.hoisted(() => vi.fn());
+vi.mock('#lib/api.js', () => ({ apiBaseURL: () => '', apiFetch, apiFetchWithSession }));
 
 // The invitation token arrives in the link, so this route reads it off
 // `page.url` -- installed from the fixture's own URL rather than a second
@@ -36,6 +37,7 @@ const WARNING = 'Continuing signs you out of your Practice in this browser.';
 beforeEach(() => {
 	goto.mockReset();
 	apiFetchWithSession.mockReset();
+	apiFetch.mockReset();
 });
 
 afterEach(() => {
@@ -140,6 +142,18 @@ describe('Accepting a portal invitation over a live Staff session (#610)', () =>
 	});
 });
 
+const ALREADY_HERE = 'You can already see your care at Rooted Birth Collective.';
+
+// #2279: the BFF refuses an invite whose login already reaches another
+// Client record at this Practice, under a code of its own.
+async function refuseAsAlreadyHere() {
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async () => jsonResponse({ code: 'PORTAL_ACCESS_ALREADY_HERE', message: ALREADY_HERE }, 409))
+	);
+	await render(Page, {});
+}
+
 /*
  * #2025: the line under the heading says what Continue does, and a link
  * that cannot be used ends on the one next step rather than on a refusal
@@ -166,6 +180,50 @@ describe('Where an invitation link leads (#2025)', () => {
 		await expect.element(testPage.getByText('Ask your doula to send the invite again.')).toBeVisible();
 		expect(testPage.getByRole('button', { name: 'Continue' }).elements()).toHaveLength(0);
 		expect(testPage.getByText('Your doula invited you to see your care online.').elements()).toHaveLength(0);
+	});
+
+	it('ends on the way to sign in when her login already reaches her care here and she is signed out (#2279)', async () => {
+		await refuseAsAlreadyHere();
+		apiFetch.mockResolvedValue(jsonResponse({ message: 'not signed in' }, 401));
+
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+
+		await expect.element(testPage.getByRole('alert')).toHaveTextContent(ALREADY_HERE);
+		await expect.element(testPage.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/portal/login');
+		expect(testPage.getByRole('button', { name: 'Continue' }).elements()).toHaveLength(0);
+		expect(testPage.getByText('Your doula invited you to see your care online.').elements()).toHaveLength(0);
+	});
+
+	it('ends on the way to her care when her login already reaches it and she is signed in (#2279)', async () => {
+		await refuseAsAlreadyHere();
+		apiFetch.mockResolvedValue(
+			jsonResponse({ engagements: [{ engagementId: 'engagement-1', practiceName: 'Rooted Birth Collective' }] })
+		);
+
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+
+		await expect.element(testPage.getByRole('alert')).toHaveTextContent(ALREADY_HERE);
+		await expect
+			.element(testPage.getByRole('link', { name: 'Go to your care' }))
+			.toHaveAttribute('href', '/portal/engagements/engagement-1');
+		expect(testPage.getByRole('button', { name: 'Continue' }).elements()).toHaveLength(0);
+		expect(goto).not.toHaveBeenCalled();
+	});
+
+	it('ends on the list of her care when she is signed in with several Engagements (#2279)', async () => {
+		await refuseAsAlreadyHere();
+		apiFetch.mockResolvedValue(
+			jsonResponse({
+				engagements: [
+					{ engagementId: 'engagement-1', practiceName: 'Rooted Birth Collective' },
+					{ engagementId: 'engagement-2', practiceName: 'Hilltop Doulas' }
+				]
+			})
+		);
+
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+
+		await expect.element(testPage.getByRole('link', { name: 'Go to your care' })).toHaveAttribute('href', '/');
 	});
 
 	it('ends on the next step when the link is not complete', async () => {

@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
-	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
+	import { apiBaseURL, apiFetch, apiFetchWithSession } from '#lib/api.js';
 	import {
 		isUnusableLink,
 		LINK_EXPIRED_OR_USED,
@@ -15,10 +15,11 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
-	import UnusableLink from '#lib/components/molecules/UnusableLink.svelte';
+	import UnusableLink, { type UnusableLinkNext } from '#lib/components/molecules/UnusableLink.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 
 	const inviteToken = page.url.searchParams.get('token') ?? '';
+	const PORTAL_ACCESS_ALREADY_HERE = 'PORTAL_ACCESS_ALREADY_HERE';
 
 	const submission = new FormSubmission();
 
@@ -34,6 +35,22 @@
 	// #2025: the BFF refused the invite itself -- expired, or accepted
 	// already -- so Continue can only be refused again.
 	let isLinkUnusable = $state(false);
+
+	// #2279: her login already reaches her care at this Practice, so this
+	// invite can never be accepted. The way on is to her care if she is
+	// signed in, and to sign in if she is not.
+	let alreadyHere = $state<{ message: string; next: UnusableLinkNext }>();
+
+	async function wayOnToHerCare(): Promise<UnusableLinkNext> {
+		const sessionResponse = await apiFetch('/api/portal/session');
+		if (!sessionResponse.ok) return { label: 'Sign in', href: resolve('/portal/(signed-out)/login') };
+		const landing = decidePortalLanding((await sessionResponse.json()) as PortalSessionInfo);
+		const href =
+			landing.type === 'redirect'
+				? resolve('/portal/(authenticated)/engagements/[engagementId]', { engagementId: landing.engagementId })
+				: resolve('/(signed-out)');
+		return { label: 'Go to your care', href };
+	}
 
 	// #617, ADR-0026: a Client has no password, so accepting an invitation
 	// is nothing but pressing Continue -- there is no account-setup step.
@@ -62,6 +79,10 @@
 				const refusal = await refusalOrConfirmable(acceptResponse);
 				if (refusal.kind === 'confirmable') {
 					signOutWarning = refusal.message;
+					return;
+				}
+				if (refusal.code === PORTAL_ACCESS_ALREADY_HERE) {
+					alreadyHere = { message: refusal.errors[0]!.message, next: await wayOnToHerCare() };
 					return;
 				}
 				return refusal.errors;
@@ -112,6 +133,8 @@
 			next={{ text: 'Ask your doula to send the invite again.' }}
 			isFocusedOnAppear
 		/>
+	{:else if alreadyHere}
+		<UnusableLink message={alreadyHere.message} next={alreadyHere.next} isFocusedOnAppear />
 	{:else}
 		<!-- #610: see the sign-in page for why the warning sits on this button. -->
 		{#if signOutWarning}
@@ -128,7 +151,7 @@
 
 <EntryPage
 	title="Accept your portal invite"
-	lede={inviteToken && !isLinkUnusable ? 'Your doula invited you to see your care online.' : undefined}
+	lede={inviteToken && !isLinkUnusable && !alreadyHere ?'Your doula invited you to see your care online.' : undefined}
 	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 	{content}
 />
