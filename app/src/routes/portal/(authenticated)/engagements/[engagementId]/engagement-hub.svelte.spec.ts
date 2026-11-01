@@ -139,6 +139,33 @@ describe('Client portal Engagement hub', () => {
 		await expect.element(page.getByText('Ongoing')).not.toBeInTheDocument();
 	});
 
+	// #2276: two Engagements at one Practice each name which one they are,
+	// in the root list's words; one Engagement keeps the Practice's name.
+	it('names which Engagement this is when she holds two at the Practice (#2276)', async () => {
+		const later = '2026-10-28T15:00:00Z';
+		const labels: string[] = [];
+		for (const started of [createdAt, later]) {
+			pageState.data = { ...pageState.data, createdAt: started };
+			mockFetch({ ...detail, isOneOfSeveral: true });
+			const screen = await render(Hub);
+			const label = engagementLabel({ practiceName, createdAt: started });
+			await expect.element(page.getByText(label, { exact: true })).toBeVisible();
+			labels.push(label);
+			screen.unmount();
+		}
+		pageState.data = { ...pageState.data, createdAt };
+		expect(labels[0]).not.toBe(labels[1]);
+	});
+
+	it('shows no started date when she holds one Engagement (#2276)', async () => {
+		await setupHub();
+
+		await expect.element(page.getByText(practiceName, { exact: true })).toBeVisible();
+		await expect
+			.element(page.getByText(engagementLabel({ practiceName, createdAt }), { exact: true }))
+			.not.toBeInTheDocument();
+	});
+
 	// The happy path: the fixture's next Visit and its due date.
 	it('says what happens next: who is coming, when, and the due date (#2007, #505)', async () => {
 		await setupHub();
