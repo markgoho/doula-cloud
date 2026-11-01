@@ -34,7 +34,7 @@ const (
 // stays mutable for the life of the Engagement. Mirrors
 // BirthPlanView.svelte's rendering rules exactly: a section_header field
 // starts a new headed group, a blank answer renders as "—" rather than an
-// empty line, a checkbox as "Yes"/"No", and a multi_select as its
+// empty line, a checkbox as "Yes"/"No" once answered, and a multi_select as its
 // selected options joined by ", ". Under the heading, before the first
 // question, it names the plan (#2209, #2355): her name, her Doula while
 // anyone is on the Engagement, the Practice, and the day it last changed,
@@ -82,10 +82,15 @@ func renderPlanPDF(heading string, m masthead, fields []Field, answers Answers) 
 func planFieldAnswerText(field Field, answers Answers) string {
 	switch field.Type {
 	case fieldTypeCheckbox:
-		if checked, _ := answers[field.ID].(bool); checked {
+		checked, answered := answers[field.ID].(bool)
+		switch {
+		case !answered:
+			return "—"
+		case checked:
 			return "Yes"
+		default:
+			return "No"
 		}
-		return "No"
 	case fieldTypeMultiSelect:
 		raw, _ := answers[field.ID].([]any)
 		options := make([]string, 0, len(raw))

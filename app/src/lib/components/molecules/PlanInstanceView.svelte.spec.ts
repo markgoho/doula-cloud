@@ -102,10 +102,16 @@ describe('PlanInstanceView.svelte', () => {
 		await expect.element(valueFor('OK to take photos')).toHaveTextContent('Yes');
 	});
 
-	it('renders No for a checkbox field answered false or unanswered', async () => {
-		await setup();
+	it('renders No for a checkbox field answered false', async () => {
+		await setup({ answers: { 'consent-photos': false } });
 
 		await expect.element(valueFor('OK to take photos')).toHaveTextContent('No');
+	});
+
+	it('renders an em dash for a checkbox field nobody answered, as progress counts it', async () => {
+		await setup();
+
+		await expect.element(valueFor('OK to take photos')).toHaveTextContent('—');
 	});
 
 	it('renders the joined selected options for a multi_select field', async () => {
