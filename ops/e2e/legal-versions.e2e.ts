@@ -37,7 +37,8 @@ for (const width of [320, 1280]) {
 		await expect(page.getByText('June 1, 2030', { exact: true })).toBeVisible();
 		const owners = page.getByText(/^\d+ Owners?$/);
 		await expect(owners).toBeVisible();
-		const counted = Number((await owners.textContent())?.split(' ')[0]);
+		const ownersText = await owners.textContent();
+		const counted = Number(ownersText?.split(' ', 1)[0]);
 		expect(counted).toBeGreaterThan(0);
 
 		await page.getByRole('button', { name: 'Publish' }).click();
