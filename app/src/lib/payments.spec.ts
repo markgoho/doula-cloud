@@ -125,18 +125,38 @@ describe('canConnectStatusStillMove', () => {
 		);
 	});
 
-	it('is false once something is outstanding, whatever the status', () => {
+	it('is true with requirements due, which on the return is Stripe catching up (#2565)', () => {
 		expect(
 			canConnectStatusStillMove(
 				statusResult({ status: 'onboarding_incomplete', requirementsDue: ['configuration.merchant.mcc'] })
 			)
-		).toBe(false);
+		).toBe(true);
 	});
 
 	it('is false once active, even with an empty requirementsDue', () => {
 		expect(canConnectStatusStillMove(statusResult({ status: 'active', requirementsDue: [] }))).toBe(false);
 	});
 });
+
+// The server project has no document; this stands one in with just what the
+// poll reads of it: `hidden` and the visibilitychange event.
+function stubDocument() {
+	const target = new EventTarget();
+	const fake = {
+		hidden: false,
+		addEventListener: target.addEventListener.bind(target),
+		removeEventListener: target.removeEventListener.bind(target)
+	};
+	vi.stubGlobal('document', fake);
+	return {
+		set(isHidden: boolean) {
+			fake.hidden = isHidden;
+		},
+		change() {
+			target.dispatchEvent(new Event('visibilitychange'));
+		}
+	};
+}
 
 describe('pollConnectStatus', () => {
 	const practiceId = 'practice-1';
@@ -265,5 +285,92 @@ describe('pollConnectStatus', () => {
 
 		expect(fetcher).not.toHaveBeenCalled();
 		expect(onStopped).not.toHaveBeenCalled();
+	});
+
+	it('reads nothing while the page is hidden, and carries on when it is shown again (#2565)', async () => {
+		vi.useFakeTimers();
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse(statusResult({ status: 'pending' })));
+		const hidden = stubDocument();
+		hidden.set(false);
+
+		const handle = pollConnectStatus(
+			fetcher,
+			practiceId,
+			statusResult(),
+			{ onResult: vi.fn(), onError: vi.fn(), onStopped: vi.fn() },
+			[10, 20]
+		);
+		hidden.set(true);
+		hidden.change();
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(fetcher).not.toHaveBeenCalled();
+
+		hidden.set(false);
+		hidden.change();
+		await vi.advanceTimersByTimeAsync(10);
+		expect(fetcher).toHaveBeenCalledTimes(1);
+
+		handle.stop();
+		vi.unstubAllGlobals();
+	});
+
+	it('ignores a visibility change while a read is in flight, and one that changes nothing', async () => {
+		vi.useFakeTimers();
+		let resolveFetch!: (response: Response) => void;
+		const fetcher = vi.fn(() => new Promise<Response>((resolve) => (resolveFetch = resolve)));
+		const hidden = stubDocument();
+
+		const handle = pollConnectStatus(
+			fetcher,
+			practiceId,
+			statusResult(),
+			{ onResult: vi.fn(), onError: vi.fn(), onStopped: vi.fn() },
+			[10, 20]
+		);
+		hidden.change();
+		await vi.advanceTimersByTimeAsync(10);
+		expect(fetcher).toHaveBeenCalledTimes(1);
+
+		hidden.set(true);
+		hidden.change();
+		hidden.set(false);
+		hidden.change();
+		resolveFetch(jsonResponse(statusResult({ status: 'pending' })));
+		await vi.advanceTimersByTimeAsync(20);
+		expect(fetcher).toHaveBeenCalledTimes(2);
+
+		handle.stop();
+		hidden.change();
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(fetcher).toHaveBeenCalledTimes(2);
+		vi.unstubAllGlobals();
+	});
+
+	it('does not schedule the next read when a read lands while the page is hidden', async () => {
+		vi.useFakeTimers();
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse(statusResult({ status: 'pending' })));
+		const hidden = stubDocument();
+		hidden.set(false);
+
+		const handle = pollConnectStatus(
+			fetcher,
+			practiceId,
+			statusResult(),
+			{ onResult: vi.fn(), onError: vi.fn(), onStopped: vi.fn() },
+			[10, 20]
+		);
+		hidden.set(true);
+		await vi.advanceTimersByTimeAsync(10);
+		expect(fetcher).toHaveBeenCalledTimes(1);
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(fetcher).toHaveBeenCalledTimes(1);
+
+		hidden.set(false);
+		hidden.change();
+		await vi.advanceTimersByTimeAsync(20);
+		expect(fetcher).toHaveBeenCalledTimes(2);
+
+		handle.stop();
+		vi.unstubAllGlobals();
 	});
 });
