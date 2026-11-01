@@ -83,6 +83,61 @@ const summaryLinks = () =>
 		.elements()
 		.map((link) => [link.textContent.trim(), link.getAttribute('href')]);
 
+describe('the on-call section after a Visit puts a Doula on the birth (#2568)', () => {
+	const onCallWithoutBo = { ...onCallPanel, doulas: [onCallPanel.doulas[0]!] };
+
+	function onCallFor(hasVisitBeenSaved: () => boolean) {
+		return (path: string, init?: RequestInit) => {
+			if (path.endsWith('/on-call')) return jsonResponse(hasVisitBeenSaved() ? onCallPanel : onCallWithoutBo);
+			if (init?.method === 'POST' && path.endsWith('/visits')) {
+				return jsonResponse({ visitId: 'visit-3', staffId: 'staff-2' }, 201);
+			}
+			return;
+		};
+	}
+
+	it('lists the Doula a saved Visit attaches, without a reload', async () => {
+		let isSaved = false;
+		const answer = onCallFor(() => isSaved);
+		await setupOnCall((path, init) => {
+			const response = answer(path, init);
+			if (init?.method === 'POST' && path.endsWith('/visits')) isSaved = true;
+			return response;
+		});
+		await expect.element(testPage.getByRole('region', { name: 'On call' })).toBeVisible();
+		expect(testPage.getByText('On call Oct 31, 2026 to Nov 13, 2026').elements()).toHaveLength(0);
+
+		await testPage.getByRole('button', { name: 'Add a Visit' }).click();
+		await testPage.getByLabelText('Who is this Visit for?').selectOptions('Jordan Reyes');
+		await testPage.getByRole('button', { name: 'Save Visit' }).click();
+
+		await expect
+			.element(testPage.getByRole('region', { name: 'On call' }).getByText('On call Oct 31, 2026 to Nov 13, 2026'))
+			.toBeVisible();
+	});
+
+	it('lists the Doula a reassigned Visit attaches, without a reload', async () => {
+		let isSaved = false;
+		await setupOnCall((path, init) => {
+			if (path.endsWith('/on-call')) return jsonResponse(isSaved ? onCallPanel : onCallWithoutBo);
+			if (init?.method === 'PATCH' && path.includes('/visits/')) {
+				isSaved = true;
+				return jsonResponse({});
+			}
+			return;
+		});
+		await expect.element(testPage.getByRole('region', { name: 'On call' })).toBeVisible();
+
+		await testPage.getByRole('button', { name: 'Reassign' }).first().click();
+		await testPage.getByLabelText('Who takes this Visit instead?').selectOptions('Jordan Reyes');
+		await testPage.getByRole('button', { name: 'Reassign the Visit' }).click();
+
+		await expect
+			.element(testPage.getByRole('region', { name: 'On call' }).getByText('On call Oct 31, 2026 to Nov 13, 2026'))
+			.toBeVisible();
+	});
+});
+
 describe('the on-call section on a birth (#1093)', () => {
 	it('says when the window runs, and who is on call for which part of it', async () => {
 		await setupOnCall();
