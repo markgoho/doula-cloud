@@ -185,30 +185,33 @@ function openAlarms(path: string): Issue[] {
  * of the attempt that failed: by the time this runs, a rerun can have
  * started, and the run's own jobs are then the rerun's.
  */
-function failedJobs(run: Run): string {
-  let jobs: Job[];
+function readJobs(run: Run): Job[] | null {
   try {
     const answer = api(
       `repos/${repo}/actions/runs/${run.id}/attempts/${run.run_attempt ?? 1}/jobs?per_page=100`
     ) as { jobs?: Job[] };
-    jobs = answer.jobs ?? [];
+    return answer.jobs ?? [];
   } catch (error) {
     // The alarm matters more than its detail: open it with the run link.
     console.log(`::warning::${(error as Error).message}`);
+    return null;
+  }
+}
+
+const isRed = (job: Job) => job.conclusion !== null && RED.has(job.conclusion);
+
+function failedJobs(jobs: Job[] | null): string {
+  if (jobs === null) {
     return '- (the jobs of this run could not be read; see the run)';
   }
-  const lines = jobs
-    .filter((job) => job.conclusion !== null && RED.has(job.conclusion))
-    .flatMap((job) => {
-      const steps = (job.steps ?? []).filter(
-        (step) => step.conclusion !== null && RED.has(step.conclusion)
-      );
-      return steps.length > 0
-        ? steps.map(
-            (step) => `- **${job.name}** - failed at step _${step.name}_`
-          )
-        : [`- **${job.name}** - \`${job.conclusion}\`, with no failed step`];
-    });
+  const lines = jobs.filter(isRed).flatMap((job) => {
+    const steps = (job.steps ?? []).filter(
+      (step) => step.conclusion !== null && RED.has(step.conclusion)
+    );
+    return steps.length > 0
+      ? steps.map((step) => `- **${job.name}** - failed at step _${step.name}_`)
+      : [`- **${job.name}** - \`${job.conclusion}\`, with no failed step`];
+  });
   return lines.length > 0
     ? [...new Set(lines)].sort().join('\n')
     : '- (no job reported a failure conclusion; see the run)';
@@ -232,7 +235,64 @@ console.log(
 if (!repo) fail('REPO is not set');
 if (!path) fail('the run has no workflow path, so its alarm has no identity');
 
+const TERRAFORM_PLAN_PATH = '.github/workflows/terraform-plan.yml';
+
+/**
+ * What each failed job of Terraform Plan plans, as terraform-plan.yml's
+ * own touch rule has it (#2509): the root job takes `terraform/` less
+ * every `terraform/stripe*` folder; the Sandbox job takes
+ * `terraform/stripe-sandbox/` and `terraform/stripe/`.
+ */
+const PLANNED: Record<
+  string,
+  { folder: string; plans: (file: string) => boolean }
+> = {
+  plan: {
+    folder: 'terraform',
+    plans: (file) =>
+      file.startsWith('terraform/') && !file.startsWith('terraform/stripe'),
+  },
+  'plan-stripe-sandbox': {
+    folder: 'terraform/stripe-sandbox',
+    plans: (file) =>
+      file.startsWith('terraform/stripe-sandbox/') ||
+      file.startsWith('terraform/stripe/'),
+  },
+};
+
+/**
+ * The paragraph that leads the alarm of a Terraform Plan failure whose
+ * own commit changed what a failed job plans: the plan is red until the
+ * laptop `apply`, and that wait is not drift. Empty for anything else.
+ */
+function awaitingApply(jobs: Job[] | null): string {
+  if (path !== TERRAFORM_PLAN_PATH || !isPush || jobs === null) return '';
+  const planned = jobs.filter(isRed).flatMap((job) => PLANNED[job.name] ?? []);
+  if (planned.length === 0) return '';
+  let files: string[];
+  try {
+    const commit = api(`repos/${repo}/commits/${run.head_sha}`) as {
+      files?: { filename: string }[];
+    };
+    files = (commit.files ?? []).map((file) => file.filename);
+  } catch (error) {
+    console.log(`::warning::${(error as Error).message}`);
+    return '';
+  }
+  const waiting = planned.filter((job) => files.some(job.plans));
+  if (waiting.length === 0) return '';
+  const changed = [
+    ...new Set(files.filter((f) => waiting.some((j) => j.plans(f)))),
+  ];
+  return [
+    `**This commit changed Terraform and is waiting for its apply.** ${run.name} is red until the laptop \`apply\` from trunk lands; that is the expected wait, not a new failure.`,
+    `Changed files:\n\n${changed.map((file) => `- \`${file}\``).join('\n')}`,
+    `To clear it:\n\n\`\`\`sh\ngit pull\n${waiting.map((job) => `cd ${job.folder} && terraform apply`).join('\n')}\ngh run rerun ${run.id} --failed\n\`\`\``,
+  ].join('\n\n');
+}
+
 function openOrUpdate(): void {
+  const jobs = readJobs(run);
   const how =
     run.conclusion === 'failure'
       ? 'failed'
@@ -241,15 +301,18 @@ function openOrUpdate(): void {
     ? `**Commit:** ${subject || '(no commit message in the event)'} (${run.head_sha})`
     : `**Trigger:** a \`${run.event}\` event, not a push. This run has no commit and no pull request of its own. It built trunk at **${short}**, and that commit did not cause the run.`;
   const body = [
+    awaitingApply(jobs),
     `**${run.name}** ${how} on trunk at **${short}**.`,
-    failedJobs(run),
+    failedJobs(jobs),
     trigger,
     `**Run:** ${run.html_url}`,
     meaning.whileOpen,
     `This issue is opened automatically by ${ALARM_WORKFLOW}. It closes itself only when ${run.name} passes on this same commit, which a rerun of the failed jobs does: \`gh run rerun ${run.id} --failed\`. A pass on a later commit comments here and leaves it open, because it does not prove this failure gone; close it by hand once you know why it failed.`,
     shaMarker(run.head_sha),
     marker(path),
-  ].join('\n\n');
+  ]
+    .filter((part) => part !== '')
+    .join('\n\n');
 
   const existing = openAlarms(path)[0];
   if (existing) {

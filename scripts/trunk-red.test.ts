@@ -59,6 +59,10 @@ type Fixtures = {
   run?: object;
   /** The comments of each issue, by its number. */
   comments?: Record<number, { body: string }[]>;
+  /** The paths `repos/<repo>/commits/<sha>` lists as changed. */
+  commitFiles?: string[];
+  /** The stand-in exits 1 on the commit read. */
+  commitFail?: boolean;
 };
 type Call = { method: string; endpoint: string; input: unknown };
 
@@ -90,6 +94,9 @@ function standIn(fixtures: Fixtures): string {
       "if (method === 'GET' && /\\/actions\\/runs\\/\\d+\\/attempts\\/\\d+\\/jobs/.test(endpoint)) {",
       "  if (fixtures.jobsFail) { console.error('HTTP 502'); process.exit(1); }",
       '  console.log(JSON.stringify({ jobs: fixtures.jobs ?? [] }));',
+      "} else if (method === 'GET' && /\\/commits\\/[0-9a-f]+$/.test(endpoint)) {",
+      "  if (fixtures.commitFail) { console.error('HTTP 502'); process.exit(1); }",
+      '  console.log(JSON.stringify({ files: (fixtures.commitFiles ?? []).map((filename) => ({ filename })) }));',
       "} else if (method === 'GET' && /\\/issues\\/\\d+\\/comments/.test(endpoint)) {",
       '  const number = Number(endpoint.match(/\\/issues\\/(\\d+)\\/comments/)[1]);',
       '  console.log(JSON.stringify((fixtures.comments ?? {})[number] ?? []));',
@@ -499,6 +506,127 @@ describe('a red run', () => {
     expect(input.body).toContain('laptop `apply`');
     expect(input.body).toContain('docs/infrastructure.md');
     expect(input.body).toContain(marker(TERRAFORM));
+  });
+
+  describe('of Terraform Plan on a commit that changed what its job plans (#2575)', () => {
+    const planJob = (name: string): Job => ({
+      name,
+      conclusion: 'failure',
+      steps: [{ name: 'Terraform plan', conclusion: 'failure' }],
+    });
+    const bodyOf = (jobName: string, commitFiles: string[]) =>
+      (
+        alarm(workflowRun(TERRAFORM, { conclusion: 'failure' }), {
+          jobs: [planJob(jobName)],
+          commitFiles,
+        }).writes[0]?.input as IssueInput
+      ).body;
+
+    test('leads with waiting for its apply, the files, and the commands', () => {
+      const result = alarm(workflowRun(TERRAFORM, { conclusion: 'failure' }), {
+        jobs: [planJob('plan')],
+        commitFiles: ['terraform/cloud_run.tf', 'README.md'],
+      });
+      const body = (result.writes[0]?.input as IssueInput).body;
+
+      expect(result.calls.map((call) => call.endpoint)).toContain(
+        `repos/${REPO}/commits/${SHA}`
+      );
+      expect(body.startsWith('**This commit changed Terraform')).toBe(true);
+      expect(body).toContain('waiting for its apply');
+      expect(body).toContain('- `terraform/cloud_run.tf`');
+      expect(body).not.toContain('README.md');
+      expect(body).toContain('git pull');
+      expect(body).toContain('cd terraform && terraform apply');
+      expect(body).toContain('gh run rerun 7001 --failed');
+      expect(body).toContain('- **plan** - failed at step _Terraform plan_');
+      expect(body).toContain(marker(TERRAFORM));
+    });
+
+    test('the root plan does not count a Stripe folder', () => {
+      const body = bodyOf('plan', [
+        'terraform/stripe-sandbox/main.tf',
+        'terraform/stripe-live/main.tf',
+        'terraform/stripe/products.tf',
+      ]);
+      expect(body).not.toContain('waiting for its apply');
+      expect(body).toContain('drift');
+    });
+
+    test('the Sandbox plan applies from terraform/stripe-sandbox', () => {
+      const body = bodyOf('plan-stripe-sandbox', [
+        'terraform/stripe/products.tf',
+        'terraform/stripe-sandbox/main.tf',
+        'terraform/cloud_run.tf',
+      ]);
+      expect(body).toContain('waiting for its apply');
+      expect(body).toContain('- `terraform/stripe/products.tf`');
+      expect(body).toContain('- `terraform/stripe-sandbox/main.tf`');
+      expect(body).not.toContain('cloud_run.tf');
+      expect(body).toContain('cd terraform/stripe-sandbox && terraform apply');
+    });
+
+    test('the Sandbox plan ignores a change to the root only', () => {
+      const body = bodyOf('plan-stripe-sandbox', ['terraform/cloud_run.tf']);
+      expect(body).not.toContain('waiting for its apply');
+    });
+
+    test('a job the workflow does not plan gets the drift text', () => {
+      const body = bodyOf('something-else', ['terraform/cloud_run.tf']);
+      expect(body).not.toContain('waiting for its apply');
+    });
+
+    test('a commit with no Terraform change gets the drift text unchanged', () => {
+      const body = bodyOf('plan', ['api/main.go', 'docs/infrastructure.md']);
+      expect(body).not.toContain('waiting for its apply');
+      expect(body.startsWith('**Terraform Plan** failed on trunk')).toBe(true);
+      expect(body).toContain('drift');
+    });
+
+    test('a scheduled run reads no commit', () => {
+      const result = alarm(
+        workflowRun(TERRAFORM, { conclusion: 'failure', event: 'schedule' }),
+        { jobs: [planJob('plan')], commitFiles: ['terraform/cloud_run.tf'] }
+      );
+      expect(
+        result.calls.some((call) => call.endpoint.includes('/commits/'))
+      ).toBe(false);
+      expect((result.writes[0]?.input as IssueInput).body).not.toContain(
+        'waiting for its apply'
+      );
+    });
+
+    test('another workflow reads no commit', () => {
+      const result = alarm(workflowRun(CI, { conclusion: 'failure' }), {
+        jobs: [planJob('plan')],
+        commitFiles: ['terraform/cloud_run.tf'],
+      });
+      expect(
+        result.calls.some((call) => call.endpoint.includes('/commits/'))
+      ).toBe(false);
+    });
+
+    test('an unreadable commit still opens the alarm with the drift text', () => {
+      const result = alarm(workflowRun(TERRAFORM, { conclusion: 'failure' }), {
+        jobs: [planJob('plan')],
+        commitFail: true,
+      });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('::warning::');
+      expect((result.writes[0]?.input as IssueInput).body).not.toContain(
+        'waiting for its apply'
+      );
+    });
+
+    test('unreadable jobs mean no apply text', () => {
+      const result = alarm(workflowRun(TERRAFORM, { conclusion: 'failure' }), {
+        jobsFail: true,
+        commitFiles: ['terraform/cloud_run.tf'],
+      });
+      expect((result.writes[0]?.input as IssueInput).body).not.toContain(
+        'waiting for its apply'
+      );
+    });
   });
 
   test('of the daily Terraform Plan says it was not caused by the trunk head', () => {
