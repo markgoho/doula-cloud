@@ -16,6 +16,7 @@ import {
 	contract as fixtureContract,
 	contractorInvoices,
 	detail as fixtureDetail,
+	doulaFees,
 	fixture,
 	session
 } from './page.fixture.js';
@@ -3724,6 +3725,29 @@ describe('the Doula fees section (#2271)', () => {
 
 		await expect.element(testPage.getByRole('status').filter({ hasText: /Recorded: Anne-Marie Ochieng-Whitfield paid \$4,500\.00/ })).toBeVisible();
 		expect(doulaFeeReads()).toHaveLength(2);
+	});
+
+	it('reads each ended Attachment as a span once care is marked complete, without a reload (#2605)', async () => {
+		let isCompleted = false;
+		await setupMoney(sessionFor(['owner']), fixtureDetail, (path, init) => {
+			if (init?.method === 'PATCH' && path.endsWith('/status')) {
+				isCompleted = true;
+				return jsonResponse({ status: 'completed', statusMoves: ['active'] });
+			}
+			if (isCompleted && path.endsWith('/doula-fees')) {
+				return jsonResponse({ items: doulaFees.map((fee) => ({ ...fee, endedOn: fee.endedOn ?? '2026-11-01' })) });
+			}
+			return;
+		});
+		await expect.element(doulaFeesSection().getByText('Since Jul 2, 2026').first()).toBeVisible();
+
+		await openChange('care phase');
+		await testPage.getByRole('button', { name: 'Mark care complete' }).click();
+		await testPage.getByLabelText('The work finished as agreed').click();
+		await testPage.getByRole('button', { name: 'Confirm completion' }).click();
+
+		await expect.element(doulaFeesSection().getByText('Jul 2, 2026 to Nov 1, 2026').first()).toBeVisible();
+		await expect.element(doulaFeesSection().getByText('Since Jul 2, 2026')).not.toBeInTheDocument();
 	});
 
 	it('removes a payment recorded by mistake, and reads the list again', async () => {
