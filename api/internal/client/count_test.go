@@ -10,8 +10,8 @@ import (
 )
 
 // countFixture is the Practice both count tests read: four Client
-// records a reader can be shown, two of them in active care, and one
-// record merged into another that no reader is shown at all.
+// records a reader can be shown, and one record merged into another that
+// no reader is shown at all.
 type countFixture struct {
 	practiceID         string
 	activeEngagementID string
@@ -23,7 +23,7 @@ func seedCountFixture(t *testing.T, db *testdb.DB, practiceID string) countFixtu
 	activeID, activeEngagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Amara", "count-active@example.com", "active")
 	testdb.SeedEngagementInStatus(t, db, practiceID, "Bex", "count-intake@example.com", "intake")
 	testdb.SeedNamedClient(t, db, practiceID, "Cleo", "count-no-work@example.com")
-	// Two active Engagements are still one Client in care.
+	// Two Engagements are still one Client record.
 	twiceID, twiceEngagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Dana", "count-twice@example.com", "active")
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO engagements (client_id, practice_id, status, kind) VALUES ($1, $2, 'active', 'postpartum')`,
@@ -52,12 +52,11 @@ func getCount(t *testing.T, session, url string) client.CountResponse {
 	return got
 }
 
-// TestCountHandler_CountsTheRecordsAndTheClientsInActiveCare is #2095:
-// the Overview's Clients card reads "14 active" without loading a page of
-// Client rows to count them. A merged record is a pointer, not a Client,
-// so it counts in neither number; a Client with two active Engagements is
-// one Client in care.
-func TestCountHandler_CountsTheRecordsAndTheClientsInActiveCare(t *testing.T) {
+// TestCountHandler_CountsTheRecords is #2095: the Overview learns whether
+// the Practice has any Client without loading a page of Client rows. A
+// merged record is a pointer, not a Client, so it is not counted; a
+// Client with two Engagements is one record.
+func TestCountHandler_CountsTheRecords(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-counting-clients"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
@@ -66,7 +65,7 @@ func TestCountHandler_CountsTheRecordsAndTheClientsInActiveCare(t *testing.T) {
 	defer srv.Close()
 
 	got := getCount(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/count")
-	if want := (client.CountResponse{Records: 4, Active: 2}); got != want {
+	if want := (client.CountResponse{Records: 4}); got != want {
 		t.Errorf("count = %+v, want %+v", got, want)
 	}
 }
@@ -87,7 +86,7 @@ func TestCountHandler_ContractorCountsOnlyTheClientsSheIsAttachedTo(t *testing.T
 	defer srv.Close()
 
 	got := getCount(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/count")
-	if want := (client.CountResponse{Records: 1, Active: 1}); got != want {
+	if want := (client.CountResponse{Records: 1}); got != want {
 		t.Errorf("count = %+v, want %+v", got, want)
 	}
 }

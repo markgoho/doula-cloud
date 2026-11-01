@@ -171,6 +171,10 @@ func TestSessionHandler_MultiplePracticesWithLastUsed(t *testing.T) {
 	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE staff SET last_practice_id = $1 WHERE id = $2`, practiceB, staffID); err != nil {
 		t.Fatalf("seed last_practice_id: %v", err)
 	}
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE practice_memberships SET employment_type = 'contractor' WHERE practice_id = $1 AND staff_id = $2`, practiceB, staffID); err != nil {
+		t.Fatalf("seed contractor membership: %v", err)
+	}
 
 	srv, session := newSessionServer(t, db, identityUID)
 	defer srv.Close()
@@ -187,6 +191,14 @@ func TestSessionHandler_MultiplePracticesWithLastUsed(t *testing.T) {
 	}
 	if out.LastPracticeID == nil || *out.LastPracticeID != practiceB {
 		t.Fatalf("lastPracticeId = %v, want %q", out.LastPracticeID, practiceB)
+	}
+	// #2266: the switcher says what she is at each Practice, so each
+	// Membership carries its own employment type.
+	want := map[string]string{practiceA: employeeType, practiceB: contractorType}
+	for _, m := range out.Memberships {
+		if m.EmploymentType != want[m.PracticeID] {
+			t.Fatalf("employmentType at %q = %q, want %q", m.PracticeID, m.EmploymentType, want[m.PracticeID])
+		}
 	}
 }
 

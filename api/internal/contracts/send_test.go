@@ -139,6 +139,46 @@ func TestPostSendContractHandler_NonDraftRejected(t *testing.T) {
 	}
 }
 
+// TestPostSendContractHandler_RefusedInviteHoldsTheSendBack proves #2522:
+// an invite whose accept was refused holds Send back as never-invited
+// does, and says the way on without naming the other record.
+func TestPostSendContractHandler_RefusedInviteHoldsTheSendBack(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "send-refused-invite"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Refused Client", "refused-send@example.com")
+	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
+	testdb.SeedPendingPortalInvite(t, db, clientID)
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE client_portal_users SET access_refused_at = now() WHERE client_id = $1`, clientID,
+	); err != nil {
+		t.Fatalf("mark refused: %v", err)
+	}
+
+	srv, session := newContractServer(t, db, uid)
+	defer srv.Close()
+
+	resp := postSendContract(t, srv, session, practiceID, engagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
+	}
+	out := apierrtest.Decode(t, resp)
+	if out.Code != apierr.CodeFailedPrecondition || !strings.Contains(out.Message, "signs in through another record") {
+		t.Fatalf("refusal = %+v, want FAILED_PRECONDITION naming the other record's sign-in", out)
+	}
+	var status string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT status::text FROM contracts WHERE engagement_id = $1`, engagementID,
+	).Scan(&status); err != nil {
+		t.Fatalf("query contract status: %v", err)
+	}
+	if status != statusDraft {
+		t.Fatalf("status after refused Send = %q, want draft", status)
+	}
+}
+
 // TestPostSendContractHandler_NoPortalInvite proves the #255 precondition:
 // Send refuses with 409 FAILED_PRECONDITION when the Engagement's Client
 // has never been sent a portal invite, before any write -- the Contract

@@ -81,6 +81,10 @@ ALTER TABLE staff_mfa_recovery_outbox ADD COLUMN dead_letter_reason outbox_dead_
 ALTER TABLE staff_mfa_recovery_outbox ADD CONSTRAINT staff_mfa_recovery_outbox_dead_letter_reason_check
     CHECK ((status = 'dead_lettered') = (dead_letter_reason IS NOT NULL)) NOT VALID;
 
+ALTER TABLE staff_notice_outbox ADD COLUMN dead_letter_reason outbox_dead_letter_reason;
+ALTER TABLE staff_notice_outbox ADD CONSTRAINT staff_notice_outbox_dead_letter_reason_check
+    CHECK ((status = 'dead_lettered') = (dead_letter_reason IS NOT NULL)) NOT VALID;
+
 ALTER TABLE staff_token_mail_outbox ADD COLUMN dead_letter_reason outbox_dead_letter_reason;
 ALTER TABLE staff_token_mail_outbox ADD CONSTRAINT staff_token_mail_outbox_dead_letter_reason_check
     CHECK ((status = 'dead_lettered') = (dead_letter_reason IS NOT NULL)) NOT VALID;
@@ -109,6 +113,7 @@ ALTER TABLE site_build_outbox DROP COLUMN dead_letter_reason;
 ALTER TABLE staff_email_change_outbox DROP COLUMN dead_letter_reason;
 ALTER TABLE staff_invite_outbox DROP COLUMN dead_letter_reason;
 ALTER TABLE staff_mfa_recovery_outbox DROP COLUMN dead_letter_reason;
+ALTER TABLE staff_notice_outbox DROP COLUMN dead_letter_reason;
 ALTER TABLE staff_token_mail_outbox DROP COLUMN dead_letter_reason;
 ALTER TABLE welcome_credits_outbox DROP COLUMN dead_letter_reason;
 DROP TYPE outbox_dead_letter_reason;

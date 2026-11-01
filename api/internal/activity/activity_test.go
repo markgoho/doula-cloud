@@ -266,6 +266,10 @@ func TestStaffingActions_ContainsExactlyTheRosterSet(t *testing.T) {
 		// #2271: what the Practice paid its contractor Doula.
 		activity.ActionContractorFeePaid,
 		activity.ActionContractorFeePaymentReversed,
+		// #2279: a refused accept changes nothing of hers.
+		activity.ActionPortalInviteRefused,
+		// #2520: a Draft she has not been sent.
+		activity.ActionContractEdited,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("StaffingActions() = %v, want exactly %v", activity.StaffingActions(), want)

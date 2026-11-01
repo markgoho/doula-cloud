@@ -30,6 +30,7 @@ import (
 	"doula-cloud/api/internal/sitebuild"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/staffinvite"
+	"doula-cloud/api/internal/staffnotice"
 	"doula-cloud/api/internal/stripemode"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/welcomecredits"
@@ -114,6 +115,7 @@ type Deps struct {
 	SessionNoticeWorker     sessionnotice.Worker
 	StaffInviteWorker       staffinvite.Worker
 	OfferWorker             offer.Worker
+	StaffNoticeWorker       staffnotice.Worker
 	EngagementRequestWorker engagementrequest.Worker
 	SiteBuildWorker         sitebuild.Worker
 	PageVerifier            sitebuild.Verifier

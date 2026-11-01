@@ -132,6 +132,15 @@ func outboxRegistrations(d Deps) []outbox.Registration {
 			Worker: d.OfferWorker,
 		},
 		{
+			// #2267's Staff-notice outbox, one table for every notice to
+			// one Staff member about another person's act; first written
+			// by offer.CreateHandler's staffId-target path.
+			Path:   "/api/internal/notifications/process-staff-notice-outbox",
+			Door:   outbox.NotificationDoor,
+			Nudge:  tasknudge.StaffNotice,
+			Worker: d.StaffNoticeWorker,
+		},
+		{
 			// #398's Engagement Request outbox, whose write site is
 			// engagementrequest.RequestHandler.
 			Path:   "/api/internal/notifications/process-engagement-request-outbox",

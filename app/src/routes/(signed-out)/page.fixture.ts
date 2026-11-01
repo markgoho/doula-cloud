@@ -27,9 +27,10 @@ export const data: Extract<RootLanding, { type: 'staff-picker' }> = {
 		{
 			practiceId: 'practice-1',
 			practiceName: 'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake',
-			roles: ['owner', 'admin', 'doula']
+			roles: ['owner', 'admin', 'doula'],
+			employmentType: 'employee'
 		},
-		{ practiceId: 'practice-2', practiceName: 'Hilltop Doulas', roles: ['doula'] }
+		{ practiceId: 'practice-2', practiceName: 'Hilltop Doulas', roles: ['doula'], employmentType: 'contractor' }
 	]
 };
 

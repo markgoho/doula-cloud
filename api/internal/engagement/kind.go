@@ -85,6 +85,15 @@ func OffersBirthPlan(in BirthPlanInputs) bool {
 	return in.Kind == KindBirth && HasLivingOrExpectedBaby(in.BirthOutcome)
 }
 
+// OffersBirthPlanToStart answers ADR-0015's create side, "offer to create
+// a Birth Plan when kind = birth AND the birth outcome is null", for the
+// Practice (#2277, #2317). Narrower than OffersBirthPlan: after a live
+// birth an existing plan stays readable, but a new one is not started for
+// a birth that has already happened.
+func OffersBirthPlanToStart(in BirthPlanInputs) bool {
+	return in.Kind == KindBirth && IsBabyStillExpected(in.BirthOutcome)
+}
+
 // KindChangeRequest carries an Engagement's target kind (#874, ADR-0015's
 // write side): "the post-birth freeze on kind is a rule, not a
 // constraint" -- kind is mutable in both directions for the life of the

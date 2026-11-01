@@ -175,6 +175,34 @@ describe('TOTP enrollment -- step one, re-authenticating', () => {
 		);
 	});
 
+	it('waits for a slow session probe and re-authenticates with its email (#2506)', async () => {
+		let answerProbe!: (response: Response) => void;
+		apiFetch.mockReturnValue(new Promise<Response>((resolve) => (answerProbe = resolve)));
+		await setup();
+		await testPage.getByLabelText('Password').fill('correct horse');
+
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+		expect(signInWithEmailAndPassword).not.toHaveBeenCalled();
+		answerProbe(jsonResponse(session));
+
+		await vi.waitFor(() =>
+			expect(signInWithEmailAndPassword).toHaveBeenCalledWith({}, session.email, 'correct horse')
+		);
+		expect(signInWithEmailAndPassword).toHaveBeenCalledTimes(1);
+	});
+
+	it('never re-authenticates when the session probe finds no session', async () => {
+		apiFetch.mockResolvedValue(jsonResponse('no matching staff session', 404));
+		await setup();
+		await testPage.getByLabelText('Password').fill('correct horse');
+
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/login'));
+		await expect.element(testPage.getByRole('button', { name: 'Continue' })).toBeEnabled();
+		expect(signInWithEmailAndPassword).not.toHaveBeenCalled();
+	});
+
 	it('shows a wrong password as a step-up refusal', async () => {
 		signInWithEmailAndPassword.mockRejectedValue({ code: 'auth/wrong-password' });
 		await setup();

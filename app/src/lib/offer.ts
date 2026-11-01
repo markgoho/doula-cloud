@@ -15,7 +15,7 @@ import type { FeePaid } from './doulaFee.js';
 import type { Fetcher } from './fetcher.js';
 
 import { apiErrorMessage } from './apiErrorMessage.js';
-import { formatCalendarDay, formatInstantWithClock } from './dates.js';
+import { formatCalendarDay, formatCalendarMonth, formatInstantWithClock } from './dates.js';
 import { formatMoney } from './money.js';
 
 /** One Offer as either side reads it. targetName/targetAddress are filled
@@ -45,6 +45,15 @@ export interface Offer {
 	/** What the Practice recorded paying her for this job (#2271): only
 	 * on her own inbox, only on an accepted Offer, and only once recorded. */
 	feePaid?: FeePaid;
+	/** The Engagement an accepted Offer put her on (#2269): only on her
+	 * own inbox, and only while she still reaches it. */
+	engagementId?: string;
+	/** `YYYY-MM-DD`, the Practice's day the Attachment this accepted
+	 * Offer granted ended (#2270): only on her own inbox. */
+	endedOn?: string;
+	/** `YYYY-MM-DD`, the Practice's day an accepted Offer was accepted
+	 * (#2513, ADR-0036): only on her own inbox. */
+	acceptedOn?: string;
 }
 
 /** The six states an Offer's lifecycle passes through -- the offer_state
@@ -158,6 +167,45 @@ export async function createOffer(
 	);
 }
 
+/** What answering an Offer did. An accept also names the Engagement and
+ * its Client, whom her new Attachment lets her read (#2268). */
+export interface OfferDecision {
+	offerId: string;
+	state: OfferState;
+	engagementId?: string;
+	engagementKind?: 'birth' | 'postpartum';
+	clientName?: string;
+}
+
+/** What the screen says an answer to an Offer did (#2268), with the
+ * link to the work when it is now hers. */
+export interface DecisionOutcome {
+	message: string;
+	link?: { href: string; label: string };
+}
+
+/** The words for what an answer did, from three persona consults on
+ * #2268. A decline mails nobody (GLOSSARY.md's Offer entry), so the line
+ * says where the Practice reads it. */
+export function decisionOutcome(
+	decision: OfferDecision,
+	practiceName: string,
+	engagementHref: (engagementId: string) => string
+): DecisionOutcome {
+	if (decision.state === 'accepted' && decision.engagementId && decision.clientName) {
+		const work = decision.engagementKind === 'postpartum' ? 'postpartum care' : 'birth';
+		const name = `${decision.clientName}'s ${work}`;
+		return {
+			message: `You accepted. You're on ${name}.`,
+			link: { href: engagementHref(decision.engagementId), label: `Open ${name}` }
+		};
+	}
+	if (decision.state === 'accepted') {
+		return { message: 'You accepted.' };
+	}
+	return { message: `You declined. ${practiceName} can see that on the Client's page.` };
+}
+
 /** Decides one of the caller's own Offers: 'accept' or 'decline'.
  * Accepting is what mints her attachment to the Engagement. */
 export async function decideOffer(
@@ -165,7 +213,7 @@ export async function decideOffer(
 	practiceId: string,
 	offerId: string,
 	action: 'accept' | 'decline'
-): Promise<{ offerId: string; state: OfferState }> {
+): Promise<OfferDecision> {
 	return readOrThrow(await fetcher(offerActionPath(practiceId, offerId, action), { method: 'POST' }));
 }
 
@@ -251,6 +299,15 @@ export function decideDescription(offer: ClientFields & { offeredAt: string }): 
 	const sent = `sent ${formatInstantWithClock(offer.offeredAt)}`;
 	const description = [offer.clientArea, due, sent].filter(Boolean).join(', ');
 	return description.charAt(0).toUpperCase() + description.slice(1);
+}
+
+/**
+ * The link from an accepted Offer to its Engagement (#2269). The card
+ * names no Client, so the due month tells two jobs apart, in the words
+ * of the persona consults on #2269.
+ */
+export function engagementLinkLabel(offer: { dueMonth?: string }): string {
+	return offer.dueMonth ? `Open the birth due ${formatCalendarMonth(offer.dueMonth)}` : 'Open this work';
 }
 
 /**

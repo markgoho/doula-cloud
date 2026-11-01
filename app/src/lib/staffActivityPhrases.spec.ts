@@ -25,6 +25,7 @@ const WORDING: readonly (readonly [action: string, named: string, unnamed: strin
 		'Contract price for the Client changed to the new rate'
 	],
 	['contract_created', 'Contract drafted for Amara', 'Contract drafted for the Client'],
+	['contract_edited', 'Contract for Amara changed', 'Contract for the Client changed'],
 	['contract_priced', 'Price set on the Contract for Amara', 'Price set on the Contract for the Client'],
 	['contract_sent', 'Contract sent to Amara', 'Contract sent to the Client'],
 	['contract_signed', 'Contract signed by Amara', 'Contract signed by the Client'],
@@ -78,6 +79,7 @@ const WORDING: readonly (readonly [action: string, named: string, unnamed: strin
 	['payment_terms_changed', 'Payment terms changed', 'Payment terms changed'],
 	['portal_account_linked', "Care added to Amara's login", "Care added to the Client's login"],
 	['portal_account_provisioned', 'Login created for Amara', 'Login created for the Client'],
+	['portal_invite_refused', 'Invite refused: Amara signs in through another record', 'Invite refused: the Client signs in through another record'],
 	['portal_invite_sent', 'Amara invited to sign in', 'The Client invited to sign in'],
 	['portal_sessions_ended', 'Amara signed out of every device', 'The Client signed out of every device'],
 	['portal_sign_in_address_changed', 'Sign-in email changed by Amara', 'Sign-in email changed by the Client'],

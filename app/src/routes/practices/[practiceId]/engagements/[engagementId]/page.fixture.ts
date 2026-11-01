@@ -217,6 +217,10 @@ export const detail = {
 	// BirthOutcomeSection's own style-guide page sweeps it directly.
 	birthOutcome: 'live_birth',
 	pregnancyEndedOn: '2026-08-14',
+	// #2277, #2317: the BFF's answers for a live birth -- the Client still
+	// reads her Birth Plan, and no new one is started.
+	offersBirthPlanToStart: false,
+	offersBirthPlan: true,
 	// #1598: who is on this Engagement. Two Doulas, the on-call panel's
 	// own primary and backup, so the summary's row holds its busiest
 	// state: the plural label and two names on one line, the first of
@@ -236,7 +240,13 @@ export const detail = {
 	// on #1625 still offers work with a fee, so the Contract section's
 	// "Your fee" row is drawn on the base. A four-figure fee, the widest
 	// the row gets.
-	yourFee: { amountCents: 1_262_000, acceptedOn: '2026-07-22' }
+	yourFee: {
+		amountCents: 1_262_000,
+		acceptedOn: '2026-07-22',
+		// #2269: the terms she accepted, the Practice's own words, a pasted
+		// URL the value column must break.
+		terms: 'Primary doula for the birth, on call from 38 weeks: https://www.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake'
+	}
 };
 
 /*
@@ -442,6 +452,10 @@ export const asDoula: RouteVariant<RouteParameters> = {
 			...detail,
 			doulas: [],
 			canAttachSelf: true,
+			// #2522: the longest Portal invite row the summary draws, the
+			// refused status with its way on, rides here too; the base's
+			// reads "Never invited".
+			clientPortalInviteStatus: 'refused',
 			session: { ...session, roles: ['doula'], isContractor: false }
 		}
 	}

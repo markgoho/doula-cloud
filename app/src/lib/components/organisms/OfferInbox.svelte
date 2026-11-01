@@ -9,29 +9,49 @@
 	 * onDecide owns the API call and the resulting state change; this
 	 * component reports which Offer and which answer.
 	 */
-	import { formatCalendarMonth, formatInstant } from '#lib/dates.js';
+	import { tick } from 'svelte';
+	import { formatCalendarDay, formatCalendarMonth } from '#lib/dates.js';
 	import { feePaidLine } from '#lib/doulaFee.js';
 	import {
 		clientFactRows,
 		decideDescription,
+		decisionOutcome,
+		engagementLinkLabel,
 		formatFee,
 		isOpen,
 		offerStateLabels,
 		offerStateVariants,
-		type Offer
+		type DecisionOutcome,
+		type Offer,
+		type OfferDecision
 	} from '#lib/offer.js';
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import EmptyState from '#lib/components/molecules/EmptyState.svelte';
 	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 
+	/*
+	 * #2268: `outcome` says what an answer did. The card it answered is
+	 * gone once the list reloads, so it is focused where it appears. It is
+	 * bindable so it outlives this component on a parent that draws it in
+	 * another place after the reload (the Overview, once her first
+	 * Engagement arrives).
+	 */
 	let {
 		offers,
-		onDecide
+		onDecide,
+		practiceName,
+		engagementHref,
+		outcome = $bindable()
 	}: {
 		offers: Offer[];
-		onDecide: (offerId: string, action: 'accept' | 'decline') => Promise<void>;
+		onDecide: (offerId: string, action: 'accept' | 'decline') => Promise<OfferDecision>;
+		practiceName: string;
+		engagementHref: (engagementId: string) => string;
+		outcome?: DecisionOutcome;
 	} = $props();
 
 	/*
@@ -50,8 +70,13 @@
 		if (offer.state === 'accepted' && offer.dueMonth) {
 			rows.push({ label: 'Due', value: formatCalendarMonth(offer.dueMonth) });
 		}
-		if (offer.state === 'accepted' && offer.decidedAt) {
-			rows.push({ label: 'Accepted on', value: formatInstant(offer.decidedAt) });
+		// #2513: the Practice's day, as Ended beside it is.
+		if (offer.state === 'accepted' && offer.acceptedOn) {
+			rows.push({ label: 'Accepted on', value: formatCalendarDay(offer.acceptedOn) });
+		}
+		// #2270: the day the work ended, beside the day it began.
+		if (offer.state === 'accepted' && offer.endedOn) {
+			rows.push({ label: 'Ended', value: formatCalendarDay(offer.endedOn) });
 		}
 		rows.push({ label: 'Fee', value: formatFee(offer.amountCents) });
 		// #2271: what the Practice recorded paying her, on the one screen
@@ -70,16 +95,44 @@
 
 	async function handleDecide(offerId: string, action: 'accept' | 'decline') {
 		decideError = '';
+		outcome = undefined;
 		decidingId = offerId;
 		try {
-			await onDecide(offerId, action);
+			outcome = decisionOutcome(await onDecide(offerId, action), practiceName, engagementHref);
 		} catch (error_) {
 			decideError = error_ instanceof Error ? error_.message : 'Failed to answer this offer';
 		} finally {
 			decidingId = '';
 		}
 	}
+
+	// #2268: declining is final, so it is confirmed first, by the house's
+	// hard confirm (docs/design/govuk-alignment.md, the modal Dialog).
+	let declining = $state('');
+	let isConfirmOpen = $state(false);
+
+	function askToDecline(offerId: string) {
+		declining = offerId;
+		isConfirmOpen = true;
+	}
+
+	// Closed before the answer is sent, so the dialog's own return of
+	// focus to Decline comes before the outcome takes it.
+	async function confirmDecline() {
+		isConfirmOpen = false;
+		await tick();
+		await handleDecide(declining, 'decline');
+	}
 </script>
+
+{#if outcome}
+	<stack-l space="var(--space-2)">
+		<Notice message={outcome.message} variant="status" isFocusedOnAppear />
+		{#if outcome.link}
+			<Link href={outcome.link.href} label={outcome.link.label} />
+		{/if}
+	</stack-l>
+{/if}
 
 {#if offers.length === 0}
 	<EmptyState message="You have no offers." />
@@ -89,6 +142,9 @@
 			<li>
 				<Badge label={offerStateLabels[offer.state]} variant={offerStateVariants[offer.state]} />
 				<SummaryList rows={offerFacts(offer)} />
+				{#if offer.engagementId}
+					<Link href={engagementHref(offer.engagementId)} label={engagementLinkLabel(offer)} />
+				{/if}
 				{#if isOpen(offer)}
 					<!-- v8 ignore start: Svelte-compiled attribute-diffing branches for
 					     the dynamic id/describedBy strings below aren't reachable from
@@ -108,7 +164,7 @@
 							variant="secondary"
 							describedBy="offer-{offer.offerId}-decide-name"
 							loading={decidingId === offer.offerId}
-							onClick={() => handleDecide(offer.offerId, 'decline')}
+							onClick={() => askToDecline(offer.offerId)}
 						/>
 					</cluster-l>
 					<span class="visually-hidden" id="offer-{offer.offerId}-decide-name"
@@ -124,3 +180,12 @@
 {#if decideError}
 	<Notice message={decideError} variant="error" />
 {/if}
+
+<ConfirmDialog
+	bind:open={isConfirmOpen}
+	title="Decline this offer?"
+	consequence="You can't undo this. {practiceName} can send you a new offer later."
+	confirmLabel="Decline offer"
+	cancelLabel="Keep the offer"
+	onConfirm={confirmDecline}
+/>

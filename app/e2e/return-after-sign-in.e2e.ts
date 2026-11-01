@@ -4,6 +4,7 @@ import { enterPractice, signIn } from './auth';
 import { staffLandingSettled } from './mountSettled';
 import { seedEngagement } from './stack';
 import { seedFoundingOwner, uniqueEmail } from './staffSignup';
+import { followMagicLink, seedPortalClient } from './portalClient';
 
 function endsWith(path: string): RegExp {
 	return new RegExp(`${path.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)}$`);
@@ -39,7 +40,30 @@ test('a saved Birth Plan address opened signed out lands on that Birth Plan afte
 	await page.getByRole('button', { name: 'Sign in' }).click();
 
 	await expect(page).toHaveURL(endsWith(birthPlan));
-	await expect(page.getByRole('heading', { level: 1, name: "Pat's Birth Plan" })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: "Pat Client's Birth Plan" })).toBeVisible();
+});
+
+// #2496: the portal's sign-in is a mailed link, so the address she opened
+// rides on the link's token at the BFF and survives the round trip.
+test('a saved portal Birth Plan address opened signed out lands on that Birth Plan after the magic link', async ({
+	page,
+	request
+}) => {
+	const { clientEmail, engagementId } = await seedPortalClient(request, 'Riverside Doulas');
+	const birthPlan = `/portal/engagements/${engagementId}/birth-plan`;
+
+	await page.goto(birthPlan);
+
+	await expect(page).toHaveURL(endsWith(`/portal/login?returnTo=${encodeURIComponent(birthPlan)}`));
+	await page.getByLabel('Email address').fill(clientEmail);
+	await page.getByRole('button', { name: 'Send me a sign-in link' }).click();
+	await expect(page.getByText(/we have sent a sign-in link/i)).toBeVisible();
+
+	await followMagicLink(page, request, clientEmail);
+	await page.getByRole('button', { name: 'Continue' }).click();
+
+	await expect(page).toHaveURL(endsWith(birthPlan));
+	await expect(page.getByRole('heading', { level: 1, name: 'Birth plan' })).toBeVisible();
 });
 
 // #757's notice still says so when the session ends under her in the app,

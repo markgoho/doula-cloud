@@ -16,7 +16,7 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { Offer } from '#lib/offer.js';
-import type { RouteFixture } from '../../../routeFixture.js';
+import { practiceSession, type RouteFixture } from '../../../routeFixture.js';
 import Page from './+page.svelte';
 
 const offers: Offer[] = [
@@ -60,7 +60,26 @@ const offers: Offer[] = [
 		offeredAt: '2026-06-01T00:00:00Z',
 		expiresAt: '2026-06-08T00:00:00Z',
 		decidedAt: '2026-06-02T00:00:00Z',
-		feePaid: { amountCents: 450_000, method: 'bank_transfer', paidOn: '2026-09-30' }
+		acceptedOn: '2026-06-02',
+		feePaid: { amountCents: 450_000, method: 'bank_transfer', paidOn: '2026-09-30' },
+		// #2270: the work ended, so no link to it.
+		endedOn: '2026-10-31'
+	},
+	// #2269: an accepted Offer she still reaches links to its Engagement.
+	{
+		offerId: 'offer-5',
+		state: 'accepted',
+		clientFirstInitial: '',
+		clientArea: '',
+		dueDate: '',
+		dueMonth: '2027-12',
+		amountCents: 450_000,
+		employmentType: 'contractor',
+		offeredAt: '2026-04-01T00:00:00Z',
+		expiresAt: '2026-04-08T00:00:00Z',
+		decidedAt: '2026-04-02T00:00:00Z',
+		acceptedOn: '2026-04-02',
+		engagementId: 'engagement-5'
 	},
 	// #2385: an open Offer whose Client was erased carries none of her
 	// fields, so it renders without the Client rows and is told apart
@@ -83,6 +102,8 @@ export const fixture: RouteFixture = {
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/offers',
+	// #2268: the decline confirm and its outcome name the Practice.
+	pageData: practiceSession(['doula']),
 	respond: () => jsonResponse({ items: offers }),
 	readyText: 'Your offers'
 };

@@ -64,11 +64,15 @@ describe('the login addresses', () => {
 	});
 
 	it('sends a portal refusal to the portal login, flagged only when this document held a session', () => {
-		expect(portalLoginAfterRefusal()).toBe('/portal/login');
+		expect(portalLoginAfterRefusal('/portal/engagements/e-1/birth-plan')).toBe(
+			'/portal/login?returnTo=%2Fportal%2Fengagements%2Fe-1%2Fbirth-plan'
+		);
 
 		noteSessionHeld();
 
-		expect(portalLoginAfterRefusal()).toBe('/portal/login?sessionEnded=true');
+		expect(portalLoginAfterRefusal('/portal/engagements/e-1')).toBe(
+			'/portal/login?sessionEnded=true&returnTo=%2Fportal%2Fengagements%2Fe-1'
+		);
 	});
 
 	/*
@@ -78,7 +82,7 @@ describe('the login addresses', () => {
 	it('produces addresses the reader recognizes', () => {
 		noteSessionHeld();
 		const staff = new URL(staffLoginAfterRefusal('/practices/p-1'), 'https://example.test');
-		const portal = new URL(portalLoginAfterRefusal(), 'https://example.test');
+		const portal = new URL(portalLoginAfterRefusal('/portal/engagements/e-1'), 'https://example.test');
 
 		const ended = new URL(staffLoginAfterSessionEnded(), 'https://example.test');
 

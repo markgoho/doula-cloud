@@ -177,6 +177,7 @@ type APIError struct {
    * `403 Forbidden`: Authenticated user lacks permission for the practice/resource.
    * `404 Not Found`: Target resource does not exist (or caller lacks permission to know it exists).
    * `409 Conflict`: Resource state conflict or duplicate idempotency key conflict.
+   * `410 Gone`: The caller once reached the resource and no longer does. One use today: `ATTACHMENT_ENDED` on the Engagement detail read, for a Doula whose own granted Attachment on it has ended ([#2270](https://github.com/markgoho/doula-cloud/issues/2270)). The message says when the work ended and nothing else about the Engagement; anyone who was never on it still gets the plain `404`.
    * `429 Too Many Requests`: Rate limit reached.
    * `500 Internal Server Error`: Unhandled server or database error (log details internally, do not leak raw stack traces to caller).
    * A signed-in caller whose identity resolves to no `staff` row gets `404 no matching staff account` on every pre-Practice `/api/staff/*` route, and `403` on a `/api/practices/{practiceId}/...` one (#1182): pre-Practice she asked about her own account and it does not exist, while behind a `{practiceId}` she asked about a Practice she has no standing at, which is the refusal beside it. `staffauth.requireSelf` owns the first, and its tests fail the build on a route in that family that answers anything else.

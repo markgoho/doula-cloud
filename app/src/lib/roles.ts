@@ -96,6 +96,25 @@ export function employmentTypeLabel(employmentType: string): string {
 }
 
 /**
+ * A whole `roles` array as a phrase, `Owner, Admin and Doula`.
+ */
+export function rolesInWords(roles: readonly string[]): string {
+	const labels = roles.map((role) => roleLabel(role));
+	const last = labels.pop() ?? '';
+	return labels.length > 0 ? `${labels.join(', ')} and ${last}` : last;
+}
+
+/**
+ * What a person is at one Practice, for the line under its name in the
+ * Practice switcher and picker (#2266): `Doula, as a contractor`. The
+ * type is set apart with "as" so it is not read as one more role.
+ */
+export function membershipLabel(roles: readonly string[], employmentType: string): string {
+	const type = employmentTypeLabel(employmentType).toLowerCase();
+	return `${rolesInWords(roles)}, as ${/^[aeiou]/.test(type) ? 'an' : 'a'} ${type}`;
+}
+
+/**
  * The lenient lookup both helpers above are: the labeled word if the map
  * has one, otherwise the stored value with its first letter raised.
  */

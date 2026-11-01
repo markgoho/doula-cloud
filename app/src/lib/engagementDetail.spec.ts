@@ -30,6 +30,7 @@ import {
 	sortVisits,
 	visitsURL,
 	visitTypeLabel,
+	yourFeeRows,
 	type EngagementReference,
 	type Visit
 } from './engagementDetail.js';
@@ -746,5 +747,18 @@ describe('sortVisits (#1999)', () => {
 		const given = [visit('a', '2026-07-01T15:00:00Z'), visit('b', '2026-07-02T15:00:00Z')];
 		sortVisits(given);
 		expect(given.map((entry) => entry.visitId)).toEqual(['a', 'b']);
+	});
+});
+
+describe('yourFeeRows', () => {
+	it('puts the terms she accepted beside her fee (#2269)', () => {
+		expect(yourFeeRows({ amountCents: 45_000, acceptedOn: '2026-10-27', terms: 'Backup for the birth.' })).toEqual([
+			{ label: 'Your fee', value: '$450.00, the fee you accepted on Oct 27, 2026' },
+			{ label: 'Terms', value: 'Backup for the birth.' }
+		]);
+	});
+
+	it('draws no Terms row for an Offer that had none', () => {
+		expect(yourFeeRows({ amountCents: 45_000, acceptedOn: '2026-10-27' })).toHaveLength(1);
 	});
 });

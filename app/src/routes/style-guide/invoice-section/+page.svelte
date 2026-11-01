@@ -128,6 +128,29 @@
 		/>
 	</section>
 
+	<!-- #2381: an Owner's row while a bank payment clears offers no
+	     Record payment, and says when it comes back. -->
+	<section>
+		<h2>An Owner, while a payment is on its way</h2>
+		<InvoiceSection
+			invoices={[{ ...invoices[1], id: 'in_9', daysOverdue: 0, billingMode: 'stripe', paymentProcessing: true }]}
+			contractStatus="signed"
+			clientsCanPay={true}
+			hasClientEmail={true}
+			isOwner={true}
+			isOwnerOrAdmin={true}
+			billingMode="stripe"
+			{paymentsSettingsHref}
+			{practiceTimezone}
+			onCreate={async () => {}}
+			onRecordPayment={async () => {}}
+			onVoidInvoice={async () => {}}
+			onWriteOffInvoice={async () => {}}
+			onReversePayment={async () => {}}
+			onRefundPayment={async () => {}}
+		/>
+	</section>
+
 	<section>
 		<h2>No Invoices yet</h2>
 		<InvoiceSection

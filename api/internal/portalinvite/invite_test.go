@@ -129,6 +129,13 @@ func TestInviteHandler_ReinviteRotatesToken(t *testing.T) {
 		t.Fatalf("first status = %d, want %d", first.StatusCode, http.StatusCreated)
 	}
 	firstExpiresAt := inviteTokenExpiresAt(t, db, firstOut.ClientPortalUserID)
+	// #2522: a refused accept on the first token is a fact about that
+	// token; rotating it asks again.
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE client_portal_users SET access_refused_at = now() WHERE id = $1`, firstOut.ClientPortalUserID,
+	); err != nil {
+		t.Fatalf("mark refused: %v", err)
+	}
 
 	second := postInvite(t, srv, session, practiceID, engagementID)
 	defer second.Body.Close()
@@ -149,6 +156,15 @@ func TestInviteHandler_ReinviteRotatesToken(t *testing.T) {
 	secondExpiresAt := inviteTokenExpiresAt(t, db, firstOut.ClientPortalUserID)
 	if !secondExpiresAt.After(firstExpiresAt) {
 		t.Fatalf("expected invite_token_expires_at to move forward on re-invite, first=%v second=%v", firstExpiresAt, secondExpiresAt)
+	}
+	var stillRefused bool
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT access_refused_at IS NOT NULL FROM client_portal_users WHERE id = $1`, firstOut.ClientPortalUserID,
+	).Scan(&stillRefused); err != nil {
+		t.Fatalf("query access_refused_at: %v", err)
+	}
+	if stillRefused {
+		t.Fatal("access_refused_at survived the re-invite, want it cleared with the rotated token")
 	}
 
 	var count int

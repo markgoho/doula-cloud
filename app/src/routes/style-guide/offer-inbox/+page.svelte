@@ -1,6 +1,11 @@
 <script lang="ts">
 	import OfferInbox from '#lib/components/organisms/OfferInbox.svelte';
-	import type { Offer } from '#lib/offer.js';
+	import type { Offer, OfferDecision } from '#lib/offer.js';
+
+	const decide = async (offerId: string, action: 'accept' | 'decline'): Promise<OfferDecision> => ({
+		offerId,
+		state: action === 'accept' ? 'accepted' : 'declined'
+	});
 
 	/*
 	 * The longest realistic value, not a representative one (ADR-0025): an
@@ -30,7 +35,8 @@
 			employmentType: 'contractor',
 			offeredAt: '2026-06-01T00:00:00Z',
 			expiresAt: '2026-06-08T00:00:00Z',
-			decidedAt: '2026-06-02T00:00:00Z'
+			decidedAt: '2026-06-02T00:00:00Z',
+			acceptedOn: '2026-06-02'
 		},
 		{
 			offerId: 'of_3',
@@ -44,7 +50,9 @@
 			offeredAt: '2026-04-01T00:00:00Z',
 			expiresAt: '2026-04-08T00:00:00Z',
 			decidedAt: '2026-04-02T00:00:00Z',
-			feePaid: { amountCents: 425_000, method: 'bank_transfer', paidOn: '2026-09-30' }
+			acceptedOn: '2026-04-02',
+			feePaid: { amountCents: 425_000, method: 'bank_transfer', paidOn: '2026-09-30' },
+			endedOn: '2026-10-31'
 		},
 		{
 			offerId: 'of_4',
@@ -57,7 +65,9 @@
 			employmentType: 'contractor',
 			offeredAt: '2026-05-01T00:00:00Z',
 			expiresAt: '2026-05-08T00:00:00Z',
-			decidedAt: '2026-05-02T00:00:00Z'
+			decidedAt: '2026-05-02T00:00:00Z',
+			acceptedOn: '2026-05-02',
+			engagementId: 'eng_4'
 		}
 	];
 </script>
@@ -67,11 +77,11 @@
 
 	<section>
 		<h2>One still open, one already decided</h2>
-		<OfferInbox {offers} onDecide={async () => {}} />
+		<OfferInbox {offers} onDecide={decide} practiceName="Rooted Birth Collective" engagementHref={() => '#'} />
 	</section>
 
 	<section>
 		<h2>Nothing offered</h2>
-		<OfferInbox offers={[]} onDecide={async () => {}} />
+		<OfferInbox offers={[]} onDecide={decide} practiceName="Rooted Birth Collective" engagementHref={() => '#'} />
 	</section>
 </stack-l>

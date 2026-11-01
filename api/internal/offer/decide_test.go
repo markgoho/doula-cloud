@@ -40,6 +40,10 @@ func TestAcceptHandler_MintsGrantedAttachmentWithFeeCopied(t *testing.T) {
 	if decided.State != "accepted" {
 		t.Fatalf("state = %q, want accepted", decided.State)
 	}
+	// #2268: the accept names the work that is now hers.
+	if decided.EngagementID != f.engagementID || decided.ClientName != "Test Client" || decided.EngagementKind != "birth" {
+		t.Fatalf("engagement, client = (%q, %q), want (%q, Test Client)", decided.EngagementID, decided.ClientName, f.engagementID)
+	}
 
 	a, found := readAttachment(t, f, f.doulaID)
 	if !found {

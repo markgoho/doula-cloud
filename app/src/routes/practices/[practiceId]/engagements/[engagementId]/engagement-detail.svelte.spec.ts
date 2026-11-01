@@ -65,12 +65,14 @@ interface Detail {
 	statusMoves: string[];
 	birthOutcome?: string;
 	pregnancyEndedOn?: string;
+	offersBirthPlanToStart: boolean;
+	offersBirthPlan: boolean;
 	clientPortalInviteStatus?: string;
 	clientEmailSuppressed?: boolean;
 	clientHasEmail?: boolean;
 	doulas: { staffId: string; name: string }[];
 	canAttachSelf: boolean;
-	yourFee?: { amountCents: number; acceptedOn: string };
+	yourFee?: { amountCents: number; acceptedOn: string; terms?: string };
 }
 
 // The Engagement is handed in as `data` rather than stubbed out of a
@@ -684,9 +686,12 @@ describe('the status-move controls (#253)', () => {
 		await testPage.getByRole('button', { name: 'Mark care complete' }).click();
 		await testPage.getByLabelText('The work finished as agreed').click();
 		await testPage.getByLabelText('Note (optional)').fill('Baby arrived safely.');
+		const onCallReads = callsTo('/on-call').length;
 		await testPage.getByRole('button', { name: 'Confirm completion' }).click();
 
 		await expect.poll(() => requests).toHaveLength(1);
+		// #2270: completion ends every Attachment, so On call is read again.
+		await vi.waitFor(() => expect(callsTo('/on-call').length).toBeGreaterThan(onCallReads));
 		expect(requests[0]!.body).toEqual({
 			status: 'completed',
 			endingReason: 'care_complete',
@@ -1202,6 +1207,68 @@ describe('a section fails on its own, independent of the others (#841)', () => {
 	});
 });
 
+// #2258: the sections read at once, not one after another, and each says
+// it is loading until its own read lands rather than drawing empty.
+async function renderWithHeldReads(roles: string[]) {
+	await testPage.viewport(3200, 900);
+	apiFetchWithSession.mockImplementation(() => new Promise(() => {}));
+	await render(Page, {
+		data: { ...fixtureDetail, session: sessionFor(roles) }
+	});
+}
+
+describe('the sections read at once and say they are loading (#2258)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('asks for every section before any answers', async () => {
+		await renderWithHeldReads(['owner']);
+
+		await expect.poll(() => apiFetchWithSession.mock.calls.length).toBeGreaterThanOrEqual(10);
+		const paths = apiFetchWithSession.mock.calls.map(([path]) => String(path));
+		for (const read of ['/visits', '/messages', '/activity', '/contract', '/plans/']) {
+			expect(paths.some((path) => path.includes(read))).toBe(true);
+		}
+	});
+
+	it('says Visits, Messages and Activity are loading, never that they are empty', async () => {
+		await renderWithHeldReads(['owner']);
+
+		for (const name of ['Loading the Visits', 'Loading the Messages', 'Loading the Activity']) {
+			await expect.element(testPage.getByRole('status', { name })).toBeInTheDocument();
+		}
+		await expect.element(testPage.getByText('No Visits yet.')).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('Nothing has happened yet.')).not.toBeInTheDocument();
+	});
+
+	it('names the Offers section for an Owner before its read lands', async () => {
+		await renderWithHeldReads(['owner']);
+
+		await expect.element(testPage.getByRole('status', { name: 'Loading the Offers' })).toBeInTheDocument();
+		await expect.element(testPage.getByRole('heading', { level: 2, name: 'Offers' })).toBeInTheDocument();
+	});
+
+	it("says why when an Owner's Offers read fails, rather than loading for ever", async () => {
+		await testPage.viewport(3200, 900);
+		const respond = toApiResponder(fixture);
+		apiFetchWithSession.mockImplementation((path: string) =>
+			path.endsWith('/offers') ? Promise.reject(new Error('Offers are down')) : respond(path)
+		);
+		await render(Page, { data: { ...fixtureDetail, session: sessionFor(['owner']) } });
+
+		await expect.element(testPage.getByText('We could not load the Offers.')).toBeVisible();
+		await expect.element(testPage.getByRole('status', { name: 'Loading the Offers' })).not.toBeInTheDocument();
+	});
+
+	it('draws no Offers section for a Doula, whom its read refuses', async () => {
+		await renderWithHeldReads(['doula']);
+
+		await expect.element(testPage.getByRole('status', { name: 'Loading the Visits' })).toBeInTheDocument();
+		await expect.element(testPage.getByRole('heading', { level: 2, name: 'Offers' })).not.toBeInTheDocument();
+	});
+});
+
 function pdfBlobResponse(): Response {
 	return new Response(new Blob(['%PDF-1.4'], { type: 'application/pdf' }), { status: 200 });
 }
@@ -1255,6 +1322,32 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 		await expect.element(testPage.getByText('Invite pending')).toBeVisible();
 	});
 
+	// #2522: an accept refused because her login reaches another record.
+	it('reads a refused invite, with the way on', async () => {
+		await setup({ ...fixtureDetail, clientPortalInviteStatus: 'refused' });
+
+		await expect
+			.element(
+				testPage.getByText(
+					"Invite refused: signs in through another record. Combine the two records: save this Client's details, and you will be asked whether the other record is the same person."
+				)
+			)
+			.toBeVisible();
+		expect(testPage.getByText('Invite pending').elements()).toHaveLength(0);
+	});
+
+	it('withholds Send Contract while the invite is refused, as never invited does', async () => {
+		await setupWithContract(
+			() => mockContract(draftContract),
+			{ ...fixtureDetail, clientPortalInviteStatus: 'refused' }
+		);
+
+		await expect
+			.element(testPage.getByText(/signs in through another record, so cannot sign a Contract sent from this one/).first())
+			.toBeVisible();
+		expect(testPage.getByRole('button', { name: 'Send Contract' }).elements()).toHaveLength(0);
+	});
+
 	it('offers "Send portal invite" while never invited', async () => {
 		await setup(fixtureDetail);
 
@@ -1300,8 +1393,9 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 		await setup({ ...fixtureDetail, clientHasEmail: false });
 
 		await expect.element(testPage.getByRole('button', { name: 'Send portal invite' })).not.toBeInTheDocument();
+		// The Contract section says it too, now that it reads beside the header (#2258).
 		await expect
-			.element(testPage.getByText('This Client has no email address on file. Add one before sending a portal invite.'))
+			.element(testPage.getByText('This Client has no email address on file. Add one before sending a portal invite.').first())
 			.toBeVisible();
 		await expect
 			.element(testPage.getByText(/no email on file, so the client cannot be invited yet/i))
@@ -2092,7 +2186,8 @@ function planOf(planType: string, overrides: Record<string, unknown> = {}) {
 async function setupPlans(
 	plans: Partial<Record<'care_plan' | 'birth_plan', ReturnType<typeof planOf>>>,
 	onPut?: (planType: string, body: { answers: Record<string, unknown> }) => Response,
-	onPost?: (planType: string) => Response
+	onPost?: (planType: string) => Response,
+	detailOverride: Partial<Detail> = {}
 ) {
 	await testPage.viewport(3200, 900);
 	const respond = toApiResponder(fixture);
@@ -2108,7 +2203,7 @@ async function setupPlans(
 		}
 		return respond(path);
 	});
-	await render(Page, { data: { ...fixtureDetail, session: sessionFor() } });
+	await render(Page, { data: { ...fixtureDetail, ...detailOverride, session: sessionFor() } });
 }
 
 function planSection(heading: string) {
@@ -2174,6 +2269,70 @@ describe('the Care Plan and Birth Plan sections (#2004)', () => {
 				`/practices/${fixture.params.practiceId}/engagements/${fixture.params.engagementId}/birth-plan`
 			);
 		expect(testPage.getByRole('button', { name: 'Download Birth Plan (PDF)' }).elements()).toHaveLength(0);
+	});
+
+	// #2277, #2317: ADR-0015's create side, as the BFF answers it.
+	const expected = { kind: 'birth', birthOutcome: undefined, pregnancyEndedOn: undefined, offersBirthPlanToStart: true };
+
+	it('offers to start the Birth Plan while the birth is still expected', async () => {
+		await setupPlans({}, undefined, undefined, expected);
+
+		await expect.element(planSection('Birth Plan').getByText('The Birth Plan is not started yet.')).toBeVisible();
+		await expect.element(planSection('Birth Plan').getByRole('button', { name: 'Start the Birth Plan' })).toBeVisible();
+	});
+
+	it('offers no Birth Plan on postpartum care', async () => {
+		await setupPlans({}, undefined, undefined, {
+			...expected,
+			kind: 'postpartum',
+			offersBirthPlanToStart: false,
+			offersBirthPlan: false
+		});
+
+		await expect.element(planSection('Birth Plan').getByText('No Birth Plan. This is postpartum care.')).toBeVisible();
+		expect(planSection('Birth Plan').getByRole('button').elements()).toHaveLength(0);
+		await expect.element(planSection('Care Plan').getByRole('button', { name: 'Start the Care Plan' })).toBeVisible();
+	});
+
+	it.each([
+		['a live birth', true],
+		['a loss', false]
+	])('offers no new Birth Plan once %s is recorded', async (_outcome, offersBirthPlan) => {
+		await setupPlans({}, undefined, undefined, { offersBirthPlanToStart: false, offersBirthPlan });
+
+		await expect
+			.element(planSection('Birth Plan').getByText('No Birth Plan. The birth outcome is recorded.'))
+			.toBeVisible();
+		expect(planSection('Birth Plan').getByRole('button').elements()).toHaveLength(0);
+	});
+
+	it('shows a Birth Plan the Client is not shown, and says so, with no hospital print', async () => {
+		await setupPlans({ birth_plan: planOf('birth_plan') }, undefined, undefined, {
+			birthOutcome: 'loss',
+			offersBirthPlanToStart: false,
+			offersBirthPlan: false
+		});
+
+		await expect
+			.element(planSection('Birth Plan').getByText(`Not shown to ${fixtureDetail.clientName}`))
+			.toBeVisible();
+		expect(planSection('Birth Plan').getByText(/has not read this yet/).elements()).toHaveLength(0);
+		expect(testPage.getByRole('link', { name: 'Print for the hospital' }).elements()).toHaveLength(0);
+		await expect.element(planSection('Birth Plan').getByText('Quiet', { exact: true })).toBeVisible();
+	});
+
+	it('says why a Start from a page opened before the outcome was recorded is refused', async () => {
+		const refusal = "A Birth Plan can't be started now: the birth outcome is recorded.";
+		await setupPlans(
+			{},
+			undefined,
+			() => jsonResponse({ code: 'conflict', message: refusal }, 409),
+			expected
+		);
+
+		await planSection('Birth Plan').getByRole('button', { name: 'Start the Birth Plan' }).click();
+
+		await expect.element(planSection('Birth Plan').getByText(refusal)).toBeVisible();
 	});
 
 	it('says a Plan is not started, and starts it at its questions', async () => {
@@ -3440,6 +3599,16 @@ describe('what a reader sees about money (#2002, #2003)', () => {
 		await expect.element(testPage.getByText('$12,620.00, the fee you accepted on Jul 22, 2026')).toBeVisible();
 	});
 
+	it('shows a contractor the terms she accepted beside her fee (#2269)', async () => {
+		await setupMoney(contractorReader, {
+			...fixtureDetail,
+			yourFee: { amountCents: 45_000, acceptedOn: '2026-10-27', terms: 'Backup for the birth, on call from 38 weeks.' }
+		});
+
+		await expect.element(testPage.getByText('Terms', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText('Backup for the birth, on call from 38 weeks.')).toBeVisible();
+	});
+
 	it('draws no fee row for a reader the BFF sends no fee', async () => {
 		await setupMoney(sessionFor(['owner']), { ...fixtureDetail, yourFee: undefined });
 
@@ -3619,7 +3788,8 @@ describe('the Messages section (#2004)', () => {
 					: undefined
 		);
 
-		expect(messagesSection().getByLabelText('Message').elements()).toHaveLength(0);
+		await expect.element(messagesSection().getByRole('button', { name: 'Write a message' })).toBeVisible();
+		expect(messagesSection().getByLabelText('Message', { exact: true }).elements()).toHaveLength(0);
 		await messagesSection().getByRole('button', { name: 'Write a message' }).click();
 		await messagesSection().getByLabelText('Message').fill('See you Thursday.');
 		await messagesSection().getByRole('button', { name: 'Send', exact: true }).click();
@@ -3690,5 +3860,101 @@ describe('how the Contract and the Plans came to be (#2104)', () => {
 		await expect.element(testPage.getByText('Oluwaseun Adebayo-Montgomery Fitzwilliam')).toBeVisible();
 		await expect.element(testPage.getByText('Aug 12, 2026 by Anne-Marie Ochieng-Whitfield')).toBeVisible();
 		await expect.element(testPage.getByText('Aug 26, 2026 by Priyanka Venkataraman-Solberg')).toBeVisible();
+	});
+});
+
+// #2331: an act the BFF records on the Engagement is on its ledger at once.
+function activityReads(): unknown[] {
+	return apiFetchWithSession.mock.calls.filter(([path]) => String(path).includes('/activity'));
+}
+
+async function setupSendContract(sendResponse: () => Response) {
+	await setupWithContract(
+		() => {
+			const respond = toApiResponder(fixture);
+			apiFetchWithSession.mockImplementation((path: string) => {
+				if (path.endsWith('/contract/send')) return Promise.resolve(sendResponse());
+				if (path.endsWith('/contract')) return Promise.resolve(jsonResponse(draftOf()));
+				return respond(path);
+			});
+		},
+		{ ...fixtureDetail, clientPortalInviteStatus: 'accepted' }
+	);
+	await vi.waitFor(() => expect(activityReads()).toHaveLength(1));
+}
+
+describe('the ledger is read again after an act (#2331)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('reads the ledger again once the Contract is sent', async () => {
+		await setupSendContract(() => jsonResponse(draftOf({ status: 'sent' })));
+
+		await testPage.getByRole('button', { name: 'Send Contract' }).click();
+
+		await expect.element(testPage.getByRole('status').filter({ hasText: 'Contract sent.' })).toBeVisible();
+		await vi.waitFor(() => expect(activityReads()).toHaveLength(2));
+	});
+
+	it('leaves the ledger as it was when sending the Contract is refused', async () => {
+		await setupSendContract(() => jsonResponse('contract is no longer a draft', 409));
+
+		await testPage.getByRole('button', { name: 'Send Contract' }).click();
+
+		await expect.element(testPage.getByText('contract is no longer a draft')).toBeVisible();
+		expect(activityReads()).toHaveLength(1);
+	});
+
+	it('reads the ledger again once the Contract is saved (#2520)', async () => {
+		await setupWithContract(
+			() => {
+				const respond = toApiResponder(fixture);
+				apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
+					if (path.endsWith('/contract') && init?.method === 'PUT') {
+						return Promise.resolve(jsonResponse(draftOf()));
+					}
+					if (path.endsWith('/contract')) return Promise.resolve(jsonResponse(draftOf()));
+					return respond(path);
+				});
+			},
+			{ ...fixtureDetail, clientPortalInviteStatus: 'accepted' }
+		);
+		await vi.waitFor(() => expect(activityReads()).toHaveLength(1));
+
+		await testPage.getByRole('button', { name: 'Change the Draft Contract' }).click();
+		await testPage.getByLabelText('Scope of service').fill('Two prenatal Visits and the birth');
+		await testPage.getByRole('button', { name: 'Save Contract' }).click();
+
+		await expect.element(testPage.getByRole('status').filter({ hasText: 'Contract saved.' })).toBeVisible();
+		await vi.waitFor(() => expect(activityReads()).toHaveLength(2));
+	});
+
+	it('reads the ledger again once an Invoice is raised', async () => {
+		await setupMoney(contractorReader, fixtureDetail, (path, init) =>
+			path.endsWith('/contract/invoices') && init?.method === 'POST'
+				? jsonResponse({ id: 'invoice-9', status: 'open', billingMode: 'stripe' }, 201)
+				: undefined
+		);
+		await vi.waitFor(() => expect(activityReads()).toHaveLength(1));
+
+		await testPage.getByRole('button', { name: 'Create Invoice' }).click();
+
+		await expect.element(testPage.getByText('Invoice created.')).toBeVisible();
+		await vi.waitFor(() => expect(activityReads()).toHaveLength(2));
+	});
+
+	it('leaves the ledger as it was when raising an Invoice is refused', async () => {
+		await setupMoney(contractorReader, fixtureDetail, (path, init) =>
+			path.endsWith('/contract/invoices') && init?.method === 'POST'
+				? jsonResponse({ message: 'The Contract is not signed yet.' }, 409)
+				: undefined
+		);
+		await vi.waitFor(() => expect(activityReads()).toHaveLength(1));
+
+		await testPage.getByRole('button', { name: 'Create Invoice' }).click();
+
+		await expect.element(testPage.getByText('The Contract is not signed yet.')).toBeVisible();
+		expect(activityReads()).toHaveLength(1);
 	});
 });

@@ -18,16 +18,19 @@
 		practicePushSubscriptionsPath,
 		registerPushSubscription
 	} from '#lib/pushRegistration.js';
-	import { decideOffer } from '#lib/offer.js';
+	import { decideOffer, type DecisionOutcome } from '#lib/offer.js';
 	import {
 		closeSecondFactorRecommendation,
 		isConnectCardShown,
+		isDeclinedBlockShown,
 		isRequestBlockShown,
 		isRosterBlockShown,
 		isTonightBlockShown,
 		loadPracticeLanding,
 		loadWaitingOnReplyPage,
 		type ConnectHealth,
+		type DeclinedHealth,
+		type DeclinedOffer,
 		type PracticeLanding,
 		type RequestHealth,
 		type RosterHealth,
@@ -171,9 +174,18 @@
 	// accepting an Offer supersedes every other open Offer on the same
 	// Engagement, and it can spend a credit, so the other blocks are stale too.
 	async function handleDecide(offerId: string, action: 'accept' | 'decline') {
-		await decideOffer(apiFetchWithSession, page.params.practiceId!, offerId, action);
+		const decision = await decideOffer(apiFetchWithSession, page.params.practiceId!, offerId, action);
 		await load();
+		return decision;
 	}
+
+	let offerOutcome = $state<DecisionOutcome>();
+
+	const offerEngagementHref = (engagementId: string) =>
+		resolve('/practices/[practiceId]/engagements/[engagementId]', {
+			practiceId: page.params.practiceId!,
+			engagementId
+		});
 
 	// #455: the roll-up of Engagements whose thread's latest Message came
 	// from the Client. rowHref makes the Client's own name (accessor's
@@ -223,6 +235,18 @@
 		return rows;
 	}
 
+	function declinedHref(item: DeclinedOffer): string {
+		const engagement = resolve('/practices/[practiceId]/engagements/[engagementId]', {
+			practiceId: page.params.practiceId!,
+			engagementId: item.engagementId
+		});
+		return `${engagement}#offers`;
+	}
+
+	function declinedLine(item: DeclinedOffer): string {
+		return `${item.clientName}, ${item.kind === 'postpartum' ? 'postpartum' : 'birth'}: ${item.declinedBy} declined`;
+	}
+
 	function notConnectedWords(connect: ConnectHealth): string {
 		if (!isPracticeOwner) return adminAsk;
 		return connect.billingMode === 'stripe' ? ownerAskStart : `${ownerAskStart} ${ownerAskEnd}`;
@@ -235,7 +259,13 @@
 		text="Work you have been offered. Accepting puts you on the birth; declining is final for that offer."
 		tone="variant"
 	/>
-	<OfferInbox offers={landing!.openOffers} onDecide={handleDecide} />
+	<OfferInbox
+		offers={landing!.openOffers}
+		onDecide={handleDecide}
+		practiceName={session.practiceName}
+		engagementHref={offerEngagementHref}
+		bind:outcome={offerOutcome}
+	/>
 {/snippet}
 
 {#snippet primary()}
@@ -296,6 +326,7 @@
 		they need no space held for them while the page loads.
 	-->
 	{#if isRequestBlockShown(landing!.requests)}{@render requestBlock(landing!.requests)}{/if}
+	{#if isDeclinedBlockShown(landing!.declined)}{@render declinedBlock(landing!.declined)}{/if}
 	{#if isConnectCardShown(landing!.connect)}{@render connectBlock(landing!.connect)}{/if}
 	{#if isRosterBlockShown(landing!.roster)}{@render rosterBlock(landing!.roster)}{/if}
 {/snippet}
@@ -372,6 +403,34 @@
 						variant="secondary"
 					/>
 				</cluster-l>
+			{/if}
+		</stack-l>
+	</section>
+{/snippet}
+
+<!--
+	#2508: a decline mails nobody, so it is read here, by every Owner and
+	Admin, while the work still has no Doula and no open Offer. Each line
+	opens that Engagement's Offers; the list is one decision.
+-->
+{#snippet declinedBlock(declined: DeclinedHealth | 'unavailable')}
+	<section>
+		<stack-l space="var(--space-3)">
+			<Heading level={2} variant="section" text="No Doula yet" />
+			{#if declined === 'unavailable'}
+				<Text text="Could not load declined Offers just now." tone="muted" />
+			{:else}
+				<Text text="The Offer was declined, and nobody else has the work or an open Offer." tone="variant" />
+				<ul class="declined-list">
+					{#each declined.items as item (item.offerId)}
+						<li>
+							<Link href={declinedHref(item)} label={declinedLine(item)} variant="secondary" />
+						</li>
+					{/each}
+				</ul>
+				{#if declined.hasMore}
+					<Text text="Showing the newest {declined.items.length}." tone="muted" />
+				{/if}
 			{/if}
 		</stack-l>
 	</section>
@@ -556,6 +615,15 @@
 		   (it was 48rem with the column unwrapped). */
 		.waiting-table {
 			container: waiting-table / inline-size;
+		}
+
+		.declined-list {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr);
+			gap: var(--space-2);
+			margin: 0;
+			padding: 0;
+			list-style: none;
 		}
 
 		.activity-table {

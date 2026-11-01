@@ -13,7 +13,7 @@
 	 * `EmptyState` in its `content` (#2015), so the contents rail still
 	 * names it and the reader learns it is empty rather than missing.
 	 */
-	import type { Snippet } from 'svelte';
+	import { tick, type Snippet } from 'svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -71,6 +71,11 @@
 		 * and gets no placeholder.
 		 */
 		summaryRows?: readonly { label: string; value: string | readonly string[]; action?: string }[];
+		/**
+		 * The words of the links a summary has under its card, such as the
+		 * Engagement's "View Client" (#2258), held as a line while loading.
+		 */
+		summaryLinks?: readonly string[];
 		actions?: Snippet;
 		/**
 		 * The actions to draw beside the title while `loading`, for a
@@ -112,6 +117,7 @@
 		isBackPending = false,
 		summary,
 		summaryRows,
+		summaryLinks,
 		actions,
 		loadingActions,
 		sections,
@@ -129,6 +135,20 @@
 			.replaceAll(/[^a-z0-9]+/g, '-')
 			.replaceAll(/^-|-$/g, '');
 	}
+
+	// #2508: a link from another screen to one section (the Overview's
+	// declined Offers, to `#offers`) arrives before the record has loaded,
+	// so the browser's own jump lands on the loading bars and the section
+	// then moves down. Once the record is drawn, the section is scrolled
+	// to again, once.
+	let hasLanded = false;
+	$effect(() => {
+		if (loading || hasLanded) return;
+		hasLanded = true;
+		const id = location.hash.slice(1);
+		if (!id) return;
+		void tick().then(() => document.querySelector(`#${CSS.escape(id)}`)?.scrollIntoView());
+	});
 </script>
 
 <PageTitle page={title} {serviceName} isPending={Boolean(loading) && !loadError} />
@@ -213,7 +233,7 @@
 						{:else}
 							<!-- A name's words as a bar, so the actions keep the
 							     baseline and the wrap a loaded name gives them. -->
-							<span class="title-placeholder" aria-hidden="true"><span>Given Family-name</span></span>
+							<span class="title-placeholder" aria-hidden="true"><span data-words="Given Family"></span></span>
 						{/if}
 						<cluster-l space="var(--space-2)" align="center">{@render loadingActions()}</cluster-l>
 					</cluster-l>
@@ -236,11 +256,16 @@
 						>
 							{#snippet value(row)}
 								{#each row.lines as line, index (index)}
-									<span class="value-placeholder"><span>{line}</span></span>
+									<span class="value-placeholder"><span data-words={line}></span></span>
 								{/each}
 							{/snippet}
 							{#snippet action(row)}<span class="action-placeholder">{row.changes}</span>{/snippet}
 						</SummaryList>
+						{#if summaryLinks?.length}
+							<div class="summary-links">
+								{#each summaryLinks as link (link)}<span class="action-placeholder">{link}</span>{/each}
+							</div>
+						{/if}
 					</div>
 				{/if}
 			</div>
@@ -393,6 +418,13 @@
 			letter-spacing: var(--text-heading-lg-tracking);
 		}
 
+		.summary-links {
+			display: flex;
+			flex-wrap: wrap;
+			gap: var(--space-4);
+			margin-block-start: var(--space-4);
+		}
+
 		.back-placeholder {
 			min-block-size: var(--hit-target-min);
 		}
@@ -410,6 +442,13 @@
 		.value-placeholder + .value-placeholder {
 			font-size: var(--text-meta-size);
 			line-height: var(--text-meta-leading);
+		}
+
+		/* The words are generated content, so no text query or page
+		   search meets a placeholder's sample value. */
+		.value-placeholder > span::before,
+		.title-placeholder > span::before {
+			content: attr(data-words);
 		}
 
 		.value-placeholder > span,

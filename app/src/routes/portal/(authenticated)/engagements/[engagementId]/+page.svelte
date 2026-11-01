@@ -61,6 +61,9 @@
 		 * postpartum-only Engagement, which never had one (#505). */
 		dueDate?: string;
 		offersBirthPlan: boolean;
+		/** True when she holds another Engagement at this Practice (#2276),
+		 * so the line under the heading names which one this is. */
+		isOneOfSeveral: boolean;
 		/** True once the Engagement is `completed` (#2217): the one fact
 		 * about where her care stands that crosses, so "What happens next"
 		 * can lead with "Care ended". No other phase does (#2007). */
@@ -75,6 +78,11 @@
 
 	let detail = $state<Detail | undefined>();
 	let error = $state('');
+
+	const label = $derived(
+		engagementLabel({ practiceName: page.data.practiceName, createdAt: page.data.createdAt })
+	);
+	const practiceLine = $derived(detail?.isOneOfSeveral ? label : (page.data.practiceName ?? ''));
 
 	// #486 AC5: the same record-scoped ledger the staff Engagement page
 	// gets, behind a closed disclosure.
@@ -158,7 +166,7 @@
 -->
 {#snippet summary()}
 	<div class="summary">
-		<div class="practice"><Text text={page.data.practiceName ?? ''} tone="variant" /></div>
+		<div class="practice"><Text text={practiceLine} tone="variant" /></div>
 		<section class="next" aria-labelledby="what-happens-next"><!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
 			<Heading level={2} variant="card" text={NEXT_HEADING} id="what-happens-next" />
 			<!-- #2217: ended care says so first, above anything else here. -->
@@ -277,7 +285,7 @@
 -->
 <RecordDetail
 	title="Your care"
-	serviceName={engagementLabel({ practiceName: page.data.practiceName, createdAt: page.data.createdAt })}
+	serviceName={label}
 	{summary}
 	sections={detail
 		? [

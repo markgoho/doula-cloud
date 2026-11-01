@@ -3,7 +3,9 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import OfferInbox from '#lib/components/organisms/OfferInbox.svelte';
-	import { decideOffer, loadInbox, type Offer } from '#lib/offer.js';
+	import { resolve } from '$app/paths';
+	import type { PracticeSession } from '../+layout.js';
+	import { decideOffer, loadInbox, type DecisionOutcome, type Offer } from '#lib/offer.js';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
@@ -28,9 +30,18 @@
 	// Offer supersedes every other open Offer on the same Engagement, and
 	// those are rows this list may well be showing.
 	async function handleDecide(offerId: string, action: 'accept' | 'decline') {
-		await decideOffer(apiFetchWithSession, page.params.practiceId!, offerId, action);
+		const decision = await decideOffer(apiFetchWithSession, page.params.practiceId!, offerId, action);
 		await refresh();
+		return decision;
 	}
+
+	let outcome = $state<DecisionOutcome>();
+
+	const engagementHref = (engagementId: string) =>
+		resolve('/practices/[practiceId]/engagements/[engagementId]', {
+			practiceId: page.params.practiceId!,
+			engagementId
+		});
 
 	onMount(refresh);
 </script>
@@ -48,7 +59,13 @@
 	{/if}
 
 	{#if isLoaded}
-		<OfferInbox {offers} onDecide={handleDecide} />
+		<OfferInbox
+			{offers}
+			onDecide={handleDecide}
+			practiceName={(page.data as { session: PracticeSession }).session.practiceName}
+			{engagementHref}
+			bind:outcome
+		/>
 	{:else}
 		<Skeleton variant="text" lines={3} label="Loading your offers" />
 	{/if}

@@ -766,11 +766,9 @@ const STAFF_ROUTES: SeededRoute<StaffSeed>[] = [
 		key: 'practices/[practiceId]/engagements/[engagementId]/birth-plan',
 		archetype: 'G',
 		url: (s) => `/practices/${s.practiceId}/engagements/${s.engagementId}/birth-plan`,
-		// clientName is personname.Preferred(givenName, preferredName)
-		// (api/internal/personname) -- this seed sets no preferred
-		// name, so it resolves to the given name alone, the same as the
-		// hub's own 'Pat' row above.
-		h1: "Pat's Birth Plan"
+		// clientDisplayName is personname.Full (#2350): this seed's given
+		// and family names, "Pat Client".
+		h1: "Pat Client's Birth Plan"
 	},
 	{
 		key: 'practices/[practiceId]/clients/[clientId]',

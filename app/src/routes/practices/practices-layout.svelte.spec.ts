@@ -36,7 +36,7 @@ const apiFetch = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetch, apiFetchWithSession }));
 
 const ONE_MEMBERSHIP = [
-	{ practiceId: 'practice-1', practiceName: 'Riverside Doula Collective', roles: ['owner'] }
+	{ practiceId: 'practice-1', practiceName: 'Riverside Doula Collective', roles: ['owner'], employmentType: 'employee' }
 ];
 
 interface SetupOptions {
@@ -353,11 +353,11 @@ describe('the Practice switcher', () => {
 			.not.toBeInTheDocument();
 	});
 
-	it('lists one row per Membership, with the roles held at each', async () => {
+	it('lists one row per Membership, with the roles and employment type at each (#2266)', async () => {
 		await setup({
 			memberships: [
 				...ONE_MEMBERSHIP,
-				{ practiceId: 'practice-2', practiceName: 'Finger Lakes Birth Support', roles: ['doula'] }
+				{ practiceId: 'practice-2', practiceName: 'Finger Lakes Birth Support', roles: ['doula'], employmentType: 'contractor' }
 			]
 		});
 
@@ -366,6 +366,6 @@ describe('the Practice switcher', () => {
 		await expect
 			.element(page.getByRole('link', { name: 'Finger Lakes Birth Support' }).first())
 			.toHaveAttribute('href', '/practices/practice-2');
-		await expect.element(page.getByText('Doula', { exact: true }).first()).toBeVisible();
+		await expect.element(page.getByText('Doula, as a contractor', { exact: true }).first()).toBeVisible();
 	});
 });

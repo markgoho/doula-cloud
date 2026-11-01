@@ -138,14 +138,16 @@ export async function isMFARequired(response: Response): Promise<boolean> {
 }
 
 /**
-The same credentialed fetch with the 401 handling left off, for the two
+The same credentialed fetch with the 401 handling left off, for the
 calls that have to swallow their own failures instead of being sent to
-the login screen: registering this device for push (#61) and
+the login screen: registering this device for push (#61),
 unregistering it on sign-out (#152 for Staff, #153 for the Client
-portal). Both are best-effort, and the unregister runs against a session
+portal), and asking whether a refused portal invite's reader is signed
+in (#2279), where a 401 is an answer, not a failure. The first two are
+best-effort, and the unregister runs against a session
 sign-out is about to end anyway --
-routing either through apiFetchWithSession would navigate the page away
-mid-flight. Feature code wants apiFetchWithSession, not this.
+routing any of them through apiFetchWithSession would navigate the page
+away mid-flight. Feature code wants apiFetchWithSession, not this.
 
 Every `POST` through here carries an `Idempotency-Key` (#1924,
 `#lib/idempotencyKey.js`): the same key when the same submit is sent again
@@ -166,11 +168,8 @@ async function handleExpiredSession(): Promise<void> {
 	// Which population's login screen, decided here; what the address says
 	// about the session that ended, decided by `#lib/sessionEnded.js`
 	// (#1131), which is the only place that flag is spelled.
-	await goto(
-		location.pathname.startsWith('/portal')
-			? portalLoginAfterRefusal()
-			: staffLoginAfterRefusal(`${location.pathname}${location.search}${location.hash}`)
-	);
+	const here = `${location.pathname}${location.search}${location.hash}`;
+	await goto(location.pathname.startsWith('/portal') ? portalLoginAfterRefusal(here) : staffLoginAfterRefusal(here));
 }
 
 /**

@@ -34,6 +34,7 @@ var wantInternalRoutes = []string{
 	"POST /api/internal/notifications/process-session-notice-outbox",
 	"POST /api/internal/notifications/process-staff-email-change-outbox",
 	"POST /api/internal/notifications/process-staff-invite-outbox",
+	"POST /api/internal/notifications/process-staff-notice-outbox",
 	"POST /api/internal/notifications/process-staff-token-mail-outbox",
 	"POST /api/internal/notifications/process-welcome-credits-outbox",
 	"POST /api/internal/outboxes/drain",

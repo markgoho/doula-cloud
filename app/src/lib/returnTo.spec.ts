@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readReturnTo, withReturnTo } from './returnTo';
+import { readReturnTo, sameOriginPath, withReturnTo } from './returnTo';
 
 function loginWith(target: string): URL {
 	const url = new URL('https://app.example.test/login');
@@ -50,5 +50,22 @@ describe('withReturnTo', () => {
 		const url = new URL(withReturnTo('/login', '/practices/p-1#birth-plan'), 'https://app.example.test');
 
 		expect(readReturnTo(url)).toBe('/practices/p-1#birth-plan');
+	});
+});
+
+describe('sameOriginPath', () => {
+	const origin = 'https://app.example.test';
+
+	it('hands back a path on this origin', () => {
+		expect(sameOriginPath('/portal/engagements/e-1/birth-plan', origin)).toBe('/portal/engagements/e-1/birth-plan');
+	});
+
+	it.each([
+		['nothing', undefined],
+		['a protocol-relative host', '//evil.example.com/portal'],
+		['a backslash the browser folds into one', String.raw`/\evil.example.com`],
+		['an absolute address', 'https://evil.example.com/portal']
+	])('refuses %s', (_, target) => {
+		expect(sameOriginPath(target, origin)).toBeUndefined();
 	});
 });

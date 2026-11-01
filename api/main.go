@@ -43,6 +43,7 @@ import (
 	"doula-cloud/api/internal/stackswitch"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/staffinvite"
+	"doula-cloud/api/internal/staffnotice"
 	"doula-cloud/api/internal/stripemode"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/website"
@@ -266,6 +267,7 @@ func main() {
 	sessionNoticeOutboxWorker := sessionnotice.NewWorker(platformMailer)
 	staffInviteOutboxWorker := staffinvite.NewWorker(platformMailer)
 	offerOutboxWorker := offer.Worker{Mailer: platformMailer}
+	staffNoticeOutboxWorker := staffnotice.NewWorker(platformMailer)
 	engagementRequestOutboxWorker := engagementrequest.NewWorker(platformMailer)
 	// #613: verification/reset mail resolves its recipient live via the
 	// Admin SDK (verifier also satisfies authn.AccountManager) rather
@@ -380,6 +382,7 @@ func main() {
 		SessionNoticeWorker:     sessionNoticeOutboxWorker,
 		StaffInviteWorker:       staffInviteOutboxWorker,
 		OfferWorker:             offerOutboxWorker,
+		StaffNoticeWorker:       staffNoticeOutboxWorker,
 		EngagementRequestWorker: engagementRequestOutboxWorker,
 		SiteBuildWorker:         siteBuildWorker,
 		PageVerifier:            pageVerifier,

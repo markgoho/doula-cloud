@@ -49,6 +49,11 @@ const paidOnLayout = "2006-01-02"
 // already written off, and an already-paid one would double-count.
 const MsgInvoiceNotOpen = "This Invoice is not open, so nothing can be recorded or changed against it."
 
+// MsgPaymentOnItsWay refuses recording a Payment by hand while a payment
+// on the Invoice is on its way (#2381): the bank debit may still clear,
+// and the Client would have paid twice.
+const MsgPaymentOnItsWay = "A payment on this Invoice is on its way, so you cannot record one by hand. It will read Paid once the bank payment clears, or you can record one if it does not go through."
+
 // MsgStripeInvoiceCannotBeVoidedOrWrittenOff refuses void/write-off
 // against a Stripe-backed Invoice (#271): nothing else in the model moves
 // a by-hand Invoice out of 'open' besides these two actions and a
@@ -292,6 +297,18 @@ func PostManualPaymentHandler(client Client) http.Handler {
 		}
 		if status != invoiceStatusOpen {
 			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgInvoiceNotOpen, nil)
+			return
+		}
+		var paymentOnItsWay bool
+		if err := tx.QueryRowContext(r.Context(),
+			`SELECT payment_processing_since IS NOT NULL FROM invoices WHERE id = $1`, invoiceID,
+		).Scan(&paymentOnItsWay); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if paymentOnItsWay {
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgPaymentOnItsWay, nil)
 			return
 		}
 

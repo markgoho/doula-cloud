@@ -97,13 +97,15 @@ async function setup({
 	// (#835), not a fetch this mock has to answer.
 	pageState.data = { session: { practiceId, practiceName, roles, isContractor, secondFactor } };
 	const answers: Record<string, Response | Promise<Response>> = {
+		// Before `offers`: its path holds `/offers` (#2508).
+		'offers/declined': jsonResponse({ items: [], hasMore: false }),
 		// The declined Offer has no counterpart in the fixture, which
 		// answers `/offers` with only the still-open one -- so it is
 		// written as a spread onto that same Offer rather than a second
 		// object restating its fields (#596).
 		offers: jsonResponse({ items: [...offers, { ...offers[0], offerId: 'offer-2', state: 'declined' }] }),
 		// `/clients/count` (#2095): every Client here is in active care.
-		clients: jsonResponse({ records: clients.length, active: clients.length }),
+		clients: jsonResponse({ records: clients.length }),
 		staff: jsonResponse({
 			members: [{ staffId: 's1' }, { staffId: 's2' }],
 			invitations: { items: [{ expired: true }], hasMore: false }
@@ -387,6 +389,63 @@ describe('the Practice landing page', () => {
 		expect(testPage.getByRole('heading', { name: 'Requests awaiting approval' }).elements()).toHaveLength(0);
 		expect(testPage.getByText('Nobody is waiting on you.').elements()).toHaveLength(0);
 		expect(testPage.getByRole('link', { name: 'Review requests' }).elements()).toHaveLength(0);
+	});
+
+	// #2508: a decline mails nobody, so the Owner and Admin read it here.
+	it('lists each declined Offer on work nobody has, linking to its Offers', async () => {
+		await setup({
+			overrides: {
+				'offers/declined': jsonResponse({
+					items: [
+						{ offerId: 'o1', engagementId: 'e1', clientName: 'Adaeze Nwosu', kind: 'birth', declinedBy: 'Lena Vasquez', declinedAt: '2026-10-30T15:00:00Z' },
+						{ offerId: 'o2', engagementId: 'e2', clientName: 'Pat Lee', kind: 'postpartum', declinedBy: 'Fern Ode', declinedAt: '2026-10-29T15:00:00Z' }
+					],
+					hasMore: false
+				})
+			}
+		});
+
+		await expect.element(testPage.getByRole('heading', { name: 'No Doula yet' })).toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Adaeze Nwosu, birth: Lena Vasquez declined' }))
+			.toHaveAttribute('href', `/practices/${practiceId}/engagements/e1#offers`);
+		await expect
+			.element(testPage.getByRole('link', { name: 'Pat Lee, postpartum: Fern Ode declined' }))
+			.toBeVisible();
+		expect(testPage.getByText(/Showing the newest/).elements()).toHaveLength(0);
+	});
+
+	it('says only the newest are shown when more declines lie past the page', async () => {
+		await setup({
+			overrides: {
+				'offers/declined': jsonResponse({
+					items: [{ offerId: 'o1', engagementId: 'e1', clientName: 'Adaeze Nwosu', kind: 'birth', declinedBy: 'Lena Vasquez', declinedAt: '2026-10-30T15:00:00Z' }],
+					hasMore: true
+				})
+			}
+		});
+
+		await expect.element(testPage.getByText('Showing the newest 1.')).toBeVisible();
+	});
+
+	it('draws no declined block when nothing waits', async () => {
+		await setup();
+		await expect.element(testPage.getByRole('heading', { name: 'Your people' })).toBeVisible();
+		expect(testPage.getByRole('heading', { name: 'No Doula yet' }).elements()).toHaveLength(0);
+	});
+
+	it('says so when the declined Offers cannot be read', async () => {
+		await setup({ overrides: { 'offers/declined': refusal('nope') } });
+
+		await expect.element(testPage.getByText('Could not load declined Offers just now.')).toBeVisible();
+	});
+
+	it('never asks a Doula without Owner or Admin for the declined Offers', async () => {
+		await setup({ roles: ['doula'] });
+
+		await expect.element(testPage.getByRole('heading', { name: 'Clients waiting on a reply' })).toBeVisible();
+		expect(apiFetchWithSession).not.toHaveBeenCalledWith(`/api/practices/${practiceId}/offers/declined`);
+		expect(testPage.getByRole('heading', { name: 'No Doula yet' }).elements()).toHaveLength(0);
 	});
 
 	it('says so when the pending Requests cannot be read', async () => {

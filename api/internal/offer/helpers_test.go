@@ -34,6 +34,7 @@ const (
 	testClientArea = "North side"
 	testDueDate    = "2027-01-01"
 	testAddress    = "renata@example.test"
+	outboxPending  = "pending"
 )
 
 // completeStatusBody is the PATCH .../status body every completion test

@@ -10,15 +10,23 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/staffauth"
 )
 
 // DecisionResponse reports the state an Offer ended up in. It is the same
 // shape for accept, decline, and withdraw so a caller reads one field to
 // find out what happened.
+//
+// An accept also names the Engagement and its Client (#2268): she is
+// attached by the time the response is written, so her reach now covers
+// both, and the screen can say whose work is hers and link to it.
 type DecisionResponse struct {
-	OfferID string `json:"offerId"`
-	State   string `json:"state"`
+	OfferID        string `json:"offerId"`
+	State          string `json:"state"`
+	EngagementID   string `json:"engagementId,omitempty"`
+	EngagementKind string `json:"engagementKind,omitempty"`
+	ClientName     string `json:"clientName,omitempty"`
 }
 
 // AcceptHandler takes an Offer. Acceptance is what mints the granted
@@ -153,7 +161,27 @@ func accept(ctx context.Context, tx *sql.Tx, offerID, staffID string) (DecisionR
 		return DecisionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
-	return DecisionResponse{OfferID: offerID, State: "accepted"}, http.StatusOK, ""
+	// Read through her own reach, which the Attachment above has just
+	// opened in this transaction.
+	var kind, givenName string
+	var preferredName, familyName sql.NullString
+	if err := tx.QueryRowContext(ctx,
+		`SELECT e.kind::text, c.given_name, c.preferred_name, c.family_name
+		   FROM engagements e JOIN clients c ON c.id = e.client_id
+		  WHERE e.id = $1`,
+		engagementID,
+	).Scan(&kind, &givenName, &preferredName, &familyName); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return DecisionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
+	}
+
+	return DecisionResponse{
+		OfferID:        offerID,
+		State:          "accepted",
+		EngagementID:   engagementID,
+		EngagementKind: kind,
+		ClientName:     personname.Full(givenName, preferredName.String, familyName.String),
+	}, http.StatusOK, ""
 }
 
 // scanIDs drains rows of its single "id" column, closing it either way.

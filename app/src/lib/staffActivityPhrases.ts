@@ -68,6 +68,7 @@ const STAFF_ACTIVITY_PHRASES: Record<string, Phrase> = {
 	contract_sent: (name) => `Contract sent to ${client(name)}`,
 	contract_signed: (name) => `Contract signed by ${client(name)}`,
 	contract_voided: (name) => `Contract for ${client(name)} voided`,
+	contract_edited: (name) => `Contract for ${client(name)} changed`,
 	contract_priced: (name) => `Price set on the Contract for ${client(name)}`,
 	contract_amount_overridden: (name) => `Contract price for ${client(name)} changed by hand`,
 	contract_amount_repriced: (name) => `Contract price for ${client(name)} changed to the new rate`,
@@ -113,6 +114,8 @@ const STAFF_ACTIVITY_PHRASES: Record<string, Phrase> = {
 	portal_invite_sent: (name) => `${client(name)} invited to sign in`,
 	portal_account_provisioned: (name) => `Login created for ${client(name)}`,
 	portal_account_linked: (name) => `Care added to ${clients(name)} login`,
+	// #2279, in the words Renata and Dee each chose.
+	portal_invite_refused: (name) => `Invite refused: ${client(name)} signs in through another record`,
 	push_notifications_enabled: (name) => `Notifications turned on by ${client(name)}`,
 	push_notifications_disabled: (name) => `Notifications turned off by ${client(name)}`,
 

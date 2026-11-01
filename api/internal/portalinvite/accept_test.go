@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/portalaccount"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/session"
@@ -328,5 +330,53 @@ func TestAcceptInviteHandler_SignInAddressReusedSamePracticeConflict(t *testing.
 	}
 	if identityUID.Valid {
 		t.Fatalf("expected the pending row to remain unclaimed, got identity_uid %q", identityUID.String)
+	}
+
+	// #2279: the refusal says so in her words, names the Practice, and
+	// carries its own code, so the page can offer the way on to her care.
+	var body struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode refusal: %v", err)
+	}
+	var practiceName string
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT name FROM practices WHERE id = $1`, practiceID).Scan(&practiceName); err != nil {
+		t.Fatalf("query practice name: %v", err)
+	}
+	if body.Code != string(apierr.CodePortalAccessAlreadyHere) {
+		t.Fatalf("code = %q, want %q", body.Code, apierr.CodePortalAccessAlreadyHere)
+	}
+	if want := "You can already see your care at " + practiceName + "."; body.Message != want {
+		t.Fatalf("message = %q, want %q", body.Message, want)
+	}
+
+	// The refused accept is on the invited Engagement's ledger, by her,
+	// so the Practice can see this invite will never be accepted.
+	var action, actorKind string
+	var actorClientID sql.NullString
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT a.action, a.actor_kind::text, a.actor_client_id::text FROM activity a
+		   JOIN engagements e ON e.id = a.subject_id
+		  WHERE a.subject_kind = 'engagement' AND e.client_id = $1
+		  ORDER BY a.created_at DESC LIMIT 1`,
+		clientID,
+	).Scan(&action, &actorKind, &actorClientID); err != nil {
+		t.Fatalf("query activity: %v", err)
+	}
+	if action != string(activity.ActionPortalInviteRefused) || actorKind != "client" || actorClientID.String != clientID {
+		t.Fatalf("activity = (%q, %q, %q), want (%q, client, %q)", action, actorKind, actorClientID.String, activity.ActionPortalInviteRefused, clientID)
+	}
+
+	// #2522: and the refusal leaves the fact the invite's status reads.
+	var refused bool
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT access_refused_at IS NOT NULL FROM client_portal_users WHERE client_id = $1`, clientID,
+	).Scan(&refused); err != nil {
+		t.Fatalf("query access_refused_at: %v", err)
+	}
+	if !refused {
+		t.Fatal("access_refused_at is unset, want the refused accept recorded on the row")
 	}
 }

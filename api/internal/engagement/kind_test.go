@@ -84,3 +84,31 @@ func TestOffersBirthPlan(t *testing.T) {
 		})
 	}
 }
+
+// TestOffersBirthPlanToStart is ADR-0015's create side (#2277, #2317):
+// only a birth Engagement with no outcome recorded starts a Birth Plan.
+func TestOffersBirthPlanToStart(t *testing.T) {
+	tests := []struct {
+		name         string
+		kind         engagement.Kind
+		birthOutcome *string
+		want         bool
+	}{
+		{"birth, no outcome recorded yet", engagement.KindBirth, nil, true},
+		{"birth, live birth", engagement.KindBirth, new(engagement.OutcomeLiveBirth), false},
+		{"birth, loss", engagement.KindBirth, new(engagement.OutcomeLoss), false},
+		{"birth, unknown", engagement.KindBirth, new(engagement.OutcomeUnknown), false},
+		{"postpartum, no outcome recorded yet", engagement.KindPostpartum, nil, false},
+		{"postpartum, live birth", engagement.KindPostpartum, new(engagement.OutcomeLiveBirth), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := engagement.OffersBirthPlanToStart(engagement.BirthPlanInputs{
+				Kind: tt.kind, BirthOutcome: tt.birthOutcome,
+			})
+			if got != tt.want {
+				t.Fatalf("OffersBirthPlanToStart(%q, %v) = %v, want %v", tt.kind, tt.birthOutcome, got, tt.want)
+			}
+		})
+	}
+}

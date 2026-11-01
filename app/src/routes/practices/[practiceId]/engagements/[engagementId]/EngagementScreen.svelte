@@ -34,7 +34,8 @@
 		sortVisits,
 		visitTypeLabel,
 		engagementStatusText,
-		yourFeeValue,
+		engagementURL,
+		yourFeeRows,
 		type BirthOutcomeFacts,
 		type BirthOutcomeRequest,
 		type EngagementSummary,
@@ -53,7 +54,9 @@
 	import {
 		hasAcceptedPortalInvite,
 		hasNeverBeenInvited,
+		isRefusedInvite,
 		portalInviteStatusText,
+		refusedInviteWayOn,
 		type PortalInviteSubject
 	} from '#lib/portalInvite.js';
 	import type { PageData } from './$types';
@@ -283,6 +286,8 @@
 		if (!hasMoved) return;
 		closeChange(`The care phase is now ${engagementStatusText(displayStatus)}.`);
 		await refreshWhoIsOn();
+		await loadOnCall();
+		await loadActivity();
 	}
 
 	// Completing asks for a reason -- GOV.UK's question-page pattern
@@ -318,7 +323,11 @@
 			completeReasonValue = '';
 			completeNoteValue = '';
 			closeChange(`The care phase is now ${engagementStatusText(displayStatus)}.`);
+			// #2270: completion ends every Attachment, so On call is read
+			// again too, and no longer lists a Doula who is off the birth.
 			await refreshWhoIsOn();
+			await loadOnCall();
+			await loadActivity();
 		}, orThrownErrors(completeFieldIds));
 	}
 
@@ -355,8 +364,41 @@
 		fieldIds: Record<string, string>
 	) {
 		const result = await recordBirthOutcome(apiFetchWithSession, reference, request, fieldIds);
-		if (result.kind === 'recorded') birthOutcomeOverride = result.facts;
+		if (result.kind === 'recorded') {
+			birthOutcomeOverride = result.facts;
+			void refreshBirthPlanOffer();
+			void loadActivity();
+		}
 		return result;
+	}
+
+	// #2277, #2317: whether a Birth Plan can be started, and whether the
+	// Client is shown one, as the BFF answers it. A kind change or a
+	// recorded outcome on this page view reads the answer again rather
+	// than re-spelling ADR-0015's rule here.
+	let birthPlanOfferOverride = $state<Pick<EngagementSummary, 'offersBirthPlanToStart' | 'offersBirthPlan'>>();
+	const birthPlanOffer = $derived(
+		birthPlanOfferOverride ?? {
+			offersBirthPlanToStart: detail.offersBirthPlanToStart,
+			offersBirthPlan: detail.offersBirthPlan
+		}
+	);
+
+	const NO_BIRTH_PLAN_ON_POSTPARTUM = 'No Birth Plan. This is postpartum care.';
+	const NO_BIRTH_PLAN_AFTER_OUTCOME = 'No Birth Plan. The birth outcome is recorded.';
+
+	async function refreshBirthPlanOffer() {
+		try {
+			const response = await apiFetchWithSession(engagementURL(reference));
+			if (!response.ok) return;
+			const fresh: EngagementSummary = await response.json();
+			birthPlanOfferOverride = {
+				offersBirthPlanToStart: fresh.offersBirthPlanToStart,
+				offersBirthPlan: fresh.offersBirthPlan
+			};
+		} catch {
+			// The write refuses a stale Start on its own.
+		}
 	}
 
 	// #874: what the Practice sold, overlaid on the load-time read once a
@@ -385,12 +427,14 @@
 	async function handleChangeKind() {
 		kindChangedMessage = '';
 		const target = otherKind;
-		await kindChange.mutate(async () => {
+		const isChanged = await kindChange.mutate(async () => {
 			const result = await changeEngagementKind(apiFetchWithSession, reference, target);
 			kindOverride = result.kind;
+			void refreshBirthPlanOffer();
 			openChange = undefined;
 			kindChangedMessage = `Now set to ${kindLabel(result.kind)}.`;
 		}, 'Failed to change what the Practice sold');
+		if (isChanged) await loadActivity();
 	}
 
 	// #2013: the due date, overlaid on the load-time read once a change
@@ -587,6 +631,12 @@
 		}
 	);
 	const hasNeverInvitedClient = $derived(hasNeverBeenInvited(clientPortalState));
+	// #2522: an accept refused because her login reaches another record
+	// here. Nothing from this record reaches her, so it holds the Contract
+	// back as never-invited does. Send portal invite stays: an email
+	// changed since keeps the row and its refusal, and a new invite to
+	// the new address asks again (InviteHandler clears the refusal).
+	const isInviteRefused = $derived(isRefusedInvite(clientPortalState));
 	const hasAcceptedPortalAccess = $derived(hasAcceptedPortalInvite(clientPortalState));
 	const hasClientEmailOnFile = $derived(detail?.clientHasEmail ?? true);
 	// InvoiceSection's own standing check (#270) -- defaults true so an
@@ -608,6 +658,7 @@
 		if (!hasClientEmailOnFile) {
 			return `${name} has no email address on file, so cannot be invited to the portal to read a message. Add an email address first.`;
 		}
+		if (isInviteRefused) return `${name} signs in through another record, so cannot read a message sent from this one. ${refusedInviteWayOn}`;
 		if (hasNeverInvitedClient) {
 			return `${name} reads messages in the portal, so send the portal invite first. The thread opens once ${name} has accepted it.`;
 		}
@@ -621,6 +672,7 @@
 	const inviteBeforeContractMessage =
 		'Send a portal invite to this Client before sending the Contract — the Contract can only be viewed and signed once portal access exists.';
 	const noEmailForInviteMessage = 'This Client has no email address on file. Add one before sending a portal invite.';
+	const refusedBeforeContractMessage = `This Client signs in through another record, so cannot sign a Contract sent from this one. ${refusedInviteWayOn}`;
 	// #2146: what the empty Contract section says while the Client has no
 	// portal account: the same three states as messageBlock above. An
 	// invite already sent does not hold Send back (PostSendContractHandler
@@ -628,6 +680,7 @@
 	// signing waits on rather than asking for an invite again.
 	const contractInviteBlock = $derived.by(() => {
 		if (hasAcceptedPortalAccess) return;
+		if (isInviteRefused) return refusedBeforeContractMessage;
 		if (hasNeverInvitedClient || !hasClientEmailOnFile) return inviteBeforeContractMessage;
 		return 'The Contract can only be viewed and signed once this Client has accepted the portal invite.';
 	});
@@ -910,7 +963,7 @@
 	// makes an unrelated roster outage take the Offers section down with
 	// it, and it re-decides who may see Offers in a place that is not
 	// about Offers. Each section answers for its own read.
-	const isOffersVisible = $derived(offersState.value !== undefined);
+	const isOffersVisible = $derived(isPracticeOwnerOrAdmin || offersState.value !== undefined);
 	// #1598: nobody offers herself work, so the Offers form does not list
 	// the person at the screen. The filter is on what the form is handed
 	// and not on the roster: the Visit pickers read the same roster and
@@ -1068,6 +1121,7 @@
 	 * merely "not invited yet". */
 	function portalInviteSummaryText(portalState: PortalInviteSubject, hasClientEmail: boolean): string {
 		const text = portalInviteStatusText(portalState);
+		if (isRefusedInvite(portalState)) return `${text}. ${refusedInviteWayOn}`;
 		if (!hasClientEmail && !portalState.portalInviteStatus) {
 			return `${text} — no email on file, so the Client cannot be invited yet`;
 		}
@@ -1129,6 +1183,7 @@
 	 * her name. A Care Plan instance never carries clientAcknowledgedAt,
 	 * so only the Birth Plan draws this row. */
 	function birthPlanReadText(instance: Instance): string {
+		if (!birthPlanOffer.offersBirthPlan) return `Not shown to ${detail.clientName}`;
 		return instance.clientAcknowledgedAt
 			? `${detail.clientName} read this on ${formatInstant(instance.clientAcknowledgedAt)}`
 			: `${detail.clientName} has not read this yet`;
@@ -1186,7 +1241,9 @@
 			() => createInstance(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!, planType),
 			'Failed to create plan'
 		);
-		if (isStarted) openPlanForm(planType);
+		if (!isStarted) return;
+		openPlanForm(planType);
+		await loadActivity();
 	}
 
 	function handlePlanAnswerChange(planType: PlanType, fieldId: string, value: unknown) {
@@ -1215,6 +1272,7 @@
 		if (!isSaved) return;
 		shownPlanForms[planType] = false;
 		planSavedMessage[planType] = `${heading} saved.`;
+		await loadActivity();
 	}
 
 	async function loadContractSection() {
@@ -1301,6 +1359,7 @@
 		if (!isSaved) return;
 		isContractFormOpen = false;
 		contractSavedMessage = 'Contract saved.';
+		await loadActivity();
 	}
 
 	async function handleSendContract() {
@@ -1309,14 +1368,16 @@
 			() => sendContract(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!),
 			'Failed to send contract'
 		);
-		if (isSent) contractSavedMessage = 'Contract sent.';
+		if (!isSent) return;
+		contractSavedMessage = 'Contract sent.';
+		await loadActivity();
 	}
 
 	/* The fee as this reader may see it (ADR-0008): the Practice's price
 	   where the BFF sends it, or her own agreed fee (#2003). */
 	const contractFeeRows = $derived<SummaryListRow[]>([
 		...(contract?.values.price ? [{ label: 'Fee', value: contract.values.price }] : []),
-		...(data.yourFee ? [{ label: 'Your fee', value: yourFeeValue(data.yourFee) }] : [])
+		...(data.yourFee ? yourFeeRows(data.yourFee) : [])
 	]);
 
 	// ContractStatus.svelte owns the error display for Void (it awaits
@@ -1348,6 +1409,7 @@
 			page.params.engagementId!,
 			reason
 		);
+		void loadActivity();
 	}
 
 	// The Owner/Admin side of #971's ask -- same shape as
@@ -1361,6 +1423,7 @@
 			requestId,
 			reason
 		);
+		void loadActivity();
 	}
 
 	// Same shape as handleVoidContract above -- ContractStatus.svelte
@@ -1430,6 +1493,7 @@
 		// #2002: a contractor's 201 names no amount (RaisedInvoice), so her
 		// new row is read back in her own shape (#2094) rather than spliced.
 		billingModeState.value = invoice.billingMode;
+		void loadActivity();
 		if (canReadContractMoney) {
 			invoicesState.value = [invoice, ...invoicesState.value];
 		} else {
@@ -1447,11 +1511,13 @@
 		input: { method: PaymentMethod; note?: string; paidOn: string }
 	) {
 		await recordPayment(apiFetchWithSession, page.params.practiceId!, invoiceId, input);
+		void loadActivity();
 		await loadInvoicesSection();
 	}
 
 	async function handleReversePayment(invoiceId: string, paymentId: string, reason: string) {
 		await reversePayment(apiFetchWithSession, page.params.practiceId!, invoiceId, paymentId, reason);
+		void loadActivity();
 		await loadInvoicesSection();
 	}
 
@@ -1459,16 +1525,19 @@
 	// here does -- the Invoice's refundedCents is the BFF's to sum.
 	async function handleRefundPayment(invoiceId: string, paymentId: string, input: RefundPaymentInput) {
 		await refundPayment(apiFetchWithSession, page.params.practiceId!, invoiceId, paymentId, input);
+		void loadActivity();
 		await loadInvoicesSection();
 	}
 
 	async function handleVoidInvoice(invoiceId: string) {
 		await voidInvoice(apiFetchWithSession, page.params.practiceId!, invoiceId);
+		void loadActivity();
 		await loadInvoicesSection();
 	}
 
 	async function handleWriteOffInvoice(invoiceId: string) {
 		await writeOffInvoice(apiFetchWithSession, page.params.practiceId!, invoiceId);
+		void loadActivity();
 		await loadInvoicesSection();
 	}
 
@@ -1492,6 +1561,7 @@
 
 	async function handleRecordDoulaFee(attachmentId: string, input: RecordPaymentInput) {
 		await recordDoulaFeePaid(apiFetchWithSession, reference.practiceId, reference.engagementId, attachmentId, input);
+		void loadActivity();
 		await loadDoulaFeesSection();
 	}
 
@@ -1504,6 +1574,7 @@
 			paymentId,
 			reason
 		);
+		void loadActivity();
 		await loadDoulaFeesSection();
 	}
 
@@ -1656,6 +1727,7 @@
 				});
 				const name = onCall?.doulas.find((doula) => doula.staffId === gapStaffId)?.name ?? 'the Doula';
 				closeGapForm();
+				void loadActivity();
 				await loadOnCall();
 				onCallSavedMessage = `The time ${name} cannot be reached is recorded.`;
 			},
@@ -1684,6 +1756,7 @@
 		openOnCall();
 		try {
 			await clearGap(apiFetchWithSession, reference.practiceId, reference.engagementId, gap.id);
+			void loadActivity();
 			await loadOnCall();
 			onCallSavedMessage = `The gap for ${gap.staffName} is cleared.`;
 		} catch (error) {
@@ -1700,6 +1773,7 @@
 				to: narrowTo[doula.staffId] === '' ? undefined : narrowTo[doula.staffId]
 			});
 			openOnCall();
+			void loadActivity();
 			await loadOnCall();
 			onCallSavedMessage = `The on-call days for ${doula.name} are saved.`;
 		} catch (error) {
@@ -1765,12 +1839,14 @@
 
 	async function handleCreateOffer(offer: NewOffer) {
 		await createOffer(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!, offer);
+		void loadActivity();
 		const updated = await loadEngagementOffers(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
 		if (offersState.value) offersState.value = updated;
 	}
 
 	async function handleWithdrawOffer(offerId: string) {
 		await withdrawOffer(apiFetchWithSession, page.params.practiceId!, offerId);
+		void loadActivity();
 		const updated = await loadEngagementOffers(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
 		if (offersState.value) offersState.value = updated;
 	}
@@ -1792,21 +1868,29 @@
 		}
 	}
 
+	async function loadRosterThenOffers() {
+		await loadRoster();
+		await loadOffersSection();
+	}
+
 	onMount(async () => {
 		void loadClientRecord();
-		// The Engagement is already here, from load. What remains is the
-		// seven sections that fill in behind it, each rendering as it lands.
-		await loadVisits();
-		await loadMessages();
-		await Promise.all(planSections.map((section) => loadPlan(section.type)));
-		await loadContractSection();
-		await loadInvoicesSection();
-		await loadPracticeTimezoneSection();
-		await loadRoster();
-		await loadOnCall();
-		await loadOffersSection();
-		await loadDoulaFeesSection();
-		await loadActivity();
+		// The Engagement is already here, from load. The sections behind it
+		// read at once and each renders as it lands (#2258); one after
+		// another, a phone waited up to 0.8 s for the last. Only the Offers
+		// wait, on the roster their form offers the work to.
+		await Promise.all([
+			loadVisits(),
+			loadMessages(),
+			...planSections.map((section) => loadPlan(section.type)),
+			loadContractSection(),
+			loadInvoicesSection(),
+			loadPracticeTimezoneSection(),
+			loadRosterThenOffers(),
+			loadOnCall(),
+			loadDoulaFeesSection(),
+			loadActivity()
+		]);
 
 		// #61: an open service worker push message ("a new Message arrived
 		// on this Engagement") triggers a refetch, the same content-free
@@ -1819,7 +1903,7 @@
 	});
 
 	async function handleSendPortalInvite() {
-		await portalInvite.mutate(async () => {
+		const isSent = await portalInvite.mutate(async () => {
 			const created = await sendPortalInvite(apiFetchWithSession, reference);
 			// #255: a fresh invite is always pending, never suppressed --
 			// lifts the Contract section's block and hides this action's
@@ -1827,6 +1911,7 @@
 			clientPortalOverride = { portalInviteStatus: 'pending', emailSuppressed: false };
 			return `${location.origin}/portal/accept-invite?token=${created.inviteToken}`;
 		}, 'Failed to send portal invite');
+		if (isSent) await loadActivity();
 	}
 
 	function staffName(staffId: string): string {
@@ -1884,6 +1969,7 @@
 				staffId && staffId !== callerStaffId ? `The Visit for ${staffName(staffId)} is added.` : 'Your Visit is added.';
 			await refreshStatusAfterScheduling(scheduledAt);
 			await refreshWhoIsOn();
+			await loadActivity();
 		}
 	}
 
@@ -1918,6 +2004,7 @@
 		await loadVisits();
 		if (wasSaved) visitsSavedMessage = `The Visit for ${visit.staffName} is saved.`;
 		if (isRescheduled) await refreshStatusAfterScheduling(scheduledAt);
+		await loadActivity();
 	}
 
 	async function handleReassignVisit(event: SubmitEvent, visit: Visit) {
@@ -2512,6 +2599,11 @@
 					focusOnAppearing: refocusedVisitOpener === 'add'
 				}
 			: undefined}
+	{#if !visitsLoad.hasSettled}
+		<!-- #2258: until the read lands the section says it is loading,
+		     never "No Visits yet.". -->
+		<Skeleton label="Loading the Visits" />
+	{:else}
 	<DataTable
 		columns={[
 			{ label: 'Date', accessor: (visit: Visit) => formatScheduledVisit(visit.scheduledAt) },
@@ -2533,6 +2625,7 @@
 		emptyMessage="No Visits yet."
 		emptyAction={addOpener}
 	/>
+	{/if}
 
 	{#if visitsSavedMessage}
 		<Notice variant="status" message={visitsSavedMessage} isFocusedOnAppear />
@@ -2613,12 +2706,14 @@
 						#280: the reading and taking-away surface -- its own
 						address. Editing stays here.
 					-->
-					{#if planType === 'birth_plan'}
+					{#if planType === 'birth_plan' && birthPlanOffer.offersBirthPlan}
 						<Link href={birthPlanHref} label="Print for the hospital" icon="file-text" variant="secondary" />
 					{/if}
 				</cluster-l>
 				<!-- #2243: the answers read here; changing them stays its own act. -->
 				<PlanInstanceView fields={instance.fields} answers={instance.answers} headingLevel={3} />
+			{:else if planType === 'birth_plan' && !birthPlanOffer.offersBirthPlanToStart}
+				<EmptyState message={displayKind === 'birth' ? NO_BIRTH_PLAN_AFTER_OUTCOME : NO_BIRTH_PLAN_ON_POSTPARTUM} />
 			{:else}
 				<EmptyState
 					message="The {heading} is not started yet."
@@ -2726,11 +2821,13 @@
 								.map((key) => mergeFieldLabel(key))
 								.join(', ')}.`}
 						/>
+					{:else if isInviteRefused}
+						<Notice variant="info" message={refusedBeforeContractMessage} />
 					{:else if hasNeverInvitedClient}
 						<Notice variant="info" message={inviteBeforeContractMessage} />
 					{/if}
 					<cluster-l space="var(--space-3)">
-						{#if missingMergeFields.length === 0 && !hasNeverInvitedClient}
+						{#if missingMergeFields.length === 0 && !hasNeverInvitedClient && !isInviteRefused}
 							<Button label="Send Contract" onClick={handleSendContract} loading={isContractBusy} />
 						{/if}
 						{#if contractEditableFields.length > 0}
@@ -2770,7 +2867,7 @@
 				person whose fee it is.
 			-->
 			{#if data.yourFee}
-				<SummaryList rows={[{ label: 'Your fee', value: yourFeeValue(data.yourFee) }]} />
+				<SummaryList rows={yourFeeRows(data.yourFee)} />
 			{/if}
 			{#if contractError}
 				<Notice variant="error" message={contractError} />
@@ -2869,6 +2966,8 @@
 			onVoidInvoice={handleVoidInvoice}
 			onWriteOffInvoice={handleWriteOffInvoice}
 		/>
+	{:else if !practiceTimezoneState.error}
+		<Skeleton label="Loading the Invoices" />
 	{/if}
 {/snippet}
 
@@ -2885,6 +2984,14 @@
 		onMount awaits loadRoster before loadOffersSection, and this
 		section is drawn only once the Offers have landed.
 	-->
+	{#if !offersState.hasSettled}
+		<Skeleton label="Loading the Offers" />
+	{:else if offersState.value === undefined}
+		<!-- The section stands before its read lands for an Owner or an
+		     Admin (#2258), whom the read never refuses, so nothing back is
+		     a failure, said as Doula fees says one. -->
+		<Notice variant="error" message="We could not load the Offers." />
+	{:else}
 	<OfferSection
 		{offers}
 		doulas={offerDoulas}
@@ -2893,6 +3000,7 @@
 		onCreate={handleCreateOffer}
 		onWithdraw={handleWithdrawOffer}
 	/>
+	{/if}
 {/snippet}
 
 {#snippet doulaFeesSection()}
@@ -2917,9 +3025,12 @@
 		message, and whether the Client is waiting on a reply (GLOSSARY.md,
 		Unanswered). Unanswered is a row only while it is true.
 	-->
-	{#if messageThreadRows.length > 0}
+	{#if !messagesLoad.hasSettled}
+		<Skeleton label="Loading the Messages" />
+	{:else if messageThreadRows.length > 0}
 		<SummaryList rows={messageThreadRows} />
 	{/if}
+	{#if messagesLoad.hasSettled}
 	<MessageThread
 		{messages}
 		error={messagesError}
@@ -2932,6 +3043,7 @@
 		composeOpener="Write a message"
 		cannotSendReason={messageBlock}
 	/>
+	{/if}
 	<!-- The way out the block names, beside it (#2004). -->
 	{#if messageBlock && hasNeverInvitedClient && hasClientEmailOnFile}
 		<div>
@@ -3198,6 +3310,9 @@
 	{#if activityError}
 		<Notice variant="error" message={activityError} />
 	{/if}
+	{#if !activityLoad.hasSettled}
+		<Skeleton label="Loading the Activity" />
+	{:else}
 	<DataTable
 		columns={activityLedgerColumns()}
 		rows={shownActivity}
@@ -3207,6 +3322,7 @@
 		loadMoreError={activity.loadMoreError}
 		emptyMessage="Nothing has happened yet."
 	/>
+	{/if}
 {/snippet}
 
 <!--

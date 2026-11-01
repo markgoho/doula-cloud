@@ -14,6 +14,7 @@ import (
 	"doula-cloud/api/internal/activitypage"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -131,6 +132,9 @@ func PostInstanceHandler() http.Handler {
 			return
 		}
 		practiceID, _ := staffauth.PracticeID(r.Context())
+		if planType == birthPlanType && refuseBirthPlanStart(w, r, tx, engagementID) {
+			return
+		}
 
 		fields, found, err := fetchFields(r.Context(), tx, practiceID, planType)
 		if err != nil {
@@ -184,6 +188,33 @@ func PostInstanceHandler() http.Handler {
 		}
 		apierr.WriteJSON(w, http.StatusCreated, out)
 	})
+}
+
+// The two refusals refuseBirthPlanStart answers with, read by Staff.
+const (
+	MsgBirthPlanOnPostpartum = "A Birth Plan can't be started on postpartum care."
+	MsgBirthPlanAfterOutcome = "A Birth Plan can't be started now: the birth outcome is recorded."
+)
+
+// refuseBirthPlanStart is engagement.OffersBirthPlanToStart enforced at
+// the write (#2277, #2317): a postpartum Engagement, or one whose birth
+// outcome is recorded, gets no new Birth Plan, whatever the screen drew.
+func refuseBirthPlanStart(w http.ResponseWriter, r *http.Request, tx *sql.Tx, engagementID string) bool {
+	inputs, err := fetchBirthPlanInputs(r.Context(), tx, engagementID)
+	if err != nil {
+		// coverage:ignore reason: resolveInstanceRequest already confirmed the row exists; a query failure here is a DB-level fault, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return true
+	}
+	if engagement.OffersBirthPlanToStart(inputs) {
+		return false
+	}
+	msg := MsgBirthPlanAfterOutcome
+	if inputs.Kind != engagement.KindBirth {
+		msg = MsgBirthPlanOnPostpartum
+	}
+	apierr.Write(w, http.StatusConflict, apierr.CodeConflict, msg, nil)
+	return true
 }
 
 // GetInstanceHandler views the Plan Instance for :engagementId +

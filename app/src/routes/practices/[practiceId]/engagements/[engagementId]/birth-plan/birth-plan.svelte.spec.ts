@@ -44,7 +44,7 @@ describe('The Practice-side Birth Plan (#280)', () => {
 		await expect
 			.element(page.getByRole('heading', { name: "Anne-Marie Ochieng-Whitfield's Birth Plan" }))
 			.toBeVisible();
-		await expect.element(page.getByRole('link', { name: 'Back to Anne-Marie Ochieng-Whitfield' })).toBeVisible();
+		await expect.element(page.getByRole('link', { name: 'Back to Anne-Marie', exact: true })).toBeVisible();
 		await expect
 			.element(page.getByText('Who do you want with you, and what should we know about them?'))
 			.toBeVisible();

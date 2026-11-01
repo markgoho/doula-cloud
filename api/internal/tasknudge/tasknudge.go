@@ -58,6 +58,10 @@ const (
 	// screen, and Cloud Scheduler's five-minute cadence is exactly the
 	// latency ADR-0013 exists to remove.
 	FeedbackIssue OutboxType = "feedback-issue"
+	// StaffNotice is #2267's mail to one Staff member about something
+	// another person did that concerns her, first an Offer made to
+	// someone already at the Practice. Nudged: an Offer expires.
+	StaffNotice OutboxType = "staff-notice"
 )
 
 // delay is how long a nudge waits before it fires, per outbox type.

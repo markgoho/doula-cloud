@@ -5,6 +5,7 @@ import {
 	closeSecondFactorRecommendation,
 	canReadRoster,
 	isConnectCardShown,
+	isDeclinedBlockShown,
 	isRequestBlockShown,
 	isRosterBlockShown,
 	isTonightBlockShown,
@@ -65,12 +66,23 @@ const connectStatus = {
 	requirementsDue: ['individual.dob']
 };
 
+const declinedOffer = {
+	offerId: 'offer-9',
+	engagementId: 'engagement-9',
+	clientName: 'Adaeze Nwosu',
+	kind: 'birth',
+	declinedBy: 'Lena Vasquez',
+	declinedAt: '2026-10-30T15:00:00Z'
+};
+
 /** Routes each request to its canned answer, so a test only has to say
  * which endpoints behave differently from the happy path. */
 function fetcherFor(overrides: Record<string, Response> = {}) {
 	const answers: Record<string, Response> = {
+		// Before `offers`: its path holds `/offers` (#2508).
+		'offers/declined': jsonResponse({ items: [declinedOffer], hasMore: false }),
 		offers: jsonResponse({ items: [openOffer, decidedOffer] }),
-		clients: jsonResponse({ records: 3, active: 2 }),
+		clients: jsonResponse({ records: 3 }),
 		staff: jsonResponse(roster),
 		// Before `billing`: its path holds `/billing` (#1589).
 		'billing-mode': jsonResponse({ billingMode: 'stripe' }),
@@ -256,7 +268,7 @@ describe('loadPracticeLanding', () => {
 
 	it('reports a Practice with no Clients as empty', async () => {
 		const landing = await loadPracticeLanding(
-			fetcherFor({ clients: jsonResponse({ records: 0, active: 0 }) }),
+			fetcherFor({ clients: jsonResponse({ records: 0 }) }),
 			'practice-1',
 			session
 		);
@@ -342,6 +354,26 @@ describe('loadPracticeLanding', () => {
 			expect(landing.practiceName).toBe('Riverside Doula Collective');
 		}
 	);
+
+	// #2508
+	it('reads the declined Offers for an Owner or Admin, and marks a failed read unavailable', async () => {
+		const landing = await loadPracticeLanding(fetcherFor(), 'practice-1', session);
+		expect(landing.declined).toEqual({ items: [declinedOffer], hasMore: false });
+		expect(isDeclinedBlockShown(landing.declined)).toBe(true);
+
+		const failed = await loadPracticeLanding(
+			fetcherFor({ 'offers/declined': refusal('nope') }),
+			'practice-1',
+			session
+		);
+		expect(failed.declined).toBe('unavailable');
+		expect(isDeclinedBlockShown(failed.declined)).toBe(true);
+	});
+
+	it('draws no declined block for an empty list or a reader who may not ask', () => {
+		expect(isDeclinedBlockShown({ items: [], hasMore: false })).toBe(false);
+		expect(isDeclinedBlockShown(undefined)).toBe(false);
+	});
 
 	it.each([['offers'], ['clients']])('fails the whole page when %s refuses', async (endpoint) => {
 		const fetcher = fetcherFor({ [endpoint]: refusal('nope') });

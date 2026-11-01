@@ -143,6 +143,32 @@ export const tonightRoster = {
  * below answers one path itself and hands each other path to it.
  */
 function respondForPopulatedPractice(path: string): Response {
+	// #2508: declines on work nobody has, Owner and Admin only. A birth
+	// with #537's double-barreled names on both sides, beside a
+	// postpartum one declined by an address that never joined.
+	if (path.includes('/offers/declined')) {
+		return jsonResponse({
+			items: [
+				{
+					offerId: 'offer-declined-1',
+					engagementId: 'engagement-4',
+					clientName: 'Anne-Marie Ochieng-Whitfield',
+					kind: 'birth',
+					declinedBy: 'Charlene Boateng-Okonkwo',
+					declinedAt: '2026-10-30T15:00:00Z'
+				},
+				{
+					offerId: 'offer-declined-2',
+					engagementId: 'engagement-5',
+					clientName: 'Pat Lee',
+					kind: 'postpartum',
+					declinedBy: 'a.very.long.address.for.a.doula@persephone-birth-collective.example.org',
+					declinedAt: '2026-10-29T15:00:00Z'
+				}
+			],
+			hasMore: true
+		});
+	}
 	if (path.includes('/offers')) {
 		return jsonResponse({ items: offers });
 	}
@@ -162,11 +188,9 @@ function respondForPopulatedPractice(path: string): Response {
 			hasMore: false
 		});
 	}
-	// #2095: the Clients card's count, and whether there is any Client
-	// at all. Four digits, the widest a pilot's count line could be drawn
-	// at, so the card is measured with a long line rather than "2 active".
+	// #2095: whether there is any Client at all.
 	if (path.includes('/clients/count')) {
-		return jsonResponse({ records: 2048, active: 1024 });
+		return jsonResponse({ records: 2048 });
 	}
 	if (path.includes('/push-subscriptions')) {
 		return jsonResponse({});
@@ -342,7 +366,7 @@ export const asOwnerWithNoClient: RouteVariant = {
 	name: 'The Practice landing hub, as an Owner with no Client yet',
 	pageData: practiceSession(['owner'], { practiceName }),
 	respond: (path) => {
-		if (path.includes('/clients/count')) return jsonResponse({ records: 0, active: 0 });
+		if (path.includes('/clients/count')) return jsonResponse({ records: 0 });
 		if (path.includes('/billing')) {
 			return jsonResponse({
 				balance: 3,
@@ -377,7 +401,7 @@ export const asContractorWithNoClient: RouteVariant = {
 		session: { ...practiceSession(['doula'], { practiceName }).session, isContractor: true }
 	},
 	respond: (path) => {
-		if (path.includes('/clients/count')) return jsonResponse({ records: 0, active: 0 });
+		if (path.includes('/clients/count')) return jsonResponse({ records: 0 });
 		return respondForPopulatedPractice(path);
 	}
 };

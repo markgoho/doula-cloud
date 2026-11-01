@@ -53,6 +53,12 @@ type Detail struct {
 	// Client-facing, and portal.Detail's own read is what enforces it.
 	BirthOutcome     *string `json:"birthOutcome,omitempty"`
 	PregnancyEndedOn *string `json:"pregnancyEndedOn,omitempty"`
+	// OffersBirthPlanToStart and OffersBirthPlan are kind.go's two answers
+	// (#2277, #2317): whether plans.PostInstanceHandler would start a Birth
+	// Plan here, and whether the Client is shown one. The hub draws its
+	// Birth Plan section off them and holds no copy of the rule.
+	OffersBirthPlanToStart bool `json:"offersBirthPlanToStart"`
+	OffersBirthPlan        bool `json:"offersBirthPlan"`
 	// StatusMoves (#253) is legalMoves(reader, Status) -- exactly the
 	// target statuses this caller may move to from Status, per ADR-0015's
 	// six-move table narrowed by its role table. TransitionHandler
@@ -105,11 +111,14 @@ type Detail struct {
 	YourFee *AgreedFee `json:"yourFee,omitempty"`
 }
 
-// AgreedFee is a Doula's own agreed fee and the Practice's calendar day
-// she accepted it on (ADR-0036: a day means the Practice's day).
+// AgreedFee is a Doula's own agreed fee, the terms she accepted it on
+// (#2269: the Offer's terms, copied onto the Attachment as fee_terms),
+// and the Practice's calendar day she accepted it on (ADR-0036: a day
+// means the Practice's day).
 type AgreedFee struct {
-	AmountCents int64  `json:"amountCents"`
-	AcceptedOn  string `json:"acceptedOn"`
+	AmountCents int64   `json:"amountCents"`
+	Terms       *string `json:"terms,omitempty"`
+	AcceptedOn  string  `json:"acceptedOn"`
 }
 
 // readOwnFee reads staffID's own open, granted Attachment on
@@ -118,7 +127,7 @@ type AgreedFee struct {
 func readOwnFee(ctx context.Context, tx *sql.Tx, engagementID, staffID string) (*AgreedFee, error) {
 	var fee AgreedFee
 	err := tx.QueryRowContext(ctx,
-		`SELECT ea.fee_amount_cents, (ea.attached_at AT TIME ZONE p.timezone)::date::text
+		`SELECT ea.fee_amount_cents, NULLIF(ea.fee_terms, ''), (ea.attached_at AT TIME ZONE p.timezone)::date::text
 		   FROM engagement_attachments ea
 		   JOIN engagements e ON e.id = ea.engagement_id
 		   JOIN practices p ON p.id = e.practice_id
@@ -126,7 +135,7 @@ func readOwnFee(ctx context.Context, tx *sql.Tx, engagementID, staffID string) (
 		    AND ea.origin = 'granted' AND ea.ended_at IS NULL
 		    AND ea.fee_amount_cents IS NOT NULL`,
 		engagementID, staffID,
-	).Scan(&fee.AmountCents, &fee.AcceptedOn)
+	).Scan(&fee.AmountCents, &fee.Terms, &fee.AcceptedOn)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil //nolint:nilnil // no fee is an answer, not a failure
 	}
@@ -135,6 +144,63 @@ func readOwnFee(ctx context.Context, tx *sql.Tx, engagementID, staffID string) (
 		return nil, fmt.Errorf("engagement: read own fee: %w", err)
 	}
 	return &fee, nil
+}
+
+// The sentences a contractor reads where her Engagement was (#2270),
+// with the Practice's day her Attachment ended. A birth is named by its
+// due month, the one fact her Your offers keeps for it (#2383), read off
+// her accepted Offer so an Erasure takes it exactly when it takes that.
+const (
+	msgBirthAttachmentEnded      = "Your work on the birth due %s ended on %s."
+	msgThisBirthAttachmentEnded  = "Your work on this birth ended on %s."
+	msgPostpartumAttachmentEnded = "Your postpartum work with this Client ended on %s."
+)
+
+// refuseUnreachable answers a reader who cannot reach engagementID. A
+// contractor whose own granted Attachment on it has ended is told that
+// the work ended and when (#2270), and nothing else about the
+// Engagement: the 410 carries her own record only. Everyone else, a
+// contractor never on it included, gets the plain 404.
+func refuseUnreachable(w http.ResponseWriter, r *http.Request, tx *sql.Tx, practiceID, engagementID string) {
+	staffID, _ := staffauth.StaffID(r.Context())
+	var kind string
+	var dueDate sql.NullTime
+	var endedOn time.Time
+	err := tx.QueryRowContext(r.Context(),
+		`SELECT e.kind::text,
+		        (SELECT o.due_date FROM engagement_offers o
+		          WHERE o.engagement_id = ea.engagement_id AND o.staff_id = ea.staff_id AND o.state = 'accepted'
+		          ORDER BY o.decided_at DESC LIMIT 1),
+		        (ea.ended_at AT TIME ZONE p.timezone)::date
+		   FROM engagement_attachments ea
+		   JOIN engagements e ON e.id = ea.engagement_id
+		   JOIN practices p ON p.id = e.practice_id
+		  WHERE ea.engagement_id = $1 AND ea.staff_id = $2 AND e.practice_id = $3
+		    AND ea.origin = 'granted' AND ea.ended_at IS NOT NULL
+		  ORDER BY ea.ended_at DESC
+		  LIMIT 1`,
+		engagementID, staffID, practiceID,
+	).Scan(&kind, &dueDate, &endedOn)
+	if errors.Is(err, sql.ErrNoRows) {
+		apierr.WriteError(w, "engagement not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+	ended := endedOn.Format("Jan 2, 2006")
+	var message string
+	switch {
+	case kind == "postpartum":
+		message = fmt.Sprintf(msgPostpartumAttachmentEnded, ended)
+	case dueDate.Valid:
+		message = fmt.Sprintf(msgBirthAttachmentEnded, dueDate.Time.Format("Jan 2006"), ended)
+	default:
+		message = fmt.Sprintf(msgThisBirthAttachmentEnded, ended)
+	}
+	apierr.Write(w, http.StatusGone, apierr.CodeAttachmentEnded, message, nil)
 }
 
 // DetailHandler views one Engagement's basic detail: every Staff role
@@ -166,7 +232,7 @@ func DetailHandler() http.Handler {
 			return
 		}
 		if !canAccess {
-			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
+			refuseUnreachable(w, r, tx, practiceID, engagementID)
 			return
 		}
 
@@ -198,6 +264,9 @@ func DetailHandler() http.Handler {
 			d.DueDate = &dueDate.String
 		}
 		d.StatusMoves = legalMoves(reader, d.Status)
+		birthPlan := BirthPlanInputs{Kind: Kind(d.Kind), BirthOutcome: d.BirthOutcome}
+		d.OffersBirthPlanToStart = OffersBirthPlanToStart(birthPlan)
+		d.OffersBirthPlan = OffersBirthPlan(birthPlan)
 
 		portalState, err := client.FetchPortalInviteState(r.Context(), tx, d.ClientID)
 		if err != nil {

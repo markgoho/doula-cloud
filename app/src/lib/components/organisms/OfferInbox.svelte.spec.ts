@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import OfferInbox from './OfferInbox.svelte';
 import { formatInstantWithClock } from '#lib/dates.js';
-import type { Offer } from '#lib/offer.js';
+import type { Offer, OfferDecision } from '#lib/offer.js';
 
 const openOffer: Offer = {
 	offerId: 'offer-1',
@@ -21,11 +21,19 @@ const sent = formatInstantWithClock(openOffer.offeredAt);
 
 async function setup(
 	offers: Offer[] = [],
-	onDecide: (offerId: string, action: 'accept' | 'decline') => Promise<void> = vi
+	onDecide: (offerId: string, action: 'accept' | 'decline') => Promise<OfferDecision> = vi
 		.fn()
-		.mockResolvedValue(undefined)
+		.mockImplementation(async (offerId: string, action: 'accept' | 'decline') => ({
+			offerId,
+			state: action === 'accept' ? 'accepted' : 'declined'
+		}))
 ) {
-	const { container } = await render(OfferInbox, { offers, onDecide });
+	const { container } = await render(OfferInbox, {
+		offers,
+		onDecide,
+		practiceName: 'Rooted Birth Collective',
+		engagementHref: (engagementId: string) => `/engagements/${engagementId}`
+	});
 	return { container, onDecide };
 }
 
@@ -65,8 +73,33 @@ describe('OfferInbox.svelte', () => {
 			clientFirstInitial: '',
 			clientArea: '',
 			dueDate: '',
-			decidedAt: '2026-10-27T15:00:00Z'
+			decidedAt: '2026-10-27T15:00:00Z',
+			acceptedOn: '2026-10-27'
 		};
+
+		it('links to the Engagement while she still reaches it (#2269)', async () => {
+			await setup([{ ...accepted, dueMonth: '2027-02', engagementId: 'eng-7' }]);
+
+			await expect
+				.element(page.getByRole('link', { name: 'Open the birth due Feb 2027' }))
+				.toHaveAttribute('href', '/engagements/eng-7');
+		});
+
+		it('says the day the work ended, with no link (#2270)', async () => {
+			await setup([{ ...accepted, dueMonth: '2027-02', endedOn: '2026-10-31' }]);
+
+			await expect.element(page.getByText('Ended', { exact: true })).toBeVisible();
+			await expect.element(page.getByText('Oct 31, 2026', { exact: true })).toBeVisible();
+			await expect.element(page.getByRole('link')).not.toBeInTheDocument();
+		});
+
+		it("says the Practice's day it was accepted, not the reader's (#2513)", async () => {
+			await setup([{ ...accepted, decidedAt: '2026-11-01T03:30:00Z', acceptedOn: '2026-10-31', endedOn: '2026-10-31' }]);
+
+			await expect.element(page.getByText('Accepted on', { exact: true })).toBeVisible();
+			expect(page.getByText('Oct 31, 2026', { exact: true }).all()).toHaveLength(2);
+			expect(page.getByText('Nov 1, 2026', { exact: true }).all()).toHaveLength(0);
+		});
 
 		it('says what the Practice recorded paying her', async () => {
 			await setup([{ ...accepted, feePaid: { amountCents: 45_000, method: 'bank_transfer', paidOn: '2027-03-03' } }]);
@@ -94,7 +127,7 @@ describe('OfferInbox.svelte', () => {
 		});
 
 		it('shows no Paid row on an accepted Offer with no fee', async () => {
-			await setup([{ ...accepted, amountCents: undefined, decidedAt: undefined }]);
+			await setup([{ ...accepted, amountCents: undefined, decidedAt: undefined, acceptedOn: undefined }]);
 
 			expect(page.getByText('Not recorded yet').all()).toHaveLength(0);
 			expect(page.getByText('Accepted', { exact: true }).all()).toHaveLength(1);
@@ -121,12 +154,53 @@ describe('OfferInbox.svelte', () => {
 		expect(onDecide).toHaveBeenCalledWith('offer-1', 'accept');
 	});
 
-	it('calls onDecide with decline', async () => {
+	// #2268: declining is final, so it is confirmed first.
+	it('asks before it declines, and declines on the confirm', async () => {
 		const { onDecide } = await setup([openOffer]);
 
 		await page.getByRole('button', { name: 'Decline' }).click();
+		await expect.element(page.getByRole('heading', { name: 'Decline this offer?' })).toBeVisible();
+		await expect
+			.element(page.getByText("You can't undo this. Rooted Birth Collective can send you a new offer later."))
+			.toBeVisible();
+		expect(onDecide).not.toHaveBeenCalled();
+
+		await page.getByRole('button', { name: 'Decline offer' }).click();
 
 		expect(onDecide).toHaveBeenCalledWith('offer-1', 'decline');
+		const status = page.getByRole('status');
+		await expect.element(status).toHaveTextContent('You declined. Rooted Birth Collective can see that on the Client\'s page.');
+		await expect.element(status).toHaveFocus();
+	});
+
+	it('keeps the offer when she backs out of declining', async () => {
+		const { onDecide } = await setup([openOffer]);
+
+		await page.getByRole('button', { name: 'Decline' }).click();
+		await page.getByRole('button', { name: 'Keep the offer' }).click();
+
+		expect(onDecide).not.toHaveBeenCalled();
+		await expect.element(page.getByRole('button', { name: 'Decline', exact: true })).toBeVisible();
+	});
+
+	it('says the work is hers on an accept, and links to it', async () => {
+		const onDecide = vi.fn().mockResolvedValue({
+			offerId: 'offer-1',
+			state: 'accepted',
+			engagementId: 'eng-1',
+			engagementKind: 'birth',
+			clientName: 'Adaeze Nwosu'
+		});
+		await setup([openOffer], onDecide);
+
+		await page.getByRole('button', { name: 'Accept' }).click();
+
+		const status = page.getByRole('status');
+		await expect.element(status).toHaveTextContent("You accepted. You're on Adaeze Nwosu's birth.");
+		await expect.element(status).toHaveFocus();
+		await expect
+			.element(page.getByRole('link', { name: "Open Adaeze Nwosu's birth" }))
+			.toHaveAttribute('href', '/engagements/eng-1');
 	});
 
 	it('names the Accept and Decline buttons by which Offer they answer', async () => {
@@ -202,7 +276,7 @@ describe('OfferInbox.svelte', () => {
 		const onDecide = vi.fn().mockRejectedValue('boom');
 		await setup([openOffer], onDecide);
 
-		await page.getByRole('button', { name: 'Decline' }).click();
+		await page.getByRole('button', { name: 'Accept' }).click();
 
 		await expect.element(page.getByText('Failed to answer this offer')).toBeVisible();
 	});

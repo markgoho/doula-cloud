@@ -2,7 +2,14 @@ import { page } from 'vitest/browser';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import InvoiceSection from './InvoiceSection.svelte';
-import type { BillingMode, ContractorInvoice, Invoice, PaymentMethod, RefundPaymentInput } from '#lib/invoice.js';
+import {
+	paymentOnItsWayLine,
+	type BillingMode,
+	type ContractorInvoice,
+	type Invoice,
+	type PaymentMethod,
+	type RefundPaymentInput
+} from '#lib/invoice.js';
 import { RefusalError } from '#lib/formErrors.js';
 
 interface SetupOptions {
@@ -606,6 +613,14 @@ describe('InvoiceSection.svelte', () => {
 			await setup({ invoices: [invoiceOpen, invoicePaid], isOwnerOrAdmin: true });
 
 			expect(page.getByRole('button', { name: 'Record payment' }).all()).toHaveLength(1);
+		});
+
+		it('offers no Record payment while a payment on the Invoice is on its way (#2381)', async () => {
+			await setup({ invoices: [{ ...invoiceOpen, paymentProcessing: true }], isOwnerOrAdmin: true });
+
+			await expect.element(page.getByText('Payment on its way').last()).toBeVisible();
+			await expect.element(page.getByText(paymentOnItsWayLine).last()).toBeVisible();
+			await expect.element(page.getByRole('button', { name: 'Record payment' })).not.toBeInTheDocument();
 		});
 
 		it('offers no Record payment action for a Doula', async () => {

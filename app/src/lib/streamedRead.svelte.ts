@@ -71,6 +71,9 @@ missing or broken read reads the same as it did when `load` threw it.
 export class Streamed<Value> {
 	value = $state.raw<Value>();
 	failure = $state<ErrorKind>();
+	/** The refusal's own code and sentence, for a screen that says more
+	 * than its `failure` kind can (#2270's ended Attachment). */
+	refusal = $state.raw<{ code?: string; message?: string }>();
 
 	constructor(read: () => Promise<StreamedRead<Value>>) {
 		$effect(() => {
@@ -88,19 +91,23 @@ export class Streamed<Value> {
 		if (!isCurrent()) return;
 		if (read.isLoaded) {
 			this.failure = undefined;
+			this.refusal = undefined;
 			this.value = read.value;
 			return;
 		}
-		const failure = await failureKind(read.response);
+		const failure = await failureOf(read.response);
 		if (failure === undefined || !isCurrent()) return;
 		this.value = undefined;
-		this.failure = failure;
+		this.refusal = failure.refusal;
+		this.failure = failure.kind;
 	}
 }
 
-async function failureKind(response: Response | undefined): Promise<ErrorKind | undefined> {
-	if (response === undefined) return 'problem';
+async function failureOf(
+	response: Response | undefined
+): Promise<{ kind: ErrorKind; refusal?: { code?: string; message?: string } } | undefined> {
+	if (response === undefined) return { kind: 'problem' };
 	if (await didFollowSessionRefusal(response)) return undefined;
-	const { code } = await parseRefusal(response, { opaque5xx: false });
-	return errorKindForStatus(response.status, code);
+	const { code, message } = await parseRefusal(response, { opaque5xx: false });
+	return { kind: errorKindForStatus(response.status, code), refusal: { code, message } };
 }

@@ -73,6 +73,11 @@ export interface EngagementSummary {
 	 * the outcome, and distinct from the day a Staff member typed it in.
 	 * Absent for an `unknown` outcome, and for one not yet recorded. */
 	pregnancyEndedOn?: string;
+	/** Whether a Birth Plan can be started here, and whether the Client is
+	 * shown one (#2277, #2317): the BFF's two answers to ADR-0015's rule,
+	 * so the hub holds no copy of it. */
+	offersBirthPlanToStart: boolean;
+	offersBirthPlan: boolean;
 	/** The Client's portal-invite state (#255), using the same
 	 * derivation the Clients list's own ClientListItem.portalInviteStatus
 	 * carries -- absent when she has never been invited. */
@@ -116,6 +121,9 @@ A Doula's own agreed fee. Mirrors the Go BFF's engagement.AgreedFee.
 */
 export interface AgreedFee {
 	amountCents: number;
+	/** The Offer's terms she accepted with the fee (#2269), absent when
+	 * the Offer had none. */
+	terms?: string;
 	/**
 	`YYYY-MM-DD`, the Practice's calendar day (ADR-0036).
 	*/
@@ -126,6 +134,15 @@ export interface AgreedFee {
  * then the day she accepted it, so she can tell which Offer it was. */
 export function yourFeeValue(fee: AgreedFee): string {
 	return `${formatMoney(fee.amountCents, 'USD')}, the fee you accepted on ${formatCalendarDay(fee.acceptedOn)}`;
+}
+
+/** "Your fee" and, beside it, the terms she accepted with it (#2269),
+ * labeled "Terms" as on the Offer card she accepted. */
+export function yourFeeRows(fee: AgreedFee): { label: string; value: string }[] {
+	return [
+		{ label: 'Your fee', value: yourFeeValue(fee) },
+		...(fee.terms ? [{ label: 'Terms', value: fee.terms }] : [])
+	];
 }
 
 /** One Doula on an Engagement. Mirrors the Go BFF's

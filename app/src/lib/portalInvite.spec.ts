@@ -3,6 +3,7 @@ import {
 	hasAcceptedPortalInvite,
 	hasNeverBeenInvited,
 	isBlockedInvite,
+	isRefusedInvite,
 	portalInviteStatusText
 } from './portalInvite.js';
 
@@ -70,5 +71,19 @@ describe('hasAcceptedPortalInvite', () => {
 		expect(hasAcceptedPortalInvite({ portalInviteStatus: 'accepted' })).toBe(true);
 		expect(hasAcceptedPortalInvite({ portalInviteStatus: 'pending' })).toBe(false);
 		expect(hasAcceptedPortalInvite({})).toBe(false);
+	});
+});
+
+describe('a refused invite (#2522)', () => {
+	it('reads its own status, never "Invite pending"', () => {
+		expect(portalInviteStatusText({ portalInviteStatus: 'refused' })).toBe(
+			'Invite refused: signs in through another record'
+		);
+	});
+
+	it('is told apart from every other status', () => {
+		expect(isRefusedInvite({ portalInviteStatus: 'refused' })).toBe(true);
+		expect(isRefusedInvite({ portalInviteStatus: 'pending' })).toBe(false);
+		expect(isRefusedInvite({})).toBe(false);
 	});
 });

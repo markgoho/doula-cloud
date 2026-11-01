@@ -46,7 +46,7 @@ export const roster = {
 
 export const session: SessionInfo = {
 	memberships: [
-		{ practiceId: 'practice-1', practiceName: 'Riverside Doula Collective', roles: ['owner'] }
+		{ practiceId: 'practice-1', practiceName: 'Riverside Doula Collective', roles: ['owner'], employmentType: 'employee' }
 	],
 	lastPracticeId: 'practice-1',
 	staffId: 'staff-1',
