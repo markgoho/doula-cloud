@@ -195,16 +195,21 @@ describe('the Pilot banner and Feedback drawer (#1527)', () => {
 			.toBeVisible();
 	});
 
+	// #2529: under load a click could land on the drawer mid-slide, so each
+	// step waits on what a person sees: the drawer at rest, the kind chosen.
 	it('posts a send to /api/staff/feedback with no practiceId, since /account carries none', async () => {
 		await renderLayout();
 
 		await testPage.getByRole('button', { name: 'Tell us what is not working or what you need.' }).click();
-		await testPage.getByLabelText('Something else').click();
-		await testPage.getByRole('button', { name: 'Send feedback' }).click();
+		const drawer = testPage.getByRole('dialog', { name: 'Send feedback to DoulaCloud' });
+		await expect.element(drawer).toBeVisible();
+		await Promise.all(drawer.element().getAnimations().map((animation) => animation.finished));
+		const kind = drawer.getByLabelText('Something else');
+		await kind.click();
+		await expect.element(kind).toBeChecked();
+		await drawer.getByRole('button', { name: 'Send feedback' }).click();
 
-		await expect
-			.poll(() => apiFetchWithSession.mock.calls.some((call: unknown[]) => call[0] === '/api/staff/feedback'))
-			.toBe(true);
+		await expect.element(testPage.getByText('Feedback sent. Thank you.', { exact: false })).toBeVisible();
 		const [, init] = apiFetchWithSession.mock.calls.find(
 			(call: unknown[]) => call[0] === '/api/staff/feedback'
 		) as [string, RequestInit];

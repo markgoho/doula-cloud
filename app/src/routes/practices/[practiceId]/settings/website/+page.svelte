@@ -42,6 +42,7 @@
 	import { gotoWithOutcome } from '#lib/outcome.js';
 	import { FROM_GETTING_PAID_QUERY, websiteSavedMessage } from '../payments/gettingPaid.js';
 	import type { PracticeSession } from '../../+layout.js';
+	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -86,14 +87,17 @@
 		resolve('/practices/[practiceId]/settings/payments', { practiceId: page.params.practiceId! })
 	);
 
-	/* 'answers' collects, 'review' shows the assembled page back to her,
-	   'saved' is the state she lands in after a successful write and the
-	   one she meets on every later visit. */
-	let step = $state<'answers' | 'review' | 'saved'>('answers');
+	/* 'answers' collects, 'facts' asks a page's two facts on a page of their
+	   own (#2302: GOV.UK puts a follow-up with more than one part on the
+	   next page, not in a reveal), 'review' shows the assembled page back
+	   to her, 'saved' is the state she lands in after a successful write
+	   and the one she meets on every later visit. */
+	let step = $state<'answers' | 'facts' | 'review' | 'saved'>('answers');
 	/* Which one question a row's Change opened (#2047), or `undefined`
 	   for the whole set: the first answer, and a change of how Clients
 	   find her, which brings its own follow-up question with it. */
 	let editing = $state<Fact | undefined>();
+	const isEditingFact = $derived(editing === 'serviceDescription' || editing === 'cancellationPolicy');
 	let choice = $state<Choice>('');
 	let ownUrl = $state('');
 	let serviceDescription = $state('');
@@ -168,18 +172,18 @@
 		...(submitError ? [{ message: submitError }] : [])
 	]);
 
-	function localErrors(): Record<string, string> {
+	function answerErrors(): Record<string, string> {
 		const errors: Record<string, string> = {};
 		if (choice === '') {
 			errors.mode = 'Choose how Clients will find you online';
-			return errors;
+		} else if (choice === 'own' && ownUrl.trim() === '') {
+			errors.ownUrl = 'Enter the web address of your website or social profile';
 		}
-		if (choice === 'own') {
-			if (ownUrl.trim() === '') {
-				errors.ownUrl = 'Enter the web address of your website or social profile';
-			}
-			return errors;
-		}
+		return errors;
+	}
+
+	function factErrors(): Record<string, string> {
+		const errors: Record<string, string> = {};
 		if (serviceDescription.trim() === '') {
 			errors.serviceDescription = 'Enter a description of what your Practice offers';
 		} else if (descriptionRemaining < 0) {
@@ -199,17 +203,22 @@
 	function handleContinue(event: SubmitEvent) {
 		event.preventDefault();
 		submitError = '';
-		const errors = localErrors();
+		const isAskingFacts = step === 'facts' || isEditingFact;
+		const errors = isAskingFacts ? factErrors() : answerErrors();
 		fieldErrors = errors;
 		if (Object.keys(errors).length > 0) {
 			return;
 		}
 		if (choice === 'hosted') {
-			step = 'review';
+			step = isAskingFacts ? 'review' : 'facts';
 			return;
 		}
 		void save();
 	}
+
+	/* Back from the check page goes to wherever its facts were asked: their
+	   own page, or the one question a Change opened. */
+	const factsStep = $derived(isEditingFact ? 'answers' : 'facts');
 
 	async function save() {
 		submitError = '';
@@ -244,7 +253,9 @@
 				   showing an error about a box that is not on it would be a
 				   dead end. */
 				fieldErrors = error_.fieldErrors;
-				step = 'answers';
+				const isAboutFacts =
+					'serviceDescription' in error_.fieldErrors || 'cancellationPolicy' in error_.fieldErrors;
+				step = isAboutFacts ? factsStep : 'answers';
 				return;
 			}
 			submitError = error_ instanceof Error ? error_.message : 'Failed to save your website';
@@ -430,7 +441,9 @@
 		label={choice === 'hosted' ? 'Continue' : 'Save'}
 		loading={isSubmitting}
 	/>
-	{#if step === 'answers' && current && current.mode !== 'undeclared'}
+	{#if step === 'facts'}
+		<Button variant="secondary" label="Back" onClick={() => (step = 'answers')} />
+	{:else if current && current.mode !== 'undeclared'}
 		<Button variant="secondary" label="Cancel" onClick={() => (step = 'saved')} />
 	{/if}
 {/snippet}
@@ -458,13 +471,24 @@
 				errorSummary={summaryErrors.length > 0 ? errorSummary : undefined}
 				fieldsets={singleQuestion
 					? [{ content: singleQuestion }]
-					: (choice === ''
-						? [{ content: howFound }]
-						: [{ content: howFound }, { content: choice === 'own' ? ownWebsite : hostedFacts }])}
+					: (choice === 'own'
+						? [{ content: howFound }, { content: ownWebsite }]
+						: [{ content: howFound }])}
+				{actions}
+			/>
+		</form>
+	{:else if step === 'facts'}
+		<!-- stacked-form:ignore: #1108 -- this form wraps a Template, as the questions' form above does. -->
+		<form onsubmit={handleContinue} novalidate>
+			<FormPage
+				title="What your page will say"
+				errorSummary={summaryErrors.length > 0 ? errorSummary : undefined}
+				fieldsets={[{ content: hostedFacts }]}
 				{actions}
 			/>
 		</form>
 	{:else if step === 'review'}
+		<PageTitle page="Check your page before you publish it" isError={summaryErrors.length > 0} />
 		<container-l>
 			<center-l max="var(--form-max)" gutters="var(--page-gutter)">
 				<stack-l space="var(--space-7)">
@@ -491,7 +515,7 @@
 
 					<cluster-l space="var(--space-3)" align="center">
 						<Button label="Publish page" loading={isSubmitting} onClick={save} />
-						<Button variant="secondary" label="Back" onClick={() => (step = 'answers')} />
+						<Button variant="secondary" label="Back" onClick={() => (step = factsStep)} />
 					</cluster-l>
 				</stack-l>
 			</center-l>

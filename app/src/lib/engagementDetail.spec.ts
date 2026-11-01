@@ -448,6 +448,15 @@ describe('createVisit', () => {
 
 		await expect(createVisit(fetcher, reference)).rejects.toThrow('nope');
 	});
+
+	// #2540: who the BFF emailed about the new Visit, or nobody.
+	it('hands back who was emailed', async () => {
+		const notified = vi.fn().mockResolvedValue(jsonResponse({ notifiedStaffIds: ['staff-7'] }));
+		await expect(createVisit(notified, reference, undefined, 'staff-7')).resolves.toEqual(['staff-7']);
+
+		const silent = vi.fn().mockResolvedValue(jsonResponse({}));
+		await expect(createVisit(silent, reference)).resolves.toEqual([]);
+	});
 });
 
 describe('scheduleVisit', () => {
@@ -531,6 +540,15 @@ describe('reassignVisit', () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse('nope', 403));
 
 		await expect(reassignVisit(fetcher, reference, 'visit-1', 'staff-2')).rejects.toThrow('nope');
+	});
+
+	// #2436: who the BFF emailed about the move, or nobody when it says none.
+	it('hands back who was emailed', async () => {
+		const notified = vi.fn().mockResolvedValue(jsonResponse({ notifiedStaffIds: ['staff-2', 'staff-1'] }));
+		await expect(reassignVisit(notified, reference, 'visit-1', 'staff-2')).resolves.toEqual(['staff-2', 'staff-1']);
+
+		const silent = vi.fn().mockResolvedValue(jsonResponse({}));
+		await expect(reassignVisit(silent, reference, 'visit-1', 'staff-2')).resolves.toEqual([]);
 	});
 });
 

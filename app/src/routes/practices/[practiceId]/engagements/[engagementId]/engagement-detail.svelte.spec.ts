@@ -73,6 +73,7 @@ interface Detail {
 	doulas: { staffId: string; name: string }[];
 	canAttachSelf: boolean;
 	yourFee?: { amountCents: number; acceptedOn: string; terms?: string };
+	hasDoulaFees: boolean;
 }
 
 // The Engagement is handed in as `data` rather than stubbed out of a
@@ -1075,6 +1076,24 @@ describe('the Visits section Date column and schedule control (#250)', () => {
 		});
 		await expect.element(testPage.getByText('The Visit for Jordan Reyes is added.')).toHaveFocus();
 		await expect.element(testPage.getByRole('button', { name: 'Add a Visit' })).toBeVisible();
+	});
+
+	// #2540: the Doula a new Visit names is emailed, and the line says so.
+	it('says the Doula a new Visit names was emailed', async () => {
+		await renderWithFixtureResponder((path, init) => {
+			if (!init || init.method !== 'POST' || !path.endsWith('/visits')) return;
+			return Promise.resolve(
+				jsonResponse({ visitId: 'visit-3', staffId: 'staff-2', notifiedStaffIds: ['staff-2'] }, 201)
+			);
+		});
+
+		await testPage.getByRole('button', { name: 'Add a Visit' }).click();
+		await testPage.getByLabelText('Who is this Visit for?').selectOptions('Jordan Reyes');
+		await testPage.getByRole('button', { name: 'Save Visit' }).click();
+
+		await expect
+			.element(testPage.getByText('The Visit for Jordan Reyes is added. We emailed Jordan Reyes to say so.'))
+			.toHaveFocus();
 	});
 
 	it('says why an add was refused, in the add form', async () => {
@@ -2800,6 +2819,28 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 		await expect.element(testPage.getByRole('button', { name: 'Reassign the Visit' })).not.toBeInTheDocument();
 	});
 
+	// #2436: who the BFF emailed about the move, never that anyone knows.
+	it('says who was emailed about the move', async () => {
+		await setupWithRoster();
+		const respond = apiFetchWithSession.getMockImplementation()!;
+		apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) =>
+			init?.method === 'PATCH' && path.endsWith('/visits/visit-1')
+				? Promise.resolve(jsonResponse({ visitId: 'visit-1', staffId: 'staff-2', notifiedStaffIds: ['staff-2', 'staff-1'] }))
+				: respond(path, init)
+		);
+		await reassignVisit(0);
+		await reassignPicker().selectOptions('Jordan Reyes');
+		await testPage.getByRole('button', { name: 'Reassign the Visit' }).click();
+
+		await expect
+			.element(
+				testPage.getByText(
+					/is Jordan Reyes's now, not Anne-Marie Ochieng-Whitfield's\. We emailed Jordan Reyes and Anne-Marie Ochieng-Whitfield to say so\.$/
+				)
+			)
+			.toBeVisible();
+	});
+
 	it('names a Visit that is not yet scheduled as such once it is reassigned', async () => {
 		await setupWithRoster();
 		await reassignVisit(1);
@@ -3702,7 +3743,7 @@ describe('the Doula fees section (#2271)', () => {
 	});
 
 	it('leaves the section out for a reader the BFF refuses', async () => {
-		await setupMoney(contractorReader, fixtureDetail, (path) =>
+		await setupMoney(contractorReader, { ...fixtureDetail, hasDoulaFees: false }, (path) =>
 			path.endsWith('/doula-fees') ? jsonResponse({ code: 'FORBIDDEN', message: 'no' }, 403) : undefined
 		);
 
@@ -3711,12 +3752,23 @@ describe('the Doula fees section (#2271)', () => {
 	});
 
 	it('leaves the section out when no Doula has a fee', async () => {
-		await setupMoney(sessionFor(['owner']), fixtureDetail, (path) =>
+		await setupMoney(sessionFor(['owner']), { ...fixtureDetail, hasDoulaFees: false }, (path) =>
 			path.endsWith('/doula-fees') ? jsonResponse({ items: [] }) : undefined
 		);
 
 		await expect.element(testPage.getByRole('region', { name: 'Messages', exact: true })).toBeVisible();
 		await expect.element(doulaFeesSection()).not.toBeInTheDocument();
+	});
+
+	// #2492: the Engagement read says a fee exists, so the heading and its
+	// link are on the page before the fees read lands, not added after.
+	it('stands from the first frame when the Engagement has a fee, before the fees read lands', async () => {
+		await setupMoney(sessionFor(['owner']), fixtureDetail, (path) =>
+			path.endsWith('/doula-fees') ? (new Promise<Response>(() => {}) as unknown as Response) : undefined
+		);
+
+		await expect.element(doulaFeesSection()).toBeVisible();
+		await expect.element(doulaFeesSection().getByRole('status', { name: 'Loading the Doula fees' })).toBeVisible();
 	});
 
 	it('says so when the fees cannot be read', async () => {

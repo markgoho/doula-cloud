@@ -1,0 +1,253 @@
+package pdffont
+
+import (
+	"bytes"
+	"fmt"
+	"math"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/go-text/typesetting/bidi"
+	"github.com/go-text/typesetting/font"
+)
+
+func glyphIDs(d *Doc, face int, text string, rtl bool) []font.GID {
+	_, out := d.shape(face, Regular, text, rtl)
+	ids := make([]font.GID, len(out.Glyphs))
+	for i, g := range out.Glyphs {
+		ids[i] = g.GlyphID
+	}
+	return ids
+}
+
+const arabicFace, devanagariFace = 1, 2
+
+// #2538: Arabic letters inside a word take their joined forms, not the
+// isolated ones each letter has alone, and the word runs right to left:
+// its first letter's glyph comes last.
+func TestShape_JoinsArabicRightToLeft(t *testing.T) {
+	d := New()
+	word := []rune("سارة")
+	_, out := d.shape(arabicFace, Regular, string(word), true)
+	if len(out.Glyphs) != len(word) {
+		t.Fatalf("glyphs = %d, want one per letter (%d)", len(out.Glyphs), len(word))
+	}
+	if last := out.Glyphs[len(out.Glyphs)-1]; last.TextIndex() != 0 {
+		t.Fatalf("last glyph is letter %d, want the first letter: the word reads right to left", last.TextIndex())
+	}
+	joined := glyphIDs(d, arabicFace, string(word), true)
+	var isolated []font.GID
+	for _, r := range word {
+		isolated = append(isolated, glyphIDs(d, arabicFace, string(r), true)...)
+	}
+	slices.Reverse(isolated)
+	if joined[len(joined)-1] == isolated[len(isolated)-1] {
+		t.Fatalf("the first letter drew in its isolated form (%d), not joined to the next", joined[len(joined)-1])
+	}
+}
+
+// #2538: "प्रि" is a conjunct and its short-i sign, which is typed after
+// the consonant and drawn before it, so it shapes to fewer glyphs than
+// characters and the conjunct is not its first glyph.
+func TestShape_FormsDevanagariConjunctsAndReordersTheShortI(t *testing.T) {
+	d := New()
+	cluster := "प्रि"
+	shaped := glyphIDs(d, devanagariFace, cluster, false)
+	if len(shaped) >= len([]rune(cluster)) {
+		t.Fatalf("glyphs = %d, want fewer than the %d characters: no conjunct formed", len(shaped), len([]rune(cluster)))
+	}
+	conjunct := glyphIDs(d, devanagariFace, "प्र", false)
+	if len(conjunct) != 1 {
+		t.Fatalf("प्र shaped to %d glyphs, want one conjunct", len(conjunct))
+	}
+	if shaped[0] == conjunct[0] || shaped[len(shaped)-1] != conjunct[0] {
+		t.Fatalf("glyphs = %v, want the short-i sign before the conjunct %d", shaped, conjunct[0])
+	}
+}
+
+// A shaped run is drawn as filled outlines with the typed text laid over
+// it invisibly, then the text render mode and scale are put back.
+func TestDrawShaped_FillsOutlinesUnderInvisibleText(t *testing.T) {
+	d := New()
+	d.SetCompression(false)
+	d.Paragraph(Regular, 12, 8, "Name: सारा")
+	var buf bytes.Buffer
+	if err := d.Output(&buf); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{" m\n", "\nf\n", "3 Tr ", "0 Tr 100 Tz"} {
+		if !bytes.Contains(buf.Bytes(), []byte(want)) {
+			t.Fatalf("content stream has no %q", want)
+		}
+	}
+}
+
+// A shaped line that starts a new page draws its outlines and its text
+// layer on that page, so every page's fills sit under their own text.
+func TestDrawShaped_KeepsOutlinesAndTextOnOnePage(t *testing.T) {
+	d := New()
+	d.SetCompression(false)
+	d.Paragraph(Regular, 12, 8, strings.Repeat("هذه الاتفاقية بين دولا المدينة وسارة الحداد. ", 80))
+	var buf bytes.Buffer
+	if err := d.Output(&buf); err != nil {
+		t.Fatal(err)
+	}
+	if d.PageCount() < 2 {
+		t.Fatalf("pages = %d, want the paragraph to cross a page", d.PageCount())
+	}
+	for i, stream := range bytes.Split(buf.Bytes(), []byte("endstream")) {
+		fills, layers, resets := bytes.Count(stream, []byte("\nf\n")), bytes.Count(stream, []byte("3 Tr")), bytes.Count(stream, []byte("0 Tr 100 Tz"))
+		if (fills == 0) != (layers == 0) || layers != resets {
+			t.Fatalf("stream %d: %d outline fills, %d text layers, %d resets", i, fills, layers, resets)
+		}
+	}
+}
+
+// An empty line draws nothing and only moves down a line.
+func TestFlush_DrawsNothingForAnEmptyLine(t *testing.T) {
+	d := New()
+	y := d.GetY()
+	d.Paragraph(Regular, 12, 8, "  ")
+	if got := d.GetY(); got != y+8 {
+		t.Fatalf("y = %v, want %v", got, y+8)
+	}
+}
+
+// Text that measures nothing in its face draws nothing over the outlines,
+// and the position still moves past them.
+func TestDrawShaped_SkipsTheTextLayerWhenItMeasuresNothing(t *testing.T) {
+	d := New()
+	d.use(arabicFace, Regular, 12)
+	x := d.GetX()
+	d.drawShaped(arabicFace, Regular, 12, 8, "\u200d")
+	if d.GetX() < x {
+		t.Fatalf("x moved back from %v to %v", x, d.GetX())
+	}
+}
+
+// #2544: in a right-to-left run a bracket draws as its mirror, by the
+// Unicode Bidi Mirroring property, so "(" opens on the right.
+func TestShape_MirrorsBracketsRightToLeft(t *testing.T) {
+	d := New()
+	for typed, mirror := range map[string]string{"(": ")", "[": "]", "«": "»"} {
+		if got, want := glyphIDs(d, 0, typed, true), glyphIDs(d, 0, mirror, false); !slices.Equal(got, want) {
+			t.Fatalf("%q right to left drew %v, want the glyph of %q, %v", typed, got, mirror, want)
+		}
+	}
+}
+
+// #2544: an emoji sequence joined by U+200D, an emoji with a skin tone
+// and a flag each draw as one glyph.
+func TestShape_JoinsEmojiSequences(t *testing.T) {
+	d := New()
+	if faces[emojiFace].family != "NotoEmoji" {
+		t.Fatalf("face %d is %s, want NotoEmoji", emojiFace, faces[emojiFace].family)
+	}
+	for _, sequence := range []string{"👩‍🍼", "👍🏽", "🇺🇸"} {
+		if got := glyphIDs(d, emojiFace, sequence, false); len(got) != 1 {
+			t.Fatalf("%q drew %d glyphs, want 1", sequence, len(got))
+		}
+	}
+}
+
+// #2544: the joiner inside an emoji sequence stays with its emoji, the
+// space after an emoji goes back to Noto Sans, and a digit asking for its
+// emoji form is a keycap in the emoji face.
+func TestRuns_KeepsAnEmojiSequenceWholeAndItsSpaceOut(t *testing.T) {
+	got := runs("a 👩‍🍼 b 1️⃣")
+	want := []run{{face: 0, text: "a ", start: 0}, {face: emojiFace, text: "👩‍🍼", start: 2}, {face: 0, text: " b ", start: 5}, {face: emojiFace, text: "1️⃣", start: 8}}
+	if !slices.Equal(got, want) {
+		t.Fatalf("runs = %+v, want %+v", got, want)
+	}
+}
+
+// #2550: a character outside the BMP is shown in the invisible text as
+// its code, scaled to the width of the U+FFFD the layout measured, and
+// with no ActualText span.
+func TestDrawShaped_ShowsACharacterOutsideTheBMPAsItsCode(t *testing.T) {
+	content := func(text string) []byte {
+		d := New()
+		d.SetCompression(false)
+		d.Paragraph(Regular, 12, 8, text)
+		var buf bytes.Buffer
+		if err := d.Output(&buf); err != nil {
+			t.Fatal(err)
+		}
+		return buf.Bytes()
+	}
+	baby := content("Ada \U0001F476")
+	if !bytes.Contains(baby, []byte("(\xfd\xd0)Tj ET\n")) {
+		t.Fatal("the layer does not show U+1F476 as its code")
+	}
+	if bytes.Contains(baby, []byte("ActualText")) {
+		t.Fatal("U+1F476 was given an ActualText")
+	}
+	var tz []float64
+	for line := range strings.SplitSeq(string(baby), "\n") {
+		var v float64
+		if _, err := fmt.Sscanf(strings.TrimPrefix(line, "3 Tr "), "%f Tz", &v); err == nil && strings.HasSuffix(line, " Tz") {
+			tz = append(tz, v)
+		}
+	}
+	// U+FFFD is 1000 units wide in Noto Sans, and a code it lacks 600, so
+	// the code's scaling is the layer's times 1000/600.
+	if len(tz) < 2 || math.Abs(tz[1]/tz[0]-1000.0/600) > 0.01 {
+		t.Fatalf("Tz = %v, want the code widened to U+FFFD's width", tz)
+	}
+}
+
+// Rule L2: the highest level is reversed first, then each lower odd one.
+func TestReorder_ReversesFromTheHighestLevelDown(t *testing.T) {
+	segments := []segment{{text: "a", level: 0}, {text: "b", level: 1}, {text: "1", level: 2}, {text: "c", level: 1}, {text: "d", level: 0}}
+	reorder(segments)
+	var got []string
+	for _, s := range segments {
+		got = append(got, s.text)
+	}
+	if want := []string{"a", "c", "1", "b", "d"}; !slices.Equal(got, want) {
+		t.Fatalf("order = %v, want %v", got, want)
+	}
+	reorder(nil)
+}
+
+// A paragraph takes its direction from its first letter.
+func TestBidiLevels_TakesTheParagraphFromItsFirstLetter(t *testing.T) {
+	for text, want := range map[string]bidi.Level{"سارة and Ada": 1, "Ada and سارة": 0, "12 سارة": 1, "": 0} {
+		if _, got := bidiLevels(text); got != want {
+			t.Fatalf("bidiLevels(%q) base = %d, want %d", text, got, want)
+		}
+	}
+}
+
+// #2546: a line holding right-to-left text is laid in the order typed.
+// The Latin label is written in one piece, then each Arabic letter, with
+// the mark after it, to the left of the one before; the space and the
+// heart between two Arabic words are written left to right in one piece.
+func TestTypedLayer_WritesEachRightToLeftLetterLeftOfTheLast(t *testing.T) {
+	d := New()
+	d.SetCompression(false)
+	d.Paragraph(Regular, 12, 8, "by: بِس ❤ سا")
+	var buf bytes.Buffer
+	if err := d.Output(&buf); err != nil {
+		t.Fatal(err)
+	}
+	var xs []float64
+	for line := range strings.SplitSeq(buf.String(), "\n") {
+		var x, y float64
+		if n, _ := fmt.Sscanf(line, "BT %f %f Td", &x, &y); n == 2 {
+			xs = append(xs, x)
+		}
+	}
+	// The label, ب with its mark, س, the space in the Arabic face, the heart
+	// and space in the first face, س, ا.
+	if len(xs) != 7 {
+		t.Fatalf("x = %v, want seven pieces", xs)
+	}
+	if !(xs[2] < xs[1] && xs[6] < xs[5]) {
+		t.Fatalf("x = %v, want each Arabic letter left of the one typed before it", xs)
+	}
+	if xs[4] <= xs[3] {
+		t.Fatalf("x = %v, want the neutral stretch left to right", xs)
+	}
+}

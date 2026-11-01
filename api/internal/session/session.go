@@ -11,6 +11,7 @@ package session
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/http"
 
 	"doula-cloud/api/internal/apierr"
@@ -18,6 +19,7 @@ import (
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/sessionmint"
 	"doula-cloud/api/internal/sessionnotice"
+	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 )
 
@@ -39,6 +41,16 @@ const Lifetime = authn.SessionLifetime
 // neither needs to tell the caller anything beyond "this worked".
 type StatusResponse struct {
 	OK bool `json:"ok"`
+}
+
+// CreateResponse is POST /api/session's success body: StatusResponse's
+// ok, plus the caller's Staff session, the same body GET
+// /api/staff/session answers (#2434). Staff is absent when the identity
+// holds no Staff row; the app then reads GET /api/staff/session for its
+// 404.
+type CreateResponse struct {
+	OK    bool                       `json:"ok"`
+	Staff *staffauth.SessionResponse `json:"staff,omitempty"`
 }
 
 // CreateHandler accepts an ID token in the Authorization header --
@@ -73,10 +85,25 @@ func CreateHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.Enqueuer) 
 			return
 		}
 
+		body := &CreateResponse{OK: true}
 		step := func(context.Context, *sql.Tx) (sessionmint.Result, error) {
-			return sessionmint.Result{IdentityUID: verified.UID, Body: StatusResponse{OK: true}}, nil
+			return sessionmint.Result{IdentityUID: verified.UID, Body: body}, nil
 		}
-		if !sessionmint.IssueFromDB(w, r, db, enq, sessionmint.Staff(*verified), step, nil) {
+		// #2434: the Staff session read rides on the sign-in's own response,
+		// read after the mint in the same transaction, so /login lands
+		// without a second request.
+		finish := func(ctx context.Context, tx *sql.Tx) error {
+			staff, found, err := staffauth.ResolveSession(ctx, tx, verified.UID, verified.SecondFactor)
+			if err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				return fmt.Errorf("session: resolve staff session: %w", err)
+			}
+			if found {
+				body.Staff = &staff
+			}
+			return nil
+		}
+		if !sessionmint.IssueFromDB(w, r, db, enq, sessionmint.Staff(*verified), step, finish) {
 			return
 		}
 

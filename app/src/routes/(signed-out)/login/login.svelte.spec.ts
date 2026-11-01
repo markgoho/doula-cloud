@@ -596,3 +596,26 @@ describe('Staff login -- the session-ended notice (#757)', () => {
 		expect(testPage.getByText(NOTICE).elements()).toHaveLength(0);
 	});
 });
+
+/*
+ * #2434: the exchange answers with the Staff session, so the press lands
+ * her without waiting on a second request.
+ */
+describe('Staff login -- the exchange carries the Staff session (#2434)', () => {
+	it('lands her from the exchange alone, with no second session read', async () => {
+		apiFetch.mockResolvedValue(jsonResponse('no session', 401));
+		signInWithEmailAndPassword.mockResolvedValue({ user: { getIdToken: async () => 'id-token' } });
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => jsonResponse({ ok: true, staff: { ...session, memberships: [firstMembership] } }))
+		);
+
+		await render(Page, {});
+		await testPage.getByLabelText('Email address').fill('priya@example.com');
+		await testPage.getByLabelText('Password').fill('correct horse');
+		await testPage.getByRole('button', { name: 'Sign in' }).click();
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith(`/practices/${firstMembership.practiceId}`));
+		expect(apiFetchWithSession).not.toHaveBeenCalledWith('/api/staff/session');
+	});
+});

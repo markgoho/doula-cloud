@@ -44,6 +44,7 @@ vi.mock('$app/navigation', () => ({ goto }));
 const apiFetch = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
 	apiBaseURL: () => '',
+	apiFetch,
 	apiFetchWithSession: vi.fn(),
 	probeSession: async <Session,>(path: string): Promise<Session | undefined> => {
 		try {
@@ -239,11 +240,89 @@ describe('Client-portal login -- the page she asked for (#2496)', () => {
 		);
 	});
 
+	// #2534: from a link that expired or was used, only its token rides.
+	it('sends the dead link with the request, and no address of its own', async () => {
+		Object.assign(
+			pageState,
+			toPageState({ ...fixture, url: 'https://example.test/portal/login?priorLink=dead-token-1' })
+		);
+		apiFetch.mockImplementation(toApiResponder(fixture));
+		const request = vi.fn(async () => jsonResponse({}, 202));
+		vi.stubGlobal('fetch', request);
+
+		await render(Page, {});
+		await testPage.getByLabelText('Email address').fill('priya@example.com');
+		await testPage.getByRole('button', { name: 'Send me a sign-in link' }).click();
+
+		await expect.element(testPage.getByText(/we have sent a sign-in link/i)).toBeVisible();
+		expect(request).toHaveBeenCalledWith(
+			'/api/portal/magic-link/request',
+			expect.objectContaining({ body: JSON.stringify({ email: 'priya@example.com', priorToken: 'dead-token-1' }) })
+		);
+	});
+
 	it('sends a visitor already signed in straight to that page', async () => {
 		apiFetch.mockResolvedValue(jsonResponse(session));
 
 		await setupWithReturnTo();
 
 		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith(BIRTH_PLAN));
+	});
+});
+
+/*
+ * #2536: she is already signed in and opened a dead link of her own. The
+ * BFF reads that link's page for her session's account; the address bar
+ * names only the token.
+ */
+async function setupSignedInWithPriorLink(priorLink: () => Promise<Response>) {
+	Object.assign(
+		pageState,
+		toPageState({ ...fixture, url: 'https://example.test/portal/login?priorLink=dead-token-1' })
+	);
+	apiFetch.mockImplementation(async (path: string) =>
+		path === '/api/portal/session' ? jsonResponse(session) : await priorLink()
+	);
+	await render(Page, {});
+}
+
+describe('Client-portal login -- a dead link, already signed in (#2536)', () => {
+	it('sends her to the page that link was asked for from', async () => {
+		await setupSignedInWithPriorLink(async () => jsonResponse({ returnTo: BIRTH_PLAN }));
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith(BIRTH_PLAN));
+		expect(apiFetch).toHaveBeenCalledWith(
+			'/api/portal/session/prior-link',
+			expect.objectContaining({ method: 'POST', body: JSON.stringify({ token: 'dead-token-1' }) })
+		);
+	});
+
+	it('lands her as usual when the BFF names no page for that link', async () => {
+		await setupSignedInWithPriorLink(async () => jsonResponse({}));
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/'));
+	});
+
+	it('lands her as usual when the read is refused', async () => {
+		await setupSignedInWithPriorLink(async () => jsonResponse('refused', 500));
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/'));
+	});
+
+	it('lands her as usual when the read never arrives', async () => {
+		await setupSignedInWithPriorLink(async () => {
+			throw new TypeError('Failed to fetch');
+		});
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/'));
+	});
+
+	it('never asks without a dead link', async () => {
+		apiFetch.mockResolvedValue(jsonResponse(session));
+
+		await setup();
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/'));
+		expect(apiFetch).not.toHaveBeenCalledWith('/api/portal/session/prior-link', expect.anything());
 	});
 });

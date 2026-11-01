@@ -78,6 +78,10 @@ export interface EngagementSummary {
 	 * so the hub holds no copy of it. */
 	offersBirthPlanToStart: boolean;
 	offersBirthPlan: boolean;
+	/** Whether a Doula on the Engagement has an agreed fee (#2492), so the
+	 * Doula fees section stands from the screen's first frame. Answered
+	 * only for an Owner or Admin; false for anyone else. */
+	hasDoulaFees: boolean;
 	/** The Client's portal-invite state (#255), using the same
 	 * derivation the Clients list's own ClientListItem.portalInviteStatus
 	 * carries -- absent when she has never been invited. */
@@ -608,13 +612,16 @@ export async function createVisit(
 	reference: EngagementReference,
 	scheduledAt?: string,
 	staffId?: string
-): Promise<void> {
+): Promise<string[]> {
 	const response = await fetcher(visitsURL(reference), {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ scheduledAt, staffId })
 	});
 	if (!response.ok) throw new Error(await apiErrorMessage(response));
+	// #2540: the Staff members the BFF queued an email to about the Visit.
+	const created: { notifiedStaffIds?: string[] } = await response.json();
+	return created.notifiedStaffIds ?? [];
 }
 
 /**
@@ -625,13 +632,16 @@ export async function reassignVisit(
 	reference: EngagementReference,
 	visitId: string,
 	staffId: string
-): Promise<void> {
+): Promise<string[]> {
 	const response = await fetcher(`${visitsURL(reference)}/${visitId}`, {
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ staffId })
 	});
 	if (!response.ok) throw new Error(await apiErrorMessage(response));
+	// #2436: the Staff members the BFF queued an email to about the move.
+	const reassigned: { notifiedStaffIds?: string[] } = await response.json();
+	return reassigned.notifiedStaffIds ?? [];
 }
 
 /**

@@ -299,6 +299,15 @@
 		}
 		await signOut(getFirebaseAuth());
 
+		// #2434: the exchange answers with the Staff session, so she lands
+		// without a second request. It is absent only when the identity
+		// holds no Staff row, which the read below says what to do about.
+		const exchanged: { staff?: SessionInfo } = await exchangeResponse.json();
+		if (exchanged.staff) {
+			await land(exchanged.staff);
+			return undefined;
+		}
+
 		const response = await apiFetchWithSession('/api/staff/session');
 		if (!response.ok) {
 			/*

@@ -3,10 +3,10 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '#lib/appState.svelte.js';
-	import { apiBaseURL, probeSession } from '#lib/api.js';
+	import { apiBaseURL, apiFetch, probeSession } from '#lib/api.js';
 	import { decidePortalLanding, type PortalSessionInfo } from '#lib/portalLanding.js';
 	import { didSessionEnd } from '#lib/sessionEnded.js';
-	import { readReturnTo } from '#lib/returnTo.js';
+	import { readPriorLink, readReturnTo, sameOriginPath } from '#lib/returnTo.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -33,6 +33,9 @@
 	// #2496: the portal page she opened signed out. The BFF checks it again
 	// and binds it to the link it mails, so it survives another device.
 	const returnTo = $derived(readReturnTo(page.url));
+	// #2534: the link she opened that had expired or was used. The BFF
+	// carries its page to the new link; this screen never learns the page.
+	const priorToken = $derived(readPriorLink(page.url));
 
 	let email = $state('');
 	const submission = new FormSubmission();
@@ -51,12 +54,31 @@
 	// own. A browser holds exactly one DoulaCloud session (#610), so a
 	// live portal session here means no Staff session survives to be
 	// misrouted by `/`'s own Staff-first probe.
+	// #2536: already signed in, a dead link's page is read for her own
+	// account at the BFF, never from this address.
+	async function priorLinkPage(): Promise<string | undefined> {
+		if (!priorToken) return undefined;
+		try {
+			const response = await apiFetch('/api/portal/session/prior-link', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ token: priorToken })
+			});
+			if (!response.ok) return undefined;
+			const prior: { returnTo?: string } = await response.json();
+			return sameOriginPath(prior.returnTo, page.url.origin);
+		} catch {
+			return undefined;
+		}
+	}
+
 	onMount(async () => {
 		const session = await probeSession<PortalSessionInfo>('/api/portal/session');
 		if (!session) return;
-		if (returnTo) {
+		const savedPage = returnTo ?? (await priorLinkPage());
+		if (savedPage) {
 			try {
-				await goto(returnTo);
+				await goto(savedPage);
 				return;
 			} catch {
 				// No route answers it; she lands as if there were none.
@@ -88,7 +110,7 @@
 			await fetch(`${apiBaseURL()}/api/portal/magic-link/request`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ email, ...(returnTo && { returnTo }) })
+				body: JSON.stringify({ email, ...(returnTo && { returnTo }), ...(priorToken && { priorToken }) })
 			});
 			hasRequested = true;
 		}, orServiceProblem);

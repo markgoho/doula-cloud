@@ -9,6 +9,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/attachment"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/staffnotice"
 )
 
 // doulaRole is the practice_role enum member (00002_practice_staff_tenancy.sql)
@@ -198,14 +199,49 @@ func hasGrantedAttachment(ctx context.Context, tx *sql.Tx, engagementID, staffID
 // activity entry (#914), so the reassign path's rows == 0 404 still
 // returns before any attachment is written. It writes the error response
 // itself and reports that it did.
-func grantAssignee(w http.ResponseWriter, r *http.Request, c visitWriteContext, engagementID, staffID string, grants bool) bool {
+//
+// putOn reports whether this grant put her on the Engagement, which she
+// was not on before (#2540), so her one email is "put on a client".
+func grantAssignee(w http.ResponseWriter, r *http.Request, c visitWriteContext, engagementID, staffID string, grants bool) (putOn, ok bool) {
 	if !grants {
-		return true
+		return false, true
+	}
+	already, err := hasGrantedAttachment(r.Context(), c.tx, engagementID, staffID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return false, false
 	}
 	if err := staffauth.Grant(r.Context(), c.tx, engagementID, staffID, c.staffID, nil, nil); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return false
+		return false, false
 	}
-	return true
+	return !already, true
+}
+
+// queueAssigneeNotice queues the one email to the Doula a Visit was put
+// on, at creation or by a move, unless she put it on herself (#2540):
+// "put on a client" when naming her also put her on the Engagement, so
+// she is not mailed twice for one act, and "put on a visit" otherwise.
+// It reports whether an email was queued.
+func queueAssigneeNotice(r *http.Request, c visitWriteContext, engagementID, visitID, staffID string, putOn bool) (bool, error) {
+	if staffID == c.staffID {
+		return false, nil
+	}
+	notice := staffnotice.Notice{
+		PracticeID:       c.practiceID,
+		RecipientStaffID: staffID,
+		Kind:             staffnotice.KindVisitReassignedTo,
+		SubjectID:        visitID,
+		TriggeredBy:      c.staffID,
+	}
+	if putOn {
+		notice.Kind, notice.SubjectID = staffnotice.KindPutOnEngagement, engagementID
+	}
+	if err := staffnotice.Queue(r.Context(), c.tx, notice); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return false, fmt.Errorf("visit: queue assignee notice: %w", err)
+	}
+	return true, nil
 }

@@ -19,7 +19,8 @@
 	const outcome = takeOutcome(page.url);
 
 	// EngagementScreen's sections, in its order. Offers is an Owner's or
-	// an Admin's (#2258); Doula fees shows only once its own read lands.
+	// an Admin's (#2258); Doula fees stands once the Engagement read says
+	// there is a fee (#2492), which this frame drawn before it cannot know.
 	const sectionHeadings = $derived([
 		'On call',
 		'Birth outcome',

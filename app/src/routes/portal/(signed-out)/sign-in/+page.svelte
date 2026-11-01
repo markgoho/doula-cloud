@@ -12,7 +12,7 @@
 	} from '#lib/formErrors.js';
 	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
 	import { decidePortalLanding, type PortalSessionInfo } from '#lib/portalLanding.js';
-	import { sameOriginPath } from '#lib/returnTo.js';
+	import { sameOriginPath, withPriorLink } from '#lib/returnTo.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
@@ -123,7 +123,12 @@
 	{#if !token || isLinkUnusable}
 		<UnusableLink
 			message={token ? LINK_EXPIRED_OR_USED : LINK_NOT_COMPLETE}
-			next={{ label: 'Ask for a new sign-in link', href: resolve('/portal/(signed-out)/login') }}
+			next={{
+				label: 'Ask for a new sign-in link',
+				href: token
+					? withPriorLink(resolve('/portal/(signed-out)/login'), token)
+					: resolve('/portal/(signed-out)/login')
+			}}
 			isFocusedOnAppear={isLinkUnusable}
 		/>
 	{:else}

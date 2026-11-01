@@ -3,6 +3,7 @@ package visit
 import (
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 )
 
 // Mount registers the Visit list and its four writes. None of the four
@@ -36,7 +37,7 @@ import (
 // on -- and because the stored body is replayed verbatim, a retry of a
 // create that named a colleague answers with that same colleague rather
 // than re-deciding who the Visit is for.
-func Mount(g *staffauth.GatedRouter, ir *idempotency.Router) {
+func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, enq tasknudge.Enqueuer) {
 	// The Practice-wide schedule (#263): every scheduled Visit at the
 	// Practice in one read, soonest first, rather than one Engagement page
 	// per Client. AnyStaff, not OwnerAndAdmin -- unlike the money and
@@ -54,10 +55,10 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router) {
 	// (create and reassign) read the one list.
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/visit-assignees",
 		staffauth.OwnerAndAdmin, AssigneesHandler())
-	ir.Replayable("POST /api/practices/{practiceId}/engagements/{engagementId}/visits", true, CreateHandler())
+	ir.Replayable("POST /api/practices/{practiceId}/engagements/{engagementId}/visits", true, CreateHandler(enq))
 	ir.Exempt("PATCH /api/practices/{practiceId}/engagements/{engagementId}/visits/{visitId}",
 		"plain UPDATE staff_id = $1 WHERE id = $2; sets the assignment to the given value, so re-sending the same body is a no-op",
-		true, ReassignHandler())
+		true, ReassignHandler(enq))
 	ir.Exempt("PATCH /api/practices/{practiceId}/engagements/{engagementId}/visits/{visitId}/schedule",
 		"UPDATE scheduled_at = $1 WHERE id = $2, which sets the scheduled instant to the given value (or clears it), so re-sending the same body is a no-op; the automatic intake -> active move it can also make (#895) is itself conditional on the Engagement still being at intake, so the second send writes nothing there either",
 		true, ScheduleHandler())

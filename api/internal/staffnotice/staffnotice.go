@@ -26,6 +26,14 @@ const KindOfferReceived Kind = "offer_received"
 // (#2403). Its subject is the engagements row.
 const KindPutOnEngagement Kind = "put_on_engagement"
 
+// KindVisitReassignedTo and KindVisitReassignedFrom are someone else
+// moving a Visit onto her, or off her (#2436). Each subject is the visits
+// row.
+const (
+	KindVisitReassignedTo   Kind = "visit_reassigned_to"
+	KindVisitReassignedFrom Kind = "visit_reassigned_from"
+)
+
 // Notice is one person to tell about one record.
 type Notice struct {
 	PracticeID       string
@@ -137,6 +145,21 @@ func compose(mailer outbox.Mailer) func(context.Context, *sql.Tx, pendingRow, ti
 			}
 			link := mailer.AppBaseURL + "/practices/" + p.practiceID + "/engagements/" + p.subjectID
 			subject, text = putOnEngagementSubject, putOnEngagementText(link)
+		case KindVisitReassignedTo, KindVisitReassignedFrom:
+			engagementID, isHers, err := visitHolder(ctx, tx, p.subjectID, p.recipientID)
+			if err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				return "", "", "", err
+			}
+			if engagementID == "" || isHers != (p.kind == KindVisitReassignedTo) {
+				return "", "", "", outbox.ErrAlreadyDone
+			}
+			link := mailer.AppBaseURL + "/practices/" + p.practiceID + "/engagements/" + engagementID
+			if p.kind == KindVisitReassignedTo {
+				subject, text = visitReassignedToSubject, visitReassignedToText(link)
+			} else {
+				subject, text = visitReassignedFromSubject, visitReassignedFromText(link)
+			}
 		default:
 			// coverage:ignore reason: staff_notice_kind admits no value without a case here
 			return "", "", "", &outbox.DeadLetterError{Reason: "unknown staff notice kind " + string(p.kind)}
@@ -185,6 +208,24 @@ func stillOn(ctx context.Context, tx *sql.Tx, engagementID, staffID string) (boo
 		return false, fmt.Errorf("staffnotice: read attachment: %w", err)
 	}
 	return on, nil
+}
+
+// visitHolder reports the Engagement visitID is on, and whether staffID
+// is the one doing it now, or no Engagement when the Visit is gone. Read
+// through 00142's visits notification-worker policy.
+func visitHolder(ctx context.Context, tx *sql.Tx, visitID, staffID string) (string, bool, error) {
+	var engagementID, holder string
+	err := tx.QueryRowContext(ctx,
+		`SELECT engagement_id, staff_id FROM visits WHERE id = $1`, visitID,
+	).Scan(&engagementID, &holder)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return "", false, fmt.Errorf("staffnotice: read visit: %w", err)
+	}
+	return engagementID, holder == staffID, nil
 }
 
 // inZone is t in the Practice's own zone (ADR-0036), or UTC for a zone

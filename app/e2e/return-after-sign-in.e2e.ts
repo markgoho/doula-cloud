@@ -66,6 +66,70 @@ test('a saved portal Birth Plan address opened signed out lands on that Birth Pl
 	await expect(page.getByRole('heading', { level: 1, name: 'Birth plan' })).toBeVisible();
 });
 
+// #2534: a dead link still names the page it was asked for from, at the
+// BFF, so the new link she asks for from it lands there too. Used here,
+// on another device; the BFF test owns the expired one, which is the same
+// refusal.
+test('a used portal sign-in link asks for a new one that still lands on the saved Birth Plan', async ({
+	page,
+	browser,
+	request
+}) => {
+	const { clientEmail, engagementId } = await seedPortalClient(request, 'Riverside Doulas');
+	const birthPlan = `/portal/engagements/${engagementId}/birth-plan`;
+
+	await page.goto(birthPlan);
+	await page.getByLabel('Email address').fill(clientEmail);
+	await page.getByRole('button', { name: 'Send me a sign-in link' }).click();
+	await expect(page.getByText(/we have sent a sign-in link/i)).toBeVisible();
+	await followMagicLink(page, request, clientEmail);
+	const usedLink = page.url();
+	await page.getByRole('button', { name: 'Continue' }).click();
+	await expect(page).toHaveURL(endsWith(birthPlan));
+
+	const other = await browser.newContext();
+	const phone = await other.newPage();
+	await phone.goto(usedLink);
+	await phone.getByRole('button', { name: 'Continue' }).click();
+	await expect(phone.getByRole('alert')).toContainText('This link has expired or was already used.');
+	await phone.getByRole('link', { name: 'Ask for a new sign-in link' }).click();
+
+	await expect(phone).not.toHaveURL(/returnTo=/);
+	await phone.getByLabel('Email address').fill(clientEmail);
+	await phone.getByRole('button', { name: 'Send me a sign-in link' }).click();
+	await expect(phone.getByText(/we have sent a sign-in link/i)).toBeVisible();
+	await followMagicLink(phone, request, clientEmail, { nth: 2 });
+	await phone.getByRole('button', { name: 'Continue' }).click();
+
+	await expect(phone).toHaveURL(endsWith(birthPlan));
+	await expect(phone.getByRole('heading', { level: 1, name: 'Birth plan' })).toBeVisible();
+	await other.close();
+});
+
+// #2536: the same used link opened where she is still signed in. The
+// login screen finds her session and asks the BFF for that link's page.
+test('a used portal sign-in link opened while signed in lands on the saved Birth Plan', async ({ page, request }) => {
+	const { clientEmail, engagementId } = await seedPortalClient(request, 'Riverside Doulas');
+	const birthPlan = `/portal/engagements/${engagementId}/birth-plan`;
+
+	await page.goto(birthPlan);
+	await page.getByLabel('Email address').fill(clientEmail);
+	await page.getByRole('button', { name: 'Send me a sign-in link' }).click();
+	await expect(page.getByText(/we have sent a sign-in link/i)).toBeVisible();
+	await followMagicLink(page, request, clientEmail);
+	const usedLink = page.url();
+	await page.getByRole('button', { name: 'Continue' }).click();
+	await expect(page).toHaveURL(endsWith(birthPlan));
+
+	await page.goto(usedLink);
+	await page.getByRole('button', { name: 'Continue' }).click();
+	await expect(page.getByRole('alert')).toContainText('This link has expired or was already used.');
+	await page.getByRole('link', { name: 'Ask for a new sign-in link' }).click();
+
+	await expect(page).toHaveURL(endsWith(birthPlan));
+	await expect(page.getByRole('heading', { level: 1, name: 'Birth plan' })).toBeVisible();
+});
+
 // #757's notice still says so when the session ends under her in the app,
 // and she still comes back to where she was going.
 test('a session that ends while she is in the app says so and returns her after sign-in', async ({
