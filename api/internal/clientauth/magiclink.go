@@ -27,10 +27,13 @@ const MagicLinkLifetime = 15 * time.Minute
 
 // RequestMagicLinkRequest is the body of a sign-in link request: the
 // address to send it to, and the portal page she asked for before she
-// was sent to sign in (#2496).
+// was sent to sign in (#2496). PriorToken is the link she opened that had
+// expired or was already used (#2534): the page bound to it carries over
+// to the new link, read here and never from the address bar.
 type RequestMagicLinkRequest struct {
-	Email    string `json:"email"`
-	ReturnTo string `json:"returnTo,omitempty"`
+	Email      string `json:"email"`
+	ReturnTo   string `json:"returnTo,omitempty"`
+	PriorToken string `json:"priorToken,omitempty"`
 }
 
 const maxReturnPathLength = 512
@@ -109,13 +112,25 @@ func RequestMagicLinkHandler(db *sql.DB) http.Handler {
 			return
 		}
 
+		returnTo, ok := portalReturnPath(req.ReturnTo)
+		if !ok {
+			// Before Mint, which deletes an expired unspent token and its
+			// return row with it.
+			returnTo, ok, err = priorReturnPath(r.Context(), tx, identifier, req.PriorToken)
+			if err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+				return
+			}
+		}
+
 		token, err := authtoken.Mint(r.Context(), tx, identifier, authtoken.PurposeClientMagicLink, MagicLinkLifetime, clock.Now(r.Context()))
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if returnTo, ok := portalReturnPath(req.ReturnTo); ok {
+		if ok {
 			if _, err := tx.ExecContext(r.Context(),
 				`INSERT INTO portal_magic_link_returns (token_hash, identifier, return_to) VALUES ($1, $2, $3)`,
 				authtoken.Digest(token), identifier, returnTo,
@@ -156,6 +171,30 @@ func findPortalAccountByAddress(ctx context.Context, tx *sql.Tx, address string)
 		return "", false, fmt.Errorf("clientauth: find portal account by address: %w", err)
 	}
 	return identifier, true, nil
+}
+
+// priorReturnPath is the page bound to a link she was mailed earlier,
+// for the account asking now (#2534). A token that names no stored row,
+// or another account's, carries nothing, so a crafted link names no page.
+func priorReturnPath(ctx context.Context, tx *sql.Tx, identifier, priorToken string) (string, bool, error) {
+	priorToken = strings.TrimSpace(priorToken)
+	if priorToken == "" {
+		return "", false, nil
+	}
+	var stored string
+	err := tx.QueryRowContext(ctx,
+		`SELECT return_to FROM portal_magic_link_returns WHERE token_hash = $1 AND identifier = $2`,
+		authtoken.Digest(priorToken), identifier,
+	).Scan(&stored)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return "", false, fmt.Errorf("clientauth: read prior magic link return: %w", err)
+	}
+	returnTo, ok := portalReturnPath(stored)
+	return returnTo, ok, nil
 }
 
 // RedeemMagicLinkRequest is the body of a sign-in link spend: the token

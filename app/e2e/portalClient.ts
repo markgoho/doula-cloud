@@ -8,7 +8,7 @@ import {
 	readStaffInviteToken,
 	MAILBOX_URL
 } from './stack';
-import { drainUntilMailArrives } from './outboxMail';
+import { drainOutbox, drainUntilMailArrives, readMailbox } from './outboxMail';
 import { acceptStaffInvite, seedFoundingOwner, uniqueEmail } from './staffSignup';
 
 // The subject portalauth's magic-link Compose gives the sign-in mail --
@@ -82,7 +82,16 @@ export async function openMagicLink(page: Page, request: APIRequestContext, emai
  * through the login screen itself (#2496, so the page she opened rides
  * with the request).
  */
-export async function followMagicLink(page: Page, request: APIRequestContext, email: string): Promise<void> {
+export async function followMagicLink(
+	page: Page,
+	request: APIRequestContext,
+	email: string,
+	{ nth = 1 }: { nth?: number } = {}
+): Promise<void> {
+	if (nth > 1) {
+		await followNthMagicLink(page, request, email, nth);
+		return;
+	}
 	// Drained until this Client's own link has arrived, not once (#1141):
 	// outboxMail.ts writes out why one drain and one read cannot mean "my
 	// row was processed". It matters more here than anywhere, because the
@@ -98,6 +107,24 @@ export async function followMagicLink(page: Page, request: APIRequestContext, em
 
 	await page.goto(`${MAILBOX_URL}/inbox/${encodeURIComponent(email)}`);
 	await page.getByRole('link', { name: MAGIC_LINK_SUBJECT }).click();
+	await page.getByRole('link', { name: /\/portal\/sign-in\?token=/ }).click();
+}
+
+function signInMails<T extends { subject: string }>(inbox: T[]): T[] {
+	return inbox.filter((message) => message.subject === MAGIC_LINK_SUBJECT);
+}
+
+// A second link for one address (#2534): the subject alone would match the
+// first mail, so this waits for the nth and opens that one by its id.
+async function followNthMagicLink(page: Page, request: APIRequestContext, email: string, nth: number): Promise<void> {
+	await expect
+		.poll(async () => {
+			await drainOutbox(request, 'process-portal-magic-link-outbox');
+			return signInMails(await readMailbox(request, email)).length;
+		})
+		.toBeGreaterThanOrEqual(nth);
+	const links = signInMails(await readMailbox(request, email));
+	await page.goto(`${MAILBOX_URL}/inbox/${encodeURIComponent(email)}/${links[nth - 1].id}`);
 	await page.getByRole('link', { name: /\/portal\/sign-in\?token=/ }).click();
 }
 

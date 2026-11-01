@@ -137,9 +137,10 @@ describe('Redeeming a sign-in link over a live Staff session (#610)', () => {
 		await expect.element(testPage.getByRole('alert')).toHaveTextContent('This link has expired or was already used.');
 		// The pressed button is gone, so focus moves to what replaced it.
 		await expect.element(testPage.getByRole('alert')).toHaveFocus();
+		// #2534: the dead link is the handle the BFF reads its page back by.
 		await expect
 			.element(testPage.getByRole('link', { name: 'Ask for a new sign-in link' }))
-			.toHaveAttribute('href', '/portal/login');
+			.toHaveAttribute('href', '/portal/login?priorLink=magic-link-token-1');
 		expect(testPage.getByRole('button', { name: 'Continue' }).elements()).toHaveLength(0);
 		expect(testPage.getByRole('button', { name: 'Continue and sign out' }).elements()).toHaveLength(
 			0

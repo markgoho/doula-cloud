@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readReturnTo, sameOriginPath, withReturnTo } from './returnTo';
+import { readPriorLink, readReturnTo, sameOriginPath, withPriorLink, withReturnTo } from './returnTo';
 
 function loginWith(target: string): URL {
 	const url = new URL('https://app.example.test/login');
@@ -67,5 +67,16 @@ describe('sameOriginPath', () => {
 		['an absolute address', 'https://evil.example.com/portal']
 	])('refuses %s', (_, target) => {
 		expect(sameOriginPath(target, origin)).toBeUndefined();
+	});
+});
+
+describe('the prior sign-in link (#2534)', () => {
+	it('round-trips a dead token through the login address', () => {
+		const login = new URL(withPriorLink('/portal/login', 'dead token/1'), 'https://app.example.test');
+		expect(readPriorLink(login)).toBe('dead token/1');
+	});
+
+	it('reads nothing from an address that names none', () => {
+		expect(readPriorLink(new URL('https://app.example.test/portal/login?priorLink='))).toBeUndefined();
 	});
 });
