@@ -10,6 +10,9 @@
         ],
         "app": [
           "doula-cloud-app"
+        ],
+        "ops": [
+          "dc-ops"
         ]
       }
     }

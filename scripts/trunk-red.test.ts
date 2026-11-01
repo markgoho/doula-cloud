@@ -330,7 +330,7 @@ describe('a red run', () => {
       '- **migrate** - failed at step _Run migrations_'
     );
     expect(input.body).toContain(
-      'The migrate, deploy-api and deploy-app jobs run ONLY on trunk'
+      'The migrate, deploy-api, deploy-app, deploy-ops and deploy-ops-site jobs run ONLY on trunk'
     );
     expect(input.body).toContain(marker(CI));
   });
@@ -822,7 +822,7 @@ describe('a canceled run', () => {
       `repos/${REPO}/issues/1660/comments`,
     ]);
     expect((result.writes[0]?.input as CommentInput).body).toContain(
-      'migrate, deploy-api and deploy-app have no evidence for this commit'
+      'migrate, deploy-api, deploy-app, deploy-ops and deploy-ops-site have no evidence for this commit'
     );
   });
 
