@@ -20,7 +20,7 @@ import (
 const feedbackPageSize = 50
 
 const (
-	msgFeedbackNotFound = "There is no piece of Feedback at this address. It may have been erased, or kept past its 24 months."
+	msgFeedbackNotFound = "There is no piece of Feedback at this address. It may have been erased, or destroyed 24 months after it was sent."
 	msgBadIssueFilter   = "The list can be narrowed only to Feedback whose issue did not open."
 )
 
