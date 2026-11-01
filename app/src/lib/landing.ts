@@ -2,6 +2,7 @@ export interface Membership {
 	practiceId: string;
 	practiceName: string;
 	roles: string[];
+	employmentType: string;
 }
 
 export interface SessionInfo {

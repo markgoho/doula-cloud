@@ -8,6 +8,7 @@
 		practiceId: string;
 		practiceName: string;
 		roles: string[];
+		employmentType: string;
 		href: string;
 	}
 
@@ -35,7 +36,7 @@
 <script lang="ts">
 	import DoorLink from '#lib/components/atoms/DoorLink.svelte';
 	import MenuButton from './MenuButton.svelte';
-	import { rolesLabel } from '#lib/roles.js';
+	import { membershipLabel } from '#lib/roles.js';
 
 	/*
 	 * Which Practice the person is looking at, and the way to the others
@@ -77,7 +78,7 @@
 						<DoorLink
 							href={practice.href}
 							label={practice.practiceName}
-							description={rolesLabel(practice.roles)}
+							description={membershipLabel(practice.roles, practice.employmentType)}
 							variant="menu"
 							current={practice === current}
 						/>

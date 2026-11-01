@@ -54,12 +54,14 @@
 			practiceId: 'p1',
 			practiceName: 'Highland Midwifery & Birth Support Collective of Western New York',
 			roles: ['owner', 'admin'],
+			employmentType: 'employee',
 			href: '#riverside'
 		},
 		{
 			practiceId: 'p2',
 			practiceName: 'Finger Lakes Birth Support and Postpartum Care Cooperative',
 			roles: ['doula'],
+			employmentType: 'contractor',
 			href: '#finger-lakes'
 		}
 	];

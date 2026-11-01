@@ -10,7 +10,7 @@ import type { RouteFixture } from '../../../routeFixture.js';
 import Page from './+page.svelte';
 
 const session: SessionInfo = {
-	memberships: [{ practiceId: 'practice-1', practiceName: 'Riverside Doulas', roles: ['owner'] }],
+	memberships: [{ practiceId: 'practice-1', practiceName: 'Riverside Doulas', roles: ['owner'], employmentType: 'employee' }],
 	lastPracticeId: undefined,
 	staffId: 'staff-1',
 	name: 'Anne-Marie Ochieng-Whitfield',

@@ -18,9 +18,10 @@ export const session: SessionInfo = {
 		{
 			practiceId: 'practice-1',
 			practiceName: 'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake',
-			roles: ['owner']
+			roles: ['owner'],
+			employmentType: 'employee'
 		},
-		{ practiceId: 'practice-2', practiceName: 'Anne-Marie Ochieng-Whitfield Doula Care', roles: ['doula'] }
+		{ practiceId: 'practice-2', practiceName: 'Anne-Marie Ochieng-Whitfield Doula Care', roles: ['doula'], employmentType: 'contractor' }
 	],
 	lastPracticeId: undefined,
 	staffId: 'staff-1',

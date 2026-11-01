@@ -16,10 +16,10 @@
 	import StaffFeedback from '#lib/components/organisms/StaffFeedback.svelte';
 	import StaffTopBar, { type NavItem } from '#lib/components/organisms/StaffTopBar.svelte';
 	import type { PracticeSession } from './[practiceId]/+layout.js';
+	import type { Membership } from '#lib/landing.js';
 
 	let { children } = $props();
 
-	type Membership = { practiceId: string; practiceName: string; roles: string[] };
 	type StaffSession = { firstName: string; lastName: string; email: string; memberships: Membership[] };
 
 	let session = $state<StaffSession | undefined>();

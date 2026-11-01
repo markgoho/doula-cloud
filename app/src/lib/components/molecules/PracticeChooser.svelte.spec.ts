@@ -5,8 +5,8 @@ import type { PracticeOption } from './PracticeSwitcher.svelte';
 import PracticeChooser from './PracticeChooser.svelte';
 
 const practices: PracticeOption[] = [
-	{ practiceId: 'practice-1', practiceName: 'Riverside Doulas', roles: ['owner', 'doula'], href: '/practices/practice-1' },
-	{ practiceId: 'practice-2', practiceName: 'Hilltop Doulas', roles: ['doula'], href: '/practices/practice-2' }
+	{ practiceId: 'practice-1', practiceName: 'Riverside Doulas', roles: ['owner', 'doula'], employmentType: 'employee', href: '/practices/practice-1' },
+	{ practiceId: 'practice-2', practiceName: 'Hilltop Doulas', roles: ['doula'], employmentType: 'contractor', href: '/practices/practice-2' }
 ];
 
 async function setup() {
@@ -20,11 +20,11 @@ describe('PracticeChooser.svelte', () => {
 		const riverside = page.getByRole('link', { name: 'Riverside Doulas', exact: true });
 		await expect.element(riverside).toBeVisible();
 		await expect.element(riverside).toHaveAttribute('href', '/practices/practice-1');
-		await expect.element(riverside).toHaveAccessibleDescription('Owner, Doula');
+		await expect.element(riverside).toHaveAccessibleDescription('Owner and Doula, as an employee');
 
 		const hilltop = page.getByRole('link', { name: 'Hilltop Doulas', exact: true });
 		await expect.element(hilltop).toHaveAttribute('href', '/practices/practice-2');
-		await expect.element(hilltop).toHaveAccessibleDescription('Doula');
+		await expect.element(hilltop).toHaveAccessibleDescription('Doula, as a contractor');
 	});
 
 	// #2070: SvelteKit reads the nearest preload attribute above a link. A

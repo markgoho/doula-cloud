@@ -1,7 +1,7 @@
 <script lang="ts">
 	/*
 	 * Choosing which Practice to open (#2027): a stack of doors, one per
-	 * Practice, its name as the link and the roles held there as the line
+	 * Practice, its name as the link and what she is there as the line
 	 * under it. Every account switcher in the #406 survey is a list of
 	 * cards or rows (Jakob's Law), and the signed-out landing beside it
 	 * already draws its doors as `DoorLink`s.
@@ -19,7 +19,7 @@
 	 * so the line under each door is never empty.
 	 */
 	import DoorLink from '#lib/components/atoms/DoorLink.svelte';
-	import { rolesLabel } from '#lib/roles.js';
+	import { membershipLabel } from '#lib/roles.js';
 	import type { PracticeOption } from './PracticeSwitcher.svelte';
 
 	interface Properties {
@@ -38,7 +38,7 @@
 <ul data-sveltekit-preload-data="false">
 	{#each practices as practice (practice.practiceId)}
 		<li>
-			<DoorLink href={practice.href} label={practice.practiceName} description={rolesLabel(practice.roles)} />
+			<DoorLink href={practice.href} label={practice.practiceName} description={membershipLabel(practice.roles, practice.employmentType)} />
 		</li>
 	{/each}
 </ul>

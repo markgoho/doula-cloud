@@ -180,7 +180,7 @@ describe('Staff login -- on-load session probe (#283)', () => {
 		await expect.element(heading).toBeVisible();
 		await expect
 			.element(testPage.getByRole('link', { name: secondMembership.practiceName }))
-			.toHaveAccessibleDescription('Doula');
+			.toHaveAccessibleDescription('Doula, as a contractor');
 		expect(goto).not.toHaveBeenCalled();
 		// #2027: the chooser replaces the form rather than sitting under it,
 		// and takes focus from the form that has gone.
