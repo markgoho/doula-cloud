@@ -215,18 +215,21 @@
 		}
 		try {
 			status = await loadConnectStatus(apiFetchWithSession, page.params.practiceId!);
+			// Set with the status, before the website read, so the screen
+			// never draws a first read as settled while Stripe catches up.
+			isPolling = connectParameter === 'return' && canConnectStatusStillMove(status);
 			website = await loadWebsite(apiFetchWithSession, page.params.practiceId!);
 		} catch (error_) {
+			isPolling = false;
 			error = error_ instanceof Error ? error_.message : 'Failed to load Stripe Connect status';
 			return;
 		}
 		if (isDestroyed) return;
-		// Only the return trip starts the poll, and only while the status
-		// can still move on its own -- a settled status, or arriving
-		// without `connect=return` at all, must never trigger an extra
-		// read (verified by the "no extra read" spec below).
-		if (connectParameter === 'return' && canConnectStatusStillMove(status)) {
-			isPolling = true;
+		// Only the return trip starts the poll, and only until the status
+		// is `active` -- arriving without `connect=return` at all must
+		// never trigger an extra read (verified by the "no extra read"
+		// spec below).
+		if (isPolling) {
 			pollHandle = pollConnectStatus(apiFetchWithSession, page.params.practiceId!, status, {
 				onResult: (result) => {
 					status = result;
@@ -430,8 +433,13 @@
 	   is still reviewing. So the return notice reads the status rather
 	   than assuming the trip worked. */
 	let isBackFromStripeRestricted = $derived(
-		connectParameter === 'return' && status !== undefined && status.status === 'onboarding_incomplete'
+		connectParameter === 'return' && !isPolling && status !== undefined && status.status === 'onboarding_incomplete'
 	);
+
+	/* #2565. For the first minutes after the return, a read that still
+	   lists requirements is Stripe catching up on the form just
+	   submitted. Nothing is shown as outstanding until the poll ends. */
+	let isStripeCatchingUp = $derived(isPolling && status?.status === 'onboarding_incomplete');
 
 	/*
 	 * #2046: the page is its facts, one summary row each, with a Change on
@@ -470,8 +478,12 @@
 			}
 		];
 		if (status !== undefined) {
-			rows.push({ fact: 'stripeStatus', label: 'Stripe status', value: CONNECT_STATUS_BADGES[status.status].label });
-			if (status.requirementsDue.length > 0) {
+			rows.push({
+				fact: 'stripeStatus',
+				label: 'Stripe status',
+				value: isStripeCatchingUp ? 'Checking with Stripe' : CONNECT_STATUS_BADGES[status.status].label
+			});
+			if (!isStripeCatchingUp && status.requirementsDue.length > 0) {
 				rows.push({
 					fact: 'stripeNeeds',
 					label: 'Stripe still needs',
@@ -511,8 +523,10 @@
 	{#if isPracticeOwnerOrAdmin}
 		{#if isBackFromStripeRestricted}
 			<Notice
-				variant="error"
-				message="Stripe still needs something before Clients can pay this Practice. Finish the form below."
+				variant="info"
+				message={isPracticeOwner
+					? 'Stripe still needs something from you before Clients can pay this Practice. Continue under Connect Stripe, below.'
+					: 'Stripe still needs something before Clients can pay this Practice. A Practice Owner has to finish it under Connect Stripe, below.'}
 			/>
 		{:else if connectParameter === 'return' && isPolling}
 			<!-- The banner's wording matches what the screen actually does
@@ -520,7 +534,7 @@
 			     actually running. -->
 			<Notice
 				variant="status"
-				message="Stripe onboarding finished. We're checking with Stripe again shortly, in case its review is still catching up."
+				message="Stripe is checking your details. This can take a minute or two."
 			/>
 		{:else if connectParameter === 'return'}
 			<!-- No poll is running -- the status already settled on the
@@ -546,13 +560,17 @@
 					exists only once `status` does.
 				-->
 				<stack-l space="var(--space-2)" aria-live="polite">
-					<span>
-						<Badge
-							label={CONNECT_STATUS_BADGES[status!.status].label}
-							variant={CONNECT_STATUS_BADGES[status!.status].variant}
-						/>
-					</span>
-					<Text text={statusCopy[status!.status].explanation} />
+					{#if isStripeCatchingUp}
+						<Text text="Checking with Stripe" />
+					{:else}
+						<span>
+							<Badge
+								label={CONNECT_STATUS_BADGES[status!.status].label}
+								variant={CONNECT_STATUS_BADGES[status!.status].variant}
+							/>
+						</span>
+						<Text text={statusCopy[status!.status].explanation} />
+					{/if}
 				</stack-l>
 			{:else if row.fact === 'stripeNeeds'}
 				<!-- The count, not the list. requirementsDue holds Stripe's own
@@ -635,7 +653,7 @@
 {/snippet}
 
 {#snippet onboarding()}
-	{#if isPracticeOwnerOrAdmin && canStartOnboarding}
+	{#if isPracticeOwnerOrAdmin && canStartOnboarding && !isStripeCatchingUp}
 		<!--
 			#2046: Stripe onboarding is its own headed section, and its
 			button is the screen's one primary.

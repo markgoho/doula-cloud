@@ -639,17 +639,21 @@ describe('payments settings screen: what #442 refuses and what it warns about', 
 			.toBeVisible();
 	});
 
-	it('does not congratulate a Practice who came back from Stripe still restricted', async () => {
+	it('does not congratulate a Practice who came back from Stripe still restricted once the poll has run out', async () => {
+		vi.useFakeTimers();
 		returnedFromStripe('return');
-		await setup({
-			status: 'onboarding_incomplete',
-			roles: ['owner'],
-			requirementsDue: ['defaults.profile.business_url']
-		});
+		await setupSequence([{ status: 'onboarding_incomplete', requirementsDue: ['defaults.profile.business_url'] }]);
+
+		await vi.advanceTimersByTimeAsync(CONNECT_STATUS_POLL_DELAYS_MS.reduce((sum, ms) => sum + ms, 0));
 
 		await expect
-			.element(testPage.getByText('Stripe still needs something before Clients can pay this Practice.', { exact: false }))
+			.element(
+				testPage.getByText(
+					'Stripe still needs something from you before Clients can pay this Practice. Continue under Connect Stripe, below.'
+				)
+			)
 			.toBeVisible();
+		await expect.element(testPage.getByText('Onboarding incomplete')).toBeVisible();
 		await expect.element(testPage.getByText('Stripe onboarding finished.', { exact: false })).not.toBeInTheDocument();
 		await expect.element(testPage.getByRole('button', { name: 'Continue Stripe onboarding' })).toBeVisible();
 	});
@@ -670,6 +674,60 @@ describe('payments settings screen: the one question the two website answers do 
 		await expect
 			.element(testPage.getByText('A short description of what your Practice offers', { exact: false }))
 			.not.toBeInTheDocument();
+	});
+});
+
+describe('payments settings screen: Stripe catching up after the return (#2565)', () => {
+	it('says Stripe is checking, not that onboarding is incomplete, while a first read still lists requirements', async () => {
+		vi.useFakeTimers();
+		returnedFromStripe('return');
+		await setupSequence([
+			{ status: 'onboarding_incomplete', requirementsDue: ['defaults.profile.business_url'] },
+			{ status: 'onboarding_incomplete', requirementsDue: ['defaults.profile.business_url'] },
+			{ status: 'pending' }
+		]);
+
+		await expect.element(testPage.getByText('Stripe is checking your details.', { exact: false })).toBeVisible();
+		await expect.element(testPage.getByText('Checking with Stripe', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText('Onboarding incomplete')).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('Stripe still needs something', { exact: false })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('heading', { name: 'Connect Stripe' })).not.toBeInTheDocument();
+
+		await vi.advanceTimersByTimeAsync(CONNECT_STATUS_POLL_DELAYS_MS[0] + CONNECT_STATUS_POLL_DELAYS_MS[1]);
+
+		await expect.element(testPage.getByText('Awaiting Stripe review')).toBeVisible();
+		await expect.element(testPage.getByText('Stripe still needs something', { exact: false })).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('Onboarding incomplete')).not.toBeInTheDocument();
+	});
+
+	it('tells an Admin the Owner has to finish it, once the poll has run out', async () => {
+		vi.useFakeTimers();
+		returnedFromStripe('return');
+		await setupSequence([{ status: 'onboarding_incomplete', requirementsDue: ['defaults.profile.business_url'] }], {
+			roles: ['admin']
+		});
+
+		await vi.advanceTimersByTimeAsync(CONNECT_STATUS_POLL_DELAYS_MS.reduce((sum, ms) => sum + ms, 0));
+
+		await expect
+			.element(testPage.getByText('A Practice Owner has to finish it under Connect Stripe, below.', { exact: false }))
+			.toBeVisible();
+	});
+
+	it('polls for about two minutes before believing an outstanding requirement', () => {
+		const total = CONNECT_STATUS_POLL_DELAYS_MS.reduce((sum, ms) => sum + ms, 0);
+		expect(total).toBeGreaterThanOrEqual(110_000);
+		expect(total).toBeLessThanOrEqual(130_000);
+	});
+
+	it('shows nothing extra off the return trip when requirements are due', async () => {
+		vi.useFakeTimers();
+		await setupSequence([{ status: 'onboarding_incomplete', requirementsDue: ['defaults.profile.business_url'] }]);
+
+		await vi.advanceTimersByTimeAsync(CONNECT_STATUS_POLL_DELAYS_MS.reduce((sum, ms) => sum + ms, 0));
+
+		expect(connectCallCount()).toBe(1);
+		await expect.element(testPage.getByText('Onboarding incomplete')).toBeVisible();
 	});
 });
 
@@ -714,7 +772,7 @@ describe('payments settings screen: re-reading Connect status on return from Str
 		await setupSequence([{ status: 'pending' }, { status: 'active' }]);
 		await expect
 			.element(
-				testPage.getByText("We're checking with Stripe again shortly", { exact: false })
+				testPage.getByText('Stripe is checking your details', { exact: false })
 			)
 			.toBeVisible();
 
@@ -722,7 +780,7 @@ describe('payments settings screen: re-reading Connect status on return from Str
 
 		await expect.element(testPage.getByText('Stripe onboarding finished.', { exact: true })).toBeVisible();
 		await expect
-			.element(testPage.getByText("We're checking with Stripe again", { exact: false }))
+			.element(testPage.getByText('Stripe is checking your details', { exact: false }))
 			.not.toBeInTheDocument();
 	});
 
@@ -732,7 +790,7 @@ describe('payments settings screen: re-reading Connect status on return from Str
 
 		await expect.element(testPage.getByText('Stripe onboarding finished.', { exact: true })).toBeVisible();
 		await expect
-			.element(testPage.getByText("We're checking with Stripe again", { exact: false }))
+			.element(testPage.getByText('Stripe is checking your details', { exact: false }))
 			.not.toBeInTheDocument();
 	});
 

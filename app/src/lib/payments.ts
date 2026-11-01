@@ -69,15 +69,14 @@ export async function loadConnectStatus(fetcher: Fetcher, practiceId: string): P
 	return response.json();
 }
 
-/** Whether a Connect status can still change on its own, with nobody
- * doing anything -- Stripe is reviewing (`pending`), or the account is
- * not yet payable and reports nothing outstanding (an empty
- * `requirementsDue` on a status other than `active`). Once this is
- * false, either the account is already `active` or the Owner has to
- * supply something before the status will ever move again -- reading
- * again on a timer would only repeat today's answer. */
+/** Whether a Connect status read on the return from Stripe can still
+ * change with nobody doing anything. Only `active` is final: Stripe takes
+ * 30 to 90 seconds to move the entries the Owner just submitted off her
+ * list, so a first read that still reports requirements due is Stripe
+ * catching up, not work left for her (#2565). The poll's bounded schedule
+ * decides when an outstanding requirement is believed. */
 export function canConnectStatusStillMove(result: ConnectStatusResult): boolean {
-	return result.status !== 'active' && result.requirementsDue.length === 0;
+	return result.status !== 'active';
 }
 
 /** What a failed re-read (poll or on-demand) tells the person. Exported
@@ -91,10 +90,11 @@ export const CONNECT_STATUS_CHECK_FAILED_MESSAGE =
  * Stripe's own account propagation is not instant, and a fixed short
  * delay would mostly land before Stripe does while a fixed long one
  * would make the common case wait longer than it has to. The ceiling --
- * five reads, a little under a minute in total -- keeps this a small,
+ * eight reads, about two minutes in total, to cover Stripe's usual 30 to
+ * 90 seconds (#2565) -- keeps this a small,
  * bounded number of extra calls to a live-from-Stripe endpoint, never an
  * open-ended timer. */
-export const CONNECT_STATUS_POLL_DELAYS_MS = [2000, 4000, 8000, 16_000, 30_000];
+export const CONNECT_STATUS_POLL_DELAYS_MS = [3000, 5000, 8000, 12_000, 15_000, 20_000, 25_000, 30_000];
 
 export interface ConnectStatusPollHandle {
 	/** Stops any scheduled re-read. Idempotent, and safe to call after the
@@ -144,14 +144,36 @@ export function pollConnectStatus(
 ): ConnectStatusPollHandle {
 	let isStopped = false;
 	let timer: ReturnType<typeof setTimeout> | undefined;
+	// The read the poll is waiting to make, kept so a hidden page can
+	// drop its timer and the page being shown again can start it afresh.
+	let waiting: { attempt: number; previous: ConnectStatusResult } | undefined;
+
+	function finish() {
+		isStopped = true;
+		globalThis.document?.removeEventListener('visibilitychange', onVisibilityChange);
+	}
+
+	function onVisibilityChange() {
+		if (isStopped || !waiting) return;
+		if (globalThis.document?.hidden) {
+			clearTimeout(timer);
+			timer = undefined;
+			return;
+		}
+		if (timer === undefined) scheduleNext(waiting.attempt, waiting.previous);
+	}
 
 	function scheduleNext(attempt: number, previous: ConnectStatusResult) {
 		if (attempt >= delaysMs.length || !canConnectStatusStillMove(previous)) {
-			isStopped = true;
+			finish();
 			callbacks.onStopped();
 			return;
 		}
+		waiting = { attempt, previous };
+		if (globalThis.document?.hidden) return;
 		timer = setTimeout(async () => {
+			timer = undefined;
+			waiting = undefined;
 			let next: ConnectStatusResult | undefined;
 			let hasErrored = false;
 			try {
@@ -165,7 +187,7 @@ export function pollConnectStatus(
 			// neither callback below runs and nothing schedules again.
 			if (isStopped) return;
 			if (hasErrored) {
-				isStopped = true;
+				finish();
 				callbacks.onError();
 				callbacks.onStopped();
 				return;
@@ -175,12 +197,13 @@ export function pollConnectStatus(
 		}, delaysMs[attempt]);
 	}
 
+	globalThis.document?.addEventListener('visibilitychange', onVisibilityChange);
 	scheduleNext(0, initial);
 
 	return {
 		stop() {
 			if (isStopped) return;
-			isStopped = true;
+			finish();
 			clearTimeout(timer);
 		}
 	};
