@@ -251,6 +251,9 @@ func idTokenCredential(w http.ResponseWriter, r *http.Request, verifier Verifier
 		apierr.WriteError(w, "invalid token", http.StatusUnauthorized)
 		return VerifiedToken{}, false
 	}
+	if RefuseOperatorToken(w, *verified) {
+		return VerifiedToken{}, false
+	}
 	return *verified, true
 }
 
@@ -321,6 +324,24 @@ type VerifiedToken struct {
 	// identity has MFA". The session store carries it forward onto the
 	// session row at mint, because the cookie outlives this token.
 	SecondFactor bool
+	// Tenant is the token's `firebase.tenant` claim: empty for a Staff or
+	// Client sign-in, set for one in the operator tenant (ADR-0062).
+	Tenant string
+}
+
+// MsgOperatorToken refuses a token from the operator tenant (ADR-0062),
+// which signs in to ops.doula.cloud and never to a Staff session.
+const MsgOperatorToken = "You signed in with an operator login. Sign in at ops.doula.cloud instead."
+
+// RefuseOperatorToken writes a 401 and returns true when verified carries
+// a tenant. It reads the claim, never a verification failure: the default
+// client verifies a tenant token, and the emulator's refusal is incidental.
+func RefuseOperatorToken(w http.ResponseWriter, verified VerifiedToken) bool {
+	if verified.Tenant == "" {
+		return false
+	}
+	apierr.WriteError(w, MsgOperatorToken, http.StatusUnauthorized)
+	return true
 }
 
 // Verifier checks an Identity Platform ID token. Session minting,
@@ -395,7 +416,7 @@ func (v *FirebaseVerifier) VerifyIDToken(ctx context.Context, idToken string) (*
 	// coverage:ignore reason: requires a real Identity Platform token, not exercised by unit tests
 	email, _ := token.Claims["email"].(string)
 	// coverage:ignore reason: requires a real Identity Platform token, not exercised by unit tests
-	return &VerifiedToken{UID: token.UID, Email: email, AuthTime: time.Unix(token.AuthTime, 0), SecondFactor: secondFactorClaim(token.Claims)}, nil
+	return &VerifiedToken{UID: token.UID, Email: email, AuthTime: time.Unix(token.AuthTime, 0), SecondFactor: secondFactorClaim(token.Claims), Tenant: token.Firebase.Tenant}, nil
 }
 
 // secondFactorClaim reports whether claims carries a non-empty

@@ -40,6 +40,10 @@ type Verifier struct {
 	// VerifiedToken.SecondFactor -- #606's tests set this to model an ID
 	// token that did or did not challenge a second factor at sign-in.
 	SecondFactor bool
+
+	// Tenant is what VerifyIDToken reports for VerifiedToken.Tenant. Set,
+	// it models a verified token from the operator tenant (ADR-0062).
+	Tenant string
 }
 
 // Verifier satisfies authn.Verifier by value, so tests can pass
@@ -52,7 +56,7 @@ func (v Verifier) VerifyIDToken(_ context.Context, _ string) (*authn.VerifiedTok
 	if v.Err != nil {
 		return nil, v.Err
 	}
-	return &authn.VerifiedToken{UID: v.UID, Email: v.Email, AuthTime: v.AuthTime, SecondFactor: v.SecondFactor}, nil
+	return &authn.VerifiedToken{UID: v.UID, Email: v.Email, AuthTime: v.AuthTime, SecondFactor: v.SecondFactor, Tenant: v.Tenant}, nil
 }
 
 // SeedSession creates a live session for uid and returns the value its

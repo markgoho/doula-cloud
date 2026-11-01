@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext } from '../../app/e2e/playwrightTest';
 import { EMULATOR_URL, enrollPhoneFactor, randomPhoneNumber } from '../../app/e2e/mfa';
-import { OPS_URL } from '../../app/e2e/ports';
+import { API_URL, OPS_URL } from '../../app/e2e/ports';
 import { OPS_TENANT_ID, SEEDED_OPERATOR } from '../../app/e2e/stack';
 
 /*
@@ -134,6 +134,21 @@ test('doula-ops refuses a Staff token, second factor and all', async ({ request 
 	expect(response.status()).toBe(401);
 	const refusal = await response.json();
 	expect(refusal.code).toBe('UNAUTHORIZED');
+});
+
+test('#2470: doula-api refuses an operator token, second factor and all', async ({ request }) => {
+	const signedIn = await newOperatorLogin(request);
+	const enrolled = await enrollPhoneFactor(request, signedIn.idToken, randomPhoneNumber(), OPS_TENANT_ID);
+
+	const response = await request.post(`${API_URL}/api/session`, {
+		headers: { Authorization: `Bearer ${enrolled.idToken}` }
+	});
+
+	// The emulator refuses this at verify, before the tenant check runs, so
+	// this proves the outcome; api/'s operatortoken specs prove the check.
+	expect(response.status()).toBe(401);
+	expect((await response.json()).code).toBe('UNAUTHORIZED');
+	expect(response.headers()['set-cookie']).toBeUndefined();
 });
 
 async function operatorSession(request: APIRequestContext): Promise<{ idToken: string; cookie: string }> {
