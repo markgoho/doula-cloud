@@ -12,7 +12,9 @@
 # push to trigger anything. Both are true at once, and that has a real cost:
 # the first console drift blocks every unrelated pull request until someone
 # reconciles it or a maintainer relaxes the ruleset. That trade is recorded,
-# not softened here -- see the issue for the reasoning.
+# not softened here -- see the issue for the reasoning. The one exception is
+# a pull request whose own diff touches the configuration a job plans: it is
+# applied after merge, so its plan is reported and passes (#2503).
 name: Terraform Plan
 
 on:
@@ -185,6 +187,7 @@ jobs:
         env:
           TF_IN_AUTOMATION: 'true'
           EVENT_NAME: ${{ github.event_name }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           # 120s -> 480s (#1202). The `concurrency` group above stays
           # per-ref, so it does not serialize two *different* PRs' plans
@@ -238,6 +241,7 @@ jobs:
                   | "| `" + .address + "` | " + (.change.actions | join(",")) + " | " + (changed_keys(.change.before; .change.after) | join(", ")) + " |"
                 ] | join("\n") )
           ' plan.json)
+          echo "$drift_table"
 
           # Only a pull_request checkout can be behind trunk in the way
           # described above -- a push or the daily schedule plans trunk
@@ -246,11 +250,16 @@ jobs:
           # to this directory with `-- .`; it is the same check as `--
           # terraform/` from the repo root.
           stale=""
+          touched=""
           if [ "$EVENT_NAME" = "pull_request" ]; then
             git fetch --quiet origin trunk || true
             merge_base=$(git merge-base HEAD origin/trunk 2>/dev/null || true)
             if [ -n "$merge_base" ] && [ -n "$(git diff --name-only "$merge_base" origin/trunk -- .)" ]; then
               stale=1
+            fi
+            head_base=$(git merge-base "$PR_HEAD_SHA" origin/trunk 2>/dev/null || true)
+            if [ -n "$head_base" ] && [ -n "$(git diff --name-only "$head_base" "$PR_HEAD_SHA" -- ':(top)terraform' ':(top,exclude)terraform/stripe*')" ]; then
+              touched=1
             fi
           fi
 
@@ -269,6 +278,16 @@ jobs:
 
             echo "This branch is behind trunk on a Terraform change -- rebase onto trunk and push. See the job summary."
             exit 1
+          fi
+
+          if [ -n "$touched" ]; then
+            {
+              echo "This pull request changes \`terraform/\`, so this plan is information, not a gate (#2503). Merge, then run \`terraform apply\` from trunk at once -- see docs/infrastructure.md, \"Who may apply, and what CI may read\"."
+              echo
+              echo "$drift_table"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "Terraform plan is non-empty, and this pull request changes terraform/ -- reported, not failed. Apply from trunk right after the merge."
+            exit 0
           fi
 
           echo "$drift_table" >> "$GITHUB_STEP_SUMMARY"
@@ -343,6 +362,7 @@ jobs:
         env:
           TF_IN_AUTOMATION: 'true'
           EVENT_NAME: ${{ github.event_name }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           key=$(gcloud secrets versions access latest --secret="$KEY_SECRET" --project doula-cloud)
           echo "::add-mask::$key"
@@ -384,12 +404,26 @@ jobs:
                   | "| `" + .address + "` | " + (.change.actions | join(",")) + " | " + (changed_keys(.change.before; .change.after) | join(", ")) + " |"
                 ] | join("\n") )
           ' plan.json)
+          echo "$drift_table"
 
           if [ "$EVENT_NAME" = "pull_request" ]; then
             git fetch --quiet origin trunk || true
             merge_base=$(git merge-base HEAD origin/trunk 2>/dev/null || true)
             if [ -n "$merge_base" ] && [ -n "$(git diff --name-only "$merge_base" origin/trunk -- . ../stripe)" ]; then
               echo "This branch is behind \`trunk\` on a Stripe Terraform change. Rebase onto \`trunk\` and push; if the plan is still non-empty after that, it is drift." >> "$GITHUB_STEP_SUMMARY"
+              echo "$drift_table" >> "$GITHUB_STEP_SUMMARY"
+              echo "This branch is behind trunk on a Stripe Terraform change -- rebase onto trunk and push. See the job summary."
+              exit 1
+            fi
+            head_base=$(git merge-base "$PR_HEAD_SHA" origin/trunk 2>/dev/null || true)
+            if [ -n "$head_base" ] && [ -n "$(git diff --name-only "$head_base" "$PR_HEAD_SHA" -- . ../stripe)" ]; then
+              {
+                echo "This pull request changes \`terraform/stripe-sandbox\` or \`terraform/stripe\`, so this plan is information, not a gate (#2503). Merge, then run \`terraform apply\` from trunk at once."
+                echo
+                echo "$drift_table"
+              } >> "$GITHUB_STEP_SUMMARY"
+              echo "The Sandbox Stripe plan is non-empty, and this pull request changes its configuration -- reported, not failed. Apply from trunk right after the merge."
+              exit 0
             fi
           fi
 
