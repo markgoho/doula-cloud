@@ -29,7 +29,7 @@ var thirdPersonPronouns = []string{"she", "her", "hers", "herself", "he", "him",
 // is voided") that was the rule before #1884. They are reworded on
 // #1894; each one reworded lowers this number by one, and a new one
 // fails the build. When it reaches 0, the ratchet becomes a plain rule.
-const lowercaseMessageCeiling = 284
+const lowercaseMessageCeiling = 278
 
 // TestMessagesUseNoThirdPersonPronoun fails the build on a message that
 // says "she", "her" or another third-person pronoun about anyone.

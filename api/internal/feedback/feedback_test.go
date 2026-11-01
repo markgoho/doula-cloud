@@ -12,6 +12,13 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
+// The two roles this package's tests seed a membership with, named once
+// for goconst.
+const (
+	testOwnerRole = "owner"
+	testAdminRole = "admin"
+)
+
 // testAccountPage and testPortalPage are the page/route values every
 // fixture below sends -- what the page was is never the point of these
 // tests, only that Insert carries it through.

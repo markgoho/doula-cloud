@@ -47,6 +47,7 @@ const (
 	originsVar      = "EXPECTED_ORIGINS"
 	databaseURLVar  = "DATABASE_URL"
 	stripeKeyVar    = "STRIPE_API_KEY"
+	feedbackRepoVar = "GITHUB_FEEDBACK_REPO"
 )
 
 var errEmulatorOnCloudRun = errors.New("doula-ops: " + emulatorHostVar + " must not be set on Cloud Run (" + stripemode.CloudRunVar + " is set)")
@@ -117,6 +118,7 @@ func newServer(ctx context.Context, getenv func(string) string, newVerifier veri
 		Origins:              origins(getenv(originsVar)),
 		Stripe:               stripeClient(getenv(stripeKeyVar), emulator),
 		Accounts:             accounts,
+		FeedbackRepo:         strings.TrimSpace(getenv(feedbackRepoVar)),
 	})
 	return &http.Server{
 		Addr:              ":" + port,

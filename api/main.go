@@ -56,19 +56,6 @@ func resolvePort() string {
 	return "8080"
 }
 
-// founderConfig reads what the founder read page needs (#1526):
-// FOUNDER_STAFF_ID, the `staff.id` of the one person it serves, and
-// GITHUB_FEEDBACK_REPO, which its link to a piece's issue is built from.
-// Both may be unset. With no FOUNDER_STAFF_ID every founder route refuses
-// everybody, so a service that was never told who the founder is serves
-// the page to nobody rather than to anybody.
-func founderConfig(getenv func(string) string) staffauth.FounderConfig {
-	return staffauth.FounderConfig{
-		StaffID:      strings.TrimSpace(getenv("FOUNDER_STAFF_ID")),
-		FeedbackRepo: strings.TrimSpace(getenv("GITHUB_FEEDBACK_REPO")),
-	}
-}
-
 // resolveExpectedOrigins reads the comma-separated EXPECTED_ORIGINS env
 // var into the origins csrf.Wrap treats as same-site. A list, not a
 // single value, because the local stack (app/e2e/stack.ts) runs one BFF
@@ -355,7 +342,7 @@ func main() {
 	// coverage:ignore reason: wires the real Deps struct main() serves from, not exercised by unit tests -- routes()/testDeps() in main_test.go exercise the route table itself
 	feedbackIssueWorker := feedback.IssueWorker{
 		Creator:    issueCreator,
-		AppBaseURL: appBaseURL,
+		OpsBaseURL: os.Getenv("OPS_BASE_URL"),
 		Now:        now,
 	}
 
@@ -419,7 +406,6 @@ func main() {
 
 		LegalDocuments:  legalHistory,
 		ExpectedOrigins: resolveExpectedOrigins(),
-		Founder:         founderConfig(os.Getenv),
 		Now:             now,
 	}
 

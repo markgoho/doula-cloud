@@ -62,8 +62,6 @@ var staffFamilyGroups = map[string]routeGroup{
 	"DELETE /api/staff/mfa":                           groupSession,
 	"DELETE /api/staff/account":                       groupSession,
 	"POST /api/staff/feedback":                        groupSession,
-	"GET /api/staff/feedback":                         groupSession,
-	"GET /api/staff/feedback/{feedbackId}":            groupSession,
 	"POST /api/staff/signup":                          groupBootstrap,
 	"POST /api/staff/accept-invite":                   groupBootstrap,
 	"POST /api/staff/mfa":                             groupBootstrap,
@@ -131,7 +129,6 @@ func TestStaffFamilyRefusesAPortalSession(t *testing.T) {
 	ir := idempotency.NewRouter(g, db.App)
 	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, authntest.NewFakeAccountManager(),
 		tasknudge.NoOpEnqueuer{}, neverSuppressed)
-	staffauth.MountFounderRoutes(g, db.App, staffauth.FounderConfig{StaffID: absentFeedbackID})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 

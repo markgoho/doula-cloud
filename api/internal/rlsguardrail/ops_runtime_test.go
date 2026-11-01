@@ -26,7 +26,6 @@ var wantDefinerFunctions = map[string][]string{
 		"erase_client_feedback(uuid)",
 		"erase_client_idempotency_keys(uuid)",
 		"erase_portal_account_feedback(text)",
-		"feedback_sender(uuid)",
 		"merge_client_portal_links(uuid,uuid)",
 		"operator_act_actor_name(uuid)",
 		"pilot_admits(text)",
@@ -41,6 +40,8 @@ var wantDefinerFunctions = map[string][]string{
 	},
 	"ops_runtime": {
 		"ops_dormant_practices(timestamp with time zone,timestamp with time zone,uuid,integer)",
+		"ops_feedback_list(boolean,timestamp with time zone,uuid,integer)",
+		"ops_feedback_piece(uuid)",
 		"ops_first_signup_at()",
 		"ops_founding_grant_practice(uuid)",
 		"ops_monthly_credits(timestamp with time zone,timestamp with time zone)",
@@ -94,9 +95,15 @@ func TestOpsRuntime_DefinerFunctionsEachRoleCanExecuteAreTheOnesOnTheRecord(t *t
 	}
 }
 
+// readsClientsException is the one definer function ops_runtime may
+// execute that reads clients: a piece of Feedback, which names a Client
+// sender by her own name (ADR-0062's Feedback exception, spec #2464
+// story 56).
+const readsClientsException = "ops_feedback_piece(uuid)"
+
 // ADR-0062: no definer function ops_runtime can execute reads a Client
-// record. ops_runtime holds no grant on clients, so a function running
-// with its own rights cannot.
+// record, but the one Feedback read. ops_runtime holds no grant on
+// clients, so a function running with its own rights cannot.
 func TestOpsRuntime_NoFunctionItCanExecuteReadsClients(t *testing.T) {
 	db := testdb.New(t)
 
@@ -124,8 +131,8 @@ func TestOpsRuntime_NoFunctionItCanExecuteReadsClients(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatalf("rows: %v", err)
 	}
-	if len(got) > 0 {
-		t.Errorf("these functions ops_runtime can execute name clients:\n%s", strings.Join(got, "\n"))
+	if !slices.Equal(got, []string{readsClientsException}) {
+		t.Errorf("these functions ops_runtime can execute name clients:\n%s\nwant only %s", strings.Join(got, "\n"), readsClientsException)
 	}
 }
 

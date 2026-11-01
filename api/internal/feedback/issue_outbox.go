@@ -76,11 +76,11 @@ func issueTitle(kind, routeID string) string {
 
 // issueBody is exactly the field list #1501 Q1 settled crosses to
 // GitHub: the route pattern, the app build, the screen width, the
-// browser, the time sent, the role(s), and the link to the founder read
-// page -- plus the hidden marker. It never holds the free text (not
+// browser, the time sent, the role(s), and the link to the piece in ops
+// -- plus the hidden marker. It never holds the free text (not
 // selected by issueClaimQuery in the first place), the full URL, the
 // Practice name, or the sender.
-func issueBody(r pendingIssueRow, appBaseURL string) string {
+func issueBody(r pendingIssueRow, opsBaseURL string) string {
 	var b strings.Builder
 	b.WriteString("Route: `" + r.routeID + "`\n")
 	b.WriteString("App build: `" + r.appBuild + "`\n")
@@ -88,7 +88,7 @@ func issueBody(r pendingIssueRow, appBaseURL string) string {
 	b.WriteString("Browser: " + r.browser + "\n")
 	b.WriteString("Sent: " + r.sentAt.UTC().Format(time.RFC3339) + "\n")
 	b.WriteString("Role: " + feedbackRole(r) + "\n")
-	b.WriteString("\n[Read the full item](" + appBaseURL + "/feedback/" + r.feedbackID + ")\n")
+	b.WriteString("\n[Read the full item](" + opsBaseURL + "/feedback/" + r.feedbackID + ")\n")
 	b.WriteString("\n" + issueMarker(r.feedbackID) + "\n")
 	return b.String()
 }
@@ -108,7 +108,7 @@ func feedbackRole(r pendingIssueRow) string {
 }
 
 // roleText is feedbackRole's rule on the two facts it reads, so the
-// founder read page (#1526) prints the same sentence the issue carries.
+// ops Feedback page prints the same sentence the issue carries.
 // roles is array_to_string(feedback.roles, ','): NULL where the piece
 // has no Practice in context.
 func roleText(portal bool, roles sql.NullString) string {
@@ -130,9 +130,10 @@ func roleText(portal bool, roles sql.NullString) string {
 // mails nobody.
 type IssueWorker struct {
 	Creator IssueCreator
-	// AppBaseURL is prefixed onto /feedback/<id> for the link an issue's
-	// body carries (#1524's own AC).
-	AppBaseURL string
+	// OpsBaseURL is ops's origin (OPS_BASE_URL), prefixed onto
+	// /feedback/<id> for the link an issue's body carries: ops is where a
+	// piece is read (ADR-0062).
+	OpsBaseURL string
 	Now        func() time.Time
 }
 
@@ -334,7 +335,7 @@ func (w IssueWorker) performOpen(ctx context.Context, tx *sql.Tx, inner outbox.W
 	}
 
 	if number == 0 {
-		number, err = w.Creator.CreateIssue(ctx, issueTitle(r.kind, r.routeID), issueBody(r, w.AppBaseURL))
+		number, err = w.Creator.CreateIssue(ctx, issueTitle(r.kind, r.routeID), issueBody(r, w.OpsBaseURL))
 		if err != nil {
 			return markIssueErr(inner.MarkFailed(ctx, tx, r.id, r.attemptCount, fmt.Errorf("feedback: create issue: %w", err), now))
 		}

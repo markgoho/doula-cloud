@@ -18,7 +18,7 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-const testIssueAppBaseURL = "https://app.example.test"
+const testIssueOpsBaseURL = "https://ops.example.test"
 
 // feedback_issue_outbox_status's own two states this file asserts
 // against, named once so goconst has one spelling to point at.
@@ -156,7 +156,7 @@ func TestIssueWorker_FirstCreateOpensAnIssueAndWritesTheNumberBack(t *testing.T)
 	enqueueIssueOutbox(t, db, feedbackID)
 
 	creator := feedback.NewFakeIssueCreator()
-	worker := feedback.IssueWorker{Creator: creator, AppBaseURL: testIssueAppBaseURL, Now: time.Now}
+	worker := feedback.IssueWorker{Creator: creator, OpsBaseURL: testIssueOpsBaseURL, Now: time.Now}
 	runIssueWorker(t, db, worker)
 
 	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusSent {
@@ -203,7 +203,7 @@ func TestIssueWorker_RetryAdoptsAnIssueFoundByItsMarker(t *testing.T) {
 		t.Fatalf("seed existing issue: %v", err)
 	}
 
-	worker := feedback.IssueWorker{Creator: creator, AppBaseURL: testIssueAppBaseURL, Now: time.Now}
+	worker := feedback.IssueWorker{Creator: creator, OpsBaseURL: testIssueOpsBaseURL, Now: time.Now}
 	runIssueWorker(t, db, worker)
 
 	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusSent {
@@ -248,7 +248,7 @@ func TestIssueWorker_RetryAfterAFailedAddLabelsAdoptsAndLabels(t *testing.T) {
 
 	creator := feedback.NewFakeIssueCreator()
 	creator.AddLabelsErr = errors.New("github is down")
-	worker := feedback.IssueWorker{Creator: creator, AppBaseURL: testIssueAppBaseURL, Now: time.Now}
+	worker := feedback.IssueWorker{Creator: creator, OpsBaseURL: testIssueOpsBaseURL, Now: time.Now}
 	runIssueWorker(t, db, worker)
 
 	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusPending {
@@ -298,7 +298,7 @@ func TestIssueWorker_GitHubErrorOnAddLabelsWhileAdoptingLeavesTheRowPending(t *t
 	}
 	creator.AddLabelsErr = errors.New("github is down")
 
-	worker := feedback.IssueWorker{Creator: creator, AppBaseURL: testIssueAppBaseURL, Now: time.Now}
+	worker := feedback.IssueWorker{Creator: creator, OpsBaseURL: testIssueOpsBaseURL, Now: time.Now}
 	runIssueWorker(t, db, worker)
 
 	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusPending {
@@ -346,7 +346,7 @@ func TestIssueWorker_GitHubErrorOnCreateLeavesTheRowPending(t *testing.T) {
 
 	creator := feedback.NewFakeIssueCreator()
 	creator.CreateIssueErr = errors.New("github is down")
-	worker := feedback.IssueWorker{Creator: creator, AppBaseURL: testIssueAppBaseURL, Now: time.Now}
+	worker := feedback.IssueWorker{Creator: creator, OpsBaseURL: testIssueOpsBaseURL, Now: time.Now}
 	runIssueWorker(t, db, worker)
 
 	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusPending {
@@ -367,7 +367,7 @@ func TestIssueWorker_GitHubErrorOnListLeavesTheRowPending(t *testing.T) {
 
 	creator := feedback.NewFakeIssueCreator()
 	creator.ListIssuesErr = errors.New("github is down")
-	worker := feedback.IssueWorker{Creator: creator, AppBaseURL: testIssueAppBaseURL, Now: time.Now}
+	worker := feedback.IssueWorker{Creator: creator, OpsBaseURL: testIssueOpsBaseURL, Now: time.Now}
 	runIssueWorker(t, db, worker)
 
 	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusPending {
@@ -390,7 +390,7 @@ func TestIssueWorker_GitHubErrorOnAddLabelsLeavesTheRowPending(t *testing.T) {
 
 	creator := feedback.NewFakeIssueCreator()
 	creator.AddLabelsErr = errors.New("github is down")
-	worker := feedback.IssueWorker{Creator: creator, AppBaseURL: testIssueAppBaseURL, Now: time.Now}
+	worker := feedback.IssueWorker{Creator: creator, OpsBaseURL: testIssueOpsBaseURL, Now: time.Now}
 	runIssueWorker(t, db, worker)
 
 	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusPending {
@@ -413,7 +413,7 @@ func TestIssueWorker_BodyNeverCarriesTheFreeText(t *testing.T) {
 	enqueueIssueOutbox(t, db, feedbackID)
 
 	creator := feedback.NewFakeIssueCreator()
-	worker := feedback.IssueWorker{Creator: creator, AppBaseURL: testIssueAppBaseURL, Now: time.Now}
+	worker := feedback.IssueWorker{Creator: creator, OpsBaseURL: testIssueOpsBaseURL, Now: time.Now}
 	runIssueWorker(t, db, worker)
 
 	number := readIssueNumber(t, db, feedbackID)
@@ -436,7 +436,7 @@ func TestIssueWorker_PortalSenderReportsClientAsTheRole(t *testing.T) {
 	enqueueIssueOutbox(t, db, feedbackID)
 
 	creator := feedback.NewFakeIssueCreator()
-	worker := feedback.IssueWorker{Creator: creator, AppBaseURL: testIssueAppBaseURL, Now: time.Now}
+	worker := feedback.IssueWorker{Creator: creator, OpsBaseURL: testIssueOpsBaseURL, Now: time.Now}
 	runIssueWorker(t, db, worker)
 
 	number := readIssueNumber(t, db, feedbackID)
@@ -455,7 +455,7 @@ func TestIssueWorker_StaffSenderWithRolesReportsThem(t *testing.T) {
 	enqueueIssueOutbox(t, db, feedbackID)
 
 	creator := feedback.NewFakeIssueCreator()
-	worker := feedback.IssueWorker{Creator: creator, AppBaseURL: testIssueAppBaseURL, Now: time.Now}
+	worker := feedback.IssueWorker{Creator: creator, OpsBaseURL: testIssueOpsBaseURL, Now: time.Now}
 	runIssueWorker(t, db, worker)
 
 	number := readIssueNumber(t, db, feedbackID)
@@ -478,7 +478,7 @@ func TestIssueWorker_ZeroRoleMembershipReportsNoRoleName(t *testing.T) {
 	enqueueIssueOutbox(t, db, feedbackID)
 
 	creator := feedback.NewFakeIssueCreator()
-	worker := feedback.IssueWorker{Creator: creator, AppBaseURL: testIssueAppBaseURL, Now: time.Now}
+	worker := feedback.IssueWorker{Creator: creator, OpsBaseURL: testIssueOpsBaseURL, Now: time.Now}
 	runIssueWorker(t, db, worker)
 
 	number := readIssueNumber(t, db, feedbackID)
@@ -505,7 +505,7 @@ func TestProcessIssueOutboxHandler_RunsBehindTheDoor(t *testing.T) {
 	enqueueIssueOutbox(t, db, feedbackID)
 
 	creator := feedback.NewFakeIssueCreator()
-	worker := feedback.IssueWorker{Creator: creator, AppBaseURL: testIssueAppBaseURL, Now: time.Now}
+	worker := feedback.IssueWorker{Creator: creator, OpsBaseURL: testIssueOpsBaseURL, Now: time.Now}
 	mux := http.NewServeMux()
 	mux.Handle("POST /internal/feedback/process-issue-outbox",
 		outbox.ProcessHandler(db.App, worker, internalauth.FromSecret("correct-secret"), outbox.NotificationDoor))

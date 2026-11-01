@@ -70,6 +70,7 @@ func newOpsStack(t *testing.T, acceptEmulatorFactor bool) *opsStack {
 		Verifier:             tokens,
 		AcceptEmulatorFactor: acceptEmulatorFactor,
 		Origins:              []string{testOrigin},
+		FeedbackRepo:         "acme/feedback",
 	})
 	return s
 }

@@ -27,6 +27,9 @@ type Deps struct {
 	// Accounts is Identity Platform admin on the Staff pool, which a
 	// second-factor reset clears (#2483).
 	Accounts authn.AccountManager
+	// FeedbackRepo is GITHUB_FEEDBACK_REPO, owner/name, which a Feedback
+	// issue's link is built from. Empty leaves the link off.
+	FeedbackRepo string
 }
 
 // router mounts a route and records it, so routes() can hand back the
@@ -56,6 +59,8 @@ func routes(d Deps) (http.Handler, []string) {
 	r.handle(http.MethodGet, "/api/practices/deleted", requireSession(d.DB, practiceList(d.DB, true)))
 	r.handle(http.MethodGet, "/api/practices/dormant", requireSession(d.DB, dormantList(d.DB)))
 	r.handle(http.MethodGet, "/api/credits/monthly", requireSession(d.DB, monthlyCredits(d.DB)))
+	r.handle(http.MethodGet, "/api/feedback", requireSession(d.DB, feedbackList(d.DB, d.FeedbackRepo)))
+	r.handle(http.MethodGet, "/api/feedback/{feedbackId}", requireSession(d.DB, feedbackRead(d.DB, d.FeedbackRepo)))
 	r.handle(http.MethodGet, "/api/practices/{practiceId}/refund", requireSession(d.DB, refundCheckRead(d.DB)))
 	r.handle(http.MethodPost, "/api/practices/{practiceId}/refunds", requireStepUp(d.DB, refundAct(d)))
 	r.handle(http.MethodGet, "/api/practices/{practiceId}/founding-grant", requireSession(d.DB, foundingGrantCheckRead(d.DB)))
