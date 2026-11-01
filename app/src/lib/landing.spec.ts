@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { decideLanding, type Membership } from './landing';
 
-const practiceA: Membership = { practiceId: 'a', practiceName: 'Practice A', roles: ['owner'] };
-const practiceB: Membership = { practiceId: 'b', practiceName: 'Practice B', roles: ['doula'] };
+const practiceA: Membership = { practiceId: 'a', practiceName: 'Practice A', roles: ['owner'], employmentType: 'employee' };
+const practiceB: Membership = { practiceId: 'b', practiceName: 'Practice B', roles: ['doula'], employmentType: 'contractor' };
 
 describe('decideLanding', () => {
 	it('redirects straight to the only Practice when there is exactly one', () => {

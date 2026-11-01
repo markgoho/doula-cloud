@@ -37,7 +37,7 @@ Reachable once stage 1 is walked — step 1.2 is what gives her the second membe
 | --- | --- | --- | --- |
 | 2.1 | Sign in at `/login` | `POST /api/session` succeeds | `automated (staff-login.e2e.ts)` |
 | 2.2 | Choose Rooted Birth Collective from **two** memberships | Sign-in shows no picker: it lands on the Practice she used last. The header's Practice switcher, "Your practices", lists both, and choosing one moves her there | `manual` |
-| 2.2-a | Read what she is at each Practice from the picker | The switcher shows her role at each ("Doula") and never her employment type ([LV-G11](https://github.com/markgoho/doula-cloud/issues/2266)) | `manual` |
+| 2.2-a | Read what she is at each Practice from the picker | The switcher shows her roles and her employment type at each: "Doula, as a contractor", "Doula, as an employee". **Built, waiting on a walk ([#2264](https://github.com/markgoho/doula-cloud/issues/2264)).** Was: her role only ([LV-G11](https://github.com/markgoho/doula-cloud/issues/2266)) | `manual` |
 | 2.3 | Read the top bar | Overview, Clients, Schedule, On call, Offers, Settings. No Credits, Invoices, Contracts or Staff. The Overview draws no Quick links ([#2398](https://github.com/markgoho/doula-cloud/issues/2398)). Settings holds only Plan Templates | `manual` |
 | 2.3-a | Open **Billing** (Credits) by its address | Refused: "You cannot view this", "Your role does not have permission to see this. Trying again will not change that.", **Go to your Practice overview** | `manual` |
 | 2.3-b | Open **Getting paid** by its address | The billing mode ("By card, through Stripe") and payment terms, which ADR-0008 lets her read for her own Engagements, then "Only a Practice Owner or Admin can see how this Practice gets paid." No Stripe Connect status and no control | `manual` |
@@ -231,7 +231,7 @@ The plan's `automated` steps were **not** re-run as specs. 2.1 was walked anyway
 | 1.B-cold | yes | yes, in a fresh context. The account question says who each answer is for ("You already sign in to DoulaCloud for another practice.") | yes |
 | 2.B-screens | 2 | 2: `/login`, the Overview of her last-used Practice. Reaching the other Practice is the switcher on that Overview, not a screen | yes |
 | 2.B-decisions | 3 | `/login` 3. The Overview's body **5** (four Quick links, **See all activity**), **7** with an Offer open | **no**, [RA-G11 (#2228)](https://github.com/markgoho/doula-cloud/issues/2228), cited |
-| 2.B-memory | yes | yes. The switcher names each Practice, so she need not recall which is which. It does not say what she is at each ([LV-G11, #2266](https://github.com/markgoho/doula-cloud/issues/2266)) | yes |
+| 2.B-memory | yes | yes. The switcher names each Practice, so she need not recall which is which. It does not say what she is at each ([LV-G11, #2266](https://github.com/markgoho/doula-cloud/issues/2266)); built, waiting on a walk ([#2264](https://github.com/markgoho/doula-cloud/issues/2264)) | yes |
 | 2.B-time | 400 ms, 100 ms | **Sign in** **410 ms** and **412 ms** in two fresh contexts, busy within 7 ms; the switcher opens in 2 ms | **no**, [RA-G16 (#2233)](https://github.com/markgoho/doula-cloud/issues/2233), cited |
 | 3.B-screens | 1 | 1: the Overview holds the Offer, and **Your offers** holds it too | yes |
 | 3.B-decisions | 2 | The Offer card 2 (**Accept**, **Decline**), and **Your offers** 2. But the Overview she meets it on holds **7** at once | **no**, [RA-G11 (#2228)](https://github.com/markgoho/doula-cloud/issues/2228), cited |

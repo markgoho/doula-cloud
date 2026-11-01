@@ -7,6 +7,7 @@ const RIVERSIDE: PracticeOption = {
 	practiceId: 'p1',
 	practiceName: 'Riverside Doula Collective',
 	roles: ['owner', 'admin'],
+	employmentType: 'employee',
 	href: '/practices/p1'
 };
 
@@ -14,6 +15,7 @@ const FINGER_LAKES: PracticeOption = {
 	practiceId: 'p2',
 	practiceName: 'Finger Lakes Birth Support',
 	roles: ['doula'],
+	employmentType: 'contractor',
 	href: '/practices/p2'
 };
 
@@ -42,7 +44,7 @@ describe('PracticeSwitcher', () => {
 		await expect.element(page.getByText('Riverside Doula Collective').first()).toBeVisible();
 	});
 
-	it('lists one row per Membership, with the roles held at each', async () => {
+	it('lists one row per Membership, with the roles and employment type at each (#2266)', async () => {
 		const { trigger } = await setup();
 
 		await trigger.click();
@@ -50,7 +52,8 @@ describe('PracticeSwitcher', () => {
 		await expect
 			.element(page.getByRole('link', { name: 'Finger Lakes Birth Support' }))
 			.toHaveAttribute('href', '/practices/p2');
-		await expect.element(page.getByText('Owner, Admin')).toBeVisible();
+		await expect.element(page.getByText('Owner and Admin, as an employee')).toBeVisible();
+		await expect.element(page.getByText('Doula, as a contractor')).toBeVisible();
 	});
 
 	// #2070: a hover on another Practice must not load its session, which
@@ -98,8 +101,8 @@ describe('PracticeSwitcher', () => {
 		await trigger.click();
 
 		const row = page.getByRole('link', { name: 'Finger Lakes Birth Support' });
-		await expect.element(row).toHaveAccessibleDescription('Doula');
-		expect(page.getByText('Doula', { exact: true }).element().closest('a')).toBe(row.element());
+		await expect.element(row).toHaveAccessibleDescription('Doula, as a contractor');
+		expect(page.getByText('Doula, as a contractor', { exact: true }).element().closest('a')).toBe(row.element());
 	});
 
 	/*
