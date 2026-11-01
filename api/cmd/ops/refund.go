@@ -24,6 +24,7 @@ const (
 	msgStripeRefused     = "Stripe did not make the refund, so nothing has changed. Try again."
 	msgCorrectAnswers    = "Correct the answers marked below."
 	msgKeyRequired       = "Send an Idempotency-Key header with the refund."
+	msgOtherField        = "Send only the number of Credits, the Owner who asked and the date the request arrived."
 
 	msgCreditsMissing   = "Enter the number of Credits to refund, 1 or more"
 	msgOwnerMissing     = "Choose the Owner who asked for the refund"
@@ -33,6 +34,9 @@ const (
 )
 
 const requestedOnLayout = "2006-01-02"
+
+// fieldCredits is the request DTO's name for the number of Credits.
+const fieldCredits = "credits"
 
 // refundOwner is an Owner of the Practice, as the check page lists them
 // to name who asked.
@@ -138,7 +142,7 @@ func writeOverLimit(ctx context.Context, w http.ResponseWriter, tx *sql.Tx, prac
 		return
 	}
 	apierr.Write(w, http.StatusUnprocessableEntity, apierr.CodeInvalidArgument, msgCorrectAnswers,
-		map[string]string{"credits": fmt.Sprintf(msgCreditsOverLimit, most.MaxCredits)})
+		map[string]string{fieldCredits: fmt.Sprintf(msgCreditsOverLimit, most.MaxCredits)})
 }
 
 // refundCheckRead answers the check page: what a refund of ?credits=N
@@ -155,7 +159,7 @@ func refundCheckRead(db *sql.DB) http.HandlerFunc {
 			n, err := strconv.Atoi(raw)
 			if err != nil || n < 1 {
 				apierr.Write(w, http.StatusUnprocessableEntity, apierr.CodeInvalidArgument, msgCorrectAnswers,
-					map[string]string{"credits": msgCreditsMissing})
+					map[string]string{fieldCredits: msgCreditsMissing})
 				return
 			}
 			credits = n
@@ -201,7 +205,7 @@ func refundCheckRead(db *sql.DB) http.HandlerFunc {
 func answerErrors(req refundRequest, now time.Time) map[string]string {
 	details := map[string]string{}
 	if req.Credits < 1 {
-		details["credits"] = msgCreditsMissing
+		details[fieldCredits] = msgCreditsMissing
 	}
 	if _, err := uuid.Parse(req.RequestedBy); err != nil {
 		details["requestedBy"] = msgOwnerMissing
@@ -233,7 +237,7 @@ func refundAct(d Deps) http.HandlerFunc {
 			return
 		}
 		var req refundRequest
-		if !decodeStrict(w, r, &req) {
+		if !decodeRefund(w, r, &req) {
 			return
 		}
 		now := clock.Now(r.Context())
@@ -252,6 +256,7 @@ func refundAct(d Deps) http.HandlerFunc {
 		defer func() { _ = tx.Rollback() }()
 
 		if err := spendStepUp(r.Context(), tx, op); err != nil {
+			// coverage:ignore reason: a second act spending the stamp between requireStepUp's read and this one; stepup_test.go covers spendStepUp's refusal
 			writeStepUpRequired(w)
 			return
 		}
@@ -343,14 +348,25 @@ func refundAct(d Deps) http.HandlerFunc {
 	}
 }
 
-// decodeStrict is apierr.DecodeJSON refusing a field the body does not
+// refundFields are the only fields a refund's body may name.
+var refundFields = map[string]bool{fieldCredits: true, "requestedBy": true, "requestedOn": true}
+
+// decodeRefund is apierr.DecodeJSON refusing a field the body does not
 // declare, so a request naming its own actor is refused, not ignored.
-func decodeStrict(w http.ResponseWriter, r *http.Request, v any) bool {
-	r.Body = http.MaxBytesReader(w, r.Body, apierr.MaxRequestBodyBytes)
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(v); err != nil {
-		apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "Send the refund's answers as JSON, with no other fields.", nil)
+func decodeRefund(w http.ResponseWriter, r *http.Request, req *refundRequest) bool {
+	var fields map[string]json.RawMessage
+	if !apierr.DecodeJSON(w, r, &fields) {
+		return false
+	}
+	for name := range fields {
+		if !refundFields[name] {
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, msgOtherField, nil)
+			return false
+		}
+	}
+	raw, _ := json.Marshal(fields)
+	if err := json.Unmarshal(raw, req); err != nil {
+		apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, msgOtherField, nil)
 		return false
 	}
 	return true

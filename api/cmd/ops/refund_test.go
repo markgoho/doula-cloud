@@ -340,6 +340,17 @@ func TestRefund_TakesNoActorFromTheRequest(t *testing.T) {
 	}
 }
 
+func TestRefund_RefusesABodyOfTheWrongShape(t *testing.T) {
+	s := newRefundStack(t)
+	cookie := s.steppedUpCookie()
+
+	for _, body := range []any{map[string]any{"credits": "two"}, "not an object"} {
+		if w := s.refund(cookie, "refund-key", body); w.Code != http.StatusBadRequest {
+			t.Errorf("%v: status = %d, want 400", body, w.Code)
+		}
+	}
+}
+
 func TestRefund_SaysWhatToCorrectInEachAnswer(t *testing.T) {
 	s := newRefundStack(t)
 	cookie := s.steppedUpCookie()
