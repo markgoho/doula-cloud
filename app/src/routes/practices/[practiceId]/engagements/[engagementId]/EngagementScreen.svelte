@@ -1961,16 +1961,20 @@
 		if (newVisitBlock) return;
 		const scheduledAt = newVisitScheduledAt ? new Date(newVisitScheduledAt).toISOString() : undefined;
 		const staffId = visitStaffId || undefined;
+		let emailed: string[] = [];
 		if (
-			await visitsCreate.mutate(
-				() => createVisit(apiFetchWithSession, reference, scheduledAt, staffId),
-				'Failed to add Visit'
-			)
+			await visitsCreate.mutate(async () => {
+				emailed = await createVisit(apiFetchWithSession, reference, scheduledAt, staffId);
+			}, 'Failed to add Visit')
 		) {
 			closeAddVisit();
 			await loadVisits();
+			// #2540: the same words a move uses when the Doula it names is emailed.
+			const told = staffId && emailed.includes(staffId) ? ` We emailed ${staffName(staffId)} to say so.` : '';
 			visitsSavedMessage =
-				staffId && staffId !== callerStaffId ? `The Visit for ${staffName(staffId)} is added.` : 'Your Visit is added.';
+				staffId && staffId !== callerStaffId
+					? `The Visit for ${staffName(staffId)} is added.${told}`
+					: 'Your Visit is added.';
 			await refreshStatusAfterScheduling(scheduledAt);
 			await refreshWhoIsOn();
 			await loadActivity();

@@ -612,13 +612,16 @@ export async function createVisit(
 	reference: EngagementReference,
 	scheduledAt?: string,
 	staffId?: string
-): Promise<void> {
+): Promise<string[]> {
 	const response = await fetcher(visitsURL(reference), {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ scheduledAt, staffId })
 	});
 	if (!response.ok) throw new Error(await apiErrorMessage(response));
+	// #2540: the Staff members the BFF queued an email to about the Visit.
+	const created: { notifiedStaffIds?: string[] } = await response.json();
+	return created.notifiedStaffIds ?? [];
 }
 
 /**

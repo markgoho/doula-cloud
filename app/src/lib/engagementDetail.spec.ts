@@ -448,6 +448,15 @@ describe('createVisit', () => {
 
 		await expect(createVisit(fetcher, reference)).rejects.toThrow('nope');
 	});
+
+	// #2540: who the BFF emailed about the new Visit, or nobody.
+	it('hands back who was emailed', async () => {
+		const notified = vi.fn().mockResolvedValue(jsonResponse({ notifiedStaffIds: ['staff-7'] }));
+		await expect(createVisit(notified, reference, undefined, 'staff-7')).resolves.toEqual(['staff-7']);
+
+		const silent = vi.fn().mockResolvedValue(jsonResponse({}));
+		await expect(createVisit(silent, reference)).resolves.toEqual([]);
+	});
 });
 
 describe('scheduleVisit', () => {

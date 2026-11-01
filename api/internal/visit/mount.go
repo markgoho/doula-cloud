@@ -55,7 +55,7 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, enq tasknudge.Enque
 	// (create and reassign) read the one list.
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/visit-assignees",
 		staffauth.OwnerAndAdmin, AssigneesHandler())
-	ir.Replayable("POST /api/practices/{practiceId}/engagements/{engagementId}/visits", true, CreateHandler())
+	ir.Replayable("POST /api/practices/{practiceId}/engagements/{engagementId}/visits", true, CreateHandler(enq))
 	ir.Exempt("PATCH /api/practices/{practiceId}/engagements/{engagementId}/visits/{visitId}",
 		"plain UPDATE staff_id = $1 WHERE id = $2; sets the assignment to the given value, so re-sending the same body is a no-op",
 		true, ReassignHandler(enq))

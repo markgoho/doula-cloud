@@ -12,6 +12,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 )
 
 // CreateRequest carries who the Visit is for and when it happens, both
@@ -39,10 +40,14 @@ type CreateRequest struct {
 // marshals it to RFC3339(Nano), so what this write echoes back is the
 // exact value list.ListHandler would read for the same row, with no
 // second hand-formatted copy to drift out of sync with it.
+//
+// NotifiedStaffIDs is who was emailed about the Visit (#2540): the Doula
+// it names, unless she created it herself.
 type CreateResponse struct {
-	VisitID     string     `json:"visitId"`
-	StaffID     string     `json:"staffId"`
-	ScheduledAt *time.Time `json:"scheduledAt,omitempty"`
+	VisitID          string     `json:"visitId"`
+	StaffID          string     `json:"staffId"`
+	ScheduledAt      *time.Time `json:"scheduledAt,omitempty"`
+	NotifiedStaffIDs []string   `json:"notifiedStaffIds"`
 }
 
 // CreateHandler creates a Visit under an Engagement, assigned to the
@@ -62,7 +67,7 @@ type CreateResponse struct {
 // which is why this handler no longer opens with a role gate. A caller
 // who cannot reach the Engagement at all is already refused upstream by
 // staffauth.AttachingWrite, before any of this runs.
-func CreateHandler() http.Handler {
+func CreateHandler(enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, ok := requireVisitWrite(w, r)
 		// coverage:ignore reason: requireVisitWrite only reports false when staffauth.Middleware left no tx or no Reader on context, which cannot happen behind it
@@ -137,9 +142,21 @@ func CreateHandler() http.Handler {
 		// shared with the reassign path. It runs here, after the row and
 		// the activity entry, so nothing is attached on a write that
 		// failed.
-		if !grantAssignee(w, r, c, engagementID, staffID, grants) {
+		putOn, ok := grantAssignee(w, r, c, engagementID, staffID, grants)
+		if !ok {
 			// coverage:ignore reason: grantAssignee only reports false on a DB write failure, not exercised by unit tests
 			return
+		}
+		notified := []string{}
+		queued, err := queueAssigneeNotice(r, c, engagementID, visitID, staffID, putOn)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if queued {
+			notified = append(notified, staffID)
+			tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.StaffNotice))
 		}
 
 		// A Visit created already scheduled is "the first time a Visit is
@@ -153,9 +170,10 @@ func CreateHandler() http.Handler {
 		}
 
 		apierr.WriteJSON(w, http.StatusCreated, CreateResponse{
-			VisitID:     visitID,
-			StaffID:     staffID,
-			ScheduledAt: scheduledAt,
+			VisitID:          visitID,
+			StaffID:          staffID,
+			ScheduledAt:      scheduledAt,
+			NotifiedStaffIDs: notified,
 		})
 	})
 }

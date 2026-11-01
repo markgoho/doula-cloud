@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"reflect"
 	"testing"
 
 	"doula-cloud/api/internal/activity"
@@ -546,7 +547,7 @@ func TestCreateHandler_ReplayReturnsTheSameAssignee(t *testing.T) {
 	defer second.Body.Close()
 	secondOut := decodeCreate(t, second)
 
-	if secondOut != firstOut {
+	if !reflect.DeepEqual(secondOut, firstOut) {
 		t.Fatalf("replay = %+v, want the stored %+v", secondOut, firstOut)
 	}
 	if got := countVisits(t, db, engagementID); got != 1 {
