@@ -109,6 +109,29 @@ type Detail struct {
 	// she gets none, and an Owner reads no other Doula's fee here. Absent
 	// when the reader holds no open Attachment with a fee.
 	YourFee *AgreedFee `json:"yourFee,omitempty"`
+
+	// HasDoulaFees (#2492) is whether any Doula on this Engagement, open
+	// or ended, has an agreed fee, so the hub stands its Doula fees
+	// section from its first frame rather than once the fees read lands.
+	// Answered only for an Owner or Admin, the readers of those fees
+	// (#2271, ADR-0008); false for anyone else, so the flag tells nobody
+	// else that a fee exists.
+	HasDoulaFees bool `json:"hasDoulaFees"`
+}
+
+// hasDoulaFees answers Detail.HasDoulaFees with the rule
+// feepayment.listFees lists by: a granted Attachment carrying a fee.
+func hasDoulaFees(ctx context.Context, tx *sql.Tx, engagementID string) (bool, error) {
+	var has bool
+	if err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS (SELECT 1 FROM engagement_attachments
+		                 WHERE engagement_id = $1 AND origin = 'granted' AND fee_amount_cents IS NOT NULL)`,
+		engagementID,
+	).Scan(&has); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return false, fmt.Errorf("engagement: has doula fees: %w", err)
+	}
+	return has, nil
 }
 
 // AgreedFee is a Doula's own agreed fee, the terms she accepted it on
@@ -298,6 +321,14 @@ func DetailHandler() http.Handler {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
+		}
+		if reader.IsOwnerOrAdmin() {
+			d.HasDoulaFees, err = hasDoulaFees(r.Context(), tx, engagementID)
+			if err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+				return
+			}
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, d)

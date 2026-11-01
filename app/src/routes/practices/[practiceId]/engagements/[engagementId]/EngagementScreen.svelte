@@ -879,8 +879,12 @@
 	// only: loadDoulaFees answers undefined for anyone the BFF refuses, and
 	// the section is then left out, as Offers is. Drawn only when some
 	// Doula on the Engagement has a fee, since there is nothing else to say.
+	// #2492: the Engagement read says so up front, so the section stands
+	// from the first frame and its heading never joins the page late.
 	const doulaFeesState = new SectionState<DoulaFee[] | undefined>(undefined);
-	const isDoulaFeesVisible = $derived((doulaFeesState.value?.length ?? 0) > 0 || doulaFeesState.error !== '');
+	const isDoulaFeesVisible = $derived(
+		data.hasDoulaFees || (doulaFeesState.value?.length ?? 0) > 0 || doulaFeesState.error !== ''
+	);
 
 	// The Practice's Doulas, read once for the whole page (#268): the
 	// Offers section offers them, and so do the two Visit pickers. One
@@ -3009,7 +3013,9 @@
 	{/if}
 	<!-- The date paid reads "today" in the Practice's zone, so the section
 	     waits for it, as InvoiceSection does. -->
-	{#if practiceTimezone}
+	{#if !doulaFeesState.hasSettled}
+		<Skeleton label="Loading the Doula fees" />
+	{:else if practiceTimezone}
 		<DoulaFeeSection
 			fees={doulaFeesState.value ?? []}
 			{practiceTimezone}

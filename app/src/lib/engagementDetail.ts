@@ -78,6 +78,10 @@ export interface EngagementSummary {
 	 * so the hub holds no copy of it. */
 	offersBirthPlanToStart: boolean;
 	offersBirthPlan: boolean;
+	/** Whether a Doula on the Engagement has an agreed fee (#2492), so the
+	 * Doula fees section stands from the screen's first frame. Answered
+	 * only for an Owner or Admin; false for anyone else. */
+	hasDoulaFees: boolean;
 	/** The Client's portal-invite state (#255), using the same
 	 * derivation the Clients list's own ClientListItem.portalInviteStatus
 	 * carries -- absent when she has never been invited. */

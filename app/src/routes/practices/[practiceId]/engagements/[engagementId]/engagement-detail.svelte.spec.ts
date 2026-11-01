@@ -73,6 +73,7 @@ interface Detail {
 	doulas: { staffId: string; name: string }[];
 	canAttachSelf: boolean;
 	yourFee?: { amountCents: number; acceptedOn: string; terms?: string };
+	hasDoulaFees: boolean;
 }
 
 // The Engagement is handed in as `data` rather than stubbed out of a
@@ -3702,7 +3703,7 @@ describe('the Doula fees section (#2271)', () => {
 	});
 
 	it('leaves the section out for a reader the BFF refuses', async () => {
-		await setupMoney(contractorReader, fixtureDetail, (path) =>
+		await setupMoney(contractorReader, { ...fixtureDetail, hasDoulaFees: false }, (path) =>
 			path.endsWith('/doula-fees') ? jsonResponse({ code: 'FORBIDDEN', message: 'no' }, 403) : undefined
 		);
 
@@ -3711,12 +3712,23 @@ describe('the Doula fees section (#2271)', () => {
 	});
 
 	it('leaves the section out when no Doula has a fee', async () => {
-		await setupMoney(sessionFor(['owner']), fixtureDetail, (path) =>
+		await setupMoney(sessionFor(['owner']), { ...fixtureDetail, hasDoulaFees: false }, (path) =>
 			path.endsWith('/doula-fees') ? jsonResponse({ items: [] }) : undefined
 		);
 
 		await expect.element(testPage.getByRole('region', { name: 'Messages', exact: true })).toBeVisible();
 		await expect.element(doulaFeesSection()).not.toBeInTheDocument();
+	});
+
+	// #2492: the Engagement read says a fee exists, so the heading and its
+	// link are on the page before the fees read lands, not added after.
+	it('stands from the first frame when the Engagement has a fee, before the fees read lands', async () => {
+		await setupMoney(sessionFor(['owner']), fixtureDetail, (path) =>
+			path.endsWith('/doula-fees') ? (new Promise<Response>(() => {}) as unknown as Response) : undefined
+		);
+
+		await expect.element(doulaFeesSection()).toBeVisible();
+		await expect.element(doulaFeesSection().getByRole('status', { name: 'Loading the Doula fees' })).toBeVisible();
 	});
 
 	it('says so when the fees cannot be read', async () => {
