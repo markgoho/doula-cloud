@@ -38,11 +38,10 @@ func registerInternalRoutes(g *staffauth.GatedRouter, d Deps) {
 	// (#2476), #420's dormant-Practices list (#2477) and the refund
 	// (#2481).
 	//
-	// #1790's pilot gate, on the same guard. Until January only an address the founder added can create
-	// a Practice: the first endpoint adds one, the second opens the gate
-	// for everyone -- the one deliberate act ADR-0043 asks for. Both
-	// record who acted and when; there is no endpoint that undoes either.
-	g.Write("POST /api/internal/staffauth/pilot-allowlist", staffauth.PilotAllowlistHandler(d.DB, d.InternalAuth))
+	// #1790's pilot gate, on the same guard: it opens the gate for
+	// everyone -- the one deliberate act ADR-0043 asks for -- and records
+	// who did it and when. Adding an address to the allowlist moved to
+	// doula-ops (#2484).
 	g.Write("POST /api/internal/staffauth/pilot-gate/open", staffauth.PilotGateOpenHandler(d.DB, d.InternalAuth))
 	// #1548's publish act, on the same guard and in the pilot gate's
 	// shape: a new version of the Terms or the Privacy Policy is written

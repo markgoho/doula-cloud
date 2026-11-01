@@ -97,6 +97,12 @@ describe('logDetail', () => {
 		expect(logDetail(row({ action: 'founding_grant', details: { staffCount: 3, credits: 30 } }))).toBe('30 Credits for 3 Staff');
 	});
 
+	it('says which address was let into the pilot', () => {
+		expect(logDetail(row({ action: 'pilot_address_added', details: { address: 'ana@example.com', requestKey: 'k' } }))).toBe(
+			'ana@example.com'
+		);
+	});
+
 	it('says which list showed Owners’ contacts, and for how many Practices', () => {
 		expect(logDetail(row({ action: 'owner_contact_read', details: { list: 'practices', practiceIds: ['p-1', 'p-2'] } }))).toBe(
 			'The Practices list, 2 Practices'

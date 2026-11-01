@@ -50,3 +50,24 @@ func TestSeedFoundingGrant(t *testing.T) {
 		t.Fatalf("grant = (%d, %v), want (6, %v)", quantity, createdAt, at)
 	}
 }
+
+func TestSeedPilotAddress(t *testing.T) {
+	db := testdb.New(t)
+	testdb.ClosePilotGate(t, db)
+
+	testdb.SeedPilotAddress(t, db, " Ana@Example.com ")
+
+	var admitted bool
+	if err := db.App.QueryRowContext(t.Context(), `SELECT pilot_admits('ana@example.com')`).Scan(&admitted); err != nil {
+		t.Fatalf("ask pilot_admits: %v", err)
+	}
+	var keyed int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM pilot_allowlist WHERE address = 'ana@example.com' AND operator_act_id IS NOT NULL`,
+	).Scan(&keyed); err != nil {
+		t.Fatalf("read the row: %v", err)
+	}
+	if !admitted || keyed != 1 {
+		t.Fatalf("admitted = %v, keyed rows = %d, want true and 1", admitted, keyed)
+	}
+}

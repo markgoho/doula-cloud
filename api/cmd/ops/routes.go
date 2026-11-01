@@ -66,6 +66,7 @@ func routes(d Deps) (http.Handler, []string) {
 	r.handle(http.MethodPost, "/api/practices/{practiceId}/refunds", requireStepUp(d.DB, refundAct(d)))
 	r.handle(http.MethodGet, "/api/practices/{practiceId}/founding-grant", requireSession(d.DB, foundingGrantCheckRead(d.DB)))
 	r.handle(http.MethodPost, "/api/practices/{practiceId}/founding-grants", requireSession(d.DB, foundingGrantAct(d.DB)))
+	r.handle(http.MethodPost, "/api/pilot-allowlist", requireSession(d.DB, pilotAddressAct(d.DB)))
 	r.handle(http.MethodGet, "/api/staff/{staffId}/second-factor", requireSession(d.DB, secondFactorCheckRead(d.DB)))
 	r.handle(http.MethodPost, "/api/staff/{staffId}/second-factor-clears", requireStepUp(d.DB, secondFactorClearAct(d)))
 	return clock.Middleware(d.Now)(csrf.Wrap(d.Origins, r.mux)), r.routes

@@ -73,3 +73,16 @@ func SeedFoundingGrant(t *testing.T, db *DB, practiceID string, credits int, at 
 	}
 	return lotID
 }
+
+// SeedPilotAddress puts address on the pilot allowlist in the spelling
+// ops stores, keyed to a fresh act of an operator, as ops adds one.
+func SeedPilotAddress(t *testing.T, db *DB, address string) {
+	t.Helper()
+	actID := SeedOperatorAct(t, db, "Mark Goho")
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO pilot_allowlist (address, operator_act_id, added_at) VALUES (lower(btrim($1)), $2, now())`, address, actID,
+	); err != nil {
+		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
+		t.Fatalf("testdb: seed pilot address: %v", err)
+	}
+}

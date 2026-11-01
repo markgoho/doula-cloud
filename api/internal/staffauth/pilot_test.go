@@ -19,18 +19,17 @@ import (
 )
 
 const (
-	pilotTestSecret   = "pilot-internal-test-secret"
-	pilotAllowlistURL = "/api/internal/staffauth/pilot-allowlist"
-	pilotGateOpenURL  = "/api/internal/staffauth/pilot-gate/open"
-	pilotFounder      = "Mark"
-	pilotPractice     = "Pilot Practice"
-	anaAddress        = "ana@example.com"
-	anaMixedCase      = "Ana@Example.com"
+	pilotTestSecret  = "pilot-internal-test-secret"
+	pilotGateOpenURL = "/api/internal/staffauth/pilot-gate/open"
+	pilotFounder     = "Mark"
+	pilotPractice    = "Pilot Practice"
+	anaAddress       = "ana@example.com"
+	anaMixedCase     = "Ana@Example.com"
 )
 
-// newPilotServer mounts signup (on one verified identity) beside the two
-// operator endpoints, so a test can refuse a signup, add the address, and
-// retry on the same identity against one database.
+// newPilotServer mounts signup (on one verified identity) beside the gate
+// endpoint, so a test can refuse a signup, let the address in, and retry
+// on the same identity against one database.
 func newPilotServer(t *testing.T, db *testdb.DB, uid, email string) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -38,7 +37,6 @@ func newPilotServer(t *testing.T, db *testdb.DB, uid, email string) *httptest.Se
 	ir := idempotency.NewRouter(g, db.App)
 	staffauth.Mount(g, ir, db.App, authntest.Verifier{UID: uid, Email: email}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{}, neverSuppressed)
 	guard := internalauth.FromSecret(pilotTestSecret)
-	mux.Handle("POST "+pilotAllowlistURL, staffauth.PilotAllowlistHandler(db.App, guard))
 	mux.Handle("POST "+pilotGateOpenURL, staffauth.PilotGateOpenHandler(db.App, guard))
 	return httptest.NewServer(mux)
 }
@@ -58,26 +56,6 @@ func postPilot(t *testing.T, srv *httptest.Server, path, secret, body string) *h
 		t.Fatalf("request: %v", err)
 	}
 	return resp
-}
-
-// addToPilot adds address through the operator endpoint and returns the
-// row it answered with.
-func addToPilot(t *testing.T, srv *httptest.Server, address, addedBy string) staffauth.PilotAllowlistEntry {
-	t.Helper()
-	body, err := json.Marshal(staffauth.PilotAllowlistRequest{Address: address, AddedBy: addedBy})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := postPilot(t, srv, pilotAllowlistURL, pilotTestSecret, string(body))
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("add %q: status = %d, want 200", address, resp.StatusCode)
-	}
-	var entry staffauth.PilotAllowlistEntry
-	if err := json.NewDecoder(resp.Body).Decode(&entry); err != nil {
-		t.Fatalf("decode entry: %v", err)
-	}
-	return entry
 }
 
 func openPilotGate(t *testing.T, srv *httptest.Server, openedBy string) staffauth.PilotGate {
@@ -184,7 +162,7 @@ func TestPilotSignup_AllowsAnAddressOnTheAllowlist(t *testing.T) {
 	srv := newPilotServer(t, db, "ana-uid", anaAddress)
 	defer srv.Close()
 
-	addToPilot(t, srv, anaAddress, pilotFounder)
+	testdb.SeedPilotAddress(t, db, anaAddress)
 	resp := pilotSignup(t, srv)
 	defer resp.Body.Close()
 	assertSignedUpWithWelcomeCredits(t, db, resp)
@@ -203,7 +181,7 @@ func TestPilotSignup_MatchIgnoresCase(t *testing.T) {
 			srv := newPilotServer(t, db, "ana-case-uid", tc.signsUp)
 			defer srv.Close()
 
-			addToPilot(t, srv, tc.added, pilotFounder)
+			testdb.SeedPilotAddress(t, db, tc.added)
 			resp := pilotSignup(t, srv)
 			defer resp.Body.Close()
 			assertSignedUpWithWelcomeCredits(t, db, resp)
@@ -224,7 +202,7 @@ func TestPilotSignup_RefusedIdentityRetriesAfterTheAddressIsAdded(t *testing.T) 
 	defer refused.Body.Close()
 	assertPilotRefusal(t, db, refused)
 
-	addToPilot(t, srv, anaAddress, pilotFounder)
+	testdb.SeedPilotAddress(t, db, anaAddress)
 	retried := pilotSignup(t, srv)
 	defer retried.Body.Close()
 	assertSignedUpWithWelcomeCredits(t, db, retried)
@@ -248,77 +226,21 @@ func TestPilotSignup_InvitationAcceptanceIsNotGated(t *testing.T) {
 	}
 }
 
-func TestPilotAllowlist_RecordsWhoAddedAndWhen(t *testing.T) {
+func TestPilotGate_RefusesWithoutTheInternalCredential(t *testing.T) {
 	db := testdb.New(t)
+	testdb.ClosePilotGate(t, db)
 	srv := newPilotServer(t, db, someUID, testStaffEmail)
 	defer srv.Close()
 
-	before := time.Now().Add(-time.Minute)
-	entry := addToPilot(t, srv, "  "+anaMixedCase+" ", "  "+pilotFounder+" ")
-	if entry.Address != anaAddress || entry.AddedBy != pilotFounder {
-		t.Fatalf("entry = %+v, want %q added by %q", entry, anaAddress, pilotFounder)
-	}
-	if entry.AddedAt.Before(before) {
-		t.Fatalf("addedAt = %v, want a time this test ran at", entry.AddedAt)
-	}
-}
-
-// A second add of the same address, in any case, succeeds and answers
-// the first record unchanged.
-func TestPilotAllowlist_SecondAddKeepsTheFirstRecord(t *testing.T) {
-	db := testdb.New(t)
-	srv := newPilotServer(t, db, someUID, testStaffEmail)
-	defer srv.Close()
-
-	first := addToPilot(t, srv, anaAddress, pilotFounder)
-	second := addToPilot(t, srv, anaMixedCase, "Someone Else")
-	if !second.AddedAt.Equal(first.AddedAt) || second.AddedBy != first.AddedBy || second.Address != first.Address {
-		t.Fatalf("second add = %+v, want the first record %+v", second, first)
-	}
-	if n := countRows(t, db, `SELECT count(*) FROM pilot_allowlist`); n != 1 {
-		t.Fatalf("allowlist rows = %d, want 1", n)
-	}
-}
-
-func TestPilotAllowlist_RefusesABadRequest(t *testing.T) {
-	db := testdb.New(t)
-	srv := newPilotServer(t, db, someUID, testStaffEmail)
-	defer srv.Close()
-
-	for name, body := range map[string]string{
-		"truncated json":   `{"address": `,
-		"empty address":    `{"address": "  ", "addedBy": "Mark"}`,
-		"no at sign":       `{"address": "ana.example.com", "addedBy": "Mark"}`,
-		"nothing after at": `{"address": "ana@", "addedBy": "Mark"}`,
-		"no addedBy":       `{"address": "ana@example.com", "addedBy": " "}`,
-	} {
-		resp := postPilot(t, srv, pilotAllowlistURL, pilotTestSecret, body)
+	for _, secret := range []string{"", "wrong-secret"} {
+		resp := postPilot(t, srv, pilotGateOpenURL, secret, `{"openedBy": "Mark"}`)
 		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Errorf("%s: status = %d, want 400", name, resp.StatusCode)
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("secret %q: status = %d, want 401", secret, resp.StatusCode)
 		}
 	}
-	if n := countRows(t, db, `SELECT count(*) FROM pilot_allowlist`); n != 0 {
-		t.Fatalf("allowlist rows = %d, want 0", n)
-	}
-}
-
-func TestPilotEndpoints_RefuseWithoutTheInternalCredential(t *testing.T) {
-	db := testdb.New(t)
-	srv := newPilotServer(t, db, someUID, testStaffEmail)
-	defer srv.Close()
-
-	for _, path := range []string{pilotAllowlistURL, pilotGateOpenURL} {
-		for _, secret := range []string{"", "wrong-secret"} {
-			resp := postPilot(t, srv, path, secret, `{"address": "ana@example.com", "addedBy": "Mark", "openedBy": "Mark"}`)
-			_ = resp.Body.Close()
-			if resp.StatusCode != http.StatusUnauthorized {
-				t.Errorf("%s with secret %q: status = %d, want 401", path, secret, resp.StatusCode)
-			}
-		}
-	}
-	if n := countRows(t, db, `SELECT count(*) FROM pilot_allowlist`); n != 0 {
-		t.Fatalf("allowlist rows = %d, want 0", n)
+	if n := countRows(t, db, `SELECT count(*) FROM pilot_gate WHERE opened_at IS NULL`); n != 1 {
+		t.Fatalf("gate is open after a refused request")
 	}
 }
 
@@ -363,5 +285,20 @@ func TestPilotGate_RefusesABadRequest(t *testing.T) {
 	}
 	if n := countRows(t, db, `SELECT count(*) FROM pilot_gate WHERE opened_at IS NULL`); n != 1 {
 		t.Fatalf("gate is open after a refused request")
+	}
+}
+
+func TestLooksLikeAddress_IsAnAtWithSomethingEitherSide(t *testing.T) {
+	for address, want := range map[string]bool{
+		anaAddress:        true,
+		"a@b":             true,
+		"":                false,
+		"ana.example.com": false,
+		"ana@":            false,
+		"@example.com":    false,
+	} {
+		if got := staffauth.LooksLikeAddress(address); got != want {
+			t.Errorf("LooksLikeAddress(%q) = %v, want %v", address, got, want)
+		}
 	}
 }

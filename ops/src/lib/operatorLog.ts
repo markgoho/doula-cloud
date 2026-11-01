@@ -28,7 +28,8 @@ export const ACTION_LABELS: Record<string, string> = {
 	founding_grant: 'Founding grant',
 	second_factor_cleared: 'Two-step sign-in reset',
 	owner_contact_read: 'Read Owners’ contacts',
-	feedback_read: 'Read a piece of Feedback'
+	feedback_read: 'Read a piece of Feedback',
+	pilot_address_added: 'Added to the pilot allowlist'
 };
 
 const REFUSAL_REASONS: Record<string, string> = {
@@ -66,6 +67,9 @@ export function logDetail(row: LogRow): string | undefined {
 		case 'founding_grant': {
 			const d = row.details as { staffCount: number; credits: number };
 			return `${credits(d.credits)} for ${d.staffCount} Staff`;
+		}
+		case 'pilot_address_added': {
+			return String(row.details.address);
 		}
 		case 'owner_contact_read': {
 			const d = row.details as { list: string; practiceIds: string[] };

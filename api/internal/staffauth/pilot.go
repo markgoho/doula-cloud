@@ -21,8 +21,8 @@ import (
 // fallback if it ever meets the refusal without the code.
 const MsgPilotNotOpen = "DoulaCloud opens in January 2027. Until then, only a Practice in the pilot can sign up."
 
-// pilotOperatorDoor is the transaction-local setting 00125's policies
-// read. Only the two operator endpoints below set it, and only after the
+// pilotOperatorDoor is the transaction-local setting 00125's pilot_gate
+// policies read. Only the gate endpoint below sets it, and only after the
 // internal guard has admitted the caller.
 const pilotOperatorDoor = `SELECT set_config('app.pilot_operator_trusted', 'true', true)`
 
@@ -33,7 +33,7 @@ func pilotNotOpen() *sessionmint.Refusal {
 
 // pilotAdmits answers whether address may create a Practice: yes while
 // the pilot gate is open, and otherwise only if the founder has added it
-// to the allowlist. address is already in NormalizeAddress's spelling,
+// to the allowlist (in ops, #2484). address is already in NormalizeAddress's spelling,
 // which is the spelling 00125 stores, so the match is case-insensitive.
 //
 // It reads through pilot_admits (00125), a yes-or-no question about one
@@ -46,95 +46,6 @@ func pilotAdmits(ctx context.Context, tx *sql.Tx, address string) (bool, error) 
 		return false, fmt.Errorf("staffauth: ask pilot_admits: %w", err)
 	}
 	return admitted, nil
-}
-
-// PilotAllowlistRequest is the body of a POST to PilotAllowlistHandler:
-// the address the founder is letting into the pilot, and who is doing it.
-type PilotAllowlistRequest struct {
-	Address string `json:"address"`
-	AddedBy string `json:"addedBy"`
-}
-
-// PilotAllowlistEntry is one address on the pilot allowlist, as stored.
-type PilotAllowlistEntry struct {
-	Address string    `json:"address"`
-	AddedBy string    `json:"addedBy"`
-	AddedAt time.Time `json:"addedAt"`
-}
-
-// PilotAllowlistHandler adds an address to the pilot allowlist (#1790).
-//
-// An operator endpoint behind the internal guard, the same shape as the
-// founding grant: the founder adds an address by hand after speaking
-// with the doula, and adding it is the act that lets her into the pilot.
-// "When was she let in, and by whom?" is what the row answers.
-//
-// Adding an address already on the list succeeds and changes nothing:
-// the answer is the first record, so a second add can never rewrite who
-// let her in or when.
-func PilotAllowlistHandler(db *sql.DB, auth *internalauth.Guard) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !auth.Require(w, r) {
-			return
-		}
-
-		var req PilotAllowlistRequest
-		if !apierr.DecodeJSON(w, r, &req) {
-			return
-		}
-		address := NormalizeAddress(req.Address)
-		if !LooksLikeAddress(address) {
-			apierr.WriteError(w, "address must be an email address", http.StatusBadRequest)
-			return
-		}
-		addedBy := strings.TrimSpace(req.AddedBy)
-		if addedBy == "" {
-			apierr.WriteError(w, "addedBy is required", http.StatusBadRequest)
-			return
-		}
-
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		// A no-op once Commit below has run: every refusal on this
-		// endpoint is answered before the transaction begins.
-		defer func() { _ = tx.Rollback() }()
-
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		if _, err := tx.ExecContext(r.Context(), pilotOperatorDoor); err != nil {
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		if _, err := tx.ExecContext(r.Context(),
-			`INSERT INTO pilot_allowlist (address, added_by, added_at) VALUES ($1, $2, $3)
-			 ON CONFLICT (address) DO NOTHING`,
-			address, addedBy, clock.Now(r.Context()),
-		); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		entry := PilotAllowlistEntry{Address: address}
-		if err := tx.QueryRowContext(r.Context(),
-			`SELECT added_by, added_at FROM pilot_allowlist WHERE address = $1`, address,
-		).Scan(&entry.AddedBy, &entry.AddedAt); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		apierr.WriteJSON(w, http.StatusOK, entry)
-	})
 }
 
 // PilotGateOpenRequest is the body of a POST to PilotGateOpenHandler: who
@@ -219,7 +130,7 @@ func PilotGateOpenHandler(db *sql.DB, auth *internalauth.Guard) http.Handler {
 // LooksLikeAddress is GOV.UK's own email-address rule, no more: an "@"
 // with something either side. Anything stricter refuses addresses that
 // really deliver. One copy for both populations: clientauth's address
-// change reads it, and so does the pilot allowlist above (#1790).
+// change reads it, and so does ops's pilot allowlist add (#2484).
 func LooksLikeAddress(address string) bool {
 	at := strings.Index(address, "@")
 	return at > 0 && at < len(address)-1
