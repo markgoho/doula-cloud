@@ -3880,6 +3880,30 @@ describe('the ledger is read again after an act (#2331)', () => {
 		expect(activityReads()).toHaveLength(1);
 	});
 
+	it('reads the ledger again once the Contract is saved (#2520)', async () => {
+		await setupWithContract(
+			() => {
+				const respond = toApiResponder(fixture);
+				apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
+					if (path.endsWith('/contract') && init?.method === 'PUT') {
+						return Promise.resolve(jsonResponse(draftOf()));
+					}
+					if (path.endsWith('/contract')) return Promise.resolve(jsonResponse(draftOf()));
+					return respond(path);
+				});
+			},
+			{ ...fixtureDetail, clientPortalInviteStatus: 'accepted' }
+		);
+		await vi.waitFor(() => expect(activityReads()).toHaveLength(1));
+
+		await testPage.getByRole('button', { name: 'Change the Draft Contract' }).click();
+		await testPage.getByLabelText('Scope of service').fill('Two prenatal Visits and the birth');
+		await testPage.getByRole('button', { name: 'Save Contract' }).click();
+
+		await expect.element(testPage.getByRole('status').filter({ hasText: 'Contract saved.' })).toBeVisible();
+		await vi.waitFor(() => expect(activityReads()).toHaveLength(2));
+	});
+
 	it('reads the ledger again once an Invoice is raised', async () => {
 		await setupMoney(contractorReader, fixtureDetail, (path, init) =>
 			path.endsWith('/contract/invoices') && init?.method === 'POST'
