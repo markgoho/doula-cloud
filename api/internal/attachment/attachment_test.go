@@ -191,3 +191,46 @@ func TestGrant(t *testing.T) {
 		t.Fatalf("activity = %d entries, actor %q, attached %q; want one, the decider, the Doula", entries, actor, attached)
 	}
 }
+
+// TestGrant_TellsTheDoulaOnlyWhenSomeoneElsePutHerOn is #2403: one
+// put_on_engagement notice to her, naming the Engagement and who did it,
+// when the decider is someone else, and none when she put herself on.
+func TestGrant_TellsTheDoulaOnlyWhenSomeoneElsePutHerOn(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Grant notice")
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "notice-owner", []string{ownerRole}, employeeType)
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "notice-doula", []string{doulaRole}, employeeType)
+	_, byOwner := testdb.SeedEngagement(t, db, practiceID)
+	_, bySelf := testdb.SeedEngagement(t, db, practiceID)
+	tx := beginPracticeTx(t, db, practiceID)
+
+	if err := attachment.Grant(t.Context(), tx, practiceID, byOwner, doulaID, ownerID); err != nil {
+		t.Fatalf("Grant by the Owner: %v", err)
+	}
+	if err := attachment.Grant(t.Context(), tx, practiceID, bySelf, doulaID, doulaID); err != nil {
+		t.Fatalf("Grant by herself: %v", err)
+	}
+
+	rows, err := tx.QueryContext(t.Context(),
+		`SELECT kind::text, subject_id::text, recipient_staff_id::text, triggered_by_staff_id::text
+		   FROM staff_notice_outbox WHERE practice_id = $1`, practiceID)
+	if err != nil {
+		t.Fatalf("read outbox: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var got [][4]string
+	for rows.Next() {
+		var r [4]string
+		if err := rows.Scan(&r[0], &r[1], &r[2], &r[3]); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		got = append(got, r)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows: %v", err)
+	}
+	want := [4]string{"put_on_engagement", byOwner, doulaID, ownerID}
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("notices = %v, want only %v", got, want)
+	}
+}

@@ -22,6 +22,10 @@ type Kind string
 // Its subject is the engagement_offers row.
 const KindOfferReceived Kind = "offer_received"
 
+// KindPutOnEngagement is someone else putting her on an Engagement
+// (#2403). Its subject is the engagements row.
+const KindPutOnEngagement Kind = "put_on_engagement"
+
 // Notice is one person to tell about one record.
 type Notice struct {
 	PracticeID       string
@@ -65,16 +69,17 @@ func NewWorker(mailer outbox.Mailer) Worker {
 }
 
 type pendingRow struct {
-	id         string
-	practiceID string
-	kind       Kind
-	subjectID  string
-	address    string
-	isMember   bool
-	timezone   string
+	id          string
+	practiceID  string
+	recipientID string
+	kind        Kind
+	subjectID   string
+	address     string
+	isMember    bool
+	timezone    string
 }
 
-const claimQuery = `SELECT o.id, o.attempt_count, o.id, o.practice_id, o.kind::text, o.subject_id, s.email,
+const claimQuery = `SELECT o.id, o.attempt_count, o.id, o.practice_id, o.recipient_staff_id, o.kind::text, o.subject_id, s.email,
 	        EXISTS (SELECT 1 FROM practice_memberships pm
 	                 WHERE pm.practice_id = o.practice_id AND pm.staff_id = o.recipient_staff_id),
 	        p.timezone
@@ -90,7 +95,7 @@ func scanRow(rows *sql.Rows) (outbox.RowMeta, pendingRow, error) {
 	var meta outbox.RowMeta
 	var p pendingRow
 	var kind string
-	if err := rows.Scan(&meta.ID, &meta.AttemptCount, &p.id, &p.practiceID, &kind, &p.subjectID,
+	if err := rows.Scan(&meta.ID, &meta.AttemptCount, &p.id, &p.practiceID, &p.recipientID, &kind, &p.subjectID,
 		&p.address, &p.isMember, &p.timezone); err != nil {
 		// coverage:ignore reason: DB scan failure, not exercised by unit tests
 		return meta, p, fmt.Errorf("staffnotice: scan outbox row: %w", err)
@@ -121,6 +126,17 @@ func compose(mailer outbox.Mailer) func(context.Context, *sql.Tx, pendingRow, ti
 			}
 			link := mailer.AppBaseURL + "/practices/" + p.practiceID + "/offers"
 			subject, text = offerReceivedSubject, offerReceivedText(link, inZone(expiresAt, p.timezone))
+		case KindPutOnEngagement:
+			on, err := stillOn(ctx, tx, p.subjectID, p.recipientID)
+			if err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				return "", "", "", err
+			}
+			if !on {
+				return "", "", "", outbox.ErrAlreadyDone
+			}
+			link := mailer.AppBaseURL + "/practices/" + p.practiceID + "/engagements/" + p.subjectID
+			subject, text = putOnEngagementSubject, putOnEngagementText(link)
 		default:
 			// coverage:ignore reason: staff_notice_kind admits no value without a case here
 			return "", "", "", &outbox.DeadLetterError{Reason: "unknown staff notice kind " + string(p.kind)}
@@ -152,6 +168,23 @@ func openOffer(ctx context.Context, tx *sql.Tx, offerID string, now time.Time) (
 		return time.Time{}, false, fmt.Errorf("staffnotice: read offer: %w", err)
 	}
 	return expiresAt, state == "offered" && expiresAt.After(now), nil
+}
+
+// stillOn reports whether staffID still holds an open, granted
+// Attachment on engagementID. Read through 00139's
+// engagement_attachments notification-worker policy.
+func stillOn(ctx context.Context, tx *sql.Tx, engagementID, staffID string) (bool, error) {
+	var on bool
+	if err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS (SELECT 1 FROM engagement_attachments
+		                 WHERE engagement_id = $1 AND staff_id = $2
+		                   AND origin = 'granted' AND ended_at IS NULL)`,
+		engagementID, staffID,
+	).Scan(&on); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return false, fmt.Errorf("staffnotice: read attachment: %w", err)
+	}
+	return on, nil
 }
 
 // inZone is t in the Practice's own zone (ADR-0036), or UTC for a zone

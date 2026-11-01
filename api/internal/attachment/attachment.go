@@ -22,6 +22,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/staffnotice"
 )
 
 // doulaRole is the practice_role a person must hold to be attached.
@@ -165,6 +166,9 @@ func ReadMembership(ctx context.Context, tx *sql.Tx, practiceID, staffID string)
 // actor on the activity entry, the diff names the Doula, and the row's
 // created_at is the instant.
 //
+// Where attachedBy is not the Doula herself, it queues her
+// staffnotice.KindPutOnEngagement mail in the same transaction (#2403).
+//
 // The caller has already asked WhyNotAttachable. Grant does not ask
 // again, so that each caller refuses in its own words.
 func Grant(ctx context.Context, tx *sql.Tx, practiceID, engagementID, doulaStaffID, attachedBy string) error {
@@ -187,6 +191,19 @@ func Grant(ctx context.Context, tx *sql.Tx, practiceID, engagementID, doulaStaff
 	}); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("attachment: record doula attached: %w", err)
+	}
+	if doulaStaffID == attachedBy {
+		return nil
+	}
+	if err := staffnotice.Queue(ctx, tx, staffnotice.Notice{
+		PracticeID:       practiceID,
+		RecipientStaffID: doulaStaffID,
+		Kind:             staffnotice.KindPutOnEngagement,
+		SubjectID:        engagementID,
+		TriggeredBy:      attachedBy,
+	}); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("attachment: queue put-on notice: %w", err)
 	}
 	return nil
 }

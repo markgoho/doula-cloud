@@ -19,3 +19,19 @@ func offerReceivedText(link string, expiresAt time.Time) string {
 		"Answer by " + expiresAt.Format(expiresLayout) + ". After that, the offer expires.\n\n" +
 		"If you have questions, reply to this email.\n"
 }
+
+// putOnEngagementSubject and putOnEngagementText are the mail to a Doula
+// someone else put on an Engagement (#2403). ADR-0009 kept on
+// 2026-11-01: no Client, colleague or Practice; the Engagement page,
+// one sign-in away, names the Client and who put her on. "A client",
+// not "a client's birth", because an Engagement may be postpartum care
+// only. Shaped like offerReceivedText, from the persona consults on
+// #2403.
+const putOnEngagementSubject = "You've been put on a client on DoulaCloud"
+
+func putOnEngagementText(link string) string {
+	return "Hello,\n\n" +
+		"You've been put on a client at your practice on DoulaCloud. This link opens that client's page at your practice:\n\n" +
+		link + "\n\n" +
+		"If you have questions, reply to this email.\n"
+}
