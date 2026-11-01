@@ -74,7 +74,15 @@ export async function signInPortalClient(page: Page, request: APIRequestContext,
 export async function openMagicLink(page: Page, request: APIRequestContext, email: string): Promise<void> {
 	const requested = await request.post(`${API_URL}/api/portal/magic-link/request`, { data: { email } });
 	expect(requested.ok(), `magic-link request failed: ${requested.status()}`).toBe(true);
+	await followMagicLink(page, request, email);
+}
 
+/**
+ * The mailbox half of openMagicLink, for a spec whose link was asked for
+ * through the login screen itself (#2496, so the page she opened rides
+ * with the request).
+ */
+export async function followMagicLink(page: Page, request: APIRequestContext, email: string): Promise<void> {
 	// Drained until this Client's own link has arrived, not once (#1141):
 	// outboxMail.ts writes out why one drain and one read cannot mean "my
 	// row was processed". It matters more here than anywhere, because the

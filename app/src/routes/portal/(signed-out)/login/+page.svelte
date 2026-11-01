@@ -6,6 +6,7 @@
 	import { apiBaseURL, probeSession } from '#lib/api.js';
 	import { decidePortalLanding, type PortalSessionInfo } from '#lib/portalLanding.js';
 	import { didSessionEnd } from '#lib/sessionEnded.js';
+	import { readReturnTo } from '#lib/returnTo.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -29,6 +30,9 @@
 	 * never see a drag-surface override.
 	 */
 	const hasSessionEnded = $derived(didSessionEnd(page.url));
+	// #2496: the portal page she opened signed out. The BFF checks it again
+	// and binds it to the link it mails, so it survives another device.
+	const returnTo = $derived(readReturnTo(page.url));
 
 	let email = $state('');
 	const submission = new FormSubmission();
@@ -50,6 +54,14 @@
 	onMount(async () => {
 		const session = await probeSession<PortalSessionInfo>('/api/portal/session');
 		if (!session) return;
+		if (returnTo) {
+			try {
+				await goto(returnTo);
+				return;
+			} catch {
+				// No route answers it; she lands as if there were none.
+			}
+		}
 
 		const landing = decidePortalLanding(session);
 		if (landing.type === 'redirect') {
@@ -76,7 +88,7 @@
 			await fetch(`${apiBaseURL()}/api/portal/magic-link/request`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ email })
+				body: JSON.stringify({ email, ...(returnTo && { returnTo }) })
 			});
 			hasRequested = true;
 		}, orServiceProblem);

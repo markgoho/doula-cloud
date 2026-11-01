@@ -102,9 +102,10 @@ export function staffLoginAfterRefusal(returnTo: string): string {
 
 /**
 The Client-portal login address for a request refused for want of a
-session, saying the session ended only when this document held one.
+session: back to returnTo after sign-in (#2496), and saying the session
+ended only when this document held one.
 */
-export function portalLoginAfterRefusal(): string {
+export function portalLoginAfterRefusal(returnTo: string): string {
 	const login = resolve('/portal/(signed-out)/login');
-	return held.inThisDocument ? `${login}?${PARAM}=${FLAG_VALUE}` : login;
+	return withReturnTo(held.inThisDocument ? `${login}?${PARAM}=${FLAG_VALUE}` : login, returnTo);
 }

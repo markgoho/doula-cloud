@@ -21,10 +21,20 @@ when it names none, names another origin (`//host`, `/\host`, a scheme),
 or names the screen reading it.
 */
 export function readReturnTo(url: Address): string | undefined {
-	const target = url.searchParams.get(PARAM);
+	const target = sameOriginPath(url.searchParams.get(PARAM), url.origin);
+	if (target === undefined || new URL(target, url.origin).pathname === url.pathname) return undefined;
+	return target;
+}
+
+/**
+target as a path, query and fragment on origin, or `undefined` when it is
+absent or names another origin. For an address that did not come off the
+address bar, such as the one the BFF hands back from a magic link (#2496).
+*/
+export function sameOriginPath(target: string | null | undefined, origin: string): string | undefined {
 	if (!target?.startsWith('/')) return undefined;
-	const resolved = new URL(target, url.origin);
-	if (resolved.origin !== url.origin || resolved.pathname === url.pathname) return undefined;
+	const resolved = new URL(target, origin);
+	if (resolved.origin !== origin) return undefined;
 	return `${resolved.pathname}${resolved.search}${resolved.hash}`;
 }
 

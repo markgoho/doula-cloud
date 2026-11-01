@@ -191,3 +191,35 @@ describe('Where a sign-in link leads (#2025)', () => {
 			.toHaveAttribute('href', '/portal/login');
 	});
 });
+
+/*
+ * #2496: the BFF hands back the page the link was asked for from, and she
+ * lands on it without a second read of her session.
+ */
+describe('Landing on the page she asked for (#2496)', () => {
+	it('goes to the page bound to the link', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => jsonResponse({ ok: true, returnTo: '/portal/engagements/engagement-1/birth-plan' }))
+		);
+
+		await render(Page, {});
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/portal/engagements/engagement-1/birth-plan'));
+		expect(apiFetchWithSession).not.toHaveBeenCalled();
+	});
+
+	it('never leaves this app for an address on another origin', async () => {
+		vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ ok: true, returnTo: '//evil.example.com/portal' })));
+		apiFetchWithSession.mockResolvedValue(
+			jsonResponse({ engagements: [{ engagementId: 'engagement-1', practiceName: 'Bright Beginnings' }] })
+		);
+
+		await render(Page, {});
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/portal/engagements/engagement-1'));
+		expect(goto).toHaveBeenCalledTimes(1);
+	});
+});

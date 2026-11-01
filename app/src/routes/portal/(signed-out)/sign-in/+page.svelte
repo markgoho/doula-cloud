@@ -12,6 +12,7 @@
 	} from '#lib/formErrors.js';
 	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
 	import { decidePortalLanding, type PortalSessionInfo } from '#lib/portalLanding.js';
+	import { sameOriginPath } from '#lib/returnTo.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
@@ -78,6 +79,18 @@
 					return;
 				}
 				return refusal.errors;
+			}
+
+			// #2496: the page she opened signed out, bound to this link by the BFF.
+			const redeemed: { returnTo?: string } = await response.json();
+			const returnTo = sameOriginPath(redeemed.returnTo, page.url.origin);
+			if (returnTo) {
+				try {
+					await goto(returnTo);
+					return;
+				} catch {
+					// No route answers it; she lands as if there were none.
+				}
 			}
 
 			const sessionResponse = await apiFetchWithSession('/api/portal/session');

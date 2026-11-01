@@ -97,12 +97,12 @@ describe('apiFetchWithSession', () => {
 		expect(goto).toHaveBeenCalledWith('/login?sessionEnded=true&returnTo=%2Fpractices%2Fprac-1');
 	});
 
-	it('routes a 401 on a portal route to the portal login', async () => {
+	it('routes a 401 on a portal route to the portal login, carrying the page it was on', async () => {
 		setup({ status: 401, pathname: '/portal/engagements/eng-1' });
 
 		await apiFetchWithSession('/api/portal/engagements/eng-1/session');
 
-		expect(goto).toHaveBeenCalledWith('/portal/login');
+		expect(goto).toHaveBeenCalledWith('/portal/login?returnTo=%2Fportal%2Fengagements%2Feng-1');
 	});
 
 	it('routes a 401 on a portal route to the portal login, saying the session ended when it held one', async () => {
@@ -112,7 +112,7 @@ describe('apiFetchWithSession', () => {
 
 		await apiFetchWithSession('/api/portal/engagements/eng-1/messages');
 
-		expect(goto).toHaveBeenCalledWith('/portal/login?sessionEnded=true');
+		expect(goto).toHaveBeenCalledWith('/portal/login?sessionEnded=true&returnTo=%2Fportal%2Fengagements%2Feng-1');
 	});
 
 	/*
