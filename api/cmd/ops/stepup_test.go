@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -41,6 +42,18 @@ func (s *opsStack) stepUpAt(cookie string) *time.Time {
 func (s *opsStack) guarded(cookie string) *httptest.ResponseRecorder {
 	s.t.Helper()
 	act := requireStepUp(s.db.Ops, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tx, err := s.db.Ops.BeginTx(r.Context(), nil)
+		if err != nil {
+			s.t.Fatalf("begin: %v", err)
+		}
+		defer func() { _ = tx.Rollback() }()
+		if err := spendStepUp(r.Context(), tx, signedIn(r)); err != nil {
+			writeStepUpRequired(w)
+			return
+		}
+		if err := tx.Commit(); err != nil {
+			s.t.Fatalf("commit: %v", err)
+		}
 		apierr.WriteJSON(w, http.StatusOK, map[string]time.Time{"stepUpAt": *signedIn(r).StepUpAt})
 	}))
 	r := httptest.NewRequestWithContext(s.t.Context(), http.MethodPost, "/api/an-act", nil)
@@ -156,6 +169,74 @@ func TestRequireStepUp_AdmitsAnActJustSteppedUp(t *testing.T) {
 	}
 	if want := `{"stepUpAt":"` + steppedUp.Format(time.RFC3339) + `"}`; strings.TrimSpace(w.Body.String()) != want {
 		t.Errorf("body = %s, want %s: the act reads the stamp it was admitted on", w.Body, want)
+	}
+}
+
+func TestSpendStepUp_AnActSpendsTheStampSoTheNextActNeedsANewCode(t *testing.T) {
+	s := newOpsStack(t, false)
+	cookie := s.steppedUpCookie()
+
+	if w := s.guarded(cookie); w.Code != http.StatusOK {
+		t.Fatalf("first act = %d, want 200; body %s", w.Code, w.Body)
+	}
+	if at := s.stepUpAt(cookie); at != nil {
+		t.Errorf("step_up_at after the act = %v, want spent", at)
+	}
+
+	assertStepUpRequired(t, s.guarded(cookie))
+}
+
+func TestSpendStepUp_RefusesAStampAnotherActSpentFirst(t *testing.T) {
+	s := newOpsStack(t, false)
+	cookie := s.steppedUpCookie()
+	at := s.stepUpAt(cookie)
+	op := operator{StepUpAt: at, token: cookie}
+
+	first, err := s.db.Ops.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = first.Rollback() }()
+	if err := spendStepUp(t.Context(), first, op); err != nil {
+		t.Fatalf("first spend: %v", err)
+	}
+
+	// The second act was admitted on the same stamp; its spend waits on
+	// the first act's row lock and finds the stamp gone once it commits.
+	second := make(chan error, 1)
+	go func() {
+		tx, err := s.db.Ops.BeginTx(t.Context(), nil)
+		if err != nil {
+			second <- err
+			return
+		}
+		defer func() { _ = tx.Rollback() }()
+		second <- spendStepUp(t.Context(), tx, op)
+	}()
+	if err := first.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	if err := <-second; !errors.Is(err, errStepUpSpent) {
+		t.Errorf("second spend = %v, want errStepUpSpent", err)
+	}
+}
+
+func TestSpendStepUp_RefusesAStampNoLongerTheSessions(t *testing.T) {
+	s := newOpsStack(t, false)
+	cookie := s.steppedUpCookie()
+	admitted := s.stepUpAt(cookie)
+	s.now = s.now.Add(time.Minute)
+	s.stepUp(cookie, "fresh-totp-token")
+
+	tx, err := s.db.Ops.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := spendStepUp(t.Context(), tx, operator{StepUpAt: admitted, token: cookie}); !errors.Is(err, errStepUpSpent) {
+		t.Errorf("spend on a replaced stamp = %v, want errStepUpSpent", err)
 	}
 }
 

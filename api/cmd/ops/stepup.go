@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -18,10 +21,10 @@ import (
 // token cached from the session's own sign-in cannot pass.
 const freshSignInWindow = 5 * time.Minute
 
-// stepUpLimit is how long a step-up admits an act that needs one. The
-// check page steps up and sends the act in one press, so five minutes
-// is enough to correct a refused act and send it again, and short
-// enough that a session left open does not keep the power (ADR-0062).
+// stepUpLimit is how long a step-up waits to admit the one act it is
+// for (spendStepUp). The check page steps up and sends the act in one
+// press, so five minutes is ample, and short enough that a session left
+// open does not keep the power (ADR-0062).
 const stepUpLimit = 5 * time.Minute
 
 const (
@@ -109,9 +112,39 @@ func requireStepUp(db *sql.DB, next http.Handler) http.Handler {
 	return requireSession(db, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		at := signedIn(r).StepUpAt
 		if at == nil || !clock.Now(r.Context()).Before(at.Add(stepUpLimit)) {
-			apierr.Write(w, http.StatusForbidden, apierr.CodeSecondFactorRequired, msgStepUpRequired, nil)
+			writeStepUpRequired(w)
 			return
 		}
 		next.ServeHTTP(w, r)
 	}))
+}
+
+// errStepUpSpent is spendStepUp's answer when the stamp the act was
+// admitted on is no longer the session's: another act spent it first, or
+// a newer step-up replaced it.
+var errStepUpSpent = errors.New("the step-up this act was admitted on is spent")
+
+// spendStepUp clears the session's stamp inside the act's own
+// transaction, only while it is still the one the act was admitted on,
+// so each code admits one act (ADR-0062) and two acts sent on one stamp
+// cannot both pass: the second waits on the first's row lock and finds
+// the stamp gone. On errStepUpSpent the act answers writeStepUpRequired.
+func spendStepUp(ctx context.Context, tx *sql.Tx, op operator) error {
+	res, err := tx.ExecContext(ctx,
+		`UPDATE operator_sessions SET step_up_at = NULL WHERE token_hash = $1 AND step_up_at = $2`,
+		tokenHash(op.token), op.StepUpAt)
+	if err != nil {
+		// coverage:ignore reason: DB failure, not exercised by unit tests
+		return fmt.Errorf("spend step-up: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return errStepUpSpent
+	}
+	return nil
+}
+
+// writeStepUpRequired is the refusal of an act whose session has no
+// unspent step-up within stepUpLimit.
+func writeStepUpRequired(w http.ResponseWriter) {
+	apierr.Write(w, http.StatusForbidden, apierr.CodeSecondFactorRequired, msgStepUpRequired, nil)
 }
