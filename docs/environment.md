@@ -279,7 +279,7 @@ gcloud run services update doula-api --region us-central1 --project=doula-cloud 
 
 ### The outbox backstop: one drain job
 
-**Which Cloud Scheduler jobs exist.** Two, both in `us-central1`. Both authenticate with an `oidc_token` minted for `internal-caller@`, with `audience` set explicitly to the service's base URL ([ADR-0037](adr/0037-the-internal-boundary-is-a-caller-identity-not-a-shared-secret.md), [#1183](https://github.com/markgoho/doula-cloud/issues/1183)); neither carries a header, and neither job spec holds a secret:
+**Which Cloud Scheduler jobs call `doula-api`.** Two, both in `us-central1`; the alert-window jobs call the Monitoring API instead ([below](#uptime-checks-and-the-founders-phone)). Both authenticate with an `oidc_token` minted for `internal-caller@`, with `audience` set explicitly to the service's base URL ([ADR-0037](adr/0037-the-internal-boundary-is-a-caller-identity-not-a-shared-secret.md), [#1183](https://github.com/markgoho/doula-cloud/issues/1183)); neither carries a header, and neither job spec holds a secret:
 
 | Job | Cadence | Calls |
 | --- | --- | --- |
@@ -295,6 +295,10 @@ The drain answers `200` only when every outbox succeeded, and `500` naming the o
 **Four outboxes have no nudge at all**, so the drain is the only thing that ever runs them: `process-staff-token-mail-outbox` and `process-staff-email-change-outbox` (#613 accepted ADR-0010's plain delay for both rather than wiring a nudge), plus `process-portal-magic-link-outbox` (#617) and `process-portal-address-change-outbox` (#619), which follow the same acceptance — ADR-0026 carves no ADR-0010 exception for either mail. Before #481 the first two had no Scheduler job either, which means they did not run outside a test or a hand invocation.
 
 The three jobs that predated this — `process-portal-invite-outbox`, `process-site-build-outbox`, and #443's `verify-practice-pages` — are down to one: the first two were deleted as redundant once the drain covered them, and `verify-practice-pages` stays because it is not an outbox at all.
+
+### Uptime checks and the founder's phone
+
+**Two uptime checks, one channel, waking hours only ([#1403](https://github.com/markgoho/doula-cloud/issues/1403), [ADR-0049](adr/0049-doula-cloud-is-one-person-by-design-and-no-night-needs-him.md) P4).** `terraform/monitoring.tf` owns an uptime check named `App` on `https://doula-cloud-app.web.app/` (the app, not the marketing site at `doula.cloud`) and one named `API` on `https://doula-api-850855848778.us-central1.run.app/api/hello`, which must answer `hello world`. Each runs every minute from Iowa, Oregon and Virginia, and has an alert policy, `App is down` and `API is down`, that opens when two of the three regions have failed for two minutes and closes itself when the check passes again. The only notification channel on either is the SMS channel `Founder phone`, made by hand in the Cloud console (Monitoring, Alerting, Edit notification channels, SMS), where its verification code is entered, and found by Terraform by that display name, so the number is in no file, no state written from CI and no log. Until the channel exists, `local.founder_phone_channel_exists` in `monitoring.tf` stays `false` and the policies notify nobody; flipping it is a commit. The window is 07:00 to 22:00 America/New_York: the `alerts-off-*` and `alerts-on-*` Scheduler jobs (`terraform/scheduler.tf`, one pair per policy in `local.waking_hours_alert_policies`) switch every listed policy off at 22:00 and on at 07:00, calling the Monitoring API as `alert-window@`, whose one permission is `monitoring.alertPolicies.update`. A failure overnight is found at 07:00, when the policy is switched back on and opens its incident. A later alert joins the window by adding itself to that map and naming `local.founder_phone_channels`. No Practice sees any of this: no status page and no uptime figure.
 
 ## doula-ops
 
