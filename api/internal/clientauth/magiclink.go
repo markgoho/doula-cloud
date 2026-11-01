@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -24,9 +26,39 @@ import (
 const MagicLinkLifetime = 15 * time.Minute
 
 // RequestMagicLinkRequest is the body of a sign-in link request: the
-// address to send it to.
+// address to send it to, and the portal page she asked for before she
+// was sent to sign in (#2496).
 type RequestMagicLinkRequest struct {
-	Email string `json:"email"`
+	Email    string `json:"email"`
+	ReturnTo string `json:"returnTo,omitempty"`
+}
+
+const maxReturnPathLength = 512
+
+// portalReturnPath is the boundary for #2496's return address: a path
+// under /portal/engagements/ on this app, with its query, or nothing. A
+// value that fails is dropped rather than refused, since she never typed
+// it and her link still works. 00141's CHECK holds the same rule.
+func portalReturnPath(raw string) (string, bool) {
+	if raw == "" || len(raw) > maxReturnPathLength || strings.ContainsAny(raw, "\\") || strings.Contains(raw, "//") {
+		return "", false
+	}
+	for _, c := range raw {
+		if c < 0x20 || c == 0x7f {
+			return "", false
+		}
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "" || u.Host != "" || u.User != nil || u.Opaque != "" {
+		return "", false
+	}
+	if !strings.HasPrefix(u.Path, "/portal/engagements/") || path.Clean(u.Path) != u.Path {
+		return "", false
+	}
+	if u.RawQuery == "" {
+		return u.Path, true
+	}
+	return u.Path + "?" + u.RawQuery, true
 }
 
 // RequestMagicLinkHandler starts a Client sign-in. Public and
@@ -83,6 +115,16 @@ func RequestMagicLinkHandler(db *sql.DB) http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
+		if returnTo, ok := portalReturnPath(req.ReturnTo); ok {
+			if _, err := tx.ExecContext(r.Context(),
+				`INSERT INTO portal_magic_link_returns (token_hash, identifier, return_to) VALUES ($1, $2, $3)`,
+				authtoken.Digest(token), identifier, returnTo,
+			); err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+				return
+			}
+		}
 		if err := queueMagicLinkMail(r.Context(), tx, identifier, token); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -122,11 +164,13 @@ type RedeemMagicLinkRequest struct {
 	Token string `json:"token"`
 }
 
-// redeemMagicLinkResponse is the minimal success body -- the frontend
-// follows this up with GET /api/portal/session, same as after any other
-// sign-in, to decide where to land.
+// redeemMagicLinkResponse is the minimal success body. ReturnTo is the
+// portal page the link was asked for from (#2496), checked when it was
+// stored; without one the frontend follows this up with GET
+// /api/portal/session to decide where to land.
 type redeemMagicLinkResponse struct {
-	OK bool `json:"ok"`
+	OK       bool   `json:"ok"`
+	ReturnTo string `json:"returnTo,omitempty"`
 }
 
 // RedeemMagicLinkHandler turns a sign-in link into a session. Public and
@@ -174,7 +218,16 @@ func RedeemMagicLinkHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				return sessionmint.Result{}, fmt.Errorf("clientauth: spend magic link: %w", err)
 			}
-			return sessionmint.Result{IdentityUID: identifier, Body: redeemMagicLinkResponse{OK: true}}, nil
+			var returnTo string
+			err = tx.QueryRowContext(ctx,
+				`SELECT return_to FROM portal_magic_link_returns WHERE token_hash = $1`,
+				authtoken.Digest(req.Token),
+			).Scan(&returnTo)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				return sessionmint.Result{}, fmt.Errorf("clientauth: read magic link return: %w", err)
+			}
+			return sessionmint.Result{IdentityUID: identifier, Body: redeemMagicLinkResponse{OK: true, ReturnTo: returnTo}}, nil
 		}
 
 		sessionmint.IssueFromDB(w, r, db, enq, sessionmint.Portal(), step, nil)

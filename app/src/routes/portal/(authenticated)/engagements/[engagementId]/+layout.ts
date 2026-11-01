@@ -34,11 +34,12 @@ export interface EngagementIdentity {
  * here. `createdAt` is additionally read off this same response, not a
  * second fetch, for the chrome's own switcher label (#310).
  */
-export const load: LayoutLoad = async ({ params }): Promise<EngagementIdentity> => {
+export const load: LayoutLoad = async ({ params, url, untrack }): Promise<EngagementIdentity> => {
 	const response = await apiFetch(`/api/portal/engagements/${params.engagementId}`);
 
 	if (response.status === 401) {
-		redirect(303, portalLoginAfterRefusal());
+		// Untracked, so moving between this Engagement's pages does not read it again.
+		redirect(303, portalLoginAfterRefusal(untrack(() => `${url.pathname}${url.search}`)));
 	} else if (!response.ok) {
 		error(response.status, await apiErrorMessage(response));
 	}

@@ -207,3 +207,43 @@ describe('Client-portal login -- the session-ended notice (#757)', () => {
 		expect(testPage.getByText(NOTICE).elements()).toHaveLength(0);
 	});
 });
+
+/*
+ * #2496: a portal page opened signed out. The address rides to the BFF
+ * with the request, so it survives the mailed link.
+ */
+const BIRTH_PLAN = '/portal/engagements/engagement-1/birth-plan';
+
+async function setupWithReturnTo() {
+	Object.assign(
+		pageState,
+		toPageState({ ...fixture, url: `https://example.test/portal/login?returnTo=${encodeURIComponent(BIRTH_PLAN)}` })
+	);
+	await render(Page, {});
+}
+
+describe('Client-portal login -- the page she asked for (#2496)', () => {
+	it('sends that page with the request for a link', async () => {
+		apiFetch.mockImplementation(toApiResponder(fixture));
+		const request = vi.fn(async () => jsonResponse({}, 202));
+		vi.stubGlobal('fetch', request);
+
+		await setupWithReturnTo();
+		await testPage.getByLabelText('Email address').fill('priya@example.com');
+		await testPage.getByRole('button', { name: 'Send me a sign-in link' }).click();
+
+		await expect.element(testPage.getByText(/we have sent a sign-in link/i)).toBeVisible();
+		expect(request).toHaveBeenCalledWith(
+			'/api/portal/magic-link/request',
+			expect.objectContaining({ body: JSON.stringify({ email: 'priya@example.com', returnTo: BIRTH_PLAN }) })
+		);
+	});
+
+	it('sends a visitor already signed in straight to that page', async () => {
+		apiFetch.mockResolvedValue(jsonResponse(session));
+
+		await setupWithReturnTo();
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith(BIRTH_PLAN));
+	});
+});

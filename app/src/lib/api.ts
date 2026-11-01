@@ -168,11 +168,8 @@ async function handleExpiredSession(): Promise<void> {
 	// Which population's login screen, decided here; what the address says
 	// about the session that ended, decided by `#lib/sessionEnded.js`
 	// (#1131), which is the only place that flag is spelled.
-	await goto(
-		location.pathname.startsWith('/portal')
-			? portalLoginAfterRefusal()
-			: staffLoginAfterRefusal(`${location.pathname}${location.search}${location.hash}`)
-	);
+	const here = `${location.pathname}${location.search}${location.hash}`;
+	await goto(location.pathname.startsWith('/portal') ? portalLoginAfterRefusal(here) : staffLoginAfterRefusal(here));
 }
 
 /**
