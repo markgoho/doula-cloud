@@ -1,6 +1,7 @@
 // `bun run dev:full` -- brings up the local stack (Firebase Auth
-// emulator + the podman-compose Postgres/API stack, see e2e/stack.ts)
-// and then runs the SvelteKit dev server against it. Tears the stack
+// emulator + the podman-compose Postgres/API stack, with doula-ops on its
+// own port beside the BFF, see e2e/stack.ts) and then runs the SvelteKit
+// dev server against it. Tears the stack
 // down again on Ctrl-C or if the dev server exits on its own.
 //
 // It starts from a clean stack each time (#2010): a dev:full that was
@@ -23,13 +24,15 @@
 // registered outbox. So mail a person causes in the browser -- a magic
 // link, an Invitation, a reset -- reaches the sandbox mailbox.
 import { request } from '@playwright/test';
-import { MAILBOX_URL, startStack, stopStack, WORKER_SECRET } from '../e2e/stack';
+import { MAILBOX_URL, OPS_TENANT_ID, SEEDED_OPERATOR, startStack, stopStack, WORKER_SECRET } from '../e2e/stack';
 import {
 	API_URL,
 	E2E_EMULATOR_HOST,
 	E2E_EMULATOR_PORT,
 	DEV_SERVER_ORIGIN,
 	developmentServerPidfilePath,
+	OPS_DEV_SERVER_ORIGIN,
+	opsDevelopmentServerPidfilePath,
 	PORT_OFFSET
 } from '../e2e/ports';
 import { demoSummary, mintPortalLinks, seedDemoPractice } from './demo-practice';
@@ -38,14 +41,15 @@ import { demoSummary, mintPortalLinks, seedDemoPractice } from './demo-practice'
 // killed run left holding the dev port (#2010): Vite would otherwise move
 // to the next free port, which the BFF's EXPECTED_ORIGINS does not name.
 const DEV_SERVER_PIDFILE = Bun.file(developmentServerPidfilePath(PORT_OFFSET));
+const OPS_DEV_SERVER_PIDFILE = Bun.file(opsDevelopmentServerPidfilePath(PORT_OFFSET));
 
 // Stops the dev server a killed run left, if the pid still names one: a
 // pid can be given to another process once its own has ended, so a
 // pidfile a clean exit left behind stops nothing.
-async function stopLeftDevelopmentServer() {
-	if (!(await DEV_SERVER_PIDFILE.exists())) return;
-	const pid = Number(await DEV_SERVER_PIDFILE.text());
-	await DEV_SERVER_PIDFILE.delete();
+async function stopLeftDevelopmentServer(pidfile: typeof DEV_SERVER_PIDFILE) {
+	if (!(await pidfile.exists())) return;
+	const pid = Number(await pidfile.text());
+	await pidfile.delete();
 	const command = Bun.spawnSync(['ps', '-o', 'command=', '-p', String(pid)]).stdout.toString();
 	if (command.includes('vite')) process.kill(pid);
 }
@@ -57,7 +61,8 @@ async function stopLeftDevelopmentServer() {
 // minutes.
 const DRAIN_INTERVAL_MS = 3000;
 
-await stopLeftDevelopmentServer();
+await stopLeftDevelopmentServer(DEV_SERVER_PIDFILE);
+await stopLeftDevelopmentServer(OPS_DEV_SERVER_PIDFILE);
 stopStack({ quiet: true });
 await startStack(DEV_SERVER_ORIGIN);
 
@@ -118,12 +123,29 @@ const vite = Bun.spawn(['./node_modules/.bin/vite', 'dev'], {
 
 await Bun.write(DEV_SERVER_PIDFILE, String(vite.pid));
 
+// ops/'s dev server (ADR-0062), against doula-ops and the operator tenant
+// the stack seeded. The emulator has no TOTP, so signing in past the code
+// by hand is not possible here; ops/'s e2e suite drives those screens.
+const opsVite = Bun.spawn(['./node_modules/.bin/vite', 'dev'], {
+	cwd: '../ops',
+	stdio: ['ignore', 'inherit', 'inherit'],
+	env: {
+		...process.env,
+		VITE_FIREBASE_AUTH_EMULATOR_HOST: `${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`,
+		VITE_OPS_TENANT_ID: OPS_TENANT_ID
+	}
+});
+await Bun.write(OPS_DEV_SERVER_PIDFILE, String(opsVite.pid));
+console.log(`ops: ${OPS_DEV_SERVER_ORIGIN}/sign-in as ${SEEDED_OPERATOR.email} / ${SEEDED_OPERATOR.password}
+`);
+
 let isTornDown = false;
 function teardown() {
 	if (isTornDown) return;
 	// eslint-disable-next-line unicorn/no-top-level-assignment-in-function -- one-shot guard against a double teardown from both the exit handler and a signal handler
 	isTornDown = true;
 	clearInterval(drainTimer);
+	opsVite.kill();
 	stopStack();
 }
 

@@ -63,6 +63,18 @@ func openLots(ctx context.Context, tx *sql.Tx, practiceID string) ([]lot, error)
 		 ORDER BY l.created_at, l.id`,
 		practiceID,
 	)
+	return scanLots(rows, err)
+}
+
+// refundLots is openLots as ops_runtime reads it, through
+// ops_refund_lots (00148), which also locks the Practice row the way
+// ConsumeCredit does, so two refunds cannot both read one lot as unspent.
+func refundLots(ctx context.Context, tx *sql.Tx, practiceID string) ([]lot, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT * FROM ops_refund_lots($1)`, practiceID)
+	return scanLots(rows, err)
+}
+
+func scanLots(rows *sql.Rows, err error) ([]lot, error) {
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return nil, fmt.Errorf("billing: list credit lots: %w", err)

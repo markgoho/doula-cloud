@@ -85,15 +85,10 @@ func useFixtureHistory(t *testing.T) {
 }
 
 // publish records that the operator published a version, the row
-// legalnotice.PublishHandler writes (#1548).
+// ops's publish act writes (#2486).
 func publish(t *testing.T, db *testdb.DB, document, version string, material bool) {
 	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO legal_version_publications (document, version, material, published_by, published_at)
-		 VALUES ($1, $2, $3, 'Mark', now())`, document, version, material,
-	); err != nil {
-		t.Fatalf("publish %s %s: %v", document, version, err)
-	}
+	testdb.SeedLegalPublication(t, db, document, version, material, time.Now())
 }
 
 // seedAgreement writes a terms_accepted row the way signup does, with

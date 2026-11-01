@@ -70,22 +70,35 @@ const (
 func TestClock_UnsetIsRealTimeAndReadsNoDatabase(t *testing.T) {
 	// A nil database: the unset switch must not touch one, which is what
 	// Cloud Run runs with.
-	read, err := stackswitch.Clock(t.Context(), env(map[string]string{stackswitch.MarkerVar: marker}), nil)
+	read, release, err := stackswitch.Clock(t.Context(), env(map[string]string{stackswitch.MarkerVar: marker}), nil)
 	if err != nil {
 		t.Fatalf("Clock: %v", err)
 	}
 	within(t, read, 0)
+	if err := release(); err != nil {
+		t.Fatalf("release: %v", err)
+	}
 }
 
-func TestClock_FollowsTheOffsetRowOnTheStack(t *testing.T) {
-	db := stackDB(t, "3 days")
-	read, err := stackswitch.Clock(t.Context(), env(map[string]string{
-		stackswitch.ClockVar:  "1",
-		stackswitch.MarkerVar: marker,
+// stackClock is the clock on the stack db, with its pool released when
+// the test ends.
+func stackClock(t *testing.T, db *testdb.DB) clock.Clock {
+	t.Helper()
+	read, release, err := stackswitch.Clock(t.Context(), env(map[string]string{
+		stackswitch.ClockVar:       "1",
+		stackswitch.MarkerVar:      marker,
+		stackswitch.DatabaseURLVar: db.AppURL,
 	}), db.App)
 	if err != nil {
 		t.Fatalf("Clock: %v", err)
 	}
+	t.Cleanup(func() { _ = release() })
+	return read
+}
+
+func TestClock_FollowsTheOffsetRowOnTheStack(t *testing.T) {
+	db := stackDB(t, "3 days")
+	read := stackClock(t, db)
 	within(t, read, 3*24*time.Hour)
 
 	// A jump moves the row; the next read follows it with no restart.
@@ -95,13 +108,7 @@ func TestClock_FollowsTheOffsetRowOnTheStack(t *testing.T) {
 
 func TestClock_KeepsTheLastOffsetWhenTheRowCannotBeRead(t *testing.T) {
 	db := stackDB(t, "5 days")
-	read, err := stackswitch.Clock(t.Context(), env(map[string]string{
-		stackswitch.ClockVar:  "1",
-		stackswitch.MarkerVar: marker,
-	}), db.App)
-	if err != nil {
-		t.Fatalf("Clock: %v", err)
-	}
+	read := stackClock(t, db)
 	within(t, read, 5*24*time.Hour)
 
 	if _, err := db.Admin.ExecContext(t.Context(), `REVOKE SELECT ON sim.offset_row FROM app_runtime`); err != nil {
@@ -112,9 +119,21 @@ func TestClock_KeepsTheLastOffsetWhenTheRowCannotBeRead(t *testing.T) {
 
 func TestClock_RefusesWithoutTheStackMarker(t *testing.T) {
 	db := stackDB(t, "0")
-	_, err := stackswitch.Clock(t.Context(), env(map[string]string{stackswitch.ClockVar: "1"}), db.App)
+	_, _, err := stackswitch.Clock(t.Context(), env(map[string]string{stackswitch.ClockVar: "1"}), db.App)
 	if !errors.Is(err, stackswitch.ErrNotTheStack) {
 		t.Fatalf("Clock without %s = %v, want ErrNotTheStack", stackswitch.MarkerVar, err)
+	}
+}
+
+func TestClock_RefusesWhenItsOwnPoolCannotReadTheOffset(t *testing.T) {
+	db := stackDB(t, "0")
+	_, _, err := stackswitch.Clock(t.Context(), env(map[string]string{
+		stackswitch.ClockVar:       "1",
+		stackswitch.MarkerVar:      marker,
+		stackswitch.DatabaseURLVar: "postgres://nobody@127.0.0.1:1/none?connect_timeout=1",
+	}), db.App)
+	if err == nil {
+		t.Fatal("Clock started with a pool that cannot read sim.offset_row")
 	}
 }
 
@@ -122,7 +141,7 @@ func TestClock_RefusesADatabaseWithNoSimSchema(t *testing.T) {
 	// A migrated database with no sim schema is what every deployed
 	// database is: simclock refuses to install into one.
 	db := testdb.New(t)
-	_, err := stackswitch.Clock(t.Context(), env(map[string]string{
+	_, _, err := stackswitch.Clock(t.Context(), env(map[string]string{
 		stackswitch.ClockVar:  "1",
 		stackswitch.MarkerVar: marker,
 	}), db.App)
@@ -132,7 +151,7 @@ func TestClock_RefusesADatabaseWithNoSimSchema(t *testing.T) {
 }
 
 func TestClock_RefusesAValueOtherThanOne(t *testing.T) {
-	_, err := stackswitch.Clock(t.Context(), env(map[string]string{
+	_, _, err := stackswitch.Clock(t.Context(), env(map[string]string{
 		stackswitch.ClockVar:  "true",
 		stackswitch.MarkerVar: marker,
 	}), nil)

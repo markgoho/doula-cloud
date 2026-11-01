@@ -46,7 +46,7 @@ type selfStaff struct {
 	// stampActivity writes last_active_at from (#1992). It once read the
 	// database's now() so it would agree with dormancy's reads under
 	// sim.now(); dormancy now judges last_active_at against clock.Now(ctx)
-	// (billing.DormantPracticesHandler), and on the e2e stack that clock
+	// (doula-ops's dormantList), and on the e2e stack that clock
 	// follows sim.offset_row (#1833), so the Go clock is the one that
 	// agrees with it.
 	ActivityStampStale bool

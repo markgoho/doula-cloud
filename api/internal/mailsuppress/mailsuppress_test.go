@@ -1,9 +1,11 @@
 package mailsuppress_test
 
 import (
+	"context"
 	"errors"
 	"os"
 	"testing"
+	"time"
 
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/mailsuppress"
@@ -153,6 +155,27 @@ func TestSender_RefusesASuppressedAddressWithoutCallingMailgun(t *testing.T) {
 	}
 	if len(inner.Sent()) != 0 {
 		t.Fatalf("handed %d messages to Mailgun, want 0", len(inner.Sent()))
+	}
+}
+
+func TestSender_ReadsThroughTheWorkersTransactionOnAOneConnectionPool(t *testing.T) {
+	db := testdb.New(t)
+	if err := mailsuppress.Record(t.Context(), db.App, "worker@example.test", mailsuppress.CauseComplaint, "evt-1"); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	db.App.SetMaxOpenConns(1)
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	inner := &mail.FakeSender{}
+	s := mailsuppress.Sender{Inner: inner, DB: db.App}
+
+	ctx, cancel := context.WithTimeout(mail.WithTx(t.Context(), tx), 10*time.Second)
+	defer cancel()
+	if err := s.Send(ctx, testMessage("worker@example.test")); !errors.Is(err, mail.ErrSuppressed) {
+		t.Fatalf("Send error = %v, want mail.ErrSuppressed", err)
 	}
 }
 

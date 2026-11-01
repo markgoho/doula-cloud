@@ -48,7 +48,7 @@ func RemoveSecondFactorHandler(verifier authn.Verifier, accounts authn.AccountMa
 			return
 		}
 
-		if err := clearEnrollmentAndRecord(r.Context(), tx, accounts, staffID, uid, AuthEventRemoved, staffID, ""); err != nil {
+		if err := clearEnrollmentAndRecord(r.Context(), tx, accounts, staffID, uid, AuthEventRemoved, staffID); err != nil {
 			// coverage:ignore reason: DB/Admin SDK failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return

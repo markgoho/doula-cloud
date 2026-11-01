@@ -366,10 +366,10 @@ func queryBatch(ctx context.Context, tx *sql.Tx, practiceID string, after *pagec
 	for rows.Next() {
 		var row rawEntry
 		var actorKind string
-		var staffName, clientGivenName, clientPreferredName, clientFamilyName, subjectName sql.NullString
+		var staffName, clientGivenName, clientPreferredName, clientFamilyName, operatorName, subjectName sql.NullString
 		var subjectClientGivenName, subjectClientPreferredName, subjectClientFamilyName sql.NullString
 		if err := rows.Scan(&row.cursorID, &row.SubjectKind, &row.SubjectID, &row.Action, &actorKind,
-			&staffName, &clientGivenName, &clientPreferredName, &clientFamilyName, &subjectName,
+			&staffName, &clientGivenName, &clientPreferredName, &clientFamilyName, &operatorName, &subjectName,
 			&subjectClientGivenName, &subjectClientPreferredName, &subjectClientFamilyName, &row.CreatedAt); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("activityfeed: scan practice activity row: %w", err)
@@ -378,7 +378,7 @@ func queryBatch(ctx context.Context, tx *sql.Tx, practiceID string, after *pagec
 		// #2111: this feed sets every Client at the Practice side by side,
 		// so a Client actor reads her full name, as the subject name beside
 		// it does.
-		row.ActorName = activitypage.ActorName(actorKind, staffName, clientGivenName, clientPreferredName, clientFamilyName, activitypage.ActorFullName)
+		row.ActorName = activitypage.ActorName(actorKind, staffName, clientGivenName, clientPreferredName, clientFamilyName, operatorName, activitypage.ActorFullName)
 		row.SubjectName = resolveSubjectName(row.SubjectKind, subjectName, subjectClientGivenName, subjectClientPreferredName, subjectClientFamilyName)
 		items = append(items, row)
 	}

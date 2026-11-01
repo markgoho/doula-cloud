@@ -1,6 +1,7 @@
 package billing_test
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -16,179 +17,159 @@ import (
 // is.
 var errStripeUnavailable = errors.New("stripe unavailable")
 
-// seedPurchase seeds one purchase lot: quantity Credits at unitPriceCents
-// each, with taxCents of sales tax charged on the whole lot, bought
-// boughtAt and paid on paymentIntentID.
-func seedPurchase(t *testing.T, db *testdb.DB, practiceID string, quantity int, unitPriceCents, taxCents int64, paymentIntentID string, boughtAt time.Time) string {
+// opsTx opens a transaction as ops_runtime, the one role a refund runs
+// as (ADR-0062).
+func opsTx(t *testing.T, db *testdb.DB) *sql.Tx {
 	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO credit_ledger
-		     (practice_id, origin, quantity, unit_price_cents, tax_cents, stripe_payment_intent_id, created_at)
-		 VALUES ($1, 'purchase', $2, $3, $4, $5, $6) RETURNING id`,
-		practiceID, quantity, unitPriceCents, taxCents, paymentIntentID, boughtAt,
-	).Scan(&id); err != nil {
-		t.Fatalf("seed purchase lot: %v", err)
-	}
-	return id
-}
-
-// seedEngagements seeds n Engagements for practiceID and returns their
-// ids. Every caller seeds before opening its transaction: ConsumeCredit
-// holds a lock on the Practice row, and an Engagement insert needs that
-// row, so seeding inside the transaction waits on a lock it holds itself.
-func seedEngagements(t *testing.T, db *testdb.DB, practiceID string, n int) []string {
-	t.Helper()
-	ids := make([]string, n)
-	for i := range ids {
-		_, ids[i] = testdb.SeedEngagement(t, db, practiceID)
-	}
-	return ids
-}
-
-// practiceTx opens a transaction on the low-privilege app_runtime
-// connection with practiceID in the session variable every credit_ledger
-// policy reads -- what staffauth.Middleware does for a real request.
-func practiceTx(t *testing.T, db *testdb.DB, practiceID string) *sql.Tx {
-	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
+	tx, err := db.Ops.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}
 	t.Cleanup(func() { _ = tx.Rollback() })
-	if _, err := tx.ExecContext(t.Context(),
-		`SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set practice: %v", err)
-	}
 	return tx
 }
 
-// TestRefundable_PricesTheUnspentBalanceFromTheLedgerAlone is the AC in
-// one test: a Practice that bought at two different prices and spent some
-// of what she bought. Because consumption is FIFO, the Credits she spent
-// are the cheap ones, and what she still holds is priced at what the
-// later purchase actually cost -- computed from credit_ledger with no
-// call to Stripe.
-func TestRefundable_PricesTheUnspentBalanceFromTheLedgerAlone(t *testing.T) {
+// refunder issues refunds on one ops_runtime transaction, each under the
+// act it records.
+type refunder struct {
+	t      *testing.T
+	db     *testdb.DB
+	tx     *sql.Tx
+	client *billing.FakeStripeClient
+	actID  string
+	quotes []billing.RefundQuote
+}
+
+func newRefunder(t *testing.T, db *testdb.DB, client *billing.FakeStripeClient) *refunder {
+	t.Helper()
+	return &refunder{t: t, db: db, tx: opsTx(t, db), client: client, actID: testdb.SeedOperatorAct(t, db, "Mark Goho")}
+}
+
+func (r *refunder) refund(practiceID, key string, credits int, now time.Time) (billing.RefundReceipt, error) {
+	r.t.Helper()
+	return billing.Refund(r.t.Context(), r.tx, r.client, //nolint:wrapcheck // test helper; callers match the error with errors.Is
+		billing.RefundOrder{PracticeID: practiceID, Credits: credits, RequestKey: key}, now,
+		func(_ context.Context, q billing.RefundQuote) (string, error) {
+			r.quotes = append(r.quotes, q)
+			return r.actID, nil
+		})
+}
+
+func (r *refunder) commit() {
+	r.t.Helper()
+	if err := r.tx.Commit(); err != nil {
+		r.t.Fatalf("commit: %v", err)
+	}
+}
+
+// refundRows counts the refund rows at practiceID and their total.
+func refundRows(t *testing.T, db *testdb.DB, practiceID string) (rows, total int) {
+	t.Helper()
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*), COALESCE(SUM(quantity), 0) FROM credit_ledger WHERE origin = 'refund' AND practice_id = $1`, practiceID,
+	).Scan(&rows, &total); err != nil {
+		t.Fatalf("count refund rows: %v", err)
+	}
+	return rows, total
+}
+
+func consume(t *testing.T, db *testdb.DB, practiceID string, engagements []string) {
+	t.Helper()
+	tx := practiceTx(t, db, practiceID)
+	for i, engagementID := range engagements {
+		if err := billing.ConsumeCredit(t.Context(), tx, practiceID, engagementID); err != nil {
+			t.Fatalf("consume %d: %v", i, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+}
+
+// TestQuoteRefund_PricesTheUnspentBalanceFromTheLedgerAlone: a Practice
+// that bought at two different prices and spent some of what she
+// bought. Because consumption is FIFO, the Credits she spent are the
+// cheap ones, and what she still holds is priced at what the later
+// purchase actually cost -- computed from credit_ledger with no call to
+// Stripe.
+func TestQuoteRefund_PricesTheUnspentBalanceFromTheLedgerAlone(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Two Prices")
 	now := time.Now()
 	seedPurchase(t, db, practiceID, 4, 500, 40, "pi_old", now.AddDate(0, -6, 0))
 	seedPurchase(t, db, practiceID, 3, 2000, 165, "pi_new", now.AddDate(0, -1, 0))
+	consume(t, db, practiceID, seedEngagements(t, db, practiceID, 5))
 
-	// Seeded before the transaction opens: ConsumeCredit locks the
-	// Practice row, and seeding an Engagement needs that row too, so
-	// seeding inside the transaction would wait on it forever.
-	engagements := seedEngagements(t, db, practiceID, 5)
-
-	tx := practiceTx(t, db, practiceID)
-	for i, engagementID := range engagements {
-		if err := billing.ConsumeCredit(t.Context(), tx, practiceID, engagementID); err != nil {
-			t.Fatalf("consume %d: %v", i, err)
-		}
-	}
-
-	quote, err := billing.Refundable(t.Context(), tx, practiceID, now)
+	quote, err := billing.QuoteRefund(t.Context(), opsTx(t, db), practiceID, 0, now)
 	if err != nil {
-		t.Fatalf("Refundable: %v", err)
+		t.Fatalf("QuoteRefund: %v", err)
 	}
 	// Four cheap Credits and one dear one are gone, so two $20.00
 	// Credits remain: $40.00, plus two thirds of the $1.65 charged on
-	// that lot, rounded down to the cent already returned as spent.
-	if quote.Credits != 2 || quote.AmountCents != 4000 {
-		t.Fatalf("quote = %+v, want 2 credits at 4000 cents", quote)
-	}
-	if quote.TaxCents != 110 {
-		t.Fatalf("quote tax = %d, want 110", quote.TaxCents)
+	// that lot, rounded down.
+	if quote.Credits != 2 || quote.MaxCredits != 2 || quote.AmountCents != 4110 || quote.TaxCents != 110 {
+		t.Fatalf("quote = %+v, want 2 of 2 credits at 4110 cents including 110 of tax", quote)
 	}
 }
 
-// TestConsumeCredit_DrawsTheOldestLotFirst proves the FIFO rule the
-// pricing above rests on: a granted Credit is spent before a purchased
-// one, and the consumption row names the lot it drew from.
-func TestConsumeCredit_DrawsTheOldestLotFirst(t *testing.T) {
+func TestQuoteRefund_PricesFewerCreditsThanTheLotHolds(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "FIFO")
-	grantID := seedSignupBonus(t, db, practiceID)
-	// An hour later, explicitly: the grant above is stamped with the
-	// database's clock and this one with Go's, and the order is the
-	// point of the test, so it must not rest on the two agreeing.
-	purchaseID := seedPurchase(t, db, practiceID, 2, 2000, 0, "pi_fifo", time.Now().Add(time.Hour))
+	practiceID := testdb.SeedPractice(t, db, "Part Of A Lot")
+	seedPurchase(t, db, practiceID, 4, 2000, 200, "pi_part", time.Now())
 
-	engagements := seedEngagements(t, db, practiceID, 4)
-
-	tx := practiceTx(t, db, practiceID)
-	for i, engagementID := range engagements {
-		if err := billing.ConsumeCredit(t.Context(), tx, practiceID, engagementID); err != nil {
-			t.Fatalf("consume %d: %v", i, err)
-		}
-	}
-
-	// Counted rather than ordered: every row written in one transaction
-	// shares that transaction's timestamp, so which draw came first is
-	// not recoverable from the rows. What the counts prove is the thing
-	// FIFO is for -- the grant was emptied before the purchase was
-	// touched at all.
-	draws := map[string]int{}
-	rows, err := tx.QueryContext(t.Context(),
-		`SELECT drawn_lot_id, count(*) FROM credit_ledger WHERE origin = 'consumption' GROUP BY drawn_lot_id`)
+	quote, err := billing.QuoteRefund(t.Context(), opsTx(t, db), practiceID, 1, time.Now())
 	if err != nil {
-		t.Fatalf("read draws: %v", err)
+		t.Fatalf("QuoteRefund: %v", err)
 	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var lotID string
-		var n int
-		if err := rows.Scan(&lotID, &n); err != nil {
-			t.Fatalf("scan draw: %v", err)
-		}
-		draws[lotID] = n
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate draws: %v", err)
-	}
-	if draws[grantID] != 3 || draws[purchaseID] != 1 {
-		t.Fatalf("draws = %v, want 3 from the grant %s and 1 from the purchase %s", draws, grantID, purchaseID)
+	if quote.Credits != 1 || quote.MaxCredits != 4 || quote.AmountCents != 2050 || quote.TaxCents != 50 {
+		t.Fatalf("quote = %+v, want 1 of 4 credits at 2050 cents including 50 of tax", quote)
 	}
 }
 
 // TestRefund_ReturnsPriceAndTaxAgainstTheOriginalPayment proves the whole
 // promise in one pass: the money goes back at the price paid, with the
 // tax charged on it, against the PaymentIntent it arrived on -- which is
-// what makes Stripe Tax reverse the tax it reported to New York.
+// what makes Stripe Tax reverse the tax it reported to New York -- and
+// the ledger row keys the act that took it.
 func TestRefund_ReturnsPriceAndTaxAgainstTheOriginalPayment(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Refundable")
 	lotID := seedPurchase(t, db, practiceID, 5, 2000, 686, "pi_original", time.Now().AddDate(0, -2, 0))
 	client := billing.NewFakeStripeClient()
+	r := newRefunder(t, db, client)
+	at := time.Date(2026, 11, 2, 10, 0, 0, 0, time.UTC)
 
-	tx := practiceTx(t, db, practiceID)
-	receipt, err := billing.Refund(t.Context(), tx, client, practiceID, "req-full", 5, time.Now())
+	receipt, err := r.refund(practiceID, "req-full", 5, at)
 	if err != nil {
 		t.Fatalf("Refund: %v", err)
 	}
-	if receipt.AmountCents != 10686 || receipt.TaxCents != 686 {
-		t.Fatalf("receipt = %+v, want 10686 cents including 686 of tax", receipt)
+	r.commit()
+	if receipt.Credits != 5 || receipt.AmountCents != 10686 || receipt.TaxCents != 686 || receipt.PaymentIntentID != "pi_original" {
+		t.Fatalf("receipt = %+v, want 5 credits, 10686 cents including 686 of tax, on pi_original", receipt)
+	}
+	if len(r.quotes) != 1 || r.quotes[0].AmountCents != 10686 {
+		t.Fatalf("acts recorded = %+v, want one at 10686 cents", r.quotes)
 	}
 
 	calls := client.RefundCalls()
-	if len(calls) != 1 || calls[0].PaymentIntentID != "pi_original" || calls[0].AmountCents != 10686 {
-		t.Fatalf("stripe refund calls = %+v, want one for pi_original at 10686", calls)
+	if len(calls) != 1 || calls[0].PaymentIntentID != "pi_original" || calls[0].AmountCents != 10686 || calls[0].IdempotencyKey != "req-full" {
+		t.Fatalf("stripe refund calls = %+v, want one for pi_original at 10686 under req-full", calls)
 	}
 
 	var quantity, taxCents int
-	var drawnLot, refundID string
-	if err := tx.QueryRowContext(t.Context(),
-		`SELECT quantity, tax_cents, drawn_lot_id, stripe_refund_id FROM credit_ledger WHERE origin = 'refund'`,
-	).Scan(&quantity, &taxCents, &drawnLot, &refundID); err != nil {
+	var drawnLot, refundID, actID string
+	var createdAt time.Time
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT quantity, tax_cents, drawn_lot_id, stripe_refund_id, operator_act_id, created_at FROM credit_ledger WHERE origin = 'refund'`,
+	).Scan(&quantity, &taxCents, &drawnLot, &refundID, &actID, &createdAt); err != nil {
 		t.Fatalf("read refund row: %v", err)
 	}
-	if quantity != -5 || taxCents != -686 || drawnLot != lotID || refundID != receipt.StripeRefundID {
-		t.Fatalf("refund row = (%d, %d, %s, %s), want (-5, -686, %s, %s)",
-			quantity, taxCents, drawnLot, refundID, lotID, receipt.StripeRefundID)
+	if quantity != -5 || taxCents != -686 || drawnLot != lotID || refundID != receipt.StripeRefundID || actID != r.actID || !createdAt.Equal(at) {
+		t.Fatalf("refund row = (%d, %d, %s, %s, act %s, %s), want (-5, -686, %s, %s, act %s, %s)",
+			quantity, taxCents, drawnLot, refundID, actID, createdAt, lotID, receipt.StripeRefundID, r.actID, at)
 	}
 
-	balance, err := billing.Balance(t.Context(), tx, practiceID)
+	balance, err := billing.Balance(t.Context(), practiceTx(t, db, practiceID), practiceID)
 	if err != nil {
 		t.Fatalf("Balance: %v", err)
 	}
@@ -205,12 +186,11 @@ func TestRefund_PartialRefundsReturnExactlyTheTaxCharged(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Partial")
 	seedPurchase(t, db, practiceID, 3, 2000, 100, "pi_partial", time.Now())
-	client := billing.NewFakeStripeClient()
+	r := newRefunder(t, db, billing.NewFakeStripeClient())
 
-	tx := practiceTx(t, db, practiceID)
 	total := int64(0)
 	for i := range 3 {
-		receipt, err := billing.Refund(t.Context(), tx, client, practiceID, fmt.Sprintf("req-partial-%d", i), 1, time.Now())
+		receipt, err := r.refund(practiceID, fmt.Sprintf("req-partial-%d", i), 1, time.Now())
 		if err != nil {
 			t.Fatalf("refund %d: %v", i, err)
 		}
@@ -228,11 +208,14 @@ func TestRefund_RefusesCreditsGivenFreeOfCharge(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Granted Only")
 	seedSignupBonus(t, db, practiceID)
+	client := billing.NewFakeStripeClient()
 
-	tx := practiceTx(t, db, practiceID)
-	_, err := billing.Refund(t.Context(), tx, billing.NewFakeStripeClient(), practiceID, "req-refused", 1, time.Now())
+	_, err := newRefunder(t, db, client).refund(practiceID, "req-refused", 1, time.Now())
 	if !errors.Is(err, billing.ErrNothingRefundable) {
 		t.Fatalf("Refund err = %v, want ErrNothingRefundable", err)
+	}
+	if calls := client.RefundCalls(); len(calls) != 0 {
+		t.Fatalf("stripe refund calls = %+v, want none", calls)
 	}
 }
 
@@ -242,14 +225,9 @@ func TestRefund_RefusesCreditsAlreadySpent(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "All Spent")
 	seedPurchase(t, db, practiceID, 1, 2000, 0, "pi_spent", time.Now())
+	consume(t, db, practiceID, seedEngagements(t, db, practiceID, 1))
 
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	tx := practiceTx(t, db, practiceID)
-	if err := billing.ConsumeCredit(t.Context(), tx, practiceID, engagementID); err != nil {
-		t.Fatalf("consume: %v", err)
-	}
-	_, err := billing.Refund(t.Context(), tx, billing.NewFakeStripeClient(), practiceID, "req-refused", 1, time.Now())
+	_, err := newRefunder(t, db, billing.NewFakeStripeClient()).refund(practiceID, "req-refused", 1, time.Now())
 	if !errors.Is(err, billing.ErrNothingRefundable) {
 		t.Fatalf("Refund err = %v, want ErrNothingRefundable", err)
 	}
@@ -263,19 +241,15 @@ func TestRefund_RefusesAPurchaseOlderThanTheWindow(t *testing.T) {
 	now := time.Now()
 	seedPurchase(t, db, practiceID, 2, 2000, 0, "pi_stale", now.AddDate(-billing.RefundWindowYears, 0, -1))
 
-	tx := practiceTx(t, db, practiceID)
-	if _, err := billing.Refund(t.Context(), tx, billing.NewFakeStripeClient(), practiceID, "req-stale", 1, now); !errors.Is(err, billing.ErrNothingRefundable) {
+	r := newRefunder(t, db, billing.NewFakeStripeClient())
+	if _, err := r.refund(practiceID, "req-stale", 1, now); !errors.Is(err, billing.ErrNothingRefundable) {
 		t.Fatalf("Refund err = %v, want ErrNothingRefundable", err)
 	}
-	quote, err := billing.Refundable(t.Context(), tx, practiceID, now)
-	if err != nil {
-		t.Fatalf("Refundable: %v", err)
-	}
-	if quote.Credits != 0 {
-		t.Fatalf("quote = %+v, want nothing refundable", quote)
+	if _, err := billing.QuoteRefund(t.Context(), r.tx, practiceID, 0, now); !errors.Is(err, billing.ErrNothingRefundable) {
+		t.Fatalf("QuoteRefund err = %v, want ErrNothingRefundable", err)
 	}
 	// The Credits themselves have not expired -- only the right to cash.
-	balance, err := billing.Balance(t.Context(), tx, practiceID)
+	balance, err := billing.Balance(t.Context(), practiceTx(t, db, practiceID), practiceID)
 	if err != nil {
 		t.Fatalf("Balance: %v", err)
 	}
@@ -293,8 +267,7 @@ func TestRefund_RefusesMoreThanTheLotHolds(t *testing.T) {
 	seedPurchase(t, db, practiceID, 2, 500, 0, "pi_first", now.AddDate(0, -2, 0))
 	seedPurchase(t, db, practiceID, 2, 2000, 0, "pi_second", now.AddDate(0, -1, 0))
 
-	tx := practiceTx(t, db, practiceID)
-	if _, err := billing.Refund(t.Context(), tx, billing.NewFakeStripeClient(), practiceID, "req-too-many", 3, now); !errors.Is(err, billing.ErrRefundExceedsLot) {
+	if _, err := newRefunder(t, db, billing.NewFakeStripeClient()).refund(practiceID, "req-too-many", 3, now); !errors.Is(err, billing.ErrRefundExceedsLot) {
 		t.Fatalf("Refund err = %v, want ErrRefundExceedsLot", err)
 	}
 }
@@ -304,8 +277,7 @@ func TestRefund_RefusesMoreThanTheLotHolds(t *testing.T) {
 func TestRefund_RefusesQuantityBelowOne(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Zero")
-	tx := practiceTx(t, db, practiceID)
-	if _, err := billing.Refund(t.Context(), tx, billing.NewFakeStripeClient(), practiceID, "req-zero", 0, time.Now()); err == nil {
+	if _, err := newRefunder(t, db, billing.NewFakeStripeClient()).refund(practiceID, "req-zero", 0, time.Now()); err == nil {
 		t.Fatal("Refund accepted a quantity of 0")
 	}
 }
@@ -318,130 +290,84 @@ func TestRefund_StripeFailureWritesNoLedgerRow(t *testing.T) {
 	seedPurchase(t, db, practiceID, 2, 2000, 0, "pi_down", time.Now())
 	client := billing.NewFakeStripeClient()
 	client.RefundPaymentErr = errStripeUnavailable
+	r := newRefunder(t, db, client)
 
-	tx := practiceTx(t, db, practiceID)
-	if _, err := billing.Refund(t.Context(), tx, client, practiceID, "req-stripe-down", 1, time.Now()); err == nil {
-		t.Fatal("Refund reported success on a failed Stripe call")
+	if _, err := r.refund(practiceID, "req-stripe-down", 1, time.Now()); !errors.Is(err, errStripeUnavailable) {
+		t.Fatalf("Refund err = %v, want the Stripe failure", err)
 	}
-	var rows int
-	if err := tx.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM credit_ledger WHERE origin = 'refund'`).Scan(&rows); err != nil {
-		t.Fatalf("count refund rows: %v", err)
-	}
-	if rows != 0 {
+	r.commit()
+	if rows, _ := refundRows(t, db, practiceID); rows != 0 {
 		t.Fatalf("refund rows = %d, want none", rows)
 	}
 }
 
-// TestDormantPractices_FindsBalancesNobodyHasTouched proves the query the
-// annual balance notice and the December/January due-diligence mailings
-// are worked from: a Practice holding Credits whose Staff have not been
-// seen. A Practice with no balance is not on it, and neither is one whose
-// Staff were here yesterday.
-func TestDormantPractices_FindsBalancesNobodyHasTouched(t *testing.T) {
+func TestRefund_AnActThatCannotBeRecordedMovesNoMoney(t *testing.T) {
 	db := testdb.New(t)
-	now := time.Now()
-	notSeenSince := now.AddDate(-billing.DormancyNoticeYears, 0, 0)
+	practiceID := testdb.SeedPractice(t, db, "No Act")
+	seedPurchase(t, db, practiceID, 2, 2000, 0, "pi_no_act", time.Now())
+	client := billing.NewFakeStripeClient()
+	errNoAct := errors.New("no act")
 
-	dormantID := testdb.SeedPractice(t, db, "Dormant")
-	seedPurchase(t, db, dormantID, 4, 2000, 0, "pi_dormant", now.AddDate(-3, 0, 0))
-	seedStaffLastActive(t, db, dormantID, "dormant-uid", now.AddDate(-3, 0, 0))
-
-	activeID := testdb.SeedPractice(t, db, "Active")
-	seedPurchase(t, db, activeID, 4, 2000, 0, "pi_active", now.AddDate(-3, 0, 0))
-	seedStaffLastActive(t, db, activeID, "active-uid", now.AddDate(0, 0, -1))
-
-	spentID := testdb.SeedPractice(t, db, "No Balance")
-	seedStaffLastActive(t, db, spentID, "spent-uid", now.AddDate(-3, 0, 0))
-
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
+	_, err := billing.Refund(t.Context(), opsTx(t, db), client,
+		billing.RefundOrder{PracticeID: practiceID, Credits: 1, RequestKey: "req-no-act"}, time.Now(),
+		func(context.Context, billing.RefundQuote) (string, error) { return "", errNoAct })
+	if !errors.Is(err, errNoAct) {
+		t.Fatalf("Refund err = %v, want the act's failure", err)
 	}
-	defer func() { _ = tx.Rollback() }()
-
-	dormant, err := billing.DormantPractices(t.Context(), tx, notSeenSince)
-	if err != nil {
-		t.Fatalf("DormantPractices: %v", err)
-	}
-	if len(dormant) != 1 || dormant[0].PracticeID != dormantID || dormant[0].Balance != 4 {
-		t.Fatalf("dormant = %+v, want only the dormant Practice with 4 Credits", dormant)
-	}
-	if dormant[0].LastContactAt == nil {
-		t.Fatal("dormant Practice reported no last contact, want the seeded one")
+	if calls := client.RefundCalls(); len(calls) != 0 {
+		t.Fatalf("stripe refund calls = %+v, want none", calls)
 	}
 }
 
-// TestDormantPractices_CountsAPracticeNobodyHasEverVisited proves a
-// Practice that has never signed in is dormant rather than invisible --
-// it is exactly the one the notice is for.
-func TestDormantPractices_CountsAPracticeNobodyHasEverVisited(t *testing.T) {
-	db := testdb.New(t)
-	now := time.Now()
-	practiceID := testdb.SeedPractice(t, db, "Never Seen")
-	seedPurchase(t, db, practiceID, 1, 2000, 0, "pi_never", now.AddDate(-3, 0, 0))
-
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	dormant, err := billing.DormantPractices(t.Context(), tx, now.AddDate(-billing.DormancyNoticeYears, 0, 0))
-	if err != nil {
-		t.Fatalf("DormantPractices: %v", err)
-	}
-	if len(dormant) != 1 || dormant[0].LastContactAt != nil {
-		t.Fatalf("dormant = %+v, want one entry with no recorded contact", dormant)
-	}
-}
-
-// seedStaffLastActive seeds a Staff member of practiceID last seen at
-// lastActive -- the durable contact record 00053 added.
-func seedStaffLastActive(t *testing.T, db *testdb.DB, practiceID, identityUID string, lastActive time.Time) {
-	t.Helper()
-	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE staff SET last_active_at = $1 WHERE id = $2`, lastActive, staffID); err != nil {
-		t.Fatalf("seed last_active_at: %v", err)
-	}
-}
-
-// TestRefund_ARetriedRefundIsTheSameRefund proves the endpoint survives
-// the failure it will actually meet: a request run by hand that times
-// out, and is run again under the same name. The second attempt is
-// answered with the refund the first one made -- no second Stripe call,
-// and no second negative row.
+// TestRefund_ARetriedRefundIsTheSameRefund proves the act survives the
+// failure it will actually meet: a request that times out and is sent
+// again under the same name. The second attempt is answered with the
+// refund the first one made -- no second act, no second Stripe call, and
+// no second negative row.
 func TestRefund_ARetriedRefundIsTheSameRefund(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Retried")
 	seedPurchase(t, db, practiceID, 4, 2000, 200, "pi_retried", time.Now())
 	client := billing.NewFakeStripeClient()
+	r := newRefunder(t, db, client)
 
-	tx := practiceTx(t, db, practiceID)
-	first, err := billing.Refund(t.Context(), tx, client, practiceID, "req-retried", 1, time.Now())
+	first, err := r.refund(practiceID, "req-retried", 1, time.Now())
 	if err != nil {
 		t.Fatalf("first refund: %v", err)
 	}
-	second, err := billing.Refund(t.Context(), tx, client, practiceID, "req-retried", 1, time.Now())
+	second, err := r.refund(practiceID, "req-retried", 1, time.Now())
 	if err != nil {
 		t.Fatalf("retried refund: %v", err)
 	}
+	r.commit()
 	if second != first {
 		t.Fatalf("retry returned %+v, want the first refund %+v", second, first)
 	}
-
+	if len(r.quotes) != 1 {
+		t.Fatalf("acts recorded = %d, want only the first", len(r.quotes))
+	}
 	if calls := client.RefundCalls(); len(calls) != 1 {
 		t.Fatalf("stripe refund calls = %+v, want only the first", calls)
 	}
-	var rows, balance int
-	if err := tx.QueryRowContext(t.Context(),
-		`SELECT count(*), COALESCE(SUM(quantity), 0) FROM credit_ledger WHERE origin = 'refund'`,
-	).Scan(&rows, &balance); err != nil {
-		t.Fatalf("count refund rows: %v", err)
+	if rows, total := refundRows(t, db, practiceID); rows != 1 || total != -1 {
+		t.Fatalf("refund rows = %d totaling %d, want one row of -1", rows, total)
 	}
-	if rows != 1 || balance != -1 {
-		t.Fatalf("refund rows = %d totaling %d, want one row of -1", rows, balance)
+}
+
+// TestRefund_ARequestKeyAtAnotherPracticeIsNotItsRefund proves a key
+// answers only for the Practice it was used at.
+func TestRefund_ARequestKeyAtAnotherPracticeIsNotItsRefund(t *testing.T) {
+	db := testdb.New(t)
+	first := testdb.SeedPractice(t, db, "First")
+	second := testdb.SeedPractice(t, db, "Second")
+	seedPurchase(t, db, first, 1, 2000, 0, "pi_first_practice", time.Now())
+	r := newRefunder(t, db, billing.NewFakeStripeClient())
+	if _, err := r.refund(first, "req-shared", 1, time.Now()); err != nil {
+		t.Fatalf("first refund: %v", err)
+	}
+
+	if _, err := r.refund(second, "req-shared", 1, time.Now()); !errors.Is(err, billing.ErrNothingRefundable) {
+		t.Fatalf("Refund at the second Practice err = %v, want ErrNothingRefundable", err)
 	}
 }
 
@@ -453,14 +379,13 @@ func TestRefund_ADifferentRequestIsADifferentRefund(t *testing.T) {
 	practiceID := testdb.SeedPractice(t, db, "Twice Over")
 	seedPurchase(t, db, practiceID, 4, 2000, 0, "pi_twice", time.Now())
 	client := billing.NewFakeStripeClient()
+	r := newRefunder(t, db, client)
 
-	tx := practiceTx(t, db, practiceID)
 	for i := range 2 {
-		if _, err := billing.Refund(t.Context(), tx, client, practiceID, fmt.Sprintf("req-twice-%d", i), 1, time.Now()); err != nil {
+		if _, err := r.refund(practiceID, fmt.Sprintf("req-twice-%d", i), 1, time.Now()); err != nil {
 			t.Fatalf("refund %d: %v", i, err)
 		}
 	}
-
 	if calls := client.RefundCalls(); len(calls) != 2 {
 		t.Fatalf("stripe refund calls = %+v, want two", calls)
 	}
@@ -476,12 +401,12 @@ func TestRefund_TheSameStripeRefundIsRecordedOnce(t *testing.T) {
 	seedPurchase(t, db, practiceID, 4, 2000, 0, "pi_once", time.Now())
 	client := billing.NewFakeStripeClient()
 	client.ReplayedRefundID = "re_replayed"
+	r := newRefunder(t, db, client)
 
-	tx := practiceTx(t, db, practiceID)
-	if _, err := billing.Refund(t.Context(), tx, client, practiceID, "req-once-a", 1, time.Now()); err != nil {
+	if _, err := r.refund(practiceID, "req-once-a", 1, time.Now()); err != nil {
 		t.Fatalf("first refund: %v", err)
 	}
-	if _, err := billing.Refund(t.Context(), tx, client, practiceID, "req-once-b", 1, time.Now()); err == nil {
+	if _, err := r.refund(practiceID, "req-once-b", 1, time.Now()); err == nil {
 		t.Fatal("one Stripe Refund was recorded twice")
 	}
 }

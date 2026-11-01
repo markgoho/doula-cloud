@@ -30,7 +30,7 @@ func TestInForceIsTheNewestVersionThatHasStarted(t *testing.T) {
 }
 
 // A version starts at midnight UTC on its date, the reading
-// legalnotice.leavesNotice gives its 30 days. In New York that is the
+// legalnotice.LeavesNotice gives its 30 days. In New York that is the
 // evening before.
 func TestAVersionStartsAtMidnightUTCOnItsDate(t *testing.T) {
 	start := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)

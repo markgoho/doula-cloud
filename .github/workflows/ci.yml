@@ -658,6 +658,116 @@ jobs:
           path: app/playwright-report/
           retention-days: 7
 
+  # ops/, the Platform operator's app (ADR-0062): the same check, unit and
+  # e2e steps as `app`, and the same 100% coverage gate. Its e2e suite
+  # brings up app/'s stack and runs app/'s Playwright by import (a second
+  # Playwright copy refuses to load), so app/'s dependencies are installed
+  # too. No PR preview: a preview would sign in against the live operator
+  # tenant.
+  ops:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    env:
+      CONTAINER_ENGINE: docker
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Keep temporary files on disk
+        run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: api/go.mod
+          cache-dependency-path: api/go.sum
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Cache bun dependencies
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-ops-${{ runner.os }}-${{ hashFiles('app/bun.lock', 'ops/bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Cache node_modules
+        uses: actions/cache@v6
+        with:
+          path: |
+            app/node_modules
+            ops/node_modules
+          key: node-modules-ops-${{ runner.os }}-${{ hashFiles('app/bun.lock', 'ops/bun.lock') }}
+
+      - name: Install dependencies
+        run: |
+          bun install --cwd app --frozen-lockfile
+          bun install --cwd ops --frozen-lockfile
+
+      - name: Typecheck
+        working-directory: ops
+        run: bun run check
+
+      - name: Lint
+        working-directory: ops
+        run: bun run lint
+
+      - name: Resolve Playwright version
+        id: playwright-version
+        working-directory: app
+        run: |
+          version=$(grep -oP '"@playwright/test@\K[0-9.]+(?=")' bun.lock | head -1)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "image=${ImageOS}-${ImageVersion}" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-shell-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Cache Playwright OS packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/playwright-debs
+          key: playwright-debs-${{ steps.playwright-version.outputs.image }}-${{ steps.playwright-version.outputs.version }}
+
+      # The same bounded script and retried download as `app`'s; see there.
+      - name: Install Playwright OS dependencies
+        working-directory: app
+        run: bash ../scripts/install-playwright-deps.sh
+
+      - name: Install Playwright browsers
+        working-directory: app
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 120 bunx playwright install --only-shell chromium; then
+              exit 0
+            fi
+            echo "Browser install attempt ${attempt} failed; retrying in 30s..."
+            sleep 30
+          done
+          exit 1
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+
+      - name: Unit test with coverage gate
+        working-directory: ops
+        run: bun run test:unit:coverage
+
+      - name: E2e test
+        working-directory: ops
+        run: ../app/node_modules/.bin/playwright test
+        timeout-minutes: 10
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ops-playwright-report
+          path: ops/playwright-report/
+          retention-days: 7
+
   # e2e/stack.ts (see the `app` job above) now runs api/cmd/migrate and
   # the BFF as host processes instead of building them into compose
   # images, so that build no longer proves api/Dockerfile still builds

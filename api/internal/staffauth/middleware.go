@@ -15,7 +15,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -297,13 +299,10 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 			// timestamp buys nothing, and a write that would set the row
 			// to the values it already holds is a lock and a dead tuple
 			// for nothing.
-			if needsActivityStamp(self, practiceID) {
-				if err := stampActivity(r.Context(), db, staffID, practiceID); err != nil {
-					// coverage:ignore reason: DB query failure, not exercised by unit tests
-					apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-					return
-				}
-			}
+			//
+			// It runs once the request's transaction has ended, so a
+			// request never holds two pool connections at once (#2432).
+			stamp := needsActivityStamp(self, practiceID)
 
 			ctx := context.WithValue(r.Context(), staffIDKey, staffID)
 			ctx = context.WithValue(ctx, practiceIDKey, practiceID)
@@ -323,13 +322,28 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 			// before this Commit runs. Draining only on a successful
 			// commit is what keeps a nudge from firing for a write that
 			// never actually landed.
-			if err := tx.Commit(); err == nil {
-				committed = true
+			err = tx.Commit()
+			committed = true
+			if err == nil {
 				tasknudge.Drain(ctx)
+			}
+
+			if stamp {
+				stampCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), activityStampTimeout)
+				err := stampActivity(stampCtx, db, staffID, practiceID)
+				cancel()
+				if err != nil {
+					// coverage:ignore reason: DB query failure, not exercised by unit tests
+					log.Printf("staffauth: %v", err)
+				}
 			}
 		})
 	}
 }
+
+// activityStampTimeout bounds the stamp, which outlives the request: a
+// client that hangs up after its write committed still leaves its stamp.
+const activityStampTimeout = 5 * time.Second
 
 // needsActivityStamp reports whether stampActivity has anything to do:
 // self already carries the same last_practice_id comparison and the

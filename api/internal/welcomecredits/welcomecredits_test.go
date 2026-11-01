@@ -197,7 +197,7 @@ func TestWorker_SkipsWithNothingMailed(t *testing.T) {
 			reason: "founding_grant",
 			arrange: func(t *testing.T, db *testdb.DB, practiceID string) {
 				t.Helper()
-				exec(t, db, `INSERT INTO credit_ledger (practice_id, origin, quantity, granted_by) VALUES ($1, 'founding_grant', 3, 'founder')`, practiceID)
+				testdb.SeedFoundingGrant(t, db, practiceID, 3, time.Now())
 			},
 		},
 		{

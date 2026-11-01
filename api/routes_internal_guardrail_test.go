@@ -15,14 +15,9 @@ import (
 // internet on a service that carries allUsers -> roles/run.invoker
 // (ADR-0037), so adding one should cost a line in this list.
 var wantInternalRoutes = []string{
-	"POST /api/internal/billing/founding-grants",
-	"POST /api/internal/billing/refunds",
-	"GET /api/internal/billing/dormant-practices",
-	"GET /api/internal/billing/monthly-credits",
 	"POST /api/internal/clients/process-erasure-outbox",
 	"POST /api/internal/feedback/process-issue-outbox",
 	"POST /api/internal/idempotency/sweep-expired-keys",
-	"POST /api/internal/legal/publish",
 	"POST /api/internal/notifications/process-connect-nudge-outbox",
 	"POST /api/internal/notifications/process-coverage-gap-outbox",
 	"POST /api/internal/notifications/process-engagement-request-outbox",
@@ -45,9 +40,7 @@ var wantInternalRoutes = []string{
 	"POST /api/internal/outboxes/drain",
 	"POST /api/internal/site/process-build-outbox",
 	"POST /api/internal/site/verify-pages",
-	"POST /api/internal/staffauth/mfa-recovery/support-clear",
-	"POST /api/internal/staffauth/pilot-allowlist",
-	"POST /api/internal/staffauth/pilot-gate/open",
+	"POST /api/internal/webhooks/sweep-arrivals",
 }
 
 // internalRoutes reads every /api/internal/** route out of the registry

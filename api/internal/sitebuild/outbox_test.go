@@ -207,6 +207,15 @@ func TestProcessOutbox_DeadLettersAfterMaxAttempts(t *testing.T) {
 	if pending != 0 || dead != 1 {
 		t.Fatalf("pending=%d dead=%d, want the row dead-lettered", pending, dead)
 	}
+	var reason string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT dead_letter_reason FROM site_build_outbox WHERE status = 'dead_lettered'`,
+	).Scan(&reason); err != nil {
+		t.Fatalf("read dead_letter_reason: %v", err)
+	}
+	if reason != string(outbox.RetriesExhausted) {
+		t.Fatalf("dead_letter_reason = %q, want %q", reason, outbox.RetriesExhausted)
+	}
 }
 
 // Queue is called inside the write site's own transaction (#443's

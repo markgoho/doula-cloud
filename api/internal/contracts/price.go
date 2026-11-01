@@ -8,9 +8,8 @@ import (
 	"slices"
 	"strings"
 
+	"doula-cloud/api/internal/money"
 	"doula-cloud/api/internal/staffauth"
-
-	"github.com/dustin/go-humanize"
 )
 
 // priceMergeKey is the reserved merge-field key #967 gives a Contract's
@@ -20,18 +19,6 @@ import (
 // app/src/lib/contractTemplate.ts's MERGE_FIELDS entry, so a Practice
 // that keeps the default prose gets it resolved with no template edit.
 const priceMergeKey = "price"
-
-// formatCentsAsDollars renders amountCents as a dollar string with a
-// thousands separator and two decimal places (e.g. 150000 -> "$1,500.00"),
-// the form the "price" merge field renders into a Contract's prose.
-// amountCents is always non-negative here: practicerate.PutRateHandler
-// and PutContractAmountHandler both refuse a non-positive amount before
-// it ever reaches a column this reads from.
-func formatCentsAsDollars(amountCents int64) string {
-	dollars := amountCents / 100
-	cents := amountCents % 100
-	return fmt.Sprintf("$%s.%02d", humanize.Comma(dollars), cents)
-}
 
 // withResolvedPrice returns values with priceMergeKey resolved from
 // amountCents, when mergeFields (parsed from the Contract's prose) asks
@@ -51,7 +38,7 @@ func withResolvedPrice(mergeFields []string, values MergeFieldValues, amountCent
 	}
 	out := make(MergeFieldValues, len(values)+1)
 	maps.Copy(out, values)
-	out[priceMergeKey] = formatCentsAsDollars(amountCents)
+	out[priceMergeKey] = money.Dollars(amountCents)
 	return out
 }
 

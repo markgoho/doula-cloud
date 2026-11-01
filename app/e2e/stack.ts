@@ -22,15 +22,25 @@ import {
 	GCS_PORT,
 	MAILBOX_HOST,
 	MAILBOX_PORT,
+	E2E_OPS_HOST,
+	E2E_OPS_PORT,
+	OPS_DEV_SERVER_ORIGIN,
+	OPS_PREVIEW_SERVER_ORIGIN,
 	PORT_OFFSET,
 	PORT_OFFSET_ROOT,
 	E2E_COMPOSE_FILE,
 	E2E_HEARTBEAT_INTERVAL_MS,
 	e2eApiBinaryPath,
+	e2eOpsBinaryPath,
 	e2eComposeProject,
 	e2eHeartbeatPath,
 	e2ePidfilePath
 } from './ports';
+
+// Absolute, so ops/'s Playwright run, whose working directory is ops/,
+// brings up the same stack app/'s does.
+const APP_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const API_DIR = path.resolve(APP_DIR, '..', 'api');
 
 // The fake-gcs-server in compose.e2e.yaml, and the one bucket the BFF is
 // pointed at. Both halves matter to the Go storage SDK: it reads
@@ -46,7 +56,7 @@ const GCS_BUCKET = 'doula-cloud-e2e-attachments';
 // has to recognize these names to find the stack a killed session left
 // running and would go silently inert if the two ever drifted.
 const COMPOSE_PROJECT = e2eComposeProject(PORT_OFFSET);
-const COMPOSE_ARGS = ['compose', '-p', COMPOSE_PROJECT, '-f', E2E_COMPOSE_FILE];
+const COMPOSE_ARGS = ['compose', '-p', COMPOSE_PROJECT, '-f', path.join(APP_DIR, E2E_COMPOSE_FILE)];
 // compose.e2e.yaml reads these for its host port bindings and the gcs
 // service's -external-url; unset (offset 0) falls back to the compose
 // file's own defaults, so CI and the main checkout are unaffected.
@@ -105,6 +115,8 @@ const CONTAINER_ENGINE = process.env.CONTAINER_ENGINE ?? 'podman';
 const EMULATOR_PIDFILE = e2ePidfilePath('firebase-emulator', PORT_OFFSET);
 const API_PIDFILE = e2ePidfilePath('api', PORT_OFFSET);
 const API_BINARY_PATH = e2eApiBinaryPath(PORT_OFFSET);
+const OPS_PIDFILE = e2ePidfilePath('ops', PORT_OFFSET);
+const OPS_BINARY_PATH = e2eOpsBinaryPath(PORT_OFFSET);
 const MAILBOX_PIDFILE = e2ePidfilePath('mailbox', PORT_OFFSET);
 const MAILBOX_SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'mailbox.ts');
 
@@ -180,12 +192,6 @@ const MAILGUN_WEBHOOK_SIGNING_KEY = 'e2e-mailgun-signing-key';
 // every call, so a stack that never set it could not drain an outbox at
 // all -- which is how mail stayed unobservable here until now.
 const NOTIFICATION_WORKER_SECRET = 'e2e-worker-secret';
-// FOUNDER_STAFF_ID (#1526): the `staff.id` the founder read page serves.
-// A fixed id rather than one a signup mints, because the BFF reads it
-// once, at start, before any Staff row exists -- seedFounder below is
-// what puts a row behind it. Deployed, it is the founder's own id
-// (docs/environment.md).
-export const FOUNDER_STAFF_ID = '0f0a1d5e-5a17-4c0b-9d0f-f0de15260001';
 
 export const MAILBOX_URL = `http://${MAILBOX_HOST}:${MAILBOX_PORT}`;
 export const MAILBOX_DOMAIN = MAILGUN_SIM_DOMAIN;
@@ -235,15 +241,19 @@ function reapOrphans(): void {
 export async function startStack(appOrigin: string) {
 	reapOrphans();
 	await startEmulator();
+	await seedOperatorTenant();
 	await startDatabase();
 	installSimClock();
 	runMigrations();
 	seedAppE2ERole();
+	seedOpsE2ERole();
 	openPilotGate();
-	grantSimClock();
+	grantSimClock('app_e2e');
+	grantSimClock('ops_e2e');
 	await seedGCSBucket();
 	await startMailbox();
 	await startAPI(appOrigin);
+	await startOps();
 	startHeartbeat();
 }
 
@@ -319,7 +329,7 @@ async function seedGCSBucket() {
 function installSimClock() {
 	execFileSync('go', ['run', './cmd/simclock', 'install', 'app'], {
 		stdio: 'inherit',
-		cwd: '../api',
+		cwd: API_DIR,
 		timeout: MIGRATE_TIMEOUT_MS,
 		env: {
 			...process.env,
@@ -328,14 +338,14 @@ function installSimClock() {
 	});
 }
 
-// Points app_e2e's search_path at the sim schema installSimClock
-// created, and grants it the USAGE and SELECT sim.now() needs to run
-// under a non-superuser role. Must run after seedAppE2ERole -- the role
-// doesn't exist before that.
-function grantSimClock() {
-	execFileSync('go', ['run', './cmd/simclock', 'grant', 'app_e2e'], {
+// Points role's search_path at the sim schema installSimClock created,
+// and grants it the USAGE and SELECT sim.now() needs to run under a
+// non-superuser role. Must run after seedAppE2ERole and seedOpsE2ERole --
+// the roles don't exist before that.
+function grantSimClock(role: 'app_e2e' | 'ops_e2e') {
+	execFileSync('go', ['run', './cmd/simclock', 'grant', role], {
 		stdio: 'inherit',
-		cwd: '../api',
+		cwd: API_DIR,
 		timeout: MIGRATE_TIMEOUT_MS,
 		env: {
 			...process.env,
@@ -352,7 +362,7 @@ function grantSimClock() {
 function runMigrations() {
 	execFileSync('go', ['run', './cmd/migrate'], {
 		stdio: 'inherit',
-		cwd: '../api',
+		cwd: API_DIR,
 		timeout: MIGRATE_TIMEOUT_MS,
 		env: {
 			...process.env,
@@ -399,14 +409,74 @@ function seedAppE2ERole() {
 	);
 }
 
+// doula-ops's login (ADR-0062), made the same way: 00143 creates the
+// ops_runtime group role, and this is the member doula-ops signs in as.
+function seedOpsE2ERole() {
+	execSQL(
+		"DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'ops_e2e') THEN " +
+			"CREATE ROLE ops_e2e LOGIN PASSWORD 'ops_e2e' IN ROLE ops_runtime; END IF; END $$;"
+	);
+}
+
 // Opens #1790's pilot gate, which migration 00125 seeds closed. Closed is
 // right for the deployed database, where only an address the founder
 // added may create a Practice before January; here every spec signs up
 // a Practice with an address of its own, and the gate would refuse them
 // all. `WHERE opened_at IS NULL` keeps the first record on a long-lived
-// `dev:full` stack, the same rule the operator endpoint follows.
-function openPilotGate() {
-	execSQL("UPDATE pilot_gate SET opened_by = 'e2e stack', opened_at = now() WHERE opened_at IS NULL");
+// `dev:full` stack, the same rule ops's opening follows. It is opened
+// with no act on record, as a gate opened before ops had the act was.
+export function openPilotGate() {
+	execSQL('UPDATE pilot_gate SET opened_at = now() WHERE opened_at IS NULL');
+}
+
+/**
+ * Publishes a version the way ops does (#2486): an operator's act, then
+ * ops_publish_legal_version, which queues a material version's email to
+ * each Owner. ops is the one way in, and it takes an operator signed in
+ * with a fresh code, so a spec about what follows a publication writes
+ * the act as the superuser instead.
+ */
+export function publishLegalVersion(document: string, version: string, isMaterial: boolean, operatorName: string): void {
+	execSQL(
+		`DO $$
+		 DECLARE
+		     v_operator uuid;
+		     v_act uuid;
+		 BEGIN
+		     INSERT INTO operators (identity_uid, name, email)
+		     VALUES ('seed-operator-' || gen_random_uuid(), ${sqlLiteral(operatorName)}, 'seed-operator@doula-cloud.invalid')
+		     RETURNING id INTO v_operator;
+		     INSERT INTO operator_acts (operator_id, action, details)
+		     VALUES (v_operator, 'legal_version_published',
+		             jsonb_build_object('document', ${sqlLiteral(document)}, 'version', ${sqlLiteral(version)}, 'material', ${isMaterial}, 'requestKey', 'seed'))
+		     RETURNING id INTO v_act;
+		     IF ops_publish_legal_version(v_act, ${sqlLiteral(document)}, ${sqlLiteral(version)}::date, ${isMaterial}, now()) IS NULL THEN
+		         RAISE EXCEPTION 'version % of % was already published', ${sqlLiteral(version)}, ${sqlLiteral(document)};
+		     END IF;
+		 END
+		 $$`
+	);
+}
+
+// How many emails a publication queued.
+export function countLegalNotices(document: string, version: string): number {
+	return Number(
+		querySQLValue(
+			`SELECT count(*) FROM legal_notice_outbox WHERE document = ${sqlLiteral(document)} AND version = ${sqlLiteral(version)}`
+		)
+	);
+}
+
+// Takes a publication back, with the emails it queued, for ops's walk
+// of publishing OPS_LEGAL_VERSION (#2486), which doula-api cannot send.
+export function unpublishLegalVersion(document: string, version: string): void {
+	const where = `document = ${sqlLiteral(document)} AND version = ${sqlLiteral(version)}`;
+	execSQL(`DELETE FROM legal_notice_outbox WHERE ${where}; DELETE FROM legal_version_publications WHERE ${where}`);
+}
+
+// Closes the gate again, for ops's walk of opening it (#2485).
+export function closePilotGate() {
+	execSQL('UPDATE pilot_gate SET operator_act_id = NULL, opened_at = NULL');
 }
 
 // Links a fresh Portal Account to clientID via client_portal_users, with
@@ -430,28 +500,112 @@ export function seedClientPortalUser(signInAddress: string, clientID: string) {
 	execSQL(`INSERT INTO client_portal_users (identity_uid, client_id) VALUES (${sqlLiteral(identifier)}, ${sqlLiteral(clientID)})`);
 }
 
-// Seeds the founder (#1526): the one `staff` row whose id is
-// FOUNDER_STAFF_ID, pointed at identityUID -- an Identity Platform
-// account the caller has already created. Direct SQL because no endpoint
-// can do this: a signup mints its own id, and the founder's is fixed by
-// configuration. He holds no Membership, which is what the read page is
-// built for -- the `staff` table has no Practice column.
-//
-// ON CONFLICT re-points the row, so a second run against a long-lived
-// `dev:full` stack takes the founder over rather than failing on the
-// primary key.
-//
-// That same re-pointing is why exactly one spec FILE may call this
-// (founder-feedback.e2e.ts). Playwright runs files in parallel and the
-// tests inside one in order: a second file seeding the founder would take
-// him from the first mid-test, and the first would see "Page not found".
-// A new founder test goes in that file.
-export function seedFounder(identityUID: string, email: string) {
+/**
+ * Seeds a Practice with one Owner and one purchase of five $20.00
+ * Credits charged $6.86 of tax, bought a month ago: what an operator's
+ * refund in ops draws on (#2481). The stack has no Stripe, so nothing
+ * can buy Credits through the API. Returns the Practice's id.
+ */
+export function seedRefundablePractice(name: string, ownerFirstName: string, ownerLastName: string): string {
+	const practiceId = randomUUID();
+	const staffId = randomUUID();
 	execSQL(
-		`INSERT INTO staff (id, identity_uid, first_name, last_name, email, work_state)
-		 VALUES (${sqlLiteral(FOUNDER_STAFF_ID)}, ${sqlLiteral(identityUID)}, 'The', 'Founder', ${sqlLiteral(email)}, 'NY')
-		 ON CONFLICT (id) DO UPDATE SET identity_uid = EXCLUDED.identity_uid, email = EXCLUDED.email`
+		`INSERT INTO practices (id, name, timezone) VALUES (${sqlLiteral(practiceId)}, ${sqlLiteral(name)}, 'America/New_York');
+		 INSERT INTO staff (id, identity_uid, first_name, last_name, email, work_state)
+		 VALUES (${sqlLiteral(staffId)}, ${sqlLiteral(`refund-owner-${staffId}`)}, ${sqlLiteral(ownerFirstName)}, ${sqlLiteral(ownerLastName)}, ${sqlLiteral(`owner-${staffId}@doula-cloud.invalid`)}, 'NY');
+		 INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type)
+		 VALUES (${sqlLiteral(practiceId)}, ${sqlLiteral(staffId)}, ARRAY['owner']::practice_role[], 'employee');
+		 INSERT INTO credit_ledger (practice_id, origin, quantity, unit_price_cents, tax_cents, stripe_payment_intent_id, created_at)
+		 VALUES (${sqlLiteral(practiceId)}, 'purchase', 5, 2000, 686, ${sqlLiteral(`pi_e2e_${staffId}`)}, now() - interval '1 month');`
 	);
+	return practiceId;
+}
+
+/**
+ * Seeds a Practice with staffCount Staff and no Credits, the roster a
+ * founding grant in ops is sized from (#2482). Returns the Practice's id.
+ */
+export function seedPracticeWithStaff(name: string, staffCount: number): string {
+	const practiceId = randomUUID();
+	const statements = [
+		`INSERT INTO practices (id, name, timezone) VALUES (${sqlLiteral(practiceId)}, ${sqlLiteral(name)}, 'America/New_York');`
+	];
+	for (let index = 0; index < staffCount; index++) {
+		const staffId = randomUUID();
+		statements.push(
+			`INSERT INTO staff (id, identity_uid, first_name, last_name, email, work_state)
+			 VALUES (${sqlLiteral(staffId)}, ${sqlLiteral(`grant-staff-${staffId}`)}, 'Staff', ${sqlLiteral(String(index + 1))}, ${sqlLiteral(`staff-${staffId}@doula-cloud.invalid`)}, 'NY');
+			 INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type)
+			 VALUES (${sqlLiteral(practiceId)}, ${sqlLiteral(staffId)}, ARRAY[${sqlLiteral(index === 0 ? 'owner' : 'doula')}]::practice_role[], 'employee');`
+		);
+	}
+	execSQL(statements.join('\n'));
+	return practiceId;
+}
+
+/**
+ * Marks a seeded Practice's Deletion finalized, so ops lists it on the
+ * Deleted list (#2475).
+ */
+export function finalizePracticeDeletion(practiceId: string): void {
+	execSQL(
+		`UPDATE practices SET deletion_requested_at = now() - interval '30 days', deletion_finalize_at = now(), deleted_at = now() WHERE id = ${sqlLiteral(practiceId)};`
+	);
+}
+
+/**
+ * Seeds a piece of Feedback a Client of the Practice sent from the
+ * Portal, whose GitHub issue dead-lettered once its retries ran out:
+ * what ops's Feedback list shows first (#2478). Returns the piece's id.
+ */
+export function seedDeadLetteredClientFeedback(practiceId: string, clientName: string, text: string): string {
+	const feedbackId = randomUUID();
+	const clientId = randomUUID();
+	const portal = `portal_${randomUUID()}`;
+	execSQL(
+		`INSERT INTO clients (id, practice_id, given_name, email) VALUES (${sqlLiteral(clientId)}, ${sqlLiteral(practiceId)}, ${sqlLiteral(clientName)}, ${sqlLiteral(`${clientId}@doula-cloud.invalid`)});
+		 INSERT INTO portal_accounts (identifier, sign_in_address) VALUES (${sqlLiteral(portal)}, ${sqlLiteral(`${portal}@doula-cloud.invalid`)});
+		 INSERT INTO feedback (id, kind, text, page_url, route_id, app_build, screen_width, browser, portal_account, practice_id, client_id, sent_at)
+		 VALUES (${sqlLiteral(feedbackId)}, 'not_working', ${sqlLiteral(text)}, '/portal', '/portal', 'e2e-build', 320, 'Chrome 130', ${sqlLiteral(portal)}, ${sqlLiteral(practiceId)}, ${sqlLiteral(clientId)}, now());
+		 INSERT INTO feedback_issue_outbox (feedback_id, status, attempt_count, last_error, dead_letter_reason)
+		 VALUES (${sqlLiteral(feedbackId)}, 'dead_lettered', 8, '401 Bad credentials', 'retries_exhausted');`
+	);
+	return feedbackId;
+}
+
+/**
+ * How many times ops recorded a read of one piece of Feedback (#2478).
+ */
+export function countFeedbackReads(feedbackId: string): number {
+	return Number(
+		querySQLValue(
+			`SELECT count(*) FROM operator_acts WHERE action = 'feedback_read' AND subject_kind = 'feedback' AND subject_id = ${sqlLiteral(feedbackId)}`
+		)
+	);
+}
+
+/**
+ * Seeds a Staff member on identityUID, an Identity Platform account the
+ * caller has already made, at one new Practice per name: whose
+ * two-factor authentication an operator resets in ops (#2483). Returns
+ * the Staff member's id.
+ */
+export function seedStaffAtPractices(identityUID: string, firstName: string, lastName: string, practiceNames: string[]): string {
+	const staffId = randomUUID();
+	const statements = [
+		`INSERT INTO staff (id, identity_uid, first_name, last_name, email, work_state)
+		 VALUES (${sqlLiteral(staffId)}, ${sqlLiteral(identityUID)}, ${sqlLiteral(firstName)}, ${sqlLiteral(lastName)}, ${sqlLiteral(`staff-${staffId}@doula-cloud.invalid`)}, 'NY');`
+	];
+	for (const name of practiceNames) {
+		const practiceId = randomUUID();
+		statements.push(
+			`INSERT INTO practices (id, name, timezone) VALUES (${sqlLiteral(practiceId)}, ${sqlLiteral(name)}, 'America/New_York');
+			 INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type)
+			 VALUES (${sqlLiteral(practiceId)}, ${sqlLiteral(staffId)}, ARRAY['owner']::practice_role[], 'employee');`
+		);
+	}
+	execSQL(statements.join('\n'));
+	return staffId;
 }
 
 // Seeds an Engagement directly: #397 decoupled Client creation from
@@ -517,6 +671,80 @@ export function backdateInvoice(invoiceId: string, days: number): void {
 	}
 	execSQL(
 		`UPDATE invoices SET created_at = created_at - interval '${days + 30} days', due_at = due_at - interval '${days + 30} days' WHERE id = ${sqlLiteral(invoiceId)}`
+	);
+}
+
+/**
+ * Seeds a Practice that signed up the month before the last closed one
+ * and bought 4 Credits in the last closed one, both in New York time,
+ * the read ops's monthly Credits page shows (#2476). Returns that month
+ * as YYYY-MM.
+ */
+export function seedMonthlyCreditsPractice(name: string): string {
+	const practiceId = sqlLiteral(randomUUID());
+	const month = `date_trunc('month', sim.now() AT TIME ZONE 'America/New_York') - interval '1 month'`;
+	execSQL(
+		`INSERT INTO practices (id, name, timezone, created_at)
+		 VALUES (${practiceId}, ${sqlLiteral(name)}, 'America/New_York', (${month} - interval '1 month' + interval '12 hours') AT TIME ZONE 'America/New_York');
+		 INSERT INTO credit_ledger (practice_id, origin, quantity, unit_price_cents, tax_cents, stripe_payment_intent_id, created_at)
+		 VALUES (${practiceId}, 'purchase', 4, 2000, 0, ${sqlLiteral(`pi_e2e_monthly_${randomUUID()}`)}, (${month} + interval '10 days 12 hours') AT TIME ZONE 'America/New_York');`
+	);
+	return querySQLValue(`SELECT to_char(${month}, 'YYYY-MM')`);
+}
+
+/**
+ * Seeds a Practice that signed up three years ago, holds 3 Credits, and
+ * whose one Owner was last active three years ago: a row on ops's
+ * dormant-Practices list (#2477). Returns the Practice's id.
+ */
+export function seedDormantPractice(name: string): string {
+	const practiceId = randomUUID();
+	const staffId = randomUUID();
+	const longAgo = `sim.now() - interval '3 years'`;
+	execSQL(
+		`INSERT INTO practices (id, name, timezone, created_at) VALUES (${sqlLiteral(practiceId)}, ${sqlLiteral(name)}, 'America/New_York', ${longAgo});
+		 INSERT INTO staff (id, identity_uid, first_name, last_name, email, work_state, last_active_at)
+		 VALUES (${sqlLiteral(staffId)}, ${sqlLiteral(`dormant-owner-${staffId}`)}, 'Dormant', 'Owner', ${sqlLiteral(`owner-${staffId}@doula-cloud.invalid`)}, 'NY', ${longAgo});
+		 INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type)
+		 VALUES (${sqlLiteral(practiceId)}, ${sqlLiteral(staffId)}, ARRAY['owner']::practice_role[], 'employee');
+		 INSERT INTO credit_ledger (practice_id, origin, quantity, created_at) VALUES (${sqlLiteral(practiceId)}, 'signup_bonus', 3, ${longAgo});`
+	);
+	return practiceId;
+}
+
+/**
+ * Gives a Practice its founding grant the way ops does (#2482): an
+ * operator's act, then ops_record_founding_grant sizing it from the
+ * roster, then the Practice's Activity row under the operator. ops is the
+ * one way in, and it takes an operator signed in with a second factor, so
+ * the demo seed (scripts/demo-practice.ts) writes the act as the superuser
+ * instead.
+ */
+export function seedFoundingGrant(practiceId: string, operatorName: string): void {
+	const practice = sqlLiteral(practiceId);
+	execSQL(
+		`DO $$
+		 DECLARE
+		     v_operator uuid;
+		     v_act uuid;
+		     v_staff integer;
+		     v_credits integer;
+		 BEGIN
+		     INSERT INTO operators (identity_uid, name, email)
+		     VALUES ('seed-operator-' || gen_random_uuid(), ${sqlLiteral(operatorName)}, 'seed-operator@doula-cloud.invalid')
+		     RETURNING id INTO v_operator;
+		     SELECT staff_count, credits INTO v_staff, v_credits FROM ops_founding_grant_practice(${practice});
+		     INSERT INTO operator_acts (operator_id, action, subject_kind, subject_id, details)
+		     VALUES (v_operator, 'founding_grant', 'practice', ${practice},
+		             jsonb_build_object('staffCount', v_staff, 'credits', v_credits, 'requestKey', 'seed'))
+		     RETURNING id INTO v_act;
+		     IF ops_record_founding_grant(${practice}, v_act, v_credits, now()) IS NULL THEN
+		         RAISE EXCEPTION 'practice % was not given a founding grant', ${practice};
+		     END IF;
+		     PERFORM record_operator_activity(${practice}, 'practice', ${practice}, 'founding_grant_issued',
+		         jsonb_build_object('staffCount', v_staff, 'credits', v_credits), v_act, now());
+		 END
+		 $$`
 	);
 }
 
@@ -781,6 +1009,8 @@ export function simulatedDateAfter(days: number): string {
 // error for each container it does not find, then exits 0.
 export function stopStack({ keepVolume = false, quiet = false }: { keepVolume?: boolean; quiet?: boolean } = {}) {
 	stopHeartbeat();
+	killPidfile(OPS_PIDFILE);
+	rmSync(OPS_BINARY_PATH, { force: true });
 	killPidfile(API_PIDFILE);
 	rmSync(API_BINARY_PATH, { force: true });
 	killPidfile(MAILBOX_PIDFILE);
@@ -790,6 +1020,55 @@ export function stopStack({ keepVolume = false, quiet = false }: { keepVolume?: 
 		timeout: 60_000,
 		env: COMPOSE_ENV
 	});
+}
+
+// The operator tenant (ADR-0062) and the one operator login dev:full
+// seeds in it. The emulator makes a tenant with a chosen id when it is
+// first written to by that id, so the id is fixed here rather than read
+// back from a create.
+export const OPS_TENANT_ID = 'operators-local';
+export const SEEDED_OPERATOR = {
+	email: 'operator@doula-cloud.invalid',
+	password: 'operator-local-password',
+	name: 'Local Operator'
+} as const;
+
+const EMULATOR_ADMIN = { 'content-type': 'application/json', Authorization: 'Bearer owner' };
+
+// mfaConfig is MANDATORY with the emulator's one factor, phone: the
+// emulator has no TOTP, and refuses phone enrollment in a tenant whose
+// mfaConfig does not name PHONE_SMS. MANDATORY does not refuse an
+// unenrolled sign-in here; doula-ops does.
+async function seedOperatorTenant() {
+	const base = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}/identitytoolkit.googleapis.com`;
+	const tenant = await fetch(
+		`${base}/v2/projects/doula-cloud/tenants/${OPS_TENANT_ID}?updateMask=displayName,allowPasswordSignup,mfaConfig`,
+		{
+			method: 'PATCH',
+			headers: EMULATOR_ADMIN,
+			body: JSON.stringify({
+				displayName: 'operators',
+				allowPasswordSignup: true,
+				mfaConfig: { state: 'MANDATORY', enabledProviders: ['PHONE_SMS'] }
+			})
+		}
+	);
+	if (!tenant.ok) throw new Error(`stack: operator tenant: ${tenant.status} ${await tenant.text()}`);
+
+	const login = await fetch(`${base}/v1/projects/doula-cloud/tenants/${OPS_TENANT_ID}/accounts`, {
+		method: 'POST',
+		headers: EMULATOR_ADMIN,
+		body: JSON.stringify({
+			email: SEEDED_OPERATOR.email,
+			password: SEEDED_OPERATOR.password,
+			displayName: SEEDED_OPERATOR.name,
+			emailVerified: true
+		})
+	});
+	const refusal = login.ok ? '' : await login.text();
+	if (!login.ok && !refusal.includes('EMAIL_EXISTS')) {
+		throw new Error(`stack: operator login: ${login.status}`);
+	}
 }
 
 async function startEmulator() {
@@ -811,7 +1090,7 @@ async function startEmulator() {
 	const arguments_ = ['firebase-tools', 'emulators:start', '--only', 'auth', '--project', 'doula-cloud'];
 	if (configPath) arguments_.push('--config', configPath);
 
-	const child = spawn('bunx', arguments_, { stdio: 'ignore', detached: true });
+	const child = spawn('bunx', arguments_, { stdio: 'ignore', detached: true, cwd: APP_DIR });
 	child.unref();
 	if (child.pid) {
 		writeFileSync(EMULATOR_PIDFILE, String(child.pid));
@@ -853,7 +1132,7 @@ async function startAPI(appOrigin: string) {
 
 	execFileSync('go', ['build', '-o', API_BINARY_PATH, '.'], {
 		stdio: 'inherit',
-		cwd: '../api',
+		cwd: API_DIR,
 		timeout: BUILD_TIMEOUT_MS
 	});
 
@@ -919,12 +1198,12 @@ async function spawnAPI(appOrigin: string, extraEnvironment: Record<string, stri
 			// tunneled walk (see docs/environment.md) overrides it via
 			// app/.env.local, which bun loads before this file runs.
 			APP_BASE_URL: process.env.APP_BASE_URL ?? appOrigin,
+			OPS_BASE_URL: OPS_DEV_SERVER_ORIGIN,
 			MAILGUN_API_BASE: MAILBOX_URL,
 			MAILGUN_API_KEY: 'e2e-mailgun-key',
 			MAILGUN_DOMAIN: MAILGUN_SIM_DOMAIN,
 			MAILGUN_WEBHOOK_SIGNING_KEY,
 			NOTIFICATION_WORKER_SECRET,
-			FOUNDER_STAFF_ID,
 			// #1833: the BFF's clock is real time plus sim.offset_row's
 			// delta, so a jump moves clock.Now(ctx) the way it moves the
 			// database's now(). api/internal/stackswitch refuses to start
@@ -947,6 +1226,52 @@ async function spawnAPI(appOrigin: string, extraEnvironment: Record<string, stri
 	}
 
 	await waitForPort(E2E_API_HOST, E2E_API_PORT, READY_TIMEOUT_MS);
+}
+
+// The version doula-ops's history holds beyond the shipped one: material,
+// and far enough off that the 30 days of notice always hold.
+export const OPS_LEGAL_VERSION = {
+	document: 'privacy',
+	effective: '2030-06-01',
+	material: true,
+	change: 'Names a new processor of your data.'
+};
+
+// doula-ops (api/cmd/ops, ADR-0062), built and run as a host process the
+// way startAPI runs the BFF, on its own port and as its own login.
+async function startOps() {
+	killPidfile(OPS_PIDFILE);
+
+	execFileSync('go', ['build', '-o', OPS_BINARY_PATH, './cmd/ops'], {
+		stdio: 'inherit',
+		cwd: API_DIR,
+		timeout: BUILD_TIMEOUT_MS
+	});
+
+	const child = spawn(OPS_BINARY_PATH, [], {
+		stdio: 'inherit',
+		detached: true,
+		env: {
+			...process.env,
+			DATABASE_URL: `postgres://ops_e2e:ops_e2e@${DB_HOST}:${DB_PORT}/app?sslmode=disable`,
+			FIREBASE_AUTH_EMULATOR_HOST: `${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`,
+			GCP_PROJECT_ID: 'doula-cloud',
+			OPS_TENANT_ID,
+			EXPECTED_ORIGINS: `${OPS_DEV_SERVER_ORIGIN},${OPS_PREVIEW_SERVER_ORIGIN}`,
+			// Session limits follow a simulated jump, as doula-api's do.
+			E2E_CLOCK_FOLLOWS_SIM_OFFSET: '1',
+			// A material version ops's walk publishes (#2486). doula-api's
+			// history does not hold it, so the walk deletes what it queued.
+			E2E_LEGAL_VERSIONS: JSON.stringify([OPS_LEGAL_VERSION]),
+			PORT: String(E2E_OPS_PORT)
+		}
+	});
+	child.unref();
+	if (child.pid) {
+		writeFileSync(OPS_PIDFILE, String(child.pid));
+	}
+
+	await waitForPort(E2E_OPS_HOST, E2E_OPS_PORT, READY_TIMEOUT_MS);
 }
 
 // Kills whatever process the given pidfile points at (if any) and

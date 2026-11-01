@@ -4,6 +4,7 @@ import (
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/tasknudge"
+	"doula-cloud/api/internal/webhookarrival"
 )
 
 // The paths named more than once in this package: #613's two un-nudged
@@ -38,6 +39,9 @@ const (
 	// due for deletion 48 hours after it was written, and nobody waits
 	// on that.
 	idempotencySweepPath = "/api/internal/idempotency/sweep-expired-keys"
+	// #2473's 90-day sweep of webhook arrivals, not nudged for the same
+	// reason.
+	webhookArrivalSweepPath = "/api/internal/webhooks/sweep-arrivals"
 )
 
 // outboxRegistrations is every outbox the BFF serves (ADR-0010), in one
@@ -219,7 +223,7 @@ func outboxRegistrations(d Deps) []outbox.Registration {
 		{
 			// #1548's email to each Owner before a material change to the
 			// Terms or the Privacy Policy, whose write site is
-			// legalnotice.PublishHandler. No Nudge, for the same reason as
+			// ops_publish_legal_version (#2486). No Nudge, for the same reason as
 			// #871's above: the email is due 30 days or more before the
 			// date it is about, so Cloud Scheduler's cadence is soon
 			// enough.
@@ -248,6 +252,16 @@ func outboxRegistrations(d Deps) []outbox.Registration {
 			Path:   idempotencySweepPath,
 			Door:   outbox.NotificationDoor,
 			Worker: idempotency.Sweeper{},
+		},
+		{
+			// #2473's sweep, in #1987's shape: deletes every
+			// webhook_arrivals row older than 90 days behind the door
+			// sweep_webhook_arrivals checks. The five-minute tick is more
+			// often than the daily the ticket asks for; the delete is
+			// idempotent and indexed on arrived_at.
+			Path:   webhookArrivalSweepPath,
+			Door:   outbox.NotificationDoor,
+			Worker: webhookarrival.Sweeper{},
 		},
 		{
 			// #443's site rebuild, under /api/internal/site for the same

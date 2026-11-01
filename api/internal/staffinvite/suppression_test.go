@@ -40,6 +40,9 @@ func TestWorker_ProcessPending_SuppressedAddressDeadLettersWithoutSending(t *tes
 	if inviteToken.Valid {
 		t.Fatalf("invite_token = %v, want NULL once the row is terminal", inviteToken.String)
 	}
+	if got := testdb.DeadLetterReason(t, db, "staff_invite_outbox", outboxID); got != "own_data" {
+		t.Fatalf("dead_letter_reason = %q, want own_data", got)
+	}
 }
 
 // The same row sends normally once nothing suppresses the address, so

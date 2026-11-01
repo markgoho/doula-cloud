@@ -41,10 +41,15 @@ const MARKER_WITH_REASON = /voice:ignore\W*\w/;
 const appRoot = fileURLToPath(new URL('../../', import.meta.url));
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
 
-const svelteFiles = globFiles('src/{lib/components,routes}/**/*.svelte', { cwd: appRoot });
-const moduleFiles = globFiles('src/{lib,routes}/**/*.ts', { cwd: appRoot }).filter(
-	(file) => !/\.(?:test|spec)\.ts$/.test(file) && !file.endsWith('.d.ts')
-);
+// #2469: ops/ (ADR-0062) as well, relative to app/ as app/'s own are.
+const svelteFiles = [
+	...globFiles('src/{lib/components,routes}/**/*.svelte', { cwd: appRoot }),
+	...globFiles('ops/src/**/*.svelte', { cwd: repoRoot }).map((file) => `../${file}`)
+];
+const moduleFiles = [
+	...globFiles('src/{lib,routes}/**/*.ts', { cwd: appRoot }),
+	...globFiles('ops/src/**/*.ts', { cwd: repoRoot }).map((file) => `../${file}`)
+].filter((file) => !/\.(?:test|spec)\.ts$/.test(file) && !file.endsWith('.d.ts'));
 const goFiles = globFiles('api/**/*.go', { cwd: repoRoot }).filter((file) => !file.endsWith('_test.go'));
 
 interface Offense {

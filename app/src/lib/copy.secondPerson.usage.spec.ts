@@ -103,7 +103,8 @@ const STAFF_NOUN: Rule = {
 const STAFF_AS_ACTOR: Rule = {
 	id: 'Staff named as the one who acts, in copy a person reads',
 	pattern: /\bStaff\s+(?:issues?|sends?|creates?|records?|adds?|approves?|has|have|must|needs?|will|can|should|did|does)\b/,
-	globs: ['src/**/*.svelte', 'src/lib/**/*.ts'],
+	// ops/'s screens are Staff-side screens (ADR-0062): its operators read them.
+	globs: ['src/**/*.svelte', 'src/lib/**/*.ts', '../ops/src/**/*.svelte', '../ops/src/lib/**/*.ts'],
 	instead: 'name the act ("To invoice again, send a new Contract") or say "you"'
 };
 
@@ -284,6 +285,8 @@ describe('the rules are scoped by who reads the file', () => {
 
 		expect(files).toContain('src/lib/invoice.ts');
 		expect(files.some((file) => file.startsWith('src/routes/portal/'))).toBe(true);
+		expect(files).toContain('../ops/src/routes/staff/+page.svelte');
+		expect(files).toContain('../ops/src/lib/refund.ts');
 		expect(files.some((file) => file.endsWith('.spec.ts'))).toBe(false);
 	});
 

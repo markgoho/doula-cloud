@@ -149,12 +149,6 @@ type Deps struct {
 	NudgeEnqueuer   tasknudge.Enqueuer
 	ExpectedOrigins []string
 
-	// Founder is #1526's FOUNDER_STAFF_ID and GITHUB_FEEDBACK_REPO: who
-	// the founder read page serves, and where its issue links point. The
-	// zero value refuses everybody, which is what every test's route
-	// table gets unless it sets one.
-	Founder staffauth.FounderConfig
-
 	// Now is #773's Clock seam: every handler that needs the current
 	// instant reads clock.Now(r.Context()) rather than calling
 	// time.Now() directly, and routes() below is the one place that
@@ -165,8 +159,8 @@ type Deps struct {
 	Now clock.Clock
 
 	// LegalDocuments is the version history of the Terms of Service and
-	// the Privacy Policy the routes publish from and read the price of a
-	// Credit from. Nil, every test's zero value and Cloud Run's, is the
+	// the Privacy Policy the routes read the price of a Credit and the
+	// emails from. Nil, every test's zero value and Cloud Run's, is the
 	// shipped history in api/internal/legal; the end-to-end stack hands
 	// main one with a version appended (stackswitch.Legal, #1833).
 	LegalDocuments []legal.Document

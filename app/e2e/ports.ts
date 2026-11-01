@@ -82,9 +82,17 @@ export const GCS_PORT = shift(14_443);
 // a browser. 1000 above the BFF, keeping this file's collision-free gap.
 export const MAILBOX_HOST = '127.0.0.1';
 export const MAILBOX_PORT = shift(19_080);
+// doula-ops (api/cmd/ops, ADR-0062), the Platform operator's service. 1000
+// above the mailbox, keeping the same collision-free gap.
+export const E2E_OPS_HOST = '127.0.0.1';
+export const E2E_OPS_PORT = shift(20_080);
+export const OPS_URL = `http://${E2E_OPS_HOST}:${E2E_OPS_PORT}`;
 
 export const DEV_SERVER_PORT = shift(5173);
 export const PREVIEW_SERVER_PORT = shift(4173);
+// ops/'s own two front-end servers, 1000 above app/'s dev server.
+export const OPS_DEV_SERVER_PORT = shift(6173);
+export const OPS_PREVIEW_SERVER_PORT = shift(7173);
 
 // The front-end origin each of the local BFF's two callers runs at --
 // `vite dev`'s port for `bun run dev:full`, and `vite preview`'s
@@ -94,6 +102,10 @@ export const PREVIEW_SERVER_PORT = shift(4173);
 // header on state-changing requests.
 export const DEV_SERVER_ORIGIN = `http://localhost:${DEV_SERVER_PORT}`;
 export const PREVIEW_SERVER_ORIGIN = `http://localhost:${PREVIEW_SERVER_PORT}`;
+// doula-ops's csrf.Wrap accepts both of ops/'s origins at once: dev:full
+// and an ops e2e run each start the stack, and either may call it.
+export const OPS_DEV_SERVER_ORIGIN = `http://localhost:${OPS_DEV_SERVER_PORT}`;
+export const OPS_PREVIEW_SERVER_ORIGIN = `http://localhost:${OPS_PREVIEW_SERVER_PORT}`;
 
 // Every port the local stack binds, unshifted -- i.e. what offset 0 uses.
 // Derived by undoing shift() rather than restating the numbers, so this
@@ -155,7 +167,7 @@ export const E2E_HEARTBEAT_INTERVAL_MS = 60_000;
 // PORT_OFFSET) and the reader (.claude/hooks/e2e-stack-reap.ts, sweeping
 // every offset on the machine) name the same file without either side
 // spelling out os.tmpdir() naming twice.
-export const E2E_PIDFILE_KINDS = ['firebase-emulator', 'api', 'mailbox'] as const;
+export const E2E_PIDFILE_KINDS = ['firebase-emulator', 'api', 'mailbox', 'ops'] as const;
 export type E2EPidfileKind = (typeof E2E_PIDFILE_KINDS)[number];
 
 // Where kind's pidfile lives for a given offset. Suffix omitted at
@@ -175,6 +187,11 @@ export function developmentServerPidfilePath(offset: number): string {
 	return path.join(tmpdir(), `doula-cloud-dev-server${offset ? `-${offset}` : ''}.pid`);
 }
 
+// ops/'s dev server's pidfile, which dev:full writes and reads the same way.
+export function opsDevelopmentServerPidfilePath(offset: number): string {
+	return path.join(tmpdir(), `doula-cloud-ops-dev-server${offset ? `-${offset}` : ''}.pid`);
+}
+
 // The Go BFF binary startAPI builds and execs, offset-suffixed the same
 // way its pidfile is (see API_BINARY_PATH, e2e/stack.ts). Exported so the
 // pidfile reaper can reconstruct *any* offset's expected binary path --
@@ -185,12 +202,20 @@ export function e2eApiBinaryPath(offset: number): string {
 	return path.join(tmpdir(), `${E2E_COMPOSE_PROJECT_PREFIX}-api${offset ? `-${offset}` : ''}`);
 }
 
+// doula-ops's binary, named the same way and for the same reason.
+export function e2eOpsBinaryPath(offset: number): string {
+	return path.join(tmpdir(), `${E2E_COMPOSE_PROJECT_PREFIX}-ops${offset ? `-${offset}` : ''}`);
+}
+
 export const BASE_PORTS: readonly number[] = [
 	E2E_API_PORT,
 	E2E_EMULATOR_PORT,
 	DB_PORT,
 	GCS_PORT,
 	MAILBOX_PORT,
+	E2E_OPS_PORT,
 	DEV_SERVER_PORT,
 	PREVIEW_SERVER_PORT,
+	OPS_DEV_SERVER_PORT,
+	OPS_PREVIEW_SERVER_PORT,
 ].map(port => port - PORT_OFFSET * PORT_STEP);

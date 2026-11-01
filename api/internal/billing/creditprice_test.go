@@ -52,16 +52,10 @@ func (c *movableClock) set(at time.Time) {
 }
 
 // publish records a version of the Terms as published, the row
-// POST /api/internal/legal/publish writes (00127).
+// ops's publish act writes (#2486).
 func publish(t *testing.T, db *testdb.DB, version string) {
 	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO legal_version_publications (document, version, material, published_by, published_at)
-		 VALUES ('terms', $1, true, 'Mark Goho', $2)`,
-		version, riseStart.Add(-61*24*time.Hour),
-	); err != nil {
-		t.Fatalf("seed publication: %v", err)
-	}
+	testdb.SeedLegalPublication(t, db, "terms", version, true, riseStart.Add(-61*24*time.Hour))
 }
 
 // buyAt starts a purchase of five Credits at the clock's instant and

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -310,8 +311,6 @@ func TestRoutes_MissingTokenPaths(t *testing.T) {
 	}{
 		{http.MethodPost, "/api/staff/signup"},
 		{http.MethodGet, "/api/staff/session"},
-		{http.MethodGet, "/api/staff/feedback"},
-		{http.MethodGet, "/api/staff/feedback/00000000-0000-4000-8000-000000000000"},
 		{http.MethodGet, "/api/practices/00000000-0000-0000-0000-000000000000/session"},
 	}
 	for _, c := range cases {
@@ -528,25 +527,6 @@ func TestResolveExpectedOrigins(t *testing.T) {
 	}
 }
 
-// TestFounderConfig: FOUNDER_STAFF_ID and GITHUB_FEEDBACK_REPO are read
-// with stray whitespace trimmed, and both unset is the zero value -- the
-// configuration that refuses everybody (#1526).
-func TestFounderConfig(t *testing.T) {
-	env := map[string]string{
-		"FOUNDER_STAFF_ID":     " 6f1c2c0e-58c5-4d39-9c2b-0e7c1f0a9b11\n",
-		"GITHUB_FEEDBACK_REPO": " markgoho/doula-cloud-feedback ",
-	}
-	got := founderConfig(func(key string) string { return env[key] })
-	want := staffauth.FounderConfig{StaffID: "6f1c2c0e-58c5-4d39-9c2b-0e7c1f0a9b11", FeedbackRepo: "markgoho/doula-cloud-feedback"}
-	if got != want {
-		t.Fatalf("founderConfig() = %+v, want %+v", got, want)
-	}
-
-	if got := founderConfig(func(string) string { return "" }); got != (staffauth.FounderConfig{}) {
-		t.Fatalf("founderConfig() with nothing set = %+v, want the zero value", got)
-	}
-}
-
 // TestInternalCallerAuth_ReadsTheOIDCIdentityItNudgesAs covers the
 // other side of ADR-0037's boundary: a Cloud Tasks nudge identifies
 // itself as the service account named here, for the same audience the
@@ -671,7 +651,9 @@ func TestRoutes_MatchingOriginAllowed(t *testing.T) {
 // or snapshot, never both.
 func TestRoutes_StripeWebhooksSucceedWithNoOrigin(t *testing.T) {
 	const stripeWebhookSecret = "whsec_test"
+	db := testdb.New(t)
 	deps := testDeps()
+	deps.DB = db.App
 	deps.StripeWebhookSecret = stripeWebhookSecret
 	mux, _, _ := routes(deps)
 	srv := httptest.NewServer(mux)
@@ -769,5 +751,13 @@ func TestRoutes_StripeWebhooksSucceedWithNoOrigin(t *testing.T) {
 	defer mailgunResp.Body.Close()
 	if mailgunResp.StatusCode != http.StatusOK {
 		t.Fatalf("POST /api/mailgun/webhook status = %d, want %d", mailgunResp.StatusCode, http.StatusOK)
+	}
+
+	var routesRecorded []string
+	for _, a := range testdb.WebhookArrivals(t, db) {
+		routesRecorded = append(routesRecorded, a.Route+" "+a.Outcome)
+	}
+	if want := []string{"stripe_platform dropped", "stripe_connect dropped", "stripe_account dropped", "mailgun dropped"}; !slices.Equal(routesRecorded, want) {
+		t.Fatalf("webhook arrivals = %v, want %v", routesRecorded, want)
 	}
 }

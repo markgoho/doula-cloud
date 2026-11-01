@@ -271,6 +271,9 @@ func TestEraseHandler_RedactionStateSurvivesRetriesAndDeadLettering(t *testing.T
 	if status := readOutboxStatus(t, db, clientID)["stripe_redaction_job|cus_failing"]; status != deadLetteredStatus {
 		t.Fatalf("redaction status = %q, want dead_lettered after the schedule is exhausted", status)
 	}
+	if reason := readOutboxReason(t, db, clientID)["stripe_redaction_job|cus_failing"]; reason != "retries_exhausted" {
+		t.Fatalf("redaction dead_letter_reason = %q, want retries_exhausted", reason)
+	}
 
 	after := readDetail(t, session, srv, practiceID, clientID).StripeRedactionEligibleAt
 	if after == nil {
@@ -539,6 +542,11 @@ func TestErasureWorker_DeadLettersWhenThePracticeHasNoConnectedAccount(t *testin
 			t.Errorf("%s = %q, want dead_lettered", act, status)
 		}
 	}
+	for act, reason := range readOutboxReason(t, db, clientID) {
+		if reason != "own_data" {
+			t.Errorf("%s dead_letter_reason = %q, want own_data", act, reason)
+		}
+	}
 	if len(stripe.deleted) != 0 {
 		t.Fatalf("customer deletes = %v, want none -- there is no account to call", stripe.deleted)
 	}
@@ -658,6 +666,11 @@ func readOutbox(t *testing.T, db *testdb.DB, clientID string) map[string]time.Ti
 func readOutboxStatus(t *testing.T, db *testdb.DB, clientID string) map[string]string {
 	t.Helper()
 	return scanOutbox[string](t, db, clientID, `act::text || '|' || target, status::text`)
+}
+
+func readOutboxReason(t *testing.T, db *testdb.DB, clientID string) map[string]string {
+	t.Helper()
+	return scanOutbox[string](t, db, clientID, `act::text || '|' || target, coalesce(dead_letter_reason::text, '')`)
 }
 
 func scanOutbox[V any](t *testing.T, db *testdb.DB, clientID, columns string) map[string]V {

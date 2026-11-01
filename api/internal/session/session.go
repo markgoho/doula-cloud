@@ -81,6 +81,9 @@ func CreateHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.Enqueuer) 
 			apierr.WriteError(w, "invalid token", http.StatusUnauthorized)
 			return
 		}
+		if authn.RefuseOperatorToken(w, *verified) {
+			return
+		}
 
 		body := &CreateResponse{OK: true}
 		step := func(context.Context, *sql.Tx) (sessionmint.Result, error) {

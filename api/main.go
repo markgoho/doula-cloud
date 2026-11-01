@@ -21,6 +21,7 @@ import (
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/dbpool"
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/feedback"
 	"doula-cloud/api/internal/internalauth"
@@ -54,19 +55,6 @@ func resolvePort() string {
 		return port
 	}
 	return "8080"
-}
-
-// founderConfig reads what the founder read page needs (#1526):
-// FOUNDER_STAFF_ID, the `staff.id` of the one person it serves, and
-// GITHUB_FEEDBACK_REPO, which its link to a piece's issue is built from.
-// Both may be unset. With no FOUNDER_STAFF_ID every founder route refuses
-// everybody, so a service that was never told who the founder is serves
-// the page to nobody rather than to anybody.
-func founderConfig(getenv func(string) string) staffauth.FounderConfig {
-	return staffauth.FounderConfig{
-		StaffID:      strings.TrimSpace(getenv("FOUNDER_STAFF_ID")),
-		FeedbackRepo: strings.TrimSpace(getenv("GITHUB_FEEDBACK_REPO")),
-	}
 }
 
 // resolveExpectedOrigins reads the comma-separated EXPECTED_ORIGINS env
@@ -142,6 +130,7 @@ func main() {
 		// coverage:ignore reason: requires a real DATABASE_URL and network access, not exercised by unit tests
 		log.Fatalf("open db: %v", err)
 	}
+	dbpool.Apply(db)
 
 	// now is #773's Clock seam, wired once here and threaded to every
 	// worker that already carried its own Now field, plus Deps.Now,
@@ -151,7 +140,7 @@ func main() {
 	// process when that switch is set anywhere else.
 	//
 	// coverage:ignore reason: main's wiring; stackswitch's own tests cover both switches and the gate
-	now, err := stackswitch.Clock(context.Background(), os.Getenv, db)
+	now, _, err := stackswitch.Clock(context.Background(), os.Getenv, db)
 	if err != nil {
 		// coverage:ignore reason: main's wiring; stackswitch's own tests cover the refusal
 		log.Fatalf("clock: %v", err)
@@ -355,7 +344,7 @@ func main() {
 	// coverage:ignore reason: wires the real Deps struct main() serves from, not exercised by unit tests -- routes()/testDeps() in main_test.go exercise the route table itself
 	feedbackIssueWorker := feedback.IssueWorker{
 		Creator:    issueCreator,
-		AppBaseURL: appBaseURL,
+		OpsBaseURL: os.Getenv("OPS_BASE_URL"),
 		Now:        now,
 	}
 
@@ -420,7 +409,6 @@ func main() {
 
 		LegalDocuments:  legalHistory,
 		ExpectedOrigins: resolveExpectedOrigins(),
-		Founder:         founderConfig(os.Getenv),
 		Now:             now,
 	}
 

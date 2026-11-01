@@ -41,6 +41,9 @@ import (
 
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/legal"
+
+	// The "pgx" driver the clock's own pool opens with.
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 const (
@@ -56,6 +59,9 @@ const (
 	// MarkerVar is the stack's mark in the environment: the Firebase
 	// Auth emulator's address.
 	MarkerVar = "FIREBASE_AUTH_EMULATOR_HOST"
+	// DatabaseURLVar is the connection string the stack's clock opens
+	// its own pool from.
+	DatabaseURLVar = "DATABASE_URL"
 )
 
 // ErrNotTheStack is returned when a switch is set in a process that does
@@ -66,35 +72,56 @@ var ErrNotTheStack = errors.New("stackswitch: an end-to-end switch is set outsid
 // Postgres interval.
 const offsetQuery = `SELECT (extract(epoch FROM delta) * 1000000)::bigint FROM sim.offset_row`
 
-// Clock returns the clock the BFF reads: clock.Real with ClockVar unset,
-// and on the stack, real time plus sim.offset_row's delta, read again on
-// every call so a jump is followed at once.
-func Clock(ctx context.Context, getenv func(string) string, db *sql.DB) (clock.Clock, error) {
+// offsetReadTimeout bounds one read of the offset, so a read that cannot
+// reach the database keeps the last offset rather than holding a request.
+const offsetReadTimeout = 5 * time.Second
+
+func closeNothing() error { return nil }
+
+// Clock returns the clock the BFF reads, and what releases it:
+// clock.Real with ClockVar unset, and on the stack, real time plus
+// sim.offset_row's delta, read again on every call so a jump is followed
+// at once.
+//
+// That read goes through a one-connection pool of the clock's own,
+// opened from DatabaseURLVar, never through db. clock.Now runs inside a
+// request's transaction, so a read that waited on the request pool would
+// hold one connection while asking for another, and a capped pool
+// deadlocks once every connection is held that way (#2432).
+func Clock(ctx context.Context, getenv func(string) string, db *sql.DB) (clock.Clock, func() error, error) {
 	switch getenv(ClockVar) {
 	case "":
-		return clock.Real, nil
+		return clock.Real, closeNothing, nil
 	case "1":
 	default:
-		return nil, fmt.Errorf("stackswitch: %s must be 1 or unset, not %q", ClockVar, getenv(ClockVar))
+		return nil, nil, fmt.Errorf("stackswitch: %s must be 1 or unset, not %q", ClockVar, getenv(ClockVar))
 	}
 	if err := requireStack(ctx, getenv, db); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	own, err := sql.Open("pgx", getenv(DatabaseURLVar))
+	if err != nil {
+		// coverage:ignore reason: pgx's sql.Open never fails; it connects on first use
+		return nil, nil, fmt.Errorf("stackswitch: open the clock's pool: %w", err)
+	}
+	own.SetMaxOpenConns(1)
 	// The clock outlives the call that built it, so it keeps ctx's values
 	// and drops its cancellation.
 	base := context.WithoutCancel(ctx)
 	var last atomic.Int64
 	read := func() (int64, error) {
+		readCtx, cancel := context.WithTimeout(base, offsetReadTimeout)
+		defer cancel()
 		var micros int64
-		if err := db.QueryRowContext(base, offsetQuery).Scan(&micros); err != nil {
+		if err := own.QueryRowContext(readCtx, offsetQuery).Scan(&micros); err != nil {
 			return 0, fmt.Errorf("stackswitch: read sim.offset_row: %w", err)
 		}
 		return micros, nil
 	}
 	micros, err := read()
 	if err != nil {
-		// coverage:ignore reason: requireStack has just read the same row's table, so a failure here needs the connection to break in between
-		return nil, err
+		_ = own.Close()
+		return nil, nil, err
 	}
 	last.Store(micros)
 	return func() time.Time {
@@ -108,7 +135,7 @@ func Clock(ctx context.Context, getenv func(string) string, db *sql.DB) (clock.C
 			last.Store(micros)
 		}
 		return clock.Real().Add(time.Duration(micros) * time.Microsecond)
-	}, nil
+	}, own.Close, nil
 }
 
 // appendedVersion is one version LegalVar adds. A price of a Credit and

@@ -327,4 +327,7 @@ func TestPayoutWorker_ProcessPending_DeadLettersAfterFinalAttempt(t *testing.T) 
 	if status != "dead_lettered" || attemptCount != 5 {
 		t.Fatalf("status/attempt_count = %q/%d, want dead_lettered/5", status, attemptCount)
 	}
+	if got := testdb.DeadLetterReason(t, db, "payout_outbox", outboxID); got != "retries_exhausted" {
+		t.Fatalf("dead_letter_reason = %q, want retries_exhausted", got)
+	}
 }

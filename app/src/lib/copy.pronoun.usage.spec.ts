@@ -90,7 +90,19 @@ const appRoot = fileURLToPath(new URL('../../', import.meta.url));
 
 const GLOBS = ['src/{lib/components,routes}/**/*.svelte', 'src/{lib,routes}/**/*.ts'];
 
-const sourceFiles = globFiles(GLOBS, { cwd: appRoot }).filter((file) => !NOT_COPY.test(file));
+
+// #2469: ops/ (ADR-0062) is held to the same voice. Its paths are made
+// relative to app/, so the read below resolves them as it does app/'s own.
+const opsCopyFiles = globFiles(['ops/src/**/*.svelte', 'ops/src/**/*.ts'], {
+	cwd: fileURLToPath(new URL('../../../', import.meta.url))
+})
+	.filter((file) => !NOT_COPY.test(file))
+	.map((file) => `../${file}`);
+
+const sourceFiles = [
+	...globFiles(GLOBS, { cwd: appRoot }).filter((file) => !NOT_COPY.test(file)),
+	...opsCopyFiles
+];
 
 interface Offense {
 	file: string;
@@ -132,6 +144,7 @@ describe('product copy names a Client or Staff member, never a pronoun', () => {
 		// below pass while checking no copy at all.
 		expect(sourceFiles.filter((file) => file.endsWith('.svelte')).length).toBeGreaterThan(50);
 		expect(sourceFiles.filter((file) => file.endsWith('.ts')).length).toBeGreaterThan(50);
+		expect(opsCopyFiles.length).toBeGreaterThan(3);
 	});
 
 	it('uses no gendered pronoun anywhere a Client or Staff member reads', () => {

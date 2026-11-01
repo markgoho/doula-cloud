@@ -17,6 +17,7 @@ import (
 	"doula-cloud/api/internal/stripemode"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
+	"doula-cloud/api/internal/webhookarrival"
 )
 
 // errRetrieveFailed stands in for any failure to reach Stripe.
@@ -62,7 +63,8 @@ func newConnectWebhookServerWith(db *testdb.DB, client payments.Client) *httptes
 // use this to inject a FakeEnqueuer configured to fail.
 func newConnectWebhookServerWithEnqueuer(db *testdb.DB, client payments.Client, enq tasknudge.Enqueuer) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle("POST /stripe/connect-webhook", payments.PostConnectWebhookHandler(db.App, client, stripeConnectWebhookSecret, stripemode.Test, enq))
+	mux.Handle("POST /stripe/connect-webhook", webhookarrival.Record(db.App, webhookarrival.StripeConnect,
+		payments.PostConnectWebhookHandler(db.App, client, stripeConnectWebhookSecret, stripemode.Test, enq)))
 	return httptest.NewServer(mux)
 }
 
@@ -328,7 +330,8 @@ func newAccountWebhookServer(db *testdb.DB, client payments.Client) *httptest.Se
 // newConnectWebhookServerWithEnqueuer.
 func newAccountWebhookServerWithEnqueuer(db *testdb.DB, client payments.Client, enq tasknudge.Enqueuer) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle("POST /stripe/account-webhook", payments.PostAccountWebhookHandler(db.App, client, stripeAccountWebhookSecret, stripemode.Test, enq))
+	mux.Handle("POST /stripe/account-webhook", webhookarrival.Record(db.App, webhookarrival.StripeAccount,
+		payments.PostAccountWebhookHandler(db.App, client, stripeAccountWebhookSecret, stripemode.Test, enq)))
 	return httptest.NewServer(mux)
 }
 

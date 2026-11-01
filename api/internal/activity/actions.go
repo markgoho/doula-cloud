@@ -95,6 +95,12 @@ const (
 	ActionMFARequiredEnabled          PracticeAction = "mfa_required_enabled"
 	ActionMFARequiredDisabled         PracticeAction = "mfa_required_disabled"
 	ActionWelcomeCreditsEmailSent     PracticeAction = "welcome_credits_email_sent"
+	// ActionCreditsRefunded is a Platform operator's refund of purchased
+	// Credits, from ops (#2481) -- diff credits, amountCents, taxCents.
+	ActionCreditsRefunded PracticeAction = "credits_refunded"
+	// ActionFoundingGrantIssued is a Platform operator's founding grant,
+	// from ops (#2482) -- diff staffCount, credits.
+	ActionFoundingGrantIssued PracticeAction = "founding_grant_issued"
 )
 
 // SubjectMembership is the subject_kind every write site that touches
@@ -153,6 +159,11 @@ const (
 	// back would leave the one Membership event with no reader at all,
 	// and an Owner performed it against a named person on a date.
 	ActionSessionsEnded MembershipAction = "sessions_ended"
+
+	// ActionSecondFactorCleared records a Platform operator resetting a
+	// person's two-factor authentication from ops (#2483), written at
+	// each Practice she belongs to. Diff "{}", as sessions_ended's.
+	ActionSecondFactorCleared MembershipAction = "second_factor_cleared"
 )
 
 // MembershipActions returns every action a write site records against
@@ -167,6 +178,7 @@ func MembershipActions() []MembershipAction {
 		ActionEmploymentTypeChanged,
 		ActionMembershipRemoved,
 		ActionSessionsEnded,
+		ActionSecondFactorCleared,
 	}
 	slices.Sort(out)
 	return out
@@ -177,6 +189,17 @@ func MembershipActions() []MembershipAction {
 // actor to a display name falls back to this constant for actor_kind =
 // 'system', rather than each caller inventing its own string.
 const SystemActorName = "DoulaCloud"
+
+// OperatorActorName is what ActorOperator renders as: the person's name
+// with DoulaCloud, "Mark Goho at DoulaCloud", never DoulaCloud alone
+// (ADR-0022's amendment of 2026-10-31).
+func OperatorActorName(operatorName string) string {
+	return operatorName + " at " + SystemActorName
+}
+
+// UnnamedOperatorActorName is an operator whose name a reader cannot be
+// given: still someone at DoulaCloud, never DoulaCloud alone (ADR-0022:86).
+const UnnamedOperatorActorName = "Someone at " + SystemActorName
 
 // DepartedStaffName is what a Staff member reads as once no reader can
 // reach her staff row any more -- staff_practice_visibility (00002)

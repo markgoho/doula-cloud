@@ -14,7 +14,7 @@ import { signIn } from './auth';
 // back do not care which provider produced it: the five acts in
 // api/internal/staffauth/secondfactor.go's SecondFactorActs, the
 // Practice boundary in middleware.go when the Practice's mfa-required
-// switch is on, and staffauth.FounderOnly. Since #1531 nothing else
+// switch is on, and nothing else. Since #1531 nothing else
 // reads it -- an Owner enters her Practice with no second factor -- so
 // a spec that only has to enter a Practice signs in with auth.ts's
 // signIn and enrolls nothing.
@@ -127,11 +127,12 @@ export async function verifyEmail(request: APIRequestContext, localId: string): 
 export async function enrollPhoneFactor(
 	request: APIRequestContext,
 	idToken: string,
-	phoneNumber = randomPhoneNumber()
+	phoneNumber = randomPhoneNumber(),
+	tenantId?: string
 ): Promise<{ idToken: string; refreshToken: string }> {
 	const start = await request.post(
 		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v2/accounts/mfaEnrollment:start?key=fake-key`,
-		{ data: { idToken, phoneEnrollmentInfo: { phoneNumber } } }
+		{ data: { idToken, tenantId, phoneEnrollmentInfo: { phoneNumber } } }
 	);
 	const startBody = await start.text();
 	expect(start.ok(), `mfaEnrollment:start failed: ${start.status()} ${startBody}`).toBe(true);
@@ -139,11 +140,11 @@ export async function enrollPhoneFactor(
 		phoneSessionInfo: { sessionInfo }
 	} = JSON.parse(startBody);
 
-	const code = await readVerificationCode(request, sessionInfo);
+	const code = await readVerificationCode(request, sessionInfo, tenantId);
 
 	const finalize = await request.post(
 		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v2/accounts/mfaEnrollment:finalize?key=fake-key`,
-		{ data: { idToken, phoneVerificationInfo: { sessionInfo, code } } }
+		{ data: { idToken, tenantId, phoneVerificationInfo: { sessionInfo, code } } }
 	);
 	const finalizeBody = await finalize.text();
 	expect(finalize.ok(), `mfaEnrollment:finalize failed: ${finalize.status()} ${finalizeBody}`).toBe(true);
@@ -173,8 +174,15 @@ export async function enrollSecondFactor(
  * above and by totpStub.ts, which drives the sign-in-time MFA challenge
  * (mfaSignIn:start/finalize) rather than enrollment.
  */
-export async function readVerificationCode(request: APIRequestContext, sessionInfo: string): Promise<string> {
-	const response = await request.get(`${EMULATOR_URL}/emulator/v1/projects/${PROJECT_ID}/verificationCodes`);
+export async function readVerificationCode(
+	request: APIRequestContext,
+	sessionInfo: string,
+	tenantId?: string
+): Promise<string> {
+	// A tenant's codes are listed under the tenant, and the project's
+	// listing does not hold them.
+	const scope = tenantId ? `${PROJECT_ID}/tenants/${tenantId}` : PROJECT_ID;
+	const response = await request.get(`${EMULATOR_URL}/emulator/v1/projects/${scope}/verificationCodes`);
 	expect(response.ok(), `listing verification codes failed: ${response.status()}`).toBe(true);
 	const { verificationCodes } = await response.json();
 	const match = verificationCodes.find(
@@ -188,8 +196,8 @@ export async function readVerificationCode(request: APIRequestContext, sessionIn
  * verifyEmail + enrollSecondFactor + signIn, composed: the one call a
  * fixture makes when it wants a session that shows a second factor
  * without spending a browser on the walk. Only a spec that drives one of
- * SecondFactorActs, turns the mfa-required switch on (or enters a
- * Practice where it is on), or opens the founder's page needs one; a
+ * SecondFactorActs, or turns the mfa-required switch on (or enters a
+ * Practice where it is on), needs one; a
  * spec that only enters a Practice calls auth.ts's signIn and enrolls
  * nothing, since #1531. Every future signInWithPassword for
  * that account demands a second-factor challenge, and against this

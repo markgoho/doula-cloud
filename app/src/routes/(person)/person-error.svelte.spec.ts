@@ -12,8 +12,7 @@ async function setup(status = 404) {
 }
 
 /*
- * #2040: the founder read page's 404 for anybody but the founder lands
- * here, inside the signed-in shell `(person)/+layout.svelte` still draws,
+ * #2040: a refusal under the group lands here, inside the signed-in shell `(person)/+layout.svelte` still draws,
  * so a signed-in person is never told to sign in.
  */
 describe('(person)/+error.svelte', () => {

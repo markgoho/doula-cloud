@@ -45,6 +45,18 @@ var BackoffSchedule = []time.Duration{
 	18 * time.Hour,
 }
 
+// DeadLetterReason is the outbox_dead_letter_reason a dead-lettered row
+// carries (ADR-0062).
+type DeadLetterReason string
+
+// RetriesExhausted is MarkFailed's, and is alerted on; OwnData is every
+// row dead-lettered at once because its own data meant no send could
+// succeed, and is only shown.
+const (
+	RetriesExhausted DeadLetterReason = "retries_exhausted"
+	OwnData          DeadLetterReason = "own_data"
+)
+
 // MaxBatch bounds how many rows one ProcessPending call sends, so a large
 // backlog can't turn a single Scheduler tick into an unbounded
 // transaction.
@@ -98,8 +110,8 @@ func (w Worker) MarkSent(ctx context.Context, tx *sql.Tx, id string, now time.Ti
 func (w Worker) MarkDeadLetteredNow(ctx context.Context, tx *sql.Tx, id, reason string) error {
 	//nolint:gosec // w.Table is a compile-time constant each package supplies, never request data
 	if _, err := tx.ExecContext(ctx,
-		fmt.Sprintf(`UPDATE %s SET status = 'dead_lettered', last_error = $1%s WHERE id = $2`, w.Table, w.clearClause()),
-		reason, id,
+		fmt.Sprintf(`UPDATE %s SET status = 'dead_lettered', dead_letter_reason = $1, last_error = $2%s WHERE id = $3`, w.Table, w.clearClause()),
+		OwnData, reason, id,
 	); err != nil {
 		// coverage:ignore reason: DB update failure, not exercised by unit tests
 		return fmt.Errorf("outbox: dead-letter %s row: %w", w.Table, err)
@@ -125,8 +137,8 @@ func (w Worker) MarkFailed(ctx context.Context, tx *sql.Tx, id string, attemptCo
 	if nextAttempt >= len(BackoffSchedule) {
 		//nolint:gosec // w.Table is a compile-time constant each package supplies, never request data
 		if _, err := tx.ExecContext(ctx,
-			fmt.Sprintf(`UPDATE %s SET status = 'dead_lettered', attempt_count = $1, last_error = $2%s WHERE id = $3`, w.Table, w.clearClause()),
-			nextAttempt, sendErr.Error(), id,
+			fmt.Sprintf(`UPDATE %s SET status = 'dead_lettered', dead_letter_reason = $1, attempt_count = $2, last_error = $3%s WHERE id = $4`, w.Table, w.clearClause()),
+			RetriesExhausted, nextAttempt, sendErr.Error(), id,
 		); err != nil {
 			// coverage:ignore reason: DB update failure, not exercised by unit tests
 			return fmt.Errorf("outbox: dead-letter %s row: %w", w.Table, err)
@@ -250,6 +262,7 @@ func (w Worker) HandlePending[R any](
 		return fmt.Errorf("outbox: close %s rows: %w", w.Table, err)
 	}
 
+	ctx = mail.WithTx(ctx, tx)
 	for _, r := range pending {
 		if err := handle(ctx, tx, w, r, now); err != nil {
 			return err

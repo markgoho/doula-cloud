@@ -5,6 +5,7 @@ import (
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/webhookarrival"
 )
 
 // What Stripe and Mailgun call.
@@ -14,14 +15,18 @@ import (
 // body against its own secret. They are inside csrf.Wrap all the same --
 // it exempts a request with no Origin header, which is what these are.
 func registerWebhookRoutes(g *staffauth.GatedRouter, d Deps) {
-	g.Write("POST /api/stripe/webhook", billing.PostPurchaseWebhookHandler(d.DB, d.StripeWebhookSecret, d.StripeMode))
-	g.Write("POST /api/stripe/connect-webhook", payments.PostConnectWebhookHandler(d.DB, d.PaymentsClient, d.PaymentsWebhookSecret, d.StripeMode, d.NudgeEnqueuer))
+	g.Write("POST /api/stripe/webhook", webhookarrival.Record(d.DB, webhookarrival.StripePlatform,
+		billing.PostPurchaseWebhookHandler(d.DB, d.StripeWebhookSecret, d.StripeMode)))
+	g.Write("POST /api/stripe/connect-webhook", webhookarrival.Record(d.DB, webhookarrival.StripeConnect,
+		payments.PostConnectWebhookHandler(d.DB, d.PaymentsClient, d.PaymentsWebhookSecret, d.StripeMode, d.NudgeEnqueuer)))
 	// A second Connect route, not a second feature: Stripe's v2 account
 	// events are thin and a destination carries one payload type, so they
 	// cannot share connect-webhook's endpoint or its secret (#247).
-	g.Write("POST /api/stripe/account-webhook", payments.PostAccountWebhookHandler(d.DB, d.PaymentsClient, d.PaymentsAccountWebhookSecret, d.StripeMode, d.NudgeEnqueuer))
+	g.Write("POST /api/stripe/account-webhook", webhookarrival.Record(d.DB, webhookarrival.StripeAccount,
+		payments.PostAccountWebhookHandler(d.DB, d.PaymentsClient, d.PaymentsAccountWebhookSecret, d.StripeMode, d.NudgeEnqueuer)))
 	// #340/ADR-0010: Mailgun's bounce/complaint delivery-event webhook,
 	// same no-staffauth shape as the Stripe webhooks above -- signature
 	// verified instead of a session.
-	g.Write("POST /api/mailgun/webhook", portalinvite.PostBounceWebhookHandler(d.DB, d.MailgunWebhookSigningKey))
+	g.Write("POST /api/mailgun/webhook", webhookarrival.Record(d.DB, webhookarrival.Mailgun,
+		portalinvite.PostBounceWebhookHandler(d.DB, d.MailgunWebhookSigningKey)))
 }

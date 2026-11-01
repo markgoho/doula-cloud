@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/dbpool"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -349,6 +350,18 @@ func TestBeginBootstrap_InvalidToken(t *testing.T) {
 	assertUnauthorized(t, rec, "invalid token")
 }
 
+func TestBeginBootstrap_RefusesAVerifiedOperatorToken(t *testing.T) {
+	db := testdb.New(t)
+
+	rec, _, ok := bootstrapRequest(t, db, authntest.Verifier{UID: testUID, Tenant: "operators-local"}, func(req *http.Request) {
+		req.Header.Set("Authorization", "Bearer operator-token")
+	})
+	if ok {
+		t.Fatal("expected ok=false, got true")
+	}
+	assertUnauthorized(t, rec, authn.MsgOperatorToken)
+}
+
 // TestBeginBootstrap_SessionCookieIsNotACredential pins that the
 // bootstrap path is Bearer-only in the other direction too: a live
 // session cookie does not stand in for the ID token, because a caller
@@ -540,6 +553,7 @@ func TestBegin_ConcurrentRenewalsDoNotBlock(t *testing.T) {
 	stale := time.Now().Add(-7 * time.Hour)
 	first := authntest.SeedSessionAt(t, db.App, "first-browser", stale)
 	second := authntest.SeedSessionAt(t, db.App, "second-browser", stale)
+	dbpool.Apply(db.App)
 
 	firstTx, _, _, ok := authn.Begin(httptest.NewRecorder(), requestWithSession(t.Context(), first), db.App, authn.TierStaff)
 	if !ok {

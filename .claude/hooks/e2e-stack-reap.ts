@@ -55,6 +55,7 @@ import {
   E2E_HEARTBEAT_INTERVAL_MS,
   E2E_PIDFILE_KINDS,
   e2eApiBinaryPath,
+  e2eOpsBinaryPath,
   e2eHeartbeatPath,
   type E2EPidfileKind,
 } from '../../app/e2e/ports.ts';
@@ -506,6 +507,7 @@ export function isProcessAlive(pid: number): boolean {
  * `api`'s marker is the exact binary path startAPI built and exec'd
  * (e2eApiBinaryPath) -- offset-suffixed, so it is unique to this
  * pidfile's own offset and never matches a different worktree's BFF.
+ * `ops`'s is startOps's binary (e2eOpsBinaryPath), the same way.
  * `mailbox` and `firebase-emulator` can't be pinned to an offset the
  * same way -- mailbox.ts's own path is the *worktree's* (its source
  * tree may no longer exist to check), and firebase-tools' invocation
@@ -520,6 +522,7 @@ export function isProcessAlive(pid: number): boolean {
  */
 const IDENTITY_MARKER: Record<E2EPidfileKind, (offset: number) => string> = {
   api: (offset) => e2eApiBinaryPath(offset),
+  ops: (offset) => e2eOpsBinaryPath(offset),
   mailbox: () => `${path.sep}app${path.sep}e2e${path.sep}mailbox.ts`,
   'firebase-emulator': () => 'emulators:start',
 };

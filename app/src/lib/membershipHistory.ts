@@ -60,6 +60,9 @@ export function membershipChangeSentence(change: MembershipChange): string {
 		case 'sessions_ended': {
 			return 'Signed out of every device';
 		}
+		case 'second_factor_cleared': {
+			return 'Two-factor authentication reset, and signed out of every device';
+		}
 		default: {
 			return fallback(change.action);
 		}

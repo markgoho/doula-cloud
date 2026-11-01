@@ -22,7 +22,11 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { e2eApiBinaryPath, e2eHeartbeatPath } from '../app/e2e/ports.ts';
+import {
+  e2eApiBinaryPath,
+  e2eHeartbeatPath,
+  e2eOpsBinaryPath,
+} from '../app/e2e/ports.ts';
 import {
   HEARTBEAT_STALE_MS,
   QUIET_MS,
@@ -830,6 +834,13 @@ describe('looksLikeOurProcess', () => {
     const commandLine = e2eApiBinaryPath(4);
     expect(looksLikeOurProcess('api', 4, commandLine)).toBe(true);
     expect(looksLikeOurProcess('api', 5, commandLine)).toBe(false); // a different worktree's binary
+  });
+
+  test("ops: matches only its own offset's exact binary path, never the BFF's", () => {
+    const commandLine = e2eOpsBinaryPath(4);
+    expect(looksLikeOurProcess('ops', 4, commandLine)).toBe(true);
+    expect(looksLikeOurProcess('ops', 5, commandLine)).toBe(false);
+    expect(looksLikeOurProcess('ops', 4, e2eApiBinaryPath(4))).toBe(false);
   });
 
   test("mailbox: matches a bun invocation of any worktree's mailbox.ts", () => {

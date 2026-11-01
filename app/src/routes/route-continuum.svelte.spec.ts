@@ -539,8 +539,6 @@ function toRouteFloorKey(condition: Condition): string {
  * (macOS/Chromium), under 55rem, so they keep DataTable's own floor.
  */
 const ROUTE_FLOORS: Readonly<Record<string, string>> = {
-	'(person)/feedback#unopened-table': 'Issue not opened',
-	'(person)/feedback#feedback-table': 'All feedback',
 	// The hub's two tables floor LOWER than 55rem (#2063): both sit in its
 	// primary column, which is narrower than that at a laptop's window.
 	'practices/[practiceId]#activity-table': 'Recent activity',

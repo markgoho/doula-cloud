@@ -142,6 +142,7 @@ const STAFF_ACTIVITY_PHRASES: Record<string, Phrase> = {
 	employment_type_changed: (name) => `Employment type changed for ${member(name)}`,
 	removed: (name) => `${member(name)} removed from the Practice`,
 	sessions_ended: (name) => `${member(name)} signed out of every device`,
+	second_factor_cleared: (name) => `Two-factor authentication reset for ${member(name)}`,
 
 	// The Practice's own settings.
 	stripe_connect_form_returned: fixed('Came back from the Stripe setup form'),
@@ -160,7 +161,9 @@ const STAFF_ACTIVITY_PHRASES: Record<string, Phrase> = {
 	second_factor_refused: fixed('Stopped until two-factor authentication is set up'),
 	mfa_required_enabled: fixed('Two-factor authentication made a must for all Staff'),
 	mfa_required_disabled: fixed('Two-factor authentication no longer a must for all Staff'),
-	welcome_credits_email_sent: fixed('Practice Owners emailed about the Welcome credits')
+	welcome_credits_email_sent: fixed('Practice Owners emailed about the Welcome credits'),
+	credits_refunded: fixed('Purchased Credits refunded'),
+	founding_grant_issued: fixed('Founding member credits given')
 };
 
 /**

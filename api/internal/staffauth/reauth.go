@@ -51,6 +51,9 @@ func RequireRecentAuth(w http.ResponseWriter, r *http.Request, verifier authn.Ve
 		apierr.WriteError(w, "this action requires a fresh sign-in", http.StatusUnauthorized)
 		return false
 	}
+	if authn.RefuseOperatorToken(w, *verified) {
+		return false
+	}
 
 	var sessionIdentityUID string
 	if err := tx.QueryRowContext(r.Context(), `SELECT identity_uid FROM staff WHERE id = $1`, staffID).Scan(&sessionIdentityUID); err != nil {

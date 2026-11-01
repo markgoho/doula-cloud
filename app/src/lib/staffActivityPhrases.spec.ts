@@ -46,6 +46,7 @@ const WORDING: readonly (readonly [action: string, named: string, unnamed: strin
 	['coverage_gap_created', 'Gap in on-call cover added for Amara', 'Gap in on-call cover added for the Client'],
 	['coverage_gap_updated', 'Gap in on-call cover changed for Amara', 'Gap in on-call cover changed for the Client'],
 	['created', 'Client record created for Amara', 'Client record created for the Client'],
+	['credits_refunded', 'Purchased Credits refunded', 'Purchased Credits refunded'],
 	['doula_attached', "Doula added to Amara's care", "Doula added to the Client's care"],
 	['due_date_changed', 'Due date changed for Amara', 'Due date changed for the Client'],
 	['employment_type_changed', 'Employment type changed for Amara', 'Employment type changed for a Staff member'],
@@ -53,6 +54,7 @@ const WORDING: readonly (readonly [action: string, named: string, unnamed: strin
 	['engagement_created', 'Care for Amara started', 'Care for the Client started'],
 	['engagement_reopened', 'Care for Amara reopened', 'Care for the Client reopened'],
 	['erased', 'Client record erased', 'Client record erased'],
+	['founding_grant_issued', 'Founding member credits given', 'Founding member credits given'],
 	['invoice_paid', 'Invoice for Amara paid', 'Invoice for the Client paid'],
 	['invoice_payment_failed', 'Payment from Amara did not go through', 'Payment from the Client did not go through'],
 	['invoice_payment_processing', 'Payment from Amara on its way', 'Payment from the Client on its way'],
@@ -93,6 +95,11 @@ const WORDING: readonly (readonly [action: string, named: string, unnamed: strin
 	['push_notifications_enabled', 'Notifications turned on by Amara', 'Notifications turned on by the Client'],
 	['removed', 'Amara removed from the Practice', 'A Staff member removed from the Practice'],
 	['roles_changed', 'Roles changed for Amara', 'Roles changed for a Staff member'],
+	[
+		'second_factor_cleared',
+		'Two-factor authentication reset for Amara',
+		'Two-factor authentication reset for a Staff member'
+	],
 	['second_factor_refused', 'Stopped until two-factor authentication is set up', 'Stopped until two-factor authentication is set up'],
 	['sessions_ended', 'Amara signed out of every device', 'A Staff member signed out of every device'],
 	['stripe_connect_form_returned', 'Came back from the Stripe setup form', 'Came back from the Stripe setup form'],

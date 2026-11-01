@@ -28,15 +28,18 @@ var (
 	// than the lot being drawn from still holds. A refund reverses one
 	// payment, so it never spans two purchases -- see Refund.
 	ErrRefundExceedsLot = errors.New("billing: refund exceeds the credits available on the purchase it draws against")
+	// ErrStripeRefused is returned when Stripe did not make the refund,
+	// so the caller's transaction must write nothing.
+	ErrStripeRefused = errors.New("billing: stripe refused the refund")
 )
 
-// RefundQuote is what a Practice could be given back right now: how many
-// purchased Credits are unspent and inside the window, and what that is
-// worth including the sales tax charged on them.
+// RefundQuote is what one refund would give back right now.
 type RefundQuote struct {
-	Credits     int   `json:"credits"`
-	AmountCents int64 `json:"amountCents"`
-	TaxCents    int64 `json:"taxCents"`
+	Credits         int    `json:"credits"`
+	AmountCents     int64  `json:"amountCents"`
+	TaxCents        int64  `json:"taxCents"`
+	MaxCredits      int    `json:"maxCredits"`
+	PaymentIntentID string `json:"-"`
 }
 
 // RefundReceipt records one issued refund: what was returned, and the
@@ -49,19 +52,24 @@ type RefundReceipt struct {
 	PaymentIntentID string `json:"paymentIntentId"`
 }
 
-// refundByRequestKey returns the refund already issued under requestKey,
-// if there is one. The PaymentIntent comes from the lot the refund drew
-// against, since that is where the money went back to.
-func refundByRequestKey(ctx context.Context, tx *sql.Tx, requestKey string) (RefundReceipt, bool, error) {
+// RefundOrder is one refund asked for; RequestKey makes a retry the same refund.
+type RefundOrder struct {
+	PracticeID string
+	Credits    int
+	RequestKey string
+}
+
+// RecordAct writes the operator_acts row a refund is taken under, once
+// its quote is known and before any money moves, and returns its id for
+// the refund's ledger row.
+type RecordAct func(ctx context.Context, quote RefundQuote) (operatorActID string, err error)
+
+func refundByRequestKey(ctx context.Context, tx *sql.Tx, practiceID, requestKey string) (RefundReceipt, bool, error) {
 	var receipt RefundReceipt
-	var quantity, taxCents int64
 	err := tx.QueryRowContext(ctx,
-		`SELECT -r.quantity, -r.tax_cents, r.stripe_refund_id, l.stripe_payment_intent_id,
-		        -r.quantity * r.unit_price_cents - r.tax_cents
-		 FROM credit_ledger r
-		 JOIN credit_ledger l ON l.id = r.drawn_lot_id
-		 WHERE r.refund_request_key = $1`, requestKey,
-	).Scan(&quantity, &taxCents, &receipt.StripeRefundID, &receipt.PaymentIntentID, &receipt.AmountCents)
+		`SELECT credits, amount_cents, tax_cents, stripe_refund_id, payment_intent_id
+		   FROM ops_refund_by_request_key($1, $2)`, practiceID, requestKey,
+	).Scan(&receipt.Credits, &receipt.AmountCents, &receipt.TaxCents, &receipt.StripeRefundID, &receipt.PaymentIntentID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RefundReceipt{}, false, nil
 	}
@@ -69,8 +77,6 @@ func refundByRequestKey(ctx context.Context, tx *sql.Tx, requestKey string) (Ref
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return RefundReceipt{}, false, fmt.Errorf("billing: look up refund by request key: %w", err)
 	}
-	receipt.Credits = int(quantity)
-	receipt.TaxCents = taxCents
 	return receipt, true, nil
 }
 
@@ -95,105 +101,90 @@ func refundableLots(lots []lot, now time.Time) []lot {
 	return refundable
 }
 
-// quote totals what the refundable lots are worth, tax included. Each
-// lot's tax share is computed the same cumulative way an actual refund
-// computes it, so the quote and the refunds that follow it agree to the
-// cent even when a lot has already been partly refunded.
-func quote(lots []lot) RefundQuote {
-	q := RefundQuote{}
-	for _, l := range lots {
-		q.Credits += l.remaining
-		q.AmountCents += int64(l.remaining) * l.unitPriceCents
-		q.TaxCents += taxOnCredits(l.taxCents, l.quantity, l.refundedCount, l.remaining, l.taxRefundedCents)
-	}
-	return q
-}
-
-// Refundable is what a Practice could get back today, computed from the
-// ledger alone -- no call to Stripe, no reconstruction from a Customer's
-// payment history. A Practice that bought at two different prices and
-// spent some of what she bought gets the arithmetic that actually
-// applies: the oldest Credits are the spent ones, so the unspent balance
-// is priced at what the later purchases cost.
-func Refundable(ctx context.Context, tx *sql.Tx, practiceID string, now time.Time) (RefundQuote, error) {
-	lots, err := openLots(ctx, tx, practiceID)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return RefundQuote{}, err
-	}
-	return quote(refundableLots(lots, now)), nil
-}
-
-// Refund gives quantity Credits back to a Practice, at the price she paid
-// for them and with the sales tax charged on them, against the payment
-// they arrived on.
-//
-// It draws from **one** lot: the oldest purchase that is unspent and
+// planRefund draws from **one** lot: the oldest purchase that is unspent and
 // inside the window. A refund is a reversal of a payment, and two
 // purchases are two payments -- issuing one refund across both would mean
 // two Stripe calls that cannot both be undone if the second fails. A
 // Practice wanting more than one purchase back asks twice, and each
 // answer stands on its own.
 //
+// Each tax share is computed cumulatively against the lot, so a run of
+// partial refunds returns exactly the tax the lot was charged.
+func planRefund(ctx context.Context, tx *sql.Tx, practiceID string, credits int, now time.Time) (lot, RefundQuote, error) {
+	lots, err := refundLots(ctx, tx, practiceID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return lot{}, RefundQuote{}, err
+	}
+	refundable := refundableLots(lots, now)
+	if len(refundable) == 0 {
+		return lot{}, RefundQuote{}, ErrNothingRefundable
+	}
+	l := refundable[0]
+	if credits == 0 {
+		credits = l.remaining
+	}
+	if credits > l.remaining {
+		return lot{}, RefundQuote{}, ErrRefundExceedsLot
+	}
+	taxCents := taxOnCredits(l.taxCents, l.quantity, l.refundedCount, credits, l.taxRefundedCents)
+	return l, RefundQuote{
+		Credits:         credits,
+		AmountCents:     int64(credits)*l.unitPriceCents + taxCents,
+		TaxCents:        taxCents,
+		MaxCredits:      l.remaining,
+		PaymentIntentID: l.stripePaymentIntentID.String,
+	}, nil
+}
+
+// QuoteRefund is what a refund of credits would give back today, without
+// calling Stripe. credits 0 asks for all the oldest refundable purchase holds.
+func QuoteRefund(ctx context.Context, tx *sql.Tx, practiceID string, credits int, now time.Time) (RefundQuote, error) {
+	_, q, err := planRefund(ctx, tx, practiceID, credits, now)
+	return q, err
+}
+
+// Refund gives order.Credits back to a Practice against the payment they
+// arrived on.
+//
 // Issuing it against the original PaymentIntent is what makes Stripe Tax
 // reverse the tax it reported; a refund moved any other way leaves the
 // ST-100 overstating what New York is owed.
 //
-// The Stripe call runs before the ledger row is written, inside the
-// caller's transaction: money moves first, then the record of it. The
-// reverse order would leave a ledger claiming a refund that Stripe
-// refused.
-func Refund(ctx context.Context, tx *sql.Tx, client StripeClient, practiceID, requestKey string, quantity int, now time.Time) (RefundReceipt, error) {
-	if quantity < 1 {
+// recordAct writes the act before the Stripe call, and the ledger row
+// keys it after: money moves, then the record of it, all in the caller's
+// transaction, so a refusal from Stripe leaves neither.
+func Refund(ctx context.Context, tx *sql.Tx, client StripeClient, order RefundOrder, now time.Time, recordAct RecordAct) (RefundReceipt, error) {
+	if order.Credits < 1 {
 		return RefundReceipt{}, fmt.Errorf("billing: refund quantity must be at least 1")
 	}
 
-	// Answered from the row the first attempt wrote, if there was one.
-	// This is what makes a retry safe rather than merely rare: the
-	// operator reruns the same request, and gets the refund already
-	// made instead of a second one.
-	if receipt, found, err := refundByRequestKey(ctx, tx, requestKey); err != nil || found {
+	if receipt, found, err := refundByRequestKey(ctx, tx, order.PracticeID, order.RequestKey); err != nil || found {
 		return receipt, err
 	}
 
-	// Same lock ConsumeCredit takes, for the same reason: two refunds
-	// arriving together must not both read the same lot as unspent.
-	if _, err := tx.ExecContext(ctx, `SELECT id FROM practices WHERE id = $1 FOR UPDATE`, practiceID); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return RefundReceipt{}, fmt.Errorf("billing: lock practice: %w", err)
-	}
-
-	lots, err := openLots(ctx, tx, practiceID)
+	l, q, err := planRefund(ctx, tx, order.PracticeID, order.Credits, now)
 	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return RefundReceipt{}, err
 	}
-	refundable := refundableLots(lots, now)
-	if len(refundable) == 0 {
-		return RefundReceipt{}, ErrNothingRefundable
-	}
-	l := refundable[0]
-	if quantity > l.remaining {
-		return RefundReceipt{}, ErrRefundExceedsLot
+
+	actID, err := recordAct(ctx, q)
+	if err != nil {
+		return RefundReceipt{}, fmt.Errorf("billing: record refund act: %w", err)
 	}
 
-	taxCents := taxOnCredits(l.taxCents, l.quantity, l.refundedCount, quantity, l.taxRefundedCents)
-	amountCents := int64(quantity)*l.unitPriceCents + taxCents
-
-	// requestKey rides through to Stripe as its idempotency key too, so
-	// a retry that raced past the lookup above -- the first attempt's
+	// The request key rides through to Stripe as its idempotency key too,
+	// so a retry that raced past the lookup above -- the first attempt's
 	// transaction not yet committed -- replays the same Refund rather
 	// than moving the money twice.
-	refundID, err := client.RefundPayment(ctx, l.stripePaymentIntentID.String, requestKey, amountCents)
+	refundID, err := client.RefundPayment(ctx, q.PaymentIntentID, order.RequestKey, q.AmountCents)
 	if err != nil {
-		return RefundReceipt{}, fmt.Errorf("billing: refund %d cents to practice %s: %w", amountCents, practiceID, err)
+		return RefundReceipt{}, fmt.Errorf("%w: %d cents to practice %s: %w", ErrStripeRefused, q.AmountCents, order.PracticeID, err)
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO credit_ledger
-		     (practice_id, origin, quantity, unit_price_cents, tax_cents, stripe_refund_id, drawn_lot_id, refund_request_key)
-		 VALUES ($1, 'refund', $2, $3, $4, $5, $6, $7)`,
-		practiceID, -quantity, l.unitPriceCents, -taxCents, refundID, l.id, requestKey,
+		`SELECT ops_record_refund($1, $2, $3, $4, $5, $6, $7, $8)`,
+		order.PracticeID, l.id, q.Credits, q.TaxCents, refundID, order.RequestKey, actID, now,
 	); err != nil {
 		// Two attempts at one request, racing: 00054 makes both the
 		// request key and the Stripe Refund unique, so the second is
@@ -202,10 +193,10 @@ func Refund(ctx context.Context, tx *sql.Tx, client StripeClient, practiceID, re
 	}
 
 	return RefundReceipt{
-		Credits:         quantity,
-		AmountCents:     amountCents,
-		TaxCents:        taxCents,
+		Credits:         q.Credits,
+		AmountCents:     q.AmountCents,
+		TaxCents:        q.TaxCents,
 		StripeRefundID:  refundID,
-		PaymentIntentID: l.stripePaymentIntentID.String,
+		PaymentIntentID: q.PaymentIntentID,
 	}, nil
 }

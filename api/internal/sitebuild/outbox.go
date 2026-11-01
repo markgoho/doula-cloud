@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	"doula-cloud/api/internal/outbox"
 )
 
 // Queue records that the published site no longer matches what is
@@ -105,13 +107,17 @@ func (w Worker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
 // record of it rather than rolling it back and forgetting.
 func (w Worker) recordFailure(ctx context.Context, tx *sql.Tx, attempt int, cause error) error {
 	status := "pending"
+	var reason *outbox.DeadLetterReason
 	if attempt >= MaxAttempts {
 		status = "dead_lettered"
+		exhausted := outbox.RetriesExhausted
+		reason = &exhausted
 	}
 	_, err := tx.ExecContext(ctx,
 		`UPDATE site_build_outbox
-		    SET attempt_count = $1, last_error = $2, status = $3::site_build_outbox_status
-		  WHERE status = 'pending'`, attempt, cause.Error(), status)
+		    SET attempt_count = $1, last_error = $2, status = $3::site_build_outbox_status,
+		        dead_letter_reason = $4::outbox_dead_letter_reason
+		  WHERE status = 'pending'`, attempt, cause.Error(), status, reason)
 	if err != nil {
 		// coverage:ignore reason: DB update failure, not exercised by unit tests
 		return fmt.Errorf("sitebuild: record dispatch failure: %w", err)

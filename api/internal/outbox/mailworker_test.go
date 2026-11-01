@@ -133,6 +133,7 @@ func TestMailWorker_ComposeDeadLetterErrorDeadLettersOnTheSpot(t *testing.T) {
 	if got.lastError.String != testDeadReason {
 		t.Fatalf("last_error = %q, want the DeadLetterError's Reason", got.lastError.String)
 	}
+	assertReason(t, got, outbox.OwnData)
 }
 
 // "error wrap" case: with the claim-scan-compose-send-mark loop living
@@ -196,6 +197,7 @@ func TestMailWorker_SuppressedAddressDeadLettersThroughWrappedSender(t *testing.
 	if got.attemptCount != 0 {
 		t.Fatalf("attempt_count = %d, want 0 (dead-lettered outright)", got.attemptCount)
 	}
+	assertReason(t, got, outbox.OwnData)
 }
 
 func TestMailWorker_MarkSentClearsConfiguredTerminalColumns(t *testing.T) {

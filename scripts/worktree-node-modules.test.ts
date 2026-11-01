@@ -103,13 +103,14 @@ describe('sveltekitPackages', () => {
     expect(sveltekitPackages(root)).toEqual([]);
   });
 
-  test("finds app, gcp-dashboard and site on this repo's own root", () => {
+  test("finds app, gcp-dashboard, ops and site on this repo's own root", () => {
     // The drift guard: if a future package renames @sveltejs/kit out of
     // its manifest, or a package.json goes missing, this fails here
     // rather than silently in a real worktree.
     expect(sveltekitPackages(REPO_ROOT)).toEqual([
       'app',
       'gcp-dashboard',
+      'ops',
       'site',
     ]);
   });

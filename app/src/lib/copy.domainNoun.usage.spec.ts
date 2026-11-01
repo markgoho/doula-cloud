@@ -71,8 +71,12 @@ const CLIENT_REGISTER_DEMOS = 'src/routes/style-guide/{document-page,sign-contra
 const clientRead = new Set(globFiles([...CLIENT_READ, CLIENT_REGISTER_DEMOS], { cwd: appRoot }));
 const isClientRead = (file: string) => clientRead.has(file);
 
-const allSvelteFiles = globFiles('src/{lib/components,routes}/**/*.svelte', { cwd: appRoot });
-const allModuleFiles = globFiles('src/{lib,routes}/**/*.ts', { cwd: appRoot }).filter(
+// ops/ (ADR-0062) is read by DoulaCloud's own operators, so every ops
+// screen is held to the Staff side's rule.
+const allSvelteFiles = globFiles(['src/{lib/components,routes}/**/*.svelte', '../ops/src/{lib/components,routes}/**/*.svelte'], {
+	cwd: appRoot
+});
+const allModuleFiles = globFiles(['src/{lib,routes}/**/*.ts', '../ops/src/{lib,routes}/**/*.ts'], { cwd: appRoot }).filter(
 	(file) => !/\.(?:test|spec)\.ts$/.test(file) && !file.endsWith('.d.ts') && !file.endsWith('.fixture.ts')
 );
 const svelteFiles = allSvelteFiles.filter((file) => !isClientRead(file));
@@ -156,6 +160,8 @@ describe("a domain noun that points at one of the product's records takes its ca
 		// pass while checking no copy at all.
 		expect(svelteFiles).toContain('src/routes/practices/[practiceId]/contracts/ContractsScreen.svelte');
 		expect(moduleFiles).toContain('src/lib/invoice.ts');
+		expect(svelteFiles).toContain('../ops/src/routes/staff/+page.svelte');
+		expect(moduleFiles).toContain('../ops/src/lib/refund.ts');
 		expect(moduleFiles.some((file) => file.endsWith('.spec.ts'))).toBe(false);
 		expect(svelteFiles.some((file) => file.startsWith('src/routes/portal/'))).toBe(false);
 		expect(moduleFiles).not.toContain('src/lib/yourCare.ts');

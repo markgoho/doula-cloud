@@ -41,8 +41,10 @@ func createTestTable(t *testing.T, db *testdb.DB) {
 			next_attempt_at timestamptz NOT NULL DEFAULT now(),
 			sent_at timestamptz,
 			last_error text,
+			dead_letter_reason outbox_dead_letter_reason,
 			secret_a text,
-			secret_b text
+			secret_b text,
+			CHECK ((status = 'dead_lettered') = (dead_letter_reason IS NOT NULL))
 		)`); err != nil {
 		t.Fatalf("create test table: %v", err)
 	}
@@ -74,6 +76,7 @@ type testRowState struct {
 	status       string
 	attemptCount int
 	lastError    sql.NullString
+	reason       sql.NullString
 	secretA      sql.NullString
 	secretB      sql.NullString
 }
@@ -82,11 +85,18 @@ func readTestRow(t *testing.T, db *testdb.DB, id string) testRowState {
 	t.Helper()
 	var s testRowState
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT status, attempt_count, last_error, secret_a, secret_b FROM outbox_test_rows WHERE id = $1`, id,
-	).Scan(&s.status, &s.attemptCount, &s.lastError, &s.secretA, &s.secretB); err != nil {
+		`SELECT status, attempt_count, last_error, dead_letter_reason, secret_a, secret_b FROM outbox_test_rows WHERE id = $1`, id,
+	).Scan(&s.status, &s.attemptCount, &s.lastError, &s.reason, &s.secretA, &s.secretB); err != nil {
 		t.Fatalf("read test row: %v", err)
 	}
 	return s
+}
+
+func assertReason(t *testing.T, got testRowState, want outbox.DeadLetterReason) {
+	t.Helper()
+	if got.reason.String != string(want) {
+		t.Fatalf("dead_letter_reason = %+v, want %q", got.reason, want)
+	}
 }
 
 func newTestWorker(sender mail.Sender, clearOnTerminal ...string) outbox.Worker {
@@ -222,6 +232,7 @@ func TestMarkFailed_DeadLettersAfterScheduleExhausted(t *testing.T) {
 	if got.secretA.Valid {
 		t.Fatalf("secret_a = %+v, want cleared on dead-letter too", got.secretA)
 	}
+	assertReason(t, got, outbox.RetriesExhausted)
 }
 
 func TestMarkDeadLetteredNow(t *testing.T) {
@@ -252,6 +263,7 @@ func TestMarkDeadLetteredNow(t *testing.T) {
 	if !got.lastError.Valid || got.lastError.String != testDeadReason {
 		t.Fatalf("last_error = %+v, want %q", got.lastError, testDeadReason)
 	}
+	assertReason(t, got, outbox.OwnData)
 }
 
 func TestSendAll_EmptyAddressesMarksSentWithNothingToMail(t *testing.T) {

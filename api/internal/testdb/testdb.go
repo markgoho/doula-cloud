@@ -21,18 +21,24 @@ import (
 const (
 	appUser     = "app_test"
 	appPassword = "app_test"
+	opsUser     = "ops_test"
+	opsPassword = "ops_test"
 )
 
-// DB holds two connections to the same disposable Postgres instance.
+// DB holds three connections to the same disposable Postgres instance.
 // Admin is a superuser connection for migrations and fixture setup --
 // Postgres superusers always bypass Row-Level Security, so Admin never
 // observes RLS in effect. App is a low-privilege connection using the
 // same app_runtime role the running application connects as; it is the
 // connection RLS policies actually apply to, and the one tests should use
-// to prove tenant isolation.
+// to prove tenant isolation. Ops connects as a member of ops_runtime, the
+// role doula-ops connects as (ADR-0062). AppURL is App's connection
+// string, for code that opens a pool of its own as the same login.
 type DB struct {
-	Admin *sql.DB
-	App   *sql.DB
+	Admin  *sql.DB
+	App    *sql.DB
+	Ops    *sql.DB
+	AppURL string
 }
 
 // New clones a fresh database from the test process's shared, migrated
@@ -87,17 +93,21 @@ func New(t *testing.T) *DB {
 		}
 	})
 
-	appDB := newAppDB(t, u.String())
+	appURL := *u
+	appURL.User = url.UserPassword(appUser, appPassword)
+	appDB := newLoginDB(t, u.String(), appUser, appPassword)
+	opsDB := newLoginDB(t, u.String(), opsUser, opsPassword)
 
-	return &DB{Admin: db, App: appDB}
+	return &DB{Admin: db, App: appDB, Ops: opsDB, AppURL: appURL.String()}
 }
 
-// newAppDB opens a connection to the clone as app_test, the shared
-// LOGIN role in the app_runtime group (created once in setup, since
-// roles are cluster-global -- a per-test CREATE ROLE would fail with
-// "role already exists" on the second test in the package). This is the
-// connection RLS policies scoped to app_runtime actually apply to.
-func newAppDB(t *testing.T, dsn string) *sql.DB {
+// newLoginDB opens a connection to the clone as user, one of the shared
+// LOGIN roles in the app_runtime or ops_runtime group (created once in
+// setup, since roles are cluster-global -- a per-test CREATE ROLE would
+// fail with "role already exists" on the second test in the package).
+// As app_test, it is the connection RLS policies scoped to app_runtime
+// actually apply to.
+func newLoginDB(t *testing.T, dsn, user, password string) *sql.DB {
 	t.Helper()
 
 	u, err := url.Parse(dsn)
@@ -105,17 +115,17 @@ func newAppDB(t *testing.T, dsn string) *sql.DB {
 	if err != nil {
 		t.Fatalf("testdb: parse dsn: %v", err)
 	}
-	u.User = url.UserPassword(appUser, appPassword)
+	u.User = url.UserPassword(user, password)
 
 	appDB, err := sql.Open("pgx", u.String())
 	// coverage:ignore reason: driver open failure, not exercised by the happy-path test
 	if err != nil {
-		t.Fatalf("testdb: open app db: %v", err)
+		t.Fatalf("testdb: open %s db: %v", user, err)
 	}
 	t.Cleanup(func() {
 		// coverage:ignore reason: db close failure, not exercised by the happy-path test
 		if err := appDB.Close(); err != nil {
-			t.Errorf("testdb: close app db: %v", err)
+			t.Errorf("testdb: close %s db: %v", user, err)
 		}
 	})
 

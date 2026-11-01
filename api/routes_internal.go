@@ -1,16 +1,14 @@
 package main
 
 import (
-	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/legal"
-	"doula-cloud/api/internal/legalnotice"
 	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/sitebuild"
 	"doula-cloud/api/internal/staffauth"
 )
 
 // The endpoints nobody signs in to reach: ADR-0010's outboxes, #443's
-// page verifier, and the operator endpoints.
+// page verifier and sweeps. Every operator act is in doula-ops.
 //
 // Cloud Scheduler and Cloud Tasks call these on a cadence, authenticated
 // by a caller identity rather than by a session (ADR-0037), so they sit
@@ -34,46 +32,6 @@ func registerInternalRoutes(g *staffauth.GatedRouter, d Deps) {
 	// workflow. The cadence is what covers a build that fails and
 	// produces no deploy and no callback at all.
 	g.Write("POST /api/internal/site/verify-pages", sitebuild.VerifyHandler(d.DB, d.PageVerifier, d.InternalAuth))
-	// #420's two billing endpoints, behind the same guard.
-	// Neither is a screen: /support tells a Practice to email us for a
-	// refund, because a refund issued on her recorded request restarts
-	// the dormancy clock that one we initiated would not (APL 1315), and
-	// the dormancy list is an operator's yearly mailing, not a tenant's
-	// view of anything.
-	g.Write("POST /api/internal/billing/refunds", billing.RefundHandler(d.DB, d.StripeClient, d.InternalAuth))
-	g.OpenGet("/api/internal/billing/dormant-practices",
-		"An internal caller identity, not a session -- the operator's escheatment mailing list (#420), the same position every /api/internal worker endpoint holds",
-		billing.DormantPracticesHandler(d.DB, d.InternalAuth))
-	// #1394: the founder's monthly read of Credits bought and spent per
-	// Practice (ADR-0046), called by hand on the same guard.
-	g.OpenGet("/api/internal/billing/monthly-credits",
-		"An internal caller identity, not a session -- the founder's monthly read of the Credit ledger (#1394, ADR-0046), the same position every /api/internal endpoint holds",
-		billing.MonthlyCreditsHandler(d.DB, d.InternalAuth))
-	// #449's founding grant, on the same guard again. A pilot Practice's
-	// Credits are issued by a person, by hand, roughly a dozen times in
-	// total -- so this is an operator endpoint that records who issued
-	// them, not a screen and not an ad-hoc INSERT.
-	g.Write("POST /api/internal/billing/founding-grants", billing.FoundingGrantHandler(d.DB, d.InternalAuth))
-	// #605's support path: an operator clears a sole Owner's enrollment
-	// after a live video call and government-ID match against her
-	// Practice's Stripe Connect identity (ADR-0007), per
-	// docs/runbooks/mfa-recovery-support.md. Same guard, same shape as
-	// founding-grants above -- an operator endpoint, deliberately not a
-	// screen (#615's AC: "no product surface").
-	g.Write("POST /api/internal/staffauth/mfa-recovery/support-clear", staffauth.SupportClearHandler(d.AccountManager, d.DB, d.InternalAuth))
-	// #1790's pilot gate, on the same guard and in founding-grants'
-	// shape. Until January only an address the founder added can create
-	// a Practice: the first endpoint adds one, the second opens the gate
-	// for everyone -- the one deliberate act ADR-0043 asks for. Both
-	// record who acted and when; there is no endpoint that undoes either.
-	g.Write("POST /api/internal/staffauth/pilot-allowlist", staffauth.PilotAllowlistHandler(d.DB, d.InternalAuth))
-	g.Write("POST /api/internal/staffauth/pilot-gate/open", staffauth.PilotGateOpenHandler(d.DB, d.InternalAuth))
-	// #1548's publish act, on the same guard and in the pilot gate's
-	// shape: a new version of the Terms or the Privacy Policy is written
-	// into api/internal/legal, and the founder then publishes it by name.
-	// A material version queues the email to each Owner, and is refused
-	// fewer than 30 days before it takes effect.
-	g.Write("POST /api/internal/legal/publish", legalnotice.PublishHandler(d.DB, d.InternalAuth, d.legalHistory(), d.StripeClient))
 }
 
 // legalDocuments is the version history the BFF publishes and mails

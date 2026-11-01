@@ -64,6 +64,15 @@ func CreateVisitHandler(service VisitService) http.HandlerFunc {
 }
 ```
 
+### Ops acts (`doula-ops`, ADR-0062)
+
+`doula-ops`, the Platform operator's service in `api/cmd/ops`, follows its own rule, not `idempotency.Wrap`'s:
+
+1. **The key is required on every ops act.** A `POST` that changes state (a refund, a founding grant, a pilot address, the pilot gate's opening, a legal publication, a second-factor reset) is refused with 400 without an `Idempotency-Key`. One helper reads it, `requestKeyOf`, with one message, "Send an Idempotency-Key header with the *act*." Sign-in, sign-out and the step-up take no key: a repeated stamp is the same stamp, and each refusal is its own try.
+2. **The replay comes from `operator_acts`, which is kept forever.** Each act writes its row through `recordAct` with the key in `details.requestKey`. A retry under the same key finds that row and answers what the first request did, writing nothing. There is no TTL and no sweep: the table is append-only and a row is the act's audit record, so a key is never forgotten.
+3. **A replay needs no new code.** On the four acts behind a step-up (refund, pilot gate, legal publication, second-factor reset), `requireStepUp` admits a request whose key this operator already acted under even when the session holds no unspent step-up, and `spendUnlessReplay` leaves any stamp the session does hold unspent. A retry after a lost response returns the original answer without spending a code or asking for one.
+4. **The client seam sends the key.** `ops/src/lib/act.ts`'s `postAct` is the only place the header is set, and `actKey()` the only place a key is made. A check page takes one key per visit and sends it with every press, so a resubmit replays.
+
 ---
 
 ## 4. Cursor-Based Pagination for Scalable Collections
@@ -152,7 +161,7 @@ Deliberately not limited:
 - `GET /api/hello` — a liveness/readiness probe with no side effect and no cost, curled in a loop by CI's own smoke tests and by Cloud Run's health check. Limiting it would break exactly the callers it exists for.
 - `GET /api/legal/coming` — the versions of the Terms of Service and the Privacy Policy that have not started, which the signup form names (#1824, ADR-0053). It reads no input, no credential and no database: it walks the few entries of `api/internal/legal`'s history at the server's instant, and says only what `/terms` and `/privacy` already print. There is nothing for a repeat to spend or to learn.
 - `DELETE /api/session` — only ever clears a cookie the caller already holds (or no-ops if there is none); no credential is checked, so there is nothing for an attacker to gain by repeating it.
-- `GET /api/staff/session`, `PUT /api/staff/work-state`, `PUT /api/staff/email`, `GET /api/portal/session`, the founder read page's `GET /api/staff/feedback` and `GET /api/staff/feedback/{feedbackId}` (#1526, behind `staffauth.FounderOnly` as well), and every route behind `staffauth.Middleware` / `clientauth.Middleware` except the one below — gated by `authn.Begin`'s own `__session` cookie check. A missing or invalid session is a `401` at that gate; there is no bootstrap-style window here for an attacker to spend.
+- `GET /api/staff/session`, `PUT /api/staff/work-state`, `PUT /api/staff/email`, `GET /api/portal/session`, and every route behind `staffauth.Middleware` / `clientauth.Middleware` except the one below — gated by `authn.Begin`'s own `__session` cookie check. A missing or invalid session is a `401` at that gate; there is no bootstrap-style window here for an attacker to spend.
 - **Limited although it sits behind `clientauth.Middleware`:** `GET /api/portal/engagements/{engagementId}/invoices/{invoiceId}/payment` (#1020), session 30/hr, `invoiceId` 30/hr, IP 100/hr. Every call is a live Stripe retrieve and returns a payment credential, which is the "heavy endpoint" rule above; a signed-in Client opening one Invoice page a few times finds her card well inside it, and a script does not.
 - `POST /api/internal/**` and `POST /api/stripe/**` / `POST /api/mailgun/webhook` — authenticated by a Google-signed OIDC ID token from an allowlisted service account ([ADR-0037](adr/0037-the-internal-boundary-is-a-caller-identity-not-a-shared-secret.md); `X-Internal-Secret` is the local and end-to-end fallback only) or a signature over the request body, not a session, and called only by Cloud Scheduler, Cloud Tasks, or the vendor itself.
 

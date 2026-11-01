@@ -53,8 +53,11 @@ The account now holds, and holds nothing beyond: `roles/cloudsql.client` and a t
 | `NOTIFICATION_TASKS_TARGET_BASE_URL` | unset | unset | the same raw Cloud Run URL `gcloud run services describe` reports (see [Deployed webhook endpoints](#deployed-webhook-endpoints)), plain env var |
 | `GITHUB_DISPATCH_TOKEN` | unset (nothing local fires a real deploy) | unset | Secret Manager `doula-cloud-github-dispatch-token`, a fine-grained personal access token scoped to `markgoho/doula-cloud` with **Contents: write** |
 | `GITHUB_FEEDBACK_TOKEN` | unset -- `main.go` wires `feedback.NewFakeIssueCreator()` instead (#1524, #1500's resolution) | unset, same fake as local | Secret Manager `doula-cloud-github-feedback-token`, a second fine-grained personal access token scoped to `markgoho/doula-cloud-feedback` alone with **Issues: write**. Created 2026-10-01, **expires 2027-10-01** ([#1529](https://github.com/markgoho/doula-cloud/issues/1529)): before then, regenerate it at <https://github.com/settings/personal-access-tokens>, add the new value as a new version of the secret, and deploy a new revision so `latest` resolves again. Unset falls back to the same fake -- a lapsed or missing token dead-letters the row rather than failing a deploy |
-| `GITHUB_FEEDBACK_REPO` | unset | unset | `markgoho/doula-cloud-feedback`, plain env var. The founder read page builds its link to a piece's issue from it too (#1526); unset, the page prints the issue number with no link |
-| `FOUNDER_STAFF_ID` | `0f0a1d5e-5a17-4c0b-9d0f-f0de15260001`, a fixed Staff id set by `stack.ts` (#1526). No Staff row has that id until one is seeded: `bun run --cwd app seed:founder-session` seeds it and prints the founder's session cookie | same; the spec that needs the founder seeds the row with `seedFounderSession` (`app/e2e/founder.ts`) | the founder's own `staff.id` in the deployed database, plain env var. **Not set yet** ([#1607](https://github.com/markgoho/doula-cloud/issues/1607)): it goes on the live service first, with `gcloud run services update doula-api --update-env-vars FOUNDER_STAFF_ID=<id>`, and into `terraform/cloud_run.tf` with the same value after, because the `plan` check fails on a declared variable the live service does not carry. Unset, or naming nobody, the two founder routes (`GET /api/staff/feedback`, `GET /api/staff/feedback/{feedbackId}`) answer `404` to everybody, so a service that was never told who the founder is serves the page to nobody |
+| `STRIPE_API_KEY` | the refund, and the check of a Terms version's Price; with the emulator and no key, an in-memory fake | unset |
+| `STRIPE_CREDIT_PRICE_ID` | a Price on the credit Product, which legal publish finds a version's Price beside | unset |
+| `E2E_LEGAL_VERSIONS` | versions appended to the shipped history, refused outside the stack (`stackswitch.Legal`) | one material Privacy Policy version, `OPS_LEGAL_VERSION` in `app/e2e/stack.ts`, which ops's walk publishes |
+| `GITHUB_FEEDBACK_REPO` | unset | unset | `markgoho/doula-cloud-feedback`, plain env var |
+| `OPS_BASE_URL` | ops/'s dev origin, set by `stack.ts` | same | `https://ops.doula.cloud`, plain env var. A Feedback issue's body links to `<OPS_BASE_URL>/feedback/<id>`, where the piece is read in ops (#2478). **Not on the live service yet**: it is set when `doula-ops` is deployed |
 | `E2E_CLOCK_FOLLOWS_SIM_OFFSET` | `1`, set by `stack.ts` (#1833): the BFF's clock is real time plus `sim.offset_row`'s delta, read again on each call, so a simulation jump moves `clock.Now(ctx)` as it moves the database's `now()` | same | **never set.** `api/internal/stackswitch` refuses to start the process when it is set unless `FIREBASE_AUTH_EMULATOR_HOST` is set and the database carries the `sim` schema. Cloud Run has neither: the emulator does not exist there, and `simclock` installs the schema only into a database that has never seen a migration |
 | `E2E_LEGAL_VERSIONS` | unset at start. `terms-agreement.e2e.ts` restarts the BFF with it (`restartAPI`), a JSON list of versions to append to the shipped Terms and Privacy Policy history (`document`, `effective`, `material`, `change`), so a spec can publish a material version without a change to `api/internal/legal/legal.go` | same | **never set**, behind the same gate as the row above |
 | `E2E_ADDRESS_RATE_LIMIT_SCALE` | `10`, set by `stack.ts` (#1858): every per-address rate-limit cap (`ratelimit.IPRule`) is multiplied by it, since every request the suite makes arrives from `127.0.0.1` and one pass makes more than 50 signups. No other dimension is scaled | same | **never set**, behind the same gate as the clock row above, so the deployed caps are the ones `api/internal/staffauth/mount.go` and its neighbors state |
@@ -191,76 +194,63 @@ gcloud run services update doula-api --region us-central1 \
 
 ### The boundary on `/api/internal/**`
 
-Thirty-three addresses sit under `/api/internal/**` — the drain, twenty-two `process-*` outbox endpoints, #443's page probe, the idempotency-key sweep, and eight operator endpoints. `api/routes_internal_guardrail_test.go` holds the list, read from the router rather than written from memory, and asserts that every one of them answers `401` to a request carrying nothing.
+Twenty-six addresses sit under `/api/internal/**` — the drain, twenty-two `process-*` outbox endpoints, #443's page probe, the idempotency-key sweep and the webhook-arrival sweep. No operator act is among them: each is taken in ops. `api/routes_internal_guardrail_test.go` holds the list, read from the router rather than written from memory, and asserts that every one of them answers `401` to a request carrying nothing.
 
 `doula-api` is `allUsers` → `roles/run.invoker` and stays that way — it serves the app and three webhooks that arrive with no Google credential — and Cloud Run's IAM is per-service, so the boundary can only be inside the process. [ADR-0037](adr/0037-the-internal-boundary-is-a-caller-identity-not-a-shared-secret.md) makes it a caller identity: `internalauth.Guard` verifies a Google-signed OIDC ID token against `INTERNAL_OIDC_AUDIENCE` and then the token's own `email` claim against `INTERNAL_OIDC_CALLERS`.
 
 `X-Internal-Secret` remains the mechanism for the local stack and the end-to-end suite, which run the BFF with no metadata server to mint a token with. It is refused outright wherever `NOTIFICATION_WORKER_SECRET` is unset, so a deployment that carries no secret accepts no header.
 
-The deployed service accepts a token and nothing else, since [#1183](https://github.com/markgoho/doula-cloud/issues/1183) set the three `INTERNAL_OIDC_*` variables on Cloud Run and removed `NOTIFICATION_WORKER_SECRET` from it. An operator endpoint is reached by minting a token rather than pasting a secret (`docs/runbooks/mfa-recovery-support.md`):
+The deployed service accepts a token and nothing else, since [#1183](https://github.com/markgoho/doula-cloud/issues/1183) set the three `INTERNAL_OIDC_*` variables on Cloud Run and removed `NOTIFICATION_WORKER_SECRET` from it. Its callers are Cloud Scheduler, Cloud Tasks and the deploy workflow; no person calls one of these addresses, since every operator act is taken in ops.
 
-```sh
-gcloud auth print-identity-token \
-  --impersonate-service-account=internal-caller@doula-cloud.iam.gserviceaccount.com \
-  --audiences=https://doula-api-850855848778.us-central1.run.app \
-  --include-email
-```
+The token's `aud` is the service's base URL and not an endpoint's own URL, because one audience has to serve all twenty-six addresses. That is a trap in the infrastructure, where Cloud Scheduler and Cloud Tasks each default an unset `audience` to the full target URI. The token must also carry an `email` claim: the guard refuses a token with none, so its absence reads as a 401 from an otherwise valid token.
 
-Both flags are load-bearing. `--audiences` is the service's base URL and not the endpoint's own URL, because one audience has to serve all thirty-two addresses — and it is the same trap in the infrastructure, where Cloud Scheduler and Cloud Tasks each default an unset `audience` to the full target URI. `--include-email` is what puts the `email` claim on the token; the guard refuses a token that carries none, so its absence reads as a 401 from an otherwise valid token.
+### Refunding a Practice's Credits
+
+A refund is not one of these endpoints and takes no token. Since [#2481](https://github.com/markgoho/doula-cloud/issues/2481) it is taken only in ops ([ADR-0062](adr/0062-the-platform-operator-works-in-a-separate-app-at-ops-doula-cloud-with-its-own-service-and-database-role.md)), when an Owner has asked for one by email. Sign in at `https://ops.doula.cloud` and open `/practices/<the Practice's id>/refund`. Enter the number of Credits, choose the Owner who asked, and enter the date her email arrived. The check page states the Practice, the Credits, the amount back with its sales tax, the Owner and the date. Enter your password and a new authenticator-app code, then press **Refund**. Stripe returns the money to the card the Credits were bought with. The refund is recorded in the Operator log under your name and in the Practice's Activity as your name with DoulaCloud. A refund draws on one purchase, so a Practice asking for more than one purchase holds is refunded twice.
+
+`doula-ops` reads `STRIPE_API_KEY` for the refund. On the local stack, with the Auth emulator and no key, it refunds through an in-memory fake.
+
+### Giving a Practice its founding grant
+
+A founding grant is not one of these endpoints either and takes no token. Since [#2482](https://github.com/markgoho/doula-cloud/issues/2482) it is given only in ops. Sign in at `https://ops.doula.cloud` and open `/practices/<the Practice's id>/founding-grant`. The check page states the Practice, how many Staff it has, and how many Credits that comes to: three for each Staff member, counted when the grant is given and never typed. Press **Give**. The grant is recorded in the Operator log under your name, on the Credit ledger keyed to that act, and in the Practice's Activity as your name with DoulaCloud. A Practice is given one founding grant; the page says so when it already holds one. Give it after the Practice's Doulas have accepted their Invitations, since the roster on that day sizes it.
 
 ### The pilot gate: who can create a Practice before January
 
 Until January 2027, `POST /api/staff/signup` creates a Practice only for an address on the pilot allowlist ([#1790](https://github.com/markgoho/doula-cloud/issues/1790)). Any other address gets a `403` with the code `PILOT_NOT_OPEN`, nothing is written, and the signup screen says DoulaCloud opens in January 2027. Accepting an Invitation is not gated: an Owner already chose that person. Migration `00125` creates the gate closed. The local stack and the end-to-end suite open it as they start (`openPilotGate` in `app/e2e/stack.ts`), and so does every Go test database (`testdb`'s template).
 
-Both operator acts below take a token minted with the command above. Each one records who did it and when, and neither can be undone through the API.
+**Let a doula into the pilot.** Do this after you have spoken with the doula. It takes no token. Since [#2484](https://github.com/markgoho/doula-cloud/issues/2484) an address is added only in ops ([ADR-0062](adr/0062-the-platform-operator-works-in-a-separate-app-at-ops-doula-cloud-with-its-own-service-and-database-role.md)). Sign in at `https://ops.doula.cloud`, open **Pilot allowlist** (`/pilot-allowlist`), and enter the address the doula will sign up with; case and spaces do not matter. The check page states the address. Press **Add**. The add is recorded in the Operator log under your name, and the allowlist row keys that act. An address already on the list is refused, with the date it was added, and nothing changes. There is no way to take an address off. If the doula was refused before you added the address, signing up again now goes through.
 
-**Let a doula into the pilot.** Do this after you have spoken with the doula. `address` is the address the doula will sign up with; case and spaces do not matter. `addedBy` is your own name. A second add of the same address answers `200` and keeps the first record. If the doula was refused before you added the address, the same form sent again now goes through.
+**Open the pilot gate in January.** The one deliberate act that opens signup to everyone ([ADR-0043](adr/0043-a-date-is-a-trigger-only-when-someone-set-it.md)). It takes no token. Since [#2485](https://github.com/markgoho/doula-cloud/issues/2485) the gate is opened only in ops. Sign in at `https://ops.doula.cloud` and open **Pilot gate** (`/pilot-gate`). The check page states that anyone who signs up can then create a Practice, and that the gate stays open for good. Enter your password and a new authenticator-app code, then press **Open the pilot gate**. From then on, signup does not read the allowlist. The opening is recorded in the Operator log under your name, and the gate keys that act. Once the gate is open, the page says when it was opened, and an opening sent again is refused with that date and changes nothing. Nothing closes it again.
 
-```sh
-TOKEN=$(gcloud auth print-identity-token \
-  --impersonate-service-account=internal-caller@doula-cloud.iam.gserviceaccount.com \
-  --audiences=https://doula-api-850855848778.us-central1.run.app \
-  --include-email)
+### Publishing a version of the Terms or the Privacy Policy
 
-curl -s -X POST 'https://doula-api-850855848778.us-central1.run.app/api/internal/staffauth/pilot-allowlist' \
-  -H "Authorization: Bearer $TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"address": "<the doula'\''s email address>", "addedBy": "<your name>"}'
-```
+A version is written first: its text on the site and its `legal.Version` in `api/internal/legal/legal.go`, in one commit. Publishing it is then one deliberate act, and it takes no token. Since [#2486](https://github.com/markgoho/doula-cloud/issues/2486) a version is published only in ops. Sign in at `https://ops.doula.cloud`, open **Legal versions** (`/legal-versions`), and choose **Check and publish** beside the version. The check page states the document, the version's one line of change, whether it is material, how many Owners will be emailed and the date it takes effect. The count is read by the same rule that queues the emails, so the two agree. Enter your password and a new authenticator-app code, then press **Publish**. A material version queues one email to each Owner of each Practice that is not deleted and not in its deletion window, in the same transaction as the publication; one that is not material emails no one. A material version is refused fewer than 30 days before its date, and a rise in the price of a Credit fewer than 60. The publication is recorded in the Operator log under your name, and the publication keys that act. A version is published once: published again, it is refused with the date, and nothing changes.
 
-The answer is the stored row: `{"address", "addedBy", "addedAt"}`.
-
-**Open the pilot gate in January.** The one deliberate act that opens signup to everyone ([ADR-0043](adr/0043-a-date-is-a-trigger-only-when-someone-set-it.md)). From then on, signup does not read the allowlist. Opening it a second time answers `200` and keeps the first record. There is no endpoint that closes it again.
-
-```sh
-curl -s -X POST 'https://doula-api-850855848778.us-central1.run.app/api/internal/staffauth/pilot-gate/open' \
-  -H "Authorization: Bearer $TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"openedBy": "<your name>"}'
-```
-
-The answer is the gate's record: `{"openedBy", "openedAt"}`.
+`doula-ops` reads `STRIPE_API_KEY` and `STRIPE_CREDIT_PRICE_ID` to check that a Stripe Price charges the price of a Credit a version of the Terms states.
 
 ### The monthly Credits read
 
-Once a month, the founder reads two counts per Practice from the Credit ledger and copies them into the private spreadsheet in the DoulaCloud Google account ([ADR-0046](adr/0046-the-product-counts-what-a-practice-did-and-never-who-she-is.md), [#1394](https://github.com/markgoho/doula-cloud/issues/1394)). Mint a token with the command above, then ask for the month just ended:
+Once a month, the founder reads two counts per Practice from the Credit ledger and copies them into the private spreadsheet in the DoulaCloud Google account ([ADR-0046](adr/0046-the-product-counts-what-a-practice-did-and-never-who-she-is.md), [#1394](https://github.com/markgoho/doula-cloud/issues/1394)). It takes no token. Since [#2476](https://github.com/markgoho/doula-cloud/issues/2476) it is read only in ops ([ADR-0062](adr/0062-the-platform-operator-works-in-a-separate-app-at-ops-doula-cloud-with-its-own-service-and-database-role.md)). Sign in at `https://ops.doula.cloud` and open **Monthly Credits** (`/credits`). It opens on the last month that has ended. The month list goes back to the month the first Practice signed up and never offers the month in progress, so no figure for the current month is shown anywhere.
 
-```sh
-curl -s 'https://doula-api-850855848778.us-central1.run.app/api/internal/billing/monthly-credits?month=<YYYY-MM>' \
-  -H "Authorization: Bearer $TOKEN"
-```
+The page has one row per Practice that existed in that month, by name: Credits bought and Credits spent, with the totals beneath. Months begin and end at midnight in New York (America/New_York), the business's time zone, not UTC. Credits bought is the sum of the purchase lots that month. Credits spent is the count of Credits spent, which is the number of Engagements started. A signup bonus, a founding grant, a refund and a forfeit count as neither.
 
-The answer is one row per Practice per calendar month, from the month the Practice was created through the month asked for, or through the month the Practice was deleted: `{"practiceId", "practiceName", "practiceCreatedMonth", "month", "creditsBought", "creditsSpent", "firstPurchaseMonth"}`. Months are UTC. `creditsBought` is the sum of purchase lots that month. `creditsSpent` is the count of Credits spent, which is the number of Engagements started. A signup bonus, a founding grant, a refund and a forfeit count as neither. `firstPurchaseMonth` is `null` until the Practice buys. A month in the future is refused with `400`.
+The page fills three of the spreadsheet's nine columns, which ADR-0046 names: people interviewed, Practices on real Clients, Practices who bought a Credit, Credits bought, Credits spent, Practices who bought again, revenue, cost, the pool's remainder. For the month on the page:
 
-The rows fill three of the spreadsheet's nine columns, which ADR-0046 names: people interviewed, Practices on real Clients, Practices who bought a Credit, Credits bought, Credits spent, Practices who bought again, revenue, cost, the pool's remainder. For the month asked for:
+- **Credits bought** is the total under Credits bought.
+- **Credits spent** is the total under Credits spent.
+- **Practices who bought again** is the total under it: the Practices that bought that month and had bought in an earlier one.
 
-- **Credits bought** is the sum of `creditsBought`.
-- **Credits spent** is the sum of `creditsSpent`.
-- **Practices who bought again** is the number of rows with `creditsBought` above zero and a `month` later than `firstPurchaseMonth`.
+Revenue and cost come from the bank, and the other columns from the founder's own notes. Below fifty in the denominator, write each figure as a count with its denominator beside it, never as a rate.
 
-Revenue and cost come from the bank, and the other columns from the founder's own notes. The totals are the spreadsheet's arithmetic, not the endpoint's. Below fifty in the denominator, write each figure as a count with its denominator beside it, never as a rate.
+The page names no Staff member, no Client, no login and no feature, and a spec fixes its field list. It shows nobody's contact, so opening it writes no Operator log row. The four signup-source fields join each row with [#1393](https://github.com/markgoho/doula-cloud/issues/1393); a count by source is a floor, never a total.
 
-The response names no Staff member, no Client, no login and no feature, and a spec fixes its field list. The four signup-source fields join each row with [#1393](https://github.com/markgoho/doula-cloud/issues/1393); a count by source is a floor, never a total.
+### The dormant-Practices list: the yearly escheatment pass
+
+New York escheats an unspent Credit balance at three years' dormancy (APL 1315(1-b)), and 2 NYCRR 125.1 accepts a verifiable login as the contact that stops the clock. Once a year, for the annual balance notice and the December/January due-diligence mailings ([#420](https://github.com/markgoho/doula-cloud/issues/420)), the founder reads which Practices hold Credits nobody has used. It takes no token. Since [#2477](https://github.com/markgoho/doula-cloud/issues/2477) it is read only in ops ([ADR-0062](adr/0062-the-platform-operator-works-in-a-separate-app-at-ops-doula-cloud-with-its-own-service-and-database-role.md)). Sign in at `https://ops.doula.cloud`, open **Practices**, then **Dormant Practices** (`/practices/dormant`).
+
+The page lists each Practice that holds a positive Credit balance and whose Staff were last active two years ago or longer, judged at midnight in New York, or never. Two years, not three, so the notice reaches the Owner a year before the balance escheats. Each row shows the Practice's name, when it signed up, the Credits it holds, and its last contact: the last time anyone at the Practice was active in the app. It is newest signup first, 50 to a page.
+
+The list is read only. It writes nothing, and nothing anywhere writes a balance off: a person sends each notice by hand ([ADR-0043](adr/0043-a-date-is-a-trigger-only-when-someone-set-it.md)). The page shows nobody's contact, so opening it writes no Operator log row. The Owner to write to is on the Practice's entry in the Practice list, whose opening is recorded.
 
 ### #443's site rebuild and page probe
 
@@ -305,6 +295,23 @@ The drain answers `200` only when every outbox succeeded, and `500` naming the o
 **Four outboxes have no nudge at all**, so the drain is the only thing that ever runs them: `process-staff-token-mail-outbox` and `process-staff-email-change-outbox` (#613 accepted ADR-0010's plain delay for both rather than wiring a nudge), plus `process-portal-magic-link-outbox` (#617) and `process-portal-address-change-outbox` (#619), which follow the same acceptance — ADR-0026 carves no ADR-0010 exception for either mail. Before #481 the first two had no Scheduler job either, which means they did not run outside a test or a hand invocation.
 
 The three jobs that predated this — `process-portal-invite-outbox`, `process-site-build-outbox`, and #443's `verify-practice-pages` — are down to one: the first two were deleted as redundant once the drain covered them, and `verify-practice-pages` stays because it is not an outbox at all.
+
+## doula-ops
+
+`doula-ops` (`api/cmd/ops`, ADR-0062) reads its own set, and none of `doula-api`'s:
+
+| Variable | Holds | Local and CI (`app/e2e/stack.ts`) |
+|---|---|---|
+| `DATABASE_URL` | the `ops_runtime` login's DSN | `ops_e2e` |
+| `OPS_TENANT_ID` | the operator tenant; unset refuses to start | `operators-local`, which the stack makes in the Auth emulator with one seeded login |
+| `GCP_PROJECT_ID` | the Identity Platform project | `doula-cloud` |
+| `EXPECTED_ORIGINS` | the origins `csrf.Wrap` accepts | ops/'s dev and preview origins |
+| `FIREBASE_AUTH_EMULATOR_HOST` | the Auth emulator; while set, the emulator's phone factor counts in place of TOTP, since the emulator has none. `doula-ops` refuses to start with it set on Cloud Run (`K_SERVICE`) | the stack's emulator |
+| `E2E_CLOCK_FOLLOWS_SIM_OFFSET` | the session limits follow a simulated jump, as `doula-api`'s clock does | `1` |
+| `GITHUB_FEEDBACK_REPO` | the private repo a Feedback issue is opened in, `owner/name`; the Feedback pages link a piece's issue from it, and with it unset they print the issue's number with no link | unset |
+| `PORT` | the listen port; Cloud Run's 8080 when unset | `E2E_OPS_PORT` |
+
+ops/'s build reads `VITE_OPS_TENANT_ID` and, locally, `VITE_FIREBASE_AUTH_EMULATOR_HOST`. `bun run dev:full` serves ops/ at `OPS_DEV_SERVER_PORT` and prints the seeded login. Locally the screens stop at the code: the emulator has no TOTP, and only ops/'s e2e suite relabels its phone factor (`app/e2e/totpStub.ts`).
 
 ## Attachments bucket and VAPID push
 
@@ -385,7 +392,7 @@ Sandbox Price, USD, one-time. One credit is one Engagement, which is one birth. 
 
 **The Terms are the authority for that number, not the Price** ([#1834](https://github.com/markgoho/doula-cloud/issues/1834)). Each version of the Terms of Service states the price in its text (the version of 2026-10-03 says "A Credit costs $20.00"), and each version of the Terms in `api/internal/legal/legal.go` carries that amount as `CreditPriceCents`. Checkout charges the amount of the version in force at `clock.Now(ctx)`, and the Billing screen shows the same amount, read the same way. `STRIPE_CREDIT_PRICE_ID` only names the credit Product, through one of its Prices: the BFF reads the Product off that Price, then uses the active, one-time, USD, `tax_behavior: exclusive` Price on that Product whose `unit_amount` is the amount the Terms state. If no such Price exists, the purchase is refused; it is never charged at some other amount. So the variable never moves when the price does. Before #1834 it did: #448 archived `price_1U7NKZ…` at $5.00 and moved the variable to `price_1U9yTw…` at $20.00.
 
-A version that charges more per Credit than the version before it counts only once it has been published through `POST /api/internal/legal/publish`. A rise in the history that was never published emailed nobody, so checkout keeps the old price after its date. A version that lowers the price needs no publication. `api/internal/legal/legal_test.go` holds that every version of the Terms states a price, that a version that raises it carries a `PriceRise` reason, and that a version with a reason raises it.
+A version that charges more per Credit than the version before it counts only once it has been published in ops (see below). A rise in the history that was never published emailed nobody, so checkout keeps the old price after its date. A version that lowers the price needs no publication. `api/internal/legal/legal_test.go` holds that every version of the Terms states a price, that a version that raises it carries a `PriceRise` reason, and that a version with a reason raises it.
 
 ### A rise in the price of a Credit
 
@@ -397,7 +404,7 @@ The Terms promise: "If the price of a Credit ever rises, we email each Owner at 
    - `docs/copy/pilot-terms-page.md`, the copy `/pilot-terms` was built from. The page itself prints the price of the version in force at each build, so it changes on the date with no edit.
 
    `site/src/lib/creditPriceCopies.spec.ts` fails when either document states a price other than the newest version's, and when this list leaves one out. `site/src/lib/legalTexts.svelte.spec.ts` fails when a version's text states a price other than its own `CreditPriceCents`. Every page that states the price reads it and needs no edit: `/pilot-terms` prints it with `creditPrice` from `site/src/lib/legal.ts` at each build, so it changes at the first daily build on or after the date, the Billing screen gets it from the BFF, and the marketing site's pricing copy is to print it with `creditPrice` when [#868](https://github.com/markgoho/doula-cloud/issues/868) and [#284](https://github.com/markgoho/doula-cloud/issues/284) build it. `GLOSSARY.md` (**Credit**) and step 2.1-a of `docs/test-plans/evaluator-doula.md` name the Terms as the price, not a number. The records of what was decided or found on a date keep the price they were written with: the ADRs, `docs/research/`, `docs/journeys/`, and a closed gap's row in a test plan.
-3. **Publication 60 days ahead.** `POST /api/internal/legal/publish` with `{"document": "terms", "version": "<date>", "publishedBy": "<your name>"}`. It refuses a rise fewer than 60 days before its date, and refuses any version of the Terms whose price no active Price from step 1 charges, so a forgotten Price is found now and not on the date. It queues the email to each Owner with the reason, and its `legal_version_publications` row records who published the rise and when. From then on the Billing screen shows the new price and its date under today's price.
+3. **Publication 60 days ahead.** Publish the version in ops, as "Publishing a version of the Terms or the Privacy Policy" says. It refuses a rise fewer than 60 days before its date, and refuses any version of the Terms whose price no active Price from step 1 charges, so a forgotten Price is found now and not on the date. It queues the email to each Owner with the reason, and its `legal_version_publications` row keys the act in the Operator log that records who published the rise and when. From then on the Billing screen shows the new price and its date under today's price.
 4. **The switch on the date.** Nobody acts. At midnight UTC on the date, checkout charges the new amount and so picks the new Price. Archive the old Price after that, not before, by setting its entry in `credit_prices` to `false` in both roots and applying; `STRIPE_CREDIT_PRICE_ID` can keep naming it, since an archived Price still names its Product.
 
 A Credit already bought keeps its price: each lot stores the `unit_price_cents` it was paid at (migration 00052), and each Checkout Session carries the `terms_version` that set its price in its metadata.

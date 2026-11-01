@@ -14,13 +14,14 @@ import (
 
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/testdb"
+	"doula-cloud/api/internal/webhookarrival"
 )
 
 const bounceWebhookTestKey = "mailgun-signing-key-test"
 
 func newBounceWebhookServer(db *testdb.DB, signingKey string) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle("POST /mailgun/webhook", portalinvite.PostBounceWebhookHandler(db.App, signingKey))
+	mux.Handle("POST /mailgun/webhook", webhookarrival.Record(db.App, webhookarrival.Mailgun, portalinvite.PostBounceWebhookHandler(db.App, signingKey)))
 	return httptest.NewServer(mux)
 }
 

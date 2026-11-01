@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/testdb"
 )
@@ -48,12 +49,15 @@ func TestRevokePending_DeadLettersThePendingRow(t *testing.T) {
 	if status != "dead_lettered" {
 		t.Fatalf("status = %q, want dead_lettered", status)
 	}
-	var lastErr string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT last_error FROM portal_invite_outbox WHERE id = $1`, outboxID).Scan(&lastErr); err != nil {
+	var lastErr, reason string
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT last_error, dead_letter_reason FROM portal_invite_outbox WHERE id = $1`, outboxID).Scan(&lastErr, &reason); err != nil {
 		t.Fatalf("read last_error: %v", err)
 	}
 	if lastErr == "" {
 		t.Fatal("last_error is empty, want a reason")
+	}
+	if reason != string(outbox.OwnData) {
+		t.Fatalf("dead_letter_reason = %q, want %q -- a revoked invitation is stopped by its own data, not by retries", reason, outbox.OwnData)
 	}
 }
 

@@ -927,3 +927,40 @@ func TestMiddleware_DeletedPracticeReadsAsNoMembership(t *testing.T) {
 		t.Fatal("a finalized Practice must read as no membership, not as pending-deletion")
 	}
 }
+
+// A client that hangs up once its request is handled still leaves its
+// activity stamp: the stamp runs on a context the request's cancel does not
+// reach.
+func TestMiddleware_ActivityStampOutlivesADisconnectedClient(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-who-hangs-up"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
+	session := authntest.SeedSession(t, db.App, identityUID)
+
+	ctx, hangUp := context.WithCancel(t.Context())
+	defer hangUp()
+	mux := http.NewServeMux()
+	mux.Handle("/practices/{practiceId}/ping", staffauth.Middleware(db.App)(
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			hangUp()
+		}),
+	))
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/practices/"+practiceID+"/ping", nil)
+	authntest.AddSessionCookie(req, session)
+	rec := httptest.NewRecorder()
+
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	var lastPractice sql.NullString
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT last_practice_id::text FROM staff WHERE id = $1`, staffID).Scan(&lastPractice); err != nil {
+		t.Fatalf("read stamp: %v", err)
+	}
+	if lastPractice.String != practiceID {
+		t.Fatalf("last_practice_id = %q, want %q: the stamp was lost with the client", lastPractice.String, practiceID)
+	}
+}

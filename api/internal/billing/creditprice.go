@@ -41,7 +41,7 @@ type priceInForce struct {
 
 // priceAt is the price of a Credit at the instant at, under the versions
 // of terms, given which versions have been published through
-// POST /api/internal/legal/publish.
+// ops (#2486).
 //
 // A version that has started sets the price unless it raises it and
 // was never published: an unpublished rise emailed nobody, so the Terms'
