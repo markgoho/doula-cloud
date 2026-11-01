@@ -188,11 +188,9 @@ function respondForPopulatedPractice(path: string): Response {
 			hasMore: false
 		});
 	}
-	// #2095: the Clients card's count, and whether there is any Client
-	// at all. Four digits, the widest a pilot's count line could be drawn
-	// at, so the card is measured with a long line rather than "2 active".
+	// #2095: whether there is any Client at all.
 	if (path.includes('/clients/count')) {
-		return jsonResponse({ records: 2048, active: 1024 });
+		return jsonResponse({ records: 2048 });
 	}
 	if (path.includes('/push-subscriptions')) {
 		return jsonResponse({});
@@ -368,7 +366,7 @@ export const asOwnerWithNoClient: RouteVariant = {
 	name: 'The Practice landing hub, as an Owner with no Client yet',
 	pageData: practiceSession(['owner'], { practiceName }),
 	respond: (path) => {
-		if (path.includes('/clients/count')) return jsonResponse({ records: 0, active: 0 });
+		if (path.includes('/clients/count')) return jsonResponse({ records: 0 });
 		if (path.includes('/billing')) {
 			return jsonResponse({
 				balance: 3,
@@ -403,7 +401,7 @@ export const asContractorWithNoClient: RouteVariant = {
 		session: { ...practiceSession(['doula'], { practiceName }).session, isContractor: true }
 	},
 	respond: (path) => {
-		if (path.includes('/clients/count')) return jsonResponse({ records: 0, active: 0 });
+		if (path.includes('/clients/count')) return jsonResponse({ records: 0 });
 		return respondForPopulatedPractice(path);
 	}
 };

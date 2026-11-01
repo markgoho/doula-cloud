@@ -7,7 +7,7 @@ interface PrimitiveSpec<Defaults extends PropertyDefaults> {
 }
 
 /**
- * The 12 Every Layout-inspired primitives whose non-default styling is a
+ * The 11 Every Layout-inspired primitives whose non-default styling is a
  * pure function of their resolved config -- see ./icon.ts for the one
  * primitive (Icon's `label`) that needs ARIA attribute reflection instead of
  * CSS injection, and so isn't expressible as one of these.
@@ -36,31 +36,6 @@ export const primitiveSpecs: PrimitiveSpec<PropertyDefaults>[] = [
 		defaults: { space: 'var(--space-4)', justify: 'flex-start', align: 'flex-start' },
 		css: (v, s) =>
 			`${s} { gap: ${v.space}; justify-content: ${v.justify}; align-items: ${v.align}; }`
-	},
-	{
-		tagName: 'sidebar-l',
-		// `side: 'start'` and `basis: '20rem'` reproduce primitives.css's own
-		// hardcoded defaults exactly, so an instance at default config still
-		// injects nothing (#564) -- `side: 'end'` swaps which DOM child gets
-		// the fixed basis and which gets the dominant, wrap-triggering
-		// minimum, for a Sidebar whose sidebar is visually and structurally
-		// LAST without reordering the DOM.
-		defaults: { space: 'var(--space-4)', 'content-min': '50%', basis: '20rem', side: 'start' },
-		css: (v, s) => {
-			const sidebarChild = v.side === 'end' ? ':last-child' : ':first-child';
-			const contentChild = v.side === 'end' ? ':first-child' : ':last-child';
-			return (
-				`${s} { gap: ${v.space}; }\n` +
-				// The sidebar side's own min-inline-size is reset to 0 explicitly,
-				// not left unset: primitives.css's own unconditional `:last-child`
-				// rule would otherwise leak its 50% through onto this element when
-				// `side: 'end'` makes `:last-child` the SIDEBAR rather than the
-				// content -- caught by rendering an instance and reading its
-				// computed style back, not assumed.
-				`${s} > ${sidebarChild} { flex-basis: ${v.basis}; flex-grow: 1; min-inline-size: 0; }\n` +
-				`${s} > ${contentChild} { flex-basis: 0; flex-grow: 999; min-inline-size: ${v['content-min']}; }`
-			);
-		}
 	},
 	{
 		tagName: 'switcher-l',

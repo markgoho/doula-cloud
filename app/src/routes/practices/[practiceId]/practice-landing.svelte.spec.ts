@@ -105,7 +105,7 @@ async function setup({
 		// object restating its fields (#596).
 		offers: jsonResponse({ items: [...offers, { ...offers[0], offerId: 'offer-2', state: 'declined' }] }),
 		// `/clients/count` (#2095): every Client here is in active care.
-		clients: jsonResponse({ records: clients.length, active: clients.length }),
+		clients: jsonResponse({ records: clients.length }),
 		staff: jsonResponse({
 			members: [{ staffId: 's1' }, { staffId: 's2' }],
 			invitations: { items: [{ expired: true }], hasMore: false }

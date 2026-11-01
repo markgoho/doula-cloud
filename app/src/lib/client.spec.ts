@@ -28,9 +28,9 @@ const editFields: ClientEditFields = {
 
 describe('loadClientCount', () => {
 	it('reads the count path and returns the two numbers', async () => {
-		const fetcher = vi.fn().mockResolvedValue(response({ records: 22, active: 14 }));
+		const fetcher = vi.fn().mockResolvedValue(response({ records: 22 }));
 
-		await expect(loadClientCount(fetcher, 'practice-1')).resolves.toEqual({ records: 22, active: 14 });
+		await expect(loadClientCount(fetcher, 'practice-1')).resolves.toEqual({ records: 22 });
 		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/clients/count');
 	});
 

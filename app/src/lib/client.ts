@@ -144,15 +144,13 @@ export async function hasAnyClient(fetcher: Fetcher, practiceId: string): Promis
 }
 
 /**
- * How many Client records the reader can be shown, and how many of those
- * Clients are in active care (an Engagement whose status is active) --
- * `client.CountHandler`, one row from the BFF (#2095). A contractor Doula
- * is told only about the Clients she is attached to, as the list tells
- * her. Throws as `loadClients` does.
+ * How many Client records the reader can be shown -- `client.CountHandler`,
+ * one row from the BFF (#2095). A contractor Doula is told only about the
+ * Clients she is attached to, as the list tells her. Throws as
+ * `loadClients` does.
  */
 export interface ClientCount {
 	records: number;
-	active: number;
 }
 
 export async function loadClientCount(fetcher: Fetcher, practiceId: string): Promise<ClientCount> {

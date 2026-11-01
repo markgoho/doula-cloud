@@ -11,3 +11,7 @@ The one genuinely surprising piece: the page-level layout-primitive layer (Stack
 Considered and rejected: using Every Layout's own shipped custom-element downloads (`<cluster-l>` etc., available under our paid license) directly, instead of reimplementing. Rejected on staleness risk — the site shows uneven updates across primitives (e.g. `gap` fully adopted on the Switcher page but not consistently elsewhere) — and because "informed by, not dependent on" keeps us able to fix or extend a primitive without waiting on a third party. Also considered: buying into Every Layout's Shadow-DOM-based custom-element packaging as-is, before finding the "Eschewing Shadow DOM" post — the post itself is the reason that path was dropped, not a preference decided in the abstract.
 
 All 13 primitives are built in one foundation-wiring pass rather than sequenced against individual page needs, now that every primitive is fully sourced (free + unlocked via the paid license) and the marginal cost of the full set is low.
+
+## Amendment, 2026-11-01: `sidebar-l` is removed
+
+Filed as [#2400](https://github.com/markgoho/doula-cloud/issues/2400). `OverviewHub`'s rail was the last `<sidebar-l>` in `app/src`, and no recorded design names a screen that needs one, so the primitive, its `side` option, its rules in `primitives.css` and its spec are gone. It was built ahead of any consumer in the one pass above. ADR-0018 measures a component by its consumers, and a primitive with none is the same question. A later screen that needs a Sidebar brings it back on its first consumer.

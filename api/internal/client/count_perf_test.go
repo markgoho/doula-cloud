@@ -9,14 +9,14 @@ import (
 )
 
 // TestCountClientsQueryPlanAtScale prices countClientsQuery (#2095) at
-// 5,000 Clients and 5,000 Engagements for one Practice, well past a
+// 5,000 Clients for one Practice, well past a
 // fourteen-doula agency's records, and fails if the plan JITs. It seeds
 // thousands of rows, so it runs only when asked:
 //
 //	RUN_PERF_TEST=1 go test ./internal/client/ -run TestCountClientsQueryPlanAtScale -v
 //
 // It lives in package client so it EXPLAINs the constant the handler
-// sends, not a copy of it. count.go's doc comment records what it found.
+// sends, not a copy of it.
 func TestCountClientsQueryPlanAtScale(t *testing.T) {
 	if os.Getenv("RUN_PERF_TEST") == "" {
 		t.Skip("set RUN_PERF_TEST=1 to run (seeds thousands of rows)")
@@ -25,18 +25,9 @@ func TestCountClientsQueryPlanAtScale(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Count Perf Practice")
 	const rowCount = 5000
-	// Every other Client has an Engagement, and every other Engagement
-	// is active: a mix, so neither half of the count is trivially empty.
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`WITH seeded AS (
-		     INSERT INTO clients (practice_id, given_name, family_name)
-		     SELECT $1, 'Perf', 'Client ' || n FROM generate_series(1, $2) AS n
-		     RETURNING id
-		 )
-		 INSERT INTO engagements (client_id, practice_id, status, kind)
-		 SELECT id, $1, CASE WHEN n % 4 = 0 THEN 'active' ELSE 'intake' END::engagement_status, 'birth'
-		   FROM (SELECT id, row_number() OVER () AS n FROM seeded) numbered
-		  WHERE n % 2 = 0`,
+		`INSERT INTO clients (practice_id, given_name, family_name)
+		 SELECT $1, 'Perf', 'Client ' || n FROM generate_series(1, $2) AS n`,
 		practiceID, rowCount); err != nil {
 		t.Fatalf("seed: %v", err)
 	}

@@ -195,7 +195,7 @@
 		 * run the full width of any stack it is dropped into. `start` hands
 		 * it back its intrinsic width. Scoped to `stack-l` rather than
 		 * written bare, because `align-self` is the BLOCK axis inside a
-		 * row-direction parent (`grid-l`, `sidebar-l`, `switcher-l`) and
+		 * row-direction parent (`grid-l`, `switcher-l`) and
 		 * this decision is only about the column one.
 		 */
 		:global(stack-l) > button {
