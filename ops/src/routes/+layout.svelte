@@ -29,4 +29,14 @@
 	main {
 		padding: var(--space-6) var(--space-4);
 	}
+
+	@layer base {
+		:global(a) {
+			color: var(--color-primary);
+		}
+
+		:global(a:hover) {
+			color: var(--color-primary-hover);
+		}
+	}
 </style>
