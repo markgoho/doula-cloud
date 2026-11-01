@@ -890,11 +890,12 @@ jobs:
   # The `if:` names every need's result rather than leaning on the implicit
   # `success()`. `api` and `app` need `changes`, which is skipped on a trunk
   # push, and a skipped job anywhere up the chain makes the implicit
-  # `success()` skip this job too (#1466). The same shape is on
-  # `deploy-api` and `deploy-app` below.
+  # `success()` skip this job too (#1466). The same shape is on every
+  # deploy job below. `ops` gates migrate, and so every deploy, since its
+  # e2e suite runs the same migrations against ops_runtime (#2472).
   migrate:
-    needs: [api, app]
-    if: ${{ !cancelled() && github.ref == 'refs/heads/trunk' && github.event_name == 'push' && needs.api.result == 'success' && needs.app.result == 'success' }}
+    needs: [api, app, ops]
+    if: ${{ !cancelled() && github.ref == 'refs/heads/trunk' && github.event_name == 'push' && needs.api.result == 'success' && needs.app.result == 'success' && needs.ops.result == 'success' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     # Own concurrency group -- the actual protection from a second quick
@@ -979,8 +980,8 @@ jobs:
   # to boot (missing CA bundle/tzdata) -- that check must gate deploy the
   # same way a failed migration does, not run merely in parallel with it.
   deploy-api:
-    needs: [api, app, migrate, api-image]
-    if: ${{ !cancelled() && github.ref == 'refs/heads/trunk' && github.event_name == 'push' && needs.api.result == 'success' && needs.app.result == 'success' && needs.migrate.result == 'success' && needs.api-image.result == 'success' }}
+    needs: [api, app, ops, migrate, api-image]
+    if: ${{ !cancelled() && github.ref == 'refs/heads/trunk' && github.event_name == 'push' && needs.api.result == 'success' && needs.app.result == 'success' && needs.ops.result == 'success' && needs.migrate.result == 'success' && needs.api-image.result == 'success' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     # Own concurrency group -- serializes deploy-api runs against each
@@ -1109,8 +1110,8 @@ jobs:
   # api-image is deliberately not a dep here -- it boot-tests the api/
   # Docker image, which has no bearing on the static app/ SPA build.
   deploy-app:
-    needs: [api, app, migrate]
-    if: ${{ !cancelled() && github.ref == 'refs/heads/trunk' && github.event_name == 'push' && needs.api.result == 'success' && needs.app.result == 'success' && needs.migrate.result == 'success' }}
+    needs: [api, app, ops, migrate]
+    if: ${{ !cancelled() && github.ref == 'refs/heads/trunk' && github.event_name == 'push' && needs.api.result == 'success' && needs.app.result == 'success' && needs.ops.result == 'success' && needs.migrate.result == 'success' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     # Own concurrency group -- serializes deploy-app runs against each
@@ -1209,4 +1210,169 @@ jobs:
           done
 
           echo "Deployed app/ site ($origin) never converged: $reason"
+          exit 1
+
+  # doula-ops (api/cmd/ops, ADR-0062), deployed the way deploy-api is: the
+  # image is CI's, everything else about the service is
+  # terraform/cloud_run.tf's, so this sets no env var or secret. `api`
+  # tests and lints its Go, `ops` its app.
+  #
+  # Every build is pushed as `:trunk` too, the tag Terraform creates the
+  # service from. Until that first apply the service does not exist, and
+  # `gcloud run deploy` would create a bare one Terraform then collides
+  # with, so the deploy is skipped with a warning instead (#2472).
+  deploy-ops:
+    needs: [api, ops, migrate]
+    if: ${{ !cancelled() && github.ref == 'refs/heads/trunk' && github.event_name == 'push' && needs.api.result == 'success' && needs.ops.result == 'success' && needs.migrate.result == 'success' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    concurrency:
+      group: deploy-ops-${{ github.ref }}
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      deployed: ${{ steps.service.outputs.exists }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: ./.github/actions/gcp-auth
+        with:
+          project_id: doula-cloud
+          workload_identity_provider: projects/850855848778/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-action-733741680@doula-cloud.iam.gserviceaccount.com
+          token_format: access_token
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Log in to Artifact Registry
+        uses: docker/login-action@v4
+        with:
+          registry: us-central1-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: api
+          build-args: MAIN_PACKAGE=./cmd/ops
+          push: true
+          tags: |
+            us-central1-docker.pkg.dev/doula-cloud/api/doula-ops:${{ github.sha }}
+            us-central1-docker.pkg.dev/doula-cloud/api/doula-ops:trunk
+          cache-from: type=gha,scope=doula-ops
+          cache-to: type=gha,mode=max,scope=doula-ops
+
+      - name: Check Terraform has created the service
+        id: service
+        run: |
+          if gcloud run services describe doula-ops --region us-central1 --project doula-cloud --format='value(name)' >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::doula-ops does not exist yet: the image is pushed, and the deploy waits for the founder's terraform apply (docs/infrastructure.md, #2472)."
+          fi
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        if: steps.service.outputs.exists == 'true'
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          service: doula-ops
+          region: us-central1
+          project_id: doula-cloud
+          image: us-central1-docker.pkg.dev/doula-cloud/api/doula-ops:${{ github.sha }}
+          flags: --add-cloudsql-instances=doula-cloud:us-central1:doula-cloud-pg --service-account=doula-ops-runtime@doula-cloud.iam.gserviceaccount.com
+
+      # /api/health pings the database as ops_runtime, so this proves the
+      # DSN, the login and the Cloud SQL mount as well as the boot.
+      - name: Smoke test deployed revision
+        if: steps.service.outputs.exists == 'true'
+        run: |
+          url="${{ steps.deploy.outputs.url }}/api/health"
+          if ! curl -fsS "$url" | grep -q '"status":"ok"'; then
+            echo "Deployed revision did not answer on /api/health"
+            exit 1
+          fi
+          echo "Deployed revision answered on /api/health."
+
+  # ops/ to the `dc-ops` Hosting site (ADR-0062), after deploy-ops: the
+  # deploy refuses a `/api/**` rewrite to a Cloud Run service that does not
+  # exist. No preview channel for ops/ anywhere, since a preview would sign
+  # in against the live operator tenant.
+  deploy-ops-site:
+    needs: [ops, migrate, deploy-ops]
+    if: ${{ !cancelled() && github.ref == 'refs/heads/trunk' && github.event_name == 'push' && needs.ops.result == 'success' && needs.migrate.result == 'success' && needs.deploy-ops.result == 'success' && needs.deploy-ops.outputs.deployed == 'true' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    concurrency:
+      group: deploy-ops-site-${{ github.ref }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+
+      # ops/ builds against app/'s tokens, components and ports.
+      - name: Install dependencies
+        run: |
+          bun install --cwd app --frozen-lockfile
+          bun install --cwd ops --frozen-lockfile
+
+      # The operator tenant (#2472). Firebase's browser config is in
+      # ops/src/lib/firebase.ts, as app/'s is in its own source.
+      - name: Build ops
+        working-directory: ops
+        run: bun run build
+        env:
+          VITE_OPS_TENANT_ID: operators-fj5ur
+
+      - name: Authenticate to Google Cloud
+        uses: ./.github/actions/gcp-auth
+        with:
+          project_id: doula-cloud
+          workload_identity_provider: projects/850855848778/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-action-733741680@doula-cloud.iam.gserviceaccount.com
+
+      - name: Install firebase-tools from the root lockfile
+        run: bun install --frozen-lockfile
+
+      - name: Deploy to Firebase
+        run: scripts/firebase-tools.sh retry deploy --only hosting:ops --non-interactive
+
+      # Retried until the edge serves this build's version.json, as
+      # deploy-app's check waits for its own release.
+      - name: Smoke test deployed site
+        run: |
+          site=$(jq -r '.targets["doula-cloud"].hosting.ops[0]' .firebaserc)
+          origin="https://${site}.web.app"
+          want=$(cat ops/build/_app/version.json)
+
+          check() {
+            reason="/_app/version.json is not this build's"
+            [ "$(curl -fsS "$origin/_app/version.json")" = "$want" ] || return 1
+
+            reason="/pilot-gate did not get the SPA shell"
+            curl -fsS "$origin/pilot-gate" | grep -q '_app/immutable' || return 1
+
+            reason="/api/health did not reach doula-ops through the /api/** rewrite"
+            curl -fsS "$origin/api/health" | grep -q '"status":"ok"' || return 1
+          }
+
+          for attempt in $(seq 1 30); do
+            if check; then
+              echo "Deployed ops/ site ($origin) passed all smoke checks on attempt $attempt."
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Deployed ops/ site ($origin) never converged: $reason"
           exit 1

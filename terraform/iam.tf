@@ -273,6 +273,63 @@ resource "google_service_account_iam_member" "github_action_doula_api_runtime_se
   service_account_id = google_service_account.doula_api_runtime.name
 }
 
+# `doula-ops-runtime@`: the identity `doula-ops` runs as (cloud_run.tf,
+# ADR-0062, #2472). Narrowed the same way as `doula-api-runtime@`; the honest
+# inventory is `grep -rn doula_ops_runtime terraform/`:
+#
+#   - `roles/cloudsql.client`, below, for the `ops_runtime` login.
+#   - The Identity Platform custom role, below.
+#   - `roles/secretmanager.secretAccessor` on its DSN and on the Stripe
+#     platform key (secrets.tf).
+#
+# Verifying an operator's token needs no grant: the SDK checks it against
+# Google's public certificates.
+resource "google_service_account" "doula_ops_runtime" {
+  account_id   = "doula-ops-runtime"
+  description  = "Runtime identity for the doula-ops Cloud Run service (ADR-0062, #2472). Holds only what api/cmd/ops uses."
+  disabled     = false
+  display_name = "doula-ops runtime"
+  project      = "doula-cloud"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "google_project_iam_member" "doula_ops_runtime_cloudsql_client" {
+  member  = google_service_account.doula_ops_runtime.member
+  project = "doula-cloud"
+  role    = "roles/cloudsql.client"
+}
+
+# Clearing a Staff member's second factor (#2483) is `UpdateUser`, which the
+# Go SDK follows with `GetUser`. Not `roles/firebaseauth.admin`, for the
+# reason on `doula_api_staff_accounts` above, and not delete.
+resource "google_project_iam_custom_role" "doula_ops_staff_second_factor" {
+  description = "What doula-ops's runtime identity does to Staff accounts in Identity Platform: read one and clear its second factors (#2483). Never delete, never the configuration."
+  permissions = [
+    "firebaseauth.users.get",
+    "firebaseauth.users.update",
+  ]
+  project = "doula-cloud"
+  role_id = "doulaOpsStaffSecondFactor"
+  stage   = "GA"
+  title   = "doula-ops staff second factor"
+}
+
+resource "google_project_iam_member" "doula_ops_runtime_staff_second_factor" {
+  member  = google_service_account.doula_ops_runtime.member
+  project = "doula-cloud"
+  role    = google_project_iam_custom_role.doula_ops_staff_second_factor.id
+}
+
+# What lets `deploy-ops` name `--service-account`, as for `doula-api-runtime@`.
+resource "google_service_account_iam_member" "github_action_doula_ops_runtime_service_account_user" {
+  member             = google_service_account.github_action.member
+  role               = "roles/iam.serviceAccountUser"
+  service_account_id = google_service_account.doula_ops_runtime.name
+}
+
 # `internal-caller@`: the identity the two Cloud Scheduler jobs present at
 # `/api/internal/**` (#1183, ADR-0037). It holds **no project role**, and that
 # is not an omission — the boundary is the `email` claim on the token it

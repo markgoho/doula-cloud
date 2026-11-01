@@ -17,6 +17,7 @@
 # step failing loudly on the next deploy, not by anything here.
 locals {
   doula_api_base_url = "https://doula-api-850855848778.us-central1.run.app"
+  doula_ops_base_url = "https://ops.doula.cloud"
 }
 
 # Imported from "projects/doula-cloud/locations/us-central1/services/doula-api"
@@ -231,6 +232,11 @@ resource "google_cloud_run_v2_service" "doula_api" {
       # shared-string path into `/api/internal/**` at all. The variable
       # survives only in `app/e2e/stack.ts`, which runs the BFF against a
       # local Postgres with no metadata server to mint a token with.
+      # #2478: a Feedback issue's "Read the full item" link points here.
+      env {
+        name  = "OPS_BASE_URL"
+        value = local.doula_ops_base_url
+      }
       # #2406: the Stripe secrets and VAPID_PRIVATE_KEY are pinned, not
       # `latest`: each must agree with a value in this file (STRIPE_MODE,
       # VAPID_PUBLIC_KEY), and Cloud Run resolves `latest` at every instance
@@ -404,5 +410,140 @@ resource "google_cloud_run_v2_service_iam_member" "doula_api_allusers_invoker" {
   member   = "allUsers"
   name     = google_cloud_run_v2_service.doula_api.id
   project  = google_cloud_run_v2_service.doula_api.project
+  role     = "roles/run.invoker"
+}
+
+# `doula-ops` (`api/cmd/ops`, ADR-0062): the Platform operator's service
+# behind `ops.doula.cloud`. Created by this configuration rather than
+# imported (#2472), with the same split as `doula_api`: Terraform owns the
+# shape, `deploy-ops` in `.github/workflows/ci.yml` owns the image.
+#
+# `image` is read once, at create. `deploy-ops` pushes every trunk build as
+# both `:<sha>` and `:trunk`, so the tag exists before the first apply, and
+# `ignore_changes` keeps every later deploy's `:<sha>` out of the diff.
+#
+# One instance at most: `dbpool.OpsMaxInstances` sizes the ops pool for one
+# (api/internal/dbpool/dbpool_test.go reads this block). None kept warm; the
+# founder is the only caller.
+resource "google_cloud_run_v2_service" "doula_ops" {
+  deletion_protection = true
+  ingress             = "INGRESS_TRAFFIC_ALL"
+  launch_stage        = "GA"
+  location            = "us-central1"
+  name                = "doula-ops"
+  project             = "doula-cloud"
+
+  scaling {
+    max_instance_count = 1
+    min_instance_count = 0
+  }
+
+  template {
+    # What `deploy-ops` writes on every revision, as on `doula_api`.
+    labels = {
+      managed-by = "github-actions"
+    }
+    service_account = google_service_account.doula_ops_runtime.email
+    timeout         = "300s"
+
+    containers {
+      image = "us-central1-docker.pkg.dev/doula-cloud/api/doula-ops:trunk"
+
+      env {
+        name = "DATABASE_URL"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.pg_ops_runtime_dsn.secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name  = "EXPECTED_ORIGINS"
+        value = local.doula_ops_base_url
+      }
+      env {
+        name  = "GCP_PROJECT_ID"
+        value = "doula-cloud"
+      }
+      env {
+        name  = "GITHUB_FEEDBACK_REPO"
+        value = "markgoho/doula-cloud-feedback"
+      }
+      env {
+        name  = "OPS_TENANT_ID"
+        value = "operators-fj5ur"
+      }
+      # The same pinned version and Price `doula_api` reads (#2406).
+      env {
+        name = "STRIPE_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.stripe_api_key.secret_id
+            version = "1"
+          }
+        }
+      }
+      env {
+        name  = "STRIPE_CREDIT_PRICE_ID"
+        value = "price_1U9yTw1rKoVEA79v6CcEaxZg"
+      }
+      ports {
+        container_port = 8080
+        name           = "http1"
+      }
+      resources {
+        cpu_idle = true
+        limits = {
+          cpu    = "1000m"
+          memory = "512Mi"
+        }
+        startup_cpu_boost = true
+      }
+      volume_mounts {
+        mount_path = "/cloudsql"
+        name       = "cloudsql"
+      }
+    }
+    scaling {
+      max_instance_count = 1
+      min_instance_count = 0
+    }
+    volumes {
+      name = "cloudsql"
+      cloud_sql_instance {
+        instances = ["doula-cloud:us-central1:doula-cloud-pg"]
+      }
+    }
+  }
+
+  # Cloud Run checks the runtime identity can read each referenced secret
+  # when it creates the revision.
+  depends_on = [
+    google_secret_manager_secret_iam_member.pg_ops_runtime_dsn_runtime_accessor,
+    google_secret_manager_secret_iam_member.stripe_api_key_ops_runtime_accessor,
+  ]
+
+  lifecycle {
+    prevent_destroy = true
+
+    ignore_changes = [
+      client,
+      client_version,
+      template[0].containers[0].image,
+      template[0].labels["commit-sha"],
+    ]
+  }
+}
+
+# Both ADR-0062 needs: ingress `all` and an `allUsers` invoker, since
+# Firebase Hosting's `/api/**` rewrite forwards an anonymous request (the
+# same argument as `doula_api_allusers_invoker`). The operator session,
+# checked in the process, is the boundary.
+resource "google_cloud_run_v2_service_iam_member" "doula_ops_allusers_invoker" {
+  location = google_cloud_run_v2_service.doula_ops.location
+  member   = "allUsers"
+  name     = google_cloud_run_v2_service.doula_ops.id
+  project  = google_cloud_run_v2_service.doula_ops.project
   role     = "roles/run.invoker"
 }

@@ -71,9 +71,10 @@ const CI_PATH = '.github/workflows/ci.yml';
 
 const MEANING: Record<string, Meaning> = {
   [CI_PATH]: {
-    unproven: 'migrate, deploy-api and deploy-app have',
+    unproven:
+      'migrate, deploy-api, deploy-app, deploy-ops and deploy-ops-site have',
     whileOpen:
-      'The migrate, deploy-api and deploy-app jobs run ONLY on trunk, so a green pull request says nothing about them. While this issue is open, **no deploy is reaching the environment** and trunk is not a safe base to branch from.',
+      'The migrate, deploy-api, deploy-app, deploy-ops and deploy-ops-site jobs run ONLY on trunk, so a green pull request says nothing about them. While this issue is open, **no deploy is reaching the environment** and trunk is not a safe base to branch from.',
   },
   '.github/workflows/firebase-hosting-merge.yml': {
     unproven: 'the build and the deploy of the marketing site have',

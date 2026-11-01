@@ -212,6 +212,33 @@ resource "google_secret_manager_secret_iam_member" "pg_app_runtime_dsn_runtime_a
   secret_id = google_secret_manager_secret.pg_app_runtime_dsn.id
 }
 
+# `doula-ops`'s DSN, the `ops_runtime` login (ADR-0062, #2472), shaped as
+# `pg_app_runtime_dsn`'s is. Created here, not imported; its value is added
+# by hand (docs/infrastructure.md, "What stays by hand").
+resource "google_secret_manager_secret" "pg_ops_runtime_dsn" {
+  project   = "doula-cloud"
+  secret_id = "doula-cloud-pg-ops-runtime-dsn"
+
+  replication {
+    user_managed {
+      replicas {
+        location = "us-central1"
+      }
+    }
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "google_secret_manager_secret_iam_member" "pg_ops_runtime_dsn_runtime_accessor" {
+  member    = google_service_account.doula_ops_runtime.member
+  project   = "doula-cloud"
+  role      = "roles/secretmanager.secretAccessor"
+  secret_id = google_secret_manager_secret.pg_ops_runtime_dsn.id
+}
+
 # This DSN is not read by `doula-api`'s own container. It is read by CI: the
 # `migrate` job in `ci.yml` fetches it on every trunk push and hands it to
 # `migrate.sh`. Until #1078 that read worked without any binding on the
@@ -337,6 +364,15 @@ resource "google_secret_manager_secret" "stripe_api_key" {
 
 resource "google_secret_manager_secret_iam_member" "stripe_api_key_runtime_accessor" {
   member    = google_service_account.doula_api_runtime.member
+  project   = "doula-cloud"
+  role      = "roles/secretmanager.secretAccessor"
+  secret_id = google_secret_manager_secret.stripe_api_key.id
+}
+
+# `doula-ops` refunds and checks a Terms Price with the same platform key
+# (#2481, #2486).
+resource "google_secret_manager_secret_iam_member" "stripe_api_key_ops_runtime_accessor" {
+  member    = google_service_account.doula_ops_runtime.member
   project   = "doula-cloud"
   role      = "roles/secretmanager.secretAccessor"
   secret_id = google_secret_manager_secret.stripe_api_key.id
