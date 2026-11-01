@@ -18,12 +18,13 @@ import type { RouteFixture } from '../../../../../routeFixture.js';
 import type { RouteParams as RouteParameters } from './$types';
 import Page from './+page.svelte';
 
-const clientName = 'Anne-Marie Ochieng-Whitfield';
+const clientDisplayName = 'Anne-Marie Ochieng-Whitfield';
 
 export const engagement = {
 	engagementId: 'engagement-1',
 	clientId: 'client-1',
-	clientName,
+	clientName: 'Anne-Marie',
+	clientDisplayName,
 	status: 'active',
 	createdAt: '2026-08-01T00:00:00Z',
 	dueDate: '2027-03-01',
@@ -75,5 +76,5 @@ export const fixture: RouteFixture<RouteParameters> = {
 		if (path.endsWith('/plans/birth_plan')) return jsonResponse(instance);
 		throw new Error(`birth-plan fixture: unmatched fetch path ${path}`);
 	},
-	readyText: `${clientName}'s Birth Plan`
+	readyText: `${clientDisplayName}'s Birth Plan`
 };

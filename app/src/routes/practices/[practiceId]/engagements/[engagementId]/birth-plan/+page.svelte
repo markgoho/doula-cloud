@@ -32,8 +32,9 @@
 	);
 
 	// #280: names the Client this address opened cold cannot otherwise
-	// identify, in the one heading the page actually has.
-	const heading = $derived(`${data.clientName}'s Birth Plan`);
+	// identify, in the one heading the page actually has -- by her full
+	// name, as her record and her Engagement are titled (#2111, #2350).
+	const heading = $derived(`${data.clientDisplayName}'s Birth Plan`);
 
 	onMount(async () => {
 		try {
