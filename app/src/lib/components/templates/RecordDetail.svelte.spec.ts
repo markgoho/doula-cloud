@@ -1,7 +1,7 @@
 import type { ComponentProps } from 'svelte';
 import { createRawSnippet } from 'svelte';
 import { page } from 'vitest/browser';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import RecordDetail from './RecordDetail.svelte';
 // The loading Skeleton reserves space with `var(--text-body-size)`, which
@@ -328,5 +328,37 @@ describe('RecordDetail.svelte', () => {
 
 		await expect.element(page.getByText('Failed to load the Engagement')).toBeVisible();
 		await expect.element(page.getByRole('status', { name: 'Loading the Engagement' })).not.toBeInTheDocument();
+	});
+
+	// #2508: a link from another screen to one section lands on it once
+	// the record is drawn, not on the loading bars it arrived on.
+	it('scrolls to the section the address names once the record has loaded', async () => {
+		const scrolled = vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(function noop() {});
+		history.replaceState(history.state, '', '#invoices');
+		try {
+			const { rerender } = await setup({ loading: 'Loading the Engagement' });
+			expect(scrolled).not.toHaveBeenCalled();
+
+			await rerender({ loading: undefined });
+			await expect.poll(() => scrolled.mock.contexts.map((element) => (element as HTMLElement).id)).toEqual(['invoices']);
+
+			await rerender({ loading: 'Loading the Engagement' });
+			await rerender({ loading: undefined });
+			expect(scrolled).toHaveBeenCalledTimes(1);
+		} finally {
+			history.replaceState(history.state, '', location.pathname);
+			scrolled.mockRestore();
+		}
+	});
+
+	it('scrolls nowhere when the address names no section', async () => {
+		const scrolled = vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(function noop() {});
+		try {
+			await setup();
+			await expect.element(page.getByRole('heading', { level: 2, name: 'Visits' })).toBeVisible();
+			expect(scrolled).not.toHaveBeenCalled();
+		} finally {
+			scrolled.mockRestore();
+		}
 	});
 });
