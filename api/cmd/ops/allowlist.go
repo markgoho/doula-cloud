@@ -14,7 +14,6 @@ import (
 )
 
 const (
-	msgPilotKeyRequired   = "Send an Idempotency-Key header with the address."
 	msgPilotOtherField    = "Send only the address. Who adds it comes from your sign-in."
 	msgPilotAddressFormat = "Enter an email address in the correct format, like name@example.com"
 	msgPilotKeyReused     = "This Idempotency-Key was already used to add a different address. Nothing has changed."
@@ -47,9 +46,8 @@ type pilotAddressActDetails struct {
 // allowlist row keys.
 func pilotAddressAct(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		requestKey := r.Header.Get(headerIdempotencyKey)
-		if requestKey == "" {
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, msgPilotKeyRequired, nil)
+		requestKey, ok := requestKeyOf(w, r, "address")
+		if !ok {
 			return
 		}
 		var req pilotAddressRequest
@@ -67,7 +65,7 @@ func pilotAddressAct(db *sql.DB) http.HandlerFunc {
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		defer func() { _ = tx.Rollback() }()
@@ -90,7 +88,7 @@ func pilotAddressAct(db *sql.DB) http.HandlerFunc {
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 
@@ -103,26 +101,23 @@ func pilotAddressAct(db *sql.DB) http.HandlerFunc {
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 
 		now := clock.Now(r.Context())
-		details, _ := json.Marshal(pilotAddressActDetails{Address: address, RequestKey: requestKey})
-		var actID string
-		if err := tx.QueryRowContext(r.Context(),
-			`INSERT INTO operator_acts (operator_id, action, details, created_at)
-			 VALUES ($1, 'pilot_address_added', $2, $3) RETURNING id`,
-			op.ID, details, now).Scan(&actID); err != nil {
+		actID, err := recordAct(r.Context(), tx, op, actPilotAddressAdded, nil,
+			pilotAddressActDetails{Address: address, RequestKey: requestKey}, nil, now)
+		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		var written bool
 		if err := tx.QueryRowContext(r.Context(), `SELECT ops_add_pilot_address($1, $2, $3)`,
 			address, actID, now).Scan(&written); err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		if !written {
@@ -132,7 +127,7 @@ func pilotAddressAct(db *sql.DB) http.HandlerFunc {
 		}
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		apierr.WriteJSON(w, http.StatusOK, pilotAddressResult{Address: address, AddedAt: now})

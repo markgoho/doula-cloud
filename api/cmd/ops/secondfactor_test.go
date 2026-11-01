@@ -287,7 +287,7 @@ func TestSecondFactorClear_RefusesARequestWithNoKey(t *testing.T) {
 
 	w := s.clear(s.steppedUpCookie(), "", noFields)
 
-	if w.Code != http.StatusBadRequest || decodeError(t, w).Message != msgClearKeyRequired {
+	if w.Code != http.StatusBadRequest || decodeError(t, w).Message != "Send an Idempotency-Key header with the reset." {
 		t.Fatalf("status = %d, body %s, want 400 asking for the key", w.Code, w.Body)
 	}
 }

@@ -76,17 +76,17 @@ func routes(d Deps) (http.Handler, []string) {
 	r.handle(http.MethodGet, "/api/feedback", requireSession(d.DB, feedbackList(d.DB, d.FeedbackRepo)))
 	r.handle(http.MethodGet, "/api/feedback/{feedbackId}", requireSession(d.DB, feedbackRead(d.DB, d.FeedbackRepo)))
 	r.handle(http.MethodGet, "/api/practices/{practiceId}/refund", requireSession(d.DB, refundCheckRead(d.DB)))
-	r.handle(http.MethodPost, "/api/practices/{practiceId}/refunds", requireStepUp(d.DB, refundAct(d)))
+	r.handle(http.MethodPost, "/api/practices/{practiceId}/refunds", requireStepUp(d.DB, actRefund, refundAct(d)))
 	r.handle(http.MethodGet, "/api/practices/{practiceId}/founding-grant", requireSession(d.DB, foundingGrantCheckRead(d.DB)))
 	r.handle(http.MethodPost, "/api/practices/{practiceId}/founding-grants", requireSession(d.DB, foundingGrantAct(d.DB)))
 	r.handle(http.MethodPost, "/api/pilot-allowlist", requireSession(d.DB, pilotAddressAct(d.DB)))
 	r.handle(http.MethodGet, "/api/pilot-gate", requireSession(d.DB, pilotGateRead(d.DB)))
-	r.handle(http.MethodPost, "/api/pilot-gate/openings", requireStepUp(d.DB, pilotGateOpenAct(d.DB)))
+	r.handle(http.MethodPost, "/api/pilot-gate/openings", requireStepUp(d.DB, actPilotGateOpened, pilotGateOpenAct(d.DB)))
 	r.handle(http.MethodGet, "/api/legal-versions", requireSession(d.DB, legalVersions(d.DB, d.legalHistory())))
 	r.handle(http.MethodGet, "/api/legal-versions/{document}/{version}", requireSession(d.DB, legalVersionCheckRead(d.DB, d.legalHistory())))
-	r.handle(http.MethodPost, "/api/legal-versions/{document}/{version}/publications", requireStepUp(d.DB, legalPublishAct(d)))
+	r.handle(http.MethodPost, "/api/legal-versions/{document}/{version}/publications", requireStepUp(d.DB, actLegalVersionPublished, legalPublishAct(d)))
 	r.handle(http.MethodGet, "/api/staff/{staffId}/second-factor", requireSession(d.DB, secondFactorCheckRead(d.DB)))
-	r.handle(http.MethodPost, "/api/staff/{staffId}/second-factor-clears", requireStepUp(d.DB, secondFactorClearAct(d)))
+	r.handle(http.MethodPost, "/api/staff/{staffId}/second-factor-clears", requireStepUp(d.DB, actSecondFactorCleared, secondFactorClearAct(d)))
 	return clock.Middleware(d.Now)(csrf.Wrap(d.Origins, r.mux)), r.routes
 }
 

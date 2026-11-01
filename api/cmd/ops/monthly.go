@@ -75,7 +75,7 @@ func monthlyCredits(db *sql.DB) http.HandlerFunc {
 		tx, err := db.BeginTx(r.Context(), &sql.TxOptions{ReadOnly: true})
 		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		defer func() { _ = tx.Rollback() }()
@@ -83,7 +83,7 @@ func monthlyCredits(db *sql.DB) http.HandlerFunc {
 		read, err := readMonthlyCredits(r, tx, month, lastClosed)
 		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		apierr.WriteJSON(w, http.StatusOK, read)

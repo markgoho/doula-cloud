@@ -372,8 +372,8 @@ func TestLegalPublish_NeedsAnIdempotencyKey(t *testing.T) {
 
 	w := s.publish(s.steppedUpCookie(), "", "privacy", "2026-12-15", map[string]any{})
 
-	if w.Code != http.StatusBadRequest || decodeError(t, w).Message != msgLegalKeyRequired {
-		t.Fatalf("status = %d, body %s; want 400 %q", w.Code, w.Body, msgLegalKeyRequired)
+	if w.Code != http.StatusBadRequest || decodeError(t, w).Message != "Send an Idempotency-Key header with the publication." {
+		t.Fatalf("status = %d, body %s; want 400 %q", w.Code, w.Body, "Send an Idempotency-Key header with the publication.")
 	}
 	if s.publications() != 0 {
 		t.Errorf("publications = %d, want none", s.publications())

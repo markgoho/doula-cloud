@@ -13,15 +13,11 @@ import (
 	"doula-cloud/api/internal/clock"
 )
 
-// headerIdempotencyKey names the request an act retries under.
-const headerIdempotencyKey = "Idempotency-Key"
-
 const (
-	msgGrantKeyRequired = "Send an Idempotency-Key header with the founding grant."
-	msgNoGrantFields    = "Send no fields with the founding grant. Its size comes from the Practice's Staff, and who gives it from your sign-in."
-	msgAlreadyGranted   = "This Practice already holds its founding grant of %d Credits. A founding grant is given once."
-	msgNoStaff          = "This Practice has no Staff, so there is nothing to size a founding grant from."
-	msgRosterChanged    = "This Practice's Staff changed while the grant was being given, so nothing has changed. Check the grant again."
+	msgNoGrantFields  = "Send no fields with the founding grant. Its size comes from the Practice's Staff, and who gives it from your sign-in."
+	msgAlreadyGranted = "This Practice already holds its founding grant of %d Credits. A founding grant is given once."
+	msgNoStaff        = "This Practice has no Staff, so there is nothing to size a founding grant from."
+	msgRosterChanged  = "This Practice's Staff changed while the grant was being given, so nothing has changed. Check the grant again."
 )
 
 // foundingGrantCheck is what the check page states before the act: the
@@ -85,7 +81,7 @@ func beginGrantRead(w http.ResponseWriter, r *http.Request, db *sql.DB, practice
 	tx, err := db.BeginTx(r.Context(), nil)
 	if err != nil {
 		// coverage:ignore reason: DB failure, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		writeInternal(w)
 		return nil, grantPractice{}, false
 	}
 	p, err := readGrantPractice(r.Context(), tx, practiceID)
@@ -97,7 +93,7 @@ func beginGrantRead(w http.ResponseWriter, r *http.Request, db *sql.DB, practice
 	if err != nil {
 		// coverage:ignore reason: DB failure, not exercised by unit tests
 		_ = tx.Rollback()
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		writeInternal(w)
 		return nil, p, false
 	}
 	return tx, p, true
@@ -143,9 +139,8 @@ func foundingGrantAct(db *sql.DB) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		requestKey := r.Header.Get(headerIdempotencyKey)
-		if requestKey == "" {
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, msgGrantKeyRequired, nil)
+		requestKey, ok := requestKeyOf(w, r, "founding grant")
+		if !ok {
 			return
 		}
 		if !decodeDeclared(w, r, map[string]bool{}, msgNoGrantFields, &struct{}{}) {
@@ -163,7 +158,7 @@ func foundingGrantAct(db *sql.DB) http.HandlerFunc {
 				details, same, err := grantedUnder(r.Context(), tx, p.grantedActID.String, requestKey)
 				if err != nil {
 					// coverage:ignore reason: DB failure, not exercised by unit tests
-					apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+					writeInternal(w)
 					return
 				}
 				if same {
@@ -181,21 +176,18 @@ func foundingGrantAct(db *sql.DB) http.HandlerFunc {
 
 		op := signedIn(r)
 		now := clock.Now(r.Context())
-		details, _ := json.Marshal(foundingGrantActDetails{StaffCount: p.StaffCount, Credits: p.Credits, RequestKey: requestKey})
-		var actID string
-		if err := tx.QueryRowContext(r.Context(),
-			`INSERT INTO operator_acts (operator_id, action, subject_kind, subject_id, details, created_at)
-			 VALUES ($1, 'founding_grant', 'practice', $2, $3, $4) RETURNING id`,
-			op.ID, practiceID, details, now).Scan(&actID); err != nil {
+		actID, err := recordAct(r.Context(), tx, op, actFoundingGrant, practiceSubject(practiceID),
+			foundingGrantActDetails{StaffCount: p.StaffCount, Credits: p.Credits, RequestKey: requestKey}, nil, now)
+		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		var written sql.NullInt64
 		if err := tx.QueryRowContext(r.Context(), `SELECT ops_record_founding_grant($1, $2, $3, $4)`,
 			practiceID, actID, p.Credits, now).Scan(&written); err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		if !written.Valid {
@@ -215,12 +207,12 @@ func foundingGrantAct(db *sql.DB) http.HandlerFunc {
 			CreatedAt:   now,
 		}); err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		apierr.WriteJSON(w, http.StatusOK, foundingGrantResult{PracticeName: p.PracticeName, StaffCount: p.StaffCount, Credits: p.Credits})

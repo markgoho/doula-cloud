@@ -41,7 +41,7 @@ func (s *opsStack) stepUpAt(cookie string) *time.Time {
 // guard is proven before any act exists.
 func (s *opsStack) guarded(cookie string) *httptest.ResponseRecorder {
 	s.t.Helper()
-	act := requireStepUp(s.db.Ops, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	act := requireStepUp(s.db.Ops, actRefund, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, err := s.db.Ops.BeginTx(r.Context(), nil)
 		if err != nil {
 			s.t.Fatalf("begin: %v", err)

@@ -202,8 +202,8 @@ func TestPilotAddressAdd_NeedsAnIdempotencyKey(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", w.Code)
 	}
-	if got := decodeError(t, w).Message; got != msgPilotKeyRequired {
-		t.Errorf("message = %q, want %q", got, msgPilotKeyRequired)
+	if got := decodeError(t, w).Message; got != "Send an Idempotency-Key header with the address." {
+		t.Errorf("message = %q, want %q", got, "Send an Idempotency-Key header with the address.")
 	}
 	if s.pilotRows() != 0 {
 		t.Errorf("rows = %d, want none", s.pilotRows())

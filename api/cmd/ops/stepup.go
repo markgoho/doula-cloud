@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -57,12 +56,9 @@ func stepUp(d Deps) http.HandlerFunc {
 		op := signedIn(r)
 		now := clock.Now(r.Context())
 		if reason := stepUpRefusalReason(r, d, op); reason != "" {
-			details, _ := json.Marshal(stepUpRefusal{Reason: reason})
-			if _, err := d.DB.ExecContext(r.Context(),
-				`INSERT INTO operator_acts (operator_id, action, details, created_at) VALUES ($1, 'step_up_refused', $2, $3)`,
-				op.ID, details, now); err != nil {
+			if _, err := recordAct(r.Context(), d.DB, op, actStepUpRefused, nil, stepUpRefusal{Reason: reason}, nil, now); err != nil {
 				// coverage:ignore reason: DB failure, not exercised by unit tests
-				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+				writeInternal(w)
 				return
 			}
 			apierr.Write(w, http.StatusUnauthorized, apierr.CodeUnauthorized, msgStepUpRefused, nil)
@@ -72,7 +68,7 @@ func stepUp(d Deps) http.HandlerFunc {
 			`UPDATE operator_sessions SET step_up_at = $2 WHERE token_hash = $1`,
 			tokenHash(op.token), now); err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -103,19 +99,29 @@ func stepUpRefusalReason(r *http.Request, d Deps, op operator) string {
 	return ""
 }
 
-// requireStepUp admits an act only on a session stepped up within
-// stepUpLimit, checked on the act's own request. The act reads the
-// stamp it was admitted on from signedIn(r).StepUpAt, for its
-// operator_acts row's step_up_at. It reads what requireSession already
-// read, so the guard costs no statement of its own (#2432).
-func requireStepUp(db *sql.DB, next http.Handler) http.Handler {
+// requireStepUp admits an act on a session stepped up within
+// stepUpLimit, or a retry of an act this operator already took under the
+// request's Idempotency-Key, which replays and needs no new code.
+func requireStepUp(db *sql.DB, action string, next http.Handler) http.Handler {
 	return requireSession(db, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		at := signedIn(r).StepUpAt
-		if at == nil || !clock.Now(r.Context()).Before(at.Add(stepUpLimit)) {
-			writeStepUpRequired(w)
+		op := signedIn(r)
+		if op.StepUpAt != nil && clock.Now(r.Context()).Before(op.StepUpAt.Add(stepUpLimit)) {
+			next.ServeHTTP(w, r)
 			return
 		}
-		next.ServeHTTP(w, r)
+		if key := r.Header.Get(headerIdempotencyKey); key != "" {
+			replay, err := isReplay(r.Context(), db, op, action, key)
+			if err != nil {
+				// coverage:ignore reason: DB failure, not exercised by unit tests
+				writeInternal(w)
+				return
+			}
+			if replay {
+				next.ServeHTTP(w, r)
+				return
+			}
+		}
+		writeStepUpRequired(w)
 	}))
 }
 

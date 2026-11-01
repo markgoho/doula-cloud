@@ -109,7 +109,7 @@ func signIn(d Deps) http.HandlerFunc {
 		view, err := mintSession(r.Context(), d.DB, identity, name, token, now)
 		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		http.SetCookie(w, sessionCookie(token, int(absoluteLimit.Seconds())))
@@ -149,7 +149,7 @@ func mintSession(ctx context.Context, db *sql.DB, identity Identity, name, token
 		// coverage:ignore reason: DB failure, not exercised by unit tests
 		return sessionView{}, fmt.Errorf("mint operator session: %w", err)
 	}
-	if err := recordAct(ctx, tx, operatorID, "sign_in", now); err != nil {
+	if _, err := recordAct(ctx, tx, operator{ID: operatorID}, actSignIn, nil, nil, nil, now); err != nil {
 		// coverage:ignore reason: DB failure, not exercised by unit tests
 		return sessionView{}, fmt.Errorf("mint operator session: %w", err)
 	}
@@ -158,17 +158,6 @@ func mintSession(ctx context.Context, db *sql.DB, identity Identity, name, token
 		return sessionView{}, fmt.Errorf("mint operator session: %w", err)
 	}
 	return view, nil
-}
-
-func recordAct(ctx context.Context, tx *sql.Tx, operatorID, action string, now time.Time) error {
-	_, err := tx.ExecContext(ctx,
-		`INSERT INTO operator_acts (operator_id, action, created_at) VALUES ($1, $2, $3)`,
-		operatorID, action, now)
-	if err != nil {
-		// coverage:ignore reason: DB failure, not exercised by unit tests
-		return fmt.Errorf("record %s: %w", action, err)
-	}
-	return nil
 }
 
 // requireSession admits a request whose cookie names a live operator
@@ -200,7 +189,7 @@ func requireSession(db *sql.DB, next http.Handler) http.Handler {
 		}
 		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), operatorKey{}, op)))
@@ -227,7 +216,7 @@ func signOut(db *sql.DB) http.HandlerFunc {
 		now := clock.Now(r.Context())
 		if err := endSession(r.Context(), db, op, now); err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		http.SetCookie(w, sessionCookie("", -1))
@@ -246,7 +235,7 @@ func endSession(ctx context.Context, db *sql.DB, op operator, now time.Time) err
 		// coverage:ignore reason: DB failure, not exercised by unit tests
 		return fmt.Errorf("end operator session: %w", err)
 	}
-	if err := recordAct(ctx, tx, op.ID, "sign_out", now); err != nil {
+	if _, err := recordAct(ctx, tx, op, actSignOut, nil, nil, nil, now); err != nil {
 		// coverage:ignore reason: DB failure, not exercised by unit tests
 		return fmt.Errorf("end operator session: %w", err)
 	}

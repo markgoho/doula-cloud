@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -13,7 +12,6 @@ import (
 )
 
 const (
-	msgGateKeyRequired = "Send an Idempotency-Key header with the opening."
 	msgGateNoFields    = "Send no fields with the opening. Who opens the gate comes from your sign-in."
 	msgGateAlreadyOpen = "The pilot gate is already open. It was opened on %s, and nothing has changed."
 	msgGateOpenRaced   = "The pilot gate was opened while this opening was being made, so nothing has changed."
@@ -37,7 +35,7 @@ func pilotGateRead(db *sql.DB) http.HandlerFunc {
 		var gate pilotGateState
 		if err := db.QueryRowContext(r.Context(), `SELECT ops_pilot_gate_opened_at()`).Scan(&gate.OpenedAt); err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		apierr.WriteJSON(w, http.StatusOK, gate)
@@ -50,9 +48,8 @@ func pilotGateRead(db *sql.DB) http.HandlerFunc {
 // gate keys. Nothing closes it again.
 func pilotGateOpenAct(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		requestKey := r.Header.Get(headerIdempotencyKey)
-		if requestKey == "" {
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, msgGateKeyRequired, nil)
+		requestKey, ok := requestKeyOf(w, r, "opening")
+		if !ok {
 			return
 		}
 		if !decodeDeclared(w, r, map[string]bool{}, msgGateNoFields, &struct{}{}) {
@@ -63,13 +60,13 @@ func pilotGateOpenAct(db *sql.DB) http.HandlerFunc {
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		defer func() { _ = tx.Rollback() }()
 
-		if err := spendStepUp(r.Context(), tx, op); err != nil {
-			// coverage:ignore reason: a second act spending the stamp between requireStepUp's read and this one; stepup_test.go covers spendStepUp's refusal
+		if err := spendUnlessReplay(r.Context(), tx, op, actPilotGateOpened, requestKey); err != nil {
+			// coverage:ignore reason: a DB failure, or a second act spending the stamp between requireStepUp's read and this one; stepup_test.go covers spendStepUp's refusal
 			writeStepUpRequired(w)
 			return
 		}
@@ -82,7 +79,7 @@ func pilotGateOpenAct(db *sql.DB) http.HandlerFunc {
 		if err == nil {
 			if err := tx.Commit(); err != nil {
 				// coverage:ignore reason: DB failure, not exercised by unit tests
-				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+				writeInternal(w)
 				return
 			}
 			apierr.WriteJSON(w, http.StatusOK, pilotGateState{OpenedAt: &priorAt})
@@ -90,14 +87,14 @@ func pilotGateOpenAct(db *sql.DB) http.HandlerFunc {
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 
 		var openedAt *time.Time
 		if err := tx.QueryRowContext(r.Context(), `SELECT ops_pilot_gate_opened_at()`).Scan(&openedAt); err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		if openedAt != nil {
@@ -107,20 +104,16 @@ func pilotGateOpenAct(db *sql.DB) http.HandlerFunc {
 		}
 
 		now := clock.Now(r.Context())
-		details, _ := json.Marshal(pilotGateActDetails{RequestKey: requestKey})
-		var actID string
-		if err := tx.QueryRowContext(r.Context(),
-			`INSERT INTO operator_acts (operator_id, action, details, step_up_at, created_at)
-			 VALUES ($1, 'pilot_gate_opened', $2, $3, $4) RETURNING id`,
-			op.ID, details, op.StepUpAt, now).Scan(&actID); err != nil {
+		actID, err := recordAct(r.Context(), tx, op, actPilotGateOpened, nil, pilotGateActDetails{RequestKey: requestKey}, op.StepUpAt, now)
+		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		var opened bool
 		if err := tx.QueryRowContext(r.Context(), `SELECT ops_open_pilot_gate($1, $2)`, actID, now).Scan(&opened); err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		if !opened {
@@ -130,7 +123,7 @@ func pilotGateOpenAct(db *sql.DB) http.HandlerFunc {
 		}
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		apierr.WriteJSON(w, http.StatusOK, pilotGateState{OpenedAt: &now})

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -16,10 +15,10 @@ import (
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/legal"
 	"doula-cloud/api/internal/legalnotice"
+	"doula-cloud/api/internal/money"
 )
 
 const (
-	msgLegalKeyRequired  = "Send an Idempotency-Key header with the publication."
 	msgLegalNoFields     = "Send no fields with the publication. The version comes from its address, and who publishes it from your sign-in."
 	msgNoSuchVersion     = "There is no such version. The Terms of Service and the Privacy Policy each name a version by the date it takes effect."
 	msgAlreadyPublished  = "This version was already published on %s, and nothing has changed."
@@ -126,7 +125,7 @@ func legalVersions(db *sql.DB, docs []legal.Document) http.HandlerFunc {
 		published, err := publicationsOf(r.Context(), db)
 		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		list := legalVersionList{Items: []legalVersion{}}
@@ -171,7 +170,7 @@ func legalVersionCheckRead(db *sql.DB, docs []legal.Document) http.HandlerFunc {
 			check.Document, check.Version, check.Material,
 		).Scan(&check.Owners, &check.PublishedAt); err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		apierr.WriteJSON(w, http.StatusOK, check)
@@ -194,7 +193,7 @@ func legalRefusal(ctx context.Context, prices billing.StripeClient, version lega
 	if version.CreditPriceCents > 0 {
 		if err := prices.CheckCreditPrice(ctx, version.CreditPriceCents); err != nil {
 			log.Printf("doula-ops: check credit price of %d cents: %v", version.CreditPriceCents, err)
-			return fmt.Sprintf(msgNoStripePrice, dollars(version.CreditPriceCents))
+			return fmt.Sprintf(msgNoStripePrice, money.Dollars(version.CreditPriceCents))
 		}
 	}
 	return ""
@@ -211,10 +210,6 @@ func longDate(isoDate string) string {
 	return day.Format("January 2, 2006")
 }
 
-func dollars(cents int64) string {
-	return fmt.Sprintf("$%d.%02d", cents/100, cents%100)
-}
-
 // legalPublishAct publishes one version (#1548, ADR-0062's act table):
 // behind a fresh code, under an Idempotency-Key so a retry is the same
 // publication. It is recorded as an operator_acts row the publication
@@ -223,9 +218,8 @@ func dollars(cents int64) string {
 func legalPublishAct(d Deps) http.HandlerFunc {
 	docs := d.legalHistory()
 	return func(w http.ResponseWriter, r *http.Request) {
-		requestKey := r.Header.Get(headerIdempotencyKey)
-		if requestKey == "" {
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, msgLegalKeyRequired, nil)
+		requestKey, ok := requestKeyOf(w, r, "publication")
+		if !ok {
 			return
 		}
 		doc, version, ok := versionFrom(w, r, docs)
@@ -248,7 +242,7 @@ func legalPublishAct(d Deps) http.HandlerFunc {
 		published, err := publicationsOf(r.Context(), d.DB)
 		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		prior, isPublished := published[document+" "+version.Effective]
@@ -262,13 +256,13 @@ func legalPublishAct(d Deps) http.HandlerFunc {
 		tx, err := d.DB.BeginTx(r.Context(), nil)
 		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		defer func() { _ = tx.Rollback() }()
 
-		if err := spendStepUp(r.Context(), tx, op); err != nil {
-			// coverage:ignore reason: a second act spending the stamp between requireStepUp's read and this one; stepup_test.go covers spendStepUp's refusal
+		if err := spendUnlessReplay(r.Context(), tx, op, actLegalVersionPublished, requestKey); err != nil {
+			// coverage:ignore reason: a DB failure, or a second act spending the stamp between requireStepUp's read and this one; stepup_test.go covers spendStepUp's refusal
 			writeStepUpRequired(w)
 			return
 		}
@@ -285,7 +279,7 @@ func legalPublishAct(d Deps) http.HandlerFunc {
 			}
 			if err := tx.Commit(); err != nil {
 				// coverage:ignore reason: DB failure, not exercised by unit tests
-				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+				writeInternal(w)
 				return
 			}
 			answer(prior)
@@ -293,7 +287,7 @@ func legalPublishAct(d Deps) http.HandlerFunc {
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		if isPublished {
@@ -302,21 +296,18 @@ func legalPublishAct(d Deps) http.HandlerFunc {
 			return
 		}
 
-		details, _ := json.Marshal(legalActDetails{RequestKey: requestKey, Document: document, Version: version.Effective, Material: version.Material})
-		var actID string
-		if err := tx.QueryRowContext(r.Context(),
-			`INSERT INTO operator_acts (operator_id, action, details, step_up_at, created_at)
-			 VALUES ($1, 'legal_version_published', $2, $3, $4) RETURNING id`,
-			op.ID, details, op.StepUpAt, now).Scan(&actID); err != nil {
+		actID, err := recordAct(r.Context(), tx, op, actLegalVersionPublished, nil,
+			legalActDetails{RequestKey: requestKey, Document: document, Version: version.Effective, Material: version.Material}, op.StepUpAt, now)
+		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		var queued *int
 		if err := tx.QueryRowContext(r.Context(), `SELECT ops_publish_legal_version($1, $2, $3, $4, $5)`,
 			actID, document, version.Effective, version.Material, now).Scan(&queued); err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		if queued == nil {
@@ -326,7 +317,7 @@ func legalPublishAct(d Deps) http.HandlerFunc {
 		}
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		answer(publicationRow{material: version.Material, publishedAt: now, queued: *queued})

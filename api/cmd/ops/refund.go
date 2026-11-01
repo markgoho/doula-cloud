@@ -19,11 +19,9 @@ import (
 )
 
 const (
-	msgPracticeNotFound  = "There is no Practice at this address."
 	msgNothingRefundable = "This Practice holds no purchased Credits that can be refunded. Credits given free, already spent or bought more than three years ago are not refundable."
 	msgStripeRefused     = "Stripe did not make the refund, so nothing has changed. Try again."
 	msgCorrectAnswers    = "Correct the answers marked below."
-	msgKeyRequired       = "Send an Idempotency-Key header with the refund."
 	msgOtherField        = "Send only the number of Credits, the Owner who asked and the date the request arrived."
 
 	msgCreditsMissing   = "Enter the number of Credits to refund, 1 or more"
@@ -75,6 +73,7 @@ type refundResult struct {
 // refundActDetails is the refund's operator_acts details: the request
 // that asked for it and what it gave back.
 type refundActDetails struct {
+	RequestKey         string `json:"requestKey"`
 	RequestedByStaffID string `json:"requestedByStaffId"`
 	RequestedOn        string `json:"requestedOn"`
 	Credits            int    `json:"credits"`
@@ -87,8 +86,6 @@ type refundDiff struct {
 	AmountCents int64 `json:"amountCents"`
 	TaxCents    int64 `json:"taxCents"`
 }
-
-var errNoPractice = errors.New("no such practice")
 
 // readRefundPractice reads the Practice's name and Owners through
 // ops_refund_practice (00147).
@@ -123,22 +120,11 @@ func readRefundPractice(ctx context.Context, tx *sql.Tx, practiceID string) (str
 	return name, owners, nil
 }
 
-// practiceIDFrom reads the path's Practice id, answering 404 for one
-// that is not a uuid.
-func practiceIDFrom(w http.ResponseWriter, r *http.Request) (string, bool) {
-	id := r.PathValue("practiceId")
-	if _, err := uuid.Parse(id); err != nil {
-		apierr.Write(w, http.StatusNotFound, apierr.CodeNotFound, msgPracticeNotFound, nil)
-		return "", false
-	}
-	return id, true
-}
-
 func writeOverLimit(ctx context.Context, w http.ResponseWriter, tx *sql.Tx, practiceID string) {
 	most, err := billing.QuoteRefund(ctx, tx, practiceID, 0, clock.Now(ctx))
 	if err != nil {
 		// coverage:ignore reason: DB failure, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		writeInternal(w)
 		return
 	}
 	apierr.Write(w, http.StatusUnprocessableEntity, apierr.CodeInvalidArgument, msgCorrectAnswers,
@@ -168,7 +154,7 @@ func refundCheckRead(db *sql.DB) http.HandlerFunc {
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		defer func() { _ = tx.Rollback() }()
@@ -180,7 +166,7 @@ func refundCheckRead(db *sql.DB) http.HandlerFunc {
 		}
 		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		check := refundCheck{PracticeName: name, Owners: owners}
@@ -192,7 +178,7 @@ func refundCheckRead(db *sql.DB) http.HandlerFunc {
 		case errors.Is(err, billing.ErrNothingRefundable):
 		case err != nil:
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		default:
 			check.Quote = &quote
@@ -231,9 +217,8 @@ func refundAct(d Deps) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		requestKey := r.Header.Get(headerIdempotencyKey)
-		if requestKey == "" {
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, msgKeyRequired, nil)
+		requestKey, ok := requestKeyOf(w, r, "refund")
+		if !ok {
 			return
 		}
 		var req refundRequest
@@ -250,13 +235,13 @@ func refundAct(d Deps) http.HandlerFunc {
 		tx, err := d.DB.BeginTx(r.Context(), nil)
 		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		defer func() { _ = tx.Rollback() }()
 
-		if err := spendStepUp(r.Context(), tx, op); err != nil {
-			// coverage:ignore reason: a second act spending the stamp between requireStepUp's read and this one; stepup_test.go covers spendStepUp's refusal
+		if err := spendUnlessReplay(r.Context(), tx, op, actRefund, requestKey); err != nil {
+			// coverage:ignore reason: a DB failure, or a second act spending the stamp between requireStepUp's read and this one; stepup_test.go covers spendStepUp's refusal
 			writeStepUpRequired(w)
 			return
 		}
@@ -267,7 +252,7 @@ func refundAct(d Deps) http.HandlerFunc {
 		}
 		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		ownerName, isOwner := "", false
@@ -286,19 +271,12 @@ func refundAct(d Deps) http.HandlerFunc {
 		receipt, err := billing.Refund(r.Context(), tx, d.Stripe,
 			billing.RefundOrder{PracticeID: practiceID, Credits: req.Credits, RequestKey: requestKey}, now,
 			func(ctx context.Context, q billing.RefundQuote) (string, error) {
-				details, _ := json.Marshal(refundActDetails{
-					RequestedByStaffID: req.RequestedBy, RequestedOn: req.RequestedOn,
+				var err error
+				actID, err = recordAct(ctx, tx, op, actRefund, practiceSubject(practiceID), refundActDetails{
+					RequestKey: requestKey, RequestedByStaffID: req.RequestedBy, RequestedOn: req.RequestedOn,
 					Credits: q.Credits, AmountCents: q.AmountCents, TaxCents: q.TaxCents,
-				})
-				err := tx.QueryRowContext(ctx,
-					`INSERT INTO operator_acts (operator_id, action, subject_kind, subject_id, details, step_up_at, created_at)
-					 VALUES ($1, 'refund', 'practice', $2, $3, $4, $5) RETURNING id`,
-					op.ID, practiceID, details, op.StepUpAt, now).Scan(&actID)
-				if err != nil {
-					// coverage:ignore reason: DB failure, not exercised by unit tests
-					return "", fmt.Errorf("record refund act: %w", err)
-				}
-				return actID, nil
+				}, op.StepUpAt, now)
+				return actID, err
 			})
 		switch {
 		case errors.Is(err, billing.ErrNothingRefundable):
@@ -312,7 +290,7 @@ func refundAct(d Deps) http.HandlerFunc {
 			return
 		case err != nil:
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 
@@ -328,13 +306,13 @@ func refundAct(d Deps) http.HandlerFunc {
 				CreatedAt:   now,
 			}); err != nil {
 				// coverage:ignore reason: DB failure, not exercised by unit tests
-				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+				writeInternal(w)
 				return
 			}
 		}
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		apierr.WriteJSON(w, http.StatusOK, refundResult{
@@ -350,24 +328,3 @@ func refundAct(d Deps) http.HandlerFunc {
 
 // refundFields are the only fields a refund's body may name.
 var refundFields = map[string]bool{fieldCredits: true, "requestedBy": true, "requestedOn": true}
-
-// decodeDeclared is apierr.DecodeJSON refusing a field the body does not
-// declare, so a request naming its own actor is refused, not ignored.
-func decodeDeclared(w http.ResponseWriter, r *http.Request, declared map[string]bool, msgOther string, target any) bool {
-	var fields map[string]json.RawMessage
-	if !apierr.DecodeJSON(w, r, &fields) {
-		return false
-	}
-	for name := range fields {
-		if !declared[name] {
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, msgOther, nil)
-			return false
-		}
-	}
-	raw, _ := json.Marshal(fields)
-	if err := json.Unmarshal(raw, target); err != nil {
-		apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, msgOther, nil)
-		return false
-	}
-	return true
-}

@@ -205,8 +205,8 @@ func TestPilotGateOpen_NeedsAnIdempotencyKey(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", w.Code)
 	}
-	if got := decodeError(t, w).Message; got != msgGateKeyRequired {
-		t.Errorf("message = %q, want %q", got, msgGateKeyRequired)
+	if got := decodeError(t, w).Message; got != "Send an Idempotency-Key header with the opening." {
+		t.Errorf("message = %q, want %q", got, "Send an Idempotency-Key header with the opening.")
 	}
 	if s.gateIsOpen() {
 		t.Error("the gate opened")

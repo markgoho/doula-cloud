@@ -81,7 +81,7 @@ func feedbackList(db *sql.DB, repo string) http.HandlerFunc {
 		page, err := readFeedbackPage(r, db, repo, filter == "unopened", afterAt, afterID)
 		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		apierr.WriteJSON(w, http.StatusOK, page)
@@ -137,7 +137,7 @@ func feedbackRead(db *sql.DB, repo string) http.HandlerFunc {
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		defer func() { _ = tx.Rollback() }()
@@ -149,19 +149,17 @@ func feedbackRead(db *sql.DB, repo string) http.HandlerFunc {
 		}
 		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
-		if _, err := tx.ExecContext(r.Context(),
-			`INSERT INTO operator_acts (operator_id, action, subject_kind, subject_id, created_at) VALUES ($1, 'feedback_read', 'feedback', $2, $3)`,
-			signedIn(r).ID, piece.ID, clock.Now(r.Context())); err != nil {
+		if _, err := recordAct(r.Context(), tx, signedIn(r), actFeedbackRead, feedbackSubject(piece.ID), nil, nil, clock.Now(r.Context())); err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		apierr.WriteJSON(w, http.StatusOK, piece)

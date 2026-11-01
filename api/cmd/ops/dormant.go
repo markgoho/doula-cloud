@@ -53,7 +53,7 @@ func dormantList(db *sql.DB) http.HandlerFunc {
 		tx, err := db.BeginTx(r.Context(), &sql.TxOptions{ReadOnly: true})
 		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		defer func() { _ = tx.Rollback() }()
@@ -61,7 +61,7 @@ func dormantList(db *sql.DB) http.HandlerFunc {
 		page, err := readDormantPage(r, tx, notSeenSince, afterAt, afterID)
 		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		apierr.WriteJSON(w, http.StatusOK, page)

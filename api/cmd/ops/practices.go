@@ -142,7 +142,7 @@ func practiceList(db *sql.DB, deleted bool) http.HandlerFunc {
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		defer func() { _ = tx.Rollback() }()
@@ -150,7 +150,7 @@ func practiceList(db *sql.DB, deleted bool) http.HandlerFunc {
 		page, err := readPracticePage(r, tx, deleted, afterAt, afterID)
 		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 
@@ -158,17 +158,14 @@ func practiceList(db *sql.DB, deleted bool) http.HandlerFunc {
 		for _, p := range page.Items {
 			read.PracticeIDs = append(read.PracticeIDs, p.ID)
 		}
-		details, _ := json.Marshal(read)
-		if _, err := tx.ExecContext(r.Context(),
-			`INSERT INTO operator_acts (operator_id, action, details, created_at) VALUES ($1, 'owner_contact_read', $2, $3)`,
-			signedIn(r).ID, details, clock.Now(r.Context())); err != nil {
+		if _, err := recordAct(r.Context(), tx, signedIn(r), actOwnerContactRead, nil, read, nil, clock.Now(r.Context())); err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		apierr.WriteJSON(w, http.StatusOK, page)

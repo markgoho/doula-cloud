@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -17,10 +16,9 @@ import (
 )
 
 const (
-	msgStaffNotFound    = "There is no Staff member at this address."
-	msgClearKeyRequired = "Send an Idempotency-Key header with the reset."
-	msgNoClearFields    = "Send no fields with the reset. Who it is for comes from the address, and who does it from your sign-in."
-	msgIdentityRefused  = "Identity Platform did not reset two-factor authentication, so nothing has changed. Try again."
+	msgStaffNotFound   = "There is no Staff member at this address."
+	msgNoClearFields   = "Send no fields with the reset. Who it is for comes from the address, and who does it from your sign-in."
+	msgIdentityRefused = "Identity Platform did not reset two-factor authentication, so nothing has changed. Try again."
 )
 
 // secondFactorStaff is what the check page states before the act, and
@@ -92,7 +90,7 @@ func writeStaffRead(w http.ResponseWriter, err error) {
 		return
 	}
 	// coverage:ignore reason: DB failure, not exercised by unit tests
-	apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+	writeInternal(w)
 }
 
 // secondFactorCheckRead answers the check page.
@@ -105,7 +103,7 @@ func secondFactorCheckRead(db *sql.DB) http.HandlerFunc {
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		defer func() { _ = tx.Rollback() }()
@@ -145,9 +143,8 @@ func secondFactorClearAct(d Deps) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		requestKey := r.Header.Get(headerIdempotencyKey)
-		if requestKey == "" {
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, msgClearKeyRequired, nil)
+		requestKey, ok := requestKeyOf(w, r, "reset")
+		if !ok {
 			return
 		}
 		if !decodeDeclared(w, r, map[string]bool{}, msgNoClearFields, &struct{}{}) {
@@ -158,13 +155,13 @@ func secondFactorClearAct(d Deps) http.HandlerFunc {
 		tx, err := d.DB.BeginTx(r.Context(), nil)
 		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		defer func() { _ = tx.Rollback() }()
 
-		if err := spendStepUp(r.Context(), tx, op); err != nil {
-			// coverage:ignore reason: a second act spending the stamp between requireStepUp's read and this one; stepup_test.go covers spendStepUp's refusal
+		if err := spendUnlessReplay(r.Context(), tx, op, actSecondFactorCleared, requestKey); err != nil {
+			// coverage:ignore reason: a DB failure, or a second act spending the stamp between requireStepUp's read and this one; stepup_test.go covers spendStepUp's refusal
 			writeStepUpRequired(w)
 			return
 		}
@@ -176,7 +173,7 @@ func secondFactorClearAct(d Deps) http.HandlerFunc {
 		done, err := clearedUnder(r.Context(), tx, staffID, requestKey)
 		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		if !done && !clearSecondFactor(w, r, d, tx, op, staffID, requestKey, staff) {
@@ -184,7 +181,7 @@ func secondFactorClearAct(d Deps) http.HandlerFunc {
 		}
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return
 		}
 		apierr.WriteJSON(w, http.StatusOK, staff)
@@ -197,21 +194,17 @@ func secondFactorClearAct(d Deps) http.HandlerFunc {
 func clearSecondFactor(w http.ResponseWriter, r *http.Request, d Deps, tx *sql.Tx, op operator, staffID, requestKey string, staff secondFactorStaff) bool {
 	ctx := r.Context()
 	now := clock.Now(ctx)
-	details, _ := json.Marshal(secondFactorActDetails{RequestKey: requestKey})
-	var actID string
-	if err := tx.QueryRowContext(ctx,
-		`INSERT INTO operator_acts (operator_id, action, subject_kind, subject_id, details, step_up_at, created_at)
-		 VALUES ($1, 'second_factor_cleared', 'staff', $2, $3, $4, $5) RETURNING id`,
-		op.ID, staffID, details, op.StepUpAt, now).Scan(&actID); err != nil {
+	actID, err := recordAct(ctx, tx, op, actSecondFactorCleared, staffSubject(staffID), secondFactorActDetails{RequestKey: requestKey}, op.StepUpAt, now)
+	if err != nil {
 		// coverage:ignore reason: DB failure, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		writeInternal(w)
 		return false
 	}
 	var identityUID sql.NullString
 	if err := tx.QueryRowContext(ctx, `SELECT ops_record_second_factor_cleared($1, $2, $3)`,
 		staffID, actID, now).Scan(&identityUID); err != nil || !identityUID.Valid {
 		// coverage:ignore reason: DB failure, or a login deleted between this request's read and its write
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		writeInternal(w)
 		return false
 	}
 	if err := d.Accounts.ClearSecondFactors(ctx, identityUID.String); err != nil {
@@ -229,7 +222,7 @@ func clearSecondFactor(w http.ResponseWriter, r *http.Request, d Deps, tx *sql.T
 			CreatedAt:   now,
 		}); err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			writeInternal(w)
 			return false
 		}
 	}
