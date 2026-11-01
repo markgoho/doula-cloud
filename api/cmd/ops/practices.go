@@ -76,6 +76,24 @@ type ownerContactRead struct {
 	PracticeIDs []string `json:"practiceIds"`
 }
 
+// listCursor reads a list page's cursor, both nil for the first page,
+// and refuses one that is not a time and a Practice id.
+func listCursor(w http.ResponseWriter, r *http.Request) (afterAt, afterID any, ok bool) {
+	raw := r.URL.Query().Get("cursor")
+	if raw == "" {
+		return nil, nil, true
+	}
+	c, err := pagecursor.Decode(raw)
+	if err == nil {
+		_, err = uuid.Parse(c.ID)
+	}
+	if err != nil {
+		apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, msgBadCursor, nil)
+		return nil, nil, false
+	}
+	return c.At, c.ID, true
+}
+
 func scanPractice(rows *sql.Rows) (practiceRow, error) {
 	var p practiceRow
 	var owners []byte
@@ -116,17 +134,9 @@ func practiceList(db *sql.DB, deleted bool) http.HandlerFunc {
 		list = "deleted"
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
-		var afterAt, afterID any
-		if raw := r.URL.Query().Get("cursor"); raw != "" {
-			c, err := pagecursor.Decode(raw)
-			if err == nil {
-				_, err = uuid.Parse(c.ID)
-			}
-			if err != nil {
-				apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, msgBadCursor, nil)
-				return
-			}
-			afterAt, afterID = c.At, c.ID
+		afterAt, afterID, ok := listCursor(w, r)
+		if !ok {
+			return
 		}
 
 		tx, err := db.BeginTx(r.Context(), nil)

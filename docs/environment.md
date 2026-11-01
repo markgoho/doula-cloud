@@ -189,7 +189,7 @@ gcloud run services update doula-api --region us-central1 \
 
 ### The boundary on `/api/internal/**`
 
-Twenty-nine addresses sit under `/api/internal/**` — the drain, twenty-one `process-*` outbox endpoints, #443's page probe, the idempotency-key sweep, the webhook-arrival sweep, and four operator endpoints. `api/routes_internal_guardrail_test.go` holds the list, read from the router rather than written from memory, and asserts that every one of them answers `401` to a request carrying nothing.
+Twenty-eight addresses sit under `/api/internal/**` — the drain, twenty-one `process-*` outbox endpoints, #443's page probe, the idempotency-key sweep, the webhook-arrival sweep, and three operator endpoints. `api/routes_internal_guardrail_test.go` holds the list, read from the router rather than written from memory, and asserts that every one of them answers `401` to a request carrying nothing.
 
 `doula-api` is `allUsers` → `roles/run.invoker` and stays that way — it serves the app and three webhooks that arrive with no Google credential — and Cloud Run's IAM is per-service, so the boundary can only be inside the process. [ADR-0037](adr/0037-the-internal-boundary-is-a-caller-identity-not-a-shared-secret.md) makes it a caller identity: `internalauth.Guard` verifies a Google-signed OIDC ID token against `INTERNAL_OIDC_AUDIENCE` and then the token's own `email` claim against `INTERNAL_OIDC_CALLERS`.
 
@@ -204,7 +204,7 @@ gcloud auth print-identity-token \
   --include-email
 ```
 
-Both flags are load-bearing. `--audiences` is the service's base URL and not the endpoint's own URL, because one audience has to serve all twenty-nine addresses — and it is the same trap in the infrastructure, where Cloud Scheduler and Cloud Tasks each default an unset `audience` to the full target URI. `--include-email` is what puts the `email` claim on the token; the guard refuses a token that carries none, so its absence reads as a 401 from an otherwise valid token.
+Both flags are load-bearing. `--audiences` is the service's base URL and not the endpoint's own URL, because one audience has to serve all twenty-eight addresses — and it is the same trap in the infrastructure, where Cloud Scheduler and Cloud Tasks each default an unset `audience` to the full target URI. `--include-email` is what puts the `email` claim on the token; the guard refuses a token that carries none, so its absence reads as a 401 from an otherwise valid token.
 
 ### Refunding a Practice's Credits
 
@@ -264,6 +264,14 @@ The page fills three of the spreadsheet's nine columns, which ADR-0046 names: pe
 Revenue and cost come from the bank, and the other columns from the founder's own notes. Below fifty in the denominator, write each figure as a count with its denominator beside it, never as a rate.
 
 The page names no Staff member, no Client, no login and no feature, and a spec fixes its field list. It shows nobody's contact, so opening it writes no Operator log row. The four signup-source fields join each row with [#1393](https://github.com/markgoho/doula-cloud/issues/1393); a count by source is a floor, never a total.
+
+### The dormant-Practices list: the yearly escheatment pass
+
+New York escheats an unspent Credit balance at three years' dormancy (APL 1315(1-b)), and 2 NYCRR 125.1 accepts a verifiable login as the contact that stops the clock. Once a year, for the annual balance notice and the December/January due-diligence mailings ([#420](https://github.com/markgoho/doula-cloud/issues/420)), the founder reads which Practices hold Credits nobody has used. It takes no token. Since [#2477](https://github.com/markgoho/doula-cloud/issues/2477) it is read only in ops ([ADR-0062](adr/0062-the-platform-operator-works-in-a-separate-app-at-ops-doula-cloud-with-its-own-service-and-database-role.md)). Sign in at `https://ops.doula.cloud`, open **Practices**, then **Dormant Practices** (`/practices/dormant`).
+
+The page lists each Practice that holds a positive Credit balance and whose Staff were last active two years ago or longer, judged at midnight in New York, or never. Two years, not three, so the notice reaches the Owner a year before the balance escheats. Each row shows the Practice's name, when it signed up, the Credits it holds, and its last contact: the last time anyone at the Practice was active in the app. It is newest signup first, 50 to a page.
+
+The list is read only. It writes nothing, and nothing anywhere writes a balance off: a person sends each notice by hand ([ADR-0043](adr/0043-a-date-is-a-trigger-only-when-someone-set-it.md)). The page shows nobody's contact, so opening it writes no Operator log row. The Owner to write to is on the Practice's entry in the Practice list, whose opening is recorded.
 
 ### #443's site rebuild and page probe
 

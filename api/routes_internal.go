@@ -1,7 +1,6 @@
 package main
 
 import (
-	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/legal"
 	"doula-cloud/api/internal/legalnotice"
 	"doula-cloud/api/internal/outbox"
@@ -34,15 +33,10 @@ func registerInternalRoutes(g *staffauth.GatedRouter, d Deps) {
 	// workflow. The cadence is what covers a build that fails and
 	// produces no deploy and no callback at all.
 	g.Write("POST /api/internal/site/verify-pages", sitebuild.VerifyHandler(d.DB, d.PageVerifier, d.InternalAuth))
-	// #420's dormancy list, behind the same guard: an operator's yearly
-	// mailing, not a tenant's view of anything. Its refund moved to
-	// doula-ops (#2481, ADR-0062).
-	g.OpenGet("/api/internal/billing/dormant-practices",
-		"An internal caller identity, not a session -- the operator's escheatment mailing list (#420), the same position every /api/internal worker endpoint holds",
-		billing.DormantPracticesHandler(d.DB, d.InternalAuth))
 	// #449's founding grant moved to doula-ops (#2482, ADR-0062), and
-	// #605's support-clear with it (#2483), and #1394's monthly Credits
-	// read (#2476).
+	// #605's support-clear with it (#2483), #1394's monthly Credits read
+	// (#2476), #420's dormant-Practices list (#2477) and the refund
+	// (#2481).
 	//
 	// #1790's pilot gate, on the same guard. Until January only an address the founder added can create
 	// a Practice: the first endpoint adds one, the second opens the gate
