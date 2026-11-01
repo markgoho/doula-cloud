@@ -479,6 +479,27 @@ export function seedFounder(identityUID: string, email: string) {
 	);
 }
 
+/**
+ * Seeds a Practice with one Owner and one purchase of five $20.00
+ * Credits charged $6.86 of tax, bought a month ago: what an operator's
+ * refund in ops draws on (#2481). The stack has no Stripe, so nothing
+ * can buy Credits through the API. Returns the Practice's id.
+ */
+export function seedRefundablePractice(name: string, ownerFirstName: string, ownerLastName: string): string {
+	const practiceId = randomUUID();
+	const staffId = randomUUID();
+	execSQL(
+		`INSERT INTO practices (id, name, timezone) VALUES (${sqlLiteral(practiceId)}, ${sqlLiteral(name)}, 'America/New_York');
+		 INSERT INTO staff (id, identity_uid, first_name, last_name, email, work_state)
+		 VALUES (${sqlLiteral(staffId)}, ${sqlLiteral(`refund-owner-${staffId}`)}, ${sqlLiteral(ownerFirstName)}, ${sqlLiteral(ownerLastName)}, ${sqlLiteral(`owner-${staffId}@doula-cloud.invalid`)}, 'NY');
+		 INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type)
+		 VALUES (${sqlLiteral(practiceId)}, ${sqlLiteral(staffId)}, ARRAY['owner']::practice_role[], 'employee');
+		 INSERT INTO credit_ledger (practice_id, origin, quantity, unit_price_cents, tax_cents, stripe_payment_intent_id, created_at)
+		 VALUES (${sqlLiteral(practiceId)}, 'purchase', 5, 2000, 686, ${sqlLiteral(`pi_e2e_${staffId}`)}, now() - interval '1 month');`
+	);
+	return practiceId;
+}
+
 // Seeds an Engagement directly: #397 decoupled Client creation from
 // Engagement creation (ADR-0017 -- an Engagement now comes from a
 // separate Engagement Request, not built yet), so POST .../clients no

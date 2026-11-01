@@ -189,7 +189,7 @@ gcloud run services update doula-api --region us-central1 \
 
 ### The boundary on `/api/internal/**`
 
-Thirty-two addresses sit under `/api/internal/**` — the drain, twenty-one `process-*` outbox endpoints, #443's page probe, the idempotency-key sweep, and eight operator endpoints. `api/routes_internal_guardrail_test.go` holds the list, read from the router rather than written from memory, and asserts that every one of them answers `401` to a request carrying nothing.
+Thirty-one addresses sit under `/api/internal/**` — the drain, twenty-one `process-*` outbox endpoints, #443's page probe, the idempotency-key sweep, and seven operator endpoints. `api/routes_internal_guardrail_test.go` holds the list, read from the router rather than written from memory, and asserts that every one of them answers `401` to a request carrying nothing.
 
 `doula-api` is `allUsers` → `roles/run.invoker` and stays that way — it serves the app and three webhooks that arrive with no Google credential — and Cloud Run's IAM is per-service, so the boundary can only be inside the process. [ADR-0037](adr/0037-the-internal-boundary-is-a-caller-identity-not-a-shared-secret.md) makes it a caller identity: `internalauth.Guard` verifies a Google-signed OIDC ID token against `INTERNAL_OIDC_AUDIENCE` and then the token's own `email` claim against `INTERNAL_OIDC_CALLERS`.
 
@@ -204,7 +204,13 @@ gcloud auth print-identity-token \
   --include-email
 ```
 
-Both flags are load-bearing. `--audiences` is the service's base URL and not the endpoint's own URL, because one audience has to serve all thirty-two addresses — and it is the same trap in the infrastructure, where Cloud Scheduler and Cloud Tasks each default an unset `audience` to the full target URI. `--include-email` is what puts the `email` claim on the token; the guard refuses a token that carries none, so its absence reads as a 401 from an otherwise valid token.
+Both flags are load-bearing. `--audiences` is the service's base URL and not the endpoint's own URL, because one audience has to serve all thirty-one addresses — and it is the same trap in the infrastructure, where Cloud Scheduler and Cloud Tasks each default an unset `audience` to the full target URI. `--include-email` is what puts the `email` claim on the token; the guard refuses a token that carries none, so its absence reads as a 401 from an otherwise valid token.
+
+### Refunding a Practice's Credits
+
+A refund is not one of these endpoints and takes no token. Since [#2481](https://github.com/markgoho/doula-cloud/issues/2481) it is taken only in ops ([ADR-0062](adr/0062-the-platform-operator-works-in-a-separate-app-at-ops-doula-cloud-with-its-own-service-and-database-role.md)), when an Owner has asked for one by email. Sign in at `https://ops.doula.cloud` and open `/practices/<the Practice's id>/refund`. Enter the number of Credits, choose the Owner who asked, and enter the date her email arrived. The check page states the Practice, the Credits, the amount back with its sales tax, the Owner and the date. Enter your password and a new authenticator-app code, then press **Refund**. Stripe returns the money to the card the Credits were bought with. The refund is recorded in the Operator log under your name and in the Practice's Activity as your name with DoulaCloud. A refund draws on one purchase, so a Practice asking for more than one purchase holds is refunded twice.
+
+`doula-ops` reads `STRIPE_API_KEY` for the refund. On the local stack, with the Auth emulator and no key, it refunds through an in-memory fake.
 
 ### The pilot gate: who can create a Practice before January
 
