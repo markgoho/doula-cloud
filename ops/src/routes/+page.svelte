@@ -37,6 +37,7 @@
 	<p>You are signed in as {operator.name} ({operator.email}).</p>
 	<p><a href={resolve('/practices')}>Practices</a></p>
 	<p><a href={resolve('/credits')}>Monthly Credits</a></p>
+	<p><a href={resolve('/feedback')}>Feedback</a></p>
 	<form onsubmit={signOut}>
 		<button class="ops-button" type="submit" disabled={isSigningOut}>Sign out</button>
 	</form>

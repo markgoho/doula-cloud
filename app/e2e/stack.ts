@@ -192,12 +192,6 @@ const MAILGUN_WEBHOOK_SIGNING_KEY = 'e2e-mailgun-signing-key';
 // every call, so a stack that never set it could not drain an outbox at
 // all -- which is how mail stayed unobservable here until now.
 const NOTIFICATION_WORKER_SECRET = 'e2e-worker-secret';
-// FOUNDER_STAFF_ID (#1526): the `staff.id` the founder read page serves.
-// A fixed id rather than one a signup mints, because the BFF reads it
-// once, at start, before any Staff row exists -- seedFounder below is
-// what puts a row behind it. Deployed, it is the founder's own id
-// (docs/environment.md).
-export const FOUNDER_STAFF_ID = '0f0a1d5e-5a17-4c0b-9d0f-f0de15260001';
 
 export const MAILBOX_URL = `http://${MAILBOX_HOST}:${MAILBOX_PORT}`;
 export const MAILBOX_DOMAIN = MAILGUN_SIM_DOMAIN;
@@ -455,30 +449,6 @@ export function seedClientPortalUser(signInAddress: string, clientID: string) {
 	execSQL(`INSERT INTO client_portal_users (identity_uid, client_id) VALUES (${sqlLiteral(identifier)}, ${sqlLiteral(clientID)})`);
 }
 
-// Seeds the founder (#1526): the one `staff` row whose id is
-// FOUNDER_STAFF_ID, pointed at identityUID -- an Identity Platform
-// account the caller has already created. Direct SQL because no endpoint
-// can do this: a signup mints its own id, and the founder's is fixed by
-// configuration. He holds no Membership, which is what the read page is
-// built for -- the `staff` table has no Practice column.
-//
-// ON CONFLICT re-points the row, so a second run against a long-lived
-// `dev:full` stack takes the founder over rather than failing on the
-// primary key.
-//
-// That same re-pointing is why exactly one spec FILE may call this
-// (founder-feedback.e2e.ts). Playwright runs files in parallel and the
-// tests inside one in order: a second file seeding the founder would take
-// him from the first mid-test, and the first would see "Page not found".
-// A new founder test goes in that file.
-export function seedFounder(identityUID: string, email: string) {
-	execSQL(
-		`INSERT INTO staff (id, identity_uid, first_name, last_name, email, work_state)
-		 VALUES (${sqlLiteral(FOUNDER_STAFF_ID)}, ${sqlLiteral(identityUID)}, 'The', 'Founder', ${sqlLiteral(email)}, 'NY')
-		 ON CONFLICT (id) DO UPDATE SET identity_uid = EXCLUDED.identity_uid, email = EXCLUDED.email`
-	);
-}
-
 /**
  * Seeds a Practice with one Owner and one purchase of five $20.00
  * Credits charged $6.86 of tax, bought a month ago: what an operator's
@@ -529,6 +499,37 @@ export function seedPracticeWithStaff(name: string, staffCount: number): string 
 export function finalizePracticeDeletion(practiceId: string): void {
 	execSQL(
 		`UPDATE practices SET deletion_requested_at = now() - interval '30 days', deletion_finalize_at = now(), deleted_at = now() WHERE id = ${sqlLiteral(practiceId)};`
+	);
+}
+
+/**
+ * Seeds a piece of Feedback a Client of the Practice sent from the
+ * Portal, whose GitHub issue dead-lettered once its retries ran out:
+ * what ops's Feedback list shows first (#2478). Returns the piece's id.
+ */
+export function seedDeadLetteredClientFeedback(practiceId: string, clientName: string, text: string): string {
+	const feedbackId = randomUUID();
+	const clientId = randomUUID();
+	const portal = `portal_${randomUUID()}`;
+	execSQL(
+		`INSERT INTO clients (id, practice_id, given_name, email) VALUES (${sqlLiteral(clientId)}, ${sqlLiteral(practiceId)}, ${sqlLiteral(clientName)}, ${sqlLiteral(`${clientId}@doula-cloud.invalid`)});
+		 INSERT INTO portal_accounts (identifier, sign_in_address) VALUES (${sqlLiteral(portal)}, ${sqlLiteral(`${portal}@doula-cloud.invalid`)});
+		 INSERT INTO feedback (id, kind, text, page_url, route_id, app_build, screen_width, browser, portal_account, practice_id, client_id, sent_at)
+		 VALUES (${sqlLiteral(feedbackId)}, 'not_working', ${sqlLiteral(text)}, '/portal', '/portal', 'e2e-build', 320, 'Chrome 130', ${sqlLiteral(portal)}, ${sqlLiteral(practiceId)}, ${sqlLiteral(clientId)}, now());
+		 INSERT INTO feedback_issue_outbox (feedback_id, status, attempt_count, last_error, dead_letter_reason)
+		 VALUES (${sqlLiteral(feedbackId)}, 'dead_lettered', 8, '401 Bad credentials', 'retries_exhausted');`
+	);
+	return feedbackId;
+}
+
+/**
+ * How many times ops recorded a read of one piece of Feedback (#2478).
+ */
+export function countFeedbackReads(feedbackId: string): number {
+	return Number(
+		querySQLValue(
+			`SELECT count(*) FROM operator_acts WHERE action = 'feedback_read' AND subject_kind = 'feedback' AND subject_id = ${sqlLiteral(feedbackId)}`
+		)
 	);
 }
 
@@ -1146,12 +1147,12 @@ async function spawnAPI(appOrigin: string, extraEnvironment: Record<string, stri
 			// tunneled walk (see docs/environment.md) overrides it via
 			// app/.env.local, which bun loads before this file runs.
 			APP_BASE_URL: process.env.APP_BASE_URL ?? appOrigin,
+			OPS_BASE_URL: OPS_DEV_SERVER_ORIGIN,
 			MAILGUN_API_BASE: MAILBOX_URL,
 			MAILGUN_API_KEY: 'e2e-mailgun-key',
 			MAILGUN_DOMAIN: MAILGUN_SIM_DOMAIN,
 			MAILGUN_WEBHOOK_SIGNING_KEY,
 			NOTIFICATION_WORKER_SECRET,
-			FOUNDER_STAFF_ID,
 			// #1833: the BFF's clock is real time plus sim.offset_row's
 			// delta, so a jump moves clock.Now(ctx) the way it moves the
 			// database's now(). api/internal/stackswitch refuses to start
