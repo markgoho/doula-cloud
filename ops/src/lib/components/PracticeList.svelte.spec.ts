@@ -1,5 +1,5 @@
 /* eslint-disable unicorn/no-null -- doula-ops answers null for a field with nothing in it */
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
 import '../../../../app/src/lib/styles/app.css';
@@ -32,21 +32,42 @@ function answering(...bodies: { status: number; body: unknown }[]) {
 }
 
 describe('PracticeList', () => {
-	it('shows each Practice with its fields and links to its acts', async () => {
+	// DataTable shows its table only where the container is wide enough to hold it.
+	beforeEach(() => page.viewport(1280, 800));
+
+	it('shows each Practice as a table row with its fields and its acts', async () => {
 		const fetcher = answering({ status: 200, body: { items: [row('p-1', 'Rooted Birth Collective')], hasMore: false } });
 
 		await render(PracticeList, { list: 'live', fetcher, onsignedout: vi.fn() });
 
-		await expect.element(page.getByRole('heading', { name: 'Rooted Birth Collective' })).toBeVisible();
-		await expect.element(page.getByText('Renata Alvarez, renata@example.com')).toBeVisible();
-		await expect.element(page.getByText('Not recorded yet')).toBeVisible();
+		const headers = page.getByRole('columnheader');
+		await expect
+			.poll(() => headers.elements().map((header) => header.textContent))
+			.toEqual([
+				'Practice',
+				'Signed up',
+				'Owners',
+				'Staff',
+				'Stripe Connect',
+				'Credits held',
+				'Engagements started',
+				'Founding grant',
+				'Deletion',
+				'Source',
+				'Open Feedback',
+				'Acts'
+			]);
+		await expect.element(page.getByRole('cell', { name: 'Rooted Birth Collective', exact: true })).toBeVisible();
+		await expect.element(page.getByRole('cell', { name: 'Renata Alvarez, renata@example.com' })).toBeVisible();
+		await expect.element(page.getByRole('cell', { name: 'Not recorded yet' })).toBeVisible();
+		await expect.element(page.getByRole('cell', { name: '12 Credits' })).toBeVisible();
 		await expect
 			.element(page.getByRole('link', { name: 'Refund Credits to Rooted Birth Collective' }))
 			.toHaveAttribute('href', '/practices/p-1/refund');
 		await expect
 			.element(page.getByRole('link', { name: 'Give a founding grant to Rooted Birth Collective' }))
 			.toHaveAttribute('href', '/practices/p-1/founding-grant');
-		await expect.element(page.getByRole('button', { name: 'Show more Practices' })).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
 	});
 
 	it('offers no founding grant to a Practice that holds one', async () => {
@@ -64,24 +85,36 @@ describe('PracticeList', () => {
 
 		await render(PracticeList, { list: 'deleted', fetcher, onsignedout: vi.fn() });
 
-		await expect.element(page.getByRole('heading', { name: 'Gone' })).toBeVisible();
+		await expect.element(page.getByRole('cell', { name: 'Gone' })).toBeVisible();
 		await expect.element(page.getByRole('link')).not.toBeInTheDocument();
+		await expect.element(page.getByRole('columnheader', { name: 'Acts' })).not.toBeInTheDocument();
 		expect(fetcher).toHaveBeenCalledWith('/api/practices/deleted', { credentials: 'include' });
 	});
 
-	it('shows more Practices from the next page', async () => {
+	it('loads more Practices from the next page', async () => {
 		const fetcher = answering(
 			{ status: 200, body: { items: [row('p-1', 'First')], hasMore: true, nextCursor: 'c-2' } },
 			{ status: 200, body: { items: [row('p-2', 'Second')], hasMore: false } }
 		);
 		await render(PracticeList, { list: 'live', fetcher, onsignedout: vi.fn() });
 
-		await page.getByRole('button', { name: 'Show more Practices' }).click();
+		await page.getByRole('button', { name: 'Load more' }).click();
 
-		await expect.element(page.getByRole('heading', { name: 'Second' })).toBeVisible();
-		await expect.element(page.getByRole('heading', { name: 'First' })).toBeVisible();
+		await expect.element(page.getByRole('cell', { name: 'Second', exact: true })).toBeVisible();
+		await expect.element(page.getByRole('cell', { name: 'First', exact: true })).toBeVisible();
 		expect(fetcher).toHaveBeenLastCalledWith('/api/practices?cursor=c-2', { credentials: 'include' });
-		await expect.element(page.getByRole('button', { name: 'Show more Practices' })).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+	});
+
+	it('shows each Practice as a record where there is no room for a table', async () => {
+		await page.viewport(320, 700);
+		const fetcher = answering({ status: 200, body: { items: [row('p-1', 'Rooted Birth Collective')], hasMore: false } });
+
+		await render(PracticeList, { list: 'live', fetcher, onsignedout: vi.fn() });
+
+		await expect.element(page.getByText('Rooted Birth Collective').last()).toBeVisible();
+		await expect.element(page.getByRole('columnheader')).not.toBeInTheDocument();
+		expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
 	});
 
 	it('says when a list holds no Practice', async () => {

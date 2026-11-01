@@ -1,11 +1,10 @@
 <script lang="ts">
-	import Button from '$ui/atoms/Button.svelte';
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import type { FormError } from '../authRefusal.ts';
 	import { practiceFacts, readPractices, type PracticeList, type PracticeRow } from '../practices.ts';
 	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
-	import SummaryList from '$ui/molecules/SummaryList.svelte';
+	import DataTable from '$ui/organisms/DataTable.svelte';
 
 	let {
 		list,
@@ -40,65 +39,70 @@
 		}
 	}
 
+	// The facts a Practice states, in the order practiceFacts gives them.
+	const factColumns = [
+		'Signed up',
+		'Owners',
+		'Staff',
+		'Stripe Connect',
+		'Credits held',
+		'Engagements started',
+		'Founding grant',
+		'Deletion',
+		'Source',
+		'Open Feedback'
+	].map((label, index) => ({
+		label,
+		accessor: (practice: PracticeRow) => practiceFacts(practice)[index]!.value,
+		numeric: ['Staff', 'Credits held', 'Engagements started', 'Open Feedback'].includes(label)
+	}));
+
+	const columns = [{ label: 'Practice', accessor: (practice: PracticeRow) => practice.name }, ...factColumns];
+
 	onMount(() => load());
 </script>
 
 <ErrorSummary {errors} />
 
-{#if hasLoaded}
-	{#if practices.length === 0}
-		<p>{list === 'deleted' ? 'No Practice has been deleted.' : 'No Practice has signed up yet.'}</p>
-	{:else}
-		<ul class="practices" role="list">
-			{#each practices as practice (practice.id)}
-				<li>
-					<stack-l>
-						<h2>{practice.name}</h2>
-						<SummaryList rows={practiceFacts(practice)} />
-						{#if list === 'live'}
-							<!-- v8 ignore start: Svelte's compiled attribute-diffing branches for the two hrefs; a Practice's id never changes in place -->
-							<ul class="acts" role="list">
-								<li>
-									<a href={resolve('/practices/[practiceId]/refund', { practiceId: practice.id })}>
-										Refund Credits<span class="visually-hidden"> to {practice.name}</span>
-									</a>
-								</li>
-								{#if !practice.foundingGrant}
-									<li>
-										<a href={resolve('/practices/[practiceId]/founding-grant', { practiceId: practice.id })}>
-											Give a founding grant<span class="visually-hidden"> to {practice.name}</span>
-										</a>
-									</li>
-								{/if}
-							</ul>
-							<!-- v8 ignore stop -->
-						{/if}
-					</stack-l>
-				</li>
-			{/each}
-		</ul>
-		{#if nextCursor}
-			<Button label="Show more Practices" loading={isLoading} onClick={() => load(nextCursor)} />
+{#snippet acts(practice: PracticeRow)}
+	<!-- v8 ignore start: Svelte's compiled attribute-diffing branches for the two hrefs; a Practice's id never changes in place -->
+	<ul class="acts" role="list">
+		<li>
+			<a href={resolve('/practices/[practiceId]/refund', { practiceId: practice.id })}>
+				Refund Credits<span class="visually-hidden"> to {practice.name}</span>
+			</a>
+		</li>
+		{#if !practice.foundingGrant}
+			<li>
+				<a href={resolve('/practices/[practiceId]/founding-grant', { practiceId: practice.id })}>
+					Give a founding grant<span class="visually-hidden"> to {practice.name}</span>
+				</a>
+			</li>
 		{/if}
-	{/if}
+	</ul>
+	<!-- v8 ignore stop -->
+{/snippet}
+
+{#if hasLoaded}
+	<DataTable
+		{columns}
+		rows={practices}
+		rowActions={list === 'live' ? { label: 'Acts', content: acts as never } : undefined}
+		hasMore={nextCursor !== undefined}
+		onLoadMore={() => load(nextCursor)}
+		isLoadingMore={isLoading}
+		emptyMessage={list === 'deleted' ? 'No Practice has been deleted.' : 'No Practice has signed up yet.'}
+	/>
 {/if}
 
 <style>
-	ul {
-		margin: 0;
-		padding: 0;
-		list-style: none;
-	}
-
-	.practices > li {
-		padding-block: var(--space-4);
-		border-block-start: var(--border-thin) solid var(--color-outline-variant);
-	}
-
 	.acts {
 		display: flex;
 		flex-wrap: wrap;
 		gap: var(--space-2) var(--space-4);
+		margin: 0;
+		padding: 0;
+		list-style: none;
 	}
 
 	a {
