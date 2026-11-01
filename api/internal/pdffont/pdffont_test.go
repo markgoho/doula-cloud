@@ -36,7 +36,7 @@ var names = []struct{ script, name string }{
 	{"a combining mark", "Zoë Brontë"},
 	{"Latin and CJK on one line", "Mei 王 Lin"},
 	{"a heart and a baby emoji", "Ada ❤️ Lovelace 👶"},
-	{"an emoji sequence and a skin tone", "👩‍🍼 Ada 👍🏽"},
+	{"an emoji sequence, a skin tone, a keycap and a flag", "👩‍🍼 Ada 👍🏽 1️⃣ 🇺🇸"},
 	{"Arabic with brackets", "سارة (سارة) الحداد"},
 	{"Arabic and an emoji", "سارة 👶 الحداد"},
 }

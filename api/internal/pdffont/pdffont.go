@@ -319,15 +319,21 @@ type run struct {
 // character (the joiner inside an emoji sequence) stays in the face
 // drawing the run it follows, when that face has it, so it sits beside
 // the letters around it. A space after an emoji is the exception: the
-// emoji face's space is an emoji wide. A character no face has stays
-// where it is and prints as that face's missing glyph.
+// emoji face's space is an emoji wide. A character followed by U+FE0F,
+// which asks for its emoji form ("1️⃣", "©️"), goes to the emoji face. A
+// character no face has stays where it is and prints as that face's
+// missing glyph.
 func runs(text string) []run {
 	var out []run
 	var b strings.Builder
-	current, start, index := -1, 0, 0
-	for _, r := range text {
+	current, start := -1, 0
+	runes := []rune(text)
+	for index, r := range runes {
 		next := current
-		if current < 0 || !stays(current, r) {
+		switch {
+		case index+1 < len(runes) && runes[index+1] == emojiPresentation && covers(emojiFace, r):
+			next = emojiFace
+		case current < 0 || !stays(current, r):
 			next = firstFace(r, current)
 		}
 		if next != current && b.Len() > 0 {
@@ -337,7 +343,6 @@ func runs(text string) []run {
 		}
 		current = next
 		b.WriteRune(r)
-		index++
 	}
 	if b.Len() > 0 {
 		out = append(out, run{face: current, text: b.String(), start: start})
@@ -345,9 +350,13 @@ func runs(text string) []run {
 	return out
 }
 
+const emojiPresentation = '️'
+
+var emojiFace = len(faces) - 1
+
 func stays(current int, r rune) bool {
 	space := unicode.IsSpace(r) && !faces[current].outlinesOnly
-	return (space || unicode.In(r, unicode.Mn, unicode.Cf)) && covers(current, r)
+	return (space || unicode.In(r, unicode.Mn, unicode.Me, unicode.Cf)) && covers(current, r)
 }
 
 func firstFace(r rune, fallback int) int {

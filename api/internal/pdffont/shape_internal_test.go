@@ -124,8 +124,6 @@ func TestDrawShaped_SkipsTheTextLayerWhenItMeasuresNothing(t *testing.T) {
 	}
 }
 
-const emojiFace = 5
-
 // #2544: in a right-to-left run a bracket draws as its mirror, by the
 // Unicode Bidi Mirroring property, so "(" opens on the right.
 func TestShape_MirrorsBracketsRightToLeft(t *testing.T) {
@@ -137,25 +135,26 @@ func TestShape_MirrorsBracketsRightToLeft(t *testing.T) {
 	}
 }
 
-// #2544: an emoji sequence joined by U+200D, and an emoji with a skin
-// tone, each draw as one glyph.
+// #2544: an emoji sequence joined by U+200D, an emoji with a skin tone
+// and a flag each draw as one glyph.
 func TestShape_JoinsEmojiSequences(t *testing.T) {
 	d := New()
 	if faces[emojiFace].family != "NotoEmoji" {
 		t.Fatalf("face %d is %s, want NotoEmoji", emojiFace, faces[emojiFace].family)
 	}
-	for _, sequence := range []string{"👩‍🍼", "👍🏽"} {
+	for _, sequence := range []string{"👩‍🍼", "👍🏽", "🇺🇸"} {
 		if got := glyphIDs(d, emojiFace, sequence, false); len(got) != 1 {
 			t.Fatalf("%q drew %d glyphs, want 1", sequence, len(got))
 		}
 	}
 }
 
-// #2544: the joiner inside an emoji sequence stays with its emoji, and
-// the space after an emoji goes back to Noto Sans.
+// #2544: the joiner inside an emoji sequence stays with its emoji, the
+// space after an emoji goes back to Noto Sans, and a digit asking for its
+// emoji form is a keycap in the emoji face.
 func TestRuns_KeepsAnEmojiSequenceWholeAndItsSpaceOut(t *testing.T) {
-	got := runs("a 👩‍🍼 b")
-	want := []run{{face: 0, text: "a ", start: 0}, {face: emojiFace, text: "👩‍🍼", start: 2}, {face: 0, text: " b", start: 5}}
+	got := runs("a 👩‍🍼 b 1️⃣")
+	want := []run{{face: 0, text: "a ", start: 0}, {face: emojiFace, text: "👩‍🍼", start: 2}, {face: 0, text: " b ", start: 5}, {face: emojiFace, text: "1️⃣", start: 8}}
 	if !slices.Equal(got, want) {
 		t.Fatalf("runs = %+v, want %+v", got, want)
 	}
