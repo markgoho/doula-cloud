@@ -102,8 +102,23 @@ func TestCreateHandler_ToStaffTarget(t *testing.T) {
 	if invitationID != nil || codeDigest != nil {
 		t.Fatalf("staff-target offer minted an invitation (%v) or a code (%v)", invitationID, codeDigest)
 	}
-	if len(f.enq.Calls()) != 0 {
-		t.Fatalf("staff-target offer nudged the offer outbox: %v", f.enq.Calls())
+	if calls := f.enq.Calls(); len(calls) != 1 || calls[0] != tasknudge.StaffNotice {
+		t.Fatalf("nudges = %v, want one staff-notice nudge", calls)
+	}
+
+	// #2267: she is told through the Staff-notice outbox, and the row
+	// names who sent it.
+	var recipient, kind, triggeredBy, status string
+	if err := f.db.Admin.QueryRowContext(t.Context(),
+		`SELECT recipient_staff_id::text, kind::text, triggered_by_staff_id::text, status::text
+		   FROM staff_notice_outbox WHERE subject_id = $1 AND practice_id = $2`,
+		created.OfferID, f.practiceID,
+	).Scan(&recipient, &kind, &triggeredBy, &status); err != nil {
+		t.Fatalf("read staff_notice_outbox: %v", err)
+	}
+	if recipient != f.doulaID || kind != "offer_received" || triggeredBy != f.ownerID || status != outboxPending {
+		t.Fatalf("staff notice = (%s, %s, %s, %s), want (%s, offer_received, %s, pending)",
+			recipient, kind, triggeredBy, status, f.doulaID, f.ownerID)
 	}
 }
 

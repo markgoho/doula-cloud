@@ -37,6 +37,7 @@ var wantOutboxPaths = []string{
 	"/api/internal/notifications/process-session-notice-outbox",
 	staffEmailChangeOutboxPath,
 	"/api/internal/notifications/process-staff-invite-outbox",
+	"/api/internal/notifications/process-staff-notice-outbox",
 	staffTokenMailOutboxPath,
 	welcomeCreditsOutboxPath,
 	siteBuildOutboxPath,
@@ -149,6 +150,7 @@ func TestNudgePaths_CoversEveryNudgeTypeTasknudgeDeclares(t *testing.T) {
 		tasknudge.MFARecoveryCode,
 		tasknudge.ClientErasure,
 		tasknudge.FeedbackIssue,
+		tasknudge.StaffNotice,
 	} {
 		if paths[outboxType] == "" {
 			t.Errorf("nudge type %q has no endpoint", outboxType)
