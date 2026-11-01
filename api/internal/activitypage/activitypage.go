@@ -360,7 +360,7 @@ type rowKey struct {
 // ClientActorForm for which reader takes which.
 //
 // An operator reads as the person's name with DoulaCloud (ADR-0022's
-// amendment of 2026-10-31), and as DoulaCloud alone only when
+// amendment of 2026-10-31), and as someone at DoulaCloud when
 // operator_act_actor_name (00146) gave no name, which it does for a
 // reader at any other Practice.
 func ActorName(actorKind string, staffName, clientGivenName, clientPreferredName, clientFamilyName, operatorName sql.NullString, form ClientActorForm) string {
@@ -379,7 +379,7 @@ func ActorName(actorKind string, staffName, clientGivenName, clientPreferredName
 		return activity.SystemActorName
 	case activity.ActorOperator:
 		if !operatorName.Valid {
-			return activity.SystemActorName
+			return activity.UnnamedOperatorActorName
 		}
 		return activity.OperatorActorName(operatorName.String)
 	}

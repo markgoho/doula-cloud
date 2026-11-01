@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -328,7 +329,10 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 			}
 
 			if stamp {
-				if err := stampActivity(r.Context(), db, staffID, practiceID); err != nil {
+				stampCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), activityStampTimeout)
+				err := stampActivity(stampCtx, db, staffID, practiceID)
+				cancel()
+				if err != nil {
 					// coverage:ignore reason: DB query failure, not exercised by unit tests
 					log.Printf("staffauth: %v", err)
 				}
@@ -336,6 +340,10 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 		})
 	}
 }
+
+// activityStampTimeout bounds the stamp, which outlives the request: a
+// client that hangs up after its write committed still leaves its stamp.
+const activityStampTimeout = 5 * time.Second
 
 // needsActivityStamp reports whether stampActivity has anything to do:
 // self already carries the same last_practice_id comparison and the

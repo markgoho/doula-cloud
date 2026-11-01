@@ -207,8 +207,8 @@ func TestActorName_ClientActorForm(t *testing.T) {
 }
 
 func TestActorName_AnOperatorWithNoNameReadsAsDoulaCloud(t *testing.T) {
-	if got := activitypage.ActorName(string(activity.ActorOperator), sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, activitypage.ActorFullName); got != activity.SystemActorName {
-		t.Fatalf("ActorName(operator, no name) = %q, want %q", got, activity.SystemActorName)
+	if got := activitypage.ActorName(string(activity.ActorOperator), sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, activitypage.ActorFullName); got != "Someone at DoulaCloud" {
+		t.Fatalf("ActorName(operator, no name) = %q, want %q", got, "Someone at DoulaCloud")
 	}
 }
 
