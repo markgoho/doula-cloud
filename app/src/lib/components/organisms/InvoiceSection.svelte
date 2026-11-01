@@ -46,6 +46,7 @@
 		invoiceRowStatusLabel,
 		invoiceRowStatusVariant,
 		paymentMethodLabels,
+		paymentOnItsWayLine,
 		unbillableContractMessage,
 		type BillingMode,
 		type ContractorInvoice,
@@ -484,13 +485,17 @@
 -->
 {#snippet invoiceActionButtons(invoice: Invoice, describedBy: string)}
 	{#if invoice.status === 'open' && isOwnerOrAdmin}
-		<Button
-			label="Record payment"
-			variant="secondary"
-			size="sm"
-			{describedBy}
-			onClick={() => startRecordingPayment(invoice.id)}
-		/>
+		{#if !invoice.paymentProcessing}
+			<Button
+				label="Record payment"
+				variant="secondary"
+				size="sm"
+				{describedBy}
+				onClick={() => startRecordingPayment(invoice.id)}
+			/>
+		{:else}
+			<span>{paymentOnItsWayLine}</span>
+		{/if}
 		{#if invoice.billingMode === 'by_hand'}
 			<Button
 				label="Void"

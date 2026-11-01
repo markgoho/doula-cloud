@@ -495,6 +495,46 @@ func TestPostManualPaymentHandler_StripePayOutOfBandFailureRecordsNothing(t *tes
 	}
 }
 
+// TestPostManualPaymentHandler_PaymentOnItsWayRefused proves #2381: while
+// a bank debit is on its way, a Payment recorded by hand is refused before
+// Stripe is asked, and nothing is written.
+func TestPostManualPaymentHandler_PaymentOnItsWayRefused(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "manual-payment-on-its-way"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedSignedContract(t, db, engagementID)
+	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_on_its_way", invoiceStatusOpen, 15000, time.Now())
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE invoices SET payment_processing_since = now() WHERE id = $1`, invoiceID,
+	); err != nil {
+		t.Fatalf("mark payment on its way: %v", err)
+	}
+	client := payments.NewFakeClient()
+	seedConnectAccount(t, db, practiceID, "acct_on_its_way")
+	srv, session := newInvoiceServer(t, db, uid, client)
+	defer srv.Close()
+
+	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCheck, "", todayInSeededZone(t))
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
+	}
+	if out := apierrtest.Decode(t, resp); out.Code != apierr.CodeFailedPrecondition || out.Message != payments.MsgPaymentOnItsWay {
+		t.Fatalf("refusal = %+v, want %s %q", out, apierr.CodeFailedPrecondition, payments.MsgPaymentOnItsWay)
+	}
+	if len(client.PayOutOfBandCalls) != 0 {
+		t.Fatalf("PayOutOfBand calls = %d, want 0", len(client.PayOutOfBandCalls))
+	}
+	if status := invoiceStatusFor(t, db, invoiceID); status != invoiceStatusOpen {
+		t.Fatalf("invoice status = %q, want unchanged %q", status, invoiceStatusOpen)
+	}
+	if got := paymentsForInvoice(t, db, invoiceID); len(got) != 0 {
+		t.Fatalf("payments for invoice = %d, want 0", len(got))
+	}
+}
+
 // TestPostVoidInvoiceHandler_HappyPath proves an Owner can void an open
 // by-hand Invoice.
 func TestPostVoidInvoiceHandler_HappyPath(t *testing.T) {
