@@ -1271,11 +1271,15 @@ jobs:
       - name: Check Terraform has created the service
         id: service
         run: |
-          if gcloud run services describe doula-ops --region us-central1 --project doula-cloud --format='value(name)' >/dev/null 2>&1; then
+          if out=$(gcloud run services describe doula-ops --region us-central1 --project doula-cloud --format='value(name)' 2>&1); then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
+          elif printf '%s' "$out" | grep -qF 'Cannot find service [doula-ops]'; then
             echo "exists=false" >> "$GITHUB_OUTPUT"
             echo "::warning::doula-ops does not exist yet: the image is pushed, and the deploy waits for the founder's terraform apply (docs/infrastructure.md, #2472)."
+          else
+            echo "::error::Could not read doula-ops. Output follows."
+            printf '%s\n' "$out"
+            exit 1
           fi
 
       - name: Deploy to Cloud Run
@@ -1287,6 +1291,8 @@ jobs:
           region: us-central1
           project_id: doula-cloud
           image: us-central1-docker.pkg.dev/doula-cloud/api/doula-ops:${{ github.sha }}
+          env_vars_update_strategy: merge
+          secrets_update_strategy: merge
           flags: --add-cloudsql-instances=doula-cloud:us-central1:doula-cloud-pg --service-account=doula-ops-runtime@doula-cloud.iam.gserviceaccount.com
 
       # /api/health pings the database as ops_runtime, so this proves the
