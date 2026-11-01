@@ -57,9 +57,9 @@ None, and that is the test. Tasha arrives from outside with no account and no fi
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 4.1 | Land on `/practices/[practiceId]` | The heading `Overview`, with the Practice's name in the top bar (#2141). The old seven-link menu is gone ([#452](https://github.com/markgoho/doula-cloud/issues/452), closed). The shell's persistent, role-scoped top bar holds ten destinations for an Owner: Overview, Clients, Schedule, On call, Invoices, Contracts, Credits, Staff, Offers and Settings. Plan Templates, Contract Template and Getting paid sit under **Settings**, and the screen's body is `OverviewHub`'s own content | `manual` |
-| 4.1-a | Search the screen for the words "birth plan" and "visit" | With no Client yet, `OverviewHub`'s body reads three sentences: "You hold every role — Owner, Admin and Doula. Anyone you invite holds only the roles you choose."; "Nothing is here yet, because no Client is. Add one and this becomes the Client's birth plan, the visits with the Client, and the contract and invoices between the Client and your Practice."; and "Adding a Client is free. Starting work with a Client uses 1 Credit, and this Practice has 3 Welcome credits." ([#1612](https://github.com/markgoho/doula-cloud/issues/1612)). Both words appear, naming the work rather than administration | `manual` |
-| 4.2 | Choose where to go first | The body offers one action, **Add your first Client**, not a menu. The top bar's ten destinations sit above it | `manual` |
+| 4.1 | Land on `/practices/[practiceId]` | On arrival from signup, the focused status "You created your Practice, *Practice name*." before the heading `Overview` ([TB-G9](https://github.com/markgoho/doula-cloud/issues/2182)), with the Practice's name in the top bar (#2141). The old seven-link menu is gone ([#452](https://github.com/markgoho/doula-cloud/issues/452), closed). Until the Practice has a Client, the shell's persistent, role-scoped top bar holds four destinations for an Owner: Overview, Credits, Staff and Settings ([TB-G10](https://github.com/markgoho/doula-cloud/issues/2183)). Clients, Schedule, On call, Invoices, Contracts and Offers join them with the first Client. Plan Templates, Contract Template and Getting paid sit under **Settings**, and the screen's body is `OverviewHub`'s own content | `manual` |
+| 4.1-a | Search the screen for the words "birth plan" and "visit" | With no Client yet, `OverviewHub`'s body reads three sentences: "You hold every role — Owner, Admin and Doula. Anyone you invite holds only the roles you choose."; "Nothing is here yet, because no Client is. Add one and this becomes the Client's Birth Plan, the Visits with the Client, and the Contract and Invoices between the Client and your Practice."; and "Adding a Client is free. Starting work with a Client uses 1 Credit, and this Practice has 3 Welcome credits." ([#1612](https://github.com/markgoho/doula-cloud/issues/1612)). Both words appear, naming the work rather than administration | `manual` |
+| 4.2 | Choose where to go first | The body offers one action, **Add your first Client**, not a menu. The top bar's four destinations sit above it | `manual` |
 | 4.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
 | 4.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 5 (Hick's Law, Miller's Law). The top bar's destinations and the one way forward, **Add your first Client** | `manual` |
 | 4.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory) | `manual` |
@@ -132,6 +132,59 @@ Five gaps are closed: TB-G2's in-product half and TB-G3 (unexplained credits) ar
 Her plan is the least automatable of the six, and for a reason worth keeping: two of her seven stages happen before the product exists, and a Playwright spec cannot run against a marketing site that has not been written.
 
 ## Run log
+
+### 2026-11-01 — the fixed steps walked again ([#2264](https://github.com/markgoho/doula-cloud/issues/2264))
+
+**Stack**: `SEED_DEMO=0 bun run --cwd app dev:full` from a worktree at port offset 1 (the app at `http://localhost:5273`, the mail catcher at `http://127.0.0.1:19180`), on trunk at `7ba7d0e6`, in WSL2 with rootless Podman. Nothing from a seed was used except the one enrolled Owner named below.
+
+**How it was walked**: by the blind `persona-walker` and the sighted `walk-evaluator` ([`docs/agents/persona-walk.md`](../agents/persona-walk.md)), at `1280x800x1`, pointer input, no throttling. Her persona file settles the laptop: she has "three other tabs open comparing tools".
+
+- **Walk 1**: stages 3 to 6 from a fresh `/signup`, as `tasha.bell.walk3@sim.doula.cloud`, Practice **Bell Birth Support**, Arizona, Phoenix time. 21 acts. Its evaluator found one `u` entry: the browser Back at act 20 was timed from the act before it. So walk 1 is admissible for stages 3 to 5 only.
+- **Walk 2**: stage 6 again, signed in at `/login` to a Practice a fresh signup had made minutes before (`tasha.bell.narrow@sim.doula.cloud`), with its email still unverified. 13 acts, and its evaluator found no `u` entry. The stage 6 numbers below come from walk 2.
+
+Moving down a page was done with **PageDown**, never by script.
+
+The orchestrating agent made the reads the blind walker could not make, each in its own isolated context:
+
+- a second fresh signup at 1280x800, to read the status's role and focus and to reload;
+- a third at 320x640, through all four signup pages to Overview;
+- each walked screen's `scrollWidth` at 320x640;
+- the return from enrollment, under an Owner with a second factor made by `SEED_SECOND_FACTOR=1 bun run --cwd app seed:staff-session`, since the local Auth emulator cannot enroll TOTP ([`e2e.md`](../testing/e2e.md), "Logging in as Staff locally", firebase/firebase-tools#6224).
+
+| Step | Mark | Result | What was seen |
+| --- | --- | --- | --- |
+| 4.1 | `manual` | as expected, cell corrected | "You created your Practice, Bell Birth Support." before `Overview`, and a top bar of Overview, Credits, Staff and Settings. The cell still named ten destinations. Clients, Schedule, On call, Invoices, Contracts and Offers joined the bar once Maria Test was saved |
+| 4.1-a | `manual` | as expected, cell corrected | The screen capitalizes "the Client's Birth Plan, the Visits with the Client, and the Contract and Invoices"; the cell quoted it in lower case |
+| 4.2 | `manual` | as expected, cell corrected | One action in the body, **Add your first Client**, under four destinations, not ten |
+| 6.1 | `manual` | as expected | Both acts at the foot of **Settings** refuse her with "You need two-factor authentication before you can …" and **Set up two-factor authentication**. The password, then "Verify your email address first"; the email's link verified her; **I have verified my email address** then answered "There is a problem with the service. Try again in a few minutes." twice, because `mfaEnrollment:start` answered `400` "Missing phoneEnrollmentInfo." That refusal is the emulator, not the product. She stopped there, by her own limit of two tries |
+
+#### Budget steps — measured
+
+Decisions are counted as `docs/journeys/README.md`'s "How Decisions are counted" says, on a quiet day ([#2570](https://github.com/markgoho/doula-cloud/issues/2570)): what is enabled in the page body, a radio group, a select or a date as one, each headed group on a hub as one. The skip link, **Back**, **Show password**, the account menu and the pilot banner's feedback button are not counted, except where a step's own note counts the top bar.
+
+| Step | Budget | Measured | Met |
+| --- | --- | --- | --- |
+| 3.B-confirmation | yes | **yes** at 1280x800. **Create your Practice** landed on Overview with "You created your Practice, Bell Birth Support." before the heading, a polite `status` holding focus. A reload said nothing. On a third signup at 320x640, with no Practice name given, it read "You created your Practice, Tasha Bell.", focused | **yes**, [TB-G9](https://github.com/markgoho/doula-cloud/issues/2182) closed |
+| 4.B-decisions | 5 | **5** at 1280x800: Overview, Credits, Staff and Settings in the top bar, and **Add your first Client**, as the step's note counts. Beside it, not counted: the account menu and the pilot feedback button. No second-factor notice was drawn on arrival | **yes**, [TB-G10](https://github.com/markgoho/doula-cloud/issues/2183) closed |
+| 4.B-confirmation | yes | **yes** at 1280x800 and 320x640: the status says her Practice exists, and **Add your first Client** is what to do next | **yes**, [TB-G9](https://github.com/markgoho/doula-cloud/issues/2182) closed |
+| 5.B-decisions | 6 | **6** on the Start work form, counted as the note counts: Kind of work, Due date, "Who is the Doula?", Note, **Start work with Maria** and **Go to Maria's record without starting work**. At 1280x800 the last two sit below the fold (their tops near 1,180 px), so 4 are in view at once. The name question is 4 | **yes** ([TB-G11](https://github.com/markgoho/doula-cloud/issues/2184), closed by a budget change) |
+| 6.B-screens | 6 | **6**, of which 4 were walked at 1280x800: **Settings**, **Delete this Practice**, the password and "Verify your email address first". Nothing else appeared on the path. The QR code could not be reached on this stack (the emulator's `400` above). The way back after it is the link's own `returnTo` (`…/settings/delete`), and under the enrolled Owner, `/settings#security-and-data` showed **Download** in view without scrolling, at 1280x800 (top at 429 px of 800) and at 320x640 (top at 550 px of 640). The export's path is one fewer | **yes** on what can be walked here, with the QR step not walkable ([TB-G12](https://github.com/markgoho/doula-cloud/issues/2185), closed by a budget change) |
+| 6.B-decisions | 5 | **5** on **Settings** at 1280x800: Your Practice, Clients and care, Money, Security and data, and **Delete this Practice**. **Delete this Practice**'s own page is 1 (**Set up two-factor authentication**), the password 2 (Password, **Continue**), and "Verify your email address first" 2 | **yes** ([TB-G12](https://github.com/markgoho/doula-cloud/issues/2185), closed by a budget change) |
+
+**320px**: each walked screen read `scrollWidth` 320 at 320x640: the four signup pages, Overview with its status, the name question, the Start work form, the Engagement, **Settings**, **Delete this Practice**, the password and "Verify your email address first", and the enrolled Owner's **Settings** at **Security and data**. The numbers above are from 1280x800 unless the row names 320x640.
+
+**Re-marked**: none. The cells of 4.1, 4.1-a and 4.2 are corrected to what the screen does. **Failed**: none.
+
+**What she said, in the walker's words**:
+
+- On Overview: "'Birth Plan' is on the very first screen, which is the word I came for."
+- On her Birth Plan, after saving three of four answers: "It says I answered 'No' on photos, though, and I never said that." That is [#2559](https://github.com/markgoho/doula-cloud/issues/2559).
+- On **Settings**: "Export wants 'two-factor' (the line above says 'Multi-factor', is that the same?)" That is [#1784](https://github.com/markgoho/doula-cloud/issues/1784).
+- At the end of walk 2: "I know both exits exist and I know what delete would do, but I couldn't actually reach either one." On this stack that is the emulator; against a real Identity Platform her next screen is the QR code.
+
+**Not filed, with the record that explains each**: `/signup/where` opened on UTC, the harness's zone, not hers (`persona-walk.md`, section 2). Signup asks for no email verification and enrollment asks for it first, by decision ([#1531](https://github.com/markgoho/doula-cloud/issues/1531), [#1504](https://github.com/markgoho/doula-cloud/issues/1504)). The generic "There is a problem with the service" on enrollment is reachable only on the emulator ([`e2e.md`](../testing/e2e.md)).
+
+**Findings filed**: [#2589](https://github.com/markgoho/doula-cloud/issues/2589) (Settings names Phoenix differently from the question that set it), [#2590](https://github.com/markgoho/doula-cloud/issues/2590) (`window.fetch` in two Staff-side loads), [#2591](https://github.com/markgoho/doula-cloud/issues/2591) (a new Engagement logs three console errors for things not created yet) and [#2592](https://github.com/markgoho/doula-cloud/issues/2592) (no way back from two-factor setup). Evidence added to [#1784](https://github.com/markgoho/doula-cloud/issues/1784), including that the hub's **Off** is the Practice's switch, not her own factor, and to [#2559](https://github.com/markgoho/doula-cloud/issues/2559).
 
 ### 2026-10-27 — second manual walk ([#2170](https://github.com/markgoho/doula-cloud/issues/2170))
 
