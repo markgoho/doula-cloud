@@ -10,12 +10,13 @@
 	 * component reports which Offer and which answer.
 	 */
 	import { tick } from 'svelte';
-	import { formatCalendarMonth, formatInstant } from '#lib/dates.js';
+	import { formatCalendarDay, formatCalendarMonth, formatInstant } from '#lib/dates.js';
 	import { feePaidLine } from '#lib/doulaFee.js';
 	import {
 		clientFactRows,
 		decideDescription,
 		decisionOutcome,
+		engagementLinkLabel,
 		formatFee,
 		isOpen,
 		offerStateLabels,
@@ -71,6 +72,10 @@
 		}
 		if (offer.state === 'accepted' && offer.decidedAt) {
 			rows.push({ label: 'Accepted on', value: formatInstant(offer.decidedAt) });
+		}
+		// #2270: the day the work ended, beside the day it began.
+		if (offer.state === 'accepted' && offer.endedOn) {
+			rows.push({ label: 'Ended', value: formatCalendarDay(offer.endedOn) });
 		}
 		rows.push({ label: 'Fee', value: formatFee(offer.amountCents) });
 		// #2271: what the Practice recorded paying her, on the one screen
@@ -136,6 +141,9 @@
 			<li>
 				<Badge label={offerStateLabels[offer.state]} variant={offerStateVariants[offer.state]} />
 				<SummaryList rows={offerFacts(offer)} />
+				{#if offer.engagementId}
+					<Link href={engagementHref(offer.engagementId)} label={engagementLinkLabel(offer)} />
+				{/if}
 				{#if isOpen(offer)}
 					<!-- v8 ignore start: Svelte-compiled attribute-diffing branches for
 					     the dynamic id/describedBy strings below aren't reachable from

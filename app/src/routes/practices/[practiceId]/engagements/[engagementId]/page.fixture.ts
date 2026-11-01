@@ -236,7 +236,13 @@ export const detail = {
 	// on #1625 still offers work with a fee, so the Contract section's
 	// "Your fee" row is drawn on the base. A four-figure fee, the widest
 	// the row gets.
-	yourFee: { amountCents: 1_262_000, acceptedOn: '2026-07-22' }
+	yourFee: {
+		amountCents: 1_262_000,
+		acceptedOn: '2026-07-22',
+		// #2269: the terms she accepted, the Practice's own words, a pasted
+		// URL the value column must break.
+		terms: 'Primary doula for the birth, on call from 38 weeks: https://www.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake'
+	}
 };
 
 /*

@@ -8,6 +8,7 @@
 	import { isOwnerOrAdmin } from '#lib/roles.js';
 	import FailedRead from '../../FailedRead.svelte';
 	import EngagementScreen from './EngagementScreen.svelte';
+	import WorkEnded from './WorkEnded.svelte';
 	import type { PageProps as PageProperties } from './$types';
 
 	let { data }: PageProperties = $props();
@@ -52,7 +53,9 @@
 	<Link href="#messages" label="Message the Client" variant="secondary" />
 {/snippet}
 
-{#if engagement.failure}
+{#if engagement.refusal?.code === 'ATTACHMENT_ENDED' && engagement.refusal.message}
+	<WorkEnded message={engagement.refusal.message} />
+{:else if engagement.failure}
 	<FailedRead kind={engagement.failure} />
 {:else if engagement.value}
 	<EngagementScreen data={{ ...data, ...engagement.value }} {outcome} />

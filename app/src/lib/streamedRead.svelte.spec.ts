@@ -159,6 +159,18 @@ describe('Streamed', () => {
 		stop();
 	});
 
+	it("keeps the refusal's own code and sentence beside its kind (#2270)", async () => {
+		const { streamed, stop } = follow<number>(
+			Promise.resolve({
+				isLoaded: false,
+				response: Response.json({ code: 'ATTACHMENT_ENDED', message: 'Your work ended.' }, { status: 410 })
+			})
+		);
+
+		await vi.waitFor(() => expect(streamed.refusal).toEqual({ code: 'ATTACHMENT_ENDED', message: 'Your work ended.' }));
+		stop();
+	});
+
 	it('draws a read that never reached the server as a problem', async () => {
 		const { streamed, stop } = follow<number>(Promise.resolve({ isLoaded: false }));
 

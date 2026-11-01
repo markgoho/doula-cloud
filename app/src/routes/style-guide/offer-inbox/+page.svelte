@@ -49,7 +49,8 @@
 			offeredAt: '2026-04-01T00:00:00Z',
 			expiresAt: '2026-04-08T00:00:00Z',
 			decidedAt: '2026-04-02T00:00:00Z',
-			feePaid: { amountCents: 425_000, method: 'bank_transfer', paidOn: '2026-09-30' }
+			feePaid: { amountCents: 425_000, method: 'bank_transfer', paidOn: '2026-09-30' },
+			endedOn: '2026-10-31'
 		},
 		{
 			offerId: 'of_4',
@@ -62,7 +63,8 @@
 			employmentType: 'contractor',
 			offeredAt: '2026-05-01T00:00:00Z',
 			expiresAt: '2026-05-08T00:00:00Z',
-			decidedAt: '2026-05-02T00:00:00Z'
+			decidedAt: '2026-05-02T00:00:00Z',
+			engagementId: 'eng_4'
 		}
 	];
 </script>

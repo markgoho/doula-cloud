@@ -56,6 +56,10 @@ func TestDetailHandler_ContractorReadsHerOwnFee(t *testing.T) {
 	if d.YourFee.AcceptedOn != "2026-07-22" {
 		t.Fatalf("yourFee.acceptedOn = %q, want 2026-07-22 (the Practice's day)", d.YourFee.AcceptedOn)
 	}
+	// #2269: the terms she accepted ride beside the fee.
+	if d.YourFee.Terms == nil || *d.YourFee.Terms != "Births in the Rochester area" {
+		t.Fatalf("yourFee.terms = %v, want the terms copied from the Offer", d.YourFee.Terms)
+	}
 
 	// The Owner reads the same Engagement and gets no fee of her own:
 	// yourFee is the reader's own, never the contractor's fee read by

@@ -76,6 +76,22 @@ describe('OfferInbox.svelte', () => {
 			decidedAt: '2026-10-27T15:00:00Z'
 		};
 
+		it('links to the Engagement while she still reaches it (#2269)', async () => {
+			await setup([{ ...accepted, dueMonth: '2027-02', engagementId: 'eng-7' }]);
+
+			await expect
+				.element(page.getByRole('link', { name: 'Open the birth due Feb 2027' }))
+				.toHaveAttribute('href', '/engagements/eng-7');
+		});
+
+		it('says the day the work ended, with no link (#2270)', async () => {
+			await setup([{ ...accepted, dueMonth: '2027-02', endedOn: '2026-10-31' }]);
+
+			await expect.element(page.getByText('Ended', { exact: true })).toBeVisible();
+			await expect.element(page.getByText('Oct 31, 2026', { exact: true })).toBeVisible();
+			await expect.element(page.getByRole('link')).not.toBeInTheDocument();
+		});
+
 		it('says what the Practice recorded paying her', async () => {
 			await setup([{ ...accepted, feePaid: { amountCents: 45_000, method: 'bank_transfer', paidOn: '2027-03-03' } }]);
 

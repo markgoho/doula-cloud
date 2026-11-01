@@ -34,7 +34,7 @@
 		sortVisits,
 		visitTypeLabel,
 		engagementStatusText,
-		yourFeeValue,
+		yourFeeRows,
 		type BirthOutcomeFacts,
 		type BirthOutcomeRequest,
 		type EngagementSummary,
@@ -283,6 +283,7 @@
 		if (!hasMoved) return;
 		closeChange(`The care phase is now ${engagementStatusText(displayStatus)}.`);
 		await refreshWhoIsOn();
+		await loadOnCall();
 	}
 
 	// Completing asks for a reason -- GOV.UK's question-page pattern
@@ -318,7 +319,10 @@
 			completeReasonValue = '';
 			completeNoteValue = '';
 			closeChange(`The care phase is now ${engagementStatusText(displayStatus)}.`);
+			// #2270: completion ends every Attachment, so On call is read
+			// again too, and no longer lists a Doula who is off the birth.
 			await refreshWhoIsOn();
+			await loadOnCall();
 		}, orThrownErrors(completeFieldIds));
 	}
 
@@ -1316,7 +1320,7 @@
 	   where the BFF sends it, or her own agreed fee (#2003). */
 	const contractFeeRows = $derived<SummaryListRow[]>([
 		...(contract?.values.price ? [{ label: 'Fee', value: contract.values.price }] : []),
-		...(data.yourFee ? [{ label: 'Your fee', value: yourFeeValue(data.yourFee) }] : [])
+		...(data.yourFee ? yourFeeRows(data.yourFee) : [])
 	]);
 
 	// ContractStatus.svelte owns the error display for Void (it awaits
@@ -2784,7 +2788,7 @@
 				person whose fee it is.
 			-->
 			{#if data.yourFee}
-				<SummaryList rows={[{ label: 'Your fee', value: yourFeeValue(data.yourFee) }]} />
+				<SummaryList rows={yourFeeRows(data.yourFee)} />
 			{/if}
 			{#if contractError}
 				<Notice variant="error" message={contractError} />
