@@ -64,6 +64,18 @@ func (d *Doc) flush(line []run, levels []bidi.Level, base bidi.Level, style Styl
 		segments = segments[:len(segments)-1]
 	}
 	reorder(segments)
+	if len(segments) == 0 {
+		return
+	}
+	// The page break fpdf's CellFormat takes for itself, taken first, so a
+	// shaped segment's outlines and its text layer land on one page.
+	auto, breakMargin := d.GetAutoPageBreak()
+	_, pageHeight := d.GetPageSize()
+	if auto && d.GetY()+lineHeight > pageHeight-breakMargin {
+		x := d.GetX()
+		d.AddPage()
+		d.SetX(x)
+	}
 
 	var total float64
 	for i := range segments {

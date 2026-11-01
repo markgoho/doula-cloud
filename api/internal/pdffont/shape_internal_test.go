@@ -3,6 +3,7 @@ package pdffont
 import (
 	"bytes"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/go-text/typesetting/bidi"
@@ -77,6 +78,37 @@ func TestDrawShaped_FillsOutlinesUnderInvisibleText(t *testing.T) {
 		if !bytes.Contains(buf.Bytes(), []byte(want)) {
 			t.Fatalf("content stream has no %q", want)
 		}
+	}
+}
+
+// A shaped line that starts a new page draws its outlines and its text
+// layer on that page, so every page's fills sit under their own text.
+func TestDrawShaped_KeepsOutlinesAndTextOnOnePage(t *testing.T) {
+	d := New()
+	d.SetCompression(false)
+	d.Paragraph(Regular, 12, 8, strings.Repeat("هذه الاتفاقية بين دولا المدينة وسارة الحداد. ", 80))
+	var buf bytes.Buffer
+	if err := d.Output(&buf); err != nil {
+		t.Fatal(err)
+	}
+	if d.PageCount() < 2 {
+		t.Fatalf("pages = %d, want the paragraph to cross a page", d.PageCount())
+	}
+	for i, stream := range bytes.Split(buf.Bytes(), []byte("endstream")) {
+		fills, layers, resets := bytes.Count(stream, []byte("\nf\n")), bytes.Count(stream, []byte("3 Tr ")), bytes.Count(stream, []byte("0 Tr 100 Tz"))
+		if fills != layers || layers != resets {
+			t.Fatalf("stream %d: %d outline fills, %d text layers, %d resets", i, fills, layers, resets)
+		}
+	}
+}
+
+// An empty line draws nothing and only moves down a line.
+func TestFlush_DrawsNothingForAnEmptyLine(t *testing.T) {
+	d := New()
+	y := d.GetY()
+	d.Paragraph(Regular, 12, 8, "  ")
+	if got := d.GetY(); got != y+8 {
+		t.Fatalf("y = %v, want %v", got, y+8)
 	}
 }
 
