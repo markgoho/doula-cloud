@@ -37,6 +37,7 @@ var wantDefinerFunctions = map[string][]string{
 		"staff_is_sole_owner(uuid)",
 		"staff_was_ever_a_member_at_practice(uuid,uuid)",
 		"sweep_expired_idempotency_keys(timestamp with time zone)",
+		"sweep_webhook_arrivals(timestamp with time zone)",
 	},
 	"ops_runtime": {
 		"ops_founding_grant_practice(uuid)",

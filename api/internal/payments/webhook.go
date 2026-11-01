@@ -18,6 +18,7 @@ import (
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/stripemode"
 	"doula-cloud/api/internal/tasknudge"
+	"doula-cloud/api/internal/webhookarrival"
 )
 
 // maxWebhookBodyBytes bounds how much of a webhook request body
@@ -121,23 +122,27 @@ func PostConnectWebhookHandler(db *sql.DB, client Client, webhookSecret string, 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxWebhookBodyBytes))
 		if err != nil {
+			webhookarrival.Mark(r.Context(), webhookarrival.BodyRefused)
 			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 
 		event, err := client.VerifyWebhookSignature(body, r.Header.Get("Stripe-Signature"), webhookSecret)
 		if err != nil {
+			webhookarrival.Mark(r.Context(), webhookarrival.SignatureRefused)
 			apierr.WriteError(w, "invalid signature", http.StatusBadRequest)
 			return
 		}
 		if !mode.Matches(event.Livemode) {
 			log.Printf("payments: connect webhook: refusing event %s: livemode %v, keys are in %s mode", event.ID, event.Livemode, mode)
+			webhookarrival.Mark(r.Context(), webhookarrival.LivemodeRefused)
 			apierr.WriteError(w, "Event mode does not match the Stripe keys", http.StatusBadRequest)
 			return
 		}
 
 		handle, ok := connectEventHandlers[event.Type]
 		if !ok {
+			webhookarrival.Mark(r.Context(), webhookarrival.Dropped)
 			log.Printf("payments: connect webhook: dropping unhandled event type %q (id %s)", event.Type, event.ID)
 			w.WriteHeader(http.StatusOK)
 			return
@@ -347,6 +352,7 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 			// Unrecognized account or unknown Stripe invoice id -- logged
 			// and dropped, per #82's ticket body, not treated as an
 			// error.
+			webhookarrival.Mark(r.Context(), webhookarrival.Dropped)
 			log.Printf("payments: connect webhook: dropping invoice.paid for unresolved invoice %q (account %q, event id %s)", inv.ID, event.Account, event.ID)
 			commitAndAck(w, tx, &committed)
 			return
@@ -471,6 +477,7 @@ func handleInvoicePaymentFailed(w http.ResponseWriter, r *http.Request, db *sql.
 	invoiceID, practiceID, err := resolveInvoiceForEvent(r.Context(), tx, inv.ID, event.Account)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
+			webhookarrival.Mark(r.Context(), webhookarrival.Dropped)
 			log.Printf("payments: connect webhook: dropping invoice.payment_failed for unresolved invoice %q (account %q, event id %s)", inv.ID, event.Account, event.ID)
 			commitAndAck(w, tx, &committed)
 			return
@@ -559,6 +566,7 @@ func handleInvoiceMarkedUncollectible(w http.ResponseWriter, r *http.Request, db
 	invoiceID, practiceID, err := resolveInvoiceForEvent(r.Context(), tx, inv.ID, event.Account)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
+			webhookarrival.Mark(r.Context(), webhookarrival.Dropped)
 			log.Printf("payments: connect webhook: dropping invoice.marked_uncollectible for unresolved invoice %q (account %q, event id %s)", inv.ID, event.Account, event.ID)
 			commitAndAck(w, tx, &committed)
 			return
@@ -664,6 +672,7 @@ func handlePaymentIntentProcessing(w http.ResponseWriter, r *http.Request, db *s
 	invoiceID, practiceID, err := resolveInvoiceForEvent(r.Context(), tx, intent.StripeInvoiceID, event.Account)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
+			webhookarrival.Mark(r.Context(), webhookarrival.Dropped)
 			log.Printf("payments: connect webhook: dropping payment_intent.processing for unresolved invoice %q (account %q, event id %s)", intent.StripeInvoiceID, event.Account, event.ID)
 			commitAndAck(w, tx, &committed)
 			return
@@ -736,17 +745,20 @@ func PostAccountWebhookHandler(db *sql.DB, client Client, webhookSecret string, 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxWebhookBodyBytes))
 		if err != nil {
+			webhookarrival.Mark(r.Context(), webhookarrival.BodyRefused)
 			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 
 		event, err := client.ParseAccountEvent(body, r.Header.Get("Stripe-Signature"), webhookSecret)
 		if err != nil {
+			webhookarrival.Mark(r.Context(), webhookarrival.SignatureRefused)
 			apierr.WriteError(w, "invalid signature", http.StatusBadRequest)
 			return
 		}
 		if !mode.Matches(event.Livemode) {
 			log.Printf("payments: account webhook: refusing event %s: livemode %v, keys are in %s mode", event.ID, event.Livemode, mode)
+			webhookarrival.Mark(r.Context(), webhookarrival.LivemodeRefused)
 			apierr.WriteError(w, "Event mode does not match the Stripe keys", http.StatusBadRequest)
 			return
 		}
@@ -755,6 +767,7 @@ func PostAccountWebhookHandler(db *sql.DB, client Client, webhookSecret string, 
 			// Stripe sends several other account events -- created,
 			// [identity].updated, [defaults].updated -- none of which
 			// change what the Payments screen reports.
+			webhookarrival.Mark(r.Context(), webhookarrival.Dropped)
 			log.Printf("payments: account webhook: dropping unhandled event type %q (id %s)", event.Type, event.ID)
 			w.WriteHeader(http.StatusOK)
 			return
@@ -821,6 +834,7 @@ func handleCapabilityStatusUpdated(w http.ResponseWriter, r *http.Request, db *s
 			// stripe_webhook_events row inserted above still commits, so a
 			// retried delivery of this same unrecognized event is also a
 			// no-op rather than logging twice.
+			webhookarrival.Mark(r.Context(), webhookarrival.Dropped)
 			log.Printf("payments: account webhook: dropping capability status update for unrecognized account %q (event id %s)", event.AccountID, event.ID)
 			commitAndAck(w, tx, &committed)
 			return

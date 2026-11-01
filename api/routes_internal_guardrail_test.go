@@ -44,6 +44,7 @@ var wantInternalRoutes = []string{
 	"POST /api/internal/site/verify-pages",
 	"POST /api/internal/staffauth/pilot-allowlist",
 	"POST /api/internal/staffauth/pilot-gate/open",
+	"POST /api/internal/webhooks/sweep-arrivals",
 }
 
 // internalRoutes reads every /api/internal/** route out of the registry

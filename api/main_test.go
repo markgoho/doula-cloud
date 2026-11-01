@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -667,7 +668,9 @@ func TestRoutes_MatchingOriginAllowed(t *testing.T) {
 // or snapshot, never both.
 func TestRoutes_StripeWebhooksSucceedWithNoOrigin(t *testing.T) {
 	const stripeWebhookSecret = "whsec_test"
+	db := testdb.New(t)
 	deps := testDeps()
+	deps.DB = db.App
 	deps.StripeWebhookSecret = stripeWebhookSecret
 	mux, _, _ := routes(deps)
 	srv := httptest.NewServer(mux)
@@ -765,5 +768,13 @@ func TestRoutes_StripeWebhooksSucceedWithNoOrigin(t *testing.T) {
 	defer mailgunResp.Body.Close()
 	if mailgunResp.StatusCode != http.StatusOK {
 		t.Fatalf("POST /api/mailgun/webhook status = %d, want %d", mailgunResp.StatusCode, http.StatusOK)
+	}
+
+	var routesRecorded []string
+	for _, a := range testdb.WebhookArrivals(t, db) {
+		routesRecorded = append(routesRecorded, a.Route+" "+a.Outcome)
+	}
+	if want := []string{"stripe_platform dropped", "stripe_connect dropped", "stripe_account dropped", "mailgun dropped"}; !slices.Equal(routesRecorded, want) {
+		t.Fatalf("webhook arrivals = %v, want %v", routesRecorded, want)
 	}
 }

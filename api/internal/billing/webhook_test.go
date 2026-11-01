@@ -13,6 +13,7 @@ import (
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/stripemode"
 	"doula-cloud/api/internal/testdb"
+	"doula-cloud/api/internal/webhookarrival"
 )
 
 //nolint:gosec // test fixture value, not a real credential
@@ -33,7 +34,7 @@ const (
 
 func newWebhookServer(db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle("POST /stripe/webhook", billing.PostPurchaseWebhookHandler(db.App, webhookTestSecret, stripemode.Test))
+	mux.Handle("POST /stripe/webhook", webhookarrival.Record(db.App, webhookarrival.StripePlatform, billing.PostPurchaseWebhookHandler(db.App, webhookTestSecret, stripemode.Test)))
 	return httptest.NewServer(mux)
 }
 

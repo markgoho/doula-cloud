@@ -13,6 +13,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/stripemode"
+	"doula-cloud/api/internal/webhookarrival"
 )
 
 // maxWebhookBodyBytes bounds how much of a webhook request body
@@ -41,6 +42,7 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string, mode stripemod
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxWebhookBodyBytes))
 		if err != nil {
+			webhookarrival.Mark(r.Context(), webhookarrival.BodyRefused)
 			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
@@ -48,11 +50,13 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string, mode stripemod
 		event, err := stripe.ConstructEvent(body, r.Header.Get("Stripe-Signature"), webhookSecret,
 			stripe.WithIgnoreAPIVersionMismatch())
 		if err != nil {
+			webhookarrival.Mark(r.Context(), webhookarrival.SignatureRefused)
 			apierr.WriteError(w, "invalid signature", http.StatusBadRequest)
 			return
 		}
 		if !mode.Matches(event.Livemode) {
 			log.Printf("billing: purchase webhook: refusing event %s: livemode %v, keys are in %s mode", event.ID, event.Livemode, mode)
+			webhookarrival.Mark(r.Context(), webhookarrival.LivemodeRefused)
 			apierr.WriteError(w, "Event mode does not match the Stripe keys", http.StatusBadRequest)
 			return
 		}
@@ -64,6 +68,7 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string, mode stripemod
 		// purchase, since dedupe is keyed by event id, not by the
 		// underlying Checkout Session.
 		if event.Type != purchaseEventType {
+			webhookarrival.Mark(r.Context(), webhookarrival.Dropped)
 			w.WriteHeader(http.StatusOK)
 			return
 		}

@@ -13,6 +13,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/mailsuppress"
+	"doula-cloud/api/internal/webhookarrival"
 )
 
 // maxMailgunWebhookBodyBytes bounds how much of a webhook request body
@@ -82,17 +83,20 @@ func PostBounceWebhookHandler(db *sql.DB, signingKey string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxMailgunWebhookBodyBytes))
 		if err != nil {
+			webhookarrival.Mark(r.Context(), webhookarrival.BodyRefused)
 			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 
 		var payload mailgunWebhookPayload
 		if err := json.Unmarshal(body, &payload); err != nil {
+			webhookarrival.Mark(r.Context(), webhookarrival.BodyRefused)
 			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 
 		if signingKey == "" || !validMailgunSignature(signingKey, payload.Signature.Timestamp, payload.Signature.Token, payload.Signature.Signature) {
+			webhookarrival.Mark(r.Context(), webhookarrival.SignatureRefused)
 			apierr.WriteError(w, "invalid signature", http.StatusBadRequest)
 			return
 		}
@@ -116,6 +120,7 @@ func PostBounceWebhookHandler(db *sql.DB, signingKey string) http.Handler {
 			// unsubscribed, or a temporary failure Mailgun itself will
 			// retry -- is acknowledged and ignored. This endpoint only
 			// records the two terminal states #337 decided on.
+			webhookarrival.Mark(r.Context(), webhookarrival.Dropped)
 			w.WriteHeader(http.StatusOK)
 			return
 		}

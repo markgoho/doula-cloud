@@ -40,6 +40,7 @@ var wantOutboxPaths = []string{
 	staffTokenMailOutboxPath,
 	welcomeCreditsOutboxPath,
 	siteBuildOutboxPath,
+	webhookArrivalSweepPath,
 }
 
 func TestOutboxRegistrations_ServeTheProvisionedPaths(t *testing.T) {
@@ -121,6 +122,7 @@ func TestOutboxRegistrations_OnlyTheAuthMailOutboxesAreUnnudged(t *testing.T) {
 		portalMagicLinkOutboxPath, portalAddressChangeOutboxPath,
 		practiceDeletionOutboxPath, legalNoticeOutboxPath,
 		idempotencySweepPath, welcomeCreditsOutboxPath,
+		webhookArrivalSweepPath,
 	}
 	sort.Strings(want)
 	if !reflect.DeepEqual(unnudged, want) {
