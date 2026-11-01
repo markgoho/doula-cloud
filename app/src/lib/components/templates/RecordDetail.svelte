@@ -13,7 +13,7 @@
 	 * `EmptyState` in its `content` (#2015), so the contents rail still
 	 * names it and the reader learns it is empty rather than missing.
 	 */
-	import type { Snippet } from 'svelte';
+	import { tick, type Snippet } from 'svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -135,6 +135,20 @@
 			.replaceAll(/[^a-z0-9]+/g, '-')
 			.replaceAll(/^-|-$/g, '');
 	}
+
+	// #2508: a link from another screen to one section (the Overview's
+	// declined Offers, to `#offers`) arrives before the record has loaded,
+	// so the browser's own jump lands on the loading bars and the section
+	// then moves down. Once the record is drawn, the section is scrolled
+	// to again, once.
+	let hasLanded = false;
+	$effect(() => {
+		if (loading || hasLanded) return;
+		hasLanded = true;
+		const id = location.hash.slice(1);
+		if (!id) return;
+		void tick().then(() => document.querySelector(`#${CSS.escape(id)}`)?.scrollIntoView());
+	});
 </script>
 
 <PageTitle page={title} {serviceName} isPending={Boolean(loading) && !loadError} />

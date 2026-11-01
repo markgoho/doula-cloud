@@ -95,6 +95,38 @@ export function isRequestBlockShown(requests: Block<RequestHealth>): requests is
 	return requests === 'unavailable' || (requests !== undefined && requests.count > 0);
 }
 
+/** One declined Offer on work nobody has yet (#2508): no Doula on the
+ * Engagement and no Offer open on it. */
+export interface DeclinedOffer {
+	offerId: string;
+	engagementId: string;
+	clientName: string;
+	kind: string;
+	declinedBy: string;
+	declinedAt: string;
+}
+
+/**
+ * The newest page of declines, and whether more lie past it.
+ */
+export interface DeclinedHealth {
+	items: DeclinedOffer[];
+	hasMore: boolean;
+}
+
+export function isDeclinedBlockShown(declined: Block<DeclinedHealth>): declined is DeclinedHealth | 'unavailable' {
+	return declined === 'unavailable' || (declined !== undefined && declined.items.length > 0);
+}
+
+async function loadDeclined(fetcher: Fetcher, practiceId: string): Promise<DeclinedHealth> {
+	const response = await fetcher(`/api/practices/${practiceId}/offers/declined`);
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	const page: CursorPage<DeclinedOffer> = await response.json();
+	return { items: page.items, hasMore: page.hasMore };
+}
+
 /**
  * Who is free tonight (#2234), from the on-call roster for today in the
  * Practice's own zone. Free is on call for no birth and not away; nothing
@@ -187,6 +219,7 @@ export interface PracticeLanding {
 	credit: Block<CreditHealth>;
 	connect: Block<ConnectHealth>;
 	requests: Block<RequestHealth>;
+	declined: Block<DeclinedHealth>;
 	tonight: Block<TonightHealth>;
 	/** Whether the hub shows the notice that recommends a second factor
 	 * (#1533). The BFF decides it; see `isSecondFactorRecommended`. */
@@ -320,7 +353,7 @@ export async function loadPracticeLanding(
 ): Promise<PracticeLanding> {
 	const { roles } = session;
 
-	const [openOffers, clientCount, roster, credit, connect, requests, tonight, secondFactorRecommended] = await Promise.all([
+	const [openOffers, clientCount, roster, credit, connect, requests, declined, tonight, secondFactorRecommended] = await Promise.all([
 		// An Offer goes to a Doula (#2141), so a caller without the role has
 		// none to answer and the hub draws no inbox for her: nothing to read.
 		isDoula(session) ? readOpenOffers(fetcher, practiceId) : [],
@@ -351,6 +384,8 @@ export async function loadPracticeLanding(
 					return { count: page.items.length, hasMore: page.hasMore };
 				})
 			: undefined,
+		// The BFF's own Owner/Admin gate (#2508): only they put a Doula on.
+		canReadRoster(roles) ? block(() => loadDeclined(fetcher, practiceId)) : undefined,
 		canReadRoster(roles)
 			? block(async () => tonightFrom(await loadTonightRoster(fetcher, practiceId)))
 			: undefined,
@@ -368,6 +403,7 @@ export async function loadPracticeLanding(
 		credit,
 		connect,
 		requests,
+		declined,
 		tonight,
 		secondFactorRecommended
 	};
