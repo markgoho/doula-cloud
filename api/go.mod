@@ -9,6 +9,7 @@ require (
 	github.com/SherClockHolmes/webpush-go v1.4.0
 	github.com/dustin/go-humanize v1.0.1
 	github.com/go-pdf/fpdf v0.9.0
+	github.com/go-text/typesetting v0.3.5
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/pressly/goose/v3 v3.27.3
