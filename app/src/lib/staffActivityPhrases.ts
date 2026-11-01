@@ -158,7 +158,8 @@ const STAFF_ACTIVITY_PHRASES: Record<string, Phrase> = {
 	mfa_required_enabled: fixed('Two-factor authentication made a must for all Staff'),
 	mfa_required_disabled: fixed('Two-factor authentication no longer a must for all Staff'),
 	welcome_credits_email_sent: fixed('Practice Owners emailed about the Welcome credits'),
-	credits_refunded: fixed('Purchased Credits refunded')
+	credits_refunded: fixed('Purchased Credits refunded'),
+	founding_grant_issued: fixed('Founding member credits given')
 };
 
 /**

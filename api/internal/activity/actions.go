@@ -98,6 +98,9 @@ const (
 	// ActionCreditsRefunded is a Platform operator's refund of purchased
 	// Credits, from ops (#2481) -- diff credits, amountCents, taxCents.
 	ActionCreditsRefunded PracticeAction = "credits_refunded"
+	// ActionFoundingGrantIssued is a Platform operator's founding grant,
+	// from ops (#2482) -- diff staffCount, credits.
+	ActionFoundingGrantIssued PracticeAction = "founding_grant_issued"
 )
 
 // SubjectMembership is the subject_kind every write site that touches

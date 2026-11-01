@@ -53,7 +53,7 @@ func newRefundStack(t *testing.T) *refundStack {
 	return s
 }
 
-func (s *refundStack) send(method, path, cookie string, header http.Header, body any) *httptest.ResponseRecorder {
+func (s *opsStack) send(method, path, cookie string, header http.Header, body any) *httptest.ResponseRecorder {
 	s.t.Helper()
 	var reader *bytes.Reader
 	if body == nil {
@@ -81,7 +81,7 @@ func (s *refundStack) refund(cookie, key string, body any) *httptest.ResponseRec
 	s.t.Helper()
 	header := http.Header{}
 	if key != "" {
-		header.Set("Idempotency-Key", key)
+		header.Set(headerIdempotencyKey, key)
 	}
 	return s.send(http.MethodPost, "/api/practices/"+s.practiceID+"/refunds", cookie, header, body)
 }
@@ -153,7 +153,7 @@ func TestRefundCheck_AnUnknownPracticeIsNotFound(t *testing.T) {
 	s := newRefundStack(t)
 	cookie := s.signedInCookie()
 
-	for _, id := range []string{"not-a-uuid", "00000000-0000-0000-0000-000000000000"} {
+	for _, id := range []string{malformedPracticeID, unknownPracticeID} {
 		if w := s.send(http.MethodGet, "/api/practices/"+id+"/refund", cookie, nil, nil); w.Code != http.StatusNotFound {
 			t.Errorf("%s: status = %d, want 404", id, w.Code)
 		}
@@ -354,7 +354,7 @@ func TestRefund_RefusesABodyOfTheWrongShape(t *testing.T) {
 func TestRefund_SaysWhatToCorrectInEachAnswer(t *testing.T) {
 	s := newRefundStack(t)
 	cookie := s.steppedUpCookie()
-	other := testdb.SeedStaffAtPractice(t, s.db, s.practiceID, "refund-doula", []string{"doula"}, "employee")
+	other := testdb.SeedStaffAtPractice(t, s.db, s.practiceID, "refund-doula", []string{doulaRole}, "employee")
 
 	cases := []struct {
 		name  string
@@ -430,8 +430,8 @@ func TestRefund_AnUnknownPracticeIsNotFound(t *testing.T) {
 	s := newRefundStack(t)
 	cookie := s.steppedUpCookie()
 
-	for _, id := range []string{"not-a-uuid", "00000000-0000-0000-0000-000000000000"} {
-		header := http.Header{"Idempotency-Key": {"refund-key-" + id}}
+	for _, id := range []string{malformedPracticeID, unknownPracticeID} {
+		header := http.Header{headerIdempotencyKey: {"refund-key-" + id}}
 		if w := s.send(http.MethodPost, "/api/practices/"+id+"/refunds", cookie, header, s.order(1)); w.Code != http.StatusNotFound {
 			t.Errorf("%s: status = %d, want 404", id, w.Code)
 		}

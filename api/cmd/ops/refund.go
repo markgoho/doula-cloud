@@ -231,13 +231,13 @@ func refundAct(d Deps) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		requestKey := r.Header.Get("Idempotency-Key")
+		requestKey := r.Header.Get(headerIdempotencyKey)
 		if requestKey == "" {
 			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, msgKeyRequired, nil)
 			return
 		}
 		var req refundRequest
-		if !decodeRefund(w, r, &req) {
+		if !decodeDeclared(w, r, refundFields, msgOtherField, &req) {
 			return
 		}
 		now := clock.Now(r.Context())
@@ -351,22 +351,22 @@ func refundAct(d Deps) http.HandlerFunc {
 // refundFields are the only fields a refund's body may name.
 var refundFields = map[string]bool{fieldCredits: true, "requestedBy": true, "requestedOn": true}
 
-// decodeRefund is apierr.DecodeJSON refusing a field the body does not
+// decodeDeclared is apierr.DecodeJSON refusing a field the body does not
 // declare, so a request naming its own actor is refused, not ignored.
-func decodeRefund(w http.ResponseWriter, r *http.Request, req *refundRequest) bool {
+func decodeDeclared(w http.ResponseWriter, r *http.Request, declared map[string]bool, msgOther string, target any) bool {
 	var fields map[string]json.RawMessage
 	if !apierr.DecodeJSON(w, r, &fields) {
 		return false
 	}
 	for name := range fields {
-		if !refundFields[name] {
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, msgOtherField, nil)
+		if !declared[name] {
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, msgOther, nil)
 			return false
 		}
 	}
 	raw, _ := json.Marshal(fields)
-	if err := json.Unmarshal(raw, req); err != nil {
-		apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, msgOtherField, nil)
+	if err := json.Unmarshal(raw, target); err != nil {
+		apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, msgOther, nil)
 		return false
 	}
 	return true

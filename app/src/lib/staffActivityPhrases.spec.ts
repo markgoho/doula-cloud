@@ -53,6 +53,7 @@ const WORDING: readonly (readonly [action: string, named: string, unnamed: strin
 	['engagement_created', 'Care for Amara started', 'Care for the Client started'],
 	['engagement_reopened', 'Care for Amara reopened', 'Care for the Client reopened'],
 	['erased', 'Client record erased', 'Client record erased'],
+	['founding_grant_issued', 'Founding member credits given', 'Founding member credits given'],
 	['invoice_paid', 'Invoice for Amara paid', 'Invoice for the Client paid'],
 	['invoice_payment_failed', 'Payment from Amara did not go through', 'Payment from the Client did not go through'],
 	['invoice_payment_processing', 'Payment from Amara on its way', 'Payment from the Client on its way'],
