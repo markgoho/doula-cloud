@@ -52,7 +52,7 @@
 	} from '#lib/components/organisms/PracticeQuestionForm.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
 	import QuestionPage from '#lib/components/templates/QuestionPage.svelte';
-	import { clientFieldsHref, clientFieldsSavedMessage } from '../clientFieldPages.js';
+	import { clientFieldsArchivedMessage, clientFieldsHref, clientFieldsSavedMessage } from '../clientFieldPages.js';
 	import type { PracticeSession } from '../../../+layout.js';
 
 	const NAME = 'client-question';
@@ -108,9 +108,9 @@
 		isLoaded = true;
 	});
 
-	async function sendAndReturn(next: Field[]) {
+	async function sendAndReturn(next: Field[], message = clientFieldsSavedMessage) {
 		await saveTemplate(apiFetchWithSession, practiceId, next);
-		await gotoWithOutcome(listHref, clientFieldsSavedMessage);
+		await gotoWithOutcome(listHref, message);
 	}
 
 	async function save(event: SubmitEvent) {
@@ -132,7 +132,8 @@
 
 	async function archive() {
 		isConfirmingArchive = false;
-		await submission.run(() => sendAndReturn(archiveField(fields, id)), orThrownMessage);
+		const archived = clientFieldsArchivedMessage(label || 'Untitled question');
+		await submission.run(() => sendAndReturn(archiveField(fields, id), archived), orThrownMessage);
 	}
 </script>
 

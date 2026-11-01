@@ -46,6 +46,7 @@
 	import {
 		isPlanType,
 		planLabel,
+		planTemplateRemovedMessage,
 		planTemplateSavedMessage,
 		planTemplatesHref,
 		type PlanType
@@ -111,9 +112,9 @@
 	const planType = $derived(page.params.planType as PlanType);
 	const listHref = $derived(planTemplatesHref(practiceId, planType));
 
-	async function sendAndReturn(next: Field[]) {
+	async function sendAndReturn(next: Field[], message = planTemplateSavedMessage(planType)) {
 		await saveTemplate(apiFetchWithSession, practiceId, planType, next);
-		await gotoWithOutcome(listHref, planTemplateSavedMessage(planType));
+		await gotoWithOutcome(listHref, message);
 	}
 
 	async function save(event: SubmitEvent) {
@@ -135,7 +136,8 @@
 
 	async function remove() {
 		isConfirmingRemove = false;
-		await submission.run(() => sendAndReturn(removeField(fields, id)), orThrownMessage);
+		const removed = planTemplateRemovedMessage(planType, label || 'Untitled question');
+		await submission.run(() => sendAndReturn(removeField(fields, id), removed), orThrownMessage);
 	}
 </script>
 

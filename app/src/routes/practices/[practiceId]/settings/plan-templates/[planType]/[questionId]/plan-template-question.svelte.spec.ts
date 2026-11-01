@@ -158,7 +158,9 @@ describe('a Plan Template question (#2193)', () => {
 		await testPage.getByRole('dialog').getByRole('button', { name: 'Remove question' }).click();
 
 		await expect.poll(() => landing.href).toBe('/practices/practice-1/settings/plan-templates');
-		expect(landing.message).toBe(savedMessage);
+		expect(landing.message).toBe(
+			`"${changedQuestion.label}" removed. Every Care Plan filled in from now on will not ask it, and a Care Plan already filled in keeps it, with its answer.`
+		);
 		expect(sentFields().map((field) => field.id)).toEqual([careTemplate.fields[0].id]);
 	});
 });

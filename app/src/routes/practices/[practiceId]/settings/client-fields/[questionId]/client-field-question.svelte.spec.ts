@@ -118,6 +118,9 @@ describe('a Client field (#2193)', () => {
 		await testPage.getByRole('dialog').getByRole('button', { name: 'Archive question' }).click();
 
 		await expect.poll(() => landing.href).toBe(listHref);
+		expect(landing.message).toBe(
+			`"${changedField.label}" archived. New Clients will not be asked it, and a Client who already answered keeps that answer, read-only on the Client's record.`
+		);
 		expect(sentFields().find((field) => field.id === changedField.id)?.archived).toBe(true);
 		expect(sentFields()).toHaveLength(template.fields.length);
 	});
