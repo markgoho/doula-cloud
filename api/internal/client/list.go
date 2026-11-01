@@ -255,7 +255,7 @@ const pendingRequestKindsExpr = `(
 // staffauth.Middleware already set up on tx.
 func listClients(ctx context.Context, tx *sql.Tx, practiceID string, withWorkOnly bool, after *pagecursor.Cursor) ([]ListItem, error) {
 	query := `SELECT c.id, c.given_name, c.preferred_name, c.family_name, COALESCE(c.email, ''), ` + hasWorkExpr + `,
-		        pu.id IS NOT NULL, pu.identity_uid IS NOT NULL, latest.status, ` + emailSuppressedExpr + `, ` + pendingRequestKindsExpr + `, c.created_at
+		        pu.id IS NOT NULL, pu.identity_uid IS NOT NULL, pu.access_refused_at IS NOT NULL, latest.status, ` + emailSuppressedExpr + `, ` + pendingRequestKindsExpr + `, c.created_at
 		 FROM clients c` + portalUserForClient + `
 		 LEFT JOIN LATERAL (
 		     SELECT o.status FROM portal_invite_outbox o
@@ -294,7 +294,7 @@ func listAttachedClients(ctx context.Context, tx *sql.Tx, practiceID, staffID st
 	// inner DISTINCT's column list.
 	query := `SELECT * FROM (
 		     SELECT DISTINCT c.id, c.given_name, c.preferred_name, c.family_name, COALESCE(c.email, '') AS email, ` + hasWorkExpr + ` AS has_work,
-		            pu.id IS NOT NULL AS has_portal_user, pu.identity_uid IS NOT NULL AS accepted, latest.status,
+		            pu.id IS NOT NULL AS has_portal_user, pu.identity_uid IS NOT NULL AS accepted, pu.access_refused_at IS NOT NULL AS refused, latest.status,
 		            ` + emailSuppressedExpr + ` AS email_suppressed,
 		            ` + pendingRequestKindsExpr + ` AS pending_request_kinds, c.created_at
 		     FROM clients c
@@ -601,19 +601,19 @@ func scanListItems(rows *sql.Rows) ([]ListItem, error) {
 		var item ListItem
 		var givenName string
 		var preferredName, familyName sql.NullString
-		var hasPortalUser, accepted bool
+		var hasPortalUser, accepted, refused bool
 		var outboxStatus sql.NullString
 		var pendingKinds sql.NullString
 		var createdAt time.Time
 		if err := rows.Scan(
 			&item.ClientID, &givenName, &preferredName, &familyName, &item.Email, &item.HasWork,
-			&hasPortalUser, &accepted, &outboxStatus, &item.EmailSuppressed, &pendingKinds, &createdAt,
+			&hasPortalUser, &accepted, &refused, &outboxStatus, &item.EmailSuppressed, &pendingKinds, &createdAt,
 		); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("client: scan list item: %w", err)
 		}
 		item.Name = personname.Full(givenName, preferredName.String, familyName.String)
-		item.PortalInviteStatus = PortalInviteStatus(hasPortalUser, accepted, outboxStatus)
+		item.PortalInviteStatus = PortalInviteStatus(hasPortalUser, accepted, refused, outboxStatus)
 		if pendingKinds.Valid {
 			item.PendingRequestKinds = strings.Split(pendingKinds.String, ",")
 		}
@@ -633,12 +633,20 @@ func scanListItems(rows *sql.Rows) ([]ListItem, error) {
 // engagement.DetailHandler and any other caller needing one Client's
 // state use -- computes the same word this list does, rather than
 // forking the derivation a second time.
-func PortalInviteStatus(hasPortalUser, accepted bool, outboxStatus sql.NullString) *string {
+//
+// refused (#2522) is an accept ADR-0015 refused because her login already
+// reaches another Client here: PortalInviteRefused, ahead of the outbox's
+// word, because that invite can never be accepted.
+func PortalInviteStatus(hasPortalUser, accepted, refused bool, outboxStatus sql.NullString) *string {
 	if !hasPortalUser {
 		return nil
 	}
 	if accepted {
 		status := "accepted"
+		return &status
+	}
+	if refused {
+		status := PortalInviteRefused
 		return &status
 	}
 	if outboxStatus.Valid {

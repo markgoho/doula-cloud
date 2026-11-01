@@ -368,4 +368,15 @@ func TestAcceptInviteHandler_SignInAddressReusedSamePracticeConflict(t *testing.
 	if action != string(activity.ActionPortalInviteRefused) || actorKind != "client" || actorClientID.String != clientID {
 		t.Fatalf("activity = (%q, %q, %q), want (%q, client, %q)", action, actorKind, actorClientID.String, activity.ActionPortalInviteRefused, clientID)
 	}
+
+	// #2522: and the refusal leaves the fact the invite's status reads.
+	var refused bool
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT access_refused_at IS NOT NULL FROM client_portal_users WHERE client_id = $1`, clientID,
+	).Scan(&refused); err != nil {
+		t.Fatalf("query access_refused_at: %v", err)
+	}
+	if !refused {
+		t.Fatal("access_refused_at is unset, want the refused accept recorded on the row")
+	}
 }

@@ -41,6 +41,11 @@ const msgMergeFieldValueRequired = "enter a value for this field"
 // own "Send portal invite" action is the way out.
 const msgNoPortalInvite = "this client has not been invited to the portal yet"
 
+// msgPortalInviteRefused refuses a send while the Client's accept was
+// refused (#2522): she signs in through another record, so nothing sent
+// from this one reaches her. It names no other record.
+const msgPortalInviteRefused = "This Client signs in through another record, so cannot sign a Contract sent from this one. Combine the two records: save this Client's details, and you will be asked whether the other record is the same person."
+
 // sendPushPayload is the content-free payload delivered to the Client's
 // push subscription(s) on Send -- per the ticket's "no Contract content
 // leaking through the notification channel" rule, it carries only the
@@ -88,10 +93,14 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 			return
 		}
 
-		invited, err := clientHasPortalInvite(r.Context(), tx, engagementID)
+		invited, refused, err := clientHasPortalInvite(r.Context(), tx, engagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if refused {
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, msgPortalInviteRefused, nil)
 			return
 		}
 		if !invited {
@@ -152,22 +161,27 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 // only refusal" rule the shared derivation already encodes (#255). Using
 // that function rather than a bare EXISTS keeps this check and the
 // Engagement page's own "never invited" readout answering from the one
-// place, per the ticket's "do not fork it".
-func clientHasPortalInvite(ctx context.Context, tx *sql.Tx, engagementID string) (bool, error) {
+// place, per the ticket's "do not fork it". refused (#2522) is an invite
+// whose accept was refused, which holds the send back as never-invited
+// does.
+func clientHasPortalInvite(ctx context.Context, tx *sql.Tx, engagementID string) (invited, refused bool, err error) {
 	var clientID string
 	if err := tx.QueryRowContext(ctx,
 		`SELECT client_id FROM engagements WHERE id = $1`,
 		engagementID,
 	).Scan(&clientID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests -- resolveContractRequest already proved the Engagement exists
-		return false, fmt.Errorf("contracts: resolve engagement client: %w", err)
+		return false, false, fmt.Errorf("contracts: resolve engagement client: %w", err)
 	}
 	state, err := client.FetchPortalInviteState(ctx, tx, clientID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return false, fmt.Errorf("contracts: fetch client portal invite state: %w", err)
+		return false, false, fmt.Errorf("contracts: fetch client portal invite state: %w", err)
 	}
-	return state.Status != nil, nil
+	if state.Status != nil && *state.Status == client.PortalInviteRefused {
+		return false, true, nil
+	}
+	return state.Status != nil, false, nil
 }
 
 // notifyClient sends sendPushPayload to every push subscription

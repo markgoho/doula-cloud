@@ -452,6 +452,10 @@ export const asDoula: RouteVariant<RouteParameters> = {
 			...detail,
 			doulas: [],
 			canAttachSelf: true,
+			// #2522: the longest Portal invite row the summary draws, the
+			// refused status with its way on, rides here too; the base's
+			// reads "Never invited".
+			clientPortalInviteStatus: 'refused',
 			session: { ...session, roles: ['doula'], isContractor: false }
 		}
 	}

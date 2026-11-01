@@ -100,6 +100,27 @@ func TestFetchPortalInviteState_Accepted(t *testing.T) {
 	}
 }
 
+// TestFetchPortalInviteState_Refused proves #2522: a pending row whose
+// accept was refused reads "refused" ahead of the outbox's own word, on
+// the single read and on the Clients list alike.
+func TestFetchPortalInviteState_Refused(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Refused Practice")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Refused Client", "refused-fetch@example.com")
+	seedPendingOutboxRow(t, db, clientID)
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE client_portal_users SET access_refused_at = now() WHERE client_id = $1`, clientID,
+	); err != nil {
+		t.Fatalf("mark refused: %v", err)
+	}
+
+	state := fetchPortalInviteState(t, db, clientID)
+
+	if state.Status == nil || *state.Status != client.PortalInviteRefused {
+		t.Fatalf("status = %v, want %q", state.Status, client.PortalInviteRefused)
+	}
+}
+
 // TestFetchPortalInviteState_EmailSuppressed proves EmailSuppressed
 // mirrors ListItem's own #785 column: true only while the address's
 // email_suppressions row has no cleared_at, compared lower-cased.

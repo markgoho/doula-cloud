@@ -120,10 +120,16 @@ func AcceptInviteHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 // It records the refused accept against the invited Engagement, kept by
 // Refusal.Keep, and answers in the Client's own words with the Practice
 // named, under its own code so the page offers the way on to her care.
-func refuseAccessAlreadyHere(ctx context.Context, tx *sql.Tx, clientID, practiceID, engagementID string) (result acceptResult, identifier, engagement string, reused bool, status int, code apierr.Code, msg string) {
+func refuseAccessAlreadyHere(ctx context.Context, tx *sql.Tx, inviteToken, clientID, practiceID, engagementID string) (result acceptResult, identifier, engagement string, reused bool, status int, code apierr.Code, msg string) {
 	var practiceName string
 	if err := tx.QueryRowContext(ctx, `SELECT name FROM practices WHERE id = $1`, practiceID).Scan(&practiceName); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests -- practiceID came from the Client row this same tx just read
+		return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
+	}
+	// #2522: the fact the invite's status reads, in the same kept
+	// transaction as the Activity entry.
+	if _, err := tx.ExecContext(ctx, `SELECT mark_portal_invite_refused($1, $2)`, inviteToken, clock.Now(ctx)); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
 	}
 	if err := activity.Record(ctx, tx, activity.Entry{
@@ -286,7 +292,7 @@ func acceptInvite(r *http.Request, tx *sql.Tx, inviteToken string) (result accep
 			return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
 		}
 		if conflictingClientID.Valid {
-			return refuseAccessAlreadyHere(ctx, tx, clientID, practiceID, engagementID)
+			return refuseAccessAlreadyHere(ctx, tx, inviteToken, clientID, practiceID, engagementID)
 		}
 
 		// Re-point app.current_identity_uid at the Portal Account being

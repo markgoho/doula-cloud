@@ -54,7 +54,9 @@
 	import {
 		hasAcceptedPortalInvite,
 		hasNeverBeenInvited,
+		isRefusedInvite,
 		portalInviteStatusText,
+		refusedInviteWayOn,
 		type PortalInviteSubject
 	} from '#lib/portalInvite.js';
 	import type { PageData } from './$types';
@@ -629,6 +631,12 @@
 		}
 	);
 	const hasNeverInvitedClient = $derived(hasNeverBeenInvited(clientPortalState));
+	// #2522: an accept refused because her login reaches another record
+	// here. Nothing from this record reaches her, so it holds the Contract
+	// back as never-invited does. Send portal invite stays: an email
+	// changed since keeps the row and its refusal, and a new invite to
+	// the new address asks again (InviteHandler clears the refusal).
+	const isInviteRefused = $derived(isRefusedInvite(clientPortalState));
 	const hasAcceptedPortalAccess = $derived(hasAcceptedPortalInvite(clientPortalState));
 	const hasClientEmailOnFile = $derived(detail?.clientHasEmail ?? true);
 	// InvoiceSection's own standing check (#270) -- defaults true so an
@@ -650,6 +658,7 @@
 		if (!hasClientEmailOnFile) {
 			return `${name} has no email address on file, so cannot be invited to the portal to read a message. Add an email address first.`;
 		}
+		if (isInviteRefused) return `${name} signs in through another record, so cannot read a message sent from this one. ${refusedInviteWayOn}`;
 		if (hasNeverInvitedClient) {
 			return `${name} reads messages in the portal, so send the portal invite first. The thread opens once ${name} has accepted it.`;
 		}
@@ -663,6 +672,7 @@
 	const inviteBeforeContractMessage =
 		'Send a portal invite to this Client before sending the Contract — the Contract can only be viewed and signed once portal access exists.';
 	const noEmailForInviteMessage = 'This Client has no email address on file. Add one before sending a portal invite.';
+	const refusedBeforeContractMessage = `This Client signs in through another record, so cannot sign a Contract sent from this one. ${refusedInviteWayOn}`;
 	// #2146: what the empty Contract section says while the Client has no
 	// portal account: the same three states as messageBlock above. An
 	// invite already sent does not hold Send back (PostSendContractHandler
@@ -670,6 +680,7 @@
 	// signing waits on rather than asking for an invite again.
 	const contractInviteBlock = $derived.by(() => {
 		if (hasAcceptedPortalAccess) return;
+		if (isInviteRefused) return refusedBeforeContractMessage;
 		if (hasNeverInvitedClient || !hasClientEmailOnFile) return inviteBeforeContractMessage;
 		return 'The Contract can only be viewed and signed once this Client has accepted the portal invite.';
 	});
@@ -1110,6 +1121,7 @@
 	 * merely "not invited yet". */
 	function portalInviteSummaryText(portalState: PortalInviteSubject, hasClientEmail: boolean): string {
 		const text = portalInviteStatusText(portalState);
+		if (isRefusedInvite(portalState)) return `${text}. ${refusedInviteWayOn}`;
 		if (!hasClientEmail && !portalState.portalInviteStatus) {
 			return `${text} — no email on file, so the Client cannot be invited yet`;
 		}
@@ -2809,11 +2821,13 @@
 								.map((key) => mergeFieldLabel(key))
 								.join(', ')}.`}
 						/>
+					{:else if isInviteRefused}
+						<Notice variant="info" message={refusedBeforeContractMessage} />
 					{:else if hasNeverInvitedClient}
 						<Notice variant="info" message={inviteBeforeContractMessage} />
 					{/if}
 					<cluster-l space="var(--space-3)">
-						{#if missingMergeFields.length === 0 && !hasNeverInvitedClient}
+						{#if missingMergeFields.length === 0 && !hasNeverInvitedClient && !isInviteRefused}
 							<Button label="Send Contract" onClick={handleSendContract} loading={isContractBusy} />
 						{/if}
 						{#if contractEditableFields.length > 0}
