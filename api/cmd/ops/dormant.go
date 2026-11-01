@@ -47,7 +47,8 @@ func dormantList(db *sql.DB) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		notSeenSince := clock.Now(r.Context()).In(businessZone).AddDate(-dormancyNoticeYears, 0, 0)
+		now := clock.Now(r.Context()).In(businessZone)
+		notSeenSince := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, businessZone).AddDate(-dormancyNoticeYears, 0, 0)
 
 		tx, err := db.BeginTx(r.Context(), &sql.TxOptions{ReadOnly: true})
 		if err != nil {

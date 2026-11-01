@@ -24,11 +24,9 @@ test('An operator reads the dormant-Practices list', async ({ page, request }) =
 	await expect(practice.getByText('3 Credits')).toBeVisible();
 	await expect(practice.getByText(/^Last contact/)).toBeVisible();
 	await expect(page.getByRole('heading', { name: empty })).toHaveCount(0);
-	await page.screenshot({ path: test.info().outputPath('dormant-wide.png'), fullPage: true });
 
 	await page.setViewportSize({ width: 320, height: 640 });
 
 	await expect(practice.getByRole('heading', { name: dormant })).toBeVisible();
 	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
-	await page.screenshot({ path: test.info().outputPath('dormant-320.png'), fullPage: true });
 });

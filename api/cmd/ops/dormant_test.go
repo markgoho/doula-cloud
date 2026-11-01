@@ -85,6 +85,23 @@ func TestDormantList_LeavesOutAPracticeSeenLatelyOrHoldingNoCredits(t *testing.T
 	}
 }
 
+func TestDormantList_TwoYearsAreCountedFromMidnightInNewYork(t *testing.T) {
+	s := &listStack{opsStack: newOpsStack(t, false)}
+	midnight := time.Date(2024, 11, 2, 0, 0, 0, 0, newYork)
+	atMidnight := testdb.SeedPractice(t, s.db, "At Midnight")
+	s.seedHeldCredits(atMidnight, 1, dormantSignedUp)
+	s.seedLastSeen(atMidnight, "at-midnight", midnight)
+	afterMidnight := testdb.SeedPractice(t, s.db, "After Midnight")
+	s.seedHeldCredits(afterMidnight, 1, dormantSignedUp)
+	s.seedLastSeen(afterMidnight, "after-midnight", midnight.Add(time.Minute))
+
+	page := decodeList(t, s.list("/api/practices/dormant", s.signedInCookie()))
+
+	if len(page.Items) != 1 || string(page.Items[0]["id"]) != `"`+atMidnight+`"` {
+		t.Fatalf("items = %+v, want only the Practice last seen at midnight two years ago", page.Items)
+	}
+}
+
 func TestDormantList_ShowsNobodysContactSoWritesNoReadRow(t *testing.T) {
 	s := &listStack{opsStack: newOpsStack(t, false)}
 	dormant := testdb.SeedPractice(t, s.db, "Quiet")
