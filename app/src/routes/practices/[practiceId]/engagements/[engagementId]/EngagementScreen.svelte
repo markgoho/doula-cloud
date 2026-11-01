@@ -285,6 +285,7 @@
 		closeChange(`The care phase is now ${engagementStatusText(displayStatus)}.`);
 		await refreshWhoIsOn();
 		await loadOnCall();
+		await loadActivity();
 	}
 
 	// Completing asks for a reason -- GOV.UK's question-page pattern
@@ -324,6 +325,7 @@
 			// again too, and no longer lists a Doula who is off the birth.
 			await refreshWhoIsOn();
 			await loadOnCall();
+			await loadActivity();
 		}, orThrownErrors(completeFieldIds));
 	}
 
@@ -363,6 +365,7 @@
 		if (result.kind === 'recorded') {
 			birthOutcomeOverride = result.facts;
 			void refreshBirthPlanOffer();
+			void loadActivity();
 		}
 		return result;
 	}
@@ -422,13 +425,14 @@
 	async function handleChangeKind() {
 		kindChangedMessage = '';
 		const target = otherKind;
-		await kindChange.mutate(async () => {
+		const isChanged = await kindChange.mutate(async () => {
 			const result = await changeEngagementKind(apiFetchWithSession, reference, target);
 			kindOverride = result.kind;
 			void refreshBirthPlanOffer();
 			openChange = undefined;
 			kindChangedMessage = `Now set to ${kindLabel(result.kind)}.`;
 		}, 'Failed to change what the Practice sold');
+		if (isChanged) await loadActivity();
 	}
 
 	// #2013: the due date, overlaid on the load-time read once a change
@@ -1225,7 +1229,9 @@
 			() => createInstance(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!, planType),
 			'Failed to create plan'
 		);
-		if (isStarted) openPlanForm(planType);
+		if (!isStarted) return;
+		openPlanForm(planType);
+		await loadActivity();
 	}
 
 	function handlePlanAnswerChange(planType: PlanType, fieldId: string, value: unknown) {
@@ -1254,6 +1260,7 @@
 		if (!isSaved) return;
 		shownPlanForms[planType] = false;
 		planSavedMessage[planType] = `${heading} saved.`;
+		await loadActivity();
 	}
 
 	async function loadContractSection() {
@@ -1348,7 +1355,9 @@
 			() => sendContract(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!),
 			'Failed to send contract'
 		);
-		if (isSent) contractSavedMessage = 'Contract sent.';
+		if (!isSent) return;
+		contractSavedMessage = 'Contract sent.';
+		await loadActivity();
 	}
 
 	/* The fee as this reader may see it (ADR-0008): the Practice's price
@@ -1387,6 +1396,7 @@
 			page.params.engagementId!,
 			reason
 		);
+		void loadActivity();
 	}
 
 	// The Owner/Admin side of #971's ask -- same shape as
@@ -1400,6 +1410,7 @@
 			requestId,
 			reason
 		);
+		void loadActivity();
 	}
 
 	// Same shape as handleVoidContract above -- ContractStatus.svelte
@@ -1469,6 +1480,7 @@
 		// #2002: a contractor's 201 names no amount (RaisedInvoice), so her
 		// new row is read back in her own shape (#2094) rather than spliced.
 		billingModeState.value = invoice.billingMode;
+		void loadActivity();
 		if (canReadContractMoney) {
 			invoicesState.value = [invoice, ...invoicesState.value];
 		} else {
@@ -1486,11 +1498,13 @@
 		input: { method: PaymentMethod; note?: string; paidOn: string }
 	) {
 		await recordPayment(apiFetchWithSession, page.params.practiceId!, invoiceId, input);
+		void loadActivity();
 		await loadInvoicesSection();
 	}
 
 	async function handleReversePayment(invoiceId: string, paymentId: string, reason: string) {
 		await reversePayment(apiFetchWithSession, page.params.practiceId!, invoiceId, paymentId, reason);
+		void loadActivity();
 		await loadInvoicesSection();
 	}
 
@@ -1498,16 +1512,19 @@
 	// here does -- the Invoice's refundedCents is the BFF's to sum.
 	async function handleRefundPayment(invoiceId: string, paymentId: string, input: RefundPaymentInput) {
 		await refundPayment(apiFetchWithSession, page.params.practiceId!, invoiceId, paymentId, input);
+		void loadActivity();
 		await loadInvoicesSection();
 	}
 
 	async function handleVoidInvoice(invoiceId: string) {
 		await voidInvoice(apiFetchWithSession, page.params.practiceId!, invoiceId);
+		void loadActivity();
 		await loadInvoicesSection();
 	}
 
 	async function handleWriteOffInvoice(invoiceId: string) {
 		await writeOffInvoice(apiFetchWithSession, page.params.practiceId!, invoiceId);
+		void loadActivity();
 		await loadInvoicesSection();
 	}
 
@@ -1531,6 +1548,7 @@
 
 	async function handleRecordDoulaFee(attachmentId: string, input: RecordPaymentInput) {
 		await recordDoulaFeePaid(apiFetchWithSession, reference.practiceId, reference.engagementId, attachmentId, input);
+		void loadActivity();
 		await loadDoulaFeesSection();
 	}
 
@@ -1543,6 +1561,7 @@
 			paymentId,
 			reason
 		);
+		void loadActivity();
 		await loadDoulaFeesSection();
 	}
 
@@ -1695,6 +1714,7 @@
 				});
 				const name = onCall?.doulas.find((doula) => doula.staffId === gapStaffId)?.name ?? 'the Doula';
 				closeGapForm();
+				void loadActivity();
 				await loadOnCall();
 				onCallSavedMessage = `The time ${name} cannot be reached is recorded.`;
 			},
@@ -1723,6 +1743,7 @@
 		openOnCall();
 		try {
 			await clearGap(apiFetchWithSession, reference.practiceId, reference.engagementId, gap.id);
+			void loadActivity();
 			await loadOnCall();
 			onCallSavedMessage = `The gap for ${gap.staffName} is cleared.`;
 		} catch (error) {
@@ -1739,6 +1760,7 @@
 				to: narrowTo[doula.staffId] === '' ? undefined : narrowTo[doula.staffId]
 			});
 			openOnCall();
+			void loadActivity();
 			await loadOnCall();
 			onCallSavedMessage = `The on-call days for ${doula.name} are saved.`;
 		} catch (error) {
@@ -1804,12 +1826,14 @@
 
 	async function handleCreateOffer(offer: NewOffer) {
 		await createOffer(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!, offer);
+		void loadActivity();
 		const updated = await loadEngagementOffers(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
 		if (offersState.value) offersState.value = updated;
 	}
 
 	async function handleWithdrawOffer(offerId: string) {
 		await withdrawOffer(apiFetchWithSession, page.params.practiceId!, offerId);
+		void loadActivity();
 		const updated = await loadEngagementOffers(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
 		if (offersState.value) offersState.value = updated;
 	}
@@ -1866,7 +1890,7 @@
 	});
 
 	async function handleSendPortalInvite() {
-		await portalInvite.mutate(async () => {
+		const isSent = await portalInvite.mutate(async () => {
 			const created = await sendPortalInvite(apiFetchWithSession, reference);
 			// #255: a fresh invite is always pending, never suppressed --
 			// lifts the Contract section's block and hides this action's
@@ -1874,6 +1898,7 @@
 			clientPortalOverride = { portalInviteStatus: 'pending', emailSuppressed: false };
 			return `${location.origin}/portal/accept-invite?token=${created.inviteToken}`;
 		}, 'Failed to send portal invite');
+		if (isSent) await loadActivity();
 	}
 
 	function staffName(staffId: string): string {
@@ -1931,6 +1956,7 @@
 				staffId && staffId !== callerStaffId ? `The Visit for ${staffName(staffId)} is added.` : 'Your Visit is added.';
 			await refreshStatusAfterScheduling(scheduledAt);
 			await refreshWhoIsOn();
+			await loadActivity();
 		}
 	}
 
@@ -1965,6 +1991,7 @@
 		await loadVisits();
 		if (wasSaved) visitsSavedMessage = `The Visit for ${visit.staffName} is saved.`;
 		if (isRescheduled) await refreshStatusAfterScheduling(scheduledAt);
+		await loadActivity();
 	}
 
 	async function handleReassignVisit(event: SubmitEvent, visit: Visit) {

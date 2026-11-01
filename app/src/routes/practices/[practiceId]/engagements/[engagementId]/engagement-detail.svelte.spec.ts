@@ -3836,3 +3836,75 @@ describe('how the Contract and the Plans came to be (#2104)', () => {
 		await expect.element(testPage.getByText('Aug 26, 2026 by Priyanka Venkataraman-Solberg')).toBeVisible();
 	});
 });
+
+// #2331: an act the BFF records on the Engagement is on its ledger at once.
+function activityReads(): unknown[] {
+	return apiFetchWithSession.mock.calls.filter(([path]) => String(path).includes('/activity'));
+}
+
+async function setupSendContract(sendResponse: () => Response) {
+	await setupWithContract(
+		() => {
+			const respond = toApiResponder(fixture);
+			apiFetchWithSession.mockImplementation((path: string) => {
+				if (path.endsWith('/contract/send')) return Promise.resolve(sendResponse());
+				if (path.endsWith('/contract')) return Promise.resolve(jsonResponse(draftOf()));
+				return respond(path);
+			});
+		},
+		{ ...fixtureDetail, clientPortalInviteStatus: 'accepted' }
+	);
+	await vi.waitFor(() => expect(activityReads()).toHaveLength(1));
+}
+
+describe('the ledger is read again after an act (#2331)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('reads the ledger again once the Contract is sent', async () => {
+		await setupSendContract(() => jsonResponse(draftOf({ status: 'sent' })));
+
+		await testPage.getByRole('button', { name: 'Send Contract' }).click();
+
+		await expect.element(testPage.getByRole('status').filter({ hasText: 'Contract sent.' })).toBeVisible();
+		await vi.waitFor(() => expect(activityReads()).toHaveLength(2));
+	});
+
+	it('leaves the ledger as it was when sending the Contract is refused', async () => {
+		await setupSendContract(() => jsonResponse('contract is no longer a draft', 409));
+
+		await testPage.getByRole('button', { name: 'Send Contract' }).click();
+
+		await expect.element(testPage.getByText('contract is no longer a draft')).toBeVisible();
+		expect(activityReads()).toHaveLength(1);
+	});
+
+	it('reads the ledger again once an Invoice is raised', async () => {
+		await setupMoney(contractorReader, fixtureDetail, (path, init) =>
+			path.endsWith('/contract/invoices') && init?.method === 'POST'
+				? jsonResponse({ id: 'invoice-9', status: 'open', billingMode: 'stripe' }, 201)
+				: undefined
+		);
+		await vi.waitFor(() => expect(activityReads()).toHaveLength(1));
+
+		await testPage.getByRole('button', { name: 'Create Invoice' }).click();
+
+		await expect.element(testPage.getByText('Invoice created.')).toBeVisible();
+		await vi.waitFor(() => expect(activityReads()).toHaveLength(2));
+	});
+
+	it('leaves the ledger as it was when raising an Invoice is refused', async () => {
+		await setupMoney(contractorReader, fixtureDetail, (path, init) =>
+			path.endsWith('/contract/invoices') && init?.method === 'POST'
+				? jsonResponse({ message: 'The Contract is not signed yet.' }, 409)
+				: undefined
+		);
+		await vi.waitFor(() => expect(activityReads()).toHaveLength(1));
+
+		await testPage.getByRole('button', { name: 'Create Invoice' }).click();
+
+		await expect.element(testPage.getByText('The Contract is not signed yet.')).toBeVisible();
+		expect(activityReads()).toHaveLength(1);
+	});
+});
