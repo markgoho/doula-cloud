@@ -97,8 +97,11 @@
 	// network round trip for no reason the retry needs.
 	let pendingIdToken = '';
 
+	let sessionProbe: Promise<SessionInfo | undefined> | undefined;
+
 	onMount(async () => {
-		const session = await probeSession<SessionInfo>('/api/staff/session');
+		sessionProbe = probeSession<SessionInfo>('/api/staff/session');
+		const session = await sessionProbe;
 		if (!session) {
 			await goto(resolve('/(signed-out)/login'));
 			return;
@@ -143,7 +146,10 @@
 				return [{ message: 'Enter your password', targetId: passwordId }];
 			}
 
-			const credential = await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
+			const session = await sessionProbe;
+			if (!session) return;
+
+			const credential = await signInWithEmailAndPassword(getFirebaseAuth(), session.email, password);
 			enrollingUser = credential.user;
 
 			await openEnrollmentSession(enrollingUser);
