@@ -641,6 +641,26 @@ export function seedMonthlyCreditsPractice(name: string): string {
 }
 
 /**
+ * Seeds a Practice that signed up three years ago, holds 3 Credits, and
+ * whose one Owner was last active three years ago: a row on ops's
+ * dormant-Practices list (#2477). Returns the Practice's id.
+ */
+export function seedDormantPractice(name: string): string {
+	const practiceId = randomUUID();
+	const staffId = randomUUID();
+	const longAgo = `sim.now() - interval '3 years'`;
+	execSQL(
+		`INSERT INTO practices (id, name, timezone, created_at) VALUES (${sqlLiteral(practiceId)}, ${sqlLiteral(name)}, 'America/New_York', ${longAgo});
+		 INSERT INTO staff (id, identity_uid, first_name, last_name, email, work_state, last_active_at)
+		 VALUES (${sqlLiteral(staffId)}, ${sqlLiteral(`dormant-owner-${staffId}`)}, 'Dormant', 'Owner', ${sqlLiteral(`owner-${staffId}@doula-cloud.invalid`)}, 'NY', ${longAgo});
+		 INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type)
+		 VALUES (${sqlLiteral(practiceId)}, ${sqlLiteral(staffId)}, ARRAY['owner']::practice_role[], 'employee');
+		 INSERT INTO credit_ledger (practice_id, origin, quantity, created_at) VALUES (${sqlLiteral(practiceId)}, 'signup_bonus', 3, ${longAgo});`
+	);
+	return practiceId;
+}
+
+/**
  * Gives a Practice its founding grant the way ops does (#2482): an
  * operator's act, then ops_record_founding_grant sizing it from the
  * roster, then the Practice's Activity row under the operator. ops is the

@@ -13,4 +13,5 @@
 <h1>Practices</h1>
 <p>Every Practice that can still act, newest signup first. A Practice whose Deletion finalized is on the Deleted list.</p>
 <p><a href={resolve('/practices/deleted')}>Deleted Practices</a></p>
+<p><a href={resolve('/practices/dormant')}>Dormant Practices</a></p>
 <PracticeList list="live" onsignedout={signedOut} />

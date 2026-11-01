@@ -31,7 +31,7 @@ export type PracticeList = 'live' | 'deleted';
 
 type Fetch = typeof fetch;
 
-function day(instant: Instant): string {
+export function day(instant: Instant): string {
 	return longDate(instant.slice(0, 10));
 }
 
