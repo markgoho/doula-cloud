@@ -4,7 +4,10 @@
 //
 // - A red run opens an assigned `trunk-red` issue, or comments on the one
 //   that is open for the same workflow.
-// - A passing run closes the open issue of the same workflow.
+// - A passing run closes the open issue of the same workflow only when it
+//   ran on a commit that issue recorded as failing (#2504). A pass on any
+//   other commit says once that the failure was never reproduced on its
+//   own commit, and leaves the issue open.
 // - A canceled run opens nothing (#1207); for a push it says so on the
 //   pull request that the commit came from.
 //
@@ -37,6 +40,7 @@ type Run = {
   event: string;
   conclusion: string | null;
   head_sha: string;
+  run_attempt?: number;
   // Absent or null on some payloads; a dispatched run's is the trunk
   // head's, which is not a commit that caused the run.
   head_commit?: { message?: string | null } | null;
@@ -81,6 +85,11 @@ const MEANING: Record<string, Meaning> = {
       'the comparison of the Hosting edge ranges with the last day of traffic has',
     whileOpen:
       "This check runs once a day. It fails when the Firebase Hosting rewrite connects from an address of Google's own outside `hostingEdgeRanges` in `api/internal/clientip`, or a range in that list stops being Google's own. While this issue is open, **clientip.From can be returning Google's address for callers who come through Hosting**: they share one rate-limit bucket, and `signer_ip` and `terms_accepted` record the edge. The failed run's log names each address; see #1867 for how the ranges were chosen.",
+  },
+  '.github/workflows/terraform-plan.yml': {
+    unproven: 'the comparison of the live project with `terraform/` has',
+    whileOpen:
+      'This plan runs on every push to trunk and once a day. On trunk it is red for one of two reasons: **the live project no longer matches `terraform/`** (a console change, a laptop `apply` that never landed a commit, or a merged Terraform change in the window before its laptop `apply`), or the plan could not run at all (the state lock, or Google Cloud auth). The job log says which. The drift table names each resource and the attributes that differ, never their values; it is in the job log, readable with `gh api repos/markgoho/doula-cloud/actions/jobs/<id>/logs --allow-escape-sequences`. The fix is a commit that matches the configuration to the live project, or a laptop `apply` from trunk that matches the live project to the configuration, never a dismissal: see docs/infrastructure.md, "Who may apply, and what CI may read". While this issue is open, **this required check can fail on any other pull request**, since each one plans against the same live project.',
   },
 };
 
@@ -148,6 +157,9 @@ function readRun(): Run {
 
 const marker = (path: string) => `<!-- ${LABEL}: ${path} -->`;
 const ANY_MARKER = `<!-- ${LABEL}: `;
+const shaMarker = (sha: string) => `<!-- ${LABEL}-sha: ${sha} -->`;
+const SHA_MARKER = new RegExp(`<!-- ${LABEL}-sha: ([0-9a-f]{40}) -->`, 'g');
+const ELSEWHERE_MARKER = `<!-- ${LABEL}-green-elsewhere -->`;
 
 /**
  * The open alarm issues of one workflow, newest first. An open issue
@@ -167,12 +179,16 @@ function openAlarms(path: string): Issue[] {
   });
 }
 
-/** One line per failed job, with the step that failed inside it. */
+/**
+ * One line per failed job, with the step that failed inside it. The jobs
+ * of the attempt that failed: by the time this runs, a rerun can have
+ * started, and the run's own jobs are then the rerun's.
+ */
 function failedJobs(run: Run): string {
   let jobs: Job[];
   try {
     const answer = api(
-      `repos/${repo}/actions/runs/${run.id}/jobs?per_page=100`
+      `repos/${repo}/actions/runs/${run.id}/attempts/${run.run_attempt ?? 1}/jobs?per_page=100`
     ) as { jobs?: Job[] };
     jobs = answer.jobs ?? [];
   } catch (error) {
@@ -229,7 +245,8 @@ function openOrUpdate(): void {
     trigger,
     `**Run:** ${run.html_url}`,
     meaning.whileOpen,
-    `This issue is opened automatically by ${ALARM_WORKFLOW} and closes itself when ${run.name} next passes on trunk. Do not close it by hand while that workflow still fails - the next failed run opens a new one.`,
+    `This issue is opened automatically by ${ALARM_WORKFLOW}. It closes itself only when ${run.name} passes on this same commit, which a rerun of the failed jobs does: \`gh run rerun ${run.id} --failed\`. A pass on a later commit comments here and leaves it open, because it does not prove this failure gone; close it by hand once you know why it failed.`,
+    shaMarker(run.head_sha),
     marker(path),
   ].join('\n\n');
 
@@ -253,16 +270,52 @@ function openOrUpdate(): void {
   wrote(`opened #${created.number}`);
 }
 
+/**
+ * Closes an open alarm only when this pass is on a commit the alarm
+ * recorded as failing, in its body or in a comment a later failure added
+ * (#2504). A pass on another commit does not prove that failure gone: it
+ * says so once and leaves the issue open.
+ */
 function close(): void {
   for (const issue of openAlarms(path)) {
+    const comments = api(
+      `repos/${repo}/issues/${issue.number}/comments?per_page=100`
+    ) as { body: string | null }[];
+    const texts = [issue.body ?? '', ...comments.map((c) => c.body ?? '')];
+    const failing = texts.flatMap((text) =>
+      [...text.matchAll(SHA_MARKER)].map((match) => match[1] as string)
+    );
+    if (failing.includes(run.head_sha)) {
+      api(`repos/${repo}/issues/${issue.number}/comments`, 'POST', {
+        body: `${run.name} passed on trunk at ${short}, the commit that failed - ${run.html_url}. Closed automatically by ${ALARM_WORKFLOW}.`,
+      });
+      api(`repos/${repo}/issues/${issue.number}`, 'PATCH', {
+        state: 'closed',
+        state_reason: 'completed',
+      });
+      wrote(`closed #${issue.number}`);
+      continue;
+    }
+    if (texts.some((text) => text.includes(ELSEWHERE_MARKER))) {
+      console.log(
+        `#${issue.number} already says a later commit passed; ${short} is not a commit it recorded as failing`
+      );
+      continue;
+    }
+    const failed =
+      failing.length > 0
+        ? [...new Set(failing)]
+            .map((sha) => `**${sha.slice(0, 8)}**`)
+            .join(', ')
+        : 'the commit this issue names';
     api(`repos/${repo}/issues/${issue.number}/comments`, 'POST', {
-      body: `${run.name} is green again on trunk as of ${short} - ${run.html_url}. Closed automatically by ${ALARM_WORKFLOW}.`,
+      body: [
+        `${run.name} passed on trunk at **${short}** (${run.head_sha}) - ${run.html_url}. That is not the commit that failed (${failed}), so the failure was never reproduced on its own commit, and this issue stays open.`,
+        `To close it automatically, rerun the failed run's failed jobs (\`gh run rerun <run id> --failed\`); a pass there closes it. Otherwise close it by hand once you know why it failed. This is said once; a later pass on another commit adds nothing here.`,
+        ELSEWHERE_MARKER,
+      ].join('\n\n'),
     });
-    api(`repos/${repo}/issues/${issue.number}`, 'PATCH', {
-      state: 'closed',
-      state_reason: 'completed',
-    });
-    wrote(`closed #${issue.number}`);
+    wrote(`commented on #${issue.number}: passed on another commit`);
   }
 }
 
