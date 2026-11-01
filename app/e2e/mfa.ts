@@ -14,7 +14,7 @@ import { signIn } from './auth';
 // back do not care which provider produced it: the five acts in
 // api/internal/staffauth/secondfactor.go's SecondFactorActs, the
 // Practice boundary in middleware.go when the Practice's mfa-required
-// switch is on, and staffauth.FounderOnly. Since #1531 nothing else
+// switch is on, and nothing else. Since #1531 nothing else
 // reads it -- an Owner enters her Practice with no second factor -- so
 // a spec that only has to enter a Practice signs in with auth.ts's
 // signIn and enrolls nothing.
@@ -196,8 +196,8 @@ export async function readVerificationCode(
  * verifyEmail + enrollSecondFactor + signIn, composed: the one call a
  * fixture makes when it wants a session that shows a second factor
  * without spending a browser on the walk. Only a spec that drives one of
- * SecondFactorActs, turns the mfa-required switch on (or enters a
- * Practice where it is on), or opens the founder's page needs one; a
+ * SecondFactorActs, or turns the mfa-required switch on (or enters a
+ * Practice where it is on), needs one; a
  * spec that only enters a Practice calls auth.ts's signIn and enrolls
  * nothing, since #1531. Every future signInWithPassword for
  * that account demands a second-factor challenge, and against this

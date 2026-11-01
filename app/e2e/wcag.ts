@@ -5,8 +5,6 @@
 // opinions, not conformance failures, and a gate that blocks on an
 // opinion is a gate people learn to route around.
 //
-// In a module of its own since #1526: accessibility.e2e.ts is the gate,
-// and founder-feedback.e2e.ts scans the two founder routes inside its own
-// walk, because only one spec file at a time may hold the founder (see
-// stack.ts's seedFounder). Both read the bar from here, so it is one bar.
+// In a module of its own since #1526, so a spec that scans a route inside
+// its own walk reads the same bar accessibility.e2e.ts does.
 export const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];

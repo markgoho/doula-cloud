@@ -1,11 +1,8 @@
 <script lang="ts">
 	/*
 	 * The shell for a signed-in Staff screen that belongs to the person
-	 * and to no Practice: `/account`, and the founder read page under
-	 * `/feedback` (#1526). It was `account/+layout.svelte` until that
-	 * second consumer arrived; the `(person)` group is how the two share
-	 * it without either URL changing. Everything below was written about
-	 * `/account` and holds for both.
+	 * and to no Practice: `/account`. It was `account/+layout.svelte`
+	 * until a second consumer arrived (#1526, since moved to ops).
 	 *
 	 * The account route's own shell (#484). It sits above the
 	 * Practice-scoped tree and inherits only the bare root layout, so

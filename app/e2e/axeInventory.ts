@@ -24,19 +24,7 @@ export interface ScannedElsewhere extends ListedRoute {
 /*
  * Scanned by another spec, against the same WCAG_TAGS (wcag.ts).
  */
-export const SCANNED_ELSEWHERE: ScannedElsewhere[] = [
-	{
-		route: 'feedback',
-		spec: 'founder-feedback.e2e.ts',
-		reason:
-			'The founder read page (#1526). One `staff` row is the founder, and seeding it re-points that row, so two spec files that each held the founder would take him from each other mid-test.'
-	},
-	{
-		route: 'feedback/[feedbackId]',
-		spec: 'founder-feedback.e2e.ts',
-		reason: 'The same as `feedback`.'
-	}
-];
+export const SCANNED_ELSEWHERE: ScannedElsewhere[] = [];
 
 /*
  * Not scanned, and each is a decision rather than an oversight.
