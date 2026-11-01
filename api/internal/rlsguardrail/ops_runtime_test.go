@@ -26,6 +26,7 @@ var wantDefinerFunctions = map[string][]string{
 		"erase_client_feedback(uuid)",
 		"erase_client_idempotency_keys(uuid)",
 		"erase_portal_account_feedback(text)",
+		"mark_portal_invite_refused(uuid,timestamp with time zone)",
 		"merge_client_portal_links(uuid,uuid)",
 		"operator_act_actor_name(uuid)",
 		"pilot_admits(text)",
