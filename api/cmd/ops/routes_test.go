@@ -25,6 +25,8 @@ var wantRoutes = []string{
 	"GET /api/session",
 	"DELETE /api/session",
 	"POST /api/session/step-up",
+	"GET /api/practices",
+	"GET /api/practices/deleted",
 	"GET /api/practices/{practiceId}/refund",
 	"POST /api/practices/{practiceId}/refunds",
 	"GET /api/practices/{practiceId}/founding-grant",

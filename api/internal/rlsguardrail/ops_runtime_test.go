@@ -46,6 +46,7 @@ var wantDefinerFunctions = map[string][]string{
 		"ops_refund_by_request_key(uuid,text)",
 		"ops_refund_lots(uuid)",
 		"ops_record_second_factor_cleared(uuid,uuid,timestamp with time zone)",
+		"ops_practice_list(boolean,timestamp with time zone,uuid,integer)",
 		"ops_refund_practice(uuid)",
 		"ops_second_factor_staff(uuid)",
 		"record_operator_activity(uuid,text,uuid,text,jsonb,uuid,timestamp with time zone)",
@@ -87,6 +88,41 @@ func TestOpsRuntime_DefinerFunctionsEachRoleCanExecuteAreTheOnesOnTheRecord(t *t
 					role, strings.Join(got, "\n"), strings.Join(wantSorted, "\n"))
 			}
 		})
+	}
+}
+
+// ADR-0062: no definer function ops_runtime can execute reads a Client
+// record. ops_runtime holds no grant on clients, so a function running
+// with its own rights cannot.
+func TestOpsRuntime_NoFunctionItCanExecuteReadsClients(t *testing.T) {
+	db := testdb.New(t)
+
+	rows, err := db.Admin.QueryContext(t.Context(),
+		`SELECT p.oid::regprocedure::text
+		   FROM pg_proc p
+		   JOIN pg_namespace n ON n.oid = p.pronamespace
+		  WHERE p.prosecdef
+		    AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+		    AND has_function_privilege('ops_runtime', p.oid, 'EXECUTE')
+		    AND p.prosrc ~* '\mclients\M'
+		  ORDER BY 1`)
+	if err != nil {
+		t.Fatalf("read functions: %v", err)
+	}
+	defer rows.Close()
+	got := []string{}
+	for rows.Next() {
+		var fn string
+		if err := rows.Scan(&fn); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		got = append(got, fn)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows: %v", err)
+	}
+	if len(got) > 0 {
+		t.Errorf("these functions ops_runtime can execute name clients:\n%s", strings.Join(got, "\n"))
 	}
 }
 
