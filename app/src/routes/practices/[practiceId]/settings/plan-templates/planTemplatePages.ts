@@ -44,3 +44,12 @@ export function planTemplateSavedMessage(planType: PlanType): string {
 	const label = planLabel(planType);
 	return `${label} questions saved. Every ${label} filled in from now on asks them, and a ${label} already filled in keeps the questions it had.`;
 }
+
+/**
+ * What a removal says on the list (#2572): the question taken off, and the
+ * dialog's own promise about plans already filled in.
+ */
+export function planTemplateRemovedMessage(planType: PlanType, question: string): string {
+	const label = planLabel(planType);
+	return `"${question}" removed. Every ${label} filled in from now on will not ask it, and a ${label} already filled in keeps it, with its answer.`;
+}
