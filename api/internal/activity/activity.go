@@ -14,26 +14,30 @@ import (
 	"time"
 )
 
-// ActorKind is the ADR's three kinds of actor -- staff, client and
-// system -- never two: a Client's own signature or payment is her act,
-// not the product's, and the product acting on its own behalf is a
-// distinct third case, never confused with either.
+// ActorKind is the ADR's four kinds of actor -- staff, client, system
+// and operator: a Client's own signature or payment is her act, not the
+// product's, the product acting on its own behalf is a distinct third
+// case, and a Platform operator is a person acting for DoulaCloud
+// (ADR-0022's amendment of 2026-10-31).
 type ActorKind string
 
-// The three ActorKind values ADR-0022 names.
+// The four ActorKind values ADR-0022 names.
 const (
-	ActorStaff  ActorKind = "staff"
-	ActorClient ActorKind = "client"
-	ActorSystem ActorKind = "system"
+	ActorStaff    ActorKind = "staff"
+	ActorClient   ActorKind = "client"
+	ActorSystem   ActorKind = "system"
+	ActorOperator ActorKind = "operator"
 )
 
-// Actor is who did it. Exactly one of StaffID/ClientID is set, matching
-// Kind -- StaffActor, ClientActor and SystemActor are the only way to
-// build one, so a caller cannot reach Record with a mismatched pair.
+// Actor is who did it. At most one of StaffID/ClientID/OperatorActID is
+// set, matching Kind -- StaffActor, ClientActor, SystemActor and
+// OperatorActor are the only way to build one, so a caller cannot reach
+// Record with a mismatched pair.
 type Actor struct {
-	Kind     ActorKind
-	StaffID  string
-	ClientID string
+	Kind          ActorKind
+	StaffID       string
+	ClientID      string
+	OperatorActID string
 }
 
 // StaffActor is a Staff member acting -- most of the product's history.
@@ -46,6 +50,14 @@ func ClientActor(clientID string) Actor { return Actor{Kind: ActorClient, Client
 // SystemActor is DoulaCloud acting with nobody asking. Displays as
 // "DoulaCloud", never "System" (ADR-0022).
 func SystemActor() Actor { return Actor{Kind: ActorSystem} }
+
+// OperatorActor is a Platform operator acting on one Practice from ops,
+// keyed to the operator_acts row that records the act. Record writes it
+// through record_operator_activity (00142), which only ops_runtime may
+// execute; set Entry.CreatedAt from clock.Now(ctx).
+func OperatorActor(operatorActID string) Actor {
+	return Actor{Kind: ActorOperator, OperatorActID: operatorActID}
+}
 
 // Entry is one row: what it happened to (SubjectKind, SubjectID), what
 // happened (Action), the diff, and the Actor. Diff is already-marshaled
@@ -112,7 +124,7 @@ func Record(ctx context.Context, tx *sql.Tx, e Entry, opts ...RecordOption) erro
 		staffID = sql.NullString{String: e.Actor.StaffID, Valid: true}
 	case ActorClient:
 		clientID = sql.NullString{String: e.Actor.ClientID, Valid: true}
-	case ActorSystem:
+	case ActorSystem, ActorOperator:
 	}
 
 	diff := e.Diff
@@ -120,16 +132,26 @@ func Record(ctx context.Context, tx *sql.Tx, e Entry, opts ...RecordOption) erro
 		diff = json.RawMessage("{}")
 	}
 
+	var createdAt sql.NullTime
+	if !e.CreatedAt.IsZero() {
+		createdAt = sql.NullTime{Time: e.CreatedAt, Valid: true}
+	}
+
+	if e.Actor.Kind == ActorOperator {
+		if _, err := tx.ExecContext(ctx,
+			`SELECT record_operator_activity($1, $2, $3, $4, $5, $6, $7)`,
+			e.PracticeID, e.SubjectKind, e.SubjectID, e.Action, []byte(diff), e.Actor.OperatorActID, createdAt,
+		); err != nil {
+			return fmt.Errorf("activity: record operator act: %w", err)
+		}
+		return nil
+	}
+
 	if cfg.widenToPractice != "" {
 		if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_practice_id', $1, true)`, cfg.widenToPractice); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			return fmt.Errorf("activity: scope to practice: %w", err)
 		}
-	}
-
-	var createdAt sql.NullTime
-	if !e.CreatedAt.IsZero() {
-		createdAt = sql.NullTime{Time: e.CreatedAt, Valid: true}
 	}
 
 	_, err := tx.ExecContext(ctx,

@@ -160,12 +160,15 @@ type Page[T any] struct {
 // caller could extend, the same restriction Projection's own doc comment
 // places on a caller's Joins and Columns.
 //
-// Columns is s.name, c.given_name, c.preferred_name, c.family_name --
-// ActorName's own four name inputs, in the scan order both this
-// package's List and activityfeed's practice-wide reader expect them.
+// Columns is s.name, c.given_name, c.preferred_name, c.family_name and
+// the operator name -- ActorName's own five name inputs, in the scan
+// order both this package's List and activityfeed's practice-wide
+// reader expect them.
 // c.family_name is #2111's: the practice-wide reader names a Client actor
 // in full, and the family name is a column of a row the c join already
-// fetches.
+// fetches. operator_act_actor_name(a.actor_operator_act_id) is #2480's:
+// app_runtime reads no operators row, so an operator's name comes
+// through that function rather than a join.
 //
 // Joins reaches the actor's name whichever of ADR-0022's two named actor
 // kinds wrote the row. Both are LEFT JOINs: a system-written row matches
@@ -187,7 +190,7 @@ type ActorJoin struct {
 // It is a var and not a const only because Go has no const struct; treat
 // it as one -- neither field is ever reassigned, here or in a caller.
 var SharedActorJoin = ActorJoin{
-	Columns: `s.name, c.given_name, c.preferred_name, c.family_name`,
+	Columns: `s.name, c.given_name, c.preferred_name, c.family_name, operator_act_actor_name(a.actor_operator_act_id)`,
 	Joins: `LEFT JOIN staff s ON s.id = a.actor_staff_id
 	LEFT JOIN clients c ON c.id = a.actor_client_id`,
 }
@@ -276,17 +279,17 @@ func List[T any](ctx context.Context, tx *sql.Tx, q Query, p Projection[T]) (Pag
 	keys := []rowKey{}
 	for rows.Next() {
 		var row Row
-		var staffName, clientGivenName, clientPreferredName, clientFamilyName sql.NullString
+		var staffName, clientGivenName, clientPreferredName, clientFamilyName, operatorName sql.NullString
 		targets, build := p.Row()
 		dest := append([]any{
 			&row.ID, &row.SubjectKind, &row.SubjectID, &row.Action, &row.ActorKind,
-			&staffName, &clientGivenName, &clientPreferredName, &clientFamilyName, &row.CreatedAt,
+			&staffName, &clientGivenName, &clientPreferredName, &clientFamilyName, &operatorName, &row.CreatedAt,
 		}, targets...)
 		if err := rows.Scan(dest...); err != nil {
 			// coverage:ignore reason: row scan failure on a well-typed query, not exercised by unit tests
 			return Page[T]{}, fmt.Errorf("activitypage: scan %s activity row: %w", q.SubjectKind, err)
 		}
-		row.ActorName = ActorName(row.ActorKind, staffName, clientGivenName, clientPreferredName, clientFamilyName, ActorFirstName)
+		row.ActorName = ActorName(row.ActorKind, staffName, clientGivenName, clientPreferredName, clientFamilyName, operatorName, ActorFirstName)
 		keys = append(keys, rowKey{id: row.ID, at: row.CreatedAt})
 		items = append(items, build(row))
 	}
@@ -355,7 +358,12 @@ type rowKey struct {
 //
 // form says which of the Client's names a Client actor reads by; see
 // ClientActorForm for which reader takes which.
-func ActorName(actorKind string, staffName, clientGivenName, clientPreferredName, clientFamilyName sql.NullString, form ClientActorForm) string {
+//
+// An operator reads as the person's name with DoulaCloud (ADR-0022's
+// amendment of 2026-10-31), and as DoulaCloud alone only when
+// operator_act_actor_name (00142) gave no name, which it does for a
+// reader at any other Practice.
+func ActorName(actorKind string, staffName, clientGivenName, clientPreferredName, clientFamilyName, operatorName sql.NullString, form ClientActorForm) string {
 	switch activity.ActorKind(actorKind) {
 	case activity.ActorStaff:
 		if !staffName.Valid {
@@ -369,7 +377,12 @@ func ActorName(actorKind string, staffName, clientGivenName, clientPreferredName
 		return personname.Preferred(clientGivenName.String, clientPreferredName.String)
 	case activity.ActorSystem:
 		return activity.SystemActorName
+	case activity.ActorOperator:
+		if !operatorName.Valid {
+			return activity.SystemActorName
+		}
+		return activity.OperatorActorName(operatorName.String)
 	}
-	// coverage:ignore reason: actor_kind is a three-value Postgres enum (00051) and the switch above names all three, so this is the compiler's floor rather than a reachable case
+	// coverage:ignore reason: actor_kind is a four-value Postgres enum (00051, 00141) and the switch above names all four, so this is the compiler's floor rather than a reachable case
 	return activity.SystemActorName
 }

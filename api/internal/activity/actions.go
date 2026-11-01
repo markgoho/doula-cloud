@@ -178,6 +178,13 @@ func MembershipActions() []MembershipAction {
 // 'system', rather than each caller inventing its own string.
 const SystemActorName = "DoulaCloud"
 
+// OperatorActorName is what ActorOperator renders as: the person's name
+// with DoulaCloud, "Mark Goho at DoulaCloud", never DoulaCloud alone
+// (ADR-0022's amendment of 2026-10-31).
+func OperatorActorName(operatorName string) string {
+	return operatorName + " at " + SystemActorName
+}
+
 // DepartedStaffName is what a Staff member reads as once no reader can
 // reach her staff row any more -- staff_practice_visibility (00002)
 // admits a staff row only while that person holds a Membership at the

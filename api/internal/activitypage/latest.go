@@ -37,9 +37,9 @@ type LatestQuery struct {
 // still in force beneath the practice_id predicate it writes.
 func Latest(ctx context.Context, tx *sql.Tx, q LatestQuery) (*Stamp, error) {
 	var (
-		actorKind                                             string
-		staffName, clientGiven, clientPreferred, clientFamily sql.NullString
-		at                                                    time.Time
+		actorKind                                                           string
+		staffName, clientGiven, clientPreferred, clientFamily, operatorName sql.NullString
+		at                                                                  time.Time
 	)
 	err := tx.QueryRowContext(ctx,
 		`SELECT a.actor_kind::text, `+SharedActorJoin.Columns+`, a.created_at
@@ -50,7 +50,7 @@ func Latest(ctx context.Context, tx *sql.Tx, q LatestQuery) (*Stamp, error) {
 		 ORDER BY a.created_at DESC, a.id DESC
 		 LIMIT 1`,
 		q.PracticeID, q.SubjectKind, q.SubjectID, q.Action, q.NotBefore,
-	).Scan(&actorKind, &staffName, &clientGiven, &clientPreferred, &clientFamily, &at)
+	).Scan(&actorKind, &staffName, &clientGiven, &clientPreferred, &clientFamily, &operatorName, &at)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil //nolint:nilnil // nothing happened yet is an answer, not a failure
 	}
@@ -60,6 +60,6 @@ func Latest(ctx context.Context, tx *sql.Tx, q LatestQuery) (*Stamp, error) {
 	}
 	return &Stamp{
 		At: at,
-		By: ActorName(actorKind, staffName, clientGiven, clientPreferred, clientFamily, ActorFirstName),
+		By: ActorName(actorKind, staffName, clientGiven, clientPreferred, clientFamily, operatorName, ActorFirstName),
 	}, nil
 }

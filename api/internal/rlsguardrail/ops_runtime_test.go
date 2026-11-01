@@ -28,6 +28,7 @@ var wantDefinerFunctions = map[string][]string{
 		"erase_portal_account_feedback(text)",
 		"feedback_sender(uuid)",
 		"merge_client_portal_links(uuid,uuid)",
+		"operator_act_actor_name(uuid)",
 		"pilot_admits(text)",
 		"portal_account_reaches_a_live_client(text)",
 		"portal_account_reuse_for_accept(text,uuid)",
@@ -37,7 +38,9 @@ var wantDefinerFunctions = map[string][]string{
 		"staff_was_ever_a_member_at_practice(uuid,uuid)",
 		"sweep_expired_idempotency_keys(timestamp with time zone)",
 	},
-	"ops_runtime": {},
+	"ops_runtime": {
+		"record_operator_activity(uuid,text,uuid,text,jsonb,uuid,timestamp with time zone)",
+	},
 }
 
 func TestOpsRuntime_DefinerFunctionsEachRoleCanExecuteAreTheOnesOnTheRecord(t *testing.T) {

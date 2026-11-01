@@ -62,6 +62,15 @@ describe("The Practice's whole activity ledger (#2006)", () => {
 		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/practices/practice-1/activity?cursor=cursor-1');
 	});
 
+	it('names a Platform operator as the person with DoulaCloud (#2480)', async () => {
+		await testPage.viewport(1440, 900);
+		const operatorRow = { ...items[1]!, action: 'sessions_ended', actorKind: 'operator', actorName: 'Mark Goho at DoulaCloud' };
+		await setup(() => jsonResponse({ items: [operatorRow], hasMore: false }));
+
+		const row = testPage.getByRole('row').filter({ hasText: 'Anne-Marie Ochieng-Whitfield signed out of every device' });
+		await expect.element(row.getByRole('cell', { name: 'Mark Goho at DoulaCloud', exact: true })).toBeVisible();
+	});
+
 	it('says so when the ledger cannot be read', async () => {
 		await setup(() => jsonResponse('not permitted to read this', 403));
 

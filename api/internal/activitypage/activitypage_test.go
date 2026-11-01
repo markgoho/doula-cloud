@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/activitypage"
@@ -149,6 +150,7 @@ func TestList_NamesEveryKindOfActorOnce(t *testing.T) {
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, "departed_acted", activity.StaffActor(departedID))
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, "client_acted", activity.ClientActor(clientID))
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, "system_acted", activity.SystemActor())
+	testdb.SeedOperatorActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, "operator_acted", "Mark Goho", time.Now())
 	// A plain departure still names her through 00116, so the one absence
 	// left is a Doula who deleted her own login (#1455): her Membership
 	// ended by endEveryMembership, her staff row redacted.
@@ -171,6 +173,7 @@ func TestList_NamesEveryKindOfActorOnce(t *testing.T) {
 		"departed_acted": activity.DepartedStaffName,
 		"client_acted":   "Margaretha",
 		"system_acted":   activity.SystemActorName,
+		"operator_acted": "Mark Goho at DoulaCloud",
 	}
 	got := map[string]string{}
 	for _, item := range page.Items {
@@ -197,9 +200,15 @@ func TestActorName_ClientActorForm(t *testing.T) {
 		{activitypage.ActorFirstName, "Bex"},
 		{activitypage.ActorFullName, "Bex Okafor"},
 	} {
-		if got := activitypage.ActorName(string(activity.ActorClient), sql.NullString{}, given, preferred, family, tc.form); got != tc.want {
+		if got := activitypage.ActorName(string(activity.ActorClient), sql.NullString{}, given, preferred, family, sql.NullString{}, tc.form); got != tc.want {
 			t.Errorf("ActorName(form %d) = %q, want %q", tc.form, got, tc.want)
 		}
+	}
+}
+
+func TestActorName_AnOperatorWithNoNameReadsAsDoulaCloud(t *testing.T) {
+	if got := activitypage.ActorName(string(activity.ActorOperator), sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, activitypage.ActorFullName); got != activity.SystemActorName {
+		t.Fatalf("ActorName(operator, no name) = %q, want %q", got, activity.SystemActorName)
 	}
 }
 
