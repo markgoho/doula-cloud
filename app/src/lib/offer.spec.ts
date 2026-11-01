@@ -5,6 +5,7 @@ import {
 	createOffer,
 	decideDescription,
 	decideOffer,
+	decisionOutcome,
 	declinePreAccountOffer,
 	formatFee,
 	isOpen,
@@ -125,6 +126,43 @@ describe('decideOffer', () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse('that offer is no longer open -- it is superseded', 409));
 
 		await expect(decideOffer(fetcher, 'practice-1', 'offer-1', 'accept')).rejects.toThrow('superseded');
+	});
+});
+
+const href = (engagementId: string) => `/engagements/${engagementId}`;
+
+describe('decisionOutcome', () => {
+	const accepted = {
+		offerId: 'offer-1',
+		state: 'accepted' as const,
+		engagementId: 'eng-1',
+		engagementKind: 'birth' as const,
+		clientName: 'Adaeze Nwosu'
+	};
+
+	it('says a birth is hers and links to it', () => {
+		expect(decisionOutcome(accepted, 'Rooted', href)).toEqual({
+			message: "You accepted. You're on Adaeze Nwosu's birth.",
+			link: { href: '/engagements/eng-1', label: "Open Adaeze Nwosu's birth" }
+		});
+	});
+
+	it('says postpartum care for a postpartum Engagement', () => {
+		expect(decisionOutcome({ ...accepted, engagementKind: 'postpartum' }, 'Rooted', href).message).toBe(
+			"You accepted. You're on Adaeze Nwosu's postpartum care."
+		);
+	});
+
+	it('says only that she accepted when the answer names no Engagement', () => {
+		expect(decisionOutcome({ offerId: 'offer-1', state: 'accepted' }, 'Rooted', href)).toEqual({
+			message: 'You accepted.'
+		});
+	});
+
+	it('says where the Practice reads a decline', () => {
+		expect(decisionOutcome({ offerId: 'offer-1', state: 'declined' }, 'Rooted', href)).toEqual({
+			message: "You declined. Rooted can see that on the Client's page."
+		});
 	});
 });
 

@@ -16,7 +16,7 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { Offer } from '#lib/offer.js';
-import type { RouteFixture } from '../../../routeFixture.js';
+import { practiceSession, type RouteFixture } from '../../../routeFixture.js';
 import Page from './+page.svelte';
 
 const offers: Offer[] = [
@@ -83,6 +83,8 @@ export const fixture: RouteFixture = {
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/offers',
+	// #2268: the decline confirm and its outcome name the Practice.
+	pageData: practiceSession(['doula']),
 	respond: () => jsonResponse({ items: offers }),
 	readyText: 'Your offers'
 };

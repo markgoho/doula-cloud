@@ -1,6 +1,11 @@
 <script lang="ts">
 	import OfferInbox from '#lib/components/organisms/OfferInbox.svelte';
-	import type { Offer } from '#lib/offer.js';
+	import type { Offer, OfferDecision } from '#lib/offer.js';
+
+	const decide = async (offerId: string, action: 'accept' | 'decline'): Promise<OfferDecision> => ({
+		offerId,
+		state: action === 'accept' ? 'accepted' : 'declined'
+	});
 
 	/*
 	 * The longest realistic value, not a representative one (ADR-0025): an
@@ -67,11 +72,11 @@
 
 	<section>
 		<h2>One still open, one already decided</h2>
-		<OfferInbox {offers} onDecide={async () => {}} />
+		<OfferInbox {offers} onDecide={decide} practiceName="Rooted Birth Collective" engagementHref={() => '#'} />
 	</section>
 
 	<section>
 		<h2>Nothing offered</h2>
-		<OfferInbox offers={[]} onDecide={async () => {}} />
+		<OfferInbox offers={[]} onDecide={decide} practiceName="Rooted Birth Collective" engagementHref={() => '#'} />
 	</section>
 </stack-l>
