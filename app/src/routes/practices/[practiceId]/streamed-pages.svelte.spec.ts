@@ -107,6 +107,28 @@ describe.each(screens)('%s', (_name, screen) => {
 	});
 });
 
+// #2270: a contractor whose Attachment ended reads that the work ended,
+// in the BFF's words, in place of "Page not found".
+it('says the work ended where the Engagement was', async () => {
+	await setup(
+		Engagement as unknown as StreamingPage,
+		Promise.resolve({
+			isLoaded: false,
+			response: Response.json(
+				{ code: 'ATTACHMENT_ENDED', message: 'Your work on the birth due Feb 2027 ended on Oct 31, 2026.' },
+				{ status: 410 }
+			)
+		})
+	);
+
+	await expect.element(testPage.getByRole('heading', { name: 'Your work has ended' })).toBeVisible();
+	await expect.element(testPage.getByText('Your work on the birth due Feb 2027 ended on Oct 31, 2026.')).toBeVisible();
+	await expect
+		.element(testPage.getByRole('link', { name: 'Your offers' }))
+		.toHaveAttribute('href', '/practices/practice-1/offers');
+	await expect.element(testPage.getByText('Page not found')).not.toBeInTheDocument();
+});
+
 // #1710: a save hands its message over only while its own navigation
 // runs, which ends once this page draws its loading state and before the
 // read lands. The page takes it then, and the loaded screen says it.

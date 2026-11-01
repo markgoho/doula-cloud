@@ -7,6 +7,7 @@ import {
 	decideOffer,
 	decisionOutcome,
 	declinePreAccountOffer,
+	engagementLinkLabel,
 	formatFee,
 	isOpen,
 	loadEngagementOffers,
@@ -265,5 +266,15 @@ describe('decideDescription', () => {
 
 	it('names it by when it was sent once her Client is erased (#2385, #2389)', () => {
 		expect(decideDescription(erased)).toBe(`Sent ${sent}`);
+	});
+});
+
+describe('engagementLinkLabel', () => {
+	it('names the birth by its due month (#2269)', () => {
+		expect(engagementLinkLabel({ dueMonth: '2027-02' })).toBe('Open the birth due Feb 2027');
+	});
+
+	it('says this work when the month was erased', () => {
+		expect(engagementLinkLabel({})).toBe('Open this work');
 	});
 });

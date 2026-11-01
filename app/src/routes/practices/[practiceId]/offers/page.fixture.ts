@@ -60,7 +60,24 @@ const offers: Offer[] = [
 		offeredAt: '2026-06-01T00:00:00Z',
 		expiresAt: '2026-06-08T00:00:00Z',
 		decidedAt: '2026-06-02T00:00:00Z',
-		feePaid: { amountCents: 450_000, method: 'bank_transfer', paidOn: '2026-09-30' }
+		feePaid: { amountCents: 450_000, method: 'bank_transfer', paidOn: '2026-09-30' },
+		// #2270: the work ended, so no link to it.
+		endedOn: '2026-10-31'
+	},
+	// #2269: an accepted Offer she still reaches links to its Engagement.
+	{
+		offerId: 'offer-5',
+		state: 'accepted',
+		clientFirstInitial: '',
+		clientArea: '',
+		dueDate: '',
+		dueMonth: '2027-12',
+		amountCents: 450_000,
+		employmentType: 'contractor',
+		offeredAt: '2026-04-01T00:00:00Z',
+		expiresAt: '2026-04-08T00:00:00Z',
+		decidedAt: '2026-04-02T00:00:00Z',
+		engagementId: 'engagement-5'
 	},
 	// #2385: an open Offer whose Client was erased carries none of her
 	// fields, so it renders without the Client rows and is told apart

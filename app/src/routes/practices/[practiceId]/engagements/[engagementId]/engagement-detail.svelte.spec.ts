@@ -70,7 +70,7 @@ interface Detail {
 	clientHasEmail?: boolean;
 	doulas: { staffId: string; name: string }[];
 	canAttachSelf: boolean;
-	yourFee?: { amountCents: number; acceptedOn: string };
+	yourFee?: { amountCents: number; acceptedOn: string; terms?: string };
 }
 
 // The Engagement is handed in as `data` rather than stubbed out of a
@@ -684,9 +684,12 @@ describe('the status-move controls (#253)', () => {
 		await testPage.getByRole('button', { name: 'Mark care complete' }).click();
 		await testPage.getByLabelText('The work finished as agreed').click();
 		await testPage.getByLabelText('Note (optional)').fill('Baby arrived safely.');
+		const onCallReads = callsTo('/on-call').length;
 		await testPage.getByRole('button', { name: 'Confirm completion' }).click();
 
 		await expect.poll(() => requests).toHaveLength(1);
+		// #2270: completion ends every Attachment, so On call is read again.
+		await vi.waitFor(() => expect(callsTo('/on-call').length).toBeGreaterThan(onCallReads));
 		expect(requests[0]!.body).toEqual({
 			status: 'completed',
 			endingReason: 'care_complete',
@@ -3501,6 +3504,16 @@ describe('what a reader sees about money (#2002, #2003)', () => {
 
 		await expect.element(testPage.getByText('Your fee')).toBeVisible();
 		await expect.element(testPage.getByText('$12,620.00, the fee you accepted on Jul 22, 2026')).toBeVisible();
+	});
+
+	it('shows a contractor the terms she accepted beside her fee (#2269)', async () => {
+		await setupMoney(contractorReader, {
+			...fixtureDetail,
+			yourFee: { amountCents: 45_000, acceptedOn: '2026-10-27', terms: 'Backup for the birth, on call from 38 weeks.' }
+		});
+
+		await expect.element(testPage.getByText('Terms', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText('Backup for the birth, on call from 38 weeks.')).toBeVisible();
 	});
 
 	it('draws no fee row for a reader the BFF sends no fee', async () => {

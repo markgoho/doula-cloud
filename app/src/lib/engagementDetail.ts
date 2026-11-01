@@ -116,6 +116,9 @@ A Doula's own agreed fee. Mirrors the Go BFF's engagement.AgreedFee.
 */
 export interface AgreedFee {
 	amountCents: number;
+	/** The Offer's terms she accepted with the fee (#2269), absent when
+	 * the Offer had none. */
+	terms?: string;
 	/**
 	`YYYY-MM-DD`, the Practice's calendar day (ADR-0036).
 	*/
@@ -126,6 +129,15 @@ export interface AgreedFee {
  * then the day she accepted it, so she can tell which Offer it was. */
 export function yourFeeValue(fee: AgreedFee): string {
 	return `${formatMoney(fee.amountCents, 'USD')}, the fee you accepted on ${formatCalendarDay(fee.acceptedOn)}`;
+}
+
+/** "Your fee" and, beside it, the terms she accepted with it (#2269),
+ * labeled "Terms" as on the Offer card she accepted. */
+export function yourFeeRows(fee: AgreedFee): { label: string; value: string }[] {
+	return [
+		{ label: 'Your fee', value: yourFeeValue(fee) },
+		...(fee.terms ? [{ label: 'Terms', value: fee.terms }] : [])
+	];
 }
 
 /** One Doula on an Engagement. Mirrors the Go BFF's

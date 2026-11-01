@@ -145,6 +145,12 @@ const (
 	// permission refusal"). Telling them apart by their prose is what
 	// #692 forbids.
 	CodeCardPaymentsNotSetUp Code = "CARD_PAYMENTS_NOT_SET_UP"
+	// CodeAttachmentEnded is #2270's 410 on an Engagement read: the
+	// contractor asking held a granted Attachment on it, and it has
+	// ended, so her reach is gone. Its own code, so the app says the work
+	// ended in place of "Page not found". A person who was never on it
+	// still gets the plain 404.
+	CodeAttachmentEnded Code = "ATTACHMENT_ENDED"
 )
 
 // ForbiddenCodes is the recorded set of reason codes a 403 may carry

@@ -15,7 +15,7 @@ import type { FeePaid } from './doulaFee.js';
 import type { Fetcher } from './fetcher.js';
 
 import { apiErrorMessage } from './apiErrorMessage.js';
-import { formatCalendarDay, formatInstantWithClock } from './dates.js';
+import { formatCalendarDay, formatCalendarMonth, formatInstantWithClock } from './dates.js';
 import { formatMoney } from './money.js';
 
 /** One Offer as either side reads it. targetName/targetAddress are filled
@@ -45,6 +45,12 @@ export interface Offer {
 	/** What the Practice recorded paying her for this job (#2271): only
 	 * on her own inbox, only on an accepted Offer, and only once recorded. */
 	feePaid?: FeePaid;
+	/** The Engagement an accepted Offer put her on (#2269): only on her
+	 * own inbox, and only while she still reaches it. */
+	engagementId?: string;
+	/** `YYYY-MM-DD`, the Practice's day the Attachment this accepted
+	 * Offer granted ended (#2270): only on her own inbox. */
+	endedOn?: string;
 }
 
 /** The six states an Offer's lifecycle passes through -- the offer_state
@@ -290,6 +296,15 @@ export function decideDescription(offer: ClientFields & { offeredAt: string }): 
 	const sent = `sent ${formatInstantWithClock(offer.offeredAt)}`;
 	const description = [offer.clientArea, due, sent].filter(Boolean).join(', ');
 	return description.charAt(0).toUpperCase() + description.slice(1);
+}
+
+/**
+ * The link from an accepted Offer to its Engagement (#2269). The card
+ * names no Client, so the due month tells two jobs apart, in the words
+ * of the persona consults on #2269.
+ */
+export function engagementLinkLabel(offer: { dueMonth?: string }): string {
+	return offer.dueMonth ? `Open the birth due ${formatCalendarMonth(offer.dueMonth)}` : 'Open this work';
 }
 
 /**

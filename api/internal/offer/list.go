@@ -14,9 +14,10 @@ import (
 // Summary is one Offer as either side reads it. The four decidable facts
 // and the terms are the whole of what an offered-not-accepted Doula may
 // read about the work (ADR-0008's fifth read column) -- there is
-// deliberately no Client name, no Engagement id, and no Contract figure
-// here, so this one DTO is safe to serve to her and informative enough
-// for the Owner who sent it.
+// deliberately no Client name and no Contract figure here, and an
+// Engagement id only on an accepted Offer she still reaches (#2269), so
+// this one DTO is safe to serve to her and informative enough for the
+// Owner who sent it.
 type Summary struct {
 	OfferID            string `json:"offerId"`
 	State              string `json:"state"`
@@ -43,6 +44,13 @@ type Summary struct {
 	// accepted Offer put on her Attachment, open or ended. Only her own
 	// inbox carries it, and it is absent until one is recorded.
 	FeePaid *FeePaid `json:"feePaid,omitempty"`
+	// EngagementID (#2269) is the Engagement an accepted Offer put her
+	// on, on her own inbox only and only while she still reaches it, so
+	// the card links to the work. An open Offer never carries it.
+	EngagementID string `json:"engagementId,omitempty"`
+	// EndedOn (#2270) is the Practice's calendar day the Attachment this
+	// accepted Offer granted ended, on her own inbox only.
+	EndedOn string `json:"endedOn,omitempty"`
 }
 
 // FeePaid is what she reads of a Fee Payment: how much, how, and the day
@@ -77,6 +85,7 @@ func InboxHandler() http.Handler {
 			return
 		}
 		staffID, _ := staffauth.StaffID(r.Context())
+		reader, _ := staffauth.ReaderFrom(r.Context())
 
 		if err := expireOpen(r.Context(), tx, byStaffID, staffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -92,16 +101,26 @@ func InboxHandler() http.Handler {
 			`SELECT o.id, o.state::text, o.client_first_initial, o.client_area, o.due_date,
 			        o.amount_cents, o.terms, o.employment_type::text, o.offered_at, o.expires_at,
 			        o.decided_at, '', '', fp.amount_cents, fp.method, fp.paid_on::text,
-			        CASE WHEN o.state = 'accepted' THEN to_char(o.due_date, 'YYYY-MM') END
+			        CASE WHEN o.state = 'accepted' THEN to_char(o.due_date, 'YYYY-MM') END,
+			        -- #2269: a confined contractor reaches the Engagement
+			        -- only through the open Attachment; anyone else reaches
+			        -- every Engagement at the Practice (ADR-0008).
+			        CASE WHEN o.state = 'accepted'
+			              AND (NOT $5::boolean OR (att.id IS NOT NULL AND att.ended_at IS NULL))
+			             THEN o.engagement_id::text END,
+			        to_char((att.ended_at AT TIME ZONE p.timezone)::date, 'YYYY-MM-DD')
 			   FROM engagement_offers o
-			   -- The Attachment this Offer's acceptance granted: the latest
-			   -- one with a fee on the pair, opened no later than the
+			   JOIN engagements e ON e.id = o.engagement_id
+			   JOIN practices p ON p.id = e.practice_id
+			   -- The Attachment in force when this Offer was accepted: the
+			   -- latest granted one on the pair, opened no later than the
 			   -- acceptance (staffauth.Grant writes both in one transaction).
+			   -- An employee's carries no fee, and so no Fee Payment.
 			   LEFT JOIN LATERAL (
-			        SELECT ea.id FROM engagement_attachments ea
+			        SELECT ea.id, ea.ended_at FROM engagement_attachments ea
 			         WHERE o.state = 'accepted'
 			           AND ea.engagement_id = o.engagement_id AND ea.staff_id = o.staff_id
-			           AND ea.origin = 'granted' AND ea.fee_amount_cents IS NOT NULL
+			           AND ea.origin = 'granted'
 			           AND ea.attached_at <= o.decided_at
 			         ORDER BY ea.attached_at DESC
 			         LIMIT 1
@@ -118,7 +137,7 @@ func InboxHandler() http.Handler {
 			    AND ($2::timestamptz IS NULL OR (o.offered_at, o.id) < ($2::timestamptz, $3::uuid))
 			  ORDER BY o.offered_at DESC, o.id DESC
 			  LIMIT $4`,
-			staffID, after)
+			staffID, after, reader.IsAmbientContractor())
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -161,7 +180,7 @@ func EngagementListHandler() http.Handler {
 			`SELECT o.id, o.state::text, o.client_first_initial, o.client_area, o.due_date,
 			        o.amount_cents, o.terms, o.employment_type::text, o.offered_at, o.expires_at,
 			        o.decided_at, COALESCE(s.name, ''), COALESCE(s.email, pi.address, ''),
-			        NULL::bigint, NULL::text, NULL::text, NULL::text
+			        NULL::bigint, NULL::text, NULL::text, NULL::text, NULL::text, NULL::text
 			   FROM engagement_offers o
 			   LEFT JOIN staff s ON s.id = o.staff_id
 			   LEFT JOIN practice_invitations pi ON pi.id = o.invitation_id
@@ -195,18 +214,18 @@ func parseCursor(w http.ResponseWriter, r *http.Request) (*cursor, bool) {
 }
 
 // list runs one of the two queries above and scans one page of Summary
-// rows out of it. Both select the same seventeen columns in the same order
-// and take the same four parameters, which is what lets one scanner
-// serve both. It asks for pageSize+1 rows and returns pageSize, so
+// rows out of it. Both select the same nineteen columns in the same order
+// and take the same first four parameters, which is what lets one scanner
+// serve both; extra is the inbox's fifth. It asks for pageSize+1 rows and returns pageSize, so
 // "is there another page" is answered without a second count query.
-func list(ctx context.Context, tx *sql.Tx, query, arg string, after *cursor) (ListResponse, error) {
+func list(ctx context.Context, tx *sql.Tx, query, arg string, after *cursor, extra ...any) (ListResponse, error) {
 	var afterTime *time.Time
 	var afterID *string
 	if after != nil {
 		afterTime = &after.offeredAt
 		afterID = &after.offerID
 	}
-	rows, err := tx.QueryContext(ctx, query, arg, afterTime, afterID, pageSize+1)
+	rows, err := tx.QueryContext(ctx, query, append([]any{arg, afterTime, afterID, pageSize + 1}, extra...)...)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return ListResponse{}, fmt.Errorf("offer: query offers: %w", err)
@@ -223,11 +242,12 @@ func list(ctx context.Context, tx *sql.Tx, query, arg string, after *cursor) (Li
 		var offeredAt, expiresAt time.Time
 		var dueDate, decidedAt sql.NullTime
 		var amountCents sql.NullInt64
-		var initial, area, terms, paidMethod, paidOn, dueMonth sql.NullString
+		var initial, area, terms, paidMethod, paidOn, dueMonth, engagementID, endedOn sql.NullString
 		var paidCents sql.NullInt64
 		if err := rows.Scan(&s.OfferID, &s.State, &initial, &area, &dueDate,
 			&amountCents, &terms, &s.EmploymentType, &offeredAt, &expiresAt, &decidedAt,
-			&s.TargetName, &s.TargetAddress, &paidCents, &paidMethod, &paidOn, &dueMonth); err != nil {
+			&s.TargetName, &s.TargetAddress, &paidCents, &paidMethod, &paidOn, &dueMonth,
+			&engagementID, &endedOn); err != nil {
 			// coverage:ignore reason: DB scan failure, not exercised by unit tests
 			return ListResponse{}, fmt.Errorf("offer: scan offer row: %w", err)
 		}
@@ -249,6 +269,8 @@ func list(ctx context.Context, tx *sql.Tx, query, arg string, after *cursor) (Li
 		// accepted Offer on her inbox keeps DueMonth.
 		lapseClientFields(s.State, &s.ClientFirstInitial, &s.ClientArea, &s.DueDate)
 		s.DueMonth = dueMonth.String
+		s.EngagementID = engagementID.String
+		s.EndedOn = endedOn.String
 		items = append(items, s)
 		offeredAts = append(offeredAts, offeredAt)
 	}
