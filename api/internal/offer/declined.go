@@ -51,7 +51,7 @@ func DeclinedHandler() http.Handler {
 		if raw := r.URL.Query().Get("cursor"); raw != "" {
 			c, err := pagecursor.Decode(raw)
 			if err != nil {
-				apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
+				apierr.WriteError(w, "That page of declined offers cannot be found. Load the list again.", http.StatusBadRequest)
 				return
 			}
 			afterAt, afterID = &c.At, &c.ID

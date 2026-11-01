@@ -418,9 +418,9 @@
 		<stack-l space="var(--space-3)">
 			<Heading level={2} variant="section" text="No Doula yet" />
 			{#if declined === 'unavailable'}
-				<Text text="Could not load declined offers just now." tone="muted" />
+				<Text text="Could not load declined Offers just now." tone="muted" />
 			{:else}
-				<Text text="The offer was declined, and nobody else has the work or an open offer." tone="variant" />
+				<Text text="The Offer was declined, and nobody else has the work or an open Offer." tone="variant" />
 				<ul class="declined-list">
 					{#each declined.items as item (item.offerId)}
 						<li>

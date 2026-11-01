@@ -437,7 +437,7 @@ describe('the Practice landing page', () => {
 	it('says so when the declined Offers cannot be read', async () => {
 		await setup({ overrides: { 'offers/declined': refusal('nope') } });
 
-		await expect.element(testPage.getByText('Could not load declined offers just now.')).toBeVisible();
+		await expect.element(testPage.getByText('Could not load declined Offers just now.')).toBeVisible();
 	});
 
 	it('never asks a Doula without Owner or Admin for the declined Offers', async () => {
