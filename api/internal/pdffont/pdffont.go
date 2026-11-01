@@ -17,6 +17,25 @@
 // text laid invisibly over it so it still copies out and searches as
 // typed. Emoji are drawn the same way, in a monochrome face (#2544).
 //
+// Readers rebuild a right-to-left line's typed order by their own
+// heuristics, which conflict, so the invisible layer suits one and is
+// checked in four (#2549; readers_test.go runs the first two):
+//
+//   - PyMuPDF 2.0 (MuPDF 1.28.5), which the layer is laid out for, copies
+//     every case out as typed. MuPDF 1.27's mutool drops the space before
+//     a bracket that follows Arabic.
+//   - poppler 26.01 (pdftotext, Evince, Okular) keeps each Arabic word
+//     whole and in order, but places a bracket, a period or a Latin label
+//     on a mostly-Arabic line where it sorts them by position, and puts a
+//     mark before its letter.
+//   - pdf.js 5.4 (Firefox) keeps the letters in order, but drops each space
+//     that touches an Arabic letter and puts a mark before its letter.
+//   - PDFium 156 (Chrome, Edge) reorders each line by position with its
+//     own bidi pass: on a left-to-right line Arabic words come out left to
+//     right, and a bracket closing an Arabic run comes out turned.
+//
+// A PDF Chromium prints from the same text does no better in any of them.
+//
 // The faces, and the license each is embedded and redistributed under,
 // sit in fonts/ beside their license text:
 //
