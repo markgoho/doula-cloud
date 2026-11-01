@@ -28,28 +28,6 @@ const FIELD_OF: Record<string, string> = {
 	requestedOn: REQUESTED_ON_TARGET
 };
 
-const dollars = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
-
-/**
-An amount in cents as a person reads it: $42.74.
-*/
-export function money(cents: number): string {
-	return dollars.format(cents / 100);
-}
-
-/**
-A YYYY-MM-DD date as a person reads it: 30 October 2026.
-*/
-export function longDate(isoDate: string): string {
-	const [year, month, day] = isoDate.split('-').map(Number);
-	return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString('en-US', {
-		timeZone: 'UTC',
-		month: 'long',
-		day: 'numeric',
-		year: 'numeric'
-	});
-}
-
 /**
 The three date boxes as YYYY-MM-DD, or undefined when they are not one real date.
 */

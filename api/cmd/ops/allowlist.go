@@ -96,7 +96,7 @@ func pilotAddressAct(db *sql.DB) http.HandlerFunc {
 		err = tx.QueryRowContext(r.Context(), `SELECT added_at FROM ops_pilot_address_added_at($1)`, address).Scan(&addedAt)
 		if err == nil {
 			apierr.Write(w, http.StatusConflict, apierr.CodeConflict,
-				fmt.Sprintf(msgPilotAlreadyAdded, address, addedAt.In(businessZone).Format("2 January 2006")), nil)
+				fmt.Sprintf(msgPilotAlreadyAdded, address, businessDay(addedAt)), nil)
 			return
 		}
 		if !errors.Is(err, sql.ErrNoRows) {

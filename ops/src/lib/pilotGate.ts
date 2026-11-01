@@ -8,18 +8,6 @@ export type PilotGate = { openedAt: string | null };
 type Fetch = typeof fetch;
 
 /**
-The day an opening was made, in New York.
-*/
-export function openedOn(instant: string): string {
-	return new Date(instant).toLocaleDateString('en-US', {
-		timeZone: 'America/New_York',
-		month: 'long',
-		day: 'numeric',
-		year: 'numeric'
-	});
-}
-
-/**
 Whether the gate is open, which the check page reads before it asks for a code.
 */
 export async function readPilotGate(fetcher: Fetch = fetch): Promise<Outcome<PilotGate>> {

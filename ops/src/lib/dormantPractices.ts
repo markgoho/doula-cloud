@@ -1,6 +1,6 @@
 import { refusal, type Outcome } from './act.ts';
 import { credits } from './foundingGrant.ts';
-import { day } from './practices.ts';
+import { newYorkDay } from './dates.ts';
 
 type Instant = string;
 
@@ -19,9 +19,9 @@ Each field the dormant list shows for one Practice, as a summary list's rows.
 */
 export function dormantFacts(row: DormantPractice): { label: string; value: string }[] {
 	return [
-		{ label: 'Signed up', value: day(row.signedUpAt) },
+		{ label: 'Signed up', value: newYorkDay(row.signedUpAt) },
 		{ label: 'Credits held', value: credits(row.balance) },
-		{ label: 'Last contact', value: row.lastContactAt ? day(row.lastContactAt) : 'Never' }
+		{ label: 'Last contact', value: row.lastContactAt ? newYorkDay(row.lastContactAt) : 'Never' }
 	];
 }
 

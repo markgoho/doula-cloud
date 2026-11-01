@@ -4,8 +4,8 @@
 	import { resolve } from '$app/paths';
 	import type { FormError } from '#lib/authRefusal.js';
 	import { readLegalVersions, type LegalVersion } from '#lib/legalVersions.js';
-	import { openedOn } from '#lib/pilotGate.js';
-	import { longDate } from '#lib/refund.js';
+	import { newYorkDay } from '#lib/dates.js';
+	import { longDate } from '#lib/dates.js';
 	import { readSession } from '#lib/session.js';
 	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
 
@@ -39,7 +39,7 @@
 					<h2>{version.documentName}, takes effect {longDate(version.version)}</h2>
 					<p>{version.change}</p>
 					{#if version.publishedAt}
-						<p>Published on {openedOn(version.publishedAt)}.</p>
+						<p>Published on {newYorkDay(version.publishedAt)}.</p>
 					{:else}
 						<p>
 							<a href={resolve('/legal-versions/[document]/[version]', { document: version.document, version: version.version })}

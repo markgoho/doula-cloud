@@ -99,7 +99,7 @@ func pilotGateOpenAct(db *sql.DB) http.HandlerFunc {
 		}
 		if openedAt != nil {
 			apierr.Write(w, http.StatusConflict, apierr.CodeConflict,
-				fmt.Sprintf(msgGateAlreadyOpen, openedAt.In(businessZone).Format("January 2, 2006")), nil)
+				fmt.Sprintf(msgGateAlreadyOpen, businessDay(*openedAt)), nil)
 			return
 		}
 

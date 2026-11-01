@@ -62,6 +62,13 @@ describe('practiceFacts', () => {
 		]);
 	});
 
+	it('dates a sign-up by the day it was in New York, not in UTC', () => {
+		const lateEvening = { ...brandNew, signedUpAt: '2026-09-15T02:00:00Z' };
+		const facts = Object.fromEntries(practiceFacts(lateEvening).map((fact) => [fact.label, fact.value]));
+
+		expect(facts['Signed up']).toBe('September 14, 2026');
+	});
+
 	it('says what a new Practice does not have yet', () => {
 		const facts = Object.fromEntries(practiceFacts(brandNew).map((fact) => [fact.label, fact.value]));
 

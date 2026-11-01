@@ -14,8 +14,8 @@
 		type LegalPublication,
 		type LegalVersionCheck
 	} from '#lib/legalVersions.js';
-	import { openedOn } from '#lib/pilotGate.js';
-	import { longDate } from '#lib/refund.js';
+	import { newYorkDay } from '#lib/dates.js';
+	import { longDate } from '#lib/dates.js';
 	import { readSession, type Operator } from '#lib/session.js';
 	import { stepUp } from '#lib/stepUp.js';
 	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
@@ -95,7 +95,7 @@
 	<stack-l>
 		<h1 tabindex="-1">This version is published</h1>
 		<p>
-			The {check.documentName} that takes effect {longDate(check.version)} was published on {openedOn(
+			The {check.documentName} that takes effect {longDate(check.version)} was published on {newYorkDay(
 				check.publishedAt
 			)}. A version is published once.
 		</p>

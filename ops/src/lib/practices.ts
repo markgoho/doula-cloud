@@ -1,6 +1,6 @@
 import { refusal, type Outcome } from './act.ts';
 import { credits } from './foundingGrant.ts';
-import { longDate } from './refund.ts';
+import { newYorkDay } from './dates.ts';
 
 type Instant = string;
 
@@ -31,10 +31,6 @@ export type PracticeList = 'live' | 'deleted';
 
 type Fetch = typeof fetch;
 
-export function day(instant: Instant): string {
-	return longDate(instant.slice(0, 10));
-}
-
 function owners(row: PracticeRow): { label: string; value: string } {
 	const named = row.owners.map((owner) => `${owner.name}, ${owner.email}`);
 	if (named.length === 0) return { label: 'Owner', value: 'No Owner' };
@@ -45,19 +41,19 @@ function stripeConnect({ stripeConnect: connect }: PracticeRow): string {
 	if (!connect.connected) return 'Not connected';
 	const parts = [`Card payments ${connect.cardPayments}, payouts ${connect.payouts}`];
 	if (connect.requirementsDue.length > 0) parts.push(`Still due: ${connect.requirementsDue.join(', ')}`);
-	if (connect.updatedAt) parts.push(`Updated ${day(connect.updatedAt)}`);
+	if (connect.updatedAt) parts.push(`Updated ${newYorkDay(connect.updatedAt)}`);
 	return parts.join('. ');
 }
 
 function foundingGrant({ foundingGrant: grant }: PracticeRow): string {
 	if (!grant) return 'Not given';
-	if (!grant.givenBy) return `${credits(grant.credits)}, given on ${day(grant.givenAt)}, before ops recorded who gave it`;
-	return `${credits(grant.credits)}, given by ${grant.givenBy} on ${day(grant.givenAt)}`;
+	if (!grant.givenBy) return `${credits(grant.credits)}, given on ${newYorkDay(grant.givenAt)}, before ops recorded who gave it`;
+	return `${credits(grant.credits)}, given by ${grant.givenBy} on ${newYorkDay(grant.givenAt)}`;
 }
 
 function deletion({ deletion: d }: PracticeRow): string {
-	if (d?.deletedAt) return `Deleted ${day(d.deletedAt)}`;
-	if (d?.requestedAt && d.finalizesAt) return `Asked for ${day(d.requestedAt)}. Finalizes ${day(d.finalizesAt)}`;
+	if (d?.deletedAt) return `Deleted ${newYorkDay(d.deletedAt)}`;
+	if (d?.requestedAt && d.finalizesAt) return `Asked for ${newYorkDay(d.requestedAt)}. Finalizes ${newYorkDay(d.finalizesAt)}`;
 	return 'Not asked for';
 }
 
@@ -66,7 +62,7 @@ Each field the Practice list shows for one Practice, as a summary list's rows.
 */
 export function practiceFacts(row: PracticeRow): { label: string; value: string }[] {
 	return [
-		{ label: 'Signed up', value: day(row.signedUpAt) },
+		{ label: 'Signed up', value: newYorkDay(row.signedUpAt) },
 		owners(row),
 		{ label: 'Staff', value: String(row.staffCount) },
 		{ label: 'Stripe Connect', value: stripeConnect(row) },

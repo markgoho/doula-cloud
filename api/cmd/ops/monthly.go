@@ -17,19 +17,6 @@ const monthLayout = "2006-01"
 
 const msgMonthNotClosed = "Choose a month that has ended, written as YYYY-MM."
 
-// businessZone is where the business keeps its books, so a month starts
-// at midnight there and not at midnight UTC.
-var businessZone = mustLoadZone("America/New_York")
-
-func mustLoadZone(name string) *time.Location {
-	loc, err := time.LoadLocation(name)
-	if err != nil {
-		// coverage:ignore reason: the zone is embedded by time/tzdata, so it always loads
-		panic(err)
-	}
-	return loc
-}
-
 type practiceMonth struct {
 	ID            string `json:"id"`
 	Name          string `json:"name"`

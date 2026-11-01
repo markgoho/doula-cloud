@@ -123,7 +123,7 @@ func TestPilotAddressAdd_RefusesAnAddressAlreadyOnTheList(t *testing.T) {
 	if w.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409; body %s", w.Code, w.Body)
 	}
-	want := "ana@example.com is already on the pilot allowlist. It was added on 2 November 2026, and nothing has changed."
+	want := "ana@example.com is already on the pilot allowlist. It was added on November 2, 2026, and nothing has changed."
 	if got := decodeError(t, w).Message; got != want {
 		t.Errorf("message = %q\nwant %q", got, want)
 	}
@@ -142,7 +142,7 @@ func TestPilotAddressAdd_TheRefusalDatesTheAddInNewYork(t *testing.T) {
 
 	w := s.addPilotAddress(cookie, "pilot-key-2", pilotBody(pilotAddress))
 
-	if got := decodeError(t, w).Message; !strings.Contains(got, "added on 2 November 2026") {
+	if got := decodeError(t, w).Message; !strings.Contains(got, "added on November 2, 2026") {
 		t.Errorf("message = %q, want the New York date", got)
 	}
 }

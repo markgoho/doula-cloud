@@ -31,8 +31,6 @@ const (
 	msgCreditsOverLimit = "Number of Credits must be %d or fewer"
 )
 
-const requestedOnLayout = "2006-01-02"
-
 // fieldCredits is the request DTO's name for the number of Credits.
 const fieldCredits = "credits"
 
@@ -196,11 +194,11 @@ func answerErrors(req refundRequest, now time.Time) map[string]string {
 	if _, err := uuid.Parse(req.RequestedBy); err != nil {
 		details["requestedBy"] = msgOwnerMissing
 	}
-	on, err := time.Parse(requestedOnLayout, req.RequestedOn)
+	_, err := time.Parse(time.DateOnly, req.RequestedOn)
 	switch {
 	case err != nil:
 		details["requestedOn"] = msgDateMissing
-	case on.After(now.UTC()):
+	case req.RequestedOn > businessToday(now).Format(time.DateOnly):
 		details["requestedOn"] = msgDateInTheFuture
 	}
 	return details

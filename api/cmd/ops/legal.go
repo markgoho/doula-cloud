@@ -207,7 +207,7 @@ func longDate(isoDate string) string {
 	if err != nil {
 		return isoDate
 	}
-	return day.Format("January 2, 2006")
+	return day.Format(longDateLayout)
 }
 
 // legalPublishAct publishes one version (#1548, ADR-0062's act table):
@@ -292,7 +292,7 @@ func legalPublishAct(d Deps) http.HandlerFunc {
 		}
 		if isPublished {
 			apierr.Write(w, http.StatusConflict, apierr.CodeConflict,
-				fmt.Sprintf(msgAlreadyPublished, prior.publishedAt.In(businessZone).Format("January 2, 2006")), nil)
+				fmt.Sprintf(msgAlreadyPublished, businessDay(prior.publishedAt)), nil)
 			return
 		}
 

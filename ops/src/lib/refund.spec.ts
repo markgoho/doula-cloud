@@ -2,8 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import {
 	answerErrors,
 	CREDITS_FIELD,
-	longDate,
-	money,
 	readRefundCheck,
 	REQUESTED_BY_FIELD,
 	REQUESTED_ON_TARGET,
@@ -20,13 +18,6 @@ function answering(status: number, body?: unknown) {
 
 const answers = { credits: '2', requestedBy: 'owner-1', day: '30', month: '10', year: '2026' };
 const check = { practiceName: 'Lakeside', owners: [{ staffId: 'owner-1', name: 'Renata Alvarez' }], quote: { credits: 2, amountCents: 4274, taxCents: 274, maxCredits: 5 } };
-
-describe('money and longDate', () => {
-	it('reads cents as dollars and a date as words', () => {
-		expect(money(4274)).toBe('$42.74');
-		expect(longDate('2026-10-30')).toBe('October 30, 2026');
-	});
-});
 
 describe('requestedOn', () => {
 	it('reads the three boxes as one date', () => {

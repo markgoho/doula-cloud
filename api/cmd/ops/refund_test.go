@@ -437,3 +437,25 @@ func TestRefund_AnUnknownPracticeIsNotFound(t *testing.T) {
 		}
 	}
 }
+
+func TestRefundAnswers_ARequestDateIsCheckedAgainstTodayInNewYork(t *testing.T) {
+	req := refundRequest{Credits: 1, RequestedBy: "6f1c2a52-0d6e-4a64-8f5e-6d1b0c1e9a10"}
+	for _, tc := range []struct {
+		name, on string
+		now      time.Time
+		future   bool
+	}{
+		{"8pm, today", "2026-10-30", time.Date(2026, 10, 31, 0, 0, 0, 0, time.UTC), false},
+		{"8pm, tomorrow", "2026-10-31", time.Date(2026, 10, 31, 0, 0, 0, 0, time.UTC), true},
+		{"11:59pm, today", "2026-10-30", time.Date(2026, 10, 31, 3, 59, 0, 0, time.UTC), false},
+		{"11:59pm, tomorrow", "2026-10-31", time.Date(2026, 10, 31, 3, 59, 0, 0, time.UTC), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req.RequestedOn = tc.on
+			got := answerErrors(req, tc.now)["requestedOn"]
+			if want := map[bool]string{true: msgDateInTheFuture}[tc.future]; got != want {
+				t.Errorf("requestedOn %s at %s = %q, want %q", tc.on, tc.now, got, want)
+			}
+		})
+	}
+}

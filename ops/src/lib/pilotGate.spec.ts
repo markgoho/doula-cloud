@@ -1,18 +1,12 @@
 /* eslint-disable unicorn/no-null -- doula-ops answers null for a gate still closed */
 import { describe, expect, it, vi } from 'vitest';
-import { openedOn, readPilotGate, sendPilotGateOpening } from './pilotGate.ts';
+import { readPilotGate, sendPilotGateOpening } from './pilotGate.ts';
 
 function answering(status: number, body?: unknown) {
 	return vi.fn<typeof fetch>(
 		async () => new Response(body === undefined ? undefined : JSON.stringify(body), { status })
 	);
 }
-
-describe('openedOn', () => {
-	it('dates the opening in New York', () => {
-		expect(openedOn('2027-01-02T01:00:00Z')).toBe('January 1, 2027');
-	});
-});
 
 describe('readPilotGate', () => {
 	it('reads whether the gate is open', async () => {

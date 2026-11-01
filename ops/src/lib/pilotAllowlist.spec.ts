@@ -40,7 +40,7 @@ describe('sendPilotAddress', () => {
 	});
 
 	it('says why an address already on the list is refused', async () => {
-		const message = 'ana@example.com is already on the pilot allowlist. It was added on 2 November 2026, and nothing has changed.';
+		const message = 'ana@example.com is already on the pilot allowlist. It was added on November 2, 2026, and nothing has changed.';
 
 		expect(await sendPilotAddress('ana@example.com', 'key-1', answering(409, { code: 'CONFLICT', message }))).toEqual({
 			kind: 'refused',

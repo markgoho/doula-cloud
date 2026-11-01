@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { newYorkDay } from '#lib/dates.js';
 	import { actKey } from '#lib/act.js';
 	import Button from '$ui/atoms/Button.svelte';
 	import { onMount, tick } from 'svelte';
@@ -6,7 +7,7 @@
 	import { resolve } from '$app/paths';
 	import type { FormError } from '#lib/authRefusal.js';
 	import { freshIdToken } from '#lib/firebase.js';
-	import { openedOn, readPilotGate, sendPilotGateOpening, type PilotGate } from '#lib/pilotGate.js';
+	import { readPilotGate, sendPilotGateOpening, type PilotGate } from '#lib/pilotGate.js';
 	import { readSession, type Operator } from '#lib/session.js';
 	import { stepUp } from '#lib/stepUp.js';
 	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
@@ -72,7 +73,7 @@
 {:else if gate?.openedAt}
 	<stack-l>
 		<h1 tabindex="-1">The pilot gate is open</h1>
-		<p>It was opened on {openedOn(gate.openedAt)}. Anyone who signs up can create a Practice, and the gate cannot be closed.</p>
+		<p>It was opened on {newYorkDay(gate.openedAt)}. Anyone who signs up can create a Practice, and the gate cannot be closed.</p>
 	</stack-l>
 	<p><a href={resolve('/')}>Back to DoulaCloud operations</a></p>
 {:else if gate}
