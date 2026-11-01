@@ -2801,6 +2801,28 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 		await expect.element(testPage.getByRole('button', { name: 'Reassign the Visit' })).not.toBeInTheDocument();
 	});
 
+	// #2436: who the BFF emailed about the move, never that anyone knows.
+	it('says who was emailed about the move', async () => {
+		await setupWithRoster();
+		const respond = apiFetchWithSession.getMockImplementation()!;
+		apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) =>
+			init?.method === 'PATCH' && path.endsWith('/visits/visit-1')
+				? Promise.resolve(jsonResponse({ visitId: 'visit-1', staffId: 'staff-2', notifiedStaffIds: ['staff-2', 'staff-1'] }))
+				: respond(path, init)
+		);
+		await reassignVisit(0);
+		await reassignPicker().selectOptions('Jordan Reyes');
+		await testPage.getByRole('button', { name: 'Reassign the Visit' }).click();
+
+		await expect
+			.element(
+				testPage.getByText(
+					/is Jordan Reyes's now, not Anne-Marie Ochieng-Whitfield's\. We emailed Jordan Reyes and Anne-Marie Ochieng-Whitfield to say so\.$/
+				)
+			)
+			.toBeVisible();
+	});
+
 	it('names a Visit that is not yet scheduled as such once it is reassigned', async () => {
 		await setupWithRoster();
 		await reassignVisit(1);

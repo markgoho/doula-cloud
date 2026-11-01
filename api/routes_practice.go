@@ -51,7 +51,7 @@ func registerPracticeRoutes(g *staffauth.GatedRouter, ir *idempotency.Router, d 
 	client.Mount(g, ir, d.NudgeEnqueuer)
 	engagementrequest.Mount(g, ir, d.DB, d.NudgeEnqueuer)
 	engagement.Mount(g, ir)
-	visit.Mount(g, ir)
+	visit.Mount(g, ir, d.NudgeEnqueuer)
 	oncall.Mount(g, ir, d.NudgeEnqueuer)
 	message.Mount(g, ir, d.DB, d.Store, d.Pusher)
 	plans.Mount(g, ir, d.DB)

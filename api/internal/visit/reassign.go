@@ -4,11 +4,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/staffnotice"
+	"doula-cloud/api/internal/tasknudge"
 )
 
 // ReassignRequest names the Doula a Visit should be reassigned to.
@@ -16,10 +19,13 @@ type ReassignRequest struct {
 	StaffID string `json:"staffId"`
 }
 
-// ReassignResponse confirms who a Visit is now assigned to.
+// ReassignResponse confirms who a Visit is now assigned to, and which of
+// the two Doulas were emailed about the move (#2436): everyone it moved
+// onto or off except the person who moved it.
 type ReassignResponse struct {
-	VisitID string `json:"visitId"`
-	StaffID string `json:"staffId"`
+	VisitID          string   `json:"visitId"`
+	StaffID          string   `json:"staffId"`
+	NotifiedStaffIDs []string `json:"notifiedStaffIds"`
 }
 
 // ReassignHandler reassigns a Visit's staff_id to a different Doula at the
@@ -31,7 +37,7 @@ type ReassignResponse struct {
 // whether this caller may name that person (an Owner or an Admin may; a
 // plain Doula may only ever name herself), whether that person may be
 // named, and whether she is granted an attachment for it.
-func ReassignHandler() http.Handler {
+func ReassignHandler(enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, ok := requireVisitWrite(w, r)
 		// coverage:ignore reason: requireVisitWrite only reports false when staffauth.Middleware left no tx or no Reader on context, which cannot happen behind it
@@ -141,6 +147,51 @@ func ReassignHandler() http.Handler {
 			return
 		}
 
-		apierr.WriteJSON(w, http.StatusOK, ReassignResponse{VisitID: visitID, StaffID: staffID})
+		notified, err := queueReassignNotices(r, c, visitID, previousStaffID, staffID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if len(notified) > 0 {
+			tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.StaffNotice))
+		}
+
+		apierr.WriteJSON(w, http.StatusOK, ReassignResponse{VisitID: visitID, StaffID: staffID, NotifiedStaffIDs: notified})
 	})
+}
+
+// queueReassignNotices queues the email to the Doula a Visit moved onto
+// and to the one it moved off (#2436), in the reassignment's own
+// transaction, and returns who they are. A move onto the person already
+// holding it tells nobody, and nobody is told about a move she made
+// herself.
+func queueReassignNotices(r *http.Request, c visitWriteContext, visitID, previousStaffID, staffID string) ([]string, error) {
+	notified := []string{}
+	if previousStaffID == staffID {
+		return notified, nil
+	}
+	for _, n := range []struct {
+		recipient string
+		kind      staffnotice.Kind
+	}{
+		{staffID, staffnotice.KindVisitReassignedTo},
+		{previousStaffID, staffnotice.KindVisitReassignedFrom},
+	} {
+		if n.recipient == c.staffID {
+			continue
+		}
+		if err := staffnotice.Queue(r.Context(), c.tx, staffnotice.Notice{
+			PracticeID:       c.practiceID,
+			RecipientStaffID: n.recipient,
+			Kind:             n.kind,
+			SubjectID:        visitID,
+			TriggeredBy:      c.staffID,
+		}); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return nil, fmt.Errorf("visit: queue reassign notice: %w", err)
+		}
+		notified = append(notified, n.recipient)
+	}
+	return notified, nil
 }

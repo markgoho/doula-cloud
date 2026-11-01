@@ -12,6 +12,7 @@ import (
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/visit"
 )
@@ -47,7 +48,7 @@ func TestRemoveMembershipHandler_LeavesHerNamedInThreadAndSchedule(t *testing.T)
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
 	message.Mount(g, ir, db.App, objectstore.NewMemoryStore(), push.NewFakePusher())
-	visit.Mount(g, ir)
+	visit.Mount(g, ir, &tasknudge.FakeEnqueuer{})
 	ir.ExemptGated("DELETE /api/practices/{practiceId}/staff/{staffId}/membership",
 		"test mount of the production route", false, staffauth.OwnerOnly, staffauth.RemoveMembershipHandler())
 	srv := httptest.NewServer(mux)

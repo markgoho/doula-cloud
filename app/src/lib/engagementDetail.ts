@@ -629,13 +629,16 @@ export async function reassignVisit(
 	reference: EngagementReference,
 	visitId: string,
 	staffId: string
-): Promise<void> {
+): Promise<string[]> {
 	const response = await fetcher(`${visitsURL(reference)}/${visitId}`, {
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ staffId })
 	});
 	if (!response.ok) throw new Error(await apiErrorMessage(response));
+	// #2436: the Staff members the BFF queued an email to about the move.
+	const reassigned: { notifiedStaffIds?: string[] } = await response.json();
+	return reassigned.notifiedStaffIds ?? [];
 }
 
 /**
