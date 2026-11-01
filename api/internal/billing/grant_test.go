@@ -167,19 +167,13 @@ func TestFoundingGrant_IsSpentBeforePurchasedCreditsAndIsNotRefundable(t *testin
 	// stamped with the database's clock and this with Go's.
 	purchaseID := seedPurchase(t, db, practiceID, 2, 2000, 100, "pi_after_grant", time.Now().Add(time.Hour))
 
-	engagements := seedEngagements(t, db, practiceID, 3)
-	tx := practiceTx(t, db, practiceID)
-	for i, engagementID := range engagements {
-		if err := billing.ConsumeCredit(t.Context(), tx, practiceID, engagementID); err != nil {
-			t.Fatalf("consume %d: %v", i, err)
-		}
-	}
+	consume(t, db, practiceID, seedEngagements(t, db, practiceID, 3))
 
 	// Three Credits spent against a three-Credit grant and a two-Credit
 	// purchase: FIFO means all three came out of the grant, so the
 	// purchase is untouched.
 	var drawsOnPurchase int
-	if err := tx.QueryRowContext(t.Context(),
+	if err := db.Admin.QueryRowContext(t.Context(),
 		`SELECT count(*) FROM credit_ledger WHERE drawn_lot_id = $1`, purchaseID,
 	).Scan(&drawsOnPurchase); err != nil {
 		t.Fatalf("count draws on purchase: %v", err)
@@ -190,12 +184,12 @@ func TestFoundingGrant_IsSpentBeforePurchasedCreditsAndIsNotRefundable(t *testin
 
 	// And the grant itself is worth nothing back: the quote counts the
 	// two purchased Credits only, at the price paid for them.
-	quote, err := billing.Refundable(t.Context(), tx, practiceID, time.Now())
+	quote, err := billing.QuoteRefund(t.Context(), opsTx(t, db), practiceID, 0, time.Now())
 	if err != nil {
-		t.Fatalf("Refundable: %v", err)
+		t.Fatalf("QuoteRefund: %v", err)
 	}
-	if quote.Credits != 2 || quote.AmountCents != 4000 {
-		t.Fatalf("quote = %+v, want 2 purchased credits at 4000 cents", quote)
+	if quote.Credits != 2 || quote.AmountCents != 4100 {
+		t.Fatalf("quote = %+v, want 2 purchased credits at 4100 cents including tax", quote)
 	}
 }
 
@@ -211,8 +205,11 @@ func TestFoundingGrant_IsAllThatIsRefusedWhenOnlyAGrantIsHeld(t *testing.T) {
 	if _, err := billing.FoundingGrant(t.Context(), tx, practiceID, testGrantor); err != nil {
 		t.Fatalf("FoundingGrant: %v", err)
 	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
 	client := billing.NewFakeStripeClient()
-	if _, err := billing.Refund(t.Context(), tx, client, practiceID, t.Name(), 1, time.Now()); !errors.Is(err, billing.ErrNothingRefundable) {
+	if _, err := newRefunder(t, db, client).refund(practiceID, t.Name(), 1, time.Now()); !errors.Is(err, billing.ErrNothingRefundable) {
 		t.Fatalf("Refund error = %v, want ErrNothingRefundable", err)
 	}
 	if calls := client.RefundCalls(); len(calls) != 0 {

@@ -34,13 +34,9 @@ func registerInternalRoutes(g *staffauth.GatedRouter, d Deps) {
 	// workflow. The cadence is what covers a build that fails and
 	// produces no deploy and no callback at all.
 	g.Write("POST /api/internal/site/verify-pages", sitebuild.VerifyHandler(d.DB, d.PageVerifier, d.InternalAuth))
-	// #420's two billing endpoints, behind the same guard.
-	// Neither is a screen: /support tells a Practice to email us for a
-	// refund, because a refund issued on her recorded request restarts
-	// the dormancy clock that one we initiated would not (APL 1315), and
-	// the dormancy list is an operator's yearly mailing, not a tenant's
-	// view of anything.
-	g.Write("POST /api/internal/billing/refunds", billing.RefundHandler(d.DB, d.StripeClient, d.InternalAuth))
+	// #420's dormancy list, behind the same guard: an operator's yearly
+	// mailing, not a tenant's view of anything. Its refund moved to
+	// doula-ops (#2481, ADR-0062).
 	g.OpenGet("/api/internal/billing/dormant-practices",
 		"An internal caller identity, not a session -- the operator's escheatment mailing list (#420), the same position every /api/internal worker endpoint holds",
 		billing.DormantPracticesHandler(d.DB, d.InternalAuth))

@@ -12,7 +12,6 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/legal"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
@@ -103,14 +102,9 @@ func TestAgreementGate_RealRoutes(t *testing.T) {
 	}{
 		{"export", http.MethodGet, base + "/export", nil},
 		{"deletion status", http.MethodGet, base + "/deletion", nil},
-		{"Credit refund", http.MethodPost, "/api/internal/billing/refunds", billing.RefundRequest{PracticeID: practiceID, Quantity: 1}},
 		{"sign out", http.MethodDelete, "/api/session", nil},
 	} {
-		session := owner
-		if open.name == "Credit refund" {
-			session = ""
-		}
-		if _, code := do(open.method, open.path, session, open.body); code == apierr.CodeTermsAgreementRequired {
+		if _, code := do(open.method, open.path, owner, open.body); code == apierr.CodeTermsAgreementRequired {
 			t.Errorf("%s refused for want of an agreement, want it left open", open.name)
 		}
 	}

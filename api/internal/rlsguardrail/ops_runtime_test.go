@@ -39,6 +39,10 @@ var wantDefinerFunctions = map[string][]string{
 		"sweep_expired_idempotency_keys(timestamp with time zone)",
 	},
 	"ops_runtime": {
+		"ops_record_refund(uuid,uuid,integer,integer,text,text,uuid,timestamp with time zone)",
+		"ops_refund_by_request_key(uuid,text)",
+		"ops_refund_lots(uuid)",
+		"ops_refund_practice(uuid)",
 		"record_operator_activity(uuid,text,uuid,text,jsonb,uuid,timestamp with time zone)",
 	},
 }
@@ -251,5 +255,32 @@ func TestOpsRuntime_HoldsNoTableGrantButTheOperatorsOwnTables(t *testing.T) {
 
 	if _, err := db.Ops.ExecContext(t.Context(), `SELECT count(*) FROM practices`); err == nil || !strings.Contains(err.Error(), "permission denied") {
 		t.Fatalf("ops_runtime read practices: want permission denied, got %v", err)
+	}
+}
+
+func TestOpsRuntime_AppRuntimeCannotWriteARefundRow(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Refund Boundary")
+	actID := testdb.SeedOperatorAct(t, db, "Mark Goho")
+	var lotID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO credit_ledger (practice_id, origin, quantity, unit_price_cents, tax_cents, stripe_payment_intent_id)
+		 VALUES ($1, 'purchase', 2, 2000, 0, 'pi_boundary') RETURNING id`, practiceID).Scan(&lotID); err != nil {
+		t.Fatalf("seed lot: %v", err)
+	}
+
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
+		t.Fatalf("set practice: %v", err)
+	}
+	_, err = tx.ExecContext(t.Context(),
+		`INSERT INTO credit_ledger (practice_id, origin, quantity, unit_price_cents, tax_cents, stripe_refund_id, drawn_lot_id, refund_request_key, operator_act_id)
+		 VALUES ($1, 'refund', -1, 2000, 0, 're_boundary', $2, 'key-boundary', $3)`, practiceID, lotID, actID)
+	if err == nil || !strings.Contains(err.Error(), "row-level security") {
+		t.Fatalf("app_runtime wrote a refund row: want a row-level security refusal, got %v", err)
 	}
 }

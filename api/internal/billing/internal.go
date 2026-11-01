@@ -12,99 +12,6 @@ import (
 	"doula-cloud/api/internal/staffauth"
 )
 
-// RefundRequest is the body of a POST to RefundHandler: which Practice is
-// being refunded, and how many Credits she asked back.
-type RefundRequest struct {
-	PracticeID string `json:"practiceId"`
-	Quantity   int    `json:"quantity"`
-}
-
-// RefundHandler issues a refund a Practice has asked for.
-//
-// It is deliberately not a screen a Practice can press. /support says "To
-// ask for a refund, email us", and that is a legal position, not a
-// missing feature: a refund the platform initiates itself inherits the
-// original balance's dormancy date, while one issued on the Practice's
-// recorded request restarts the clock (APL 1315). The request is the
-// email; this endpoint is how it is honored.
-//
-// The refusal rules live in Refund, not here, so they hold however the
-// operation is reached.
-func RefundHandler(db *sql.DB, client StripeClient, auth *internalauth.Guard) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !auth.Require(w, r) {
-			return
-		}
-
-		var req RefundRequest
-		if !apierr.DecodeJSON(w, r, &req) {
-			return
-		}
-		if !staffauth.ParseUUID(w, "practice", req.PracticeID) {
-			return
-		}
-		if req.Quantity < 1 {
-			apierr.WriteError(w, "quantity must be at least 1", http.StatusBadRequest)
-			return
-		}
-		// The name of this request, and the reason a retry is safe: the
-		// same key returns the refund already issued instead of issuing
-		// a second one. Required, not optional -- a refund moves money,
-		// and an unnamed request cannot be recognized on its way back
-		// through. Same header docs/api-design.md sets for every other
-		// repeatable write.
-		requestKey := r.Header.Get("Idempotency-Key")
-		if requestKey == "" {
-			apierr.WriteError(w, "Idempotency-Key header is required", http.StatusBadRequest)
-			return
-		}
-
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		committed := false
-		defer func() {
-			if !committed {
-				_ = tx.Rollback()
-			}
-		}()
-
-		// No staffauth.Middleware in front of this endpoint, so nothing
-		// else sets the variable credit_ledger's policy reads -- the
-		// caller checked above is what licenses setting it, exactly as
-		// the Stripe signature does in PostPurchaseWebhookHandler.
-		if _, err := tx.ExecContext(r.Context(),
-			`SELECT set_config('app.current_practice_id', $1, true)`, req.PracticeID,
-		); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		receipt, err := Refund(r.Context(), tx, client, req.PracticeID, requestKey, req.Quantity, clock.Now(r.Context()))
-		if errors.Is(err, ErrNothingRefundable) || errors.Is(err, ErrRefundExceedsLot) {
-			apierr.WriteError(w, err.Error(), http.StatusConflict)
-			return
-		}
-		if err != nil {
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		committed = true
-
-		apierr.WriteJSON(w, http.StatusOK, receipt)
-	})
-}
-
 // DormantPracticesHandler lists the Practices holding Credits nobody has
 // touched for DormancyNoticeYears -- the list the annual balance notice
 // and the December/January due-diligence mailings are worked from. Read
@@ -219,7 +126,7 @@ func FoundingGrantHandler(db *sql.DB, auth *internalauth.Guard) http.Handler {
 			}
 		}()
 
-		// Same reason RefundHandler sets it: no staffauth.Middleware in
+		// No staffauth.Middleware in
 		// front of this endpoint, so nothing else sets the variable
 		// credit_ledger's and practice_memberships' policies read.
 		if _, err := tx.ExecContext(r.Context(),

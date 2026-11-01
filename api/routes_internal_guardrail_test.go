@@ -16,7 +16,6 @@ import (
 // (ADR-0037), so adding one should cost a line in this list.
 var wantInternalRoutes = []string{
 	"POST /api/internal/billing/founding-grants",
-	"POST /api/internal/billing/refunds",
 	"GET /api/internal/billing/dormant-practices",
 	"GET /api/internal/billing/monthly-credits",
 	"POST /api/internal/clients/process-erasure-outbox",

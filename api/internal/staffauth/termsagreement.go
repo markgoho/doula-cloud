@@ -146,9 +146,9 @@ func dueAgreement(ctx context.Context, tx *sql.Tx, practiceID string, now time.T
 // session read the app's layout needs to learn what is due, the press
 // that agrees, the export, every deletion route, and the push
 // unsubscribe that signing out sends. Signing out itself (DELETE
-// /api/session) and the refund of an unspent Credit (an operator's
-// POST /api/internal/billing/refunds) are not Practice-scoped, so this
-// gate never sees them.
+// /api/session) is not Practice-scoped, and the refund of an unspent
+// Credit is an operator's act in doula-ops (ADR-0062), so this gate
+// never sees either.
 func isAgreementExemptRoute(r *http.Request, practiceID string) bool {
 	base := "/api/practices/" + practiceID
 	switch r.URL.Path {
