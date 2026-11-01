@@ -100,7 +100,7 @@ func SessionHandler(db *sql.DB) http.Handler {
 			return
 		}
 
-		resp, err := resolveSession(r, tx, self, secondFactor)
+		resp, err := resolveSession(r.Context(), tx, self, secondFactor)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -111,8 +111,21 @@ func SessionHandler(db *sql.DB) http.Handler {
 	})
 }
 
-func resolveSession(r *http.Request, tx *sql.Tx, self selfStaff, secondFactor bool) (SessionResponse, error) {
-	ctx := r.Context()
+// ResolveSession is SessionHandler's read for a caller the session was
+// just minted for, inside the minting transaction (#2434): POST
+// /api/session hands it back so sign-in lands without a second request.
+// found is false when identityUID names no Staff row, the case
+// SessionHandler answers 404.
+func ResolveSession(ctx context.Context, tx *sql.Tx, identityUID string, secondFactor bool) (resp SessionResponse, found bool, err error) {
+	self, found, err := resolveSelf(ctx, tx, identityUID)
+	if err != nil || !found {
+		return SessionResponse{}, found, err
+	}
+	resp, err = resolveSession(ctx, tx, self, secondFactor)
+	return resp, err == nil, err
+}
+
+func resolveSession(ctx context.Context, tx *sql.Tx, self selfStaff, secondFactor bool) (SessionResponse, error) {
 	staffID := self.ID
 
 	memberships, err := listMemberships(ctx, tx, staffID)
