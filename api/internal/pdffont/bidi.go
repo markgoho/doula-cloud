@@ -2,7 +2,6 @@ package pdffont
 
 import (
 	"fmt"
-	"math"
 	"slices"
 	"strings"
 	"unicode"
@@ -181,11 +180,11 @@ func (d *Doc) typedLayer(segments []segment, style Style, size, lineHeight float
 				j++
 			}
 			c := chars[i]
-			setScale(c.stretch)
-			d.use(c.face, style, size)
-			// A reader measures the step back against the advance at the
-			// glyph's size, which horizontal scaling changes by its root.
-			w := d.GetStringWidth(shownText(string(c.r))) * math.Sqrt(scale)
+			// Font size, not Tz, takes the stretch: MuPDF measures a
+			// Tz-scaled step by its root and poppler by Tz (#2549).
+			setScale(1)
+			d.use(c.face, style, size*c.stretch)
+			w := d.GetStringWidth(shownText(string(c.r)))
 			if !chained {
 				x = c.right
 			}
@@ -194,8 +193,12 @@ func (d *Doc) typedLayer(segments []segment, style Style, size, lineHeight float
 			for _, m := range chars[i:j] {
 				b.WriteRune(m.r)
 			}
-			d.SetX(x)
+			// fpdf sets a cell's baseline by its font size; this keeps the
+			// line's own.
+			y := d.GetY()
+			d.SetXY(x, y+0.3*size*(1-c.stretch)/d.GetConversionRatio())
 			d.layer(b.String(), w, lineHeight)
+			d.SetY(y)
 			chained = true
 			i = j
 			continue

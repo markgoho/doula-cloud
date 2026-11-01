@@ -438,6 +438,18 @@ jobs:
       # so, until go.sum next changes and forces a fresh save, every run
       # recomputes all packages here (~70s) instead of hitting the near
       # -instant cache trunk had before this change.
+      # pdffont's reader test copies text out of a PDF in poppler and
+      # PyMuPDF (#2549), and fails in CI where either is missing.
+      # --no-deps: the text extraction needs none of PyMuPDF 2.0's layout
+      # dependencies.
+      - name: Install PDF readers
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends poppler-utils python3-venv
+          python3 -m venv "$RUNNER_TEMP/pdf-readers"
+          "$RUNNER_TEMP/pdf-readers/bin/pip" install -q --no-deps pymupdf==2.0
+          echo "$RUNNER_TEMP/pdf-readers/bin" >> "$GITHUB_PATH"
+
       - name: Test
         uses: robherley/go-test-action@v1
         with:
