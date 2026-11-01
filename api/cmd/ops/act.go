@@ -24,7 +24,7 @@ const (
 	msgPracticeNotFound = "There is no Practice at this address."
 )
 
-// The operator_acts actions (00159's check constraint).
+// The operator_acts actions (00160's check constraint).
 const (
 	actSignIn                = "sign_in"
 	actSignOut               = "sign_out"
@@ -37,6 +37,7 @@ const (
 	actPilotAddressAdded     = "pilot_address_added"
 	actPilotGateOpened       = "pilot_gate_opened"
 	actLegalVersionPublished = "legal_version_published"
+	actStaffLookup           = "staff_lookup"
 )
 
 var errNoPractice = errors.New("no such practice")

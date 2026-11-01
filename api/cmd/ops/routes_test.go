@@ -42,6 +42,7 @@ var wantRoutes = []string{
 	"GET /api/legal-versions/{document}/{version}",
 	"POST /api/legal-versions/{document}/{version}/publications",
 	"POST /api/practices/{practiceId}/founding-grants",
+	"GET /api/staff",
 	"GET /api/staff/{staffId}/second-factor",
 	"POST /api/staff/{staffId}/second-factor-clears",
 }

@@ -32,7 +32,8 @@ export const ACTION_LABELS: Record<string, string> = {
 	feedback_read: 'Read a piece of Feedback',
 	pilot_address_added: 'Added to the pilot allowlist',
 	pilot_gate_opened: 'Opened the pilot gate',
-	legal_version_published: 'Published a legal version'
+	legal_version_published: 'Published a legal version',
+	staff_lookup: 'Looked up a Staff member'
 };
 
 const LEGAL_DOCUMENTS: Record<string, string> = { terms: 'The Terms of Service', privacy: 'The Privacy Policy' };
@@ -84,6 +85,10 @@ export function logDetail(row: LogRow): string | undefined {
 		case 'owner_contact_read': {
 			const d = row.details as { list: string; practiceIds: string[] };
 			return `${CONTACT_LISTS[d.list] ?? d.list}, ${count(d.practiceIds.length, 'Practice', 'Practices')}`;
+		}
+		case 'staff_lookup': {
+			const d = row.details as { email: string; staffIds: string[] };
+			return `${d.email}, ${count(d.staffIds.length, 'Staff member', 'Staff members')}`;
 		}
 	}
 	return undefined;

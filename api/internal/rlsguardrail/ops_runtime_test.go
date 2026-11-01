@@ -44,6 +44,7 @@ var wantDefinerFunctions = map[string][]string{
 		"ops_dormant_practices(timestamp with time zone,timestamp with time zone,uuid,integer)",
 		"ops_feedback_list(boolean,timestamp with time zone,uuid,integer)",
 		"ops_feedback_piece(uuid)",
+		"ops_find_staff(text)",
 		"ops_first_signup_at()",
 		"ops_founding_grant_practice(uuid)",
 		"ops_legal_notice_owner_count()",

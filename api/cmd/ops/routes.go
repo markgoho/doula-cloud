@@ -85,6 +85,7 @@ func routes(d Deps) (http.Handler, []string) {
 	r.handle(http.MethodGet, "/api/legal-versions", requireSession(d.DB, legalVersions(d.DB, d.legalHistory())))
 	r.handle(http.MethodGet, "/api/legal-versions/{document}/{version}", requireSession(d.DB, legalVersionCheckRead(d.DB, d.legalHistory())))
 	r.handle(http.MethodPost, "/api/legal-versions/{document}/{version}/publications", requireStepUp(d.DB, actLegalVersionPublished, legalPublishAct(d)))
+	r.handle(http.MethodGet, "/api/staff", requireSession(d.DB, staffLookup(d.DB)))
 	r.handle(http.MethodGet, "/api/staff/{staffId}/second-factor", requireSession(d.DB, secondFactorCheckRead(d.DB)))
 	r.handle(http.MethodPost, "/api/staff/{staffId}/second-factor-clears", requireStepUp(d.DB, actSecondFactorCleared, secondFactorClearAct(d)))
 	return clock.Middleware(d.Now)(csrf.Wrap(d.Origins, r.mux)), r.routes

@@ -36,14 +36,28 @@
 	<ErrorSummary {errors} />
 	<h1>DoulaCloud operations</h1>
 	<p>You are signed in as {operator.name} ({operator.email}).</p>
-	<p><a href={resolve('/practices')}>Practices</a></p>
-	<p><a href={resolve('/credits')}>Monthly Credits</a></p>
-	<p><a href={resolve('/feedback')}>Feedback</a></p>
-	<p><a href={resolve('/pilot-allowlist')}>Pilot allowlist</a></p>
-	<p><a href={resolve('/pilot-gate')}>Pilot gate</a></p>
-	<p><a href={resolve('/legal-versions')}>Legal versions</a></p>
-	<p><a href={resolve('/operator-log')}>Operator log</a></p>
+	<nav aria-label="Operations">
+		<ul>
+			<li><a href={resolve('/practices')}>Practices</a></li>
+			<li><a href={resolve('/credits')}>Monthly Credits</a></li>
+			<li><a href={resolve('/feedback')}>Feedback</a></li>
+			<li><a href={resolve('/staff')}>Reset two-factor authentication</a></li>
+			<li><a href={resolve('/pilot-allowlist')}>Pilot allowlist</a></li>
+			<li><a href={resolve('/pilot-gate')}>Pilot gate</a></li>
+			<li><a href={resolve('/legal-versions')}>Legal versions</a></li>
+			<li><a href={resolve('/operator-log')}>Operator log</a></li>
+		</ul>
+	</nav>
 	<form onsubmit={signOut}>
 		<Button label="Sign out" type="submit" loading={isSigningOut} />
 	</form>
 {/if}
+
+<style>
+	ul {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		padding-inline-start: var(--space-4);
+	}
+</style>

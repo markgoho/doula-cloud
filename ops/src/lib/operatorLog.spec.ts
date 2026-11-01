@@ -123,6 +123,12 @@ describe('logDetail', () => {
 		expect(logDetail(row({ action: 'owner_contact_read', details: { list: 'dormant', practiceIds: [] } }))).toBe('dormant, 0 Practices');
 	});
 
+	it('says which sign-in email a Staff lookup asked for, and how many it showed', () => {
+		expect(logDetail(row({ action: 'staff_lookup', details: { email: 'priya@example.com', staffIds: ['s-1'] } }))).toBe(
+			'priya@example.com, 1 Staff member'
+		);
+	});
+
 	it('has nothing more to say about a sign-in', () => {
 		expect(logDetail(row({ action: 'sign_in' }))).toBeUndefined();
 	});

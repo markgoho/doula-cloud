@@ -47,7 +47,16 @@ test('An operator checks and sends a two-factor reset with a fresh code', async 
 	const staffId = seedStaffAtPractices(localId, 'Priya', 'Raman', ['Lakeside Birth Collective', 'Rooted Doula Care']);
 	await signedInOperator(page, request, password, 'Two-Factor Operator');
 
-	await page.goto(`/staff/${staffId}/two-factor`);
+	await page.getByRole('link', { name: 'Reset two-factor authentication' }).click();
+	await page.getByRole('button', { name: 'Find' }).click();
+	await expect(page.getByRole('alert').filter({ hasText: 'There is a problem' })).toContainText(
+		'Enter the email address the person signs in with'
+	);
+	await page.getByLabel('Sign-in email address').fill(`STAFF-${staffId}@doula-cloud.invalid`);
+	await page.getByRole('button', { name: 'Find' }).click();
+	await expect(page.getByRole('status')).toContainText('Lakeside Birth Collective, Rooted Doula Care');
+	await page.getByRole('link', { name: 'Priya Raman' }).click();
+	await expect(page).toHaveURL(new RegExp(`/staff/${staffId}/two-factor$`));
 	await expect(page.getByRole('heading', { name: 'Check before you reset two-factor authentication' })).toBeVisible();
 	const answers = page.getByRole('definition');
 	await expect(answers.filter({ hasText: 'Priya Raman' })).toBeVisible();
