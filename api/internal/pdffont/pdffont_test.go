@@ -82,8 +82,15 @@ func TestParagraph_EmbedsOnlyWhatTheDocumentUses(t *testing.T) {
 		d.Paragraph(pdffont.Regular, 12, 8, prose)
 		d.Paragraph(pdffont.Regular, 12, 8, "Signed electronically by: Ada Lovelace")
 	})
-	if bytes.Contains(latin, []byte("DroidSansFallback")) || bytes.Contains(latin, []byte("NotoSansArabic")) {
-		t.Fatal("a Latin-only document embedded a face it never used")
+	// fpdf names an embedded face "utf8" and its family in lower case.
+	others := []string{"utf8notosansarabic", "utf8notosansdevanagari", "utf8droidsansfallback", "utf8nanumgothic"}
+	for _, face := range others {
+		if bytes.Contains(latin, []byte("/BaseFont /"+face)) {
+			t.Fatalf("a Latin-only document embedded %s, which it never used", face)
+		}
+	}
+	if !bytes.Contains(latin, []byte("/BaseFont /utf8notosans")) {
+		t.Fatal("a Latin-only document did not embed Noto Sans")
 	}
 	if len(latin) > 60_000 {
 		t.Fatalf("a Latin-only Contract is %d bytes, want at most 60000", len(latin))
@@ -97,6 +104,11 @@ func TestParagraph_EmbedsOnlyWhatTheDocumentUses(t *testing.T) {
 		d.Paragraph(pdffont.Regular, 12, 8, prose)
 		d.Paragraph(pdffont.Regular, 12, 8, every.String())
 	})
+	for _, face := range others {
+		if !bytes.Contains(mixed, []byte("/BaseFont /"+face)) {
+			t.Fatalf("a document naming every script did not embed %s", face)
+		}
+	}
 	if len(mixed) > 200_000 {
 		t.Fatalf("a Contract naming every script is %d bytes, want at most 200000", len(mixed))
 	}

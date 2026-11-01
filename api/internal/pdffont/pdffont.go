@@ -20,7 +20,8 @@
 //     its NOTICE.
 //   - Nanum Gothic (Korean): SIL Open Font License 1.1. Its Reserved Font
 //     Names bind a modified font distributed as a font; a subset embedded
-//     in a document is not one (the OFL FAQ, 1.x on embedding).
+//     in a document is not one (the OFL FAQ, on embedding a font in a
+//     document).
 //
 // fpdf does not shape text: Arabic prints in its isolated letter forms,
 // left to right, and Devanagari without its conjuncts. Every character is
