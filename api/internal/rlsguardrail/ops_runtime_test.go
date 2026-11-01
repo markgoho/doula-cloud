@@ -40,7 +40,9 @@ var wantDefinerFunctions = map[string][]string{
 		"sweep_webhook_arrivals(timestamp with time zone)",
 	},
 	"ops_runtime": {
+		"ops_first_signup_at()",
 		"ops_founding_grant_practice(uuid)",
+		"ops_monthly_credits(timestamp with time zone,timestamp with time zone)",
 		"ops_record_founding_grant(uuid,uuid,integer,timestamp with time zone)",
 		"ops_record_refund(uuid,uuid,integer,integer,text,text,uuid,timestamp with time zone)",
 		"ops_refund_by_request_key(uuid,text)",

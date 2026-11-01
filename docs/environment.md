@@ -189,7 +189,7 @@ gcloud run services update doula-api --region us-central1 \
 
 ### The boundary on `/api/internal/**`
 
-Twenty-nine addresses sit under `/api/internal/**` — the drain, twenty-one `process-*` outbox endpoints, #443's page probe, the idempotency-key sweep, and five operator endpoints. `api/routes_internal_guardrail_test.go` holds the list, read from the router rather than written from memory, and asserts that every one of them answers `401` to a request carrying nothing.
+Twenty-nine addresses sit under `/api/internal/**` — the drain, twenty-one `process-*` outbox endpoints, #443's page probe, the idempotency-key sweep, the webhook-arrival sweep, and four operator endpoints. `api/routes_internal_guardrail_test.go` holds the list, read from the router rather than written from memory, and asserts that every one of them answers `401` to a request carrying nothing.
 
 `doula-api` is `allUsers` → `roles/run.invoker` and stays that way — it serves the app and three webhooks that arrive with no Google credential — and Cloud Run's IAM is per-service, so the boundary can only be inside the process. [ADR-0037](adr/0037-the-internal-boundary-is-a-caller-identity-not-a-shared-secret.md) makes it a caller identity: `internalauth.Guard` verifies a Google-signed OIDC ID token against `INTERNAL_OIDC_AUDIENCE` and then the token's own `email` claim against `INTERNAL_OIDC_CALLERS`.
 
@@ -251,24 +251,19 @@ The answer is the gate's record: `{"openedBy", "openedAt"}`.
 
 ### The monthly Credits read
 
-Once a month, the founder reads two counts per Practice from the Credit ledger and copies them into the private spreadsheet in the DoulaCloud Google account ([ADR-0046](adr/0046-the-product-counts-what-a-practice-did-and-never-who-she-is.md), [#1394](https://github.com/markgoho/doula-cloud/issues/1394)). Mint a token with the command above, then ask for the month just ended:
+Once a month, the founder reads two counts per Practice from the Credit ledger and copies them into the private spreadsheet in the DoulaCloud Google account ([ADR-0046](adr/0046-the-product-counts-what-a-practice-did-and-never-who-she-is.md), [#1394](https://github.com/markgoho/doula-cloud/issues/1394)). It takes no token. Since [#2476](https://github.com/markgoho/doula-cloud/issues/2476) it is read only in ops ([ADR-0062](adr/0062-the-platform-operator-works-in-a-separate-app-at-ops-doula-cloud-with-its-own-service-and-database-role.md)). Sign in at `https://ops.doula.cloud` and open **Monthly Credits** (`/credits`). It opens on the last month that has ended. The month list goes back to the month the first Practice signed up and never offers the month in progress, so no figure for the current month is shown anywhere.
 
-```sh
-curl -s 'https://doula-api-850855848778.us-central1.run.app/api/internal/billing/monthly-credits?month=<YYYY-MM>' \
-  -H "Authorization: Bearer $TOKEN"
-```
+The page has one row per Practice that existed in that month, by name: Credits bought and Credits spent, with the totals beneath. Months begin and end at midnight in New York (America/New_York), the business's time zone, not UTC. Credits bought is the sum of the purchase lots that month. Credits spent is the count of Credits spent, which is the number of Engagements started. A signup bonus, a founding grant, a refund and a forfeit count as neither.
 
-The answer is one row per Practice per calendar month, from the month the Practice was created through the month asked for, or through the month the Practice was deleted: `{"practiceId", "practiceName", "practiceCreatedMonth", "month", "creditsBought", "creditsSpent", "firstPurchaseMonth"}`. Months are UTC. `creditsBought` is the sum of purchase lots that month. `creditsSpent` is the count of Credits spent, which is the number of Engagements started. A signup bonus, a founding grant, a refund and a forfeit count as neither. `firstPurchaseMonth` is `null` until the Practice buys. A month in the future is refused with `400`.
+The page fills three of the spreadsheet's nine columns, which ADR-0046 names: people interviewed, Practices on real Clients, Practices who bought a Credit, Credits bought, Credits spent, Practices who bought again, revenue, cost, the pool's remainder. For the month on the page:
 
-The rows fill three of the spreadsheet's nine columns, which ADR-0046 names: people interviewed, Practices on real Clients, Practices who bought a Credit, Credits bought, Credits spent, Practices who bought again, revenue, cost, the pool's remainder. For the month asked for:
+- **Credits bought** is the total under Credits bought.
+- **Credits spent** is the total under Credits spent.
+- **Practices who bought again** is the total under it: the Practices that bought that month and had bought in an earlier one.
 
-- **Credits bought** is the sum of `creditsBought`.
-- **Credits spent** is the sum of `creditsSpent`.
-- **Practices who bought again** is the number of rows with `creditsBought` above zero and a `month` later than `firstPurchaseMonth`.
+Revenue and cost come from the bank, and the other columns from the founder's own notes. Below fifty in the denominator, write each figure as a count with its denominator beside it, never as a rate.
 
-Revenue and cost come from the bank, and the other columns from the founder's own notes. The totals are the spreadsheet's arithmetic, not the endpoint's. Below fifty in the denominator, write each figure as a count with its denominator beside it, never as a rate.
-
-The response names no Staff member, no Client, no login and no feature, and a spec fixes its field list. The four signup-source fields join each row with [#1393](https://github.com/markgoho/doula-cloud/issues/1393); a count by source is a floor, never a total.
+The page names no Staff member, no Client, no login and no feature, and a spec fixes its field list. It shows nobody's contact, so opening it writes no Operator log row. The four signup-source fields join each row with [#1393](https://github.com/markgoho/doula-cloud/issues/1393); a count by source is a floor, never a total.
 
 ### #443's site rebuild and page probe
 

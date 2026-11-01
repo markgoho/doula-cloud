@@ -40,13 +40,9 @@ func registerInternalRoutes(g *staffauth.GatedRouter, d Deps) {
 	g.OpenGet("/api/internal/billing/dormant-practices",
 		"An internal caller identity, not a session -- the operator's escheatment mailing list (#420), the same position every /api/internal worker endpoint holds",
 		billing.DormantPracticesHandler(d.DB, d.InternalAuth))
-	// #1394: the founder's monthly read of Credits bought and spent per
-	// Practice (ADR-0046), called by hand on the same guard.
-	g.OpenGet("/api/internal/billing/monthly-credits",
-		"An internal caller identity, not a session -- the founder's monthly read of the Credit ledger (#1394, ADR-0046), the same position every /api/internal endpoint holds",
-		billing.MonthlyCreditsHandler(d.DB, d.InternalAuth))
 	// #449's founding grant moved to doula-ops (#2482, ADR-0062), and
-	// #605's support-clear with it (#2483).
+	// #605's support-clear with it (#2483), and #1394's monthly Credits
+	// read (#2476).
 	//
 	// #1790's pilot gate, on the same guard. Until January only an address the founder added can create
 	// a Practice: the first endpoint adds one, the second opens the gate
