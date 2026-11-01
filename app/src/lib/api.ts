@@ -3,7 +3,7 @@ import { resolve } from '$app/paths';
 import { signOut } from 'firebase/auth';
 import { getFirebaseAuth } from './firebase.js';
 import { keyRequest } from './idempotencyKey.js';
-import { portalLoginAfterSessionEnded, staffLoginAfterSessionEnded } from './sessionEnded.js';
+import { noteSessionHeld, portalLoginAfterRefusal, staffLoginAfterRefusal } from './sessionEnded.js';
 
 /**
 The Go BFF's origin. Set by Playwright/dev; a real deploy serves both from the same origin.
@@ -21,8 +21,8 @@ one trip (to mint the cookie) rather than being a credential feature
 code carries around. On a 401 (no session, expired, or revoked) this
 clears the signed-in Identity Platform user, if any, and sends the
 browser to the login screen for whichever population the current route
-belongs to, carrying the flag `#lib/sessionEnded.js` owns so that screen
-can read this as "your session ended" rather than an ordinary visit.
+belongs to, through `#lib/sessionEnded.js`, which decides whether that
+screen says the session ended and carries the address to come back to.
 
 A refusal carrying `{code: "MFA_REQUIRED"}` (#606) is a live, valid
 session that may not enter *this* Practice -- not an ended session -- so
@@ -157,6 +157,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 	const keyed = keyRequest(path, init);
 	const response = await fetch(apiBaseURL() + path, { ...keyed.init, credentials: 'include' });
 	keyed.settle(response);
+	if (response.ok) noteSessionHeld();
 	return response;
 }
 
@@ -167,8 +168,8 @@ async function handleExpiredSession(): Promise<void> {
 	// (#1131), which is the only place that flag is spelled.
 	await goto(
 		location.pathname.startsWith('/portal')
-			? portalLoginAfterSessionEnded()
-			: staffLoginAfterSessionEnded()
+			? portalLoginAfterRefusal()
+			: staffLoginAfterRefusal(`${location.pathname}${location.search}${location.hash}`)
 	);
 }
 

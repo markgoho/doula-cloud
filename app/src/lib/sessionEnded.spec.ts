@@ -1,5 +1,12 @@
-import { describe, expect, it } from 'vitest';
-import { didSessionEnd, portalLoginAfterSessionEnded, staffLoginAfterSessionEnded } from './sessionEnded';
+import { beforeEach, describe, expect, it } from 'vitest';
+import {
+	didSessionEnd,
+	forgetSessionHeld,
+	noteSessionHeld,
+	portalLoginAfterRefusal,
+	staffLoginAfterRefusal,
+	staffLoginAfterSessionEnded
+} from './sessionEnded';
 
 describe('didSessionEnd', () => {
 	it('recognizes a login address carrying the flag', () => {
@@ -21,9 +28,13 @@ describe('didSessionEnd', () => {
 });
 
 describe('the login addresses', () => {
+	beforeEach(() => {
+		forgetSessionHeld();
+	});
+
 	/*
 	 * Pinned literally, not built from the module's own constants: these
-	 * two strings are what `app/e2e/sign-out.e2e.ts` and
+	 * strings are what `app/e2e/sign-out.e2e.ts` and
 	 * `portal-sign-out.e2e.ts` wait for, and what every route-load spec
 	 * asserts a refusal redirects to. A spec that spelled them the way the
 	 * module does would agree with a rename instead of catching it.
@@ -32,8 +43,32 @@ describe('the login addresses', () => {
 		expect(staffLoginAfterSessionEnded()).toBe('/login?sessionEnded=true');
 	});
 
-	it('sends a Client-portal session that ended to the portal login screen', () => {
-		expect(portalLoginAfterSessionEnded()).toBe('/portal/login?sessionEnded=true');
+	// #2259: a device that never signed in was not signed out.
+	it('sends a refusal in a document that held no session to the plain Staff login, carrying returnTo', () => {
+		expect(staffLoginAfterRefusal('/practices/p-1/birth-plan')).toBe(
+			'/login?returnTo=%2Fpractices%2Fp-1%2Fbirth-plan'
+		);
+	});
+
+	it('says the session ended when this document held one, and still carries returnTo', () => {
+		noteSessionHeld();
+
+		expect(staffLoginAfterRefusal('/practices/p-1')).toBe('/login?sessionEnded=true&returnTo=%2Fpractices%2Fp-1');
+	});
+
+	it('reads a refusal after sign-out as no session having ended', () => {
+		noteSessionHeld();
+		forgetSessionHeld();
+
+		expect(staffLoginAfterRefusal('/practices/p-1')).toBe('/login?returnTo=%2Fpractices%2Fp-1');
+	});
+
+	it('sends a portal refusal to the portal login, flagged only when this document held a session', () => {
+		expect(portalLoginAfterRefusal()).toBe('/portal/login');
+
+		noteSessionHeld();
+
+		expect(portalLoginAfterRefusal()).toBe('/portal/login?sessionEnded=true');
 	});
 
 	/*
@@ -41,9 +76,13 @@ describe('the login addresses', () => {
 	 * enforced before: what a writer emits is what a reader recognizes.
 	 */
 	it('produces addresses the reader recognizes', () => {
-		const staff = new URL(staffLoginAfterSessionEnded(), 'https://example.test');
-		const portal = new URL(portalLoginAfterSessionEnded(), 'https://example.test');
+		noteSessionHeld();
+		const staff = new URL(staffLoginAfterRefusal('/practices/p-1'), 'https://example.test');
+		const portal = new URL(portalLoginAfterRefusal(), 'https://example.test');
 
+		const ended = new URL(staffLoginAfterSessionEnded(), 'https://example.test');
+
+		expect(didSessionEnd(ended)).toBe(true);
 		expect(didSessionEnd(staff)).toBe(true);
 		expect(didSessionEnd(portal)).toBe(true);
 	});

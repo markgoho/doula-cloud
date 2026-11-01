@@ -1,3 +1,4 @@
+import { forgetSessionHeld } from '#lib/sessionEnded.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { load } from './+page.js';
 
@@ -54,7 +55,8 @@ describe('feedback/+page.ts load', () => {
 			'/api/staff/feedback': { status: 401, body: {} }
 		});
 
-		await expect(loadList()).rejects.toMatchObject({ status: 303, location: '/login?sessionEnded=true' });
+		forgetSessionHeld();
+		await expect(loadList()).rejects.toMatchObject({ status: 303, location: '/login?returnTo=%2Ffeedback' });
 	});
 
 	it('sends the founder with no second factor to TOTP enrollment, and back here after it', async () => {

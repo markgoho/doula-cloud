@@ -1,0 +1,69 @@
+import { expect, test } from '@playwright/test';
+import { API_URL } from './ports';
+import { enterPractice, signIn } from './auth';
+import { staffLandingSettled } from './mountSettled';
+import { seedEngagement } from './stack';
+import { seedFoundingOwner, uniqueEmail } from './staffSignup';
+
+function endsWith(path: string): RegExp {
+	return new RegExp(`${path.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)}$`);
+}
+
+const SIGNED_OUT_NOTICE = 'For your security, we signed you out. Sign in again to continue.';
+
+// #2259: a Birth Plan address she saved, opened on a device that has never
+// signed in, says nothing about being signed out and comes back after sign-in.
+test('a saved Birth Plan address opened signed out lands on that Birth Plan after sign-in', async ({
+	page,
+	request
+}) => {
+	const { email, password, idToken, practiceId } = await seedFoundingOwner(request);
+	const headers = await signIn(request, API_URL, idToken);
+	const created = await request.post(`${API_URL}/api/practices/${practiceId}/clients`, {
+		headers,
+		data: { givenName: 'Pat', familyName: 'Client', email: uniqueEmail('client') }
+	});
+	expect(created.ok(), `create client failed: ${created.status()} ${await created.text()}`).toBe(true);
+	const { id: clientId } = await created.json();
+	const engagementId = seedEngagement(clientId, practiceId);
+	const birthPlan = `/practices/${practiceId}/engagements/${engagementId}/birth-plan`;
+
+	await page.goto(birthPlan);
+
+	await expect(page).toHaveURL(endsWith(`/login?returnTo=${encodeURIComponent(birthPlan)}`));
+	await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+	await expect(page.getByText(SIGNED_OUT_NOTICE)).toHaveCount(0);
+
+	await page.getByLabel('Email address').fill(email);
+	await page.getByLabel('Password').fill(password);
+	await page.getByRole('button', { name: 'Sign in' }).click();
+
+	await expect(page).toHaveURL(endsWith(birthPlan));
+	await expect(page.getByRole('heading', { level: 1, name: "Pat's Birth Plan" })).toBeVisible();
+});
+
+// #757's notice still says so when the session ends under her in the app,
+// and she still comes back to where she was going.
+test('a session that ends while she is in the app says so and returns her after sign-in', async ({
+	page,
+	request,
+	context
+}) => {
+	const { email, password, idToken, practiceId } = await seedFoundingOwner(request, { staffName: 'Robin Owner' });
+	const headers = await signIn(request, API_URL, idToken);
+	await Promise.all([staffLandingSettled(page, practiceId), enterPractice(context, page, headers, practiceId)]);
+
+	await context.clearCookies();
+	await page.getByRole('navigation', { name: 'Practice' }).getByRole('link', { name: 'Staff' }).click();
+
+	const staff = `/practices/${practiceId}/staff`;
+	await expect(page).toHaveURL(endsWith(`/login?sessionEnded=true&returnTo=${encodeURIComponent(staff)}`));
+	await expect(page.getByText(SIGNED_OUT_NOTICE)).toBeVisible();
+
+	await page.getByLabel('Email address').fill(email);
+	await page.getByLabel('Password').fill(password);
+	await page.getByRole('button', { name: 'Sign in' }).click();
+
+	await expect(page).toHaveURL(endsWith(staff));
+	await expect(page.getByRole('heading', { level: 1, name: 'Staff' })).toBeVisible();
+});

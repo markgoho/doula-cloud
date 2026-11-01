@@ -1,7 +1,7 @@
 import { redirect, error } from '@sveltejs/kit';
 import { apiFetch } from '#lib/api.js';
 import { apiErrorMessage } from '#lib/apiErrorMessage.js';
-import { portalLoginAfterSessionEnded } from '#lib/sessionEnded.js';
+import { portalLoginAfterRefusal } from '#lib/sessionEnded.js';
 import type { LayoutLoad } from './$types';
 
 export interface EngagementIdentity {
@@ -38,7 +38,7 @@ export const load: LayoutLoad = async ({ params }): Promise<EngagementIdentity> 
 	const response = await apiFetch(`/api/portal/engagements/${params.engagementId}`);
 
 	if (response.status === 401) {
-		redirect(303, portalLoginAfterSessionEnded());
+		redirect(303, portalLoginAfterRefusal());
 	} else if (!response.ok) {
 		error(response.status, await apiErrorMessage(response));
 	}

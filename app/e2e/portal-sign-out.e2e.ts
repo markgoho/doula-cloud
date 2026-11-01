@@ -43,7 +43,7 @@ test('a Client signs out and can no longer reach their Engagement', async ({ pag
 	// SSR'd copy to fall back on), so the 401 bounces the pop to the portal
 	// login screen with no pregnancy or birth information ever painted.
 	await page.goBack();
-	await expect(page).toHaveURL(/\/portal\/login\?sessionEnded=true$/);
+	await expect(page).toHaveURL(/\/portal\/login$/);
 	// #296: the hub's own `<h1>`. It has to be the heading the hub renders
 	// today, not the one it used to: a name nothing renders any more would
 	// pass this forever without proving the Engagement screen is gone.
@@ -51,7 +51,7 @@ test('a Client signs out and can no longer reach their Engagement', async ({ pag
 
 	// And a fresh navigation to the Engagement is refused the same way.
 	await page.goto(`/portal/engagements/${engagementId}`);
-	await expect(page).toHaveURL(/\/portal\/login\?sessionEnded=true$/);
+	await expect(page).toHaveURL(/\/portal\/login$/);
 	await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Your care' })).toHaveCount(0);
 });

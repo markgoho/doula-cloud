@@ -10,6 +10,7 @@ const getFirebaseAuth = vi.fn(() => 'the-auth-instance');
 vi.mock('./firebase.js', () => ({ getFirebaseAuth }));
 
 const { apiBaseURL, apiFetch, apiFetchWithSession, didFollowSessionRefusal, probeSession } = await import('./api');
+const { forgetSessionHeld } = await import('./sessionEnded');
 
 describe('apiBaseURL', () => {
 	it('defaults to same-origin (empty string) when unset', () => {
@@ -33,8 +34,9 @@ describe('apiFetchWithSession', () => {
 		signOut.mockImplementation(async () => {});
 		const fetchMock = vi.fn(async () => new Response(undefined, { status }));
 		vi.stubGlobal('fetch', fetchMock);
-		const location = { pathname };
+		const location = { pathname, search: '', hash: '' };
 		vi.stubGlobal('location', location);
+		forgetSessionHeld();
 		return { fetchMock, location };
 	}
 
@@ -73,18 +75,42 @@ describe('apiFetchWithSession', () => {
 		expect(goto).toHaveBeenCalled();
 	});
 
-	it('routes a 401 on a Staff route to the Staff login, carrying the session-ended explanation', async () => {
-		setup({ status: 401, pathname: '/practices/prac-1' });
+	it('routes a 401 on a Staff route to the Staff login, carrying the address to come back to', async () => {
+		const { location } = setup({ status: 401, pathname: '/practices/prac-1/clients' });
+		location.search = '?q=pat';
+		location.hash = '#list';
 
-		await apiFetchWithSession('/api/practices/prac-1/session');
+		await apiFetchWithSession('/api/practices/prac-1/clients');
 
-		expect(goto).toHaveBeenCalledWith('/login?sessionEnded=true');
+		expect(goto).toHaveBeenCalledWith('/login?returnTo=%2Fpractices%2Fprac-1%2Fclients%3Fq%3Dpat%23list');
 	});
 
-	it('routes a 401 on a portal route to the portal login, carrying the session-ended explanation', async () => {
+	// #2259: the notice is for a session this document held, not for a
+	// device that never signed in.
+	it('says the session ended when an earlier request in this document was answered', async () => {
+		const { fetchMock } = setup({ status: 401, pathname: '/practices/prac-1' });
+		fetchMock.mockResolvedValueOnce(new Response(undefined, { status: 200 }));
+		await apiFetchWithSession('/api/practices/prac-1/session');
+
+		await apiFetchWithSession('/api/practices/prac-1/clients');
+
+		expect(goto).toHaveBeenCalledWith('/login?sessionEnded=true&returnTo=%2Fpractices%2Fprac-1');
+	});
+
+	it('routes a 401 on a portal route to the portal login', async () => {
 		setup({ status: 401, pathname: '/portal/engagements/eng-1' });
 
 		await apiFetchWithSession('/api/portal/engagements/eng-1/session');
+
+		expect(goto).toHaveBeenCalledWith('/portal/login');
+	});
+
+	it('routes a 401 on a portal route to the portal login, saying the session ended when it held one', async () => {
+		const { fetchMock } = setup({ status: 401, pathname: '/portal/engagements/eng-1' });
+		fetchMock.mockResolvedValueOnce(new Response(undefined, { status: 200 }));
+		await apiFetchWithSession('/api/portal/engagements/eng-1/session');
+
+		await apiFetchWithSession('/api/portal/engagements/eng-1/messages');
 
 		expect(goto).toHaveBeenCalledWith('/portal/login?sessionEnded=true');
 	});
