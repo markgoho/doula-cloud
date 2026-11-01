@@ -221,6 +221,9 @@ export const detail = {
 	// reads her Birth Plan, and no new one is started.
 	offersBirthPlanToStart: false,
 	offersBirthPlan: true,
+	// #2492: the base's Owner reads the Doula fees below, so the BFF says
+	// so up front and the section stands from the first frame.
+	hasDoulaFees: true,
 	// #1598: who is on this Engagement. Two Doulas, the on-call panel's
 	// own primary and backup, so the summary's row holds its busiest
 	// state: the plural label and two names on one line, the first of
@@ -456,6 +459,8 @@ export const asDoula: RouteVariant<RouteParameters> = {
 			// refused status with its way on, rides here too; the base's
 			// reads "Never invited".
 			clientPortalInviteStatus: 'refused',
+			// #2492: answered for an Owner or Admin only.
+			hasDoulaFees: false,
 			session: { ...session, roles: ['doula'], isContractor: false }
 		}
 	}
@@ -518,6 +523,7 @@ export const asContractor: RouteVariant<RouteParameters> = {
 	props: {
 		data: {
 			...detail,
+			hasDoulaFees: false,
 			session: { ...session, roles: ['doula'], isContractor: true }
 		}
 	},
