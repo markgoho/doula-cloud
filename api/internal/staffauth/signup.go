@@ -415,9 +415,8 @@ func signup(r *http.Request, tx *sql.Tx, verified authn.VerifiedToken, req Signu
 const defaultCarePlanFields = `[
 	{"id": "support-people", "type": "section_header", "label": "Support People", "order": 0},
 	{"id": "support-people-names", "type": "short_text", "label": "Who will be present for support?", "order": 1},
-	{"id": "pain-management", "type": "single_select", "label": "Preferred pain management", "options": ["Unmedicated", "Epidural", "Open to options in the moment"], "order": 2},
-	{"id": "special-requests", "type": "long_text", "label": "Special requests or concerns", "order": 3},
-	{"id": "share-with-backup", "type": "checkbox", "label": "OK to share this plan with a backup doula", "order": 4}
+	{"id": "special-requests", "type": "long_text", "label": "Special requests or concerns", "order": 2},
+	{"id": "share-with-backup", "type": "checkbox", "label": "OK to share this plan with a backup doula", "order": 3}
 ]`
 
 const defaultBirthPlanFields = `[
@@ -426,7 +425,10 @@ const defaultBirthPlanFields = `[
 	{"id": "birth-setting", "type": "section_header", "label": "Birth Setting", "order": 2},
 	{"id": "location", "type": "single_select", "label": "Planned birth location", "options": ["Home", "Birth center", "Hospital"], "order": 3},
 	{"id": "atmosphere", "type": "long_text", "label": "Preferences for atmosphere (music, lighting, etc.)", "order": 4},
-	{"id": "consent-photos", "type": "checkbox", "label": "OK to take photos/video during labor", "order": 5}
+	{"id": "consent-photos", "type": "checkbox", "label": "OK to take photos/video during labor", "order": 5},
+	{"id": "pain-relief-header", "type": "section_header", "label": "Pain Relief", "order": 6},
+	{"id": "pain-relief", "type": "single_select", "label": "Preferred pain relief", "options": ["Unmedicated", "Epidural", "Open to options in the moment"], "order": 7},
+	{"id": "pain-relief-notes", "type": "long_text", "label": "Anything else about pain relief", "order": 8}
 ]`
 
 // defaultContractTemplateProse is the Contract Template prose a new

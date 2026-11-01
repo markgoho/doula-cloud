@@ -617,6 +617,48 @@ func TestSignupHandler_SeededPlansShowNoGroupOverSeven(t *testing.T) {
 	}
 }
 
+// TestSignupHandler_PainReliefIsAskedOnTheBirthPlanOnly proves the
+// pain relief question sits on the Birth Plan, which the Client reads and
+// the hospital is handed, and not also on the staff-only Care Plan (#2580).
+func TestSignupHandler_PainReliefIsAskedOnTheBirthPlanOnly(t *testing.T) {
+	db := testdb.New(t)
+	srv := newSignupServer(authntest.Verifier{UID: "pain-owner", Email: jamieEmail}, db)
+	defer srv.Close()
+
+	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY",
+		PracticeName: "Pain Practice", FirstName: jamieName, LastName: ownerLastName,
+	})
+	defer resp.Body.Close()
+	var out staffauth.SignupResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	for planType, wantAsked := range map[string]bool{birthPlanType: true, carePlanType: false} {
+		var raw []byte
+		if err := db.Admin.QueryRowContext(t.Context(),
+			`SELECT fields FROM plan_templates WHERE practice_id = $1 AND plan_type = $2`, out.PracticeID, planType,
+		).Scan(&raw); err != nil {
+			t.Fatalf("query %s template: %v", planType, err)
+		}
+		var fields []struct {
+			Label string `json:"label"`
+		}
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			t.Fatalf("decode %s fields: %v", planType, err)
+		}
+		asked := false
+		for _, field := range fields {
+			if field.Label == "Preferred pain relief" {
+				asked = true
+			}
+		}
+		if asked != wantAsked {
+			t.Errorf("%s asks \"Preferred pain relief\" = %v, want %v", planType, asked, wantAsked)
+		}
+	}
+}
+
 // TestSignupHandler_SeededTemplatesRoundTripThroughPlansAPI proves the
 // hardcoded default field JSON in signup.go matches the palette the plans
 // package validates: GET the seeded template, then PUT that exact payload

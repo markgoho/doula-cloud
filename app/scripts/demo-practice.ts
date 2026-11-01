@@ -484,7 +484,9 @@ async function seedPriyaBook(request: APIRequestContext, roster: Roster, today: 
 	await startAndSavePlan(request, roster, camille, 'birth_plan', priya.headers, {
 		'Planned birth location': 'Hospital',
 		'Preferences for atmosphere (music, lighting, etc.)':
-			'Lights down low, my own playlist on quietly, and Marcus right beside me the whole time.'
+			'Lights down low, my own playlist on quietly, and Marcus right beside me the whole time.',
+		'Preferred pain relief': 'Open to options in the moment',
+		'Anything else about pain relief': 'No epidural unless I ask twice.'
 	});
 	await startAndSavePlan(request, roster, camille, 'care_plan', roster.owner, {
 		'Who will be present for support?': 'Marcus, her partner, all the way through. Her sister Dana until it is time to push.',
