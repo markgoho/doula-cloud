@@ -195,6 +195,15 @@ func TestWorker_RetriesThenDeadLetters(t *testing.T) {
 		if row.status != "dead_lettered" || row.token != nil || row.code != nil {
 			t.Fatalf("final row = %+v, want dead_lettered with credentials cleared", row)
 		}
+		var reason string
+		if err := f.db.Admin.QueryRowContext(t.Context(),
+			`SELECT dead_letter_reason FROM engagement_offer_outbox WHERE offer_id = $1`, offerID,
+		).Scan(&reason); err != nil {
+			t.Fatalf("read dead_letter_reason: %v", err)
+		}
+		if reason != "retries_exhausted" {
+			t.Fatalf("dead_letter_reason = %q, want retries_exhausted", reason)
+		}
 	}
 }
 

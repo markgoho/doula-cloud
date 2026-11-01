@@ -24,8 +24,9 @@ const (
 func setOpenJob(t *testing.T, db *testdb.DB, feedbackID, status string, attempts int, lastError string) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO feedback_issue_outbox (feedback_id, status, attempt_count, last_error)
-		 VALUES ($1, $2::feedback_issue_outbox_status, $3, NULLIF($4, ''))`,
+		`INSERT INTO feedback_issue_outbox (feedback_id, status, attempt_count, last_error, dead_letter_reason)
+		 VALUES ($1, $2::feedback_issue_outbox_status, $3, NULLIF($4, ''),
+		         CASE WHEN $2::text = 'dead_lettered' THEN 'retries_exhausted'::outbox_dead_letter_reason END)`,
 		feedbackID, status, attempts, lastError,
 	); err != nil {
 		t.Fatalf("seed open job: %v", err)

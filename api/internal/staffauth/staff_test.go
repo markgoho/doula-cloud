@@ -150,7 +150,7 @@ func TestListStaffHandler_PendingInvitationsAreTheirOwnGroup(t *testing.T) {
 	pendingID := seedInvitation(t, db, practiceID, ownerID, "pending@example.com", "{doula}", contractorType, time.Now().Add(time.Hour))
 	deadID := seedInvitation(t, db, practiceID, ownerID, "dead@example.com", "{admin}", employeeType, time.Now().Add(time.Hour))
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO staff_invite_outbox (invitation_id, status) VALUES ($1, 'dead_lettered')`, deadID,
+		`INSERT INTO staff_invite_outbox (invitation_id, status, dead_letter_reason) VALUES ($1, 'dead_lettered', 'retries_exhausted')`, deadID,
 	); err != nil {
 		t.Fatalf("seed dead-lettered outbox row: %v", err)
 	}
@@ -220,8 +220,8 @@ func TestListStaffHandler_ReInviteAfterASendDoesNotDuplicate(t *testing.T) {
 	invitationID := seedInvitation(t, db, practiceID, ownerID, "twice-sent@example.com", "{doula}", employeeType, time.Now().Add(time.Hour))
 
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO staff_invite_outbox (invitation_id, status, created_at)
-		 VALUES ($1, 'dead_lettered', now() - interval '1 hour'), ($1, 'pending', now())`,
+		`INSERT INTO staff_invite_outbox (invitation_id, status, dead_letter_reason, created_at)
+		 VALUES ($1, 'dead_lettered', 'retries_exhausted', now() - interval '1 hour'), ($1, 'pending', NULL, now())`,
 		invitationID,
 	); err != nil {
 		t.Fatalf("seed two outbox rows: %v", err)

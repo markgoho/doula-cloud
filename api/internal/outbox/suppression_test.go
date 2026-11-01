@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/mail"
+	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -72,6 +73,7 @@ func TestMarkFailed_SuppressedDeadLettersWithoutRetrying(t *testing.T) {
 	if got.lastError.String != sendErr.Error() {
 		t.Fatalf("last_error = %q, want %q", got.lastError.String, sendErr.Error())
 	}
+	assertReason(t, got, outbox.OwnData)
 }
 
 // The suppressed-address branch clears the same terminal columns every
@@ -164,6 +166,7 @@ func TestSendAll_EverySuppressedAddressDeadLetters(t *testing.T) {
 	if got.lastError.String == "" {
 		t.Fatal("last_error is empty, want the suppression reason")
 	}
+	assertReason(t, got, outbox.OwnData)
 }
 
 // A real send failure alongside a suppressed address still retries: the

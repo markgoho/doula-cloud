@@ -9,6 +9,7 @@ import (
 	"doula-cloud/api/internal/legalnotice"
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/mailsuppress"
+	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -39,6 +40,9 @@ func TestWorker_SuppressedAddressIsRecordedAsNotDelivered(t *testing.T) {
 	if status != statusDead || !strings.Contains(lastError, "suppressed") {
 		t.Fatalf("Bea's row is %s (%q), want dead_lettered with the suppression as the reason", status, lastError)
 	}
+	if got := reasonOf(t, db, harbor, bea); got != string(outbox.OwnData) {
+		t.Fatalf("Bea's dead_letter_reason = %q, want own_data", got)
+	}
 }
 
 // An Owner who deletes her login after the email was queued is not
@@ -60,6 +64,9 @@ func TestWorker_DeletedLoginIsNotMailed(t *testing.T) {
 	if status != statusDead || !strings.Contains(lastError, "deleted") {
 		t.Fatalf("row is %s (%q), want dead_lettered because the login was deleted", status, lastError)
 	}
+	if got := reasonOf(t, db, harbor, ana); got != string(outbox.OwnData) {
+		t.Fatalf("dead_letter_reason = %q, want own_data", got)
+	}
 }
 
 // A row whose version the worker's history does not hold cannot be
@@ -78,6 +85,9 @@ func TestWorker_VersionMissingFromTheHistoryIsNotMailed(t *testing.T) {
 	}
 	if status, _ := statusOf(t, db, harbor, ana); status != statusDead {
 		t.Fatalf("row is %s, want dead_lettered", status)
+	}
+	if got := reasonOf(t, db, harbor, ana); got != string(outbox.OwnData) {
+		t.Fatalf("dead_letter_reason = %q, want own_data", got)
 	}
 }
 

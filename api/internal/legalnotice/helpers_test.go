@@ -217,6 +217,18 @@ func statusOf(t *testing.T, db *testdb.DB, practiceID, staffID string) (status, 
 	return status, lastError
 }
 
+func reasonOf(t *testing.T, db *testdb.DB, practiceID, staffID string) string {
+	t.Helper()
+	var reason string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT coalesce(dead_letter_reason::text, '') FROM legal_notice_outbox WHERE practice_id = $1 AND staff_id = $2`,
+		practiceID, staffID,
+	).Scan(&reason); err != nil {
+		t.Fatalf("read reason for %s at %s: %v", staffID, practiceID, err)
+	}
+	return reason
+}
+
 // addOwner makes an existing Staff member an Owner of a second Practice.
 func addOwner(t *testing.T, db *testdb.DB, practiceID, staffID string) {
 	t.Helper()
