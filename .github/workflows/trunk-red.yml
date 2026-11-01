@@ -10,10 +10,11 @@
 # was green and nobody looked past it.
 #
 # This turns that silence into an assigned, labeled issue within a minute
-# of the failure, and closes it again the moment the same workflow goes
-# green, so an open issue is always the live state and not a backlog to
-# sift. Each watched workflow has its own issue: `CI` going green does
-# not close the one a failed site deploy opened.
+# of the failure, and closes it again when the same workflow goes green on
+# the commit that failed (a rerun). A pass on a later commit only comments
+# (#2504): it does not prove the failure gone. Each watched workflow has
+# its own issue: `CI` going green does not close the one a failed site
+# deploy opened.
 #
 # The logic is in scripts/trunk-red.ts, with scripts/trunk-red.test.ts
 # beside it, and not in this file. `workflow_run` runs from the default
@@ -30,6 +31,7 @@ on:
       - CI
       - Deploy the marketing site to Firebase Hosting on merge
       - Hosting edge check
+      - Terraform Plan
     types: [completed]
     # A `repository_dispatch` run of a watched workflow has `trunk` as
     # its head branch too, so this filter lets it through.

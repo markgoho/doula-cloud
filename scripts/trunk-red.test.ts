@@ -24,9 +24,14 @@ const SITE = {
   name: 'Deploy the marketing site to Firebase Hosting on merge',
   path: '.github/workflows/firebase-hosting-merge.yml',
 };
+const TERRAFORM = {
+  name: 'Terraform Plan',
+  path: '.github/workflows/terraform-plan.yml',
+};
 
 const CANCELED = 'cancelled'; // spelling:ignore: the value GitHub's API sends
 const SHA = '8b41853e0f6a4b0c9d2e7f1a3c5b7d9e1f2a4c6e';
+const LATER_SHA = '407184f7c2d1e0b9a8f7e6d5c4b3a2f1e0d9c8b7';
 const RUN_URL = 'https://github.com/markgoho/doula-cloud/actions/runs/7001';
 
 let dir: string;
@@ -52,6 +57,8 @@ type Fixtures = {
   jobsFail?: boolean;
   /** What `repos/<repo>/actions/runs/<id>` answers, for a replay. */
   run?: object;
+  /** The comments of each issue, by its number. */
+  comments?: Record<number, { body: string }[]>;
 };
 type Call = { method: string; endpoint: string; input: unknown };
 
@@ -80,9 +87,12 @@ function standIn(fixtures: Fixtures): string {
       "const input = readsInput ? JSON.parse(fs.readFileSync(0, 'utf8')) : null;",
       "const fixtures = JSON.parse(fs.readFileSync(path.join(import.meta.dir, 'fixtures.json'), 'utf8'));",
       "fs.appendFileSync(path.join(import.meta.dir, 'calls.jsonl'), JSON.stringify({ method, endpoint, input }) + '\\n');",
-      "if (method === 'GET' && /\\/actions\\/runs\\/\\d+\\/jobs/.test(endpoint)) {",
+      "if (method === 'GET' && /\\/actions\\/runs\\/\\d+\\/attempts\\/\\d+\\/jobs/.test(endpoint)) {",
       "  if (fixtures.jobsFail) { console.error('HTTP 502'); process.exit(1); }",
       '  console.log(JSON.stringify({ jobs: fixtures.jobs ?? [] }));',
+      "} else if (method === 'GET' && /\\/issues\\/\\d+\\/comments/.test(endpoint)) {",
+      '  const number = Number(endpoint.match(/\\/issues\\/(\\d+)\\/comments/)[1]);',
+      '  console.log(JSON.stringify((fixtures.comments ?? {})[number] ?? []));',
       "} else if (method === 'GET' && /\\/actions\\/runs\\/\\d+$/.test(endpoint)) {",
       '  console.log(JSON.stringify(fixtures.run ?? {}));',
       "} else if (method === 'GET' && /\\/issues\\?/.test(endpoint)) {",
@@ -103,22 +113,25 @@ type RunFields = {
   conclusion: string;
   event?: string;
   message?: string | null;
+  sha?: string;
+  attempt?: number;
 };
 
 /** The fields of a `workflow_run` object that the script reads. */
 function workflowRun(
   workflow: { name: string; path: string },
-  { conclusion, event = 'push', message }: RunFields
+  { conclusion, event = 'push', message, sha = SHA, attempt = 1 }: RunFields
 ) {
   return {
     id: 7001,
+    run_attempt: attempt,
     name: workflow.name,
     path: workflow.path,
     event,
     status: 'completed',
     conclusion,
     head_branch: 'trunk',
-    head_sha: SHA,
+    head_sha: sha,
     head_commit:
       message === null
         ? null
@@ -173,9 +186,15 @@ function alarm(
 const marker = (workflow: { path: string }) =>
   `<!-- trunk-red: ${workflow.path} -->`;
 
-const openAlarm = (number: number, workflow: { path: string }): Issue => ({
+const shaMarker = (sha: string) => `<!-- trunk-red-sha: ${sha} -->`;
+
+const openAlarm = (
+  number: number,
+  workflow: { path: string },
+  sha = SHA
+): Issue => ({
   number,
-  body: `It failed.\n\n${marker(workflow)}\n`,
+  body: `It failed.\n\n${shaMarker(sha)}\n\n${marker(workflow)}\n`,
 });
 
 const DEPLOY_FAILED: Job[] = [
@@ -405,6 +424,96 @@ describe('a red run', () => {
     );
   });
 
+  test.each([1, 2])(
+    'reads the jobs of the attempt that failed (%i), not of a rerun that started since (#2504)',
+    (attempt) => {
+      const result = alarm(
+        workflowRun(CI, { conclusion: 'failure', attempt }),
+        {
+          jobs: [
+            {
+              name: 'api-image',
+              conclusion: 'failure',
+              steps: [{ name: 'Build and push', conclusion: 'failure' }],
+            },
+          ],
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.calls.map((call) => call.endpoint)).toContain(
+        `repos/${REPO}/actions/runs/7001/attempts/${attempt}/jobs?per_page=100`
+      );
+      expect((result.writes[0]?.input as IssueInput).body).toContain(
+        '- **api-image** - failed at step _Build and push_'
+      );
+    }
+  );
+
+  test('records the failing commit, and says that only a pass on that commit closes the issue', () => {
+    const result = alarm(workflowRun(CI, { conclusion: 'failure' }));
+
+    const input = result.writes[0]?.input as IssueInput;
+    expect(input.body).toContain(shaMarker(SHA));
+    expect(input.body).toContain('gh run rerun 7001 --failed');
+    expect(input.body).toContain('passes on this same commit');
+  });
+
+  test('on a later commit records that commit in its comment on the open issue', () => {
+    const result = alarm(
+      workflowRun(CI, { conclusion: 'failure', sha: LATER_SHA }),
+      { issues: [openAlarm(1622, CI)] }
+    );
+
+    expect(result.writes.map((call) => call.endpoint)).toEqual([
+      `repos/${REPO}/issues/1622/comments`,
+    ]);
+    expect((result.writes[0]?.input as CommentInput).body).toContain(
+      shaMarker(LATER_SHA)
+    );
+  });
+
+  test('of Terraform Plan on a push says what a red plan means, where the drift table is, and the fix', () => {
+    const result = alarm(workflowRun(TERRAFORM, { conclusion: 'failure' }), {
+      jobs: [
+        {
+          name: 'plan',
+          conclusion: 'failure',
+          steps: [{ name: 'Terraform plan', conclusion: 'failure' }],
+        },
+      ],
+    });
+
+    expect(result.status).toBe(0);
+    const input = result.writes[0]?.input as IssueInput;
+    expect(input.title).toBe('Trunk is red: Terraform Plan failed on 8b41853e');
+    expect(input.body).toContain(
+      '- **plan** - failed at step _Terraform plan_'
+    );
+    expect(input.body).not.toContain('no deploy is reaching the environment');
+    expect(input.body).not.toContain('not reaching the environment');
+    expect(input.body).toContain('drift');
+    expect(input.body).toContain(
+      'gh api repos/markgoho/doula-cloud/actions/jobs/<id>/logs --allow-escape-sequences'
+    );
+    expect(input.body).toContain('laptop `apply`');
+    expect(input.body).toContain('docs/infrastructure.md');
+    expect(input.body).toContain(marker(TERRAFORM));
+  });
+
+  test('of the daily Terraform Plan says it was not caused by the trunk head', () => {
+    const result = alarm(
+      workflowRun(TERRAFORM, { conclusion: 'failure', event: 'schedule' })
+    );
+
+    const input = result.writes[0]?.input as IssueInput;
+    expect(input.title).toBe(
+      'Trunk is red: Terraform Plan failed on a schedule run'
+    );
+    expect(input.body).toContain('a `schedule` event, not a push');
+    expect(input.body).not.toContain('**Commit:**');
+  });
+
   test('still opens the alarm when the jobs cannot be read', () => {
     const result = alarm(workflowRun(SITE, { conclusion: 'failure' }), {
       jobsFail: true,
@@ -432,7 +541,7 @@ describe('a passing run', () => {
       `PATCH repos/${REPO}/issues/1700`,
     ]);
     expect((result.writes[0]?.input as CommentInput).body).toContain(
-      `Deploy the marketing site to Firebase Hosting on merge is green again on trunk as of 8b41853e - ${RUN_URL}`
+      `Deploy the marketing site to Firebase Hosting on merge passed on trunk at 8b41853e, the commit that failed - ${RUN_URL}`
     );
     expect(result.writes[1]?.input).toEqual({
       state: 'closed',
@@ -485,6 +594,75 @@ describe('a passing run', () => {
 
     expect(result.status).toBe(0);
     expect(result.writes).toEqual([]);
+  });
+
+  test('on a different commit leaves the alarm open, with a comment that names both commits (#2504)', () => {
+    const result = alarm(
+      workflowRun(CI, { conclusion: 'success', sha: LATER_SHA }),
+      { issues: [openAlarm(1622, CI)] }
+    );
+
+    expect(result.status).toBe(0);
+    expect(
+      result.writes.map((call) => `${call.method} ${call.endpoint}`)
+    ).toEqual([`POST repos/${REPO}/issues/1622/comments`]);
+    const body = (result.writes[0]?.input as CommentInput).body;
+    expect(body).toContain(LATER_SHA.slice(0, 8));
+    expect(body).toContain(SHA.slice(0, 8));
+    expect(body).toContain('never reproduced');
+    expect(body).toContain('gh run rerun');
+  });
+
+  test('on a different commit says so only once', () => {
+    const first = alarm(
+      workflowRun(CI, { conclusion: 'success', sha: LATER_SHA }),
+      { issues: [openAlarm(1622, CI)] }
+    );
+    const said = (first.writes[0]?.input as CommentInput).body;
+    fs.rmSync(path.join(dir, 'calls.jsonl'));
+
+    const result = alarm(
+      workflowRun(CI, {
+        conclusion: 'success',
+        sha: 'c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00',
+      }),
+      { issues: [openAlarm(1622, CI)], comments: { 1622: [{ body: said }] } }
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.writes).toEqual([]);
+  });
+
+  test('on a later commit that also failed closes the alarm, because that commit is recorded in a comment', () => {
+    const result = alarm(
+      workflowRun(CI, { conclusion: 'success', sha: LATER_SHA }),
+      {
+        issues: [openAlarm(1622, CI)],
+        comments: {
+          1622: [{ body: `It failed again.\n\n${shaMarker(LATER_SHA)}` }],
+        },
+      }
+    );
+
+    expect(
+      result.writes.map((call) => `${call.method} ${call.endpoint}`)
+    ).toEqual([
+      `POST repos/${REPO}/issues/1622/comments`,
+      `PATCH repos/${REPO}/issues/1622`,
+    ]);
+  });
+
+  test('does not close an issue that records no commit', () => {
+    const result = alarm(workflowRun(CI, { conclusion: 'success' }), {
+      issues: [{ number: 1622, body: 'Trunk CI failed on **462d3b94**.' }],
+    });
+
+    expect(
+      result.writes.map((call) => `${call.method} ${call.endpoint}`)
+    ).toEqual([`POST repos/${REPO}/issues/1622/comments`]);
+    expect((result.writes[0]?.input as CommentInput).body).toContain(
+      'never reproduced'
+    );
   });
 });
 
@@ -665,6 +843,12 @@ describe('.github/workflows/trunk-red.yml', () => {
   test('watches the daily Hosting edge check (#1867)', () => {
     expect(watched.map((name) => names.get(name))).toContain(
       'hosting-edge-check.yml'
+    );
+  });
+
+  test('watches Terraform Plan (#2504)', () => {
+    expect(watched.map((name) => names.get(name))).toContain(
+      'terraform-plan.yml'
     );
   });
 
