@@ -62,7 +62,11 @@ func findStaff(ctx context.Context, tx *sql.Tx, email string) ([]foundStaff, err
 			last.PracticeNames = append(last.PracticeNames, practiceName.String)
 		}
 	}
-	return found, rows.Err()
+	if err := rows.Err(); err != nil {
+		// coverage:ignore reason: DB failure, not exercised by unit tests
+		return nil, fmt.Errorf("find staff: %w", err)
+	}
+	return found, nil
 }
 
 // staffLookup finds a Staff member by the sign-in email she gives on the
