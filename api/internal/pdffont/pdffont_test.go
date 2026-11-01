@@ -142,3 +142,27 @@ func TestParagraph_WrapsBetweenWords(t *testing.T) {
 		t.Fatalf("text = %q, want the newline kept as a line of its own", text)
 	}
 }
+
+// #2538: a right-to-left paragraph of several sentences, long enough to
+// wrap, a name between Latin words, a long Devanagari paragraph, and a
+// right-to-left word longer than a line, each read back as typed.
+func TestParagraph_ReadsBackRightToLeftAndShapedTextAsTyped(t *testing.T) {
+	arabicProse := strings.TrimSpace(strings.Repeat("هذه الاتفاقية بين دولا المدينة وسارة الحداد. ", 5))
+	devanagariProse := strings.TrimSpace(strings.Repeat("यह समझौता जन्म सहयोग और प्रिया शर्मा के बीच है। ", 5))
+	for name, text := range map[string]string{
+		"Arabic prose":           arabicProse,
+		"a name between words":   "This agreement is between Rooted Birth Collective and سارة الحداد for doula services.",
+		"Devanagari prose":       devanagariProse,
+		"a word wider than line": strings.Repeat("س", 300),
+	} {
+		t.Run(name, func(t *testing.T) {
+			for _, style := range []pdffont.Style{pdffont.Regular, pdffont.Bold} {
+				out := render(t, func(d *pdffont.Doc) { d.Paragraph(style, 12, 8, text) })
+				lines := strings.Split(pdftext.Text(out), "\n")
+				if got := strings.Join(lines, " "); strings.ReplaceAll(got, " ", "") != strings.ReplaceAll(text, " ", "") {
+					t.Fatalf("style %q: text = %q, want %q", style, got, text)
+				}
+			}
+		})
+	}
+}

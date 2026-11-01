@@ -19,7 +19,7 @@ func TestFirstFace_KeepsWhatNoFaceHasWhereItIs(t *testing.T) {
 func TestCell_DrawsNothingForEmptyText(t *testing.T) {
 	d := New()
 	x := d.GetX()
-	d.cell("", 8)
+	d.cell("", 0, 8)
 	if d.GetX() != x {
 		t.Fatalf("x moved from %v to %v", x, d.GetX())
 	}

@@ -5,10 +5,17 @@
 //
 // No one font covers every script a Client's name may be written in, so
 // a line is split into runs, each drawn in the first face that has a
-// glyph for it, and fpdf's flowing Write lays the runs out one after
-// another. fpdf subsets each face to the characters a document uses, so a
-// typical Contract carries a few kilobytes of each face it touches and
-// nothing of the rest.
+// glyph for it, and the runs are laid out one after another. fpdf subsets
+// each face to the characters a document uses, so a typical Contract
+// carries a few kilobytes of each face it touches and nothing of the rest.
+//
+// fpdf draws each character's own glyph in the order typed and does no
+// text shaping, which Arabic and Devanagari need: Arabic joins its letters
+// and runs right to left, and Devanagari forms conjuncts and moves its
+// short-i sign before its consonant. A run in either face is shaped
+// instead (shape.go, #2538) and drawn as its glyph outlines, with the same
+// text laid invisibly over it so it still copies out and searches as
+// typed.
 //
 // The faces, and the license each is embedded and redistributed under,
 // sit in fonts/ beside their license text:
@@ -23,10 +30,8 @@
 //     in a document is not one (the OFL FAQ, on embedding a font in a
 //     document).
 //
-// fpdf does not shape text: Arabic prints in its isolated letter forms,
-// left to right, and Devanagari without its conjuncts. Every character is
-// a real glyph rather than a "?", and a reader that copies the text gets
-// the characters typed; shaping is #2538.
+// Shaping is github.com/go-text/typesetting, a Go port of HarfBuzz, under
+// the Unlicense or the BSD 3-Clause License.
 package pdffont
 
 import (
@@ -37,6 +42,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/go-pdf/fpdf"
+	"github.com/go-text/typesetting/bidi"
+	"github.com/go-text/typesetting/shaping"
 	"golang.org/x/image/font/sfnt"
 	"golang.org/x/text/unicode/norm"
 )
@@ -45,18 +52,20 @@ import (
 var fontFiles embed.FS
 
 // face is one embedded typeface, as the fpdf family it is registered as.
+// A face with a script is shaped rather than drawn character by character.
 type face struct {
 	family  string
 	regular string
 	bold    string
+	script  *script
 }
 
 // faces in the order a character is looked for: the first that has a
 // glyph for it draws it.
 var faces = []face{
 	{family: "NotoSans", regular: "fonts/NotoSans-Regular.ttf", bold: "fonts/NotoSans-Bold.ttf"},
-	{family: "NotoSansArabic", regular: "fonts/NotoSansArabic-Regular.ttf", bold: "fonts/NotoSansArabic-Bold.ttf"},
-	{family: "NotoSansDevanagari", regular: "fonts/NotoSansDevanagari-Regular.ttf", bold: "fonts/NotoSansDevanagari-Bold.ttf"},
+	{family: "NotoSansArabic", regular: "fonts/NotoSansArabic-Regular.ttf", bold: "fonts/NotoSansArabic-Bold.ttf", script: &arabic},
+	{family: "NotoSansDevanagari", regular: "fonts/NotoSansDevanagari-Regular.ttf", bold: "fonts/NotoSansDevanagari-Bold.ttf", script: &devanagari},
 	// One weight only: bold CJK prints in the regular weight.
 	{family: "DroidSansFallback", regular: "fonts/DroidSansFallbackFull.ttf", bold: "fonts/DroidSansFallbackFull.ttf"},
 	// Hangul, which Droid Sans Fallback does not have.
@@ -108,16 +117,25 @@ const (
 	Bold    Style = "B"
 )
 
+func (f face) file(style Style) string {
+	if style == Bold {
+		return f.bold
+	}
+	return f.regular
+}
+
 // Doc is an A4 portrait PDF that writes text through the embedded faces.
 type Doc struct {
 	*fpdf.Fpdf
 	registered map[string]bool
+	shaper     shaping.HarfbuzzShaper
+	shapers    map[string]*shapingFace
 }
 
 // New starts a Doc with its first page added. Cells carry no inner
 // margin, so the runs of one line sit flush against each other.
 func New() *Doc {
-	d := &Doc{Fpdf: fpdf.New("P", "mm", "A4", ""), registered: map[string]bool{}}
+	d := &Doc{Fpdf: fpdf.New("P", "mm", "A4", ""), registered: map[string]bool{}, shapers: map[string]*shapingFace{}}
 	d.SetCellMargin(0)
 	d.AddPage()
 	return d
@@ -129,63 +147,97 @@ func New() *Doc {
 //
 // It lays the line out itself rather than through fpdf's Write, which
 // reads a zero-width glyph (a combining mark, a Devanagari vowel sign) as
-// a glyph wider than the page and breaks the line at it. GetStringWidth
-// reads those widths correctly, so each piece is measured with it and
-// drawn as a cell of exactly that width.
+// a glyph wider than the page and breaks the line at it. Each piece is
+// measured (GetStringWidth, or its shaped width) and drawn at exactly that
+// width. A line is wrapped in the order it was typed and gathered whole
+// before it is drawn, then its pieces are put in reading order by the
+// Unicode Bidirectional Algorithm (bidi.go), so right-to-left words read
+// right to left. A paragraph whose first letter is right-to-left reads
+// right to left as a whole and is set against the right margin.
 func (d *Doc) Paragraph(style Style, size, lineHeight float64, text string) {
 	for line := range strings.SplitSeq(printable(text), "\n") {
-		for _, word := range words(runs(line)) {
-			d.place(word, style, size, lineHeight)
-		}
+		levels, base := bidiLevels(line)
+		d.layout(words(runs(line)), levels, base, style, size, lineHeight)
 		d.Ln(lineHeight)
 	}
 }
 
-// place draws word at the current position, first moving to a new line
-// when it would cross the right margin, so a line breaks only at a space
-// and a word set in two faces (a name, then its full stop) stays whole. A
-// space that would open a line is dropped, and a word wider than a whole
-// line is broken between characters.
-func (d *Doc) place(word []run, style Style, size, lineHeight float64) {
+// layout places words on lines, moving to a new line before a word that
+// would cross the right margin, so a line breaks only at a space and a
+// word set in two faces (a name, then its full stop) stays whole. A space
+// that would open a line is dropped, and a word wider than a whole line
+// is broken between characters.
+func (d *Doc) layout(ws [][]run, levels []bidi.Level, base bidi.Level, style Style, size, lineHeight float64) {
 	left, _, right, _ := d.GetMargins()
 	pageWidth, _ := d.GetPageSize()
 	limit := pageWidth - right
-	var width float64
-	for _, r := range word {
-		d.use(r.face, style, size)
-		width += d.GetStringWidth(r.text)
-	}
-	if d.GetX()+width > limit && d.GetX() > left {
+	var line []run
+	x := d.GetX()
+	newLine := func() {
+		d.flush(line, levels, base, style, size, lineHeight)
 		d.Ln(lineHeight)
-		word[0].text = strings.TrimLeft(word[0].text, " ")
+		line, x = nil, left
 	}
-	for _, r := range word {
-		d.use(r.face, style, size)
-		piece := r.text
-		if d.GetX()+d.GetStringWidth(piece) > limit {
+	for _, word := range ws {
+		width := d.wordWidth(word, style, size)
+		if x+width > limit && x > left {
+			newLine()
+			trimmed := strings.TrimLeft(word[0].text, " ")
+			word[0].start += utf8.RuneCountInString(word[0].text) - utf8.RuneCountInString(trimmed)
+			word[0].text = trimmed
+			width = d.wordWidth(word, style, size)
+		}
+		if x+width <= limit {
+			line = append(line, word...)
+			x += width
+			continue
+		}
+		for _, r := range word {
 			var b strings.Builder
-			for _, c := range piece {
-				if b.Len() > 0 && d.GetX()+d.GetStringWidth(b.String()+string(c)) > limit {
-					d.cell(b.String(), lineHeight)
-					d.Ln(lineHeight)
+			start := r.start
+			for _, c := range r.text {
+				next := b.String() + string(c)
+				if b.Len() > 0 && x+d.width(r.face, style, size, next) > limit {
+					line = append(line, run{face: r.face, text: b.String(), start: start})
+					start += utf8.RuneCountInString(b.String())
+					newLine()
 					b.Reset()
 				}
 				b.WriteRune(c)
 			}
-			piece = b.String()
+			line = append(line, run{face: r.face, text: b.String(), start: start})
+			x += d.width(r.face, style, size, b.String())
 		}
-		d.cell(piece, lineHeight)
 	}
+	d.flush(line, levels, base, style, size, lineHeight)
 }
 
-// cell draws text at the current position in a cell exactly as wide.
-// fpdf reads a cell width of 0 as "to the right margin", so text that is
-// only a zero-width mark is drawn in a cell barely wider.
-func (d *Doc) cell(text string, lineHeight float64) {
+func (d *Doc) wordWidth(word []run, style Style, size float64) float64 {
+	var width float64
+	for _, r := range word {
+		width += d.width(r.face, style, size, r.text)
+	}
+	return width
+}
+
+// width is how wide text draws in face i: shaped where the face is
+// shaped, fpdf's own measure otherwise.
+func (d *Doc) width(i int, style Style, size float64, text string) float64 {
+	if faces[i].script != nil {
+		return d.shapedWidth(i, style, size, text)
+	}
+	d.use(i, style, size)
+	return d.GetStringWidth(text)
+}
+
+// cell draws text at the current position in a cell width wide. fpdf
+// reads a cell width of 0 as "to the right margin", so text that is only
+// a zero-width mark is drawn in a cell barely wider.
+func (d *Doc) cell(text string, width, lineHeight float64) {
 	if text == "" {
 		return
 	}
-	d.CellFormat(max(d.GetStringWidth(text), zeroWidth), lineHeight, text, "", 0, "", false, 0, "")
+	d.CellFormat(max(width, zeroWidth), lineHeight, text, "", 0, "", false, 0, "")
 }
 
 const zeroWidth = 1e-6
@@ -196,11 +248,13 @@ func words(rs []run) [][]run {
 	var out [][]run
 	var word []run
 	for _, r := range rs {
+		start := r.start
 		for _, piece := range strings.SplitAfter(r.text, " ") {
 			if piece == "" {
 				continue
 			}
-			word = append(word, run{face: r.face, text: piece})
+			word = append(word, run{face: r.face, text: piece, start: start})
+			start += utf8.RuneCountInString(piece)
 			if strings.HasSuffix(piece, " ") {
 				out = append(out, word)
 				word = nil
@@ -219,19 +273,18 @@ func (d *Doc) use(i int, style Style, size float64) {
 	f := faces[i]
 	key := f.family + string(style)
 	if !d.registered[key] {
-		file := f.regular
-		if style == Bold {
-			file = f.bold
-		}
-		d.AddUTF8FontFromBytes(f.family, string(style), mustRead(file))
+		d.AddUTF8FontFromBytes(f.family, string(style), mustRead(f.file(style)))
 		d.registered[key] = true
 	}
 	d.SetFont(f.family, string(style), size)
 }
 
+// run is text one face draws, and where it starts in its paragraph, in
+// runes.
 type run struct {
-	face int
-	text string
+	face  int
+	text  string
+	start int
 }
 
 // runs splits text into the longest stretches one face can draw. Each
@@ -243,21 +296,23 @@ type run struct {
 func runs(text string) []run {
 	var out []run
 	var b strings.Builder
-	current := -1
+	current, start, index := -1, 0, 0
 	for _, r := range text {
 		next := current
 		if current < 0 || (!unicode.IsSpace(r) && !unicode.Is(unicode.Mn, r)) || !covers(current, r) {
 			next = firstFace(r, current)
 		}
 		if next != current && b.Len() > 0 {
-			out = append(out, run{face: current, text: b.String()})
+			out = append(out, run{face: current, text: b.String(), start: start})
 			b.Reset()
+			start = index
 		}
 		current = next
 		b.WriteRune(r)
+		index++
 	}
 	if b.Len() > 0 {
-		out = append(out, run{face: current, text: b.String()})
+		out = append(out, run{face: current, text: b.String(), start: start})
 	}
 	return out
 }
@@ -280,7 +335,9 @@ func firstFace(r rune, fallback int) int {
 // drops what fpdf cannot write: fpdf encodes text as UTF-16 without
 // surrogate pairs, so a character outside the Basic Multilingual Plane
 // (an emoji, a rare CJK ideograph) would corrupt the line. Each prints as
-// U+FFFD instead, and invalid UTF-8 likewise.
+// U+FFFD instead, and invalid UTF-8 likewise. No embedded face has a
+// glyph for any of them, so a face drawing its outline would print a box
+// all the same (#2538).
 func printable(text string) string {
 	text = norm.NFC.String(text)
 	if !strings.ContainsFunc(text, func(r rune) bool { return r > 0xFFFF || r == utf8.RuneError }) {
