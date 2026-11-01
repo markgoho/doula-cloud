@@ -553,3 +553,33 @@ resource "google_artifact_registry_repository" "api" {
     enablement_config = null
   }
 }
+
+# `alert-window@`: the identity the #1403 Scheduler pair (scheduler.tf)
+# presents to the Monitoring API to switch alert policies off and on. Alert
+# policies have no resource-level IAM, so the grant is project-level, narrowed
+# by a custom role to the one permission the PATCH needs rather than
+# `roles/monitoring.alertPolicyEditor`, which can also create and delete.
+# Cloud Scheduler's service agent mints the access token through
+# `roles/cloudscheduler.serviceAgent`, which carries
+# `iam.serviceAccounts.getAccessToken`.
+resource "google_service_account" "alert_window" {
+  account_id   = "alert-window"
+  description  = "Switches the waking-hours alert policies off at 22:00 and on at 07:00 America/New_York (#1403)."
+  display_name = "Alert window"
+  project      = "doula-cloud"
+}
+
+resource "google_project_iam_custom_role" "alert_window" {
+  description = "Switch an alert policy on or off (#1403). Nothing else: not create, not delete."
+  permissions = ["monitoring.alertPolicies.update"]
+  project     = "doula-cloud"
+  role_id     = "alertWindow"
+  stage       = "GA"
+  title       = "Alert window"
+}
+
+resource "google_project_iam_member" "alert_window" {
+  member  = google_service_account.alert_window.member
+  project = "doula-cloud"
+  role    = google_project_iam_custom_role.alert_window.id
+}

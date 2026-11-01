@@ -33,6 +33,14 @@
 # `pg_site_builder_dsn`). Creating and rotating the logins by hand, per
 # docs/infrastructure.md's by-hand table, is the only way this configuration
 # never holds a database password.
+#
+# Accepted risk (ADR-0049 P4, #1403): this is a single-zone `db-f1-micro`
+# with nightly backups and seven days of transaction logs, and no standby.
+# It cannot have one on this tier: high availability needs a dedicated-core
+# tier at several times this instance's cost. The risk is accepted through
+# the pilot and the first year (#1378 P4). The threshold is set in advance:
+# the standby is bought the month the monthly page (ADR-0046 P3) shows
+# Credits bought covering its cost, and not before.
 resource "google_sql_database_instance" "doula_cloud_pg" {
   database_version                           = "POSTGRES_16"
   deletion_policy                            = "DELETE"
