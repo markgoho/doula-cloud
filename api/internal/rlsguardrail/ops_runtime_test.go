@@ -44,7 +44,9 @@ var wantDefinerFunctions = map[string][]string{
 		"ops_record_refund(uuid,uuid,integer,integer,text,text,uuid,timestamp with time zone)",
 		"ops_refund_by_request_key(uuid,text)",
 		"ops_refund_lots(uuid)",
+		"ops_record_second_factor_cleared(uuid,uuid,timestamp with time zone)",
 		"ops_refund_practice(uuid)",
+		"ops_second_factor_staff(uuid)",
 		"record_operator_activity(uuid,text,uuid,text,jsonb,uuid,timestamp with time zone)",
 	},
 }
@@ -304,5 +306,22 @@ func TestOpsRuntime_AppRuntimeCannotWriteAFoundingGrantRow(t *testing.T) {
 		`INSERT INTO credit_ledger (practice_id, origin, quantity, operator_act_id) VALUES ($1, 'founding_grant', 3, $2)`, practiceID, actID)
 	if err == nil || !strings.Contains(err.Error(), "row-level security") {
 		t.Fatalf("app_runtime wrote a founding grant row: want a row-level security refusal, got %v", err)
+	}
+}
+
+func TestOpsRuntime_AppRuntimeCannotWriteASupportClearRow(t *testing.T) {
+	db := testdb.New(t)
+	staffID := testdb.SeedStaff(t, db, "support-boundary")
+	actID := testdb.SeedOperatorAct(t, db, "Mark Goho")
+
+	_, err := db.App.ExecContext(t.Context(),
+		`INSERT INTO staff_auth_events (staff_id, actor_operator_act_id, reason) VALUES ($1, $2, 'support')`, staffID, actID)
+	if err == nil || !strings.Contains(err.Error(), "permission denied") {
+		t.Fatalf("app_runtime wrote a support row: want permission denied, got %v", err)
+	}
+
+	if _, err := db.App.ExecContext(t.Context(),
+		`INSERT INTO staff_auth_events (staff_id, actor_staff_id, reason) VALUES ($1, $1, 'enrolled')`, staffID); err != nil {
+		t.Fatalf("app_runtime wrote a Staff member's own row: %v", err)
 	}
 }

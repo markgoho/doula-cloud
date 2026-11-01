@@ -73,7 +73,7 @@ func FinishEnrollmentHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.
 				}}, nil
 			}
 			staffID := self.ID
-			if err := recordAuthEvent(ctx, tx, staffID, AuthEventEnrolled, staffID, ""); err != nil {
+			if err := recordAuthEvent(ctx, tx, staffID, AuthEventEnrolled, staffID); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				return sessionmint.Result{}, err
 			}
