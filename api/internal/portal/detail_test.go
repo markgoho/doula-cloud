@@ -291,3 +291,50 @@ func TestDetailHandler_TotalToPayCents(t *testing.T) {
 		t.Fatalf("totalToPayCents = %d, want 9000", out.TotalToPayCents)
 	}
 }
+
+// TestDetailHandler_IsOneOfSeveral proves #2276's gate: false while her
+// Client record holds one Engagement, true on each of two once a second
+// is added at the same Practice.
+func TestDetailHandler_IsOneOfSeveral(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "portal-detail-several"
+	first, _ := seedClientAtPracticeWithDueDate(t, db, identityUID, "Riverside Doulas", "")
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+	read := func(engagementID string) portal.Detail {
+		t.Helper()
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/portal/engagements/"+engagementID, nil)
+		if err != nil {
+			t.Fatalf("build request: %v", err)
+		}
+		authntest.AddSessionCookie(req, session)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer resp.Body.Close()
+		var out portal.Detail
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		return out
+	}
+
+	if read(first).IsOneOfSeveral {
+		t.Fatalf("isOneOfSeveral = true with one Engagement, want false")
+	}
+
+	var second string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO engagements (client_id, practice_id, status, kind)
+		 SELECT client_id, practice_id, 'intake', 'postpartum' FROM engagements WHERE id = $1 RETURNING id`,
+		first).Scan(&second); err != nil {
+		t.Fatalf("seed second engagement: %v", err)
+	}
+	for _, id := range []string{first, second} {
+		if !read(id).IsOneOfSeveral {
+			t.Fatalf("isOneOfSeveral = false on %s with two Engagements, want true", id)
+		}
+	}
+}

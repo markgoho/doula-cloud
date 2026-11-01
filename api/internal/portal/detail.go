@@ -68,6 +68,11 @@ type Detail struct {
 	// from this DTO once before (#505, when the portal page had no use
 	// for it) and is back now that the chrome does.
 	CreatedAt time.Time `json:"createdAt"`
+	// IsOneOfSeveral is true when her Client record at this Practice holds
+	// another Engagement too (#2276), so the page names which one this is
+	// with the root list's label. Engagements at two Practices already
+	// read apart by the Practice's name.
+	IsOneOfSeveral bool `json:"isOneOfSeveral"`
 	// OffersBirthPlan is engagement.OffersBirthPlan's own resolved answer
 	// -- not the Engagement's kind (#311) and not its birth outcome
 	// (#294), both of which are staff-only (GLOSSARY.md's Engagement
@@ -120,13 +125,14 @@ func DetailHandler() http.Handler {
 			`SELECT e.id, p.name,
 			        trim(concat_ws(' ', coalesce(c.preferred_name, c.given_name), c.family_name)),
 			        e.due_date::text, e.created_at, e.kind::text, e.birth_outcome::text,
-			        e.status = 'completed'
+			        e.status = 'completed',
+			        EXISTS(SELECT 1 FROM engagements o WHERE o.client_id = e.client_id AND o.id <> e.id)
 			 FROM engagements e
 			 JOIN practices p ON p.id = e.practice_id
 			 JOIN clients c ON c.id = e.client_id
 			 WHERE e.id = $1 AND e.client_id = $2`,
 			engagementID, clientID,
-		).Scan(&d.EngagementID, &d.PracticeName, &d.ClientName, &dueDate, &d.CreatedAt, &kind, &birthOutcome, &d.CareEnded)
+		).Scan(&d.EngagementID, &d.PracticeName, &d.ClientName, &dueDate, &d.CreatedAt, &kind, &birthOutcome, &d.CareEnded, &d.IsOneOfSeveral)
 		if errors.Is(err, sql.ErrNoRows) {
 			// coverage:ignore reason: clientauth.Middleware already confirmed ownership; unreachable in practice
 			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
