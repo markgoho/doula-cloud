@@ -487,6 +487,13 @@ const (
 	// a new Practice.
 	ActionPortalAccountLinked EngagementAction = "portal_account_linked"
 
+	// ActionPortalInviteRefused records the accept ADR-0015 refuses
+	// (#2279): the caller's Portal Account already reaches another Client
+	// at this Practice, so this record's invite can never be accepted.
+	// Always a ClientActor. In staffingActions below: nothing of hers
+	// changed, and the way on is the Practice's merge of the two records.
+	ActionPortalInviteRefused EngagementAction = "portal_invite_refused"
+
 	// #303: a Client's own push-notification preference change, recorded
 	// against her Engagement (notificationpref's PUT handler). Neither
 	// action belongs in moneyActions or staffingActions below -- it is
@@ -647,6 +654,8 @@ var staffingActions = map[EngagementAction]bool{
 	// #2271: what the Practice paid its Doula is the Practice's own books.
 	ActionContractorFeePaid:            true,
 	ActionContractorFeePaymentReversed: true,
+	// #2279: a refused accept changes nothing of hers.
+	ActionPortalInviteRefused: true,
 }
 
 // StaffingActions returns every action GLOSSARY.md's Activity entry keeps

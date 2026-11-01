@@ -78,7 +78,10 @@ func AcceptInviteHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 			var msg string
 			result, identifier, engagementID, reused, status, code, msg = acceptInvite(r, tx, req.InviteToken)
 			if status != http.StatusOK {
-				return sessionmint.Result{Refusal: &sessionmint.Refusal{Status: status, Code: code, Message: msg}}, nil
+				// #2279: the refused accept is recorded on the Engagement,
+				// so the Practice can see the invite will never be accepted.
+				keep := code == apierr.CodePortalAccessAlreadyHere
+				return sessionmint.Result{Refusal: &sessionmint.Refusal{Status: status, Code: code, Message: msg, Keep: keep}}, nil
 			}
 			return sessionmint.Result{IdentityUID: identifier, Body: result.AcceptInviteResponse}, nil
 		}
@@ -110,6 +113,31 @@ func AcceptInviteHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 
 		sessionmint.IssueFromDB(w, r, db, enq, sessionmint.Portal(), step, finish)
 	})
+}
+
+// refuseAccessAlreadyHere is ADR-0015's refusal of an accept whose
+// Portal Account already reaches another Client at this Practice (#2279).
+// It records the refused accept against the invited Engagement, kept by
+// Refusal.Keep, and answers in the Client's own words with the Practice
+// named, under its own code so the page offers the way on to her care.
+func refuseAccessAlreadyHere(ctx context.Context, tx *sql.Tx, clientID, practiceID, engagementID string) (result acceptResult, identifier, engagement string, reused bool, status int, code apierr.Code, msg string) {
+	var practiceName string
+	if err := tx.QueryRowContext(ctx, `SELECT name FROM practices WHERE id = $1`, practiceID).Scan(&practiceName); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests -- practiceID came from the Client row this same tx just read
+		return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
+	}
+	if err := activity.Record(ctx, tx, activity.Entry{
+		PracticeID:  practiceID,
+		SubjectKind: activity.SubjectEngagement,
+		SubjectID:   engagementID,
+		Action:      string(activity.ActionPortalInviteRefused),
+		Actor:       activity.ClientActor(clientID),
+	}, activity.ScopedTo(practiceID)); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
+	}
+	return acceptResult{}, "", "", false, http.StatusConflict, apierr.CodePortalAccessAlreadyHere,
+		fmt.Sprintf("You can already see your care at %s.", practiceName)
 }
 
 // acceptResult is acceptInvite's success value: the public response plus
@@ -258,7 +286,7 @@ func acceptInvite(r *http.Request, tx *sql.Tx, inviteToken string) (result accep
 			return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
 		}
 		if conflictingClientID.Valid {
-			return acceptResult{}, "", "", false, http.StatusConflict, apierr.CodeConflict, "you already have portal access at this practice -- sign in instead of accepting a new invitation"
+			return refuseAccessAlreadyHere(ctx, tx, clientID, practiceID, engagementID)
 		}
 
 		// Re-point app.current_identity_uid at the Portal Account being

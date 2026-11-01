@@ -151,6 +151,12 @@ const (
 	// ended in place of "Page not found". A person who was never on it
 	// still gets the plain 404.
 	CodeAttachmentEnded Code = "ATTACHMENT_ENDED"
+	// CodePortalAccessAlreadyHere is #2279's 409 on a portal invite
+	// accept: the Portal Account the invited address signs in with
+	// already reaches another Client at this Practice (ADR-0015). Its own
+	// code, so the accept page offers the way on to her care in place of
+	// a Continue that can only be refused again.
+	CodePortalAccessAlreadyHere Code = "PORTAL_ACCESS_ALREADY_HERE"
 )
 
 // ForbiddenCodes is the recorded set of reason codes a 403 may carry

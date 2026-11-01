@@ -76,6 +76,7 @@ const WORDING: readonly (readonly [action: string, named: string, unnamed: strin
 	['payment_terms_changed', 'Payment terms changed', 'Payment terms changed'],
 	['portal_account_linked', "Care added to Amara's login", "Care added to the Client's login"],
 	['portal_account_provisioned', 'Login created for Amara', 'Login created for the Client'],
+	['portal_invite_refused', 'Invite refused: Amara signs in through another record', 'Invite refused: the Client signs in through another record'],
 	['portal_invite_sent', 'Amara invited to sign in', 'The Client invited to sign in'],
 	['portal_sessions_ended', 'Amara signed out of every device', 'The Client signed out of every device'],
 	['portal_sign_in_address_changed', 'Sign-in email changed by Amara', 'Sign-in email changed by the Client'],

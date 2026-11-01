@@ -113,6 +113,8 @@ const STAFF_ACTIVITY_PHRASES: Record<string, Phrase> = {
 	portal_invite_sent: (name) => `${client(name)} invited to sign in`,
 	portal_account_provisioned: (name) => `Login created for ${client(name)}`,
 	portal_account_linked: (name) => `Care added to ${clients(name)} login`,
+	// #2279, in the words Renata and Dee each chose.
+	portal_invite_refused: (name) => `Invite refused: ${client(name)} signs in through another record`,
 	push_notifications_enabled: (name) => `Notifications turned on by ${client(name)}`,
 	push_notifications_disabled: (name) => `Notifications turned off by ${client(name)}`,
 
