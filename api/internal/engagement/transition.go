@@ -223,7 +223,7 @@ func TransitionHandler() http.Handler {
 		// before the request body is even decoded -- the same ordering
 		// CompleteHandler's RequireOwnerOrAdmin already used for its own
 		// role gate.
-		if refuseFactWrite(w, reader, "a contractor Doula cannot change an Engagement's status") {
+		if refuseFactWrite(w, reader, "a contractor Doula cannot change the status of this work") {
 			return
 		}
 
@@ -240,7 +240,7 @@ func TransitionHandler() http.Handler {
 		if req.Status == StatusCompleted {
 			if req.EndingReason == nil || !endingReasons[*req.EndingReason] {
 				apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
-					"endingReason is required to complete an Engagement",
+					"endingReason is required to complete this work",
 					map[string]string{"endingReason": MsgEndingReasonNeeded})
 				return
 			}
@@ -274,7 +274,7 @@ func TransitionHandler() http.Handler {
 		// "intake" as a target at all, so they are already rejected by
 		// the 400 above. What is left to gate here is role, not legality.
 		if !isNoOp && isReopen && !reader.IsOwnerOrAdmin() {
-			apierr.WriteError(w, "only a Practice Owner or Admin can reopen a completed Engagement", http.StatusForbidden)
+			apierr.WriteError(w, "only a Practice Owner or Admin can reopen completed work", http.StatusForbidden)
 			return
 		}
 

@@ -122,7 +122,7 @@ func entities() []entity {
 		},
 		{
 			file:        "engagement.csv",
-			description: "Every Engagement -- a Client's episode of care -- this Practice has run.",
+			description: "Every piece of work -- a Client's episode of care -- this Practice has run.",
 			header:      []string{"id", "client_id", colKind, colStatus, colDueDate, colCreatedAt},
 			query: `SELECT id::text, client_id::text, kind::text, status::text, due_date::text, created_at::text
 			          FROM engagements WHERE practice_id = $1
@@ -130,7 +130,7 @@ func entities() []entity {
 		},
 		{
 			file:        "engagement_request.csv",
-			description: "Every Client's request for an Engagement, decided or still pending.",
+			description: "Every Client's request to start work, decided or still pending.",
 			header:      []string{"id", "client_id", colKind, colDueDate, colNote, "state", "requested_by_staff_id", "requested_at", "decided_by_staff_id", "decided_at", colReason, colEngagementID},
 			query: `SELECT id::text, client_id::text, kind::text, due_date::text, note, state::text,
 			               requested_by::text, requested_at::text, decided_by::text, decided_at::text,
@@ -143,7 +143,7 @@ func entities() []entity {
 			// exclusion list applies just as much to an unused Offer) and
 			// is deliberately not selected here.
 			file:        "engagement_offer.csv",
-			description: "Every offer of employment or a contractor fee this Practice has made against an Engagement.",
+			description: "Every offer of employment or a contractor fee this Practice has made against a piece of work.",
 			header:      []string{"id", colEngagementID, colStaffID, "invitation_id", colEmploymentType, colAmountCents, "terms", "client_first_initial", "client_area", colDueDate, "state", "offered_by_staff_id", "offered_at", "expires_at", "decided_by_staff_id", "decided_at", "access_code_attempts"},
 			query: `SELECT o.id::text, o.engagement_id::text, o.staff_id::text, o.invitation_id::text,
 			               o.employment_type::text, o.amount_cents::text, o.terms, o.client_first_initial,
@@ -156,7 +156,7 @@ func entities() []entity {
 		},
 		{
 			file:        "engagement_attachment.csv",
-			description: "Which Staff member is or was attached to which Engagement, and on what fee terms.",
+			description: "Which Staff member is or was attached to which piece of work, and on what fee terms.",
 			header:      []string{"id", colEngagementID, colStaffID, "origin", "attached_by_staff_id", "attached_at", "ended_at", "ended_by_staff_id", "fee_amount_cents", "fee_terms"},
 			query: `SELECT a.id::text, a.engagement_id::text, a.staff_id::text, a.origin::text,
 			               a.attached_by::text, a.attached_at::text, a.ended_at::text, a.ended_by::text,
@@ -178,7 +178,7 @@ func entities() []entity {
 		},
 		{
 			file:        "visit.csv",
-			description: "Every recorded Visit a Staff member paid against an Engagement.",
+			description: "Every recorded Visit a Staff member paid against a piece of work.",
 			header:      []string{"id", colEngagementID, colStaffID, colCreatedAt, "scheduled_at", "notes"},
 			query: `SELECT v.id::text, v.engagement_id::text, v.staff_id::text, v.created_at::text,
 			               v.scheduled_at::text, v.notes
@@ -197,7 +197,7 @@ func entities() []entity {
 		},
 		{
 			file:        "plan_instance.csv",
-			description: "Each Engagement's own birth or care plan, questions and her answers together.",
+			description: "Each piece of work's own birth or care plan, questions and her answers together.",
 			header:      []string{"id", colEngagementID, "plan_type", colFields, "answers", colCreatedAt},
 			query: `SELECT p.id::text, p.engagement_id::text, p.plan_type::text, p.fields::text, p.answers::text,
 			               p.created_at::text
@@ -218,7 +218,7 @@ func entities() []entity {
 			// scope for this ticket (#288's "not a judgment call" list),
 			// and is deliberately not selected.
 			file:        "contract.csv",
-			description: "Each Engagement's own Contract, its merge fields, and how and when she signed it.",
+			description: "Each piece of work's own Contract, its merge fields, and how and when she signed it.",
 			header:      []string{"id", colEngagementID, colStatus, "prose", "merge_field_values", "signer_full_name", "signer_attestation", "signer_ip", "signed_at", colCreatedAt},
 			query: `SELECT c.id::text, c.engagement_id::text, c.status::text, c.prose, c.merge_field_values::text,
 			               c.signer_full_name, c.signer_attestation::text, c.signer_ip, c.signed_at::text, c.created_at::text
@@ -264,7 +264,7 @@ func entities() []entity {
 			// attachment_filename/content_type/byte_size still say what it
 			// was.
 			file:        "message.csv",
-			description: "Every Message sent on an Engagement's thread. Attachment content itself is out of scope; the filename, type and size still say what it was.",
+			description: "Every Message sent on a piece of work's thread. Attachment content itself is out of scope; the filename, type and size still say what it was.",
 			header:      []string{"id", colEngagementID, "sender_type", "sender_id", "body", "attachment_filename", "attachment_content_type", "attachment_byte_size", colCreatedAt},
 			query: `SELECT m.id::text, m.engagement_id::text, m.sender_type::text, m.sender_id::text, m.body,
 			               m.attachment_filename, m.attachment_content_type, m.attachment_byte_size::text,
@@ -286,7 +286,7 @@ func entities() []entity {
 		},
 		{
 			file:        "notification_preference.csv",
-			description: "Which push notifications a Client's Portal Account has muted, per Engagement.",
+			description: "Which push notifications a Client's Portal Account has muted, per piece of work.",
 			header:      []string{colEngagementID, "identity_uid", "channel", "muted", colCreatedAt, colUpdatedAt},
 			query: `SELECT np.engagement_id::text, np.identity_uid, np.channel::text, np.muted::text,
 			               np.created_at::text, np.updated_at::text

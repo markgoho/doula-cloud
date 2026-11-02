@@ -35,7 +35,7 @@ const (
 
 // MsgFeeNotFound is the refusal for an Attachment that is not this
 // Engagement's, or carries no accepted fee to pay.
-const MsgFeeNotFound = "This fee is not on this Engagement."
+const MsgFeeNotFound = "This fee is not on this work."
 
 // MsgFeeAlreadyPaid refuses a second record against a fee already
 // recorded as paid: the record is the whole accepted fee, so a second one

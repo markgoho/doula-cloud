@@ -201,7 +201,7 @@ func hasGrantedAttachment(ctx context.Context, tx *sql.Tx, engagementID, staffID
 // itself and reports that it did.
 //
 // The write is attachment.Grant, the one grant every path shares, so it
-// records "Put on this Engagement as the Doula" in the Engagement's
+// records "Put on this work as the Doula" in the Engagement's
 // Activity and queues her "put on a client" mail itself (#2567). A Doula
 // already granted is left alone: nothing changes, so nothing is recorded.
 //

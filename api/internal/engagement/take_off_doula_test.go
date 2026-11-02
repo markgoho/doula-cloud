@@ -91,7 +91,7 @@ func TestTakeOffDoulaHandler_EndsTheAttachmentAndRecordsIt(t *testing.T) {
 	for _, entry := range ledger.Items {
 		if entry.Action == "doula_taken_off" {
 			found = true
-			if entry.ActorName != attachingOwnerName || entry.Detail != "Taken off this Engagement as the Doula: "+attachedDoulaName || entry.CreatedAt.IsZero() {
+			if entry.ActorName != attachingOwnerName || entry.Detail != "Taken off this work as the Doula: "+attachedDoulaName || entry.CreatedAt.IsZero() {
 				t.Fatalf("ledger entry = %+v, want who, whom and when", entry)
 			}
 		}

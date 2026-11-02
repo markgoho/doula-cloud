@@ -89,7 +89,7 @@ func ChangeDueDateHandler() http.Handler {
 		if !staffauth.ParseUUID(w, "engagement", engagementID) {
 			return
 		}
-		if refuseFactWrite(w, reader, "A contractor Doula cannot change an Engagement's due date") {
+		if refuseFactWrite(w, reader, "A contractor Doula cannot change the due date of this work") {
 			return
 		}
 

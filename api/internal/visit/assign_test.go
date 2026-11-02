@@ -275,7 +275,7 @@ func TestCreateHandler_RefusesAnIneligibleAssignee(t *testing.T) {
 				t.Helper()
 				return testdb.SeedContractorAtPractice(t, db, practiceID, "contractor-unattached-"+t.Name())
 			},
-			wantMsg: "that contractor has not accepted an offer on this engagement",
+			wantMsg: "that contractor has not accepted an offer on this work",
 		},
 	}
 	for _, testCase := range cases {

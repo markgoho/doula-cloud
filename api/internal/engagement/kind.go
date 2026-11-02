@@ -195,7 +195,7 @@ func ChangeKindHandler() http.Handler {
 		if !staffauth.ParseUUID(w, "engagement", engagementID) {
 			return
 		}
-		if refuseFactWrite(w, reader, "a contractor Doula cannot change an Engagement's kind") {
+		if refuseFactWrite(w, reader, "a contractor Doula cannot change the kind of this work") {
 			return
 		}
 
@@ -282,6 +282,6 @@ func refuseUpgradeAfterBirth(w http.ResponseWriter, current kindRow, target stri
 		return false
 	}
 	apierr.Write(w, http.StatusConflict, apierr.CodeConflict,
-		"this Engagement's birth outcome is already recorded, so its kind can no longer be changed to 'birth'", nil)
+		"the birth outcome of this work is already recorded, so its kind can no longer be changed to 'birth'", nil)
 	return true
 }

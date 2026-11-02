@@ -116,7 +116,7 @@ func RecordBirthOutcomeHandler() http.Handler {
 		if !staffauth.ParseUUID(w, "engagement", engagementID) {
 			return
 		}
-		if refuseFactWrite(w, reader, "a contractor Doula cannot record an Engagement's birth outcome") {
+		if refuseFactWrite(w, reader, "a contractor Doula cannot record a birth outcome on this work") {
 			return
 		}
 
@@ -210,7 +210,7 @@ func validateOutcome(w http.ResponseWriter, req BirthOutcomeRequest) (endedOn *s
 		}
 		if req.PregnancyEndedOn != nil && *req.PregnancyEndedOn != "" {
 			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
-				"an Engagement with no birth outcome carries no date either",
+				"work with no birth outcome carries no date either",
 				map[string]string{fieldPregnancyEndedOn: MsgEndedOnUnwanted})
 			return nil, false
 		}
@@ -270,13 +270,13 @@ func refuseFrozenWrite(w http.ResponseWriter, reader staffauth.Reader, frozen, c
 	switch {
 	case frozen && !correction:
 		apierr.Write(w, http.StatusConflict, apierr.CodeBirthOutcomeFrozen,
-			"this Engagement already has a birth outcome; only a Practice Owner can correct it", nil)
+			"this work already has a birth outcome; only a Practice Owner can correct it", nil)
 		return true
 	case frozen && !reader.Has(ownerRole):
 		apierr.WriteError(w, "only a Practice Owner can correct a recorded birth outcome", http.StatusForbidden)
 		return true
 	case !frozen && correction:
-		apierr.WriteError(w, "this Engagement has no birth outcome to correct", http.StatusConflict)
+		apierr.WriteError(w, "this work has no birth outcome to correct", http.StatusConflict)
 		return true
 	}
 	return false
@@ -323,4 +323,4 @@ func refuseClearOnCompleted(w http.ResponseWriter, current birthOutcomeRow, outc
 // sends a clear on a completed Engagement (engagementDetail.ts's
 // OUTCOME_KEPT_ON_COMPLETED), so this is met only by a page whose reading
 // went stale.
-const MsgOutcomeKeptOnCompleted = "A completed Engagement keeps its birth outcome. Reopen it first, then remove the record."
+const MsgOutcomeKeptOnCompleted = "Completed work keeps its birth outcome. Reopen it first, then remove the record."

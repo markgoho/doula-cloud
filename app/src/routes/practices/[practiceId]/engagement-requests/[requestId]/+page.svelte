@@ -221,7 +221,7 @@
 			{#if detail.warning}
 				<Notice
 					variant="info"
-					message="{firstName(detail.client)} already has a live engagement. That does not stop this approval."
+					message="{firstName(detail.client)} already has live work. That does not stop this approval."
 				/>
 			{/if}
 			{#if isBalanceNoticeShown}

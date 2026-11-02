@@ -14,7 +14,7 @@ import (
 
 // The refusals the two per-Engagement writes own.
 const (
-	MsgNotABirth      = "Only a birth engagement has an on-call window."
+	MsgNotABirth      = "Only birth work has an on-call window."
 	MsgNotAttached    = "This doula is not on this birth."
 	MsgNarrowOrder    = "The last day must be on or after the first day."
 	MsgNarrowDate     = "Enter a date, such as 2026-10-09."

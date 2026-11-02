@@ -730,7 +730,7 @@ describe('the status-move controls (#253)', () => {
 	it('shows the refusal when the BFF rejects the move', async () => {
 		await renderWithFixtureResponder((path, init) => {
 			if (!init || init.method !== 'PATCH' || !path.endsWith('/status')) return;
-			return Promise.resolve(jsonResponse('endingReason is required to complete an Engagement', 400));
+			return Promise.resolve(jsonResponse('endingReason is required to complete this work', 400));
 		});
 
 		await openChange('care phase');
@@ -739,7 +739,7 @@ describe('the status-move controls (#253)', () => {
 		await testPage.getByRole('button', { name: 'Confirm completion' }).click();
 
 		await expect
-			.element(testPage.getByText('endingReason is required to complete an Engagement'))
+			.element(testPage.getByText('endingReason is required to complete this work'))
 			.toBeVisible();
 	});
 
@@ -3066,13 +3066,13 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 	});
 
 	it('shows the refusal and keeps the control when the BFF refuses the press', async () => {
-		await setupWhoIsOn(nobodyOnIt, () => jsonResponse('This Engagement has completed, so nobody can be put on it.', 409));
+		await setupWhoIsOn(nobodyOnIt, () => jsonResponse('This work has completed, so nobody can be put on it.', 409));
 		await openChange('Doula');
 		await expect.element(putMeOnIt()).toBeVisible();
 
 		await putMeOnIt().click();
 
-		await expect.element(testPage.getByText('This Engagement has completed, so nobody can be put on it.')).toBeVisible();
+		await expect.element(testPage.getByText('This work has completed, so nobody can be put on it.')).toBeVisible();
 		await expect.element(putMeOnIt()).toBeVisible();
 		await expect.element(testPage.getByText('No Doula yet', { exact: true })).toBeVisible();
 	});
@@ -3301,7 +3301,7 @@ describe('putting a Doula on the Engagement (#2230)', () => {
 
 	it('shows the refusal and keeps the question open when the BFF refuses', async () => {
 		await setupPutOn(nobodyOnIt, ['owner', 'doula'], {
-			attachResponse: () => jsonResponse('This Engagement has completed, so nobody can be put on it.', 409)
+			attachResponse: () => jsonResponse('This work has completed, so nobody can be put on it.', 409)
 		});
 		await openChange('Doula');
 
@@ -3309,7 +3309,7 @@ describe('putting a Doula on the Engagement (#2230)', () => {
 		await saveTheDoula().click();
 
 		await expect
-			.element(testPage.getByText('This Engagement has completed, so nobody can be put on it.').first())
+			.element(testPage.getByText('This work has completed, so nobody can be put on it.').first())
 			.toBeVisible();
 		await expect.element(whoIsTheDoula()).toBeVisible();
 	});

@@ -14,10 +14,10 @@ import (
 // it is, so each is a sentence a person can read, and the contractor's
 // names the path that is open to her.
 const (
-	msgAttachDoulaNoEngagement  = "This Engagement was not found at this Practice."
+	msgAttachDoulaNoEngagement  = "This work was not found at this Practice."
 	msgAttachDoulaNotAtPractice = "That person is not on the Staff at this Practice."
-	msgAttachDoulaNotADoula     = " does not hold the Doula role, so cannot be put on an Engagement."
-	msgAttachDoulaContractor    = " contracts for this Practice, so goes on an Engagement by accepting an Offer. Offer this work instead."
+	msgAttachDoulaNotADoula     = " does not hold the Doula role, so cannot be put on this work."
+	msgAttachDoulaContractor    = " contracts for this Practice, so takes on work by accepting an Offer. Offer this work instead."
 )
 
 // AttachDoulaHandler puts a named Doula on an Engagement: the Doula row's

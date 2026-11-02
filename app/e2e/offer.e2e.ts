@@ -145,11 +145,11 @@ test('A solo Owner who is a contractor Doula is named on the Start work form, an
 	// The audit trail: who, in the ledger's own sentence. DataTable draws
 	// the row in both of its trees, and which one shows depends on the
 	// width (#1945), so the visible copy.
-	await expect(page.getByText('Put on this Engagement as the Doula: Jamie Owner').filter({ visible: true }).first()).toBeVisible();
+	await expect(page.getByText('Put on this work as the Doula: Jamie Owner').filter({ visible: true }).first()).toBeVisible();
 
 	// And it holds on a fresh read: she is the Doula, and there is no control.
 	await page.reload();
-	await expect(page.getByText('Put on this Engagement as the Doula: Jamie Owner').filter({ visible: true }).first()).toBeVisible();
+	await expect(page.getByText('Put on this work as the Doula: Jamie Owner').filter({ visible: true }).first()).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Put me on this work' })).toHaveCount(0);
 	await expect(page.getByText('No Doula yet', { exact: true })).toHaveCount(0);
 
@@ -181,7 +181,7 @@ test('A solo Owner who is a contractor Doula is named on the Start work form, an
 	await expect(page).toHaveURL(
 		new RegExp(`/practices/${practiceId}/engagements/${startedEngagementId}$`)
 	);
-	await expect(page.getByText('Put on this Engagement as the Doula: Jamie Owner').filter({ visible: true }).first()).toBeVisible();
+	await expect(page.getByText('Put on this work as the Doula: Jamie Owner').filter({ visible: true }).first()).toBeVisible();
 	await expect(page.getByText('No Doula yet', { exact: true })).toHaveCount(0);
 });
 
@@ -226,11 +226,11 @@ test('A solo Owner puts herself on an Engagement that started with no Doula', as
 	// The audit trail: who, in the ledger's own sentence. DataTable draws
 	// the row in both of its trees, and which one shows depends on the
 	// width (#1945), so the visible copy.
-	await expect(page.getByText('Put on this Engagement as the Doula: Jamie Owner').filter({ visible: true }).first()).toBeVisible();
+	await expect(page.getByText('Put on this work as the Doula: Jamie Owner').filter({ visible: true }).first()).toBeVisible();
 
 	// And it holds on a fresh read: she is the Doula, and there is no control.
 	await page.reload();
-	await expect(page.getByText('Put on this Engagement as the Doula: Jamie Owner').filter({ visible: true }).first()).toBeVisible();
+	await expect(page.getByText('Put on this work as the Doula: Jamie Owner').filter({ visible: true }).first()).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Put me on this work' })).toHaveCount(0);
 	await expect(page.getByText('No Doula yet', { exact: true })).toHaveCount(0);
 });

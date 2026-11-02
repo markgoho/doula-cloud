@@ -13,11 +13,11 @@ import (
 // copy. Content-free per GLOSSARY.md/ADR-0017: no kind, due date, or
 // Client name, the same restraint engagement_offers_notification_worker
 // (00041) already observes -- only a pointer back to the dashboard.
-const requestSubject = "DoulaCloud: a new Engagement Request is waiting"
+const requestSubject = "DoulaCloud: a new request to start work is waiting"
 
 func requestText(link string) string {
 	return "Hello,\n\n" +
-		"A new Engagement Request is waiting for your decision at your Practice.\n\n" +
+		"A new request to start work is waiting for your decision at your Practice.\n\n" +
 		link + "\n\n" +
 		"If you have questions, reply to this email.\n"
 }

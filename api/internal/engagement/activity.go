@@ -219,7 +219,7 @@ func entryDetail(action string, diff []byte, before, after sql.NullString) strin
 	case string(activity.ActionDoulaAttached):
 		return attachmentDetail(after)
 	case string(activity.ActionDoulaTakenOff):
-		return "Taken off this Engagement as the Doula: " + staffDisplayName(after)
+		return "Taken off this work as the Doula: " + staffDisplayName(after)
 	case string(activity.ActionContractorFeePaid):
 		return "Fee paid to " + staffDisplayName(after)
 	case string(activity.ActionContractorFeePaymentReversed):
@@ -243,7 +243,7 @@ func entryDetail(action string, diff []byte, before, after sql.NullString) strin
 // so a Doula who has since left ("a former colleague") never opens the
 // sentence in lower case.
 func attachmentDetail(attached sql.NullString) string {
-	return "Put on this Engagement as the Doula: " + staffDisplayName(attached)
+	return "Put on this work as the Doula: " + staffDisplayName(attached)
 }
 
 // refundDetail says where a Refund came from when nobody in DoulaCloud

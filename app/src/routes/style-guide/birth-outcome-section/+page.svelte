@@ -25,7 +25,7 @@
 	const frozen: BirthOutcomeResult = {
 		kind: 'confirmable',
 		message:
-			'this Engagement already has a birth outcome; only a Practice Owner can correct it'
+			'this work already has a birth outcome; only a Practice Owner can correct it'
 	};
 </script>
 
