@@ -150,7 +150,7 @@
 <ListPage title="Schedule">
 	{#snippet intro()}
 		<Text
-			text="Every Visit this Practice has scheduled, soonest first, across all Clients and doulas. Open one to reach the Engagement it belongs to."
+			text="Every Visit this Practice has scheduled, soonest first, across all Clients and doulas. Open one to go to the Client it belongs to."
 			tone="muted"
 		/>
 	{/snippet}

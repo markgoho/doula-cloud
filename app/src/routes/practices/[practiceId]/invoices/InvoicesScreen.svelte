@@ -198,7 +198,7 @@
 
 {#snippet intro()}
 	<Text
-		text="Every Invoice this Practice has billed, newest first. Open one to reach the Engagement it belongs to."
+		text="Every Invoice this Practice has billed, newest first. Open one to go to the Client it belongs to."
 		tone="muted"
 	/>
 {/snippet}
