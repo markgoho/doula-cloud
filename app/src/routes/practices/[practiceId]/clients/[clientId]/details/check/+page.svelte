@@ -25,6 +25,7 @@
 	import CheckAnswers from '#lib/components/templates/CheckAnswers.svelte';
 	import { FormSubmission, orThrownErrors } from '#lib/formSubmission.svelte.js';
 	import { answerSections } from '#lib/intakeAnswers.js';
+	import { intakeFlow } from '#lib/intakeFlow.svelte.js';
 	import { DETAILS_STEPS, journeySteps } from '#lib/intakeJourney.js';
 	import { detailsQuestions, knownAs } from '../details.js';
 
@@ -37,7 +38,7 @@
 	);
 	// The layout renders no step until the record is read, so it is here.
 	const toSave = $derived(detailsToSave(clientDetails.record!, clientDetails.draft.answers, askedFieldIds));
-	const sections = $derived(answerSections(toSave, detailsQuestions.sections, base, DETAILS_STEPS));
+	const sections = $derived(answerSections(toSave, detailsQuestions.sections, base, DETAILS_STEPS, intakeFlow.practiceName));
 	const lastStep = $derived(detailsQuestions.steps.at(-1)!);
 
 	const submission = new FormSubmission();

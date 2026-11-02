@@ -159,28 +159,49 @@ describe('answerSections', () => {
 		]);
 	});
 
-	it('adds a headed group per Practice-named page, each Change link its own', () => {
+	// #2621: the Practice's own questions are one row and one Change, every question kept.
+	it('reads the own questions of a Practice as one row grouped by page, with one Change to the first', () => {
 		const sections = answerSections(
 			{ ...blankAnswers(), fieldValues: { allergies: 'Peanuts' } },
 			[
-				{ heading: 'Health', fields: [field({ id: 'allergies', label: 'Allergies' })] },
+				{
+					heading: 'Health',
+					fields: [field({ id: 'allergies', label: 'Allergies' }), field({ id: 'doc', label: 'Doctor' })]
+				},
 				{ heading: 'Birth', fields: [field({ id: 'plan', label: 'Birth plan' })] }
 			],
-			basePath
+			basePath,
+			DETAILS_STEPS,
+			'Rooted Birth Collective'
 		);
 
-		expect(sections).toHaveLength(3);
-		expect(sections[1]).toEqual({
-			heading: 'Health',
-			answers: [
-				{
-					label: 'Allergies',
-					value: 'Peanuts',
-					changes: 'Allergies',
-					changeHref: `${basePath}/sections/0?from=check`
-				}
-			]
+		expect(sections).toHaveLength(1);
+		expect(rowLabels(sections[0].answers)).toEqual([
+			'Name',
+			'Date of birth',
+			'Email address',
+			'Phone number',
+			'Address',
+			'What else Rooted Birth Collective asks'
+		]);
+		expect(sections[0].answers.at(-1)).toEqual({
+			label: 'What else Rooted Birth Collective asks',
+			value: 'Allergies: Peanuts. Doctor: Not answered. Birth plan: Not answered',
+			groups: [
+				{ heading: 'Health', lines: ['Allergies: Peanuts', 'Doctor: Not answered'] },
+				{ heading: 'Birth', lines: ['Birth plan: Not answered'] }
+			],
+			changes: 'What else Rooted Birth Collective asks',
+			changeHref: `${basePath}/sections/0?from=check`
 		});
-		expect(sections[2].answers[0].changeHref).toBe(`${basePath}/sections/1?from=check`);
+	});
+
+	it('stays one row however many questions a Practice asks, and adds none when it asks none', () => {
+		const many = Array.from({ length: 12 }, (_, index) => field({ id: `q${index}`, label: `Question ${index}` }));
+		const asked = answerSections(blankAnswers(), [{ heading: 'Everything', fields: many }], basePath, DETAILS_STEPS);
+
+		expect(asked[0].answers).toHaveLength(6);
+		expect(asked[0].answers.at(-1)?.label).toBe('What else this Practice asks');
+		expect(answerSections(blankAnswers(), [], basePath, DETAILS_STEPS)[0].answers).toHaveLength(5);
 	});
 });

@@ -135,21 +135,30 @@ export function answerSections(
 	answers: IntakeAnswers,
 	sections: IntakeSection[],
 	basePath: string,
-	structuralSteps: readonly StructuralStep[] = STRUCTURAL_STEPS
+	structuralSteps: readonly StructuralStep[] = STRUCTURAL_STEPS,
+	practiceName = ''
 ): AnswerSection[] {
-	const structural: AnswerSection = {
-		answers: structuralSteps.flatMap((step) => stepAnswers(answers, step, basePath))
-	};
+	const rows = structuralSteps.flatMap((step) => stepAnswers(answers, step, basePath));
+	if (sections.length === 0) return [{ answers: rows }];
 
-	const practiceDefined: AnswerSection[] = sections.map((section, index) => ({
+	/*
+	 * The Practice's own questions are one row however many it asks
+	 * (#2621): a row and a Change for each passed the page's seven
+	 * decisions at three questions. Every question is kept, grouped under
+	 * its own section heading, with one Change to the first of those
+	 * pages; the journey's step list reaches the rest.
+	 */
+	const label = `What else ${practiceName || 'this Practice'} asks`;
+	const groups = sections.map((section) => ({
 		heading: section.heading,
-		answers: section.fields.map((field) => ({
-			label: field.label,
-			value: fieldValueText(field, answers.fieldValues[field.id]),
-			changes: field.label,
-			changeHref: changeHref(basePath, sectionSlug(index))
-		}))
+		lines: section.fields.map((field) => `${field.label}: ${fieldValueText(field, answers.fieldValues[field.id])}`)
 	}));
-
-	return [structural, ...practiceDefined];
+	const own: Answer = {
+		label,
+		value: groups.flatMap((group) => group.lines).join('. '),
+		groups,
+		changes: label,
+		changeHref: changeHref(basePath, sectionSlug(0))
+	};
+	return [{ answers: [...rows, own] }];
 }

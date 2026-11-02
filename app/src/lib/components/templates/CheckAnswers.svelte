@@ -11,6 +11,18 @@
 		 * it, which is what this becomes.
 		 */
 		changes: string;
+		/**
+		 * An answer made of several, as a Practice's own questions are
+		 * (#2621): one row and one Change however many it holds, each
+		 * group drawn under its own heading when there is more than one.
+		 * `value` still names the row to the caller.
+		 */
+		groups?: AnswerGroup[];
+	}
+
+	export interface AnswerGroup {
+		heading: string;
+		lines: string[];
 	}
 
 	export interface AnswerSection {
@@ -156,6 +168,26 @@
 										on hover keeps the affordance without the noise.
 									-->
 									<SummaryList rows={section.answers}>
+										{#snippet value(answer)}
+											{#if answer.groups}
+												<stack-l space="var(--space-3)">
+													{#each answer.groups as group, groupIndex (groupIndex)}
+														<div>
+															{#if answer.groups.length > 1}
+																<strong class="group-heading">{group.heading}</strong>
+															{/if}
+															<ul class="lines">
+																{#each group.lines as line, lineIndex (lineIndex)}
+																	<li>{line}</li>
+																{/each}
+															</ul>
+														</div>
+													{/each}
+												</stack-l>
+											{:else}
+												{answer.value}
+											{/if}
+										{/snippet}
 										{#snippet action(answer, describedBy)}
 											<Link href={answer.changeHref} label="Change" variant="secondary" {describedBy} />
 										{/snippet}
@@ -189,6 +221,20 @@
 		.column {
 			max-inline-size: var(--form-max);
 			margin-inline: auto;
+		}
+
+		.group-heading {
+			display: block;
+		}
+
+		.lines {
+			margin: 0;
+			padding: 0;
+			list-style: none;
+		}
+
+		.lines li {
+			overflow-wrap: anywhere;
 		}
 
 		.caption {
