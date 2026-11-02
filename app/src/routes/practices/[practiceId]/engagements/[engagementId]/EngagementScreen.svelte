@@ -1204,11 +1204,16 @@
 			: `${detail.clientName} has not read this yet`;
 	}
 
+	// The Engagement read says whether each record exists (#2591), so a
+	// Plan or Contract not started is never asked for, which would log a 404.
 	async function loadPlan(planType: PlanType) {
-		await planState[planType].load(
-			() => loadInstance(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!, planType),
-			'Failed to load plan'
-		);
+		const isStarted = planType === 'care_plan' ? detail.hasCarePlan : detail.hasBirthPlan;
+		if (isStarted) {
+			await planState[planType].load(
+				() => loadInstance(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!, planType),
+				'Failed to load plan'
+			);
+		}
 		planLoaded[planType] = true;
 	}
 
@@ -1291,10 +1296,12 @@
 	}
 
 	async function loadContractSection() {
-		await contractState.load(
-			() => loadContract(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!),
-			'Failed to load contract'
-		);
+		if (detail.hasContract) {
+			await contractState.load(
+				() => loadContract(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!),
+				'Failed to load contract'
+			);
+		}
 		isContractLoaded = true;
 		await loadRatesWhenStartable();
 	}
@@ -1556,18 +1563,19 @@
 		await loadInvoicesSection();
 	}
 
-	// The roster read and the Offers read are both Owner/Admin; either
-	// refusing is what tells this page the caller is a Doula, so the
-	// section is left out rather than shown broken. The module answers
-	// undefined for exactly that, which says "not for you" in the type
-	// where this used to be a bare empty catch -- so this never throws in
+	// The roster, Offers and Doula fees reads are all Owner/Admin, and are
+	// asked for only by one (#2601): a Doula is never sent to be refused,
+	// so the section is left out rather than shown broken. The module
+	// still answers undefined for a refusal, so these never throw in
 	// practice, and offersState.error is never rendered (see its own
 	// declaration above).
 	async function loadOffersSection() {
+		if (!isPracticeOwnerOrAdmin) return;
 		await offersState.load(() => loadOffers(apiFetchWithSession, reference, loadEngagementOffers), '');
 	}
 
 	async function loadDoulaFeesSection() {
+		if (!isPracticeOwnerOrAdmin) return;
 		await doulaFeesState.load(
 			() => loadDoulaFees(apiFetchWithSession, reference.practiceId, reference.engagementId),
 			'We could not load the Doula fees.'
@@ -1833,6 +1841,7 @@
 	);
 
 	async function loadRoster() {
+		if (!isPracticeOwnerOrAdmin) return;
 		await rosterState.load(
 			() => loadVisitAssigneesOrNone(apiFetchWithSession, reference.practiceId, reference.engagementId),
 			'We could not load the Practice roster, so there is nobody to pick from. Try again.'
