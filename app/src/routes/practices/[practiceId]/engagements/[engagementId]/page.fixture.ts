@@ -224,6 +224,11 @@ export const detail = {
 	// #2492: the base's Owner reads the Doula fees below, so the BFF says
 	// so up front and the section stands from the first frame.
 	hasDoulaFees: true,
+	// #2591: the BFF says which records exist. The base has a Contract and
+	// a Birth Plan and no Care Plan, as its `respond` answers.
+	hasCarePlan: false,
+	hasBirthPlan: true,
+	hasContract: true,
 	// #2597: the Note typed on the Request that started this Engagement,
 	// long and in two lines, as the Owner (its reader) would have written it.
 	startNote: {
@@ -550,6 +555,7 @@ export const asContractor: RouteVariant<RouteParameters> = {
  */
 export const withNoRate: RouteVariant<RouteParameters> = {
 	name: 'The Staff-side Engagement detail hub, with no Contract and no rate for its kind',
+	props: { data: { ...detail, hasContract: false, session } },
 	respond: (path) => {
 		if (path.endsWith('/contract')) return jsonResponse('not found', 404);
 		if (path.endsWith('/rates')) {
@@ -586,6 +592,7 @@ const typicalDetail = {
 	// #2004: a Client in care has a portal account, so the Messages
 	// section reads her thread with its form behind one opener.
 	clientPortalInviteStatus: 'accepted',
+	hasCarePlan: true,
 	doulas: [{ staffId: typicalDoula.staffId, name: typicalDoula.name }]
 };
 const typicalInvoices: Invoice[] = [
