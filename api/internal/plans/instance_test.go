@@ -562,6 +562,57 @@ func TestPutInstanceHandler_RecordsWhichPlanChanged(t *testing.T) {
 	}
 }
 
+// TestPutInstanceHandler_ASaveThatChangesNothingRecordsNothing proves #2581:
+// the ledger's "edited" row follows the same answers-changed test that moves
+// changed_at and clears the Client's acknowledgment, so a save that changes
+// no answer leaves no row saying the plan changed.
+func TestPutInstanceHandler_ASaveThatChangesNothingRecordsNothing(t *testing.T) {
+	for _, planType := range []string{carePlanType, birthPlanType} {
+		t.Run(planType, func(t *testing.T) {
+			db := testdb.New(t)
+			uid := "put-instance-noop-" + planType
+			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+			_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+			seedInstance(t, db, engagementID, planType,
+				`[{"id":"name","type":"short_text","label":"Name","order":0}]`, `{}`)
+
+			srv, session := newPlanServer(t, db, uid)
+			defer srv.Close()
+
+			edits := func() int {
+				var n int
+				if err := db.Admin.QueryRowContext(t.Context(),
+					`SELECT count(*) FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 AND action LIKE '%plan_edited'`,
+					engagementID,
+				).Scan(&n); err != nil {
+					t.Fatalf("count edits: %v", err)
+				}
+				return n
+			}
+			save := func(answers plans.Answers) {
+				resp := putInstance(t, srv, session, practiceID, engagementID, planType, plans.PutInstanceRequest{Answers: answers})
+				defer resp.Body.Close()
+				if resp.StatusCode != http.StatusOK {
+					t.Fatalf("PUT status = %d, want %d", resp.StatusCode, http.StatusOK)
+				}
+			}
+
+			save(plans.Answers{})
+			if got := edits(); got != 0 {
+				t.Fatalf("a first save of the same empty answers recorded %d edits, want 0", got)
+			}
+			save(plans.Answers{nameFieldID: jamieAnswer})
+			if got := edits(); got != 1 {
+				t.Fatalf("a save that changed an answer recorded %d edits, want 1", got)
+			}
+			save(plans.Answers{nameFieldID: jamieAnswer})
+			if got := edits(); got != 1 {
+				t.Fatalf("a repeat save of the same answers left %d edits, want still 1", got)
+			}
+		})
+	}
+}
+
 // TestInstance_LastEdited is #2104: a Plan that has never been saved says
 // no edit, a save's own response names when and by whom, and a read of
 // the other Plan does not borrow this one's edit.
