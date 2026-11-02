@@ -124,8 +124,9 @@ const vite = Bun.spawn(['./node_modules/.bin/vite', 'dev'], {
 await Bun.write(DEV_SERVER_PIDFILE, String(vite.pid));
 
 // ops/'s dev server (ADR-0062), against doula-ops and the operator tenant
-// the stack seeded. The emulator has no TOTP, so signing in past the code
-// by hand is not possible here; ops/'s e2e suite drives those screens.
+// the stack seeded. The emulator has no TOTP, so the seeded operator carries
+// its phone factor and the sign-in page asks for the code the emulator
+// lists (#2556); ops/'s e2e suite relabels the factor instead.
 const opsVite = Bun.spawn(['./node_modules/.bin/vite', 'dev'], {
 	cwd: '../ops',
 	stdio: ['ignore', 'inherit', 'inherit'],
@@ -137,6 +138,9 @@ const opsVite = Bun.spawn(['./node_modules/.bin/vite', 'dev'], {
 });
 await Bun.write(OPS_DEV_SERVER_PIDFILE, String(opsVite.pid));
 console.log(`ops: ${OPS_DEV_SERVER_ORIGIN}/sign-in as ${SEEDED_OPERATOR.email} / ${SEEDED_OPERATOR.password}
+ops code step: the Auth emulator texts nothing. After the password step, open
+http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}/emulator/v1/projects/doula-cloud/tenants/${OPS_TENANT_ID}/verificationCodes
+and type the newest "code" (the sign-in page links to it).
 `);
 
 let isTornDown = false;
