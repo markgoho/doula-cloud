@@ -42,10 +42,11 @@ type InstanceResponse struct {
 	// cleared it (PutInstanceHandler).
 	ClientAcknowledgedAt *time.Time `json:"clientAcknowledgedAt,omitempty"`
 
-	// LastEdited is when this Plan Instance was last saved and by whom
-	// (#2104), read from the care_plan_edited or birth_plan_edited row
-	// PutInstanceHandler records. Staff reads only, and nil until the
-	// first save: starting a Plan records no edit.
+	// LastEdited is when an answer of this Plan Instance last changed and
+	// who changed it (#2104), read from the care_plan_edited or
+	// birth_plan_edited row PutInstanceHandler records. Staff reads only,
+	// and nil until a save changes an answer: starting a Plan, or a save
+	// that changes nothing, records no edit (#2581).
 	LastEdited *activitypage.Stamp `json:"lastEdited,omitempty"`
 
 	// Started is when this Plan Instance was started and by whom (#2133),
@@ -332,34 +333,43 @@ func PutInstanceHandler() http.Handler {
 		// write that could race a concurrent PUT or acknowledge. The same
 		// test moves changed_at (#2209) to the request clock: when the plan
 		// last changed is when an answer last did, so a save that changes
-		// nothing leaves the printed date where it was, though the ledger
-		// still records the save (LastEdited).
+		// nothing leaves the printed date where it was, and records
+		// nothing in the ledger either (#2581): the same test decides all
+		// three, so they cannot disagree.
 		var clientAcknowledgedAt sql.NullTime
+		var answersChanged bool
 		if err := tx.QueryRowContext(r.Context(),
-			`UPDATE plan_instances
+			`WITH was AS (
+			     SELECT answers IS DISTINCT FROM $1::jsonb AS changed
+			     FROM plan_instances
+			     WHERE engagement_id = $2 AND plan_type = $3
+			 )
+			 UPDATE plan_instances
 			 SET answers = $1::jsonb,
 			     client_acknowledged_at = CASE WHEN answers IS DISTINCT FROM $1::jsonb THEN NULL ELSE client_acknowledged_at END,
 			     changed_at = CASE WHEN answers IS DISTINCT FROM $1::jsonb THEN $4 ELSE changed_at END
 			 WHERE engagement_id = $2 AND plan_type = $3
-			 RETURNING client_acknowledged_at`,
+			 RETURNING client_acknowledged_at, (SELECT changed FROM was)`,
 			answersJSON, engagementID, planType, clock.Now(r.Context()),
-		).Scan(&clientAcknowledgedAt); err != nil {
+		).Scan(&clientAcknowledgedAt, &answersChanged); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		practiceID, _ := staffauth.PracticeID(r.Context())
-		staffID, _ := staffauth.StaffID(r.Context())
-		if err := activity.Record(r.Context(), tx, activity.Entry{
-			PracticeID:  practiceID,
-			SubjectKind: activity.SubjectEngagement,
-			SubjectID:   engagementID,
-			Action:      string(editedAction(planType)),
-			Actor:       activity.StaffActor(staffID),
-		}); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
+		if answersChanged {
+			practiceID, _ := staffauth.PracticeID(r.Context())
+			staffID, _ := staffauth.StaffID(r.Context())
+			if err := activity.Record(r.Context(), tx, activity.Entry{
+				PracticeID:  practiceID,
+				SubjectKind: activity.SubjectEngagement,
+				SubjectID:   engagementID,
+				Action:      string(editedAction(planType)),
+				Actor:       activity.StaffActor(staffID),
+			}); err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+				return
+			}
 		}
 
 		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: req.Answers, ClientAcknowledgedAt: nullTimePtr(clientAcknowledgedAt)}
