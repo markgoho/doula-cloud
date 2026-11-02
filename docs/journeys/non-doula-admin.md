@@ -95,7 +95,7 @@ Dee is a domain expert on the business half and a stranger to the care half.
 * **Confirmation**: yes (Peak-End Rule)
 * **320px**: yes (ADR-0024)
 
-- **5.1** — Open the Engagement and look for a control that puts a Doula on it: on a new Engagement, "Who is the Doula?" on the Start work form; on an existing one, the Doula row's **Change** and **Save the Doula** (RA-G13). It puts her on beside any Doula already there, and nothing takes one off ([#2596](https://github.com/markgoho/doula-cloud/issues/2596), found on the 2026-11-01 walk, when Dee could not move Morgan Dunmore's birth from one Doula to another).
+- **5.1** — Open the Engagement and look for a control that puts a Doula on it: on a new Engagement, "Who is the Doula?" on the Start work form; on an existing one, the Doula row's **Change** and **Save the Doula** (RA-G13). It puts her on beside any Doula already there, and **Take a Doula off** takes one off ([#2596](https://github.com/markgoho/doula-cloud/issues/2596), found on the 2026-11-01 walk, when Dee could not move Morgan Dunmore's birth from one Doula to another).
 - **5.2** — Create a Visit naming the Doula instead. **Add a Visit** asks "Who is this Visit for?", and naming a colleague is the Owner's and the Admin's act; what Dee cannot do is log a Visit for herself, and the screen offers her no control for it (**DW-G6**, closed; walked 2026-10-28). **Reassign** moves one Visit from one Doula to another, and answered her `200` on the 2026-11-01 walk.
 
 ### Stage 6 — Send the Contract
