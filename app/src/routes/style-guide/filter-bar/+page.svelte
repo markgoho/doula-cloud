@@ -65,17 +65,17 @@
 	<stack-l space="var(--space-4)">
 		<h2>A toggle that acts at once</h2>
 		<Text
-			text="Every control takes effect the moment it changes, so there is no Apply. The Clients list's See everyone."
+			text="Every control takes effect the moment it changes, so there is no Apply. The Clients list's switch that adds Clients with no work."
 			tone="variant"
 		/>
 		<FilterBar
 			{action}
 			onSubmit={stay}
-			legend="Choose who to show"
+			legend="Add to the list"
 			status="Showing 12 Clients with work."
 			isAppliedOnChange
 		>
-			<LabeledField label="See everyone" orientation="inline">
+			<LabeledField label="Also show Clients with no work yet" orientation="inline">
 				{#snippet children(control)}
 					<Checkbox variant="toggle" checked={false} onChange={ignore} {...control} />
 				{/snippet}

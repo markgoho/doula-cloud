@@ -163,7 +163,7 @@ export async function loadClientCount(fetcher: Fetcher, practiceId: string): Pro
 
 /**
  * The Clients list's result, as its filter bar's status line (#2068): read
- * out when "See everyone" changes what the list holds. The same shape as
+ * out when "Also show Clients with no work yet" changes what the list holds. The same shape as
  * the Schedule's `scheduleResultSummary`.
  */
 export function clientsResultSummary(count: number, hasMore: boolean, isShowingEveryone: boolean): string {

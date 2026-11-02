@@ -67,7 +67,7 @@ Reachable once stage 1 is walked — step 1.2 is what gives her the second membe
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 4.1 | Open `/practices/[practiceId]/clients` | The list renders for a non-owner | `manual` |
-| 4.2 | Count the rows | **Only hers.** "Showing 2 Clients with work.", the two Engagements she holds a granted attachment on, and **See everyone** shows the same two. Nothing else of the agency's book reaches her (ADR-0008) | `manual` |
+| 4.2 | Count the rows | **Only hers.** "Showing 2 Clients with work.", the two Engagements she holds a granted attachment on, and the list draws no switch for Clients with no work, since none could be hers (#2603). Nothing else of the agency's book reaches her (ADR-0008) | `manual` |
 | 4.2-a | Pick hers out | Every row is hers, and each says "Your fee" with the fee she accepted | `manual` |
 | 4.1-a | Add a Client to the agency's book | **She is refused, by name.** The list offers no **Find or add a Client**. At `/clients/search` she reads "Work at this Practice reaches you as an Offer, so there is no Client to search for or add here. To take on Clients of your own, set up a Practice." `client.CreateHandler` and the `clients_insert` RLS policy refuse the write independently ([LV-G9](https://github.com/markgoho/doula-cloud/issues/292) closed) | `manual` |
 | 4.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
