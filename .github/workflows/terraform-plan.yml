@@ -335,7 +335,7 @@ jobs:
             {
               echo "This branch is behind \`trunk\` on a Terraform change -- not drift."
               echo
-              echo "\`trunk\` merged a change under \`terraform/\` after this branch's last common ancestor with it, and that change is already applied to the live project (a laptop \`apply\`, never CI -- see docs/infrastructure.md, \"Who may apply, and what CI may read\"). This plan compares this branch's older configuration against a live project that has already moved on:"
+              echo "\`trunk\` merged a change under \`terraform/\` after this branch's last common ancestor with it, and that change is applied to the live project, or waiting for its apply (a laptop \`apply\`, never CI -- see docs/infrastructure.md, \"Who may apply, and what CI may read\"). This plan compares this branch's older configuration against a live project that has already moved on:"
               echo
               git log --oneline "$merge_base"..origin/trunk -- .
               echo
