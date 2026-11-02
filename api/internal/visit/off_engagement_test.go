@@ -10,10 +10,10 @@ import (
 	"doula-cloud/api/internal/visit"
 )
 
-// #2596: a booked Visit held by a Doula who was taken off the Engagement is
+// #2596: a Visit that has not happened (future or undated, #2665) held by a Doula who was taken off the Engagement is
 // flagged on both Staff reads. A past Visit, a Visit of a Doula still on it,
 // and a Visit on a Doula who never had an Attachment are not.
-func TestVisitReads_FlagABookedVisitWhoseDoulaWasTakenOff(t *testing.T) {
+func TestVisitReads_FlagAnOpenVisitWhoseDoulaWasTakenOff(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "off-engagement-owner"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole}, employeeType)
@@ -37,7 +37,7 @@ func TestVisitReads_FlagABookedVisitWhoseDoulaWasTakenOff(t *testing.T) {
 	onBooked := seedScheduledVisit(t, db, engagementID, staysOn, soon)
 	neverBooked := seedScheduledVisit(t, db, engagementID, never, soon)
 	unscheduled := seedVisit(t, db, engagementID, takenOff)
-	want := map[string]bool{offBooked: true, offPast: false, onBooked: false, neverBooked: false, unscheduled: false}
+	want := map[string]bool{offBooked: true, offPast: false, onBooked: false, neverBooked: false, unscheduled: true}
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -56,7 +56,7 @@ func TestVisitReads_FlagABookedVisitWhoseDoulaWasTakenOff(t *testing.T) {
 
 	page := getSchedule(t, session, schedulePath(srv.URL, practiceID, nil))
 	if len(page.Items) != 3 {
-		t.Fatalf("schedule items = %d, want the 3 booked Visits", len(page.Items))
+		t.Fatalf("schedule items = %d, want the 3 dated Visits", len(page.Items))
 	}
 	for _, v := range page.Items {
 		if v.IsOffEngagement != want[v.VisitID] {

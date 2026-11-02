@@ -15,7 +15,7 @@ import (
 // The tests in this file are #2596: an Owner or an Admin takes a Doula off
 // an Engagement. The Attachment is ended, never deleted; the ledger says
 // who and when; the Doula gets one mail, unless she is the one who
-// pressed; her booked Visits stay hers.
+// pressed; her Visits that have not happened stay hers.
 
 func takeOffDoulaAs(t *testing.T, db *testdb.DB, srv *httptest.Server, uid, practiceID, engagementID, staffID string) (int, attachSelfBody) {
 	t.Helper()
@@ -64,10 +64,14 @@ func TestTakeOffDoulaHandler_EndsTheAttachmentAndRecordsIt(t *testing.T) {
 	attachDoulaAs(t, db, srv, uid, practiceID, engagementID, doulaID)
 	seedVisitAt(t, db, engagementID, doulaID, "2999-01-01T12:00:00Z")
 	seedVisitAt(t, db, engagementID, doulaID, "2001-01-01T12:00:00Z")
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO visits (engagement_id, staff_id) VALUES ($1, $2)`, engagementID, doulaID); err != nil {
+		t.Fatalf("seed undated visit: %v", err)
+	}
 
 	_, on := attachDoulaAs(t, db, srv, uid, practiceID, engagementID, doulaID)
-	if len(on.Doulas) != 1 || on.Doulas[0].BookedVisits != 1 {
-		t.Fatalf("doulas before = %+v, want one with 1 booked Visit", on.Doulas)
+	if len(on.Doulas) != 1 || on.Doulas[0].OpenVisits != 2 {
+		t.Fatalf("doulas before = %+v, want one with 2 Visits that have not happened (one future, one undated; the past one is not counted)", on.Doulas)
 	}
 
 	status, body := takeOffDoulaAs(t, db, srv, uid, practiceID, engagementID, doulaID)
@@ -104,8 +108,8 @@ func TestTakeOffDoulaHandler_EndsTheAttachmentAndRecordsIt(t *testing.T) {
 	}
 	var visits int
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM visits WHERE engagement_id = $1 AND staff_id = $2`, engagementID, doulaID).Scan(&visits); err != nil || visits != 2 {
-		t.Fatalf("visits = %d (%v), want both still hers", visits, err)
+		`SELECT count(*) FROM visits WHERE engagement_id = $1 AND staff_id = $2`, engagementID, doulaID).Scan(&visits); err != nil || visits != 3 {
+		t.Fatalf("visits = %d (%v), want all three still hers", visits, err)
 	}
 }
 

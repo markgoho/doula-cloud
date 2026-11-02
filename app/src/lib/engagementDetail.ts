@@ -164,9 +164,9 @@ export function yourFeeRows(fee: AgreedFee): { label: string; value: string }[] 
 export interface AttachedDoula {
 	staffId: string;
 	name: string;
-	/** How many of her Visits on this Engagement are scheduled for later
-	 * than now (#2596). */
-	bookedVisits: number;
+	/** How many of her Visits on this Engagement have not happened: dated
+	 * later than now, or not dated at all (#2596, #2665). */
+	openVisits: number;
 }
 
 /** Who is on an Engagement, as both the Engagement read and the
@@ -263,13 +263,15 @@ export async function takeOffDoula(
 /** The confirm dialog's words for taking a Doula off (#2596). Names repeat
  * because product copy uses no pronoun for a person. */
 export function takeOffWords(doula: AttachedDoula, isSelf: boolean): { title: string; consequence: string; confirm: string } {
-	const booked =
-		doula.bookedVisits === 0
-			? ''
-			: ` ${doula.name}'s ${doula.bookedVisits} booked ${doula.bookedVisits === 1 ? 'Visit stays' : 'Visits stay'} with ${doula.name} until you reassign ${doula.bookedVisits === 1 ? 'it' : 'them'}.`;
+	let open = '';
+	if (doula.openVisits === 1) {
+		open = ` ${doula.name} still has 1 Visit that hasn't happened yet. It stays with ${doula.name} until you reassign it.`;
+	} else if (doula.openVisits > 1) {
+		open = ` ${doula.name} still has ${doula.openVisits} Visits that haven't happened yet. They stay with ${doula.name} until you reassign them.`;
+	}
 	return {
 		title: `Take ${doula.name} off this work?`,
-		consequence: `${isSelf ? '' : `We will email ${doula.name} to say so.`}${booked}`.trim() || `${doula.name} can be put back on later.`,
+		consequence: `${isSelf ? '' : `We will email ${doula.name} to say so.`}${open}`.trim() || `${doula.name} can be put back on later.`,
 		confirm: `Take ${doula.name} off`
 	};
 }
@@ -278,10 +280,12 @@ export function takeOffWords(doula: AttachedDoula, isSelf: boolean): { title: st
 The status line after a Doula is taken off (#2596).
 */
 export function takenOffMessage(doula: AttachedDoula, isSelf: boolean): string {
-	const left =
-		doula.bookedVisits === 0
-			? ''
-			: ` ${doula.bookedVisits} booked ${doula.bookedVisits === 1 ? 'Visit is' : 'Visits are'} still ${doula.name}'s: reassign ${doula.bookedVisits === 1 ? 'it' : 'each one'} under Visits.`;
+	let left = '';
+	if (doula.openVisits === 1) {
+		left = ` 1 Visit that hasn't happened yet is still ${doula.name}'s. Reassign it under Visits.`;
+	} else if (doula.openVisits > 1) {
+		left = ` ${doula.openVisits} Visits that haven't happened yet are still ${doula.name}'s. Reassign each one under Visits.`;
+	}
 	return `${doula.name} is off this work.${isSelf ? '' : ` We emailed ${doula.name} to say so.`}${left}`;
 }
 
