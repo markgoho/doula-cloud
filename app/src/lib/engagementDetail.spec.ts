@@ -4,6 +4,7 @@ import { errorsFromCause } from './formErrors.js';
 import { jsonResponse } from './testResponse.js';
 import {
 	attachDoula,
+	attachDoulaWords,
 	attachSelf,
 	birthOutcomeLabel,
 	birthOutcomeURL,
@@ -359,6 +360,28 @@ describe('attachDoula', () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse('Lena Vasquez contracts for this Practice.', 422));
 
 		await expect(attachDoula(fetcher, reference, 'staff-3')).rejects.toThrow('Lena Vasquez contracts for this Practice.');
+	});
+});
+
+// #2569: the question says who stays, because saving adds.
+const on = (count: number) =>
+	['Kimiko Nakashima', 'Priya Raman', 'Joss Adeyemi', 'Delia Marchetti', 'Rowan Petrosyan']
+		.slice(0, count)
+		.map((name, index) => ({ staffId: `staff-${index}`, name }));
+
+describe('attachDoulaWords', () => {
+	it('keeps "Who is the Doula?" and "Save the Doula" where nobody is on', () => {
+		expect(attachDoulaWords([])).toEqual({ question: 'Who is the Doula?', button: 'Save the Doula' });
+	});
+
+	it.each([
+		[1, 'Who joins Kimiko Nakashima?'],
+		[2, 'Who joins Kimiko Nakashima and Priya Raman?'],
+		[3, 'Who joins Kimiko Nakashima, Priya Raman and Joss Adeyemi?'],
+		[4, 'Who joins Kimiko Nakashima, Priya Raman, Joss Adeyemi and 1 other?'],
+		[5, 'Who joins Kimiko Nakashima, Priya Raman, Joss Adeyemi and 2 others?']
+	])('names who is on with %i on it', (count, question) => {
+		expect(attachDoulaWords(on(count))).toEqual({ question, button: 'Add this Doula' });
 	});
 });
 

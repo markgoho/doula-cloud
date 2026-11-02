@@ -19,6 +19,8 @@
 	import { emailFormatError, type FormError } from '#lib/formErrors.js';
 	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
 	import { formatInstant } from '#lib/dates.js';
+	import { isDoulaSelect } from '#lib/engagementRequest.js';
+	import Select from '#lib/components/atoms/Select.svelte';
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
@@ -121,9 +123,11 @@
 	// question asked" and "where does its refusal point", so a refusal
 	// cannot be given an id that no element carries, which is what an id
 	// built from an empty roster was.
-	const doulaFieldId = $derived(
-		firstDoula !== undefined && answer === 'staff' ? radioFieldId(doulaGroupName, firstDoula.staffId) : undefined
-	);
+	const isDoulaSelectShown = $derived(isDoulaSelect(roster));
+	const doulaFieldId = $derived.by(() => {
+		if (firstDoula === undefined || answer !== 'staff') return;
+		return isDoulaSelectShown ? doulaGroupName : radioFieldId(doulaGroupName, firstDoula.staffId);
+	});
 	const isByEmail = $derived(answer === 'email');
 
 	// Which employment type the fee rule is read against: her own
@@ -338,7 +342,22 @@
 		{/if}
 
 		<!-- With nothing chosen yet, neither follow-up question is asked. -->
-		{#if doulaFieldId !== undefined}
+		{#if doulaFieldId !== undefined && isDoulaSelectShown}
+			<!-- #2569: past DOULA_RADIOS_MAX, a select, as on Start work. -->
+			<LabeledField id={doulaFieldId} label="Doula" error={offerSubmission.errorFor(doulaFieldId)}>
+				{#snippet children({ id, describedBy, invalid })}
+					<Select
+						{id}
+						{describedBy}
+						{invalid}
+						options={roster.map((doula) => ({ value: doula.staffId, label: doula.name }))}
+						placeholder="Choose a Doula"
+						value={staffId}
+						onChange={(value: string) => (staffId = value)}
+					/>
+				{/snippet}
+			</LabeledField>
+		{:else if doulaFieldId !== undefined}
 			<RadioGroup
 				legend="Doula"
 				name={doulaGroupName}

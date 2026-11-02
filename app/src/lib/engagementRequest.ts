@@ -92,7 +92,7 @@ export const DOULA_RADIOS_MAX = 7;
 /**
  * Whether the roster is long enough for the select (#2034).
  */
-export function isDoulaSelect(doulas: RequestDoula[]): boolean {
+export function isDoulaSelect(doulas: readonly unknown[]): boolean {
 	return doulas.length > DOULA_RADIOS_MAX;
 }
 

@@ -21,6 +21,7 @@ import {
 	session
 } from './page.fixture.js';
 import type { Contract } from '#lib/contract.js';
+import { DOULA_RADIOS_MAX } from '#lib/engagementRequest.js';
 import { OUTCOME_KEPT_ON_COMPLETED } from '#lib/engagementDetail.js';
 import type { Rate } from '#lib/rates.js';
 import { CONTRACTOR_WITHOUT_ACCEPTED_OFFER, type VisitAssignee } from '#lib/staff.js';
@@ -2893,11 +2894,12 @@ describe('the Offers form does not list the person at the screen (#1598)', () =>
 		// *Offer this work to* opens with nothing chosen (#1914).
 		await testPage.getByLabelText('Someone already at this Practice').click();
 
-		const doulaPick = testPage.getByRole('group', { name: 'Doula', exact: true });
-		await expect.element(doulaPick.getByLabelText('Priyanka Venkataraman-Solberg')).toBeVisible();
-		expect(doulaPick.getByLabelText('Anne-Marie Ochieng-Whitfield').elements()).toHaveLength(0);
+		// #2569: the fixture's roster passes DOULA_RADIOS_MAX, so a select.
+		const doulaPick = testPage.getByLabelText('Doula', { exact: true });
+		expect(doulaPick.getByRole('option', { name: 'Priyanka Venkataraman-Solberg' }).elements()).toHaveLength(1);
+		expect(doulaPick.getByRole('option', { name: 'Anne-Marie Ochieng-Whitfield' }).elements()).toHaveLength(0);
 		// #2230: nor a Doula already on it (`staff-2` is, in the fixture).
-		expect(doulaPick.getByLabelText('Jordan Reyes').elements()).toHaveLength(0);
+		expect(doulaPick.getByRole('option', { name: 'Jordan Reyes' }).elements()).toHaveLength(0);
 
 		await openAddVisit();
 		const visitPicker = testPage.getByLabelText('Who is this Visit for?');
@@ -3171,6 +3173,54 @@ describe('putting a Doula on the Engagement (#2230)', () => {
 
 		await expect.element(testPage.getByRole('radio', { name: 'Jo Mercer' })).toBeVisible();
 		expect(testPage.getByRole('radio', { name: 'Priya Raman' }).elements()).toHaveLength(0);
+	});
+
+	// #2569: saving keeps who is on and adds the one chosen, so the question
+	// names who stays instead of reading as a swap.
+	it('names the Doula who stays, and says the one chosen is added', async () => {
+		const jo: VisitAssignee = { staffId: 'staff-4', name: 'Jo Mercer', employmentType: 'employee', nameable: true };
+		await setupPutOn({ ...nobodyOnIt, doulas: [{ staffId: 'staff-2', name: 'Priya Raman' }] }, ['owner', 'doula'], {
+			assignees: [...roster, jo]
+		});
+		await openChange('Doula');
+
+		await expect.element(testPage.getByRole('group', { name: 'Who joins Priya Raman?' })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Add this Doula' })).toBeVisible();
+		expect(whoIsTheDoula().elements()).toHaveLength(0);
+		expect(saveTheDoula().elements()).toHaveLength(0);
+	});
+
+	// #2569: past DOULA_RADIOS_MAX Doulas, a select, as on Start work.
+	describe('with more Doulas than DOULA_RADIOS_MAX', () => {
+		const many: VisitAssignee[] = Array.from({ length: DOULA_RADIOS_MAX + 1 }, (_, index) => ({
+			staffId: `staff-${index + 1}`,
+			name: `Doula Number${index + 1}`,
+			employmentType: 'employee',
+			nameable: true
+		}));
+
+		it('asks as a select and puts the chosen Doula on', async () => {
+			await setupPutOn(nobodyOnIt, ['owner', 'doula'], { assignees: many });
+			await openChange('Doula');
+
+			expect(testPage.getByRole('radio').elements()).toHaveLength(0);
+			await testPage.getByLabelText('Who is the Doula?').selectOptions('staff-2');
+			await saveTheDoula().click();
+
+			expect(apiFetchWithSession).toHaveBeenCalledWith(
+				'/api/practices/practice-1/engagements/engagement-1/attachments/staff-2',
+				{ method: 'PUT' }
+			);
+		});
+
+		it('refuses a save with nobody chosen, and points at the select', async () => {
+			await setupPutOn(nobodyOnIt, ['owner', 'doula'], { assignees: many });
+			await openChange('Doula');
+
+			await saveTheDoula().click();
+
+			await expect.element(testPage.getByRole('link', { name: 'Select who the Doula is' })).toBeVisible();
+		});
 	});
 
 	it('refuses a save with nobody chosen, and points at the question', async () => {
