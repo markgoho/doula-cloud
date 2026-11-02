@@ -2317,7 +2317,7 @@
 								id={ATTACH_GROUP}
 								label={attachWords.question}
 								hint={hasUnlistedContractor
-									? 'A contractor is not listed: a contractor goes on the work by accepting an Offer.'
+									? 'A contractor is not listed: a contractor takes on work by accepting an Offer.'
 									: undefined}
 								error={attachSubmission.errorFor(ATTACH_GROUP)}
 							>
@@ -2337,7 +2337,7 @@
 							<RadioGroup
 								legend={attachWords.question}
 								hint={hasUnlistedContractor
-									? 'A contractor is not listed: a contractor goes on the work by accepting an Offer.'
+									? 'A contractor is not listed: a contractor takes on work by accepting an Offer.'
 									: undefined}
 								name={ATTACH_GROUP}
 								options={attachOptions}
