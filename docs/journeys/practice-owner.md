@@ -157,7 +157,7 @@ The stage has no Time line, because signup and the first Client are not acts tha
 
 ### Stage 8 — Coverage, at 2 a.m. — moment of truth
 
-**Thinking**: "Who is already at a birth?" **Pain points**: no screen shows availability, on-call state, or who is where. Because Visits carry no dates (MO-G1), the data a coverage view would read does not exist. This is the highest-value gap in the whole practice-side set, and it came from the experience layer — a click-by-click map would never have surfaced it, because there is no click to record.
+**Thinking**: "Who is already at a birth?" **Pain points**: no screen shows availability, on-call state, or who is where. Because Visits carry no dates (MO-G1), the data a coverage view would read does not exist. This is the highest-value gap in the whole practice-side set, and it came from the experience layer — a click-by-click map would never have surfaced it, because there is no click to record. The budget of 2 Decisions is measured on a quiet day: a block drawn only when something needs her, such as **No Doula yet** after a declined Offer, does not count against it ([#2570](https://github.com/markgoho/doula-cloud/issues/2570), 2026-11-01; stage 1's Pain points name those blocks, and the "How Decisions are counted" section of the README has the rule).
 
 **Budget**:
 
