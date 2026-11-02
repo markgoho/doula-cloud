@@ -71,6 +71,23 @@ describe('clients/+page.ts load (#539)', () => {
 
 		expect(result).toMatchObject({ isContractor: false, isDoula: true });
 	});
+
+	// #2675: only an explicit `false` from the session withholds the switch.
+	it('reads whether another Doula holds the role', async () => {
+		apiFetch.mockResolvedValue(jsonResponse({ items: [withWork], hasMore: false }));
+
+		const alone = { ...membership(['doula']).session, hasOtherDoulas: false };
+		const parent = vi.fn().mockResolvedValue({ session: alone });
+		const { hasOtherDoulas } = (await load({
+			params: { practiceId },
+			parent,
+			fetch: loadFetch,
+		} as unknown as Parameters<typeof load>[0])) as ClientsListGate;
+		const { result } = await runLoad(['doula']);
+
+		expect(hasOtherDoulas).toBe(false);
+		expect(result.hasOtherDoulas).toBe(true);
+	});
 });
 
 // #1609 (ADR-0017's amendment of 2026-10-02): the count of Client

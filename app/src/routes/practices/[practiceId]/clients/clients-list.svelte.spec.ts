@@ -70,11 +70,13 @@ beforeEach(() => {
 interface Caller {
 	isContractor?: boolean;
 	isDoula?: boolean;
+	// Whether anyone else holds the Doula role (#2675).
+	hasOtherDoulas?: boolean;
 	// What `+page.ts` read with `all=true` (#1609).
 	hasAnyClient?: boolean;
 }
 
-async function setup(response?: Response, { isContractor = false, isDoula = false, hasAnyClient = true }: Caller = {}) {
+async function setup(response?: Response, { isContractor = false, isDoula = false, hasOtherDoulas = true, hasAnyClient = true }: Caller = {}) {
 	// DataTable's own content floor (#508) shows its record cards below
 	// 55rem, and this file's assertions are about the <table> specifically.
 	// A desktop window is past it (#2022), so the <table> renders.
@@ -93,6 +95,7 @@ async function setup(response?: Response, { isContractor = false, isDoula = fals
 			isContractor,
 			isOwner: false,
 			isDoula,
+			hasOtherDoulas,
 			hasAnyClient: Promise.resolve(hasAnyClient),
 			session: { practiceId, staffId: 'staff-1', practiceName: 'Riverside Doula Collective', roles: [], isContractor }
 		}
@@ -295,6 +298,21 @@ describe('the "Only my Clients" switch', () => {
 		await setup();
 
 		await expect.element(mine()).not.toBeInTheDocument();
+	});
+
+	it('is not offered to the Practice\'s only Doula, for whom it changes nothing (#2675)', async () => {
+		await setup(undefined, { isDoula: true, hasOtherDoulas: false });
+
+		await expect.element(mine()).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('group', { name: 'Add to the list' })).toBeVisible();
+	});
+
+	it('ignores `?mine=true` for the Practice\'s only Doula', async () => {
+		pageState.url.searchParams.set('mine', 'true');
+
+		await setup(undefined, { isDoula: true, hasOtherDoulas: false });
+
+		expect(requestUrl()).toBe(`/api/practices/${practiceId}/clients`);
 	});
 
 	it('is not offered to a contractor Doula, whose list is already only hers', async () => {

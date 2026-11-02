@@ -30,8 +30,9 @@
 	let { data }: { data?: PageProperties['data'] } = $props();
 	const isContractor = $derived(data?.isContractor ?? false);
 	// #2624: "Only my Clients" is drawn for a Doula who is not a contractor,
-	// whose list is already only hers.
-	const canNarrowToMine = $derived(!isContractor && (data?.isDoula ?? false));
+	// whose list is already only hers, and where another Doula holds the role
+	// (#2675), since at a Practice with one Doula every Client is hers.
+	const canNarrowToMine = $derived(!isContractor && (data?.isDoula ?? false) && (data?.hasOtherDoulas ?? true));
 	// #1609: whether the Practice holds any Client record, which decides
 	// where the header link goes. Defaults to the search, which is right
 	// at a Practice of any size. Undefined while +page.ts's read runs

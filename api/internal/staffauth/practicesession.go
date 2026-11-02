@@ -71,6 +71,14 @@ type PracticeSessionResponse struct {
 	// it would hide her Offers. It is not the count client.CountHandler
 	// withholds from her -- only whether the Practice has begun.
 	HasClients bool `json:"hasClients"`
+	// HasOtherDoulas is whether anyone besides the caller holds the Doula
+	// role at this Practice (#2675). The Clients list reads it to draw
+	// "Only my Clients" only where it can change the list: at a Practice
+	// whose one Doula is the caller, every Client is hers. A yes or no
+	// that names nobody, so a Doula who cannot read the Staff list learns
+	// no more than the switch needs. Drawing only; `?mine=true` grants
+	// nothing either way.
+	HasOtherDoulas bool `json:"hasOtherDoulas"`
 	// ClientsCanPay is cardpayments.ClientsCanPay's fact (#270). It rides
 	// on the session so the Invoices list can say "Clients cannot pay this
 	// Practice yet" above its rows from the first frame, before the list's
@@ -92,6 +100,8 @@ type PracticeSessionResponse struct {
 // pointer to a survivor that is still counted, so excluding it changes
 // nothing but keeps the read the same as the Client list's.
 const hasClientsQuery = `SELECT EXISTS (SELECT 1 FROM clients WHERE practice_id = $1 AND merged_into IS NULL)`
+
+const hasOtherDoulasQuery = `SELECT EXISTS (SELECT 1 FROM practice_memberships WHERE practice_id = $1 AND staff_id <> $2 AND 'doula' = ANY(roles))`
 
 // practiceQuery's third column is the billing mode, empty while none is
 // chosen.
@@ -131,6 +141,13 @@ func PracticeSessionHandler() http.Handler {
 
 		staffID, _ := StaffID(r.Context())
 
+		var hasOtherDoulas bool
+		if err := tx.QueryRowContext(r.Context(), hasOtherDoulasQuery, practiceID, staffID).Scan(&hasOtherDoulas); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
 		resp := PracticeSessionResponse{
 			PracticeID:      practiceID,
 			StaffID:         staffID,
@@ -141,6 +158,7 @@ func PracticeSessionHandler() http.Handler {
 			SecondFactor:    SecondFactor(r.Context()),
 			AgreementDue:    agreementDueFrom(r.Context()),
 			HasClients:      hasClients,
+			HasOtherDoulas:  hasOtherDoulas,
 			ClientsCanPay:   clientsCanPay,
 			BillingMode:     billingMode,
 		}
