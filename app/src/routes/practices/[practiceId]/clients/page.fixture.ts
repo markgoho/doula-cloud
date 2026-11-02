@@ -125,12 +125,12 @@ export const clients: ClientListItem[] = [
 ];
 
 /*
- * "See everyone" on (#458, #1945): the Work column renders only here, so
+ * "Also show Clients with no work yet" on (#458, #1945): the Work column renders only here, so
  * without this variant the sweep never measured the widest the table
  * gets. The same rows as the base, through the base's own `respond`.
  */
 export const withEveryone: RouteVariant = {
-	name: 'The Clients list, with See everyone on',
+	name: 'The Clients list, with Also show Clients with no work yet on',
 	url: 'https://example.test/practices/practice-1/clients?all=true'
 };
 
@@ -210,7 +210,7 @@ export const typical: RouteVariant = {
 
 export const typicalWithEveryone: RouteVariant = {
 	...typical,
-	name: 'The Clients list, with typical pilot data and See everyone on',
+	name: 'The Clients list, with typical pilot data and Also show Clients with no work yet on',
 	url: withEveryone.url
 };
 

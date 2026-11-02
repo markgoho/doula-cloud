@@ -35,7 +35,7 @@
 	 * the live region exists before its text changes.
 	 *
 	 * `isAppliedOnChange` (#2068) is the bar whose every control acts the
-	 * moment it changes -- the Clients list's "See everyone" toggle. A
+	 * moment it changes -- the Clients list's "Also show Clients with no work yet" toggle. A
 	 * switch is a setting that takes effect at once, so an Apply after it
 	 * would be a second press for nothing; the bar draws none. The route
 	 * navigates from the control's own change. Schedule and On call keep

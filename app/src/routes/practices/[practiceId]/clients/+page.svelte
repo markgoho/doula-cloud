@@ -98,7 +98,7 @@
 
 	// #458: the default view is always "Clients with work" (ADR-0017), so
 	// every row there already has it -- the column would say the same
-	// thing on every row. It only carries information once "See everyone"
+	// thing on every row. It only carries information once the switch is on
 	// mixes the two together.
 	function workStatusText(client: ClientListItem): string {
 		return client.hasWork ? 'Has work' : 'No work yet';
@@ -289,12 +289,12 @@
 	// empty default view at a Practice that holds a Client record (the
 	// `all=true` count +page.ts read) means nobody has work yet, not that
 	// nobody exists -- and "No Clients yet." would contradict the "Find or
-	// add a Client" link above it. With "See everyone" on there is no
+	// add a Client" link above it. With the switch on there is no
 	// filter left to point at, so the plain message stays.
 	const emptyMessage = $derived.by(() => {
 		if (isContractor) return 'Work reaches you as an Offer, so there are no Clients here yet.';
 		if (hasAnyClient && !isShowingEveryone) {
-			return 'No Client has work yet. Turn on See everyone to list every Client.';
+			return 'No Client has work yet. Turn on "Also show Clients with no work yet" to list them.';
 		}
 		return 'No Clients yet.';
 	});
@@ -399,19 +399,22 @@
 		A switch acts at once, so the bar draws no Apply; the toggle's own
 		change navigates.
 	-->
-	<FilterBar
-		action={clientsPath(false)}
-		legend="Choose who to show"
-		status={isReady ? summary : ''}
-		empty={isReady && clients.items.length === 0}
-		isAppliedOnChange
-	>
-		<LabeledField label="See everyone" orientation="inline">
-			{#snippet children(control)}
-				<Checkbox variant="toggle" checked={isShowingEveryone} onChange={handleToggleAll} {...control} />
-			{/snippet}
-		</LabeledField>
-	</FilterBar>
+	<!-- #2603: a contractor Doula is attached only through an Offer she accepted (ADR-0008), so the switch could never add a row to her list. -->
+	{#if !isContractor}
+		<FilterBar
+			action={clientsPath(false)}
+			legend="Add to the list"
+			status={isReady ? summary : ''}
+			empty={isReady && clients.items.length === 0}
+			isAppliedOnChange
+		>
+			<LabeledField label="Also show Clients with no work yet" orientation="inline">
+				{#snippet children(control)}
+					<Checkbox variant="toggle" checked={isShowingEveryone} onChange={handleToggleAll} {...control} />
+				{/snippet}
+			</LabeledField>
+		</FilterBar>
+	{/if}
 
 	{#if error}
 		<Notice message={error} variant="error" />

@@ -12,7 +12,7 @@
 	 * close, and rejected: its `isEmpty`/`empty` pair is required because a
 	 * hub's whole body is either the populated view or the empty one. A list
 	 * screen does not divide that way -- `clients`' "Find or add a Client"
-	 * link and "See everyone" toggle render whether or not the table has
+	 * link and the "Also show Clients with no work yet" toggle render whether or not the table has
 	 * rows, and `DataTable` already carries its own `emptyMessage` for the
 	 * zero-row case. Forcing every route here to split its body into
 	 * `primary`/`empty` would recreate a state that already exists one layer

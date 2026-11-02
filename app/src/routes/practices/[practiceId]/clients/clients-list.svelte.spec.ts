@@ -158,6 +158,15 @@ describe('a contractor Doula without the owner or admin role', () => {
 			.not.toBeInTheDocument();
 	});
 
+	// #2603: she is attached only through an accepted Offer (ADR-0008), so
+	// a switch that adds Clients with no work could never add a row for her.
+	it('is not offered the switch that adds Clients with no work', async () => {
+		await setup(undefined, { isContractor: true });
+
+		await expect.element(testPage.getByRole('link', { name: 'Find or add a Client' })).not.toBeInTheDocument();
+		expect(testPage.getByRole('switch').elements()).toHaveLength(0);
+	});
+
 	it('names why her list is empty rather than reusing "No Clients yet."', async () => {
 		await setup(jsonResponse({ items: [], hasMore: false }), { isContractor: true });
 
@@ -200,14 +209,14 @@ describe('a non-contractor with an empty list', () => {
 		await setup(jsonResponse({ items: [], hasMore: false }), { hasAnyClient: true });
 
 		await expect
-			.element(testPage.getByText('No Client has work yet. Turn on See everyone to list every Client.'))
+			.element(testPage.getByText('No Client has work yet. Turn on "Also show Clients with no work yet" to list them.'))
 			.toBeVisible();
 		await expect.element(testPage.getByText('No Clients yet.')).not.toBeInTheDocument();
 	});
 
-	// With "See everyone" on there is no filter left to point at, so an
+	// With "Also show Clients with no work yet" on there is no filter left to point at, so an
 	// empty list there reads the plain message whatever the count said.
-	it('keeps the plain empty message while "See everyone" is on', async () => {
+	it('keeps the plain empty message while "Also show Clients with no work yet" is on', async () => {
 		pageState.url.searchParams.set('all', 'true');
 
 		await setup(jsonResponse({ items: [], hasMore: false }), { hasAnyClient: true });
@@ -224,7 +233,7 @@ describe('the "see everyone" toggle', () => {
 		await setup();
 
 		await expect
-			.element(testPage.getByRole('switch', { name: 'See everyone' }))
+			.element(testPage.getByRole('switch', { name: 'Also show Clients with no work yet' }))
 			.not.toBeChecked();
 		expect(requestUrl()).toBe(`/api/practices/${practiceId}/clients`);
 	});
@@ -234,14 +243,14 @@ describe('the "see everyone" toggle', () => {
 
 		await setup();
 
-		await expect.element(testPage.getByRole('switch', { name: 'See everyone' })).toBeChecked();
+		await expect.element(testPage.getByRole('switch', { name: 'Also show Clients with no work yet' })).toBeChecked();
 		expect(requestUrl()).toBe(`/api/practices/${practiceId}/clients?all=true`);
 	});
 
 	it('navigates to `?all=true` when switched on from the default view', async () => {
 		await setup();
 
-		await testPage.getByRole('switch', { name: 'See everyone' }).click();
+		await testPage.getByRole('switch', { name: 'Also show Clients with no work yet' }).click();
 
 		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients?all=true`);
 	});
@@ -251,8 +260,8 @@ describe('the "see everyone" toggle', () => {
 	it('sits in the list’s filter bar, which says what the list holds', async () => {
 		await setup();
 
-		const bar = testPage.getByRole('group', { name: 'Choose who to show' });
-		await expect.element(bar.getByRole('switch', { name: 'See everyone' })).toBeVisible();
+		const bar = testPage.getByRole('group', { name: 'Add to the list' });
+		await expect.element(bar.getByRole('switch', { name: 'Also show Clients with no work yet' })).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Apply' })).not.toBeInTheDocument();
 		await expect.element(testPage.getByRole('status')).toHaveTextContent(/^Showing \d+ Clients? with work/);
 	});
@@ -261,7 +270,7 @@ describe('the "see everyone" toggle', () => {
 		pageState.url.searchParams.set('all', 'true');
 		await setup();
 
-		await testPage.getByRole('switch', { name: 'See everyone' }).click();
+		await testPage.getByRole('switch', { name: 'Also show Clients with no work yet' }).click();
 
 		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients`);
 	});
@@ -440,11 +449,11 @@ describe('the Status column (#264, #2022)', () => {
 	});
 });
 
-// #458: "See everyone" mixes Clients who have work with Clients who
+// #458: "Also show Clients with no work yet" mixes Clients who have work with Clients who
 // don't, and nothing on the row said which was which. The default view
 // never mixes the two (ADR-0017: every row has work already), so the
 // column would add nothing there -- it only earns its place once
-// "See everyone" is on.
+// "Also show Clients with no work yet" is on.
 describe('the Work column (#458)', () => {
 	it('is absent from the default "Clients with work" view', async () => {
 		await setup();
@@ -454,7 +463,7 @@ describe('the Work column (#458)', () => {
 			.not.toBeInTheDocument();
 	});
 
-	it('shows which Clients have work and which do not once "See everyone" is on', async () => {
+	it('shows which Clients have work and which do not once "Also show Clients with no work yet" is on', async () => {
 		pageState.url.searchParams.set('all', 'true');
 
 		await setup();
@@ -495,7 +504,7 @@ describe('a "Load more" already in flight when the filter changes', () => {
 		apiFetchWithSession.mockReturnValueOnce(pageTwo.promise);
 		await testPage.getByRole('button', { name: 'Load more' }).click();
 
-		await testPage.getByRole('switch', { name: 'See everyone' }).click();
+		await testPage.getByRole('switch', { name: 'Also show Clients with no work yet' }).click();
 		pageTwo.resolve(
 			jsonResponse({
 				items: [
@@ -543,7 +552,7 @@ describe('a "Load more" already in flight when the filter changes', () => {
 		apiFetchWithSession.mockReturnValueOnce(pageTwo.promise);
 		await testPage.getByRole('button', { name: 'Load more' }).click();
 
-		await testPage.getByRole('switch', { name: 'See everyone' }).click();
+		await testPage.getByRole('switch', { name: 'Also show Clients with no work yet' }).click();
 		pageTwo.resolve(textResponse('the practice is gone'));
 
 		await expect.element(testPage.getByText('the practice is gone')).not.toBeInTheDocument();
