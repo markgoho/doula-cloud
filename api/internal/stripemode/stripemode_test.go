@@ -118,3 +118,24 @@ func TestMode_Matches(t *testing.T) {
 		}
 	}
 }
+
+func TestOfKey_ReadsTheModeFromThePrefix(t *testing.T) {
+	cases := []struct {
+		key  string
+		want stripemode.Mode
+		ok   bool
+	}{
+		{testSecret, stripemode.Test, true},
+		{testRestrct + "\n", stripemode.Test, true},
+		{liveSecret, stripemode.Live, true},
+		{liveRestrct, stripemode.Live, true},
+		{"", "", false},
+		{"whsec_nope", "", false},
+	}
+	for _, tc := range cases {
+		got, ok := stripemode.OfKey(tc.key)
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("OfKey(%q) = %q, %v; want %q, %v", tc.key, got, ok, tc.want, tc.ok)
+		}
+	}
+}

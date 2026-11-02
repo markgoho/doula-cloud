@@ -10,6 +10,7 @@ import (
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/csrf"
 	"doula-cloud/api/internal/legal"
+	"doula-cloud/api/internal/stripemode"
 )
 
 // Deps is what doula-ops's route table needs.
@@ -21,9 +22,11 @@ type Deps struct {
 	AcceptEmulatorFactor bool
 	Origins              []string
 	Stripe               billing.StripeClient
-	Accounts             authn.AccountManager
-	FeedbackRepo         string
-	Legal                []legal.Document
+	// The mode STRIPE_API_KEY is in, read from its prefix; empty with no key.
+	StripeMode   stripemode.Mode
+	Accounts     authn.AccountManager
+	FeedbackRepo string
+	Legal        []legal.Document
 }
 
 func (d Deps) legalHistory() []legal.Document {
@@ -56,6 +59,7 @@ func routes(d Deps) (http.Handler, []string) {
 	r.handle(http.MethodGet, "/api/practices/deleted", requireSession(d.DB, practiceList(d.DB, true)))
 	r.handle(http.MethodGet, "/api/practices/dormant", requireSession(d.DB, dormantList(d.DB)))
 	r.handle(http.MethodGet, "/api/credits/monthly", requireSession(d.DB, monthlyCredits(d.DB)))
+	r.handle(http.MethodGet, "/api/system", requireSession(d.DB, systemRead(d)))
 	r.handle(http.MethodGet, "/api/operator-log", requireSession(d.DB, operatorLog(d.DB)))
 	r.handle(http.MethodGet, "/api/feedback", requireSession(d.DB, feedbackList(d.DB, d.FeedbackRepo)))
 	r.handle(http.MethodGet, "/api/feedback/{feedbackId}", requireSession(d.DB, feedbackRead(d.DB, d.FeedbackRepo)))

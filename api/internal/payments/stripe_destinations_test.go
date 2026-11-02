@@ -2,7 +2,6 @@ package payments
 
 import (
 	"encoding/json"
-	"maps"
 	"os"
 	"regexp"
 	"slices"
@@ -50,10 +49,10 @@ func TestStripeDestinationsMatchConnectAndAccountHandlers(t *testing.T) {
 
 	assertSameEvents(t, "/api/stripe/connect-webhook",
 		destinations["/api/stripe/connect-webhook"].EnabledEvents,
-		slices.Collect(maps.Keys(connectEventHandlers)))
+		ConnectEventTypes())
 	assertSameEvents(t, "/api/stripe/account-webhook",
 		destinations["/api/stripe/account-webhook"].EnabledEvents,
-		[]string{eventTypeMerchantCapabilityStatusUpdated})
+		AccountEventTypes())
 }
 
 // unpinnedSnapshotRoutes are snapshot routes whose imported destination

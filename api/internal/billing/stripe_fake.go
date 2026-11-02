@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 )
 
 // FakeStripeClient is an in-memory StripeClient double, injected into
@@ -29,6 +30,15 @@ type FakeStripeClient struct {
 	// call -- what Stripe does when a retry carries an idempotency key
 	// it has already seen.
 	ReplayedRefundID string
+
+	// PlatformAccount and Undelivered are what PlatformAccountID and
+	// UndeliveredEventCount answer, unless the matching Err is set.
+	PlatformAccount      string
+	Undelivered          int
+	PlatformAccountErr   error
+	UndeliveredEventsErr error
+	// UndeliveredSince records the window start of each count asked for.
+	UndeliveredSince []time.Time
 }
 
 // RefundCall is one recorded RefundPayment call: which payment was
@@ -41,7 +51,7 @@ type RefundCall struct {
 
 // NewFakeStripeClient returns a FakeStripeClient with no recorded calls.
 func NewFakeStripeClient() *FakeStripeClient {
-	return &FakeStripeClient{}
+	return &FakeStripeClient{PlatformAccount: "acct_fake_platform"}
 }
 
 // CheckCreditPrice answers CheckCreditPriceErr: nil, a Price at every
@@ -121,4 +131,23 @@ func (f *FakeStripeClient) RefundCalls() []RefundCall {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]RefundCall(nil), f.Refunds...)
+}
+
+// PlatformAccountID answers PlatformAccount, or PlatformAccountErr.
+func (f *FakeStripeClient) PlatformAccountID(_ context.Context) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.PlatformAccount, f.PlatformAccountErr
+}
+
+// UndeliveredEventCount records since and answers Undelivered, capped at
+// limit, or UndeliveredEventsErr.
+func (f *FakeStripeClient) UndeliveredEventCount(_ context.Context, since time.Time, limit int) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.UndeliveredSince = append(f.UndeliveredSince, since)
+	if f.UndeliveredEventsErr != nil {
+		return 0, f.UndeliveredEventsErr
+	}
+	return min(f.Undelivered, limit), nil
 }

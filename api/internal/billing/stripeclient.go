@@ -1,6 +1,9 @@
 package billing
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // CheckoutSessionRequest is everything CreateCheckoutSession needs to
 // build one credit purchase.
@@ -61,4 +64,12 @@ type StripeClient interface {
 	// sales tax it reported, so the ST-100 does not overstate what New
 	// York is owed (#420).
 	RefundPayment(ctx context.Context, paymentIntentID, idempotencyKey string, amountCents int64) (string, error)
+	// PlatformAccountID is the id of the Stripe account the API key
+	// belongs to: the Platform account, whichever mode the key is in.
+	PlatformAccountID(ctx context.Context) (string, error)
+	// UndeliveredEventCount counts the events created at or after since
+	// that Stripe reports as not delivered to every webhook endpoint
+	// (delivery_success=false), up to limit. A count equal to limit
+	// means "at least that many".
+	UndeliveredEventCount(ctx context.Context, since time.Time, limit int) (int, error)
 }

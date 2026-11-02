@@ -51,6 +51,12 @@ func keyMode(value string, test, live []string) (Mode, bool) {
 	return "", false
 }
 
+// OfKey reports the mode a Stripe secret or restricted API key is in by
+// its prefix, and false for a key with none of the four prefixes.
+func OfKey(apiKey string) (Mode, bool) {
+	return keyMode(strings.TrimSpace(apiKey), []string{"sk_test_", "rk_test_"}, []string{"sk_live_", "rk_live_"})
+}
+
 // Load reads the mode from getenv, refusing an unrecognized key prefix, a
 // publishable key in the other mode, a STRIPE_MODE that is invalid or
 // disagrees with the key, a Cloud Run service with no STRIPE_MODE or no
