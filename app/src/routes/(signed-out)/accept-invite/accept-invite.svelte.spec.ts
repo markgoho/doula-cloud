@@ -244,6 +244,7 @@ describe('a person who is new here', () => {
 		await expect
 			.element(testPage.getByText('Must be 15 characters or more, and not a commonly used password'))
 			.toBeVisible();
+		await expect.element(testPage.getByText('The one you already use to sign in to DoulaCloud')).not.toBeInTheDocument();
 	});
 
 	it('refuses each empty answer, in field order, before anything is sent', async () => {
@@ -321,6 +322,13 @@ describe('a person who already has an account', () => {
 		await expect.element(firstNameField()).not.toBeInTheDocument();
 		await expect.element(stateField()).not.toBeInTheDocument();
 		await expect.element(testPage.getByRole('link', { name: /where you work/ })).not.toBeInTheDocument();
+	});
+
+	it('says the password is the one she already uses, and states no new-password rule', async () => {
+		await setup({ lookup: () => jsonResponse(returningInvitation) });
+
+		await expect.element(testPage.getByText('The one you already use to sign in to DoulaCloud')).toBeVisible();
+		await expect.element(testPage.getByText('Must be 15 characters or more', { exact: false })).not.toBeInTheDocument();
 	});
 
 	it('refuses an empty password before anything is sent', async () => {
