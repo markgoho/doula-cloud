@@ -29,9 +29,11 @@ func (f fakeVerifier) Verify(_ context.Context, idToken string) (Identity, error
 }
 
 const (
-	opName  = "Mark Goho"
-	opEmail = "mark@doula.cloud"
-	opUID   = "op-uid-1"
+	opName   = "Mark Goho"
+	opEmail  = "mark@doula.cloud"
+	opUID    = "op-uid-1"
+	opUID2   = "op-uid-2"
+	opEmail2 = "second@doula.cloud"
 )
 
 var (
@@ -42,13 +44,13 @@ var (
 		"totp-token":  {UID: opUID, Email: opEmail, Name: opName, SecondFactor: factorTOTP},
 		"phone-token": {UID: opUID, Email: opEmail, Name: opName, SecondFactor: "phone"},
 		"bare-token":  {UID: opUID, Email: opEmail, Name: opName},
-		"other-token": {UID: "op-uid-2", Email: "second@doula.cloud", SecondFactor: factorTOTP},
+		"other-token": {UID: opUID2, Email: opEmail2, SecondFactor: factorTOTP},
 		// A step-up's tokens: a sign-in just now, its auth_time real wall
 		// time as Identity Platform's is.
 		"fresh-totp-token":  {UID: opUID, Email: opEmail, Name: opName, SecondFactor: factorTOTP, AuthTime: justNow},
 		"fresh-phone-token": {UID: opUID, Email: opEmail, Name: opName, SecondFactor: "phone", AuthTime: justNow},
 		"fresh-bare-token":  {UID: opUID, Email: opEmail, Name: opName, AuthTime: justNow},
-		"fresh-other-token": {UID: "op-uid-2", Email: "second@doula.cloud", SecondFactor: factorTOTP, AuthTime: justNow},
+		"fresh-other-token": {UID: opUID2, Email: opEmail2, SecondFactor: factorTOTP, AuthTime: justNow},
 	}
 )
 
@@ -61,9 +63,23 @@ type opsStack struct {
 	now     time.Time
 }
 
+// newOpsDB is a fresh database with the operators list the founder would have
+// seeded: ops_runtime cannot add a login, so a test lists it first (#2610).
+func newOpsDB(t *testing.T) *testdb.DB {
+	t.Helper()
+	db := testdb.New(t)
+	for uid, email := range map[string]string{opUID: opEmail, opUID2: opEmail2} {
+		if _, err := db.Admin.ExecContext(t.Context(),
+			`INSERT INTO operators (identity_uid, name, email) VALUES ($1, $2, $3)`, uid, opName, email); err != nil {
+			t.Fatalf("seed operator %s: %v", uid, err)
+		}
+	}
+	return db
+}
+
 func newOpsStack(t *testing.T, acceptEmulatorFactor bool) *opsStack {
 	t.Helper()
-	s := &opsStack{t: t, db: testdb.New(t), now: opsStart}
+	s := &opsStack{t: t, db: newOpsDB(t), now: opsStart}
 	s.handler, _ = routes(Deps{
 		DB:                   s.db.Ops,
 		Now:                  func() time.Time { return s.now },
@@ -158,33 +174,47 @@ func TestSignIn_AnAuthenticatorAppSignInMintsASessionAndRecordsTheOperatorAndThe
 	}
 }
 
-func TestSignIn_ASecondSignInKeepsTheFirstNameAndEmail(t *testing.T) {
+func TestSignIn_ASecondSignInKeepsTheListedNameAndEmail(t *testing.T) {
 	s := newOpsStack(t, false)
 	s.signIn("totp-token")
 	s.now = s.now.Add(time.Minute)
-	if _, err := s.db.Admin.ExecContext(t.Context(), `UPDATE operators SET name = 'First Name' WHERE identity_uid = 'op-uid-1'`); err != nil {
-		t.Fatalf("rename: %v", err)
+
+	w := s.signIn("totp-token")
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
 	}
-
-	s.signIn("totp-token")
-
-	if n := s.count(`SELECT count(*) FROM operators WHERE identity_uid = 'op-uid-1' AND name = 'First Name'`); n != 1 {
-		t.Errorf("operators named as first recorded = %d, want 1", n)
+	if n := s.count(`SELECT count(*) FROM operators`); n != 2 {
+		t.Errorf("operators = %d, want the 2 listed", n)
 	}
 	if n := s.count(`SELECT count(*) FROM operator_acts WHERE action = 'sign_in'`); n != 2 {
 		t.Errorf("sign_in acts = %d, want 2", n)
 	}
 }
 
-func TestSignIn_AnOperatorWithNoNameIsRecordedByEmail(t *testing.T) {
+func TestSignIn_RefusesALoginNotOnTheOperatorsListAndInsertsNothing(t *testing.T) {
 	s := newOpsStack(t, false)
+	tokens["unlisted-token"] = Identity{UID: "op-uid-unlisted", Email: "stranger@example.com", Name: "Stranger", SecondFactor: factorTOTP}
+	t.Cleanup(func() { delete(tokens, "unlisted-token") })
 
-	if w := s.signIn("other-token"); w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", w.Code)
+	w := s.signIn("unlisted-token")
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403; body %s", w.Code, w.Body)
 	}
-
-	if n := s.count(`SELECT count(*) FROM operators WHERE name = 'second@doula.cloud'`); n != 1 {
-		t.Errorf("operators named by email = %d, want 1", n)
+	if body := decodeError(t, w); body.Code != apierr.CodeForbidden || body.Message != msgNotOnTheList {
+		t.Errorf("error = %s %q, want %s %q", body.Code, body.Message, apierr.CodeForbidden, msgNotOnTheList)
+	}
+	for _, c := range w.Result().Cookies() {
+		if c.Name == authn.SessionCookieName && c.Value != "" {
+			t.Errorf("a session cookie was set for an unlisted login")
+		}
+	}
+	if n := s.count(`SELECT count(*) FROM operators WHERE identity_uid = 'op-uid-unlisted'`); n != 0 {
+		t.Errorf("operators rows for the unlisted login = %d, want 0", n)
+	}
+	if n := s.count(`SELECT count(*) FROM operator_sessions`); n != 0 {
+		t.Errorf("sessions = %d, want 0", n)
 	}
 }
 
@@ -225,8 +255,8 @@ func TestSignIn_RefusesALoginWithNoSecondFactorAndSendsItToEnroll(t *testing.T) 
 	if body := decodeError(t, w); body.Code != apierr.CodeMFARequired {
 		t.Errorf("code = %s, want %s", body.Code, apierr.CodeMFARequired)
 	}
-	if n := s.count(`SELECT count(*) FROM operator_sessions`) + s.count(`SELECT count(*) FROM operators`); n != 0 {
-		t.Errorf("sessions and operators = %d, want 0", n)
+	if n := s.count(`SELECT count(*) FROM operator_sessions`); n != 0 {
+		t.Errorf("sessions = %d, want 0", n)
 	}
 }
 

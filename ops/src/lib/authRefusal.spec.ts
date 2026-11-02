@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { codeFieldError, codeRefusal, credentialRefusal, isSecondFactorRequired } from './authRefusal.ts';
+import { codeFieldError, codeRefusal, credentialRefusal, enrollSetupRefusal, isSecondFactorRequired } from './authRefusal.ts';
 import { emulatorURL } from './firebase.ts';
 import { SERVICE_PROBLEM } from './session.ts';
 
@@ -73,5 +73,18 @@ describe('emulatorURL', () => {
 	it('builds the emulator URL from its host, and none without one', () => {
 		expect(emulatorURL('127.0.0.1:9099')).toBe('http://127.0.0.1:9099');
 		expect(emulatorURL(undefined)).toBeUndefined();
+	});
+});
+
+describe('enrollSetupRefusal', () => {
+	it('names the unverified email when Identity Platform refuses a secret to it', () => {
+		expect(enrollSetupRefusal({ code: 'auth/unverified-email' })).toEqual({
+			message: 'Your sign-in email address is not verified, so an authenticator app cannot be set up yet. Ask whoever added your login to mark it verified, then reload this page'
+		});
+	});
+
+	it('keeps the service problem for any other cause', () => {
+		expect(enrollSetupRefusal({ code: 'auth/network-request-failed' })).toEqual({ message: SERVICE_PROBLEM });
+		expect(enrollSetupRefusal(new Error('offline'))).toEqual({ message: SERVICE_PROBLEM });
 	});
 });

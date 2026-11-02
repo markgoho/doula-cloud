@@ -307,7 +307,7 @@ func TestOpsRuntime_HoldsNoTableGrantButTheOperatorsOwnTables(t *testing.T) {
 	want := []string{
 		"operator_acts INSERT", "operator_acts SELECT",
 		"operator_sessions DELETE", "operator_sessions INSERT", "operator_sessions SELECT", "operator_sessions UPDATE",
-		"operators INSERT", "operators SELECT",
+		"operators SELECT",
 	}
 	slices.Sort(got)
 	if !slices.Equal(got, want) {

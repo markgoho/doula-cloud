@@ -32,7 +32,7 @@ type secondFactorStack struct {
 
 func newSecondFactorStack(t *testing.T) *secondFactorStack {
 	t.Helper()
-	s := &secondFactorStack{opsStack: &opsStack{t: t, db: testdb.New(t), now: opsStart}, accounts: authntest.NewFakeAccountManager()}
+	s := &secondFactorStack{opsStack: &opsStack{t: t, db: newOpsDB(t), now: opsStart}, accounts: authntest.NewFakeAccountManager()}
 	s.handler, _ = routes(Deps{
 		DB:       s.db.Ops,
 		Now:      func() time.Time { return s.now },

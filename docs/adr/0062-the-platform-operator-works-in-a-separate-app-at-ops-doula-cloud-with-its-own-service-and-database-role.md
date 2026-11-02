@@ -19,7 +19,7 @@ Decided on [How does a Platform operator sign in to ops.doula.cloud? (#2414)](ht
 - **An operator tenant in the `doula-cloud` Identity Platform project.** Operator logins live apart from Staff. The ops service verifies tokens with a tenant-scoped client, so it refuses every Staff token. Login accounts are made by hand in the tenant; there is no signup route ([ADR-0049](0049-doula-cloud-is-one-person-by-design-and-no-night-needs-him.md)).
 - **`doula-api` refuses any token whose `firebase.tenant` is set**, at session create and at reauth. Without that, it would mint a Staff session from an operator's token.
 - **TOTP is required, never SMS**, as for Staff ([ADR-0026](0026-two-populations-two-sign-in-methods-and-one-token-table.md)). It is enforced twice: the tenant's `mfaConfig` is `MANDATORY` with TOTP, and the ops service refuses any session without a TOTP second factor.
-- **No `staff` row and no Practice.** An `operators` row, keyed by the tenant uid and holding name and email, is made at first sign-in.
+- **No `staff` row and no Practice.** An `operators` row, keyed by the tenant uid and holding name and email, is on the list before the first sign-in: the founder adds it, and a sign-in whose uid has no row is refused with 403 (#2610; `docs/infrastructure.md`, "Adding an operator"). It was made at first sign-in until then, which let anyone who could sign up to the tenant become an operator.
 - **Session:** 1 hour idle, 8 hours absolute, in its own `operator_sessions` table. It is not `sessions`, because `app_runtime` can insert there and could mint an operator session.
 
 ## The database boundary
@@ -27,7 +27,7 @@ Decided on [How does a Platform operator sign in to ops.doula.cloud? (#2414)](ht
 - **A Postgres role `ops_runtime`, which `doula-api` never holds.** Its login is a password user made by hand, with the DSN in a Secret Manager secret only `doula-ops-runtime@` can read.
 - **`ops_runtime` has no table grants and no policies.** Every read and act is a `SECURITY DEFINER` function called from a handler, with `search_path` set and `pg_temp` last, `EXECUTE` revoked from `PUBLIC` and granted to `ops_runtime` alone, in the same migration transaction. Each returns only the columns a screen prints.
 - **No function body reads `clients`.** That makes "never a Client record" something a reviewer can check. The one exception is below, under Feedback.
-- **Two direct grants**, on tables with no Practice in them: `operator_sessions`, and `operator_acts` with `operators` (see "The record").
+- **Direct grants**, on tables with no Practice in them: `operator_sessions`, and `operator_acts` with `operators` (SELECT only on `operators` since #2610) (see "The record").
 - **No existing policy changes.** RLS stays whole for every other reader. A `TO ops_runtime USING (true)` policy is not used anywhere.
 - **Two guards fail the build.** A Go test asserts `app_runtime` and `app_runtime_login` are not members of `ops_runtime`. A Go test over `pg_proc` lists every `SECURITY DEFINER` function each of `app_runtime` and `ops_runtime` may execute, and fails on any function that is not on its list. That catches a forgotten `REVOKE ... FROM PUBLIC`.
 - **What it does not fence.** `practices` has no RLS, and `doula-api` already reads any Practice's ledger by setting `app.current_practice_id` itself. So `ops_runtime` fences the operator's own functions and acts: Feedback, every outbox, the cross-Practice reads, and the eight acts below. It does not fence Practice data in general, and this ADR does not claim it does.

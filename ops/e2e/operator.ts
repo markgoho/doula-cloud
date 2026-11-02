@@ -1,6 +1,6 @@
 import { expect, type APIRequestContext, type Page } from '../../app/e2e/playwrightTest';
 import { EMULATOR_URL } from '../../app/e2e/mfa';
-import { OPS_TENANT_ID } from '../../app/e2e/stack';
+import { OPS_TENANT_ID, seedOperatorRow } from '../../app/e2e/stack';
 import { STUB_TOTP_CODE, stubTotpFactor } from '../../app/e2e/totpStub';
 
 /*
@@ -23,6 +23,8 @@ export async function signedInOperator(
 		}
 	);
 	expect(created.ok()).toBe(true);
+	const { localId } = await created.json();
+	seedOperatorRow(localId, displayName, email);
 	await stubTotpFactor(page, request);
 	await page.goto('/sign-in');
 	await page.getByLabel('Email address').fill(email);

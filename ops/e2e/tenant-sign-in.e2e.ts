@@ -1,7 +1,7 @@
 import { expect, test, type APIRequestContext } from '../../app/e2e/playwrightTest';
 import { EMULATOR_URL, enrollPhoneFactor, randomPhoneNumber } from '../../app/e2e/mfa';
 import { API_URL, OPS_URL } from '../../app/e2e/ports';
-import { OPS_TENANT_ID, SEEDED_OPERATOR } from '../../app/e2e/stack';
+import { OPS_TENANT_ID, SEEDED_OPERATOR, seedOperatorRow } from '../../app/e2e/stack';
 
 /*
  * #2469: the vendored Auth emulator signs in to a tenant, which local ops
@@ -18,7 +18,7 @@ import { OPS_TENANT_ID, SEEDED_OPERATOR } from '../../app/e2e/stack';
  * - A tenant login cannot sign in without the tenant id.
  */
 
-type Tokens = { idToken: string };
+type Tokens = { idToken: string; localId: string };
 
 function claimsOf(idToken: string): { firebase: Record<string, unknown> } {
 	return JSON.parse(Buffer.from(idToken.split('.', 3)[1], 'base64url').toString('utf8'));
@@ -73,6 +73,7 @@ async function newOperatorLogin(request: APIRequestContext): Promise<Tokens> {
 		password: 'operator-spec-password',
 		tenantId: OPS_TENANT_ID
 	});
+	seedOperatorRow(signedIn.localId, 'Spec Operator', email);
 	return signedIn;
 }
 
