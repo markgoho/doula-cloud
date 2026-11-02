@@ -134,3 +134,67 @@ func TestWorker_MailsNothingOnceTheMoveIsNoLongerTrue(t *testing.T) {
 		})
 	}
 }
+
+// #2656: a contractor whose Attachment has ended cannot open the client's
+// page, only the screen that says her work ended, so the mail about a
+// Visit moved off her says that is where the link goes. A contractor still
+// on the Engagement, and an employee, keep the client's page.
+func TestWorker_AVisitMovedOffAContractorSaysWhereTheLinkGoes(t *testing.T) {
+	cases := map[string]struct {
+		attached bool
+		want     string
+		notWant  string
+	}{
+		"her Attachment has ended": {
+			attached: false,
+			want:     "This link shows the day your work ended:",
+			notWant:  "client's page",
+		},
+		"she is still on the Engagement": {
+			attached: true,
+			want:     "This link opens that client's page at your practice:",
+			notWant:  "work ended",
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := newVisitFixture(t)
+			if tc.attached {
+				if _, err := f.db.Admin.ExecContext(t.Context(),
+					`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by)
+					 VALUES ($1, $2, 'granted', $3)`,
+					f.engagementID, f.doulaID, f.ownerID,
+				); err != nil {
+					t.Fatalf("seed attachment: %v", err)
+				}
+			}
+			f.queue(t, f.notice(f.doulaID, staffnotice.KindVisitReassignedFrom))
+
+			sent := f.run(t, putOnNow).Sent()
+			if len(sent) != 1 {
+				t.Fatalf("sent %d messages, want 1", len(sent))
+			}
+			text := sent[0].Text
+			if !strings.Contains(text, tc.want) || strings.Contains(text, tc.notWant) {
+				t.Fatalf("text = %q, want %q and not %q", text, tc.want, tc.notWant)
+			}
+			if hasOffersLine := strings.Contains(text, "stay on Your offers."); hasOffersLine == tc.attached {
+				t.Fatalf("text = %q, Your offers line present = %v", text, hasOffersLine)
+			}
+		})
+	}
+}
+
+func TestWorker_AVisitMovedOffAnEmployeeKeepsTheClientPage(t *testing.T) {
+	f := newVisitFixture(t)
+	if _, err := f.db.Admin.ExecContext(t.Context(),
+		`UPDATE practice_memberships SET employment_type = 'employee' WHERE staff_id = $1`, f.doulaID); err != nil {
+		t.Fatalf("make employee: %v", err)
+	}
+	f.queue(t, f.notice(f.doulaID, staffnotice.KindVisitReassignedFrom))
+
+	sent := f.run(t, putOnNow).Sent()
+	if len(sent) != 1 || !strings.Contains(sent[0].Text, "This link opens that client's page at your practice:") {
+		t.Fatalf("sent = %v, want the client's page wording", sent)
+	}
+}
