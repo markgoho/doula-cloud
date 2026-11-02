@@ -20,13 +20,13 @@ import (
 // working this birth"). An accrued Attachment names nobody here. It is a
 // record of work done, and no screen calls its holder the Doula.
 //
-// BookedVisits is how many Visits she holds on it that are scheduled for
-// later than now: what taking her off leaves with her until someone
-// reassigns them (#2596).
+// OpenVisits is how many Visits she holds on it that have not happened:
+// dated later than now or not dated at all (#2665), what taking her off
+// leaves with her until someone reassigns them (#2596).
 type AttachedDoula struct {
-	StaffID      string `json:"staffId"`
-	Name         string `json:"name"`
-	BookedVisits int    `json:"bookedVisits"`
+	StaffID    string `json:"staffId"`
+	Name       string `json:"name"`
+	OpenVisits int    `json:"openVisits"`
 }
 
 // AttachSelfResponse is who is on the Engagement once the caller has put
@@ -58,7 +58,7 @@ func readAttachedDoulas(ctx context.Context, tx *sql.Tx, engagementID string) ([
 	rows, err := tx.QueryContext(ctx,
 		`SELECT ea.staff_id, COALESCE(s.name, $2),
 		        (SELECT count(*) FROM visits v
-		          WHERE v.engagement_id = ea.engagement_id AND v.staff_id = ea.staff_id AND v.scheduled_at > $3)
+		          WHERE v.engagement_id = ea.engagement_id AND v.staff_id = ea.staff_id AND (v.scheduled_at IS NULL OR v.scheduled_at > $3))
 		   FROM engagement_attachments ea
 		   LEFT JOIN staff s ON s.id = ea.staff_id
 		  WHERE ea.engagement_id = $1 AND ea.origin = 'granted' AND ea.ended_at IS NULL
@@ -73,7 +73,7 @@ func readAttachedDoulas(ctx context.Context, tx *sql.Tx, engagementID string) ([
 	doulas := []AttachedDoula{}
 	for rows.Next() {
 		var doula AttachedDoula
-		if err := rows.Scan(&doula.StaffID, &doula.Name, &doula.BookedVisits); err != nil {
+		if err := rows.Scan(&doula.StaffID, &doula.Name, &doula.OpenVisits); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("engagement: scan attached doula: %w", err)
 		}

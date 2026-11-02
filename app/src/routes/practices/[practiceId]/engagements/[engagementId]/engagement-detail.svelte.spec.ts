@@ -72,7 +72,7 @@ interface Detail {
 	clientPortalInviteStatus?: string;
 	clientEmailSuppressed?: boolean;
 	clientHasEmail?: boolean;
-	doulas: { staffId: string; name: string; bookedVisits: number }[];
+	doulas: { staffId: string; name: string; openVisits: number }[];
 	canAttachSelf: boolean;
 	yourFee?: { amountCents: number; acceptedOn: string; terms?: string };
 	hasDoulaFees: boolean;
@@ -3039,7 +3039,7 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 		await setupWhoIsOn(nobodyOnIt, () =>
 			jsonResponse({
 				engagementId: 'engagement-1',
-				doulas: [{ staffId: 'staff-1', name: 'Anne-Marie Ochieng-Whitfield', bookedVisits: 0 }],
+				doulas: [{ staffId: 'staff-1', name: 'Anne-Marie Ochieng-Whitfield', openVisits: 0 }],
 				canAttachSelf: false
 			})
 		);
@@ -3105,7 +3105,7 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 						isVisitAdded
 							? {
 									...nobodyOnIt,
-									doulas: [{ staffId: 'staff-1', name: 'Anne-Marie Ochieng-Whitfield', bookedVisits: 0 }],
+									doulas: [{ staffId: 'staff-1', name: 'Anne-Marie Ochieng-Whitfield', openVisits: 0 }],
 									canAttachSelf: false
 								}
 							: nobodyOnIt
@@ -3151,7 +3151,7 @@ const roster: VisitAssignee[] = [
 ];
 
 const priyaIsOn = () =>
-	jsonResponse({ engagementId: 'engagement-1', doulas: [{ staffId: 'staff-2', name: 'Priya Raman', bookedVisits: 0 }], canAttachSelf: true });
+	jsonResponse({ engagementId: 'engagement-1', doulas: [{ staffId: 'staff-2', name: 'Priya Raman', openVisits: 0 }], canAttachSelf: true });
 
 async function setupPutOn(
 	detail: Detail,
@@ -3198,7 +3198,7 @@ describe('putting a Doula on the Engagement (#2230)', () => {
 
 	it('leaves out a Doula who is already on it', async () => {
 		const jo: VisitAssignee = { staffId: 'staff-4', name: 'Jo Mercer', employmentType: 'employee', nameable: true };
-		await setupPutOn({ ...nobodyOnIt, doulas: [{ staffId: 'staff-2', name: 'Priya Raman', bookedVisits: 0 }] }, ['owner', 'doula'], {
+		await setupPutOn({ ...nobodyOnIt, doulas: [{ staffId: 'staff-2', name: 'Priya Raman', openVisits: 0 }] }, ['owner', 'doula'], {
 			assignees: [...roster, jo]
 		});
 		await openChange('Doula');
@@ -3211,7 +3211,7 @@ describe('putting a Doula on the Engagement (#2230)', () => {
 	// names who stays instead of reading as a swap.
 	it('names the Doula who stays, and says the one chosen is added', async () => {
 		const jo: VisitAssignee = { staffId: 'staff-4', name: 'Jo Mercer', employmentType: 'employee', nameable: true };
-		await setupPutOn({ ...nobodyOnIt, doulas: [{ staffId: 'staff-2', name: 'Priya Raman', bookedVisits: 0 }] }, ['owner', 'doula'], {
+		await setupPutOn({ ...nobodyOnIt, doulas: [{ staffId: 'staff-2', name: 'Priya Raman', openVisits: 0 }] }, ['owner', 'doula'], {
 			assignees: [...roster, jo]
 		});
 		await openChange('Doula');
@@ -3289,7 +3289,7 @@ describe('putting a Doula on the Engagement (#2230)', () => {
 	it('says "You are on this work." when the reader chooses herself', async () => {
 		await setupPutOn(nobodyOnIt, ['owner', 'doula'], {
 			attachResponse: () =>
-				jsonResponse({ engagementId: 'engagement-1', doulas: [{ staffId: 'staff-1', name: 'Renata Alvarez', bookedVisits: 0 }], canAttachSelf: false })
+				jsonResponse({ engagementId: 'engagement-1', doulas: [{ staffId: 'staff-1', name: 'Renata Alvarez', openVisits: 0 }], canAttachSelf: false })
 		});
 		await openChange('Doula');
 
@@ -4188,8 +4188,8 @@ async function setupTakeOff(
 }
 
 describe('taking a Doula off the Engagement (#2596)', () => {
-	const lena = { staffId: 'staff-3', name: 'Lena Vasquez', bookedVisits: 3 };
-	const priya = { staffId: 'staff-2', name: 'Priya Raman', bookedVisits: 0 };
+	const lena = { staffId: 'staff-3', name: 'Lena Vasquez', openVisits: 3 };
+	const priya = { staffId: 'staff-2', name: 'Priya Raman', openVisits: 0 };
 
 	beforeEach(() => {
 		apiFetchWithSession.mockReset();
@@ -4225,14 +4225,14 @@ describe('taking a Doula off the Engagement (#2596)', () => {
 
 		await expect.element(testPage.getByRole('heading', { name: 'Take Lena Vasquez off this work?' })).toBeVisible();
 		await expect
-			.element(testPage.getByText("We will email Lena Vasquez to say so. Lena Vasquez's 3 booked Visits stay with Lena Vasquez until you reassign them."))
+			.element(testPage.getByText("We will email Lena Vasquez to say so. Lena Vasquez still has 3 Visits that haven't happened yet. They stay with Lena Vasquez until you reassign them."))
 			.toBeVisible();
 		await testPage.getByRole('button', { name: 'Take Lena Vasquez off' }).click();
 
 		await expect
 			.element(
 				testPage.getByText(
-					"Lena Vasquez is off this work. We emailed Lena Vasquez to say so. 3 booked Visits are still Lena Vasquez's: reassign each one under Visits."
+					"Lena Vasquez is off this work. We emailed Lena Vasquez to say so. 3 Visits that haven't happened yet are still Lena Vasquez's. Reassign each one under Visits."
 				)
 			)
 			.toBeVisible();

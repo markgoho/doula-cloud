@@ -322,7 +322,7 @@ describe('attachSelf', () => {
 	it('puts with no body, and answers who is on the Engagement', async () => {
 		const answer = {
 			engagementId: 'engagement-1',
-			doulas: [{ staffId: 'staff-1', name: 'Hana Kim', bookedVisits: 0 }],
+			doulas: [{ staffId: 'staff-1', name: 'Hana Kim', openVisits: 0 }],
 			canAttachSelf: false
 		};
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse(answer));
@@ -349,7 +349,7 @@ describe('attachDoula', () => {
 	it('puts with no body at her own path, and answers who is on the Engagement', async () => {
 		const answer = {
 			engagementId: 'engagement-1',
-			doulas: [{ staffId: 'staff-2', name: 'Priya Raman', bookedVisits: 0 }],
+			doulas: [{ staffId: 'staff-2', name: 'Priya Raman', openVisits: 0 }],
 			canAttachSelf: true
 		};
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse(answer));
@@ -390,27 +390,27 @@ describe('takeOffWords and takenOffMessage', () => {
 	const lena = { staffId: 'staff-1', name: 'Lena Vasquez' };
 
 	it('names the act, the email and the Visits that stay', () => {
-		expect(takeOffWords({ ...lena, bookedVisits: 3 }, false)).toEqual({
+		expect(takeOffWords({ ...lena, openVisits: 3 }, false)).toEqual({
 			title: 'Take Lena Vasquez off this work?',
 			consequence:
-				'We will email Lena Vasquez to say so. Lena Vasquez\'s 3 booked Visits stay with Lena Vasquez until you reassign them.',
+				"We will email Lena Vasquez to say so. Lena Vasquez still has 3 Visits that haven't happened yet. They stay with Lena Vasquez until you reassign them.",
 			confirm: 'Take Lena Vasquez off'
 		});
-		expect(takenOffMessage({ ...lena, bookedVisits: 3 }, false)).toBe(
-			"Lena Vasquez is off this work. We emailed Lena Vasquez to say so. 3 booked Visits are still Lena Vasquez's: reassign each one under Visits."
+		expect(takenOffMessage({ ...lena, openVisits: 3 }, false)).toBe(
+			"Lena Vasquez is off this work. We emailed Lena Vasquez to say so. 3 Visits that haven't happened yet are still Lena Vasquez's. Reassign each one under Visits."
 		);
 	});
 
 	it('speaks of one Visit in the singular', () => {
-		expect(takeOffWords({ ...lena, bookedVisits: 1 }, false).consequence).toBe(
-			"We will email Lena Vasquez to say so. Lena Vasquez's 1 booked Visit stays with Lena Vasquez until you reassign it."
+		expect(takeOffWords({ ...lena, openVisits: 1 }, false).consequence).toBe(
+			"We will email Lena Vasquez to say so. Lena Vasquez still has 1 Visit that hasn't happened yet. It stays with Lena Vasquez until you reassign it."
 		);
-		expect(takenOffMessage({ ...lena, bookedVisits: 1 }, false)).toContain("1 booked Visit is still Lena Vasquez's: reassign it under Visits.");
+		expect(takenOffMessage({ ...lena, openVisits: 1 }, false)).toContain("1 Visit that hasn't happened yet is still Lena Vasquez's. Reassign it under Visits.");
 	});
 
 	it('says nothing of an email to the person who pressed, or of Visits that are not there', () => {
-		expect(takeOffWords({ ...lena, bookedVisits: 0 }, true).consequence).toBe('Lena Vasquez can be put back on later.');
-		expect(takenOffMessage({ ...lena, bookedVisits: 0 }, true)).toBe('Lena Vasquez is off this work.');
+		expect(takeOffWords({ ...lena, openVisits: 0 }, true).consequence).toBe('Lena Vasquez can be put back on later.');
+		expect(takenOffMessage({ ...lena, openVisits: 0 }, true)).toBe('Lena Vasquez is off this work.');
 	});
 });
 
@@ -425,7 +425,7 @@ describe('visitDoulaText', () => {
 const on = (count: number) =>
 	['Kimiko Nakashima', 'Priya Raman', 'Joss Adeyemi', 'Delia Marchetti', 'Rowan Petrosyan']
 		.slice(0, count)
-		.map((name, index) => ({ staffId: `staff-${index}`, name, bookedVisits: 0 }));
+		.map((name, index) => ({ staffId: `staff-${index}`, name, openVisits: 0 }));
 
 describe('attachDoulaWords', () => {
 	it('keeps "Who is the Doula?" and "Save the Doula" where nobody is on', () => {
@@ -444,8 +444,8 @@ describe('attachDoulaWords', () => {
 });
 
 describe('doulaSummaryItem', () => {
-	const hana = { staffId: 'staff-1', name: 'Hana Kim', bookedVisits: 0 };
-	const renata = { staffId: 'staff-2', name: 'Renata Alvarez', bookedVisits: 0 };
+	const hana = { staffId: 'staff-1', name: 'Hana Kim', openVisits: 0 };
+	const renata = { staffId: 'staff-2', name: 'Renata Alvarez', openVisits: 0 };
 
 	it('says "No Doula yet" for a live Engagement nobody is on', () => {
 		expect(doulaSummaryItem([], 'intake')).toEqual({ label: 'Doula', value: 'No Doula yet' });

@@ -43,7 +43,7 @@ type Visit struct {
 	// calendar day each instant falls on is the Practice's own, not
 	// UTC's and not the reader's (#953).
 	Type string `json:"type"`
-	// IsOffEngagement is true for a booked Visit whose Doula has been taken
+	// IsOffEngagement is true for a Visit not yet happened (future or undated) whose Doula has been taken
 	// off the Engagement (#2596, off_engagement.go).
 	IsOffEngagement bool `json:"isOffEngagement"`
 }
