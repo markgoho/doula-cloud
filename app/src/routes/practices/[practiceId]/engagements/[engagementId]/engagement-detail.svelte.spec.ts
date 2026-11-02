@@ -3183,7 +3183,7 @@ describe('putting a Doula on the Engagement (#2230)', () => {
 		await expect.element(testPage.getByRole('radio', { name: 'Priya Raman' })).not.toBeChecked();
 		expect(testPage.getByRole('radio', { name: /Lena Vasquez/ }).elements()).toHaveLength(0);
 		await expect
-			.element(testPage.getByText('A contractor is not listed: a contractor goes on the work by accepting an Offer.'))
+			.element(testPage.getByText('A contractor is not listed: a contractor takes on work by accepting an Offer.'))
 			.toBeVisible();
 		expect(putMeOnIt().elements()).toHaveLength(0);
 	});

@@ -191,7 +191,7 @@ describe('the approval screen', () => {
 
 	it('shows why approval was refused when the named Doula can no longer be attached', async () => {
 		const reason =
-			'Marguerite Throckmorton-Balasubramanian is now a contractor, and a contractor goes on the work by accepting an Offer. Refuse this request, then start the work again and name another Doula or no Doula yet.';
+			'Marguerite Throckmorton-Balasubramanian is now a contractor, and a contractor takes on work by accepting an Offer. Refuse this request, then start the work again and name another Doula or no Doula yet.';
 		await setup({ approveStatus: 409, approveBody: reason });
 
 		await approve();
