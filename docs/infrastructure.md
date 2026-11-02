@@ -80,7 +80,7 @@ Nothing here is an oversight. Each line is a decision, and the reason is the poi
 | Secret **values** (every `google_secret_manager_secret_version`) | A version's payload is stored in Terraform state in plaintext. Putting the Stripe key, the Mailgun key and three database DSNs in state trades one console step for a file that is worth more than the console. The shells are owned; the values are added with `gcloud secrets versions add`, as `docs/environment.md` already describes. |
 | `doula-api`'s and `doula-ops`'s container images | `ci.yml`'s `deploy-api` and `deploy-ops` set them on every merge to trunk. See the next section — this is the one conflict that decides whether any of this works. `doula-ops` was created by Terraform rather than imported, from the `:trunk` tag `deploy-ops` pushes beside each `:<sha>`, so it carries no `build_config` residue and its `ignore_changes` has the four entries below plus `template[0].labels["goog-terraform-provisioned"]`: the provider stamps that label on a service it created, and `deploy-ops` copies it into each revision template, so the plan showed it removed after every deploy. |
 | The `Founder phone` notification channel | An SMS channel's `labels.number` is the founder's phone number, and creating one needs a code sent to that phone. Made once in the console; `terraform/monitoring.tf` reads it by display name with a data source, so the number is in no file and the plan identity only lists it. Deleting or renaming it makes `plan` fail, once `local.founder_phone_channel_exists` is `true` ([#1403](https://github.com/markgoho/doula-cloud/issues/1403)). |
-| Cloud SQL users and their passwords | `google_sql_user` writes the password to state. `app_runtime_login`, `site_builder_login` and `ops_runtime_login` are created by hand and their DSNs live in Secret Manager. The instance and the databases are owned; the logins are not. |
+| Cloud SQL users and their passwords | `google_sql_user` writes the password to state. `app_runtime_login`, `site_builder_login` and `ops_runtime_login` are created by hand and their DSNs live in Secret Manager. The instance and the databases are owned; the logins are not. Create each login as `postgres` with `CREATE ROLE <login> LOGIN PASSWORD '…' IN ROLE <role>`, never with `gcloud sql users create`: that command makes the new login a member of `cloudsqlsuperuser`, which defeats the grants on the role it was meant to hold. Check the result with [Verifying the logins](#verifying-the-logins-2585). |
 | Identity Platform configuration | `signIn.email`, the MFA settings, the authorized domains. The Terraform provider covers `google_identity_platform_config` unevenly, and ADR-0026's two sign-in methods are a product decision walked by hand once. Revisit only if it drifts. |
 | Firebase Hosting, Firestore, and the Firebase-created buckets | `firebase.json` and `.firebaserc` are already code and already deploy from CI; `doula-cloud.firebasestorage.app` and the `(default)` Firestore database were created by Firebase enabling itself and are managed by it. Adding a second owner would produce drift, not detect it. |
 | `firebase-app-hosting-github-oauth-github-oauthtoken-a16322` | Created by Firebase App Hosting's Developer Connect integration for its own GitHub connection, not by DoulaCloud (#1046). Its only accessor is `service-850855848778@gcp-sa-devconnect.iam.gserviceaccount.com`, a Google service agent — already excluded from ownership by the row above, so importing the shell alone would own a resource whose one real grant Terraform can never manage, the same half-configuration this ticket exists to avoid on the eleven secrets it does own ([#1192](https://github.com/markgoho/doula-cloud/issues/1192) took the count from twelve). Same reasoning as the Firebase-created buckets and Firestore: Developer Connect creates and rotates this secret for itself, and a second owner would read as drift, not detect it. |
@@ -103,13 +103,37 @@ Nothing here is an oversight. Each line is a decision, and the reason is the poi
 | 3 | Add the founder's operator login, `mark@doula.cloud`, to tenant `operators-fj5ur`, with its email marked verified (`accounts:update` `emailVerified` true) when the login is created: Identity Platform refuses an authenticator app to an unverified email (`auth/unverified-email`), and `/enroll` then says so. Then add it to the operators list, per "Adding an operator" below. Its authenticator app is set up at the first sign-in on `ops.doula.cloud`, after step 11 | Yes, 2026-11-01 |
 | 4 | Create the `dc-ops` Hosting site, which `.firebaserc`'s `ops` target names | Yes, 2026-11-01 |
 | 5 | Connect `ops.doula.cloud` to `dc-ops`, and add its CNAME in Squarespace DNS | Yes, 2026-11-01 |
-| 6 | Create the Cloud SQL login `ops_runtime_login` with `gcloud sql users create`, then, as `postgres`, `GRANT ops_runtime TO ops_runtime_login` (00143 made the `ops_runtime` role) | Yes, 2026-11-01 |
+| 6 | As `postgres`, `CREATE ROLE ops_runtime_login LOGIN PASSWORD '<password>' IN ROLE ops_runtime` (00143 made the `ops_runtime` role). Not `gcloud sql users create`, which makes the login a member of `cloudsqlsuperuser`; run [Verifying the logins](#verifying-the-logins-2585) afterward | Yes, 2026-11-01 |
 | 7 | `terraform apply -target=google_secret_manager_secret.pg_ops_runtime_dsn`, so the secret's shell exists to hold a value | Yes, 2026-11-01 |
 | 8 | Add the DSN as the secret's first version: `postgres://ops_runtime_login:<password>@/doula_cloud?host=/cloudsql/doula-cloud:us-central1:doula-cloud-pg&sslmode=disable`, the shape `doula-cloud-pg-app-runtime-dsn` has | Yes, 2026-11-01 |
 | 9 | A trunk run's `deploy-ops` has pushed `doula-ops:trunk`, the image Terraform creates the service from. Until step 10, the job pushes the image and skips the deploy with a warning | Yes, 2026-11-01 |
 | 10 | `terraform apply`: the service account, its grants, `doula-ops`, its invoker, and `doula-api`'s `OPS_BASE_URL` and its #2432 scaling. If it fails on the service after creating it, `terraform untaint google_cloud_run_v2_service.doula_ops` before applying again, or the next plan proposes a replace that `prevent_destroy` refuses | Yes, 2026-11-01 |
 | 11 | Re-run that trunk run's `deploy-ops`, which now deploys, then `deploy-ops-site` | Yes, 2026-11-01 |
 | 12 | Add `ops` to the trunk ruleset's required status checks | Yes, 2026-11-01 |
+
+### Verifying the logins (#2585)
+
+Each Cloud SQL login must be a member of exactly one role, the role the migrations made for it, and of nothing else. In particular none may be a member of `cloudsqlsuperuser`, which is what `gcloud sql users create` grants. Run this as `postgres` after creating a login, and again after any change to one:
+
+```sql
+SELECT login.rolname AS login, array_agg(parent.rolname ORDER BY parent.rolname) AS member_of
+FROM pg_roles login
+LEFT JOIN pg_auth_members m ON m.member = login.oid
+LEFT JOIN pg_roles parent ON parent.oid = m.roleid
+WHERE login.rolname LIKE '%\_login'
+GROUP BY login.rolname
+ORDER BY login.rolname;
+```
+
+Expected result, three rows:
+
+| login | member_of |
+| --- | --- |
+| `app_runtime_login` | `{app_runtime}` |
+| `ops_runtime_login` | `{ops_runtime}` |
+| `site_builder_login` | `{site_builder}` |
+
+A `cloudsqlsuperuser` in any `member_of` is wrong, and so is a login whose list is `{NULL}` (no role). To fix a login that holds it, as `postgres`: `REVOKE cloudsqlsuperuser FROM <login>`, then `GRANT <role> TO <login>` if the role is missing. The roles come from `00002_practice_staff_tenancy.sql` (`app_runtime`), `00046_practice_page_slug.sql` (`site_builder`) and `00143_ops_runtime_and_operator_tables.sql` (`ops_runtime`).
 
 ### Adding an operator
 
