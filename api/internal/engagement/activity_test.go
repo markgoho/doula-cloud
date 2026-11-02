@@ -390,7 +390,7 @@ func TestListActivityHandler_AttachmentNamesTheDoulaAndWhoAttachedHer(t *testing
 		t.Fatalf("got %d items, want 1", len(got.Items))
 	}
 	entry := got.Items[0]
-	if want := "Put on this Engagement as the Doula: Hana Kim"; entry.Detail != want {
+	if want := "Put on this work as the Doula: Hana Kim"; entry.Detail != want {
 		t.Fatalf("detail = %q, want %q", entry.Detail, want)
 	}
 	if entry.ActorName != "Renata Alvarez" {
@@ -418,7 +418,7 @@ func TestListActivityHandler_AttachmentOfSomebodyGone(t *testing.T) {
 	if len(got.Items) != 1 {
 		t.Fatalf("got %d items, want 1", len(got.Items))
 	}
-	if want := "Put on this Engagement as the Doula: a former colleague"; got.Items[0].Detail != want {
+	if want := "Put on this work as the Doula: a former colleague"; got.Items[0].Detail != want {
 		t.Fatalf("detail = %q, want %q", got.Items[0].Detail, want)
 	}
 }

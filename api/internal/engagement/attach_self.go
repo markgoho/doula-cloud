@@ -44,9 +44,9 @@ type AttachSelfResponse struct {
 // is a whole sentence a person can read, and each names the reason. The
 // first two also name the path that is open to her.
 const (
-	msgAttachSelfNotADoula   = "Only a Staff member who holds the Doula role can be put on an Engagement."
-	msgAttachSelfContractor  = "You contract for this Practice, so you go on an Engagement by accepting an Offer."
-	msgAttachSelfIsCompleted = "This Engagement has completed, so nobody can be put on it."
+	msgAttachSelfNotADoula   = "Only a Staff member who holds the Doula role can be put on this work."
+	msgAttachSelfContractor  = "You contract for this Practice, so you take on work by accepting an Offer."
+	msgAttachSelfIsCompleted = "This work has completed, so nobody can be put on it."
 )
 
 // readAttachedDoulas reads the Doulas on engagementID, in the order they

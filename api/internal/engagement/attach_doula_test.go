@@ -132,7 +132,7 @@ func TestAttachDoulaHandler_RoleTable(t *testing.T) {
 				t.Fatalf("ledger items = %d, want 1", len(ledger.Items))
 			}
 			entry := ledger.Items[0]
-			if entry.ActorName != attachingOwnerName || entry.Detail != "Put on this Engagement as the Doula: "+attachedDoulaName || entry.CreatedAt.IsZero() {
+			if entry.ActorName != attachingOwnerName || entry.Detail != "Put on this work as the Doula: "+attachedDoulaName || entry.CreatedAt.IsZero() {
 				t.Fatalf("ledger entry = %+v, want who, whom and when", entry)
 			}
 		})
@@ -147,7 +147,7 @@ func TestAttachDoulaHandler_ContractorRefusalNamesTheOffer(t *testing.T) {
 	srv, practiceID, _, doulaID, engagementID := newAttachDoulaServer(t, db, uid, []string{ownerRole}, []string{doulaRole}, contractorType, engagement.StatusActive)
 
 	_, body := attachDoulaAs(t, db, srv, uid, practiceID, engagementID, doulaID)
-	want := attachedDoulaName + " contracts for this Practice, so goes on an Engagement by accepting an Offer. Offer this work instead."
+	want := attachedDoulaName + " contracts for this Practice, so takes on work by accepting an Offer. Offer this work instead."
 	if body.Message != want {
 		t.Fatalf("message = %q, want %q", body.Message, want)
 	}

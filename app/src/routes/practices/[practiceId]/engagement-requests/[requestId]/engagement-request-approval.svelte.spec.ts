@@ -204,9 +204,9 @@ describe('the approval screen', () => {
 	});
 
 	it('warns on a second live piece of work without blocking the decision', async () => {
-		await setup({ detail: { ...baseDetail, warning: 'this client already has a live engagement' } });
+		await setup({ detail: { ...baseDetail, warning: 'this client already has live work' } });
 
-		await expect.element(testPage.getByText(`${clientFirstName} already has a live engagement.`, { exact: false })).toBeVisible();
+		await expect.element(testPage.getByText(`${clientFirstName} already has live work.`, { exact: false })).toBeVisible();
 		await expect.element(approveRadio()).toBeEnabled();
 	});
 

@@ -17,10 +17,10 @@ const (
 	// Nobody reaches it from the Engagement page, whose only two paths
 	// are named buttons; it is here for a caller that sent its own body,
 	// and it still names the field.
-	MsgStatusUnknown = "Choose whether this Engagement is active or completed"
+	MsgStatusUnknown = "Choose whether this work is active or completed"
 	// MsgEndingReasonNeeded is the endingReason field on the completion
 	// form -- the same sentence that form's own check shows.
-	MsgEndingReasonNeeded = "Select why this Engagement is ending"
+	MsgEndingReasonNeeded = "Select why care is ending"
 	// MsgBirthOutcomeUnknown is the birthOutcome field on the birth
 	// outcome form, matching its own client-side check.
 	MsgBirthOutcomeUnknown = "Select what happened to the pregnancy"
@@ -29,7 +29,7 @@ const (
 	// the other of the two kinds as a named button; it is here for a
 	// caller that sent its own body, the same reasoning MsgStatusUnknown
 	// gives for its own control.
-	MsgKindUnknown = "Choose whether this Engagement is for birth or postpartum care"
+	MsgKindUnknown = "Choose whether this work is for birth or postpartum care"
 	// MsgDueDateMalformed is the dueDate field on the due-date change
 	// (#2013): empty, not a real day, or not YYYY-MM-DD. The Engagement
 	// page composes the date from three boxes and checks it first, so this

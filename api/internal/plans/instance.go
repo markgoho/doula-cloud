@@ -160,7 +160,7 @@ func PostInstanceHandler() http.Handler {
 			engagementID, planType, fieldsJSON, clock.Now(r.Context()),
 		); err != nil {
 			if pgerr.IsUniqueViolation(err) {
-				apierr.WriteError(w, "a plan instance already exists for this engagement and plan type", http.StatusConflict)
+				apierr.WriteError(w, "a plan instance already exists for this work and plan type", http.StatusConflict)
 				return
 			}
 			// coverage:ignore reason: DB query failure, not exercised by unit tests

@@ -193,7 +193,7 @@ func checkFee(employmentType string, amountCents *int64) (int, string) {
 		return http.StatusOK, ""
 	}
 	if amountCents != nil {
-		return http.StatusBadRequest, "an employee's work carries no per-Engagement fee"
+		return http.StatusBadRequest, "an employee's work carries no separate fee for this work"
 	}
 	return http.StatusOK, ""
 }
@@ -224,7 +224,7 @@ func writeEngagementErr(w http.ResponseWriter, err error) {
 	case errors.Is(err, sql.ErrNoRows):
 		apierr.WriteError(w, "engagement not found", http.StatusNotFound)
 	case errors.Is(err, errEngagementCompleted):
-		apierr.WriteError(w, "that engagement has completed", http.StatusConflict)
+		apierr.WriteError(w, "that work has completed", http.StatusConflict)
 	default:
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -256,7 +256,7 @@ func create(ctx context.Context, tx *sql.Tx, practiceID, engagementID, actorStaf
 		return CreateResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError, nil
 	}
 	if open {
-		return CreateResponse{}, http.StatusConflict, apierr.CodeConflict, "that person already has an open offer on this engagement", nil
+		return CreateResponse{}, http.StatusConflict, apierr.CodeConflict, "that person already has an open offer on this work", nil
 	}
 
 	expiresAt := clock.Now(ctx).Add(Lifetime)

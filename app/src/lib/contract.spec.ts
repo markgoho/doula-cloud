@@ -308,10 +308,10 @@ describe('downloadClientSignedContractPdf', () => {
 	});
 
 	it('throws with the response body text on a non-ok response', async () => {
-		const fetcher = vi.fn().mockResolvedValue(jsonResponse('no contract on this engagement has ever been signed', 404));
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('no contract on this work has ever been signed', 404));
 
 		await expect(downloadClientSignedContractPdf(fetcher, 'eng-1')).rejects.toThrow(
-			'no contract on this engagement has ever been signed'
+			'no contract on this work has ever been signed'
 		);
 	});
 });

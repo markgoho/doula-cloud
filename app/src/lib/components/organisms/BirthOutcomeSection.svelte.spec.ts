@@ -23,7 +23,7 @@ const BIRTH_OUTCOME_FIELD_IDS = {
 
 const frozen: BirthOutcomeResult = {
 	kind: 'confirmable',
-	message: 'this Engagement already has a birth outcome; only a Practice Owner can correct it'
+	message: 'this work already has a birth outcome; only a Practice Owner can correct it'
 };
 
 interface SetupOptions {
@@ -292,14 +292,14 @@ describe('BirthOutcomeSection', () => {
 
 	it('renders every other refusal as itself', async () => {
 		await setup({
-			result: { kind: 'errors', errors: [{ message: 'This Engagement has no birth outcome to correct' }] }
+			result: { kind: 'errors', errors: [{ message: 'this work has no birth outcome to correct' }] }
 		});
 		await openForm();
 		await page.getByLabelText('The Practice never learned what happened').click();
 		await page.getByRole('button', { name: 'Record this outcome' }).click();
 
 		await expect
-			.element(page.getByText('This Engagement has no birth outcome to correct').first())
+			.element(page.getByText('this work has no birth outcome to correct').first())
 			.toBeVisible();
 	});
 

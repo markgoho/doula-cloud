@@ -33,7 +33,7 @@ type ApproveResponse struct {
 
 // liveEngagementWarning is the fixed copy ADR-0017's second-live-Engagement
 // warning carries at both seats it appears in.
-const liveEngagementWarning = "this client already has a live engagement"
+const liveEngagementWarning = "this client already has live work"
 
 // ApproveHandler approves a pending Engagement Request: it is the only
 // path in the codebase that creates an engagements row (approve, below),

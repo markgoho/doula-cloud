@@ -262,7 +262,7 @@ func PostContractHandler() http.Handler {
 			engagementID, prose, valuesJSON, amountCents,
 		); err != nil {
 			if pgerr.IsUniqueViolation(err) {
-				apierr.WriteError(w, "a contract already exists for this engagement", http.StatusConflict)
+				apierr.WriteError(w, "a contract already exists for this work", http.StatusConflict)
 				return
 			}
 			// coverage:ignore reason: DB query failure, not exercised by unit tests

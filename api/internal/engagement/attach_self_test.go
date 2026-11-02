@@ -205,7 +205,7 @@ func TestAttachSelfHandler_RoleTable(t *testing.T) {
 				t.Fatalf("ledger items = %d, want 1", len(ledger.Items))
 			}
 			entry := ledger.Items[0]
-			if entry.ActorName != doulaName || entry.Detail != "Put on this Engagement as the Doula: "+doulaName || entry.CreatedAt.IsZero() {
+			if entry.ActorName != doulaName || entry.Detail != "Put on this work as the Doula: "+doulaName || entry.CreatedAt.IsZero() {
 				t.Fatalf("ledger entry = %+v, want who, what and when", entry)
 			}
 

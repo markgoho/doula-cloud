@@ -20,7 +20,7 @@ import (
 // Contract's PDF is still served (#299), so a refusal here is about a
 // document that was never produced, never about the Contract's status
 // right now.
-const MsgNoSignedContract = "no contract on this engagement has ever been signed"
+const MsgNoSignedContract = "no contract on this work has ever been signed"
 
 // SignedPDFObjectPath is the deterministic object-store key for one
 // Contract's Signed PDF. It is keyed on the Contract id, not on the

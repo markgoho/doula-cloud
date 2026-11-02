@@ -49,7 +49,7 @@ describe('requestEngagement', () => {
 	});
 
 	it('carries the second-live-Engagement warning through unchanged', async () => {
-		const outcome = { requestId: 'request-1', state: 'pending', warning: 'this client already has a live engagement' };
+		const outcome = { requestId: 'request-1', state: 'pending', warning: 'this client already has live work' };
 		const fetcher = vi.fn().mockResolvedValue(response(outcome));
 
 		const result = await requestEngagement(fetcher, 'practice-1', 'client-1', body);

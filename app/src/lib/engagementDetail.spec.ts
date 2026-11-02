@@ -336,10 +336,10 @@ describe('attachSelf', () => {
 	it('throws a refusal', async () => {
 		const fetcher = vi
 			.fn()
-			.mockResolvedValue(jsonResponse('You contract for this Practice, so you go on an Engagement by accepting an Offer.', 403));
+			.mockResolvedValue(jsonResponse('You contract for this Practice, so you take on work by accepting an Offer.', 403));
 
 		await expect(attachSelf(fetcher, reference)).rejects.toThrow(
-			'You contract for this Practice, so you go on an Engagement by accepting an Offer.'
+			'You contract for this Practice, so you take on work by accepting an Offer.'
 		);
 	});
 });
@@ -742,7 +742,7 @@ describe('recordBirthOutcome', () => {
 			jsonResponse(
 				{
 					code: 'BIRTH_OUTCOME_FROZEN',
-					message: 'this Engagement already has a birth outcome; only a Practice Owner can correct it'
+					message: 'this work already has a birth outcome; only a Practice Owner can correct it'
 				},
 				409
 			)
@@ -752,7 +752,7 @@ describe('recordBirthOutcome', () => {
 
 		expect(result).toEqual({
 			kind: 'confirmable',
-			message: 'this Engagement already has a birth outcome; only a Practice Owner can correct it'
+			message: 'this work already has a birth outcome; only a Practice Owner can correct it'
 		});
 	});
 
@@ -760,7 +760,7 @@ describe('recordBirthOutcome', () => {
 		const fetcher = vi
 			.fn()
 			.mockResolvedValue(
-				jsonResponse({ message: 'this Engagement has no birth outcome to correct' }, 409)
+				jsonResponse({ message: 'this work has no birth outcome to correct' }, 409)
 			);
 
 		const result = await recordBirthOutcome(fetcher, reference, {
@@ -770,7 +770,7 @@ describe('recordBirthOutcome', () => {
 
 		expect(result).toEqual({
 			kind: 'errors',
-			errors: [{ message: 'this Engagement has no birth outcome to correct' }]
+			errors: [{ message: 'this work has no birth outcome to correct' }]
 		});
 	});
 });

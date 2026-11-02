@@ -91,7 +91,7 @@ func refusalMessage(reason string) string {
 	case ReasonNotADoula:
 		return "staff member does not hold the Doula role at this practice"
 	default:
-		return "that contractor has not accepted an offer on this engagement"
+		return "that contractor has not accepted an offer on this work"
 	}
 }
 
