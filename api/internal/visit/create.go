@@ -148,7 +148,7 @@ func CreateHandler(enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 		notified := []string{}
-		queued, err := queueAssigneeNotice(r, c, engagementID, visitID, staffID, putOn)
+		queued, err := queueAssigneeNotice(r, c, visitID, staffID, putOn)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)

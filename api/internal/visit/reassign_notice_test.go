@@ -10,7 +10,10 @@ import (
 	"doula-cloud/api/internal/visit"
 )
 
-const kindVisitTo = "visit_reassigned_to"
+const (
+	kindVisitTo = "visit_reassigned_to"
+	kindPutOn   = "put_on_engagement"
+)
 
 type queuedNotice struct{ recipient, kind, triggeredBy string }
 
