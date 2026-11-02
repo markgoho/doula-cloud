@@ -13,6 +13,6 @@
 
 	<stack-l space="var(--space-4)">
 		<BackLink href="/style-guide" />
-		<BackLink href="/style-guide" label="Back to the Engagement Request you were deciding" />
+		<BackLink href="/style-guide" label="Back to the request you were deciding" />
 	</stack-l>
 </stack-l>

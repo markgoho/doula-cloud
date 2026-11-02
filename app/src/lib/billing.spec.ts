@@ -88,7 +88,7 @@ describe('originLabel', () => {
 
 	it('names the other three origins in words rather than enum values', () => {
 		expect(originLabel('purchase')).toBe('Purchase');
-		expect(originLabel('consumption')).toBe('Engagement started');
+		expect(originLabel('consumption')).toBe('Work started');
 		expect(originLabel('refund')).toBe('Refund');
 	});
 

@@ -21,7 +21,7 @@ export const billingModeOptions = [
 	{
 		value: 'by_hand' as const,
 		label: 'By hand',
-		description: 'This Practice sends the bill and collects the payment itself, and records each payment on the Engagement.'
+		description: 'This Practice sends the bill and collects the payment itself, and records each payment on the work it is for.'
 	}
 ];
 

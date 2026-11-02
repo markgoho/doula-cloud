@@ -250,7 +250,7 @@
 	// #1998: the summary card's Change (GOV.UK's Summary list row action).
 	// Each opens an in-place form under its own row, holding the controls
 	// that used to sit in a loose stack under the facts: the care-phase
-	// moves, the kind change, and "Put me on this Engagement". One row is
+	// moves, the kind change, and "Put me on this work". One row is
 	// open at a time. A save closes it and says what changed in a status
 	// that takes focus, because the control she pressed goes with the
 	// form; a refusal leaves it open, beside the refusal.
@@ -317,7 +317,7 @@
 		event.preventDefault();
 		await completeSubmission.run(async () => {
 			if (!completeReasonValue) {
-				return [{ message: 'Select why this Engagement is ending', targetId: endingReasonFieldId }];
+				return [{ message: 'Select why care is ending', targetId: endingReasonFieldId }];
 			}
 			statusOverride = await changeEngagementStatus(
 				apiFetchWithSession,
@@ -497,7 +497,7 @@
 
 	// #1598: who is on this Engagement, overlaid on the load-time read the
 	// way statusOverride is. The BFF decides both halves -- the names, and
-	// whether "Put me on this Engagement" is hers to press
+	// whether "Put me on this work" is hers to press
 	// (engagement.canAttachSelf, the function its own write asks) -- and
 	// this page only draws them. `undefined` means "nothing on this page
 	// view has changed who is on it".
@@ -518,8 +518,8 @@
 		const isAttached = await selfAttach.mutate(async () => {
 			whoIsOnOverride = await attachSelf(apiFetchWithSession, reference);
 			openChange = undefined;
-			selfAttachedMessage = 'You are on this Engagement.';
-		}, 'We could not put you on this Engagement. Try again.');
+			selfAttachedMessage = 'You are on this work.';
+		}, 'We could not put you on this work. Try again.');
 		if (!isAttached) return;
 		// A birth with a Doula on it can have an On-call window, and the
 		// ledger has a new entry: both sections are re-read, each with its
@@ -543,7 +543,7 @@
 				reference
 			);
 			whoIsOnOverride = { doulas: refreshedDoulas, canAttachSelf: refreshedCanAttach };
-			// "You are on this Engagement." was true when it was said. A
+			// "You are on this work." was true when it was said. A
 			// later write can end her Attachment (completion), so the
 			// message goes when who is on it is read again.
 			selfAttachedMessage = '';
@@ -1038,8 +1038,8 @@
 			attachChoice = undefined;
 			selfAttachedMessage =
 				chosen.value === callerStaffId
-					? 'You are on this Engagement.'
-					: `${doulas!.find((doula) => doula.staffId === chosen.value)!.name} is on this Engagement.`;
+					? 'You are on this work.'
+					: `${doulas!.find((doula) => doula.staffId === chosen.value)!.name} is on this work.`;
 			isAttached = true;
 		}, orThrownMessage);
 		if (!isAttached) return;
@@ -2270,7 +2270,7 @@
 									<ErrorSummary errors={completeSubmission.errors} />
 								{/if}
 								<RadioGroup
-									legend="Why is this Engagement ending?"
+									legend="Why is care ending?"
 									name="ending-reason"
 									options={endingReasons}
 									value={completeReasonValue}
@@ -2317,7 +2317,7 @@
 								id={ATTACH_GROUP}
 								label={attachWords.question}
 								hint={hasUnlistedContractor
-									? 'A contractor is not listed: a contractor goes on an Engagement by accepting an Offer.'
+									? 'A contractor is not listed: a contractor goes on the work by accepting an Offer.'
 									: undefined}
 								error={attachSubmission.errorFor(ATTACH_GROUP)}
 							>
@@ -2337,7 +2337,7 @@
 							<RadioGroup
 								legend={attachWords.question}
 								hint={hasUnlistedContractor
-									? 'A contractor is not listed: a contractor goes on an Engagement by accepting an Offer.'
+									? 'A contractor is not listed: a contractor goes on the work by accepting an Offer.'
 									: undefined}
 								name={ATTACH_GROUP}
 								options={attachOptions}
@@ -2357,7 +2357,7 @@
 					</StackedForm>
 				{:else}
 					<!--
-						#1598: "Put me on this Engagement", behind the Doula row's
+						#1598: "Put me on this work", behind the Doula row's
 						Change. The row has a Change only where the BFF says the
 						press would be accepted: not for a contractor Doula, not
 						for an Owner or an Admin who holds no Doula role, not for
@@ -2368,7 +2368,7 @@
 					<stack-l space="var(--space-3)">
 						<cluster-l space="var(--space-3)">
 							<Button
-								label="Put me on this Engagement"
+								label="Put me on this work"
 								size="sm"
 								variant="secondary"
 								loading={selfAttach.isBusy}

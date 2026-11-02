@@ -70,6 +70,6 @@
 		summaryLinks={['View Client']}
 		loadingActions={messageTheClient}
 		sections={sectionHeadings.map((heading) => ({ heading, content: nothing }))}
-		loading="Loading the Engagement"
+		loading="Loading the work"
 	/>
 {/if}

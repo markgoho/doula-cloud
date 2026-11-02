@@ -292,7 +292,7 @@
 {/snippet}
 
 <RecordDetail
-	title={detail ? `Approve work with ${fullName(detail.client)}` : 'Approve an Engagement Request'}
+	title={detail ? `Approve work with ${fullName(detail.client)}` : 'Approve a request to start work'}
 	summary={detail ? summary : undefined}
 	sections={detail
 		? [

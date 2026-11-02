@@ -143,7 +143,7 @@ describe('OfferInbox.svelte', () => {
 	it('says an employee Offer carries no fee', async () => {
 		await setup([{ ...openOffer, amountCents: undefined, employmentType: 'employee' }]);
 
-		await expect.element(page.getByText('No per-Engagement fee')).toBeVisible();
+		await expect.element(page.getByText('No fee for this work')).toBeVisible();
 	});
 
 	it('calls onDecide with accept', async () => {

@@ -172,7 +172,7 @@ describe('the search that fronts intake (#498)', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: 'Ada Byron' }))
 			.toHaveAttribute('href', `/practices/${practiceId}/clients/client-2`);
-		await expect.element(testPage.getByText('Added Mar 4, 2024 · 1 Engagement · open now')).toBeVisible();
+		await expect.element(testPage.getByText('Added Mar 4, 2024 · Birth · open now')).toBeVisible();
 		// The contact rows are gone, so a blank one draws no dash.
 		await expect.element(testPage.getByText('—', { exact: true })).not.toBeInTheDocument();
 		// A client-side result set moves no focus on its own -- the results

@@ -61,12 +61,12 @@ describe('ContractForm.svelte', () => {
 			values: { engagement_start_date: '2026-10-27' }
 		});
 
-		await expect.element(page.getByLabelText('Engagement start date')).toHaveAttribute('type', 'date');
-		await expect.element(page.getByLabelText('Engagement start date')).toHaveValue('2026-10-27');
-		await expect.element(page.getByLabelText('Engagement end date')).toHaveAttribute('type', 'date');
+		await expect.element(page.getByLabelText('Work start date')).toHaveAttribute('type', 'date');
+		await expect.element(page.getByLabelText('Work start date')).toHaveValue('2026-10-27');
+		await expect.element(page.getByLabelText('Work end date')).toHaveAttribute('type', 'date');
 		await expect.element(page.getByLabelText('Price')).toHaveAttribute('type', 'text');
 
-		await page.getByLabelText('Engagement end date').fill('2027-04-05');
+		await page.getByLabelText('Work end date').fill('2027-04-05');
 
 		expect(onValueChange).toHaveBeenCalledWith('engagement_end_date', '2027-04-05');
 	});

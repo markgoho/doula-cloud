@@ -45,8 +45,8 @@ test('A Contract can be built, sent, signed by the Client, and its Signed PDF re
 	// they're filled by hand.
 	await expect(page.getByLabel('Practice name')).toHaveValue('Riverside Doulas');
 	await page.getByLabel('Scope of service').fill('12 prenatal visits');
-	await page.getByLabel('Engagement start date').fill('2027-01-01');
-	await page.getByLabel('Engagement end date').fill('2027-06-01');
+	await page.getByLabel('Work start date').fill('2027-01-01');
+	await page.getByLabel('Work end date').fill('2027-06-01');
 	await page.getByRole('button', { name: 'Save Contract' }).click();
 	await expect(page.getByText('Contract saved.')).toBeVisible();
 

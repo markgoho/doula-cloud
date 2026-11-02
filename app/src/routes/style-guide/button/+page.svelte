@@ -30,7 +30,7 @@
 		<h2>Variants</h2>
 		<cluster-l space="var(--space-4)">
 			<Button label="I agree to sign electronically, continue" variant="primary" onClick={noop} />
-			<Button label="Back to the Engagement Request you were deciding" variant="secondary" onClick={noop} />
+			<Button label="Back to the request you were deciding" variant="secondary" onClick={noop} />
 			<Button label="Remove this Doula from the Practice" variant="destructive" onClick={noop} />
 		</cluster-l>
 	</section>

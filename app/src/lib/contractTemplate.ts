@@ -20,8 +20,8 @@ export const MERGE_FIELDS = [
 	{ token: '{{practice_name}}', label: 'Practice name' },
 	{ token: '{{client_name}}', label: 'Client name' },
 	{ token: '{{price}}', label: 'Price' },
-	{ token: '{{engagement_start_date}}', label: 'Engagement start date' },
-	{ token: '{{engagement_end_date}}', label: 'Engagement end date' },
+	{ token: '{{engagement_start_date}}', label: 'Work start date' },
+	{ token: '{{engagement_end_date}}', label: 'Work end date' },
 	{ token: '{{scope_of_service}}', label: 'Scope of service' }
 ] as const;
 

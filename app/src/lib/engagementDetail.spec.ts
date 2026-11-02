@@ -391,13 +391,13 @@ describe('takeOffWords and takenOffMessage', () => {
 
 	it('names the act, the email and the Visits that stay', () => {
 		expect(takeOffWords({ ...lena, bookedVisits: 3 }, false)).toEqual({
-			title: 'Take Lena Vasquez off this Engagement?',
+			title: 'Take Lena Vasquez off this work?',
 			consequence:
 				'We will email Lena Vasquez to say so. Lena Vasquez\'s 3 booked Visits stay with Lena Vasquez until you reassign them.',
 			confirm: 'Take Lena Vasquez off'
 		});
 		expect(takenOffMessage({ ...lena, bookedVisits: 3 }, false)).toBe(
-			"Lena Vasquez is off this Engagement. We emailed Lena Vasquez to say so. 3 booked Visits are still Lena Vasquez's: reassign each one under Visits."
+			"Lena Vasquez is off this work. We emailed Lena Vasquez to say so. 3 booked Visits are still Lena Vasquez's: reassign each one under Visits."
 		);
 	});
 
@@ -410,14 +410,14 @@ describe('takeOffWords and takenOffMessage', () => {
 
 	it('says nothing of an email to the person who pressed, or of Visits that are not there', () => {
 		expect(takeOffWords({ ...lena, bookedVisits: 0 }, true).consequence).toBe('Lena Vasquez can be put back on later.');
-		expect(takenOffMessage({ ...lena, bookedVisits: 0 }, true)).toBe('Lena Vasquez is off this Engagement.');
+		expect(takenOffMessage({ ...lena, bookedVisits: 0 }, true)).toBe('Lena Vasquez is off this work.');
 	});
 });
 
 describe('visitDoulaText', () => {
 	it('adds the flag only for a Visit whose Doula was taken off', () => {
 		expect(visitDoulaText('Lena Vasquez', false)).toBe('Lena Vasquez');
-		expect(visitDoulaText('Lena Vasquez', true)).toBe('Lena Vasquez (No longer on this Engagement)');
+		expect(visitDoulaText('Lena Vasquez', true)).toBe('Lena Vasquez (No longer on this work)');
 	});
 });
 

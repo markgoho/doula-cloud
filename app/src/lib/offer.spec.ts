@@ -217,7 +217,7 @@ describe('formatFee', () => {
 	});
 
 	it('says so when an Offer carries no fee at all', () => {
-		expect(formatFee(undefined)).toBe('No per-Engagement fee');
+		expect(formatFee(undefined)).toBe('No fee for this work');
 	});
 });
 

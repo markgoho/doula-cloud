@@ -509,7 +509,7 @@ describe('unnameableHint', () => {
 	// word, never a pronoun.
 	it('names the one person who carries the marker by first name', () => {
 		expect(unnameableHint([nameableEmployee, unattachedContractor])).toBe(
-			'Maya Oyelaran-Fitzgerald is marked "cannot be named yet": a contractor who has not accepted an Offer on this Engagement. Send Maya an Offer, then name Maya on a Visit.'
+			'Maya Oyelaran-Fitzgerald is marked "cannot be named yet": a contractor who has not accepted an Offer for this work. Send Maya an Offer, then name Maya on a Visit.'
 		);
 	});
 
@@ -517,7 +517,7 @@ describe('unnameableHint', () => {
 		const second = { ...unattachedContractor, staffId: 'staff-3', name: 'Trish Halvorsen' };
 
 		expect(unnameableHint([nameableEmployee, unattachedContractor, second])).toBe(
-			'Somebody marked "cannot be named yet" is a contractor who has not accepted an Offer on this Engagement. Send an Offer, then name that doula on a Visit.'
+			'Somebody marked "cannot be named yet" is a contractor who has not accepted an Offer for this work. Send an Offer, then name that doula on a Visit.'
 		);
 	});
 });
@@ -529,7 +529,7 @@ describe('assigneeBlock', () => {
 	// error says what is wrong and what to do about it.
 	it('refuses a person this Engagement cannot admit, naming the remedy', () => {
 		expect(assigneeBlock(assignees, 'staff-2')).toBe(
-			'Maya Oyelaran-Fitzgerald is a contractor who has not accepted an Offer on this Engagement, so cannot be named on a Visit here yet. Send Maya an Offer, then name Maya.'
+			'Maya Oyelaran-Fitzgerald is a contractor who has not accepted an Offer for this work, so cannot be named on a Visit here yet. Send Maya an Offer, then name Maya.'
 		);
 	});
 
@@ -544,6 +544,6 @@ describe('assigneeBlock', () => {
 	it('still blocks, in plainer words, on a reason it does not recognize', () => {
 		expect(
 			assigneeBlock([{ ...unattachedContractor, reason: 'some_future_rule' }], 'staff-2')
-		).toBe('Maya Oyelaran-Fitzgerald cannot be named on a Visit on this Engagement yet.');
+		).toBe('Maya Oyelaran-Fitzgerald cannot be named on a Visit for this work yet.');
 	});
 });

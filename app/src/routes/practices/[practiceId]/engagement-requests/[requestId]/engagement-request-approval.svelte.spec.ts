@@ -191,7 +191,7 @@ describe('the approval screen', () => {
 
 	it('shows why approval was refused when the named Doula can no longer be attached', async () => {
 		const reason =
-			'Marguerite Throckmorton-Balasubramanian is now a contractor, and a contractor goes on an Engagement by accepting an Offer. Refuse this request, then start the work again and name another Doula or no Doula yet.';
+			'Marguerite Throckmorton-Balasubramanian is now a contractor, and a contractor goes on the work by accepting an Offer. Refuse this request, then start the work again and name another Doula or no Doula yet.';
 		await setup({ approveStatus: 409, approveBody: reason });
 
 		await approve();
@@ -203,7 +203,7 @@ describe('the approval screen', () => {
 		expect(goto).not.toHaveBeenCalled();
 	});
 
-	it('warns on a second live Engagement without blocking the decision', async () => {
+	it('warns on a second live piece of work without blocking the decision', async () => {
 		await setup({ detail: { ...baseDetail, warning: 'this client already has a live engagement' } });
 
 		await expect.element(testPage.getByText(`${clientFirstName} already has a live engagement.`, { exact: false })).toBeVisible();

@@ -101,7 +101,7 @@ describe('the on-call roster', () => {
 		await expect
 			.element(
 				testPage.getByRole('cell', {
-					name: 'There is no on-call window for this Engagement.',
+					name: 'There is no on-call window for this work.',
 				})
 			)
 			.toBeVisible();

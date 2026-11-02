@@ -266,7 +266,7 @@ export async function declinePreAccountOffer(
  * only absent case to handle. */
 export function formatFee(amountCents: number | undefined): string {
 	if (amountCents === undefined) {
-		return 'No per-Engagement fee';
+		return 'No fee for this work';
 	}
 	return formatMoney(amountCents, 'USD');
 }

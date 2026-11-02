@@ -400,12 +400,12 @@ describe('client detail hub', () => {
 			}
 		});
 
-		const approvedRow = testPage.getByRole('row', { name: /Postpartum Engagement approved/ });
+		const approvedRow = testPage.getByRole('row', { name: /Postpartum work approved/ });
 		await expect.element(approvedRow.getByRole('cell', { name: 'Renata Alvarez' })).toBeVisible();
 		await expect
 			.element(approvedRow.getByText(formatActivityTimestamp('2026-01-03T00:00:00Z')))
 			.toHaveAttribute('datetime', '2026-01-03T00:00:00Z');
-		const askedRow = testPage.getByRole('row', { name: /Postpartum Engagement requested/ });
+		const askedRow = testPage.getByRole('row', { name: /Postpartum work requested/ });
 		await expect.element(askedRow.getByRole('cell', { name: 'Priya Raman' })).toBeVisible();
 		await expect
 			.element(askedRow.getByText(formatActivityTimestamp('2026-01-02T00:00:00Z')))
@@ -443,7 +443,7 @@ describe('client detail hub', () => {
 			}
 		});
 
-		await expect.element(testPage.getByRole('cell', { name: 'Birth Engagement requested' })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Birth work requested' })).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'Jamie Doula' })).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'Record created' })).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'Sam Admin' })).toBeVisible();
@@ -570,7 +570,7 @@ describe('client detail hub', () => {
 		});
 
 		await expect
-			.element(testPage.getByText('Postpartum Engagement requested by Jamie Doula on Jan 2, 2026'))
+			.element(testPage.getByText('Postpartum work requested by Jamie Doula on Jan 2, 2026'))
 			.toBeVisible();
 	});
 
@@ -765,7 +765,7 @@ describe('the pending-request block: Withdraw (#504)', () => {
 			sessionStaffId: 'staff-someone-uninvolved'
 		});
 
-		await expect.element(testPage.getByText('Postpartum Engagement requested by')).toBeVisible();
+		await expect.element(testPage.getByText('Postpartum work requested by')).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: /Withdraw/ })).not.toBeInTheDocument();
 	});
 
@@ -776,7 +776,7 @@ describe('the pending-request block: Withdraw (#504)', () => {
 			sessionOk: false
 		});
 
-		await expect.element(testPage.getByText('Postpartum Engagement requested by')).toBeVisible();
+		await expect.element(testPage.getByText('Postpartum work requested by')).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: /Withdraw/ })).not.toBeInTheDocument();
 	});
 
@@ -789,7 +789,7 @@ describe('the pending-request block: Withdraw (#504)', () => {
 			sessionThrows: true
 		});
 
-		await expect.element(testPage.getByText('Postpartum Engagement requested by')).toBeVisible();
+		await expect.element(testPage.getByText('Postpartum work requested by')).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: /Withdraw/ })).not.toBeInTheDocument();
 	});
 
@@ -825,17 +825,17 @@ describe('the pending-request block: Withdraw (#504)', () => {
 			`/api/practices/${practiceId}/engagement-requests/request-mendoza-riquelme-postpartum/withdraw`,
 			{ method: 'POST' }
 		);
-		await expect.element(testPage.getByRole('status')).toHaveTextContent('Postpartum Engagement request withdrawn');
+		await expect.element(testPage.getByRole('status')).toHaveTextContent('Postpartum work request withdrawn');
 		await expect
-			.element(testPage.getByText('Postpartum Engagement requested by Alejandra Mendoza-Riquelme'))
+			.element(testPage.getByText('Postpartum work requested by Alejandra Mendoza-Riquelme'))
 			.not.toBeInTheDocument();
 		// The History gains the withdrawal, at the time the BFF recorded
 		// it, and keeps the asking beneath it.
-		const withdrawnRow = testPage.getByRole('row', { name: /Postpartum Engagement request withdrawn/ });
+		const withdrawnRow = testPage.getByRole('row', { name: /Postpartum work request withdrawn/ });
 		await expect
 			.element(withdrawnRow.getByText(formatActivityTimestamp('2026-01-04T08:00:00Z')))
 			.toHaveAttribute('datetime', '2026-01-04T08:00:00Z');
-		await expect.element(testPage.getByRole('cell', { name: 'Postpartum Engagement requested' })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Postpartum work requested' })).toBeVisible();
 	});
 
 	it('names who refused a Request, with the reason, and keeps who asked', async () => {
@@ -857,9 +857,9 @@ describe('the pending-request block: Withdraw (#504)', () => {
 			}
 		});
 
-		const refusedRow = testPage.getByRole('row', { name: /Birth Engagement refused: No Doula is free that week/ });
+		const refusedRow = testPage.getByRole('row', { name: /Birth work refused: No Doula is free that week/ });
 		await expect.element(refusedRow.getByRole('cell', { name: 'Renata Alvarez' })).toBeVisible();
-		const askedRow = testPage.getByRole('row', { name: /Birth Engagement requested/ });
+		const askedRow = testPage.getByRole('row', { name: /Birth work requested/ });
 		await expect.element(askedRow.getByRole('cell', { name: 'Chidinma Okonkwo' })).toBeVisible();
 	});
 
@@ -881,7 +881,7 @@ describe('the pending-request block: Withdraw (#504)', () => {
 			.element(testPage.getByText('that request is no longer pending -- it is approved'))
 			.toBeVisible();
 		await expect
-			.element(testPage.getByText('Postpartum Engagement requested by Alejandra Mendoza-Riquelme'))
+			.element(testPage.getByText('Postpartum work requested by Alejandra Mendoza-Riquelme'))
 			.toBeVisible();
 	});
 });

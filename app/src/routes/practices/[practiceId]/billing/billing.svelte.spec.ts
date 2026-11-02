@@ -68,7 +68,7 @@ describe('the way back to an approval an empty balance interrupted (#502)', () =
 		await renderBilling();
 
 		await expect
-			.element(testPage.getByRole('link', { name: 'Back to the engagement request you were deciding' }))
+			.element(testPage.getByRole('link', { name: 'Back to the request you were deciding' }))
 			.toHaveAttribute('href', approvalReturnPath);
 	});
 
@@ -80,7 +80,7 @@ describe('the way back to an approval an empty balance interrupted (#502)', () =
 		await renderBilling();
 
 		await expect
-			.element(testPage.getByRole('link', { name: 'Back to the engagement request you were deciding' }))
+			.element(testPage.getByRole('link', { name: 'Back to the request you were deciding' }))
 			.not.toBeInTheDocument();
 		vi.restoreAllMocks();
 	});
@@ -89,7 +89,7 @@ describe('the way back to an approval an empty balance interrupted (#502)', () =
 		await renderBilling();
 
 		await expect
-			.element(testPage.getByRole('link', { name: 'Back to the engagement request you were deciding' }))
+			.element(testPage.getByRole('link', { name: 'Back to the request you were deciding' }))
 			.not.toBeInTheDocument();
 	});
 });
@@ -101,7 +101,7 @@ describe('what a Credit buys (#286)', () => {
 		await expect
 			.element(
 				testPage.getByText(
-					'One Credit covers one Engagement — a single Client relationship centered on one baby, from intake through the end of care.'
+					'One Credit covers one piece of work with a Client, birth or postpartum, from intake to the end of care.'
 				)
 			)
 			.toBeVisible();

@@ -121,7 +121,7 @@
 	rows={fees}
 	{rowId}
 	rowActions={{ label: 'Actions', content: feeActions }}
-	emptyMessage="No Doula on this Engagement has an agreed fee."
+	emptyMessage="No Doula on this work has an agreed fee."
 />
 
 {#if openForm && openFee}

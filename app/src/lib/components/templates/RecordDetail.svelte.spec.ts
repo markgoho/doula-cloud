@@ -193,14 +193,14 @@ describe('RecordDetail.svelte', () => {
 
 	it('draws the back link, the title and a skeleton while loading, instead of the record (#480, #2248)', async () => {
 		const { container } = await setup({
-			loading: 'Loading the Engagement',
+			loading: 'Loading the work',
 			backHref: '/clients',
 			backLabel: 'Clients'
 		});
 
 		expect(container.querySelector('center-l')).toHaveAttribute('max', 'none');
 		await expect
-			.element(page.getByRole('status', { name: 'Loading the Engagement' }))
+			.element(page.getByRole('status', { name: 'Loading the work' }))
 			.toBeVisible();
 		await expect.element(page.getByRole('link', { name: 'Clients' })).toBeVisible();
 		await expect.element(page.getByRole('heading', { level: 1, name: 'Ada Lovelace' })).toBeVisible();
@@ -227,7 +227,7 @@ describe('RecordDetail.svelte', () => {
 	// the contents are drawn from them at once, and land where the loaded
 	// ones do. Case 1 of the querySelector exception: two copies of one list.
 	it('draws the contents from the named sections while loading, if the loaded record will have them (#480, #2257)', async () => {
-		const { container } = await setup({ loading: 'Loading the Engagement', isContentsShown: true });
+		const { container } = await setup({ loading: 'Loading the work', isContentsShown: true });
 
 		for (const region of ['.contents-rail', '.contents-strip']) {
 			const hrefs = [...container.querySelectorAll(`${region} a`)].map((anchor) => anchor.getAttribute('href'));
@@ -265,7 +265,7 @@ describe('RecordDetail.svelte', () => {
 	// Case 2 of the querySelector exception, as above.
 	it('holds the line of links a summary has under its card while loading (#2258)', async () => {
 		const { container } = await setup({
-			loading: 'Loading the Engagement',
+			loading: 'Loading the work',
 			summaryRows: [{ label: 'Care', value: 'Birth' }],
 			summaryLinks: ['View Client']
 		});
@@ -310,7 +310,7 @@ describe('RecordDetail.svelte', () => {
 	});
 
 	it('does not reserve a contents rail while loading a record with no rail', async () => {
-		const { container } = await setup({ loading: 'Loading the Engagement' });
+		const { container } = await setup({ loading: 'Loading the work' });
 
 		expect(container.querySelector('.contents-rail')).toBeNull();
 	});
@@ -324,10 +324,10 @@ describe('RecordDetail.svelte', () => {
 	});
 
 	it('prefers loadError over loading when both are somehow given', async () => {
-		await setup({ loadError: 'Failed to load the Engagement', loading: 'Loading the Engagement' });
+		await setup({ loadError: 'Failed to load the Engagement', loading: 'Loading the work' });
 
 		await expect.element(page.getByText('Failed to load the Engagement')).toBeVisible();
-		await expect.element(page.getByRole('status', { name: 'Loading the Engagement' })).not.toBeInTheDocument();
+		await expect.element(page.getByRole('status', { name: 'Loading the work' })).not.toBeInTheDocument();
 	});
 
 	// #2508: a link from another screen to one section lands on it once
@@ -336,13 +336,13 @@ describe('RecordDetail.svelte', () => {
 		const scrolled = vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(function noop() {});
 		history.replaceState(history.state, '', '#invoices');
 		try {
-			const { rerender } = await setup({ loading: 'Loading the Engagement' });
+			const { rerender } = await setup({ loading: 'Loading the work' });
 			expect(scrolled).not.toHaveBeenCalled();
 
 			await rerender({ loading: undefined });
 			await expect.poll(() => scrolled.mock.contexts.map((element) => (element as HTMLElement).id)).toEqual(['invoices']);
 
-			await rerender({ loading: 'Loading the Engagement' });
+			await rerender({ loading: 'Loading the work' });
 			await rerender({ loading: undefined });
 			expect(scrolled).toHaveBeenCalledTimes(1);
 		} finally {

@@ -63,7 +63,7 @@ describe('The Practice-side Birth Plan (#280)', () => {
 		await setup(() => ({ status: 404, ok: false, text: () => Promise.resolve('none') }) as Response);
 
 		await expect
-			.element(page.getByText('No Birth Plan has been created for this Engagement yet.'))
+			.element(page.getByText('No Birth Plan has been created for this work yet.'))
 			.toBeVisible();
 		expect(page.getByRole('button', { name: 'Print' }).elements()).toHaveLength(0);
 	});
@@ -110,7 +110,7 @@ describe('the page frame (#1576)', () => {
 		await setup(() => ({ status: 404, ok: false, text: () => Promise.resolve('none') }) as Response);
 
 		await expect
-			.element(page.getByText('No Birth Plan has been created for this Engagement yet.'))
+			.element(page.getByText('No Birth Plan has been created for this work yet.'))
 			.toBeVisible();
 		await expectOneFramedHeading(clientBirthPlan);
 	});

@@ -56,11 +56,11 @@ export const EMPLOYMENT_TYPE_LABELS: readonly LabeledValue<EmploymentType>[] = [
 export const ROLE_DESCRIPTIONS: Readonly<Record<string, string>> = {
 	owner: 'Runs the Practice: its Staff, its Plan Templates and its billing',
 	admin: 'Looks after Clients, Contracts, Invoices and scheduling',
-	doula: 'Works with Clients, on Engagements and Visits'
+	doula: 'Works with Clients and Visits'
 };
 
 export const EMPLOYMENT_TYPE_DESCRIPTIONS: Readonly<Record<EmploymentType, string>> = {
-	employee: 'Inside the business, and sees every Engagement at this Practice',
+	employee: 'Inside the business, and sees every Client at this Practice',
 	contractor: 'Outside the business, and sees only the work offered and accepted, unless also an Owner or Admin'
 };
 

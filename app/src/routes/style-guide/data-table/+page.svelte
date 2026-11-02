@@ -41,7 +41,7 @@
 
 	const credits: CreditRow[] = [
 		{ origin: 'Purchase of a twenty-credit block', quantity: 20 },
-		{ origin: 'Engagement started with Anne-Marie Ochieng-Whitfield', quantity: -1 }
+		{ origin: 'Work started with Anne-Marie Ochieng-Whitfield', quantity: -1 }
 	];
 
 	/*

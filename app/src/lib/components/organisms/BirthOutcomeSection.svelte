@@ -379,7 +379,7 @@
      that knows this Engagement was recorded while the page was open. -->
 <ConfirmDialog
 	bind:open={isFrozenDialogShown}
-	title="This Engagement already has a recorded outcome"
+	title="This work already has a recorded outcome"
 	consequence={frozenMessage}
 	confirmLabel="Overwrite it with what I entered"
 	onConfirm={handleFrozenConfirm}
@@ -388,7 +388,7 @@
 <ConfirmDialog
 	bind:open={isClearDialogShown}
 	title="Remove the recorded outcome?"
-	consequence="This Engagement goes back to having no outcome recorded at all, and the date the pregnancy ended goes with it. That is not the same as recording that the Practice never learned."
+	consequence="This work goes back to having no outcome recorded at all, and the date the pregnancy ended goes with it. That is not the same as recording that the Practice never learned."
 	confirmLabel="Remove this record"
 	onConfirm={handleClear}
 />

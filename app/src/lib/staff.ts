@@ -425,9 +425,9 @@ export const CONTRACTOR_WITHOUT_ACCEPTED_OFFER = 'contractor_without_accepted_of
 function unnameableClause(reason: string | undefined, name: string): string {
 	if (reason === CONTRACTOR_WITHOUT_ACCEPTED_OFFER) {
 		const first = firstName(name);
-		return `is a contractor who has not accepted an Offer on this Engagement, so cannot be named on a Visit here yet. Send ${first} an Offer, then name ${first}.`;
+		return `is a contractor who has not accepted an Offer for this work, so cannot be named on a Visit here yet. Send ${first} an Offer, then name ${first}.`;
 	}
-	return 'cannot be named on a Visit on this Engagement yet.';
+	return 'cannot be named on a Visit for this work yet.';
 }
 
 /** The name copy calls a person by once the screen knows who it is
@@ -504,9 +504,9 @@ export function unnameableHint(assignees: readonly VisitAssignee[]): string {
 	if (unnameable.length === 1) {
 		const { name } = unnameable[0]!;
 		const first = firstName(name);
-		return `${name} is marked "${UNNAMEABLE_MARKER}": a contractor who has not accepted an Offer on this Engagement. Send ${first} an Offer, then name ${first} on a Visit.`;
+		return `${name} is marked "${UNNAMEABLE_MARKER}": a contractor who has not accepted an Offer for this work. Send ${first} an Offer, then name ${first} on a Visit.`;
 	}
-	return `Somebody marked "${UNNAMEABLE_MARKER}" is a contractor who has not accepted an Offer on this Engagement. Send an Offer, then name that doula on a Visit.`;
+	return `Somebody marked "${UNNAMEABLE_MARKER}" is a contractor who has not accepted an Offer for this work. Send an Offer, then name that doula on a Visit.`;
 }
 
 /**
