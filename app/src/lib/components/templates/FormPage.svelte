@@ -88,6 +88,14 @@
 		Presence is the state, value is the Notice's message (#480).
 		*/
 		loadError?: string;
+		/**
+		 * The title takes focus as it appears (#2561): for a route whose
+		 * steps swap in place at one address, so a screen reader is told the
+		 * new step's heading, as a navigation would. Off on a first arrival,
+		 * which the browser announces itself, and while an error summary
+		 * holds focus.
+		 */
+		isTitleFocused?: boolean;
 	}
 
 	let {
@@ -99,7 +107,8 @@
 		errorSummary,
 		actions,
 		loading,
-		loadError
+		loadError,
+		isTitleFocused = false
 	}: Properties = $props();
 </script>
 
@@ -144,7 +153,7 @@
 					<Notice variant="status" message={outcome} isFocusedOnAppear />
 				{/if}
 
-				<Heading level={1} variant="page" text={title} />
+				<Heading level={1} variant="page" text={title} focusOnAppearing={isTitleFocused && !errorSummary} />
 
 				{@render introRegion()}
 

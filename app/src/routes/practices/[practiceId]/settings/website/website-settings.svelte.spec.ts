@@ -362,6 +362,37 @@ describe('website settings screen', () => {
 		await expect.element(testPage.getByLabelText('What your Practice offers')).toBeVisible();
 	});
 
+	it('moves focus to the heading of each step it swaps in, going on and going back (#2561)', async () => {
+		await setup();
+		const heading = (name: string) => testPage.getByRole('heading', { level: 1, name });
+
+		await expect.element(heading('Your website')).not.toHaveFocus();
+		await testPage.getByRole('radio', { name: 'Publish a page for me' }).click();
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+		await expect.element(heading('What your page will say')).toHaveFocus();
+
+		await testPage.getByLabelText('What your Practice offers').fill('Birth support.');
+		await testPage.getByLabelText('Your cancellation or refund policy').fill('Two weeks notice.');
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+		await expect.element(heading('Check your page before you publish it')).toHaveFocus();
+
+		await testPage.getByRole('button', { name: 'Back' }).click();
+		await expect.element(heading('What your page will say')).toHaveFocus();
+
+		await testPage.getByRole('button', { name: 'Back' }).click();
+		await expect.element(heading('Your website')).toHaveFocus();
+	});
+
+	it('moves focus to the heading of the saved answers once a save lands (#2561)', async () => {
+		await setup();
+
+		await testPage.getByRole('radio', { name: 'I have my own website or social profile' }).click();
+		await testPage.getByLabelText('The web address of your website or social profile').fill('rochesterdoulas.com');
+		await testPage.getByRole('button', { name: 'Save' }).click();
+
+		await expect.element(testPage.getByRole('heading', { level: 1, name: 'Your website' })).toHaveFocus();
+	});
+
 	// The already-answered/hosted/live state this test needs is exactly
 	// what the fixture describes (#596), so the "saved" screen it renders
 	// on is the fixture's own -- including the referral-link content #530
