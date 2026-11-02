@@ -5,11 +5,16 @@ import {
 	getMultiFactorResolver,
 	initializeAuth,
 	inMemoryPersistence,
+	PhoneAuthProvider,
+	PhoneMultiFactorGenerator,
+	RecaptchaVerifier,
 	signInWithEmailAndPassword,
 	signOut,
 	TotpMultiFactorGenerator,
 	type Auth,
+	type MultiFactorAssertion,
 	type MultiFactorError,
+	type MultiFactorResolver,
 	type UserCredential
 } from 'firebase/auth';
 
@@ -38,6 +43,28 @@ export function getOperatorAuth(): Auth {
 		if (url) connectAuthEmulator(auth, url, { disableWarnings: true });
 	}
 	return auth;
+}
+
+// Local only: the emulator's phone factor stands in for TOTP, and its fake app check needs no real reCAPTCHA.
+export async function sendEmulatorCode(resolver: MultiFactorResolver): Promise<string> {
+	const auth = getOperatorAuth();
+	auth.settings.appVerificationDisabledForTesting = true;
+	const container = document.createElement('div');
+	document.body.append(container);
+	const verifier = new RecaptchaVerifier(auth, container, { size: 'invisible' });
+	try {
+		return await new PhoneAuthProvider(auth).verifyPhoneNumber(
+			{ multiFactorHint: resolver.hints[0] as never, session: resolver.session },
+			verifier
+		);
+	} finally {
+		verifier.clear();
+		container.remove();
+	}
+}
+
+export function emulatorAssertion(verificationId: string, code: string): MultiFactorAssertion {
+	return PhoneMultiFactorGenerator.assertion(PhoneAuthProvider.credential(verificationId, code));
 }
 
 // Identity Platform has no code-only re-authentication, so the password comes first.

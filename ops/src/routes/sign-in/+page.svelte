@@ -13,7 +13,8 @@
 	} from 'firebase/auth';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { getOperatorAuth } from '#lib/firebase.js';
+	import { emulatorAssertion, getOperatorAuth, sendEmulatorCode } from '#lib/firebase.js';
+	import { codeListURL, isPhoneHint } from '#lib/phoneFactor.js';
 	import { exchangeToken } from '#lib/session.js';
 	import {
 		codeFieldError,
@@ -27,14 +28,19 @@
 	const emailId = 'email';
 	const passwordId = 'password';
 	const codeId = 'code';
+	const emulatorCodes = codeListURL(
+		import.meta.env.VITE_FIREBASE_AUTH_EMULATOR_HOST as string | undefined,
+		import.meta.env.VITE_OPS_TENANT_ID as string
+	);
 
 	let email = $state('');
 	let password = $state('');
 	let code = $state('');
-	let step = $state<'credentials' | 'challenge'>('credentials');
+	let step = $state<'credentials' | 'challenge' | 'emulator'>('credentials');
 	let errors = $state<FormError[]>([]);
 	let isSubmitting = $state(false);
 	let resolver: MultiFactorResolver | undefined;
+	let verificationId = '';
 
 	const errorFor = (field: string) => errors.find((error) => error.targetId === field)?.message;
 
@@ -71,6 +77,11 @@
 			} catch (error) {
 				if (!isSecondFactorRequired(error)) return [credentialRefusal(error, passwordId)];
 				resolver = getMultiFactorResolver(getOperatorAuth(), error as MultiFactorError);
+				if (emulatorCodes && isPhoneHint(resolver.hints[0])) {
+					verificationId = await sendEmulatorCode(resolver);
+					step = 'emulator';
+					return [];
+				}
 				step = 'challenge';
 				return [];
 			}
@@ -83,10 +94,11 @@
 			const empty = codeFieldError(code, codeId);
 			if (empty) return [empty];
 			try {
-				const assertion = TotpMultiFactorGenerator.assertionForSignIn(
-					resolver!.hints[0].uid,
-					code.replaceAll(/\s/g, '')
-				);
+				const digits = code.replaceAll(/\s/g, '');
+				const assertion =
+					step === 'emulator'
+						? emulatorAssertion(verificationId, digits)
+						: TotpMultiFactorGenerator.assertionForSignIn(resolver!.hints[0].uid, digits);
 				return await finish(await resolver!.resolveSignIn(assertion));
 			} catch (error) {
 				return [codeRefusal(error, codeId)];
@@ -131,6 +143,28 @@
 				{/snippet}
 			</LabeledField>
 			<Button label="Sign in" type="submit" loading={isSubmitting} />
+		</stack-l>
+	</form>
+{:else if step === 'emulator'}
+	<h1>Enter the code from the Auth emulator</h1>
+	<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- the Auth emulator's list, outside ops -->
+	<p>The emulator texts nothing. <a href={emulatorCodes}>Open its list of codes</a> and use the newest.</p>
+	<form novalidate onsubmit={answerChallenge}>
+		<stack-l>
+			<LabeledField id={codeId} label="Emulator code" error={errorFor(codeId)}>
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						inputmode="numeric"
+						autocomplete="one-time-code"
+						value={code}
+						onInput={(next) => (code = next)}
+					/>
+				{/snippet}
+			</LabeledField>
+			<Button label="Continue" type="submit" loading={isSubmitting} />
 		</stack-l>
 	</form>
 {:else}
