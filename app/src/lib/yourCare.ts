@@ -81,7 +81,8 @@ export interface WhatHappensNext {
  * already shows, true for every Client after a loss included (ADR-0015).
  * A Visit still booked stays named under it: completion ends no Visit
  * (ADR-0015), so the booking is the Practice's and the line says what the
- * record holds. With nothing booked the ended line stands alone, since
+ * record holds, as "still booked" so it does not read against "Care ended"
+ * (#2658). With nothing booked the ended line stands alone, since
  * "No visit is booked yet." promises a booking ended care does not hold.
  *
  * The BFF already leaves the due date out once any birth outcome is
@@ -96,7 +97,13 @@ export function whatHappensNext(
 	const out: WhatHappensNext = hasCareEnded ? { ended: engagementStatusLabel('completed') } : {};
 	if (next) {
 		const when = formatPortalVisit(next.scheduledAt, false);
-		out.lead = next.doulaName ? `${next.doulaName} is coming to you on ${when}.` : `Your next visit is on ${when}.`;
+		if (hasCareEnded) {
+			out.lead = next.doulaName
+				? `Your next visit is still booked: ${next.doulaName} is coming on ${when}.`
+				: `Your next visit is still booked, on ${when}.`;
+		} else {
+			out.lead = next.doulaName ? `${next.doulaName} is coming to you on ${when}.` : `Your next visit is on ${when}.`;
+		}
 	} else if (!hasCareEnded) {
 		out.lead = NO_NEXT_VISIT_MESSAGE;
 	}
