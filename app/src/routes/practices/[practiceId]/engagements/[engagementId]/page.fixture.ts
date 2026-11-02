@@ -224,6 +224,13 @@ export const detail = {
 	// #2492: the base's Owner reads the Doula fees below, so the BFF says
 	// so up front and the section stands from the first frame.
 	hasDoulaFees: true,
+	// #2597: the Note typed on the Request that started this Engagement,
+	// long and in two lines, as the Owner (its reader) would have written it.
+	startNote: {
+		text: 'Heard about us from her midwife, who asked that we keep the first visit short.\nPrefers text messages to calls before 9am and after 8pm.',
+		writtenBy: 'Persephone Ochieng-Whitfield',
+		writtenAt: '2026-08-01T14:30:00Z'
+	},
 	// #1598: who is on this Engagement. Two Doulas, the on-call panel's
 	// own primary and backup, so the summary's row holds its busiest
 	// state: the plural label and two names on one line, the first of

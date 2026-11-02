@@ -63,7 +63,7 @@
 	import type { PageData } from './$types';
 	import { stampText } from '#lib/stamp.js';
 	import { latestMessageText, unansweredSince } from '#lib/threadSummary.js';
-	import { formatCalendarDay, formatInstant, formatScheduledVisit, toDatetimeLocalValue } from '#lib/dates.js';
+	import { formatCalendarDay, formatInstant, formatInstantWithClock, formatScheduledVisit, toDatetimeLocalValue } from '#lib/dates.js';
 	import {
 		activityLedgerColumns,
 		loadEngagementActivityPage,
@@ -3019,6 +3019,17 @@
 	{/if}
 {/snippet}
 
+{#snippet startNoteSection()}
+	{#if detail.startNote}
+		<p class="start-note">{detail.startNote.text}</p>
+		<Text
+			text={`Written by ${detail.startNote.writtenBy} on ${formatInstantWithClock(detail.startNote.writtenAt)}.`}
+			step="meta"
+			tone="muted"
+		/>
+	{/if}
+{/snippet}
+
 {#snippet offersSection()}
 	<!--
 		The roster without the reader (#1598, offerDoulas), and otherwise
@@ -3410,9 +3421,19 @@
 		{ heading: 'Care Plan', content: carePlanSection },
 		{ heading: 'Birth Plan', content: birthPlanSection },
 		{ heading: 'Invoices', content: invoicesSection },
+		...(detail.startNote ? [{ heading: 'Note when work started', content: startNoteSection }] : []),
 		...(isOffersVisible ? [{ heading: 'Offers', content: offersSection }] : []),
 		...(isDoulaFeesVisible ? [{ heading: 'Doula fees', content: doulaFeesSection }] : []),
 		{ heading: 'Messages', content: messagesSection },
 		{ heading: 'Activity', content: activitySection }
 	]}
 />
+
+<style>
+	.start-note {
+		margin: 0;
+		max-inline-size: var(--measure);
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+	}
+</style>
