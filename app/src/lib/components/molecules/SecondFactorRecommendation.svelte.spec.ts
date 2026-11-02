@@ -28,6 +28,8 @@ describe('SecondFactorRecommendation.svelte', () => {
 	it('names the five acts that need a second factor', async () => {
 		await setup();
 
+		await expect.element(page.getByText("download all of your Practice's data")).not.toBeVisible();
+		await page.getByText('What needs it').click();
 		const items = page.getByRole('listitem');
 		await expect.element(items.nth(4)).toBeVisible();
 		expect(items.elements().map((item) => item.textContent)).toEqual([

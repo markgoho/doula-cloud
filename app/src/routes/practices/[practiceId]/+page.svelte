@@ -270,7 +270,14 @@
 
 {#snippet primary()}
 	<!--
-		#1533: first in the column, where she reads it before her work. Only
+		#2234: at 2 a.m. on her phone the Overview is the screen that says
+		who is free tonight, with nothing to press, so it adds no decision.
+		First in the column (#2571): the notice below it took the whole
+		first screen at 390x844, and at 320x640 its short form still did.
+	-->
+	{#if isTonightBlockShown(landing!.tonight)}{@render tonightBlock(landing!.tonight)}{/if}
+	<!--
+		#1533: after who is free tonight, before the rest of her work. Only
 		in `primary`, which the empty Practice never draws (ADR-0048); the
 		BFF also says no before First Value.
 	-->
@@ -280,11 +287,6 @@
 			onClose={closeRecommendation}
 		/>
 	{/if}
-	<!--
-		#2234: at 2 a.m. on her phone the Overview is the screen that says
-		who is free tonight, with nothing to press, so it adds no decision.
-	-->
-	{#if isTonightBlockShown(landing!.tonight)}{@render tonightBlock(landing!.tonight)}{/if}
 	<!-- An Offer goes to a Doula (#2141): a Staff member without the role
 	     can never be offered work, so an inbox that could only ever say
 	     "You have no offers." is not drawn for her. -->
