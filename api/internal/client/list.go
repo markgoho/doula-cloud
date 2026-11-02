@@ -150,7 +150,10 @@ type ListResponse struct {
 // any of their Engagements) regardless of the filter, the same ADR-0008
 // carve-out Reader.CanAccessClient enforces -- an owner-contractor
 // (ADR-0017's "solo Practice") holds the owner role's ambient reach
-// instead, so her list is never narrowed. Must be mounted behind
+// instead, so her list is never narrowed. ?mine=true narrows any reader's
+// list the same way, to the Clients she herself is attached to (#2624): a
+// choice about her own view that grants nothing, since every row it can
+// return the unnarrowed list already returns. Must be mounted behind
 // staffauth.Middleware.
 //
 // Ordering moved from alphabetical (COALESCE(preferred_name, given_name))
@@ -187,7 +190,7 @@ func ListHandler() http.Handler {
 
 		var list []ListItem
 		var err error
-		if reader.IsAmbientContractor() {
+		if reader.IsAmbientContractor() || r.URL.Query().Get("mine") == "true" {
 			list, err = listAttachedClients(r.Context(), tx, practiceID, staffID, withWorkOnly, after)
 		} else {
 			list, err = listClients(r.Context(), tx, practiceID, withWorkOnly, after)

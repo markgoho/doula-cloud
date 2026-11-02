@@ -59,6 +59,7 @@ beforeEach(() => {
 	apiFetchWithSession.mockReset();
 	goto.mockReset();
 	pageState.url.searchParams.delete('all');
+	pageState.url.searchParams.delete('mine');
 });
 
 // A `response` left undefined answers every fetch from the fixture's own
@@ -68,11 +69,12 @@ beforeEach(() => {
 // more"/failure case below still wants.
 interface Caller {
 	isContractor?: boolean;
+	isDoula?: boolean;
 	// What `+page.ts` read with `all=true` (#1609).
 	hasAnyClient?: boolean;
 }
 
-async function setup(response?: Response, { isContractor = false, hasAnyClient = true }: Caller = {}) {
+async function setup(response?: Response, { isContractor = false, isDoula = false, hasAnyClient = true }: Caller = {}) {
 	// DataTable's own content floor (#508) shows its record cards below
 	// 55rem, and this file's assertions are about the <table> specifically.
 	// A desktop window is past it (#2022), so the <table> renders.
@@ -90,6 +92,7 @@ async function setup(response?: Response, { isContractor = false, hasAnyClient =
 		data: {
 			isContractor,
 			isOwner: false,
+			isDoula,
 			hasAnyClient: Promise.resolve(hasAnyClient),
 			session: { practiceId, staffId: 'staff-1', practiceName: 'Riverside Doula Collective', roles: [], isContractor }
 		}
@@ -273,6 +276,75 @@ describe('the "see everyone" toggle', () => {
 		await testPage.getByRole('switch', { name: 'Also show Clients with no work yet' }).click();
 
 		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients`);
+	});
+});
+
+// #2624: an employee Doula can narrow the list to her own Clients.
+const mine = () => testPage.getByRole('switch', { name: 'Only my Clients' });
+
+describe('the "Only my Clients" switch', () => {
+	it('is offered to a Doula, off, with no `mine` param on the wire', async () => {
+		await setup(undefined, { isDoula: true });
+
+		await expect.element(mine()).not.toBeChecked();
+		expect(requestUrl()).toBe(`/api/practices/${practiceId}/clients`);
+		await expect.element(testPage.getByRole('group', { name: 'Choose which Clients to show' })).toBeVisible();
+	});
+
+	it('is not offered to a Staff member who holds no Doula role', async () => {
+		await setup();
+
+		await expect.element(mine()).not.toBeInTheDocument();
+	});
+
+	it('is not offered to a contractor Doula, whose list is already only hers', async () => {
+		await setup(undefined, { isContractor: true, isDoula: true });
+
+		await expect.element(mine()).not.toBeInTheDocument();
+	});
+
+	it('navigates to `?mine=true` when switched on', async () => {
+		await setup(undefined, { isDoula: true });
+
+		await mine().click();
+
+		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients?mine=true`);
+	});
+
+	it('reflects `?mine=true`: checked, sent to the BFF, worded as hers, and without the no-work switch', async () => {
+		pageState.url.searchParams.set('mine', 'true');
+
+		await setup(undefined, { isDoula: true });
+
+		await expect.element(mine()).toBeChecked();
+		expect(requestUrl()).toBe(`/api/practices/${practiceId}/clients?mine=true`);
+		await expect.element(testPage.getByRole('status')).toHaveTextContent(/^Showing \d+ of your Clients/);
+		await expect.element(testPage.getByRole('switch', { name: 'Also show Clients with no work yet' })).not.toBeInTheDocument();
+	});
+
+	it('goes back to the whole list when switched off', async () => {
+		pageState.url.searchParams.set('mine', 'true');
+		await setup(undefined, { isDoula: true });
+
+		await mine().click();
+
+		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients`);
+	});
+
+	it('says so when none of the Clients are hers', async () => {
+		pageState.url.searchParams.set('mine', 'true');
+
+		await setup(jsonResponse({ items: [], hasMore: false }), { isDoula: true });
+
+		await expect.element(testPage.getByRole('status')).toHaveTextContent('No Clients are yours yet.');
+	});
+
+	it('ignores `?mine=true` for a Staff member who cannot use it', async () => {
+		pageState.url.searchParams.set('mine', 'true');
+
+		await setup();
+
+		expect(requestUrl()).toBe(`/api/practices/${practiceId}/clients`);
 	});
 });
 

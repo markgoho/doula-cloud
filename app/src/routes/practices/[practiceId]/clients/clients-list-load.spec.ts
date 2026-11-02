@@ -60,7 +60,16 @@ describe('clients/+page.ts load (#539)', () => {
 
 		const { result } = await runLoad(['owner']);
 
-		expect(result).toMatchObject({ isContractor: false, isOwner: true });
+		expect(result).toMatchObject({ isContractor: false, isOwner: true, isDoula: false });
+	});
+
+	// #2624: the role that decides whether "Only my Clients" is drawn.
+	it('reads whether she holds the Doula role', async () => {
+		apiFetch.mockResolvedValue(jsonResponse({ items: [withWork], hasMore: false }));
+
+		const { result } = await runLoad(['doula']);
+
+		expect(result).toMatchObject({ isContractor: false, isDoula: true });
 	});
 });
 

@@ -96,11 +96,16 @@ function clientsPath(practiceId: string): string {
 export interface LoadClientsOptions {
 	cursor?: string;
 	showAll?: boolean;
+	/**
+	 * Only the Clients she is attached to (ListHandler's `?mine=true`, #2624).
+	 */
+	showMine?: boolean;
 }
 
-function clientsQuery({ cursor, showAll }: LoadClientsOptions): string {
+function clientsQuery({ cursor, showAll, showMine }: LoadClientsOptions): string {
 	const parts: string[] = [];
 	if (showAll) parts.push('all=true');
+	if (showMine) parts.push('mine=true');
 	if (cursor) parts.push(`cursor=${encodeURIComponent(cursor)}`);
 	return parts.length > 0 ? `?${parts.join('&')}` : '';
 }
@@ -166,7 +171,16 @@ export async function loadClientCount(fetcher: Fetcher, practiceId: string): Pro
  * out when "Also show Clients with no work yet" changes what the list holds. The same shape as
  * the Schedule's `scheduleResultSummary`.
  */
-export function clientsResultSummary(count: number, hasMore: boolean, isShowingEveryone: boolean): string {
+export function clientsResultSummary(
+	count: number,
+	hasMore: boolean,
+	isShowingEveryone: boolean,
+	isShowingMine = false
+): string {
+	if (isShowingMine) {
+		if (count === 0) return 'No Clients are yours yet.';
+		return `Showing ${count} of your Clients${hasMore ? ' so far. More remain.' : '.'}`;
+	}
 	const kind = isShowingEveryone ? '' : ' with work';
 	if (count === 0) return `No Clients${kind}.`;
 	const clients = count === 1 ? `1 Client${kind}` : `${count} Clients${kind}`;
