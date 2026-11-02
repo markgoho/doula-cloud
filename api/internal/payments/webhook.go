@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/stripe/stripe-go/v86"
@@ -173,6 +175,16 @@ var connectEventHandlers = map[string]connectEventHandler{
 	eventTypeRefundCreated: func(w http.ResponseWriter, r *http.Request, db *sql.DB, _ Client, event WebhookEvent, _ tasknudge.Enqueuer) {
 		handleRefundCreated(w, r, db, event)
 	},
+}
+
+// ConnectEventTypes is every event type the connect route acts on, sorted.
+func ConnectEventTypes() []string {
+	return slices.Sorted(maps.Keys(connectEventHandlers))
+}
+
+// AccountEventTypes is every event type the account route acts on.
+func AccountEventTypes() []string {
+	return []string{eventTypeMerchantCapabilityStatusUpdated}
 }
 
 // claimEvent begins a transaction and records eventID in

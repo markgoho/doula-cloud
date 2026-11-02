@@ -476,6 +476,19 @@ export function unpublishLegalVersion(document: string, version: string): void {
 }
 
 // Closes the gate again, for ops's walk of opening it (#2485).
+/**
+ * Seeds the webhook arrivals the System section reads (#1996): a verified
+ * invoice.paid on the Connect route an hour ago, and a refused request on
+ * the platform route.
+ */
+export function seedWebhookArrivals() {
+	execSQL(
+		`INSERT INTO webhook_arrivals (route, outcome, event_id, event_type, arrived_at) VALUES
+		 ('stripe_connect', 'accepted', 'evt_e2e_system_paid', 'invoice.paid', sim.now() - interval '1 hour'),
+		 ('stripe_platform', 'signature_refused', NULL, NULL, sim.now() - interval '2 hours')`
+	);
+}
+
 export function closePilotGate() {
 	execSQL('UPDATE pilot_gate SET operator_act_id = NULL, opened_at = NULL');
 }

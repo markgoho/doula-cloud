@@ -114,6 +114,7 @@ func newServer(ctx context.Context, getenv func(string) string, newVerifier veri
 		AcceptEmulatorFactor: emulator,
 		Origins:              origins(getenv(originsVar)),
 		Stripe:               stripeClient(getenv(stripeKeyVar), getenv(creditPriceVar), emulator),
+		StripeMode:           stripeKeyMode(getenv(stripeKeyVar)),
 		Accounts:             accounts,
 		FeedbackRepo:         strings.TrimSpace(getenv(feedbackRepoVar)),
 		Legal:                history,
@@ -131,6 +132,12 @@ func stripeClient(apiKey, creditPriceID string, emulator bool) billing.StripeCli
 		return billing.NewFakeStripeClient()
 	}
 	return billing.NewStripeAPIClient(apiKey, creditPriceID, "")
+}
+
+// A key with none of the four Stripe prefixes, or none at all, has no mode.
+func stripeKeyMode(apiKey string) stripemode.Mode {
+	mode, _ := stripemode.OfKey(apiKey)
+	return mode
 }
 
 // Unset is none, which refuses every state-changing request that names an origin.

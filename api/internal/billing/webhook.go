@@ -27,6 +27,11 @@ const maxWebhookBodyBytes = 1 << 20 // 1 MiB
 // enabled_events in terraform/stripe/destinations.json (#2390).
 const purchaseEventType = stripe.EventTypeCheckoutSessionCompleted
 
+// HandledEventTypes is every event type PostPurchaseWebhookHandler acts on.
+func HandledEventTypes() []string {
+	return []string{string(purchaseEventType)}
+}
+
 // PostPurchaseWebhookHandler receives Stripe's Customer/Checkout events --
 // a new, platform-level webhook endpoint, entirely separate from #38's
 // (not yet implemented) Connect webhook, which is a different Stripe

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/stripe/stripe-go/v86"
 )
@@ -223,4 +224,45 @@ func (c *StripeAPIClient) RefundPayment(ctx context.Context, paymentIntentID, id
 	}
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	return refund.ID, nil
+}
+
+// PlatformAccountID retrieves the account the key belongs to.
+func (c *StripeAPIClient) PlatformAccountID(ctx context.Context) (string, error) {
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	account, err := c.client.V1Accounts.Retrieve(ctx, nil)
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	if err != nil {
+		return "", fmt.Errorf("billing: retrieve platform account: %w", err)
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	return account.ID, nil
+}
+
+// UndeliveredEventCount lists events created since that Stripe has not
+// delivered to every endpoint, and stops counting at limit.
+func (c *StripeAPIClient) UndeliveredEventCount(ctx context.Context, since time.Time, limit int) (int, error) {
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	params := &stripe.EventListParams{
+		DeliverySuccess: new(false),
+		CreatedRange:    &stripe.RangeQueryParams{GreaterThanOrEqual: since.Unix()},
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	params.Limit = new(int64(min(limit, 100)))
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	count := 0
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	for _, err := range c.client.V1Events.List(ctx, params).All(ctx) {
+		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+		if err != nil {
+			return 0, fmt.Errorf("billing: list undelivered events: %w", err)
+		}
+		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+		count++
+		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+		if count >= limit {
+			break
+		}
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	return count, nil
 }

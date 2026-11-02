@@ -14,6 +14,7 @@ const SECTIONS = [
 	['Pilot allowlist', '/pilot-allowlist'],
 	['Pilot gate', '/pilot-gate'],
 	['Legal versions', '/legal-versions'],
+	['System', '/system'],
 	['Operator log', '/operator-log']
 ] as const;
 

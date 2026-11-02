@@ -25,6 +25,7 @@
 		{ label: 'Pilot allowlist', href: resolve('/pilot-allowlist') },
 		{ label: 'Pilot gate', href: resolve('/pilot-gate') },
 		{ label: 'Legal versions', href: resolve('/legal-versions') },
+		{ label: 'System', href: resolve('/system') },
 		{ label: 'Operator log', href: resolve('/operator-log') }
 	];
 
