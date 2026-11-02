@@ -5,9 +5,10 @@
 	 * it after First Value, her first Staff Invitation, and Stripe
 	 * connected; the BFF decides when.
 	 *
-	 * It states one fact about her account, says what the second step is
-	 * and why an Owner has one, names the five acts that need it, and has
-	 * one link, to enrollment. It is no checklist and reads no use of hers
+	 * It says what the second step is in two lines, and has one link, to
+	 * enrollment. Why an Owner has one, and the five acts that need it,
+	 * sit behind "What needs it" (#2571): on a phone the open explanation
+	 * filled the first screen and pushed Who is free tonight below it. It is no checklist and reads no use of hers
 	 * (ADR-0046 P5). She can close it (ADR-0043: a notice she cannot close
 	 * is the product chasing her); the close is the caller's, because the
 	 * BFF keeps it.
@@ -19,6 +20,7 @@
 	 */
 	import { resolve } from '$app/paths';
 	import Button from '#lib/components/atoms/Button.svelte';
+	import Details from '#lib/components/atoms/Details.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -59,18 +61,8 @@
 	<stack-l space="var(--space-3)">
 		<Heading level={2} variant="card" id={headingId} text="Add a second step when you sign in" />
 		<Text
-			text="You sign in with your password only. Two-factor authentication adds a second step: after your password, you type a code from an app on your phone. Then a stolen password is not enough to get into your account."
+			text="After your password, you type a code from an app on your phone. Then a stolen password is not enough to get into your account."
 		/>
-		<Text
-			text="As a Practice Owner, you can see every Client's records and decide who gets in. You need two-factor authentication before you can:"
-		/>
-		<ul class="prose-list">
-			<li>download all of your Practice's data</li>
-			<li>delete your Practice</li>
-			<li>erase a Client's records</li>
-			<li>help a Staff member who is locked out get back in</li>
-			<li>make two-factor authentication a must for all your Staff</li>
-		</ul>
 		{#if error}
 			<Notice variant="error" message={error} />
 		{/if}
@@ -78,6 +70,20 @@
 			<Link {href} label="Set up two-factor authentication" />
 			<Button variant="secondary" label="Close" loading={isClosing} onClick={handleClose} />
 		</cluster-l>
+		<Details summary="What needs it">
+			<stack-l space="var(--space-3)">
+				<Text
+					text="As a Practice Owner, you can see every Client's records and decide who gets in. You need two-factor authentication before you can:"
+				/>
+				<ul class="prose-list">
+					<li>download all of your Practice's data</li>
+					<li>delete your Practice</li>
+					<li>erase a Client's records</li>
+					<li>help a Staff member who is locked out get back in</li>
+					<li>make two-factor authentication a must for all your Staff</li>
+				</ul>
+			</stack-l>
+		</Details>
 	</stack-l>
 </section>
 
