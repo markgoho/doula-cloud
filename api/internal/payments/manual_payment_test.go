@@ -151,7 +151,7 @@ func TestPostManualPaymentHandler_OtherMethodRequiresNote(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
 	defer srv.Close()
 
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodOther, "", isoDate(time.Now().UTC()))
+	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodOther, "", todayInSeededZone(t))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -206,7 +206,7 @@ func TestPostManualPaymentHandler_InvalidMethodRefused(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
 	defer srv.Close()
 
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethod("venmo"), "", isoDate(time.Now().UTC()))
+	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethod("venmo"), "", todayInSeededZone(t))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -238,7 +238,7 @@ func TestPostManualPaymentHandler_MissingMethodRefused(t *testing.T) {
 	defer srv.Close()
 
 	// No "method" key at all, the body a form with nothing chosen would send.
-	resp := postPaymentBody(t, srv, session, practiceID, invoiceID, `{"paidOn":"`+isoDate(time.Now().UTC())+`"}`)
+	resp := postPaymentBody(t, srv, session, practiceID, invoiceID, `{"paidOn":"`+todayInSeededZone(t)+`"}`)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -317,7 +317,7 @@ func TestPostManualPaymentHandler_UnloadablePracticeZoneIsAnError(t *testing.T) 
 	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
 	defer srv.Close()
 
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCash, "", isoDate(time.Now().UTC()))
+	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCash, "", todayInSeededZone(t))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusInternalServerError {
@@ -408,7 +408,7 @@ func TestPostManualPaymentHandler_DoulaForbidden(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
 	defer srv.Close()
 
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCash, "", isoDate(time.Now().UTC()))
+	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCash, "", todayInSeededZone(t))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {
@@ -743,7 +743,7 @@ func TestPostManualPaymentHandler_MalformedInvoiceIDReturns400(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
 	defer srv.Close()
 
-	resp := postPayment(t, srv, session, practiceID, "not-a-uuid", payments.PaymentMethodCash, "", isoDate(time.Now().UTC()))
+	resp := postPayment(t, srv, session, practiceID, "not-a-uuid", payments.PaymentMethodCash, "", todayInSeededZone(t))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
