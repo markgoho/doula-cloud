@@ -86,7 +86,7 @@ func TestGetPracticeInvoicesHandler_OverdueBeatsUnpaid(t *testing.T) {
 	base := time.Now().Add(-time.Hour)
 
 	lateID := seedInvoiceDue(t, db, practiceID, contractID, "in_both_late", invoiceStatusOpen, 15000,
-		base, time.Now().AddDate(0, 0, -1))
+		base, time.Now().AddDate(0, 0, -3))
 	seedInvoiceDue(t, db, practiceID, contractID, "in_both_current", invoiceStatusOpen, 22000,
 		base.Add(time.Second), time.Now().AddDate(0, 0, 10))
 
