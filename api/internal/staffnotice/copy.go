@@ -84,7 +84,14 @@ func visitReassignedToText(link string) string {
 		"If you have questions, reply to this email.\n"
 }
 
-func visitReassignedFromText(link string) string {
+func visitReassignedFromText(link string, isEndedContractor bool) string {
+	if isEndedContractor {
+		return "Hello,\n\n" +
+			"You've been taken off a visit at your practice on DoulaCloud. Someone else has it now. This link shows the day your work ended:\n\n" +
+			link + "\n\n" +
+			"Your fee, the terms and what you were paid stay on Your offers.\n\n" +
+			"If you have questions, reply to this email.\n"
+	}
 	return "Hello,\n\n" +
 		"You've been taken off a visit at your practice on DoulaCloud. Someone else has it now. This link opens that client's page at your practice:\n\n" +
 		link + "\n\n" +

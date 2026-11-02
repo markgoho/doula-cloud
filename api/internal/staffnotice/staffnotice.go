@@ -177,7 +177,16 @@ func compose(mailer outbox.Mailer) func(context.Context, *sql.Tx, pendingRow, ti
 			if p.kind == KindVisitReassignedTo {
 				subject, text = visitReassignedToSubject, visitReassignedToText(link)
 			} else {
-				subject, text = visitReassignedFromSubject, visitReassignedFromText(link)
+				isEnded := false
+				if p.isContractor {
+					on, err := stillOn(ctx, tx, engagementID, p.recipientID)
+					if err != nil {
+						// coverage:ignore reason: DB query failure, not exercised by unit tests
+						return "", "", "", err
+					}
+					isEnded = !on
+				}
+				subject, text = visitReassignedFromSubject, visitReassignedFromText(link, isEnded)
 			}
 		default:
 			// coverage:ignore reason: staff_notice_kind admits no value without a case here
