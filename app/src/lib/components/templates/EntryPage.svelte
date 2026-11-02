@@ -32,6 +32,7 @@
 	import type { Snippet } from 'svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
+	import BackLink from '#lib/components/molecules/BackLink.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 
 	interface Properties {
@@ -68,9 +69,15 @@
 		 * short line, and a string cannot grow into a paragraph.
 		 */
 		lede?: string;
+		/**
+		 * GOV.UK's Back link, above the error summary, for a page a person
+		 * reaches from another screen and could not otherwise leave (#2592).
+		 * Absent on the doors, which have nothing to go back to.
+		 */
+		backHref?: string;
 	}
 
-	let { title, errorSummary, content, lede }: Properties = $props();
+	let { title, errorSummary, content, lede, backHref }: Properties = $props();
 </script>
 
 <PageTitle page={title} isError={Boolean(errorSummary)} />
@@ -78,6 +85,10 @@
 <container-l>
 	<center-l max="var(--form-max)" gutters="var(--page-gutter)">
 		<stack-l space="var(--space-group)">
+			{#if backHref}
+				<BackLink href={backHref} />
+			{/if}
+
 			{#if errorSummary}
 				{@render errorSummary()}
 			{/if}

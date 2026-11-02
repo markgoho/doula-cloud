@@ -396,6 +396,7 @@
 
 <EntryPage
 	title="Set up two-factor authentication"
+	backHref={readReturnTo(page.url) ?? resolve('/(signed-out)')}
 	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 	{content}
 />
