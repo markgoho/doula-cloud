@@ -35,8 +35,18 @@
 
 	let { level, variant, text, id, focusOnAppearing = false }: Properties = $props();
 
+	/*
+	 * A form that opens on request (#2602) is drawn under the control that
+	 * opened it, which on a phone is often at the bottom edge: the heading
+	 * was in view and the field under it was not. The form the heading
+	 * opens is scrolled into view by the least that shows all of it, so
+	 * what sits above it (a Client's last Message) stays on screen as far
+	 * as it fits. A heading with no form around it scrolls itself.
+	 */
 	function takeFocus(element: Element) {
-		(element as HTMLElement).focus();
+		const heading = element as HTMLElement;
+		heading.focus({ preventScroll: true });
+		(heading.closest('form') ?? heading).scrollIntoView({ block: 'nearest' });
 	}
 
 	const fallbackByLevel = {

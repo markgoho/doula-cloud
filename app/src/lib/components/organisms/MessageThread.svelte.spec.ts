@@ -343,6 +343,22 @@ describe('MessageThread.svelte compose behind an opener (#2004)', () => {
 		await expect.element(page.getByLabelText('Message')).toBeVisible();
 	});
 
+	// #2602: on a phone the opener is often at the bottom edge, so the form
+	// is brought into view whole; where it lands is checked on the page.
+	it('scrolls the form it opens into view, with focus on its heading', async () => {
+		const scrolled: Element[] = [];
+		vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(function (this: Element) {
+			scrolled.push(this);
+		});
+		await setup({ composeOpener: 'Write a message' });
+
+		await page.getByRole('button', { name: 'Write a message' }).click();
+
+		await expect.element(page.getByRole('heading', { level: 3, name: 'Write a message' })).toHaveFocus();
+		expect(scrolled.map((element) => element.tagName)).toEqual(['FORM']);
+		vi.restoreAllMocks();
+	});
+
 	it('closes the form on Cancel, with its refusals gone', async () => {
 		await setup({ composeOpener: 'Write a message' });
 
