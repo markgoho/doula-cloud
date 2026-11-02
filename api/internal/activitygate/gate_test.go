@@ -77,7 +77,7 @@ func TestCanSeeAction_UnregisteredKindRefused(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Gate Unregistered Action Practice")
 	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-unregistered-action-owner", []string{ownerRole}, employeeType)
-	reader, _ := buildReader(t, db, practiceID, ownerID, []string{ownerRole}, employeeType)
+	reader := staffauth.NewReader(ownerID, []string{ownerRole}, employeeType)
 
 	if activitygate.CanSeeAction(reader, "bogus", "anything_happened") {
 		t.Fatal("CanSeeAction(bogus) = true, want false for an unregistered subject kind")
@@ -195,7 +195,7 @@ func TestCanSeeAction_Engagement(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			reader, _ := buildReader(t, db, practiceID, tc.staffID, tc.roles, tc.employmentType)
+			reader := staffauth.NewReader(tc.staffID, tc.roles, tc.employmentType)
 			if got := activitygate.CanSeeAction(reader, activity.SubjectEngagement, tc.action); got != tc.want {
 				t.Fatalf("CanSeeAction(engagement, %q) = %v, want %v", tc.action, got, tc.want)
 			}
@@ -276,15 +276,15 @@ func TestBypasses(t *testing.T) {
 	employeeID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-bypasses-employee", []string{doulaRole}, employeeType)
 	contractorID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-bypasses-contractor", []string{doulaRole}, contractorType)
 
-	ownerReader, _ := buildReader(t, db, practiceID, ownerID, []string{ownerRole}, employeeType)
+	ownerReader := staffauth.NewReader(ownerID, []string{ownerRole}, employeeType)
 	if !activitygate.Bypasses(ownerReader) {
 		t.Fatal("Bypasses(owner) = false, want true")
 	}
-	employeeReader, _ := buildReader(t, db, practiceID, employeeID, []string{doulaRole}, employeeType)
+	employeeReader := staffauth.NewReader(employeeID, []string{doulaRole}, employeeType)
 	if !activitygate.Bypasses(employeeReader) {
 		t.Fatal("Bypasses(employee doula) = false, want true")
 	}
-	contractorReader, _ := buildReader(t, db, practiceID, contractorID, []string{doulaRole}, contractorType)
+	contractorReader := staffauth.NewReader(contractorID, []string{doulaRole}, contractorType)
 	if activitygate.Bypasses(contractorReader) {
 		t.Fatal("Bypasses(contractor doula) = true, want false")
 	}

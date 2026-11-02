@@ -423,8 +423,10 @@ func TestDefinerFunctionsRefuseWithoutTheirPrecondition(t *testing.T) {
 
 	// No tombstone: the two records are simply two records.
 	var moved int
-	err := beginRuntimeTx(t, db, practiceID).QueryRowContext(t.Context(),
+	tx := beginRuntimeTx(t, db, practiceID)
+	err := tx.QueryRowContext(t.Context(),
 		`SELECT merge_client_portal_links($1, $2)`, otherID, survivorID).Scan(&moved)
+	_ = tx.Rollback()
 	if err == nil {
 		t.Fatalf("merge_client_portal_links moved %d links with no tombstone, want a refusal", moved)
 	}
@@ -438,8 +440,10 @@ func TestDefinerFunctionsRefuseWithoutTheirPrecondition(t *testing.T) {
 	// Nor may a tombstone be redacted while the record it was merged into
 	// is still live -- that is what keeps this from being a delete button
 	// on somebody else's Client.
-	_, err = beginRuntimeTx(t, db, practiceID).ExecContext(t.Context(),
+	tx = beginRuntimeTx(t, db, practiceID)
+	_, err = tx.ExecContext(t.Context(),
 		`SELECT redact_absorbed_client($1)`, otherID)
+	_ = tx.Rollback()
 	if err == nil {
 		t.Fatalf("redact_absorbed_client redacted a live record, want a refusal")
 	}

@@ -83,7 +83,7 @@ func TestClear_LiftsABounceLocallyAndAtMailgun(t *testing.T) {
 		t.Fatalf("Mailgun deletes = %v, want [%s]", got, testAddress)
 	}
 
-	active, err := mailsuppress.Active(t.Context(), db.App, testAddress)
+	active, err := mailsuppress.Active(t.Context(), db.Admin, testAddress)
 	if err != nil {
 		t.Fatalf("Active: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestClear_RefusesAComplaint(t *testing.T) {
 	if len(clearer.Deleted()) != 0 {
 		t.Fatal("a refused complaint still reached Mailgun")
 	}
-	active, err := mailsuppress.Active(t.Context(), db.App, testAddress)
+	active, err := mailsuppress.Active(t.Context(), db.Admin, testAddress)
 	if err != nil {
 		t.Fatalf("Active: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestClear_MailgunFailureLeavesTheSuppressionStanding(t *testing.T) {
 	if !errors.Is(err, errBoom) {
 		t.Fatalf("Clear error = %v, want errBoom", err)
 	}
-	active, err := mailsuppress.Active(t.Context(), db.App, testAddress)
+	active, err := mailsuppress.Active(t.Context(), db.Admin, testAddress)
 	if err != nil {
 		t.Fatalf("Active: %v", err)
 	}

@@ -27,3 +27,21 @@ func TestHarness(t *testing.T) {
 		t.Fatalf("expected empty practices table, got %d rows", count)
 	}
 }
+
+func TestNew_CapsTheAppPoolAtOneConnection(t *testing.T) {
+	db := testdb.New(t)
+
+	if got := db.App.Stats().MaxOpenConnections; got != 1 {
+		t.Fatalf("App MaxOpenConnections = %d, want 1", got)
+	}
+}
+
+func TestOptOutOfOneConnectionPool_LiftsTheCap(t *testing.T) {
+	db := testdb.New(t)
+
+	db.OptOutOfOneConnectionPool("a test that needs two connections on purpose")
+
+	if got := db.App.Stats().MaxOpenConnections; got != testdb.OptOutAppConnections {
+		t.Fatalf("App MaxOpenConnections = %d, want %d", got, testdb.OptOutAppConnections)
+	}
+}
