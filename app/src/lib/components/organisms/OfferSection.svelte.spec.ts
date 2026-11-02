@@ -1,6 +1,7 @@
 import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { DOULA_RADIOS_MAX } from '#lib/engagementRequest.js';
 import OfferSection from './OfferSection.svelte';
 import type { NewOffer, Offer } from '#lib/offer.js';
 import { SERVICE_PROBLEM } from '#lib/formErrors.js';
@@ -22,6 +23,13 @@ const openOffer: Offer = {
 	targetName: 'Renata Alvarez',
 	targetAddress: 'renata@example.test'
 };
+
+const employees = (count: number) =>
+	Array.from({ length: count }, (_, index) => ({
+		staffId: `staff-${index}`,
+		name: `Doula Number${index}`,
+		employmentType: 'employee'
+	}));
 
 interface SetupOptions {
 	offers?: Offer[];
@@ -577,6 +585,35 @@ describe('OfferSection.svelte', () => {
 			for (const name of ['Renata Alvarez', 'Dana Okafor']) {
 				await expect.element(page.getByRole('radio', { name })).not.toBeChecked();
 			}
+		});
+
+		// #2569: past DOULA_RADIOS_MAX, a select, as on Start work.
+		it('asks which Doula as a select past DOULA_RADIOS_MAX, and as radios at that number', async () => {
+			const { container, onCreate } = await setup({ doulas: employees(DOULA_RADIOS_MAX + 1) });
+
+			await chooseSomeoneHere();
+
+			expect(page.getByRole('radio', { name: /Doula Number/ }).elements()).toHaveLength(0);
+			await expect.element(page.getByLabelText('Doula', { exact: true })).toBeVisible();
+			await fillFacts();
+			await page.getByRole('button', { name: 'Send Offer' }).click();
+
+			expect(onCreate).not.toHaveBeenCalled();
+			await expect.element(page.getByRole('link', { name: 'Select a Doula' })).toHaveAttribute('href', '#offer-doula');
+			expect(danglingSummaryTargets(container)).toEqual([]);
+
+			await page.getByLabelText('Doula', { exact: true }).selectOptions('staff-3');
+			await page.getByRole('button', { name: 'Send Offer' }).click();
+
+			expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ staffId: 'staff-3' }));
+		});
+
+		it('keeps radios at DOULA_RADIOS_MAX Doulas', async () => {
+			await setup({ doulas: employees(DOULA_RADIOS_MAX) });
+
+			await chooseSomeoneHere();
+
+			await expect.element(page.getByRole('radio', { name: 'Doula Number0' })).toBeVisible();
 		});
 
 		it('refuses a send with no answer, against the question and linked to its first option', async () => {

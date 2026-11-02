@@ -181,6 +181,24 @@ export function doulaSummaryItem(
 	};
 }
 
+const NAMED_BEFORE_OTHERS = 3;
+
+/**
+ * The Doula row's question and its button (#2569). With nobody on, the
+ * person chosen is the Doula. With somebody on, saving keeps them and
+ * adds the one chosen, so the question names who stays: a form that
+ * said "the Doula" read as a swap.
+ */
+export function attachDoulaWords(doulas: readonly AttachedDoula[]): { question: string; button: string } {
+	if (doulas.length === 0) return { question: 'Who is the Doula?', button: 'Save the Doula' };
+	const names = doulas.slice(0, NAMED_BEFORE_OTHERS).map((doula) => doula.name);
+	const others = doulas.length - names.length;
+	let named = names[0]!;
+	if (others > 0) named = `${names.join(', ')} and ${others} ${others === 1 ? 'other' : 'others'}`;
+	else if (names.length > 1) named = `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+	return { question: `Who joins ${named}?`, button: 'Add this Doula' };
+}
+
 export function ownAttachmentURL(reference: EngagementReference): string {
 	return `${engagementURL(reference)}/attachments/me`;
 }

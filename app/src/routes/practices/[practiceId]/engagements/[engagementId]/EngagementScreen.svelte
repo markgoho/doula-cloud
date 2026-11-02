@@ -11,6 +11,7 @@
 	import { triggerBlobDownload } from '#lib/blobDownload.js';
 	import {
 		attachDoula,
+		attachDoulaWords,
 		attachSelf,
 		changeEngagementDueDate,
 		changeEngagementKind,
@@ -42,7 +43,7 @@
 		type Visit,
 		type WhoIsOn
 	} from '#lib/engagementDetail.js';
-	import { kindLabel } from '#lib/engagementRequest.js';
+	import { isDoulaSelect, kindLabel } from '#lib/engagementRequest.js';
 	import {
 		assigneeBlock,
 		attachableDoulaOptions,
@@ -1009,6 +1010,12 @@
 	// leaves out for this reason, so the line is never about nobody.
 	const hasUnlistedContractor = $derived(doulas?.some((doula) => !doula.nameable) ?? false);
 	const ATTACH_GROUP = 'attach-doula';
+	const attachWords = $derived(attachDoulaWords(attachedDoulas));
+	// #2569: past DOULA_RADIOS_MAX the question is a select, as on Start work.
+	const isAttachSelect = $derived(isDoulaSelect(attachOptions));
+	function attachFieldId(): string {
+		return isAttachSelect ? ATTACH_GROUP : radioFieldId(ATTACH_GROUP, attachOptions[0]!.value);
+	}
 	let attachChoice = $state<string | undefined>();
 	const attachSubmission = new FormSubmission();
 
@@ -1019,7 +1026,7 @@
 		await attachSubmission.run(async () => {
 			const chosen = attachOptions.find((option) => option.value === attachChoice);
 			if (!chosen) {
-				return [{ message: 'Select who the Doula is', targetId: radioFieldId(ATTACH_GROUP, attachOptions[0]!.value) }];
+				return [{ message: 'Select who the Doula is', targetId: attachFieldId() }];
 			}
 			whoIsOnOverride = await attachDoula(apiFetchWithSession, reference, chosen.value);
 			openChange = undefined;
@@ -2239,20 +2246,43 @@
 						{#if attachSubmission.errors.length > 0}
 							<ErrorSummary errors={attachSubmission.errors} />
 						{/if}
-						<RadioGroup
-							legend="Who is the Doula?"
-							hint={hasUnlistedContractor
-								? 'A contractor is not listed: a contractor goes on an Engagement by accepting an Offer.'
-								: undefined}
-							name={ATTACH_GROUP}
-							options={attachOptions}
-							value={attachChoice}
-							onChange={(value) => (attachChoice = value)}
-							error={attachSubmission.errorFor(radioFieldId(ATTACH_GROUP, attachOptions[0]!.value))}
-						/>
+						{#if isAttachSelect}
+							<LabeledField
+								id={ATTACH_GROUP}
+								label={attachWords.question}
+								hint={hasUnlistedContractor
+									? 'A contractor is not listed: a contractor goes on an Engagement by accepting an Offer.'
+									: undefined}
+								error={attachSubmission.errorFor(ATTACH_GROUP)}
+							>
+								{#snippet children({ id, describedBy, invalid })}
+									<Select
+										{id}
+										{describedBy}
+										{invalid}
+										options={attachOptions}
+										placeholder="Choose a Doula"
+										value={attachChoice}
+										onChange={(value: string) => (attachChoice = value)}
+									/>
+								{/snippet}
+							</LabeledField>
+						{:else}
+							<RadioGroup
+								legend={attachWords.question}
+								hint={hasUnlistedContractor
+									? 'A contractor is not listed: a contractor goes on an Engagement by accepting an Offer.'
+									: undefined}
+								name={ATTACH_GROUP}
+								options={attachOptions}
+								value={attachChoice}
+								onChange={(value) => (attachChoice = value)}
+								error={attachSubmission.errorFor(attachFieldId())}
+							/>
+						{/if}
 						<cluster-l space="var(--space-3)">
 							<Button
-								label="Save the Doula"
+								label={attachWords.button}
 								type="submit"
 								size="sm"
 								loading={attachSubmission.isSubmitting}
