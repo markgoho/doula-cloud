@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { formatCalendarDay } from './dates.js';
+import { formatCalendarDay, formatInstantWithClock, formatInstantWithSeconds } from './dates.js';
 import { jsonResponse } from './testResponse.js';
 import {
 	activityLedgerColumns,
@@ -227,6 +227,52 @@ describe('activityLedgerColumns', () => {
 		expect(what.accessor(entry({ detail: 'Visit reassigned from Ana Silva to Mira Osei' }))).toBe(
 			'Visit reassigned from Ana Silva to Mira Osei'
 		);
+	});
+
+	describe('which Visit a reassignment moved (#2666)', () => {
+		const detail = 'Visit reassigned from Ana Silva to Mira Osei';
+		const scheduledAt = '2026-11-13T21:00:00Z';
+		const addedAt = '2026-11-02T10:11:00Z';
+
+		it('names a dated Visit by its date, on the Engagement ledger from the diff', () => {
+			const what = activityLedgerColumns()[1];
+
+			expect(what.accessor(entry({ detail, diff: { visitScheduledAt: scheduledAt, visitCreatedAt: addedAt } }))).toBe(
+				`Visit on ${formatInstantWithClock(scheduledAt)} reassigned from Ana Silva to Mira Osei`
+			);
+		});
+
+		it('names a Visit with no date by when it was added', () => {
+			const what = activityLedgerColumns()[1];
+
+			expect(what.accessor(entry({ detail, diff: { visitScheduledAt: recordedNull, visitCreatedAt: addedAt } }))).toBe(
+				`Visit not yet scheduled (added ${formatInstantWithSeconds(addedAt)}) reassigned from Ana Silva to Mira Osei`
+			);
+		});
+
+		it('keeps a row written before the Visit was recorded as it was', () => {
+			const what = activityLedgerColumns()[1];
+
+			expect(what.accessor(entry({ detail, diff: { assignedStaffIdBefore: 'a', assignedStaffIdAfter: 'b' } }))).toBe(detail);
+			expect(what.accessor(entry())).toBe('Visit for the Client given to another doula');
+		});
+
+		it('names the Visit on the Practice-wide feed from its two fields', () => {
+			const what = activityLedgerColumns()[1];
+
+			expect(what.accessor(entry({ subjectName: 'Grace Whitfield', visitScheduledAt: scheduledAt, visitAddedAt: addedAt }))).toBe(
+				`Visit on ${formatInstantWithClock(scheduledAt)} for Grace Whitfield given to another doula`
+			);
+			expect(what.accessor(entry({ subjectName: 'Grace Whitfield', visitAddedAt: addedAt }))).toBe(
+				`Visit not yet scheduled (added ${formatInstantWithSeconds(addedAt)}) for Grace Whitfield given to another doula`
+			);
+		});
+
+		it('leaves any other action alone', () => {
+			const what = activityLedgerColumns()[1];
+
+			expect(what.accessor(entry({ action: 'visit_logged', visitScheduledAt: scheduledAt }))).toBe('Visit added for the Client');
+		});
 	});
 
 	it("says the row's own words for an entry carrying no detail (#2006)", () => {

@@ -247,7 +247,8 @@ const personSubjectKind = activity.SubjectMembership
 // neither, and each is a primary-key lookup on a table this query
 // already reads.
 const listPracticeActivityQueryTemplate = `SELECT a.id, a.subject_kind, a.subject_id, a.action, a.actor_kind::text,
-	       %[3]s, subj.name, sc.given_name, sc.preferred_name, sc.family_name, a.created_at
+	       %[3]s, subj.name, sc.given_name, sc.preferred_name, sc.family_name, a.created_at,
+	       NULLIF(a.diff ->> '%[7]s', '')::timestamptz, (a.diff ->> '%[8]s')::timestamptz
 	FROM activity a
 	%[4]s
 	LEFT JOIN staff subj ON a.subject_kind = '%[2]s' AND subj.id = a.subject_id
@@ -257,7 +258,8 @@ const listPracticeActivityQueryTemplate = `SELECT a.id, a.subject_kind, a.subjec
 	ORDER BY a.created_at DESC, a.id DESC LIMIT %[1]d`
 
 const listPracticeActivityAfterQueryTemplate = `SELECT a.id, a.subject_kind, a.subject_id, a.action, a.actor_kind::text,
-	       %[3]s, subj.name, sc.given_name, sc.preferred_name, sc.family_name, a.created_at
+	       %[3]s, subj.name, sc.given_name, sc.preferred_name, sc.family_name, a.created_at,
+	       NULLIF(a.diff ->> '%[7]s', '')::timestamptz, (a.diff ->> '%[8]s')::timestamptz
 	FROM activity a
 	%[4]s
 	LEFT JOIN staff subj ON a.subject_kind = '%[2]s' AND subj.id = a.subject_id
@@ -267,13 +269,13 @@ const listPracticeActivityAfterQueryTemplate = `SELECT a.id, a.subject_kind, a.s
 	  AND (a.created_at, a.id) < ($2, $3)
 	ORDER BY a.created_at DESC, a.id DESC LIMIT %[1]d`
 
-var listPracticeActivityQuery = fmt.Sprintf(listPracticeActivityQueryTemplate, //nolint:gosec // all six interpolated values are package-internal constants (two activitypage's own, two activity's), not request input
+var listPracticeActivityQuery = fmt.Sprintf(listPracticeActivityQueryTemplate, //nolint:gosec // all eight interpolated values are package-internal constants, not request input
 	practiceBatchSize+1, personSubjectKind, activitypage.SharedActorJoin.Columns, activitypage.SharedActorJoin.Joins,
-	activity.SubjectEngagement, activity.SubjectClient)
+	activity.SubjectEngagement, activity.SubjectClient, activity.DiffKeyVisitScheduledAt, activity.DiffKeyVisitCreatedAt)
 
-var listPracticeActivityAfterQuery = fmt.Sprintf(listPracticeActivityAfterQueryTemplate, //nolint:gosec // all six interpolated values are package-internal constants (two activitypage's own, two activity's), not request input
+var listPracticeActivityAfterQuery = fmt.Sprintf(listPracticeActivityAfterQueryTemplate, //nolint:gosec // all eight interpolated values are package-internal constants, not request input
 	practiceBatchSize+1, personSubjectKind, activitypage.SharedActorJoin.Columns, activitypage.SharedActorJoin.Joins,
-	activity.SubjectEngagement, activity.SubjectClient)
+	activity.SubjectEngagement, activity.SubjectClient, activity.DiffKeyVisitScheduledAt, activity.DiffKeyVisitCreatedAt)
 
 // rawEntry is Entry plus the row id fetchPage needs to mint a cursor but
 // never puts in the response, the same shape engagement.activityRow
@@ -368,13 +370,20 @@ func queryBatch(ctx context.Context, tx *sql.Tx, practiceID string, after *pagec
 		var actorKind string
 		var staffName, clientGivenName, clientPreferredName, clientFamilyName, operatorName, subjectName sql.NullString
 		var subjectClientGivenName, subjectClientPreferredName, subjectClientFamilyName sql.NullString
+		var visitScheduledAt, visitAddedAt sql.NullTime
 		if err := rows.Scan(&row.cursorID, &row.SubjectKind, &row.SubjectID, &row.Action, &actorKind,
 			&staffName, &clientGivenName, &clientPreferredName, &clientFamilyName, &operatorName, &subjectName,
-			&subjectClientGivenName, &subjectClientPreferredName, &subjectClientFamilyName, &row.CreatedAt); err != nil {
+			&subjectClientGivenName, &subjectClientPreferredName, &subjectClientFamilyName, &row.CreatedAt, &visitScheduledAt, &visitAddedAt); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("activityfeed: scan practice activity row: %w", err)
 		}
 		row.ActorKind = actorKind
+		if visitScheduledAt.Valid {
+			row.VisitScheduledAt = &visitScheduledAt.Time
+		}
+		if visitAddedAt.Valid {
+			row.VisitAddedAt = &visitAddedAt.Time
+		}
 		// #2111: this feed sets every Client at the Practice side by side,
 		// so a Client actor reads her full name, as the subject name beside
 		// it does.

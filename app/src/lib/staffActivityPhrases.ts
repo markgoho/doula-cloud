@@ -29,7 +29,7 @@
  * Client register.
  */
 
-type Phrase = (name: string | undefined) => string;
+type Phrase = (name: string | undefined, visit?: string) => string;
 
 /**
 The Client a row is about, by name or by the domain noun.
@@ -78,7 +78,7 @@ const STAFF_ACTIVITY_PHRASES: Record<string, Phrase> = {
 
 	// Visits and the Birth Plan.
 	visit_logged: (name) => `Visit added for ${client(name)}`,
-	visit_reassigned: (name) => `Visit for ${client(name)} given to another doula`,
+	visit_reassigned: (name, visit) => `${visit ?? 'Visit'} for ${client(name)} given to another doula`,
 	visit_scheduled: (name) => `Visit time for ${client(name)} updated`,
 	visit_notes_edited: (name) => `Visit notes for ${client(name)} updated`,
 	// One action per plan (#2066), so every reader names the plan.
@@ -179,10 +179,10 @@ function sentenceCase(text: string): string {
  * the way `clientActivityPhrase` does, rather than printing the raw
  * action: the usage spec is what keeps that from reaching a screen.
  */
-export function staffActivityPhrase(action: string, subjectName?: string): string {
+export function staffActivityPhrase(action: string, subjectName?: string, visit?: string): string {
 	const phrase = STAFF_ACTIVITY_PHRASES[action];
 	if (!phrase) throw new Error(`staffActivityPhrases: no Staff wording for activity action "${action}"`); // voice:ignore: a developer-facing error, never rendered
-	return sentenceCase(phrase(subjectName || undefined));
+	return sentenceCase(phrase(subjectName || undefined, visit));
 }
 
 /**

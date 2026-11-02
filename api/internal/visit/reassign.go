@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
@@ -89,10 +90,12 @@ func ReassignHandler(enq tasknudge.Enqueuer) http.Handler {
 		// reassigned via an engagementId/visitId pair that don't actually
 		// belong together.
 		var previousStaffID string
+		var scheduledAt sql.NullTime
+		var createdAt time.Time
 		if err := c.tx.QueryRowContext(r.Context(),
-			`SELECT staff_id FROM visits WHERE id = $1 AND engagement_id = $2 FOR UPDATE`,
+			`SELECT staff_id, scheduled_at, created_at FROM visits WHERE id = $1 AND engagement_id = $2 FOR UPDATE`,
 			visitID, engagementID,
-		).Scan(&previousStaffID); err != nil {
+		).Scan(&previousStaffID, &scheduledAt, &createdAt); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				apierr.WriteError(w, "visit not found", http.StatusNotFound)
 				return
@@ -116,9 +119,15 @@ func ReassignHandler(enq tasknudge.Enqueuer) http.Handler {
 		// single-sided assignedStaffId on purpose: a creation has no
 		// "before", and writing a null one would say the Visit had
 		// previously been on nobody rather than that it did not exist.
-		diff, err := json.Marshal(map[string]string{
+		var visitScheduledAt *time.Time
+		if scheduledAt.Valid {
+			visitScheduledAt = &scheduledAt.Time
+		}
+		diff, err := json.Marshal(map[string]any{
 			activity.DiffKeyAssignedStaffIDBefore: previousStaffID,
 			activity.DiffKeyAssignedStaffIDAfter:  staffID,
+			activity.DiffKeyVisitScheduledAt:      visitScheduledAt,
+			activity.DiffKeyVisitCreatedAt:        createdAt,
 		})
 		if err != nil {
 			// coverage:ignore reason: a map of strings always marshals cleanly, not exercised by unit tests

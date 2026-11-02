@@ -367,6 +367,14 @@ const (
 	DiffKeyAssignedStaffIDBefore = "assignedStaffIdBefore"
 	DiffKeyAssignedStaffIDAfter  = "assignedStaffIdAfter"
 
+	// DiffKeyVisitScheduledAt and DiffKeyVisitCreatedAt say which Visit an
+	// ActionVisitReassigned entry moved (#2666): the Visit's scheduled
+	// instant when it moved (a JSON null for a Visit with no date) and the
+	// instant it was added, which never changes and so tells two undated
+	// Visits apart. Rows written before #2666 carry neither.
+	DiffKeyVisitScheduledAt = "visitScheduledAt"
+	DiffKeyVisitCreatedAt   = "visitCreatedAt"
+
 	// ActionVisitScheduled records a Visit's scheduled date/time being
 	// set, changed or cleared (#250) -- its own action, distinct from
 	// ActionVisitLogged (the row being typed) and ActionVisitReassigned
