@@ -234,3 +234,53 @@ func TestGrant_TellsTheDoulaOnlyWhenSomeoneElsePutHerOn(t *testing.T) {
 		t.Fatalf("notices = %v, want only %v", got, want)
 	}
 }
+
+// TestTakeOff is #2596: it ends her granted Attachment, writes the
+// doula_taken_off entry, and queues her one mail, unless she is the person
+// who did it or was not on it.
+func TestTakeOff(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Take off")
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "take-off-owner", []string{ownerRole}, employeeType)
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "take-off-doula", []string{doulaRole}, employeeType)
+	_, byOwner := testdb.SeedEngagement(t, db, practiceID)
+	_, bySelf := testdb.SeedEngagement(t, db, practiceID)
+	tx := beginPracticeTx(t, db, practiceID)
+	for _, engagementID := range []string{byOwner, bySelf} {
+		if err := attachment.Grant(t.Context(), tx, practiceID, engagementID, doulaID, ownerID); err != nil {
+			t.Fatalf("Grant: %v", err)
+		}
+	}
+
+	if wasOn, err := attachment.TakeOff(t.Context(), tx, practiceID, byOwner, doulaID, ownerID); err != nil || !wasOn {
+		t.Fatalf("TakeOff by the Owner = %v, %v, want true", wasOn, err)
+	}
+	if wasOn, err := attachment.TakeOff(t.Context(), tx, practiceID, bySelf, doulaID, doulaID); err != nil || !wasOn {
+		t.Fatalf("TakeOff by herself = %v, %v, want true", wasOn, err)
+	}
+	if wasOn, err := attachment.TakeOff(t.Context(), tx, practiceID, byOwner, doulaID, ownerID); err != nil || wasOn {
+		t.Fatalf("second TakeOff = %v, %v, want false", wasOn, err)
+	}
+
+	var open, ended, entries, notices int
+	if err := tx.QueryRowContext(t.Context(),
+		`SELECT count(*) FILTER (WHERE ended_at IS NULL AND engagement_id IN ($1, $2)),
+		        count(*) FILTER (WHERE ended_at IS NOT NULL AND ended_by IS NOT NULL)
+		   FROM engagement_attachments WHERE staff_id = $3`,
+		byOwner, bySelf, doulaID,
+	).Scan(&open, &ended); err != nil {
+		t.Fatalf("read attachments: %v", err)
+	}
+	if err := tx.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM activity WHERE action = 'doula_taken_off'`).Scan(&entries); err != nil {
+		t.Fatalf("read activity: %v", err)
+	}
+	if err := tx.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM staff_notice_outbox WHERE kind = 'taken_off_engagement' AND recipient_staff_id = $1`,
+		doulaID).Scan(&notices); err != nil {
+		t.Fatalf("read notices: %v", err)
+	}
+	if open != 0 || ended != 2 || entries != 2 || notices != 1 {
+		t.Fatalf("open %d ended %d entries %d notices %d, want 0, 2, 2, 1", open, ended, entries, notices)
+	}
+}

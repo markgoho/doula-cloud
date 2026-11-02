@@ -340,6 +340,48 @@ func TestGrant_UpgradesAnAccruedAttachmentInPlace(t *testing.T) {
 	}
 }
 
+// EndGranted ends one person's granted attachment and names who ended it
+// (#2596), leaves an accrued one alone, and says whether it ended any.
+func TestEndGranted_EndsOnlyAGrantedAttachment(t *testing.T) {
+	f := newAttachFixture(t)
+	doulaID := testdb.SeedStaff(t, f.db, "end-granted-doula")
+	seedMembershipWithRoles(t, f.db, f.practiceID, doulaID, "{doula}")
+	ownerID := testdb.SeedStaff(t, f.db, "end-granted-owner")
+	seedMembershipWithRoles(t, f.db, f.practiceID, ownerID, "{owner}")
+	f.write(t, "end-granted-doula", "ok")
+
+	tx, err := f.db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, f.practiceID); err != nil {
+		t.Fatalf("set_config: %v", err)
+	}
+
+	if ended, err := staffauth.EndGranted(t.Context(), tx, f.engagementID, doulaID, ownerID); err != nil || ended {
+		t.Fatalf("EndGranted on an accrued attachment = %v, %v, want false", ended, err)
+	}
+	if err := staffauth.Grant(t.Context(), tx, f.engagementID, doulaID, ownerID, nil, nil); err != nil {
+		t.Fatalf("Grant: %v", err)
+	}
+	if ended, err := staffauth.EndGranted(t.Context(), tx, f.engagementID, doulaID, ownerID); err != nil || !ended {
+		t.Fatalf("EndGranted on a granted attachment = %v, %v, want true", ended, err)
+	}
+
+	var endedBy string
+	if err := tx.QueryRowContext(t.Context(),
+		`SELECT ended_by::text FROM engagement_attachments
+		  WHERE engagement_id = $1 AND staff_id = $2 AND ended_at IS NOT NULL`,
+		f.engagementID, doulaID,
+	).Scan(&endedBy); err != nil {
+		t.Fatalf("read ended attachment: %v", err)
+	}
+	if endedBy != ownerID {
+		t.Fatalf("ended_by = %q, want the person who ended it", endedBy)
+	}
+}
+
 // EndAttachments closes every open attachment and names who closed them,
 // and leaves an already-ended one alone.
 func TestEndAttachments_ClosesOpenRowsOnly(t *testing.T) {
