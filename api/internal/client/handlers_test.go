@@ -1044,6 +1044,42 @@ func TestListHandler_ContractorSeesOnlyAttachedClients(t *testing.T) {
 	}
 }
 
+// TestListHandler_MineNarrowsAnEmployeeDoulaToHerOwnClients is #2624: an
+// employee Doula's list is every Doula's Clients (ADR-0008), and ?mine=true
+// narrows it to the ones she holds an open, granted attachment on. Without
+// it, and for another Doula, the list is unchanged.
+func TestListHandler_MineNarrowsAnEmployeeDoulaToHerOwnClients(t *testing.T) {
+	db := testdb.New(t)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-owner-mine-list", []string{ownerRole}, "employee")
+	const doulaUID = "employee-doula-mine"
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, doulaUID, []string{doulaRole}, "employee")
+	otherID := testdb.SeedStaffAtPractice(t, db, practiceID, "employee-doula-other", []string{doulaRole}, "employee")
+	mine, mineEngagement := testdb.SeedEngagementInStatus(t, db, practiceID, "Mine Client", "mine-list@example.com", "active")
+	_, theirEngagement := testdb.SeedEngagementInStatus(t, db, practiceID, "Their Client", "their-list@example.com", "active")
+	testdb.SeedEngagementInStatus(t, db, practiceID, "Nobody Client", "nobody-list@example.com", "active")
+	testdb.SeedGrantedAttachment(t, db, mineEngagement, doulaID)
+	testdb.SeedGrantedAttachment(t, db, theirEngagement, otherID)
+
+	srv, session := newServer(t, db, doulaUID)
+	defer srv.Close()
+	list := func(query string) []client.ListItem {
+		resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients"+query)
+		defer resp.Body.Close()
+		var out client.ListResponse
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil || resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, err = %v", resp.StatusCode, err)
+		}
+		return out.Items
+	}
+
+	if got := list(""); len(got) != 3 {
+		t.Fatalf("unnarrowed list = %d Clients, want all 3 with work", len(got))
+	}
+	if got := list("?mine=true"); len(got) != 1 || got[0].ClientID != mine {
+		t.Fatalf("mine list = %+v, want only the Client she is attached to", got)
+	}
+}
+
 // TestSearchHandler_RefusesContractorAndEmptyQueryReturnsNoMatches proves
 // the contractor refusal and the empty-query short circuit both return
 // cleanly rather than erroring.

@@ -25,12 +25,14 @@
  */
 import { apiFetch } from '#lib/api.js';
 import { hasAnyClient } from '#lib/client.js';
-import { isAmbientContractor, isOwner } from '#lib/roles.js';
+import { isAmbientContractor, isDoula, isOwner } from '#lib/roles.js';
 import type { PageLoad } from './$types';
 
 export interface ClientsListGate {
 	isContractor: boolean;
 	isOwner: boolean;
+	// Whether she holds the Doula role, which decides whether "Only my Clients" is drawn (#2624).
+	isDoula: boolean;
 	// Whether the Practice holds any Client record at all.
 	hasAnyClient: Promise<boolean>;
 }
@@ -55,6 +57,7 @@ export const load: PageLoad = async ({ params, parent, fetch }): Promise<Clients
 	return {
 		isContractor,
 		isOwner: isOwner(session),
+		isDoula: isDoula(session),
 		// A contractor Doula has no header link, so nothing turns on it.
 		hasAnyClient: isContractor ? Promise.resolve(true) : hasAnyClientRecord(params.practiceId, fetch)
 	};

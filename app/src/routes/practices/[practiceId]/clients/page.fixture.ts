@@ -214,6 +214,17 @@ export const typicalWithEveryone: RouteVariant = {
 	url: withEveryone.url
 };
 
+/*
+ * #2624: a Doula who is not a contractor is also offered "Only my
+ * Clients" in the filter bar, beside the switch for Clients with no work.
+ * With it on the bar draws one switch fewer, a strict subset of this
+ * one, so that state is not declared.
+ */
+export const asEmployeeDoula: RouteVariant = {
+	name: 'The Clients list, as an employee Doula',
+	props: { data: { isContractor: false, isDoula: true } }
+};
+
 export const fixture: RouteFixture = {
 	name: 'The Clients list',
 	component: Page,
@@ -222,5 +233,5 @@ export const fixture: RouteFixture = {
 	props: { data: { isContractor: false } },
 	respond: () => jsonResponse({ items: clients, hasMore: false }),
 	readyText: 'Clients',
-	variants: [asContractorWithNoClients, withEveryone, typical, typicalWithEveryone]
+	variants: [asContractorWithNoClients, withEveryone, typical, typicalWithEveryone, asEmployeeDoula]
 };

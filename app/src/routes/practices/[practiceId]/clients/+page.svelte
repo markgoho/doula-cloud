@@ -29,6 +29,9 @@
 	// real navigation always supplies it.
 	let { data }: { data?: PageProperties['data'] } = $props();
 	const isContractor = $derived(data?.isContractor ?? false);
+	// #2624: "Only my Clients" is drawn for a Doula who is not a contractor,
+	// whose list is already only hers.
+	const canNarrowToMine = $derived(!isContractor && (data?.isDoula ?? false));
 	// #1609: whether the Practice holds any Client record, which decides
 	// where the header link goes. Defaults to the search, which is right
 	// at a Practice of any size. Undefined while +page.ts's read runs
@@ -53,7 +56,8 @@
 		loadPage: (cursor) =>
 			loadClients(apiFetchWithSession, page.params.practiceId!, {
 				cursor,
-				showAll: isShowingEveryone
+				showAll: isShowingEveryone,
+				showMine: isShowingMine
 			}),
 		failureMessage: 'Failed to load more Clients'
 	});
@@ -68,10 +72,16 @@
 	// SvelteKit's own navigation (#499).
 	let isShowingEveryone = $derived(page.url.searchParams.get('all') === 'true');
 
-	function clientsPath(isShowingEveryone: boolean): string {
+	// #2624: `?mine=true` narrows the list to the Clients she is attached
+	// to, in the address for the same reasons. A Client with no work has no
+	// Doula, so the two switches never both apply.
+	let isShowingMine = $derived(canNarrowToMine && page.url.searchParams.get('mine') === 'true');
+
+	function clientsPath(isShowingEveryone: boolean, isShowingMine = false): string {
 		const base = resolve('/practices/[practiceId]/clients', {
 			practiceId: page.params.practiceId!
 		});
+		if (isShowingMine) return `${base}?mine=true`;
 		return isShowingEveryone ? `${base}?all=true` : base;
 	}
 
@@ -84,7 +94,13 @@
 		await goto(clientsPath(checked));
 	}
 
-	const summary = $derived(clientsResultSummary(clients.items.length, clients.hasMore, isShowingEveryone));
+	// eslint-disable-next-line unicorn/consistent-boolean-name -- mirrors the native HTMLInputElement `checked` property Checkbox's onChange wraps 1:1 (same exception Checkbox.svelte itself carries)
+	async function handleToggleMine(checked: boolean) {
+		clients.abandon();
+		await goto(clientsPath(false, checked));
+	}
+
+	const summary = $derived(clientsResultSummary(clients.items.length, clients.hasMore, isShowingEveryone, isShowingMine));
 
 	// ADR-0017: a pending Engagement Request shows on its Client's row.
 	// She can hold one of each kind at once, hence the join rather than a
@@ -242,7 +258,7 @@
 	// different `all` value, since `isShowingEveryone` is derived from
 	// `page.url` and every one of those re-runs this effect.
 	$effect(() => {
-		void loadFirstPage(isShowingEveryone);
+		void loadFirstPage(isShowingEveryone, isShowingMine);
 	});
 
 	/*
@@ -260,13 +276,14 @@
 	 * of date -- which the effect's next run corrects -- never a list
 	 * mixing both.
 	 */
-	async function loadFirstPage(isShowingEveryone: boolean) {
+	async function loadFirstPage(isShowingEveryone: boolean, isShowingMine: boolean) {
 		isLoaded = false;
 		error = '';
 		try {
 			clients.reset(
 				await loadClients(apiFetchWithSession, page.params.practiceId!, {
-					showAll: isShowingEveryone
+					showAll: isShowingEveryone,
+					showMine: isShowingMine
 				})
 			);
 			isLoaded = true;
@@ -293,6 +310,7 @@
 	// filter left to point at, so the plain message stays.
 	const emptyMessage = $derived.by(() => {
 		if (isContractor) return 'Work reaches you as an Offer, so there are no Clients here yet.';
+		if (isShowingMine) return 'No Clients are yours yet.';
 		if (hasAnyClient && !isShowingEveryone) {
 			return 'No Client has work yet. Turn on "Also show Clients with no work yet" to list them.';
 		}
@@ -403,16 +421,26 @@
 	{#if !isContractor}
 		<FilterBar
 			action={clientsPath(false)}
-			legend="Add to the list"
+			legend={canNarrowToMine ? 'Choose which Clients to show' : 'Add to the list'}
 			status={isReady ? summary : ''}
 			empty={isReady && clients.items.length === 0}
 			isAppliedOnChange
 		>
-			<LabeledField label="Also show Clients with no work yet" orientation="inline">
-				{#snippet children(control)}
-					<Checkbox variant="toggle" checked={isShowingEveryone} onChange={handleToggleAll} {...control} />
-				{/snippet}
-			</LabeledField>
+			<!-- #2624: a Client with no work has no Doula, so while the list is only hers the switch could add nothing. -->
+			{#if !isShowingMine}
+				<LabeledField label="Also show Clients with no work yet" orientation="inline">
+					{#snippet children(control)}
+						<Checkbox variant="toggle" checked={isShowingEveryone} onChange={handleToggleAll} {...control} />
+					{/snippet}
+				</LabeledField>
+			{/if}
+			{#if canNarrowToMine}
+				<LabeledField label="Only my Clients" orientation="inline">
+					{#snippet children(control)}
+						<Checkbox variant="toggle" checked={isShowingMine} onChange={handleToggleMine} {...control} />
+					{/snippet}
+				</LabeledField>
+			{/if}
 		</FilterBar>
 	{/if}
 

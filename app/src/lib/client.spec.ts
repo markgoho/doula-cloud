@@ -74,6 +74,14 @@ describe('loadClients', () => {
 		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/clients?all=true');
 	});
 
+	it('appends mine=true when showMine is set (#2624)', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response({ items: [], hasMore: false }));
+
+		await loadClients(fetcher, 'practice-1', { showMine: true, cursor: 'next-page' });
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/clients?mine=true&cursor=next-page');
+	});
+
 	it('combines all=true and the cursor when both are given', async () => {
 		const fetcher = vi.fn().mockResolvedValue(response({ items: [], hasMore: false }));
 
@@ -295,5 +303,12 @@ describe('clientsResultSummary (#2068)', () => {
 		expect(clientsResultSummary(1, false, false)).toBe('Showing 1 Client with work.');
 		expect(clientsResultSummary(3, false, true)).toBe('Showing 3 Clients.');
 		expect(clientsResultSummary(25, true, true)).toBe('Showing 25 Clients so far. More remain.');
+	});
+
+	// #2624
+	it('words the list as hers while "Only my Clients" is on', () => {
+		expect(clientsResultSummary(0, false, false, true)).toBe('No Clients are yours yet.');
+		expect(clientsResultSummary(5, false, false, true)).toBe('Showing 5 of your Clients.');
+		expect(clientsResultSummary(30, true, false, true)).toBe('Showing 30 of your Clients so far. More remain.');
 	});
 });
