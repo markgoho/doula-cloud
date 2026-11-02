@@ -17,6 +17,7 @@ One worktree per unit of work, landed by a squash-merged PR, never a direct push
    ```
 
    `state` becomes `MERGED`. A PR must be up to date with trunk before it merges ([#1327](https://github.com/markgoho/doula-cloud/issues/1327)), so when another PR lands first, `mergeStateStatus` reads `BEHIND`: run `gh pr update-branch <PR> --rebase` (never the default, which writes a merge commit), and auto-merge lands it once the required checks pass on the new head. If every required check has passed, `mergeStateStatus` is `CLEAN`, and the PR is still `OPEN` a few minutes later, auto-merge has stalled: land it with `gh pr merge <PR> --squash`.
+
 8. **Wait for the trunk run** when the change touches what only trunk runs (`migrate`, `deploy-api`, `deploy-app`, the site deploy). Each command is its own tool call; read `conclusion`, never the exit status of `gh run watch`, which exits 0 on a canceled run:
 
    ```sh
@@ -24,7 +25,10 @@ One worktree per unit of work, landed by a squash-merged PR, never a direct push
    gh api repos/markgoho/doula-cloud/actions/runs/<id> --jq '.conclusion'
    ```
 
+   **A merged change under `terraform/` is applied at once, by you** ([#2680](https://github.com/markgoho/doula-cloud/issues/2680)); trunk's `plan` waits 15 minutes for it before turning trunk red. In your worktree, `git fetch origin trunk`, then `git checkout --detach origin/trunk`, then `terraform -chdir=terraform init -input=false`, then the two commands in [`docs/infrastructure.md`](../infrastructure.md), "Who may apply, and what CI may read": `plan -out=tfplan`, read it, `apply -lock-timeout=5m tfplan`. Apply only if the plan's resources and actions are the ones the PR's own `plan` job summary listed; anything else, stop and tell the founder. A change under `terraform/stripe*` needs a Stripe key only the founder types: hand the founder the command instead. The Google credentials are the founder's laptop ADC; if they are missing or expired, hand over `gcloud auth application-default login` as a `!` command.
+
    A canceled run proves nothing; the next run whose head contains your merge does. The reference's "What a green PR does not prove" says how to tell. A red run: [`docs/testing/gates.md`](../testing/gates.md), "Reading a failed CI run".
+
 9. **Leave.** `ExitWorktree` once the PR reads `MERGED`. The pruner collects what a dead session left; never remove another session's worktree by hand (the reference's "A live worktree is never removed").
 
 ## Forms the worktree isolation accepts

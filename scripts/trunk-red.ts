@@ -68,6 +68,8 @@ type Meaning = {
 };
 
 const CI_PATH = '.github/workflows/ci.yml';
+const APPLY_ENV =
+  'USER_PROJECT_OVERRIDE=true GOOGLE_BILLING_PROJECT=doula-cloud';
 
 const MEANING: Record<string, Meaning> = {
   [CI_PATH]: {
@@ -285,9 +287,9 @@ function awaitingApply(jobs: Job[] | null): string {
     ...new Set(files.filter((f) => waiting.some((j) => j.plans(f)))),
   ];
   return [
-    `**This commit changed Terraform and is waiting for its apply.** ${run.name} is red until the laptop \`apply\` from trunk lands; that is the expected wait, not a new failure.`,
+    `**This commit changed Terraform and is waiting for its apply.** ${run.name} waited 15 minutes for the \`apply\` from trunk that follows a Terraform merge (#2680), and none landed. It stays red until one does.`,
     `Changed files:\n\n${changed.map((file) => `- \`${file}\``).join('\n')}`,
-    `To clear it:\n\n\`\`\`sh\ngit pull\n${waiting.map((job) => `terraform -chdir=${job.folder} apply`).join('\n')}\ngh run rerun ${run.id} --failed\n\`\`\``,
+    `To clear it, read the plan before applying it:\n\n\`\`\`sh\ngit pull\n${waiting.map((job) => `${APPLY_ENV} terraform -chdir=${job.folder} plan -out=tfplan\n${APPLY_ENV} terraform -chdir=${job.folder} apply -lock-timeout=5m tfplan`).join('\n')}\ngh run rerun ${run.id} --failed\n\`\`\``,
   ].join('\n\n');
 }
 
