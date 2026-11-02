@@ -93,7 +93,7 @@ describe('PlanInstanceView.svelte', () => {
 	it('renders an em dash for a text-shaped field with no answer', async () => {
 		await setup();
 
-		await expect.element(valueFor('Planned birth location')).toHaveTextContent('—');
+		await expect.element(valueFor('Planned birth location')).toHaveTextContent('Not answered');
 	});
 
 	it('renders Yes for a checkbox field answered true', async () => {
@@ -111,7 +111,7 @@ describe('PlanInstanceView.svelte', () => {
 	it('renders an em dash for a checkbox field nobody answered, as progress counts it', async () => {
 		await setup();
 
-		await expect.element(valueFor('OK to take photos')).toHaveTextContent('—');
+		await expect.element(valueFor('OK to take photos')).toHaveTextContent('Not answered');
 	});
 
 	it('renders the joined selected options for a multi_select field', async () => {
@@ -123,7 +123,7 @@ describe('PlanInstanceView.svelte', () => {
 	it('renders an em dash for a multi_select field with no selected options', async () => {
 		await setup();
 
-		await expect.element(valueFor('Notify')).toHaveTextContent('—');
+		await expect.element(valueFor('Notify')).toHaveTextContent('Not answered');
 	});
 
 	// A `<dl>` may only directly contain `<dt>`, `<dd>` and `<div>`, so a
