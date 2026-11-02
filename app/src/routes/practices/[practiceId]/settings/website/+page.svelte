@@ -93,6 +93,14 @@
 	   to her, 'saved' is the state she lands in after a successful write
 	   and the one she meets on every later visit. */
 	let step = $state<'answers' | 'facts' | 'review' | 'saved'>('answers');
+	/* The steps swap in place at one address, so no navigation tells a
+	   screen reader the page changed (#2561): each move she makes puts focus
+	   on the new step's heading. The first arrival is not a move. */
+	let hasMoved = $state(false);
+	function goTo(next: typeof step) {
+		hasMoved = true;
+		step = next;
+	}
 	/* Which one question a row's Change opened (#2047), or `undefined`
 	   for the whole set: the first answer, and a change of how Clients
 	   find her, which brings its own follow-up question with it. */
@@ -210,7 +218,7 @@
 			return;
 		}
 		if (choice === 'hosted') {
-			step = isAskingFacts ? 'review' : 'facts';
+			goTo(isAskingFacts ? 'review' : 'facts');
 			return;
 		}
 		void save();
@@ -245,7 +253,7 @@
 				await gotoWithOutcome(gettingPaidHref, websiteSavedMessage(current.mode));
 				return;
 			}
-			step = 'saved';
+			goTo('saved');
 		} catch (error_) {
 			if (error_ instanceof WebsiteValidationError) {
 				/* The server refused a field. Back to the questions, with its
@@ -255,7 +263,7 @@
 				fieldErrors = error_.fieldErrors;
 				const isAboutFacts =
 					'serviceDescription' in error_.fieldErrors || 'cancellationPolicy' in error_.fieldErrors;
-				step = isAboutFacts ? factsStep : 'answers';
+				goTo(isAboutFacts ? factsStep : 'answers');
 				return;
 			}
 			submitError = error_ instanceof Error ? error_.message : 'Failed to save your website';
@@ -283,7 +291,7 @@
 		fieldErrors = {};
 		submitError = '';
 		editing = fact;
-		step = 'answers';
+		goTo('answers');
 	}
 
 	/* Whether the hosted page is actually there (#443), as its row's
@@ -442,9 +450,9 @@
 		loading={isSubmitting}
 	/>
 	{#if step === 'facts'}
-		<Button variant="secondary" label="Back" onClick={() => (step = 'answers')} />
+		<Button variant="secondary" label="Back" onClick={() => goTo('answers')} />
 	{:else if current && current.mode !== 'undeclared'}
-		<Button variant="secondary" label="Cancel" onClick={() => (step = 'saved')} />
+		<Button variant="secondary" label="Cancel" onClick={() => goTo('saved')} />
 	{/if}
 {/snippet}
 
@@ -467,6 +475,7 @@
 		<form onsubmit={handleContinue} novalidate>
 			<FormPage
 				title="Your website"
+				isTitleFocused={hasMoved}
 				{intro}
 				errorSummary={summaryErrors.length > 0 ? errorSummary : undefined}
 				fieldsets={singleQuestion
@@ -482,6 +491,7 @@
 		<form onsubmit={handleContinue} novalidate>
 			<FormPage
 				title="What your page will say"
+				isTitleFocused={hasMoved}
 				errorSummary={summaryErrors.length > 0 ? errorSummary : undefined}
 				fieldsets={[{ content: hostedFacts }]}
 				{actions}
@@ -496,7 +506,7 @@
 					     takes on the step before this (#467). -->
 					<ErrorSummary errors={summaryErrors} />
 
-					<Heading level={1} variant="page" text="Check your page before you publish it" />
+					<Heading level={1} variant="page" text="Check your page before you publish it" focusOnAppearing={summaryErrors.length === 0} />
 					<Text
 						text="This is what Clients and Stripe will see at your page. You can change any of it later."
 					/>
@@ -515,7 +525,7 @@
 
 					<cluster-l space="var(--space-3)" align="center">
 						<Button label="Publish page" loading={isSubmitting} onClick={save} />
-						<Button variant="secondary" label="Back" onClick={() => (step = factsStep)} />
+						<Button variant="secondary" label="Back" onClick={() => goTo(factsStep)} />
 					</cluster-l>
 				</stack-l>
 			</center-l>
@@ -524,7 +534,7 @@
 		<container-l>
 			<center-l max="var(--form-max)" gutters="var(--page-gutter)">
 				<stack-l space="var(--space-7)">
-					<Heading level={1} variant="page" text="Your website" />
+					<Heading level={1} variant="page" text="Your website" focusOnAppearing={hasMoved} />
 
 					{#if current.mode === 'undeclared'}
 						<!-- Reached only by a non-Owner (onMount above): an Owner
