@@ -1048,8 +1048,12 @@ jobs:
           site=$(jq -r '.targets["doula-cloud"].hosting.app[0]' .firebaserc)
           echo "origin=https://${site}.web.app" >> "$GITHUB_OUTPUT"
 
+      # One transient failure (a token refresh dropped mid-call, #2681) is
+      # retried by the identical step below; redeploying the same image is
+      # idempotent, and the job still fails when the retry fails.
       - name: Deploy to Cloud Run
         id: deploy
+        continue-on-error: true
         uses: google-github-actions/deploy-cloudrun@v3
         with:
           service: doula-api
@@ -1088,9 +1092,23 @@ jobs:
           # lets a deploy name it at all.
           flags: --min-instances=1 --add-cloudsql-instances=doula-cloud:us-central1:doula-cloud-pg --service-account=doula-api-runtime@doula-cloud.iam.gserviceaccount.com
 
+      - name: Deploy to Cloud Run (retry)
+        id: deploy-retry
+        if: steps.deploy.outcome == 'failure'
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          service: doula-api
+          region: us-central1
+          project_id: doula-cloud
+          image: us-central1-docker.pkg.dev/doula-cloud/api/doula-api:${{ github.sha }}
+          secrets: DATABASE_URL=doula-cloud-pg-app-runtime-dsn:latest
+          env_vars: EXPECTED_ORIGINS=${{ steps.app-origin.outputs.origin }}
+          env_vars_update_strategy: merge
+          flags: --min-instances=1 --add-cloudsql-instances=doula-cloud:us-central1:doula-cloud-pg --service-account=doula-api-runtime@doula-cloud.iam.gserviceaccount.com
+
       - name: Smoke test deployed revision
         run: |
-          url="${{ steps.deploy.outputs.url }}/api/hello"
+          url="${{ steps.deploy-retry.outputs.url || steps.deploy.outputs.url }}/api/hello"
           if ! curl -fsS "$url" | grep -q 'hello world'; then
             echo "Deployed revision did not answer on /api/hello"
             exit 1
@@ -1282,9 +1300,24 @@ jobs:
             exit 1
           fi
 
+      # Retried once on a transient failure, as in deploy-api (#2681).
       - name: Deploy to Cloud Run
         id: deploy
         if: steps.service.outputs.exists == 'true'
+        continue-on-error: true
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          service: doula-ops
+          region: us-central1
+          project_id: doula-cloud
+          image: us-central1-docker.pkg.dev/doula-cloud/api/doula-ops:${{ github.sha }}
+          env_vars_update_strategy: merge
+          secrets_update_strategy: merge
+          flags: --add-cloudsql-instances=doula-cloud:us-central1:doula-cloud-pg --service-account=doula-ops-runtime@doula-cloud.iam.gserviceaccount.com
+
+      - name: Deploy to Cloud Run (retry)
+        id: deploy-retry
+        if: steps.service.outputs.exists == 'true' && steps.deploy.outcome == 'failure'
         uses: google-github-actions/deploy-cloudrun@v3
         with:
           service: doula-ops
@@ -1300,7 +1333,7 @@ jobs:
       - name: Smoke test deployed revision
         if: steps.service.outputs.exists == 'true'
         run: |
-          url="${{ steps.deploy.outputs.url }}/api/health"
+          url="${{ steps.deploy-retry.outputs.url || steps.deploy.outputs.url }}/api/health"
           if ! curl -fsS "$url" | grep -q '"status":"ok"'; then
             echo "Deployed revision did not answer on /api/health"
             exit 1

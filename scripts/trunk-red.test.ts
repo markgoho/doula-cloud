@@ -52,6 +52,8 @@ type Job = {
 };
 type Fixtures = {
   issues?: Issue[];
+  /** What the closed-issues listing answers. */
+  closedIssues?: Issue[];
   jobs?: Job[];
   /** The stand-in exits 1 on the jobs read. */
   jobsFail?: boolean;
@@ -103,7 +105,7 @@ function standIn(fixtures: Fixtures): string {
       "} else if (method === 'GET' && /\\/actions\\/runs\\/\\d+$/.test(endpoint)) {",
       '  console.log(JSON.stringify(fixtures.run ?? {}));',
       "} else if (method === 'GET' && /\\/issues\\?/.test(endpoint)) {",
-      '  console.log(JSON.stringify(fixtures.issues ?? []));',
+      "  console.log(JSON.stringify((endpoint.includes('state=closed') ? fixtures.closedIssues : fixtures.issues) ?? []));",
       "} else if (method === 'POST' && /\\/issues$/.test(endpoint)) {",
       "  console.log(JSON.stringify({ number: 4242, html_url: 'https://github.com/markgoho/doula-cloud/issues/4242' }));",
       '} else {',
@@ -464,6 +466,40 @@ describe('a red run', () => {
     expect(input.body).toContain(shaMarker(SHA));
     expect(input.body).toContain('gh run rerun 7001 --failed');
     expect(input.body).toContain('passes on this same commit');
+  });
+
+  test('on a commit whose closed alarm recorded it reopens that issue and comments, and opens no second one (#2681)', () => {
+    const result = alarm(workflowRun(CI, { conclusion: 'failure' }), {
+      closedIssues: [openAlarm(2191, CI)],
+    });
+
+    expect(result.status).toBe(0);
+    expect(
+      result.writes.map((call) => `${call.method} ${call.endpoint}`)
+    ).toEqual([
+      `PATCH repos/${REPO}/issues/2191`,
+      `POST repos/${REPO}/issues/2191/comments`,
+    ]);
+    expect(result.writes[0]?.input).toEqual({ state: 'open' });
+  });
+
+  test('on a commit that a closed alarm recorded in a comment reopens that issue', () => {
+    const result = alarm(workflowRun(CI, { conclusion: 'failure' }), {
+      closedIssues: [{ ...openAlarm(2191, CI, LATER_SHA) }],
+      comments: { 2191: [{ body: `Failed again.\n\n${shaMarker(SHA)}` }] },
+    });
+
+    expect(result.writes[0]?.endpoint).toBe(`repos/${REPO}/issues/2191`);
+  });
+
+  test('opens a new issue when the closed alarm is for another commit or another workflow', () => {
+    const result = alarm(workflowRun(CI, { conclusion: 'failure' }), {
+      closedIssues: [openAlarm(2191, CI, LATER_SHA), openAlarm(2192, SITE)],
+    });
+
+    expect(result.writes.map((call) => call.endpoint)).toEqual([
+      `repos/${REPO}/issues`,
+    ]);
   });
 
   test('on a later commit records that commit in its comment on the open issue', () => {
