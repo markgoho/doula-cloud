@@ -27,6 +27,7 @@ const factorTOTP = "totp"
 const (
 	msgNotAnOperatorSignIn = "Sign in with an operator login."
 	msgSecondFactorNeeded  = "Set up an authenticator app to sign in."
+	msgNotOnTheList        = "This login is not on the list of operators."
 	msgSessionEnded        = "Your session has ended. Sign in again."
 )
 
@@ -81,14 +82,13 @@ func signIn(d Deps) http.HandlerFunc {
 			apierr.Write(w, http.StatusForbidden, apierr.CodeMFARequired, msgSecondFactorNeeded, nil)
 			return
 		}
-		name := identity.Name
-		if name == "" {
-			name = identity.Email
-		}
-
 		token := newSessionToken()
 		now := clock.Now(r.Context())
-		view, err := mintSession(r.Context(), d.DB, identity, name, token, now)
+		view, err := mintSession(r.Context(), d.DB, identity, token, now)
+		if errors.Is(err, errNotListed) {
+			apierr.Write(w, http.StatusForbidden, apierr.CodeForbidden, msgNotOnTheList, nil)
+			return
+		}
 		if err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
 			writeInternal(w)
@@ -99,7 +99,11 @@ func signIn(d Deps) http.HandlerFunc {
 	}
 }
 
-func mintSession(ctx context.Context, db *sql.DB, identity Identity, name, token string, now time.Time) (sessionView, error) {
+var errNotListed = errors.New("identity is not on the operators list")
+
+// A login enters the operators list by the founder's SQL, never by signing in
+// (#2610): ops_runtime holds no INSERT on operators.
+func mintSession(ctx context.Context, db *sql.DB, identity Identity, token string, now time.Time) (sessionView, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		// coverage:ignore reason: DB failure, not exercised by unit tests
@@ -107,18 +111,13 @@ func mintSession(ctx context.Context, db *sql.DB, identity Identity, name, token
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO operators (identity_uid, name, email, created_at) VALUES ($1, $2, $3, $4)
-		 ON CONFLICT (identity_uid) DO NOTHING`,
-		identity.UID, name, identity.Email, now); err != nil {
-		// coverage:ignore reason: DB failure, not exercised by unit tests
-		return sessionView{}, fmt.Errorf("mint operator session: %w", err)
-	}
 	var operatorID string
 	var view sessionView
 	if err := tx.QueryRowContext(ctx,
 		`SELECT id, name, email FROM operators WHERE identity_uid = $1`, identity.UID).
-		Scan(&operatorID, &view.Name, &view.Email); err != nil {
+		Scan(&operatorID, &view.Name, &view.Email); errors.Is(err, sql.ErrNoRows) {
+		return sessionView{}, errNotListed
+	} else if err != nil {
 		// coverage:ignore reason: DB failure, not exercised by unit tests
 		return sessionView{}, fmt.Errorf("mint operator session: %w", err)
 	}

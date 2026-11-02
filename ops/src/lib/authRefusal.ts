@@ -52,3 +52,14 @@ export function codeFieldError(code: string, codeField: string): FormError | und
 	if (!/^\d{6}$/.test(trimmed)) return { message: 'Enter the code as 6 digits', targetId: codeField };
 	return undefined;
 }
+
+// Identity Platform refuses a TOTP secret to an unverified email (#1489).
+export function enrollSetupRefusal(error: unknown): FormError {
+	if (codeOf(error) === 'auth/unverified-email') {
+		return {
+			message:
+				'Your sign-in email address is not verified, so an authenticator app cannot be set up yet. Ask whoever added your login to mark it verified, then reload this page'
+		};
+	}
+	return { message: SERVICE_PROBLEM };
+}

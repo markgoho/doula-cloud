@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from '../../app/e2e/playwrightTest';
 import { EMULATOR_URL } from '../../app/e2e/mfa';
-import { OPS_TENANT_ID } from '../../app/e2e/stack';
+import { OPS_TENANT_ID, seedOperatorRow } from '../../app/e2e/stack';
 import { STUB_TOTP_CODE, stubTotpFactor } from '../../app/e2e/totpStub';
 
 /*
@@ -13,7 +13,7 @@ import { STUB_TOTP_CODE, stubTotpFactor } from '../../app/e2e/totpStub';
 
 const password = 'operator-walk-password';
 
-async function newOperatorLogin(request: APIRequestContext, name: string): Promise<string> {
+async function newOperatorLogin(request: APIRequestContext, name: string, listed = true): Promise<string> {
 	const email = `operator-${crypto.randomUUID()}@doula-cloud.invalid`;
 	const created = await request.post(
 		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/projects/doula-cloud/tenants/${OPS_TENANT_ID}/accounts`,
@@ -23,6 +23,7 @@ async function newOperatorLogin(request: APIRequestContext, name: string): Promi
 		}
 	);
 	expect(created.ok()).toBe(true);
+	if (listed) seedOperatorRow((await created.json()).localId, name, email);
 	return email;
 }
 
@@ -92,4 +93,18 @@ test('Signing in with nothing entered says what to enter', async ({ page }) => {
 	const summary = page.getByRole('alert').filter({ hasText: 'There is a problem' });
 	await expect(summary).toContainText('Enter your email address');
 	await expect(summary).toContainText('Enter your password');
+});
+
+test('A login that is not on the operators list is refused after its code', async ({ page, request }) => {
+	const email = await newOperatorLogin(request, 'Unlisted Operator', false);
+	await stubTotpFactor(page, request);
+
+	await signInWithPassword(page, email);
+	await page.getByLabel('Authenticator app code').fill(STUB_TOTP_CODE);
+	await page.getByRole('button', { name: 'Confirm and sign in' }).click();
+
+	await expect(page.getByRole('alert').filter({ hasText: 'There is a problem' })).toContainText(
+		'This login is not on the list of operators.'
+	);
+	await expect(page.getByText('You are signed in as')).toBeHidden();
 });

@@ -45,7 +45,7 @@ type legalStack struct {
 
 func newLegalStack(t *testing.T) *legalStack {
 	t.Helper()
-	s := &legalStack{opsStack: &opsStack{t: t, db: testdb.New(t), now: opsStart}, stripe: billing.NewFakeStripeClient()}
+	s := &legalStack{opsStack: &opsStack{t: t, db: newOpsDB(t), now: opsStart}, stripe: billing.NewFakeStripeClient()}
 	s.handler, _ = routes(Deps{
 		DB:       s.db.Ops,
 		Now:      func() time.Time { return s.now },

@@ -9,7 +9,7 @@
 	import { resolve } from '$app/paths';
 	import { getOperatorAuth } from '#lib/firebase.js';
 	import { exchangeToken, SERVICE_PROBLEM } from '#lib/session.js';
-	import { codeFieldError, codeRefusal, type FormError } from '#lib/authRefusal.js';
+	import { codeFieldError, codeRefusal, enrollSetupRefusal, type FormError } from '#lib/authRefusal.js';
 	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
 
 	const codeId = 'code';
@@ -36,8 +36,8 @@
 			secret = await TotpMultiFactorGenerator.generateSecret(await multiFactor(user).getSession());
 			key = secret.secretKey;
 			qrCode = await QRCode.toDataURL(secret.generateQrCodeUrl(user.email ?? 'operator', 'DoulaCloud operations'));
-		} catch {
-			errors = [{ message: SERVICE_PROBLEM }];
+		} catch (error) {
+			errors = [enrollSetupRefusal(error)];
 		}
 	});
 

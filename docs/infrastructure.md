@@ -99,8 +99,8 @@ Nothing here is an oversight. Each line is a decision, and the reason is the poi
 | # | Step | Done |
 | --- | --- | --- |
 | 1 | Allow tenants on `doula-cloud`'s Identity Platform (console) | Yes, 2026-11-01 |
-| 2 | Create the operator tenant: id `operators-fj5ur`, display name `operators`, password sign-in on, email link off, `mfaConfig.state` `MANDATORY` with TOTP, and self-signup off (`client.permissions.disabledUserSignup` true). Self-signup off is not `allowPasswordSignup` false: on a tenant, that turns off password sign-in itself. doula-ops makes any login in the tenant an operator, so an open signup lets anyone in ([#2610](https://github.com/markgoho/doula-cloud/issues/2610)) | Yes, 2026-11-01; signup closed the same day |
-| 3 | Add the founder's operator login, `mark@doula.cloud`, to tenant `operators-fj5ur`, with its email marked verified (`accounts:update` `emailVerified` true): Identity Platform refuses an authenticator app to an unverified email, and `/enroll` then shows only a service problem. Its authenticator app is set up at the first sign-in on `ops.doula.cloud`, after step 11 | Yes, 2026-11-01 |
+| 2 | Create the operator tenant: id `operators-fj5ur`, display name `operators`, password sign-in on, email link off, `mfaConfig.state` `MANDATORY` with TOTP, and self-signup off (`client.permissions.disabledUserSignup` true). Self-signup off is not `allowPasswordSignup` false: on a tenant, that turns off password sign-in itself. Since [#2610](https://github.com/markgoho/doula-cloud/issues/2610) doula-ops admits only a login on its `operators` list, and the tenant's settings above are `terraform/identity_platform.tf`'s (all but `mfaConfig`, which that resource has no field for), so a change by hand shows as drift on `plan`. Self-signup must stay off | Yes, 2026-11-01; signup closed the same day |
+| 3 | Add the founder's operator login, `mark@doula.cloud`, to tenant `operators-fj5ur`, with its email marked verified (`accounts:update` `emailVerified` true) when the login is created: Identity Platform refuses an authenticator app to an unverified email (`auth/unverified-email`), and `/enroll` then says so. Then add it to the operators list, per "Adding an operator" below. Its authenticator app is set up at the first sign-in on `ops.doula.cloud`, after step 11 | Yes, 2026-11-01 |
 | 4 | Create the `dc-ops` Hosting site, which `.firebaserc`'s `ops` target names | Yes, 2026-11-01 |
 | 5 | Connect `ops.doula.cloud` to `dc-ops`, and add its CNAME in Squarespace DNS | Yes, 2026-11-01 |
 | 6 | Create the Cloud SQL login `ops_runtime_login` with `gcloud sql users create`, then, as `postgres`, `GRANT ops_runtime TO ops_runtime_login` (00143 made the `ops_runtime` role) | Yes, 2026-11-01 |
@@ -110,6 +110,17 @@ Nothing here is an oversight. Each line is a decision, and the reason is the poi
 | 10 | `terraform apply`: the service account, its grants, `doula-ops`, its invoker, and `doula-api`'s `OPS_BASE_URL` and its #2432 scaling. If it fails on the service after creating it, `terraform untaint google_cloud_run_v2_service.doula_ops` before applying again, or the next plan proposes a replace that `prevent_destroy` refuses | Yes, 2026-11-01 |
 | 11 | Re-run that trunk run's `deploy-ops`, which now deploys, then `deploy-ops-site` | Yes, 2026-11-01 |
 | 12 | Add `ops` to the trunk ruleset's required status checks | Yes, 2026-11-01 |
+
+### Adding an operator
+
+doula-ops inserts no `operators` row: `ops_runtime` holds SELECT only on the table, and a sign-in whose identity UID has no row is refused with 403. A migration cannot seed one, because the UID belongs to a tenant that exists only in one environment. The founder adds a login with the tenant login created and its email marked verified (step 3), as the database owner (`postgres`), after reading the login's UID (`localId`) from the tenant's accounts:
+
+```sql
+INSERT INTO operators (identity_uid, name, email)
+VALUES ('<localId of the login in operators-fj5ur>', '<name>', '<email>');
+```
+
+Removing a login from the list is `DELETE FROM operator_sessions WHERE operator_id = ...`, then the row's removal as `postgres`; its past `operator_acts` rows keep a reference, so a login that has acted is better disabled in Identity Platform. The founder's own row, `mark@doula.cloud`, was made at its first sign-in on 2026-11-01, before this rule.
 
 ## The Cloud Run image conflict
 

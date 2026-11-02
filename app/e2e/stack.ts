@@ -241,12 +241,13 @@ function reapOrphans(): void {
 export async function startStack(appOrigin: string) {
 	reapOrphans();
 	await startEmulator();
-	await seedOperatorTenant();
+	const seededOperatorUid = await seedOperatorTenant();
 	await startDatabase();
 	installSimClock();
 	runMigrations();
 	seedAppE2ERole();
 	seedOpsE2ERole();
+	seedOperatorRow(seededOperatorUid, SEEDED_OPERATOR.name, SEEDED_OPERATOR.email);
 	openPilotGate();
 	grantSimClock('app_e2e');
 	grantSimClock('ops_e2e');
@@ -1039,7 +1040,7 @@ const EMULATOR_ADMIN = { 'content-type': 'application/json', Authorization: 'Bea
 // emulator has no TOTP, and refuses phone enrollment in a tenant whose
 // mfaConfig does not name PHONE_SMS. MANDATORY does not refuse an
 // unenrolled sign-in here; doula-ops does.
-async function seedOperatorTenant() {
+async function seedOperatorTenant(): Promise<string> {
 	const base = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}/identitytoolkit.googleapis.com`;
 	const tenant = await fetch(
 		`${base}/v2/projects/doula-cloud/tenants/${OPS_TENANT_ID}?updateMask=displayName,allowPasswordSignup,mfaConfig`,
@@ -1069,6 +1070,25 @@ async function seedOperatorTenant() {
 	if (!login.ok && !refusal.includes('EMAIL_EXISTS')) {
 		throw new Error(`stack: operator login: ${login.status}`);
 	}
+	const lookup = await fetch(`${base}/v1/projects/doula-cloud/tenants/${OPS_TENANT_ID}/accounts:lookup`, {
+		method: 'POST',
+		headers: EMULATOR_ADMIN,
+		body: JSON.stringify({ email: [SEEDED_OPERATOR.email] })
+	});
+	if (!lookup.ok) throw new Error(`stack: operator lookup: ${lookup.status}`);
+	const { users } = await lookup.json();
+	return users[0].localId;
+}
+
+/**
+ * Puts a login on doula-ops's operators list (#2610). doula-ops inserts no
+ * operator itself, so a spec that signs a made-up login in lists it first,
+ * the way the founder runs the INSERT in docs/infrastructure.md.
+ */
+export function seedOperatorRow(identityUid: string, name: string, email: string) {
+	execSQL(
+		`INSERT INTO operators (identity_uid, name, email) VALUES (${sqlLiteral(identityUid)}, ${sqlLiteral(name)}, ${sqlLiteral(email)}) ON CONFLICT (identity_uid) DO NOTHING`
+	);
 }
 
 async function startEmulator() {
