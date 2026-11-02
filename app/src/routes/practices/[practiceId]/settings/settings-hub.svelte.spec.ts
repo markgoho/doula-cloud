@@ -111,6 +111,16 @@ describe('the Settings index', () => {
 		expect(apiFetchWithSession).not.toHaveBeenCalled();
 	});
 
+	it('reads a listed zone the label the Timezone question offered', async () => {
+		await setup(
+			{},
+			(path) => Promise.resolve(path.endsWith('/timezone') ? jsonResponse({ timezone: 'America/Phoenix' }) : respond(path))
+		);
+
+		await expect.element(testPage.getByText('Mountain time, no daylight saving (Phoenix)')).toBeVisible();
+		expect(testPage.getByText('Mountain Standard time (Phoenix)').query()).toBeNull();
+	});
+
 	it('gives an Owner no line about who may change her settings', async () => {
 		await setup();
 
