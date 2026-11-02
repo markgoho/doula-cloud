@@ -98,7 +98,7 @@
 
 {#snippet intro()}
 	<Text
-		text="Every Contract this Practice is still waiting on, oldest first. Open one to reach the Engagement it belongs to and send, void or invoice it there."
+		text="Every Contract this Practice is still waiting on, oldest first. Open one to go to the Client and send, void or invoice the Contract there."
 		tone="muted"
 	/>
 {/snippet}
@@ -120,7 +120,7 @@
 
 	<Heading level={2} text="Void requests" />
 	<Text
-		text="Every void a Doula has asked for and nobody has decided yet, oldest first. Open one to reach the Engagement it belongs to and void or decline it there."
+		text="Every void a Doula has asked for and nobody has decided yet, oldest first. Open one to go to the Client and void or decline the request there."
 		tone="muted"
 	/>
 
