@@ -62,7 +62,7 @@ func TestVisitWrites_ADoulaPutOnTheClientGetsOneEmail(t *testing.T) {
 		if want := []string{doulaID}; !slices.Equal(out.NotifiedStaffIDs, want) {
 			t.Fatalf("notifiedStaffIds = %v, want %v", out.NotifiedStaffIDs, want)
 		}
-		if got, want := queuedNotices(t, db), []queuedNotice{{doulaID, "put_on_engagement", ownerID}}; !slices.Equal(got, want) {
+		if got, want := queuedNotices(t, db), []queuedNotice{{doulaID, kindPutOn, ownerID}}; !slices.Equal(got, want) {
 			t.Fatalf("queued = %+v, want %+v", got, want)
 		}
 	})
@@ -81,7 +81,7 @@ func TestVisitWrites_ADoulaPutOnTheClientGetsOneEmail(t *testing.T) {
 			t.Fatalf("notifiedStaffIds = %v, want %v", out.NotifiedStaffIDs, want)
 		}
 		want := []queuedNotice{
-			{toID, "put_on_engagement", adminID},
+			{toID, kindPutOn, adminID},
 			{fromID, "visit_reassigned_from", adminID},
 		}
 		if got := queuedNotices(t, db); !slices.Equal(got, want) {

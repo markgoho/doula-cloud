@@ -10,7 +10,7 @@
 // writer of a granted Attachment. One rule and one write, so the two
 // cannot come to disagree about who is attachable or about what the
 // Engagement's ledger says afterward. visit reads the rule too (#1625),
-// for the Visit that names a Doula, and keeps its own write.
+// for the Visit that names a Doula, and writes through Grant (#2567).
 package attachment
 
 import (

@@ -200,8 +200,14 @@ func hasGrantedAttachment(ctx context.Context, tx *sql.Tx, engagementID, staffID
 // returns before any attachment is written. It writes the error response
 // itself and reports that it did.
 //
+// The write is attachment.Grant, the one grant every path shares, so it
+// records "Put on this Engagement as the Doula" in the Engagement's
+// Activity and queues her "put on a client" mail itself (#2567). A Doula
+// already granted is left alone: nothing changes, so nothing is recorded.
+//
 // putOn reports whether this grant put her on the Engagement, which she
-// was not on before (#2540), so her one email is "put on a client".
+// was not on before (#2540), so her one email is "put on a client" and
+// queueAssigneeNotice queues no second.
 func grantAssignee(w http.ResponseWriter, r *http.Request, c visitWriteContext, engagementID, staffID string, grants bool) (putOn, ok bool) {
 	if !grants {
 		return false, true
@@ -212,34 +218,38 @@ func grantAssignee(w http.ResponseWriter, r *http.Request, c visitWriteContext, 
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return false, false
 	}
-	if err := staffauth.Grant(r.Context(), c.tx, engagementID, staffID, c.staffID, nil, nil); err != nil {
+	if already {
+		return false, true
+	}
+	if err := attachment.Grant(r.Context(), c.tx, c.practiceID, engagementID, staffID, c.staffID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return false, false
 	}
-	return !already, true
+	return true, true
 }
 
 // queueAssigneeNotice queues the one email to the Doula a Visit was put
 // on, at creation or by a move, unless she put it on herself (#2540):
 // "put on a client" when naming her also put her on the Engagement, so
 // she is not mailed twice for one act, and "put on a visit" otherwise.
-// It reports whether an email was queued.
-func queueAssigneeNotice(r *http.Request, c visitWriteContext, engagementID, visitID, staffID string, putOn bool) (bool, error) {
+// The "put on a client" mail is attachment.Grant's, queued by
+// grantAssignee, so putOn queues nothing here. It reports whether she
+// has an email queued for this act.
+func queueAssigneeNotice(r *http.Request, c visitWriteContext, visitID, staffID string, putOn bool) (bool, error) {
 	if staffID == c.staffID {
 		return false, nil
 	}
-	notice := staffnotice.Notice{
+	if putOn {
+		return true, nil
+	}
+	if err := staffnotice.Queue(r.Context(), c.tx, staffnotice.Notice{
 		PracticeID:       c.practiceID,
 		RecipientStaffID: staffID,
 		Kind:             staffnotice.KindVisitReassignedTo,
 		SubjectID:        visitID,
 		TriggeredBy:      c.staffID,
-	}
-	if putOn {
-		notice.Kind, notice.SubjectID = staffnotice.KindPutOnEngagement, engagementID
-	}
-	if err := staffnotice.Queue(r.Context(), c.tx, notice); err != nil {
+	}); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return false, fmt.Errorf("visit: queue assignee notice: %w", err)
 	}

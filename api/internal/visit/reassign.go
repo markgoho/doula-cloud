@@ -148,7 +148,7 @@ func ReassignHandler(enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 
-		notified, err := queueReassignNotices(r, c, engagementID, visitID, previousStaffID, staffID, putOn)
+		notified, err := queueReassignNotices(r, c, visitID, previousStaffID, staffID, putOn)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -167,12 +167,15 @@ func ReassignHandler(enq tasknudge.Enqueuer) http.Handler {
 // transaction, and returns who they are. A move onto the person already
 // holding it tells nobody, and nobody is told about a move she made
 // herself. The one it moved onto gets queueAssigneeNotice's one email.
-func queueReassignNotices(r *http.Request, c visitWriteContext, engagementID, visitID, previousStaffID, staffID string, putOn bool) ([]string, error) {
+func queueReassignNotices(r *http.Request, c visitWriteContext, visitID, previousStaffID, staffID string, putOn bool) ([]string, error) {
 	notified := []string{}
 	if previousStaffID == staffID {
+		if putOn && staffID != c.staffID {
+			notified = append(notified, staffID)
+		}
 		return notified, nil
 	}
-	queued, err := queueAssigneeNotice(r, c, engagementID, visitID, staffID, putOn)
+	queued, err := queueAssigneeNotice(r, c, visitID, staffID, putOn)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return nil, err
