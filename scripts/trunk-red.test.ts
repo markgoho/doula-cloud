@@ -574,7 +574,7 @@ describe('a red run', () => {
       expect(body).not.toContain('README.md');
       expect(body).toContain('git pull');
       expect(body).toContain(
-        'USER_PROJECT_OVERRIDE=true GOOGLE_BILLING_PROJECT=doula-cloud terraform -chdir=terraform plan -out=tfplan'
+        "USER_PROJECT_OVERRIDE=true GOOGLE_BILLING_PROJECT=doula-cloud terraform -chdir=terraform plan -var applied_sha=$(git log -1 --format=%H -- terraform ':(exclude)terraform/stripe*') -out=tfplan"
       );
       expect(body).toContain(
         'USER_PROJECT_OVERRIDE=true GOOGLE_BILLING_PROJECT=doula-cloud terraform -chdir=terraform apply -lock-timeout=5m tfplan'

@@ -287,9 +287,9 @@ function awaitingApply(jobs: Job[] | null): string {
     ...new Set(files.filter((f) => waiting.some((j) => j.plans(f)))),
   ];
   return [
-    `**This commit changed Terraform and is waiting for its apply.** ${run.name} waited 15 minutes for the \`apply\` from trunk that follows a Terraform merge (#2680), and none landed. It stays red until one does.`,
+    `**This commit changed Terraform and is waiting for its apply.** ${run.name} is red until the \`apply\` from trunk lands.`,
     `Changed files:\n\n${changed.map((file) => `- \`${file}\``).join('\n')}`,
-    `To clear it, read the plan before applying it:\n\n\`\`\`sh\ngit pull\n${waiting.map((job) => `${APPLY_ENV} terraform -chdir=${job.folder} plan -out=tfplan\n${APPLY_ENV} terraform -chdir=${job.folder} apply -lock-timeout=5m tfplan`).join('\n')}\ngh run rerun ${run.id} --failed\n\`\`\``,
+    `To clear it, read the plan before applying it:\n\n\`\`\`sh\ngit pull\n${waiting.map((job) => `${APPLY_ENV} terraform -chdir=${job.folder} plan${job.folder === 'terraform' ? ` -var applied_sha=$(git log -1 --format=%H -- terraform ':(exclude)terraform/stripe*')` : ''} -out=tfplan\n${APPLY_ENV} terraform -chdir=${job.folder} apply -lock-timeout=5m tfplan`).join('\n')}\ngh run rerun ${run.id} --failed\n\`\`\``,
   ].join('\n\n');
 }
 

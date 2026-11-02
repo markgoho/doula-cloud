@@ -104,11 +104,11 @@ jobs:
     # step below, plus setup, on top of the plan itself. `timeout-minutes`
     # only counts once a job starts running, never time spent queued
     # behind `concurrency`, so this is not shared with any other run.
-    # 15 -> 30: a trunk push can also wait out APPLY_WINDOW (#2680).
-    timeout-minutes: 30
+    timeout-minutes: 15
     permissions:
       contents: read
       id-token: write
+      issues: write
     steps:
       # fetch-depth: 0 (full history, all refs) is what the staleness check in
       # the "Terraform plan" step below needs: `git merge-base` against
@@ -143,6 +143,69 @@ jobs:
       - name: Terraform init
         working-directory: terraform
         run: terraform init -input=false
+
+      # Drift is the live project against the commit last applied to it,
+      # not against trunk (#2680). Every apply stamps that commit into state
+      # as `applied_sha`. A push, the schedule, and a pull request that does
+      # not touch terraform/ plan that commit, so a merged change still
+      # waiting for its apply is not drift; the next step reports it as
+      # an issue instead. A pull request that touches terraform/ plans its
+      # own head, as information. With no stamp yet, everything plans its
+      # own checkout, as before.
+      - name: Choose the commit to plan
+        id: target
+        working-directory: terraform
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git fetch --quiet origin trunk
+          applied=$(terraform output -raw applied_sha 2>/dev/null || true)
+          if ! printf '%s' "$applied" | grep -Eq '^[0-9a-f]{40}$'; then
+            applied=""
+          fi
+
+          touched=""
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            head_base=$(git merge-base "$PR_HEAD_SHA" origin/trunk 2>/dev/null || true)
+            if [ -n "$head_base" ] && [ -n "$(git diff --name-only "$head_base" "$PR_HEAD_SHA" -- ':(top)terraform' ':(top,exclude)terraform/stripe*')" ]; then
+              touched=1
+            fi
+          fi
+          echo "touched=$touched" >> "$GITHUB_OUTPUT"
+          echo "applied=$applied" >> "$GITHUB_OUTPUT"
+
+          if [ -z "$applied" ]; then
+            echo "Terraform state carries no \`applied_sha\` yet (#2680), so this plans its own checkout." >> "$GITHUB_STEP_SUMMARY"
+            echo "TF_VAR_applied_sha=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+            echo "mode=head" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! git merge-base --is-ancestor "$applied" origin/trunk; then
+            echo "The live project was last applied from $applied, which is not on trunk. Apply from trunk's head -- see docs/infrastructure.md, \"Who may apply, and what CI may read\"." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "TF_VAR_applied_sha=$applied" >> "$GITHUB_ENV"
+
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            tf_head=$(git log -1 --format=%H origin/trunk -- . ':(exclude)stripe*')
+            if git diff --quiet "$applied" "$tf_head" -- . ':(exclude)stripe*'; then
+              echo "pending=" >> "$GITHUB_OUTPUT"
+            else
+              echo "pending=1" >> "$GITHUB_OUTPUT"
+            fi
+            echo "tf_head=$tf_head" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ -n "$touched" ]; then
+            echo "mode=head" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git checkout --quiet --detach "$applied"
+          terraform init -input=false > /dev/null
+          echo "mode=applied" >> "$GITHUB_OUTPUT"
+          echo "Planning \`$applied\`, the commit last applied to the live project (#2680)." >> "$GITHUB_STEP_SUMMARY"
 
       # `plan`'s own human-readable stdout is never printed or kept. The
       # original reason was scheduler.tf's nonsensitive() read: a *drifted*
@@ -189,7 +252,8 @@ jobs:
           TF_IN_AUTOMATION: 'true'
           EVENT_NAME: ${{ github.event_name }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          APPLY_WINDOW: '900'
+          MODE: ${{ steps.target.outputs.mode }}
+          TOUCHED: ${{ steps.target.outputs.touched }}
         run: |
           # 120s -> 480s (#1202). The `concurrency` group above stays
           # per-ref, so it does not serialize two *different* PRs' plans
@@ -208,25 +272,6 @@ jobs:
           terraform plan -detailed-exitcode -input=false -no-color -lock-timeout=480s -out=tfplan > plan-raw.log 2>&1
           plan_exit=$?
           set -e
-
-          # A trunk push within APPLY_WINDOW of a commit that changed
-          # terraform/ waits for the agent's apply from trunk (#2680) instead
-          # of failing on the first plan: it re-plans each minute, without
-          # the lock so the apply is never blocked by it, until the plan is
-          # empty or the window closes. After the window, a non-empty plan
-          # fails exactly as before.
-          if [ "$EVENT_NAME" = "push" ] && [ "$plan_exit" -eq 2 ]; then
-            last_tf=$(git log -1 --format=%ct HEAD -- . ':(exclude)stripe*')
-            deadline=$(( ${last_tf:-0} + APPLY_WINDOW ))
-            while [ "$plan_exit" -eq 2 ] && [ "$(date +%s)" -lt "$deadline" ]; do
-              echo "Plan is non-empty within $(( APPLY_WINDOW / 60 )) minutes of a terraform/ commit -- waiting for its apply from trunk (#2680)."
-              sleep 60
-              set +e
-              terraform plan -detailed-exitcode -input=false -no-color -lock=false -out=tfplan > plan-raw.log 2>&1
-              plan_exit=$?
-              set -e
-            done
-          fi
 
           if [ "$plan_exit" -eq 1 ]; then
             if grep -q "Error acquiring the state lock" plan-raw.log; then
@@ -255,7 +300,7 @@ jobs:
               (($b | keys) + ($a | keys) | unique) as $allkeys |
               ($allkeys | map(select($b[.] != $a[.])));
 
-            [.resource_changes[] | select(.mode == "managed" and (.change.actions != ["no-op"] or .change.importing != null))] as $drifted
+            [.resource_changes[] | select(.mode == "managed" and .address != "terraform_data.applied" and (.change.actions != ["no-op"] or .change.importing != null))] as $drifted
             | ($drifted | length | tostring) + " resource(s) differ from the live project. Attribute NAMES only -- never values, per #1052.\n\n" +
               "| Resource | Action | Changed attributes |\n|---|---|---|\n" +
               ( [ $drifted[]
@@ -264,23 +309,25 @@ jobs:
           ' plan.json)
           echo "$drift_table"
 
-          # Only a pull_request checkout can be behind trunk in the way
-          # described above -- a push or the daily schedule plans trunk
-          # itself, where this comparison is always empty and would only add
-          # noise. `working-directory: terraform` scopes the pathspec below
-          # to this directory with `-- .`; it is the same check as `--
-          # terraform/` from the repo root.
+          # The stamp alone is never drift: it changes on every apply, and
+          # has nothing to compare before the first one.
+          if jq -e '[.resource_changes[] | select(.mode == "managed" and .address != "terraform_data.applied" and (.change.actions != ["no-op"] or .change.importing != null))] | length == 0' plan.json > /dev/null; then
+            echo "No changes. The live project matches the configuration planned." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Only a pull_request checkout of its own head can be behind trunk
+          # in the way described above -- a push, the daily schedule, and a
+          # pull request that does not touch terraform/ plan the applied
+          # commit instead. `working-directory: terraform` scopes the
+          # pathspec below to this directory with `-- .`; it is the same
+          # check as `-- terraform/` from the repo root.
           stale=""
-          touched=""
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            git fetch --quiet origin trunk || true
+          touched="$TOUCHED"
+          if [ "$EVENT_NAME" = "pull_request" ] && [ "$MODE" = "head" ]; then
             merge_base=$(git merge-base HEAD origin/trunk 2>/dev/null || true)
             if [ -n "$merge_base" ] && [ -n "$(git diff --name-only "$merge_base" origin/trunk -- .)" ]; then
               stale=1
-            fi
-            head_base=$(git merge-base "$PR_HEAD_SHA" origin/trunk 2>/dev/null || true)
-            if [ -n "$head_base" ] && [ -n "$(git diff --name-only "$head_base" "$PR_HEAD_SHA" -- ':(top)terraform' ':(top,exclude)terraform/stripe*')" ]; then
-              touched=1
             fi
           fi
 
@@ -315,6 +362,57 @@ jobs:
 
           echo "Terraform plan is non-empty -- see the job summary for which resources and attributes drifted."
           exit 1
+
+      # A merged change waiting for its apply is a to-do, not drift (#2680):
+      # one open issue says so while it waits, and closes once the stamp
+      # catches up.
+      - name: Report a merged change waiting for its apply
+        if: github.event_name != 'pull_request' && steps.target.outputs.applied != ''
+        working-directory: terraform
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          APPLIED: ${{ steps.target.outputs.applied }}
+          TF_HEAD: ${{ steps.target.outputs.tf_head }}
+          PENDING: ${{ steps.target.outputs.pending }}
+        run: |
+          title="Terraform is waiting for its apply"
+          existing=$(gh issue list -R "$REPO" --state open --search "\"$title\" in:title" --json number,title --jq "map(select(.title == \"$title\")) | .[0].number // empty")
+
+          if [ -z "$PENDING" ]; then
+            if [ -n "$existing" ]; then
+              gh issue close "$existing" -R "$REPO" --comment "Applied: the live project's stamp is now \`$APPLIED\`, trunk's newest \`terraform/\` commit."
+            fi
+            exit 0
+          fi
+
+          {
+            echo "Trunk has \`terraform/\` changes the live project does not have yet. This is not drift and trunk is not red; it waits for the \`apply\` from trunk that follows the merge (#2680)."
+            echo
+            echo "Applied: \`$APPLIED\`. Trunk's newest \`terraform/\` commit: \`$TF_HEAD\`."
+            echo
+            git log --oneline "$APPLIED".."$TF_HEAD" -- . ':(exclude)stripe*' | sed 's/^/- /'
+            echo
+            echo "To apply, from the repository root on trunk's head, reading the plan before applying it:"
+            echo
+            cat <<'COMMANDS'
+          ```sh
+          git pull
+          sha=$(git log -1 --format=%H -- terraform ':(exclude)terraform/stripe*')
+          USER_PROJECT_OVERRIDE=true GOOGLE_BILLING_PROJECT=doula-cloud terraform -chdir=terraform plan -var applied_sha=$sha -out=tfplan
+          USER_PROJECT_OVERRIDE=true GOOGLE_BILLING_PROJECT=doula-cloud terraform -chdir=terraform apply -lock-timeout=5m tfplan
+          ```
+          COMMANDS
+            echo
+            echo "This issue is opened and closed by .github/workflows/terraform-plan.yml."
+          } > pending.md
+
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" -R "$REPO" --body-file pending.md
+          else
+            gh issue create -R "$REPO" --title "$title" --assignee markgoho --body-file pending.md
+          fi
+          echo "::notice::Trunk's terraform/ is ahead of the live project by a merged change waiting for its apply -- see the issue \"$title\"."
 
   # The Sandbox Stripe account against terraform/stripe-sandbox (#2390),
   # with its own state under gs://doula-cloud-tfstate/stripe/sandbox and a
