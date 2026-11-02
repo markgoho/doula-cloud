@@ -82,8 +82,28 @@ function changeHref(basePath: string, slug: string): string {
  */
 const ADDRESS_SLUG = 'address';
 
+const NAME_SLUG = 'name';
+
+/*
+ * The name is one answer to a person, asked as three boxes, and reads as
+ * one row with one Change, the way the address does (#2558): seven
+ * Change links and the save were eight decisions on one screen.
+ */
+function nameText(answers: IntakeAnswers): string {
+	const full = [answers.givenName, answers.familyName]
+		.map((part) => part.trim())
+		.filter(Boolean)
+		.join(' ');
+	const preferred = answers.preferredName.trim();
+	if (full === '') return preferred === '' ? NOT_ANSWERED : `Called ${preferred}`;
+	return preferred === '' ? full : `${full}, called ${preferred}`;
+}
+
 function stepAnswers(answers: IntakeAnswers, step: StructuralStep, basePath: string): Answer[] {
 	const href = changeHref(basePath, step.slug);
+	if (step.slug === NAME_SLUG) {
+		return [{ label: step.label, value: nameText(answers), changes: 'name', changeHref: href }];
+	}
 	if (step.slug === ADDRESS_SLUG) {
 		const address = formatAddress(answers);
 		return [

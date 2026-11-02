@@ -55,21 +55,32 @@ describe('answerSections', () => {
 		expect(sections).toHaveLength(1);
 		expect(sections[0].heading).toBeUndefined();
 		expect(rowLabels(sections[0].answers)).toEqual([
-			'Given name',
-			'Family name',
-			'Preferred name',
+			'Name',
 			'Date of birth',
 			'Email address',
 			'Phone number',
 			'Address'
 		]);
 		expect(sections[0].answers[0]).toEqual({
-			label: 'Given name',
+			label: 'Name',
 			value: 'Sarah',
-			changes: 'given name',
+			changes: 'name',
 			changeHref: `${basePath}/name?from=check`
 		});
 		expect(sections[0].answers[1].value).toBe(NOT_ANSWERED);
+	});
+
+	// #2558: three name boxes, one row, one Change.
+	it.each([
+		['all three', { givenName: 'Nadia', familyName: 'Haddad', preferredName: 'Nay' }, 'Nadia Haddad, called Nay'],
+		['no preferred name', { givenName: 'Nadia', familyName: 'Haddad' }, 'Nadia Haddad'],
+		['given name only', { givenName: ' Nadia ' }, 'Nadia'],
+		['a preferred name alone', { preferredName: 'Nay' }, 'Called Nay'],
+		['nothing', {}, NOT_ANSWERED]
+	])('reads the name as one row: %s', (_case, parts, expected) => {
+		const sections = answerSections({ ...blankAnswers(), ...parts }, [], basePath, DETAILS_STEPS);
+
+		expect(sections[0].answers[0].value).toBe(expected);
 	});
 
 	// #1610: the details journey never asks the name, so it has no row.
@@ -77,9 +88,7 @@ describe('answerSections', () => {
 		const sections = answerSections(blankAnswers(), [], basePath, DETAILS_STEPS);
 
 		expect(rowLabels(sections[0].answers)).toEqual([
-			'Given name',
-			'Family name',
-			'Preferred name',
+			'Name',
 			'Date of birth',
 			'Email address',
 			'Phone number',
@@ -129,21 +138,19 @@ describe('answerSections', () => {
 	it('reads the date of birth back in words, not as it is stored', () => {
 		const sections = answerSections({ ...blankAnswers(), dateOfBirth: '1988-02-09' }, [], basePath, DETAILS_STEPS);
 
-		expect(sections[0].answers[3].value).toBe('Feb 9, 1988');
+		expect(sections[0].answers[1].value).toBe('Feb 9, 1988');
 	});
 
 	it('leaves an unanswered date of birth unanswered rather than formatting a blank', () => {
 		const sections = answerSections(blankAnswers(), [], basePath, DETAILS_STEPS);
 
-		expect(sections[0].answers[3].value).toBe(NOT_ANSWERED);
+		expect(sections[0].answers[1].value).toBe(NOT_ANSWERED);
 	});
 
 	it('sends each Change link back to the question that asked it', () => {
 		const sections = answerSections(blankAnswers(), [], basePath, DETAILS_STEPS);
 
 		expect(sections[0].answers.map((answer) => answer.changeHref)).toEqual([
-			`${basePath}/name?from=check`,
-			`${basePath}/name?from=check`,
 			`${basePath}/name?from=check`,
 			`${basePath}/date-of-birth?from=check`,
 			`${basePath}/email?from=check`,
