@@ -18,7 +18,7 @@ import { OPS_TENANT_ID, SEEDED_OPERATOR, seedOperatorRow } from '../../app/e2e/s
  * - A tenant login cannot sign in without the tenant id.
  */
 
-type Tokens = { idToken: string; localId: string };
+type Tokens = { idToken: string; localId: string; mfaPendingCredential?: string; mfaInfo?: unknown[] };
 
 function claimsOf(idToken: string): { firebase: Record<string, unknown> } {
 	return JSON.parse(Buffer.from(idToken.split('.', 3)[1], 'base64url').toString('utf8'));
@@ -35,7 +35,7 @@ async function signInWithPassword(
 	return await response.json();
 }
 
-test('The seeded operator login signs in to the operator tenant, and the token names the tenant', async ({
+test('The seeded operator login signs in to the operator tenant and is challenged for its emulator phone factor', async ({
 	request
 }) => {
 	const signedIn = await signInWithPassword(request, {
@@ -44,9 +44,9 @@ test('The seeded operator login signs in to the operator tenant, and the token n
 		tenantId: OPS_TENANT_ID
 	});
 
-	const { firebase } = claimsOf(signedIn.idToken);
-	expect(firebase.tenant).toBe(OPS_TENANT_ID);
-	expect(firebase.sign_in_second_factor).toBeUndefined();
+	expect(signedIn.idToken).toBeUndefined();
+	expect(signedIn.mfaPendingCredential).toBeTruthy();
+	expect(signedIn.mfaInfo).toHaveLength(1);
 });
 
 test('An operator login cannot sign in outside its tenant', async ({ request }) => {

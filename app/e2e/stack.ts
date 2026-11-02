@@ -1044,7 +1044,9 @@ export const OPS_TENANT_ID = 'operators-local';
 export const SEEDED_OPERATOR = {
 	email: 'operator@doula-cloud.invalid',
 	password: 'operator-local-password',
-	name: 'Local Operator'
+	name: 'Local Operator',
+	// The emulator has no TOTP, so the seeded login carries its phone factor: sign-in sends a code the emulator lists, and doula-ops counts that factor only while the emulator host variable is set.
+	phoneNumber: '+15555550100'
 } as const;
 
 const EMULATOR_ADMIN = { 'content-type': 'application/json', Authorization: 'Bearer owner' };
@@ -1076,7 +1078,8 @@ async function seedOperatorTenant(): Promise<string> {
 			email: SEEDED_OPERATOR.email,
 			password: SEEDED_OPERATOR.password,
 			displayName: SEEDED_OPERATOR.name,
-			emailVerified: true
+			emailVerified: true,
+			mfaInfo: [{ phoneInfo: SEEDED_OPERATOR.phoneNumber, displayName: 'Emulator phone' }]
 		})
 	});
 	const refusal = login.ok ? '' : await login.text();
