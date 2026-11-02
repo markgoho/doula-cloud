@@ -204,7 +204,7 @@ describe('Client portal Engagement hub', () => {
 		// ended line, then the Visit, in that order.
 		await expect
 			.element(next)
-			.toHaveTextContent(new RegExp(String.raw`^${NEXT_HEADING}\s*Care ended\s*${visits[0]!.doulaName} is coming to you on`));
+			.toHaveTextContent(new RegExp(String.raw`^${NEXT_HEADING}\s*Care ended\s*Your next visit is still booked: ${visits[0]!.doulaName} is coming on`));
 		await expect.element(next.getByText(/due date/i)).not.toBeInTheDocument();
 	});
 

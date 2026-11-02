@@ -58,7 +58,16 @@ describe('whatHappensNext', () => {
 
 		expect(whatHappensNext(next, undefined, true)).toEqual({
 			ended: 'Care ended',
-			lead: `Priya Raman is coming to you on ${formatPortalVisit(next.scheduledAt, false)}.`
+			lead: `Your next visit is still booked: Priya Raman is coming on ${formatPortalVisit(next.scheduledAt, false)}.`
+		});
+	});
+
+	it('names nobody for a still-booked Visit whose Doula was taken off', () => {
+		const next = visit({ doulaName: '' });
+
+		expect(whatHappensNext(next, undefined, true)).toEqual({
+			ended: 'Care ended',
+			lead: `Your next visit is still booked, on ${formatPortalVisit(next.scheduledAt, false)}.`
 		});
 	});
 
