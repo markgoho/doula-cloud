@@ -349,6 +349,20 @@ describe('apiFetch', () => {
 		vi.unstubAllGlobals();
 	});
 
+	// #2590: a route's load passes its own fetch, and the window's stays unused.
+	it('sends through the fetcher it is given instead of the window', async () => {
+		const windowFetch = vi.fn();
+		vi.stubGlobal('fetch', windowFetch);
+		const loadFetch = vi.fn(async () => new Response(undefined, { status: 200 }));
+
+		await apiFetch('/api/staff/session', {}, loadFetch);
+		await probeSession('/api/staff/session', loadFetch);
+
+		expect(loadFetch).toHaveBeenCalledTimes(2);
+		expect(windowFetch).not.toHaveBeenCalled();
+		vi.unstubAllGlobals();
+	});
+
 	// #1924: the seam is apiFetch, so every POST a route sends through
 	// apiFetchWithSession carries the key without the route naming one.
 	it('sends the same Idempotency-Key when a dropped submit is pressed again, and a new one after it lands', async () => {

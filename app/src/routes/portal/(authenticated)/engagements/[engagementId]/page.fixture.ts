@@ -125,7 +125,7 @@ export const fixture: RouteFixture = {
 	// #310: the ancestor `+layout.ts` load now carries `createdAt` too --
 	// `+page.svelte` builds `RecordDetail`'s `serviceName` from it via
 	// `engagementLabel`, the same way the real load chain does.
-	pageData: { practiceName, createdAt },
+	pageData: { ...detail, createdAt },
 	// #486: the Activity ledger's own read shares this route's one mocked
 	// fetcher, and needs the cursor-list envelope docs/api-design.md
 	// section 4 asks for -- the bare `detail` shape above has no `items`,

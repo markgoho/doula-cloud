@@ -23,7 +23,16 @@ describe('streamRead', () => {
 			isLoaded: true,
 			value: { balance: 3 }
 		});
-		expect(apiFetch).toHaveBeenCalledWith('/api/practices/practice-1/billing');
+		expect(apiFetch).toHaveBeenCalledWith('/api/practices/practice-1/billing', {}, undefined);
+	});
+
+	it("reads through the load's own fetch when given one", async () => {
+		const loadFetch = vi.fn();
+		apiFetch.mockImplementation(async () => Response.json({ balance: 3 }));
+
+		await streamRead('/api/practices/practice-1/billing', loadFetch);
+
+		expect(apiFetch).toHaveBeenCalledWith('/api/practices/practice-1/billing', {}, loadFetch);
 	});
 
 	it('carries a refused response through unread', async () => {

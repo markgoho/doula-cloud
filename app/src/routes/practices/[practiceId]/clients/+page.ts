@@ -41,21 +41,21 @@ export interface ClientsListGate {
  * `apiFetch`, not `apiFetchWithSession`, for the reason the Invoices
  * load gives: that helper's 401 handling calls `goto()` mid-`load`.
  */
-async function hasAnyClientRecord(practiceId: string): Promise<boolean> {
+async function hasAnyClientRecord(practiceId: string, fetcher: typeof globalThis.fetch): Promise<boolean> {
 	try {
-		return await hasAnyClient(apiFetch, practiceId);
+		return await hasAnyClient((path, init) => apiFetch(path, init, fetcher), practiceId);
 	} catch {
 		return true;
 	}
 }
 
-export const load: PageLoad = async ({ params, parent }): Promise<ClientsListGate> => {
+export const load: PageLoad = async ({ params, parent, fetch }): Promise<ClientsListGate> => {
 	const { session } = await parent();
 	const isContractor = isAmbientContractor(session);
 	return {
 		isContractor,
 		isOwner: isOwner(session),
 		// A contractor Doula has no header link, so nothing turns on it.
-		hasAnyClient: isContractor ? Promise.resolve(true) : hasAnyClientRecord(params.practiceId)
+		hasAnyClient: isContractor ? Promise.resolve(true) : hasAnyClientRecord(params.practiceId, fetch)
 	};
 };

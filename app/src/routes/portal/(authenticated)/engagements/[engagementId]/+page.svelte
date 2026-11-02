@@ -14,10 +14,11 @@
 	 * still registered for #61's alerts.
 	 */
 	import { onMount } from 'svelte';
+	import { invalidate } from '$app/navigation';
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import { apiErrorMessage } from '#lib/apiErrorMessage.js';
+	import { PORTAL_ENGAGEMENT_DEPENDENCY, isEngagementReadNew } from '#lib/portalEngagementRead.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import {
 		clientActivityLedgerColumns,
@@ -76,8 +77,7 @@
 		lastMessage?: LastMessage;
 	};
 
-	let detail = $state<Detail | undefined>();
-	let error = $state('');
+	let detail = $state.raw<Detail | undefined>();
 
 	const label = $derived(
 		engagementLabel({ practiceName: page.data.practiceName, createdAt: page.data.createdAt })
@@ -116,7 +116,6 @@
 	 */
 	onMount(async () => {
 		const engagementId = page.params.engagementId!;
-		const detailRead = apiFetchWithSession(`/api/portal/engagements/${engagementId}`);
 		const listsRead = Promise.all([
 			(async () => {
 				try {
@@ -134,15 +133,12 @@
 			})()
 		]);
 
-		const response = await detailRead;
-		if (!response.ok) {
-			error = await apiErrorMessage(response);
-			return;
+		if (!isEngagementReadNew()) {
+			await invalidate(PORTAL_ENGAGEMENT_DEPENDENCY);
+			isEngagementReadNew();
 		}
-
-		const record: Detail = await response.json();
 		await listsRead;
-		detail = record;
+		detail = page.data as Detail;
 	});
 
 	const next = $derived(whatHappensNext(nextVisit(visits.items), detail?.dueDate, detail?.careEnded));
@@ -297,8 +293,7 @@
 				{ heading: 'Everything that has happened', content: activitySection }
 			]
 		: []}
-	loading={detail || error ? undefined : 'Loading your care'}
-	loadError={error || undefined}
+	loading={detail ? undefined : 'Loading your care'}
 />
 
 <style>

@@ -17,11 +17,14 @@ function membership(roles: string[], isContractor = false) {
 	};
 }
 
+const loadFetch = vi.fn();
+
 async function runLoad(roles: string[], isContractor = false) {
 	const parent = vi.fn().mockResolvedValue(membership(roles, isContractor));
 	const result = (await load({
 		params: { practiceId },
 		parent,
+		fetch: loadFetch,
 	} as unknown as Parameters<typeof load>[0])) as ClientsListGate;
 	return { result, parent };
 }
@@ -71,7 +74,9 @@ describe('whether the Practice holds a Client record (#1609)', () => {
 		await runLoad(['owner']);
 
 		expect(apiFetch).toHaveBeenCalledWith(
-			`/api/practices/${practiceId}/clients?all=true`
+			`/api/practices/${practiceId}/clients?all=true`,
+			undefined,
+			loadFetch
 		);
 	});
 

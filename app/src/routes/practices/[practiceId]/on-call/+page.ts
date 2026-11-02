@@ -31,10 +31,11 @@ export interface OnCallPageData {
 export const load: PageLoad = ({
 	params,
 	url,
+	fetch,
 }): { read: Promise<StreamedRead<OnCallPageData>> } => {
 	const range = rangeFromParameters(url.searchParams);
 	return {
-		read: mapRead(streamRead<Roster>(rosterPath(params.practiceId, range)), (roster) => ({
+		read: mapRead(streamRead<Roster>(rosterPath(params.practiceId, range), fetch), (roster) => ({
 			roster,
 			range,
 		})),

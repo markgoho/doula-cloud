@@ -120,9 +120,9 @@ const deleteSettingsPath = (practiceId: string) =>
  * she lands, and `/no-practice` is the fallback only once there truly is
  * nowhere else.
  */
-export const load: LayoutLoad = async ({ params, url, depends }): Promise<{ session: PracticeSession }> => {
+export const load: LayoutLoad = async ({ params, url, depends, fetch }): Promise<{ session: PracticeSession }> => {
 	depends(PRACTICE_SESSION_DEPENDENCY);
-	const response = await apiFetch(`/api/practices/${params.practiceId}/session`);
+	const response = await apiFetch(`/api/practices/${params.practiceId}/session`, {}, fetch);
 
 	const returnTo = `${url.pathname}${url.search}`;
 	if (response.status === 401) {
@@ -135,7 +135,7 @@ export const load: LayoutLoad = async ({ params, url, depends }): Promise<{ sess
 		// stale Membership.
 		redirect(303, agreementPath(params.practiceId));
 	} else if (response.status === 403 || response.status === 404) {
-		await redirectAwayFromStalePractice(returnTo);
+		await redirectAwayFromStalePractice(returnTo, fetch);
 	} else if (!response.ok) {
 		error(response.status, await apiErrorMessage(response));
 	}
@@ -190,8 +190,8 @@ export const load: LayoutLoad = async ({ params, url, depends }): Promise<{ sess
  * refused it. Always throws -- either a redirect to where she still
  * belongs, or to `/no-practice` once there is nowhere left.
  */
-async function redirectAwayFromStalePractice(returnTo: string): Promise<never> {
-	const staffResponse = await apiFetch('/api/staff/session');
+async function redirectAwayFromStalePractice(returnTo: string, fetcher: typeof globalThis.fetch): Promise<never> {
+	const staffResponse = await apiFetch('/api/staff/session', {}, fetcher);
 
 	if (staffResponse.status === 401) {
 		redirect(303, staffLoginAfterRefusal(returnTo));

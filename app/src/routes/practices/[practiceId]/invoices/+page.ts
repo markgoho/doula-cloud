@@ -16,7 +16,8 @@ import type { PageLoad } from './$types';
  */
 export const load: PageLoad = ({
 	params,
-	url
+	url,
+	fetch
 }): { read: Promise<StreamedRead<PracticeInvoiceListData>> } => {
 	// #768: the overdue narrowing is a link, not a control the page holds
 	// in memory -- the URL is the state, so it survives a reload, a back
@@ -26,7 +27,7 @@ export const load: PageLoad = ({
 	const isNarrowedToOverdue = url.searchParams.get('overdue') === 'true';
 	const path = practiceInvoicesPath(params.practiceId, undefined, isNarrowedToOverdue);
 	return {
-		read: mapRead(streamRead<PracticeInvoicePage>(path), (invoices) => ({
+		read: mapRead(streamRead<PracticeInvoicePage>(path, fetch), (invoices) => ({
 			...invoices,
 			isNarrowedToOverdue
 		}))

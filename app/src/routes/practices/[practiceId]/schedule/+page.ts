@@ -46,12 +46,13 @@ export interface SchedulePageData {
 export const load: PageLoad = async ({
 	params,
 	url,
-	parent
+	parent,
+	fetch
 }): Promise<{ read: Promise<StreamedRead<SchedulePageData>> }> => {
 	const { session } = await parent();
 	const filters = scheduleFiltersFromParameters(url.searchParams);
-	const schedule = streamRead<CursorPage<ScheduledVisit>>(practiceSchedulePath(params.practiceId, filters));
-	const doulas = isOwnerOrAdmin(session) ? loadDoulaOptions(params.practiceId) : noDoulas();
+	const schedule = streamRead<CursorPage<ScheduledVisit>>(practiceSchedulePath(params.practiceId, filters), fetch);
+	const doulas = isOwnerOrAdmin(session) ? loadDoulaOptions(params.practiceId, fetch) : noDoulas();
 	return {
 		read: mapRead(bothRead(schedule, doulas), ([page, doulas]) => ({ page, filters, doulas }))
 	};
@@ -65,8 +66,8 @@ export const load: PageLoad = async ({
  * nothing. `staff.ts` owns the reduction (#268) -- this screen's filter
  * and the Engagement page's Visit pickers offer the same people.
  */
-function loadDoulaOptions(practiceId: string): Promise<StreamedRead<LabeledValue[]>> {
-	return mapRead(streamRead<Roster>(staffPath(practiceId)), (roster) =>
+function loadDoulaOptions(practiceId: string, fetcher: typeof globalThis.fetch): Promise<StreamedRead<LabeledValue[]>> {
+	return mapRead(streamRead<Roster>(staffPath(practiceId), fetcher), (roster) =>
 		doulaOptions(doulasOf(roster))
 	);
 }
