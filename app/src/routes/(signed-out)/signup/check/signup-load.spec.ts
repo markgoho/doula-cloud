@@ -27,6 +27,17 @@ describe('/signup +page.ts load (#1824)', () => {
 		expect(String(fetchMock.mock.calls[0]?.[0])).toMatch(/\/api\/legal\/coming$/);
 	});
 
+	// #2590: through the fetch that load is passed, not the window's.
+	it("reads through the fetch that load is passed, not the window's", async () => {
+		const { fetchMock } = setup(async () => jsonResponse({ coming }));
+		const loadFetch = vi.fn(async () => jsonResponse({ coming }));
+
+		await pageLoad({ fetch: loadFetch } as unknown as Parameters<typeof pageLoad>[0]);
+
+		expect(loadFetch).toHaveBeenCalledOnce();
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
 	/*
 	 * The form must name what the press records, so it is not drawn
 	 * without the read: a BFF that cannot answer it cannot take the
