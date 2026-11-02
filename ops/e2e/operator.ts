@@ -23,7 +23,8 @@ export async function signedInOperator(
 		}
 	);
 	expect(created.ok()).toBe(true);
-	seedOperatorRow((await created.json()).localId, displayName, email);
+	const { localId } = await created.json();
+	seedOperatorRow(localId, displayName, email);
 	await stubTotpFactor(page, request);
 	await page.goto('/sign-in');
 	await page.getByLabel('Email address').fill(email);

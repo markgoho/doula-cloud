@@ -13,7 +13,7 @@ import { STUB_TOTP_CODE, stubTotpFactor } from '../../app/e2e/totpStub';
 
 const password = 'operator-walk-password';
 
-async function newOperatorLogin(request: APIRequestContext, name: string, listed = true): Promise<string> {
+async function newOperatorLogin(request: APIRequestContext, name: string, isListed = true): Promise<string> {
 	const email = `operator-${crypto.randomUUID()}@doula-cloud.invalid`;
 	const created = await request.post(
 		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/projects/doula-cloud/tenants/${OPS_TENANT_ID}/accounts`,
@@ -23,7 +23,8 @@ async function newOperatorLogin(request: APIRequestContext, name: string, listed
 		}
 	);
 	expect(created.ok()).toBe(true);
-	if (listed) seedOperatorRow((await created.json()).localId, name, email);
+	const { localId } = await created.json();
+	if (isListed) seedOperatorRow(localId, name, email);
 	return email;
 }
 
