@@ -50,6 +50,11 @@ export interface PracticeSession {
 	// it; it is optional so the route fixtures that predate it need not
 	// restate it, and only `false` narrows the bar.
 	hasClients?: boolean;
+	// #2675: whether anyone besides her holds the Doula role at this
+	// Practice. The Clients list draws "Only my Clients" only where it can
+	// change the list. This load always sets it; only `false` hides the
+	// switch.
+	hasOtherDoulas?: boolean;
 	// #2293: whether Clients can pay this Practice through Stripe (#270),
 	// so the Invoices list draws its Notice above the rows on the first
 	// frame. This load always sets it; only `false` draws the Notice.
@@ -149,6 +154,7 @@ export const load: LayoutLoad = async ({ params, url, depends, fetch }): Promise
 		secondFactor: boolean;
 		agreementDue?: DueVersion[];
 		hasClients: boolean;
+		hasOtherDoulas: boolean;
 		clientsCanPay: boolean;
 		billingMode?: BillingMode;
 	} = await response.json();
@@ -179,6 +185,7 @@ export const load: LayoutLoad = async ({ params, url, depends, fetch }): Promise
 			secondFactor: body.secondFactor,
 			agreementDue: body.agreementDue,
 			hasClients: body.hasClients,
+			hasOtherDoulas: body.hasOtherDoulas,
 			clientsCanPay: body.clientsCanPay,
 			billingMode: body.billingMode
 		}

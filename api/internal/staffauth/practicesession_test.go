@@ -130,6 +130,47 @@ func TestPracticeSessionHandler_HasClients(t *testing.T) {
 	}
 }
 
+// TestPracticeSessionHandler_HasOtherDoulas proves HasOtherDoulas (#2675)
+// is false for the Practice's only Doula, and true for an Admin beside her
+// and for her once a second Doula joins.
+func TestPracticeSessionHandler_HasOtherDoulas(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "practice-session-other-doulas-owner"
+	const adminUID = "practice-session-other-doulas-admin"
+	const secondUID = "practice-session-other-doulas-second"
+	practiceID := testdb.SeedPractice(t, db, "Other Doulas Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, ownerUID, []string{ownerRole, doulaRole}, employeeType)
+	testdb.SeedStaffAtPractice(t, db, practiceID, adminUID, []string{adminRole}, employeeType)
+
+	srv, ownerSession := newPracticeSessionServer(t, db, ownerUID)
+	defer srv.Close()
+	adminSession := authntest.SeedSession(t, db.App, adminUID)
+
+	read := func(session string) staffauth.PracticeSessionResponse {
+		t.Helper()
+		resp := getPracticeSession(t, srv, session, practiceID)
+		defer resp.Body.Close()
+		var out staffauth.PracticeSessionResponse
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		return out
+	}
+
+	if read(ownerSession).HasOtherDoulas {
+		t.Fatal("hasOtherDoulas = true for the only Doula, want false")
+	}
+	if !read(adminSession).HasOtherDoulas {
+		t.Fatal("hasOtherDoulas = false for an Admin beside a Doula, want true")
+	}
+
+	testdb.SeedStaffAtPractice(t, db, practiceID, secondUID, []string{doulaRole}, contractorType)
+
+	if !read(ownerSession).HasOtherDoulas {
+		t.Fatal("hasOtherDoulas = false once a second Doula joins, want true")
+	}
+}
+
 // TestPracticeSessionHandler_ClientsCanPay proves ClientsCanPay (#2293)
 // is cardpayments.ClientsCanPay's fact: false until the Practice's card
 // payments capability is active, then true.

@@ -33,6 +33,8 @@ export interface ClientsListGate {
 	isOwner: boolean;
 	// Whether she holds the Doula role, which decides whether "Only my Clients" is drawn (#2624).
 	isDoula: boolean;
+	// Whether anyone else holds the Doula role, without which the switch changes nothing (#2675).
+	hasOtherDoulas: boolean;
 	// Whether the Practice holds any Client record at all.
 	hasAnyClient: Promise<boolean>;
 }
@@ -58,6 +60,7 @@ export const load: PageLoad = async ({ params, parent, fetch }): Promise<Clients
 		isContractor,
 		isOwner: isOwner(session),
 		isDoula: isDoula(session),
+		hasOtherDoulas: session.hasOtherDoulas !== false,
 		// A contractor Doula has no header link, so nothing turns on it.
 		hasAnyClient: isContractor ? Promise.resolve(true) : hasAnyClientRecord(params.practiceId, fetch)
 	};
