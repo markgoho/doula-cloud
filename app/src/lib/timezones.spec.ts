@@ -45,6 +45,13 @@ describe('timezoneOptions', () => {
 });
 
 describe('zoneLabel', () => {
+	it('reads each of the seven the label the Timezone question offers', () => {
+		for (const zone of US_TIMEZONES) {
+			expect(zoneLabel(zone.value)).toBe(zone.label);
+		}
+		expect(zoneLabel('America/Phoenix')).toBe('Mountain time, no daylight saving (Phoenix)');
+	});
+
 	it('names a zone outside the seven the way the seven are named, by its common name and city', () => {
 		expect(zoneLabel('America/Indiana/Indianapolis')).toBe('Eastern time (Indianapolis)');
 		expect(zoneLabel('America/Argentina/Buenos_Aires')).toBe('Argentina Standard time (Buenos Aires)');

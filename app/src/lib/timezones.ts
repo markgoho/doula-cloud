@@ -105,7 +105,10 @@ export function timezoneOptions(current: string): readonly LabeledValue[] {
 }
 
 /**
- * A zone outside the seven, in the seven's own shape: its common name and
+ * The one place a zone gets its label. A zone in the seven reads the
+ * label the Timezone question offered, so Phoenix reads "Mountain time,
+ * no daylight saving (Phoenix)" wherever it is shown (#2589). A zone
+ * outside them is named in the seven's own shape: its common name and
  * its city, "Eastern time (Indianapolis)" for `America/Indiana/Indianapolis`
  * (#2023). The name is `Intl`'s generic one, which does not change with
  * daylight saving, so the label reads the same all year and needs no
@@ -118,6 +121,8 @@ export function timezoneOptions(current: string): readonly LabeledValue[] {
  * the true answer.
  */
 export function zoneLabel(zone: string): string {
+	const listed = US_TIMEZONES.find((entry) => entry.value === zone);
+	if (listed) return listed.label;
 	let name: string | undefined;
 	try {
 		name = new Intl.DateTimeFormat('en-US', { timeZone: zone, timeZoneName: 'longGeneric' })
