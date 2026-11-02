@@ -11,7 +11,6 @@ import (
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/dbpool"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -61,7 +60,8 @@ func beginRequest(t *testing.T, db *testdb.DB, setup func(*http.Request)) (*http
 
 	tx, uid, _, ok := authn.Begin(rec, req, db.App, authn.TierStaff)
 	if ok {
-		t.Cleanup(func() { _ = tx.Rollback() })
+		// Released now: the pool holds one connection, and no caller reads through tx.
+		_ = tx.Rollback()
 	}
 	return rec, uid, ok
 }
@@ -180,7 +180,7 @@ func TestBegin_SessionCookie_RenewsPastHalfLife(t *testing.T) {
 	// AC: renewal extends the one session rather than minting a second
 	// one. Asserted on the store, not on the cookie's value -- a re-mint
 	// would leave the original row live alongside a new one.
-	if got := authntest.CountFor(t, db.App, testUID); got != 1 {
+	if got := authntest.CountFor(t, db.Admin, testUID); got != 1 {
 		t.Errorf("session rows for %s = %d, want 1 -- renewal minted a new session instead of extending", testUID, got)
 	}
 }
@@ -306,7 +306,8 @@ func bootstrapRequest(t *testing.T, db *testdb.DB, verifier authn.Verifier, setu
 
 	tx, verified, ok := authn.BeginBootstrap(rec, req, verifier, db.App)
 	if ok {
-		t.Cleanup(func() { _ = tx.Rollback() })
+		// Released now: the pool holds one connection, and no caller reads through tx.
+		_ = tx.Rollback()
 	}
 	return rec, verified.UID, ok
 }
@@ -553,7 +554,7 @@ func TestBegin_ConcurrentRenewalsDoNotBlock(t *testing.T) {
 	stale := time.Now().Add(-7 * time.Hour)
 	first := authntest.SeedSessionAt(t, db.App, "first-browser", stale)
 	second := authntest.SeedSessionAt(t, db.App, "second-browser", stale)
-	dbpool.Apply(db.App)
+	db.OptOutOfOneConnectionPool("a request transaction is held open while a second request renews on another connection, which is the hazard under test")
 
 	firstTx, _, _, ok := authn.Begin(httptest.NewRecorder(), requestWithSession(t.Context(), first), db.App, authn.TierStaff)
 	if !ok {

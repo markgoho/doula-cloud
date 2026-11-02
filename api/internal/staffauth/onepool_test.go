@@ -26,8 +26,6 @@ func TestMiddleware_CompletesOnAOneConnectionPool(t *testing.T) {
 	defer srv.Close()
 	session := authntest.SeedSessionAt(t, db.App, identityUID, time.Now().Add(-7*time.Hour))
 
-	db.App.SetMaxOpenConns(1)
-
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pingURL(srv, practiceID), nil)
@@ -102,8 +100,6 @@ func TestMiddleware_CompletesOnAOneConnectionPoolWithTheStackClock(t *testing.T)
 	srv := httptest.NewServer(clock.Middleware(now)(mux))
 	defer srv.Close()
 	session := authntest.SeedSessionAt(t, db.App, identityUID, time.Now().Add(-7*time.Hour))
-
-	db.App.SetMaxOpenConns(1)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()

@@ -111,6 +111,7 @@ func TestProcessOutbox_OverlappingRunsDispatchOnce(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedHostedPage(t, db, "Rochester Doulas", "rochester-doulas")
 	queueRebuild(t, db, practiceID, 120)
+	db.OptOutOfOneConnectionPool("two outbox runs hold a transaction each at the same time, which is the overlap under test")
 	dispatcher := &fakeDispatcher{}
 	worker := sitebuild.Worker{Dispatcher: dispatcher, Now: fixedNow}
 

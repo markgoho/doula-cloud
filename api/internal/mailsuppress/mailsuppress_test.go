@@ -163,7 +163,6 @@ func TestSender_ReadsThroughTheWorkersTransactionOnAOneConnectionPool(t *testing
 	if err := mailsuppress.Record(t.Context(), db.App, "worker@example.test", mailsuppress.CauseComplaint, "evt-1"); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
-	db.App.SetMaxOpenConns(1)
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatalf("begin: %v", err)

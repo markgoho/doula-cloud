@@ -25,7 +25,8 @@ func beginAs(t *testing.T, db *testdb.DB, token string, want authn.Tier) (*httpt
 
 	tx, uid, _, ok := authn.Begin(rec, req, db.App, want)
 	if ok {
-		t.Cleanup(func() { _ = tx.Rollback() })
+		// Released now: the pool holds one connection, and no caller reads through tx.
+		_ = tx.Rollback()
 	}
 	return rec, uid, ok
 }

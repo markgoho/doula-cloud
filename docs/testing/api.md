@@ -26,6 +26,8 @@ Moving either one usually means fixing what the new version reports in the same 
 
 `api/internal/testdb` uses testcontainers-go to start **one** real, disposable Postgres container per test *process* (`go test` forks one process per package), applies the goose migrations (`api/db/migrations`) once into a template database, and then hands each call to `testdb.New(t)` a fresh database cloned from that template — a file copy, not a migration replay. It hands back a `*testdb.DB` with three connections: `Admin` (the superuser the migrations ran as, for fixture setup), `App` (a low-privilege `app_runtime`-derived role, the one the running application actually connects as) and `Ops` (an `ops_runtime`-derived role, the one `doula-ops` connects as, ADR-0062). Postgres superusers and table owners always bypass Row-Level Security, so tests that need to observe RLS in effect — not just assume it — must query through `App`, not `Admin`.
 
+`App` is capped at **one** connection, because production holds one pool connection per request and a request that takes a second while holding the first hangs ([#2491](https://github.com/markgoho/doula-cloud/issues/2491)). A test or helper that opens a second transaction or query on `App` while one is still open hangs until the test timeout: read through the open transaction, use `Admin` for assertions made while a request transaction is held, or run the steps in sequence. A test that needs two connections on purpose calls `db.OptOutOfOneConnectionPool("<reason>")`, and the reason goes in that call.
+
 Every package that calls `testdb.New` must define a `TestMain` that hands off to `testdb.Main`, so the shared container is terminated once at process exit rather than leaked or torn down mid-run:
 
 ```go
