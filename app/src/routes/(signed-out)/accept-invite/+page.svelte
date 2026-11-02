@@ -315,7 +315,7 @@
 			<LabeledField
 				id={passwordId}
 				label={isNew ? 'Create a password' : 'Password'}
-				hint={isNew ? PASSWORD_HINT : undefined}
+				hint={isNew ? PASSWORD_HINT : 'The one you already use to sign in to DoulaCloud'}
 				error={submission.errorFor(passwordId)}
 			>
 				{#snippet children({ id, describedBy, invalid })}
