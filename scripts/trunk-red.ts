@@ -291,6 +291,30 @@ function awaitingApply(jobs: Job[] | null): string {
   ].join('\n\n');
 }
 
+/**
+ * The newest closed alarm of one workflow that recorded this commit as
+ * failing, in its body or in a comment. A rerun of a run whose alarm a
+ * later green run closed fails on the same commit, and it belongs on that
+ * issue and not on a second one (#2681).
+ */
+function closedAlarmFor(workflowPath: string, sha: string): Issue | undefined {
+  const issues = api(
+    `repos/${repo}/issues?labels=${LABEL}&state=closed&per_page=30`
+  ) as Issue[];
+  return issues
+    .filter(
+      (issue) =>
+        !issue.pull_request && (issue.body ?? '').includes(marker(workflowPath))
+    )
+    .find((issue) => {
+      if ((issue.body ?? '').includes(shaMarker(sha))) return true;
+      const comments = api(
+        `repos/${repo}/issues/${issue.number}/comments?per_page=100`
+      ) as { body: string | null }[];
+      return comments.some((c) => (c.body ?? '').includes(shaMarker(sha)));
+    });
+}
+
 function openOrUpdate(): void {
   const jobs = readJobs(run);
   const how =
@@ -318,6 +342,13 @@ function openOrUpdate(): void {
   if (existing) {
     api(`repos/${repo}/issues/${existing.number}/comments`, 'POST', { body });
     wrote(`commented on existing #${existing.number}`);
+    return;
+  }
+  const closed = closedAlarmFor(path, run.head_sha);
+  if (closed) {
+    api(`repos/${repo}/issues/${closed.number}`, 'PATCH', { state: 'open' });
+    api(`repos/${repo}/issues/${closed.number}/comments`, 'POST', { body });
+    wrote(`reopened #${closed.number}`);
     return;
   }
   const where = isPush
