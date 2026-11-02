@@ -120,10 +120,10 @@ describe('Notice.svelte', () => {
 	});
 
 	// For a Notice that reports the result of a control which is gone once
-	// pressed (#1598's "Put me on this Engagement", the Feedback drawer):
+	// pressed (#1598's "Put me on this work", the Feedback drawer):
 	// focus lands on the result and not on the document.
 	it('takes focus when it appears, where it is asked to', async () => {
-		await setup({ message: 'You are on this Engagement.', variant: 'status', isFocusedOnAppear: true });
+		await setup({ message: 'You are on this work.', variant: 'status', isFocusedOnAppear: true });
 
 		await expect.element(page.getByRole('status')).toHaveFocus();
 	});

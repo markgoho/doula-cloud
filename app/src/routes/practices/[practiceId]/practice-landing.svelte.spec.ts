@@ -197,7 +197,7 @@ describe('the Practice landing page', () => {
 	// #455: the roll-up of Engagements whose thread's latest Message came
 	// from the Client, in the primary column alongside Offers -- "who is
 	// waiting on me" is the same question, for any Staff role.
-	it('shows the Engagements waiting on a reply, linking through to each one', async () => {
+	it('shows the Clients waiting on a reply, linking through to each one', async () => {
 		await setup({
 			overrides: {
 				'awaiting-reply': jsonResponse({

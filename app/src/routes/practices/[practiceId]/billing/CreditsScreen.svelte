@@ -126,7 +126,7 @@
 	-->
 	<Text text="Practices buy Credits from DoulaCloud." />
 	<Text
-		text="One Credit covers one Engagement — a single Client relationship centered on one baby, from intake through the end of care."
+		text="One Credit covers one piece of work with a Client, birth or postpartum, from intake to the end of care."
 	/>
 	<Text text={`One Credit costs ${unitPrice}.`} />
 	{#if comingPrice}
@@ -148,7 +148,7 @@
 	/>
 
 	{#if approvalReturn}
-		<Link href={approvalReturn} label="Back to the Engagement Request you were deciding" />
+		<Link href={approvalReturn} label="Back to the request you were deciding" />
 	{/if}
 
 	{#if checkoutStatus === 'success'}

@@ -57,14 +57,14 @@ async function setup(pageData: SchedulePageData = data) {
 }
 
 describe('a booked Visit whose Doula was taken off (#2596)', () => {
-	it('reads "No longer on this Engagement" beside her name', async () => {
+	it('reads "No longer on this work" beside her name', async () => {
 		await setup({
 			...data,
 			page: { ...schedulePage, items: [{ ...earlierVisit, isOffEngagement: true }, laterVisit] }
 		});
 
 		await expect
-			.element(testPage.getByRole('cell', { name: `${earlierVisit.staffName} (No longer on this Engagement)`, exact: true }))
+			.element(testPage.getByRole('cell', { name: `${earlierVisit.staffName} (No longer on this work)`, exact: true }))
 			.toBeVisible();
 	});
 });

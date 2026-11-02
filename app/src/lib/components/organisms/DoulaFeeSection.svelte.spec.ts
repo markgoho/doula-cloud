@@ -72,7 +72,7 @@ describe('DoulaFeeSection', () => {
 	it('says so when no Doula has a fee', async () => {
 		await setup({ fees: [] });
 
-		await expect.element(page.getByText('No Doula on this Engagement has an agreed fee.').first()).toBeVisible();
+		await expect.element(page.getByText('No Doula on this work has an agreed fee.').first()).toBeVisible();
 	});
 
 	it('records the whole fee as paid, then says what it wrote', async () => {

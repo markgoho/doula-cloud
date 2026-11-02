@@ -138,10 +138,10 @@ test('A solo Owner who is a contractor Doula is named on the Start work form, an
 	await expect(page.getByText('No Doula yet', { exact: true })).toBeVisible();
 	// #1998: behind the Doula row's Change in the summary card.
 	await page.locator('dt', { hasText: /^Doulas?$/ }).locator('..').getByRole('button', { name: 'Change', exact: true }).click();
-	await page.getByRole('button', { name: 'Put me on this Engagement' }).click();
+	await page.getByRole('button', { name: 'Put me on this work' }).click();
 
-	await expect(page.getByText('You are on this Engagement.')).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Put me on this Engagement' })).toHaveCount(0);
+	await expect(page.getByText('You are on this work.')).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Put me on this work' })).toHaveCount(0);
 	// The audit trail: who, in the ledger's own sentence. DataTable draws
 	// the row in both of its trees, and which one shows depends on the
 	// width (#1945), so the visible copy.
@@ -150,7 +150,7 @@ test('A solo Owner who is a contractor Doula is named on the Start work form, an
 	// And it holds on a fresh read: she is the Doula, and there is no control.
 	await page.reload();
 	await expect(page.getByText('Put on this Engagement as the Doula: Jamie Owner').filter({ visible: true }).first()).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Put me on this Engagement' })).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Put me on this work' })).toHaveCount(0);
 	await expect(page.getByText('No Doula yet', { exact: true })).toHaveCount(0);
 
 	// The Start work form, for a second Client: she is the only Doula at
@@ -218,10 +218,10 @@ test('A solo Owner puts herself on an Engagement that started with no Doula', as
 
 	// #1998: behind the Doula row's Change in the summary card.
 	await page.locator('dt', { hasText: /^Doulas?$/ }).locator('..').getByRole('button', { name: 'Change', exact: true }).click();
-	await page.getByRole('button', { name: 'Put me on this Engagement' }).click();
+	await page.getByRole('button', { name: 'Put me on this work' }).click();
 
-	await expect(page.getByText('You are on this Engagement.')).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Put me on this Engagement' })).toHaveCount(0);
+	await expect(page.getByText('You are on this work.')).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Put me on this work' })).toHaveCount(0);
 	await expect(page.getByText('No Doula yet', { exact: true })).toHaveCount(0);
 	// The audit trail: who, in the ledger's own sentence. DataTable draws
 	// the row in both of its trees, and which one shows depends on the
@@ -231,6 +231,6 @@ test('A solo Owner puts herself on an Engagement that started with no Doula', as
 	// And it holds on a fresh read: she is the Doula, and there is no control.
 	await page.reload();
 	await expect(page.getByText('Put on this Engagement as the Doula: Jamie Owner').filter({ visible: true }).first()).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Put me on this Engagement' })).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Put me on this work' })).toHaveCount(0);
 	await expect(page.getByText('No Doula yet', { exact: true })).toHaveCount(0);
 });

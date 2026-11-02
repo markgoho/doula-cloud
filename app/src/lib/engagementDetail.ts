@@ -119,7 +119,7 @@ export interface EngagementSummary {
 	 * (#1598): she is a Doula whom no Offer has to attach (an employee, or
 	 * a holder of Owner or Admin under each Employment type, #1625), the
 	 * Engagement has not completed, and she is not on it. The hub draws
-	 * "Put me on this Engagement" off this and holds no copy of the rule,
+	 * "Put me on this work" off this and holds no copy of the rule,
 	 * the arrangement `statusMoves` has with the status endpoint. */
 	canAttachSelf: boolean;
 	/** The reader's own agreed fee on this Engagement (#2003): the fee an
@@ -268,7 +268,7 @@ export function takeOffWords(doula: AttachedDoula, isSelf: boolean): { title: st
 			? ''
 			: ` ${doula.name}'s ${doula.bookedVisits} booked ${doula.bookedVisits === 1 ? 'Visit stays' : 'Visits stay'} with ${doula.name} until you reassign ${doula.bookedVisits === 1 ? 'it' : 'them'}.`;
 	return {
-		title: `Take ${doula.name} off this Engagement?`,
+		title: `Take ${doula.name} off this work?`,
 		consequence: `${isSelf ? '' : `We will email ${doula.name} to say so.`}${booked}`.trim() || `${doula.name} can be put back on later.`,
 		confirm: `Take ${doula.name} off`
 	};
@@ -282,7 +282,7 @@ export function takenOffMessage(doula: AttachedDoula, isSelf: boolean): string {
 		doula.bookedVisits === 0
 			? ''
 			: ` ${doula.bookedVisits} booked ${doula.bookedVisits === 1 ? 'Visit is' : 'Visits are'} still ${doula.name}'s: reassign ${doula.bookedVisits === 1 ? 'it' : 'each one'} under Visits.`;
-	return `${doula.name} is off this Engagement.${isSelf ? '' : ` We emailed ${doula.name} to say so.`}${left}`;
+	return `${doula.name} is off this work.${isSelf ? '' : ` We emailed ${doula.name} to say so.`}${left}`;
 }
 
 /** What the hub says to "Mark care complete" while no birth outcome is
@@ -297,7 +297,7 @@ export const OUTCOME_BEFORE_COMPLETION =
  * row, so reopening comes first. The same words as the BFF's own refusal
  * (engagement.MsgOutcomeKeptOnCompleted), which a stale page still meets. */
 export const OUTCOME_KEPT_ON_COMPLETED =
-	'A completed Engagement keeps its birth outcome. Reopen it first, then remove the record.';
+	'Completed work keeps its birth outcome. Reopen it first, then remove the record.';
 
 /** ADR-0015's six named reasons a completed Engagement may carry, in the
  * order the hub's radio group offers them. */
@@ -307,7 +307,7 @@ export const endingReasons: { value: string; label: string }[] = [
 	{ value: 'practice_ended', label: 'The Practice ended it' },
 	{ value: 'transferred', label: 'The Client moved to another provider' },
 	{ value: 'no_response', label: 'The Client stopped answering' },
-	{ value: 'entered_in_error', label: 'This Engagement should never have existed' }
+	{ value: 'entered_in_error', label: 'Added by mistake' }
 ];
 
 export interface Visit {
@@ -335,7 +335,7 @@ export interface Visit {
 
 /** What Staff screens say beside a booked Visit whose Doula was taken off
  * its Engagement (#2596). */
-export const NO_LONGER_ON_THIS_ENGAGEMENT = 'No longer on this Engagement';
+export const NO_LONGER_ON_THIS_ENGAGEMENT = 'No longer on this work';
 
 /** A Visit's Doula as a Staff list names her: her name, and the flag where
  * she is no longer on the Engagement. */
@@ -561,7 +561,7 @@ export const BIRTH_OUTCOMES: readonly { value: string; label: string; descriptio
 	{
 		value: 'loss',
 		label: 'The pregnancy ended without a living baby',
-		description: 'Care after a loss continues on this same Engagement.'
+		description: 'Care after a loss carries on here, as the same work.'
 	},
 	{
 		value: 'unknown',

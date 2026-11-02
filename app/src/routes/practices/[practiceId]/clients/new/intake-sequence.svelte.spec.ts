@@ -282,9 +282,9 @@ describe('the duplicate check', () => {
 		await expect
 			.element(busiest!)
 			.toHaveAccessibleDescription(
-				/^Added Nov 14, 2023 · 2 Engagements · most recent ended Jun 12, 2026\s*Keeps this record\. You check any changes before they are saved\.$/
+				/^Added Nov 14, 2023 · Birth, Postpartum · most recent ended Jun 12, 2026\s*Keeps this record\. You check any changes before they are saved\.$/
 			);
-		await expect.element(empty!).toHaveAccessibleDescription(/^Added Oct 20, 2026 · No Engagements yet\s*Keeps this record\./);
+		await expect.element(empty!).toHaveAccessibleDescription(/^Added Oct 20, 2026 · No work started yet\s*Keeps this record\./);
 		await expect.element(testPage.getByText(/Records are never merged here/)).not.toBeInTheDocument();
 	});
 

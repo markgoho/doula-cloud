@@ -249,19 +249,19 @@
 		}
 		const request = entry.engagementRequest;
 		const label = kindLabel(request.kind);
-		if (entry.act === 'asked') return `${label} Engagement requested`;
+		if (entry.act === 'asked') return `${label} work requested`;
 		switch (request.state) {
 			case 'approved': {
-				return `${label} Engagement approved`;
+				return `${label} work approved`;
 			}
 			case 'refused': {
-				return `${label} Engagement refused${request.reason ? `: ${request.reason}` : ''}`;
+				return `${label} work refused${request.reason ? `: ${request.reason}` : ''}`;
 			}
 			case 'withdrawn': {
-				return `${label} Engagement request withdrawn`;
+				return `${label} work request withdrawn`;
 			}
 			default: {
-				return `${label} Engagement request`;
+				return `${label} work request`;
 			}
 		}
 	}
@@ -307,7 +307,7 @@
 		withdrawingRequestId = request.requestId;
 		try {
 			await withdrawRequest(apiFetchWithSession, page.params.practiceId!, request.requestId);
-			withdrawnConfirmation = `${kindLabel(request.kind)} Engagement request withdrawn`;
+			withdrawnConfirmation = `${kindLabel(request.kind)} work request withdrawn`;
 			// #2280: read back rather than flipped in place, so the History's
 			// withdrawal row carries the time the BFF recorded it, as
 			// handleErase does for the same reason.
@@ -355,7 +355,7 @@
 	// Names {name} throughout rather than "her" -- #463's voice rule,
 	// checked by copy.pronoun.usage.spec.ts.
 	function eraseConsequence(): string {
-		return `This permanently erases ${name}'s name, email, phone, address and date of birth. ${name}'s Engagements, Contracts, Invoices and Visits stay in your Practice's financial and clinical record. Stripe can't erase a payment record until 90 days after its Invoice. Messages, signed Contracts and Plan Instance answers keep their words as written, even where they name ${name}. This cannot be undone.`;
+		return `This permanently erases ${name}'s name, email, phone, address and date of birth. ${name}'s work, Contracts, Invoices and Visits stay in your Practice's financial and clinical record. Stripe can't erase a payment record until 90 days after its Invoice. Messages, signed Contracts and Plan Instance answers keep their words as written, even where they name ${name}. This cannot be undone.`;
 	}
 
 	// Re-fetches the Client rather than merging ErasureResponse's own
@@ -459,7 +459,7 @@
 			<cluster-l space="var(--space-3)" align="center">
 				<Notice
 					variant="info"
-					message="{kindLabel(request.kind)} Engagement requested by {request.requestedByName} on {formattedDate(
+					message="{kindLabel(request.kind)} work requested by {request.requestedByName} on {formattedDate(
 						request.requestedAt
 					)}"
 				/>
@@ -630,7 +630,7 @@
 				engagementId: row.engagementId
 			})}
 		hasMore={false}
-		emptyMessage="No Engagements yet."
+		emptyMessage="No work started yet."
 	/>
 {/snippet}
 
@@ -724,7 +724,7 @@
 				{ heading: `How to reach ${name}`, content: contactSection },
 				{ heading: `Where ${name} lives`, content: addressSection },
 				{ heading: `What else ${practiceName} asks`, content: practiceQuestionsSection },
-				{ heading: 'Engagements', content: engagementsSection },
+				{ heading: 'Work', content: engagementsSection },
 				{ heading: 'History', content: historySection },
 				...eraseSections
 			]

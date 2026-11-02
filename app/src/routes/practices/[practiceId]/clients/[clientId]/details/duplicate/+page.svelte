@@ -257,7 +257,7 @@
 					<Text
 						step="body-sm"
 						tone="muted"
-						text="Choosing an existing Client combines the two records into one. Engagements, requests and portal access move to the record that is kept, and the other record stops appearing anywhere."
+						text="Choosing an existing Client combines the two records into one. Work, requests and portal access move to the record that is kept, and the other record stops appearing anywhere."
 					/>
 					<Notice
 						variant="info"

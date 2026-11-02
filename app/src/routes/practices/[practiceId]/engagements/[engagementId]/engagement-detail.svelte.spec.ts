@@ -673,11 +673,11 @@ describe('the status-move controls (#253)', () => {
 		// role="alert" (the same disambiguation the sibling
 		// engagement-requests/new spec uses for its own refusal).
 		await expect
-			.element(testPage.getByRole('link', { name: 'Select why this Engagement is ending' }))
+			.element(testPage.getByRole('link', { name: 'Select why care is ending' }))
 			.toBeVisible();
 		await expect
 			.element(testPage.getByRole('alert').last())
-			.toHaveTextContent('Select why this Engagement is ending');
+			.toHaveTextContent('Select why care is ending');
 		expect(requests).toHaveLength(0);
 	});
 
@@ -722,7 +722,7 @@ describe('the status-move controls (#253)', () => {
 		await testPage.getByRole('button', { name: 'Confirm completion' }).click();
 
 		await expect
-			.element(testPage.getByRole('link', { name: 'Select why this Engagement is ending' }))
+			.element(testPage.getByRole('link', { name: 'Select why care is ending' }))
 			.toBeVisible();
 		expect(document.documentElement.scrollWidth).toBe(document.documentElement.clientWidth);
 	});
@@ -765,7 +765,7 @@ describe('the status-move controls (#253)', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: 'Record what happened' }))
 			.toHaveAttribute('href', '#birth-outcome');
-		expect(testPage.getByRole('radiogroup', { name: 'Why is this Engagement ending?' }).elements()).toHaveLength(0);
+		expect(testPage.getByRole('radiogroup', { name: 'Why is care ending?' }).elements()).toHaveLength(0);
 		expect(testPage.getByRole('button', { name: 'Confirm completion' }).elements()).toHaveLength(0);
 		expect(requests).toHaveLength(0);
 	});
@@ -2969,7 +2969,7 @@ describe('the Offers form does not list the person at the screen (#1598)', () =>
 // Doula is offered it, and so is a Doula who holds Owner or Admin
 // whatever her Employment type is (#1625).
 const attachSelfPath = '/api/practices/practice-1/engagements/engagement-1/attachments/me';
-const putMeOnIt = () => testPage.getByRole('button', { name: 'Put me on this Engagement' });
+const putMeOnIt = () => testPage.getByRole('button', { name: 'Put me on this work' });
 
 async function setupWhoIsOn(detail: Detail, attachResponse?: () => Response) {
 	await testPage.viewport(3200, 900);
@@ -3051,7 +3051,7 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 
 		expect(apiFetchWithSession).toHaveBeenCalledWith(attachSelfPath, { method: 'PUT' });
 		// The result takes focus: the button she pressed is gone.
-		await expect.element(testPage.getByText('You are on this Engagement.')).toHaveFocus();
+		await expect.element(testPage.getByText('You are on this work.')).toHaveFocus();
 		expect(testPage.getByText('No Doula yet', { exact: true }).elements()).toHaveLength(0);
 		expect(putMeOnIt().elements()).toHaveLength(0);
 		expect(changeButton('Doula')).toBeUndefined();
@@ -3183,7 +3183,7 @@ describe('putting a Doula on the Engagement (#2230)', () => {
 		await expect.element(testPage.getByRole('radio', { name: 'Priya Raman' })).not.toBeChecked();
 		expect(testPage.getByRole('radio', { name: /Lena Vasquez/ }).elements()).toHaveLength(0);
 		await expect
-			.element(testPage.getByText('A contractor is not listed: a contractor goes on an Engagement by accepting an Offer.'))
+			.element(testPage.getByText('A contractor is not listed: a contractor goes on the work by accepting an Offer.'))
 			.toBeVisible();
 		expect(putMeOnIt().elements()).toHaveLength(0);
 	});
@@ -3278,7 +3278,7 @@ describe('putting a Doula on the Engagement (#2230)', () => {
 			'/api/practices/practice-1/engagements/engagement-1/attachments/staff-2',
 			{ method: 'PUT' }
 		);
-		await expect.element(testPage.getByText('Priya Raman is on this Engagement.')).toHaveFocus();
+		await expect.element(testPage.getByText('Priya Raman is on this work.')).toHaveFocus();
 		await expect.element(testPage.getByText('Priya Raman', { exact: true })).toBeVisible();
 		await vi.waitFor(() => {
 			expect(apiFetchWithSession).toHaveBeenCalledWith('/api/practices/practice-1/engagements/engagement-1/on-call');
@@ -3286,7 +3286,7 @@ describe('putting a Doula on the Engagement (#2230)', () => {
 		});
 	});
 
-	it('says "You are on this Engagement." when the reader chooses herself', async () => {
+	it('says "You are on this work." when the reader chooses herself', async () => {
 		await setupPutOn(nobodyOnIt, ['owner', 'doula'], {
 			attachResponse: () =>
 				jsonResponse({ engagementId: 'engagement-1', doulas: [{ staffId: 'staff-1', name: 'Renata Alvarez', bookedVisits: 0 }], canAttachSelf: false })
@@ -3296,7 +3296,7 @@ describe('putting a Doula on the Engagement (#2230)', () => {
 		await testPage.getByRole('radio', { name: 'Renata Alvarez (you)' }).click();
 		await saveTheDoula().click();
 
-		await expect.element(testPage.getByText('You are on this Engagement.')).toHaveFocus();
+		await expect.element(testPage.getByText('You are on this work.')).toHaveFocus();
 	});
 
 	it('shows the refusal and keeps the question open when the BFF refuses', async () => {
@@ -4223,7 +4223,7 @@ describe('taking a Doula off the Engagement (#2596)', () => {
 		await takeOffLink().click();
 		await testPage.getByRole('button', { name: 'Take off', exact: true }).click();
 
-		await expect.element(testPage.getByRole('heading', { name: 'Take Lena Vasquez off this Engagement?' })).toBeVisible();
+		await expect.element(testPage.getByRole('heading', { name: 'Take Lena Vasquez off this work?' })).toBeVisible();
 		await expect
 			.element(testPage.getByText("We will email Lena Vasquez to say so. Lena Vasquez's 3 booked Visits stay with Lena Vasquez until you reassign them."))
 			.toBeVisible();
@@ -4232,7 +4232,7 @@ describe('taking a Doula off the Engagement (#2596)', () => {
 		await expect
 			.element(
 				testPage.getByText(
-					"Lena Vasquez is off this Engagement. We emailed Lena Vasquez to say so. 3 booked Visits are still Lena Vasquez's: reassign each one under Visits."
+					"Lena Vasquez is off this work. We emailed Lena Vasquez to say so. 3 booked Visits are still Lena Vasquez's: reassign each one under Visits."
 				)
 			)
 			.toBeVisible();

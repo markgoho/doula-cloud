@@ -16,18 +16,19 @@
  */
 import type { ClientMatch } from './client.js';
 import { formatInstant } from './dates.js';
+import { kindLabel } from './engagementRequest.js';
 
 const COMPLETED = 'completed';
 
 export function matchHistory(match: Pick<ClientMatch, 'createdAt' | 'engagements'>): string {
 	const added = `Added ${formatInstant(match.createdAt)}`;
 	const { engagements } = match;
-	if (engagements.length === 0) return `${added} · No Engagements yet`;
+	if (engagements.length === 0) return `${added} · No work started yet`;
 
-	const count = engagements.length === 1 ? '1 Engagement' : `${engagements.length} Engagements`;
+	const count = engagements.map((engagement) => kindLabel(engagement.kind)).join(', ');
 	const openCount = engagements.filter((engagement) => engagement.status !== COMPLETED).length;
 	if (openCount > 0) {
-		// "1 Engagement · open now" rather than "1 open now" of one.
+		// "Birth · open now" rather than "Birth · 1 open now" of one.
 		const open = engagements.length === 1 ? 'open now' : `${openCount} open now`;
 		return `${added} · ${count} · ${open}`;
 	}

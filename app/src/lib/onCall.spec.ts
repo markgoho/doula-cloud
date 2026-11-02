@@ -118,7 +118,7 @@ describe('the words a reader meets', () => {
 	// #2220: a reason the BFF can give after a loss names no birth that may
 	// not have happened.
 	it('names no baby and no birth in any reason that can follow a loss', () => {
-		expect(describeNoWindow('nobody_attached')).toBe('No doula is on this Engagement yet.');
+		expect(describeNoWindow('nobody_attached')).toBe('No doula is on this work yet.');
 		for (const reason of ['no_due_date', 'nobody_attached', 'completed', 'ended_before_start', 'something_new']) {
 			expect(describeNoWindow(reason)).not.toMatch(/\b(baby|birth|arrived)\b/i);
 		}
@@ -126,7 +126,7 @@ describe('the words a reader meets', () => {
 
 	it('states plainly that there is no window for a reason it has not met', () => {
 		expect(describeNoWindow('something_new')).toBe(
-			'There is no on-call window for this Engagement.'
+			'There is no on-call window for this work.'
 		);
 	});
 

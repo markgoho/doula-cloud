@@ -305,10 +305,10 @@ describe('the Engagement Request screen', () => {
 		expect(postedBody()).toStrictEqual({ kind: 'postpartum', dueDate: '', note: '' });
 	});
 
-	it('warns on a second live Engagement without blocking the submit', async () => {
+	it('warns on a second live piece of work without blocking the submit', async () => {
 		await setup({ detail: { ...baseDetail, engagements: [liveEngagement] } });
 
-		await expect.element(testPage.getByText('already has a live Engagement', { exact: false })).toBeVisible();
+		await expect.element(testPage.getByText('already has live work', { exact: false })).toBeVisible();
 
 		await testPage.getByLabelText('Birth').click();
 		await testPage.getByLabelText('Due date').fill('2027-03-01');

@@ -13,7 +13,7 @@
 		 * again from the top of the page. It is focusable from a script
 		 * only (tabindex -1), so it adds no stop to the tab order.
 		 *
-		 * First used by the Engagement hub's "Put me on this Engagement"
+		 * First used by the Engagement hub's "Put me on this work"
 		 * (#1598). The two Feedback organisms (#1527, #1528) keep a
 		 * focusable wrapper of their own: their Notice appears while a
 		 * Drawer closes, the closing dialog hands focus back to the control

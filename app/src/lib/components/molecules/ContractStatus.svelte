@@ -4,7 +4,7 @@
 	 * against one string rather than three copies of the same wording
 	 * that could drift apart. */
 	export const PREVIOUS_CONTRACT_PDF_NOTICE =
-		'This PDF is from an earlier Contract on this Engagement that was signed and later voided.';
+		'This PDF is from an earlier Contract on this work that was signed and later voided.';
 
 	/** What a void costs, said before the button and again in the
 	 * confirmation (#2004). */

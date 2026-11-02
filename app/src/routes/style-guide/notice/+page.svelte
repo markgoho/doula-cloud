@@ -32,6 +32,6 @@
 			pressed: the Notice takes focus, so it shows its focus ring here
 			on load. It is not in the tab order.
 		-->
-		<Notice variant="status" message="You are on this Engagement." isFocusedOnAppear />
+		<Notice variant="status" message="You are on this work." isFocusedOnAppear />
 	</section>
 </stack-l>

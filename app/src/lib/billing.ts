@@ -63,7 +63,7 @@ const ORIGIN_LABELS: Record<string, string> = {
 	signup_bonus: 'Welcome credits',
 	founding_grant: 'Founding member credits',
 	purchase: 'Purchase',
-	consumption: 'Engagement started',
+	consumption: 'Work started',
 	refund: 'Refund'
 };
 

@@ -32,7 +32,7 @@
 <section>
 	<Heading level={2} text="Merge-field placeholders" />
 	{#if onProseChange}
-		<p>Insert these tokens into the prose above; they are replaced per Engagement.</p>
+		<p>Insert these tokens into the prose above; they are replaced for each piece of work.</p>
 	{:else}
 		<p>Each Contract fills these in for its Client.</p>
 	{/if}

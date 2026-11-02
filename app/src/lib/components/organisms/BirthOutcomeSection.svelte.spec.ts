@@ -248,7 +248,7 @@ describe('BirthOutcomeSection', () => {
 		await page.getByRole('button', { name: 'Record this outcome' }).click();
 
 		await expect
-			.element(page.getByRole('heading', { name: 'This Engagement already has a recorded outcome' }))
+			.element(page.getByRole('heading', { name: 'This work already has a recorded outcome' }))
 			.toBeVisible();
 		await expect.element(page.getByText(frozen.message ?? '')).toBeVisible();
 
@@ -285,7 +285,7 @@ describe('BirthOutcomeSection', () => {
 		await page.getByRole('button', { name: 'Record this outcome' }).click();
 
 		await expect
-			.element(page.getByRole('heading', { name: 'This Engagement already has a recorded outcome' }))
+			.element(page.getByRole('heading', { name: 'This work already has a recorded outcome' }))
 			.not.toBeInTheDocument();
 		await expect.element(page.getByText(frozen.message ?? '').first()).toBeVisible();
 	});

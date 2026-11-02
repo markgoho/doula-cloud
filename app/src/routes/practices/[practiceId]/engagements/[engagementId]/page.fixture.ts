@@ -236,7 +236,7 @@ export const detail = {
 		writtenBy: 'Persephone Ochieng-Whitfield',
 		writtenAt: '2026-08-01T14:30:00Z'
 	},
-	// #1598: who is on this Engagement. Two Doulas, the on-call panel's
+	// #1598: who is on this work. Two Doulas, the on-call panel's
 	// own primary and backup, so the summary's row holds its busiest
 	// state: the plural label and two names on one line, the first of
 	// them the longest name on this screen. The reader is one of them

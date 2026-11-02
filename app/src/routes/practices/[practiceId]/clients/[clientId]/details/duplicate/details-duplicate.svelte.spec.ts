@@ -93,8 +93,8 @@ describe('when gate two names a possible duplicate', () => {
 		const [busiest, empty] = testPage.getByLabelText(fullName(matches[0])).all();
 		await expect
 			.element(busiest!)
-			.toHaveAccessibleDescription(/^Added Nov 14, 2023 · 2 Engagements · 1 open now\s*Keeps/);
-		await expect.element(empty!).toHaveAccessibleDescription(/^Added Oct 20, 2026 · No Engagements yet\s*Keeps/);
+			.toHaveAccessibleDescription(/^Added Nov 14, 2023 · Birth, Postpartum · 1 open now\s*Keeps/);
+		await expect.element(empty!).toHaveAccessibleDescription(/^Added Oct 20, 2026 · No work started yet\s*Keeps/);
 	});
 
 	// #2154: which record is kept, from `wouldSurvive`, under each match --

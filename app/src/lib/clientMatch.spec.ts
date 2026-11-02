@@ -16,12 +16,12 @@ function engagement(status: string, endedAt?: string): EngagementSummary {
 
 describe('matchHistory', () => {
 	it('says when a Client with no Engagement was added, and that there is none yet', () => {
-		expect(matchHistory({ createdAt: ADDED, engagements: [] })).toBe('Added Mar 4, 2024 · No Engagements yet');
+		expect(matchHistory({ createdAt: ADDED, engagements: [] })).toBe('Added Mar 4, 2024 · No work started yet');
 	});
 
 	it('says one Engagement is open now', () => {
 		expect(matchHistory({ createdAt: ADDED, engagements: [engagement('active')] })).toBe(
-			'Added Mar 4, 2024 · 1 Engagement · open now'
+			'Added Mar 4, 2024 · Birth · open now'
 		);
 	});
 
@@ -31,13 +31,13 @@ describe('matchHistory', () => {
 				createdAt: ADDED,
 				engagements: [engagement('completed', '2025-06-01T12:00:00Z'), engagement('intake')]
 			})
-		).toBe('Added Mar 4, 2024 · 2 Engagements · 1 open now');
+		).toBe('Added Mar 4, 2024 · Birth, Birth · 1 open now');
 	});
 
 	it('says when one ended Engagement ended', () => {
 		expect(
 			matchHistory({ createdAt: ADDED, engagements: [engagement('completed', '2026-06-12T12:00:00Z')] })
-		).toBe('Added Mar 4, 2024 · 1 Engagement · ended Jun 12, 2026');
+		).toBe('Added Mar 4, 2024 · Birth · ended Jun 12, 2026');
 	});
 
 	it('names the latest end among several, compared as instants rather than text', () => {
@@ -52,15 +52,15 @@ describe('matchHistory', () => {
 					engagement('completed')
 				]
 			})
-		).toBe('Added Mar 4, 2024 · 3 Engagements · most recent ended Jun 15, 2026');
+		).toBe('Added Mar 4, 2024 · Birth, Birth, Birth · most recent ended Jun 15, 2026');
 	});
 
 	it('says an ended Engagement ended without guessing a date the ledger does not hold', () => {
 		expect(matchHistory({ createdAt: ADDED, engagements: [engagement('completed')] })).toBe(
-			'Added Mar 4, 2024 · 1 Engagement · ended'
+			'Added Mar 4, 2024 · Birth · ended'
 		);
 		expect(
 			matchHistory({ createdAt: ADDED, engagements: [engagement('completed'), engagement('completed')] })
-		).toBe('Added Mar 4, 2024 · 2 Engagements · all ended');
+		).toBe('Added Mar 4, 2024 · Birth, Birth · all ended');
 	});
 });

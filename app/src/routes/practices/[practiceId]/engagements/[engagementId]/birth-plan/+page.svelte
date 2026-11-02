@@ -78,7 +78,7 @@
 	backLabel="Back to {data.clientName}"
 	loadError={error || undefined}
 	loading={isLoaded ? undefined : 'Loading Birth Plan'}
-	empty={instance === undefined ? 'No Birth Plan has been created for this Engagement yet.' : undefined}
+	empty={instance === undefined ? 'No Birth Plan has been created for this work yet.' : undefined}
 >
 	{#snippet content()}
 		<!-- `content` renders only once the Template's own states are past,

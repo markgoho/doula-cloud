@@ -220,7 +220,7 @@ export function describeNoWindow(reason: string): string {
 			return 'No due date recorded, so there is no window to work out.';
 		}
 		case 'nobody_attached': {
-			return 'No doula is on this Engagement yet.';
+			return 'No doula is on this work yet.';
 		}
 		case 'postpartum': {
 			return 'Postpartum care is not on-call work.';
@@ -234,7 +234,7 @@ export function describeNoWindow(reason: string): string {
 			return 'The pregnancy ended before the on-call window would have opened.';
 		}
 		default: {
-			return 'There is no on-call window for this Engagement.';
+			return 'There is no on-call window for this work.';
 		}
 	}
 }

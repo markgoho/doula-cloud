@@ -91,7 +91,7 @@
 	const waitingOnReply = new PaginatedList<WaitingOnReply>({
 		first: { items: [], hasMore: false },
 		loadPage: (cursor) => loadWaitingOnReplyPage(apiFetchWithSession, page.params.practiceId!, cursor),
-		failureMessage: 'Failed to load more Engagements waiting on a reply'
+		failureMessage: 'Failed to load more Clients waiting on a reply'
 	});
 	let waitingOnReplyError = $state('');
 
@@ -140,7 +140,7 @@
 			waitingOnReply.reset(await loadWaitingOnReplyPage(apiFetchWithSession, page.params.practiceId!, ''));
 		} catch (error_) {
 			waitingOnReplyError =
-				error_ instanceof Error ? error_.message : 'Failed to load Engagements waiting on a reply';
+				error_ instanceof Error ? error_.message : 'Failed to load Clients waiting on a reply';
 		}
 	}
 

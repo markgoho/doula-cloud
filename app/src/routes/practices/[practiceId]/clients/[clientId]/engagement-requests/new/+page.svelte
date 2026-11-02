@@ -357,7 +357,7 @@
 		{#if hasLiveEngagement}
 			<Notice
 				variant="info"
-				message="{detail ? firstName(detail) : 'This Client'} already has a live Engagement. A second one does not stop this request."
+				message="{detail ? firstName(detail) : 'This Client'} already has live work. A second piece of work does not stop this request."
 			/>
 		{/if}
 
