@@ -140,6 +140,40 @@ async function setup() {
 	await render(Page, {});
 }
 
+const back = () => testPage.getByRole('link', { name: 'Back' });
+
+describe('TOTP enrollment -- the way back (#2592)', () => {
+	it('goes to the screen she came from', async () => {
+		pageState.url = urlWith('/practices/practice-1/settings#security-and-data');
+		await setup();
+		await expect.element(back()).toHaveAttribute('href', '/practices/practice-1/settings#security-and-data');
+	});
+
+	it('goes to the Staff home when no returnTo came with her', async () => {
+		await setup();
+		await expect.element(back()).toHaveAttribute('href', '/');
+	});
+
+	it('stays through a refusal on the page, on the verify step and on the QR code', async () => {
+		pageState.url = urlWith('/practices/practice-1/settings');
+		await render(Page, {});
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+		await expect.element(testPage.getByText('There is a problem')).toBeVisible();
+		await expect.element(back()).toHaveAttribute('href', '/practices/practice-1/settings');
+
+		await testPage.getByLabelText('Password').fill('correct horse');
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+		await expect.element(testPage.getByLabelText('Authenticator app code')).toBeVisible();
+		await expect.element(back()).toHaveAttribute('href', '/practices/practice-1/settings');
+	});
+
+	it('shows on the verify-your-email step', async () => {
+		signInUnverified();
+		await goToVerifyStep();
+		await expect.element(back()).toHaveAttribute('href', '/');
+	});
+});
+
 describe('TOTP enrollment -- step one, re-authenticating', () => {
 	it('asks for the password again rather than assuming a live sign-in', async () => {
 		await setup();
