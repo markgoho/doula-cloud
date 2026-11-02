@@ -39,7 +39,9 @@
 		}
 	}
 
-	// The facts a Practice states, in the order practiceFacts gives them.
+	// The facts a Practice states, in the order practiceFacts gives them. Source is not a column:
+	// twelve columns do not fit 1440px without a word breaking (#2615), and Source reads "Not
+	// recorded yet" for every Practice until it is captured; it belongs on the Practice's page.
 	const factColumns = [
 		'Signed up',
 		'Owners',
@@ -55,7 +57,7 @@
 		label,
 		accessor: (practice: PracticeRow) => practiceFacts(practice)[index]!.value,
 		numeric: ['Staff', 'Credits held', 'Engagements started', 'Open Feedback'].includes(label)
-	}));
+	})).filter((column) => column.label !== 'Source');
 
 	const columns = [{ label: 'Practice', accessor: (practice: PracticeRow) => practice.name }, ...factColumns];
 
@@ -84,18 +86,45 @@
 {/snippet}
 
 {#if hasLoaded}
-	<DataTable
-		{columns}
-		rows={practices}
-		rowActions={list === 'live' ? { label: 'Acts', content: acts as never } : undefined}
-		hasMore={nextCursor !== undefined}
-		onLoadMore={() => load(nextCursor)}
-		isLoadingMore={isLoading}
-		emptyMessage={list === 'deleted' ? 'No Practice has been deleted.' : 'No Practice has signed up yet.'}
-	/>
+	<div class="practice-table">
+		<DataTable
+			{columns}
+			rows={practices}
+			rowActions={list === 'live' ? { label: 'Acts', content: acts } : undefined}
+			hasMore={nextCursor !== undefined}
+			onLoadMore={() => load(nextCursor)}
+			isLoadingMore={isLoading}
+			emptyMessage={list === 'deleted' ? 'No Practice has been deleted.' : 'No Practice has signed up yet.'}
+		/>
+	</div>
 {/if}
 
 <style>
+	@layer components {
+		.practice-table {
+			container: practice-table / inline-size;
+		}
+
+		.practice-table > :global(*) {
+			--data-table-table-display: none;
+			--data-table-records-display: block;
+		}
+
+		@container practice-table (min-width: 82rem) {
+			.practice-table > :global(*) {
+				--data-table-table-display: table;
+				--data-table-records-display: none;
+			}
+		}
+	}
+
+	/* Unlayered, so it outranks DataTable's layered `anywhere`: a cell here
+	   breaks at a space or a hyphen and never inside a word. */
+	.practice-table :global(:is(th, td)) {
+		max-inline-size: none;
+		overflow-wrap: normal;
+	}
+
 	.acts {
 		display: flex;
 		flex-wrap: wrap;
