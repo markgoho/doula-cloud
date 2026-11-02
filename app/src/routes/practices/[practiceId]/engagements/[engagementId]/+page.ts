@@ -16,7 +16,9 @@ import type { PageLoad } from './$types';
  * #350), which the screen draws as the page `practices/+error.svelte`
  * would.
  */
-export const load: PageLoad = ({ params }): { read: Promise<StreamedRead<EngagementSummary>> } => ({
-	read: streamRead<EngagementSummary>(engagementURL({ practiceId: params.practiceId, engagementId: params.engagementId })
+export const load: PageLoad = ({ params, fetch }): { read: Promise<StreamedRead<EngagementSummary>> } => ({
+	read: streamRead<EngagementSummary>(
+		engagementURL({ practiceId: params.practiceId, engagementId: params.engagementId }),
+		fetch
 	)
 });

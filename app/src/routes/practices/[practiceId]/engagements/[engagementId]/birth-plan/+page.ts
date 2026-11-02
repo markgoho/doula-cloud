@@ -26,9 +26,11 @@ import type { PageLoad } from './$types';
  * and a slow or failed plan fetch never blocks the page that says who it
  * belongs to.
  */
-export const load: PageLoad = async ({ params, url }): Promise<EngagementSummary> => {
+export const load: PageLoad = async ({ params, url, fetch }): Promise<EngagementSummary> => {
 	const response = await apiFetch(
-		engagementURL({ practiceId: params.practiceId, engagementId: params.engagementId })
+		engagementURL({ practiceId: params.practiceId, engagementId: params.engagementId }),
+		{},
+		fetch
 	);
 
 	if (response.status === 401) {

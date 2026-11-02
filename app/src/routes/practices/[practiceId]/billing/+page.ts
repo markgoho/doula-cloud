@@ -9,6 +9,6 @@ import type { PageLoad } from './$types';
  * types this URL gets a 403, which the screen draws as the page
  * `practices/+error.svelte` would.
  */
-export const load: PageLoad = ({ params }): { read: Promise<StreamedRead<Balance>> } => ({
-	read: streamRead<Balance>(billingPath(params.practiceId))
+export const load: PageLoad = ({ params, fetch }): { read: Promise<StreamedRead<Balance>> } => ({
+	read: streamRead<Balance>(billingPath(params.practiceId), fetch)
 });

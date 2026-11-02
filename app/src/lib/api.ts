@@ -154,10 +154,17 @@ Every `POST` through here carries an `Idempotency-Key` (#1924,
 after a dropped connection or a 5xx, a new one once a submit has settled.
 A `fetch` that throws leaves its submit unsettled, which is the case the
 key exists for.
+
+A route's `load` passes its own `fetch` as `fetcher`: SvelteKit warns
+(`window_fetch_in_load`) about the window's.
 */
-export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+export async function apiFetch(
+	path: string,
+	init: RequestInit = {},
+	fetcher?: typeof globalThis.fetch
+): Promise<Response> {
 	const keyed = keyRequest(path, init);
-	const response = await fetch(apiBaseURL() + path, { ...keyed.init, credentials: 'include' });
+	const response = await (fetcher ?? fetch)(apiBaseURL() + path, { ...keyed.init, credentials: 'include' });
 	keyed.settle(response);
 	if (response.ok) noteSessionHeld();
 	return response;
@@ -184,9 +191,12 @@ rather than a redirect. A thrown fetch (offline, the wrong host, a
 non-JSON body from a rewrite miss) reads the same way, so the caller can
 treat every one of these outcomes as "can't tell, proceed as signed out".
 */
-export async function probeSession<Session>(path: string): Promise<Session | undefined> {
+export async function probeSession<Session>(
+	path: string,
+	fetcher?: typeof globalThis.fetch
+): Promise<Session | undefined> {
 	try {
-		const response = await apiFetch(path);
+		const response = await apiFetch(path, {}, fetcher);
 		if (!response.ok) return undefined;
 		return (await response.json()) as Session;
 	} catch {

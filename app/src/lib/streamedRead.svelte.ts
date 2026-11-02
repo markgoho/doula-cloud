@@ -21,11 +21,15 @@ export type StreamedRead<Value> =
 Reads an API path for a route's `load`, through plain `apiFetch`: a `load`
 also runs for a hovered link, which must not navigate anywhere. Never
 rejects, so a read nobody consumes -- the hovered link that was never
-clicked -- leaves no unhandled rejection behind.
+clicked -- leaves no unhandled rejection behind. `fetcher` is the `load`'s
+own `fetch`.
 */
-export async function streamRead<Value>(path: string): Promise<StreamedRead<Value>> {
+export async function streamRead<Value>(
+	path: string,
+	fetcher?: typeof globalThis.fetch
+): Promise<StreamedRead<Value>> {
 	try {
-		const response = await apiFetch(path);
+		const response = await apiFetch(path, {}, fetcher);
 		if (!response.ok) return { isLoaded: false, response };
 		return { isLoaded: true, value: (await response.json()) as Value };
 	} catch {
