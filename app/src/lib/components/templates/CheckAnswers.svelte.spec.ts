@@ -47,7 +47,15 @@ const sections: AnswerSection[] = [
 	}
 ];
 
-type SetupOptions = Partial<ComponentProps<typeof CheckAnswers>>;
+const grouped = (groups: { heading: string; lines: string[] }[]): AnswerSection[] => [
+	{
+		answers: [
+			{ label: 'What else Okonkwo Birth Support asks', value: 'x', changeHref: '/clients/new/sections/0', changes: 'what else', groups }
+		]
+	}
+];
+
+type SetupOptions =Partial<ComponentProps<typeof CheckAnswers>>;
 
 async function setup(overrides: SetupOptions = {}) {
 	return render(CheckAnswers, {
@@ -92,6 +100,27 @@ describe('CheckAnswers.svelte', () => {
 
 		await expect.element(page.getByText('sarah@example.com')).toBeVisible();
 		expect(page.getByRole('heading', { level: 2 }).elements().map((node) => node.textContent)).toEqual(['Who Sarah is']);
+	});
+
+	// #2621: an answer of several is one row and one Change, each group under its heading.
+	it('draws a grouped answer as one row with one Change, headed when there is more than one group', async () => {
+		const { container, rerender } = await setup({
+			sections: grouped([
+				{ heading: 'Health', lines: ['Allergies: Peanuts', 'Doctor: Not answered'] },
+				{ heading: 'Birth', lines: ['Birth plan: Not answered'] }
+			])
+		});
+
+		expect(container.querySelectorAll(':scope .row')).toHaveLength(1);
+		expect(container.querySelectorAll(':scope .row a')).toHaveLength(1);
+		await expect.element(page.getByText('Health')).toBeVisible();
+		await expect.element(page.getByText('Allergies: Peanuts')).toBeVisible();
+		await expect.element(page.getByText('Birth plan: Not answered')).toBeVisible();
+
+		await rerender({ sections: grouped([{ heading: 'Okonkwo Birth Support', lines: ['Partner: Dana'] }]) });
+
+		await expect.element(page.getByText('Partner: Dana')).toBeVisible();
+		await expect.element(page.getByText('Okonkwo Birth Support', { exact: true })).not.toBeInTheDocument();
 	});
 
 	/*
