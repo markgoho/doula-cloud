@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { greetingFor } from './greeting';
 
 /*
@@ -10,6 +10,10 @@ function at(hour: number, minute = 0): Date {
 }
 
 describe('greetingFor', () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
 	it.each([
 		[0, 0, 'Up late? Welcome.'],
 		[4, 59, 'Up late? Welcome.'],
@@ -26,6 +30,9 @@ describe('greetingFor', () => {
 	});
 
 	it('reads the device clock when it is given no time', () => {
-		expect(greetingFor()).toBe(greetingFor(new Date()));
+		vi.useFakeTimers({ now: at(9) });
+		expect(greetingFor()).toBe('Good morning.');
+		vi.setSystemTime(at(23));
+		expect(greetingFor()).toBe('Up late? Welcome.');
 	});
 });

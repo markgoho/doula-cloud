@@ -66,6 +66,12 @@ export default defineConfig({
 		projects: [
 			{
 				extends: './vite.config.ts',
+				// Pre-bundled up front so a cold CI cache never discovers one
+				// mid-run: Vite then re-optimizes and reloads the page, which
+				// kills in-flight spec imports (#2191, #2192).
+				optimizeDeps: {
+					include: ['qrcode', '@stripe/stripe-js', 'firebase/app', 'firebase/auth']
+				},
 				test: {
 					name: 'client',
 					// Vitest sizes the browser pool as `Math.min(12, ncpu - 1)`
