@@ -1,6 +1,6 @@
 import type { ComponentProps } from 'svelte';
 import { page } from 'vitest/browser';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import Heading from './Heading.svelte';
 
@@ -61,6 +61,23 @@ describe('Heading.svelte', () => {
 		const heading = page.getByRole('heading', { level: 2, name: 'Before you continue' });
 		await expect.element(heading).toHaveFocus();
 		await expect.element(heading).toHaveAttribute('tabindex', '-1');
+	});
+
+	/*
+	 * #2602: the form a heading opens is scrolled into view by the least
+	 * that shows all of it; the page itself is checked on the rendered
+	 * screen.
+	 */
+	it('scrolls itself into view when no form is around it', async () => {
+		const scrolled: Element[] = [];
+		vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(function (this: Element) {
+			scrolled.push(this);
+		});
+
+		await setup({ level: 3, text: 'Before you continue', focusOnAppearing: true });
+
+		expect(scrolled.map((element) => element.textContent)).toEqual(['Before you continue']);
+		vi.restoreAllMocks();
 	});
 
 	it('neither takes focus nor a tabindex unless asked to', async () => {
