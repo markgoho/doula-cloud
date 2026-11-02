@@ -81,11 +81,12 @@ func assignedStaffID(t *testing.T, db *testdb.DB, engagementID, action, key stri
 	).Scan(&diff); err != nil {
 		t.Fatalf("read activity entry: %v", err)
 	}
-	decoded := map[string]string{}
+	decoded := map[string]any{}
 	if err := json.Unmarshal(diff, &decoded); err != nil {
 		t.Fatalf("decode diff: %v", err)
 	}
-	return decoded[key]
+	s, _ := decoded[key].(string)
+	return s
 }
 
 // attachment reads the open attachment for a pair, or reports that there

@@ -40,6 +40,18 @@ export function formatInstantWithClock(value: string): string {
 }
 
 /**
+ * An instant to the second, in the reader's own zone: "Oct 25, 2026,
+ * 3:04:09pm". For the one place the minute is not enough to tell two
+ * things apart: two Visits added in the same minute (#2666).
+ */
+export function formatInstantWithSeconds(value: string): string {
+	const date = new Date(value);
+	const clock = formatClock(date);
+	const seconds = date.getSeconds().toString().padStart(2, '0');
+	return `${formatDay(date)}, ${clock.slice(0, -2)}:${seconds}${clock.slice(-2)}`;
+}
+
+/**
  * A due date is a calendar day, not an instant: it must not shift by one
  * when the reader's zone is behind UTC, so the day is built from its own
  * parts rather than parsed as UTC midnight. `value` is the date-only

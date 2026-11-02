@@ -5,6 +5,7 @@ import {
 	formatCalendarMonth,
 	formatInstant,
 	formatInstantWithClock,
+	formatInstantWithSeconds,
 	formatPortalVisit,
 	formatScheduledVisit,
 	toDatetimeLocalValue
@@ -117,5 +118,15 @@ describe('toDatetimeLocalValue', () => {
 	it('renders local date/time parts an <input type="datetime-local"> accepts back', () => {
 		const iso = local(2027, 3, 5, 9, 5);
 		expect(toDatetimeLocalValue(iso)).toBe('2027-03-05T09:05');
+	});
+});
+
+describe('formatInstantWithSeconds (#2666)', () => {
+	it.each([
+		['afternoon', local(2026, 11, 2, 15, 4, 9), 'Nov 2, 2026, 3:04:09pm'],
+		['noon', local(2026, 11, 2, 12, 0, 0), 'Nov 2, 2026, 12:00:00pm'],
+		['morning', local(2026, 11, 2, 10, 46, 43), 'Nov 2, 2026, 10:46:43am']
+	])('reads %s to the second, in the reader own zone', (_name, iso, want) => {
+		expect(formatInstantWithSeconds(iso)).toBe(want);
 	});
 });

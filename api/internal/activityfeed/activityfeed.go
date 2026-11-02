@@ -40,6 +40,15 @@ type Entry struct {
 	ActorKind string    `json:"actorKind"`
 	ActorName string    `json:"actorName"`
 	CreatedAt time.Time `json:"createdAt"`
+
+	// VisitScheduledAt and VisitAddedAt say which Visit a visit_reassigned
+	// row moved (#2666): the Visit's date when it moved, absent for a Visit
+	// with no date, and the instant it was added, which never changes. Both
+	// are absent on every other row and on a reassignment written before
+	// #2666. They are instants only: the reader formats them, as it does
+	// every Visit date.
+	VisitScheduledAt *time.Time `json:"visitScheduledAt,omitempty"`
+	VisitAddedAt     *time.Time `json:"visitAddedAt,omitempty"`
 }
 
 // ListResponse is docs/api-design.md section 4's envelope, the same shape

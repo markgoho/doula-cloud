@@ -16,7 +16,7 @@ import type { Fetcher } from './fetcher.js';
 
 import { apiErrorMessage } from './apiErrorMessage.js';
 import { clientActivityPhrase } from './clientRegister.js';
-import { formatActivityTimestamp, formatCalendarDay } from './dates.js';
+import { formatActivityTimestamp, formatCalendarDay, formatInstantWithClock, formatInstantWithSeconds } from './dates.js';
 import type { CursorPage } from './paginatedList.svelte.js';
 import { birthOutcomeLabel, endingReasons, engagementStatusText, type EngagementReference } from './engagementDetail.js';
 import { kindLabel } from './engagementRequest.js';
@@ -65,6 +65,13 @@ export interface ActivityEntry {
 	 * Engagement's own facts are read from it here (`factChangeText`).
 	 */
 	diff?: Record<string, unknown>;
+	/**
+	 * Which Visit a `visit_reassigned` row on the Practice-wide feed
+	 * moved (#2666): the Visit's date when it moved, absent for one with
+	 * no date, and the instant it was added.
+	 */
+	visitScheduledAt?: string;
+	visitAddedAt?: string;
 	createdAt: string;
 }
 
@@ -182,8 +189,29 @@ function factChangeText(row: ActivityEntry): string | undefined {
  * prose about the row, and it already names the people in it.
  */
 function staffEventText(row: ActivityEntry): string {
-	if (row.detail) return row.detail;
-	return factChangeText(row) ?? staffActivityPhrase(row.action, row.subjectName);
+	const visit = movedVisitText(row);
+	if (row.detail) {
+		return visit && row.detail.startsWith(DETAIL_VISIT_LEAD) ? visit + row.detail.slice(DETAIL_VISIT_LEAD.length) : row.detail;
+	}
+	return factChangeText(row) ?? staffActivityPhrase(row.action, row.subjectName, visit);
+}
+
+const DETAIL_VISIT_LEAD = 'Visit';
+
+/**
+ * Which Visit a reassignment moved (#2666), by the date it had then, or,
+ * for one with no date, by when it was added, which never changes. The
+ * Practice-wide feed sends the two instants as fields; the Engagement
+ * ledger sends them in the diff. A row written before #2666 has neither
+ * and keeps its words.
+ */
+function movedVisitText(row: ActivityEntry): string | undefined {
+	if (row.action !== 'visit_reassigned') return undefined;
+	const scheduledAt = row.visitScheduledAt ?? row.diff?.visitScheduledAt;
+	if (typeof scheduledAt === 'string') return `Visit on ${formatInstantWithClock(scheduledAt)}`;
+	const addedAt = row.visitAddedAt ?? row.diff?.visitCreatedAt;
+	if (typeof addedAt === 'string') return `Visit not yet scheduled (added ${formatInstantWithSeconds(addedAt)})`;
+	return undefined;
 }
 
 /**
