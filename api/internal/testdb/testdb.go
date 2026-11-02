@@ -41,6 +41,20 @@ type DB struct {
 	AppURL string
 }
 
+// OptOutAppConnections is how many connections App may open once a test
+// has opted out of the one-connection cap.
+const OptOutAppConnections = 8
+
+// OptOutOfOneConnectionPool lifts the one-connection cap New puts on App.
+// Production holds one pool connection per request, so App is capped at 1
+// and a nested connection hangs the test. A test that needs two
+// connections on purpose (concurrent requests, a second session) calls
+// this and says why; reason is required so the opt-out reads in place.
+func (d *DB) OptOutOfOneConnectionPool(reason string) {
+	_ = reason
+	d.App.SetMaxOpenConns(OptOutAppConnections)
+}
+
 // New clones a fresh database from the test process's shared, migrated
 // template (starting the container and template on first call, via
 // sync.Once) and returns Admin and App connections to the clone. The
@@ -96,6 +110,7 @@ func New(t *testing.T) *DB {
 	appURL := *u
 	appURL.User = url.UserPassword(appUser, appPassword)
 	appDB := newLoginDB(t, u.String(), appUser, appPassword)
+	appDB.SetMaxOpenConns(1)
 	opsDB := newLoginDB(t, u.String(), opsUser, opsPassword)
 
 	return &DB{Admin: db, App: appDB, Ops: opsDB, AppURL: appURL.String()}

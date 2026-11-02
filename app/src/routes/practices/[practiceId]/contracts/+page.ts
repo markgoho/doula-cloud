@@ -21,10 +21,14 @@ export interface ContractsPageData {
  * page `practices/+error.svelte` would. Both roll-ups load in parallel --
  * neither depends on the other.
  */
-export const load: PageLoad = ({ params }): { read: Promise<StreamedRead<ContractsPageData>> } => {
-	const contracts = streamRead<CursorPage<AwaitingContract>>(practiceAwaitingContractsPath(params.practiceId));
+export const load: PageLoad = ({ params, fetch }): { read: Promise<StreamedRead<ContractsPageData>> } => {
+	const contracts = streamRead<CursorPage<AwaitingContract>>(
+		practiceAwaitingContractsPath(params.practiceId),
+		fetch
+	);
 	const voidRequests = streamRead<CursorPage<AwaitingVoidRequest>>(
-		practiceAwaitingVoidRequestsPath(params.practiceId)
+		practiceAwaitingVoidRequestsPath(params.practiceId),
+		fetch
 	);
 	return {
 		read: mapRead(bothRead(contracts, voidRequests), ([contracts, voidRequests]) => ({ contracts, voidRequests }))

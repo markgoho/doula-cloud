@@ -349,6 +349,7 @@ func TestMiddleware_ActivityStampRefreshesPracticeAcrossDays(t *testing.T) {
 // first request takes.
 func TestMiddleware_ActivityStampDoesNotSerializeConcurrentRequests(t *testing.T) {
 	db := testdb.New(t)
+	db.OptOutOfOneConnectionPool("two requests are in flight at once on purpose; each holds its own pool connection")
 	const identityUID = "staff-concurrent-requests"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
 

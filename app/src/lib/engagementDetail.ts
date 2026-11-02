@@ -82,6 +82,12 @@ export interface EngagementSummary {
 	 * Doula fees section stands from the screen's first frame. Answered
 	 * only for an Owner or Admin; false for anyone else. */
 	hasDoulaFees: boolean;
+	/** Whether the Care Plan, the Birth Plan and the Contract each exist
+	 * (#2591), so the hub asks for the ones that do and a missing record
+	 * is never read to answer 404. */
+	hasCarePlan: boolean;
+	hasBirthPlan: boolean;
+	hasContract: boolean;
 	/** The Note typed on the Request that started this Engagement (#2597):
 	 * what was written, by whom, and when. Answered only for an Owner or
 	 * an Admin, and absent when no note was written. */

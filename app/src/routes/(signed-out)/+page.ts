@@ -19,7 +19,7 @@ export type RootLanding =
  * use for their own on-load check (#283) -- see its own doc comment for
  * why `apiFetchWithSession` is the wrong tool here.
  */
-export const load: PageLoad = async (): Promise<RootLanding> => {
+export const load: PageLoad = async ({ fetch }): Promise<RootLanding> => {
 	/*
 	 * Read as a status rather than through `probeSession` (#745). That
 	 * helper answers "is there a Staff session" with one `undefined` for
@@ -30,7 +30,7 @@ export const load: PageLoad = async (): Promise<RootLanding> => {
 	 * telling her to do the two things that have already stopped working
 	 * for her.
 	 */
-	const staffResponse = await readSession('/api/staff/session');
+	const staffResponse = await readSession('/api/staff/session', fetch);
 	if (staffResponse?.ok) {
 		const landing = decideLanding((await staffResponse.json()) as SessionInfo);
 		if (landing.type === 'redirect') {
@@ -44,7 +44,7 @@ export const load: PageLoad = async (): Promise<RootLanding> => {
 		return { type: 'staff-picker', memberships: landing.memberships };
 	}
 
-	const portalSession = await probeSession<PortalSessionInfo>('/api/portal/session');
+	const portalSession = await probeSession<PortalSessionInfo>('/api/portal/session', fetch);
 	if (portalSession) {
 		const landing = decidePortalLanding(portalSession);
 		if (landing.type === 'redirect') {
@@ -73,9 +73,9 @@ export const load: PageLoad = async (): Promise<RootLanding> => {
  * fetch -- offline, a rewrite miss -- is still `undefined`, which reads
  * as "can't tell, proceed as signed out" exactly as it does there.
  */
-async function readSession(path: string): Promise<Response | undefined> {
+async function readSession(path: string, fetcher: typeof globalThis.fetch): Promise<Response | undefined> {
 	try {
-		return await apiFetch(path);
+		return await apiFetch(path, {}, fetcher);
 	} catch {
 		return undefined;
 	}

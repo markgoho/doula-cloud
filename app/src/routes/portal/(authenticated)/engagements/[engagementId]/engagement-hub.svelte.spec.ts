@@ -40,6 +40,8 @@ const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
 	apiFetchWithSession
 }));
+const invalidate = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+vi.mock('$app/navigation', () => ({ invalidate }));
 
 function jsonResponse(body: unknown) {
 	return { ok: true, json: () => Promise.resolve(body) } as Response;
@@ -50,6 +52,7 @@ function jsonResponse(body: unknown) {
 // response would hand either list loader the detail body instead of a
 // { items, hasMore } page.
 function mockFetch(body: unknown, activityItems: unknown[] = [], visitItems: unknown[] = visits) {
+	pageState.data = { ...pageState.data, ...(body as Record<string, unknown>) };
 	apiFetchWithSession.mockImplementation((path: string) => {
 		if (path.includes('/activity')) return Promise.resolve(jsonResponse({ items: activityItems, hasMore: false }));
 		if (path.includes('/visits')) return Promise.resolve(jsonResponse({ items: visitItems, hasMore: false }));
@@ -63,6 +66,7 @@ function mockFetch(body: unknown, activityItems: unknown[] = [], visitItems: unk
  * block and the Your visits block need this and neither can express it
  * through `mockFetch`, so it is written once and told which read fails. */
 function mockRefusedList(failingPath: '/activity' | '/visits', refusal: string) {
+	pageState.data = { ...pageState.data, ...detail };
 	apiFetchWithSession.mockImplementation((path: string) => {
 		if (path.includes(failingPath))
 			return Promise.resolve({ ok: false, text: () => Promise.resolve(refusal) } as Response);
@@ -92,6 +96,7 @@ function mockRefusedList(failingPath: '/activity' | '/visits', refusal: string) 
  * block reads the render result. */
 async function setupHub({ record }: { record?: unknown } = {}) {
 	if (record === undefined) {
+		Object.assign(pageState, toPageState(fixture));
 		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
 	} else {
 		mockFetch(record);
@@ -708,5 +713,28 @@ describe('the hub while her Visits are loading (#2218)', () => {
 		// file's Activity block gives the reason), so the ledger's empty
 		// line is looked for in the DOM itself.
 		expect(container.textContent).not.toContain('Nothing has happened yet.');
+	});
+});
+
+describe('Client portal Engagement hub, the Engagement read (#2587)', () => {
+	// The layout's load already read the Engagement; the hub draws from
+	// page.data and asks for the lists only.
+	it('does not read the Engagement itself', async () => {
+		apiFetchWithSession.mockClear();
+		await setupHub();
+
+		await expect.element(page.getByRole('heading', { name: 'What you still owe' })).toBeVisible();
+		const paths = apiFetchWithSession.mock.calls.map(([path]) => String(path));
+		expect(paths.filter((path) => !path.includes('/activity') && !path.includes('/visits'))).toEqual([]);
+	});
+
+	// The layout keeps its data across the Engagement's pages, so a hub
+	// drawn again without a new layout read asks for it again.
+	it('reads the Engagement again when the layout has not since it last drew', async () => {
+		invalidate.mockClear();
+		await setupHub();
+
+		await expect.element(page.getByRole('heading', { name: 'What you still owe' })).toBeVisible();
+		expect(invalidate).toHaveBeenCalledWith('portal:engagement');
 	});
 });

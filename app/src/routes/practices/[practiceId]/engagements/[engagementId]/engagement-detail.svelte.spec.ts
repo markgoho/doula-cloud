@@ -76,6 +76,9 @@ interface Detail {
 	canAttachSelf: boolean;
 	yourFee?: { amountCents: number; acceptedOn: string; terms?: string };
 	hasDoulaFees: boolean;
+	hasCarePlan: boolean;
+	hasBirthPlan: boolean;
+	hasContract: boolean;
 	startNote?: { text: string; writtenBy: string; writtenAt: string };
 }
 
@@ -143,7 +146,7 @@ async function renderWithFixtureResponder(
 		return respond(path);
 	});
 	await render(Page, {
-		data: { ...detail, session: sessionFor() }
+		data: { ...detail, session: sessionFor(['owner', 'doula']) }
 	});
 }
 
@@ -1235,7 +1238,7 @@ async function renderWithHeldReads(roles: string[]) {
 	await testPage.viewport(3200, 900);
 	apiFetchWithSession.mockImplementation(() => new Promise(() => {}));
 	await render(Page, {
-		data: { ...fixtureDetail, session: sessionFor(roles) }
+		data: { ...fixtureDetail, hasCarePlan: true, hasBirthPlan: true, session: sessionFor(roles) }
 	});
 }
 
@@ -2245,7 +2248,15 @@ async function setupPlans(
 		}
 		return respond(path);
 	});
-	await render(Page, { data: { ...fixtureDetail, ...detailOverride, session: sessionFor() } });
+	await render(Page, {
+		data: {
+			...fixtureDetail,
+			hasCarePlan: plans.care_plan !== undefined,
+			hasBirthPlan: plans.birth_plan !== undefined,
+			...detailOverride,
+			session: sessionFor()
+		}
+	});
 }
 
 function planSection(heading: string) {
@@ -4007,6 +4018,60 @@ describe('how the Contract and the Plans came to be (#2104)', () => {
 		await expect.element(testPage.getByText('Oluwaseun Adebayo-Montgomery Fitzwilliam')).toBeVisible();
 		await expect.element(testPage.getByText('Aug 12, 2026 by Anne-Marie Ochieng-Whitfield')).toBeVisible();
 		await expect.element(testPage.getByText('Aug 26, 2026 by Priyanka Venkataraman-Solberg')).toBeVisible();
+	});
+});
+
+function askedPaths() {
+	return apiFetchWithSession.mock.calls.map(([path]) => String(path));
+}
+
+describe('the reads the page asks for are the ones it may and has (#2591, #2601)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('does not ask for a Plan or a Contract that has not been started', async () => {
+		const detail = { ...fixtureDetail, hasCarePlan: false, hasBirthPlan: false, hasContract: false };
+		await setupMoney(sessionFor(['owner']), detail);
+
+		await expect.element(testPage.getByRole('heading', { name: 'Care Plan' })).toBeVisible();
+		await expect.poll(() => askedPaths().some((path) => path.endsWith('/activity'))).toBe(true);
+		expect(askedPaths().filter((path) => path.includes('/plans/') || path.endsWith('/contract'))).toEqual([]);
+	});
+
+	it('asks for the Plans and the Contract that exist', async () => {
+		const detail = { ...fixtureDetail, hasCarePlan: true, hasBirthPlan: true, hasContract: true };
+		await setupMoney(sessionFor(['owner']), detail);
+
+		await expect
+			.poll(() => askedPaths().filter((path) => path.includes('/plans/') || path.endsWith('/contract')))
+			.toHaveLength(3);
+	});
+
+	it.each([
+		['a Doula', sessionFor(['doula'], 'staff-9')],
+		['a contractor Doula', contractorReader]
+	])('does not ask %s for the roster, the Doula fees or the Offers', async (_name, reader) => {
+		await setupMoney(reader);
+
+		await expect.poll(() => askedPaths().some((path) => path.endsWith('/activity'))).toBe(true);
+		expect(
+			askedPaths().filter(
+				(path) => path.endsWith('/visit-assignees') || path.endsWith('/doula-fees') || path.endsWith('/offers')
+			)
+		).toEqual([]);
+	});
+
+	it('asks an Owner for the roster, the Doula fees and the Offers', async () => {
+		await setupMoney(sessionFor(['owner']));
+
+		await expect
+			.poll(() =>
+				askedPaths().filter(
+					(path) => path.endsWith('/visit-assignees') || path.endsWith('/doula-fees') || path.endsWith('/offers')
+				)
+			)
+			.toHaveLength(3);
 	});
 });
 

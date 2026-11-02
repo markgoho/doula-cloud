@@ -54,6 +54,19 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 		});
 	});
 
+	// #2590: SvelteKit warns when a load reads through the window's fetch.
+	it("reads through the fetch that load is passed, not the window's", async () => {
+		const { fetchMock } = setup({});
+		const loadFetch = vi.fn(async () =>
+			jsonResponse({ staffId: 'staff-9', practiceName: 'Riverside', roles: ['owner'], isContractor: false })
+		);
+
+		await load({ ...loadArguments, fetch: loadFetch } as unknown as Parameters<typeof load>[0]);
+
+		expect(loadFetch).toHaveBeenCalledWith('/api/practices/practice-1/session', expect.anything());
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
 	// #1532: the five screens whose act needs a second factor read this
 	// off the session, so they can say so before she tries.
 	it("carries the session's own second-factor fact", async () => {

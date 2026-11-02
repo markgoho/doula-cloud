@@ -25,10 +25,10 @@ const unread = 'the coming versions of the Terms could not be read';
  * a BFF that cannot answer this read cannot take the signup either.
  * `apiFetch`, not `apiFetchWithSession`: there is no session here.
  */
-export const load: PageLoad = async (): Promise<SignupData> => {
+export const load: PageLoad = async ({ fetch }): Promise<SignupData> => {
 	let response: Response;
 	try {
-		response = await apiFetch(comingVersionsPath);
+		response = await apiFetch(comingVersionsPath, {}, fetch);
 	} catch {
 		error(503, unread);
 	}

@@ -118,6 +118,16 @@ type Detail struct {
 	// else that a fee exists.
 	HasDoulaFees bool `json:"hasDoulaFees"`
 
+	// HasCarePlan, HasBirthPlan and HasContract (#2591) say whether each
+	// of those records exists on this Engagement, so the hub asks for the
+	// ones that do and the read that would answer 404 is never sent. Their
+	// own reads stay `404` for a missing record (docs/api-design.md); every
+	// Staff caller who can read this Engagement can read all three, so the
+	// flags tell nobody anything the reads would not.
+	HasCarePlan  bool `json:"hasCarePlan"`
+	HasBirthPlan bool `json:"hasBirthPlan"`
+	HasContract  bool `json:"hasContract"`
+
 	// StartNote (#2597) is the Note typed on the Engagement Request that
 	// started this Engagement, who wrote it and when. Answered only for
 	// an Owner or an Admin, the readers of a Request's note (ADR-0017);
@@ -155,6 +165,20 @@ func readStartNote(ctx context.Context, tx *sql.Tx, engagementID string) (*Start
 	}
 	note.WrittenBy = staffDisplayName(writer)
 	return &note, nil
+}
+
+// readRecordFlags answers Detail.HasCarePlan, HasBirthPlan and HasContract.
+func readRecordFlags(ctx context.Context, tx *sql.Tx, d *Detail) error {
+	if err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS (SELECT 1 FROM plan_instances WHERE engagement_id = $1 AND plan_type = 'care_plan'),
+		        EXISTS (SELECT 1 FROM plan_instances WHERE engagement_id = $1 AND plan_type = 'birth_plan'),
+		        EXISTS (SELECT 1 FROM contracts WHERE engagement_id = $1)`,
+		d.EngagementID,
+	).Scan(&d.HasCarePlan, &d.HasBirthPlan, &d.HasContract); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("engagement: read record flags: %w", err)
+	}
+	return nil
 }
 
 // hasDoulaFees answers Detail.HasDoulaFees with the rule
@@ -356,6 +380,11 @@ func DetailHandler() http.Handler {
 		d.CanAttachSelf = canAttachSelf(reader, staffID, d.Status, d.Doulas)
 		d.YourFee, err = readOwnFee(r.Context(), tx, engagementID, staffID)
 		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if err := readRecordFlags(r.Context(), tx, &d); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return

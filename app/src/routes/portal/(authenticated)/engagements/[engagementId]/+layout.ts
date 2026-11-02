@@ -1,6 +1,7 @@
 import { redirect, error } from '@sveltejs/kit';
 import { apiFetch } from '#lib/api.js';
 import { apiErrorMessage } from '#lib/apiErrorMessage.js';
+import { PORTAL_ENGAGEMENT_DEPENDENCY, noteEngagementRead } from '#lib/portalEngagementRead.js';
 import { portalLoginAfterRefusal } from '#lib/sessionEnded.js';
 import type { LayoutLoad } from './$types';
 
@@ -29,13 +30,14 @@ export interface EngagementIdentity {
  * `apiFetchWithSession`: that helper's 401 handling calls `goto()`, which
  * is the wrong tool mid-`load` (#471's rule, same as `billing/+page.ts`).
  *
- * This does not replace the hub page's own fetch of the same endpoint for
- * `status` -- that duplication predates this ticket and is out of scope
- * here. `createdAt` is additionally read off this same response, not a
- * second fetch, for the chrome's own switcher label (#310).
+ * The hub reads the rest of this same response from `page.data` (#2587)
+ * instead of asking again; `createdAt` is read off it too, for the chrome's
+ * own switcher label (#310). Through the `fetch` that `load` is passed, as
+ * SvelteKit asks.
  */
-export const load: LayoutLoad = async ({ params, url, untrack }): Promise<EngagementIdentity> => {
-	const response = await apiFetch(`/api/portal/engagements/${params.engagementId}`);
+export const load: LayoutLoad = async ({ params, url, untrack, fetch, depends }): Promise<EngagementIdentity> => {
+	depends(PORTAL_ENGAGEMENT_DEPENDENCY);
+	const response = await apiFetch(`/api/portal/engagements/${params.engagementId}`, {}, fetch);
 
 	if (response.status === 401) {
 		// Untracked, so moving between this Engagement's pages does not read it again.
@@ -44,5 +46,6 @@ export const load: LayoutLoad = async ({ params, url, untrack }): Promise<Engage
 		error(response.status, await apiErrorMessage(response));
 	}
 
+	noteEngagementRead();
 	return response.json();
 };
