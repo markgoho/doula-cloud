@@ -62,6 +62,7 @@ const STAFF_ACTIVITY_PHRASES: Record<string, Phrase> = {
 	due_date_changed: (name) => `Due date changed for ${client(name)}`,
 	birth_outcome_recorded: (name) => `Birth outcome recorded for ${client(name)}`,
 	doula_attached: (name) => `Doula added to ${clients(name)} care`,
+	doula_taken_off: (name) => `Doula taken off ${clients(name)} care`,
 
 	// The Contract.
 	contract_created: (name) => `Contract drafted for ${client(name)}`,

@@ -72,7 +72,7 @@ interface Detail {
 	clientPortalInviteStatus?: string;
 	clientEmailSuppressed?: boolean;
 	clientHasEmail?: boolean;
-	doulas: { staffId: string; name: string }[];
+	doulas: { staffId: string; name: string; bookedVisits: number }[];
 	canAttachSelf: boolean;
 	yourFee?: { amountCents: number; acceptedOn: string; terms?: string };
 	hasDoulaFees: boolean;
@@ -3039,7 +3039,7 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 		await setupWhoIsOn(nobodyOnIt, () =>
 			jsonResponse({
 				engagementId: 'engagement-1',
-				doulas: [{ staffId: 'staff-1', name: 'Anne-Marie Ochieng-Whitfield' }],
+				doulas: [{ staffId: 'staff-1', name: 'Anne-Marie Ochieng-Whitfield', bookedVisits: 0 }],
 				canAttachSelf: false
 			})
 		);
@@ -3105,7 +3105,7 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 						isVisitAdded
 							? {
 									...nobodyOnIt,
-									doulas: [{ staffId: 'staff-1', name: 'Anne-Marie Ochieng-Whitfield' }],
+									doulas: [{ staffId: 'staff-1', name: 'Anne-Marie Ochieng-Whitfield', bookedVisits: 0 }],
 									canAttachSelf: false
 								}
 							: nobodyOnIt
@@ -3151,7 +3151,7 @@ const roster: VisitAssignee[] = [
 ];
 
 const priyaIsOn = () =>
-	jsonResponse({ engagementId: 'engagement-1', doulas: [{ staffId: 'staff-2', name: 'Priya Raman' }], canAttachSelf: true });
+	jsonResponse({ engagementId: 'engagement-1', doulas: [{ staffId: 'staff-2', name: 'Priya Raman', bookedVisits: 0 }], canAttachSelf: true });
 
 async function setupPutOn(
 	detail: Detail,
@@ -3198,7 +3198,7 @@ describe('putting a Doula on the Engagement (#2230)', () => {
 
 	it('leaves out a Doula who is already on it', async () => {
 		const jo: VisitAssignee = { staffId: 'staff-4', name: 'Jo Mercer', employmentType: 'employee', nameable: true };
-		await setupPutOn({ ...nobodyOnIt, doulas: [{ staffId: 'staff-2', name: 'Priya Raman' }] }, ['owner', 'doula'], {
+		await setupPutOn({ ...nobodyOnIt, doulas: [{ staffId: 'staff-2', name: 'Priya Raman', bookedVisits: 0 }] }, ['owner', 'doula'], {
 			assignees: [...roster, jo]
 		});
 		await openChange('Doula');
@@ -3211,7 +3211,7 @@ describe('putting a Doula on the Engagement (#2230)', () => {
 	// names who stays instead of reading as a swap.
 	it('names the Doula who stays, and says the one chosen is added', async () => {
 		const jo: VisitAssignee = { staffId: 'staff-4', name: 'Jo Mercer', employmentType: 'employee', nameable: true };
-		await setupPutOn({ ...nobodyOnIt, doulas: [{ staffId: 'staff-2', name: 'Priya Raman' }] }, ['owner', 'doula'], {
+		await setupPutOn({ ...nobodyOnIt, doulas: [{ staffId: 'staff-2', name: 'Priya Raman', bookedVisits: 0 }] }, ['owner', 'doula'], {
 			assignees: [...roster, jo]
 		});
 		await openChange('Doula');
@@ -3289,7 +3289,7 @@ describe('putting a Doula on the Engagement (#2230)', () => {
 	it('says "You are on this Engagement." when the reader chooses herself', async () => {
 		await setupPutOn(nobodyOnIt, ['owner', 'doula'], {
 			attachResponse: () =>
-				jsonResponse({ engagementId: 'engagement-1', doulas: [{ staffId: 'staff-1', name: 'Renata Alvarez' }], canAttachSelf: false })
+				jsonResponse({ engagementId: 'engagement-1', doulas: [{ staffId: 'staff-1', name: 'Renata Alvarez', bookedVisits: 0 }], canAttachSelf: false })
 		});
 		await openChange('Doula');
 
@@ -4168,5 +4168,85 @@ describe('the ledger is read again after an act (#2331)', () => {
 
 		await expect.element(testPage.getByText('The Contract is not signed yet.')).toBeVisible();
 		expect(activityReads()).toHaveLength(1);
+	});
+});
+
+// #2596: taking a Doula off, from a control of its own under the summary.
+const takeOffLink = () => testPage.getByRole('button', { name: 'Take a Doula off' });
+
+async function setupTakeOff(
+	doulas: Detail['doulas'],
+	roles: string[],
+	takeOffAnswer: () => Response = () => jsonResponse({ engagementId: 'engagement-1', doulas: [], canAttachSelf: false })
+) {
+	await testPage.viewport(3200, 900);
+	apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
+		if (init?.method === 'DELETE' && /\/attachments\/[^/]+$/.test(path)) return Promise.resolve(takeOffAnswer());
+		return Promise.resolve(jsonResponse('not available', 403));
+	});
+	await render(Page, { data: { ...fixtureDetail, doulas, session: sessionFor(roles, 'staff-1') } });
+}
+
+describe('taking a Doula off the Engagement (#2596)', () => {
+	const lena = { staffId: 'staff-3', name: 'Lena Vasquez', bookedVisits: 3 };
+	const priya = { staffId: 'staff-2', name: 'Priya Raman', bookedVisits: 0 };
+
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('is offered to an Owner or an Admin where somebody is on it, and to nobody else', async () => {
+		await setupTakeOff([lena], ['owner']);
+		await expect.element(takeOffLink()).toBeVisible();
+	});
+
+	it.each([
+		['a Doula', ['doula'], [lena]],
+		['an Owner with nobody on it', ['owner'], []]
+	])('is not offered to %s', async (_name, roles, doulas) => {
+		await setupTakeOff(doulas, roles);
+		await expect.element(testPage.getByRole('heading', { level: 1 })).toBeVisible();
+		expect(takeOffLink().elements()).toHaveLength(0);
+	});
+
+	it('asks for a name when more than one Doula is on it and none is chosen', async () => {
+		await setupTakeOff([lena, priya], ['owner']);
+		await takeOffLink().click();
+		await testPage.getByRole('button', { name: 'Take off', exact: true }).click();
+
+		await expect.element(testPage.getByText('Select who comes off').first()).toBeVisible();
+		expect(apiFetchWithSession.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false);
+	});
+
+	it('confirms by name, takes her off, and says what is left to move', async () => {
+		await setupTakeOff([lena], ['owner']);
+		await takeOffLink().click();
+		await testPage.getByRole('button', { name: 'Take off', exact: true }).click();
+
+		await expect.element(testPage.getByRole('heading', { name: 'Take Lena Vasquez off this Engagement?' })).toBeVisible();
+		await expect
+			.element(testPage.getByText("We will email Lena Vasquez to say so. Lena Vasquez's 3 booked Visits stay with Lena Vasquez until you reassign them."))
+			.toBeVisible();
+		await testPage.getByRole('button', { name: 'Take Lena Vasquez off' }).click();
+
+		await expect
+			.element(
+				testPage.getByText(
+					"Lena Vasquez is off this Engagement. We emailed Lena Vasquez to say so. 3 booked Visits are still Lena Vasquez's: reassign each one under Visits."
+				)
+			)
+			.toBeVisible();
+		expect(takeOffLink().elements()).toHaveLength(0);
+	});
+
+	it('leaves her on, with the refusal said in the dialog, when the BFF refuses', async () => {
+		await setupTakeOff([lena], ['owner'], () => jsonResponse('Only an Owner or an Admin can do that.', 403));
+		await takeOffLink().click();
+		await testPage.getByRole('button', { name: 'Take off', exact: true }).click();
+		await testPage.getByRole('button', { name: 'Take Lena Vasquez off' }).click();
+
+		await expect.element(testPage.getByText('Only an Owner or an Admin can do that.')).toBeVisible();
+		await testPage.getByRole('button', { name: 'Cancel' }).click();
+		await expect.element(takeOffLink()).toBeVisible();
 	});
 });

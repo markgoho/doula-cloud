@@ -64,6 +64,11 @@ describe('portalVisitColumns', () => {
 
 		expect(who.accessor(visit({ doulaName: 'Maya Okonkwo' }))).toBe('Maya Okonkwo');
 	});
+
+	// #2596: a booked Visit whose Doula was taken off arrives with no name.
+	it('says it is to be confirmed where the Doula was taken off', () => {
+		expect(portalVisitColumns()[1]!.accessor(visit({ doulaName: '' }))).toBe('To be confirmed');
+	});
 });
 
 // The wire's order is furthest-future first, and the page's is the next

@@ -22,15 +22,15 @@
 	import {
 		closeSecondFactorRecommendation,
 		isConnectCardShown,
-		isDeclinedBlockShown,
+		isNoDoulaBlockShown,
 		isRequestBlockShown,
 		isRosterBlockShown,
 		isTonightBlockShown,
 		loadPracticeLanding,
 		loadWaitingOnReplyPage,
 		type ConnectHealth,
-		type DeclinedHealth,
-		type DeclinedOffer,
+		type NoDoulaHealth,
+		type NoDoulaItem,
 		type PracticeLanding,
 		type RequestHealth,
 		type RosterHealth,
@@ -235,7 +235,7 @@
 		return rows;
 	}
 
-	function declinedHref(item: DeclinedOffer): string {
+	function declinedHref(item: NoDoulaItem): string {
 		const engagement = resolve('/practices/[practiceId]/engagements/[engagementId]', {
 			practiceId: page.params.practiceId!,
 			engagementId: item.engagementId
@@ -243,8 +243,8 @@
 		return `${engagement}#offers`;
 	}
 
-	function declinedLine(item: DeclinedOffer): string {
-		return `${item.clientName}, ${item.kind === 'postpartum' ? 'postpartum' : 'birth'}: ${item.declinedBy} declined`;
+	function declinedLine(item: NoDoulaItem): string {
+		return `${item.clientName}, ${item.kind === 'postpartum' ? 'postpartum' : 'birth'}: ${item.name} ${item.reason === 'declined' ? 'declined' : 'was taken off'}`;
 	}
 
 	function notConnectedWords(connect: ConnectHealth): string {
@@ -326,7 +326,7 @@
 		they need no space held for them while the page loads.
 	-->
 	{#if isRequestBlockShown(landing!.requests)}{@render requestBlock(landing!.requests)}{/if}
-	{#if isDeclinedBlockShown(landing!.declined)}{@render declinedBlock(landing!.declined)}{/if}
+	{#if isNoDoulaBlockShown(landing!.declined)}{@render declinedBlock(landing!.declined)}{/if}
 	{#if isConnectCardShown(landing!.connect)}{@render connectBlock(landing!.connect)}{/if}
 	{#if isRosterBlockShown(landing!.roster)}{@render rosterBlock(landing!.roster)}{/if}
 {/snippet}
@@ -413,16 +413,16 @@
 	Admin, while the work still has no Doula and no open Offer. Each line
 	opens that Engagement's Offers; the list is one decision.
 -->
-{#snippet declinedBlock(declined: DeclinedHealth | 'unavailable')}
+{#snippet declinedBlock(declined: NoDoulaHealth | 'unavailable')}
 	<section>
 		<stack-l space="var(--space-3)">
 			<Heading level={2} variant="section" text="No Doula yet" />
 			{#if declined === 'unavailable'}
-				<Text text="Could not load declined Offers just now." tone="muted" />
+				<Text text="Could not load the work without a Doula just now." tone="muted" />
 			{:else}
-				<Text text="The Offer was declined, and nobody else has the work or an open Offer." tone="variant" />
+				<Text text="Nobody has this work now, and no Offer is open." tone="variant" />
 				<ul class="declined-list">
-					{#each declined.items as item (item.offerId)}
+					{#each declined.items as item (item.id)}
 						<li>
 							<Link href={declinedHref(item)} label={declinedLine(item)} variant="secondary" />
 						</li>

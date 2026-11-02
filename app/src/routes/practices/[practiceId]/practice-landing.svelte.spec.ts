@@ -98,7 +98,7 @@ async function setup({
 	pageState.data = { session: { practiceId, practiceName, roles, isContractor, secondFactor } };
 	const answers: Record<string, Response | Promise<Response>> = {
 		// Before `offers`: its path holds `/offers` (#2508).
-		'offers/declined': jsonResponse({ items: [], hasMore: false }),
+		'no-doula-yet': jsonResponse({ items: [], hasMore: false }),
 		// The declined Offer has no counterpart in the fixture, which
 		// answers `/offers` with only the still-open one -- so it is
 		// written as a spread onto that same Offer rather than a second
@@ -395,10 +395,11 @@ describe('the Practice landing page', () => {
 	it('lists each declined Offer on work nobody has, linking to its Offers', async () => {
 		await setup({
 			overrides: {
-				'offers/declined': jsonResponse({
+				'no-doula-yet': jsonResponse({
 					items: [
-						{ offerId: 'o1', engagementId: 'e1', clientName: 'Adaeze Nwosu', kind: 'birth', declinedBy: 'Lena Vasquez', declinedAt: '2026-10-30T15:00:00Z' },
-						{ offerId: 'o2', engagementId: 'e2', clientName: 'Pat Lee', kind: 'postpartum', declinedBy: 'Fern Ode', declinedAt: '2026-10-29T15:00:00Z' }
+						{ id: 'o1', reason: 'declined', engagementId: 'e1', clientName: 'Adaeze Nwosu', kind: 'birth', name: 'Lena Vasquez', at: '2026-10-30T15:00:00Z' },
+						{ id: 'o2', reason: 'declined', engagementId: 'e2', clientName: 'Pat Lee', kind: 'postpartum', name: 'Fern Ode', at: '2026-10-29T15:00:00Z' },
+						{ id: 'a1', reason: 'taken_off', engagementId: 'e3', clientName: 'Camille Boyd', kind: 'birth', name: 'Lena Vasquez', at: '2026-10-28T15:00:00Z' }
 					],
 					hasMore: false
 				})
@@ -412,14 +413,17 @@ describe('the Practice landing page', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: 'Pat Lee, postpartum: Fern Ode declined' }))
 			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Camille Boyd, birth: Lena Vasquez was taken off' }))
+			.toBeVisible();
 		expect(testPage.getByText(/Showing the newest/).elements()).toHaveLength(0);
 	});
 
 	it('says only the newest are shown when more declines lie past the page', async () => {
 		await setup({
 			overrides: {
-				'offers/declined': jsonResponse({
-					items: [{ offerId: 'o1', engagementId: 'e1', clientName: 'Adaeze Nwosu', kind: 'birth', declinedBy: 'Lena Vasquez', declinedAt: '2026-10-30T15:00:00Z' }],
+				'no-doula-yet': jsonResponse({
+					items: [{ id: 'o1', reason: 'declined', engagementId: 'e1', clientName: 'Adaeze Nwosu', kind: 'birth', name: 'Lena Vasquez', at: '2026-10-30T15:00:00Z' }],
 					hasMore: true
 				})
 			}
@@ -435,16 +439,16 @@ describe('the Practice landing page', () => {
 	});
 
 	it('says so when the declined Offers cannot be read', async () => {
-		await setup({ overrides: { 'offers/declined': refusal('nope') } });
+		await setup({ overrides: { 'no-doula-yet': refusal('nope') } });
 
-		await expect.element(testPage.getByText('Could not load declined Offers just now.')).toBeVisible();
+		await expect.element(testPage.getByText('Could not load the work without a Doula just now.')).toBeVisible();
 	});
 
 	it('never asks a Doula without Owner or Admin for the declined Offers', async () => {
 		await setup({ roles: ['doula'] });
 
 		await expect.element(testPage.getByRole('heading', { name: 'Clients waiting on a reply' })).toBeVisible();
-		expect(apiFetchWithSession).not.toHaveBeenCalledWith(`/api/practices/${practiceId}/offers/declined`);
+		expect(apiFetchWithSession).not.toHaveBeenCalledWith(`/api/practices/${practiceId}/no-doula-yet`);
 		expect(testPage.getByRole('heading', { name: 'No Doula yet' }).elements()).toHaveLength(0);
 	});
 

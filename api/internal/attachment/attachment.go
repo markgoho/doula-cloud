@@ -207,3 +207,56 @@ func Grant(ctx context.Context, tx *sql.Tx, practiceID, engagementID, doulaStaff
 	}
 	return nil
 }
+
+// TakeOff ends doulaStaffID's granted Attachment on engagementID (#2596):
+// the Practice taking her off, one of the four triggers ADR-0008 names. It
+// writes the doula_taken_off activity entry that answers "who took her
+// off, and when" (the actor is endedBy, the row's created_at is the
+// instant, the diff names her), and, where endedBy is not the Doula
+// herself, queues her staffnotice.KindTakenOffEngagement mail in the same
+// transaction. Her booked Visits are not touched: they stay hers until
+// someone reassigns them, and send no mail of their own.
+//
+// It reports whether she was on it. A Doula who is not leaves no entry and
+// no mail, so a repeated press changes nothing. Whether the caller may
+// take anyone off is the mount's question, not this one's.
+func TakeOff(ctx context.Context, tx *sql.Tx, practiceID, engagementID, doulaStaffID, endedBy string) (bool, error) {
+	wasOn, err := staffauth.EndGranted(ctx, tx, engagementID, doulaStaffID, endedBy)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return false, fmt.Errorf("attachment: take off: %w", err)
+	}
+	if !wasOn {
+		return false, nil
+	}
+	diff, err := json.Marshal(map[string]string{activity.DiffKeyAttachedStaffID: doulaStaffID})
+	if err != nil {
+		// coverage:ignore reason: a map of strings always marshals cleanly, not exercised by unit tests
+		return false, fmt.Errorf("attachment: marshal doula taken off diff: %w", err)
+	}
+	if err := activity.Record(ctx, tx, activity.Entry{
+		PracticeID:  practiceID,
+		SubjectKind: activity.SubjectEngagement,
+		SubjectID:   engagementID,
+		Action:      string(activity.ActionDoulaTakenOff),
+		Diff:        diff,
+		Actor:       activity.StaffActor(endedBy),
+	}); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return false, fmt.Errorf("attachment: record doula taken off: %w", err)
+	}
+	if doulaStaffID == endedBy {
+		return true, nil
+	}
+	if err := staffnotice.Queue(ctx, tx, staffnotice.Notice{
+		PracticeID:       practiceID,
+		RecipientStaffID: doulaStaffID,
+		Kind:             staffnotice.KindTakenOffEngagement,
+		SubjectID:        engagementID,
+		TriggeredBy:      endedBy,
+	}); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return false, fmt.Errorf("attachment: queue taken-off notice: %w", err)
+	}
+	return true, nil
+}

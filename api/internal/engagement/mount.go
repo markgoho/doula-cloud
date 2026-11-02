@@ -56,4 +56,9 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router) {
 	ir.ExemptGated("PUT /api/practices/{practiceId}/engagements/{engagementId}/attachments/{staffId}",
 		"naturally idempotent (docs/api-design.md rule 4): a PUT for a Doula who is already on the Engagement writes nothing and returns the same 200",
 		false, staffauth.OwnerAndAdmin, AttachDoulaHandler())
+	// TakeOffDoulaHandler (#2596) is the Owner's or the Admin's act too, and
+	// carries no staffauth.AttachingWrite for the same reason.
+	ir.ExemptGated("DELETE /api/practices/{practiceId}/engagements/{engagementId}/attachments/{staffId}",
+		"naturally idempotent (docs/api-design.md rule 4): a DELETE for a Doula who is not on the Engagement writes nothing and returns the same 200",
+		false, staffauth.OwnerAndAdmin, TakeOffDoulaHandler())
 }

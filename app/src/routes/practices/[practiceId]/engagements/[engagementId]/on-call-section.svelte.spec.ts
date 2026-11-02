@@ -554,7 +554,7 @@ describe('the on-call section on a birth (#1093)', () => {
 				? jsonResponse({
 						noWindowReason: 'ended_before_start',
 						rule: { startRule: 'gestational_week', startWeek: 37, graceDays: 14, overridden: false },
-						doulas: [{ staffId: 'doula-1', name: 'Maya Okonkwo' }],
+						doulas: [{ staffId: 'doula-1', name: 'Maya Okonkwo', bookedVisits: 0 }],
 						gaps: []
 					})
 				: undefined

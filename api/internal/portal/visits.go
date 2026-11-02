@@ -61,6 +61,11 @@ type Visit struct {
 	// Doula who deleted her own login, whose name ADR-0033 overwrites on
 	// the row, and whom 00111's policy therefore refuses rather than
 	// showing a Client "Deleted Staff Member".
+	//
+	// It is empty for a booked Visit whose Doula has been taken off the
+	// Engagement (#2596): a Client is not told "Lena is coming" about a
+	// Visit Lena will not work. The Practice moves the Visit, and the name
+	// returns with it.
 	DoulaName string `json:"doulaName"`
 	// HasHappened is decided in SQL against the database's own clock, so the
 	// browser never has to compare a parsed instant with its own -- the
@@ -146,7 +151,10 @@ func VisitsHandler() http.Handler {
 // `hasHappened` with no second request and no sort of its own.
 // `hasHappened` is judged at clock.Now(ctx), not SQL now() (#1992).
 func listPortalVisits(ctx context.Context, tx *sql.Tx, engagementID string, after *pagecursor.Cursor) ([]Visit, error) {
-	query := `SELECT v.id, v.scheduled_at, coalesce(s.name, $2), v.scheduled_at <= $3
+	query := `SELECT v.id, v.scheduled_at,
+		        CASE WHEN v.scheduled_at > $3 AND client_portal_holder_left_engagement(v.engagement_id, v.staff_id)
+		             THEN '' ELSE coalesce(s.name, $2) END,
+		        v.scheduled_at <= $3
 		 FROM visits v
 		 LEFT JOIN staff s ON s.id = v.staff_id
 		 WHERE v.engagement_id = $1 AND v.scheduled_at IS NOT NULL`

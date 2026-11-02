@@ -95,7 +95,8 @@ export function whatHappensNext(
 ): WhatHappensNext {
 	const out: WhatHappensNext = hasCareEnded ? { ended: engagementStatusLabel('completed') } : {};
 	if (next) {
-		out.lead = `${next.doulaName} is coming to you on ${formatPortalVisit(next.scheduledAt, false)}.`;
+		const when = formatPortalVisit(next.scheduledAt, false);
+		out.lead = next.doulaName ? `${next.doulaName} is coming to you on ${when}.` : `Your next visit is on ${when}.`;
 	} else if (!hasCareEnded) {
 		out.lead = NO_NEXT_VISIT_MESSAGE;
 	}

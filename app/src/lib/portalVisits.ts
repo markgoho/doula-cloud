@@ -35,9 +35,16 @@ import type { CursorPage } from './paginatedList.svelte.js';
 export interface PortalVisit {
 	visitId: string;
 	scheduledAt: string;
+	/**
+	Empty for a booked Visit whose Doula was taken off the work (#2596).
+	*/
 	doulaName: string;
 	hasHappened: boolean;
 }
+
+/** What a booked Visit says in place of a Doula who was taken off the work
+ * (#2596). */
+const NOT_YET_NAMED = 'To be confirmed';
 
 /**
  * One column, shaped to satisfy DataTable's own `Column<T>` structurally
@@ -77,7 +84,7 @@ export function portalVisitColumns(): VisitColumn[] {
 			variant: 'meta',
 			datetimeAccessor: (row) => row.scheduledAt
 		},
-		{ label: 'Who', accessor: (row) => row.doulaName, variant: 'muted' }
+		{ label: 'Who', accessor: (row) => row.doulaName || NOT_YET_NAMED, variant: 'muted' }
 	];
 }
 

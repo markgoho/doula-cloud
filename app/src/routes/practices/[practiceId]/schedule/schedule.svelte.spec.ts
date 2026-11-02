@@ -56,6 +56,19 @@ async function setup(pageData: SchedulePageData = data) {
 	});
 }
 
+describe('a booked Visit whose Doula was taken off (#2596)', () => {
+	it('reads "No longer on this Engagement" beside her name', async () => {
+		await setup({
+			...data,
+			page: { ...schedulePage, items: [{ ...earlierVisit, isOffEngagement: true }, laterVisit] }
+		});
+
+		await expect
+			.element(testPage.getByRole('cell', { name: `${earlierVisit.staffName} (No longer on this Engagement)`, exact: true }))
+			.toBeVisible();
+	});
+});
+
 describe('the Practice-wide schedule (#263)', () => {
 	it('lists every scheduled Visit at the Practice, with when, whose and who is covering', async () => {
 		await setup();

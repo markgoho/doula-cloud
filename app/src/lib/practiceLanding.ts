@@ -95,35 +95,37 @@ export function isRequestBlockShown(requests: Block<RequestHealth>): requests is
 	return requests === 'unavailable' || (requests !== undefined && requests.count > 0);
 }
 
-/** One declined Offer on work nobody has yet (#2508): no Doula on the
+/** One line of work nobody has yet (#2508, #2596): a declined Offer, or the Doula
+ * taken off it. No Doula on the
  * Engagement and no Offer open on it. */
-export interface DeclinedOffer {
-	offerId: string;
+export interface NoDoulaItem {
+	id: string;
 	engagementId: string;
 	clientName: string;
 	kind: string;
-	declinedBy: string;
-	declinedAt: string;
+	reason: 'declined' | 'taken_off';
+	name: string;
+	at: string;
 }
 
 /**
- * The newest page of declines, and whether more lie past it.
+ * The newest page of work without a Doula, and whether more lie past it.
  */
-export interface DeclinedHealth {
-	items: DeclinedOffer[];
+export interface NoDoulaHealth {
+	items: NoDoulaItem[];
 	hasMore: boolean;
 }
 
-export function isDeclinedBlockShown(declined: Block<DeclinedHealth>): declined is DeclinedHealth | 'unavailable' {
+export function isNoDoulaBlockShown(declined: Block<NoDoulaHealth>): declined is NoDoulaHealth | 'unavailable' {
 	return declined === 'unavailable' || (declined !== undefined && declined.items.length > 0);
 }
 
-async function loadDeclined(fetcher: Fetcher, practiceId: string): Promise<DeclinedHealth> {
-	const response = await fetcher(`/api/practices/${practiceId}/offers/declined`);
+async function loadNoDoula(fetcher: Fetcher, practiceId: string): Promise<NoDoulaHealth> {
+	const response = await fetcher(`/api/practices/${practiceId}/no-doula-yet`);
 	if (!response.ok) {
 		throw new Error(await apiErrorMessage(response));
 	}
-	const page: CursorPage<DeclinedOffer> = await response.json();
+	const page: CursorPage<NoDoulaItem> = await response.json();
 	return { items: page.items, hasMore: page.hasMore };
 }
 
@@ -219,7 +221,7 @@ export interface PracticeLanding {
 	credit: Block<CreditHealth>;
 	connect: Block<ConnectHealth>;
 	requests: Block<RequestHealth>;
-	declined: Block<DeclinedHealth>;
+	declined: Block<NoDoulaHealth>;
 	tonight: Block<TonightHealth>;
 	/** Whether the hub shows the notice that recommends a second factor
 	 * (#1533). The BFF decides it; see `isSecondFactorRecommended`. */
@@ -385,7 +387,7 @@ export async function loadPracticeLanding(
 				})
 			: undefined,
 		// The BFF's own Owner/Admin gate (#2508): only they put a Doula on.
-		canReadRoster(roles) ? block(() => loadDeclined(fetcher, practiceId)) : undefined,
+		canReadRoster(roles) ? block(() => loadNoDoula(fetcher, practiceId)) : undefined,
 		canReadRoster(roles)
 			? block(async () => tonightFrom(await loadTonightRoster(fetcher, practiceId)))
 			: undefined,

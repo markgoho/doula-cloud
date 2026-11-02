@@ -13,6 +13,10 @@
 		attachDoula,
 		attachDoulaWords,
 		attachSelf,
+		takeOffDoula,
+		takeOffWords,
+		takenOffMessage,
+		visitDoulaText,
 		changeEngagementDueDate,
 		changeEngagementKind,
 		changeEngagementStatus,
@@ -136,6 +140,7 @@
 	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 	import PlanInstanceView from '#lib/components/molecules/PlanInstanceView.svelte';
 	import RadioGroup, { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
+	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import DateFields from '#lib/components/molecules/DateFields.svelte';
 	import {
 		EMPTY_DATE_PARTS,
@@ -1040,6 +1045,58 @@
 		if (!isAttached) return;
 		await loadOnCall();
 		await loadActivity();
+	}
+
+	// #2596: taking a Doula off is its own control under the summary, apart
+	// from the Doula row's add, and ends in a confirm dialog that names the
+	// act. Offered only to an Owner or an Admin where somebody is on it; the
+	// endpoint refuses anyone else whatever is drawn.
+	const canTakeOff = $derived(isPracticeOwnerOrAdmin && attachedDoulas.length > 0 && displayStatus !== 'completed');
+	const TAKE_OFF_GROUP = 'take-off-doula';
+	let isTakeOffShown = $state(false);
+	let isTakeOffConfirmShown = $state(false);
+	let takeOffChoice = $state<string | undefined>();
+	let takeOffError = $state('');
+	const takeOffSubmission = new FormSubmission();
+	const takeOffOptions = $derived(attachedDoulas.map((doula) => ({ value: doula.staffId, label: doula.name })));
+	const takeOffDoulaChosen = $derived(
+		attachedDoulas.find((doula) => doula.staffId === (takeOffChoice ?? (attachedDoulas.length === 1 ? attachedDoulas[0]!.staffId : undefined)))
+	);
+	const takeOffDialog = $derived(
+		takeOffDoulaChosen ? takeOffWords(takeOffDoulaChosen, takeOffDoulaChosen.staffId === callerStaffId) : undefined
+	);
+
+	function toggleTakeOff() {
+		isTakeOffShown = !isTakeOffShown;
+		takeOffChoice = undefined;
+		takeOffError = '';
+		takeOffSubmission.errors = [];
+	}
+
+	async function handleTakeOffSubmit(event: SubmitEvent) {
+		event.preventDefault();
+		await takeOffSubmission.run(async () => {
+			if (!takeOffDoulaChosen) {
+				return [{ message: 'Select who comes off', targetId: radioFieldId(TAKE_OFF_GROUP, takeOffOptions[0]!.value) }];
+			}
+			takeOffError = '';
+			isTakeOffConfirmShown = true;
+		}, orThrownMessage);
+	}
+
+	async function confirmTakeOff() {
+		const doula = takeOffDoulaChosen!;
+		try {
+			whoIsOnOverride = await takeOffDoula(apiFetchWithSession, reference, doula.staffId);
+		} catch (error) {
+			takeOffError = error instanceof Error ? error.message : 'Could not take off the Doula';
+			throw error;
+		}
+		isTakeOffShown = false;
+		takeOffChoice = undefined;
+		openChange = undefined;
+		selfAttachedMessage = takenOffMessage(doula, doula.staffId === callerStaffId);
+		await Promise.all([loadVisits(), loadOnCall(), loadActivity()]);
 	}
 
 	onDestroy(() => {
@@ -2326,6 +2383,45 @@
 			{/snippet}
 		</SummaryList>
 
+		{#if canTakeOff}
+			<!--
+				#2596: apart from the Doula row's add, so a destructive button never
+				sits beside a benign one. The link opens a small form; its one
+				button opens the confirm dialog, which names the act.
+			-->
+			<stack-l space="var(--space-3)">
+				<Button label="Take a Doula off" variant="link" expanded={isTakeOffShown} onClick={toggleTakeOff} />
+				{#if isTakeOffShown}
+					<StackedForm onSubmit={handleTakeOffSubmit}>
+						{#if takeOffSubmission.errors.length > 0}
+							<ErrorSummary errors={takeOffSubmission.errors} />
+						{/if}
+						<RadioGroup
+							legend="Who comes off?"
+							name={TAKE_OFF_GROUP}
+							options={takeOffOptions}
+							value={takeOffDoulaChosen?.staffId}
+							onChange={(value) => (takeOffChoice = value)}
+							error={takeOffSubmission.errorFor(radioFieldId(TAKE_OFF_GROUP, takeOffOptions[0]!.value))}
+						/>
+						<cluster-l space="var(--space-3)">
+							<Button label="Take off" type="submit" size="sm" variant="destructive" loading={takeOffSubmission.isSubmitting} />
+						</cluster-l>
+					</StackedForm>
+				{/if}
+			</stack-l>
+		{/if}
+		{#if takeOffDialog}
+			<ConfirmDialog
+				bind:open={isTakeOffConfirmShown}
+				title={takeOffDialog.title}
+				consequence={takeOffDialog.consequence}
+				confirmLabel={takeOffDialog.confirm}
+				error={takeOffError}
+				onConfirm={confirmTakeOff}
+			/>
+		{/if}
+
 		<!--
 			What a Change did. Each takes focus: the control she pressed
 			went with the form it was in, and focus would otherwise fall to
@@ -2665,7 +2761,7 @@
 		columns={[
 			{ label: 'Date', accessor: (visit: Visit) => formatScheduledVisit(visit.scheduledAt) },
 			{ label: 'Type', accessor: (visit: Visit) => visitTypeLabel(visit.type) },
-			{ label: 'Doula', accessor: (visit: Visit) => visit.staffName },
+			{ label: 'Doula', accessor: (visit: Visit) => visitDoulaText(visit.staffName, visit.isOffEngagement) },
 			// #2091: a note is a Doula's prose beside four facts, so it takes
 			// the room they leave and wraps there. The table's floor is then the
 			// facts beside the note's longest word, 615px on the typical screen in

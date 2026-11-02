@@ -20,6 +20,7 @@ import (
 var wantDefinerFunctions = map[string][]string{
 	"app_runtime": {
 		"acknowledge_birth_plan(uuid)",
+		"client_portal_holder_left_engagement(uuid,uuid)",
 		"client_portal_sees_staff(uuid)",
 		"current_staff_id()",
 		"engagement_doula_names(uuid)",
