@@ -46,6 +46,9 @@ func TestWorker_MailsHerTheEngagementSomeoneTookHerOff(t *testing.T) {
 	if !strings.Contains(msg.Text, "\n"+link+"\n") || !strings.Contains(msg.Text, "opens that client's page") {
 		t.Fatalf("text = %q, want the link and the employee's wording", msg.Text)
 	}
+	if !strings.Contains(msg.Text, "stay yours until your practice moves them to someone else.") {
+		t.Fatalf("text = %q, want the line on her booked visits", msg.Text)
+	}
 	if strings.Contains(msg.Text, "Your offers") {
 		t.Fatalf("an employee's mail speaks of Your offers: %q", msg.Text)
 	}
@@ -72,6 +75,7 @@ func TestWorker_AContractorTakenOffIsToldWhereHerFeeIs(t *testing.T) {
 	text := sent[0].Text
 	if !strings.Contains(text, "This link shows the day your work ended:") ||
 		!strings.Contains(text, "Your fee, the terms and what you were paid stay on Your offers.") ||
+		!strings.Contains(text, "stay yours until your practice moves them to someone else.") ||
 		strings.Contains(text, "client's page") {
 		t.Fatalf("text = %q, want the contractor's wording", text)
 	}
