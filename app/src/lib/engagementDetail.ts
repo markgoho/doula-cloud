@@ -82,6 +82,10 @@ export interface EngagementSummary {
 	 * Doula fees section stands from the screen's first frame. Answered
 	 * only for an Owner or Admin; false for anyone else. */
 	hasDoulaFees: boolean;
+	/** The Note typed on the Request that started this Engagement (#2597):
+	 * what was written, by whom, and when. Answered only for an Owner or
+	 * an Admin, and absent when no note was written. */
+	startNote?: { text: string; writtenBy: string; writtenAt: string };
 	/** The Client's portal-invite state (#255), using the same
 	 * derivation the Clients list's own ClientListItem.portalInviteStatus
 	 * carries -- absent when she has never been invited. */

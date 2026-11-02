@@ -76,6 +76,7 @@ interface Detail {
 	canAttachSelf: boolean;
 	yourFee?: { amountCents: number; acceptedOn: string; terms?: string };
 	hasDoulaFees: boolean;
+	startNote?: { text: string; writtenBy: string; writtenAt: string };
 }
 
 // The Engagement is handed in as `data` rather than stubbed out of a
@@ -1891,8 +1892,27 @@ describe('an Engagement with no Contract yet (#2146)', () => {
 });
 
 // #2146: the order a Doula works in, Contract before the Visits.
+describe('the note when work started (#2597)', () => {
+	it('reads the note, who wrote it and when, in the Engagement', async () => {
+		await setupWithContract(() => respondFromFixture(), fixtureDetail, ownerSession);
+
+		const region = testPage.getByRole('region', { name: 'Note when work started', exact: true });
+		await expect.element(region.getByText(/Heard about us from her midwife/)).toBeVisible();
+		await expect.element(region.getByText(/Written by Persephone Ochieng-Whitfield on /)).toBeVisible();
+	});
+
+	it('leaves the section out where no note was written', async () => {
+		await setupWithContract(() => respondFromFixture(), { ...fixtureDetail, startNote: undefined }, ownerSession);
+
+		await expect.element(testPage.getByRole('heading', { level: 2, name: 'Doula fees' })).toBeVisible();
+		await expect
+			.element(testPage.getByRole('region', { name: 'Note when work started', exact: true }))
+			.not.toBeInTheDocument();
+	});
+});
+
 describe('the order of the sections (#2146)', () => {
-	it('runs On call, Birth outcome, Contract, Visits, Care Plan, Birth Plan, Invoices, Offers, Doula fees, Messages, Activity', async () => {
+	it('runs On call, Birth outcome, Contract, Visits, Care Plan, Birth Plan, Invoices, Note when work started, Offers, Doula fees, Messages, Activity', async () => {
 		await setupWithContract(() => respondFromFixture(), fixtureDetail, ownerSession);
 		// Offers and Doula fees are an Owner's or an Admin's, drawn once
 		// each read lands.
@@ -1910,6 +1930,7 @@ describe('the order of the sections (#2146)', () => {
 			'Care Plan',
 			'Birth Plan',
 			'Invoices',
+			'Note when work started',
 			'Offers',
 			'Doula fees',
 			'Messages',

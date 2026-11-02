@@ -117,6 +117,44 @@ type Detail struct {
 	// (#2271, ADR-0008); false for anyone else, so the flag tells nobody
 	// else that a fee exists.
 	HasDoulaFees bool `json:"hasDoulaFees"`
+
+	// StartNote (#2597) is the Note typed on the Engagement Request that
+	// started this Engagement, who wrote it and when. Answered only for
+	// an Owner or an Admin, the readers of a Request's note (ADR-0017);
+	// absent when no note was written.
+	StartNote *StartNote `json:"startNote,omitempty"`
+}
+
+// StartNote is the Note on the Engagement Request an Engagement came from.
+type StartNote struct {
+	Text      string    `json:"text"`
+	WrittenBy string    `json:"writtenBy"`
+	WrittenAt time.Time `json:"writtenAt"`
+}
+
+// readStartNote reads the note of the approved Engagement Request that
+// made engagementID, or nil where there was none. A Staff member who has
+// since left reads as activity.DepartedStaffName, as in Activity.
+func readStartNote(ctx context.Context, tx *sql.Tx, engagementID string) (*StartNote, error) {
+	var note StartNote
+	var writer sql.NullString
+	err := tx.QueryRowContext(ctx,
+		`SELECT r.note, rs.name, r.requested_at
+		   FROM engagement_requests r
+		   LEFT JOIN staff rs ON rs.id = r.requested_by
+		  WHERE r.engagement_id = $1 AND r.note IS NOT NULL
+		  LIMIT 1`,
+		engagementID,
+	).Scan(&note.Text, &writer, &note.WrittenAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil //nolint:nilnil // no note is an answer, not a failure
+	}
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, fmt.Errorf("engagement: read start note: %w", err)
+	}
+	note.WrittenBy = staffDisplayName(writer)
+	return &note, nil
 }
 
 // hasDoulaFees answers Detail.HasDoulaFees with the rule
@@ -324,6 +362,12 @@ func DetailHandler() http.Handler {
 		}
 		if reader.IsOwnerOrAdmin() {
 			d.HasDoulaFees, err = hasDoulaFees(r.Context(), tx, engagementID)
+			if err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+				return
+			}
+			d.StartNote, err = readStartNote(r.Context(), tx, engagementID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
