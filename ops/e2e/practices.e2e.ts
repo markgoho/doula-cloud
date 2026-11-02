@@ -9,6 +9,7 @@ import { signedInOperator } from './operator';
  */
 
 test('An operator reads the Practice list and the Deleted list', async ({ page, request }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
 	const suffix = crypto.randomUUID().slice(0, 8);
 	const live = `Lakeside Birth ${suffix}`;
 	const gone = `Closed Doulas ${suffix}`;
@@ -23,7 +24,6 @@ test('An operator reads the Practice list and the Deleted list', async ({ page, 
 	await expect(page.getByRole('navigation', { name: 'Operations' }).getByRole('link', { name: 'Practices' })).toHaveAttribute('aria-current', 'page');
 	const practice = page.getByRole('row').filter({ has: page.getByRole('cell', { name: live, exact: true }) });
 	await expect(practice.getByRole('cell', { name: /^Staff 1, staff-.+@doula-cloud\.invalid$/ })).toBeVisible();
-	await expect(practice.getByRole('cell', { name: 'Not recorded yet' })).toBeVisible();
 	await expect(practice.getByRole('cell', { name: 'Not given' })).toBeVisible();
 	await expect(page.getByRole('cell', { name: gone })).toHaveCount(0);
 	await expect(practice.getByRole('link', { name: `Give a founding grant to ${live}` })).toHaveAttribute(

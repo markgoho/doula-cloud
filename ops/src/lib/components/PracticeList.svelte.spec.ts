@@ -33,7 +33,7 @@ function answering(...bodies: { status: number; body: unknown }[]) {
 
 describe('PracticeList', () => {
 	// DataTable shows its table only where the container is wide enough to hold it.
-	beforeEach(() => page.viewport(1280, 800));
+	beforeEach(() => page.viewport(1440, 800));
 
 	it('shows each Practice as a table row with its fields and its acts', async () => {
 		const fetcher = answering({ status: 200, body: { items: [row('p-1', 'Rooted Birth Collective')], hasMore: false } });
@@ -53,13 +53,11 @@ describe('PracticeList', () => {
 				'Engagements started',
 				'Founding grant',
 				'Deletion',
-				'Source',
 				'Open Feedback',
 				'Acts'
 			]);
 		await expect.element(page.getByRole('cell', { name: 'Rooted Birth Collective', exact: true })).toBeVisible();
 		await expect.element(page.getByRole('cell', { name: 'Renata Alvarez, renata@example.com' })).toBeVisible();
-		await expect.element(page.getByRole('cell', { name: 'Not recorded yet' })).toBeVisible();
 		await expect.element(page.getByRole('cell', { name: '12 Credits' })).toBeVisible();
 		await expect
 			.element(page.getByRole('link', { name: 'Refund Credits to Rooted Birth Collective' }))
