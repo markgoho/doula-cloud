@@ -8,6 +8,7 @@
 		type Field,
 		type Masthead
 	} from '#lib/planInstance.js';
+	import { NOT_ANSWERED } from '#lib/intakeAnswers.js';
 	import { formatCalendarDay } from '#lib/dates.js';
 	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 
@@ -76,17 +77,17 @@
 
 	function textValue(field: Field): string {
 		const value = answerText(answers, field.id);
-		return value === '' ? '—' : value;
+		return value === '' ? NOT_ANSWERED : value;
 	}
 
 	function checkboxValue(field: Field): string {
-		if (answers[field.id] === undefined) return '—';
+		if (answers[field.id] === undefined) return NOT_ANSWERED;
 		return isAnswerChecked(answers, field.id) ? 'Yes' : 'No';
 	}
 
 	function selectedOptions(field: Field): string {
 		const options = answerOptions(answers, field.id);
-		return options.length > 0 ? options.join(', ') : '—';
+		return options.length > 0 ? options.join(', ') : NOT_ANSWERED;
 	}
 
 	function answerValue(field: Field): string {

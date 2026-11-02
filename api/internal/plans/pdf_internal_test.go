@@ -22,16 +22,16 @@ func TestPlanFieldAnswerText_MirrorsBirthPlanView(t *testing.T) {
 			want:    "Water birth preferred",
 		},
 		{
-			name:    "short_text blank renders em dash",
+			name:    "short_text blank reads Not answered",
 			field:   Field{ID: "f1", Type: fieldTypeShortText},
 			answers: Answers{},
-			want:    "—",
+			want:    planUnanswered,
 		},
 		{
-			name:    "single_select blank renders em dash",
+			name:    "single_select blank reads Not answered",
 			field:   Field{ID: "f1", Type: fieldTypeSingleSelect},
 			answers: Answers{},
-			want:    "—",
+			want:    planUnanswered,
 		},
 		{
 			name:    "single_select filled",
@@ -52,16 +52,16 @@ func TestPlanFieldAnswerText_MirrorsBirthPlanView(t *testing.T) {
 			want:    "No",
 		},
 		{
-			name:    "checkbox unanswered renders em dash",
+			name:    "checkbox unanswered reads Not answered",
 			field:   Field{ID: "f1", Type: fieldTypeCheckbox},
 			answers: Answers{},
-			want:    "—",
+			want:    planUnanswered,
 		},
 		{
-			name:    "multi_select empty renders em dash",
+			name:    "multi_select empty reads Not answered",
 			field:   Field{ID: "f1", Type: fieldTypeMultiSelect},
 			answers: Answers{},
-			want:    "—",
+			want:    planUnanswered,
 		},
 		{
 			name:    "multi_select joins selected options",

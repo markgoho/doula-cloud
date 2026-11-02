@@ -28,12 +28,16 @@ const (
 	birthPlanPDFFilename = "birth-plan.pdf"
 )
 
+// planUnanswered is what a question with no answer reads, the same words
+// as PlanInstanceView.svelte (#2618).
+const planUnanswered = "Not answered"
+
 // renderPlanPDF renders a Plan Instance's field list and answers to PDF
 // bytes (#306) -- built fresh on every request, never stored, since a
 // Plan Instance has no "final" event the way a signed Contract does and
 // stays mutable for the life of the Engagement. Mirrors
 // BirthPlanView.svelte's rendering rules exactly: a section_header field
-// starts a new headed group, a blank answer renders as "—" rather than an
+// starts a new headed group, a blank answer renders as "Not answered" rather than an
 // empty line, a checkbox as "Yes"/"No" once answered, and a multi_select as its
 // selected options joined by ", ". Under the heading, before the first
 // question, it names the plan (#2209, #2355): her name, her Doula while
@@ -78,14 +82,14 @@ func renderPlanPDF(heading string, m masthead, fields []Field, answers Answers) 
 
 // planFieldAnswerText formats field's answer the way BirthPlanView.svelte's
 // textValue/checkboxValue/selectedOptions do -- an unanswered field never
-// renders as a blank line, always as "—".
+// renders as a blank line, always as "Not answered".
 func planFieldAnswerText(field Field, answers Answers) string {
 	switch field.Type {
 	case fieldTypeCheckbox:
 		checked, answered := answers[field.ID].(bool)
 		switch {
 		case !answered:
-			return "—"
+			return planUnanswered
 		case checked:
 			return "Yes"
 		default:
@@ -100,14 +104,14 @@ func planFieldAnswerText(field Field, answers Answers) string {
 			}
 		}
 		if len(options) == 0 {
-			return "—"
+			return planUnanswered
 		}
 		return strings.Join(options, ", ")
 	default: // short_text, long_text, single_select
 		if s, ok := answers[field.ID].(string); ok && s != "" {
 			return s
 		}
-		return "—"
+		return planUnanswered
 	}
 }
 
