@@ -24,7 +24,8 @@ export const schedulePage: CursorPage<ScheduledVisit> = {
 			clientName: 'Anne-Marie Ochieng-Whitfield',
 			staffId: 'staff-1',
 			staffName: 'Persephone Vandermeulen-Achterberg, CD(DONA)',
-			scheduledAt: '2026-09-12T14:30:00Z'
+			scheduledAt: '2026-09-12T14:30:00Z',
+			isOffEngagement: false
 		},
 		{
 			visitId: 'visit-2',
@@ -33,7 +34,8 @@ export const schedulePage: CursorPage<ScheduledVisit> = {
 				'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake',
 			staffId: 'staff-2',
 			staffName: 'Bo Ng',
-			scheduledAt: '2026-09-19T02:05:00Z'
+			scheduledAt: '2026-09-19T02:05:00Z',
+			isOffEngagement: false
 		}
 	],
 	hasMore: false
@@ -69,7 +71,8 @@ export const typical: RouteVariant<RouteParameters> = {
 						clientName: person.name,
 						staffId: doula.staffId,
 						staffName: doula.name,
-						scheduledAt: `2026-09-${String(8 + index * 3).padStart(2, '0')}T14:30:00Z`
+						scheduledAt: `2026-09-${String(8 + index * 3).padStart(2, '0')}T14:30:00Z`,
+						isOffEngagement: false
 					};
 				}),
 				hasMore: false

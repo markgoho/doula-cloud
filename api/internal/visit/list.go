@@ -10,6 +10,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/practicetimezone"
 	"doula-cloud/api/internal/staffauth"
@@ -42,6 +43,9 @@ type Visit struct {
 	// calendar day each instant falls on is the Practice's own, not
 	// UTC's and not the reader's (#953).
 	Type string `json:"type"`
+	// IsOffEngagement is true for a booked Visit whose Doula has been taken
+	// off the Engagement (#2596, off_engagement.go).
+	IsOffEngagement bool `json:"isOffEngagement"`
 }
 
 // ListResponse is the standard cursor-pagination envelope from
@@ -172,17 +176,18 @@ func ListHandler() http.Handler {
 // it decides which calendar day each row's instant falls on, and every
 // row on the page uses the same one.
 func listVisits(ctx context.Context, tx *sql.Tx, engagementID string, after *pagecursor.Cursor, zone *time.Location) ([]Visit, error) {
-	query := `SELECT v.id, v.staff_id, s.name, v.created_at, v.scheduled_at, v.notes, e.pregnancy_ended_on::text
+	query := `SELECT v.id, v.staff_id, s.name, v.created_at, v.scheduled_at, v.notes, e.pregnancy_ended_on::text,
+		        ` + offEngagementBefore + `$2` + offEngagementAfter + `
 		 FROM visits v
 		 LEFT JOIN staff s ON s.id = v.staff_id
 		 JOIN engagements e ON e.id = v.engagement_id
 		 WHERE v.engagement_id = $1`
-	args := []any{engagementID}
+	args := []any{engagementID, clock.Now(ctx)}
 	if after != nil {
-		query += ` AND (v.created_at, v.id) < ($2, $3) ORDER BY v.created_at DESC, v.id DESC LIMIT $4`
+		query += ` AND (v.created_at, v.id) < ($3, $4) ORDER BY v.created_at DESC, v.id DESC LIMIT $5`
 		args = append(args, after.At, after.ID, pageSize+1)
 	} else {
-		query += ` ORDER BY v.created_at DESC, v.id DESC LIMIT $2`
+		query += ` ORDER BY v.created_at DESC, v.id DESC LIMIT $3`
 		args = append(args, pageSize+1)
 	}
 
@@ -200,7 +205,7 @@ func listVisits(ctx context.Context, tx *sql.Tx, engagementID string, after *pag
 		var scheduledAt sql.NullTime
 		var notes sql.NullString
 		var pregnancyEndedOn sql.NullString
-		if err := rows.Scan(&v.VisitID, &v.StaffID, &staffName, &v.CreatedAt, &scheduledAt, &notes, &pregnancyEndedOn); err != nil {
+		if err := rows.Scan(&v.VisitID, &v.StaffID, &staffName, &v.CreatedAt, &scheduledAt, &notes, &pregnancyEndedOn, &v.IsOffEngagement); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("visit: scan visit row: %w", err)
 		}

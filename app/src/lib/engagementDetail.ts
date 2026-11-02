@@ -158,6 +158,9 @@ export function yourFeeRows(fee: AgreedFee): { label: string; value: string }[] 
 export interface AttachedDoula {
 	staffId: string;
 	name: string;
+	/** How many of her Visits on this Engagement are scheduled for later
+	 * than now (#2596). */
+	bookedVisits: number;
 }
 
 /** Who is on an Engagement, as both the Engagement read and the
@@ -238,6 +241,44 @@ export async function attachDoula(
 	return { doulas, canAttachSelf };
 }
 
+/** Takes a Doula off an Engagement (#2596). An Owner or an Admin only; the
+ * BFF refuses anyone else whatever this page drew. */
+export async function takeOffDoula(
+	fetcher: Fetcher,
+	reference: EngagementReference,
+	staffId: string
+): Promise<WhoIsOn> {
+	const response = await fetcher(`${engagementURL(reference)}/attachments/${encodeURIComponent(staffId)}`, { method: 'DELETE' });
+	if (!response.ok) throw new Error(await apiErrorMessage(response));
+	const { doulas, canAttachSelf } = (await response.json()) as WhoIsOn;
+	return { doulas, canAttachSelf };
+}
+
+/** The confirm dialog's words for taking a Doula off (#2596). Names repeat
+ * because product copy uses no pronoun for a person. */
+export function takeOffWords(doula: AttachedDoula, isSelf: boolean): { title: string; consequence: string; confirm: string } {
+	const booked =
+		doula.bookedVisits === 0
+			? ''
+			: ` ${doula.name}'s ${doula.bookedVisits} booked ${doula.bookedVisits === 1 ? 'Visit stays' : 'Visits stay'} with ${doula.name} until you reassign ${doula.bookedVisits === 1 ? 'it' : 'them'}.`;
+	return {
+		title: `Take ${doula.name} off this Engagement?`,
+		consequence: `${isSelf ? '' : `We will email ${doula.name} to say so.`}${booked}`.trim() || `${doula.name} can be put back on later.`,
+		confirm: `Take ${doula.name} off`
+	};
+}
+
+/**
+The status line after a Doula is taken off (#2596).
+*/
+export function takenOffMessage(doula: AttachedDoula, isSelf: boolean): string {
+	const left =
+		doula.bookedVisits === 0
+			? ''
+			: ` ${doula.bookedVisits} booked ${doula.bookedVisits === 1 ? 'Visit is' : 'Visits are'} still ${doula.name}'s: reassign ${doula.bookedVisits === 1 ? 'it' : 'each one'} under Visits.`;
+	return `${doula.name} is off this Engagement.${isSelf ? '' : ` We emailed ${doula.name} to say so.`}${left}`;
+}
+
 /** What the hub says to "Mark care complete" while no birth outcome is
  * recorded (#2199): ADR-0015 completes no Engagement without one, and
  * 'unknown' is an outcome too. The same words as the BFF's own refusal
@@ -281,6 +322,19 @@ export interface Visit {
 	 * own instant and the Engagement's pregnancy-end date, so this screen
 	 * renders it rather than deriving its own copy of the same rule. */
 	type: 'prenatal' | 'birth' | 'postpartum';
+	/** A booked Visit whose Doula has been taken off this Engagement
+	 * (#2596). It stays hers until someone reassigns it. */
+	isOffEngagement: boolean;
+}
+
+/** What Staff screens say beside a booked Visit whose Doula was taken off
+ * its Engagement (#2596). */
+export const NO_LONGER_ON_THIS_ENGAGEMENT = 'No longer on this Engagement';
+
+/** A Visit's Doula as a Staff list names her: her name, and the flag where
+ * she is no longer on the Engagement. */
+export function visitDoulaText(name: string, isOffEngagement: boolean): string {
+	return isOffEngagement ? `${name} (${NO_LONGER_ON_THIS_ENGAGEMENT})` : name;
 }
 
 /** The word a Staff screen shows for an Engagement's status (#1512): one

@@ -26,6 +26,10 @@ const KindOfferReceived Kind = "offer_received"
 // (#2403). Its subject is the engagements row.
 const KindPutOnEngagement Kind = "put_on_engagement"
 
+// KindTakenOffEngagement is someone else taking her off an Engagement
+// (#2596). Its subject is the engagements row.
+const KindTakenOffEngagement Kind = "taken_off_engagement"
+
 // KindVisitReassignedTo and KindVisitReassignedFrom are someone else
 // moving a Visit onto her, or off her (#2436). Each subject is the visits
 // row.
@@ -77,20 +81,24 @@ func NewWorker(mailer outbox.Mailer) Worker {
 }
 
 type pendingRow struct {
-	id          string
-	practiceID  string
-	recipientID string
-	kind        Kind
-	subjectID   string
-	address     string
-	isMember    bool
-	timezone    string
+	id           string
+	practiceID   string
+	recipientID  string
+	kind         Kind
+	subjectID    string
+	address      string
+	isMember     bool
+	isContractor bool
+	timezone     string
 }
 
 const claimQuery = `SELECT o.id, o.attempt_count, o.id, o.practice_id, o.recipient_staff_id, o.kind::text, o.subject_id, s.email,
 	        EXISTS (SELECT 1 FROM practice_memberships pm
 	                 WHERE pm.practice_id = o.practice_id AND pm.staff_id = o.recipient_staff_id),
-	        p.timezone
+	        p.timezone,
+	        EXISTS (SELECT 1 FROM practice_memberships pm
+	                 WHERE pm.practice_id = o.practice_id AND pm.staff_id = o.recipient_staff_id
+	                   AND pm.employment_type = 'contractor' AND NOT ('owner' = ANY(pm.roles) OR 'admin' = ANY(pm.roles)))
 	   FROM staff_notice_outbox o
 	   JOIN staff s ON s.id = o.recipient_staff_id
 	   JOIN practices p ON p.id = o.practice_id
@@ -104,7 +112,7 @@ func scanRow(rows *sql.Rows) (outbox.RowMeta, pendingRow, error) {
 	var p pendingRow
 	var kind string
 	if err := rows.Scan(&meta.ID, &meta.AttemptCount, &p.id, &p.practiceID, &p.recipientID, &kind, &p.subjectID,
-		&p.address, &p.isMember, &p.timezone); err != nil {
+		&p.address, &p.isMember, &p.timezone, &p.isContractor); err != nil {
 		// coverage:ignore reason: DB scan failure, not exercised by unit tests
 		return meta, p, fmt.Errorf("staffnotice: scan outbox row: %w", err)
 	}
@@ -145,6 +153,17 @@ func compose(mailer outbox.Mailer) func(context.Context, *sql.Tx, pendingRow, ti
 			}
 			link := mailer.AppBaseURL + "/practices/" + p.practiceID + "/engagements/" + p.subjectID
 			subject, text = putOnEngagementSubject, putOnEngagementText(link)
+		case KindTakenOffEngagement:
+			on, err := stillOn(ctx, tx, p.subjectID, p.recipientID)
+			if err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				return "", "", "", err
+			}
+			if on {
+				return "", "", "", outbox.ErrAlreadyDone
+			}
+			link := mailer.AppBaseURL + "/practices/" + p.practiceID + "/engagements/" + p.subjectID
+			subject, text = takenOffEngagementSubject, takenOffEngagementText(link, p.isContractor)
 		case KindVisitReassignedTo, KindVisitReassignedFrom:
 			engagementID, isHers, err := visitHolder(ctx, tx, p.subjectID, p.recipientID)
 			if err != nil {

@@ -241,8 +241,8 @@ export const detail = {
 	// Engagement she is not on (#1625). The empty state and the control
 	// are `asDoula`'s, below.
 	doulas: [
-		{ staffId: 'staff-1', name: 'Persephone Vandermeulen-Achterberg, CD(DONA)' },
-		{ staffId: 'staff-2', name: 'Bo Ng' }
+		{ staffId: 'staff-1', name: 'Persephone Vandermeulen-Achterberg, CD(DONA)', bookedVisits: 0 },
+		{ staffId: 'staff-2', name: 'Bo Ng', bookedVisits: 0 }
 	],
 	canAttachSelf: false,
 	// #2003: the reader's own agreed fee. She is an Owner who is a
@@ -586,7 +586,7 @@ const typicalDetail = {
 	// #2004: a Client in care has a portal account, so the Messages
 	// section reads her thread with its form behind one opener.
 	clientPortalInviteStatus: 'accepted',
-	doulas: [{ staffId: typicalDoula.staffId, name: typicalDoula.name }]
+	doulas: [{ staffId: typicalDoula.staffId, name: typicalDoula.name, bookedVisits: 0 }]
 };
 const typicalInvoices: Invoice[] = [
 	{

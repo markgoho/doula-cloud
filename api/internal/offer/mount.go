@@ -60,9 +60,10 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB, nudge t
 	ir.ReplayableGated("POST /api/practices/{practiceId}/engagements/{engagementId}/offers", false, staffauth.OwnerAndAdmin, CreateHandler(nudge))
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/offers", staffauth.OwnerAndAdmin, EngagementListHandler())
 	g.Get("/api/practices/{practiceId}/offers", staffauth.AnyStaff, InboxHandler())
-	// #2508: the declined Offers on work nobody has, for the Overview.
-	// Owner-or-Admin here, the roster read's rule: it names who said no.
-	g.Get("/api/practices/{practiceId}/offers/declined", staffauth.OwnerAndAdmin, DeclinedHandler())
+	// #2508, #2596: the work nobody has, for the Overview: declined Offers
+	// and Doulas taken off. Owner-or-Admin here, the roster read's rule: it
+	// names who said no and who was taken off.
+	g.Get("/api/practices/{practiceId}/no-doula-yet", staffauth.OwnerAndAdmin, NoDoulaHandler())
 	ir.Exempt("POST /api/practices/{practiceId}/offers/{offerId}/accept",
 		"state-guarded UPDATE ... WHERE state = 'offered'; a retry after the first commit affects zero rows and 409s instead of granting the attachment twice",
 		false, AcceptHandler())

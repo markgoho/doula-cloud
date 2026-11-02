@@ -36,6 +36,32 @@ func putOnEngagementText(link string) string {
 		"If you have questions, reply to this email.\n"
 }
 
+// takenOffEngagementSubject and takenOffEngagementText are the mail to a
+// Doula someone else took off an Engagement (#2596). ADR-0009 as
+// putOnEngagementText keeps it: no Client, colleague or Practice. A
+// contractor who holds neither Owner nor Admin can no longer open the
+// Engagement, only the screen that says her work ended, so her mail says
+// that is where the link goes and repeats that screen's line about her
+// fee, her terms and her pay (Lena, on #2596). An employee can still open
+// the client's page. Nothing is said of her booked visits: they stay hers
+// until the Practice moves them, and she is told no more than the Practice
+// has decided.
+const takenOffEngagementSubject = "You've been taken off a client on DoulaCloud"
+
+func takenOffEngagementText(link string, isContractor bool) string {
+	if isContractor {
+		return "Hello,\n\n" +
+			"You've been taken off a client at your practice on DoulaCloud. This link shows the day your work ended:\n\n" +
+			link + "\n\n" +
+			"Your fee, the terms and what you were paid stay on Your offers.\n\n" +
+			"If you have questions, reply to this email.\n"
+	}
+	return "Hello,\n\n" +
+		"You've been taken off a client at your practice on DoulaCloud. This link opens that client's page at your practice:\n\n" +
+		link + "\n\n" +
+		"If you have questions, reply to this email.\n"
+}
+
 // visitReassignedToSubject, visitReassignedFromSubject and their texts
 // are the mail to a Doula someone else moved a Visit onto, or off (#2436).
 // ADR-0009 as putOnEngagementText keeps it: no Client, colleague,

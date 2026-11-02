@@ -48,6 +48,7 @@ const WORDING: readonly (readonly [action: string, named: string, unnamed: strin
 	['created', 'Client record created for Amara', 'Client record created for the Client'],
 	['credits_refunded', 'Purchased Credits refunded', 'Purchased Credits refunded'],
 	['doula_attached', "Doula added to Amara's care", "Doula added to the Client's care"],
+	['doula_taken_off', "Doula taken off Amara's care", "Doula taken off the Client's care"],
 	['due_date_changed', 'Due date changed for Amara', 'Due date changed for the Client'],
 	['employment_type_changed', 'Employment type changed for Amara', 'Employment type changed for a Staff member'],
 	['engagement_completed', 'Care for Amara ended', 'Care for the Client ended'],

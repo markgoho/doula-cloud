@@ -22,6 +22,7 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { formatScheduledVisit } from '#lib/dates.js';
+	import { visitDoulaText } from '#lib/engagementDetail.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { isOwnerOrAdmin } from '#lib/roles.js';
 	import {
@@ -135,7 +136,7 @@
 			variant: 'meta' as const,
 			datetimeAccessor: (visit: ScheduledVisit) => visit.scheduledAt
 		},
-		{ label: 'Doula', accessor: (visit: ScheduledVisit) => visit.staffName }
+		{ label: 'Doula', accessor: (visit: ScheduledVisit) => visitDoulaText(visit.staffName, visit.isOffEngagement) }
 	]);
 
 	function engagementHref(visit: ScheduledVisit): string {

@@ -55,6 +55,8 @@ type ScheduledVisit struct {
 	StaffID      string    `json:"staffId"`
 	StaffName    string    `json:"staffName"`
 	ScheduledAt  time.Time `json:"scheduledAt"`
+	// IsOffEngagement: see Visit.IsOffEngagement (#2596).
+	IsOffEngagement bool `json:"isOffEngagement"`
 }
 
 // PracticeScheduleResponse is the standard cursor-pagination envelope from
@@ -235,7 +237,8 @@ func parseScheduleFilter(w http.ResponseWriter, r *http.Request) (scheduleFilter
 // "this parameter is NULL, or it matches". `$4` is the Doula a reader
 // picked; `$5` is the contractor rule she did not pick, and is NULL for
 // every caller ADR-0008 grants ambient reach.
-const scheduleSelect = `SELECT v.id, e.id, cl.given_name, cl.preferred_name, cl.family_name, s.id, s.name, v.scheduled_at
+const scheduleSelect = `SELECT v.id, e.id, cl.given_name, cl.preferred_name, cl.family_name, s.id, s.name, v.scheduled_at,
+	       ` + offEngagementBefore + `$6` + offEngagementAfter + `
 	  FROM visits v
 	  JOIN engagements e ON e.id = v.engagement_id
 	  JOIN clients cl ON cl.id = e.client_id
@@ -278,13 +281,13 @@ func listScheduledVisits(
 	query := scheduleSelect
 	args := []any{
 		practiceID, filter.from, filter.to,
-		nullableID(filter.staffID), nullableID(filter.contractorStaffID),
+		nullableID(filter.staffID), nullableID(filter.contractorStaffID), clock.Now(ctx),
 	}
 	if after != nil {
-		query += ` AND (v.scheduled_at, v.id) > ($6, $7) ORDER BY v.scheduled_at, v.id LIMIT $8`
+		query += ` AND (v.scheduled_at, v.id) > ($7, $8) ORDER BY v.scheduled_at, v.id LIMIT $9`
 		args = append(args, after.At, after.ID, schedulePageSize+1)
 	} else {
-		query += ` ORDER BY v.scheduled_at, v.id LIMIT $6`
+		query += ` ORDER BY v.scheduled_at, v.id LIMIT $7`
 		args = append(args, schedulePageSize+1)
 	}
 
@@ -301,7 +304,7 @@ func listScheduledVisits(
 		var givenName string
 		var preferredName, familyName sql.NullString
 		if err := rows.Scan(&item.VisitID, &item.EngagementID, &givenName, &preferredName, &familyName,
-			&item.StaffID, &item.StaffName, &item.ScheduledAt); err != nil {
+			&item.StaffID, &item.StaffName, &item.ScheduledAt, &item.IsOffEngagement); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("visit: scan practice schedule row: %w", err)
 		}

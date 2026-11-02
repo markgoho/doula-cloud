@@ -253,6 +253,8 @@ func TestStaffingActions_ContainsExactlyTheRosterSet(t *testing.T) {
 		activity.ActionOnCallRuleChanged,
 		// #1596: who the Practice put on the birth.
 		activity.ActionDoulaAttached,
+		// #2596: and who it took off.
+		activity.ActionDoulaTakenOff,
 		// #1423: engagement_events' three facts, folded in, stay staff-only.
 		activity.ActionEngagementReopened,
 		activity.ActionKindChanged,

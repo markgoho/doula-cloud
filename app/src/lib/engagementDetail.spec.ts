@@ -29,6 +29,10 @@ import {
 	sendMessage,
 	sendPortalInvite,
 	sortVisits,
+	takenOffMessage,
+	takeOffDoula,
+	takeOffWords,
+	visitDoulaText,
 	visitsURL,
 	visitTypeLabel,
 	yourFeeRows,
@@ -85,8 +89,8 @@ describe('loadVisitsPage', () => {
 
 	it('keeps the endpoint order, newest first', async () => {
 		const visits: Visit[] = [
-			{ visitId: 'v2', staffId: 's1', staffName: 'Maya', createdAt: '2027-02-01', type: 'prenatal' },
-			{ visitId: 'v1', staffId: 's1', staffName: 'Maya', createdAt: '2027-01-01', type: 'prenatal' }
+			{ visitId: 'v2', staffId: 's1', staffName: 'Maya', createdAt: '2027-02-01', type: 'prenatal', isOffEngagement: false },
+			{ visitId: 'v1', staffId: 's1', staffName: 'Maya', createdAt: '2027-01-01', type: 'prenatal', isOffEngagement: false }
 		];
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: visits, hasMore: false }));
 
@@ -318,7 +322,7 @@ describe('attachSelf', () => {
 	it('puts with no body, and answers who is on the Engagement', async () => {
 		const answer = {
 			engagementId: 'engagement-1',
-			doulas: [{ staffId: 'staff-1', name: 'Hana Kim' }],
+			doulas: [{ staffId: 'staff-1', name: 'Hana Kim', bookedVisits: 0 }],
 			canAttachSelf: false
 		};
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse(answer));
@@ -345,7 +349,7 @@ describe('attachDoula', () => {
 	it('puts with no body at her own path, and answers who is on the Engagement', async () => {
 		const answer = {
 			engagementId: 'engagement-1',
-			doulas: [{ staffId: 'staff-2', name: 'Priya Raman' }],
+			doulas: [{ staffId: 'staff-2', name: 'Priya Raman', bookedVisits: 0 }],
 			canAttachSelf: true
 		};
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse(answer));
@@ -363,11 +367,65 @@ describe('attachDoula', () => {
 	});
 });
 
+// #2596: an Owner or an Admin takes a named Doula off.
+describe('takeOffDoula', () => {
+	it('deletes at her path, and answers who is still on the Engagement', async () => {
+		const answer = { engagementId: 'engagement-1', doulas: [], canAttachSelf: true };
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse(answer));
+
+		const result = await takeOffDoula(fetcher, reference, 'staff-2');
+
+		expect(fetcher).toHaveBeenCalledWith(`${base}/attachments/staff-2`, { method: 'DELETE' });
+		expect(result).toEqual({ doulas: [], canAttachSelf: true });
+	});
+
+	it('throws a refusal', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('Only an Owner or an Admin can do that.', 403));
+
+		await expect(takeOffDoula(fetcher, reference, 'staff-2')).rejects.toThrow('Only an Owner or an Admin can do that.');
+	});
+});
+
+describe('takeOffWords and takenOffMessage', () => {
+	const lena = { staffId: 'staff-1', name: 'Lena Vasquez' };
+
+	it('names the act, the email and the Visits that stay', () => {
+		expect(takeOffWords({ ...lena, bookedVisits: 3 }, false)).toEqual({
+			title: 'Take Lena Vasquez off this Engagement?',
+			consequence:
+				'We will email Lena Vasquez to say so. Lena Vasquez\'s 3 booked Visits stay with Lena Vasquez until you reassign them.',
+			confirm: 'Take Lena Vasquez off'
+		});
+		expect(takenOffMessage({ ...lena, bookedVisits: 3 }, false)).toBe(
+			"Lena Vasquez is off this Engagement. We emailed Lena Vasquez to say so. 3 booked Visits are still Lena Vasquez's: reassign each one under Visits."
+		);
+	});
+
+	it('speaks of one Visit in the singular', () => {
+		expect(takeOffWords({ ...lena, bookedVisits: 1 }, false).consequence).toBe(
+			"We will email Lena Vasquez to say so. Lena Vasquez's 1 booked Visit stays with Lena Vasquez until you reassign it."
+		);
+		expect(takenOffMessage({ ...lena, bookedVisits: 1 }, false)).toContain("1 booked Visit is still Lena Vasquez's: reassign it under Visits.");
+	});
+
+	it('says nothing of an email to the person who pressed, or of Visits that are not there', () => {
+		expect(takeOffWords({ ...lena, bookedVisits: 0 }, true).consequence).toBe('Lena Vasquez can be put back on later.');
+		expect(takenOffMessage({ ...lena, bookedVisits: 0 }, true)).toBe('Lena Vasquez is off this Engagement.');
+	});
+});
+
+describe('visitDoulaText', () => {
+	it('adds the flag only for a Visit whose Doula was taken off', () => {
+		expect(visitDoulaText('Lena Vasquez', false)).toBe('Lena Vasquez');
+		expect(visitDoulaText('Lena Vasquez', true)).toBe('Lena Vasquez (No longer on this Engagement)');
+	});
+});
+
 // #2569: the question says who stays, because saving adds.
 const on = (count: number) =>
 	['Kimiko Nakashima', 'Priya Raman', 'Joss Adeyemi', 'Delia Marchetti', 'Rowan Petrosyan']
 		.slice(0, count)
-		.map((name, index) => ({ staffId: `staff-${index}`, name }));
+		.map((name, index) => ({ staffId: `staff-${index}`, name, bookedVisits: 0 }));
 
 describe('attachDoulaWords', () => {
 	it('keeps "Who is the Doula?" and "Save the Doula" where nobody is on', () => {
@@ -386,8 +444,8 @@ describe('attachDoulaWords', () => {
 });
 
 describe('doulaSummaryItem', () => {
-	const hana = { staffId: 'staff-1', name: 'Hana Kim' };
-	const renata = { staffId: 'staff-2', name: 'Renata Alvarez' };
+	const hana = { staffId: 'staff-1', name: 'Hana Kim', bookedVisits: 0 };
+	const renata = { staffId: 'staff-2', name: 'Renata Alvarez', bookedVisits: 0 };
 
 	it('says "No Doula yet" for a live Engagement nobody is on', () => {
 		expect(doulaSummaryItem([], 'intake')).toEqual({ label: 'Doula', value: 'No Doula yet' });
@@ -767,7 +825,8 @@ function visit(visitId: string, createdAt: string, scheduledAt?: string): Visit 
 		staffName: 'Priya Raman',
 		createdAt,
 		...(scheduledAt && { scheduledAt }),
-		type: 'prenatal'
+		type: 'prenatal',
+		isOffEngagement: false
 	};
 }
 

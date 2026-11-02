@@ -36,6 +36,14 @@ describe('whatHappensNext', () => {
 		});
 	});
 
+	it('names nobody for a Visit whose Doula was taken off', () => {
+		const next = visit({ doulaName: '' });
+
+		expect(whatHappensNext(next, undefined)).toEqual({
+			lead: `Your next visit is on ${formatPortalVisit(next.scheduledAt, false)}.`
+		});
+	});
+
 	// CB-G5: nothing booked promises nothing, and no due date (after a
 	// loss, or on a postpartum-only Engagement) leaves the line out.
 	it('says nothing is booked, and leaves out a due date there is none of', () => {

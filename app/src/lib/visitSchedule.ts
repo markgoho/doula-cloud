@@ -33,6 +33,10 @@ export interface ScheduledVisit {
 	staffId: string;
 	staffName: string;
 	scheduledAt: string;
+	/**
+	A booked Visit whose Doula was taken off its Engagement (#2596).
+	*/
+	isOffEngagement: boolean;
 }
 
 /** The narrowing a reader chose, in the shape the URL carries it: two

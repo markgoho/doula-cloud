@@ -146,24 +146,26 @@ function respondForPopulatedPractice(path: string): Response {
 	// #2508: declines on work nobody has, Owner and Admin only. A birth
 	// with #537's double-barreled names on both sides, beside a
 	// postpartum one declined by an address that never joined.
-	if (path.includes('/offers/declined')) {
+	if (path.includes('/no-doula-yet')) {
 		return jsonResponse({
 			items: [
 				{
-					offerId: 'offer-declined-1',
+					id: 'offer-declined-1',
+					reason: 'declined',
 					engagementId: 'engagement-4',
 					clientName: 'Anne-Marie Ochieng-Whitfield',
 					kind: 'birth',
-					declinedBy: 'Charlene Boateng-Okonkwo',
-					declinedAt: '2026-10-30T15:00:00Z'
+					name: 'Charlene Boateng-Okonkwo',
+					at: '2026-10-30T15:00:00Z'
 				},
 				{
-					offerId: 'offer-declined-2',
+					id: 'offer-declined-2',
+					reason: 'declined',
 					engagementId: 'engagement-5',
 					clientName: 'Pat Lee',
 					kind: 'postpartum',
-					declinedBy: 'a.very.long.address.for.a.doula@persephone-birth-collective.example.org',
-					declinedAt: '2026-10-29T15:00:00Z'
+					name: 'a.very.long.address.for.a.doula@persephone-birth-collective.example.org',
+					at: '2026-10-29T15:00:00Z'
 				}
 			],
 			hasMore: true

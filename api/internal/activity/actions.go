@@ -557,6 +557,13 @@ const (
 	// action. In staffingActions below: who is on a birth is the roster.
 	ActionDoulaAttached EngagementAction = "doula_attached"
 
+	// ActionDoulaTakenOff records an Owner or an Admin taking a Doula off
+	// an Engagement (#2596): the actor is who decided it, the row's
+	// created_at is when, and the diff names the Doula under the same key
+	// ActionDoulaAttached uses. In staffingActions below, for the same
+	// reason.
+	ActionDoulaTakenOff EngagementAction = "doula_taken_off"
+
 	// DiffKeyAttachedStaffID is the one key an ActionDoulaAttached diff
 	// carries: the id of the Staff member who was attached. An
 	// ActionContractorFeePaid or ActionContractorFeePaymentReversed diff
@@ -669,6 +676,8 @@ var staffingActions = map[EngagementAction]bool{
 	ActionOnCallRuleChanged:      true,
 	// #1596: who the Practice put on the birth is the roster.
 	ActionDoulaAttached: true,
+	// #2596: and who the Practice took off it.
+	ActionDoulaTakenOff: true,
 	// #1423: the Practice's own audit of an Engagement's mutable facts.
 	ActionEngagementReopened:   true,
 	ActionKindChanged:          true,

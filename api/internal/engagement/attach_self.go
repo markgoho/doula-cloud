@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/attachment"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -18,9 +19,14 @@ import (
 // open, granted Attachment on it (GLOSSARY.md's Attachment, "who is
 // working this birth"). An accrued Attachment names nobody here. It is a
 // record of work done, and no screen calls its holder the Doula.
+//
+// BookedVisits is how many Visits she holds on it that are scheduled for
+// later than now: what taking her off leaves with her until someone
+// reassigns them (#2596).
 type AttachedDoula struct {
-	StaffID string `json:"staffId"`
-	Name    string `json:"name"`
+	StaffID      string `json:"staffId"`
+	Name         string `json:"name"`
+	BookedVisits int    `json:"bookedVisits"`
 }
 
 // AttachSelfResponse is who is on the Engagement once the caller has put
@@ -50,12 +56,14 @@ const (
 // ledger already uses for her.
 func readAttachedDoulas(ctx context.Context, tx *sql.Tx, engagementID string) ([]AttachedDoula, error) {
 	rows, err := tx.QueryContext(ctx,
-		`SELECT ea.staff_id, COALESCE(s.name, $2)
+		`SELECT ea.staff_id, COALESCE(s.name, $2),
+		        (SELECT count(*) FROM visits v
+		          WHERE v.engagement_id = ea.engagement_id AND v.staff_id = ea.staff_id AND v.scheduled_at > $3)
 		   FROM engagement_attachments ea
 		   LEFT JOIN staff s ON s.id = ea.staff_id
 		  WHERE ea.engagement_id = $1 AND ea.origin = 'granted' AND ea.ended_at IS NULL
 		  ORDER BY ea.attached_at, ea.staff_id`,
-		engagementID, activity.DepartedStaffName)
+		engagementID, activity.DepartedStaffName, clock.Now(ctx))
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return nil, fmt.Errorf("engagement: read attached doulas: %w", err)
@@ -65,7 +73,7 @@ func readAttachedDoulas(ctx context.Context, tx *sql.Tx, engagementID string) ([
 	doulas := []AttachedDoula{}
 	for rows.Next() {
 		var doula AttachedDoula
-		if err := rows.Scan(&doula.StaffID, &doula.Name); err != nil {
+		if err := rows.Scan(&doula.StaffID, &doula.Name, &doula.BookedVisits); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("engagement: scan attached doula: %w", err)
 		}

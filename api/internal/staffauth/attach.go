@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 )
 
 // AttachingWrite is ADR-0008's write-side seam. It wraps an
@@ -185,6 +186,31 @@ func EndAttachments(ctx context.Context, tx *sql.Tx, engagementID, endedBy strin
 		return fmt.Errorf("staffauth: end attachments: %w", err)
 	}
 	return nil
+}
+
+// EndGranted ends staffID's open granted attachment on engagementID,
+// recording who ended it and when: the Practice-takes-her-off trigger
+// ADR-0008 names (#2596). It reports whether there was one to end, so a
+// second press writes and reports nothing. Ending is ended_at, never a
+// delete.
+func EndGranted(ctx context.Context, tx *sql.Tx, engagementID, staffID, endedBy string) (bool, error) {
+	res, err := tx.ExecContext(ctx,
+		`UPDATE engagement_attachments
+		    SET ended_at = $4, ended_by = $3
+		  WHERE engagement_id = $1 AND staff_id = $2
+		    AND origin = 'granted' AND ended_at IS NULL`,
+		engagementID, staffID, endedBy, clock.Now(ctx),
+	)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return false, fmt.Errorf("staffauth: end granted attachment: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		// coverage:ignore reason: the pgx driver always reports rows affected
+		return false, fmt.Errorf("staffauth: end granted attachment: %w", err)
+	}
+	return n > 0, nil
 }
 
 // statusRecorder remembers the status code a handler wrote, so
