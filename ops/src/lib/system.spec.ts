@@ -56,17 +56,17 @@ describe('labels', () => {
 });
 
 describe('refusals', () => {
-	const none = { signature: 0, livemode: 0, body: 0, other: 0, failed: 0 };
+	const none = { signature: 0, livemode: 0, body: 0, payload: 0, other: 0, failed: 0 };
 
 	it('totals every kind', () => {
-		expect(refusalTotal({ signature: 2, livemode: 1, body: 3, other: 4, failed: 5 })).toBe(15);
+		expect(refusalTotal({ signature: 2, livemode: 1, body: 3, payload: 6, other: 4, failed: 5 })).toBe(21);
 		expect(refusalTotal(none)).toBe(0);
 	});
 
 	it('names only the kinds that happened, livemode first', () => {
 		expect(refusalBreakdown({ ...none, signature: 2, livemode: 1 })).toBe('1 livemode, 2 signature');
-		expect(refusalBreakdown({ signature: 1, livemode: 0, body: 1, other: 1, failed: 1 })).toBe(
-			'1 signature, 1 handler failed, 1 unreadable, 1 other'
+		expect(refusalBreakdown({ signature: 1, livemode: 0, body: 1, payload: 1, other: 1, failed: 1 })).toBe(
+			'1 signature, 1 handler failed, 1 unreadable, 1 bad content, 1 other'
 		);
 		expect(refusalBreakdown(none)).toBe('');
 	});

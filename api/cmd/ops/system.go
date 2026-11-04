@@ -47,6 +47,7 @@ type webhookRefusals struct {
 	Signature int `json:"signature"`
 	Livemode  int `json:"livemode"`
 	Body      int `json:"body"`
+	Payload   int `json:"payload"`
 	Other     int `json:"other"`
 	Failed    int `json:"failed"`
 }
@@ -169,8 +170,8 @@ func queryAll[T any](ctx context.Context, tx *sql.Tx, into func(*T) []any, query
 func readSystemDatabase(ctx context.Context, tx *sql.Tx, now, since time.Time, view *systemView) error {
 	var err error
 	view.Webhooks, err = queryAll(ctx, tx, func(r *webhookRoute) []any {
-		return []any{&r.Route, &r.LastArrivalAt, &r.Refusals.Signature, &r.Refusals.Livemode, &r.Refusals.Body, &r.Refusals.Other, &r.Refusals.Failed}
-	}, `SELECT route, last_arrival_at, signature_refused, livemode_refused, body_refused, refused, failed
+		return []any{&r.Route, &r.LastArrivalAt, &r.Refusals.Signature, &r.Refusals.Livemode, &r.Refusals.Body, &r.Refusals.Payload, &r.Refusals.Other, &r.Refusals.Failed}
+	}, `SELECT route, last_arrival_at, signature_refused, livemode_refused, body_refused, payload_refused, refused, failed
 	      FROM ops_webhook_routes($1)
 	     ORDER BY array_position(ARRAY['stripe_platform', 'stripe_connect', 'stripe_account', 'mailgun'], route)`, since)
 	if err != nil {

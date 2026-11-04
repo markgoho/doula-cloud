@@ -3,7 +3,7 @@ import { sentAt } from './feedback.ts';
 
 type Instant = string;
 
-export type Refusals = { signature: number; livemode: number; body: number; other: number; failed: number };
+export type Refusals = { signature: number; livemode: number; body: number; payload: number; other: number; failed: number };
 
 export type System = {
 	stripe: {
@@ -58,7 +58,7 @@ export function typeArrivalLabel(instant: Instant | null): string {
 }
 
 export function refusalTotal(refusals: Refusals): number {
-	return refusals.signature + refusals.livemode + refusals.body + refusals.other + refusals.failed;
+	return refusals.signature + refusals.livemode + refusals.body + refusals.payload + refusals.other + refusals.failed;
 }
 
 function count(n: number, one: string, many: string): string {
@@ -72,6 +72,7 @@ export function refusalBreakdown(refusals: Refusals): string {
 		[refusals.signature, 'signature'],
 		[refusals.failed, 'handler failed'],
 		[refusals.body, 'unreadable'],
+		[refusals.payload, 'bad content'],
 		[refusals.other, 'other']
 	];
 	return kinds
