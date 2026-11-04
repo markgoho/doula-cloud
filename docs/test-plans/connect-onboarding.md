@@ -2,7 +2,7 @@
 
 Written from the walk that first completed it ([#236](https://github.com/markgoho/doula-cloud/issues/236)), and rewritten from the one that last did ([#2171](https://github.com/markgoho/doula-cloud/issues/2171), 2026-10-28). Every later walk that needs a Practice able to raise Invoices follows this rather than re-deriving it.
 
-**Drive it in the founder's own Chrome, through Claude in Chrome.** Stripe fingerprints an automation-launched browser, not the absence of a human, so the browser is the whole trick:
+**Drive it in the walk Chrome profile, through Claude in Chrome** ([#2687](https://github.com/markgoho/doula-cloud/issues/2687)). That is a separate profile of the founder's own Chrome on Windows, kept for walks and signed in to nothing, never the profile the founder works in. Stripe fingerprints an automation-launched browser, not the absence of a human, so the browser is the whole trick:
 
 | Browser | Result |
 | --- | --- |
@@ -13,6 +13,8 @@ Written from the walk that first completed it ([#236](https://github.com/markgoh
 
 Claude in Chrome works from a session in WSL, and the Windows Chrome reaches the WSL stack on `localhost` (`http://localhost:5173`), so nothing else is needed to get there. It replaces `playwriter`, which this recipe used to name. Never solve a challenge; if Stripe serves one, stop and hand over.
 
+The extension connects once per profile, so the walk profile shows in `list_connected_browsers` as a browser of its own. Pick it there with `select_browser` before the first page of the walk; if the session is already pointed at another browser, it is the wrong one. If the walk profile is not listed, the founder opens it and presses **Connect** in the extension.
+
 **The founder has to be there.** The agent fills the screens that hold nothing sensitive. These are the founder's, and only the founder's, because each one is a credential or a legal agreement:
 
 - the Stripe login: email, password, and the two-step code;
@@ -22,7 +24,11 @@ Claude in Chrome works from a session in WSL, and the Windows Chrome reaches the
 
 **Two-step authentication needs an authenticator app.** Stripe offers a text message, but the Persona's phone number is a fictional 555 number that receives nothing, and `000000` is refused at that step. Choose the authenticator app, and the founder scans it. Never write the password, the authenticator secret or a backup code into this repository, an issue or a comment.
 
-**It signs that Chrome into Stripe as the Persona.** The login step creates a real Stripe *user* for the Owner's fake address, and the hosted flow logs the founder's Chrome into it. Afterwards `dashboard.stripe.com` in that Chrome resolves to the **connected account**, not the DoulaCloud platform, so a Dashboard settings page opened straight after a walk is the Practice's, not ours. Switch accounts top-left, or sign out, before touching any platform setting.
+**It signs that Chrome into Stripe as the Persona, which is why it is a separate profile.** A Practice's connected account has a full Stripe Dashboard, so the login step creates a real Stripe _user_ for the Owner's fake address, such as `maya.okonkwo.2565@sim.doula.cloud`, and the hosted flow signs the browser into it. That user can see only the Practice's account; **Switch sandbox** is grayed out, so there is no switching back. Signing back in as the founder needs the founder's password and two-step code, so no script can undo it.
+
+In the walk profile that costs nothing. Run in the founder's everyday Chrome, as it was until 2026-11-02, it swapped out the founder's Stripe session: the Dashboard opened on Maya, and a `stripe login` approved from that Chrome offered only Maya's account, which left the Stripe CLI answering `403` "Permission denied" to every platform call. If that happens, wait until no walk is mid-onboarding, then the founder signs out of the Persona in the Dashboard and back in as themselves, and runs `stripe logout && stripe login` again.
+
+**Approve `stripe login` only from the founder's everyday Chrome, signed in as the founder,** and pick **DoulaCloud sandbox** (`acct_1U7N3e1rKoVEA79v`) on its "Choose an account" screen. Never approve it from the walk profile.
 
 ## Before starting
 
