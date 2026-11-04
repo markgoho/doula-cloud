@@ -2,7 +2,7 @@
 
 Written from the walk that first completed it ([#236](https://github.com/markgoho/doula-cloud/issues/236)), and rewritten from the one that last did ([#2171](https://github.com/markgoho/doula-cloud/issues/2171), 2026-10-28). Every later walk that needs a Practice able to raise Invoices follows this rather than re-deriving it.
 
-**Drive it in the walk Chrome profile, through Claude in Chrome** ([#2687](https://github.com/markgoho/doula-cloud/issues/2687)). That is a separate profile of the founder's own Chrome on Windows, kept for walks and signed in to nothing, never the profile the founder works in. Stripe fingerprints an automation-launched browser, not the absence of a human, so the browser is the whole trick:
+**Drive it in the walk Chrome profile, through Claude in Chrome** ([#2687](https://github.com/markgoho/doula-cloud/issues/2687)). That is a separate profile of the founder's own Chrome on Windows, kept for walks and signed in to nothing but the Claude in Chrome extension (no Google account, no Stripe), never the profile the founder works in. Stripe fingerprints an automation-launched browser, not the absence of a human, so the browser is the whole trick:
 
 | Browser | Result |
 | --- | --- |
