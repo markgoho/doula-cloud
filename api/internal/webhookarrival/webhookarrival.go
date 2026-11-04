@@ -41,6 +41,7 @@ const (
 	BodyRefused      Outcome = "body_refused"
 	SignatureRefused Outcome = "signature_refused"
 	LivemodeRefused  Outcome = "livemode_refused"
+	PayloadRefused   Outcome = "payload_refused"
 	Refused          Outcome = "refused"
 	Failed           Outcome = "failed"
 )

@@ -329,7 +329,7 @@ func TestPostPurchaseWebhookHandler_MalformedSessionObjectRejected(t *testing.T)
 // TestPostPurchaseWebhookHandler_NonexistentPracticeRejected proves a
 // well-formed but nonexistent practice_id -- which should never happen,
 // since we set that metadata ourselves at Checkout Session creation --
-// surfaces as an internal error via credit_ledger's foreign key, and
+// is refused with a 400 via credit_ledger's foreign key, and
 // rolls back rather than leaving a stray stripe_webhook_events row with
 // no corresponding credit.
 func TestPostPurchaseWebhookHandler_NonexistentPracticeRejected(t *testing.T) {
@@ -342,8 +342,8 @@ func TestPostPurchaseWebhookHandler_NonexistentPracticeRejected(t *testing.T) {
 	resp := postWebhook(t, srv, payload, webhookTestSecret)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
 
 	var count int

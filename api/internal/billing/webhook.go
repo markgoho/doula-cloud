@@ -8,13 +8,20 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/google/uuid"
 	"github.com/stripe/stripe-go/v86"
 
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/stripemode"
 	"doula-cloud/api/internal/webhookarrival"
 )
+
+func refusePayload(w http.ResponseWriter, r *http.Request, event stripe.Event, field, message string) {
+	log.Printf("billing: purchase webhook: refusing event %s (%s): %s", event.ID, event.Type, field)
+	webhookarrival.Mark(r.Context(), webhookarrival.PayloadRefused)
+	apierr.WriteError(w, message, http.StatusBadRequest)
+}
 
 // maxWebhookBodyBytes bounds how much of a webhook request body
 // PostPurchaseWebhookHandler will read -- Stripe event payloads are
@@ -92,12 +99,13 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string, mode stripemod
 		}
 
 		practiceID := session.Metadata["practice_id"]
-		if !staffauth.ParseUUID(w, "practice", practiceID) {
+		if _, err := uuid.Parse(practiceID); err != nil {
+			refusePayload(w, r, event, "metadata.practice_id", "invalid practice id")
 			return
 		}
 		quantity, err := strconv.Atoi(session.Metadata["quantity"])
 		if err != nil || quantity < 1 {
-			apierr.WriteError(w, "invalid quantity metadata", http.StatusBadRequest)
+			refusePayload(w, r, event, "metadata.quantity", "invalid quantity metadata")
 			return
 		}
 
@@ -113,7 +121,7 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string, mode stripemod
 		// computed wrong three years from now. Refuse it and let Stripe
 		// retry: nothing has been written yet.
 		if session.AmountSubtotal <= 0 || session.AmountSubtotal%int64(quantity) != 0 {
-			apierr.WriteError(w, "checkout session subtotal does not divide by quantity", http.StatusBadRequest)
+			refusePayload(w, r, event, "amount_subtotal", "checkout session subtotal does not divide by quantity")
 			return
 		}
 		unitPriceCents := session.AmountSubtotal / int64(quantity)
@@ -126,7 +134,7 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string, mode stripemod
 		// webhook payload, so this carries the id and nothing else --
 		// which is all the ledger keeps.
 		if session.PaymentIntent == nil || session.PaymentIntent.ID == "" {
-			apierr.WriteError(w, "checkout session has no payment intent", http.StatusBadRequest)
+			refusePayload(w, r, event, "payment_intent", "checkout session has no payment intent")
 			return
 		}
 
@@ -185,8 +193,10 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string, mode stripemod
 			 VALUES ($1, 'purchase', $2, $3, $4, $5)`,
 			practiceID, quantity, unitPriceCents, taxCents, session.PaymentIntent.ID,
 		); err != nil {
-			// Includes a foreign-key violation if practiceID -- taken
-			// verbatim from event metadata -- doesn't name a real Practice.
+			if pgerr.IsForeignKeyViolation(err) {
+				refusePayload(w, r, event, "metadata.practice_id: no such Practice", "no such practice")
+				return
+			}
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}

@@ -26,6 +26,15 @@ import (
 // being violated: https://www.postgresql.org/docs/current/errcodes-appendix.html
 const uniqueViolation = "23505"
 
+const foreignKeyViolation = "23503"
+
+// IsForeignKeyViolation reports whether err is a Postgres foreign-key
+// violation -- the error an INSERT gets when the row it points at is missing.
+func IsForeignKeyViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolation
+}
+
 // IsUniqueViolation reports whether err is a Postgres unique violation --
 // the error an INSERT gets when the row it is adding already exists.
 //

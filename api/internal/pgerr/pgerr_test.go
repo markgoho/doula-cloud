@@ -14,6 +14,26 @@ func uniqueViolation(constraint string) error {
 	return &pgconn.PgError{Code: "23505", ConstraintName: constraint}
 }
 
+func TestIsForeignKeyViolation(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"a foreign key violation", &pgconn.PgError{Code: "23503"}, true},
+		{"a wrapped foreign key violation", fmt.Errorf("insert: %w", &pgconn.PgError{Code: "23503"}), true},
+		{"a unique violation", uniqueViolation("k"), false},
+		{"a non-Postgres error", errors.New("connection refused"), false},
+		{"no error at all", nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := pgerr.IsForeignKeyViolation(tc.err); got != tc.want {
+				t.Errorf("IsForeignKeyViolation(%v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestIsUniqueViolation(t *testing.T) {
 	for _, tc := range []struct {
 		name string

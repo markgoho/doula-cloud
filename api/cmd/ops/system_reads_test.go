@@ -69,6 +69,7 @@ func TestSystem_CountsEachKindOfRefusalInTheLastSevenDaysOnly(t *testing.T) {
 	s.arrival("stripe_platform", "signature_refused", "", recent)
 	s.arrival("stripe_platform", "livemode_refused", "checkout.session.completed", recent)
 	s.arrival("stripe_platform", "body_refused", "", recent)
+	s.arrival("stripe_platform", "payload_refused", "checkout.session.completed", recent)
 	s.arrival("stripe_platform", "refused", "", recent)
 	s.arrival("stripe_platform", "failed", "checkout.session.completed", recent)
 	s.arrival("stripe_platform", "signature_refused", "", opsStart.AddDate(0, 0, -8))
@@ -76,7 +77,7 @@ func TestSystem_CountsEachKindOfRefusalInTheLastSevenDaysOnly(t *testing.T) {
 
 	v := s.view()
 
-	if got, want := routeOf(t, v, "stripe_platform").Refusals, (webhookRefusals{Signature: 2, Livemode: 1, Body: 1, Other: 1, Failed: 1}); got != want {
+	if got, want := routeOf(t, v, "stripe_platform").Refusals, (webhookRefusals{Signature: 2, Livemode: 1, Body: 1, Payload: 1, Other: 1, Failed: 1}); got != want {
 		t.Errorf("stripe_platform refusals = %+v, want %+v", got, want)
 	}
 	if got := routeOf(t, v, "mailgun").Refusals; got != (webhookRefusals{Signature: 1}) {

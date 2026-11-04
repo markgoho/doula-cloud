@@ -70,7 +70,7 @@ func TestPostPurchaseWebhookHandler_RecordsAnArrivalForEachOutcome(t *testing.T)
 		{webhookarrival.Dropped, "evt_other", "payment_intent.succeeded"},
 		{webhookarrival.SignatureRefused, "evt_forged", stripeEventTypeCheckoutCompleted},
 		{webhookarrival.LivemodeRefused, "evt_live", stripeEventTypeCheckoutCompleted},
-		{webhookarrival.Refused, "evt_bad_quantity", stripeEventTypeCheckoutCompleted},
+		{webhookarrival.PayloadRefused, "evt_bad_quantity", stripeEventTypeCheckoutCompleted},
 		{webhookarrival.Failed, "evt_malformed", stripeEventTypeCheckoutCompleted},
 		{webhookarrival.BodyRefused, "", ""},
 	}

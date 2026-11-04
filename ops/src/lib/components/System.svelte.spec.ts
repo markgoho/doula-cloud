@@ -10,7 +10,7 @@ function answering(status: number, body: unknown) {
 	return vi.fn<typeof fetch>(async () => Response.json(body, { status }));
 }
 
-const none = { signature: 0, livemode: 0, body: 0, other: 0, failed: 0 };
+const none = { signature: 0, livemode: 0, body: 0, payload: 0, other: 0, failed: 0 };
 
 const system: System = {
 	stripe: { mode: 'test', platformAccountId: 'acct_1Platform', undelivered: { count: 2, atLeast: false } },
