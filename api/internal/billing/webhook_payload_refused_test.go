@@ -17,6 +17,23 @@ const (
 	failingSubtotal      = "amount_subtotal"
 )
 
+func TestPostPurchaseWebhookHandler_AnOtherwiseFailedLedgerInsertStaysA500(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Ledger Check Failure")
+	srv := newWebhookServer(db)
+	defer srv.Close()
+
+	resp := postWebhook(t, srv, pricedCheckoutPayload(t, "evt_negative_tax", practiceID, 5, 10000, -1, "pi_negative_tax"), webhookTestSecret)
+	_ = resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", resp.StatusCode)
+	}
+	if got := arrivals(t, db); !slices.Equal(got, []arrival{{webhookarrival.Failed, "evt_negative_tax", stripeEventTypeCheckoutCompleted}}) {
+		t.Fatalf("arrivals = %v, want one failed", got)
+	}
+}
+
 func TestPostPurchaseWebhookHandler_MarksAndLogsEachPayloadItCannotActOn(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Payload Refused")
