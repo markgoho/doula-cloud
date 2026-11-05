@@ -212,3 +212,12 @@
 </main>
 <!-- #1558: the same footer, in the same place, as the signed-out Portal screens. -->
 <PortalFooter />
+
+<style>
+	@layer components {
+		main {
+			inline-size: min(100%, var(--portal-column));
+			margin-inline: auto;
+		}
+	}
+</style>

@@ -310,27 +310,20 @@
 			overflow-wrap: anywhere;
 		}
 
-		/* The drawing's card: one bordered block, as wide as the cards
-		   below it. */
 		.next {
 			display: flex;
 			flex-direction: column;
 			gap: var(--space-3);
-			max-inline-size: var(--measure);
 			padding: var(--space-5);
 			border: var(--border-thin) solid var(--color-outline-variant);
 			border-radius: var(--radius);
 			background-color: var(--color-surface-bright);
 		}
 
-		/* One column for every section's card, the drawing's width: a
-		   card that ran the full 1440px would put its one line a long way
-		   from its edge. */
 		.column {
 			display: flex;
 			flex-direction: column;
 			gap: var(--space-4);
-			max-inline-size: var(--measure);
 		}
 	}
 </style>

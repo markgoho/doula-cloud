@@ -322,6 +322,10 @@
 	   that guard is WCAG 1.4.4, which is about text. */
 	--page-gutter: clamp(1rem, 2.5cqi, 3rem);
 	--form-max: 44rem;
+	/* The signed-in portal's column (#2700), whole, gutters inside it: narrower
+	   than every Template's own cap at every width of the type ramp, so each
+	   Template fills it and they all start at one edge. */
+	--portal-column: 37.5rem;
 	/* The rail beside a page's column -- RecordDetail's contents list
 	   (#424) and the intake step rail (#464) are the same 260px the
 	   drawing put there, and three consumers is past the bar at which a
