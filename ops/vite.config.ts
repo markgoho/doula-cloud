@@ -3,6 +3,7 @@ import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
+import { VERSION_POLL_MS } from '../app/src/lib/versionSkew.ts';
 import { OPS_DEV_SERVER_PORT, OPS_PREVIEW_SERVER_PORT, OPS_URL } from '../app/e2e/ports.ts';
 
 export default defineConfig({
@@ -12,6 +13,7 @@ export default defineConfig({
 				runes: ({ filename }) => (filename.split(/[/\\]/).includes('node_modules') ? undefined : true)
 			},
 			adapter: adapter({ fallback: '200.html' }),
+			version: { pollInterval: VERSION_POLL_MS },
 			alias: { '$ui': '../app/src/lib/components' }
 		})
 	],

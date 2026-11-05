@@ -1,12 +1,18 @@
 <script lang="ts">
 	import '../../../app/src/lib/styles/app.css';
-	import { goto } from '$app/navigation';
+	import { beforeNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { page } from '$app/state';
+	import { page, updated } from '$app/state';
+	import { skewReloadHref } from '../../../app/src/lib/versionSkew.js';
 	import ServiceNavigation from '#lib/components/ServiceNavigation.svelte';
 	import type { Operator } from '#lib/session.js';
 
 	let { children } = $props();
+
+	beforeNavigate((navigation) => {
+		const href = skewReloadHref(updated.current, navigation);
+		if (href) location.assign(href);
+	});
 
 	const operator = $derived(page.data.operator as Operator | undefined);
 </script>

@@ -3,6 +3,7 @@ import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
+import { VERSION_POLL_MS } from './src/lib/versionSkew.ts';
 import { E2E_API_HOST, E2E_API_PORT, DEV_SERVER_PORT, PREVIEW_SERVER_PORT } from './e2e/ports.ts';
 
 // How many headless Chromium renderers the `client` project may open at
@@ -35,7 +36,8 @@ export default defineConfig({
 			// requires. `200.html` (not `index.html`) per adapter-static's
 			// own guidance, since it's the name Firebase Hosting's
 			// SPA-rewrite convention expects for a catch-all fallback.
-			adapter: adapter({ fallback: '200.html' })
+			adapter: adapter({ fallback: '200.html' }),
+			version: { pollInterval: VERSION_POLL_MS }
 		})
 	],
 	// `vite dev` (server) and Playwright's webServer (`vite preview`) each

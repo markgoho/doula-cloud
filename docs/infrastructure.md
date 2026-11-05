@@ -71,6 +71,15 @@ Each of these is a resource in the configuration, and a difference between the c
 
 The restore drill and the storage cost of the transaction logs are recorded on #2363 once they are measured.
 
+## Hosting caching and version skew ([#2706](https://github.com/markgoho/doula-cloud/issues/2706))
+
+The `app` and `ops` sites are single-page apps served from `200.html` through a `**` rewrite, and each deploy replaces the hashed `/_app/immutable/` chunks. The rule, in `firebase.json`:
+
+- Everything is `Cache-Control: no-cache`, so a browser revalidates the HTML shell on every load. Hosting's default is `max-age=3600`, which let a browser keep the previous deploy's shell for an hour after chunks it imports were deleted.
+- `/_app/immutable/**` is `public, max-age=31536000, immutable`, since a file's name changes whenever its content does. The later `headers` entry wins over the `**` one.
+- `/_app/**` is rewritten to `/_app/missing`, which does not exist, ahead of the `**` rewrite. A request for a chunk that a deploy deleted is a `404`, not the shell as `200 text/html`, which the browser would run as a broken module.
+- The apps recover from skew they can still meet: `kit.version.pollInterval` (60 seconds) with `updated` makes the next navigation a full page load, and `app/src/lib/versionSkew.ts` reloads once, guarded for 30 seconds in `sessionStorage`, when a chunk fails to preload (`app/src/hooks.client.ts`, `ops/src/hooks.client.ts`).
+
 ## What stays by hand
 
 Nothing here is an oversight. Each line is a decision, and the reason is the point of the line.
