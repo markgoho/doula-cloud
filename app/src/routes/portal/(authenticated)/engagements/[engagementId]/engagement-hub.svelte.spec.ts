@@ -189,6 +189,38 @@ describe('Client portal Engagement hub', () => {
 		await expect.element(next.getByText('No visit is booked yet.')).toBeVisible();
 	});
 
+	// #2697: money she owes comes first in "What happens next". One open
+	// Invoice is linked to directly (a Payment Element belongs to one
+	// Invoice, #983); several are linked through the list.
+	it('leads with the one open invoice, linked straight to it (#2697)', async () => {
+		await setupHub({
+			record: { ...detail, openInvoiceCount: 1, totalToPayCents: 150_000, onlyOpenInvoiceId: 'invoice-9' }
+		});
+
+		const next = page.getByRole('region', { name: 'What happens next' });
+		const link = next.getByRole('link', { name: 'Your invoice for $1,500.00 is ready to pay' });
+		await expect.element(link).toHaveAttribute('href', `/portal/engagements/${detail.engagementId}/invoices/invoice-9`);
+		await expect
+			.element(next)
+			.toHaveTextContent(new RegExp(String.raw`^${NEXT_HEADING}\s*Your invoice for \$1,500\.00 is ready to pay`));
+	});
+
+	it('leads with the total and the list when two or more are open (#2697)', async () => {
+		await setupHub();
+
+		const next = page.getByRole('region', { name: 'What happens next' });
+		const link = next.getByRole('link', { name: 'You have 2 invoices to pay, $3,350.00 in all' });
+		await expect.element(link).toHaveAttribute('href', `/portal/engagements/${detail.engagementId}/invoices`);
+	});
+
+	it('says nothing about money when nothing is due, with no $0 line (#2697)', async () => {
+		await setupHub({ record: { ...detail, openInvoiceCount: 0, totalToPayCents: 0 } });
+
+		const next = page.getByRole('region', { name: 'What happens next' });
+		await expect.element(next.getByRole('link')).not.toBeInTheDocument();
+		await expect.element(next.getByText(/invoice|\$/i)).not.toBeInTheDocument();
+	});
+
 	// #2217: once the Practice marks care complete, "What happens next"
 	// says so first, and a Visit it still holds booked stays named under
 	// it. The portal never carries the birth outcome, so after a loss the
@@ -196,7 +228,9 @@ describe('Client portal Engagement hub', () => {
 	// as after a live birth: this case is Nadia Haddad's and Camille
 	// Boyd's alike.
 	it('says care has ended above anything else, then the Visit still booked (#2217)', async () => {
-		await setupHub({ record: { ...detail, careEnded: true, dueDate: undefined } });
+		await setupHub({
+			record: { ...detail, careEnded: true, dueDate: undefined, openInvoiceCount: 0, totalToPayCents: 0 }
+		});
 
 		const next = page.getByRole('region', { name: 'What happens next' });
 		await expect.element(next.getByText('Care ended', { exact: true })).toBeVisible();
@@ -251,7 +285,7 @@ describe('Client portal Engagement hub', () => {
 		await expect.element(page.getByRole('term').filter({ hasText: 'Total to pay' })).toBeVisible();
 		await expect.element(page.getByRole('definition').filter({ hasText: '$3,350.00' })).toBeVisible();
 		await expect
-			.element(page.getByRole('link', { name: 'Invoices' }))
+			.element(page.getByRole('link', { name: 'Invoices', exact: true }))
 			.toHaveAttribute('href', '/portal/engagements/engagement-1/invoices');
 	});
 

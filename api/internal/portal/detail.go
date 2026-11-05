@@ -88,6 +88,12 @@ type Detail struct {
 	// total comes from, so the hub and the money screen cannot disagree.
 	// Additive: 0 when nothing is owed.
 	TotalToPayCents int64 `json:"totalToPayCents"`
+	// OpenInvoiceCount and OnlyOpenInvoiceID (#2697) let "What happens
+	// next" say money is due first: one open Invoice links straight to
+	// it, several link to the list. The id is absent unless exactly one is
+	// open.
+	OpenInvoiceCount  int     `json:"openInvoiceCount"`
+	OnlyOpenInvoiceID *string `json:"onlyOpenInvoiceId,omitempty"`
 	// Contract, BirthPlan and LastMessage are the one line each that
 	// "Your care" says about her documents and her thread (#2007), read
 	// by the package that owns each, so the hub carries no prose, no
@@ -150,7 +156,7 @@ func DetailHandler() http.Handler {
 			Kind: engagement.Kind(kind), BirthOutcome: birthOutcome,
 		})
 
-		d.TotalToPayCents, _, err = payments.ClientTotalToPay(r.Context(), tx, engagementID)
+		d.TotalToPayCents, d.OpenInvoiceCount, d.OnlyOpenInvoiceID, err = payments.ClientOpenInvoices(r.Context(), tx, engagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)

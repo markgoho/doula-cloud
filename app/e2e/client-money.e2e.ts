@@ -24,7 +24,7 @@ test('a Client walks from the hub to an Invoice and back', async ({ page, reques
 	const main = page.getByRole('main');
 	await expect(main.getByRole('term').filter({ hasText: 'Total to pay' })).toBeVisible();
 	await expect(main.getByRole('definition').filter({ hasText: '$3,350.00' })).toBeVisible();
-	await main.getByRole('link', { name: 'Invoices' }).click();
+	await main.getByRole('link', { name: 'Invoices', exact: true }).click();
 
 	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}/invoices$`));
 	await expect(page.getByRole('heading', { level: 1, name: 'Invoices' })).toBeVisible();

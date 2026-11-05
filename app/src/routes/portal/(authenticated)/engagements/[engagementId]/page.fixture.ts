@@ -30,6 +30,7 @@ export const detail = {
 	isOneOfSeveral: false,
 	careEnded: false,
 	totalToPayCents: 335_000,
+	openInvoiceCount: 2,
 	/*
 	 * #2007's three cards, each at its longest: a signed Contract, a
 	 * Birth Plan she has confirmed, and a Message whose body is one long

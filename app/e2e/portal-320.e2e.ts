@@ -13,9 +13,9 @@ import { seedPortalClient, signInPortalClient } from './portalClient';
 // the width is the commitment itself, not a device.
 test.use({ viewport: { width: 320, height: 640 } });
 
-// The five destinations the authenticated layout passes for a birth
+// The six destinations the authenticated layout passes for a birth
 // Engagement, seedEngagement's own default kind, which offers a Birth plan.
-const NAV_LABELS = ['Your care', 'Messages', 'Birth plan', 'Contract', 'Notifications'];
+const NAV_LABELS = ['Your care', 'Messages', 'Birth plan', 'Contract', 'Invoices', 'Notifications'];
 
 async function expectNoSidewaysScroll(page: Page): Promise<void> {
 	const { scrollWidth, clientWidth } = await page.evaluate(() => ({
