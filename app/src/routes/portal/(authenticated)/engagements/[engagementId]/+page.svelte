@@ -40,6 +40,7 @@
 		contractCard,
 		messagesCard,
 		nextVisit,
+		owedNextLine,
 		whatHappensNext,
 		type BirthPlanGlance,
 		type CareCard,
@@ -47,6 +48,7 @@
 		type LastMessage
 	} from '#lib/yourCare.js';
 	import DoorLink from '#lib/components/atoms/DoorLink.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
@@ -72,6 +74,11 @@
 		/** What she still owes on this care (#983); the Invoices route
 		 * holds the rest. */
 		totalToPayCents: number;
+		/** How many Invoices make that total, and the one's id when there
+		 * is exactly one, so "What happens next" can link straight to it
+		 * (#2697). */
+		openInvoiceCount: number;
+		onlyOpenInvoiceId?: string;
 		contract?: ContractGlance;
 		birthPlan?: BirthPlanGlance;
 		lastMessage?: LastMessage;
@@ -143,13 +150,21 @@
 
 	const next = $derived(whatHappensNext(nextVisit(visits.items), detail?.dueDate, detail?.careEnded));
 
+	const owedNext = $derived(owedNextLine(detail?.openInvoiceCount ?? 0, detail?.totalToPayCents ?? 0));
+
 	const routes = $derived.by(() => {
 		const engagementId = page.params.engagementId!;
 		return {
 			birthPlan: resolve('/portal/(authenticated)/engagements/[engagementId]/birth-plan', { engagementId }),
 			contract: resolve('/portal/(authenticated)/engagements/[engagementId]/contract', { engagementId }),
 			messages: resolve('/portal/(authenticated)/engagements/[engagementId]/messages', { engagementId }),
-			invoices: resolve('/portal/(authenticated)/engagements/[engagementId]/invoices', { engagementId })
+			invoices: resolve('/portal/(authenticated)/engagements/[engagementId]/invoices', { engagementId }),
+			onlyInvoice: detail?.onlyOpenInvoiceId
+				? resolve('/portal/(authenticated)/engagements/[engagementId]/invoices/[invoiceId]', {
+						engagementId,
+						invoiceId: detail.onlyOpenInvoiceId
+					})
+				: undefined
 		};
 	});
 </script>
@@ -165,6 +180,10 @@
 		<div class="practice"><Text text={practiceLine} tone="variant" /></div>
 		<section class="next" aria-labelledby="what-happens-next"><!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
 			<Heading level={2} variant="card" text={NEXT_HEADING} id="what-happens-next" />
+			<!-- #2697: money she owes comes before anything else, one link either way. -->
+			{#if owedNext}
+				<Link href={routes.onlyInvoice ?? routes.invoices} label={owedNext} />
+			{/if}
 			<!-- #2217: ended care says so first, above anything else here. -->
 			{#if next.ended}
 				<Text text={next.ended} step="label" />

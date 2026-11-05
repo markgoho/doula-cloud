@@ -138,6 +138,12 @@
 				})
 			},
 			{
+				label: 'Invoices',
+				href: resolve('/portal/(authenticated)/engagements/[engagementId]/invoices', {
+					engagementId
+				})
+			},
+			{
 				label: 'Notifications',
 				href: resolve('/portal/(authenticated)/engagements/[engagementId]/notifications', {
 					engagementId

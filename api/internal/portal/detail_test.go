@@ -270,25 +270,47 @@ func TestDetailHandler_TotalToPayCents(t *testing.T) {
 			t.Fatalf("seed invoice: %v", err)
 		}
 	}
-
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/portal/engagements/"+engagementID, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
+	read := func() portal.Detail {
+		t.Helper()
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/portal/engagements/"+engagementID, nil)
+		if err != nil {
+			t.Fatalf("build request: %v", err)
+		}
+		authntest.AddSessionCookie(req, session)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer resp.Body.Close()
+		var out portal.Detail
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		return out
 	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer resp.Body.Close()
-	var out portal.Detail
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+
+	out := read()
 	if out.TotalToPayCents != 9000 {
 		t.Fatalf("totalToPayCents = %d, want 9000", out.TotalToPayCents)
+	}
+	if out.OpenInvoiceCount != 2 || out.OnlyOpenInvoiceID != nil {
+		t.Fatalf("open invoices = %d, only = %v, want 2 and none", out.OpenInvoiceCount, out.OnlyOpenInvoiceID)
+	}
+
+	var onlyID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`UPDATE invoices SET status = 'paid' WHERE stripe_invoice_id = 'in_detail_b' RETURNING id`).Scan(new(string)); err != nil {
+		t.Fatalf("pay one: %v", err)
+	}
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT id FROM invoices WHERE stripe_invoice_id = 'in_detail_a'`).Scan(&onlyID); err != nil {
+		t.Fatalf("read id: %v", err)
+	}
+	out = read()
+	if out.OpenInvoiceCount != 1 || out.OnlyOpenInvoiceID == nil || *out.OnlyOpenInvoiceID != onlyID {
+		t.Fatalf("open invoices = %d, only = %v, want 1 and %s", out.OpenInvoiceCount, out.OnlyOpenInvoiceID, onlyID)
 	}
 }
 

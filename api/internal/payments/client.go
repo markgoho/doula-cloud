@@ -109,7 +109,8 @@ const (
 // totalToPayQuery sums the Engagement's open Invoices and nothing else:
 // the model holds no partial Payments (#981), so what she owes is the sum
 // of her open Invoices.
-const totalToPayQuery = `SELECT COALESCE(SUM(i.amount_cents), 0), COUNT(*)
+const totalToPayQuery = `SELECT COALESCE(SUM(i.amount_cents), 0), COUNT(*),
+	       CASE WHEN COUNT(*) = 1 THEN MIN(i.id::text) END
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
 	WHERE c.engagement_id = $1 AND i.status = 'open'`
@@ -119,11 +120,23 @@ const totalToPayQuery = `SELECT COALESCE(SUM(i.amount_cents), 0), COUNT(*)
 // list's totals and for the portal hub's single line (#1011), so the two
 // cannot disagree. tx must be a Client-portal transaction.
 func ClientTotalToPay(ctx context.Context, tx *sql.Tx, engagementID string) (cents int64, count int, err error) {
-	if err := tx.QueryRowContext(ctx, totalToPayQuery, engagementID).Scan(&cents, &count); err != nil {
+	cents, count, _, err = ClientOpenInvoices(ctx, tx, engagementID)
+	return cents, count, err
+}
+
+// ClientOpenInvoices is ClientTotalToPay plus the id of the Engagement's
+// one open Invoice, nil unless exactly one is open, so the portal hub can
+// link straight to it (#2697).
+func ClientOpenInvoices(ctx context.Context, tx *sql.Tx, engagementID string) (cents int64, count int, onlyID *string, err error) {
+	var only sql.NullString
+	if err := tx.QueryRowContext(ctx, totalToPayQuery, engagementID).Scan(&cents, &count, &only); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return 0, 0, fmt.Errorf("payments: total to pay: %w", err)
+		return 0, 0, nil, fmt.Errorf("payments: total to pay: %w", err)
 	}
-	return cents, count, nil
+	if only.Valid {
+		onlyID = &only.String
+	}
+	return cents, count, onlyID, nil
 }
 
 // clientPracticeZone is the zone of the Practice behind engagementID

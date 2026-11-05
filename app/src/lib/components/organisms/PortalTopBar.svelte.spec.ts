@@ -16,6 +16,7 @@ const NAV_ITEMS = [
 	{ label: 'Messages', href: '/messages', current: false },
 	{ label: 'Birth plan', href: '/birth-plan', current: false },
 	{ label: 'Contract', href: '/contract', current: false },
+	{ label: 'Invoices', href: '/invoices', current: false },
 	{ label: 'Notifications', href: '/notifications', current: false }
 ];
 
@@ -53,7 +54,7 @@ describe('PortalTopBar', () => {
 		await expect.element(page.getByText('DoulaCloud')).not.toBeInTheDocument();
 	});
 
-	it.each(['Your care', 'Messages', 'Birth plan', 'Contract', 'Notifications'])('offers %s', async (label) => {
+	it.each(['Your care', 'Messages', 'Birth plan', 'Contract', 'Invoices', 'Notifications'])('offers %s', async (label) => {
 		await setup();
 
 		await expect.element(page.getByRole('link', { name: label }).first()).toBeVisible();
@@ -184,8 +185,8 @@ describe('PortalTopBar tabs (#2007)', () => {
 	// between two samples.
 	const widths = Array.from({ length: 81 }, (_, step) => 320 + step * 4);
 	const sets = [
-		{ name: 'five', items: NAV_ITEMS },
-		{ name: 'four', items: NAV_ITEMS.filter((item) => item.label !== 'Birth plan') }
+		{ name: 'six', items: NAV_ITEMS },
+		{ name: 'five', items: NAV_ITEMS.filter((item) => item.label !== 'Birth plan') }
 	];
 	describe.each(sets)('with $name tabs', ({ items }) => {
 		it.each(widths)('leaves no tab alone on a line at %ipx', async (width) => {

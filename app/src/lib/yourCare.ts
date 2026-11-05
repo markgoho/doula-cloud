@@ -16,6 +16,7 @@
 
 import { NO_CONTRACT_MESSAGE, contractVoidedNotice, engagementStatusLabel } from './clientRegister.js';
 import { formatCalendarDay, formatInstant, formatPortalVisit } from './dates.js';
+import { formatMoney } from './money.js';
 import { inReadingOrder, type PortalVisit } from './portalVisits.js';
 
 /**
@@ -109,6 +110,17 @@ export function whatHappensNext(
 	}
 	if (dueDate) out.detail = `Your due date is ${formatCalendarDay(dueDate)}.`;
 	return out;
+}
+
+/** The link text for money she still owes, first in "What happens next"
+ * (#2697): one open Invoice names its amount and is linked to directly,
+ * two or more name the total and are linked to the list. Nothing at all
+ * for none, so a Client who owes nothing reads nothing about money. */
+export function owedNextLine(openInvoiceCount: number, totalToPayCents: number, currency = 'usd'): string | undefined {
+	if (openInvoiceCount < 1) return undefined;
+	const amount = formatMoney(totalToPayCents, currency);
+	if (openInvoiceCount === 1) return `Your invoice for ${amount} is ready to pay`;
+	return `You have ${openInvoiceCount} invoices to pay, ${amount} in all`;
 }
 
 /** Her Birth Plan. Its acknowledgment is cleared by a Staff edit, so it

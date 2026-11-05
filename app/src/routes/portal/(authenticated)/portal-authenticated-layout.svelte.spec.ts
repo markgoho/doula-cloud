@@ -157,10 +157,19 @@ describe('Client portal authenticated layout', () => {
 	 * inside the hub, and a nav item pointing at a section of another page
 	 * is a nav item that lies about where it goes.
 	 */
-	it.each(['Your care', 'Messages', 'Birth plan', 'Contract', 'Notifications'])('offers %s', async (label) => {
+	it.each(['Your care', 'Messages', 'Birth plan', 'Contract', 'Invoices', 'Notifications'])('offers %s', async (label) => {
 		await setup();
 
 		await expect.element(page.getByRole('link', { name: label }).first()).toBeVisible();
+	});
+
+	// #2697: the only way back to an open Invoice used to be the foot of the hub.
+	it('offers Invoices as its own destination, current on its route', async () => {
+		await setup({ pathname: '/portal/engagements/engagement-1/invoices' });
+
+		const invoices = page.getByRole('link', { name: 'Invoices' }).first();
+		await expect.element(invoices).toHaveAttribute('href', '/portal/engagements/engagement-1/invoices');
+		await expect.element(invoices).toHaveAttribute('aria-current', 'page');
 	});
 
 	// #311: a postpartum-only Engagement offers no Birth Plan anywhere in
