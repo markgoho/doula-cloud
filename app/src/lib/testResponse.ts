@@ -9,6 +9,7 @@ export function jsonResponse(body: unknown, status = 200): Response {
 		ok: status >= 200 && status < 300,
 		status,
 		text: () => Promise.resolve(typeof body === 'string' ? body : JSON.stringify(body)),
-		json: () => Promise.resolve(body)
+		json: () => Promise.resolve(body),
+		clone: () => jsonResponse(body, status)
 	} as Response;
 }

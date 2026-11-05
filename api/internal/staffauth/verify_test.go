@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/idempotency"
@@ -218,6 +219,7 @@ func TestSpendVerificationHandler_UnknownTokenInvalid(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
+	requireErrorCode(t, resp, apierr.CodeLinkUnusable)
 }
 
 func TestSpendVerificationHandler_Success(t *testing.T) {

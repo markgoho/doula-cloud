@@ -64,7 +64,7 @@ func AcceptInviteHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 		// invite -- the same refusal as an unknown one, rather than a 500
 		// when Postgres will not read it as the uuid column it is matched to.
 		if _, err := uuid.Parse(req.InviteToken); err != nil {
-			apierr.WriteError(w, "This invite was not found or was already accepted.", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, apierr.CodeLinkUnusable, "This invite was not found or was already accepted.", nil)
 			return
 		}
 
@@ -185,7 +185,7 @@ func acceptInvite(r *http.Request, tx *sql.Tx, inviteToken string) (result accep
 		inviteToken,
 	).Scan(&clientID, &expiresAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return acceptResult{}, "", "", false, http.StatusNotFound, apierr.CodeNotFound, "invite not found or already accepted"
+		return acceptResult{}, "", "", false, http.StatusNotFound, apierr.CodeLinkUnusable, "invite not found or already accepted"
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -197,12 +197,9 @@ func acceptInvite(r *http.Request, tx *sql.Tx, inviteToken string) (result accep
 	// There is no status column to flip here the way staffauth.acceptInvite
 	// flips practice_invitations.status: a re-invite already rotates both
 	// invite_token and invite_token_expires_at, so nothing needs marking
-	// on the way past. apierr has no dedicated Gone/expired code, so this
-	// takes CodeForStatus's default the way staffauth's own 410 path does
-	// (via apierr.WriteError) -- an explicit derivation, not a mistaken
-	// CodeInternal literal for what is an expected, not a server, failure.
+	// on the way past.
 	if !expiresAt.Valid || !expiresAt.Time.After(clock.Now(ctx)) {
-		return acceptResult{}, "", "", false, http.StatusGone, apierr.CodeForStatus(http.StatusGone), "this invitation has expired -- ask your practice to send a new one"
+		return acceptResult{}, "", "", false, http.StatusGone, apierr.CodeLinkUnusable, "this invitation has expired -- ask your practice to send a new one"
 	}
 
 	// Opens clients_self_visibility (00009_messaging_client_portal_read.sql)

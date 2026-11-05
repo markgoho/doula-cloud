@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
@@ -311,6 +312,7 @@ func TestAcceptInviteHandler_ExpiredIsGoneAndMarked(t *testing.T) {
 	if resp.StatusCode != http.StatusGone {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusGone)
 	}
+	requireErrorCode(t, resp, apierr.CodeLinkUnusable)
 
 	// The expiry is written down on the way past, so the Owner's Staff
 	// screen stops offering it as pending. It survives the rolled-back
@@ -337,6 +339,7 @@ func TestAcceptInviteHandler_UnknownToken(t *testing.T) {
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
 	}
+	requireErrorCode(t, resp, apierr.CodeLinkUnusable)
 }
 
 func TestAcceptInviteHandler_RevokedTokenIsNotFound(t *testing.T) {
@@ -358,6 +361,7 @@ func TestAcceptInviteHandler_RevokedTokenIsNotFound(t *testing.T) {
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
 	}
+	requireErrorCode(t, resp, apierr.CodeLinkUnusable)
 }
 
 func TestAcceptInviteHandler_BadRequests(t *testing.T) {

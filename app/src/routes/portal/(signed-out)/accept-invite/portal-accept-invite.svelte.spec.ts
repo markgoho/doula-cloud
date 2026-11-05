@@ -171,7 +171,7 @@ describe('Where an invitation link leads (#2025)', () => {
 	});
 
 	it('ends on the next step when the invitation has expired or was accepted already', async () => {
-		vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ message: 'invite not found or already accepted' }, 404)));
+		vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ code: 'LINK_UNUSABLE', message: 'invite not found or already accepted' }, 404)));
 
 		await render(Page, {});
 		await testPage.getByRole('button', { name: 'Continue' }).click();

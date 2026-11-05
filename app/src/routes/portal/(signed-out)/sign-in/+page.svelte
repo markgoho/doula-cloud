@@ -68,7 +68,7 @@
 				},
 				body: JSON.stringify({ token })
 			});
-			if (isUnusableLink(response)) {
+			if (await isUnusableLink(response)) {
 				isLinkUnusable = true;
 				return;
 			}

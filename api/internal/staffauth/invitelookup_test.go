@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
@@ -103,11 +104,12 @@ func TestLookupInvitation_Refusals(t *testing.T) {
 		name  string
 		token string
 		want  int
+		code  apierr.Code
 	}{
-		{"no token", "  ", http.StatusBadRequest},
-		{"unknown", "no-such-token", http.StatusNotFound},
-		{"revoked", revoked, http.StatusNotFound},
-		{"expired", expired, http.StatusGone},
+		{"no token", "  ", http.StatusBadRequest, apierr.CodeInvalidArgument},
+		{"unknown", "no-such-token", http.StatusNotFound, apierr.CodeLinkUnusable},
+		{"revoked", revoked, http.StatusNotFound, apierr.CodeLinkUnusable},
+		{"expired", expired, http.StatusGone, apierr.CodeLinkUnusable},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			resp := postLookup(t, srv, tc.token)
@@ -115,6 +117,7 @@ func TestLookupInvitation_Refusals(t *testing.T) {
 			if resp.StatusCode != tc.want {
 				t.Fatalf("status = %d, want %d", resp.StatusCode, tc.want)
 			}
+			requireErrorCode(t, resp, tc.code)
 		})
 	}
 

@@ -71,7 +71,7 @@
 				},
 				body: JSON.stringify({ inviteToken })
 			});
-			if (isUnusableLink(acceptResponse)) {
+			if (await isUnusableLink(acceptResponse)) {
 				isLinkUnusable = true;
 				return;
 			}
