@@ -172,7 +172,8 @@
 
 		ul {
 			margin: 0;
-			padding-inline-start: var(--space-5);
+			padding: 0;
+			list-style: none;
 			font-size: var(--text-body-size);
 		}
 
