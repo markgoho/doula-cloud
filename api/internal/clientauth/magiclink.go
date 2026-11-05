@@ -287,7 +287,7 @@ func RedeemMagicLinkHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 			identifier, err := authtoken.Spend(ctx, tx, req.Token, authtoken.PurposeClientMagicLink, clock.Now(ctx))
 			if errors.Is(err, authtoken.ErrInvalid) {
 				return sessionmint.Result{Refusal: &sessionmint.Refusal{
-					Status: http.StatusBadRequest, Message: "this link is invalid or has expired -- ask for a new one",
+					Status: http.StatusBadRequest, Code: apierr.CodeLinkUnusable, Message: "this link is invalid or has expired -- ask for a new one",
 				}}, nil
 			}
 			if err != nil {

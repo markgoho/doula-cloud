@@ -27,6 +27,7 @@
 	import { apiBaseURL, apiFetch, apiFetchWithSession } from '#lib/api.js';
 	import {
 		authRefusal,
+		isUnusableLink,
 		LINK_EXPIRED_OR_USED,
 		LINK_NOT_COMPLETE,
 		refusalErrors,
@@ -109,6 +110,14 @@
 	let credential = $state<UserCredential | undefined>();
 	let step = $state<'form' | 'confirm-sign-out'>('form');
 	let signOutWarning = $state<string | undefined>();
+	let isLinkSpentOnSubmit = $state(false);
+
+	async function refuseSpentLink() {
+		credential = undefined;
+		await signOut(getFirebaseAuth());
+		isLinkSpentOnSubmit = true;
+		lookup = 'unusable';
+	}
 
 	async function readInvitation() {
 		const response = await apiFetch('/api/staff/accept-invite/lookup', {
@@ -119,7 +128,7 @@
 		if (response.ok) {
 			invitation = (await response.json()) as Invitation;
 			lookup = 'ready';
-		} else if (response.status === 404 || response.status === 410) {
+		} else if (await isUnusableLink(response)) {
 			lookup = 'unusable';
 		} else {
 			lookupErrors = await refusalErrors(response);
@@ -221,6 +230,10 @@
 			}
 
 			const acceptResponse = await postAccept(false);
+			if (await isUnusableLink(acceptResponse)) {
+				await refuseSpentLink();
+				return;
+			}
 			if (!acceptResponse.ok) {
 				// #816: a live portal session in this browser is not a form
 				// error; the same press, confirmed, goes through.
@@ -249,6 +262,10 @@
 	async function handleConfirmSignOut() {
 		await submission.run(async () => {
 			const acceptResponse = await postAccept(true);
+			if (await isUnusableLink(acceptResponse)) {
+				await refuseSpentLink();
+				return;
+			}
 			if (!acceptResponse.ok) {
 				const refusal = await refusalErrors(acceptResponse, acceptFieldIds);
 				step = 'form';
@@ -280,7 +297,11 @@
 		<!-- #2025: only the Practice can send another invite. -->
 		<UnusableLink message={LINK_NOT_COMPLETE} next={{ text: 'Ask the Practice to send the invite again.' }} />
 	{:else if lookup === 'unusable'}
-		<UnusableLink message={LINK_EXPIRED_OR_USED} next={{ text: 'Ask the Practice to send the invite again.' }} />
+		<UnusableLink
+			message={LINK_EXPIRED_OR_USED}
+			next={{ text: 'Ask the Practice to send the invite again.' }}
+			isFocusedOnAppear={isLinkSpentOnSubmit}
+		/>
 	{:else if lookup === 'loading'}
 		<Skeleton variant="text" lines={4} label="Loading your invite" />
 	{:else if lookup === 'failed'}

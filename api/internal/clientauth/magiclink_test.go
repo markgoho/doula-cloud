@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/clientauth"
@@ -194,6 +195,7 @@ func TestRedeemMagicLinkHandler_UnknownTokenInvalid(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
+	requireErrorCode(t, resp, apierr.CodeLinkUnusable)
 }
 
 // TestRedeemMagicLinkHandler_Success proves the token is single-use and

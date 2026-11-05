@@ -224,9 +224,9 @@ func SpendAddressChangeHandler(db *sql.DB) http.Handler {
 			}
 		}()
 
-		address, status, msg := applyAddressChange(r.Context(), tx, req.Token)
+		address, status, code, msg := applyAddressChange(r.Context(), tx, req.Token)
 		if status != http.StatusOK {
-			apierr.WriteError(w, msg, status)
+			apierr.Write(w, status, code, msg, nil)
 			return
 		}
 
@@ -248,14 +248,14 @@ func SpendAddressChangeHandler(db *sql.DB) http.Handler {
 // link she holds still works once she picks another address. (A failed
 // UPDATE aborts the Postgres transaction outright, so nothing may run on
 // tx afterwards but the rollback the handler's defer performs.)
-func applyAddressChange(ctx context.Context, tx *sql.Tx, token string) (address string, status int, msg string) {
+func applyAddressChange(ctx context.Context, tx *sql.Tx, token string) (address string, status int, code apierr.Code, msg string) {
 	identifier, err := authtoken.Spend(ctx, tx, token, authtoken.PurposeClientSignInAddressChange, clock.Now(ctx))
 	if errors.Is(err, authtoken.ErrInvalid) {
-		return "", http.StatusBadRequest, MsgAddressLinkInvalid
+		return "", http.StatusBadRequest, apierr.CodeLinkUnusable, MsgAddressLinkInvalid
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return "", http.StatusInternalServerError, apierr.MsgInternalError
+		return "", http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
 	}
 
 	err = tx.QueryRowContext(ctx,
@@ -264,7 +264,7 @@ func applyAddressChange(ctx context.Context, tx *sql.Tx, token string) (address 
 	).Scan(&address)
 	if err != nil {
 		// coverage:ignore reason: the companion row is inserted in the same transaction as its token and cascades with it, so a spendable token always has one
-		return "", http.StatusInternalServerError, apierr.MsgInternalError
+		return "", http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
 	}
 
 	// portal_accounts_self_update (00079) admits exactly one row, the one
@@ -272,23 +272,23 @@ func applyAddressChange(ctx context.Context, tx *sql.Tx, token string) (address 
 	// not a convenience.
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_identity_uid', $1, true)`, identifier); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return "", http.StatusInternalServerError, apierr.MsgInternalError
+		return "", http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
 	}
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE portal_accounts SET sign_in_address = $1 WHERE identifier = $2`, address, identifier,
 	); err != nil {
 		if pgerr.IsUniqueViolation(err) {
-			return "", http.StatusConflict, MsgAddressTaken
+			return "", http.StatusConflict, apierr.CodeConflict, MsgAddressTaken
 		}
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return "", http.StatusInternalServerError, apierr.MsgInternalError
+		return "", http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
 	}
 
 	if err := recordForEachClient(ctx, tx, identifier, activity.ActionPortalSignInAddressChanged); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return "", http.StatusInternalServerError, apierr.MsgInternalError
+		return "", http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
 	}
-	return address, http.StatusOK, ""
+	return address, http.StatusOK, "", ""
 }
 
 // clientSubject is one Practice's record of the person whose sign-in

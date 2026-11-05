@@ -49,9 +49,9 @@ func LookupInvitationHandler(accounts authn.AccountManager, db *sql.DB) http.Han
 			return
 		}
 
-		resp, status, msg := lookupInvitation(r.Context(), db, req.InviteToken)
+		resp, status, code, msg := lookupInvitation(r.Context(), db, req.InviteToken)
 		if status != http.StatusOK {
-			apierr.WriteError(w, msg, status)
+			apierr.Write(w, status, code, msg, nil)
 			return
 		}
 
@@ -70,17 +70,17 @@ func LookupInvitationHandler(accounts authn.AccountManager, db *sql.DB) http.Han
 	})
 }
 
-func lookupInvitation(ctx context.Context, db *sql.DB, token string) (LookupInvitationResponse, int, string) {
+func lookupInvitation(ctx context.Context, db *sql.DB, token string) (LookupInvitationResponse, int, apierr.Code, string) {
 	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		// coverage:ignore reason: DB connection failure, not exercised by unit tests
-		return LookupInvitationResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
+		return LookupInvitationResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.invite_token_digest', $1, true)`, TokenDigest(token)); err != nil {
-		return LookupInvitationResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
+		return LookupInvitationResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
 	}
 
 	var resp LookupInvitationResponse
@@ -94,16 +94,16 @@ func lookupInvitation(ctx context.Context, db *sql.DB, token string) (LookupInvi
 		TokenDigest(token), clock.Now(ctx),
 	).Scan(&resp.PracticeName, &resp.Address, &roles, &resp.EmploymentType, &expired)
 	if errors.Is(err, sql.ErrNoRows) {
-		return LookupInvitationResponse{}, http.StatusNotFound, "This invitation was not found, was already accepted, or was revoked"
+		return LookupInvitationResponse{}, http.StatusNotFound, apierr.CodeLinkUnusable, "This invitation was not found, was already accepted, or was revoked"
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return LookupInvitationResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
+		return LookupInvitationResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
 	}
 	if expired {
-		return LookupInvitationResponse{}, http.StatusGone, "This invitation has expired. Ask for a new one"
+		return LookupInvitationResponse{}, http.StatusGone, apierr.CodeLinkUnusable, "This invitation has expired. Ask for a new one"
 	}
 	resp.Address = NormalizeAddress(resp.Address)
 	resp.Roles = splitRoles(roles)
-	return resp, http.StatusOK, ""
+	return resp, http.StatusOK, "", ""
 }

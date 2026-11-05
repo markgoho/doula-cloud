@@ -86,7 +86,7 @@ describe('verifying an email address', () => {
 			token: 'token-1',
 			respond: () =>
 				Promise.resolve(
-					jsonResponse({ code: 'INVALID_ARGUMENT', message: 'this link is invalid or has expired -- ask for a new one' }, 400)
+					jsonResponse({ code: 'LINK_UNUSABLE', message: 'this link is invalid or has expired -- ask for a new one' }, 400)
 				)
 		});
 

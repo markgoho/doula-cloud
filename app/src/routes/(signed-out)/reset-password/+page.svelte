@@ -3,7 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { pushState } from '$app/navigation';
 	import { apiBaseURL } from '#lib/api.js';
-	import { LINK_EXPIRED_OR_USED, refusalErrors } from '#lib/formErrors.js';
+	import { isUnusableLink, LINK_EXPIRED_OR_USED, refusalErrors } from '#lib/formErrors.js';
 	import {
 		PASSWORD_HINT,
 		PASSWORD_RULES,
@@ -63,6 +63,7 @@
 	// #1539: the list loads while she types, not on submit.
 	preloadCommonPasswords();
 	let hasSucceeded = $state(false);
+	let isLinkUnusable = $state(false);
 
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
@@ -77,6 +78,10 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ token, newPassword })
 			});
+			if (await isUnusableLink(response)) {
+				isLinkUnusable = true;
+				return;
+			}
 			if (!response.ok) {
 				return await refusalErrors(response, { newPassword: passwordId });
 			}
@@ -97,10 +102,11 @@
 			message="Your password has been reset. Every device you were signed in on has been signed out."
 		/>
 		<Link href={resolve('/(signed-out)/login')} label="Continue to sign in" />
-	{:else if !token}
+	{:else if !token || isLinkUnusable}
 		<UnusableLink
 			message={LINK_EXPIRED_OR_USED}
 			next={{ label: 'Ask for a new link', href: resolve('/(signed-out)/forgot-password') }}
+			isFocusedOnAppear={isLinkUnusable}
 		/>
 	{:else}
 		<StackedForm onSubmit={handleSubmit}>

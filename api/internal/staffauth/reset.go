@@ -157,7 +157,7 @@ func SpendResetHandler(accounts authn.AccountManager, db *sql.DB) http.Handler {
 
 		uid, err := authtoken.Spend(r.Context(), tx, req.Token, authtoken.PurposeStaffPasswordReset, clock.Now(r.Context()))
 		if errors.Is(err, authtoken.ErrInvalid) {
-			apierr.WriteError(w, "this link is invalid or has expired -- ask for a new one", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeLinkUnusable, "this link is invalid or has expired -- ask for a new one", nil)
 			return
 		}
 		if err != nil {

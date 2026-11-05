@@ -157,6 +157,14 @@ const (
 	// code, so the accept page offers the way on to her care in place of
 	// a Continue that can only be refused again.
 	CodePortalAccessAlreadyHere Code = "PORTAL_ACCESS_ALREADY_HERE"
+	// CodeLinkUnusable is #2695's refusal of an emailed link or invite
+	// token that is expired, already spent, revoked or unknown: nothing
+	// the person types can make it work, so the page swaps the form for
+	// a way to ask for a new one. Its own code, not CodeInvalidArgument,
+	// which the same endpoints use for a refusal the person can fix (a
+	// common password) -- the app tells them apart by this code, never by
+	// the status or the message.
+	CodeLinkUnusable Code = "LINK_UNUSABLE"
 )
 
 // ForbiddenCodes is the recorded set of reason codes a 403 may carry

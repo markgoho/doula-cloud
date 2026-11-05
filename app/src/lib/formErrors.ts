@@ -123,17 +123,26 @@ export async function parseRefusal(
 }
 
 /*
- * Whether the BFF refused an emailed link itself (#2025): it has expired,
- * it was used already, or it names nothing. The link endpoints a screen
- * spends one on say so with 400 (`verify-email`, the sign-in link, the
- * sign-in address link), 404 or 410 (the portal invite). A screen that
- * gets one shows `UnusableLink`, with a next step, rather than a refusal
- * summary above a Continue button that can only be refused again.
- * Everything else -- a 409 the screen answers on its own, a 5xx -- is not
- * the link's fault, and a second press may still work.
+ * The `APIError.code` of a link the BFF refused as unusable (#2695):
+ * expired, already used, revoked, or naming nothing. A code of its own,
+ * because the same endpoints refuse a 400 for something the person can fix
+ * (a common password), and the status alone cannot tell the two apart.
  */
-export function isUnusableLink(response: Response): boolean {
-	return [400, 404, 410].includes(response.status);
+export const LINK_UNUSABLE = 'LINK_UNUSABLE';
+
+/*
+ * Whether the BFF refused an emailed link itself (#2025): read off the
+ * refusal's code, never its status or its words. A screen that gets one
+ * shows `UnusableLink`, with a next step, rather than a refusal summary
+ * above a form or a Continue button that can only be refused again.
+ * Everything else -- a password the person can change, a 409 the screen
+ * answers on its own, a 5xx -- is not the link's fault, and another try
+ * may still work. Reads a clone, so the caller can still read the body.
+ */
+export async function isUnusableLink(response: Response): Promise<boolean> {
+	if (response.ok) return false;
+	const parsed = await parseRefusal(response.clone());
+	return parsed?.code === LINK_UNUSABLE;
 }
 
 /*

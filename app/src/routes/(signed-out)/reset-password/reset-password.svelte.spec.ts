@@ -128,15 +128,24 @@ describe('the URL change that tells Chrome the reset worked (#1813)', () => {
 	});
 
 	it('does not change the URL when the reset is refused', async () => {
-		// staffauth/reset.go's answer to a spent or expired token.
 		globalFetch.mockResolvedValueOnce(
-			jsonResponse({ message: 'this link is invalid or has expired -- ask for a new one' }, 400)
+			jsonResponse(
+				{
+					code: 'INVALID_ARGUMENT',
+					message: 'newPassword is a commonly used password',
+					details: { newPassword: 'Password is too common. Enter a different password' }
+				},
+				400
+			)
 		);
 		await setupFromLink();
 		await passwordField().fill('a password nobody else has chosen');
 		await submit();
 
 		await expect.element(testPage.getByRole('button', { name: 'Reset password' })).toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Password is too common. Enter a different password' }))
+			.toBeVisible();
 		expect(pushState).not.toHaveBeenCalled();
 	});
 
@@ -152,6 +161,26 @@ describe('the URL change that tells Chrome the reset worked (#1813)', () => {
 		await expect.element(testPage.getByRole('link', { name: 'Ask for a new link' })).toBeVisible();
 		await expect.element(testPage.getByText(/Your password has been reset/)).not.toBeInTheDocument();
 		await expect.element(passwordField()).not.toBeInTheDocument();
+	});
+});
+
+describe('a link that is expired, used or unknown (#2695)', () => {
+	it('replaces the form with the way to ask for a new link', async () => {
+		globalFetch.mockResolvedValueOnce(
+			jsonResponse({ code: 'LINK_UNUSABLE', message: 'this link is invalid or has expired -- ask for a new one' }, 400)
+		);
+		await setupFromLink();
+		await passwordField().fill('a password nobody else has chosen');
+		await submit();
+
+		await expect.element(testPage.getByText('This link has expired or was already used.')).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: 'Ask for a new link' })).toHaveAttribute(
+			'href',
+			'/forgot-password'
+		);
+		await expect.element(passwordField()).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('There is a problem')).not.toBeInTheDocument();
+		expect(pushState).not.toHaveBeenCalled();
 	});
 });
 

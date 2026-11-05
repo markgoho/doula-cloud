@@ -41,7 +41,7 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ token })
 			});
-			if (isUnusableLink(response)) {
+			if (await isUnusableLink(response)) {
 				errorMessage = LINK_EXPIRED_OR_USED;
 				status = 'unusable';
 				return;

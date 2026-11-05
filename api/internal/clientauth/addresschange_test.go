@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/authtoken"
@@ -519,14 +520,15 @@ func TestSpendAddressChangeHandler_Refusals(t *testing.T) {
 	_ = first.Body.Close()
 
 	cases := []struct {
-		name string
-		body string
-		want int
+		name     string
+		body     string
+		want     int
+		wantCode apierr.Code
 	}{
-		{"invalid body", `not json`, http.StatusBadRequest},
-		{"empty token", `{"token":"  "}`, http.StatusBadRequest},
-		{"unknown token", `{"token":"never-minted"}`, http.StatusBadRequest},
-		{"already spent", `{"token":"` + spent + `"}`, http.StatusBadRequest},
+		{"invalid body", `not json`, http.StatusBadRequest, apierr.CodeInvalidArgument},
+		{"empty token", `{"token":"  "}`, http.StatusBadRequest, apierr.CodeInvalidArgument},
+		{"unknown token", `{"token":"never-minted"}`, http.StatusBadRequest, apierr.CodeLinkUnusable},
+		{"already spent", `{"token":"` + spent + `"}`, http.StatusBadRequest, apierr.CodeLinkUnusable},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -535,6 +537,7 @@ func TestSpendAddressChangeHandler_Refusals(t *testing.T) {
 			if resp.StatusCode != tc.want {
 				t.Fatalf("status = %d, want %d", resp.StatusCode, tc.want)
 			}
+			requireErrorCode(t, resp, tc.wantCode)
 		})
 	}
 }

@@ -232,14 +232,34 @@ describe('isUnverifiedEmail', () => {
 });
 
 describe('isUnusableLink', () => {
-	it.each([[400], [404], [410]])('reads a %i as a link that cannot be used', (status) => {
-		expect(isUnusableLink(jsonResponse('this link is invalid or has expired', status))).toBe(true);
+	it.each([[400], [404], [410]])('reads a %i carrying the link code as a link that cannot be used', async (status) => {
+		const response = jsonResponse({ code: 'LINK_UNUSABLE', message: 'this link is gone' }, status);
+		expect(await isUnusableLink(response)).toBe(true);
 	});
 
-	// A 409 is a question the screen answers (#610's sign-out warning), and
-	// a 5xx is ours: neither says the link is spent.
-	it.each([[409], [500]])('reads a %i as not the link', (status) => {
-		expect(isUnusableLink(jsonResponse('not the link', status))).toBe(false);
+	it('leaves the body readable for the caller', async () => {
+		const response = Response.json({ code: 'LINK_UNUSABLE', message: 'this link is gone' }, { status: 400 });
+		await isUnusableLink(response);
+		expect(await refusalMessage(response)).toBe('this link is gone');
+	});
+
+	// The same status carries a refusal the person can fix, and a 409 is a
+	// question the screen answers (#610's sign-out warning): neither says
+	// the link is spent, whatever the words are.
+	it.each([
+		[400, { code: 'INVALID_ARGUMENT', message: 'this link is invalid or has expired' }],
+		[404, { code: 'NOT_FOUND', message: 'not found' }],
+		[409, { code: 'SESSION_EVICTION_UNCONFIRMED', message: 'sign out?' }]
+	])('reads a %i with another code as not the link', async (status, body) => {
+		expect(await isUnusableLink(jsonResponse(body, status))).toBe(false);
+	});
+
+	it.each([[500], [200]])('reads a %i as not the link', async (status) => {
+		expect(await isUnusableLink(jsonResponse({ code: 'LINK_UNUSABLE', message: 'x' }, status))).toBe(false);
+	});
+
+	it('reads a body that is not JSON as not the link', async () => {
+		expect(await isUnusableLink(new Response('plain text', { status: 400 }))).toBe(false);
 	});
 });
 

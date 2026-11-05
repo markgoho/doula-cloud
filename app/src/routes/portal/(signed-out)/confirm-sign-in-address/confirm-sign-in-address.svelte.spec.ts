@@ -104,7 +104,7 @@ describe('confirming a changed Client sign-in address', () => {
 	// #2025: a used or expired link cannot be pressed through, so Continue
 	// gives way to the next step.
 	it('offers the way to a new link when the link has expired or was used', async () => {
-		await setup({ spend: jsonResponse({ code: 'INVALID_ARGUMENT', message: 'this link is invalid or has expired' }, 400) });
+		await setup({ spend: jsonResponse({ code: 'LINK_UNUSABLE', message: 'this link is invalid or has expired' }, 400) });
 
 		await continueButton().click();
 
@@ -117,11 +117,7 @@ describe('confirming a changed Client sign-in address', () => {
 	// answer, surfacing where it is safe to say plainly.
 	it('reports an address claimed since the link was sent', async () => {
 		await setup({
-			spend: {
-				ok: false,
-				status: 409,
-				text: () => Promise.resolve(JSON.stringify({ error: 'that address already signs in' }))
-			}
+			spend: jsonResponse({ error: 'that address already signs in' }, 409)
 		});
 
 		await continueButton().click();

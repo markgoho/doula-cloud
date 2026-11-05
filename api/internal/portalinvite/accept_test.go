@@ -74,6 +74,7 @@ func TestAcceptInviteHandler_UnknownToken(t *testing.T) {
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
 	}
+	requireErrorCode(t, resp, apierr.CodeLinkUnusable)
 }
 
 // #2025: a link cut short when it was copied carries part of a token.
@@ -90,6 +91,7 @@ func TestAcceptInviteHandler_TokenThatIsNotAUUID(t *testing.T) {
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
 	}
+	requireErrorCode(t, resp, apierr.CodeLinkUnusable)
 }
 
 // TestAcceptInviteHandler_ExpiredInvite proves #616's AC: an invitation
@@ -110,6 +112,7 @@ func TestAcceptInviteHandler_ExpiredInvite(t *testing.T) {
 	if resp.StatusCode != http.StatusGone {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusGone)
 	}
+	requireErrorCode(t, resp, apierr.CodeLinkUnusable)
 
 	var identityUID sql.NullString
 	var storedToken string

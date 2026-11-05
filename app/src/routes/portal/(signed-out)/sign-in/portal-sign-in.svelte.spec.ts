@@ -117,14 +117,14 @@ describe('Redeeming a sign-in link over a live Staff session (#610)', () => {
 		expect(redeem).toHaveBeenCalledTimes(2);
 	});
 
-	it('reads an ordinary refusal as an error, not as something to press through', async () => {
+	it('reads a dead link as the link, not as something to press through', async () => {
 		vi.stubGlobal(
 			'fetch',
 			vi
 				.fn()
 				.mockResolvedValue(
 					jsonResponse(
-						{ code: 'INVALID_ARGUMENT', message: 'this link is invalid or has expired -- ask for a new one' },
+						{ code: 'LINK_UNUSABLE', message: 'this link is invalid or has expired -- ask for a new one' },
 						400
 					)
 				)

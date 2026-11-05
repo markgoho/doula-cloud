@@ -56,6 +56,10 @@ function refusal(status: number, message: string): Response {
 	return jsonResponse(message, status);
 }
 
+function deadLink(status: number, message: string): Response {
+	return jsonResponse({ code: 'LINK_UNUSABLE', message }, status);
+}
+
 const accepted = {
 	staffId: 'staff-1',
 	practiceId: 'practice-9',
@@ -199,7 +203,7 @@ describe('before she types -- the Invitation read (#2238)', () => {
 		[404, 'invitation not found, already accepted, or revoked'],
 		[410, 'this invitation has expired -- ask for a new one']
 	])('says the link cannot be used when the read answers %i', async (status, message) => {
-		await setup({ lookup: () => refusal(status, message) });
+		await setup({ lookup: () => deadLink(status, message) });
 
 		await expect.element(testPage.getByText('This link has expired or was already used.')).toBeVisible();
 		await expect.element(testPage.getByText('Ask the Practice to send the invite again.')).toBeVisible();
@@ -440,12 +444,27 @@ describe('what happens after the invite is accepted (#2239)', () => {
 	});
 
 	it("shows the server's own words when the invite is refused, and signs out", async () => {
-		await setup({ accepts: [() => refusal(410, 'this invitation has expired')] });
+		await setup({ accepts: [() => refusal(409, 'you already hold a membership at this practice')] });
 		await answerAsNewPerson();
 
 		await acceptButton().click();
 
-		await expect.element(testPage.getByRole('alert')).toHaveTextContent('this invitation has expired');
+		await expect
+			.element(testPage.getByRole('alert'))
+			.toHaveTextContent('you already hold a membership at this practice');
+		expect(signOut).toHaveBeenCalled();
+		expect(gotoWithOutcome).not.toHaveBeenCalled();
+	});
+
+	it('replaces the form with the way to ask for a new invite when the accept finds it spent (#2695)', async () => {
+		await setup({ accepts: [() => deadLink(410, 'this invitation has expired')] });
+		await answerAsNewPerson();
+
+		await acceptButton().click();
+
+		await expect.element(testPage.getByText('This link has expired or was already used.')).toBeVisible();
+		await expect.element(testPage.getByText('Ask the Practice to send the invite again.')).toBeVisible();
+		await expect.element(acceptButton()).not.toBeInTheDocument();
 		expect(signOut).toHaveBeenCalled();
 		expect(gotoWithOutcome).not.toHaveBeenCalled();
 	});
@@ -524,14 +543,28 @@ describe('accepting over a live portal session (#816)', () => {
 	});
 
 	it('returns to the form with the refusal when the confirmed accept is refused', async () => {
-		await setup({ accepts: [evictionWarning, () => refusal(410, 'this invitation has expired')] });
+		await setup({ accepts: [evictionWarning, () => refusal(409, 'you already hold a membership at this practice')] });
 		await answerAsNewPerson();
 		await acceptButton().click();
 
 		await testPage.getByRole('button', { name: 'Continue and sign out' }).click();
 
-		await expect.element(testPage.getByRole('alert')).toHaveTextContent('this invitation has expired');
+		await expect
+			.element(testPage.getByRole('alert'))
+			.toHaveTextContent('you already hold a membership at this practice');
 		await expect.element(acceptButton()).toBeVisible();
+		expect(signOut).toHaveBeenCalled();
+	});
+
+	it('replaces the form with the way to ask for a new invite when the confirmed accept finds it spent (#2695)', async () => {
+		await setup({ accepts: [evictionWarning, () => deadLink(410, 'this invitation has expired')] });
+		await answerAsNewPerson();
+		await acceptButton().click();
+
+		await testPage.getByRole('button', { name: 'Continue and sign out' }).click();
+
+		await expect.element(testPage.getByText('This link has expired or was already used.')).toBeVisible();
+		await expect.element(acceptButton()).not.toBeInTheDocument();
 		expect(signOut).toHaveBeenCalled();
 	});
 });
