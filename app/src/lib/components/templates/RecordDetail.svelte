@@ -574,7 +574,14 @@
 			.contents {
 				display: block;
 				grid-area: contents;
-				align-self: start;
+			}
+
+			.contents-rail {
+				position: sticky;
+				inset-block-start: var(--space-4);
+				max-block-size: calc(100dvh - 2 * var(--space-4));
+				overflow-y: auto;
+				padding: var(--space-1);
 			}
 
 			.contents-strip {
