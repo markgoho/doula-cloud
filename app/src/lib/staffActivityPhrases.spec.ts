@@ -120,6 +120,12 @@ describe('staffActivityPhrase', () => {
 		expect(staffActivityPhrase(action)).toBe(unnamed);
 	});
 
+	it('names both Doulas a reassignment moved the Visit between (#2672)', () => {
+		expect(staffActivityPhrase('visit_reassigned', 'Amara', undefined, { from: 'Delia Marchetti', to: 'Priya Raman' })).toBe(
+			'Visit for Amara reassigned from Delia Marchetti to Priya Raman'
+		);
+	});
+
 	it('reads an empty name as no name', () => {
 		expect(staffActivityPhrase('contract_sent', '')).toBe('Contract sent to the Client');
 	});

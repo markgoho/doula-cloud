@@ -72,6 +72,12 @@ export interface ActivityEntry {
 	 */
 	visitScheduledAt?: string;
 	visitAddedAt?: string;
+	/**
+	 * The Doula a `visit_reassigned` row on the Practice-wide feed moved
+	 * the Visit from and to (#2672), already resolved server-side.
+	 */
+	reassignedFromName?: string;
+	reassignedToName?: string;
 	createdAt: string;
 }
 
@@ -193,7 +199,9 @@ function staffEventText(row: ActivityEntry): string {
 	if (row.detail) {
 		return visit && row.detail.startsWith(DETAIL_VISIT_LEAD) ? visit + row.detail.slice(DETAIL_VISIT_LEAD.length) : row.detail;
 	}
-	return factChangeText(row) ?? staffActivityPhrase(row.action, row.subjectName, visit);
+	const move =
+		row.reassignedFromName && row.reassignedToName ? { from: row.reassignedFromName, to: row.reassignedToName } : undefined;
+	return factChangeText(row) ?? staffActivityPhrase(row.action, row.subjectName, visit, move);
 }
 
 const DETAIL_VISIT_LEAD = 'Visit';

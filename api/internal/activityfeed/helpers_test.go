@@ -21,6 +21,7 @@ const (
 	// shared across three tests there so goconst has one place to point
 	// at rather than three literals free to drift.
 	renataAlvarez = "Renata Alvarez"
+	priyaRaman    = "Priya Raman"
 )
 
 // newServer mounts this package's route through activityfeed.Mount, the

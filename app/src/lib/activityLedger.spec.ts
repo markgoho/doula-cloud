@@ -268,6 +268,21 @@ describe('activityLedgerColumns', () => {
 			);
 		});
 
+		it('names both Doulas on the Practice-wide feed when the row carries them (#2672)', () => {
+			const what = activityLedgerColumns()[1];
+			const move = { subjectName: 'Grace Whitfield', reassignedFromName: 'Delia Marchetti', reassignedToName: 'Priya Raman' };
+
+			expect(what.accessor(entry({ ...move, visitScheduledAt: scheduledAt, visitAddedAt: addedAt }))).toBe(
+				`Visit on ${formatInstantWithClock(scheduledAt)} for Grace Whitfield reassigned from Delia Marchetti to Priya Raman`
+			);
+			expect(what.accessor(entry({ ...move, visitAddedAt: addedAt }))).toBe(
+				`Visit not yet scheduled (added ${formatInstantWithSeconds(addedAt)}) for Grace Whitfield reassigned from Delia Marchetti to Priya Raman`
+			);
+			expect(what.accessor(entry({ ...move, reassignedFromName: 'a former colleague' }))).toBe(
+				'Visit for Grace Whitfield reassigned from a former colleague to Priya Raman'
+			);
+		});
+
 		it('leaves any other action alone', () => {
 			const what = activityLedgerColumns()[1];
 
