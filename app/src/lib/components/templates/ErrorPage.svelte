@@ -21,20 +21,27 @@
 	 * No chrome here, per ADR-0018 -- the nearest `+layout.svelte` above the
 	 * failure renders it. This owns only the gutter, the max-width, and the
 	 * copy.
+	 *
+	 * A page met in place of one of these, whose words the route writes,
+	 * passes `title` and `body` instead of `kind` (#2710): the contractor's
+	 * "Your work has ended" is the first. Same frame, same way out.
 	 */
+	import type { Snippet } from 'svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 	import type { ErrorKind } from '#lib/errorPage.js';
 
-	interface Properties {
-		kind: ErrorKind;
+	type Properties = {
 		wayOutHref: string;
 		wayOutLabel: string;
-	}
+	} & (
+		| { kind: ErrorKind; title?: never; body?: never }
+		| { kind?: never; title: string; body: Snippet }
+	);
 
-	let { kind, wayOutHref, wayOutLabel }: Properties = $props();
+	let { kind, title, body, wayOutHref, wayOutLabel }: Properties = $props();
 
 	const copyByKind: Record<ErrorKind, { title: string; body: string }> = {
 		notFound: {
@@ -67,18 +74,23 @@
 		}
 	};
 
-	const copy = $derived(copyByKind[kind]);
+	const copy = $derived(kind ? copyByKind[kind] : undefined);
+	const heading = $derived(copy ? copy.title : title!);
 </script>
 
-<PageTitle page={copy.title} />
+<PageTitle page={heading} />
 
 <container-l>
 	<!-- A heading, a sentence and a way out: all prose, so the frame takes
 	     --measure and nothing else (#541). -->
 	<center-l max="var(--measure)" gutters="var(--page-gutter)">
 		<stack-l space="var(--space-4)">
-			<Heading level={1} variant="page" text={copy.title} />
-			<Text text={copy.body} />
+			<Heading level={1} variant="page" text={heading} />
+			{#if copy}
+				<Text text={copy.body} />
+			{:else}
+				{@render body?.()}
+			{/if}
 			<Link href={wayOutHref} label={wayOutLabel} variant="primary" />
 		</stack-l>
 	</center-l>

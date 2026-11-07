@@ -33,7 +33,7 @@
 	import { intakeFlow } from '#lib/intakeFlow.svelte.js';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
-	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
+	import FormPage from '#lib/components/templates/FormPage.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import { detailsSave } from './detailsSave.svelte.js';
 
@@ -44,6 +44,7 @@
 	const record = $derived(clientDetails.record);
 	const loadError = $derived(clientDetails.loadError || intakeFlow.loadError);
 	const isReady = $derived(clientDetails.status === 'ready' && intakeFlow.status === 'ready');
+	const isErased = $derived(isReady && Boolean(record?.erasedAt));
 
 	/*
 	 * `untrack`, because each `load` reads its own state to decide whether
@@ -68,35 +69,28 @@
 	});
 </script>
 
-{#if loadError}
-	<container-l>
-		<center-l max="var(--form-max)" gutters="var(--page-gutter)">
-			<Notice variant="error" message={loadError} />
-		</center-l>
-	</container-l>
-{:else if isReady && record?.erasedAt}
-	<container-l>
-		<center-l max="var(--form-max)" gutters="var(--page-gutter)">
-			<stack-l space="var(--space-4)">
-				<Notice
-					variant="info"
-					message="This Client's data was erased on request, so no details can be added."
-				/>
-				<Link
-					href={resolve('/practices/[practiceId]/clients/[clientId]', { practiceId, clientId })}
-					label="Back to the Client's record"
-				/>
-			</stack-l>
-		</center-l>
-	</container-l>
-{:else if isReady && !record?.mergedInto}
+{#snippet erased()}
+	<stack-l space="var(--space-4)">
+		<Notice
+			variant="info"
+			message="This Client's data was erased on request, so no details can be added."
+		/>
+		<Link
+			href={resolve('/practices/[practiceId]/clients/[clientId]', { practiceId, clientId })}
+			label="Back to the Client's record"
+		/>
+	</stack-l>
+{/snippet}
+
+{#if isReady && !loadError && !isErased && !record?.mergedInto}
 	{@render children()}
 {:else}
-	<container-l>
-		<center-l max="var(--form-max)" gutters="var(--page-gutter)">
-			<Skeleton lines={6} variant="text" label="Loading the questions to ask" />
-		</center-l>
-	</container-l>
+	<FormPage
+		title="Client details"
+		loadError={loadError || undefined}
+		loading={isErased ? undefined : 'Loading the questions to ask'}
+		fieldsets={[{ content: erased }]}
+	/>
 {/if}
 
 <!-- Gate one of the journey's save (`detailsSave.svelte.ts`): drawn here
@@ -111,11 +105,3 @@
 	onConfirm={() => detailsSave.confirmOverride()}
 	onCancel={() => detailsSave.cancel()}
 />
-
-<style>
-	@layer components {
-		container-l {
-			padding-block: var(--space-8);
-		}
-	}
-</style>

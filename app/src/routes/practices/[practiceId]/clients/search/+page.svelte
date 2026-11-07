@@ -48,7 +48,7 @@
 	import { carriedGivenName } from '#lib/intakeJourney.js';
 	import { handOffToIntake } from '#lib/intakeHandoff.js';
 	import { intakeDraft } from '#lib/intakeDraft.svelte.js';
-	import PageTitle from '#lib/components/PageTitle.svelte';
+	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
@@ -226,6 +226,145 @@
 	}
 </script>
 
+{#snippet errorSummary()}
+	<ErrorSummary errors={submission.errors} />
+{/snippet}
+
+{#snippet content()}
+	<Text
+		tone="variant"
+		text="Search for a Client already on file before adding a new one. Name, date of birth, email and phone all match — use whatever you have, one on its own is enough."
+	/>
+
+	<StackedForm onSubmit={handleSearch}>
+		<LabeledField id={nameId} label="Name" error={submission.errorFor(nameId)}>
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					value={name}
+					onInput={(v) => (name = v)}
+					autocomplete="off"
+				/>
+			{/snippet}
+		</LabeledField>
+		<DateFields
+			name={dateOfBirthId}
+			legend="Date of birth"
+			hint="For example, 3 12 1988."
+			parts={dateOfBirthParts}
+			onChange={(next) => (dateOfBirthParts = next)}
+			error={dateOfBirthRefusal?.message}
+			invalidField={dateOfBirthRefusal?.field}
+		/>
+		<LabeledField id={emailId} label="Email address">
+			{#snippet children({ id, describedBy })}
+				<TextInput
+					{id}
+					{describedBy}
+					type="email"
+					value={email}
+					onInput={(v) => (email = v)}
+					autocomplete="off"
+				/>
+			{/snippet}
+		</LabeledField>
+		<!-- GOV.UK's Telephone numbers width (#1216). -->
+		<LabeledField id={phoneId} label="Phone number" width={20}>
+			{#snippet children({ id, describedBy, width })}
+				<TextInput
+					{id}
+					{describedBy}
+					{width}
+					type="tel"
+					value={phone}
+					onInput={(v) => (phone = v)}
+					autocomplete="off"
+				/>
+			{/snippet}
+		</LabeledField>
+		<cluster-l space="var(--space-3)" align="center">
+			<Button type="submit" label="Search" loading={submission.isSubmitting} />
+		</cluster-l>
+	</StackedForm>
+
+	{#if hasSearched}
+		<section aria-labelledby="client-search-results-heading"> <!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
+			<stack-l space="var(--space-6)">
+				<!--
+					Remounted by each completed search, so the heading
+					takes focus again on a repeat search with the same
+					count -- `focusOnAppearing` acts as it appears (#2143).
+				-->
+				{#key searchToken}
+					<Heading
+						level={2}
+						variant="section"
+						text={resultsHeading()}
+						id="client-search-results-heading"
+						focusOnAppearing
+					/>
+				{/key}
+
+				{#if matches.length > 0}
+					<!--
+						#2143: one row per match, the full name as the link
+						(the brief's Voice, amended 2026-10-26: a search
+						result keeps the full name) and one line under it
+						saying when the record was added and when the Client
+						was last cared for -- what tells two people with one
+						name apart. Date of birth, email and phone left the
+						row: on a record that holds none of them they were
+						three dashes, and the record they link to shows them.
+					-->
+					<ul class="matches">
+						{#each matches as match (match.id)}
+							<li>
+								<stack-l space="var(--space-1)">
+									<Link href={detailHref(match.id)} label={fullName(match)} />
+									<Text step="body-sm" tone="variant" text={matchHistory(match)} />
+								</stack-l>
+							</li>
+						{/each}
+					</ul>
+					<!--
+						#2005: a new Client can share a name with one on
+						file, so a match is never a dead end. The way on is
+						under the matches, after they have been read, as
+						the drawing has it. The name question then saves,
+						and a name that matches stops at "Is this the same
+						person?" (#1611), so this is no way round the
+						duplicate check.
+					-->
+					<stack-l space="var(--space-4)">
+						<Text
+							text={matches.length === 1
+								? 'Not the right Client?'
+								: 'None of these is the right Client?'}
+						/>
+						<cluster-l space="var(--space-3)" align="center">
+							<Link href={startIntakeHref()} label="Add a new Client" onClick={handOffSearchFields} />
+						</cluster-l>
+					</stack-l>
+				{:else}
+					<stack-l space="var(--space-4)">
+						<Text
+							tone="variant"
+							text={carriedGivenName(name)
+								? "Nothing at this Practice matches what was typed. Add a new Client instead — the name typed here carries onto intake's first page, so it does not have to be retyped."
+								: 'Nothing at this Practice matches what was typed. Add a new Client instead.'}
+						/>
+						<cluster-l space="var(--space-3)" align="center">
+							<Link href={startIntakeHref()} label="Add a new Client" onClick={handOffSearchFields} />
+						</cluster-l>
+					</stack-l>
+				{/if}
+			</stack-l>
+		</section>
+	{/if}
+{/snippet}
+
 {#if isContractorDoor}
 	<!--
 		#501 (ADR-0017): in place of the search screen SearchHandler would
@@ -233,159 +372,15 @@
 	-->
 	<ContractorDoor />
 {:else}
-	<PageTitle page="Find a Client" isError={submission.errors.length > 0} />
-
-	<container-l>
-		<center-l max="var(--form-max)" gutters="var(--page-gutter)">
-			<stack-l space="var(--space-7)">
-				<Heading level={1} variant="page" text="Find a Client" />
-				<Text
-					tone="variant"
-					text="Search for a Client already on file before adding a new one. Name, date of birth, email and phone all match — use whatever you have, one on its own is enough."
-				/>
-
-				{#if submission.errors.length > 0}
-					<ErrorSummary errors={submission.errors} />
-				{/if}
-
-				<StackedForm onSubmit={handleSearch}>
-					<LabeledField id={nameId} label="Name" error={submission.errorFor(nameId)}>
-						{#snippet children({ id, describedBy, invalid })}
-							<TextInput
-								{id}
-								{describedBy}
-								{invalid}
-								value={name}
-								onInput={(v) => (name = v)}
-								autocomplete="off"
-							/>
-						{/snippet}
-					</LabeledField>
-					<DateFields
-						name={dateOfBirthId}
-						legend="Date of birth"
-						hint="For example, 3 12 1988."
-						parts={dateOfBirthParts}
-						onChange={(next) => (dateOfBirthParts = next)}
-						error={dateOfBirthRefusal?.message}
-						invalidField={dateOfBirthRefusal?.field}
-					/>
-					<LabeledField id={emailId} label="Email address">
-						{#snippet children({ id, describedBy })}
-							<TextInput
-								{id}
-								{describedBy}
-								type="email"
-								value={email}
-								onInput={(v) => (email = v)}
-								autocomplete="off"
-							/>
-						{/snippet}
-					</LabeledField>
-					<!-- GOV.UK's Telephone numbers width (#1216). -->
-					<LabeledField id={phoneId} label="Phone number" width={20}>
-						{#snippet children({ id, describedBy, width })}
-							<TextInput
-								{id}
-								{describedBy}
-								{width}
-								type="tel"
-								value={phone}
-								onInput={(v) => (phone = v)}
-								autocomplete="off"
-							/>
-						{/snippet}
-					</LabeledField>
-					<cluster-l space="var(--space-3)" align="center">
-						<Button type="submit" label="Search" loading={submission.isSubmitting} />
-					</cluster-l>
-				</StackedForm>
-
-				{#if hasSearched}
-					<section aria-labelledby="client-search-results-heading"> <!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
-						<stack-l space="var(--space-6)">
-							<!--
-								Remounted by each completed search, so the heading
-								takes focus again on a repeat search with the same
-								count -- `focusOnAppearing` acts as it appears (#2143).
-							-->
-							{#key searchToken}
-								<Heading
-									level={2}
-									variant="section"
-									text={resultsHeading()}
-									id="client-search-results-heading"
-									focusOnAppearing
-								/>
-							{/key}
-
-							{#if matches.length > 0}
-								<!--
-									#2143: one row per match, the full name as the link
-									(the brief's Voice, amended 2026-10-26: a search
-									result keeps the full name) and one line under it
-									saying when the record was added and when the Client
-									was last cared for -- what tells two people with one
-									name apart. Date of birth, email and phone left the
-									row: on a record that holds none of them they were
-									three dashes, and the record they link to shows them.
-								-->
-								<ul class="matches">
-									{#each matches as match (match.id)}
-										<li>
-											<stack-l space="var(--space-1)">
-												<Link href={detailHref(match.id)} label={fullName(match)} />
-												<Text step="body-sm" tone="variant" text={matchHistory(match)} />
-											</stack-l>
-										</li>
-									{/each}
-								</ul>
-								<!--
-									#2005: a new Client can share a name with one on
-									file, so a match is never a dead end. The way on is
-									under the matches, after they have been read, as
-									the drawing has it. The name question then saves,
-									and a name that matches stops at "Is this the same
-									person?" (#1611), so this is no way round the
-									duplicate check.
-								-->
-								<stack-l space="var(--space-4)">
-									<Text
-										text={matches.length === 1
-											? 'Not the right Client?'
-											: 'None of these is the right Client?'}
-									/>
-									<cluster-l space="var(--space-3)" align="center">
-										<Link href={startIntakeHref()} label="Add a new Client" onClick={handOffSearchFields} />
-									</cluster-l>
-								</stack-l>
-							{:else}
-								<stack-l space="var(--space-4)">
-									<Text
-										tone="variant"
-										text={carriedGivenName(name)
-											? "Nothing at this Practice matches what was typed. Add a new Client instead — the name typed here carries onto intake's first page, so it does not have to be retyped."
-											: 'Nothing at this Practice matches what was typed. Add a new Client instead.'}
-									/>
-									<cluster-l space="var(--space-3)" align="center">
-										<Link href={startIntakeHref()} label="Add a new Client" onClick={handOffSearchFields} />
-									</cluster-l>
-								</stack-l>
-							{/if}
-						</stack-l>
-					</section>
-				{/if}
-				</stack-l>
-			</center-l>
-		</container-l>
+	<EntryPage
+		title="Find a Client"
+		errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
+		{content}
+	/>
 {/if}
 
 <style>
 	@layer components {
-		container-l {
-			padding-block: var(--space-8);
-		}
-
 		/* Hairline-separated rows, the way the drawing set them apart. */
 		.matches {
 			margin: 0;

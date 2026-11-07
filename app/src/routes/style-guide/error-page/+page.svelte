@@ -9,6 +9,7 @@
 	 * the two 403 reasons that are not a role refusal, neither of which
 	 * a local stack produces on demand either.
 	 */
+	import Text from '#lib/components/atoms/Text.svelte';
 	import ErrorPage from '#lib/components/templates/ErrorPage.svelte';
 	import type { ErrorKind } from '#lib/errorPage.js';
 
@@ -61,3 +62,19 @@
 	<h2>{heading}</h2>
 	<ErrorPage {kind} wayOutHref="/practices/practice-1" {wayOutLabel} />
 {/each}
+
+<!-- #2710: a page met in place of one, whose words the route writes. -->
+{#snippet workEnded()}
+	<Text
+		text="Your Attachment to the Engagement for Alexandrina Montgomery-Featherstonehaugh ended on September 30, 2027."
+	/>
+	<Text text="Your fee, the terms and what you were paid stay on Your offers." />
+{/snippet}
+
+<h2>Words of its own (contractor's work ended)</h2>
+<ErrorPage
+	title="Your work has ended"
+	body={workEnded}
+	wayOutHref="/practices/practice-1/offers"
+	wayOutLabel="Your offers"
+/>

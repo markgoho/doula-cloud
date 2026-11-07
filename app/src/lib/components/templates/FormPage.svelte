@@ -75,7 +75,11 @@
 		 * own data failing to arrive at all, before there is a form to fail.
 		 */
 		errorSummary?: Snippet;
-		actions: Snippet;
+		/**
+		 * Absent on a page with nothing to submit (#2710): a saved answer
+		 * read back, or a record that takes no more details.
+		 */
+		actions?: Snippet;
 		/**
 		 * Presence is the state, value is the Skeleton's accessible label
 		 * (#480). Unlike `OverviewHub`/`RecordDetail`, `title` still renders
@@ -174,7 +178,7 @@
 					{/if}
 				{/each}
 
-				<cluster-l space="var(--space-3)" align="center">{@render actions()}</cluster-l>
+				<cluster-l space="var(--space-3)" align="center">{@render actions?.()}</cluster-l>
 			</stack-l>
 		{/if}
 	</center-l>
