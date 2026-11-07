@@ -1,18 +1,22 @@
-import type { ComponentProps } from 'svelte';
+import { createRawSnippet } from 'svelte';
+import type { ErrorKind } from '#lib/errorPage.js';
 import { page } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import ErrorPage from './ErrorPage.svelte';
 
-type SetupOptions = Partial<ComponentProps<typeof ErrorPage>>;
+interface SetupOptions {
+	kind?: ErrorKind;
+	wayOutHref?: string;
+	wayOutLabel?: string;
+}
 
 async function setup({
 	kind = 'notFound',
 	wayOutHref = '/practices/practice-1',
-	wayOutLabel = 'Go to your Practice overview',
-	...rest
+	wayOutLabel = 'Go to your Practice overview'
 }: SetupOptions = {}) {
-	await render(ErrorPage, { kind, wayOutHref, wayOutLabel, ...rest });
+	await render(ErrorPage, { kind, wayOutHref, wayOutLabel });
 }
 
 describe('ErrorPage.svelte', () => {
@@ -75,6 +79,20 @@ describe('ErrorPage.svelte', () => {
 
 		await expect.element(page.getByRole('heading', { name: 'Sorry, there is a problem' })).toBeVisible();
 		await expect.element(page.getByText('Try again in a few minutes.')).toBeVisible();
+	});
+
+	// #2710: a page met in place of an error page brings its own words.
+	it('renders a title and body the caller wrote, in place of a kind', async () => {
+		await render(ErrorPage, {
+			title: 'Your work has ended',
+			body: createRawSnippet(() => ({ render: () => '<p>Your Attachment ended on Mar 1, 2027.</p>' })),
+			wayOutHref: '/practices/practice-1/offers',
+			wayOutLabel: 'Your offers'
+		});
+
+		await expect.element(page.getByRole('heading', { level: 1, name: 'Your work has ended' })).toBeVisible();
+		await expect.element(page.getByText('Your Attachment ended on Mar 1, 2027.')).toBeVisible();
+		await expect.element(page.getByRole('link', { name: 'Your offers' })).toBeVisible();
 	});
 
 	it('renders the given way-out link', async () => {

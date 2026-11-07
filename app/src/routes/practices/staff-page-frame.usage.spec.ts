@@ -15,18 +15,6 @@ function svelteFilesUnder(directory: string): string[] {
 
 const route = (file: string) => file.slice(practicesRoot.length);
 
-/*
- * Files that still draw their own frame, each migrated onto a Template by
- * #2710. The list only shrinks: a file that no longer hand-writes a frame
- * fails here until it is taken off.
- */
-const HAND_FRAMED = new Set([
-	'[practiceId]/clients/search/+page.svelte',
-	'[practiceId]/clients/ContractorDoor.svelte',
-	'[practiceId]/clients/[clientId]/details/+layout.svelte',
-	'[practiceId]/settings/website/+page.svelte',
-	'[practiceId]/engagements/[engagementId]/WorkEnded.svelte',
-]);
 
 const TEMPLATE_IMPORT = /from '#lib\/components\/templates\/[A-Za-z]+\.svelte'/;
 const LOCAL_COMPONENT_IMPORT = /from '(\.{1,2}\/[^']+\.svelte)'/g;
@@ -50,8 +38,7 @@ const files = svelteFilesUnder(practicesRoot).map((file) => ({
 	route: route(file),
 	source: readFileSync(file, 'utf8'),
 }));
-const framed = files.filter(({ route }) => !HAND_FRAMED.has(route));
-const pages = framed.filter(
+const pages = files.filter(
 	({ file }) => path.basename(file) === '+page.svelte'
 );
 
@@ -74,15 +61,7 @@ describe('Staff pages leave the page frame to a Template', () => {
 		}
 	);
 
-	it.each(framed)('$route hand-writes no page frame', ({ source }) => {
+	it.each(files)('$route hand-writes no page frame', ({ source }) => {
 		expect(source).not.toMatch(FRAME);
 	});
-
-	it.each([...HAND_FRAMED])(
-		'%s is still hand-framed, or comes off the list',
-		(listed) => {
-			const file = path.join(practicesRoot, listed);
-			expect(readFileSync(file, 'utf8')).toMatch(FRAME);
-		}
-	);
 });

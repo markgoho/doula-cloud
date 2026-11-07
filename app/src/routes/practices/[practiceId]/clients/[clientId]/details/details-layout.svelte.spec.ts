@@ -63,6 +63,7 @@ describe('the details layout', () => {
 		await setup({ ...record, erasedAt: '2026-09-01T00:00:00Z' });
 
 		await expect.element(testPage.getByText('no details can be added')).toBeVisible();
+		await expect.element(testPage.getByRole('heading', { level: 1, name: 'Client details' })).toBeVisible();
 		await expect
 			.element(testPage.getByRole('link', { name: "Back to the Client's record" }))
 			.toHaveAttribute('href', `/practices/${practiceId}/clients/${clientId}`);
@@ -84,6 +85,7 @@ describe('the details layout', () => {
 		await setup({ code: 'NOT_FOUND', message: 'client not found' }, 404);
 
 		await expect.element(testPage.getByText('client not found')).toBeVisible();
+		await expect.element(testPage.getByRole('heading', { level: 1, name: 'Client details' })).toBeVisible();
 		await expect.element(testPage.getByText('the email question')).not.toBeInTheDocument();
 	});
 

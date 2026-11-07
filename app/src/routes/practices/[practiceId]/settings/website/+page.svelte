@@ -42,12 +42,9 @@
 	import { gotoWithOutcome } from '#lib/outcome.js';
 	import { FROM_GETTING_PAID_QUERY, websiteSavedMessage } from '../payments/gettingPaid.js';
 	import type { PracticeSession } from '../../+layout.js';
-	import PageTitle from '#lib/components/PageTitle.svelte';
-	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
-	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
@@ -456,16 +453,105 @@
 	{/if}
 {/snippet}
 
+{#snippet reviewIntro()}
+	<Text
+		text="This is what Clients and Stripe will see at your page. You can change any of it later."
+	/>
+{/snippet}
+
+{#snippet reviewPage()}
+	<SummaryList
+		rows={[
+			{ label: 'Business name', value: practiceName },
+			{ label: 'What you offer', value: serviceDescription },
+			{ label: 'Cancellation policy', value: cancellationPolicy }
+		]}
+	/>
+{/snippet}
+
+{#snippet reviewRest()}
+	<Text
+		text="Your page will also show how to reach you and a privacy statement. Those come from what you have already told us, so there is nothing more to write."
+	/>
+{/snippet}
+
+{#snippet reviewActions()}
+	<Button label="Publish page" loading={isSubmitting} onClick={save} />
+	<Button variant="secondary" label="Back" onClick={() => goTo(factsStep)} />
+{/snippet}
+
+<!--
+	The saved step's blocks, one fieldset each so each sits a group apart.
+	A block with nothing to say renders nothing, and `FormPage` draws no
+	gap for it (#2020).
+-->
+{#snippet savedFailure()}
+	{#if current?.mode !== 'undeclared' && current?.pageState === 'failed'}
+		<Notice
+			variant="error"
+			message={`We could not load your page: ${current.pageCheckDetail}. Change an answer below and publish it again. If it keeps failing, tell us. Stripe will not let you take payments while your page shows nothing.`}
+		/>
+	{/if}
+{/snippet}
+
+{#snippet savedAnswers()}
+	{#if current?.mode === 'undeclared'}
+		<!-- Reached only by a non-Owner (onMount above): an Owner
+		     with no answer is on the questions instead. -->
+		<Text text="Not answered yet. A Practice Owner answers this before Stripe can be connected." />
+	{:else}
+		<SummaryList rows={answerRows}>
+			{#snippet value(row)}
+				{#if row.href}<Link href={row.href} label={row.value} />{:else}{row.value}{/if}
+			{/snippet}
+			{#snippet action(row, describedBy)}
+				{#if row.change === 'name'}
+					<Link
+						href={resolve('/practices/[practiceId]/settings/name', { practiceId: page.params.practiceId! })}
+						label="Change"
+						{describedBy}
+					/>
+				{:else}
+					<Button
+						variant="link"
+						label="Change"
+						{describedBy}
+						onClick={() => change(row.change === 'mode' || row.change === 'name' ? undefined : row.change)}
+					/>
+				{/if}
+			{/snippet}
+		</SummaryList>
+	{/if}
+{/snippet}
+
+<!-- How this came to say what it says: who last wrote it, and when. A
+     Practice with more than one Owner has more than one person who could
+     have. -->
+{#snippet savedBy()}
+	{#if current?.updatedAt}
+		<Text
+			step="meta"
+			tone="muted"
+			text={`Last changed by ${current.updatedBy} on ${reportedOn(current.updatedAt)}`}
+		/>
+	{/if}
+{/snippet}
+
+<!-- Under the answers an Owner has a Change on (#1971): the name and
+     timezone screens' shape for a fact she can read but not change. A
+     non-Owner only ever reaches the saved step (onMount above), so this is
+     the one place it goes. -->
+{#snippet ownerOnly()}
+	{#if !isPracticeOwner}
+		<Notice
+			variant="status"
+			message="Only a Practice Owner can change this. Ask an Owner if it needs updating."
+		/>
+	{/if}
+{/snippet}
+
 {#if loadError}
-	<!-- Same frame the other three steps below build by hand -- #480. -->
-	<container-l>
-		<center-l max="var(--form-max)" gutters="var(--page-gutter)">
-			<stack-l space="var(--space-7)">
-				<Heading level={1} variant="page" text="Your website" />
-				<Notice variant="error" message={loadError} />
-			</stack-l>
-		</center-l>
-	</container-l>
+	<FormPage title="Your website" {loadError} fieldsets={[]} />
 {:else if current}
 	{#if step === 'answers'}
 		<!-- `novalidate`: this page refuses the submit and says so once, at
@@ -498,121 +584,26 @@
 			/>
 		</form>
 	{:else if step === 'review'}
-		<PageTitle page="Check your page before you publish it" isError={summaryErrors.length > 0} />
-		<container-l>
-			<center-l max="var(--form-max)" gutters="var(--page-gutter)">
-				<stack-l space="var(--space-7)">
-					<!-- Above the <h1>, GOV.UK's position and the one `FormPage`
-					     takes on the step before this (#467). -->
-					<ErrorSummary errors={summaryErrors} />
-
-					<Heading level={1} variant="page" text="Check your page before you publish it" focusOnAppearing={summaryErrors.length === 0} />
-					<Text
-						text="This is what Clients and Stripe will see at your page. You can change any of it later."
-					/>
-
-					<SummaryList
-						rows={[
-							{ label: 'Business name', value: practiceName },
-							{ label: 'What you offer', value: serviceDescription },
-							{ label: 'Cancellation policy', value: cancellationPolicy }
-						]}
-					/>
-
-					<Text
-						text="Your page will also show how to reach you and a privacy statement. Those come from what you have already told us, so there is nothing more to write."
-					/>
-
-					<cluster-l space="var(--space-3)" align="center">
-						<Button label="Publish page" loading={isSubmitting} onClick={save} />
-						<Button variant="secondary" label="Back" onClick={() => goTo(factsStep)} />
-					</cluster-l>
-				</stack-l>
-			</center-l>
-		</container-l>
+		<FormPage
+			title="Check your page before you publish it"
+			isTitleFocused
+			intro={reviewIntro}
+			errorSummary={summaryErrors.length > 0 ? errorSummary : undefined}
+			fieldsets={[{ content: reviewPage }, { content: reviewRest }]}
+			actions={reviewActions}
+		/>
 	{:else}
-		<container-l>
-			<center-l max="var(--form-max)" gutters="var(--page-gutter)">
-				<stack-l space="var(--space-7)">
-					<Heading level={1} variant="page" text="Your website" focusOnAppearing={hasMoved} />
-
-					{#if current.mode === 'undeclared'}
-						<!-- Reached only by a non-Owner (onMount above): an Owner
-						     with no answer is on the questions instead. -->
-						<Text text="Not answered yet. A Practice Owner answers this before Stripe can be connected." />
-					{:else}
-						{#if current.pageState === 'failed'}
-							<Notice
-								variant="error"
-								message={`We could not load your page: ${current.pageCheckDetail}. Change an answer below and publish it again. If it keeps failing, tell us. Stripe will not let you take payments while your page shows nothing.`}
-							/>
-						{/if}
-						<SummaryList rows={answerRows}>
-							{#snippet value(row)}
-								{#if row.href}<Link href={row.href} label={row.value} />{:else}{row.value}{/if}
-							{/snippet}
-							{#snippet action(row, describedBy)}
-								{#if row.change === 'name'}
-									<Link
-										href={resolve('/practices/[practiceId]/settings/name', { practiceId: page.params.practiceId! })}
-										label="Change"
-										{describedBy}
-									/>
-								{:else}
-									<Button
-										variant="link"
-										label="Change"
-										{describedBy}
-										onClick={() => change(row.change === 'mode' || row.change === 'name' ? undefined : row.change)}
-									/>
-								{/if}
-							{/snippet}
-						</SummaryList>
-					{/if}
-
-					<!-- How this came to say what it says: who last wrote it, and
-					     when. A Practice with more than one Owner has more than one
-					     person who could have. -->
-					{#if current.updatedAt}
-						<Text
-							step="meta"
-							tone="muted"
-							text={`Last changed by ${current.updatedBy} on ${reportedOn(current.updatedAt)}`}
-						/>
-					{/if}
-
-					{#if !isPracticeOwner}
-						<!-- In the frame, under the answers an Owner has a Change
-						     on (#1971): the name and timezone screens' shape for a
-						     fact she can read but not change. A non-Owner only ever
-						     reaches this step (onMount above), so this is the one
-						     place it goes. -->
-						<Notice
-							variant="status"
-							message="Only a Practice Owner can change this. Ask an Owner if it needs updating."
-						/>
-					{/if}
-				</stack-l>
-			</center-l>
-		</container-l>
+		<FormPage
+			title="Your website"
+			isTitleFocused={hasMoved}
+			fieldsets={[
+				{ content: savedFailure },
+				{ content: savedAnswers },
+				{ content: savedBy },
+				{ content: ownerOnly }
+			]}
+		/>
 	{/if}
 {:else}
-	<!-- The loading gap between mount and the first response: previously
-	     nothing rendered here at all, not even outside the frame. -->
-	<container-l>
-		<center-l max="var(--form-max)" gutters="var(--page-gutter)">
-			<stack-l space="var(--space-7)">
-				<Heading level={1} variant="page" text="Your website" />
-				<Skeleton variant="text" lines={4} label="Loading your website settings" />
-			</stack-l>
-		</center-l>
-	</container-l>
+	<FormPage title="Your website" loading="Loading your website settings" fieldsets={[]} />
 {/if}
-
-<style>
-	@layer components {
-		container-l {
-			padding-block: var(--space-8);
-		}
-	}
-</style>
