@@ -689,6 +689,19 @@ export function backdateInvoice(invoiceId: string, days: number): void {
 }
 
 /**
+ * Moves an Engagement's start `days` into the past, so a Client with two
+ * Engagements reads them apart by date (seed:scenario's
+ * returning-postpartum-client). An Engagement starts when it is approved,
+ * at the clock's now, and no endpoint starts one in the past.
+ */
+export function backdateEngagementStart(engagementId: string, days: number): void {
+	if (!Number.isSafeInteger(days) || days <= 0) {
+		throw new Error(`stack: invalid day count ${days}`);
+	}
+	execSQL(`UPDATE engagements SET created_at = created_at - interval '${days} days' WHERE id = ${sqlLiteral(engagementId)}`);
+}
+
+/**
  * Seeds a Practice that signed up the month before the last closed one
  * and bought 4 Credits in the last closed one, both in New York time,
  * the read ops's monthly Credits page shows (#2476). Returns that month

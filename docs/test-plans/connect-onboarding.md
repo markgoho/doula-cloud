@@ -37,9 +37,11 @@ In the walk profile that costs nothing. Run in the founder's everyday Chrome, as
 - **Check `app/.env.local` has `STRIPE_PUBLISHABLE_KEY=pk_test_…`** ([`docs/environment.md`](../environment.md)) before `dev:full` starts. Without it the BFF refuses the Client's pay control in the portal ("Your Practice cannot take this payment yet."), even on an active account, and the Client can pay only on Stripe's hosted Invoice page. Adding it later means restarting the BFF.
 - The stack's Postgres is torn down with its volumes (`app/e2e/stack.ts`), so **a connected account does not survive the session that made it.** Do the onboarding after the day's last `dev:full` start, inside the session that needs it.
 
+- Build the Practice with `bun run --cwd app seed:scenario connect-ready`, not by hand. It makes a fresh solo Practice with its website answered as its own site, and a Client with a signed Contract for the Invoice afterward. It prints the sign-in URL, the **Getting paid** URL and the path of the file that holds the Owner's email and password ([`persona-walk.md`](../agents/persona-walk.md), section 1).
+
 ## The walk
 
-Sign in as the Owner, open **Settings → Getting paid**. If it asks the website question first, answer it (**Your website** does not lead back; return to **Getting paid** yourself). Press **Connect Stripe**, or **Continue Stripe onboarding** if an account was already made.
+Sign in as the Owner from the scenario's file and open the **Getting paid** URL it printed. It shows **Connect Stripe**; the website question is already answered. Press **Connect Stripe**, or **Continue Stripe onboarding** if an account was already made.
 
 Stripe's screens, in order, with the values that pass in the Sandbox. **(Founder)** marks a step only the founder does.
 

@@ -25,41 +25,40 @@
 // the Auth emulator and the sandbox mailbox; nothing here can reach the
 // deployed app or Identity Platform, because every URL below is a loopback
 // port from e2e/ports.ts.
-import type { APIRequestContext, APIResponse } from '@playwright/test';
+import type { APIRequestContext } from '@playwright/test';
 import { sessionCookieFrom, signIn } from '../e2e/auth';
 import { drainOutbox, readMailbox } from '../e2e/outboxMail';
-import { API_URL, DEV_SERVER_ORIGIN, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from '../e2e/ports';
-import { retryPastRateLimit } from '../e2e/rateLimit';
+import { API_URL, DEV_SERVER_ORIGIN } from '../e2e/ports';
 import { provisionTail, type DoulaSession, type ProvisionedClient } from '../e2e/simulation/provision';
 import { describeWorld, type SeededClient } from '../e2e/simulation/world';
 import { backdateInvoice, countPracticesNamed, MAILBOX_URL, readStaffInviteToken, seedFoundingGrant, simulatedDateAfter } from '../e2e/stack';
 import { acceptStaffInvite } from '../e2e/staffSignup';
 import { TYPICAL_PRACTICE_NAME, TYPICAL_STAFF, type TypicalStaff } from '../src/routes/typicalPilot';
-
-/**
- * The one password every demo account signs in with. Dev-only and fake on
- * purpose: it exists in the local Auth emulator and nowhere else, and the
- * emulator is wiped each time the stack stops. Fifteen characters or more,
- * the Staff rule (#1538).
- */
-export const DEMO_PASSWORD = 'demo-password-local-only';
-
-// The domain the simulation already gives a simulated person's address
-// (docs/simulation/environment.md), so a log says at a glance that the
-// address is nobody's. Mail to it goes to the sandbox mailbox only.
-const DEMO_DOMAIN = 'sim.doula.cloud';
+import {
+	addClient,
+	contractFor,
+	createIdentity,
+	dayAfter,
+	DEMO_PASSWORD,
+	demoAddress,
+	instantAfter,
+	invitePortal,
+	portalSessionFor,
+	readOk,
+	send,
+	signInWithPassword,
+	signUpPractice,
+	startAndSavePlan,
+	type NamedClient,
+	type NamedEngagement,
+	type Session
+} from './seedThroughBff';
 
 // The seed for describeWorld: the simulation's own, so the demo's tail is
 // the same book a rehearsal run provisions.
 const WORLD_SEED = 4_102_027;
 // world.ts's day zero, which the demo moves to today.
 const WORLD_DAY_ZERO = '2027-01-04';
-
-const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
-
-export function demoAddress(givenName: string, familyName: string): string {
-	return `${givenName}.${familyName}@${DEMO_DOMAIN}`.toLowerCase();
-}
 
 function nameParts(member: TypicalStaff): { givenName: string; familyName: string } {
 	const [givenName, familyName] = member.name.split(' ', 2);
@@ -78,17 +77,6 @@ function addressOf(member: TypicalStaff): string {
 
 const [OWNER, ADMIN, EMPLOYEE_DOULA, CONTRACTOR_DOULA] = TYPICAL_STAFF;
 const INVITED = TYPICAL_STAFF.slice(1);
-
-/**
-One Client the demo names, beyond the World's anonymous tail.
-*/
-interface NamedClient {
-	givenName: string;
-	familyName: string;
-	kind: 'birth' | 'postpartum';
-	// Days from today, for a birth; undefined for postpartum care.
-	dueInDays?: number;
-}
 
 // Priya's book: the World gives her four Clients. Camille Boyd is Rooted's
 // Client Persona and the demo's portal account.
@@ -127,68 +115,6 @@ export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
 export const DEMO_CLIENT_EMAIL = demoAddress(CAMILLE.givenName, CAMILLE.familyName);
 export const AFTER_A_LOSS_CLIENT_EMAIL = demoAddress(AFTER_A_LOSS.givenName, AFTER_A_LOSS.familyName);
 
-type Session = { Cookie: string };
-
-async function readOk(response: APIResponse, what: string): Promise<string> {
-	const body = await response.text();
-	if (!response.ok()) {
-		throw new Error(`demo seed: ${what} answered ${response.status()}: ${body}`);
-	}
-	return body;
-}
-
-// One BFF call: through retryPastRateLimit, because the seed makes a few
-// hundred writes from one address in a minute, and a refusal it causes
-// itself is not a reason to stop.
-async function send<T>(
-	request: APIRequestContext,
-	method: 'GET' | 'POST' | 'PUT' | 'PATCH',
-	path: string,
-	headers: Record<string, string>,
-	data?: unknown
-): Promise<T> {
-	const response = await retryPastRateLimit(() => request.fetch(`${API_URL}${path}`, { method, headers, data }));
-	const body = await readOk(response, `${method} ${path}`);
-	return (body === '' ? {} : JSON.parse(body)) as T;
-}
-
-async function createIdentity(request: APIRequestContext, email: string): Promise<string> {
-	const response = await request.post(`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`, {
-		data: { email, password: DEMO_PASSWORD, returnSecureToken: true }
-	});
-	const { idToken } = JSON.parse(await readOk(response, `creating the emulator account for ${email}`));
-	return idToken;
-}
-
-// The emulator's answer to a password sign-in: an ID token, or undefined
-// when there is no such account -- the probe that tells a fresh stack from
-// one already seeded.
-async function signInWithPassword(request: APIRequestContext, email: string): Promise<string | undefined> {
-	const response = await request.post(
-		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=fake-key`,
-		{ data: { email, password: DEMO_PASSWORD, returnSecureToken: true } }
-	);
-	if (!response.ok()) return undefined;
-	const { idToken } = await response.json();
-	return idToken;
-}
-
-/**
-The calendar day `days` after `day`, both YYYY-MM-DD.
-*/
-export function dayAfter(day: string, days: number): string {
-	const date = new Date(`${day}T12:00:00Z`);
-	date.setUTCDate(date.getUTCDate() + days);
-	return date.toISOString().slice(0, 10);
-}
-
-/**
-An instant `days` after `day`, at `hourUtc` o'clock UTC, as RFC 3339.
-*/
-function instantAfter(day: string, days: number, hourUtc: number): string {
-	return `${dayAfter(day, days)}T${String(hourUtc).padStart(2, '0')}:00:00Z`;
-}
-
 /**
 Whole days from `from` to `to`, both YYYY-MM-DD.
 */
@@ -215,25 +141,15 @@ interface Roster {
 	staff: Record<string, DoulaSession>;
 }
 
-// Renata signs up, the way a Practice starts: an emulator account, then
-// POST /api/staff/signup, which grants her all three roles.
+// Renata signs up, the way a Practice starts.
 async function signUpOwner(request: APIRequestContext): Promise<{ practiceId: string; owner: Session }> {
-	const idToken = await createIdentity(request, addressOf(OWNER));
-	const { givenName, familyName } = nameParts(OWNER);
-	const { practiceId } = await send<{ practiceId: string }>(
-		request,
-		'POST',
-		'/api/staff/signup',
-		{ Authorization: `Bearer ${idToken}` },
-		{
-			practiceName: TYPICAL_PRACTICE_NAME,
-			firstName: givenName,
-			lastName: familyName,
-			workState: OWNER.workState,
-			timezone: 'America/New_York'
-		}
-	);
-	return { practiceId, owner: await signIn(request, API_URL, idToken) };
+	const { practiceId, owner } = await signUpPractice(request, {
+		email: addressOf(OWNER),
+		practiceName: TYPICAL_PRACTICE_NAME,
+		...nameParts(OWNER),
+		workState: OWNER.workState
+	});
+	return { practiceId, owner };
 }
 
 // One Staff member joins through the real Invitation: the Owner invites
@@ -313,97 +229,23 @@ async function spreadTailAcrossPhases(
 	}
 }
 
-interface NamedEngagement {
-	client: NamedClient;
-	clientId: string;
-	engagementId: string;
-	email: string;
-}
-
-// A named Client of Priya's: the record, with an address so the portal can
-// reach her; the Engagement Request, which the Owner's own request
-// approves at once (ADR-0017); and Priya's own first Visit, which attaches
-// her, as provisionTail does for the tail.
+// A named Client of Priya's: her record and Engagement, then Priya's own
+// first Visit, which attaches her, as provisionTail does for the tail.
 async function addPriyaClient(
 	request: APIRequestContext,
 	roster: Roster,
 	today: string,
 	client: NamedClient
 ): Promise<NamedEngagement> {
-	const { practiceId, owner, staff } = roster;
-	const email = demoAddress(client.givenName, client.familyName);
-	const { id: clientId } = await send<{ id: string }>(request, 'POST', `/api/practices/${practiceId}/clients`, owner, {
-		givenName: client.givenName,
-		familyName: client.familyName,
-		email,
-		override: false
-	});
-	const requested = await send<{ engagementId: string }>(
+	const engagement = await addClient(request, roster, today, client);
+	await send(
 		request,
 		'POST',
-		`/api/practices/${practiceId}/clients/${clientId}/engagement-requests`,
-		owner,
-		client.dueInDays === undefined ? { kind: client.kind } : { kind: client.kind, dueDate: dayAfter(today, client.dueInDays) }
+		`/api/practices/${roster.practiceId}/engagements/${engagement.engagementId}/visits`,
+		roster.staff.priya.headers,
+		{}
 	);
-	await send(request, 'POST', `/api/practices/${practiceId}/engagements/${requested.engagementId}/visits`, staff.priya.headers, {});
-	return { client, clientId, engagementId: requested.engagementId, email };
-}
-
-// The Client's own portal session, through the Practice's invitation and
-// her acceptance of it -- the first sign-in a real Client has (#90, #617).
-// A Contract cannot be sent to a Client the portal has not invited, so
-// even Grace, who has not signed in yet, holds an invitation.
-async function invitePortal(request: APIRequestContext, roster: Roster, engagement: NamedEngagement): Promise<string> {
-	const { inviteToken } = await send<{ inviteToken: string }>(
-		request,
-		'POST',
-		`/api/practices/${roster.practiceId}/engagements/${engagement.engagementId}/portal-invite`,
-		roster.owner
-	);
-	return inviteToken;
-}
-
-async function portalSessionFor(request: APIRequestContext, roster: Roster, engagement: NamedEngagement): Promise<Session> {
-	const inviteToken = await invitePortal(request, roster, engagement);
-	const accepted = await retryPastRateLimit(() =>
-		request.post(`${API_URL}/api/portal/accept-invite`, { data: { inviteToken } })
-	);
-	await readOk(accepted, `${engagement.client.givenName} accepting her portal invitation`);
-	return sessionCookieFrom(accepted, 'portal accept-invite');
-}
-
-// A Contract from the Practice's template, filled, sent, and -- unless
-// `sign` is false -- signed by the Client in her portal. The fields the
-// template leaves to a person are filled the way accessibility.e2e.ts
-// fills them; the price is the rate's, and the BFF refuses a request that
-// sets it.
-async function contractFor(
-	request: APIRequestContext,
-	roster: Roster,
-	today: string,
-	engagement: NamedEngagement,
-	portal: Session | undefined
-): Promise<void> {
-	const contractPath = `/api/practices/${roster.practiceId}/engagements/${engagement.engagementId}/contract`;
-	const { values } = await send<{ values: Record<string, string> }>(request, 'POST', contractPath, roster.owner);
-	const editable = Object.fromEntries(Object.entries(values).filter(([key]) => key !== 'price'));
-	await send(request, 'PUT', contractPath, roster.owner, {
-		values: {
-			...editable,
-			scope_of_service:
-				engagement.client.kind === 'birth'
-					? 'Two prenatal visits, on call from 37 weeks, continuous support in labor, and one postpartum visit.'
-					: 'Six postpartum visits in the first eight weeks, daytime or overnight.',
-			engagement_start_date: dayAfter(today, -30),
-			engagement_end_date: dayAfter(today, 120)
-		}
-	});
-	await send(request, 'POST', `${contractPath}/send`, roster.owner);
-	if (portal === undefined) return;
-	await send(request, 'POST', `/api/portal/engagements/${engagement.engagementId}/contract/sign`, portal, {
-		fullLegalName: `${engagement.client.givenName} ${engagement.client.familyName}`,
-		attestation: true
-	});
+	return engagement;
 }
 
 async function raiseInvoice(request: APIRequestContext, roster: Roster, engagement: NamedEngagement): Promise<string> {
@@ -428,34 +270,6 @@ async function scheduleVisit(
 		staffId,
 		scheduledAt
 	});
-}
-
-// A Plan from the Practice's template, started and saved by whoever
-// `headers` signs in as, with each answer in `answers` keyed by the
-// question it answers, worded as the template words it (#2137). An answer
-// keyed by its position put "Iron supplements from 28 weeks." under "Who
-// will be present for support?", so a label the template does not hold
-// stops the seed rather than putting an answer beside the wrong question.
-async function startAndSavePlan(
-	request: APIRequestContext,
-	roster: Roster,
-	engagement: NamedEngagement,
-	planType: 'care_plan' | 'birth_plan',
-	headers: Record<string, string>,
-	answers: Record<string, string | string[] | boolean>
-): Promise<void> {
-	const planPath = `/api/practices/${roster.practiceId}/engagements/${engagement.engagementId}/plans/${planType}`;
-	const { fields } = await send<{ fields: { id: string; label: string }[] }>(request, 'POST', planPath, headers);
-	const byId: Record<string, string | string[] | boolean> = {};
-	for (const [label, answer] of Object.entries(answers)) {
-		const field = fields.find((candidate) => candidate.label === label);
-		if (!field) {
-			const asked = fields.map((candidate) => `"${candidate.label}"`).join(', ');
-			throw new Error(`demo seed: the ${planType} template has no question "${label}"; it asks ${asked}`);
-		}
-		byId[field.id] = answer;
-	}
-	await send(request, 'PUT', planPath, headers, { answers: byId });
 }
 
 // Priya's four. Camille Boyd is the demo's portal Client: her Contract is
