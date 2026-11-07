@@ -3693,7 +3693,7 @@ describe('id uniqueness across DataTable two trees (#666)', () => {
 async function setupMoney(
 	reader: typeof session,
 	detail: Detail = fixtureDetail,
-	respondOverride?: (path: string, init?: RequestInit) => Response | undefined
+	respondOverride?: (path: string, init?: RequestInit) => Response | Promise<Response> | undefined
 ) {
 	await testPage.viewport(3200, 900);
 	const respond = toApiResponder(fixture);
@@ -3870,7 +3870,7 @@ describe('the Doula fees section (#2271)', () => {
 	// link are on the page before the fees read lands, not added after.
 	it('stands from the first frame when the Engagement has a fee, before the fees read lands', async () => {
 		await setupMoney(sessionFor(['owner']), fixtureDetail, (path) =>
-			path.endsWith('/doula-fees') ? (new Promise<Response>(() => {}) as unknown as Response) : undefined
+			path.endsWith('/doula-fees') ? new Promise<Response>(() => {}) : undefined
 		);
 
 		await expect.element(doulaFeesSection()).toBeVisible();

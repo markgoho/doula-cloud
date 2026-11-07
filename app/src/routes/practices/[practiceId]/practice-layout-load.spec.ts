@@ -1,6 +1,7 @@
 import { forgetSessionHeld } from '#lib/sessionEnded.js';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { jsonResponse } from '#lib/testResponse.js';
+import { loadEvent } from '#testing/loadEvent.js';
 import { load } from './+layout.js';
 
 const goto = vi.hoisted(() => vi.fn());
@@ -19,11 +20,11 @@ function setup(byPath: Record<string, { status: number; body: unknown } | undefi
 
 const depends = vi.fn();
 
-const loadArguments = {
+const loadArguments = loadEvent(load, {
 	params: { practiceId: 'practice-1' },
 	url: new URL('https://example.test/practices/practice-1/billing'),
 	depends
-} as unknown as Parameters<typeof import('./+layout.js').load>[0];
+});
 
 afterEach(() => {
 	vi.unstubAllGlobals();
@@ -61,7 +62,7 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 			jsonResponse({ staffId: 'staff-9', practiceName: 'Riverside', roles: ['owner'], isContractor: false })
 		);
 
-		await load({ ...loadArguments, fetch: loadFetch } as unknown as Parameters<typeof load>[0]);
+		await load({ ...loadArguments, fetch: loadFetch });
 
 		expect(loadFetch).toHaveBeenCalledWith('/api/practices/practice-1/session', expect.anything());
 		expect(fetchMock).not.toHaveBeenCalled();

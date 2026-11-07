@@ -1,4 +1,5 @@
 import { isRedirect } from '@sveltejs/kit';
+import { loadEvent } from '#testing/loadEvent.js';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { blankAnswers, intakeDraft } from '#lib/intakeDraft.svelte.js';
 import { handOffToIntake, takeIntakeHandoff } from '#lib/intakeHandoff.js';
@@ -11,7 +12,7 @@ Runs the door, and returns where it sent the reader.
 function enter(search = ''): string {
 	const url = new URL(`https://example.test/practices/${practiceId}/clients/new${search}`);
 	try {
-		load({ params: { practiceId }, url } as unknown as Parameters<typeof load>[0]);
+		load(loadEvent(load, { params: { practiceId }, url }));
 	} catch (error) {
 		if (isRedirect(error)) return error.location;
 		throw error;

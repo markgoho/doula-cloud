@@ -3,6 +3,7 @@
 // reaches the network. Named *.e2e.ts, not a Vitest spec, because
 // vite.config.ts's unit-test projects only include src/** (app/e2e is
 // exercised by the Playwright suite instead, per docs/testing/gates.md).
+/* eslint-disable unicorn/no-null -- Anthropic.Message types every absent field as null */
 import { test, expect } from '@playwright/test';
 import type Anthropic from '@anthropic-ai/sdk';
 import { AnthropicPersonaConversation, type MessagesClient } from './simulation/persona-conversation';
@@ -18,7 +19,28 @@ class FakeMessagesClient implements MessagesClient {
 		this.messages = {
 			create: async (parameters: Anthropic.MessageCreateParamsNonStreaming): Promise<Anthropic.Message> => {
 				this.requests.push(parameters);
-				return { content: [{ type: 'text', text: this.reply(), citations: undefined }] } as unknown as Anthropic.Message;
+				return {
+					id: 'msg_fake',
+					container: null,
+					content: [{ type: 'text', text: this.reply(), citations: null }],
+					model: parameters.model,
+					role: 'assistant',
+					stop_details: null,
+					stop_reason: 'end_turn',
+					stop_sequence: null,
+					type: 'message',
+					usage: {
+						cache_creation: null,
+						cache_creation_input_tokens: null,
+						cache_read_input_tokens: null,
+						inference_geo: null,
+						input_tokens: 0,
+						output_tokens: 0,
+						output_tokens_details: null,
+						server_tool_use: null,
+						service_tier: null
+					}
+				};
 			}
 		};
 	}

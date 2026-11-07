@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { jsonResponse } from '#lib/testResponse.js';
 import { isEngagementReadNew } from '#lib/portalEngagementRead.js';
+import { loadEvent } from '#testing/loadEvent.js';
 import { load } from './+layout.js';
 
 const body = {
@@ -12,13 +13,12 @@ const body = {
 };
 
 function callLoad(loadFetch: typeof fetch) {
-	return load({
+	return load(loadEvent(load, {
 		params: { engagementId: 'engagement-1' },
 		url: new URL('https://example.test/portal/engagements/engagement-1'),
-		untrack: (function_: () => unknown) => function_(),
 		depends: vi.fn(),
 		fetch: loadFetch
-	} as unknown as Parameters<typeof load>[0]);
+	}));
 }
 
 afterEach(() => {
@@ -29,9 +29,9 @@ describe('portal engagements/[engagementId]/+layout.ts load (#2587)', () => {
 	it("reads the Engagement once, through the fetch that load is passed, not the window's", async () => {
 		const windowFetch = vi.fn();
 		vi.stubGlobal('fetch', windowFetch);
-		const loadFetch = vi.fn(async () => jsonResponse(body, 200));
+		const loadFetch = vi.fn<typeof fetch>(async () => jsonResponse(body, 200));
 
-		await expect(callLoad(loadFetch as unknown as typeof fetch)).resolves.toEqual(body);
+		await expect(callLoad(loadFetch)).resolves.toEqual(body);
 
 		expect(loadFetch).toHaveBeenCalledTimes(1);
 		expect(loadFetch).toHaveBeenCalledWith('/api/portal/engagements/engagement-1', expect.anything());
@@ -40,7 +40,7 @@ describe('portal engagements/[engagementId]/+layout.ts load (#2587)', () => {
 
 	it('counts as a read the hub need not repeat', async () => {
 		isEngagementReadNew();
-		await callLoad(vi.fn(async () => jsonResponse(body, 200)) as unknown as typeof fetch);
+		await callLoad(vi.fn<typeof fetch>(async () => jsonResponse(body, 200)));
 
 		expect(isEngagementReadNew()).toBe(true);
 		expect(isEngagementReadNew()).toBe(false);
@@ -48,13 +48,13 @@ describe('portal engagements/[engagementId]/+layout.ts load (#2587)', () => {
 
 	it('sends a signed-out Client to sign-in without navigating mid-load', async () => {
 		await expect(
-			callLoad(vi.fn(async () => jsonResponse({}, 401)) as unknown as typeof fetch)
+			callLoad(vi.fn<typeof fetch>(async () => jsonResponse({}, 401)))
 		).rejects.toMatchObject({ status: 303 });
 	});
 
 	it('refuses the route with the read status for any other failure', async () => {
 		await expect(
-			callLoad(vi.fn(async () => jsonResponse({ message: 'gone' }, 404)) as unknown as typeof fetch)
+			callLoad(vi.fn<typeof fetch>(async () => jsonResponse({ message: 'gone' }, 404)))
 		).rejects.toMatchObject({ status: 404 });
 	});
 });

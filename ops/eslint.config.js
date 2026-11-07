@@ -26,9 +26,8 @@ export default defineConfig(
 		}
 	},
 	{
-		// Matches app/eslint.config.js: no double cast outside test code.
+		// Matches app/eslint.config.js: no double cast.
 		files: ['**/*.{ts,js,svelte}'],
-		ignores: ['**/*.spec.ts', '**/*.test.ts', 'e2e/**'],
 		rules: {
 			'no-restricted-syntax': [
 				'error',

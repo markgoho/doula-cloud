@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { loadEvent } from '#testing/loadEvent.js';
 import { load } from './+layout.js';
 
 // #1609: the predicate itself is covered once in #lib/roles.spec.ts. This
@@ -14,7 +15,7 @@ describe('clients/new/+layout.ts load (#1609)', () => {
 			session: { practiceId: 'practice-1', practiceName: 'Test Practice', roles, isContractor }
 		});
 
-		const result = await load({ parent } as unknown as Parameters<typeof load>[0]);
+		const result = await load(loadEvent(load, { parent }));
 
 		expect(parent).toHaveBeenCalled();
 		expect(result).toEqual({ isContractor: expected });

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { jsonResponse } from '#lib/testResponse.js';
+import { loadEvent } from '#testing/loadEvent.js';
 import { load, type ClientsListGate } from './+page.js';
 
 // Only the row count matters to this load, so a row is its id and its work.
@@ -21,11 +22,9 @@ const loadFetch = vi.fn();
 
 async function runLoad(roles: string[], isContractor = false) {
 	const parent = vi.fn().mockResolvedValue(membership(roles, isContractor));
-	const result = (await load({
-		params: { practiceId },
-		parent,
-		fetch: loadFetch,
-	} as unknown as Parameters<typeof load>[0])) as ClientsListGate;
+	const result = (await load(
+		loadEvent(load, { params: { practiceId }, parent, fetch: loadFetch })
+	)) as ClientsListGate;
 	return { result, parent };
 }
 
@@ -78,11 +77,9 @@ describe('clients/+page.ts load (#539)', () => {
 
 		const alone = { ...membership(['doula']).session, hasOtherDoulas: false };
 		const parent = vi.fn().mockResolvedValue({ session: alone });
-		const { hasOtherDoulas } = (await load({
-			params: { practiceId },
-			parent,
-			fetch: loadFetch,
-		} as unknown as Parameters<typeof load>[0])) as ClientsListGate;
+		const { hasOtherDoulas } = (await load(
+			loadEvent(load, { params: { practiceId }, parent, fetch: loadFetch })
+		)) as ClientsListGate;
 		const { result } = await runLoad(['doula']);
 
 		expect(hasOtherDoulas).toBe(false);

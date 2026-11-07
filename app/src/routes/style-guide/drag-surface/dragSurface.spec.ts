@@ -3,12 +3,12 @@ import { describe, expect, it } from 'vitest';
 import type { RouteFixture } from '../../routeFixture.js';
 import { respondWith, toDemos, toRouteDemos, toSlug } from './dragSurface.js';
 
-const stub = (() => {}) as unknown as Component;
+const stub: Component = () => ({});
 
 function routeFixture(overrides: Partial<RouteFixture> = {}): RouteFixture {
 	return {
 		name: 'The Practice-wide invoice list',
-		component: stub as RouteFixture['component'],
+		component: stub,
 		params: { practiceId: 'practice-1' },
 		url: 'https://example.test/practices/practice-1/invoices',
 		readyText: 'Invoices',

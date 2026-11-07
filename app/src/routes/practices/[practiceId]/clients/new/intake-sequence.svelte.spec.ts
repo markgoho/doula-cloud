@@ -75,7 +75,7 @@ function setupFor(fixture: RouteFixture, Page: Component<never>) {
 		The body of the first request the page made, decoded.
 		*/
 		const sent = () =>
-			JSON.parse(apiFetchWithSession.mock.calls[0][1].body as string) as Record<string, unknown>;
+			JSON.parse(apiFetchWithSession.mock.calls[0][1].body as string) as Record<string, unknown> & ClientNames;
 		return { sent };
 	};
 }
@@ -357,7 +357,7 @@ describe('the duplicate check', () => {
 
 		await expect.poll(() => landing.href).toBe(`/practices/${practiceId}/clients/client-1`);
 		expect(sent().phone).toBe('+1 (585) 555-0199');
-		expect(landing.message).toBe(detailsSavedMessage(sent() as unknown as ClientNames));
+		expect(landing.message).toBe(detailsSavedMessage(sent()));
 	});
 
 	// ADR-0017's "This is her" with nothing to propose: what was typed is

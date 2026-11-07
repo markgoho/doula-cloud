@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { loadEvent } from '#testing/loadEvent.js';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ComingVersion } from '#lib/legal.js';
 import { load as pageLoad } from './+page.js';
@@ -12,7 +13,7 @@ function setup(answer: (input: RequestInfo | URL) => Promise<Response>) {
 }
 
 async function load() {
-	return pageLoad({} as Parameters<typeof pageLoad>[0]);
+	return pageLoad(loadEvent(pageLoad, {}));
 }
 
 afterEach(() => {
@@ -32,7 +33,7 @@ describe('/signup +page.ts load (#1824)', () => {
 		const { fetchMock } = setup(async () => jsonResponse({ coming }));
 		const loadFetch = vi.fn(async () => jsonResponse({ coming }));
 
-		await pageLoad({ fetch: loadFetch } as unknown as Parameters<typeof pageLoad>[0]);
+		await pageLoad(loadEvent(pageLoad, { fetch: loadFetch }));
 
 		expect(loadFetch).toHaveBeenCalledOnce();
 		expect(fetchMock).not.toHaveBeenCalled();

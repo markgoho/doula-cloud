@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { loadEvent } from '#testing/loadEvent.js';
 import { load } from './+layout.js';
 
 vi.mock('$app/paths', () => ({
@@ -14,7 +15,7 @@ vi.mock('$app/paths', () => ({
  */
 async function run(roles: string[], planType = 'birth_plan') {
 	const parent = vi.fn().mockResolvedValue({ session: { practiceId: 'practice-1', roles } });
-	return load({ parent, params: { practiceId: 'practice-1', planType } } as unknown as Parameters<typeof load>[0]);
+	return load(loadEvent(load, { parent, params: { practiceId: 'practice-1', planType } }));
 }
 
 describe('plan-templates/[planType]/+layout.ts load (#2244)', () => {

@@ -45,7 +45,7 @@ describe('toRoutePath', () => {
  * `variants` (#913), so what it does is asserted here rather than twice
  * over in the two halves that call it.
  */
-const stub = (() => {}) as unknown as RouteFixture['component'];
+const stub: RouteFixture['component'] = () => ({});
 
 function paymentsFixture(variants?: RouteFixture['variants']): RouteFixture {
 	return {

@@ -32,7 +32,7 @@ const RECORD_ANNOUNCEMENTS = `
 `;
 
 async function announcements(page: Page): Promise<string[]> {
-	return page.evaluate(() => (globalThis as unknown as { __announcements: string[] }).__announcements);
+	return page.evaluate(() => Reflect.get(globalThis, '__announcements'));
 }
 
 test('a move to a page titled from its own read announces its settled title, and nothing before it', async ({

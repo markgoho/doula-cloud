@@ -14,7 +14,10 @@ export function skewReloadHref(
 }
 
 export function reloadOnceOnPreloadError(
-	win: Pick<Window, 'addEventListener' | 'location'> & { sessionStorage?: Storage },
+	win: Pick<Window, 'addEventListener'> & {
+		location: Pick<Location, 'reload'>;
+		sessionStorage?: Pick<Storage, 'getItem' | 'setItem'>;
+	},
 	now: () => number = Date.now
 ): void {
 	win.addEventListener('vite:preloadError', (event) => {

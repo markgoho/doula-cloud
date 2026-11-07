@@ -1,4 +1,4 @@
-import { createRawSnippet, type Component } from 'svelte';
+import { createRawSnippet } from 'svelte';
 import { page } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
@@ -209,7 +209,7 @@ describe('SummaryList.svelte', () => {
 	 * itself -- read from its own width, not the window's (ADR-0024).
 	 */
 	it('stacks by itself in a narrow space and sets key beside value in a wide one', async () => {
-		const { frame, remove } = await mountInFrame(SummaryList as unknown as Component, {
+		const { frame, remove } = await mountInFrame(SummaryList, {
 			rows
 		});
 		try {
@@ -237,7 +237,7 @@ describe('SummaryList.svelte', () => {
 	 * across the whole available-space continuum (ADR-0025).
 	 */
 	it('never needs more room than it is given, for a value or label with no break opportunity', async () => {
-		const { run, frame, remove } = await mountInFrame(SummaryList as unknown as Component, {
+		const { run, frame, remove } = await mountInFrame(SummaryList, {
 			rows: [
 				{ label: 'Referral', value: REFERRAL_URL },
 				{
@@ -259,7 +259,7 @@ describe('SummaryList.svelte', () => {
 	 * on a page ends at one right edge.
 	 */
 	it('caps the list at --measure when given ample room', async () => {
-		const { frame, remove } = await mountInFrame(SummaryList as unknown as Component, {
+		const { frame, remove } = await mountInFrame(SummaryList, {
 			rows: [{ label: 'Referral', value: REFERRAL_URL }]
 		});
 		try {
