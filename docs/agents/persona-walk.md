@@ -13,7 +13,28 @@ A persona's skill and patience live in what her brief says she does, never in a 
 
 Start `dev:full` from the worktree as [`docs/testing/walk-a-screen-locally.md`](../testing/walk-a-screen-locally.md) says, in the background. Note the dev origin and the sandbox mailbox URL it prints. Put `SEED_DEMO=0` in front for a persona whose journey starts from an empty product (Maya Okonkwo and Tasha Bell sign up cold); leave the seed on for anyone who works inside Rooted Birth Collective, and take her account from that doc's table.
 
-A Client persona signs in to the portal by magic link, so her brief gives `/portal/login` as the start URL and the mailbox URL, and she asks for the link and follows it herself. Of the three, only Camille Boyd has a seeded account. Hannah Sorensen and Nadia Haddad each need a Practice that has added her as a Client first. Make that through a Staff walk or the seed, and give her only her email, never a link lifted from the seed's output.
+A Client persona signs in to the portal by magic link, so her brief gives `/portal/login` as the start URL and the mailbox URL, and she asks for the link and follows it herself. Of the three, only Camille Boyd has a seeded account. Hannah Sorensen and Nadia Haddad each need a Practice that has added her as a Client first. Make that with a scenario below, and give her only her email, never a link lifted from the seed's output.
+
+**Build the starting state with `seed:scenario`, never by hand.** Once `dev:full` is up, run
+
+```sh
+bun run --cwd app seed:scenario <name> [flags]
+```
+
+It builds the state through the BFF and the Auth emulator, so the audit rows are the product's own, in about a second. It prints the sign-in URL, the URL the walk starts on, and the path of a file under `.seed-scenario/` at the worktree root that holds every account's email and password and the Owner's session. Read the walker's email and password from that file; nothing secret is printed. With no name, or one it does not know, it lists the scenarios and exits nonzero. A scenario on Rooted Birth Collective changes the seeded Practice, so run it once per `dev:full` start; one on Maya's solo Practice signs up a new Practice each time and can run again.
+
+| Scenario | What it builds | Walks it starts |
+| --- | --- | --- |
+| `connect-ready` | A fresh solo Practice (Maya, Owner, Admin and Doula) with its own website declared and Stripe not connected, so **Getting paid** shows **Connect Stripe**; Nadia Haddad with a signed Contract. `--no-client` leaves Nadia out | [connect-onboarding.md](../test-plans/connect-onboarding.md), solo-birth-doula stage 7 |
+| `fresh-practice` | A solo Practice a signup made just now, its email unverified, with nothing in it | evaluator-doula stage 6, solo-birth-doula's second Practice |
+| `first-time-client` | Hannah Sorensen at Maya's Practice: birth work with Maya as Doula, a portal invitation in the mailbox, a Birth Plan saved three times (three answers, one changed, one save that changed nothing) | first-time-client |
+| `loss-client` | Nadia Haddad at Maya's Practice before her loss: signed Contract, Birth Plan, two past Visits and one booked, a message; Rana Saleh with a loss recorded and no Birth Plan. `--after-loss` goes on to Nadia's loss, a condolence message and her Contract voided | loss-client |
+| `doula-invited` | Rooted with a pending Invitation for a new employed Doula, to accept from the mailbox | employed-doula stage 1 |
+| `admin-invited` | Rooted with a pending Invitation for a new employed Admin who is not a Doula, to accept from the mailbox | non-doula-admin stage 1 |
+| `contractor-second-practice` | Rooted, plus Ridgeline Doulas inviting Lena Vasquez as a contractor; at Rooted, Adaeze Nwosu's birth with no Doula and three Birth Plan answers, ready for an Offer, and Lena's seeded fee recorded as paid | contractor-doula |
+| `returning-postpartum-client` | Rooted, with Camille Boyd's birth care complete and started months ago, and a second Camille Boyd at the same address with postpartum work, a started Birth Plan, a Draft Contract and a portal invitation | returning-postpartum-client |
+
+practice-owner walks the seeded Rooted Birth Collective as it is, so `seed:demo` (run by `dev:full`) is its starting state.
 
 Record `git rev-parse HEAD`: the evaluator needs the walked SHA.
 
