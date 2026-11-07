@@ -22,12 +22,12 @@ describe('skewReloadHref', () => {
 	});
 });
 
-function fakeWindow(storage: Storage | undefined) {
+function fakeWindow(storage: Pick<Storage, 'getItem' | 'setItem'> | undefined) {
 	const listeners = new Map<string, (event: Event) => void>();
 	const reload = vi.fn();
 	const win = {
 		addEventListener: (type: string, listener: (event: Event) => void) => listeners.set(type, listener),
-		location: { reload } as unknown as Location,
+		location: { reload },
 		sessionStorage: storage
 	};
 	const fire = () => {
@@ -42,9 +42,10 @@ describe('reloadOnceOnPreloadError', () => {
 	it('reloads once, cancels the error, and does not reload again within the guard window', () => {
 		const store = new Map<string, string>();
 		const storage = {
-			getItem: (k: string) => store.get(k) as string,
+			// eslint-disable-next-line unicorn/no-null -- Storage.getItem returns null for a missing key
+			getItem: (k: string) => store.get(k) ?? null,
 			setItem: (k: string, v: string) => void store.set(k, v)
-		} as Storage;
+		};
 		const { win, reload, fire } = fakeWindow(storage);
 		let clock = 1_000_000;
 		reloadOnceOnPreloadError(win, () => clock);
@@ -70,10 +71,11 @@ describe('reloadOnceOnPreloadError', () => {
 
 	it('does not reload when storage throws, since the loop cannot be guarded', () => {
 		const storage = {
-			getItem: () => {
+			getItem: (): never => {
 				throw new Error('blocked');
-			}
-		} as unknown as Storage;
+			},
+			setItem: () => {}
+		};
 		const { win, reload, fire } = fakeWindow(storage);
 		reloadOnceOnPreloadError(win);
 		fire();

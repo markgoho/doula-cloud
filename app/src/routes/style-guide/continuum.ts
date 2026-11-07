@@ -14,7 +14,6 @@
  * only ever execute in a browser.
  */
 
-import type { Component } from 'svelte';
 import { render } from 'vitest-browser-svelte';
 
 // ADR-0024: 320 is a conformance commitment, not a content floor -- the
@@ -698,8 +697,10 @@ export interface Mounted {
 	remove(): void;
 }
 
+type Mountable = Parameters<typeof render>[0];
+
 export async function mountInFrame(
-	component: Component,
+	component: Mountable,
 	properties: Record<string, unknown> = {}
 ): Promise<Mounted> {
 	const run = document.createElement('div');

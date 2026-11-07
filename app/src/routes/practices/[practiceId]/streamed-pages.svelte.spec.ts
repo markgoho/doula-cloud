@@ -12,7 +12,6 @@
 import { page as testPage } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import type { Component } from 'svelte';
 import type { StreamedRead } from '#lib/streamedRead.svelte.js';
 import { gotoWithOutcome } from '#lib/outcome.js';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
@@ -49,18 +48,18 @@ vi.mock('./engagements/[engagementId]/EngagementScreen.svelte', async () => impo
 // Each page's `data` also carries the Practice layout's session. Only the
 // Engagement reads it, for the shape of the summary it holds while loading
 // (#2251), so the spec hands it a Doula's and the others the read alone.
-type StreamingPage = Component<{ data: { read: Promise<StreamedRead<unknown>> } }>;
+type StreamingPage = Parameters<typeof render>[0];
 
 const templateLoading: [string, StreamingPage, string][] = [
-	['Credits', Credits as unknown as StreamingPage, 'Credits'],
-	['Contracts', Contracts as unknown as StreamingPage, 'Contracts'],
-	['the Engagement', Engagement as unknown as StreamingPage, 'Clients']
+	['Credits', Credits, 'Credits'],
+	['Contracts', Contracts, 'Contracts'],
+	['the Engagement', Engagement, 'Clients']
 ];
 
 const screenLoading: [string, StreamingPage][] = [
-	['On call', OnCall as unknown as StreamingPage],
-	['Invoices', Invoices as unknown as StreamingPage],
-	['Schedule', Schedule as unknown as StreamingPage]
+	['On call', OnCall],
+	['Invoices', Invoices],
+	['Schedule', Schedule]
 ];
 
 const screens: [string, StreamingPage][] = [...templateLoading, ...screenLoading].map(([name, screen]) => [
@@ -69,7 +68,7 @@ const screens: [string, StreamingPage][] = [...templateLoading, ...screenLoading
 ]);
 
 async function setup(screen: StreamingPage, read: Promise<StreamedRead<unknown>>) {
-	const session = screen === (Engagement as unknown as StreamingPage) ? { session: { roles: ['doula'] } } : {};
+	const session = screen === (Engagement) ? { session: { roles: ['doula'] } } : {};
 	await render(screen, { data: { read, ...session } });
 }
 
@@ -111,7 +110,7 @@ describe.each(screens)('%s', (_name, screen) => {
 // in the BFF's words, in place of "Page not found".
 it('says the work ended where the Engagement was', async () => {
 	await setup(
-		Engagement as unknown as StreamingPage,
+		Engagement,
 		Promise.resolve({
 			isLoaded: false,
 			response: Response.json(
@@ -137,7 +136,7 @@ it('hands the Engagement screen what the save that led here did', async () => {
 	pageState.url = new URL(`https://example.test${engagementPath}`);
 	const read = Promise.withResolvers<StreamedRead<unknown>>();
 	goto.mockImplementationOnce(async () => {
-		await setup(Engagement as unknown as StreamingPage, read.promise);
+		await setup(Engagement, read.promise);
 	});
 
 	await gotoWithOutcome(engagementPath, 'Work with Pat started.');

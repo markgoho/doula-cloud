@@ -1,4 +1,5 @@
 import { createRawSnippet } from 'svelte';
+import { loadEvent } from '#testing/loadEvent.js';
 import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
@@ -61,10 +62,12 @@ async function setup({ isContractor = false, search = '' }: SetupOptions = {}) {
  */
 async function enterFromSearch(fields: Partial<ClientSearchFields>) {
 	expect(() =>
-		doorLoad({
-			params: { practiceId },
-			url: new URL(`https://example.test/practices/${practiceId}/clients/new`)
-		} as unknown as Parameters<typeof doorLoad>[0])
+		doorLoad(
+			loadEvent(doorLoad, {
+				params: { practiceId },
+				url: new URL(`https://example.test/practices/${practiceId}/clients/new`)
+			})
+		)
 	).toThrow();
 	handOffToIntake(practiceId, { name: '', dateOfBirth: '', email: '', phone: '', ...fields });
 	await setup();

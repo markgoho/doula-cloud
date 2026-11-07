@@ -154,9 +154,7 @@ export default defineConfig(
 		}
 	},
 	{
-		// A test double stands in for a type it only partly implements, so test code may double-cast.
 		files: ['**/*.{ts,js,svelte}'],
-		ignores: ['**/*.spec.ts', '**/*.test.ts', 'e2e/**'],
 		rules: {
 			'no-restricted-syntax': [
 				'error',

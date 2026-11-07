@@ -32,7 +32,7 @@ describe('a Practice page at /p/<slug>', () => {
 			.toBeVisible();
 		await expect.element(testPage.getByText('Ada <i>Owner</i>', { exact: false })).toBeVisible();
 		expect(container.querySelector(':scope main :is(script, img, b, i)')).toBeNull();
-		expect((globalThis as unknown as { pwned?: boolean }).pwned).toBeUndefined();
+		expect(Reflect.get(globalThis, 'pwned')).toBeUndefined();
 	});
 
 	it('keeps the line breaks she typed', async () => {

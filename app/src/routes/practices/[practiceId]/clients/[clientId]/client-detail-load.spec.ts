@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { loadEvent } from '#testing/loadEvent.js';
 import { load } from './+page.js';
 
 // #465, mirroring clients-list-load.spec.ts (#539): every branch of the
@@ -11,7 +12,7 @@ describe('clients/[clientId]/+page.ts load (#465, #691)', () => {
 			session: { practiceId: 'practice-1', practiceName: 'Test Practice', roles: ['doula'], isContractor: true }
 		});
 
-		const result = await load({ parent } as unknown as Parameters<typeof load>[0]);
+		const result = await load(loadEvent(load, { parent }));
 
 		expect(parent).toHaveBeenCalled();
 		expect(result).toEqual({ isContractor: true, isOwner: false, hasSecondFactor: true });
@@ -22,7 +23,7 @@ describe('clients/[clientId]/+page.ts load (#465, #691)', () => {
 			session: { practiceId: 'practice-1', practiceName: 'Test Practice', roles: ['owner'], isContractor: false }
 		});
 
-		const result = await load({ parent } as unknown as Parameters<typeof load>[0]);
+		const result = await load(loadEvent(load, { parent }));
 
 		expect(result).toEqual({ isContractor: false, isOwner: true, hasSecondFactor: true });
 	});
@@ -40,7 +41,7 @@ describe('clients/[clientId]/+page.ts load (#465, #691)', () => {
 			}
 		});
 
-		const result = await load({ parent } as unknown as Parameters<typeof load>[0]);
+		const result = await load(loadEvent(load, { parent }));
 
 		expect(result).toEqual({ isContractor: false, isOwner: true, hasSecondFactor: false });
 	});
