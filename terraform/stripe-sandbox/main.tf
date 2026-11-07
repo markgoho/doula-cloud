@@ -33,7 +33,7 @@ module "stripe" {
   source = "../stripe"
 
   livemode      = false
-  base_url      = "https://doula-api-850855848778.us-central1.run.app"
+  base_url      = "https://sandbox-events-off.doula.cloud"
   credit_prices = { "2000" = true }
 }
 
