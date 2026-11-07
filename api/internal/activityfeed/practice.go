@@ -248,7 +248,8 @@ const personSubjectKind = activity.SubjectMembership
 // already reads.
 const listPracticeActivityQueryTemplate = `SELECT a.id, a.subject_kind, a.subject_id, a.action, a.actor_kind::text,
 	       %[3]s, subj.name, sc.given_name, sc.preferred_name, sc.family_name, a.created_at,
-	       NULLIF(a.diff ->> '%[7]s', '')::timestamptz, (a.diff ->> '%[8]s')::timestamptz
+	       NULLIF(a.diff ->> '%[7]s', '')::timestamptz, (a.diff ->> '%[8]s')::timestamptz,
+	       a.diff ->> '%[9]s', a.diff ->> '%[10]s'
 	FROM activity a
 	%[4]s
 	LEFT JOIN staff subj ON a.subject_kind = '%[2]s' AND subj.id = a.subject_id
@@ -259,7 +260,8 @@ const listPracticeActivityQueryTemplate = `SELECT a.id, a.subject_kind, a.subjec
 
 const listPracticeActivityAfterQueryTemplate = `SELECT a.id, a.subject_kind, a.subject_id, a.action, a.actor_kind::text,
 	       %[3]s, subj.name, sc.given_name, sc.preferred_name, sc.family_name, a.created_at,
-	       NULLIF(a.diff ->> '%[7]s', '')::timestamptz, (a.diff ->> '%[8]s')::timestamptz
+	       NULLIF(a.diff ->> '%[7]s', '')::timestamptz, (a.diff ->> '%[8]s')::timestamptz,
+	       a.diff ->> '%[9]s', a.diff ->> '%[10]s'
 	FROM activity a
 	%[4]s
 	LEFT JOIN staff subj ON a.subject_kind = '%[2]s' AND subj.id = a.subject_id
@@ -269,20 +271,24 @@ const listPracticeActivityAfterQueryTemplate = `SELECT a.id, a.subject_kind, a.s
 	  AND (a.created_at, a.id) < ($2, $3)
 	ORDER BY a.created_at DESC, a.id DESC LIMIT %[1]d`
 
-var listPracticeActivityQuery = fmt.Sprintf(listPracticeActivityQueryTemplate, //nolint:gosec // all eight interpolated values are package-internal constants, not request input
+var listPracticeActivityQuery = fmt.Sprintf(listPracticeActivityQueryTemplate, //nolint:gosec // all ten interpolated values are package-internal constants, not request input
 	practiceBatchSize+1, personSubjectKind, activitypage.SharedActorJoin.Columns, activitypage.SharedActorJoin.Joins,
-	activity.SubjectEngagement, activity.SubjectClient, activity.DiffKeyVisitScheduledAt, activity.DiffKeyVisitCreatedAt)
+	activity.SubjectEngagement, activity.SubjectClient, activity.DiffKeyVisitScheduledAt, activity.DiffKeyVisitCreatedAt,
+	activity.DiffKeyAssignedStaffIDBefore, activity.DiffKeyAssignedStaffIDAfter)
 
-var listPracticeActivityAfterQuery = fmt.Sprintf(listPracticeActivityAfterQueryTemplate, //nolint:gosec // all eight interpolated values are package-internal constants, not request input
+var listPracticeActivityAfterQuery = fmt.Sprintf(listPracticeActivityAfterQueryTemplate, //nolint:gosec // all ten interpolated values are package-internal constants, not request input
 	practiceBatchSize+1, personSubjectKind, activitypage.SharedActorJoin.Columns, activitypage.SharedActorJoin.Joins,
-	activity.SubjectEngagement, activity.SubjectClient, activity.DiffKeyVisitScheduledAt, activity.DiffKeyVisitCreatedAt)
+	activity.SubjectEngagement, activity.SubjectClient, activity.DiffKeyVisitScheduledAt, activity.DiffKeyVisitCreatedAt,
+	activity.DiffKeyAssignedStaffIDBefore, activity.DiffKeyAssignedStaffIDAfter)
 
 // rawEntry is Entry plus the row id fetchPage needs to mint a cursor but
 // never puts in the response, the same shape engagement.activityRow
-// already uses.
+// already uses, and a reassignment's two staff ids, which fetchPage
+// resolves to names.
 type rawEntry struct {
 	Entry
-	cursorID string
+	cursorID           string
+	movedFrom, movedTo sql.NullString
 }
 
 // fetchPage reads one practiceBatchSize(+1)-row batch, gates each row in
@@ -316,6 +322,7 @@ func fetchPage(ctx context.Context, tx *sql.Tx, reader staffauth.Reader, practic
 
 	gateCache := map[string]bool{}
 	items := []Entry{}
+	moves := []move{}
 	examinedIndex := -1
 	for i, row := range rows {
 		examinedIndex = i
@@ -330,11 +337,19 @@ func fetchPage(ctx context.Context, tx *sql.Tx, reader staffauth.Reader, practic
 			gateCache[key] = can
 		}
 		if can && activitygate.CanSeeAction(reader, row.SubjectKind, row.Action) {
+			if row.Action == string(activity.ActionVisitReassigned) && row.movedFrom.Valid && row.movedTo.Valid {
+				moves = append(moves, move{index: len(items), from: row.movedFrom.String, to: row.movedTo.String})
+			}
 			items = append(items, row.Entry)
 			if len(items) == practicePageSize {
 				break
 			}
 		}
+	}
+
+	if err := nameTheMoves(ctx, tx, items, moves); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return ListResponse{}, err
 	}
 
 	resp := ListResponse{Items: items}
@@ -373,7 +388,7 @@ func queryBatch(ctx context.Context, tx *sql.Tx, practiceID string, after *pagec
 		var visitScheduledAt, visitAddedAt sql.NullTime
 		if err := rows.Scan(&row.cursorID, &row.SubjectKind, &row.SubjectID, &row.Action, &actorKind,
 			&staffName, &clientGivenName, &clientPreferredName, &clientFamilyName, &operatorName, &subjectName,
-			&subjectClientGivenName, &subjectClientPreferredName, &subjectClientFamilyName, &row.CreatedAt, &visitScheduledAt, &visitAddedAt); err != nil {
+			&subjectClientGivenName, &subjectClientPreferredName, &subjectClientFamilyName, &row.CreatedAt, &visitScheduledAt, &visitAddedAt, &row.movedFrom, &row.movedTo); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("activityfeed: scan practice activity row: %w", err)
 		}
@@ -456,4 +471,59 @@ func resolveSubjectName(subjectKind string, subjectName, clientGivenName, client
 		return activity.DepartedStaffName
 	}
 	return subjectName.String
+}
+
+// move is one allowed visit_reassigned row's two staff ids, by its place
+// in the page.
+type move struct {
+	index    int
+	from, to string
+}
+
+// nameTheMoves names the Doula each reassignment on the page moved the
+// Visit from and to (#2672), read from the staff row as it stands, the way
+// engagement.reassignmentDetail reads them: a row this reader's RLS does
+// not reach reads activity.DepartedStaffName, and a deleted login reads
+// its redacted name (ADR-0033). It runs once per page, on the rows the
+// gate allowed, rather than as two more staff joins on the batch query,
+// each of which would inline staff's RLS policies again under the Sort.
+func nameTheMoves(ctx context.Context, tx *sql.Tx, items []Entry, moves []move) error {
+	if len(moves) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(moves)*2)
+	for _, m := range moves {
+		ids = append(ids, m.from, m.to)
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT id::text, name FROM staff WHERE id = ANY($1::uuid[])`, ids)
+	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	if err != nil {
+		return fmt.Errorf("activityfeed: name reassigned staff: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	names := map[string]string{}
+	for rows.Next() {
+		var id, name string
+		if err := rows.Scan(&id, &name); err != nil {
+			// coverage:ignore reason: row scan failure, not exercised by unit tests
+			return fmt.Errorf("activityfeed: scan reassigned staff: %w", err)
+		}
+		names[id] = name
+	}
+	if err := rows.Err(); err != nil {
+		// coverage:ignore reason: row iteration failure, not exercised by unit tests
+		return fmt.Errorf("activityfeed: iterate reassigned staff: %w", err)
+	}
+	for _, m := range moves {
+		items[m.index].ReassignedFromName = movedStaffName(names, m.from)
+		items[m.index].ReassignedToName = movedStaffName(names, m.to)
+	}
+	return nil
+}
+
+func movedStaffName(names map[string]string, id string) string {
+	if name, ok := names[id]; ok {
+		return name
+	}
+	return activity.DepartedStaffName
 }

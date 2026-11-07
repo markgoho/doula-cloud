@@ -49,6 +49,14 @@ type Entry struct {
 	// every Visit date.
 	VisitScheduledAt *time.Time `json:"visitScheduledAt,omitempty"`
 	VisitAddedAt     *time.Time `json:"visitAddedAt,omitempty"`
+
+	// ReassignedFromName and ReassignedToName are the Doula a
+	// visit_reassigned row moved the Visit from and to (#2672), resolved
+	// the way the Engagement ledger resolves them. Practice-wide feed only:
+	// the Client portal's projection never sets them, and excludes the
+	// action besides.
+	ReassignedFromName string `json:"reassignedFromName,omitempty"`
+	ReassignedToName   string `json:"reassignedToName,omitempty"`
 }
 
 // ListResponse is docs/api-design.md section 4's envelope, the same shape

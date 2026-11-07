@@ -36,7 +36,7 @@ func TestPracticeHandler_SurfacesEveryMembershipEvent(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "owner-feed-membership"
 	practiceID := testdb.SeedPractice(t, db, "Feed Membership Practice")
-	ownerID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, identityUID, "Priya Raman", []string{ownerRole}, employeeType)
+	ownerID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, identityUID, priyaRaman, []string{ownerRole}, employeeType)
 	subjectID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "doula-feed-membership", renataAlvarez, []string{doulaRole}, employeeType)
 
 	for _, action := range membershipActions() {
@@ -73,8 +73,8 @@ func TestPracticeHandler_SurfacesEveryMembershipEvent(t *testing.T) {
 		if entry.SubjectName != renataAlvarez {
 			t.Errorf("%q SubjectName = %q, want %q", action, entry.SubjectName, renataAlvarez)
 		}
-		if entry.ActorName != "Priya Raman" {
-			t.Errorf("%q ActorName = %q, want %q", action, entry.ActorName, "Priya Raman")
+		if entry.ActorName != priyaRaman {
+			t.Errorf("%q ActorName = %q, want %q", action, entry.ActorName, priyaRaman)
 		}
 	}
 }

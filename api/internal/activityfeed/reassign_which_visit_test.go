@@ -28,7 +28,7 @@ func TestPracticeHandler_ReassignmentRowsSayWhichVisitMoved(t *testing.T) {
 	testdb.SeedActivityWithDiff(t, db, practiceID, activity.SubjectEngagement, engagementID, action, actor,
 		json.RawMessage(`{"visitScheduledAt":"2026-11-13T21:00:00Z","visitCreatedAt":"2026-11-02T10:11:43.327441Z"}`))
 	testdb.SeedActivityWithDiff(t, db, practiceID, activity.SubjectEngagement, engagementID, action, actor,
-		json.RawMessage(`{"assignedStaffIdBefore":"a","assignedStaffIdAfter":"b"}`))
+		json.RawMessage(`{"assignedStaffIdBefore":"`+ownerID+`","assignedStaffIdAfter":"`+ownerID+`"}`))
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
