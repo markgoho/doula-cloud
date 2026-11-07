@@ -154,6 +154,20 @@ export default defineConfig(
 		}
 	},
 	{
+		// A test double stands in for a type it only partly implements, so test code may double-cast.
+		files: ['**/*.{ts,js,svelte}'],
+		ignores: ['**/*.spec.ts', '**/*.test.ts', 'e2e/**'],
+		rules: {
+			'no-restricted-syntax': [
+				'error',
+				{
+					selector: 'TSAsExpression[expression.type="TSAsExpression"]',
+					message: 'No double cast (`as unknown as`): narrow with a type guard or fix the type.'
+				}
+			]
+		}
+	},
+	{
 		files: ['**/*.svelte', '**/*.svelte.ts', '**/*.svelte.js'],
 		languageOptions: {
 			parserOptions: {

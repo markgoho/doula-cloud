@@ -26,6 +26,20 @@ export default defineConfig(
 		}
 	},
 	{
+		// Matches app/eslint.config.js: no double cast outside test code.
+		files: ['**/*.{ts,js,svelte}'],
+		ignores: ['**/*.spec.ts', '**/*.test.ts', 'e2e/**'],
+		rules: {
+			'no-restricted-syntax': [
+				'error',
+				{
+					selector: 'TSAsExpression[expression.type="TSAsExpression"]',
+					message: 'No double cast (`as unknown as`): narrow with a type guard or fix the type.'
+				}
+			]
+		}
+	},
+	{
 		files: ['**/*.svelte', '**/*.svelte.ts', '**/*.svelte.js'],
 		languageOptions: {
 			parserOptions: {
