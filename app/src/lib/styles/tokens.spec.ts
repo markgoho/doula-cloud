@@ -35,12 +35,12 @@ function block(selector: string): Map<string, string> {
 
 // The `color-scheme` value declared directly inside the block opened by
 // `selector`. Not a custom property, so `block()`'s `--name: value` regex
-// does not see it -- this is why the sync test above cannot catch it.
+// does not see it.
 function colorScheme(selector: string): string {
 	const start = source.indexOf(`${selector} {`);
 	if (start === -1) throw new Error(`No block for selector: ${selector}`);
 	const body = source.slice(start, source.indexOf('}', start));
-	const match = /\bcolor-scheme\s*:\s*(\w+)\s*;/.exec(body);
+	const match = /\bcolor-scheme\s*:\s*([\w ]+?)\s*;/.exec(body);
 	if (!match) throw new Error(`No color-scheme declared in ${selector}`);
 	return match[1];
 }
@@ -94,15 +94,30 @@ function colorNamesIn(declarations: Map<string, string>): string[] {
 		.toSorted((a, b) => a.localeCompare(b));
 }
 
-const light = block(':root');
-const darkBySystem = block(":root:not([data-theme='light'])");
-const darkByOverride = block(":root[data-theme='dark']");
-const shell = block('[data-shell]');
+const root = block(':root');
+
+// A color token is `light-dark(<light>, <dark>)`: the two halves, in order.
+function halves(value: string): [string, string] | undefined {
+	const match = /^light-dark\((oklch\([^)]*\)), (oklch\([^)]*\))\)$/.exec(value);
+	return match ? [match[1], match[2]] : undefined;
+}
+
+function half(index: 0 | 1): Map<string, string> {
+	return new Map(
+		[...root].map(([name, value]) => [
+			name,
+			name.startsWith('--color-') ? (halves(value)?.[index] ?? value) : value
+		])
+	);
+}
+
+const light = half(0);
+const dark = half(1);
+const shell = new Map([...dark, ...block('[data-shell]')]);
 
 const themes = [
 	['light', light],
-	['dark (system preference)', darkBySystem],
-	['dark (manual override)', darkByOverride],
+	['dark', dark],
 	['the shell (top bars, in both themes)', shell]
 ] as const;
 
@@ -140,47 +155,53 @@ describe('tokens.css is authored in OKLCH only', () => {
 	});
 });
 
-describe('the two dark blocks stay in sync', () => {
-	it('declares identical values, so a manual override matches the system theme', () => {
-		expect([...darkByOverride]).toStrictEqual([...darkBySystem]);
+describe('each color token is declared once, for both themes', () => {
+	it('declares every --color-* on :root as light-dark() of two oklch() values', () => {
+		const offenders = [...root]
+			.filter(([name]) => name.startsWith('--color-'))
+			.filter(([, value]) => halves(value) === undefined)
+			.map(([name]) => name);
+		expect(offenders).toStrictEqual([]);
 	});
 
-	it('covers exactly the color tokens the light theme declares', () => {
-		expect(colorNamesIn(darkBySystem)).toStrictEqual(colorNamesIn(light));
-	});
-
-	it('the shell covers exactly the color tokens the light theme declares, so nothing in a bar falls through to the page', () => {
+	it('gives the shell a value only where it differs from the dark theme, and only for a color token the page declares', () => {
+		const overrides = block('[data-shell]');
+		const repeated = [...overrides].filter(([name, value]) => dark.get(name) === value).map(([name]) => name);
+		expect(repeated).toStrictEqual([]);
+		expect(colorNamesIn(overrides).filter((name) => !root.has(name))).toStrictEqual([]);
 		expect(colorNamesIn(shell)).toStrictEqual(colorNamesIn(light));
 	});
 
 	it('varies color only -- type, spacing, shape and motion are declared once', () => {
-		const nonColor = darkBySystem
-			.keys()
-			.filter((name) => !name.startsWith('--color-'))
-			.toArray();
-		expect(nonColor).toStrictEqual([]);
+		const forced = [':root[data-theme=\'dark\']', ':root[data-theme=\'light\']', '[data-shell]'].flatMap((selector) =>
+			block(selector).keys().filter((name) => !name.startsWith('--color-')).toArray()
+		);
+		expect(forced).toStrictEqual([]);
 	});
 });
 
 /*
- * `color-scheme` -- #438. Browser-rendered UI (scrollbars, the canvas
- * outside the document, default form-control chrome, spellcheck underlines)
- * reads this property, not our custom properties, so it needs its own
- * assertion: `block()`'s regex only ever sees `--name: value` pairs, and the
- * "two dark blocks stay in sync" test above cannot see a bare `color-scheme`
- * declaration at all -- a mismatch there would ship silently without this.
+ * `color-scheme` -- #438. It is what `light-dark()` reads to pick a half,
+ * and what browser-rendered UI (scrollbars, the canvas outside the
+ * document, default form-control chrome, spellcheck underlines) reads. It
+ * is not a custom property, so `block()`'s regex never sees it and it needs
+ * its own assertion.
  */
 describe('color-scheme tracks the resolved theme, not just the system preference', () => {
-	it('is light by default', () => {
-		expect(colorScheme(':root')).toBe('light');
+	it('follows the system by default', () => {
+		expect(colorScheme(':root')).toBe('light dark');
 	});
 
-	it('is dark for the system-preference block', () => {
-		expect(colorScheme(":root:not([data-theme='light'])")).toBe('dark');
-	});
-
-	it('is dark for the manual-override block, matching the system-preference block', () => {
+	it('is dark when the manual override says dark', () => {
 		expect(colorScheme(":root[data-theme='dark']")).toBe('dark');
+	});
+
+	it('is light when the manual override says light', () => {
+		expect(colorScheme(":root[data-theme='light']")).toBe('light');
+	});
+
+	it('is dark in the shell, so it reads the dark half in both themes', () => {
+		expect(colorScheme('[data-shell]')).toBe('dark');
 	});
 });
 

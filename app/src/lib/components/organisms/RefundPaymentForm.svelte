@@ -42,11 +42,11 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
-	import Textarea from '#lib/components/atoms/Textarea.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
-	import RadioGroup, { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
+	import PaymentMethodFields from '#lib/components/molecules/PaymentMethodFields.svelte';
+	import { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 
@@ -219,19 +219,17 @@
 				{/snippet}
 			</LabeledField>
 			{#if !isCardPayment}
-				<RadioGroup
+				<PaymentMethodFields
 					legend="How was the money returned?"
-					name={methodName}
-					options={paymentMethodOptions}
-					value={method}
-					onChange={(value) => (method = value)}
-					error={methodError || undefined}
+					methodName={methodName}
+					{method}
+					onMethodChange={(value) => (method = value)}
+					methodError={methodError || undefined}
+					{noteFieldId}
+					{note}
+					onNoteInput={(value) => (note = value)}
+					noteError={noteError || undefined}
 				/>
-				<LabeledField id={noteFieldId} label="Note (optional)" error={noteError || undefined}>
-					{#snippet children({ id, describedBy, invalid })}
-						<Textarea {id} {describedBy} {invalid} value={note} onInput={(value) => (note = value)} />
-					{/snippet}
-				</LabeledField>
 			{/if}
 			<Button label="Continue" type="submit" />
 			<Button label="Cancel" variant="secondary" onClick={onCancel} />

@@ -23,6 +23,9 @@ export default defineConfig({
 	define: {
 		__APP_BUILD__: JSON.stringify(process.env.GITHUB_SHA ?? 'dev')
 	},
+	// Keeps `light-dark()` as written: below these, lightningcss rewrites it into
+	// custom-property toggles that a `color-scheme` on a subtree cannot flip.
+	build: { cssTarget: ['chrome123', 'firefox120', 'safari17.5'] },
 	plugins: [
 		sveltekit({
 			compilerOptions: {

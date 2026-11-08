@@ -24,6 +24,30 @@
 	}
 </script>
 
+{#snippet switchField(label: string, name: string, checked = false, disabled = false)}
+	<LabeledField {label} orientation="inline">
+		{#snippet children(control)}
+			<Checkbox {name} value="true" {checked} {disabled} onChange={ignore} {...control} />
+		{/snippet}
+	</LabeledField>
+{/snippet}
+
+{#snippet nameField()}
+	<LabeledField label="Name" width={20}>
+		{#snippet children({ id, describedBy, invalid, width })}
+			<TextInput {id} {describedBy} {invalid} {width} type="search" name="q" value="" onInput={ignore} />
+		{/snippet}
+	</LabeledField>
+{/snippet}
+
+{#snippet doulaField(name: string, fieldWidth: 20 | 30)}
+	<LabeledField label="Doula" width={fieldWidth}>
+		{#snippet children({ id, describedBy, invalid, width })}
+			<Select {id} {describedBy} {invalid} {width} {name} options={doulas} value="staff-1" />
+		{/snippet}
+	</LabeledField>
+{/snippet}
+
 {#snippet dates()}
 	<DateRangeFields from="2026-10-26" to="2026-11-25" />
 {/snippet}
@@ -50,37 +74,13 @@
 			status="Showing 14 Clients, soonest due first."
 		>
 			{#snippet switches()}
-				<LabeledField label="Mine" orientation="inline">
-					{#snippet children(control)}
-						<Checkbox name="mine" value="true" checked onChange={ignore} {...control} />
-					{/snippet}
-				</LabeledField>
-				<LabeledField label="Who owe money" orientation="inline">
-					{#snippet children(control)}
-						<Checkbox name="owes" value="true" checked={false} onChange={ignore} {...control} />
-					{/snippet}
-				</LabeledField>
-				<LabeledField label="Active, with no Contract" orientation="inline">
-					{#snippet children(control)}
-						<Checkbox name="noContract" value="true" checked={false} onChange={ignore} {...control} />
-					{/snippet}
-				</LabeledField>
-				<LabeledField label="Also show anyone not yet in care" orientation="inline">
-					{#snippet children(control)}
-						<Checkbox name="all" value="true" checked={false} onChange={ignore} {...control} />
-					{/snippet}
-				</LabeledField>
+				{@render switchField('Mine', 'mine', true)}
+				{@render switchField('Who owe money', 'owes')}
+				{@render switchField('Active, with no Contract', 'noContract')}
+				{@render switchField('Also show anyone not yet in care', 'all')}
 			{/snippet}
-			<LabeledField label="Name" width={20}>
-				{#snippet children({ id, describedBy, invalid, width })}
-					<TextInput {id} {describedBy} {invalid} {width} type="search" name="q" value="" onInput={ignore} />
-				{/snippet}
-			</LabeledField>
-			<LabeledField label="Doula" width={30}>
-				{#snippet children({ id, describedBy, invalid, width })}
-					<Select {id} {describedBy} {invalid} {width} name="doula" options={doulas} value="staff-1" />
-				{/snippet}
-			</LabeledField>
+			{@render nameField()}
+			{@render doulaField('doula', 30)}
 		</FilterBar>
 	</stack-l>
 
@@ -95,11 +95,7 @@
 		<h2>Two dates and a select</h2>
 		<FilterBar {action} onSubmit={stay} clearHref={action} legend="Narrow the schedule" status="Showing 25 scheduled visits. Load more to see the rest.">
 			{@render dates()}
-			<LabeledField label="Doula" width={20}>
-				{#snippet children({ id, describedBy, invalid, width })}
-					<Select {id} {describedBy} {invalid} {width} name="staffId" options={doulas} value="staff-1" />
-				{/snippet}
-			</LabeledField>
+			{@render doulaField('staffId', 20)}
 		</FilterBar>
 	</stack-l>
 
@@ -126,30 +122,14 @@
 		/>
 		<FilterBar {action} onSubmit={stay} legend="Choose which Clients to show" status="Showing 14 Clients, soonest due first." foldsFieldsOnly>
 			{#snippet switches()}
-				<LabeledField label="Who owe money" orientation="inline">
-					{#snippet children(control)}
-						<Checkbox name="owes" value="true" checked={false} onChange={ignore} {...control} />
-					{/snippet}
-				</LabeledField>
+				{@render switchField('Who owe money', 'owes')}
 				<div data-holds-space aria-hidden="true" inert>
-					<LabeledField label="Also show anyone not yet in care" orientation="inline">
-						{#snippet children(control)}
-							<Checkbox name="all" value="true" checked={false} disabled onChange={ignore} {...control} />
-						{/snippet}
-					</LabeledField>
+					{@render switchField('Also show anyone not yet in care', 'all', false, true)}
 				</div>
 			{/snippet}
-			<LabeledField label="Name" width={20}>
-				{#snippet children({ id, describedBy, invalid, width })}
-					<TextInput {id} {describedBy} {invalid} {width} type="search" name="q" value="" onInput={ignore} />
-				{/snippet}
-			</LabeledField>
+			{@render nameField()}
 			{#snippet folded()}
-				<LabeledField label="Doula" width={20}>
-					{#snippet children({ id, describedBy, invalid, width })}
-						<Select {id} {describedBy} {invalid} {width} name="staffId" options={doulas} value="staff-1" />
-					{/snippet}
-				</LabeledField>
+				{@render doulaField('staffId', 20)}
 			{/snippet}
 		</FilterBar>
 	</stack-l>

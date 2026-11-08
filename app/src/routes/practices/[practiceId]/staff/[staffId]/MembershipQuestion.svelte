@@ -17,10 +17,9 @@
 	 * the shape `mfa-recovery` already uses. Drawing, never a gate.
 	 */
 	import { onMount, type Snippet } from 'svelte';
-	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { updateMembership, type StaffSummary } from '#lib/staff.js';
-	import { isOwner as checkIsOwner, type EmploymentType } from '#lib/roles.js';
+	import type { EmploymentType } from '#lib/roles.js';
 	import { gotoWithOutcome } from '#lib/outcome.js';
 	import { FormSubmission, orThrownMessage, type FormError } from '#lib/formSubmission.svelte.js';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -29,7 +28,7 @@
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
 	import QuestionPage from '#lib/components/templates/QuestionPage.svelte';
-	import type { PracticeSession } from '../../+layout.js';
+	import { staffRoute } from './staffRoute.svelte.js';
 	import { loadMember, memberHref } from './member.js';
 
 	interface Membership {
@@ -70,10 +69,8 @@
 
 	let { subject, question, start, validate, next, outcome, controls }: Properties = $props();
 
-	const practiceId = $derived(page.params.practiceId!);
-	const staffId = $derived(page.params.staffId!);
-	const isOwner = $derived(checkIsOwner((page.data as { session: PracticeSession }).session));
-	const backHref = $derived(memberHref(practiceId, staffId));
+	const route = staffRoute();
+	const backHref = $derived(memberHref(route.practiceId, route.staffId));
 
 	let member = $state<StaffSummary | undefined>();
 	let isRefused = $state(false);
@@ -81,12 +78,12 @@
 	const submission = new FormSubmission();
 
 	onMount(async () => {
-		if (!isOwner) {
+		if (!route.isOwner) {
 			isRefused = true;
 			return;
 		}
 		try {
-			const loaded = await loadMember(apiFetchWithSession, practiceId, staffId);
+			const loaded = await loadMember(apiFetchWithSession, route.practiceId, route.staffId);
 			start(loaded);
 			member = loaded;
 		} catch (error_) {
@@ -100,7 +97,7 @@
 			const refusals = validate();
 			if (refusals.length > 0) return refusals;
 			const saved = next(member!);
-			await updateMembership(apiFetchWithSession, practiceId, staffId, saved.roles, saved.employmentType);
+			await updateMembership(apiFetchWithSession, route.practiceId, route.staffId, saved.roles, saved.employmentType);
 			await gotoWithOutcome(backHref, outcome(member!, saved));
 		}, orThrownMessage);
 	}

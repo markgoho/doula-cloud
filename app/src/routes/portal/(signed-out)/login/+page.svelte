@@ -14,7 +14,7 @@
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
-	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
+	import { EmailRequestForm } from '#lib/emailRequestForm.svelte.js';
 
 	const emailId = 'portal-login-email';
 
@@ -35,10 +35,6 @@
 	// #2534: the link she opened that had expired or was used. The BFF
 	// carries its page to the new link; this screen never learns the page.
 	const priorToken = $derived(readPriorLink(page.url));
-
-	let email = $state('');
-	const submission = new FormSubmission();
-	let hasRequested = $state(false);
 
 	// #617: a Client has no password any more, so this screen only ever
 	// asks for an address to mail a sign-in link to. The on-load probe is
@@ -96,24 +92,17 @@
 		}
 	});
 
-	async function handleSubmit(event: SubmitEvent) {
-		event.preventDefault();
-		await submission.run(async () => {
-			if (email.trim() === '') {
-				return [{ message: 'Enter your email address', targetId: emailId }];
-			}
-
-			// The response is identical whether or not the address is on
-			// record (#168) -- there is nothing here for a refused submit to
-			// report.
-			await fetch(`${apiBaseURL()}/api/portal/magic-link/request`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ email, ...(returnTo && { returnTo }), ...(priorToken && { priorToken }) })
-			});
-			hasRequested = true;
-		}, orServiceProblem);
-	}
+	const form = new EmailRequestForm(emailId, async (email) => {
+		// The response is identical whether or not the address is on
+		// record (#168) -- there is nothing here for a refused submit to
+		// report.
+		await fetch(`${apiBaseURL()}/api/portal/magic-link/request`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ email, ...(returnTo && { returnTo }), ...(priorToken && { priorToken }) })
+		});
+	});
+	const submission = form.submission;
 </script>
 
 {#snippet errorSummary()}
@@ -121,7 +110,7 @@
 {/snippet}
 
 {#snippet content()}
-	{#if hasRequested}
+	{#if form.isSent}
 		<Notice
 			variant="status"
 			message="If that address is on our records, we have sent a sign-in link. It can take a minute to arrive."
@@ -141,8 +130,8 @@
 		{/if}
 
 		<!-- `novalidate`: this page refuses the submit, not the browser. -->
-		<StackedForm onSubmit={handleSubmit}>
-			<EmailAddressField id={emailId} value={email} onInput={(value) => (email = value)} error={submission.errorFor(emailId)} />
+		<StackedForm onSubmit={form.submit}>
+			<EmailAddressField id={emailId} value={form.email} onInput={(value) => (form.email = value)} error={submission.errorFor(emailId)} />
 			<Button type="submit" label="Send me a sign-in link" loading={submission.isSubmitting} />
 		</StackedForm>
 

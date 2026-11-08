@@ -225,8 +225,6 @@ describe('components spend tokens, not raw values', () => {
 describe('the favicon holds no color tokens.css does not', () => {
 	const favicon = readFileSync(new URL('src/lib/assets/favicon.svg', appRoot), 'utf8');
 	const tokens = readFileSync(new URL('src/lib/styles/tokens.css', appRoot), 'utf8');
-	// Everything above the first dark block is the light theme.
-	const lightTokens = tokens.slice(0, tokens.indexOf('@media (prefers-color-scheme: dark)'));
 
 	function colorOf(attribute: 'fill' | 'stroke'): string | undefined {
 		return new RegExp(String.raw`${attribute}="(oklch\([^)]+\))"`).exec(favicon)?.[1];
@@ -238,11 +236,11 @@ describe('the favicon holds no color tokens.css does not', () => {
 	});
 
 	it("fills the tile with the light theme's --color-primary", () => {
-		expect(lightTokens).toContain(`--color-primary: ${colorOf('fill')};`);
+		expect(tokens).toContain(`--color-primary: light-dark(${colorOf('fill')},`);
 	});
 
 	it("draws the strokes in the light theme's --color-on-primary", () => {
-		expect(lightTokens).toContain(`--color-on-primary: ${colorOf('stroke')};`);
+		expect(tokens).toContain(`--color-on-primary: light-dark(${colorOf('stroke')},`);
 	});
 
 	it('names no color outside OKLCH', () => {

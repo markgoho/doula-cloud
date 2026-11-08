@@ -1,5 +1,6 @@
 <script lang="ts">
 	import CheckboxGroup from '#lib/components/molecules/CheckboxGroup.svelte';
+	import DisabledAndFocusDemo from '../DisabledAndFocusDemo.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import { ROLE_LABELS, ROLE_DESCRIPTIONS } from '#lib/roles.js';
 
@@ -52,15 +53,6 @@
 	</section>
 
 	<section>
-		<h2>Disabled</h2>
-		<p>No caller disables a box. A disabled fieldset around a form still reaches one, and this is how it looks.</p>
-		<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- the demo IS a disabled fieldset around the group, the one way a caller's form reaches a disabled box -->
-		<fieldset disabled class="plain-fieldset">
-			<CheckboxGroup legend="Roles" options={roleOptions} value={['admin']} onChange={() => {}} />
-		</fieldset>
-	</section>
-
-	<section>
 		<h2>Beside a radio group</h2>
 		<p>The box and the circle are one size, and the gap to the text is one value, so the two kinds of question read as one product.</p>
 		<stack-l space="var(--space-7)">
@@ -69,18 +61,7 @@
 		</stack-l>
 	</section>
 
-	<section>
-		<h2>Hover and focus</h2>
-		<p>Point at an option to see its halo. Tab to the group to see its focus outline.</p>
-	</section>
+	<DisabledAndFocusDemo control="box">
+		<CheckboxGroup legend="Roles" options={roleOptions} value={['admin']} onChange={() => {}} />
+	</DisabledAndFocusDemo>
 </stack-l>
-
-<style>
-	@layer components {
-		.plain-fieldset {
-			margin: 0;
-			padding: 0;
-			border: none;
-		}
-	}
-</style>
