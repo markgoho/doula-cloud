@@ -3,24 +3,33 @@ package authtoken_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"doula-cloud/api/internal/authtoken"
 )
 
-func TestRequireToken(t *testing.T) {
-	token := "  abc  "
-	w := httptest.NewRecorder()
-	if !authtoken.RequireToken(w, &token) || token != "abc" {
-		t.Fatalf("got %q, want the trimmed token accepted", token)
-	}
+type spendBody struct {
+	Token string `json:"token"`
+}
 
-	blank := "   "
-	w = httptest.NewRecorder()
-	if authtoken.RequireToken(w, &blank) {
-		t.Fatal("a blank token was accepted")
+func decodeSpendBody(t *testing.T, body string) (spendBody, bool, int) {
+	t.Helper()
+	w := httptest.NewRecorder()
+	r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/spend", strings.NewReader(body))
+	r.Header.Set("Content-Type", "application/json")
+	req, ok := authtoken.DecodeSpend(w, r, func(q *spendBody) *string { return &q.Token })
+	return req, ok, w.Code
+}
+
+func TestDecodeSpend(t *testing.T) {
+	if req, ok, _ := decodeSpendBody(t, `{"token":"  abc  "}`); !ok || req.Token != "abc" {
+		t.Fatalf("got (%q, %v), want the trimmed token accepted", req.Token, ok)
 	}
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", w.Code)
+	if _, ok, code := decodeSpendBody(t, `{"token":"   "}`); ok || code != http.StatusBadRequest {
+		t.Fatalf("blank token: ok=%v status=%d, want refused with 400", ok, code)
+	}
+	if _, ok, code := decodeSpendBody(t, `not json`); ok || code != http.StatusBadRequest {
+		t.Fatalf("bad body: ok=%v status=%d, want refused with 400", ok, code)
 	}
 }

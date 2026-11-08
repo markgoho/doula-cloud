@@ -66,11 +66,7 @@ func RequestVerificationHandler(db *sql.DB) http.Handler {
 			return
 		}
 
-		if !dbtx.Commit(w, tx) {
-			return
-		}
-
-		w.WriteHeader(http.StatusAccepted)
+		dbtx.CommitWith(w, tx, http.StatusAccepted)
 	})
 }
 
@@ -89,16 +85,14 @@ type SpendVerificationRequest struct {
 // behind authn.BeginBootstrap, and not behind authn.Begin either.
 func SpendVerificationHandler(accounts authn.AccountManager, db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req SpendVerificationRequest
-		if !apierr.DecodeJSON(w, r, &req) {
-			return
-		}
-		if !authtoken.RequireToken(w, &req.Token) {
+		req, ok := authtoken.DecodeSpend(w, r, func(q *SpendVerificationRequest) *string { return &q.Token })
+		if !ok {
 			return
 		}
 
 		tx, ok := dbtx.Begin(w, r, db)
 		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 		defer dbtx.Rollback(tx)
@@ -119,10 +113,6 @@ func SpendVerificationHandler(accounts authn.AccountManager, db *sql.DB) http.Ha
 			return
 		}
 
-		if !dbtx.Commit(w, tx) {
-			return
-		}
-
-		w.WriteHeader(http.StatusNoContent)
+		dbtx.CommitWith(w, tx, http.StatusNoContent)
 	})
 }

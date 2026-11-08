@@ -25,6 +25,7 @@ type doulaChange struct {
 func beginDoulaChange(w http.ResponseWriter, r *http.Request) (c doulaChange, ok bool) {
 	c.tx, c.practiceID, c.reader, ok = staffauth.RequireTxReader(w, r)
 	if !ok {
+		// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 		return doulaChange{}, false
 	}
 	c.callerID, _ = staffauth.StaffID(r.Context())

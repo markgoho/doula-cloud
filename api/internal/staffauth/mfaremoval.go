@@ -50,9 +50,6 @@ func RemoveSecondFactorHandler(verifier authn.Verifier, accounts authn.AccountMa
 			return
 		}
 
-		if !dbtx.Commit(w, tx) {
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
+		dbtx.CommitWith(w, tx, http.StatusNoContent)
 	})
 }

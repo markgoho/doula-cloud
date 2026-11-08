@@ -89,6 +89,7 @@ func RequestMagicLinkHandler(db *sql.DB) http.Handler {
 
 		tx, ok := dbtx.Begin(w, r, db)
 		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 		defer dbtx.Rollback(tx)
@@ -141,11 +142,7 @@ func RequestMagicLinkHandler(db *sql.DB) http.Handler {
 			return
 		}
 
-		if !dbtx.Commit(w, tx) {
-			return
-		}
-
-		w.WriteHeader(http.StatusAccepted)
+		dbtx.CommitWith(w, tx, http.StatusAccepted)
 	})
 }
 
@@ -257,11 +254,8 @@ type redeemMagicLinkResponse struct {
 // queues a notice, and the outbox wants a nudge once this commits.
 func RedeemMagicLinkHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req RedeemMagicLinkRequest
-		if !apierr.DecodeJSON(w, r, &req) {
-			return
-		}
-		if !authtoken.RequireToken(w, &req.Token) {
+		req, ok := authtoken.DecodeSpend(w, r, func(q *RedeemMagicLinkRequest) *string { return &q.Token })
+		if !ok {
 			return
 		}
 

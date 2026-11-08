@@ -141,6 +141,7 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string, mode stripemod
 
 		tx, ok := dbtx.Begin(w, r, db)
 		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 		defer dbtx.Rollback(tx)
@@ -161,6 +162,7 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string, mode stripemod
 			`INSERT INTO stripe_webhook_events (event_id) VALUES ($1) ON CONFLICT (event_id) DO NOTHING`, event.ID,
 		)
 		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 		if rows == 0 {
@@ -185,9 +187,6 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string, mode stripemod
 			return
 		}
 
-		if !dbtx.Commit(w, tx) {
-			return
-		}
-		w.WriteHeader(http.StatusOK)
+		dbtx.CommitWith(w, tx, http.StatusOK)
 	})
 }

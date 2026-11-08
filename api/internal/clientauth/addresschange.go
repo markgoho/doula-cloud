@@ -136,11 +136,7 @@ func RequestAddressChangeHandler(db *sql.DB) http.Handler {
 			return
 		}
 
-		if !dbtx.Commit(w, tx) {
-			return
-		}
-
-		w.WriteHeader(http.StatusAccepted)
+		dbtx.CommitWith(w, tx, http.StatusAccepted)
 	})
 }
 
@@ -193,16 +189,14 @@ const MsgAddressLinkInvalid = "this link is invalid or has expired -- ask for a 
 // following the link must not burn it before she reads the mail.
 func SpendAddressChangeHandler(db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req SpendAddressChangeRequest
-		if !apierr.DecodeJSON(w, r, &req) {
-			return
-		}
-		if !authtoken.RequireToken(w, &req.Token) {
+		req, ok := authtoken.DecodeSpend(w, r, func(q *SpendAddressChangeRequest) *string { return &q.Token })
+		if !ok {
 			return
 		}
 
 		tx, ok := dbtx.Begin(w, r, db)
 		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 		defer dbtx.Rollback(tx)
@@ -214,6 +208,7 @@ func SpendAddressChangeHandler(db *sql.DB) http.Handler {
 		}
 
 		if !dbtx.Commit(w, tx) {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 

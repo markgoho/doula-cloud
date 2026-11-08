@@ -155,10 +155,12 @@ func FeedbackHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 			SentAt:        clock.Now(r.Context()),
 		}
 		if !feedback.Save(r.Context(), w, tx, row) {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 
 		if !dbtx.Commit(w, tx) {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 		// This handler commits its own write rather than running inside

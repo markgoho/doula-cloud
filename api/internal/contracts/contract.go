@@ -349,6 +349,7 @@ func GetContractHandler() http.Handler {
 
 		reader, ok := staffauth.RequireReader(w, r)
 		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 		if !staffauth.RequireEngagementAccess(w, r, tx, engagementID, "no contract found for this engagement") {

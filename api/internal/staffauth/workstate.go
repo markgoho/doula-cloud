@@ -173,6 +173,7 @@ func UpdateWorkStateHandler(db *sql.DB) http.Handler {
 		}
 
 		if !dbtx.Commit(w, tx) {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 

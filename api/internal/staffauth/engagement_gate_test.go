@@ -84,6 +84,7 @@ func TestRequireEngagementAndClientGates(t *testing.T) {
 		{"contractor, not attached", unattachedUID, enc, http.StatusNotFound},
 		{"reach: owner", ownerUID, enc + "/reach", http.StatusNoContent},
 		{"reach: contractor not attached", unattachedUID, enc + "/reach", http.StatusNotFound},
+		{"reach: engagement at another practice", ownerUID, "/engagements/" + otherEngagementID + "/reach", http.StatusNotFound},
 		{"reach: malformed id", ownerUID, "/engagements/not-a-uuid/reach", http.StatusBadRequest},
 		{"client: owner", ownerUID, "/clients/" + clientID, http.StatusNoContent},
 		{"client: contractor attached", attachedUID, "/clients/" + clientID, http.StatusNoContent},

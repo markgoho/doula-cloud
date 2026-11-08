@@ -39,6 +39,7 @@ func WithdrawHandler() http.Handler {
 			staffID, requestID,
 		)
 		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 		if rows == 0 {

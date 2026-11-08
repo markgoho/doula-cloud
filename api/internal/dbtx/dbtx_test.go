@@ -27,10 +27,8 @@ func TestLifecycle(t *testing.T) {
 	if !ok || rows != 2 {
 		t.Fatalf("ExecRows = (%d, %v), want (2, true)", rows, ok)
 	}
-	if !dbtx.Commit(w, tx) {
-		t.Fatal("Commit failed")
-	}
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want the recorder's untouched 200", w.Code)
+	dbtx.CommitWith(w, tx, http.StatusAccepted)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202", w.Code)
 	}
 }

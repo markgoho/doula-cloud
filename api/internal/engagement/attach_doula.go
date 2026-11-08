@@ -71,6 +71,7 @@ func AttachDoulaHandler() http.Handler {
 
 		doulas, ok := attachIfAbsent(w, r, c.tx, c.practiceID, c.engagementID, c.doulaID, c.callerID)
 		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 

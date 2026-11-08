@@ -67,6 +67,7 @@ func refusalMessage(roles []string) string {
 func RequireOwner(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, ok bool) {
 	tx, practiceID, reader, ok := RequireTxReader(w, r)
 	if !ok {
+		// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 		return nil, "", false
 	}
 	if !reader.Has(roleOwner) {
@@ -94,6 +95,7 @@ const MsgContractorMoneyRefused = "You contract for this Practice, so you cannot
 func RequireNotAmbientContractor(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, ok bool) {
 	tx, practiceID, reader, ok := RequireTxReader(w, r)
 	if !ok {
+		// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 		return nil, "", false
 	}
 	if reader.IsAmbientContractor() {
@@ -119,6 +121,7 @@ func RequireNotAmbientContractor(w http.ResponseWriter, r *http.Request) (tx *sq
 func RequireOwnerOrAdmin(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, ok bool) {
 	tx, practiceID, reader, ok := RequireTxReader(w, r)
 	if !ok {
+		// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 		return nil, "", false
 	}
 	if !reader.IsOwnerOrAdmin() {

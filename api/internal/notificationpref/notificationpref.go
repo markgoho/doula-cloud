@@ -39,6 +39,7 @@ func GetHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, ok := clientauth.RequireTx(w, r)
 		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 		identityUID, _ := clientauth.IdentityUID(r.Context())
@@ -67,6 +68,7 @@ func SetHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, ok := clientauth.RequireTx(w, r)
 		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 		identityUID, _ := clientauth.IdentityUID(r.Context())

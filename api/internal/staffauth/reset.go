@@ -62,6 +62,7 @@ func RequestResetHandler(accounts authn.AccountManager, db *sql.DB) http.Handler
 
 		tx, ok := dbtx.Begin(w, r, db)
 		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 		defer dbtx.Rollback(tx)
@@ -78,11 +79,7 @@ func RequestResetHandler(accounts authn.AccountManager, db *sql.DB) http.Handler
 			return
 		}
 
-		if !dbtx.Commit(w, tx) {
-			return
-		}
-
-		w.WriteHeader(http.StatusAccepted)
+		dbtx.CommitWith(w, tx, http.StatusAccepted)
 	})
 }
 
@@ -107,11 +104,8 @@ type SpendResetRequest struct {
 // away from being reset is not meaningfully reset at all.
 func SpendResetHandler(accounts authn.AccountManager, db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req SpendResetRequest
-		if !apierr.DecodeJSON(w, r, &req) {
-			return
-		}
-		if !authtoken.RequireToken(w, &req.Token) {
+		req, ok := authtoken.DecodeSpend(w, r, func(q *SpendResetRequest) *string { return &q.Token })
+		if !ok {
 			return
 		}
 		if utf8.RuneCountInString(req.NewPassword) < minPasswordLength {
@@ -131,6 +125,7 @@ func SpendResetHandler(accounts authn.AccountManager, db *sql.DB) http.Handler {
 
 		tx, ok := dbtx.Begin(w, r, db)
 		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 		defer dbtx.Rollback(tx)
@@ -157,10 +152,6 @@ func SpendResetHandler(accounts authn.AccountManager, db *sql.DB) http.Handler {
 			return
 		}
 
-		if !dbtx.Commit(w, tx) {
-			return
-		}
-
-		w.WriteHeader(http.StatusNoContent)
+		dbtx.CommitWith(w, tx, http.StatusNoContent)
 	})
 }

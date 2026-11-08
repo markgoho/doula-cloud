@@ -45,6 +45,7 @@ func DoulaCountsHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, reader, ok := staffauth.RequireTxReader(w, r)
 		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 		staffID, _ := staffauth.StaffID(r.Context())

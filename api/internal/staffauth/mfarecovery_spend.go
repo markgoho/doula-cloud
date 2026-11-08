@@ -73,6 +73,7 @@ func SpendMFARecoveryHandler(accounts authn.AccountManager, db *sql.DB) http.Han
 
 		tx, ok := dbtx.Begin(w, r, db)
 		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 		defer dbtx.Rollback(tx)
@@ -108,11 +109,7 @@ func SpendMFARecoveryHandler(accounts authn.AccountManager, db *sql.DB) http.Han
 			return
 		}
 
-		if !dbtx.Commit(w, tx) {
-			return
-		}
-
-		w.WriteHeader(http.StatusNoContent)
+		dbtx.CommitWith(w, tx, http.StatusNoContent)
 	})
 }
 

@@ -42,6 +42,14 @@ func Commit(w http.ResponseWriter, tx *sql.Tx) bool {
 	return true
 }
 
+// CommitWith commits tx and answers status with no body, or answers 500
+// instead if the commit fails.
+func CommitWith(w http.ResponseWriter, tx *sql.Tx, status int) {
+	if Commit(w, tx) {
+		w.WriteHeader(status)
+	}
+}
+
 // ExecRows runs a statement on tx and returns the rows it affected,
 // writing a 500 and returning ok=false if the statement or the driver's
 // count fails.

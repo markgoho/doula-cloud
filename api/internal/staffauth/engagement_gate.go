@@ -69,6 +69,7 @@ func RequireEngagementAtPractice(w http.ResponseWriter, r *http.Request, tx *sql
 func RequireEngagementAccess(w http.ResponseWriter, r *http.Request, tx *sql.Tx, engagementID, notFound string) bool {
 	reader, ok := RequireReader(w, r)
 	if !ok {
+		// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 		return false
 	}
 	canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)

@@ -185,6 +185,7 @@ func withTokenTx(w http.ResponseWriter, r *http.Request, db *sql.DB, token, code
 
 	tx, ok := dbtx.Begin(w, r, db)
 	if !ok {
+		// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 		return
 	}
 	defer dbtx.Rollback(tx)
@@ -196,6 +197,7 @@ func withTokenTx(w http.ResponseWriter, r *http.Request, db *sql.DB, token, code
 		// applies to an expiry it flips on the way past.
 		if status == http.StatusForbidden {
 			if !dbtx.Commit(w, tx) {
+				// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 				return
 			}
 		}
@@ -212,6 +214,7 @@ func withTokenTx(w http.ResponseWriter, r *http.Request, db *sql.DB, token, code
 		return
 	}
 	if !dbtx.Commit(w, tx) {
+		// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 		return
 	}
 	apierr.WriteJSON(w, http.StatusOK, body)

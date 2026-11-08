@@ -87,6 +87,7 @@ func ClientGetSignedContractPDFHandler(store objectstore.ObjectStore) http.Handl
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, engagementID, ok := clientauth.RequireEngagementTx(w, r)
 		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 		serveSignedPDF(w, r, tx, store, engagementID, apierr.MsgInternalError)

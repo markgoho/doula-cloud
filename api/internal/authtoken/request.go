@@ -7,13 +7,18 @@ import (
 	"doula-cloud/api/internal/apierr"
 )
 
-// RequireToken trims the token a spend request carried, in place, and
-// refuses an empty one with a 400.
-func RequireToken(w http.ResponseWriter, token *string) bool {
-	*token = strings.TrimSpace(*token)
-	if *token == "" {
-		apierr.WriteError(w, "token is required", http.StatusBadRequest)
-		return false
+// DecodeSpend decodes the body of a spend request and refuses one whose
+// token is blank, trimming the token in place. token picks the token field
+// out of the decoded request. It writes the 400 itself.
+func DecodeSpend[T any](w http.ResponseWriter, r *http.Request, token func(*T) *string) (req T, ok bool) {
+	if !apierr.DecodeJSON(w, r, &req) {
+		return req, false
 	}
-	return true
+	t := token(&req)
+	*t = strings.TrimSpace(*t)
+	if *t == "" {
+		apierr.WriteError(w, "token is required", http.StatusBadRequest)
+		return req, false
+	}
+	return req, true
 }

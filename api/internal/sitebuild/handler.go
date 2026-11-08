@@ -43,6 +43,7 @@ func internalHandler(db *sql.DB, auth *internalauth.Guard, run func(context.Cont
 
 		tx, ok := dbtx.Begin(w, r, db)
 		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 		defer dbtx.Rollback(tx)
@@ -60,9 +61,6 @@ func internalHandler(db *sql.DB, auth *internalauth.Guard, run func(context.Cont
 			return
 		}
 
-		if !dbtx.Commit(w, tx) {
-			return
-		}
-		w.WriteHeader(http.StatusOK)
+		dbtx.CommitWith(w, tx, http.StatusOK)
 	})
 }

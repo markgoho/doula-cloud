@@ -90,11 +90,7 @@ func ChangeEmailHandler(accounts authn.AccountManager, db *sql.DB) http.Handler 
 			return
 		}
 
-		if !dbtx.Commit(w, tx) {
-			return
-		}
-
-		w.WriteHeader(http.StatusNoContent)
+		dbtx.CommitWith(w, tx, http.StatusNoContent)
 	})
 }
 

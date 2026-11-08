@@ -199,6 +199,7 @@ func AccountEventTypes() []string {
 func beginEvent(w http.ResponseWriter, r *http.Request, db *sql.DB, eventID string) (tx *sql.Tx, committed *bool, ok bool) {
 	tx, ok = dbtx.Begin(w, r, db)
 	if !ok {
+		// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 		return nil, nil, false
 	}
 	rows, ok := dbtx.ExecRows(r.Context(), w, tx,

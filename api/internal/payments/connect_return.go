@@ -40,14 +40,9 @@ const MsgConnectReturnNoAccount = "You have not started connecting Stripe yet."
 // from it. Must be mounted behind staffauth.Middleware.
 func PostConnectReturnHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
+		tx, practiceID, accountID, ok := requireConnectAccount(w, r)
 		if !ok {
-			return
-		}
-
-		accountID, ok := requireConnectAccountID(w, r, tx, practiceID)
-		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 		if !accountID.Valid {

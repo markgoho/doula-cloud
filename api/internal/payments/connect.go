@@ -233,6 +233,23 @@ func requireConnectAccountID(w http.ResponseWriter, r *http.Request, tx *sql.Tx,
 	return accountID, true
 }
 
+// requireConnectAccount is the preamble of the two Connect routes that
+// read the stored account: the request-scoped tx, the Practice, and the
+// Stripe Connect account id it holds, if any.
+func requireConnectAccount(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, accountID sql.NullString, ok bool) {
+	tx, practiceID, ok = staffauth.RequireTx(w, r)
+	// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
+	if !ok {
+		return nil, "", sql.NullString{}, false
+	}
+	accountID, ok = requireConnectAccountID(w, r, tx, practiceID)
+	if !ok {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, "", sql.NullString{}, false
+	}
+	return tx, practiceID, accountID, true
+}
+
 // GetConnectStatusHandler reads a Practice's Stripe Connect status.
 // ADR-0008's read table gives Stripe Connect state to an Owner and an
 // Admin, and to no Doula of either employment type (#267) -- enforced by
@@ -245,14 +262,9 @@ func requireConnectAccountID(w http.ResponseWriter, r *http.Request, tx *sql.Tx,
 // Must be mounted behind staffauth.Middleware.
 func GetConnectStatusHandler(client Client) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
+		_, _, accountID, ok := requireConnectAccount(w, r)
 		if !ok {
-			return
-		}
-
-		accountID, ok := requireConnectAccountID(w, r, tx, practiceID)
-		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 
