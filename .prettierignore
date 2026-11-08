@@ -1,4 +1,11 @@
-# Add files here to ignore them from prettier formatting
+# The root Prettier owns only .claude/hooks and scripts (#1120, #2769).
+# app/ has no formatter (#1232); site/, ops/, gcp-dashboard/, api/, docs/ and
+# the rest have none either, so Prettier must leave them unchanged.
+/*
+!/.claude
+/.claude/*
+!/.claude/hooks
+!/scripts
 /dist
 /coverage
 /site/build
