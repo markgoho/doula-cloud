@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/visit"
 )
@@ -22,17 +22,7 @@ func assigneesURL(baseURL, practiceID, engagementID string) string {
 // because the body has to be closed either way.
 func getAssignees(t *testing.T, session, url string) (int, map[string]visit.Assignee) {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
-	if err != nil {
-		// coverage:ignore reason: request construction failure, not exercised by these tests
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		// coverage:ignore reason: transport failure against an in-process server, not exercised by these tests
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Get(t, url, reqtest.Session(session))
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -48,9 +49,7 @@ func TestEraseHandler_ReachesEveryCustomerSheEverHad(t *testing.T) {
 
 	resp := postErasure(t, session, srv, practiceID, clientID)
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	acts := readOutbox(t, db, clientID)
 	for _, customerID := range []string{"cus_historical", "cus_mapped_and_billed"} {
@@ -90,9 +89,7 @@ func TestEraseHandler_MappedCustomerWithNoInvoiceAgesFromItsOwnCreation(t *testi
 
 	resp := postErasure(t, session, srv, practiceID, clientID)
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	acts := readOutbox(t, db, clientID)
 	redact, ok := acts["stripe_redaction_job|cus_never_billed"]

@@ -1,7 +1,6 @@
 package portal_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -9,7 +8,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/activityfeed"
-	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -61,15 +60,7 @@ func seedEngagementForActivity(t *testing.T, db *testdb.DB, identityUID, practic
 
 func authedActivityGet(t *testing.T, session, url string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Get(t, url, reqtest.Session(session))
 	return resp
 }
 
@@ -89,13 +80,8 @@ func TestActivityHandler_ReturnsOwnEngagementActivity(t *testing.T) {
 
 	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
-	}
-	var got activityfeed.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	got := reqtest.Decode[activityfeed.ListResponse](t, resp)
 	if len(got.Items) != 1 || got.Items[0].Action != string(activity.ActionContractSent) {
 		t.Fatalf("Items = %+v, want exactly the one contract_sent row", got.Items)
 	}
@@ -123,10 +109,7 @@ func TestActivityHandler_RedactsStaffActorNames(t *testing.T) {
 
 	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
-	var got activityfeed.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	got := reqtest.Decode[activityfeed.ListResponse](t, resp)
 	byAction := map[string]activityfeed.Entry{}
 	for _, entry := range got.Items {
 		byAction[entry.Action] = entry
@@ -156,10 +139,7 @@ func TestActivityHandler_KeepsMoneyEntries(t *testing.T) {
 
 	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
-	var got activityfeed.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	got := reqtest.Decode[activityfeed.ListResponse](t, resp)
 	if len(got.Items) != 1 || got.Items[0].Action != string(activity.ActionInvoiceRaised) {
 		t.Fatalf("Items = %+v, want the invoice_raised row kept", got.Items)
 	}
@@ -184,10 +164,7 @@ func TestActivityHandler_HidesStaffingEntries(t *testing.T) {
 
 	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
-	var got activityfeed.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	got := reqtest.Decode[activityfeed.ListResponse](t, resp)
 	if len(got.Items) != 1 || got.Items[0].Action != string(activity.ActionVisitLogged) {
 		t.Fatalf("Items = %+v, want only the visit_logged row (offer/reassignment hidden)", got.Items)
 	}
@@ -213,10 +190,7 @@ func TestActivityHandler_HidesTheCarePlan(t *testing.T) {
 
 	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
-	var got activityfeed.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	got := reqtest.Decode[activityfeed.ListResponse](t, resp)
 	actions := make([]string, 0, len(got.Items))
 	for _, item := range got.Items {
 		actions = append(actions, item.Action)
@@ -249,10 +223,7 @@ func TestActivityHandler_HidesVoidDeliberation(t *testing.T) {
 
 	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
-	var got activityfeed.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	got := reqtest.Decode[activityfeed.ListResponse](t, resp)
 	if len(got.Items) != 1 || got.Items[0].Action != string(activity.ActionContractVoided) {
 		t.Fatalf("Items = %+v, want only the contract_voided row (the deliberation hidden)", got.Items)
 	}
@@ -281,10 +252,7 @@ func TestActivityHandler_HidesTheEngagementAudit(t *testing.T) {
 
 	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
-	var got activityfeed.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	got := reqtest.Decode[activityfeed.ListResponse](t, resp)
 	if len(got.Items) != 1 || got.Items[0].Action != string(activity.ActionEngagementCompleted) {
 		t.Fatalf("Items = %+v, want only the engagement_completed row (the audit hidden)", got.Items)
 	}
@@ -308,10 +276,7 @@ func TestActivityHandler_PaginatesNewestFirst(t *testing.T) {
 
 	firstResp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
 	defer firstResp.Body.Close()
-	var first activityfeed.ListResponse
-	if err := json.UnmarshalRead(firstResp.Body, &first); err != nil {
-		t.Fatalf("decode first page: %v", err)
-	}
+	first := reqtest.Decode[activityfeed.ListResponse](t, firstResp)
 	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
 		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
 			len(first.Items), first.HasMore, first.NextCursor)
@@ -319,10 +284,7 @@ func TestActivityHandler_PaginatesNewestFirst(t *testing.T) {
 
 	secondResp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity?cursor="+*first.NextCursor)
 	defer secondResp.Body.Close()
-	var second activityfeed.ListResponse
-	if err := json.UnmarshalRead(secondResp.Body, &second); err != nil {
-		t.Fatalf("decode second page: %v", err)
-	}
+	second := reqtest.Decode[activityfeed.ListResponse](t, secondResp)
 	if len(second.Items) != 1 || second.HasMore || second.NextCursor != nil {
 		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
 			len(second.Items), second.HasMore, second.NextCursor)
@@ -341,7 +303,5 @@ func TestActivityHandler_InvalidCursorRejected(t *testing.T) {
 
 	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity?cursor=not!valid!base64!")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }

@@ -18,6 +18,7 @@ import (
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/push"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -70,30 +71,13 @@ func (failingStore) Get(_ context.Context, _ string) (io.ReadCloser, error) {
 
 func authedGet(t *testing.T, session, url string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Get(t, url, reqtest.Session(session))
 	return resp
 }
 
 func authedPost(t *testing.T, session, url string, body []byte) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, url, reqtest.Session(session), reqtest.RawJSON(body))
 	return resp
 }
 
@@ -121,17 +105,7 @@ func authedMultipartPost(t *testing.T, session, url, body, filename string, cont
 		t.Fatalf("close multipart writer: %v", err)
 	}
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, &buf)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Post(t, url, reqtest.Session(session), reqtest.Body(writer.FormDataContentType(), buf.Bytes()))
 }
 
 // pngContentType is what http.DetectContentType reports for pngBytes.
@@ -165,13 +139,8 @@ func TestCreateHandler_Success(t *testing.T) {
 	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var out message.Message
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
+	out := reqtest.Decode[message.Message](t, resp)
 	if out.MessageID == "" || out.SenderType != "staff" || out.SenderID != staffID ||
 		out.SenderName != "Jamie Doula" || out.Body != "Hi, checking in on your appointment." || out.CreatedAt.IsZero() {
 		t.Fatalf("unexpected response: %+v", out)
@@ -192,9 +161,7 @@ func TestCreateHandler_EmptyBodyRejected(t *testing.T) {
 	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestCreateHandler_InvalidJSONBody(t *testing.T) {
@@ -210,9 +177,7 @@ func TestCreateHandler_InvalidJSONBody(t *testing.T) {
 	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", []byte("not json"))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestCreateHandler_InvalidEngagementID(t *testing.T) {
@@ -228,9 +193,7 @@ func TestCreateHandler_InvalidEngagementID(t *testing.T) {
 	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid/messages", body)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestCreateHandler_NotFoundForEngagementAtDifferentPractice proves the
@@ -255,9 +218,7 @@ func TestCreateHandler_NotFoundForEngagementAtDifferentPractice(t *testing.T) {
 	resp := authedPost(t, session, srv.URL+"/api/practices/"+homePracticeID+"/engagements/"+engagementID+"/messages", body)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestListHandler_EmptyThread(t *testing.T) {
@@ -273,13 +234,8 @@ func TestListHandler_EmptyThread(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out message.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[message.ListResponse](t, resp)
 	if len(out.Items) != 0 || out.HasMore || out.NextCursor != nil {
 		t.Fatalf("unexpected response: %+v", out)
 	}
@@ -297,9 +253,7 @@ func TestListHandler_InvalidEngagementID(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid/messages")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestListHandler_NotFoundForEngagementAtDifferentPractice mirrors
@@ -323,9 +277,7 @@ func TestListHandler_NotFoundForEngagementAtDifferentPractice(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+homePracticeID+"/engagements/"+engagementID+"/messages")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestListHandler_InvalidCursorRejected(t *testing.T) {
@@ -387,10 +339,7 @@ func TestListHandler_AnyStaffAtSamePracticeSeesAndCanReplyToSameThread(t *testin
 	if listResp.StatusCode != http.StatusOK {
 		t.Fatalf("Staff B list status = %d, want %d", listResp.StatusCode, http.StatusOK)
 	}
-	var listed message.ListResponse
-	if err := json.UnmarshalRead(listResp.Body, &listed); err != nil {
-		t.Fatalf("decode list response: %v", err)
-	}
+	listed := reqtest.Decode[message.ListResponse](t, listResp)
 	if len(listed.Items) != 1 || listed.Items[0].Body != messageFromA || listed.Items[0].SenderName != "Staff A" {
 		t.Fatalf("Staff B's view of the thread = %+v, want A's message with A's name", listed.Items)
 	}
@@ -404,10 +353,7 @@ func TestListHandler_AnyStaffAtSamePracticeSeesAndCanReplyToSameThread(t *testin
 
 	finalResp := authedGet(t, sessionA, srvA.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
 	defer finalResp.Body.Close()
-	var final message.ListResponse
-	if err := json.UnmarshalRead(finalResp.Body, &final); err != nil {
-		t.Fatalf("decode final list response: %v", err)
-	}
+	final := reqtest.Decode[message.ListResponse](t, finalResp)
 	if len(final.Items) != 2 {
 		t.Fatalf("final thread = %+v, want both messages visible to Staff A", final.Items)
 	}
@@ -432,9 +378,7 @@ func TestListHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestListHandler_ContractorWithGrantedAttachmentSucceeds proves the
@@ -452,9 +396,7 @@ func TestListHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 }
 
 // TestListHandler_PaginatesNewestFirst seeds more than one page of
@@ -481,10 +423,7 @@ func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 	if firstResp.StatusCode != http.StatusOK {
 		t.Fatalf("first page status = %d, want %d", firstResp.StatusCode, http.StatusOK)
 	}
-	var first message.ListResponse
-	if err := json.UnmarshalRead(firstResp.Body, &first); err != nil {
-		t.Fatalf("decode first page: %v", err)
-	}
+	first := reqtest.Decode[message.ListResponse](t, firstResp)
 	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
 		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
 			len(first.Items), first.HasMore, first.NextCursor)
@@ -495,10 +434,7 @@ func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 	if secondResp.StatusCode != http.StatusOK {
 		t.Fatalf("second page status = %d, want %d", secondResp.StatusCode, http.StatusOK)
 	}
-	var second message.ListResponse
-	if err := json.UnmarshalRead(secondResp.Body, &second); err != nil {
-		t.Fatalf("decode second page: %v", err)
-	}
+	second := reqtest.Decode[message.ListResponse](t, secondResp)
 	if len(second.Items) != 5 || second.HasMore || second.NextCursor != nil {
 		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 5/false/nil",
 			len(second.Items), second.HasMore, second.NextCursor)
@@ -534,13 +470,8 @@ func TestCreateHandler_AttachmentUploadAndDownloadRoundTrip(t *testing.T) {
 	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
 		"Here's the photo", "photo.png", pngBytes)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var created message.Message
-	if err := json.UnmarshalRead(resp.Body, &created); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
+	created := reqtest.Decode[message.Message](t, resp)
 	if created.AttachmentContentType != pngContentType || created.AttachmentFilename != "photo.png" {
 		t.Fatalf("attachment metadata = %+v, want image/png photo.png", created)
 	}
@@ -581,13 +512,8 @@ func TestCreateHandler_MultipartTextOnlyNoAttachmentField(t *testing.T) {
 	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
 		"text only, sent as multipart", "", nil)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var created message.Message
-	if err := json.UnmarshalRead(resp.Body, &created); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
+	created := reqtest.Decode[message.Message](t, resp)
 	if created.Body != "text only, sent as multipart" || created.AttachmentFilename != "" {
 		t.Fatalf("unexpected response: %+v", created)
 	}
@@ -609,13 +535,8 @@ func TestCreateHandler_AttachmentOnlyNoBody(t *testing.T) {
 	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
 		"", "photo.png", pngBytes)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var created message.Message
-	if err := json.UnmarshalRead(resp.Body, &created); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
+	created := reqtest.Decode[message.Message](t, resp)
 	if created.Body != "" || created.AttachmentFilename != "photo.png" {
 		t.Fatalf("unexpected response: %+v", created)
 	}
@@ -637,13 +558,8 @@ func TestCreateHandler_AttachmentPDFAccepted(t *testing.T) {
 	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
 		"Here's the contract", "form.pdf", pdfBytes)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var created message.Message
-	if err := json.UnmarshalRead(resp.Body, &created); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
+	created := reqtest.Decode[message.Message](t, resp)
 	if created.AttachmentContentType != "application/pdf" {
 		t.Fatalf("attachmentContentType = %q, want application/pdf", created.AttachmentContentType)
 	}
@@ -682,13 +598,8 @@ func TestCreateHandler_AttachmentTypeList(t *testing.T) {
 		t.Run("accepts "+tc.filename, func(t *testing.T) {
 			resp := authedMultipartPost(t, session, url, "", tc.filename, tc.content)
 			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusCreated {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-			}
-			var created message.Message
-			if err := json.UnmarshalRead(resp.Body, &created); err != nil {
-				t.Fatalf("decode response: %v", err)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusCreated)
+			created := reqtest.Decode[message.Message](t, resp)
 			if created.AttachmentContentType != tc.contentType {
 				t.Fatalf("attachmentContentType = %q, want %q", created.AttachmentContentType, tc.contentType)
 			}
@@ -741,13 +652,8 @@ func TestCreateHandler_AttachmentEmptyRejected(t *testing.T) {
 // control, and the words the person reads there (#1952).
 func assertFieldRefusal(t *testing.T, resp *http.Response, status int, field, want string) {
 	t.Helper()
-	if resp.StatusCode != status {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, status)
-	}
-	var refusal apierr.APIError
-	if err := json.UnmarshalRead(resp.Body, &refusal); err != nil {
-		t.Fatalf("decode refusal: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, status)
+	refusal := reqtest.Decode[apierr.APIError](t, resp)
 	if refusal.Message != want || refusal.Details[field] != want {
 		t.Fatalf("refusal = %+v, want message and details[%q] = %q", refusal, field, want)
 	}
@@ -808,21 +714,9 @@ func TestCreateHandler_MalformedMultipartRejected(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", bytes.NewReader([]byte("not actually multipart")))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "multipart/form-data; boundary=doesnotmatch")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", reqtest.Session(session), reqtest.Body("multipart/form-data; boundary=doesnotmatch", []byte("not actually multipart")))
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestCreateHandler_EmptyBodyAndNoAttachmentRejected proves
@@ -860,9 +754,7 @@ func TestCreateHandler_StorePutFailureReturns500(t *testing.T) {
 	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
 		"", "photo.png", pngBytes)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusInternalServerError)
 }
 
 // TestAttachmentHandler_StoreGetFailureReturns500 mirrors
@@ -883,9 +775,7 @@ func TestAttachmentHandler_StoreGetFailureReturns500(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages/"+messageID+"/attachment")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusInternalServerError)
 }
 
 // TestAttachmentHandler_StoreGetNotFoundReturns404 proves a Message whose
@@ -907,9 +797,7 @@ func TestAttachmentHandler_StoreGetNotFoundReturns404(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages/"+messageID+"/attachment")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestAttachmentHandler_NoAttachmentNotFound proves a text-only Message
@@ -932,9 +820,7 @@ func TestAttachmentHandler_NoAttachmentNotFound(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages/"+messageID+"/attachment")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestAttachmentHandler_InvalidMessageID proves the messageId path param
@@ -951,9 +837,7 @@ func TestAttachmentHandler_InvalidMessageID(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages/not-a-uuid/attachment")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestAttachmentHandler_InvalidEngagementID mirrors
@@ -969,9 +853,7 @@ func TestAttachmentHandler_InvalidEngagementID(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid/messages/00000000-0000-0000-0000-000000000000/attachment")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestAttachmentHandler_EngagementNotFoundAtDifferentPractice mirrors
@@ -991,9 +873,7 @@ func TestAttachmentHandler_EngagementNotFoundAtDifferentPractice(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+homePracticeID+"/engagements/"+engagementID+"/messages/00000000-0000-0000-0000-000000000000/attachment")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestAttachmentHandler_ContractorWithoutAttachmentForbidden proves
@@ -1009,9 +889,7 @@ func TestAttachmentHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages/00000000-0000-0000-0000-000000000000/attachment")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestAttachmentHandler_WrongEngagementNotFound proves the messageId path
@@ -1032,16 +910,11 @@ func TestAttachmentHandler_WrongEngagementNotFound(t *testing.T) {
 	createResp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
 		"", "photo.png", pngBytes)
 	defer createResp.Body.Close()
-	var created message.Message
-	if err := json.UnmarshalRead(createResp.Body, &created); err != nil {
-		t.Fatalf("decode create response: %v", err)
-	}
+	created := reqtest.Decode[message.Message](t, createResp)
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+otherEngagementID+"/messages/"+created.MessageID+"/attachment")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestCreateHandler_JSONRequestStillTextOnly proves the original
@@ -1060,13 +933,8 @@ func TestCreateHandler_JSONRequestStillTextOnly(t *testing.T) {
 	body, _ := json.Marshal(message.CreateRequest{Body: "plain JSON, no attachment"})
 	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var created message.Message
-	if err := json.UnmarshalRead(resp.Body, &created); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
+	created := reqtest.Decode[message.Message](t, resp)
 	if created.AttachmentFilename != "" || created.AttachmentContentType != "" {
 		t.Fatalf("unexpected attachment on JSON-only create: %+v", created)
 	}
@@ -1116,14 +984,9 @@ func TestListHandler_SenderWhoDeletedHerLoginShowsAFormerColleague(t *testing.T)
 	defer readerSrv.Close()
 	resp := authedGet(t, readerSession, readerSrv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
-	var thread message.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &thread); err != nil {
-		t.Fatalf("decode thread: %v", err)
-	}
+	thread := reqtest.Decode[message.ListResponse](t, resp)
 	if len(thread.Items) != 1 {
 		t.Fatalf("thread = %+v, want the one Message she sent", thread.Items)
 	}
@@ -1166,14 +1029,9 @@ func TestListHandler_SenderWhoPlainlyLeftStillNamesHer(t *testing.T) {
 	defer readerSrv.Close()
 	resp := authedGet(t, readerSession, readerSrv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
-	var thread message.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &thread); err != nil {
-		t.Fatalf("decode thread: %v", err)
-	}
+	thread := reqtest.Decode[message.ListResponse](t, resp)
 	if len(thread.Items) != 1 {
 		t.Fatalf("thread = %+v, want the one Message she sent", thread.Items)
 	}

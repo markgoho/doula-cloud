@@ -1,7 +1,6 @@
 package engagement_test
 
 import (
-	"bytes"
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +9,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/engagement"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -63,26 +63,9 @@ type transitionResponseBody struct {
 // status code and decoded body.
 func transitionAs(t *testing.T, db *testdb.DB, srv *httptest.Server, uid, practiceID, engagementID string, body map[string]any) (int, transitionResponseBody) {
 	t.Helper()
-	encoded, err := json.Marshal(body)
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPatch,
-		srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/status", bytes.NewReader(encoded))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	authntest.AddSessionCookie(req, authntest.SeedSession(t, db.App, uid))
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Do(t, http.MethodPatch, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/status", reqtest.Session(authntest.SeedSession(t, db.App, uid)), reqtest.JSON(body))
 	defer func() { _ = resp.Body.Close() }()
-	var out transitionResponseBody
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[transitionResponseBody](t, resp)
 	return resp.StatusCode, out
 }
 
@@ -528,21 +511,9 @@ func TestTransitionHandler_RefusesMalformedBody(t *testing.T) {
 	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "malformed@example.com", engagement.StatusIntake)
 	srv := newTransitionServer(t, db)
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPatch,
-		srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/status", bytes.NewReader([]byte("not json")))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	authntest.AddSessionCookie(req, authntest.SeedSession(t, db.App, "malformed-owner"))
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Do(t, http.MethodPatch, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/status", reqtest.Session(authntest.SeedSession(t, db.App, "malformed-owner")), reqtest.RawJSON([]byte("not json")))
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", resp.StatusCode)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestTransitionHandler_ReRequestSameStatusIsNoOp proves re-requesting

@@ -17,10 +17,7 @@ func TestRLS_VisitsFailsClosedWithNoPracticeSet(t *testing.T) {
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedVisit(t, db, engagementID, staffID)
 
-	var count int
-	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM visits`).Scan(&count); err != nil {
-		t.Fatalf("query visits with no session vars set: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM visits`)
 	if count != 0 {
 		t.Fatalf("expected 0 rows with no session variables set, got %d", count)
 	}
@@ -38,15 +35,7 @@ func TestRLS_VisitsSelectIsScopedViaEngagementsExistsSubquery(t *testing.T) {
 	visitAtA := seedVisit(t, db, engagementA, staffA)
 	seedVisit(t, db, engagementB, staffB)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Practice(practiceA))
 
 	var visibleIDs []string
 	rows, err := tx.QueryContext(t.Context(), `SELECT id FROM visits`)
@@ -81,15 +70,7 @@ func TestRLS_VisitsUpdateRejectedAcrossPractice(t *testing.T) {
 	_, engagementB := testdb.SeedEngagement(t, db, practiceB)
 	visitAtB := seedVisit(t, db, engagementB, staffB)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Practice(practiceA))
 
 	result, err := tx.ExecContext(t.Context(), `UPDATE visits SET staff_id = $1 WHERE id = $2`, staffA, visitAtB)
 	if err != nil {

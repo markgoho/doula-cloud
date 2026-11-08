@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/visit"
 )
@@ -39,9 +40,7 @@ func getSchedule(t *testing.T, session, requestURL string) visit.PracticeSchedul
 	t.Helper()
 	resp := authedGet(t, session, requestURL)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	var page visit.PracticeScheduleResponse
 	if err := json.UnmarshalRead(resp.Body, &page); err != nil {
 		t.Fatalf("decode schedule: %v", err)
@@ -258,9 +257,7 @@ func TestPracticeSchedule_RefusesMalformedNarrowing(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			resp := authedGet(t, session, schedulePath(srv.URL, f.practiceID, tc.params))
 			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusBadRequest {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 		})
 	}
 }

@@ -10,6 +10,7 @@ import (
 
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/portal"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -70,9 +71,7 @@ func TestVisitsHandler_ReturnsScheduledAndPastDistinguishably(t *testing.T) {
 
 	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	out := decodeVisits(t, resp)
 	if len(out.Items) != 2 {
@@ -191,9 +190,7 @@ func TestVisitsHandler_RefusesAnotherEngagementsVisits(t *testing.T) {
 	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+someoneElse+"/visits")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("read body: %v", err)
@@ -281,9 +278,7 @@ func TestVisitsHandler_RejectsAnUnreadableCursor(t *testing.T) {
 	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/visits?cursor=not-a-cursor")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestVisitsHandler_PagesFromItsOwnCursor proves the envelope pages: a

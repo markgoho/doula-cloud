@@ -1,7 +1,6 @@
 package engagement_test
 
 import (
-	"bytes"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"net/http"
@@ -11,6 +10,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/engagement"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -57,26 +57,9 @@ type outcomeResponseBody struct {
 // code and decoded body (zero value on a non-200).
 func recordOutcomeAs(t *testing.T, db *testdb.DB, srv *httptest.Server, uid, practiceID, engagementID string, body map[string]any) (int, outcomeResponseBody) {
 	t.Helper()
-	encoded, err := json.Marshal(body)
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut,
-		srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/birth-outcome", bytes.NewReader(encoded))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	authntest.AddSessionCookie(req, authntest.SeedSession(t, db.App, uid))
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Put(t, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/birth-outcome", reqtest.Session(authntest.SeedSession(t, db.App, uid)), reqtest.JSON(body))
 	defer func() { _ = resp.Body.Close() }()
-	var out outcomeResponseBody
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[outcomeResponseBody](t, resp)
 	return resp.StatusCode, out
 }
 
@@ -389,22 +372,9 @@ func TestRecordBirthOutcomeHandler_MalformedBody(t *testing.T) {
 	const uid = "malformed-outcome-owner"
 	srv, practiceID, engagementID := newOutcomeServer(t, db, uid, []string{ownerRole}, employeeType)
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut,
-		srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/birth-outcome",
-		bytes.NewReader([]byte("{")))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	authntest.AddSessionCookie(req, authntest.SeedSession(t, db.App, uid))
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Put(t, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/birth-outcome", reqtest.Session(authntest.SeedSession(t, db.App, uid)), reqtest.RawJSON([]byte("{")))
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", resp.StatusCode)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestDetailHandler_BirthOutcome proves the Staff-side read carries both
@@ -436,10 +406,7 @@ func TestDetailHandler_BirthOutcome(t *testing.T) {
 
 	resp = authedGet(t, authntest.SeedSession(t, db.App, uid), detailURL)
 	defer func() { _ = resp.Body.Close() }()
-	var d engagement.Detail
-	if err := json.UnmarshalRead(resp.Body, &d); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	d := reqtest.Decode[engagement.Detail](t, resp)
 	if d.BirthOutcome == nil || *d.BirthOutcome != engagement.OutcomeLoss {
 		t.Fatalf("birthOutcome = %v, want loss", d.BirthOutcome)
 	}

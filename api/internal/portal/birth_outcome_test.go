@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/portal"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -31,19 +31,9 @@ func TestDetailHandler_NeverShowsTheBirthOutcome(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/portal/engagements/"+engagementID, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Get(t, srv.URL+"/api/portal/engagements/"+engagementID, reqtest.Session(session))
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -99,23 +89,10 @@ func TestDetailHandler_NoDueDateOnceAnOutcomeIsRecorded(t *testing.T) {
 			srv, session := newServer(t, db, tt.uid)
 			defer srv.Close()
 
-			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/portal/engagements/"+engagementID, nil)
-			if err != nil {
-				t.Fatalf("build request: %v", err)
-			}
-			authntest.AddSessionCookie(req, session)
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				t.Fatalf("request: %v", err)
-			}
+			resp := reqtest.Get(t, srv.URL+"/api/portal/engagements/"+engagementID, reqtest.Session(session))
 			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusOK {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-			}
-			var fields map[string]jsontext.Value
-			if err := json.UnmarshalRead(resp.Body, &fields); err != nil {
-				t.Fatalf("decode response: %v", err)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusOK)
+			fields := reqtest.Decode[map[string]jsontext.Value](t, resp)
 			if _, present := fields["dueDate"]; present != tt.wantKeys {
 				t.Fatalf("dueDate present = %v, want %v with birth outcome %q", present, tt.wantKeys, tt.outcome)
 			}
@@ -166,24 +143,11 @@ func TestDetailHandler_BirthPlanFollowsTheOutcome(t *testing.T) {
 			srv, session := newServer(t, db, tt.uid)
 			defer srv.Close()
 
-			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/portal/engagements/"+engagementID, nil)
-			if err != nil {
-				t.Fatalf("build request: %v", err)
-			}
-			authntest.AddSessionCookie(req, session)
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				t.Fatalf("request: %v", err)
-			}
+			resp := reqtest.Get(t, srv.URL+"/api/portal/engagements/"+engagementID, reqtest.Session(session))
 			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusOK {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusOK)
 
-			var out portal.Detail
-			if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-				t.Fatalf("decode response: %v", err)
-			}
+			out := reqtest.Decode[portal.Detail](t, resp)
 			if out.OffersBirthPlan != tt.want {
 				t.Fatalf("offersBirthPlan = %v, want %v with birth outcome %q", out.OffersBirthPlan, tt.want, tt.outcome)
 			}

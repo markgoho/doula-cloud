@@ -2,26 +2,17 @@ package engagement_test
 
 import (
 	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"net/http"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/engagement"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
 func authedGet(t *testing.T, session, url string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Get(t, url, reqtest.Session(session))
 	return resp
 }
 
@@ -37,13 +28,8 @@ func TestDetailHandler_Success(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var d engagement.Detail
-	if err := json.UnmarshalRead(resp.Body, &d); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	d := reqtest.Decode[engagement.Detail](t, resp)
 	if d.EngagementID != engagementID || d.ClientName != "Detail Client" || d.Status != engagement.StatusActive {
 		t.Fatalf("unexpected detail: %+v", d)
 	}
@@ -72,10 +58,7 @@ func TestDetailHandler_ClientDisplayName(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
 	defer resp.Body.Close()
 
-	var d engagement.Detail
-	if err := json.UnmarshalRead(resp.Body, &d); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	d := reqtest.Decode[engagement.Detail](t, resp)
 	if d.ClientDisplayName != "Ama Okafor" || d.ClientName != "Ama" {
 		t.Fatalf("clientDisplayName = %q, clientName = %q, want %q and %q", d.ClientDisplayName, d.ClientName, "Ama Okafor", "Ama")
 	}
@@ -102,13 +85,8 @@ func TestDetailHandler_DueDate(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var d engagement.Detail
-	if err := json.UnmarshalRead(resp.Body, &d); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	d := reqtest.Decode[engagement.Detail](t, resp)
 	if d.DueDate == nil || *d.DueDate != "2027-06-15" {
 		t.Fatalf("dueDate = %v, want %q", d.DueDate, "2027-06-15")
 	}
@@ -129,13 +107,8 @@ func TestDetailHandler_Kind(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var d engagement.Detail
-	if err := json.UnmarshalRead(resp.Body, &d); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	d := reqtest.Decode[engagement.Detail](t, resp)
 	if d.Kind != string(engagement.KindPostpartum) {
 		t.Fatalf("kind = %q, want postpartum", d.Kind)
 	}
@@ -157,13 +130,8 @@ func TestDetailHandler_NullDueDate(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var raw map[string]jsontext.Value
-	if err := json.UnmarshalRead(resp.Body, &raw); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	raw := reqtest.Decode[map[string]jsontext.Value](t, resp)
 	if _, present := raw["dueDate"]; present {
 		t.Fatalf("dueDate key present in response, want omitted: %v", raw["dueDate"])
 	}
@@ -182,9 +150,7 @@ func TestDetailHandler_NotFoundAtWrongPractice(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestDetailHandler_ContractorWithoutAttachmentForbidden proves the
@@ -204,9 +170,7 @@ func TestDetailHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestDetailHandler_ContractorWithGrantedAttachmentSucceeds proves the
@@ -225,13 +189,8 @@ func TestDetailHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var d engagement.Detail
-	if err := json.UnmarshalRead(resp.Body, &d); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	d := reqtest.Decode[engagement.Detail](t, resp)
 	if len(d.StatusMoves) != 0 {
 		t.Fatalf("statusMoves = %v, want none -- ADR-0015 refuses a contractor Doula every move outright", d.StatusMoves)
 	}
@@ -266,13 +225,8 @@ func TestDetailHandler_StatusMoves(t *testing.T) {
 
 			resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
 			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusOK {
-				t.Fatalf("status = %d, want 200", resp.StatusCode)
-			}
-			var d engagement.Detail
-			if err := json.UnmarshalRead(resp.Body, &d); err != nil {
-				t.Fatalf("decode response: %v", err)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusOK)
+			d := reqtest.Decode[engagement.Detail](t, resp)
 			if len(d.StatusMoves) != len(tc.want) || (len(tc.want) > 0 && d.StatusMoves[0] != tc.want[0]) {
 				t.Fatalf("statusMoves = %v, want %v", d.StatusMoves, tc.want)
 			}
@@ -307,13 +261,8 @@ func TestDetailHandler_ClientPortalState(t *testing.T) {
 		t.Helper()
 		resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("status = %d, want 200", resp.StatusCode)
-		}
-		var d engagement.Detail
-		if err := json.UnmarshalRead(resp.Body, &d); err != nil {
-			t.Fatalf("decode response: %v", err)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusOK)
+		d := reqtest.Decode[engagement.Detail](t, resp)
 		return d
 	}
 
@@ -353,13 +302,8 @@ func TestDetailHandler_ClientsCanPay(t *testing.T) {
 		t.Helper()
 		resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("status = %d, want 200", resp.StatusCode)
-		}
-		var d engagement.Detail
-		if err := json.UnmarshalRead(resp.Body, &d); err != nil {
-			t.Fatalf("decode response: %v", err)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusOK)
+		d := reqtest.Decode[engagement.Detail](t, resp)
 		return d
 	}
 
@@ -385,7 +329,5 @@ func TestDetailHandler_InvalidEngagementID(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }

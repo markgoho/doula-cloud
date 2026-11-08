@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/visit"
 )
@@ -50,9 +51,7 @@ func reassign(t *testing.T, db *testdb.DB, uid, practiceID, engagementID, visitI
 	}
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	var out visit.ReassignResponse
 	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)

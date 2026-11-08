@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -67,9 +68,7 @@ func TestEraseHandler_RedactsTheRecordInPlace(t *testing.T) {
 
 	resp := postErasure(t, session, srv, practiceID, clientID)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	var row struct {
 		id                                                    string
@@ -134,9 +133,7 @@ func TestEraseHandler_ShredsHerHistoryWithoutTouchingIt(t *testing.T) {
 
 	resp := postErasure(t, session, srv, practiceID, clientID)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	after := readActivityRows(t, db, clientID)
 	if len(after) != 2 {
@@ -218,9 +215,7 @@ func TestEraseHandler_RedactsPaymentReversalReasons(t *testing.T) {
 
 	resp := postErasure(t, session, srv, practiceID, clientID)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	var diff []byte
 	if err := db.Admin.QueryRowContext(t.Context(),
 		`SELECT diff FROM activity WHERE subject_kind = 'client' AND subject_id = $1 AND action = 'erased'`, clientID,
@@ -281,9 +276,7 @@ func TestEraseHandler_RedactsRefundNote(t *testing.T) {
 
 	resp := postErasure(t, session, srv, practiceID, clientID)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	var note *string
 	var amount int64
@@ -328,9 +321,7 @@ func TestEraseHandler_RedactsOtherMethodPaymentNote(t *testing.T) {
 
 	resp := postErasure(t, session, srv, practiceID, clientID)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	var diff []byte
 	if err := db.Admin.QueryRowContext(t.Context(),
 		`SELECT diff FROM activity WHERE subject_kind = 'client' AND subject_id = $1 AND action = 'erased'`, clientID,
@@ -436,9 +427,7 @@ func TestEraseHandler_RefusesAnUnknownClient(t *testing.T) {
 
 	resp := postErasure(t, session, srv, practiceID, otherClientID)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestEraseHandler_RefusesAMalformedClientID(t *testing.T) {
@@ -451,9 +440,7 @@ func TestEraseHandler_RefusesAMalformedClientID(t *testing.T) {
 
 	resp := postErasure(t, session, srv, practiceID, "not-a-uuid")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestEditHandler_RefusesAnErasedClient -- her record is not editable

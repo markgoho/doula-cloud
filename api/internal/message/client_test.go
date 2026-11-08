@@ -13,6 +13,7 @@ import (
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/push"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -62,9 +63,7 @@ func TestClientCreateHandler_Success(t *testing.T) {
 	resp := authedPost(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages", body)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
 	var out message.Message
 	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
@@ -108,9 +107,7 @@ func TestClientCreateHandler_InvalidJSONBody(t *testing.T) {
 	resp := authedPost(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages", []byte("not json"))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestClientCreateHandler_NotLinkedToClientForbidden proves the ticket's
@@ -135,9 +132,7 @@ func TestClientCreateHandler_NotLinkedToClientForbidden(t *testing.T) {
 	resp := authedPost(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages", body)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 func TestClientListHandler_EmptyThread(t *testing.T) {
@@ -153,9 +148,7 @@ func TestClientListHandler_EmptyThread(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	var out message.ListResponse
 	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
@@ -178,9 +171,7 @@ func TestClientListHandler_InvalidCursorRejected(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages?cursor=not!valid!base64!")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestClientListHandler_PaginatesNewestFirst mirrors
@@ -248,9 +239,7 @@ func TestClientListHandler_NotLinkedToClientForbidden(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 // TestSharedThread_StaffAndClientSeeOneContinuousThread proves the
@@ -338,9 +327,7 @@ func TestClientCreateHandler_AttachmentUploadAndDownloadRoundTrip(t *testing.T) 
 	resp := authedMultipartPost(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages",
 		"Here's a photo", "photo.png", pngBytes)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
 	var created message.Message
 	if err := json.UnmarshalRead(resp.Body, &created); err != nil {
 		t.Fatalf("decode response: %v", err)
@@ -377,9 +364,7 @@ func TestClientAttachmentHandler_InvalidMessageID(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages/not-a-uuid/attachment")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestClientAttachmentHandler_NotLinkedToClientForbidden mirrors
@@ -409,9 +394,7 @@ func TestClientAttachmentHandler_NotLinkedToClientForbidden(t *testing.T) {
 
 	resp := authedGet(t, unrelatedSession, unrelatedSrv.URL+"/api/portal/engagements/"+engagementID+"/messages/"+created.MessageID+"/attachment")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 // TestClientListHandler_NamesASenderWhoHasLeftThePractice is the Message
@@ -446,9 +429,7 @@ func TestClientListHandler_NamesASenderWhoHasLeftThePractice(t *testing.T) {
 	defer portalSrv.Close()
 	resp := authedGet(t, portalSession, portalSrv.URL+"/api/portal/engagements/"+engagementID+"/messages")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	var thread message.ListResponse
 	if err := json.UnmarshalRead(resp.Body, &thread); err != nil {
@@ -503,9 +484,7 @@ func TestClientListHandler_StandsInForASenderWhoDeletedHerLogin(t *testing.T) {
 	defer portalSrv.Close()
 	resp := authedGet(t, portalSession, portalSrv.URL+"/api/portal/engagements/"+engagementID+"/messages")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	var thread message.ListResponse
 	if err := json.UnmarshalRead(resp.Body, &thread); err != nil {

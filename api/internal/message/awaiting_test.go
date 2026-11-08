@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/message"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -24,9 +25,7 @@ func TestAwaitingReplyHandler_EmptyPracticeHasNoEngagementsWaiting(t *testing.T)
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	var got message.AwaitingReplyResponse
 	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -155,9 +154,7 @@ func TestAwaitingReplyHandler_OwnerOrAdminContractorSeesTheWholePractice(t *test
 
 			resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply")
 			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusOK {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusOK)
 			var out message.AwaitingReplyResponse
 			if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 				t.Fatalf("decode: %v", err)
@@ -187,9 +184,7 @@ func TestAwaitingReplyHandler_InvalidCursorRejected(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply?cursor=not!valid!base64!")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestAwaitingReplyHandler_PaginatesAcrossPages proves the "one request,

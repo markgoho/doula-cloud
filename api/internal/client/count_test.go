@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -42,9 +43,7 @@ func getCount(t *testing.T, session, url string) client.CountResponse {
 	t.Helper()
 	resp := authedGet(t, session, url)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	var got client.CountResponse
 	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)

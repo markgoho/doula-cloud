@@ -21,10 +21,7 @@ func TestRLS_MessagesFailsClosedWithNoSessionVarsSet(t *testing.T) {
 	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Some Client", "some@example.com")
 	seedMessage(t, db, engagementID, "staff", staffID, "hello")
 
-	var count int
-	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM messages`).Scan(&count); err != nil {
-		t.Fatalf("query messages with no session vars set: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM messages`)
 	if count != 0 {
 		t.Fatalf("expected 0 rows with no session variables set, got %d", count)
 	}
@@ -44,19 +41,8 @@ func TestRLS_MessagesPracticeTierScopedToOwnPractice(t *testing.T) {
 	practiceB := testdb.SeedPractice(t, db, "Practice B")
 	testdb.SeedStaffAtPractice(t, db, practiceB, "staff-b", []string{doulaRole}, "employee")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-	var count int
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM messages`).Scan(&count); err != nil {
-		t.Fatalf("query messages as Practice A: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Practice(practiceA))
+	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM messages`)
 	if count != 1 {
 		t.Fatalf("expected Practice A to see its own message, got count = %d", count)
 	}
@@ -64,9 +50,7 @@ func TestRLS_MessagesPracticeTierScopedToOwnPractice(t *testing.T) {
 	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceB); err != nil {
 		t.Fatalf("set_config: %v", err)
 	}
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM messages`).Scan(&count); err != nil {
-		t.Fatalf("query messages as Practice B: %v", err)
-	}
+	count = testdb.Scalar[int](t, tx, `SELECT count(*) FROM messages`)
 	if count != 0 {
 		t.Fatalf("expected a Staff member at a different Practice to get zero rows, got count = %d", count)
 	}
@@ -84,19 +68,8 @@ func TestRLS_MessagesClientTierScopedToOwnEngagement(t *testing.T) {
 
 	clientB, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Client B", "b@example.com")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-	var count int
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM messages`).Scan(&count); err != nil {
-		t.Fatalf("query messages as Client A: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Client(clientA))
+	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM messages`)
 	if count != 1 {
 		t.Fatalf("expected Client A to see its own Engagement's message, got count = %d", count)
 	}
@@ -104,9 +77,7 @@ func TestRLS_MessagesClientTierScopedToOwnEngagement(t *testing.T) {
 	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientB); err != nil {
 		t.Fatalf("set_config: %v", err)
 	}
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM messages`).Scan(&count); err != nil {
-		t.Fatalf("query messages as Client B: %v", err)
-	}
+	count = testdb.Scalar[int](t, tx, `SELECT count(*) FROM messages`)
 	if count != 0 {
 		t.Fatalf("expected a Client not linked to the Engagement to get zero rows, got count = %d", count)
 	}
@@ -123,15 +94,7 @@ func TestRLS_MessagesPracticeTierAllowsStaffInsert(t *testing.T) {
 	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "insert-staff", []string{doulaRole}, "employee")
 	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Practice(practiceID))
 
 	if _, err := tx.ExecContext(t.Context(),
 		`INSERT INTO messages (engagement_id, sender_type, sender_id, body) VALUES ($1, 'staff', $2, 'hello from staff')`,
@@ -150,15 +113,7 @@ func TestRLS_MessagesClientTierAllowsClientInsert(t *testing.T) {
 	practiceID := testdb.SeedPractice(t, db, "Insert Practice")
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Client(clientID))
 
 	if _, err := tx.ExecContext(t.Context(),
 		`INSERT INTO messages (engagement_id, sender_type, sender_id, body) VALUES ($1, 'client', $2, 'hello from client')`,
@@ -217,10 +172,7 @@ func TestRLS_PushSubscriptionsFailsClosedWithNoSessionVarsSet(t *testing.T) {
 	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "fail-closed-push-staff", []string{doulaRole}, "employee")
 	testdb.SeedPushSubscription(t, db, "staff", staffID, "https://push.example.com/fail-closed")
 
-	var count int
-	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM push_subscriptions`).Scan(&count); err != nil {
-		t.Fatalf("query push_subscriptions with no session vars set: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM push_subscriptions`)
 	if count != 0 {
 		t.Fatalf("expected 0 rows with no session variables set, got %d", count)
 	}
@@ -243,18 +195,7 @@ func TestRLS_PushSubscriptionsStaffScopedToOwnIdentity(t *testing.T) {
 	staffB := testdb.SeedStaffAtPractice(t, db, practiceB, "push-staff-b", []string{doulaRole}, "employee")
 	testdb.SeedPushSubscription(t, db, "staff", staffB, "https://push.example.com/staff-b")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_identity_uid', $1, true)`, "push-staff-a"); err != nil {
-		t.Fatalf("set_config identity: %v", err)
-	}
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config practice: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Identity("push-staff-a"), testdb.Practice(practiceA))
 
 	var visibleIDs []string
 	rows, err := tx.QueryContext(t.Context(), `SELECT id FROM push_subscriptions`)
@@ -290,15 +231,7 @@ func TestRLS_PushSubscriptionsClientScopedToOwnIdentity(t *testing.T) {
 	clientB, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Client B", "b@example.com")
 	testdb.SeedPushSubscription(t, db, "client", clientB, "https://push.example.com/client-b")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Client(clientA))
 
 	var visibleIDs []string
 	rows, err := tx.QueryContext(t.Context(), `SELECT id FROM push_subscriptions`)
@@ -331,18 +264,7 @@ func TestRLS_PushSubscriptionsStaffTierAllowsInsert(t *testing.T) {
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "insert-push-staff", []string{doulaRole}, "employee")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_identity_uid', $1, true)`, "insert-push-staff"); err != nil {
-		t.Fatalf("set_config identity: %v", err)
-	}
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set_config practice: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Identity("insert-push-staff"), testdb.Practice(practiceID))
 
 	if _, err := tx.ExecContext(t.Context(),
 		`INSERT INTO push_subscriptions (owner_type, owner_id, endpoint, p256dh_key, auth_key)
@@ -361,15 +283,7 @@ func TestRLS_PushSubscriptionsClientTierAllowsInsert(t *testing.T) {
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Client(clientID))
 
 	if _, err := tx.ExecContext(t.Context(),
 		`INSERT INTO push_subscriptions (owner_type, owner_id, endpoint, p256dh_key, auth_key)
@@ -398,23 +312,9 @@ func TestRLS_PushSubscriptionsStaffRowHiddenDuringClientPortalContext(t *testing
 	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Shared Client", "shared@example.com")
 	testdb.SeedPortalUser(t, db, sharedUID, clientID)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Identity(sharedUID), testdb.Client(clientID))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_identity_uid', $1, true)`, sharedUID); err != nil {
-		t.Fatalf("set_config identity: %v", err)
-	}
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
-		t.Fatalf("set_config client: %v", err)
-	}
-
-	var count int
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM push_subscriptions WHERE owner_type = 'staff'`).Scan(&count); err != nil {
-		t.Fatalf("query push_subscriptions during client-portal context: %v", err)
-	}
+	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM push_subscriptions WHERE owner_type = 'staff'`)
 	if count != 0 {
 		t.Fatalf("expected the shared identity's Staff push_subscriptions row to stay hidden during a Client-portal context, got count = %d", count)
 	}

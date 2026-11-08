@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -56,23 +56,10 @@ func TestDetailHandler_SaysWhenCareHasEnded(t *testing.T) {
 
 			srv, session := newServer(t, db, tt.uid)
 			defer srv.Close()
-			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/portal/engagements/"+engagementID, nil)
-			if err != nil {
-				t.Fatalf("build request: %v", err)
-			}
-			authntest.AddSessionCookie(req, session)
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				t.Fatalf("request: %v", err)
-			}
+			resp := reqtest.Get(t, srv.URL+"/api/portal/engagements/"+engagementID, reqtest.Session(session))
 			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusOK {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-			}
-			var fields map[string]jsontext.Value
-			if err := json.UnmarshalRead(resp.Body, &fields); err != nil {
-				t.Fatalf("decode response: %v", err)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusOK)
+			fields := reqtest.Decode[map[string]jsontext.Value](t, resp)
 			var careEnded bool
 			if err := json.Unmarshal(fields["careEnded"], &careEnded); err != nil {
 				t.Fatalf("careEnded = %s, want a boolean: %v", fields["careEnded"], err)

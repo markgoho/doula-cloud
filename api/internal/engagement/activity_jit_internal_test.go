@@ -40,20 +40,9 @@ func TestListEngagementActivityQuery_StaysOffTheJITCliff(t *testing.T) {
 	practiceID := testdb.SeedPractice(t, db, "JIT Canary Practice")
 	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Nadia Client", "jit-canary@example.com")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Practice(practiceID))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	var threshold string
-	if err := tx.QueryRowContext(t.Context(), `SHOW jit_above_cost`).Scan(&threshold); err != nil {
-		t.Fatalf("read jit_above_cost: %v", err)
-	}
+	threshold := testdb.Scalar[string](t, tx, `SHOW jit_above_cost`)
 	limit, err := strconv.ParseFloat(threshold, 64)
 	if err != nil {
 		t.Fatalf("parse jit_above_cost %q: %v", threshold, err)

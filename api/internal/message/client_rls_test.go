@@ -22,28 +22,14 @@ func TestRLS_ClientsSelfVisibilityScopedToOwnRow(t *testing.T) {
 	clientA, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Client A", "a@example.com")
 	clientB, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Client B", "b@example.com")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Client(clientA))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	var name string
-	if err := tx.QueryRowContext(t.Context(), `SELECT given_name FROM clients WHERE id = $1`, clientA).Scan(&name); err != nil {
-		t.Fatalf("expected Client A to see their own clients row, got error: %v", err)
-	}
+	name := testdb.Scalar[string](t, tx, `SELECT given_name FROM clients WHERE id = $1`, clientA)
 	if name != "Client A" {
 		t.Fatalf("name = %q, want %q", name, "Client A")
 	}
 
-	var count int
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM clients WHERE id = $1`, clientB).Scan(&count); err != nil {
-		t.Fatalf("query clients as Client A: %v", err)
-	}
+	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM clients WHERE id = $1`, clientB)
 	if count != 0 {
 		t.Fatalf("expected Client A to see zero rows for Client B, got count = %d", count)
 	}
@@ -62,28 +48,14 @@ func TestRLS_StaffVisibleToOwnClientPortalEngagements(t *testing.T) {
 	practiceB := testdb.SeedPractice(t, db, "Practice B")
 	testdb.SeedNamedStaffAtPractice(t, db, practiceB, "staff-at-b", "Staff At B", []string{doulaRole}, "employee")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Client(clientA))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	var name string
-	if err := tx.QueryRowContext(t.Context(), `SELECT name FROM staff WHERE id = $1`, staffAtA).Scan(&name); err != nil {
-		t.Fatalf("expected Client A to see Staff at their own Practice, got error: %v", err)
-	}
+	name := testdb.Scalar[string](t, tx, `SELECT name FROM staff WHERE id = $1`, staffAtA)
 	if name != "Staff At A" {
 		t.Fatalf("name = %q, want %q", name, "Staff At A")
 	}
 
-	var count int
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM staff WHERE identity_uid = 'staff-at-b'`).Scan(&count); err != nil {
-		t.Fatalf("query staff as Client A: %v", err)
-	}
+	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM staff WHERE identity_uid = 'staff-at-b'`)
 	if count != 0 {
 		t.Fatalf("expected Client A to see zero rows for Staff at an unrelated Practice, got count = %d", count)
 	}
@@ -141,24 +113,13 @@ func TestRLS_StaffVisibleToOwnClientPortalHistory(t *testing.T) {
 		t.Fatalf("remove memberships: %v", err)
 	}
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Client(clientID))
 
 	for _, want := range []struct {
 		staffID string
 		name    string
 	}{{visited, "Maya Okonkwo"}, {messaged, "Priya Raman"}} {
-		var name string
-		if err := tx.QueryRowContext(t.Context(), `SELECT name FROM staff WHERE id = $1`, want.staffID).Scan(&name); err != nil {
-			t.Fatalf("expected the departed Staff member %q to stay readable to her own Client, got error: %v", want.name, err)
-		}
+		name := testdb.Scalar[string](t, tx, `SELECT name FROM staff WHERE id = $1`, want.staffID)
 		if name != want.name {
 			t.Fatalf("name = %q, want %q", name, want.name)
 		}
@@ -172,10 +133,7 @@ func TestRLS_StaffVisibleToOwnClientPortalHistory(t *testing.T) {
 		{visitedOther, "worked another Client's Visit at the same Practice"},
 		{messagedOther, "sent a Message on another Client's Engagement at the same Practice"},
 	} {
-		var count int
-		if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM staff WHERE id = $1`, refused.staffID).Scan(&count); err != nil {
-			t.Fatalf("query staff as the Client: %v", err)
-		}
+		count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM staff WHERE id = $1`, refused.staffID)
 		if count != 0 {
 			t.Fatalf("expected zero rows for a departed Staff member who %s, got count = %d", refused.why, count)
 		}
@@ -202,28 +160,14 @@ func TestRLS_StaffPortalHistoryGrantsAStaffSessionNothing(t *testing.T) {
 	}
 	testdb.RemoveMembership(t, db, departed)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Practice(practiceID))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	var count int
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM staff WHERE id = $1`, departed).Scan(&count); err != nil {
-		t.Fatalf("query staff as Staff: %v", err)
-	}
+	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM staff WHERE id = $1`, departed)
 	if count != 0 {
 		t.Fatalf("expected a Staff session to see zero rows for a departed Staff member, got count = %d", count)
 	}
 
-	var name string
-	if err := tx.QueryRowContext(t.Context(), `SELECT name FROM staff WHERE id = $1`, reader).Scan(&name); err != nil {
-		t.Fatalf("expected a Staff session to still read a live Membership's row, got error: %v", err)
-	}
+	name := testdb.Scalar[string](t, tx, `SELECT name FROM staff WHERE id = $1`, reader)
 	if name != "Renata Owner" {
 		t.Fatalf("name = %q, want %q", name, "Renata Owner")
 	}

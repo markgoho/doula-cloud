@@ -17,6 +17,7 @@ import (
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/outbox"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -97,9 +98,7 @@ func TestEraseHandler_QueuesStripeWorkAndReportsWhenItCanRun(t *testing.T) {
 
 	resp := postErasure(t, session, srv, practiceID, clientID)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	acts := readOutbox(t, db, clientID)
 	if len(acts) != 2 {
@@ -157,9 +156,7 @@ func TestEraseHandler_RedactionIsDueAtOnceForAnOldInvoice(t *testing.T) {
 
 	resp := postErasure(t, session, srv, practiceID, clientID)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	acts := readOutbox(t, db, clientID)
 	redact, ok := acts["stripe_redaction_job|cus_old"]
@@ -202,9 +199,7 @@ func TestEraseHandler_EachStripeCustomerGetsItsOwnEligibilityDate(t *testing.T) 
 
 	resp := postErasure(t, session, srv, practiceID, clientID)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	acts := readOutbox(t, db, clientID)
 	ancient, ok := acts["stripe_redaction_job|cus_ancient"]
@@ -327,9 +322,7 @@ func TestEraseHandler_RefusesWhileAnInvoiceIsUnsettled(t *testing.T) {
 
 			resp := postErasure(t, session, srv, practiceID, clientID)
 			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusConflict {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusConflict)
 			// The code, not the prose, is what tells this refusal from
 			// "already erased" -- see EraseHandler's own doc comment.
 			// The message still has to name the blocking invoice.
@@ -369,9 +362,7 @@ func TestEraseHandler_DeletesHerPortalLoginAndEndsHerSessions(t *testing.T) {
 
 	resp := postErasure(t, session, srv, practiceID, clientID)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	var sessions int
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -428,9 +419,7 @@ func TestEraseHandler_RevokesAnUnacceptedPortalInvite(t *testing.T) {
 
 	resp := postErasure(t, session, srv, practiceID, clientID)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	var token *string
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -601,15 +590,7 @@ func TestProcessErasureOutboxHandler_RunsDueActsBehindTheWorkerSecret(t *testing
 
 func postProcessErasure(t *testing.T, srv *httptest.Server, secret string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/internal/clients/process-erasure-outbox", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("X-Internal-Secret", secret)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/internal/clients/process-erasure-outbox", reqtest.Header("X-Internal-Secret", secret))
 	return resp
 }
 
@@ -764,9 +745,7 @@ func TestEraseHandler_LeavesTheLoginAnotherPracticeStillReaches(t *testing.T) {
 	defer srvA.Close()
 	respA := postErasure(t, sessionA, srvA, practiceA, clientA)
 	defer respA.Body.Close()
-	if respA.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", respA.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, respA, http.StatusOK)
 
 	linkedA, accounts, sessions := portalReach(t, db, clientA, portalUID)
 	if linkedA != nil {

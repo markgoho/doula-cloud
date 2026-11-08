@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/engagement"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/visit"
 )
@@ -102,9 +103,7 @@ func TestCreateHandler_ScheduledVisitActivatesTheEngagement(t *testing.T) {
 	resp := createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "",
 		visit.CreateRequest{ScheduledAt: new(firstScheduledAt)})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
 
 	if got := engagementStatus(t, db, engagementID); got != engagement.StatusActive {
 		t.Fatalf("engagement status = %q, want %q", got, engagement.StatusActive)
@@ -134,9 +133,7 @@ func TestCreateHandler_ActivationActorIsTheBookerNotTheAssignee(t *testing.T) {
 	resp := createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "",
 		visit.CreateRequest{StaffID: &assigneeStaffID, ScheduledAt: new(firstScheduledAt)})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
 
 	if got := engagementStatus(t, db, engagementID); got != engagement.StatusActive {
 		t.Fatalf("engagement status = %q, want %q", got, engagement.StatusActive)
@@ -160,9 +157,7 @@ func TestCreateHandler_UnscheduledVisitLeavesTheEngagementAtIntake(t *testing.T)
 
 	resp := createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "", visit.CreateRequest{})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
 
 	if got := engagementStatus(t, db, engagementID); got != engagement.StatusIntake {
 		t.Fatalf("engagement status = %q, want %q", got, engagement.StatusIntake)
@@ -190,9 +185,7 @@ func TestScheduleHandler_ActivatesOnTheLaterSchedule(t *testing.T) {
 
 	resp := scheduleVisit(t, session, srv.URL, practiceID, engagementID, visitID, firstScheduledAt)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	if got := engagementStatus(t, db, engagementID); got != engagement.StatusActive {
 		t.Fatalf("engagement status = %q, want %q", got, engagement.StatusActive)
@@ -220,9 +213,7 @@ func TestScheduleHandler_ClearingAnInstantActivatesNothing(t *testing.T) {
 
 	resp := scheduleVisit(t, session, srv.URL, practiceID, engagementID, visitID, "")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	if got := engagementStatus(t, db, engagementID); got != engagement.StatusIntake {
 		t.Fatalf("engagement status = %q, want %q", got, engagement.StatusIntake)
@@ -300,9 +291,7 @@ func TestVisitWrites_LeaveAnEngagementPastIntakeAlone(t *testing.T) {
 				resp = scheduleVisit(t, session, srv.URL, practiceID, engagementID, visitID, firstScheduledAt)
 			}
 			defer resp.Body.Close()
-			if resp.StatusCode != wantStatus {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, wantStatus)
-			}
+			reqtest.RequireStatus(t, resp, wantStatus)
 
 			if got := engagementStatus(t, db, engagementID); got != tc.status {
 				t.Fatalf("engagement status = %q, want it untouched at %q", got, tc.status)

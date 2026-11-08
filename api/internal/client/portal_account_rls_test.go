@@ -1,7 +1,6 @@
 package client_test
 
 import (
-	"database/sql"
 	"testing"
 
 	"doula-cloud/api/internal/testdb"
@@ -48,19 +47,11 @@ func markErased(t *testing.T, db *testdb.DB, clientID string) {
 // remove.
 func deleteLoginAs(t *testing.T, db *testdb.DB, practiceID, portalUID string) int64 {
 	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Practice(practiceID))
 	defer func() { _ = tx.Rollback() }()
-
-	if _, err := tx.ExecContext(t.Context(),
-		`SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-	var res sql.Result
-	if res, err = tx.ExecContext(t.Context(),
-		`DELETE FROM portal_accounts WHERE identifier = $1`, portalUID); err != nil {
+	res, err := tx.ExecContext(t.Context(),
+		`DELETE FROM portal_accounts WHERE identifier = $1`, portalUID)
+	if err != nil {
 		t.Fatalf("delete portal account: %v", err)
 	}
 	affected, err := res.RowsAffected()

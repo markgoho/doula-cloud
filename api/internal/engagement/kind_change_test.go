@@ -1,8 +1,6 @@
 package engagement_test
 
 import (
-	"bytes"
-	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,6 +9,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/engagement"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -27,26 +26,9 @@ type kindChangeResponseBody struct {
 // decoded body (zero value on a non-200).
 func changeKindAs(t *testing.T, db *testdb.DB, srv *httptest.Server, uid, practiceID, engagementID, kind string) (int, kindChangeResponseBody) {
 	t.Helper()
-	encoded, err := json.Marshal(map[string]any{"kind": kind})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut,
-		srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/kind", bytes.NewReader(encoded))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	authntest.AddSessionCookie(req, authntest.SeedSession(t, db.App, uid))
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Put(t, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/kind", reqtest.Session(authntest.SeedSession(t, db.App, uid)), reqtest.JSON(map[string]any{"kind": kind}))
 	defer func() { _ = resp.Body.Close() }()
-	var out kindChangeResponseBody
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[kindChangeResponseBody](t, resp)
 	return resp.StatusCode, out
 }
 
@@ -279,22 +261,9 @@ func TestChangeKindHandler_MalformedBody(t *testing.T) {
 	const uid = "malformed-kind-owner"
 	srv, practiceID, engagementID := newKindServer(t, db, uid, []string{ownerRole}, employeeType)
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut,
-		srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/kind",
-		bytes.NewReader([]byte("{")))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	authntest.AddSessionCookie(req, authntest.SeedSession(t, db.App, uid))
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Put(t, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/kind", reqtest.Session(authntest.SeedSession(t, db.App, uid)), reqtest.RawJSON([]byte("{")))
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", resp.StatusCode)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestChangeKindHandler_MovesNothingElse is ADR-0015's own list, proved
