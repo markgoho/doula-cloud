@@ -65,11 +65,13 @@
 	import { unregisterPushSubscription } from '#lib/pushRegistration.js';
 	import { signOutOfSession, type SignOutOutcome } from '#lib/signOut.js';
 	import DoorLink from '#lib/components/atoms/DoorLink.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
 	import PracticeChooser from '#lib/components/molecules/PracticeChooser.svelte';
 	import SignOutButton from '#lib/components/molecules/SignOutButton.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 	import LandingPage from '#lib/components/templates/LandingPage.svelte';
 	import { greetingFor } from '#lib/greeting.js';
+	import { readLastDoor, rememberDoor } from '#lib/lastDoor.js';
 	import {
 		CARE_HEADING,
 		NO_CARE_HEADING,
@@ -84,7 +86,7 @@
 	let { data }: PageProperties = $props();
 
 	const HEADINGS: Record<RootLanding['type'], string> = {
-		'signed-out': 'Sign in or set up a Practice',
+		'signed-out': 'Sign in',
 		'staff-picker': 'Choose a Practice',
 		'portal-picker': CARE_HEADING
 	};
@@ -97,6 +99,9 @@
 	const title = $derived(hasNoCare ? NO_CARE_HEADING : HEADINGS[data.type]);
 
 	const greeting = greetingFor();
+	// Read once, before the first paint, like the greeting: a door never
+	// lights up after the page has drawn.
+	const lastDoor = readLastDoor();
 
 	/*
 	 * The door out of a session that leads nowhere (#1116). Not extracted
@@ -136,31 +141,33 @@
 
 {#snippet doors()}
 	<!--
-		Staff sign in is the primary door: the marketing site is where a new
-		person arrives (ADR-0044), so most people who reach `/` already have
-		an account. A judgment, not a measurement -- ADR-0046 counts nothing
-		about who visits.
+		The two sign-in doors carry equal weight: most people who reach `/`
+		already have an account (ADR-0044), and a Client is as much this
+		page's reader as a Staff member. Setting up a Practice is the one
+		act for someone new, so it is a line under them, not a third door.
 	-->
-	<stack-l space="var(--space-4)">
-		<DoorLink
-			href={resolve('/(signed-out)/login')}
-			label="Staff sign in"
-			description="For doulas and practice owners."
-			variant="primary"
-		/>
+	<stack-l space="var(--space-6)">
 		<grid-l min="var(--door-min)" space="var(--space-4)">
 			<DoorLink
-				href={resolve('/portal/(signed-out)/login')}
-				label="Client portal sign in"
-				description={PORTAL_DOOR_LINE}
+				href={resolve('/(signed-out)/login')}
+				label="Staff sign in"
+				description="For doulas, practice owners, and office staff."
+				lastUsed={lastDoor === 'staff'}
+				onClick={() => rememberDoor('staff')}
 			/>
-			<!-- ADR-0042: signup grants three Credits with no card, one per Engagement. -->
 			<DoorLink
-				href={resolve('/(signed-out)/signup')}
-				label="Set up a Practice"
-				description="New here? Your first three clients are free."
+				href={resolve('/portal/(signed-out)/login')}
+				label="Client sign in"
+				description={PORTAL_DOOR_LINE}
+				lastUsed={lastDoor === 'client'}
+				onClick={() => rememberDoor('client')}
 			/>
 		</grid-l>
+		<!-- ADR-0042: signup grants three Credits with no card, one per Engagement. -->
+		<p class="new-here">
+			New here? <Link href={resolve('/(signed-out)/signup')} label="Set up a Practice" />. Your
+			first three clients are free.
+		</p>
 	</stack-l>
 {/snippet}
 
@@ -231,6 +238,11 @@
 
 <style>
 	@layer components {
+		.new-here {
+			margin: 0;
+			color: var(--color-on-surface-variant);
+		}
+
 		/* `PracticeChooser`'s own stack, for the one chooser that is not
 		   a Practice (#2027, #2020). */
 		.doors {

@@ -87,8 +87,8 @@
 </script>
 
 <PilotBanner
-	sentence="DoulaCloud is new, and you are one of the first to use it."
-	controlText="Tell us what is not working or what you need"
+	sentence=""
+	controlText="Tell us what you think"
 	open={isOpen}
 	controlsId={drawerId}
 	onOpenFeedback={() => (isOpen = true)}

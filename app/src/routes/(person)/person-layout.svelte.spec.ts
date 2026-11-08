@@ -190,7 +190,7 @@ describe('the Pilot banner and Feedback drawer (#1527)', () => {
 
 		await expect
 			.element(
-				testPage.getByText('DoulaCloud is new, and you are one of the first to use it.', { exact: false })
+				testPage.getByText('Pilot', { exact: true })
 			)
 			.toBeVisible();
 	});
@@ -200,7 +200,7 @@ describe('the Pilot banner and Feedback drawer (#1527)', () => {
 	it('posts a send to /api/staff/feedback with no practiceId, since /account carries none', async () => {
 		await renderLayout();
 
-		await testPage.getByRole('button', { name: 'Tell us what is not working or what you need.' }).click();
+		await testPage.getByRole('button', { name: 'Tell us what you think.' }).click();
 		const drawer = testPage.getByRole('dialog', { name: 'Send feedback to DoulaCloud' });
 		await expect.element(drawer).toBeVisible();
 		await Promise.all(drawer.element().getAnimations().map((animation) => animation.finished));

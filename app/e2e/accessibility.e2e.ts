@@ -280,7 +280,7 @@ function routeFor<Seed>(row: SeededRoute<Seed>, seed: Seed): Route {
 // link's label.
 const LINK_TOKEN = 'a11y-scan-token';
 const SIGNED_OUT_ROUTES: Route[] = [
-	{ key: '/', archetype: 'A', url: '/', h1: 'Sign in or set up a Practice' },
+	{ key: '/', archetype: 'A', url: '/', h1: 'Sign in' },
 	{ key: 'login', archetype: 'A', url: '/login', h1: 'Sign in' },
 	// #2049: setting up a Practice is three question pages and a check
 	// page. Each is reached by its address with nothing typed, which is

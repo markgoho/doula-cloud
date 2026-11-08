@@ -15,7 +15,7 @@
 	 */
 </script>
 
-<header>
+<header data-shell>
 	<BrandLockup />
 </header>
 

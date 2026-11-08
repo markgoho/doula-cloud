@@ -12,7 +12,7 @@
 	 * close, and rejected: its `isEmpty`/`empty` pair is required because a
 	 * hub's whole body is either the populated view or the empty one. A list
 	 * screen does not divide that way -- `clients`' "Find or add a Client"
-	 * link and the "Also show Clients with no work yet" toggle render whether or not the table has
+	 * link and the "Also show Clients with no care or request yet" toggle render whether or not the table has
 	 * rows, and `DataTable` already carries its own `emptyMessage` for the
 	 * zero-row case. Forcing every route here to split its body into
 	 * `primary`/`empty` would recreate a state that already exists one layer
@@ -46,9 +46,8 @@
 		intro?: Snippet;
 		/**
 		 * The one primary action a list screen carries -- "Invite a Staff
-		 * member", "Find or add a Client" -- positioned between the intro and
-		 * the content, which is where every one of the four routes this
-		 * Template was built for already put it.
+		 * member", "Find or add a Client" -- on the title's line, where list
+		 * screens elsewhere put it, ahead of any intro.
 		 */
 		actions?: Snippet;
 		content: Snippet;
@@ -90,20 +89,27 @@
 				<Skeleton variant="row" lines={6} label={loading} />
 			</stack-l>
 		{:else}
-			<stack-l space="var(--space-section)">
+			<stack-l space="var(--space-group)">
 				{#if outcome}
 					<Notice variant="status" message={outcome} isFocusedOnAppear />
 				{/if}
-				<Heading level={1} variant="page" text={title} />
+				<!-- The list's one action shares the title's line, beside the
+				     title rather than at the far edge, since a table stops at
+				     its own width (#542) and the edge can sit far from it. It
+				     wraps under the title when the line runs out (ADR-0024).
+				     The row holds one action's height with or without one, so
+				     the title sits at the same place on every list. -->
+				<cluster-l class="title-row" space="var(--space-group)" align="center">
+					<Heading level={1} variant="page" text={title} />
+					{#if actions}
+						<div class="actions">{@render actions()}</div>
+					{/if}
+				</cluster-l>
 
 				{#if intro}
 					<!-- A stack, not a plain div (#2020): an intro of two
 					     paragraphs ran them together. -->
 					<stack-l class="intro" space="var(--space-related)">{@render intro()}</stack-l>
-				{/if}
-
-				{#if actions}
-					<div class="actions">{@render actions()}</div>
 				{/if}
 
 				{@render content()}
@@ -116,6 +122,10 @@
 	@layer components {
 		container-l {
 			padding-block: var(--space-8);
+		}
+
+		.title-row {
+			min-block-size: var(--start-button-block-size);
 		}
 
 		/* The one place this Template caps a line length: the body itself is

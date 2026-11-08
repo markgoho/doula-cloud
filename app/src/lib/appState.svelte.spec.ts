@@ -21,6 +21,7 @@ const realPage = vi.hoisted(() => ({
 	params: { practiceId: 'the-real-practice' } as Record<string, string>,
 	url: new URL('https://example.test/practices/the-real-practice'),
 	data: { practiceName: 'The real Practice' } as Record<string, unknown>,
+	state: { clientsName: 'Camille' } as Record<string, unknown>,
 	route: { id: '/practices/[practiceId]' } as { id: string | null }
 }));
 vi.mock('$app/state', () => ({ page: realPage }));
@@ -42,6 +43,15 @@ describe('the page a route reads', () => {
 		expect(page.params).toBe(realPage.params);
 		expect(page.url).toBe(realPage.url);
 		expect(page.data).toBe(realPage.data);
+		expect(page.state).toBe(realPage.state);
+	});
+
+	it('reads the history entry state off the override, empty when it holds none', () => {
+		overridePage({ ...fixtureEnvironment, state: { clientsName: 'Hannah' } });
+		expect(page.state).toEqual({ clientsName: 'Hannah' });
+
+		overridePage(fixtureEnvironment);
+		expect(page.state).toEqual({});
 	});
 
 	/*

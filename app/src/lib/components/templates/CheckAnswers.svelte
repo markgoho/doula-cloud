@@ -220,7 +220,7 @@
 		 */
 		.column {
 			max-inline-size: var(--form-max);
-			margin-inline: auto;
+			margin-inline: var(--page-column-margin-inline, auto);
 		}
 
 		.group-heading {

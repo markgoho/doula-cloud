@@ -1,0 +1,54 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Clients - Care Wallet</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Big+Shoulders+Display:wght@600;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#14244a;--purple:#5b3f8f;--red:#c8312b;--ink:#1b1f2e;--perf:#8d93ab;--tint:#e9e5f3}
+html,body{width:1440px;height:900px;overflow:hidden;margin:0}
+body{font:400 15px/1.3 Barlow,sans-serif;color:var(--ink);background:#fff;font-variant-numeric:tabular-nums}
+a{color:var(--navy)} h1,th,.c b{font-family:"Big Shoulders Display",sans-serif;text-transform:uppercase}
+header{background:var(--navy);display:flex;align-items:center;height:48px;padding:0 32px;color:#fff;gap:28px}
+header>strong{font:900 24px "Big Shoulders Display";text-transform:uppercase;letter-spacing:.06em}
+nav{display:flex;gap:20px;flex:1} nav a{color:#fff;text-decoration:none;padding:13px 0 10px;border-bottom:3px solid transparent} nav .cur{border-color:#fff;font-weight:600}
+.org{display:flex;align-items:center;gap:12px} .av{width:32px;height:32px;border-radius:50%;background:#fff;color:var(--navy);display:grid;place-items:center;font-weight:600}
+.band{background:var(--navy);color:#fff;padding:0 32px 22px;display:flex;align-items:flex-end;gap:36px;border-top:1px dotted #6f7ca6}
+h1{margin:0;font-weight:900;font-size:96px;line-height:.95;letter-spacing:.02em;padding-top:10px}
+.go{margin-bottom:12px;font:600 17px Barlow;background:#fff;color:var(--navy);border:0;border-radius:4px;padding:11px 20px}
+form{background:var(--tint);padding:14px 32px;display:flex;gap:32px;align-items:flex-end;border-bottom:1px solid var(--navy)}
+fieldset{border:0;margin:0;padding:0;display:grid;grid-template-columns:auto auto;gap:6px 36px} legend{font-weight:600;padding:0 0 6px}
+label{display:flex;align-items:center;gap:8px} input[type=checkbox]{width:18px;height:18px;accent-color:var(--purple);margin:0}
+label.n{flex-direction:column;align-items:stretch;gap:4px;font-weight:600}
+.n input,.n select{font:400 15px Barlow;height:38px;border:1px solid #6b6f85;border-radius:4px;padding:0 10px;background:#fff;width:200px;box-sizing:border-box}
+.ap{font:600 15px Barlow;height:38px;padding:0 22px;border:0;border-radius:4px;background:var(--purple);color:#fff}
+p{margin:0;padding:9px 32px 7px}
+table{border-collapse:collapse;width:1376px;margin:0 32px}
+th{background:var(--navy);color:#fff;text-align:left;font-weight:600;font-size:17px;letter-spacing:.12em;padding:6px 10px}
+td{padding:7px 10px;border-bottom:1px solid var(--navy);vertical-align:middle} td a{font-weight:600;font-size:17px}
+.d{color:var(--purple);font-weight:600;font-size:17px}
+.s{display:flex;align-items:stretch} .s strong{width:88px;align-self:center;font-size:16px}
+.c{position:relative;width:162px;height:60px;box-sizing:border-box;padding:0 10px 0 9px;border-left:1px dotted var(--perf);overflow:hidden;display:flex;flex-direction:column;font-style:normal}
+.c b{font-weight:800;font-size:15px;letter-spacing:.14em;color:var(--navy);background:var(--tint);margin:0 -10px 0 -9px;padding:2px 9px;border-bottom:1px solid var(--perf)}
+.c em{font-style:normal;font-size:15px;line-height:1.1;padding-top:4px}
+.o{background:#fff;box-shadow:inset 0 0 0 1px var(--navy)} .o b{background:var(--navy);color:#fff} .o em{color:var(--purple);font-weight:600} .o.r em{color:var(--red)}
+.c.f{background:#f4f3f8} .c.f b{background:#f4f3f8;color:#4a5068} .c.f em,.u em{color:#4a5068}
+.u::after,.v::after{content:"USED";position:absolute;right:6px;bottom:6px;transform:rotate(-9deg);font:800 15px/1 "Big Shoulders Display";letter-spacing:.12em;color:var(--purple);border:2px solid var(--purple);padding:1px 4px;border-radius:3px}
+.v{background:#fff} .v em,.v b{text-decoration:line-through;text-decoration-color:var(--red);text-decoration-thickness:2px}
+.v::after{content:"VOID";color:var(--red);border-color:var(--red);font-size:19px;bottom:8px;transform:rotate(-12deg);background:#fff}
+</style></head><body>
+<header><strong>DoulaCloud</strong><nav><a href="#">Overview</a><a href="#" class="cur">Clients</a><a href="#">Schedule</a><a href="#">On call</a><a href="#">Invoices</a><a href="#">Contracts</a><a href="#">Credits</a><a href="#">Staff</a><a href="#">Offers</a><a href="#">Settings</a></nav><div class="org">Rooted Birth Collective<span class="av">RA</span></div></header>
+<div class="band"><h1>Clients</h1><button class="go">Find or add a Client</button></div>
+<form><fieldset><legend>Choose which Clients to show</legend>
+<label><input type="checkbox">Only my Clients</label><label><input type="checkbox">Only Clients who owe money</label>
+<label><input type="checkbox">Only active Clients with no Contract</label><label><input type="checkbox">Also show Clients not yet in care</label></fieldset>
+<label class="n">Name<input type="text"></label><label class="n">Doula<select><option>Any Doula</option></select></label><button class="ap" type="button">Apply</button></form>
+<p>Showing the first 30 Clients, soonest due first.</p>
+<table><thead><tr><th style="width:200px">Name</th><th style="width:700px">Status</th><th style="width:170px">Due</th><th>Doula</th></tr></thead><tbody>
+<tr><td><a href="#">Casey Estrada</a></td><td><div class="s"><strong>Birth</strong><i class="c o"><b>Intake</b><em>In intake</em></i><i class="c f"><b>Contract</b><em>No Contract yet</em></i><i class="c f"><b>Birth</b><em>Not yet</em></i></div></td><td class="d">Nov 9, 2026</td><td>Rowan Petrosyan</td></tr>
+<tr><td><a href="#">Quinn Estrada</a></td><td><div class="s"><strong>Birth</strong><i class="c o"><b>Intake</b><em>In intake</em></i><i class="c f"><b>Contract</b><em>No Contract yet</em></i><i class="c f"><b>Birth</b><em>Not yet</em></i></div></td><td class="d">Nov 10, 2026</td><td>Rowan Petrosyan</td></tr>
+<tr><td><a href="#">Morgan Grier</a></td><td><div class="s"><strong>Birth</strong><i class="c u"><b>Intake</b><em>Complete</em></i><i class="c o"><b>Contract</b><em>No Contract yet</em></i><i class="c f"><b>Birth</b><em>Active</em></i></div></td><td class="d">Nov 26, 2026</td><td>Marisol Terrazas</td></tr>
+<tr><td><a href="#">Camille Boyd</a></td><td><div class="s"><strong>Birth</strong><i class="c u"><b>Intake</b><em>Complete</em></i><i class="c v"><b>Contract</b><em>Voided, reissued</em></i><i class="c u"><b>Contract</b><em>Signed</em></i><i class="c o r"><b>Birth</b><em>Owes $1,500.00</em></i></div></td><td class="d">Nov 28, 2026</td><td>Priya Raman</td></tr>
+<tr><td><a href="#">Imani Brooks</a></td><td><div class="s"><strong>Postpartum</strong><i class="c u"><b>Intake</b><em>Complete</em></i><i class="c u"><b>Contract</b><em>Signed</em></i><i class="c o r"><b>Postpartum</b><em>$950.00 overdue by 12 days</em></i></div></td><td class="d">Born Oct 27, 2026</td><td>Priya Raman</td></tr>
+<tr><td><a href="#">Tessa Moreau</a></td><td><div class="s"><strong>Birth</strong><i class="c u"><b>Intake</b><em>Complete</em></i><i class="c u"><b>Contract</b><em>Signed</em></i><i class="c o"><b>Birth</b><em>Paid $1,500.00</em></i></div></td><td class="d">Dec 23, 2026</td><td>Priya Raman</td></tr>
+<tr><td><a href="#">Reese Calloway</a></td><td><div class="s"><strong>Birth</strong><i class="c u"><b>Intake</b><em>Complete</em></i><i class="c o"><b>Contract</b><em>No Contract yet</em></i><i class="c f"><b>Birth</b><em>Active</em></i></div></td><td class="d">Dec 31, 2026</td><td>Joss Adeyemi</td></tr>
+<tr><td><a href="#">Jamie Dunmore</a></td><td><div class="s"><strong>Birth</strong><i class="c u"><b>Intake</b><em>Complete</em></i><i class="c o"><b>Contract</b><em>No Contract yet</em></i><i class="c f"><b>Birth</b><em>Active</em></i></div></td><td class="d">Jan 3, 2027</td><td>Joss Adeyemi</td></tr>
+<tr><td><a href="#">Mira Castellanos</a></td><td><div class="s"><strong>Birth</strong><i class="c o"><b>Intake</b><em>In intake</em></i><i class="c u"><b>Contract</b><em>Signed</em></i><i class="c f"><b>Birth</b><em>Not yet</em></i></div></td><td class="d">Jan 11, 2027</td><td>Priya Raman</td></tr>
+<tr><td><a href="#">Grace Whitfield</a></td><td><div class="s"><strong>Birth</strong><i class="c o"><b>Intake</b><em>In intake</em></i><i class="c f"><b>Contract</b><em>Contract sent</em></i><i class="c f"><b>Birth</b><em>Not yet</em></i></div></td><td class="d">Jan 27, 2027</td><td>Priya Raman</td></tr>
+</tbody></table></body></html>

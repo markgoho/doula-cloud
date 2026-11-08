@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/*.html"
+        ],
+        "createdAt": "2026-11-08T05:25:12.898Z",
+        "reason": "Spent decision-round sketches of rejected visual worlds; they never ship and deliberately use other faces"
+      }
+    ]
+  }
+}

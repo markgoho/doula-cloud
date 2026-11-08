@@ -94,11 +94,13 @@ export function toPageState(fixture: RouteFixture): {
 	params: Record<string, string>;
 	url: URL;
 	data: Record<string, unknown>;
+	state: Record<string, unknown>;
 } {
 	return {
 		params: { ...fixture.params },
 		url: new URL(fixture.url),
-		data: { ...fixture.pageData }
+		data: { ...fixture.pageData },
+		state: {}
 	};
 }
 

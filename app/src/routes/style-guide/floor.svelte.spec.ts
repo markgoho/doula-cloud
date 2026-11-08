@@ -57,10 +57,10 @@
  * The scale has no fluid step between them, a component may not author a
  * `clamp()` (`tokens.usage.spec.ts`), and nothing intrinsic reads a
  * column's width into a choice between two tokens -- so this is a second
- * job only a query can do. `OverviewHub`'s title is its one member: the
- * display step where the column holds a reading measure, heading-lg
- * below it. It is judged by the same criteria as a tree swap (`measure`,
- * here) and carries its own justification like every other entry.
+ * job only a query can do. It has no member now: `OverviewHub`'s title was
+ * its one, and went to the page `Heading` every Template draws, so a hub's
+ * <h1> is no larger than any other screen's. A member would be judged by
+ * the same criteria as a tree swap and carry its own justification.
  *
  * A third kind is admitted (#2145): a query that picks WHICH WIDTH one
  * element takes, its column's or its own -- `Button` and `Link`'s start
@@ -68,8 +68,7 @@
  * intrinsic picks between the two: Switcher arithmetic on
  * `min-inline-size` leaves an explicit minimum in the wide case, which
  * replaces a flex item's own (#1851), and `calc-size()` is Chromium's
- * alone. Both members are judged by `measure`, at the same reading
- * measure as `OverviewHub`'s title.
+ * alone. Both members are judged by `measure`, at the reading measure.
  *
  * `StepRail` was the exception that proved the rule, in `UNDERIVABLE`
  * below rather than here. It is not any more: #585 replaced its query
@@ -244,6 +243,25 @@ const CRITERIA: Readonly<Record<string, Criterion>> = {
 			'its own width once its column holds a reading measure, and fills a narrower one, as the prose ' +
 			'above it does.'
 	},
+	/*
+	 * A presentation swap, not a DOM-tree swap or a width: the bar's controls
+	 * show in full in a wide column, and collapse behind one "Filters"
+	 * summary in a narrow one (GOV.UK/MOJ's filter pattern on a phone). The
+	 * floor is where the busiest bar's field row (Name, Doula, Apply and
+	 * "Clear filters", about 662px measured, so 42rem) shares one line. Its switches wrap
+	 * onto a second line by design, so they do not set it. Below it the
+	 * fields would stack into the first screen of a list.
+	 */
+	'molecules/FilterBar.svelte#1': {
+		kind: 'single-row',
+		selector: '.fields',
+		justification:
+			'Showing the controls or folding them behind a disclosure is a different presentation of the ' +
+			'same markup, and what picks it is whether the field row fits on one line. Nothing intrinsic ' +
+			'makes that choice: wrapping (Cluster) reflows the controls but never hides them, and a ' +
+			"closed <details>' content needs a condition to be shown. The room it reads is the bar's own " +
+			'container, never the window (ADR-0024).'
+	},
 	// The start button is drawn as the primary Button, so its width swap
 	// is Button's, judged the same way on its own demo's section.
 	'atoms/Link.svelte#1': {
@@ -255,29 +273,6 @@ const CRITERIA: Readonly<Record<string, Criterion>> = {
 			'intrinsic mechanism picks between them without an explicit minimum (#1851). It keeps its own ' +
 			'width once its column holds a reading measure, as the primary Button it is drawn as does.'
 	},
-	'templates/RecordDetail.svelte#1': {
-		kind: 'measure',
-		target: '.record-grid > .sections',
-		cap: 'measure',
-		justification:
-			'A Jump to chip strip under the header versus an On this page rail beside the header and the ' +
-			'sections is a different DOM tree, one always display:none so nothing is announced twice -- no ' +
-			'intrinsic mechanism swaps markup (#2004). The rail goes beside the record once the sections ' +
-			'column still holds a reading measure next to it, and one query decides both the arrangement ' +
-			'and the list, so a strip beside the sections or a rail above them is a state no width reaches.'
-	},
-	'templates/OverviewHub.svelte#1': {
-		kind: 'measure',
-		target: 'container-l > center-l > stack-l > h1',
-		cap: 'measure',
-		justification:
-			'A type-step swap, not a DOM-tree swap (#1632): the hub title is the display step where its ' +
-			'column holds a reading measure and heading-lg below it. The closed type scale (#417) has no ' +
-			'fluid step between the two, a component may not author a clamp() (tokens.usage.spec.ts), and ' +
-			'no intrinsic mechanism reads the column width into a choice between two tokens -- so a query ' +
-			'is the only way to keep a 75-character Practice name from pushing the empty Practice one link ' +
-			'below the first screen of a phone.'
-	}
 };
 
 /*
@@ -461,11 +456,13 @@ function assertCriterionAt(
 			expect(row, `${criterion.selector} not found for ${key}`).not.toBeNull();
 			const items = [...row!.children] as HTMLElement[];
 			expect(items.length, `${criterion.selector} has no items for ${key}`).toBeGreaterThan(0);
-			const top = items[0]!.getBoundingClientRect().top;
-			const areOnOneRow = items.every(
-				(item) => Math.abs(item.getBoundingClientRect().top - top) <= TOLERANCE
-			);
-			const rows = new Set(items.map((item) => Math.round(item.getBoundingClientRect().top))).size;
+			// One row when every item overlaps the same band: the highest top is
+			// above the lowest bottom. Not "equal tops", which a row that aligns
+			// its items to the bottom (a field beside its Apply) never has.
+			const boxes = items.map((item) => item.getBoundingClientRect());
+			const areOnOneRow =
+				Math.max(...boxes.map((box) => box.top)) - Math.min(...boxes.map((box) => box.bottom)) < -TOLERANCE;
+			const rows = new Set(boxes.map((box) => Math.round(box.bottom))).size;
 			expect(
 				areOnOneRow,
 				`${key}: given ${px}px, ${items.length} items across ${rows} row(s) (single-row criterion).`

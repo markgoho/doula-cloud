@@ -278,4 +278,11 @@ describe('Button.svelte', () => {
 
 		await expect.element(page.getByRole('button')).not.toHaveAttribute('aria-controls');
 	});
+
+	it.each(['sm', 'md'] as const)('sets a %s label at the size of the text around it', async (size) => {
+		const { container } = await setup({ size });
+		container.style.fontSize = '23px';
+
+		expect(getComputedStyle(page.getByRole('button').element()).fontSize).toBe('23px');
+	});
 });

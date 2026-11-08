@@ -132,7 +132,7 @@ const linkContentColumns = [
 ];
 
 interface SetupOptions {
-	columns?: typeof columns;
+	columns?: { label: string; accessor: (row: Row) => string; numeric?: boolean; grows?: boolean }[];
 	rows?: Row[];
 	rowHref?: (row: Row) => string;
 	rowActions?: { label: string; onRemove: (row: Row) => void };
@@ -142,6 +142,12 @@ interface SetupOptions {
 	loadMoreError?: string;
 	emptyMessage?: string;
 	disclosure?: string;
+	caption?: string;
+	describedBy?: string;
+	hasRowHeader?: boolean;
+	isBusy?: boolean;
+	columnWidths?: 'content' | 'even' | 'fill';
+	recordLayout?: 'list' | 'compact';
 }
 
 /*
@@ -165,7 +171,13 @@ async function setup({
 	isLoadingMore = false,
 	loadMoreError,
 	emptyMessage = 'No records yet.',
-	disclosure
+	disclosure,
+	caption,
+	describedBy,
+	hasRowHeader,
+	isBusy,
+	columnWidths,
+	recordLayout
 }: SetupOptions = {}) {
 	await page.viewport(...WIDE);
 	const { container } = await render(DataTable<Row>, {
@@ -181,7 +193,13 @@ async function setup({
 		isLoadingMore,
 		loadMoreError,
 		emptyMessage,
-		disclosure
+		disclosure,
+		caption,
+		describedBy,
+		hasRowHeader,
+		isBusy,
+		columnWidths,
+		recordLayout
 	});
 	return { container };
 }
@@ -194,12 +212,183 @@ describe('DataTable.svelte', () => {
 		await expect.element(page.getByRole('columnheader', { name: 'Status' })).toBeVisible();
 	});
 
+	it('names the table with a caption a screen reader hears and a sighted reader does not see', async () => {
+		await setup({ caption: 'Showing 2 Clients, soonest due first.' });
+
+		const table = page.getByRole('table', { name: 'Showing 2 Clients, soonest due first.' });
+		await expect.element(table).toBeVisible();
+		const caption = table.element().querySelector('caption')!;
+		expect(caption.textContent).toBe('Showing 2 Clients, soonest due first.');
+		expect(caption.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+	});
+
+	it('makes the first column the row header, drawn as a plain cell is', async () => {
+		await setup();
+
+		const header = page.getByRole('rowheader', { name: 'Ada Lovelace' });
+		await expect.element(header).toBeVisible();
+		await expect.element(header).toHaveAttribute('scope', 'row');
+		// A body cell reads as one: not the column header's weight.
+		const rowHeaderStyle = getComputedStyle(header.element());
+		const cellStyle = getComputedStyle(page.getByRole('cell', { name: 'Active', exact: true }).element());
+		expect(rowHeaderStyle.fontWeight).toBe(cellStyle.fontWeight);
+		expect(rowHeaderStyle.textAlign).toBe(cellStyle.textAlign);
+		expect(rowHeaderStyle.fontSize).toBe(cellStyle.fontSize);
+		expect(rowHeaderStyle.fontWeight).not.toBe(
+			getComputedStyle(page.getByRole('columnheader', { name: 'Name' }).element()).fontWeight
+		);
+	});
+
+	it('draws the first column as plain cells when asked not to name rows by it', async () => {
+		await setup({ hasRowHeader: false });
+
+		await expect.element(page.getByRole('rowheader')).not.toBeInTheDocument();
+		await expect.element(page.getByRole('cell', { name: 'Ada Lovelace' })).toBeVisible();
+	});
+
+	it('draws no caption when none is given', async () => {
+		const { container } = await setup();
+
+		expect(container.querySelector('caption')).toBeNull();
+		expect(container.querySelector('.record-view')!.getAttribute('aria-label')).toBeNull();
+	});
+
+	it('describes the table, and the record view, by the element it is pointed at', async () => {
+		const status = document.createElement('p');
+		status.id = 'result-line';
+		status.textContent = 'Showing 2 Clients, soonest due first.';
+		document.body.append(status);
+		try {
+			await setup({ caption: 'Clients', describedBy: 'result-line' });
+
+			await expect
+				.element(page.getByRole('table', { name: 'Clients' }))
+				.toHaveAccessibleDescription('Showing 2 Clients, soonest due first.');
+			await page.viewport(...NARROW);
+			await expect
+				.element(page.getByRole('group', { name: 'Clients' }))
+				.toHaveAccessibleDescription('Showing 2 Clients, soonest due first.');
+		} finally {
+			status.remove();
+		}
+	});
+
+	it('lets a filling table\'s one growing column take the room, and every other column keep its content\'s width', async () => {
+		const { container } = await setup({
+			columns: [
+				{ label: 'Name', accessor: (row: Row) => row.name },
+				{ label: 'Status', accessor: (row: Row) => row.status, grows: true }
+			],
+			columnWidths: 'fill',
+			caption: 'People'
+		});
+
+		await expect.element(page.getByRole('columnheader', { name: 'Name' })).toBeVisible();
+		const table = container.querySelector('table')!.getBoundingClientRect();
+		const name = page.getByRole('columnheader', { name: 'Name' }).element().getBoundingClientRect();
+		const status = page.getByRole('columnheader', { name: 'Status' }).element().getBoundingClientRect();
+		const longest = Math.max(
+			...page
+				.getByRole('rowheader')
+				.elements()
+				.map((header) => {
+					const range = document.createRange();
+					range.selectNodeContents(header);
+					return range.getBoundingClientRect().width;
+				})
+		);
+		// The name column is its longest name and the cell's inset, not a share of the frame.
+		expect(name.width).toBeLessThan(longest + 24);
+		expect(status.width).toBeGreaterThan(table.width / 2);
+		expect(name.width + status.width).toBeCloseTo(table.width, 0);
+	});
+
+	it('moves no column left of the growing one when a column right of it is left out of a filling table', async () => {
+		const filling = [
+			{ label: 'Name', accessor: (row: Row) => row.name },
+			{ label: 'Status', accessor: (row: Row) => row.status, grows: true },
+			{ label: 'Extra', accessor: () => 'Some words' }
+		];
+		const { container } = await setup({ columns: filling, columnWidths: 'fill', caption: 'People' });
+		await expect.element(page.getByRole('columnheader', { name: 'Name' })).toBeVisible();
+		const before = container.querySelector('table')!.getBoundingClientRect().width;
+		const nameBefore = page.getByRole('columnheader', { name: 'Name' }).element().getBoundingClientRect().width;
+
+		await render(DataTable<Row>, {
+			columns: filling.slice(0, 2),
+			rows,
+			emptyMessage: '',
+			columnWidths: 'fill',
+			caption: 'Others'
+		});
+
+		const tables = document.querySelectorAll('table');
+		expect(tables[1]!.getBoundingClientRect().width).toBeCloseTo(before, 0);
+		expect(page.getByRole('columnheader', { name: 'Name' }).nth(1).element().getBoundingClientRect().width).toBeCloseTo(nameBefore, 0);
+	});
+
+	it('draws a compact record as the name, the next field, then the rest on one line, with labels read not drawn', async () => {
+		await setup({ columns: [...columns, { label: 'Doula', accessor: () => 'Priya Raman' }], recordLayout: 'compact', caption: 'People' });
+		await page.viewport(...NARROW);
+
+		const record = page.getByRole('group', { name: 'People' }).element().firstElementChild as HTMLElement;
+		expect(record.textContent).toMatch(/Ada Lovelace.*Status:\s+Active.*Doula:\s+Priya Raman/s);
+	});
+
+	it('hands a compact record\'s snippet cells the record view', async () => {
+		const viewSnippet = createRawSnippet<[Row, DataTableView]>((_row, view) => ({
+			render: () => `<span>drawn in ${view()}</span>`
+		}));
+		const twoMore = [
+			columns[0],
+			{ label: 'Status', accessor: (row: Row) => row.status, content: viewSnippet },
+			{ label: 'Doula', accessor: () => 'Priya Raman', content: viewSnippet }
+		];
+		await setup({ columns: twoMore as typeof columns, recordLayout: 'compact', caption: 'People' });
+		await page.viewport(...NARROW);
+
+		const record = page.getByRole('group', { name: 'People' }).element().firstElementChild as HTMLElement;
+		expect(record.textContent).toContain('drawn in record');
+	});
+
+	it('draws a compact record with nothing on its second line when it holds one field', async () => {
+		await setup({ recordLayout: 'compact', caption: 'People' });
+		await page.viewport(...NARROW);
+
+		const record = page.getByRole('group', { name: 'People' }).element().firstElementChild as HTMLElement;
+		expect(record.textContent).toMatch(/Ada Lovelace.*Status:\s+Active/s);
+	});
+
+	it('draws no last line for a compact record that says nothing in it, though another does', async () => {
+		await setup({ columns: [...columns, { label: 'Doula', accessor: (row: Row) => (row.name === 'Ada Lovelace' ? 'Priya Raman' : '') }], recordLayout: 'compact', caption: 'People' });
+		await page.viewport(...NARROW);
+
+		const metas = [...page.getByRole('group', { name: 'People' }).element().querySelectorAll('.compact-meta')] as HTMLElement[];
+		expect(metas).toHaveLength(1);
+		expect(metas[0]!.textContent).toContain('Priya Raman');
+	});
+
+	it('marks the table and the record view busy while a newer page is on its way', async () => {
+		await setup({ caption: 'Clients', isBusy: true });
+
+		await expect.element(page.getByRole('table', { name: 'Clients' })).toHaveAttribute('aria-busy', 'true');
+		await page.viewport(...NARROW);
+		await expect.element(page.getByRole('group', { name: 'Clients' })).toHaveAttribute('aria-busy', 'true');
+	});
+
+	it('gives the record view the caption as its accessible name', async () => {
+		await setup({ caption: 'Showing 2 Clients, soonest due first.' });
+		await page.viewport(...NARROW);
+
+		await expect.element(page.getByRole('group', { name: 'Showing 2 Clients, soonest due first.' })).toBeVisible();
+	});
+
 	it('renders each row via the column accessors', async () => {
 		await setup();
 
-		await expect.element(page.getByRole('cell', { name: 'Ada Lovelace' })).toBeVisible();
+		await expect.element(page.getByRole('rowheader', { name: 'Ada Lovelace' })).toBeVisible();
 		await expect.element(page.getByRole('cell', { name: 'Active', exact: true })).toBeVisible();
-		await expect.element(page.getByRole('cell', { name: 'Grace Hopper' })).toBeVisible();
+		await expect.element(page.getByRole('rowheader', { name: 'Grace Hopper' })).toBeVisible();
 		await expect.element(page.getByRole('cell', { name: 'Inactive' })).toBeVisible();
 	});
 
@@ -301,7 +490,7 @@ describe('DataTable.svelte', () => {
 	it('renders plain cells with no links when rowHref is omitted', async () => {
 		const { container } = await setup();
 
-		await expect.element(page.getByRole('cell', { name: 'Ada Lovelace' })).toBeVisible();
+		await expect.element(page.getByRole('rowheader', { name: 'Ada Lovelace' })).toBeVisible();
 		expect(container.querySelector('.table-view')!.querySelectorAll('a')).toHaveLength(0);
 	});
 
@@ -397,7 +586,7 @@ describe('DataTable.svelte', () => {
 		});
 
 		await expect.element(page.getByRole('alert')).toHaveTextContent('Failed to load more records');
-		await expect.element(page.getByRole('cell', { name: 'Ada Lovelace' })).toBeVisible();
+		await expect.element(page.getByRole('rowheader', { name: 'Ada Lovelace' })).toBeVisible();
 		await expect.element(page.getByRole('button', { name: 'Load more' })).toBeVisible();
 	});
 
@@ -410,7 +599,7 @@ describe('DataTable.svelte', () => {
 	it('renders no trailing action column when rowActions is omitted', async () => {
 		const { container } = await setup();
 
-		expect(container.querySelectorAll('th')).toHaveLength(2);
+		expect(container.querySelectorAll('th[scope="col"]')).toHaveLength(2);
 	});
 
 	it('renders a trailing header and per-row action content when rowActions is provided', async () => {
@@ -509,6 +698,34 @@ describe('DataTable.svelte', () => {
  * rather than a resolved CSS custom property -- the class is the
  * component's own contract; the token behind it is tokens.spec.ts's job.
  */
+// How far a cell's words start inside the cell.
+const inset = (name: string, role: 'columnheader' | 'rowheader' | 'cell') => {
+	const cell = page.getByRole(role, { name }).first().element();
+	const words = document.createRange();
+	words.selectNodeContents(cell);
+	return words.getBoundingClientRect().left - cell.getBoundingClientRect().left;
+};
+
+describe('the first column’s edge', () => {
+	it('takes the first column’s inset away, header and rows alike, and leaves the other columns’ alone', async () => {
+		await setup();
+
+		expect(inset('Name', 'columnheader')).toBeLessThan(0.5);
+		expect(inset('Ada Lovelace', 'rowheader')).toBeLessThan(0.5);
+		expect(inset('Status', 'columnheader')).toBeGreaterThan(0);
+		expect(inset('Active', 'cell')).toBeGreaterThan(0);
+	});
+
+	it('starts the first column’s words at the table’s own edge', async () => {
+		await setup();
+
+		const table = page.getByRole('table').element().getBoundingClientRect();
+		const range = document.createRange();
+		range.selectNodeContents(page.getByRole('rowheader', { name: 'Ada Lovelace' }).element());
+		expect(Math.abs(range.getBoundingClientRect().left - table.left)).toBeLessThanOrEqual(1);
+	});
+});
+
 describe('the activity ledger treatment (#486)', () => {
 	const ledgerColumns = [
 		{ label: 'When', accessor: (row: Row) => row.name, variant: 'meta' as const },
@@ -519,20 +736,20 @@ describe('the activity ledger treatment (#486)', () => {
 	it('marks the meta column body cells, header excluded', async () => {
 		const { container } = await setup({ columns: ledgerColumns });
 
-		expect(container.querySelectorAll(':scope .table-view td.meta')).toHaveLength(rows.length);
-		expect(container.querySelector(':scope .table-view th.meta')).toBeNull();
+		expect(container.querySelectorAll(':scope .table-view tbody :is(td, th).meta')).toHaveLength(rows.length);
+		expect(container.querySelector(':scope .table-view thead th.meta')).toBeNull();
 	});
 
 	it('marks the body-variant column body cells', async () => {
 		const { container } = await setup({ columns: ledgerColumns });
 
-		expect(container.querySelectorAll(':scope .table-view td.variant-body')).toHaveLength(rows.length);
+		expect(container.querySelectorAll(':scope .table-view tbody :is(td, th).variant-body')).toHaveLength(rows.length);
 	});
 
 	it('marks the muted column body cells', async () => {
 		const { container } = await setup({ columns: ledgerColumns });
 
-		expect(container.querySelectorAll(':scope .table-view td.muted')).toHaveLength(rows.length);
+		expect(container.querySelectorAll(':scope .table-view tbody :is(td, th).muted')).toHaveLength(rows.length);
 	});
 
 	/*
@@ -572,10 +789,10 @@ describe('the activity ledger treatment (#486)', () => {
 			};
 
 			// Geometry, which the accessible tree does not carry (svelte-tests.md, case 1's reason).
-			expect(lines(container.querySelector(':scope .table-view td.variant-body')!)).toBeGreaterThan(
+			expect(lines(container.querySelector(':scope .table-view tbody :is(td, th).variant-body')!)).toBeGreaterThan(
 				1
 			);
-			expect(lines(container.querySelector(':scope .table-view td.meta')!)).toBe(1);
+			expect(lines(container.querySelector(':scope .table-view tbody :is(td, th).meta')!)).toBe(1);
 		} finally {
 			host.remove();
 		}
@@ -613,7 +830,7 @@ describe('the activity ledger treatment (#486)', () => {
 				return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
 			};
 			// Geometry, which the accessible tree does not carry (svelte-tests.md, case 1's reason).
-			const cells = [...container.querySelectorAll(':scope .table-view tbody td')];
+			const cells = [...container.querySelectorAll(':scope .table-view tbody :is(td, th)')];
 
 			expect(lines(cells[2]!)).toBeGreaterThan(1);
 			expect(cells.slice(0, 2).map((cell) => lines(cell))).toEqual([1, 1]);
@@ -627,7 +844,7 @@ describe('the activity ledger treatment (#486)', () => {
 		const { container } = await setup();
 
 		expect(
-			container.querySelector(':scope .table-view td.meta, :scope .table-view td.muted, :scope .table-view td.variant-body')
+			container.querySelector(':scope .table-view tbody :is(td, th).meta, :scope .table-view tbody :is(td, th).muted, :scope .table-view tbody :is(td, th).variant-body')
 		).toBeNull();
 	});
 
@@ -659,7 +876,7 @@ describe('the activity ledger treatment (#486)', () => {
 	it('renders open with no disclosure wrapper when disclosure is omitted', async () => {
 		const { container } = await setup();
 
-		await expect.element(page.getByRole('cell', { name: 'Ada Lovelace' })).toBeVisible();
+		await expect.element(page.getByRole('rowheader', { name: 'Ada Lovelace' })).toBeVisible();
 		expect(container.querySelector('details')).toBeNull();
 	});
 
@@ -676,7 +893,7 @@ describe('the activity ledger treatment (#486)', () => {
 		expect(getComputedStyle(container.querySelector('.frame')!).display).toBe('none');
 
 		await page.getByText('Everything that has happened').click();
-		await expect.element(page.getByRole('cell', { name: 'Ada Lovelace' })).toBeVisible();
+		await expect.element(page.getByRole('rowheader', { name: 'Ada Lovelace' })).toBeVisible();
 		expect(getComputedStyle(container.querySelector('.frame')!).display).not.toBe('none');
 	});
 });
@@ -704,7 +921,7 @@ function firstRow(container: HTMLElement): HTMLElement {
 }
 
 function firstRowCells(container: HTMLElement): HTMLElement[] {
-	return [...container.querySelectorAll<HTMLElement>(':scope .table-view tbody tr:first-child td')];
+	return [...container.querySelectorAll<HTMLElement>(':scope .table-view tbody tr:first-child :is(td, th)')];
 }
 
 /**

@@ -4,6 +4,7 @@ import {
 	createClient,
 	editClient,
 	loadClientCount,
+	loadDoulaCounts,
 	loadClients,
 	mergeClient,
 	searchClients,
@@ -38,6 +39,22 @@ describe('loadClientCount', () => {
 		const fetcher = vi.fn().mockResolvedValue(response({ message: 'You cannot see this Practice.' }, 403));
 
 		await expect(loadClientCount(fetcher, 'practice-1')).rejects.toThrow('You cannot see this Practice.');
+	});
+});
+
+describe('loadDoulaCounts', () => {
+	it('reads the doula-counts path and returns the counts', async () => {
+		const counts = { mine: 1, doulas: { 'staff-1': 1, 'staff-2': 3 } };
+		const fetcher = vi.fn().mockResolvedValue(response(counts));
+
+		await expect(loadDoulaCounts(fetcher, 'practice-1')).resolves.toEqual(counts);
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/clients/doula-counts');
+	});
+
+	it('throws on a refusal', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response({ message: 'You cannot see this Practice.' }, 403));
+
+		await expect(loadDoulaCounts(fetcher, 'practice-1')).rejects.toThrow('You cannot see this Practice.');
 	});
 });
 
@@ -80,6 +97,74 @@ describe('loadClients', () => {
 		await loadClients(fetcher, 'practice-1', { showMine: true, cursor: 'next-page' });
 
 		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/clients?mine=true&cursor=next-page');
+	});
+
+	it('appends owes=true and noContract=true when showOwing and showNoContract are set (#2724)', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response({ items: [], hasMore: false }));
+
+		await loadClients(fetcher, 'practice-1', { showMine: true, showOwing: true, showNoContract: true, cursor: 'next-page' });
+
+		expect(fetcher).toHaveBeenCalledWith(
+			'/api/practices/practice-1/clients?mine=true&owes=true&noContract=true&cursor=next-page'
+		);
+	});
+
+	it('appends the Doula beside every other param', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response({ items: [], hasMore: false }));
+
+		await loadClients(fetcher, 'practice-1', { showOwing: true, doula: 'staff-1', cursor: 'next-page' });
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/clients?owes=true&doula=staff-1&cursor=next-page');
+	});
+
+	it('sends a name in a POST body, with every other filter, and never in the address (#1829)', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response({ items: [], hasMore: false }));
+
+		await loadClients(fetcher, 'practice-1', {
+			showAll: true,
+			showMine: true,
+			showOwing: true,
+			showNoContract: true,
+			doula: 'staff-1',
+			name: 'Anne & Marie 100%',
+			cursor: 'next-page'
+		});
+
+		const [path, init] = fetcher.mock.calls[0];
+		expect(path).toBe('/api/practices/practice-1/clients/list');
+		expect(path).not.toContain('Anne');
+		expect(init.method).toBe('POST');
+		expect(JSON.parse(init.body)).toEqual({
+			name: 'Anne & Marie 100%',
+			all: true,
+			mine: true,
+			owes: true,
+			noContract: true,
+			doula: 'staff-1',
+			cursor: 'next-page'
+		});
+	});
+
+	it('sends the unset filters of a named list as off', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response({ items: [], hasMore: false }));
+
+		await loadClients(fetcher, 'practice-1', { name: 'Camille' });
+
+		expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({
+			name: 'Camille',
+			all: false,
+			mine: false,
+			owes: false,
+			noContract: false,
+			doula: '',
+			cursor: ''
+		});
+	});
+
+	it('throws with the response body text when a named list is refused', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response('forbidden', 403));
+
+		await expect(loadClients(fetcher, 'practice-1', { name: 'Camille' })).rejects.toThrow('forbidden');
 	});
 
 	it('combines all=true and the cursor when both are given', async () => {
@@ -297,18 +382,134 @@ describe('mergeClient', () => {
 });
 
 describe('clientsResultSummary (#2068)', () => {
+	it('says the list is ordered soonest due first, and the first 30 when more wait', () => {
+		expect(clientsResultSummary(30, true, false)).toBe('Showing the first 30 Clients, soonest due first, then most recently ended.');
+	});
+
+	// A loss is not a birth: the order names what it sorts by, neutrally.
+	it('never calls an ended pregnancy a birth in how it says the list is ordered', () => {
+		const lines = [
+			clientsResultSummary(3, false, false),
+			clientsResultSummary(3, true, true),
+			clientsResultSummary(3, false, false, true, true, true, { doulaName: 'Lena Vasquez', name: 'Cam' })
+		];
+		for (const line of lines) {
+			expect(line).toMatch(/, soonest due first, then most recently ended\.$/);
+			expect(line).not.toMatch(/birth/i);
+		}
+	});
+
 	it('counts the Clients the filter shows', () => {
-		expect(clientsResultSummary(0, false, false)).toBe('No Clients with work.');
+		expect(clientsResultSummary(0, false, false)).toBe('No Clients in care yet.');
 		expect(clientsResultSummary(0, false, true)).toBe('No Clients.');
-		expect(clientsResultSummary(1, false, false)).toBe('Showing 1 Client with work.');
-		expect(clientsResultSummary(3, false, true)).toBe('Showing 3 Clients.');
-		expect(clientsResultSummary(25, true, true)).toBe('Showing 25 Clients so far. More remain.');
+		expect(clientsResultSummary(1, false, false)).toBe('Showing 1 Client, soonest due first, then most recently ended.');
+		expect(clientsResultSummary(3, false, true)).toBe('Showing 3 Clients, including anyone not yet in care, soonest due first, then most recently ended.');
+		expect(clientsResultSummary(25, true, true)).toBe('Showing the first 25 Clients, including anyone not yet in care, soonest due first, then most recently ended.');
 	});
 
 	// #2624
 	it('words the list as hers while "Only my Clients" is on', () => {
-		expect(clientsResultSummary(0, false, false, true)).toBe('No Clients are yours yet.');
-		expect(clientsResultSummary(5, false, false, true)).toBe('Showing 5 of your Clients.');
-		expect(clientsResultSummary(30, true, false, true)).toBe('Showing 30 of your Clients so far. More remain.');
+		expect(clientsResultSummary(0, false, false, true)).toBe('You are not the Doula for any Client yet. Clear the filters to widen the list.');
+		expect(clientsResultSummary(5, false, false, true)).toBe('Showing 5 of your Clients, soonest due first, then most recently ended.');
+		expect(clientsResultSummary(30, true, false, true)).toBe('Showing the first 30 of your Clients, soonest due first, then most recently ended.');
+	});
+
+	// #2724
+	it('words the list for the Clients who owe money', () => {
+		expect(clientsResultSummary(3, false, false, false, true)).toBe('Showing 3 Clients who owe money, soonest due first, then most recently ended.');
+		expect(clientsResultSummary(1, false, false, false, true)).toBe('Showing 1 Client who owes money, soonest due first, then most recently ended.');
+		expect(clientsResultSummary(30, true, false, false, true)).toBe('Showing the first 30 Clients who owe money, soonest due first, then most recently ended.');
+		expect(clientsResultSummary(0, false, false, false, true)).toBe('No Client owes money. Clear the filters to widen the list.');
+	});
+
+	it('words the list for the Clients with no Contract', () => {
+		expect(clientsResultSummary(4, false, false, false, false, true)).toBe('Showing 4 active Clients with no Contract, soonest due first, then most recently ended.');
+		expect(clientsResultSummary(0, false, false, false, false, true)).toBe('No active Client is missing a Contract. Clear the filters to widen the list.');
+	});
+
+	it('words the list when both apply, and when it is hers', () => {
+		expect(clientsResultSummary(2, false, false, false, true, true)).toBe('Showing 2 active Clients who owe money and have no Contract, soonest due first, then most recently ended.');
+		expect(clientsResultSummary(1, false, false, false, true, true)).toBe('Showing 1 active Client who owes money and has no Contract, soonest due first, then most recently ended.');
+		expect(clientsResultSummary(0, false, false, false, true, true)).toBe('No active Client owes money and is missing a Contract. Clear the filters to widen the list.');
+		expect(clientsResultSummary(2, false, false, true, true)).toBe('Showing 2 of your Clients who owe money, soonest due first, then most recently ended.');
+		expect(clientsResultSummary(2, false, false, true, false, true)).toBe('Showing 2 of your active Clients with no Contract, soonest due first, then most recently ended.');
+		expect(clientsResultSummary(0, false, false, true, true, true)).toBe('None of your active Clients owe money and are missing a Contract. Clear the filters to widen the list.');
+	});
+
+	it('words the list narrowed to a name', () => {
+		const named = { name: 'Camille' };
+		expect(clientsResultSummary(3, false, false, false, false, false, named)).toBe('Showing 3 Clients named "Camille", soonest due first, then most recently ended.');
+		expect(clientsResultSummary(1, false, false, false, false, false, named)).toBe('Showing 1 Client named "Camille", soonest due first, then most recently ended.');
+		expect(clientsResultSummary(30, true, true, false, false, false, named)).toBe('Showing the first 30 Clients named "Camille", including anyone not yet in care, soonest due first, then most recently ended.');
+		expect(clientsResultSummary(0, false, false, false, false, false, named)).toBe('No Client is named "Camille". Turn on "Also show anyone not yet in care" to look among them.');
+		expect(clientsResultSummary(0, false, true, false, false, false, named)).toBe('No Client is named "Camille". Clear the filters to widen the list.');
+	});
+
+	it('words the list narrowed to a Doula, and to a Doula and a name', () => {
+		const doula = { doulaName: 'Kimiko Nakashima' };
+		expect(clientsResultSummary(5, false, false, false, false, false, doula)).toBe("Showing Kimiko Nakashima's 5 Clients, soonest due first, then most recently ended.");
+		expect(clientsResultSummary(5, false, false, false, false, false, { ...doula, name: 'Cam' })).toBe(
+			'Showing Kimiko Nakashima\'s 5 Clients named "Cam", soonest due first, then most recently ended.'
+		);
+		expect(clientsResultSummary(1, false, false, false, false, false, doula)).toBe("Showing Kimiko Nakashima's 1 Client, soonest due first, then most recently ended.");
+		expect(clientsResultSummary(30, true, false, false, false, false, doula)).toBe("Showing the first 30 of Kimiko Nakashima's Clients, soonest due first, then most recently ended.");
+		expect(clientsResultSummary(2, true, false, false, false, true, doula)).toBe("Showing the first 2 of Kimiko Nakashima's active Clients with no Contract, soonest due first, then most recently ended.");
+		expect(clientsResultSummary(2, false, false, false, false, true, doula)).toBe("Showing Kimiko Nakashima's 2 active Clients with no Contract, soonest due first, then most recently ended.");
+		expect(clientsResultSummary(0, false, false, false, false, false, doula)).toBe('Kimiko Nakashima has no Clients. Clear the filters to widen the list.');
+	});
+
+	it('words a name beside the other narrowings, and says nobody matched them', () => {
+		const named = { name: 'Cam' };
+		expect(clientsResultSummary(2, false, false, false, true, true, named)).toBe(
+			'Showing 2 active Clients named "Cam" who owe money and have no Contract, soonest due first, then most recently ended.'
+		);
+		expect(clientsResultSummary(1, false, false, false, true, true, named)).toBe(
+			'Showing 1 active Client named "Cam" who owes money and has no Contract, soonest due first, then most recently ended.'
+		);
+		expect(clientsResultSummary(1, false, false, false, true, false, named)).toBe('Showing 1 Client named "Cam" who owes money, soonest due first, then most recently ended.');
+		expect(clientsResultSummary(2, false, false, false, false, true, named)).toBe('Showing 2 active Clients named "Cam" with no Contract, soonest due first, then most recently ended.');
+		expect(clientsResultSummary(2, false, false, true, false, false, named)).toBe('Showing 2 of your Clients named "Cam", soonest due first, then most recently ended.');
+		expect(clientsResultSummary(0, false, false, true, false, false, named)).toBe('None of your Clients is named "Cam". Clear the filters to widen the list.');
+		expect(clientsResultSummary(0, false, false, false, true, false, named)).toBe('No Client named "Cam" owes money. Clear the filters to widen the list.');
+		expect(clientsResultSummary(0, false, false, false, false, true, named)).toBe('No active Client named "Cam" is missing a Contract. Clear the filters to widen the list.');
+	});
+
+	// An empty narrowed result says what was looked for, in the count line's words.
+	it('names what an empty narrowed list was looking for', () => {
+		const doula = { doulaName: 'Priya Raman' };
+		const clear = ' Clear the filters to widen the list.';
+		expect(clientsResultSummary(0, false, false, false, true, false, doula)).toBe(`None of Priya Raman's Clients owe money.${clear}`);
+		expect(clientsResultSummary(0, false, false, false, false, false, { doulaName: 'Renata Alvarez' })).toBe(`Renata Alvarez has no Clients.${clear}`);
+		expect(clientsResultSummary(0, false, true, false, false, false, { doulaName: 'Renata Alvarez' })).toBe(`Renata Alvarez has no Clients.${clear}`);
+		expect(clientsResultSummary(0, false, false, false, false, false, { ...doula, name: 'Cam' })).toBe(`None of Priya Raman's Clients is named "Cam".${clear}`);
+		expect(clientsResultSummary(0, false, false, true, false, false, doula)).toBe(`You have no Clients with Priya Raman.${clear}`);
+		expect(clientsResultSummary(0, false, false, true, false, false)).toBe(`You are not the Doula for any Client yet.${clear}`);
+	});
+
+	// ADR-0017: the default list is any Engagement, in any status, or a pending Request.
+	it('does not name the default list’s group, and says what the switch adds', () => {
+		expect(clientsResultSummary(2, false, false)).toBe(
+			'Showing 2 Clients, soonest due first, then most recently ended.'
+		);
+		expect(clientsResultSummary(2, false, true)).toBe(
+			'Showing 2 Clients, including anyone not yet in care, soonest due first, then most recently ended.'
+		);
+	});
+
+	it('says nothing of the switch beside a filter that already implies care, since it changes nothing there', () => {
+		const expected = 'Showing 2 of your Clients, soonest due first, then most recently ended.';
+		expect(clientsResultSummary(2, false, true, true)).toBe(expected);
+		expect(clientsResultSummary(2, false, true, false, true)).toBe(
+			'Showing 2 Clients who owe money, soonest due first, then most recently ended.'
+		);
+		expect(clientsResultSummary(2, false, true, false, false, false, { doulaName: 'Priya Raman' })).toBe(
+			"Showing Priya Raman's 2 Clients, soonest due first, then most recently ended."
+		);
+	});
+
+	it('keeps the switch in the line beside a name, which implies no care', () => {
+		expect(clientsResultSummary(2, false, true, false, false, false, { name: 'Cam' })).toBe(
+			'Showing 2 Clients named "Cam", including anyone not yet in care, soonest due first, then most recently ended.'
+		);
 	});
 });

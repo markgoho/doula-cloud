@@ -81,6 +81,13 @@ const PRONOUNS = ['she', 'her', 'hers', 'herself', 'he', 'him', 'his', 'himself'
 const SINGULAR_THEM =
 	/\b(?:sends?|sent|emails?|emailed|tells?|told|invites?|invited|reminds?|reminded|messages?|messaged|notify|notifies|notified|lets?)\s+(?:to\s+)?them\b/i;
 
+// "their" before one thing a person has, in the singular: "lists you as their
+// Doula", "their name". A singular noun after "their" is one person's, where
+// "their invoices" is a plural of things and is left alone (limit 1 above).
+// "they" stays out: only a verb that is singular-only could tell it apart.
+const SINGULAR_THEIR =
+	/\btheir\s+(?:doula|client|owner|admin|staff member|practice|name|email|phone|contract|invoice|birth plan|due date|engagement)\b(?!s)/i;
+
 const MARKER = 'voice:ignore';
 
 // A marker only counts with a reason after it.
@@ -119,6 +126,7 @@ function offensesIn(text: string): Pick<Offense, 'found' | 'text'>[] {
 		}
 	}
 	if (SINGULAR_THEM.test(text)) found.push({ found: 'them', text });
+	if (SINGULAR_THEIR.test(text)) found.push({ found: 'their', text });
 	return found;
 }
 
@@ -202,6 +210,15 @@ describe('findOffensesInSource', () => {
 			{ file: 'fixture.svelte', line: 1, found: 'them', text: line }
 		]);
 		expect(findOffensesInSource('fixture.ts', "export const HINT = 'Remind them to sign';")).toHaveLength(1);
+	});
+
+	it('flags "their" before one thing a person has, not a plural of things', () => {
+		const line = "export const EMPTY = 'No Client lists you as their Doula yet.';";
+
+		expect(findOffensesInSource('fixture.ts', line)).toEqual([
+			{ file: 'fixture.ts', line: 1, found: 'their', text: 'No Client lists you as their Doula yet.' }
+		]);
+		expect(findOffensesInSource('fixture.ts', "export const A = 'Pay their invoices.';")).toEqual([]);
 	});
 
 	it('leaves "them" alone where it is a plural of things', () => {

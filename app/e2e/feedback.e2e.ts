@@ -20,7 +20,7 @@ test('sends a piece of Feedback from a Staff screen', async ({ page, request, co
 	await enterPractice(context, page, staffHeaders, owner.practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${owner.practiceId}$`));
 
-	await page.getByRole('button', { name: 'Tell us what is not working or what you need.' }).click();
+	await page.getByRole('button', { name: 'Tell us what you think.' }).click();
 	await expect(page.getByRole('dialog', { name: 'Send feedback to DoulaCloud' })).toBeVisible();
 
 	await page.getByLabel('An idea or a request').check();

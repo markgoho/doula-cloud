@@ -239,6 +239,10 @@ describe('offerStateLabels', () => {
 	it('gives every one of them a badge variant, so neither screen keeps its own copy', () => {
 		expect(Object.keys(offerStateVariants)).toEqual(states);
 	});
+
+	it('shows an expired Offer in the red badge: red means late or failed', () => {
+		expect(offerStateVariants.expired).toBe('error');
+	});
 });
 
 const erased = { ...offer, clientFirstInitial: '', clientArea: '', dueDate: '' };

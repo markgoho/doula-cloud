@@ -52,6 +52,12 @@
 		backHref?: string;
 		backLabel?: string;
 		/**
+		 * The route's own move for the Back link, when a plain navigation
+		 * would drop something the page it returns to keeps in history state.
+		 * It owns `preventDefault()`; with no script the href still works.
+		 */
+		onBack?: (event: MouseEvent) => void;
+		/**
 		 * The record will have a Back link whose target is its own data,
 		 * such as the Practice Your account came from (#2251). While
 		 * `loading`, its line is held so the title does not move when it
@@ -93,9 +99,9 @@
 		 * Optional because archetype D covers short records too, and a
 		 * contents list above three sections is furniture. It is also
 		 * consulted while `loading` -- a route knows whether its record has
-		 * a rail before the record has loaded, since it never varied by
-		 * data (#480) -- to reserve the rail's column width so the layout
-		 * does not shift width once `sections` exists to derive links from.
+		 * contents before the record has loaded, since it never varied by
+		 * data (#480) -- so the list is drawn from the named sections at
+		 * once and the page does not move when the record lands.
 		 */
 		isContentsShown?: boolean;
 		/**
@@ -114,6 +120,7 @@
 		outcome,
 		backHref,
 		backLabel,
+		onBack,
 		isBackPending = false,
 		summary,
 		summaryRows,
@@ -166,12 +173,12 @@
 				-->
 				<div class="record-header">
 					{#if backHref}
-						<div class="back"><BackLink href={backHref} label={backLabel} /></div>
+						<div class="back"><BackLink href={backHref} label={backLabel} onClick={onBack} /></div>
 					{/if}
 					{#if outcome}
 						<div class="notice"><Notice variant="status" message={outcome} isFocusedOnAppear /></div>
 					{/if}
-					<cluster-l space="var(--space-4)" justify="space-between" align="baseline">
+					<cluster-l space="var(--space-group)" align="baseline">
 						<Heading level={1} variant="page" text={title} />
 						{#if actions}
 							<cluster-l space="var(--space-2)" align="center">{@render actions()}</cluster-l>
@@ -184,9 +191,11 @@
 				</div>
 		{/snippet}
 
-		<!-- #2257: on a narrow page the contents sit under the title and
-		     above the summary, so the way to every section is on a phone's
-		     first screen. -->
+		<!-- The contents sit under the title and above the summary at every
+		     width, GOV.UK's contents list (ADR-0021): on a phone's first
+		     screen (#2257), and on a wide one at the gutter every Staff
+		     page starts at, with no second column to read as a nav
+		     (ADR-0018, 2026-11-07). -->
 		{#snippet contentsStrip()}
 			<div class="contents-strip">
 				<stack-l space="var(--space-2)">
@@ -200,20 +209,6 @@
 			</div>
 		{/snippet}
 
-		{#snippet contentsRail()}
-			<div class="contents">
-				<div class="contents-rail">
-					<stack-l space="var(--space-3)">
-						<p class="contents-heading">On this page</p>
-						<div class="contents-links">
-							{#each sections as section (section.heading)}
-								<Link href="#{anchorId(section.heading)}" label={section.heading} variant="rail" />
-							{/each}
-						</div>
-					</stack-l>
-				</div>
-			</div>
-		{/snippet}
 
 		<!-- What the header is before the record loads (#2248): the back
 		     link and the title, which a route knows first, and a
@@ -222,12 +217,12 @@
 		{#snippet loadingHeader()}
 			<div class="record-header">
 				{#if backHref}
-					<div class="back"><BackLink href={backHref} label={backLabel} /></div>
+					<div class="back"><BackLink href={backHref} label={backLabel} onClick={onBack} /></div>
 				{:else if isBackPending}
 					<div class="back back-placeholder" aria-hidden="true"></div>
 				{/if}
 				{#if loadingActions}
-					<cluster-l space="var(--space-4)" justify="space-between" align="baseline">
+					<cluster-l space="var(--space-group)" align="baseline">
 						{#if title}
 							<Heading level={1} variant="page" text={title} />
 						{:else}
@@ -331,55 +326,10 @@
 		{#if loadError}
 			<Notice variant="error" message={loadError} />
 		{:else if loading}
-			{#if isContentsShown}
-				<!-- The loaded record's own grid (#2248), so the rail's column
-				     sits where the loaded rail does and flips at the same
-				     width. The contents are drawn from the headings the route
-				     already names (#2257). -->
-				<div class="record">
-					<div class="record-grid">
-						{@render loadingHeader()}
-						{@render contentsRail()}
-						{@render loadingSections()}
-					</div>
-				</div>
-			{:else}
-				<stack-l space="var(--space-section)">
-					{@render loadingHeader()}
-					{@render loadingSections()}
-				</stack-l>
-			{/if}
-		{:else if isContentsShown}
-			<!--
-				#2004: the contents sit between the record's header and its
-				sections, in reading order as on the page: a screen reader or
-				keyboard user meets the title, then what is on the page, then
-				the sections -- GOV.UK's contents list, after the title. Where
-				the sections column can hold a reading measure beside it, the
-				contents are the drawing's "On this page" rail to the left of
-				the header and the sections; below that, the drawing's narrow
-				"Jump to" strip under the title and above the summary, on
-				a phone's first screen, where a Doula reading at arm's length
-				in a corridor finds it (PR-G5, #2257). Before #2004 the
-				narrow page stacked the rail under the last section, the full
-				height of the page away from the title.
-
-				One query decides both the arrangement and which list
-				renders, so the two cannot disagree: a strip beside the
-				sections, or a rail above them, is a state no width reaches.
-				The same list twice, and exactly one of them rendered at a
-				time -- `display: none` takes the other out of the
-				accessibility tree entirely, so nothing is announced twice.
-			-->
-			<div class="record">
-				<div class="record-grid">
-					{@render recordHeader()}
-
-					{@render contentsRail()}
-
-					{@render recordSections()}
-				</div>
-			</div>
+			<stack-l space="var(--space-section)">
+				{@render loadingHeader()}
+				{@render loadingSections()}
+			</stack-l>
 		{:else}
 			{@render recordContent()}
 		{/if}
@@ -489,15 +439,11 @@
 			font-weight: var(--font-weight-medium);
 		}
 
-		/* No gap: the entries' left hairlines meet and read as one rule
-		   down the list, which is what makes it a list without a border box
-		   around it. */
-		.contents-links {
-			display: grid;
-		}
-
 		/* Proximity again: the strip is the title's, as the summary is. */
 		.contents-strip {
+			/* As wide as its links, so on a wide record the box ends with
+			   them rather than at the window's edge. */
+			inline-size: fit-content;
 			margin-block-start: var(--space-4);
 			padding: var(--space-3) var(--space-4);
 			border: var(--border-thin) solid var(--color-outline-variant);
@@ -511,82 +457,6 @@
 		   already broken. */
 		section {
 			scroll-margin-block-start: calc(var(--top-bar-height) + var(--space-4));
-		}
-
-		/*
-		 * The record asks one question of its own width, so it is its own
-		 * containment context -- named, so that losing this declaration
-		 * cannot silently resolve the query below against the page (#533).
-		 */
-		.record {
-			container: record-detail / inline-size;
-		}
-
-		/* The base size re-resolved against the context (#544): a `cqi`
-		   resolves against the nearest ANCESTOR container. */
-		.record > * {
-			font-size: var(--text-body-size);
-		}
-
-		/* Narrow: one column -- the header, with the Jump to strip in it,
-		   then the sections -- with the gap between sections between each. */
-		.record-grid {
-			display: grid;
-			grid-template-columns: minmax(0, 1fr);
-			row-gap: var(--space-section);
-		}
-
-		.contents {
-			display: none;
-		}
-
-		/*
-		 * #2004: wide, the rail beside the header and the sections, from the
-		 * width at which the sections column holds a reading measure beside
-		 * it -- the content question `sidebar-l` answered here before, asked
-		 * once so the arrangement and the list that renders flip together.
-		 * Structural, and therefore a query: the strip and the rail are two
-		 * DOM trees, and no intrinsic mechanism swaps markup. The rail
-		 * column is `--page-rail` (16.25rem) and the gap `--space-12`
-		 * (3rem), so the floor is those plus the measure, checked by the
-		 * floor check's measure criterion. Measured 2026-10-26: the measure
-		 * is 631px on macOS and 650px in CI's Linux/Chromium, the canonical
-		 * environment, where the sections column reaches it from a 968px
-		 * record: 60.5rem.
-		 */
-		@container record-detail (min-width: 60.5rem) {
-			.record-grid {
-				grid-template-columns: var(--page-rail) minmax(0, 1fr);
-				grid-template-areas:
-					'contents header'
-					'contents sections';
-				column-gap: var(--space-12);
-			}
-
-			.record-grid > .record-header {
-				grid-area: header;
-			}
-
-			.record-grid > .sections {
-				grid-area: sections;
-			}
-
-			.contents {
-				display: block;
-				grid-area: contents;
-			}
-
-			.contents-rail {
-				position: sticky;
-				inset-block-start: var(--space-4);
-				max-block-size: calc(100dvh - 2 * var(--space-4));
-				overflow-y: auto;
-				padding: var(--space-1);
-			}
-
-			.contents-strip {
-				display: none;
-			}
 		}
 	}
 </style>

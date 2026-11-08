@@ -479,6 +479,8 @@ describe('payments settings screen: the states Accounts v1 could not report', ()
 		await setup({ status: 'pending', roles: ['owner'] });
 
 		await expect.element(testPage.getByText('Awaiting Stripe review')).toBeVisible();
+		// Waiting on Stripe is pending, so blue; amber stays for what needs the Owner to act.
+		await expect.element(testPage.getByText('Awaiting Stripe review')).toHaveClass('info');
 		await expect
 			.element(testPage.getByText('Stripe is reviewing the details already submitted. Nothing more is needed right now.'))
 			.toBeVisible();

@@ -114,7 +114,7 @@
 	{#if !isOwner}
 		<!-- Notice renders in body below; intro stays generic here. -->
 	{:else if status?.pending}
-		<Badge label="Deletion pending" variant="warning" />
+		<Badge label="Deletion pending" variant="info" />
 	{:else}
 		<Text text="Delete this Practice only when you are closing it for good." />
 	{/if}

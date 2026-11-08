@@ -196,10 +196,19 @@ describe('the nav', () => {
 		}
 	);
 
-	it('keeps the admin-only items hidden when no Practice session has resolved yet', async () => {
-		await setup({ hasPracticeSession: false });
+	it('keeps the admin-only items hidden while no session of either kind has said what she holds', async () => {
+		await setup({ hasPracticeSession: false, staffSessionRefuses: true });
 
+		await expect.element(page.getByRole('link', { name: 'Overview', exact: true })).toBeVisible();
 		await expect.element(page.getByRole('link', { name: 'Credits', exact: true })).not.toBeInTheDocument();
+	});
+
+	// A URL that matches no route never runs [practiceId]/+layout.ts, so
+	// Page not found had an Owner's bar shrink to a Doula's.
+	it("draws an Owner's bar from her Membership where no Practice session loaded", async () => {
+		await setup({ hasPracticeSession: false, pathname: '/practices/practice-1/nope' });
+
+		await expect.element(page.getByRole('link', { name: 'Credits', exact: true })).toBeVisible();
 	});
 
 	it('marks the current section, and marks it with more than color', async () => {
@@ -320,14 +329,14 @@ describe('the Pilot banner and Feedback drawer (#1527)', () => {
 		await setup();
 
 		await expect
-			.element(page.getByText('DoulaCloud is new, and you are one of the first to use it.', { exact: false }))
+			.element(page.getByText('Pilot', { exact: true }))
 			.toBeVisible();
 	});
 
 	it("posts a send to /api/staff/feedback with the route's own practiceId, closes the drawer, and shows a Notice", async () => {
 		await setup({ routeParameters: { practiceId: 'practice-1' }, pathname: '/practices/practice-1' });
 
-		await page.getByRole('button', { name: 'Tell us what is not working or what you need.' }).click();
+		await page.getByRole('button', { name: 'Tell us what you think.' }).click();
 		await page.getByLabelText('Something is not working').click();
 		await page.getByRole('button', { name: 'Send feedback' }).click();
 

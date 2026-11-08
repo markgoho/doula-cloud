@@ -66,13 +66,9 @@ test('The first Client in three presses, then the Visits section', async ({ page
 	await expect(page.getByText('Work with Pat started.')).toHaveCount(0);
 
 	// #1511: the new Engagement has no Visit, Contract or Invoice yet, so
-	// Schedule, Contracts and Invoices have no row for it. The Clients
-	// list and her record each link to it.
+	// Schedule, Contracts and Invoices have no row for it. Her record
+	// links to it, one click past her name on the Clients list.
 	const engagementUrl = page.url();
-	// #1998: the Engagement page's own "Clients" back link.
-	await page.getByRole('main').getByRole('link', { name: 'Clients', exact: true }).click();
-	await page.getByRole('link', { name: 'Birth', exact: true }).click();
-	await expect(page).toHaveURL(engagementUrl);
 	// #1998: the Engagement page's own "Clients" back link.
 	await page.getByRole('main').getByRole('link', { name: 'Clients', exact: true }).click();
 	await page.getByRole('link', { name: /^Pat/ }).click();

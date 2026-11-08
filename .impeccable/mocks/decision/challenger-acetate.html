@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Clients - Acetate</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800;900&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<style>
+:root{--teal:#1f7a80;--spine:#0b3a3e;--leaf:#f6f5f2;--ink:#17201f;--quiet:#5b5a55;--red:#c8312b;--rule:#d9d6cd;--link:#155a5f}
+*{box-sizing:border-box}
+html,body{width:1440px;height:900px;overflow:hidden;margin:0}
+body{background:var(--teal);color:var(--ink);font:400 17px/1.35 "Source Serif 4",Georgia,serif;font-variant-numeric:tabular-nums lining-nums;position:relative}
+h1,legend,th,.nav a,.rail a,.brand,.btn,.org{font-family:Archivo,"Helvetica Neue",Arial,sans-serif}
+header{position:absolute;left:0;top:0;width:1440px;height:100px;background:var(--spine)}
+.brand{position:absolute;left:28px;top:30px;color:#fff;font-weight:900;font-size:26px;letter-spacing:-.01em}
+.org{position:absolute;right:112px;top:14px;color:#e8f1f0;font-size:15px;font-weight:600;display:flex;align-items:center;gap:12px}
+.av{width:34px;height:34px;border-radius:50%;background:#f2c230;color:#17201f;font-weight:800;font-size:14px;display:grid;place-items:center}
+.nav{position:absolute;left:190px;bottom:0;display:flex;gap:4px}
+.nav a{display:block;height:34px;line-height:34px;padding:0 15px;font-size:15px;font-weight:700;border-radius:6px 6px 0 0;color:#fff}
+.nav a.cur{height:46px;line-height:46px;font-size:16px;font-weight:800;padding:0 24px}
+.o{background:#e2702a;color:#17201f!important}.c{background:#1f7a80}.s{background:#f2c230;color:#17201f!important}
+.i{background:#2f8f4e;color:#0a1a10!important}.k{background:#2b3fb0}.f{background:#6a3fa0}
+.n1{background:#5a6b73}.n2{background:#8a5a2b}.n3{background:#a8386f}.n4{background:#3d4a49}
+.leaf{position:absolute;left:28px;top:112px;width:1328px;height:820px;background:var(--leaf);padding:26px 32px;box-shadow:-3px 0 2px -1px rgba(0,0,0,.4)}
+.leaf::before{content:"";position:absolute;left:-14px;top:-12px;right:10px;bottom:0;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.55);z-index:-1}
+.title{display:flex;align-items:center;gap:24px}
+h1{margin:0;font-size:46px;font-weight:900;letter-spacing:-.02em;line-height:1}
+.btn{font-size:16px;font-weight:700;border:0;border-radius:4px;padding:11px 20px;background:var(--teal);color:#fff}
+fieldset{border:0;margin:16px 0 0;padding:0}
+legend{padding:0;font-size:15px;font-weight:700;color:var(--quiet);margin-bottom:8px}
+.checks{display:flex;gap:28px}
+.checks label{display:flex;align-items:center;gap:8px;font-size:16px}
+input[type=checkbox]{width:18px;height:18px;accent-color:var(--teal);margin:0}
+.fields{display:flex;gap:18px;align-items:flex-end;margin-top:14px}
+.fields label{display:flex;flex-direction:column;gap:4px;font:700 14px Archivo,sans-serif;color:var(--quiet)}
+input[type=text],select{font:400 16px "Source Serif 4",serif;height:40px;border:1px solid #8b897f;border-radius:4px;background:#fff;padding:0 10px;width:240px;color:var(--ink)}
+select{width:200px}
+.fields .btn{height:40px;padding:0 24px}
+.result{margin:18px 0 10px;font-size:16px;color:var(--quiet)}
+table{width:100%;border-collapse:collapse}
+th{background:var(--teal);color:#fff;text-align:left;font-size:15px;font-weight:700;padding:9px 14px;height:38px}
+td{padding:0 14px;height:46px;border-bottom:1px solid var(--rule);vertical-align:middle;white-space:nowrap}
+tr:nth-child(even) td{background:#ecebe6}
+td a{color:var(--link);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+td b{font-weight:700;margin-right:2px}
+.q{color:var(--quiet)}
+.badge{display:inline-block;font:700 14px Archivo,sans-serif;padding:2px 9px;border-radius:3px;margin:0 2px;color:var(--red);border:1px solid var(--red);background:#fff}
+.badge.x{background:var(--red);color:#fff}
+.rail{position:absolute;right:0;top:100px;width:84px;height:800px;background:var(--spine)}
+.rail a{position:absolute;right:0;width:42px;display:flex;flex-direction:column;align-items:center;padding-top:8px;font-size:14px;font-weight:700;color:#fff;border-radius:6px 0 0 6px;overflow:hidden}
+.rail a span{writing-mode:vertical-rl;margin-top:6px;font-size:13px;font-weight:700}
+.rail a.cur{width:84px;font-size:24px;font-weight:900;border-radius:0;padding-top:10px}
+.rail a.cur span{font-size:16px;font-weight:800}
+</style></head><body>
+<header>
+<div class="brand">DoulaCloud</div>
+<div class="org">Rooted Birth Collective <span class="av">RA</span></div>
+<nav class="nav"><a class="o">Overview</a><a class="c cur">Clients</a><a class="s">Schedule</a><a class="n1">On call</a><a class="i">Invoices</a><a class="k">Contracts</a><a class="n2">Credits</a><a class="f">Staff</a><a class="n3">Offers</a><a class="n4">Settings</a></nav>
+</header>
+<main class="leaf">
+<div class="title"><h1>Clients</h1><button class="btn">Find or add a Client</button></div>
+<form>
+<fieldset><legend>Choose which Clients to show</legend>
+<div class="checks"><label><input type="checkbox"> Only my Clients</label><label><input type="checkbox"> Only Clients who owe money</label><label><input type="checkbox"> Only active Clients with no Contract</label><label><input type="checkbox"> Also show Clients not yet in care</label></div></fieldset>
+<div class="fields"><label>Name<input type="text"></label><label>Doula<select><option>Any Doula</option></select></label><button type="button" class="btn">Apply</button></div>
+</form>
+<p class="result">Showing the first 30 Clients, soonest due first.</p>
+<table><thead><tr><th style="width:21%">Name</th><th style="width:52%">Status</th><th style="width:13%">Due</th><th>Doula</th></tr></thead><tbody>
+<tr><td><a href="#">Casey Estrada</a></td><td><b>Birth</b> <span class="q">· Intake · No Contract yet</span></td><td>Nov 9, 2026</td><td>Rowan Petrosyan</td></tr>
+<tr><td><a href="#">Quinn Estrada</a></td><td><b>Birth</b> <span class="q">· Intake · No Contract yet</span></td><td>Nov 10, 2026</td><td>Rowan Petrosyan</td></tr>
+<tr><td><a href="#">Morgan Grier</a></td><td><b>Birth</b> <span class="q">· Active · No Contract yet</span></td><td>Nov 26, 2026</td><td>Marisol Terrazas</td></tr>
+<tr><td><a href="#">Camille Boyd</a></td><td><b>Birth</b> <span class="badge">Owes $1,500.00</span> <span class="q">· Active · Contract signed</span></td><td>Nov 28, 2026</td><td>Priya Raman</td></tr>
+<tr><td><a href="#">Imani Brooks</a></td><td><b>Postpartum</b> <span class="badge x">$950.00 overdue by 12 days</span> <span class="q">· Active · Contract signed</span></td><td>Born Oct 27, 2026</td><td>Priya Raman</td></tr>
+<tr><td><a href="#">Tessa Moreau</a></td><td><b>Birth</b> <span class="q">· Active · Contract signed · Paid $1,500.00</span></td><td>Dec 23, 2026</td><td>Priya Raman</td></tr>
+<tr><td><a href="#">Reese Calloway</a></td><td><b>Birth</b> <span class="q">· Active · No Contract yet</span></td><td>Dec 31, 2026</td><td>Joss Adeyemi</td></tr>
+<tr><td><a href="#">Jamie Dunmore</a></td><td><b>Birth</b> <span class="q">· Active · No Contract yet</span></td><td>Jan 3, 2027</td><td>Joss Adeyemi</td></tr>
+<tr><td><a href="#">Mira Castellanos</a></td><td><b>Birth</b> <span class="q">· Intake · Contract signed</span></td><td>Jan 11, 2027</td><td>Priya Raman</td></tr>
+<tr><td><a href="#">Grace Whitfield</a></td><td><b>Birth</b> <span class="q">· Intake · Contract sent</span></td><td>Jan 27, 2027</td><td>Priya Raman</td></tr>
+</tbody></table>
+</main>
+<aside class="rail" aria-label="Sections; tab height shows how much is in each">
+<a class="o" style="top:0;height:98px" href="#">14<span>Overview</span></a>
+<a class="c cur" style="top:98px;height:210px" href="#">30<span>Clients</span></a>
+<a class="s" style="top:308px;height:147px" href="#">21<span>Schedule</span></a>
+<a class="i" style="top:455px;height:84px" href="#">12<span>Invoices</span></a>
+<a class="k" style="top:539px;height:126px" href="#">18<span>Contracts</span></a>
+<a class="f" style="top:665px;height:98px" href="#">14<span>Staff</span></a>
+</aside>
+</body></html>

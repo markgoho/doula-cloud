@@ -15,7 +15,7 @@ type SetupOptions = Partial<ComponentProps<typeof LandingPage>>;
 async function setup(overrides: SetupOptions = {}) {
 	return render(LandingPage, {
 		props: {
-			title: 'Sign in or set up a Practice',
+			title: 'Sign in',
 			greeting: 'Good morning.',
 			lede: 'Welcome to DoulaCloud.',
 			content: textSnippet('The doors'),
@@ -29,53 +29,37 @@ describe('LandingPage.svelte', () => {
 		await setup();
 
 		await expect
-			.element(page.getByRole('heading', { level: 1, name: 'Sign in or set up a Practice' }))
+			.element(page.getByRole('heading', { level: 1, name: 'Sign in' }))
 			.toBeVisible();
 		expect(page.getByRole('heading').all()).toHaveLength(1);
-		expect(document.title).toContain('Sign in or set up a Practice');
+		expect(document.title).toContain('Sign in');
 	});
 
-	// ADR-0021: the h1 says what the page is for; the greeting is a
-	// paragraph, so it adds nothing to the heading outline.
-	it('greets as a paragraph, with the line under it, and renders the content', async () => {
+	// ADR-0021: the h1 says what the page is for; the greeting and the lede
+	// are the one line under it, so reading order is visual order.
+	it('greets on the line under the title, with the content after it', async () => {
 		await setup();
 
-		const greeting = page.getByText('Good morning.');
+		const title = page.getByRole('heading', { level: 1 }).element().getBoundingClientRect();
+		const greeting = page.getByText('Good morning.', { exact: true });
 		await expect.element(greeting).toBeVisible();
-		expect(greeting.element().tagName).toBe('P');
-		await expect.element(page.getByText('Welcome to DoulaCloud.')).toBeVisible();
-		await expect.element(page.getByText('The doors')).toBeVisible();
+		await expect.element(page.getByText('Welcome to DoulaCloud.', { exact: false })).toBeVisible();
+		const doors = page.getByText('The doors');
+		await expect.element(doors).toBeVisible();
+		const line = greeting.element().getBoundingClientRect();
+		expect(line.top).toBeGreaterThanOrEqual(title.bottom);
+		expect(doors.element().getBoundingClientRect().top).toBeGreaterThanOrEqual(line.bottom);
 	});
 
-	it('draws the mark as decoration, since the bar above already names the product', async () => {
-		const { container } = await setup();
-
-		// querySelector, case 2 of svelte-tests.md: the mark is aria-hidden.
-		const mark = container.querySelector('svg')!;
-		expect(mark).toHaveAttribute('aria-hidden', 'true');
-		expect(mark).toHaveAttribute('width', '200');
-	});
-
-	it('sets the two panels side by side where there is room', async () => {
-		await page.viewport(1280, 800);
+	// ADR-0024: one column at 320px, nothing wider than the page.
+	it('keeps one column at 320px with nothing wider than the page', async () => {
+		await page.viewport(320, 640);
 		await setup();
 
-		const greeting = page.getByText('Good morning.').element().getBoundingClientRect();
 		const title = page.getByRole('heading', { level: 1 }).element().getBoundingClientRect();
-		expect(title.left).toBeGreaterThan(greeting.right);
-	});
-
-	// ADR-0024: at 320px the panels stack, nothing is wider than the page,
-	// and the mark is drawn smaller than 200px rather than overflowing.
-	it('stacks the panels at 320px with nothing wider than the page', async () => {
-		await page.viewport(320, 640);
-		const { container } = await setup();
-
-		const greeting = page.getByText('Good morning.').element().getBoundingClientRect();
-		const title = page.getByRole('heading', { level: 1 }).element().getBoundingClientRect();
-		expect(title.top).toBeGreaterThan(greeting.bottom);
+		const doors = page.getByText('The doors').element().getBoundingClientRect();
+		expect(doors.top).toBeGreaterThan(title.bottom);
 		expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320);
-		expect(container.querySelector('svg')!.getBoundingClientRect().width).toBeLessThan(200);
 	});
 });
 
@@ -99,17 +83,17 @@ describe('LandingPage.svelte in the shell', () => {
 		await render(LandingPage, {
 			target: main,
 			props: {
-				title: 'Sign in or set up a Practice',
+				title: 'Sign in',
 				greeting: 'Good morning.',
 				lede: 'Welcome to DoulaCloud.',
 				content: textSnippet('The doors')
 			}
 		});
 
-		// querySelector, case 2 of svelte-tests.md: a panel is a layout box
+		// querySelector, case 2 of svelte-tests.md: the root is a layout box
 		// with no role of its own.
-		const welcome = main.querySelector('.welcome')!.getBoundingClientRect();
-		expect(Math.round(welcome.bottom)).toBeGreaterThanOrEqual(window.innerHeight - 1);
+		const root = main.querySelector('[data-fills-main]')!.getBoundingClientRect();
+		expect(Math.round(root.bottom)).toBeGreaterThanOrEqual(window.innerHeight - 1);
 		main.remove();
 	});
 });

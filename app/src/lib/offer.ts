@@ -89,13 +89,13 @@ export interface NewOffer {
 
 /** Which Badge variant each state wears -- kept beside the labels so the
  * two never drift, and so neither screen owns a copy of the other's. */
-export const offerStateVariants: Record<OfferState, 'info' | 'success' | 'warning' | 'neutral'> = {
+export const offerStateVariants: Record<OfferState, 'info' | 'success' | 'error' | 'neutral'> = {
 	offered: 'info',
 	accepted: 'success',
 	declined: 'neutral',
 	withdrawn: 'neutral',
 	superseded: 'neutral',
-	expired: 'warning'
+	expired: 'error'
 };
 
 /** Human-readable labels for each state, so a list reads as a story

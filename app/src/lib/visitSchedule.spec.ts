@@ -202,7 +202,7 @@ describe('scheduleResultSummary', () => {
 	});
 
 	it('never claims a total the endpoint did not give it', () => {
-		expect(scheduleResultSummary(30, true)).toBe('Showing 30 scheduled visits so far. More remain.');
+		expect(scheduleResultSummary(30, true)).toBe('Showing the first 30 scheduled visits.');
 		expect(scheduleResultSummary(31, false)).toBe('Showing 31 scheduled visits.');
 	});
 });

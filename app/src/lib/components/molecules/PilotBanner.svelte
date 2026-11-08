@@ -81,7 +81,7 @@
 			display: flex;
 			flex-wrap: wrap;
 			align-items: baseline;
-			gap: var(--space-1) var(--space-3);
+			gap: var(--space-1) var(--space-2);
 			margin: 0;
 			font-family: var(--font-family-base);
 			font-size: var(--text-body-sm-size);
@@ -105,17 +105,18 @@
 		 * does -- only `min-inline-size: 0` to let it shrink past that
 		 * min-content width once the Pilot tag has taken its own room.
 		 *
-		 * 16rem is a wrap-width decision, not a spacing one, the same
+		 * 12rem is a wrap-width decision, not a spacing one, the same
 		 * reasoning `Drawer.svelte`'s own bare `28rem` panel width gives
 		 * (`tokens.usage.spec.ts` only gates raw px and color, never rem):
 		 * below the 320px conformance floor's own content box (roughly
 		 * 288px once `.banner`'s padding is subtracted), the sentence and
 		 * the Pilot tag wrap onto separate lines anyway (see `.banner`'s
 		 * `flex-wrap`), so this basis only governs the point above 320px
-		 * where they still share a row.
+		 * where they still share a row. Small enough that the Staff shell's tag and short
+		 * control stay on one line at 320px.
 		 */
 		span {
-			flex: 1 1 16rem;
+			flex: 1 1 12rem;
 			min-inline-size: 0;
 		}
 	}

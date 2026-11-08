@@ -20,13 +20,18 @@
 	interface Properties {
 		href: string;
 		label?: string;
+		/**
+		 * The route's own move, when the href alone would drop state the page
+		 * it returns to keeps in history. It owns `preventDefault()`.
+		 */
+		onClick?: (event: MouseEvent) => void;
 	}
 
-	let { href, label = 'Back' }: Properties = $props();
+	let { href, label = 'Back', onClick }: Properties = $props();
 </script>
 
 <div class="back">
-	<Link {href} {label} variant="secondary" icon="arrow-left" />
+	<Link {href} {label} variant="secondary" icon="arrow-left" {onClick} />
 </div>
 
 <style>

@@ -42,21 +42,60 @@ async function setup({ data = staffPickerData }: SetupOptions = {}) {
 	await render(Page, { params: fixture.params, data });
 }
 
+describe('/+page.svelte, the door this device used last', () => {
+	afterEach(() => {
+		localStorage.removeItem('doulacloud.lastDoor');
+	});
+
+	it('lights the door this device used last, in the first paint', async () => {
+		localStorage.setItem('doulacloud.lastDoor', 'client');
+		await setup({ data: SIGNED_OUT });
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Client sign in', exact: true }))
+			.toHaveAccessibleDescription(
+				'Messages with your doula, your visits, and what you still owe. Last used on this device'
+			);
+		expect(testPage.getByText('Last used on this device').all()).toHaveLength(1);
+	});
+
+	it('remembers the door a visitor takes', async () => {
+		await setup({ data: SIGNED_OUT });
+		const door = testPage.getByRole('link', { name: 'Staff sign in', exact: true });
+		// Kept on this page: the press is what is under test, not the route.
+		door.element().addEventListener('click', (event) => event.preventDefault());
+
+		await door.click();
+
+		expect(localStorage.getItem('doulacloud.lastDoor')).toBe('staff');
+	});
+
+	it('remembers the Client door too', async () => {
+		await setup({ data: SIGNED_OUT });
+		const door = testPage.getByRole('link', { name: 'Client sign in', exact: true });
+		door.element().addEventListener('click', (event) => event.preventDefault());
+
+		await door.click();
+
+		expect(localStorage.getItem('doulacloud.lastDoor')).toBe('client');
+	});
+});
+
 describe('/+page.svelte', () => {
-	it('offers a signed-out visitor the three real entry points, as three doors', async () => {
+	it('offers a signed-out visitor the three real entry points: two sign-in doors and a setup link', async () => {
 		await setup({ data: SIGNED_OUT });
 
 		// #678: the heading names what the page is for rather than
 		// repeating the brand, which the signed-out bar above it now
 		// carries. #1645 kept it word for word.
 		await expect
-			.element(testPage.getByRole('heading', { level: 1, name: 'Sign in or set up a Practice' }))
+			.element(testPage.getByRole('heading', { level: 1, name: 'Sign in' }))
 			.toBeVisible();
 		// `exact`: each door's accessible name is its name alone, not its
 		// name run together with the line under it (#1645).
 		for (const [name, href] of [
 			['Staff sign in', '/login'],
-			['Client portal sign in', '/portal/login'],
+			['Client sign in', '/portal/login'],
 			['Set up a Practice', '/signup']
 		] as const) {
 			const door = testPage.getByRole('link', { name, exact: true });
@@ -65,14 +104,14 @@ describe('/+page.svelte', () => {
 		}
 		await expect
 			.element(testPage.getByRole('link', { name: 'Staff sign in', exact: true }))
-			.toHaveAccessibleDescription('For doulas and practice owners.');
+			.toHaveAccessibleDescription('For doulas, practice owners, and office staff.');
 		await expect
-			.element(testPage.getByRole('link', { name: 'Client portal sign in', exact: true }))
-			.toHaveAccessibleDescription('Your contract, your birth plan, and your invoices.');
+			.element(testPage.getByRole('link', { name: 'Client sign in', exact: true }))
+			.toHaveAccessibleDescription('Messages with your doula, your visits, and what you still owe.');
 		await expect
-			.element(testPage.getByRole('link', { name: 'Set up a Practice', exact: true }))
-			.toHaveAccessibleDescription('New here? Your first three clients are free.');
-		await expect.element(testPage.getByText('Welcome to DoulaCloud.')).toBeVisible();
+			.element(testPage.getByText('Your first three clients are free.', { exact: false }))
+			.toBeVisible();
+		await expect.element(testPage.getByText('Welcome to DoulaCloud.', { exact: false })).toBeVisible();
 		await expect.element(testPage.getByText('your session ended', { exact: false })).not.toBeInTheDocument();
 	});
 
@@ -93,8 +132,8 @@ describe('/+page.svelte', () => {
 
 		const line = testPage.getByText(greeting, { exact: true });
 		await expect.element(line).toBeVisible();
-		// A paragraph, so the h1 alone still names the page (ADR-0021).
-		expect(line.element().tagName).toBe('P');
+		// Inside a paragraph, so the h1 alone still names the page (ADR-0021).
+		expect(line.element().closest('p')).not.toBeNull();
 	});
 
 	// The greeting is in the first paint and stays: the page reads the clock

@@ -62,7 +62,7 @@ describe('clients/+page.ts load (#539)', () => {
 		expect(result).toMatchObject({ isContractor: false, isOwner: true, isDoula: false });
 	});
 
-	// #2624: the role that decides whether "Only my Clients" is drawn.
+	// #2624: the role that decides whether "Mine" is drawn.
 	it('reads whether she holds the Doula role', async () => {
 		apiFetch.mockResolvedValue(jsonResponse({ items: [withWork], hasMore: false }));
 
@@ -84,6 +84,171 @@ describe('clients/+page.ts load (#539)', () => {
 
 		expect(hasOtherDoulas).toBe(false);
 		expect(result.hasOtherDoulas).toBe(true);
+	});
+});
+
+const countsPath = `/api/practices/${practiceId}/clients/doula-counts`;
+
+// staff-1 holds two Clients and staff-3 none; the reader holds none.
+const counts = { mine: 0, doulas: { 'staff-1': 2 } };
+
+function answer(rosterResponse: Response, countsResponse: Response = jsonResponse(counts)) {
+	apiFetch.mockImplementation((path: string) =>
+		Promise.resolve(
+			path.endsWith('/staff') ? rosterResponse : (path.endsWith('/doula-counts') ? countsResponse : jsonResponse({ items: [withWork], hasMore: false }))
+		)
+	);
+}
+
+// The "Doula" filter's options come from the Staff roster, which only an
+// Owner or an Admin may read (ADR-0008), and only the people who hold the
+// Doula role are offered.
+describe('the Doulas the list can be narrowed to', () => {
+	const roster = {
+		members: [
+			{ staffId: 'staff-1', name: 'Kimiko Nakashima', roles: ['doula'], employmentType: 'employee' },
+			{ staffId: 'staff-2', name: 'Dee Whitlock', roles: ['admin'], employmentType: 'employee' },
+			{ staffId: 'staff-3', name: 'Lena Vasquez', roles: ['doula'], employmentType: 'contractor' }
+		]
+	};
+
+	it('are the roster\'s Doulas, contractors included, for an Owner', async () => {
+		answer(jsonResponse(roster), jsonResponse({ mine: 0, doulas: { 'staff-1': 2, 'staff-3': 1 } }));
+
+		const { result } = await runLoad(['owner']);
+
+		await expect(result.doulas).resolves.toEqual([
+			{ value: 'staff-1', label: 'Kimiko Nakashima' },
+			{ value: 'staff-3', label: 'Lena Vasquez' }
+		]);
+	});
+
+	it('leaves out a Doula who holds no Client, rather than listing her as empty', async () => {
+		answer(jsonResponse(roster));
+
+		const { result } = await runLoad(['owner']);
+
+		await expect(result.doulas).resolves.toEqual([{ value: 'staff-1', label: 'Kimiko Nakashima' }]);
+	});
+
+	it('reads the counts once, however many Doulas there are', async () => {
+		answer(jsonResponse(roster));
+
+		const { result } = await runLoad(['owner']);
+		await result.doulas;
+
+		expect(apiFetch.mock.calls.filter(([path]) => path === countsPath)).toHaveLength(1);
+		expect(apiFetch).not.toHaveBeenCalledWith(expect.stringContaining('doula='), undefined, loadFetch);
+	});
+
+	it('keeps a Doula unmarked when the counts cannot be read', async () => {
+		apiFetch.mockImplementation((path: string) =>
+			path.endsWith('/staff') ? Promise.resolve(jsonResponse(roster)) : Promise.reject(new Error('offline'))
+		);
+
+		const { result } = await runLoad(['owner']);
+
+		await expect(result.doulas).resolves.toEqual([
+			{ value: 'staff-1', label: 'Kimiko Nakashima' },
+			{ value: 'staff-3', label: 'Lena Vasquez' }
+		]);
+	});
+
+	it('keeps a Doula unmarked when the counts are refused', async () => {
+		answer(jsonResponse(roster), jsonResponse({ message: 'nope' }, 500));
+
+		const { result } = await runLoad(['owner']);
+
+		await expect(result.doulas).resolves.toEqual([
+			{ value: 'staff-1', label: 'Kimiko Nakashima' },
+			{ value: 'staff-3', label: 'Lena Vasquez' }
+		]);
+	});
+
+	it('leaves out a Doula the counts hold at zero, as well as one they omit', async () => {
+		answer(jsonResponse(roster), jsonResponse({ mine: 0, doulas: { 'staff-1': 0, 'staff-3': 1 } }));
+
+		const { result } = await runLoad(['owner']);
+
+		await expect(result.doulas).resolves.toEqual([{ value: 'staff-3', label: 'Lena Vasquez' }]);
+	});
+
+	it('are read for an Admin too', async () => {
+		answer(jsonResponse(roster), jsonResponse({ mine: 0, doulas: { 'staff-1': 2, 'staff-3': 1 } }));
+
+		const { result } = await runLoad(['admin']);
+
+		await expect(result.doulas).resolves.toHaveLength(2);
+	});
+
+	it('are not read for a Doula, who may not read the roster', async () => {
+		const { result } = await runLoad(['doula']);
+
+		await expect(result.doulas).resolves.toEqual([]);
+		expect(apiFetch).not.toHaveBeenCalledWith(`/api/practices/${practiceId}/staff`, undefined, loadFetch);
+	});
+
+	it('are none when the roster is refused', async () => {
+		answer(jsonResponse({ error: 'nope' }, 403));
+
+		const { result } = await runLoad(['owner']);
+
+		await expect(result.doulas).resolves.toEqual([]);
+	});
+
+	it('are none when the roster cannot be reached', async () => {
+		apiFetch.mockRejectedValue(new Error('offline'));
+
+		const { result } = await runLoad(['owner']);
+
+		await expect(result.doulas).resolves.toEqual([]);
+	});
+});
+
+// "Mine" is drawn only for a Doula who holds a live Client.
+describe('whether she holds a live Client', () => {
+	it('holds one when her own count is above zero', async () => {
+		answer(jsonResponse({}), jsonResponse({ mine: 3, doulas: {} }));
+
+		const { result } = await runLoad(['doula']);
+
+		await expect(result.hasMine).resolves.toBe(true);
+		expect(apiFetch).toHaveBeenCalledWith(countsPath, undefined, loadFetch);
+		expect(apiFetch).not.toHaveBeenCalledWith(expect.stringContaining('mine=true'), undefined, loadFetch);
+	});
+
+	it('holds none when her own count is zero', async () => {
+		answer(jsonResponse({}), jsonResponse({ mine: 0, doulas: {} }));
+
+		const { result } = await runLoad(['doula']);
+
+		await expect(result.hasMine).resolves.toBe(false);
+	});
+
+	it('is drawn when the read fails, as it was before the read', async () => {
+		answer(jsonResponse({}), jsonResponse({ error: 'nope' }, 500));
+
+		const { result } = await runLoad(['doula']);
+
+		await expect(result.hasMine).resolves.toBe(true);
+	});
+
+	it('is not read for anyone who is not a Doula', async () => {
+		apiFetch.mockResolvedValue(jsonResponse({ items: [withWork], hasMore: false }));
+
+		const { result } = await runLoad(['owner']);
+
+		await expect(result.hasMine).resolves.toBe(false);
+		expect(apiFetch).not.toHaveBeenCalledWith(expect.stringContaining('mine=true'), undefined, loadFetch);
+	});
+
+	it('shares the one counts read with the Doula filter for an owner who is also a Doula', async () => {
+		answer(jsonResponse({ members: [] }), jsonResponse({ mine: 1, doulas: {} }));
+
+		const { result } = await runLoad(['owner', 'doula']);
+		await Promise.all([result.hasMine, result.doulas]);
+
+		expect(apiFetch.mock.calls.filter(([path]) => path === countsPath)).toHaveLength(1);
 	});
 });
 

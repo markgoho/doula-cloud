@@ -103,6 +103,13 @@ function invitationsTable() {
 	return testPage.elementLocator(document.querySelectorAll('.table-view')[1]!);
 }
 
+// Where an element's words start, apart from the box that holds them.
+function wordsLeft(element: Element) {
+	const range = document.createRange();
+	range.selectNodeContents(element);
+	return range.getBoundingClientRect().left;
+}
+
 async function setup(options: MockOptions = {}) {
 	// Wide enough that every DataTable draws its <table>, which is what
 	// the cell and row assertions below are about.
@@ -131,7 +138,17 @@ describe('staff screen', () => {
 		await testPage.viewport(320, 800);
 
 		await expect.element(testPage.getByRole('heading', { name: 'Members' })).toBeVisible();
-		expect(document.documentElement.scrollWidth).toBe(document.documentElement.clientWidth);
+		expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
+	});
+
+	// The first column's edge is one rule for every list: a Member's name starts
+	// where the page title does, as a Client's name does on the Clients list.
+	it('starts the member names where the page title starts', async () => {
+		await setup();
+
+		const title = wordsLeft(testPage.getByRole('heading', { level: 1 }).element());
+		const name = wordsLeft(testPage.getByRole('link', { name: contractorMember!.name, exact: true }).first().element());
+		expect(Math.abs(name - title), `title ${title}, name ${name}`).toBeLessThanOrEqual(1);
 	});
 
 	it('lists members with their roles and employment type', async () => {
@@ -175,7 +192,7 @@ describe('staff screen', () => {
 		await setup();
 
 		await expect
-			.element(testPage.getByRole('cell', { name: liveInvitation!.address, exact: true }))
+			.element(testPage.getByRole('rowheader', { name: liveInvitation!.address, exact: true }))
 			.toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'doula' })).toBeVisible();
 	});
@@ -186,6 +203,8 @@ describe('staff screen', () => {
 		const flags = invitationsTable().getByText('Email could not be delivered');
 		await expect.element(flags).toBeVisible();
 		expect(flags.elements()).toHaveLength(1);
+		// A failed delivery is an error, not a warning that someone owes.
+		await expect.element(flags).toHaveClass('error');
 	});
 
 	it('flags a lapsed invitation instead of hiding it (#291)', async () => {
@@ -238,9 +257,9 @@ describe('staff screen', () => {
 		const dialog = testPage.getByRole('dialog', { name: 'Revoke invitation' });
 		await dialog.getByRole('button', { name: 'Revoke invitation' }).click();
 
-		await expect.element(testPage.getByRole('cell', { name: liveInvitation!.address })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('rowheader', { name: liveInvitation!.address })).not.toBeInTheDocument();
 		await expect
-			.element(testPage.getByRole('cell', { name: lapsedInvitation!.address, exact: true }))
+			.element(testPage.getByRole('rowheader', { name: lapsedInvitation!.address, exact: true }))
 			.toBeVisible();
 	});
 

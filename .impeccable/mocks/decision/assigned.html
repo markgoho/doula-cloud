@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Clients - The Care Score</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&family=Hanken+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0f0f12;--lane:#e8e6f0;--violet:#5b3cc4;--red:#d1452f}
+*{box-sizing:border-box}
+html,body{width:1440px;height:900px;overflow:hidden;margin:0}
+body{font:400 15px/1.35 "Hanken Grotesk",sans-serif;font-variant-numeric:tabular-nums;color:var(--ink);background:#fff}
+a{color:var(--ink);font-weight:700;text-underline-offset:3px}
+.top{height:56px;background:var(--ink);color:#fff;display:flex;align-items:center;padding:0 20px;gap:28px}
+.top b{font:800 22px "Bricolage Grotesque",sans-serif;letter-spacing:-.02em;margin-right:4px}
+.top nav{display:flex;gap:4px;flex:1}
+.top nav a{color:#fff;font-weight:600;text-decoration:none;padding:6px 11px;border-radius:6px}
+.top nav a[aria-current]{background:var(--violet)}
+.top .org{display:flex;align-items:center;gap:12px;font-weight:600}
+.av{width:32px;height:32px;border-radius:50%;background:#fff;color:var(--ink);display:grid;place-items:center;font-weight:700;font-size:14px}
+.band{background:var(--lane);height:158px;padding:0 20px 6px;display:flex;align-items:flex-end;gap:36px}
+h1{margin:0;font:800 148px/.82 "Bricolage Grotesque",sans-serif;letter-spacing:-.055em;padding-bottom:12px}
+.btn{font:700 17px "Hanken Grotesk",sans-serif;background:var(--ink);color:#fff;border:0;border-radius:6px;padding:12px 20px;margin-bottom:22px}
+form{padding:12px 20px 14px;border-bottom:1px solid var(--ink)}
+fieldset{border:0;margin:0;padding:0;display:flex;align-items:flex-end;gap:22px}
+legend{font-weight:700;padding:0;margin-bottom:6px}
+.chk{display:flex;gap:20px;padding-bottom:7px}
+label{display:flex;align-items:center;gap:7px}
+input[type=checkbox]{width:18px;height:18px;accent-color:var(--ink);margin:0}
+.fld{display:flex;flex-direction:column;gap:3px;font-weight:600}
+input[type=text],select{font:400 15px "Hanken Grotesk",sans-serif;height:36px;border:1.5px solid var(--ink);border-radius:5px;padding:0 10px;background:#fff;width:190px}
+.btn.s{margin:0;padding:0 22px;height:36px;font-size:15px}
+.res{margin:0;padding:8px 20px;font-weight:600}
+table{border-collapse:collapse;width:1440px;table-layout:fixed}
+th{background:var(--ink);color:#fff;text-align:left;padding:8px 10px 0;height:68px;vertical-align:top;font-weight:700}
+th:first-child,td:first-child{padding-left:20px}
+td{height:56px;border-bottom:1px solid var(--lane);padding:0 10px;vertical-align:middle}
+td.care,th.care{position:relative;padding:0}
+td.care{background:repeating-linear-gradient(90deg,var(--lane) 0 1px,transparent 1px 35px)}
+td.care::before{content:"";position:absolute;left:0;right:0;top:12px;height:32px;background:repeating-linear-gradient(90deg,rgba(15,15,18,.2) 0 1px,transparent 1px 35px),var(--lane)}
+td.care::after,th.care::after{content:"";position:absolute;left:69px;top:0;bottom:0;width:2px;background:var(--violet);z-index:4}
+.b{position:absolute;top:17px;height:22px;border:2px solid var(--ink);border-right-width:5px;z-index:2;background:#fff}
+.in{background:repeating-linear-gradient(135deg,var(--ink) 0 2px,transparent 2px 6px)}
+.ac{background:var(--ink)}
+.pp{background:radial-gradient(var(--ink) 1.7px,transparent 2.2px) 0 0/6px 6px,#fff}
+em{position:absolute;top:20px;font:700 12px/16px "Hanken Grotesk",sans-serif;font-style:normal;z-index:3;white-space:nowrap}
+.m{position:absolute;top:8px;font-size:13px;font-weight:700;border-left:1px solid #fff;padding-left:5px;line-height:15px}
+.tdy{position:absolute;left:61px;top:6px;background:var(--violet);color:#fff;font-size:12px;font-weight:700;padding:1px 8px;border-radius:9px;z-index:5;line-height:16px;white-space:nowrap}
+.lg{position:absolute;top:38px;left:8px;display:flex;gap:16px;font-size:12px;font-weight:600;line-height:18px;z-index:6;width:620px}
+.lg span{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.lg i{display:block;width:30px;height:12px;border:1.5px solid #fff;background:var(--lane)}
+.lg i.in{background:repeating-linear-gradient(135deg,var(--ink) 0 1.5px,var(--lane) 1.5px 4px)}
+.lg i.ac{background:var(--ink)}
+.lg i.pp{background:radial-gradient(var(--ink) 1.2px,transparent 1.6px) 0 0/4px 4px,var(--lane)}
+.lg i.ed{width:5px;background:#fff;border:0}
+.bold{font-weight:700}.q{color:#3a3a46}
+.bd{display:inline-block;background:var(--red);color:#fff;font-weight:700;padding:1px 8px;border-radius:4px}
+.mk{display:inline-block;border:2.5px solid var(--violet);border-radius:999px;padding:2px 13px;margin:-5px -15px}
+</style></head><body>
+<header class="top"><b>DoulaCloud</b>
+<nav><a href="#">Overview</a><a href="#" aria-current="page">Clients</a><a href="#">Schedule</a><a href="#">On call</a><a href="#">Invoices</a><a href="#">Contracts</a><a href="#">Credits</a><a href="#">Staff</a><a href="#">Offers</a><a href="#">Settings</a></nav>
+<div class="org">Rooted Birth Collective <span class="av">RA</span></div></header>
+<div class="band"><h1>Clients</h1><button class="btn">Find or add a Client</button></div>
+<form><fieldset><legend>Choose which Clients to show</legend>
+<div class="chk"><label><input type="checkbox">Only my Clients</label><label><input type="checkbox">Only Clients who owe money</label><label><input type="checkbox">Only active Clients with no Contract</label><label><input type="checkbox">Also show Clients not yet in care</label></div>
+<div class="fld"><label for="n" style="display:block">Name</label><input id="n" type="text"></div>
+<div class="fld"><label for="d" style="display:block">Doula</label><select id="d"><option>Any Doula</option></select></div>
+<button class="btn s" type="button">Apply</button></fieldset></form>
+<p class="res">Showing the first 30 Clients, soonest due first.</p>
+<table><colgroup><col style="width:210px"><col style="width:400px"><col style="width:640px"><col></colgroup>
+<thead><tr><th>Name</th><th>Status</th>
+<th class="care"><span class="tdy">Today, Nov 8</span><span class="m" style="left:35px">Nov 2026</span><span class="m" style="left:185px">Dec</span><span class="m" style="left:340px">Jan 2027</span><span class="m" style="left:495px">Feb</span>
+<span class="lg" aria-label="Legend"><span>Care</span><span><i class="in"></i>Intake</span><span><i class="ac"></i>Active</span><span><i class="pp"></i>Postpartum</span><span><i class="ed"></i>Due date; weekly ticks</span></span></th>
+<th>Doula</th></tr></thead><tbody>
+<tr><td><a href="#">Casey Estrada</a></td><td><span class="bold">Birth</span> · <span class="q">Intake · No Contract yet</span></td><td class="care"><i class="b in" style="left:5px;width:70px"></i><em style="left:83px">Nov 9</em></td><td>Rowan Petrosyan</td></tr>
+<tr><td><a href="#">Quinn Estrada</a></td><td><span class="bold">Birth</span> · <span class="q">Intake · No Contract yet</span></td><td class="care"><i class="b in" style="left:15px;width:65px"></i><em style="left:88px">Nov 10</em></td><td>Rowan Petrosyan</td></tr>
+<tr><td><a href="#">Morgan Grier</a></td><td><span class="bold">Birth</span> · <span class="q">Active · No Contract yet</span></td><td class="care"><i class="b ac" style="left:50px;width:110px"></i><em style="left:168px">Nov 26</em></td><td>Marisol Terrazas</td></tr>
+<tr><td><a href="#"><span class="mk">Camille Boyd</span></a></td><td><span class="bold">Birth</span> · <span class="bd">Owes $1,500.00</span> · <span class="q">Active · Contract signed</span></td><td class="care"><i class="b ac" style="left:60px;width:110px"></i><em style="left:178px">Nov 28</em></td><td>Priya Raman</td></tr>
+<tr><td><a href="#">Imani Brooks</a></td><td><span class="bold">Postpartum</span> · <span class="bd">$950.00 overdue by 12 days</span> · <span class="q">Active · Contract signed</span></td><td class="care"><i class="b pp" style="left:10px;width:210px"></i><em style="left:228px">Dec 8 · born Oct 27</em></td><td>Priya Raman</td></tr>
+<tr><td><a href="#">Tessa Moreau</a></td><td><span class="bold">Birth</span> · <span class="q">Active · Contract signed · Paid $1,500.00</span></td><td class="care"><i class="b ac" style="left:60px;width:235px"></i><em style="left:303px">Dec 23</em></td><td>Priya Raman</td></tr>
+<tr><td><a href="#">Reese Calloway</a></td><td><span class="bold">Birth</span> · <span class="q">Active · No Contract yet</span></td><td class="care"><i class="b ac" style="left:65px;width:270px"></i><em style="left:343px">Dec 31</em></td><td>Joss Adeyemi</td></tr>
+<tr><td><a href="#">Jamie Dunmore</a></td><td><span class="bold">Birth</span> · <span class="q">Active · No Contract yet</span></td><td class="care"><i class="b ac" style="left:65px;width:285px"></i><em style="left:358px">Jan 3</em></td><td>Joss Adeyemi</td></tr>
+<tr><td><a href="#">Mira Castellanos</a></td><td><span class="bold">Birth</span> · <span class="q">Intake · Contract signed</span></td><td class="care"><i class="b in" style="left:50px;width:340px"></i><em style="left:398px">Jan 11</em></td><td>Priya Raman</td></tr>
+<tr><td><a href="#">Grace Whitfield</a></td><td><span class="bold">Birth</span> · <span class="q">Intake · Contract sent</span></td><td class="care"><i class="b in" style="left:40px;width:430px"></i><em style="left:478px">Jan 27</em></td><td>Priya Raman</td></tr>
+</tbody></table></body></html>

@@ -4,6 +4,12 @@
 	interface Properties {
 		id?: string;
 		name?: string;
+		/*
+		 * What a form submits for this box when it is checked: the browser's
+		 * "on" when unstated. A GET form whose address is read by a route
+		 * (the Clients list's filters) states the word that address carries.
+		 */
+		value?: string;
 		checked: boolean;
 		// eslint-disable-next-line unicorn/consistent-boolean-name -- mirrors the native HTMLInputElement `checked` property this atom wraps 1:1
 		onChange: (checked: boolean) => void;
@@ -26,6 +32,7 @@
 	let {
 		id = generatedId,
 		name,
+		value,
 		checked,
 		onChange,
 		disabled = false,
@@ -41,6 +48,7 @@
 	{id}
 	type="checkbox"
 	{name}
+	{value}
 	{checked}
 	{disabled}
 	{required}

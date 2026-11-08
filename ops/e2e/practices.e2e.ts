@@ -22,10 +22,10 @@ test('An operator reads the Practice list and the Deleted list', async ({ page, 
 
 	await expect(page.getByRole('heading', { name: 'Practices', level: 1 })).toBeVisible();
 	await expect(page.getByRole('navigation', { name: 'Operations' }).getByRole('link', { name: 'Practices' })).toHaveAttribute('aria-current', 'page');
-	const practice = page.getByRole('row').filter({ has: page.getByRole('cell', { name: live, exact: true }) });
+	const practice = page.getByRole('row').filter({ has: page.getByRole('rowheader', { name: live, exact: true }) });
 	await expect(practice.getByRole('cell', { name: /^Staff 1, staff-.+@doula-cloud\.invalid$/ })).toBeVisible();
 	await expect(practice.getByRole('cell', { name: 'Not given' })).toBeVisible();
-	await expect(page.getByRole('cell', { name: gone })).toHaveCount(0);
+	await expect(page.getByRole('rowheader', { name: gone })).toHaveCount(0);
 	await expect(practice.getByRole('link', { name: `Give a founding grant to ${live}` })).toHaveAttribute(
 		'href',
 		`/practices/${liveId}/founding-grant`
@@ -34,8 +34,8 @@ test('An operator reads the Practice list and the Deleted list', async ({ page, 
 	await page.getByRole('link', { name: 'Deleted Practices' }).click();
 
 	await expect(page.getByRole('heading', { name: 'Deleted Practices', level: 1 })).toBeVisible();
-	const deleted = page.getByRole('row').filter({ has: page.getByRole('cell', { name: gone }) });
+	const deleted = page.getByRole('row').filter({ has: page.getByRole('rowheader', { name: gone }) });
 	await expect(deleted.getByRole('cell', { name: /^Deleted / })).toBeVisible();
 	await expect(deleted.getByRole('link')).toHaveCount(0);
-	await expect(page.getByRole('cell', { name: live })).toHaveCount(0);
+	await expect(page.getByRole('rowheader', { name: live })).toHaveCount(0);
 });

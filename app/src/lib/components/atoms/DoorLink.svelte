@@ -36,19 +36,39 @@
 		description: string;
 		variant?: 'primary' | 'secondary' | 'menu';
 		current?: boolean;
+		/*
+		 * The lamp (the surface brief for `/`): the door this device used
+		 * last. A warmer surface, an amber edge and a line of text, so the
+		 * state is never carried by color alone, and the line is heard
+		 * after the description.
+		 */
+		lastUsed?: boolean;
+		onClick?: (event: MouseEvent) => void;
 	}
 
-	let { href, label, description, variant = 'secondary', current = false }: Properties = $props();
+	let {
+		href,
+		label,
+		description,
+		variant = 'secondary',
+		current = false,
+		lastUsed = false,
+		onClick
+	}: Properties = $props();
 
 	const id = $props.id();
 	const nameId = `${id}-name`;
 	const descriptionId = `${id}-description`;
+	const lastUsedId = `${id}-last-used`;
 </script>
 
-<a {href} class={variant} aria-current={current ? 'page' : undefined} aria-labelledby={nameId} aria-describedby={descriptionId}><!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
+<a {href} class={variant} class:last-used={lastUsed} aria-current={current ? 'page' : undefined} aria-labelledby={nameId} aria-describedby={lastUsed ? `${descriptionId} ${lastUsedId}` : descriptionId} onclick={onClick}><!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
 	<span class="text">
 		<span id={nameId} class="name">{label}</span>
 		<span id={descriptionId} class="description">{description}</span>
+		{#if lastUsed}
+			<span id={lastUsedId} class="lamp">Last used on this device</span>
+		{/if}
 	</span>
 	{#if variant === 'primary'}
 		<Icon name="arrow-right" size={24} weight="light" />
@@ -145,6 +165,21 @@
 
 		.secondary:hover .name {
 			color: var(--color-primary-hover);
+		}
+
+		/* The lamp: a warmer ground and an amber edge, no glow. */
+		.last-used {
+			border-color: var(--color-lamp);
+			background-color: var(--color-lamp-surface);
+		}
+
+		.lamp {
+			margin-block-start: var(--space-2);
+			color: var(--color-lamp);
+			font-size: var(--text-meta-size);
+			font-weight: var(--font-weight-semibold);
+			line-height: var(--text-meta-leading);
+			letter-spacing: var(--text-meta-tracking);
 		}
 
 		.menu {

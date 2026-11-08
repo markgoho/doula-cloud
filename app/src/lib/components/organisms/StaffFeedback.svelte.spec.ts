@@ -5,7 +5,7 @@ import { render } from 'vitest-browser-svelte';
 import { RefusalError } from '#lib/formErrors.js';
 import StaffFeedback from './StaffFeedback.svelte';
 
-const CONTROL = 'Tell us what is not working or what you need.';
+const CONTROL = 'Tell us what you think.';
 
 type SetupOptions = Partial<ComponentProps<typeof StaffFeedback>>;
 
@@ -22,11 +22,11 @@ async function openDrawer() {
 }
 
 describe('StaffFeedback', () => {
-	it("shows the Staff banner's sentence and control", async () => {
+	it("shows the Staff banner's tag and control", async () => {
 		await setup();
 
 		await expect
-			.element(page.getByText('DoulaCloud is new, and you are one of the first to use it.', { exact: false }))
+			.element(page.getByText('Pilot', { exact: true }))
 			.toBeVisible();
 		await expect.element(page.getByRole('button', { name: CONTROL })).toBeVisible();
 	});

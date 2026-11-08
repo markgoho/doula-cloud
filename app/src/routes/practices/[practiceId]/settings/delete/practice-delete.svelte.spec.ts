@@ -1,6 +1,7 @@
 import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 import { toApiResponder, toPageState, type RouteFixture } from '../../../../routeFixture.js';
 import { fixture, ownerWithoutSecondFactor } from './page.fixture.js';
@@ -26,6 +27,16 @@ async function setup(subject: RouteFixture = fixture) {
 
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
+});
+
+describe('Delete-this-Practice settings screen, once deletion has started', () => {
+	// The countdown is pending, so the badge is blue; amber is for what is owed
+	// or needs someone to act.
+	it('draws "Deletion pending" as the information badge', async () => {
+		await setup({ ...fixture, respond: () => jsonResponse({ pending: true, hasUnsettledInvoices: false }) });
+
+		await expect.element(testPage.getByText('Deletion pending')).toHaveClass('info');
+	});
 });
 
 describe('Delete-this-Practice settings screen', () => {

@@ -116,6 +116,12 @@
 			padding-block: var(--space-8);
 		}
 
+		/* Centered in spare room by default (#543); a shell that holds
+		   every page to one edge sets the property (ADR-0018). */
+		center-l {
+			margin-inline: var(--page-column-margin-inline, auto);
+		}
+
 		/* A print query, not a width one (ADR-0024 allows it): on paper the
 		   back link is a way out of nothing. */
 		@media print {

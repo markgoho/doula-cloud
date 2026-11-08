@@ -7,6 +7,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
+
+	"github.com/google/uuid"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
@@ -70,7 +73,9 @@ type ListItem struct {
 	// by PendingRequestKinds above).
 	OpenEngagements []OpenEngagement `json:"openEngagements,omitempty"`
 
-	createdAt time.Time
+	// sortAt is this Client's place in the list's order, encoded as one time
+	// by dueSortJoin. It is the cursor's time.
+	sortAt time.Time
 }
 
 // OpenEngagement is one rollup line of ListItem.OpenEngagements.
@@ -89,8 +94,17 @@ type OpenEngagement struct {
 	// Kind is 'birth' or 'postpartum'. A Client can hold one open
 	// Engagement of each kind at once (ADR-0017), so the kind is what
 	// names a rollup line and its link to the Engagement (#1511).
-	Kind             string  `json:"kind"`
-	EngagementStatus string  `json:"engagementStatus"`
+	Kind             string `json:"kind"`
+	EngagementStatus string `json:"engagementStatus"`
+	// DueDate is the Engagement's due date as YYYY-MM-DD, absent when none
+	// is on file. It is not money, so no role is barred from it.
+	DueDate *string `json:"dueDate,omitempty"`
+	// BirthOutcome ('live_birth', 'loss' or 'unknown', migration 00093) and
+	// PregnancyEndedOn (YYYY-MM-DD) are what the Engagement records of how
+	// the pregnancy ended, each absent until recorded. Not money, so no role
+	// is barred from them.
+	BirthOutcome     *string `json:"birthOutcome,omitempty"`
+	PregnancyEndedOn *string `json:"pregnancyEndedOn,omitempty"`
 	ContractStatus   *string `json:"contractStatus,omitempty"`
 	// DoulaNames is a list so a comma inside one name never splits it.
 	DoulaNames []string `json:"doulaNames,omitempty"`
@@ -156,72 +170,173 @@ type ListResponse struct {
 // return the unnarrowed list already returns. Must be mounted behind
 // staffauth.Middleware.
 //
-// Ordering moved from alphabetical (COALESCE(preferred_name, given_name))
-// to (created_at, id) DESC -- #446: a cursor's tuple has to be the sort
-// key, and pagecursor.Cursor only carries (time, id), so alphabetical
-// order could not survive pagination without a second cursor shape the
-// ticket forbids inventing.
+// Ordering is one key per Client from her open Engagements, then id: births
+// not yet ended by due date ascending (a birth past its due date first, then
+// the soonest), then ended pregnancies by the day they ended, most recent
+// first, then Clients with neither. dueSortJoin holds the encoding. A cursor's
+// tuple has to be the sort key (#446), and pagecursor.Cursor only carries
+// (time, id), so the key rides as a time.
 func ListHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
+		query := r.URL.Query()
+		// The name is a Client's, and a URL is logged (#1829): it travels in
+		// ListByNameHandler's body only, so a GET that carries one is refused
+		// rather than ignored, which would answer with the unfiltered list.
+		if query.Has("q") {
+			apierr.WriteError(w, "Send the name in a POST to /clients/list, not in the address.", http.StatusBadRequest)
+			return
+		}
+		doula, ok := doulaParam(w, query.Get("doula"))
 		if !ok {
 			return
 		}
-		staffID, _ := staffauth.StaffID(r.Context())
-		reader, has := staffauth.ReaderFrom(r.Context())
-		if !has {
-			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		withWorkOnly := r.URL.Query().Get("all") != "true"
-
-		var after *pagecursor.Cursor
-		if raw := r.URL.Query().Get("cursor"); raw != "" {
-			c, err := pagecursor.Decode(raw)
-			if err != nil {
-				apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
-				return
-			}
-			after = &c
-		}
-
-		var list []ListItem
-		var err error
-		if reader.IsAmbientContractor() || r.URL.Query().Get("mine") == "true" {
-			list, err = listAttachedClients(r.Context(), tx, practiceID, staffID, withWorkOnly, after)
-		} else {
-			list, err = listClients(r.Context(), tx, practiceID, withWorkOnly, after)
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		hasMore := len(list) > pageSize
-		if hasMore {
-			list = list[:pageSize]
-		}
-
-		if err := attachOpenEngagements(r.Context(), tx, practiceID, list, reader, staffID); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		resp := ListResponse{Items: list, HasMore: hasMore}
-		if hasMore {
-			last := list[len(list)-1]
-			next := pagecursor.Encode(last.createdAt, last.ClientID)
-			resp.NextCursor = &next
-		}
-
-		apierr.WriteJSON(w, http.StatusOK, resp)
+		serveList(w, r, ListRequest{
+			All:        queryFlag(r, "all"),
+			Mine:       queryFlag(r, "mine"),
+			Owes:       queryFlag(r, "owes"),
+			NoContract: queryFlag(r, "noContract"),
+			Doula:      doula,
+			Cursor:     query.Get("cursor"),
+		})
 	})
 }
+
+// ListRequest is the body of the Clients list read sent as a POST (#1829):
+// the same filters and cursor ListHandler reads from its query string, plus
+// the one it refuses there, a name.
+type ListRequest struct {
+	All        bool   `json:"all"`
+	Mine       bool   `json:"mine"`
+	Owes       bool   `json:"owes"`
+	NoContract bool   `json:"noContract"`
+	Doula      string `json:"doula"`
+	Name       string `json:"name"`
+	Cursor     string `json:"cursor"`
+}
+
+// ListByNameHandler is ListHandler with its filters in a request body, so a
+// Client's name never reaches a URL, a request log or a Referer (#1829).
+// It runs the same query with the same filters, cursor, order and role
+// narrowing, and writes nothing. Must be mounted behind staffauth.Middleware.
+func ListByNameHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ListRequest
+		if !apierr.DecodeJSON(w, r, &req) {
+			return
+		}
+		doula, ok := doulaParam(w, req.Doula)
+		if !ok {
+			return
+		}
+		req.Doula = doula
+		text, ok := nameParam(w, req.Name)
+		if !ok {
+			return
+		}
+		req.Name = text
+		serveList(w, r, req)
+	})
+}
+
+// serveList answers the Clients list for filters already read and checked
+// by either entry point.
+func serveList(w http.ResponseWriter, r *http.Request, req ListRequest) {
+	tx, practiceID, ok := staffauth.RequireTx(w, r)
+	// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
+	if !ok {
+		return
+	}
+	staffID, _ := staffauth.StaffID(r.Context())
+	reader, has := staffauth.ReaderFrom(r.Context())
+	if !has {
+		// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+
+	if req.Owes && reader.IsAmbientContractor() {
+		apierr.WriteError(w, "You contract for this Practice, so you cannot filter Clients by what they owe. Money is the Practice's to see.", http.StatusForbidden)
+		return
+	}
+	filters := listFilters{
+		doula: req.Doula,
+		name:  req.Name,
+		// Narrowing to who owes or who lacks a Contract is a question about
+		// Clients with work, so all has nothing to add while either is on.
+		withWorkOnly: !req.All || req.Owes || req.NoContract,
+		owes:         req.Owes,
+		noContract:   req.NoContract,
+	}
+
+	var after *pagecursor.Cursor
+	if req.Cursor != "" {
+		c, err := pagecursor.Decode(req.Cursor)
+		if err != nil {
+			apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
+			return
+		}
+		after = &c
+	}
+
+	var list []ListItem
+	var err error
+	if reader.IsAmbientContractor() || req.Mine {
+		list, err = listAttachedClients(r.Context(), tx, practiceID, staffID, filters, after)
+	} else {
+		list, err = listClients(r.Context(), tx, practiceID, filters, after)
+	}
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+
+	hasMore := len(list) > pageSize
+	if hasMore {
+		list = list[:pageSize]
+	}
+
+	if err := attachOpenEngagements(r.Context(), tx, practiceID, list, reader, staffID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+
+	resp := ListResponse{Items: list, HasMore: hasMore}
+	if hasMore {
+		last := list[len(list)-1]
+		next := pagecursor.Encode(last.sortAt, last.ClientID)
+		resp.NextCursor = &next
+	}
+
+	apierr.WriteJSON(w, http.StatusOK, resp)
+}
+
+// dueSortJoin is shared by both list queries: due.sort_at is the Client's
+// place in the list as one UTC-midnight timestamp, the cursor's time, so the
+// composite order fits pagecursor.Cursor's (time, id). Each open Engagement
+// gets a key and the Client takes her smallest:
+//
+//  1. Birth not yet ended (a due_date, no pregnancy_ended_on): the due date
+//     itself, so a birth past its due date sorts first, then the soonest.
+//  2. Pregnancy ended (a pregnancy_ended_on, whatever the due date):
+//     5000-01-01 plus the days from that day to the anchor 3000-01-01. A more
+//     recent end is fewer days from the anchor, so the newest birth sorts
+//     first, and every such key lands after every group 1 key.
+//  3. Neither date: no key. A Client with no keyed line gets 9999-12-31 and
+//     follows everyone, by id.
+//
+// min() skips a line with no key, and a Client with lines in both groups takes
+// group 1, being the smaller. The aggregate always yields one row, so the join
+// never drops a Client.
+const dueSortJoin = `
+	LEFT JOIN LATERAL (
+	    SELECT (COALESCE(min(CASE
+	        WHEN de.pregnancy_ended_on IS NOT NULL THEN DATE '5000-01-01' + (DATE '3000-01-01' - de.pregnancy_ended_on)
+	        ELSE de.due_date
+	    END), DATE '9999-12-31'))::timestamp AT TIME ZONE 'UTC' AS sort_at
+	    FROM engagements de WHERE de.client_id = c.id AND de.status <> 'completed'
+	) due ON true`
 
 // hasWorkExpr is shared by both list queries below: a Client "has work"
 // when she has at least one Engagement (any status) or a pending
@@ -253,28 +368,123 @@ const pendingRequestKindsExpr = `(
 	FROM engagement_requests r WHERE r.client_id = c.id AND r.state = 'pending'
 )`
 
+// owesExpr is ?owes=true: an open Engagement whose live (non-voided)
+// Contract holds an open Invoice with no payment on its way -- the rule the
+// list's Owes and Overdue badges follow, where a payment on its way is a
+// fact and not a call to act. Its aliases differ from the outer query's,
+// which listAttachedClients already spends `e` on.
+const owesExpr = `EXISTS (
+	SELECT 1 FROM engagements oe
+	JOIN contracts oc ON oc.engagement_id = oe.id AND oc.status <> 'voided'
+	JOIN invoices oi ON oi.contract_id = oc.id
+	WHERE oe.client_id = c.id AND oe.status <> 'completed'
+	  AND oi.status = 'open' AND oi.payment_processing_since IS NULL
+)`
+
+// noContractExpr is ?noContract=true: an Engagement past Intake and not
+// completed that has no Contract row at all. One whose only Contract is
+// voided reads "Contract voided" on the list, not "No Contract yet", so it
+// does not match.
+const noContractExpr = `EXISTS (
+	SELECT 1 FROM engagements ne
+	WHERE ne.client_id = c.id AND ne.status NOT IN ('intake', 'completed')
+	  AND NOT EXISTS (SELECT 1 FROM contracts nc WHERE nc.engagement_id = ne.id)
+)`
+
+// maxNameQueryRunes bounds ?q: a name a person looks for is short, and the
+// bound keeps the pattern the database matches against short too.
+const maxNameQueryRunes = 100
+
+// listFilters is what the Clients list's address narrows it by.
+type listFilters struct {
+	withWorkOnly bool
+	owes         bool
+	noContract   bool
+	// doula is the Staff id from ?doula, "" for none: Clients with an open
+	// Engagement that Staff member holds an open, granted attachment on. It is
+	// not money, so every reader may use it; for an ambient contractor it
+	// only narrows the list she already has.
+	doula string
+	// name is ?q, trimmed, "" for none.
+	name string
+}
+
+// doulaParam checks the doula filter, writing a 400 and returning false when it is not
+// a uuid. The length check keeps uuid.Parse's looser spellings (braces,
+// urn:uuid:) out, so one id has one address.
+func doulaParam(w http.ResponseWriter, raw string) (string, bool) {
+	if raw == "" {
+		return "", true
+	}
+	if _, err := uuid.Parse(raw); err != nil || len(raw) != 36 {
+		apierr.WriteError(w, "Choose a Doula from the list.", http.StatusBadRequest)
+		return "", false
+	}
+	return strings.ToLower(raw), true
+}
+
+// nameParam trims the name filter, writing a 400 and returning false past
+// maxNameQueryRunes.
+func nameParam(w http.ResponseWriter, raw string) (string, bool) {
+	text := strings.TrimSpace(raw)
+	if utf8.RuneCountInString(text) > maxNameQueryRunes {
+		apierr.WriteError(w, "Use 100 characters or fewer for the name.", http.StatusBadRequest)
+		return "", false
+	}
+	return text, true
+}
+
+// likeEscaper escapes the three characters LIKE reads as more than
+// themselves, so a name typed with "%" or "_" matches only itself.
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+// nameMatchExpr is ?q: the pattern, bound as $%[1]d, matches (case-insensitively)
+// her given, preferred or family name, or her full name as the list reads it
+// or as her record spells it.
+const nameMatchExpr = `($%[1]d::text = '' OR (
+	c.given_name ILIKE $%[1]d OR c.preferred_name ILIKE $%[1]d OR c.family_name ILIKE $%[1]d
+	OR concat_ws(' ', COALESCE(NULLIF(c.preferred_name, ''), c.given_name), c.family_name) ILIKE $%[1]d
+	OR concat_ws(' ', c.given_name, c.family_name) ILIKE $%[1]d
+))`
+
+// doulaExpr is ?doula, bound as $%[1]d: an open Engagement of hers with an
+// open, granted attachment for that Staff member. Aliased apart from both
+// list queries' own.
+const doulaExpr = `($%[1]d::uuid IS NULL OR EXISTS (
+	SELECT 1 FROM engagements de
+	JOIN engagement_attachments da ON da.engagement_id = de.id
+	WHERE de.client_id = c.id AND de.status <> 'completed'
+	  AND da.staff_id = $%[1]d::uuid AND da.origin = 'granted' AND da.ended_at IS NULL
+))`
+
+// narrowing is the ?doula and ?q conditions as SQL, with their two bind
+// arguments numbered from first, to be ANDed into either list query.
+func (f listFilters) narrowing(first int) (string, []any) {
+	var doula any
+	if f.doula != "" {
+		doula = f.doula
+	}
+	pattern := ""
+	if f.name != "" {
+		pattern = "%" + likeEscaper.Replace(f.name) + "%"
+	}
+	return fmt.Sprintf(doulaExpr, first) + " AND " + fmt.Sprintf(nameMatchExpr, first+1), []any{doula, pattern}
+}
+
+// queryFlag is whether the address carries name=true.
+func queryFlag(r *http.Request, name string) bool {
+	return r.URL.Query().Get(name) == "true"
+}
+
 // listClients is the ambient-reach query -- Owner, Admin, or employee
 // Doula -- filtered by practiceID explicitly, on top of the RLS scoping
 // staffauth.Middleware already set up on tx.
-func listClients(ctx context.Context, tx *sql.Tx, practiceID string, withWorkOnly bool, after *pagecursor.Cursor) ([]ListItem, error) {
-	query := `SELECT c.id, c.given_name, c.preferred_name, c.family_name, COALESCE(c.email, ''), ` + hasWorkExpr + `,
-		        pu.id IS NOT NULL, pu.identity_uid IS NOT NULL, pu.access_refused_at IS NOT NULL, latest.status, ` + emailSuppressedExpr + `, ` + pendingRequestKindsExpr + `, c.created_at
-		 FROM clients c` + portalUserForClient + `
-		 LEFT JOIN LATERAL (
-		     SELECT o.status FROM portal_invite_outbox o
-		     WHERE o.client_portal_user_id = pu.id
-		     ORDER BY o.created_at DESC LIMIT 1
-		 ) latest ON true
-		 WHERE c.practice_id = $1 AND c.merged_into IS NULL AND (NOT $2 OR ` + hasWorkExpr + `)`
-	args := []any{practiceID, withWorkOnly}
-	if after != nil {
-		query += ` AND (c.created_at, c.id) < ($3, $4) ORDER BY c.created_at DESC, c.id DESC LIMIT $5`
-		args = append(args, after.At, after.ID, pageSize+1)
-	} else {
-		query += ` ORDER BY c.created_at DESC, c.id DESC LIMIT $3`
-		args = append(args, pageSize+1)
+func listClients(ctx context.Context, tx *sql.Tx, practiceID string, filters listFilters, after *pagecursor.Cursor) ([]ListItem, error) {
+	if err := disableJIT(ctx, tx); err != nil {
+		// coverage:ignore reason: DB failure, not exercised by unit tests
+		return nil, err
 	}
-
+	query, args := listClientsQuery(practiceID, filters, after)
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -284,26 +494,94 @@ func listClients(ctx context.Context, tx *sql.Tx, practiceID string, withWorkOnl
 	return scanListItems(rows)
 }
 
+// disableJIT turns JIT compilation off for the rest of tx. The list sorts every
+// Client by a computed due date, so its plan's estimated cost passes
+// jit_above_cost (100,000) at about 1,200 Clients and jit_optimize_above_cost
+// (500,000) with the ?doula narrowing at 5,000: measured 2026-11-08
+// (TestListQueryPlanAtScale, list_perf_test.go), JIT then compiled 463
+// functions for 3.2 s of a query that runs in tens of ms without it. The cost
+// is inflated by the row-level security checks on every Client, not by the work.
+func disableJIT(ctx context.Context, tx *sql.Tx) error {
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('jit', 'off', true)`); err != nil {
+		// coverage:ignore reason: DB failure, not exercised by unit tests
+		return fmt.Errorf("client: disable jit: %w", err)
+	}
+	return nil
+}
+
+// listClientsQuery is listClients' SQL and its bind arguments, apart from
+// the read so list_perf_test.go prices the very statement the handler runs.
+//
+// Measured with EXPLAIN (ANALYZE, BUFFERS) as app_runtime under the Practice's
+// RLS (2026-11-08), one page of thirty at 5,000 Clients, each with one active
+// Engagement due on one of 300 days and one in fourteen attached to the
+// narrowed Doula (TestListQueryPlanAtScale): a Seq Scan on clients, which
+// cannot be avoided because the order is a computed per-Client key, with the
+// due-date lateral an Index Scan on engagements_client_idx once per Client
+// (5,000 loops), then a top-N Sort. Total cost 412,938 for the default view and
+// 579,743 with ?doula, both far over jit_above_cost, and the estimate is the
+// RLS check on every Client, not the work. With JIT on (before disableJIT) that
+// cost 189.8 ms to run and 3,233 ms with ?doula (463 functions compiled). With
+// JIT off, execution and planning: default first page 43.4 ms and 10.8 ms;
+// a later page 32.2 ms and 2.3 ms; ?doula 16.8 ms and 11.2 ms; ?q 15.0 ms and
+// 3.0 ms; ?doula with ?q, ?owes and ?noContract 21.4 ms and 39.2 ms. Every case
+// is under the tens of ms an index would be added for, and an index cannot
+// shorten the Seq Scan or the 5,000 probes, so no migration was added.
+// Re-run 2026-11-08 after the order became three groups (a CASE in the
+// lateral's min(), dueSortJoin): the same nodes, the same Index Scan once per
+// Client, total cost 412,838 for the default later page, and the default
+// first page in the same tens of ms, so the figures above stand.
+func listClientsQuery(practiceID string, filters listFilters, after *pagecursor.Cursor) (string, []any) {
+	narrow, narrowArgs := filters.narrowing(5)
+	//nolint:gosec // narrow is built from this file's own constants and a numeric placeholder index; every value rides args as a bind parameter
+	query := `SELECT c.id, c.given_name, c.preferred_name, c.family_name, COALESCE(c.email, ''), ` + hasWorkExpr + `,
+		        pu.id IS NOT NULL, pu.identity_uid IS NOT NULL, pu.access_refused_at IS NOT NULL, latest.status, ` + emailSuppressedExpr + `, ` + pendingRequestKindsExpr + `, due.sort_at
+		 FROM clients c` + portalUserForClient + dueSortJoin + `
+		 LEFT JOIN LATERAL (
+		     SELECT o.status FROM portal_invite_outbox o
+		     WHERE o.client_portal_user_id = pu.id
+		     ORDER BY o.created_at DESC LIMIT 1
+		 ) latest ON true
+		 WHERE c.practice_id = $1 AND c.merged_into IS NULL AND (NOT $2 OR ` + hasWorkExpr + `)
+		   AND (NOT $3 OR ` + owesExpr + `) AND (NOT $4 OR ` + noContractExpr + `)
+		   AND ` + narrow
+	args := append([]any{practiceID, filters.withWorkOnly, filters.owes, filters.noContract}, narrowArgs...)
+	if after != nil {
+		query += ` AND (due.sort_at, c.id) > ($7, $8) ORDER BY due.sort_at, c.id LIMIT $9`
+		args = append(args, after.At, after.ID, pageSize+1)
+	} else {
+		query += ` ORDER BY due.sort_at, c.id LIMIT $7`
+		args = append(args, pageSize+1)
+	}
+	return query, args
+}
+
 // listAttachedClients is listClients narrowed to Clients staffID holds an
 // open (ended_at IS NULL), granted-origin engagement_attachments row on,
 // via any of their Engagements -- ADR-0008's contractor column. DISTINCT
 // because a contractor may be attached to more than one Engagement for
 // the same Client.
-func listAttachedClients(ctx context.Context, tx *sql.Tx, practiceID, staffID string, withWorkOnly bool, after *pagecursor.Cursor) ([]ListItem, error) {
+func listAttachedClients(ctx context.Context, tx *sql.Tx, practiceID, staffID string, filters listFilters, after *pagecursor.Cursor) ([]ListItem, error) {
 	// DISTINCT is wrapped in a subquery rather than applied at the top
 	// level: Postgres requires a plain SELECT DISTINCT's ORDER BY
 	// expressions to appear literally in the select list, and sorting by
-	// (created_at, id) needs the outer query's own comparison, not the
+	// (sort_at, id) needs the outer query's own comparison, not the
 	// inner DISTINCT's column list.
+	if err := disableJIT(ctx, tx); err != nil {
+		// coverage:ignore reason: DB failure, not exercised by unit tests
+		return nil, err
+	}
+	narrow, narrowArgs := filters.narrowing(6)
+	//nolint:gosec // narrow is built from this file's own constants and a numeric placeholder index; every value rides args as a bind parameter
 	query := `SELECT * FROM (
 		     SELECT DISTINCT c.id, c.given_name, c.preferred_name, c.family_name, COALESCE(c.email, '') AS email, ` + hasWorkExpr + ` AS has_work,
 		            pu.id IS NOT NULL AS has_portal_user, pu.identity_uid IS NOT NULL AS accepted, pu.access_refused_at IS NOT NULL AS refused, latest.status,
 		            ` + emailSuppressedExpr + ` AS email_suppressed,
-		            ` + pendingRequestKindsExpr + ` AS pending_request_kinds, c.created_at
+		            ` + pendingRequestKindsExpr + ` AS pending_request_kinds, due.sort_at
 		     FROM clients c
 		     JOIN engagements e ON e.client_id = c.id
 		     JOIN engagement_attachments ea ON ea.engagement_id = e.id
-		     ` + portalUserForClient + `
+		     ` + portalUserForClient + dueSortJoin + `
 		     LEFT JOIN LATERAL (
 		         SELECT o.status FROM portal_invite_outbox o
 		         WHERE o.client_portal_user_id = pu.id
@@ -312,13 +590,15 @@ func listAttachedClients(ctx context.Context, tx *sql.Tx, practiceID, staffID st
 		     WHERE c.practice_id = $1 AND c.merged_into IS NULL AND ea.staff_id = $2
 		       AND ea.origin = 'granted' AND ea.ended_at IS NULL
 		       AND (NOT $3 OR ` + hasWorkExpr + `)
+		       AND (NOT $4 OR ` + owesExpr + `) AND (NOT $5 OR ` + noContractExpr + `)
+		       AND ` + narrow + `
 		 ) attached`
-	args := []any{practiceID, staffID, withWorkOnly}
+	args := append([]any{practiceID, staffID, filters.withWorkOnly, filters.owes, filters.noContract}, narrowArgs...)
 	if after != nil {
-		query += ` WHERE (created_at, id) < ($4, $5) ORDER BY created_at DESC, id DESC LIMIT $6`
+		query += ` WHERE (sort_at, id) > ($8, $9) ORDER BY sort_at, id LIMIT $10`
 		args = append(args, after.At, after.ID, pageSize+1)
 	} else {
-		query += ` ORDER BY created_at DESC, id DESC LIMIT $4`
+		query += ` ORDER BY sort_at, id LIMIT $8`
 		args = append(args, pageSize+1)
 	}
 
@@ -339,6 +619,9 @@ type rawOpenEngagement struct {
 	engagementID     string
 	kind             string
 	engagementStatus string
+	dueDate          sql.NullString
+	birthOutcome     sql.NullString
+	pregnancyEndedOn sql.NullString
 	contractStatus   sql.NullString
 	// doulaNames is the names joined by doulaNameSeparator, which no name
 	// a person types holds.
@@ -426,11 +709,15 @@ const doulaNameSeparator = "\x1f"
 // page's thirty Clients and their 27 open Engagements: Sort over a Nested
 // Loop Left Join with the same index scans, total cost 1,860, no JIT
 // section; 10.9 ms planning, 3.0 ms execution, 504 shared buffers.
+// e.due_date, added for the list's Due column, is a column of the Engagement
+// row the plan already reads, so the plan is unchanged (re-run 2026-11-08:
+// same nodes, total cost 17,322, no JIT section).
 // The zone the count needs is one primary-key read of practices
 // (practicetimezone.Load) per request, made only for a reader shown
 // Invoices.
 const openEngagementRollupQueryTemplate = `
-	SELECT e.client_id, e.id, e.kind, e.status, ct.status,
+	SELECT e.client_id, e.id, e.kind, e.status, to_char(e.due_date, 'YYYY-MM-DD'),
+	       e.birth_outcome::text, to_char(e.pregnancy_ended_on, 'YYYY-MM-DD'), ct.status,
 	       (SELECT string_agg(s.name, E'\x1f' ORDER BY s.last_name, s.first_name)
 	        FROM engagement_attachments ea
 	        JOIN staff s ON s.id = ea.staff_id
@@ -531,7 +818,8 @@ func fetchOpenEngagements(ctx context.Context, tx *sql.Tx, clientIDs []string, s
 	for rows.Next() {
 		var raw rawOpenEngagement
 		if err := rows.Scan(
-			&raw.clientID, &raw.engagementID, &raw.kind, &raw.engagementStatus, &raw.contractStatus,
+			&raw.clientID, &raw.engagementID, &raw.kind, &raw.engagementStatus, &raw.dueDate,
+			&raw.birthOutcome, &raw.pregnancyEndedOn, &raw.contractStatus,
 			&raw.doulaNames, &raw.invoiceStatus, &raw.invoiceAmountCents, &raw.invoiceDueAt, &raw.paymentProcessing, &raw.feeCents,
 		); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
@@ -562,6 +850,18 @@ func shapeOpenEngagement(reader staffauth.Reader, raw rawOpenEngagement, days in
 		EngagementID:     raw.engagementID,
 		Kind:             raw.kind,
 		EngagementStatus: raw.engagementStatus,
+	}
+	if raw.dueDate.Valid {
+		due := raw.dueDate.String
+		oe.DueDate = &due
+	}
+	if raw.birthOutcome.Valid {
+		outcome := raw.birthOutcome.String
+		oe.BirthOutcome = &outcome
+	}
+	if raw.pregnancyEndedOn.Valid {
+		ended := raw.pregnancyEndedOn.String
+		oe.PregnancyEndedOn = &ended
 	}
 	if raw.contractStatus.Valid {
 		status := raw.contractStatus.String
@@ -607,10 +907,10 @@ func scanListItems(rows *sql.Rows) ([]ListItem, error) {
 		var hasPortalUser, accepted, refused bool
 		var outboxStatus sql.NullString
 		var pendingKinds sql.NullString
-		var createdAt time.Time
+		var sortAt time.Time
 		if err := rows.Scan(
 			&item.ClientID, &givenName, &preferredName, &familyName, &item.Email, &item.HasWork,
-			&hasPortalUser, &accepted, &refused, &outboxStatus, &item.EmailSuppressed, &pendingKinds, &createdAt,
+			&hasPortalUser, &accepted, &refused, &outboxStatus, &item.EmailSuppressed, &pendingKinds, &sortAt,
 		); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("client: scan list item: %w", err)
@@ -620,7 +920,7 @@ func scanListItems(rows *sql.Rows) ([]ListItem, error) {
 		if pendingKinds.Valid {
 			item.PendingRequestKinds = strings.Split(pendingKinds.String, ",")
 		}
-		item.createdAt = createdAt
+		item.sortAt = sortAt
 		list = append(list, item)
 	}
 	if err := rows.Err(); err != nil {

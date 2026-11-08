@@ -365,6 +365,8 @@ describe('the Practice landing page', () => {
 			.element(testPage.getByRole('heading', { name: 'Requests awaiting approval' }))
 			.toBeVisible();
 		await expect.element(testPage.getByText('2 waiting')).toBeVisible();
+		// Waiting is blue app-wide; amber is for what is owed or needs someone to act.
+		await expect.element(testPage.getByText('2 waiting')).toHaveClass('info');
 		await expect
 			.element(testPage.getByRole('link', { name: 'Review requests' }))
 			.toHaveAttribute('href', `/practices/${practiceId}/engagement-requests`);

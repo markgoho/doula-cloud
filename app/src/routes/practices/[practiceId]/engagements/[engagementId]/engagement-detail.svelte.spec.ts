@@ -43,7 +43,7 @@ const pageState = vi.hoisted(() => ({
 vi.mock('$app/state', () => ({ page: pageState }));
 Object.assign(pageState, toPageState(fixture));
 
-vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
+vi.mock('$app/navigation', () => ({ goto: vi.fn(), afterNavigate: vi.fn() }));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
@@ -724,7 +724,7 @@ describe('the status-move controls (#253)', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: 'Select why care is ending' }))
 			.toBeVisible();
-		expect(document.documentElement.scrollWidth).toBe(document.documentElement.clientWidth);
+		expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
 	});
 
 	it('shows the refusal when the BFF rejects the move', async () => {
@@ -920,8 +920,8 @@ describe('the Visits section Date column and schedule control (#250)', () => {
 		const minute = scheduled.getMinutes().toString().padStart(2, '0');
 		const suffix = scheduled.getHours() < 12 ? 'am' : 'pm';
 		const expected = `${scheduled.toLocaleDateString('en-US', { month: 'short' })} ${scheduled.getDate()}, ${scheduled.getFullYear()}, ${hour12}:${minute}${suffix}`;
-		await expect.element(testPage.getByRole('cell', { name: expected, exact: true })).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: 'Not yet scheduled', exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('rowheader', { name: expected, exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('rowheader', { name: 'Not yet scheduled', exact: true })).toBeVisible();
 	});
 
 	it("sets an unscheduled Visit's schedule from its Change, and sends nothing for the fields left alone", async () => {
@@ -2783,7 +2783,7 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 			await openAddVisit();
 
 			await expect.element(testPage.getByLabelText('Who is this Visit for?')).toBeVisible();
-			expect(document.documentElement.scrollWidth).toBe(document.documentElement.clientWidth);
+			expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
 		});
 
 		// A Practice whose only Doula is the person already holding the
@@ -3748,7 +3748,7 @@ describe('what a reader sees about money (#2002, #2003)', () => {
 		);
 
 		const invoices = testPage.getByRole('region', { name: 'Invoices', exact: true });
-		await expect.element(invoices.getByRole('cell', { name: 'Aug 1, 2026' })).toBeVisible();
+		await expect.element(invoices.getByRole('rowheader', { name: 'Aug 1, 2026' })).toBeVisible();
 		await expect.element(invoices.getByRole('cell', { name: 'Overdue' })).toBeVisible();
 		await expect
 			.element(testPage.getByText(/You see when each Invoice was raised and where it stands, not what the Client pays/))

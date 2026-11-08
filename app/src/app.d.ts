@@ -31,7 +31,16 @@ declare global {
 		}
 		// interface Locals {}
 		// interface PageData {}
-		// interface PageState {}
+		/**
+		 * What a history entry keeps beside its address (`goto(url, { state })`,
+		 * `page.state`). `clientsName` is the Name typed into the Clients list's
+		 * filter: a Client's name is never in a URL (#1829), so it rides here.
+		 */
+		interface PageState {
+			clientsName?: string;
+			// How many pages of the Clients list were open, for a Back to it.
+			clientsPages?: number;
+		}
 		// interface Platform {}
 	}
 }

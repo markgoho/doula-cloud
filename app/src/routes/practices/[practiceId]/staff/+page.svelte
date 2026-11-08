@@ -139,7 +139,7 @@
 		<Badge label="Expired — invite again or revoke" variant="neutral" />
 	{/if}
 	{#if invitation.deliveryFailed}
-		<Badge label="Email could not be delivered" variant="warning" />
+		<Badge label="Email could not be delivered" variant="error" />
 	{/if}
 	<Button
 		label="Revoke"

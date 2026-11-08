@@ -230,11 +230,10 @@
 		/*
 		 * The question column is capped at --form-max while the frame
 		 * around it is not: the column is all controls, and a 1200px input
-		 * is unreadable however wide the window is (#422). Centered rather
-		 * than left at the inline start, because a page that asks one
-		 * question has nothing else to put in a wider window (#543) --
-		 * which is what the sidebar-l this replaced achieved with
-		 * `justify-content: center` once its rail wrapped away (#585).
+		 * is unreadable however wide the window is (#422). Centered by
+		 * default, because a page that asks one question has nothing else
+		 * to put in a wider window (#543); the Staff shells hold it to the
+		 * gutter every other Staff page starts at (ADR-0018, 2026-11-07).
 		 *
 		 * The journey is inside this cap now rather than beside it. It is
 		 * one collapsed line, so it costs the column nothing, and a
@@ -243,7 +242,7 @@
 		 */
 		.column {
 			max-inline-size: var(--form-max);
-			margin-inline: auto;
+			margin-inline: var(--page-column-margin-inline, auto);
 		}
 
 		fieldset {

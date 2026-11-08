@@ -83,11 +83,11 @@ describe('loadContractorInvoices (#2094)', () => {
 });
 
 describe('invoiceRowStatusLabel and invoiceRowStatusVariant (#2094, #2122)', () => {
-	it('reads Overdue, as a warning, once the BFF counts an Invoice late', () => {
+	it('reads Overdue, as an error a step past Owed, once the BFF counts an Invoice late', () => {
 		const late = { status: 'open', daysOverdue: 3 };
 
 		expect(invoiceRowStatusLabel(late)).toBe('Overdue');
-		expect(invoiceRowStatusVariant(late)).toBe('warning');
+		expect(invoiceRowStatusVariant(late)).toBe('error');
 	});
 
 	it('reads every other status as everyone reads it', () => {
@@ -95,10 +95,10 @@ describe('invoiceRowStatusLabel and invoiceRowStatusVariant (#2094, #2122)', () 
 
 		expect(invoiceRowStatusLabel(paid)).toBe('Paid');
 		expect(invoiceRowStatusVariant(paid)).toBe('success');
-		expect(invoiceRowStatusLabel({ status: 'open', daysOverdue: 0 })).toBe('Open');
+		expect(invoiceRowStatusLabel({ status: 'open', daysOverdue: 0 })).toBe('Owed');
 	});
 
-	// #2225: she has paid and the money is coming, so it is neither Open
+	// #2225: she has paid and the money is coming, so it is neither Owed
 	// nor Overdue -- the BFF says a payment is on its way, and that wins.
 	it('reads Payment on its way, as information, while a payment settles, even past its due day', () => {
 		for (const daysOverdue of [0, 3]) {
@@ -507,9 +507,9 @@ describe('formatAmount', () => {
 
 describe('invoiceStatusVariant (#2059)', () => {
 	it('wears each status as a Badge variant, an unknown one neutral', () => {
-		expect(invoiceStatusVariant('open')).toBe('info');
+		expect(invoiceStatusVariant('open')).toBe('warning');
 		expect(invoiceStatusVariant('paid')).toBe('success');
-		expect(invoiceStatusVariant('uncollectible')).toBe('warning');
+		expect(invoiceStatusVariant('uncollectible')).toBe('error');
 		expect(invoiceStatusVariant('void')).toBe('neutral');
 		expect(invoiceStatusVariant('draft')).toBe('neutral');
 		expect(invoiceStatusVariant('something_new')).toBe('neutral');
@@ -519,7 +519,7 @@ describe('invoiceStatusVariant (#2059)', () => {
 describe('invoiceStatusLabel', () => {
 	it('reads each Stripe status back in the words a person reads', () => {
 		expect(invoiceStatusLabel('draft')).toBe('Draft');
-		expect(invoiceStatusLabel('open')).toBe('Open');
+		expect(invoiceStatusLabel('open')).toBe('Owed');
 		expect(invoiceStatusLabel('paid')).toBe('Paid');
 		expect(invoiceStatusLabel('uncollectible')).toBe('Uncollectible');
 		expect(invoiceStatusLabel('void')).toBe('Void');

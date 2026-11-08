@@ -145,3 +145,45 @@ ol.prose-list {
 #svelte-announcer {
 	display: none;
 }
+
+/*
+ * Browser surfaces, from the palette so both themes follow. The selection
+ * is a tint of the primary under the page's own text, so selected text
+ * keeps its contrast; the caret is the text color; the scrollbar is a
+ * neutral thin thumb on no track.
+ */
+::selection {
+	background-color: color-mix(in oklch, var(--color-primary) 28%, var(--color-surface));
+	color: var(--color-on-surface);
+}
+
+:root {
+	caret-color: var(--color-on-surface);
+	scrollbar-width: thin;
+	scrollbar-color: var(--color-outline) transparent;
+	/* The track's room is kept whether or not a page needs it, so filtering a
+	   long list down to a short one does not shift the page sideways. */
+	scrollbar-gutter: stable;
+}
+
+/*
+ * A link's underline sits clear of the descenders and draws at a hairline
+ * weight rather than the browser's heavy default.
+ */
+a {
+	text-underline-offset: 0.2em;
+	text-decoration-thickness: 1px;
+}
+
+/*
+ * Tabular figures wherever a value is a date, amount or count, so digits
+ * line up by place value. `.tabular` is the opt-in for a value no element
+ * above names.
+ */
+time,
+data,
+output,
+dd,
+.tabular {
+	font-variant-numeric: tabular-nums;
+}

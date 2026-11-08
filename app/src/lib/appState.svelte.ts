@@ -55,6 +55,7 @@ export interface PageOverride {
 	readonly params: Record<string, string>;
 	readonly url: URL;
 	readonly data: Record<string, unknown>;
+	readonly state?: Record<string, unknown>;
 }
 
 let override = $state<PageOverride | undefined>();
@@ -101,6 +102,13 @@ export const page = {
 	},
 	get data(): RealPage['data'] {
 		return (override?.data ?? realPage.data) as RealPage['data'];
+	},
+	/**
+	 * The history entry's own state (`goto(url, { state })`), where a
+	 * Client's name rides since it is never in a URL (#1829).
+	 */
+	get state(): RealPage['state'] {
+		return (override ? (override.state ?? {}) : realPage.state) as RealPage['state'];
 	},
 	/**
 	 * The matched route pattern, e.g. `/practices/[practiceId]/clients`

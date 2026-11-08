@@ -12,6 +12,7 @@
 	 */
 	import { untrack } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { formatCalendarDay } from '#lib/dates.js';
@@ -20,10 +21,16 @@
 		dueLabel,
 		formatAmount,
 		invoiceRowStatusLabel,
+		invoiceRowStatusVariant,
+		invoicesResultSummary,
 		loadPracticeInvoices,
 		type PracticeInvoice
 	} from '#lib/invoice.js';
+	import Badge from '#lib/components/atoms/Badge.svelte';
+	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import FilterBar from '#lib/components/molecules/FilterBar.svelte';
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { refreshSessionIfClientsCanPayChanged } from '#lib/clientsCanPaySession.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
@@ -127,16 +134,48 @@
 	);
 
 	/*
-	 * #768: the narrowing is two links, not a control this page holds in
-	 * memory -- the URL is the state, so it survives a reload and a back
-	 * button, and the page needs no client-side JavaScript to offer it.
-	 * The Practice's own overdue count is on the link, because a filter
-	 * that shows nothing and a filter nobody needs look identical until
-	 * the number is said.
+	 * #768: the narrowing is in the address, not in memory the page holds --
+	 * the URL is the state, so it survives a reload and a back button. It is
+	 * the filter bar every other Staff list uses: a checkbox named for the
+	 * parameter, so the form reaches the address with no script running, and
+	 * the Practice's own overdue count in the result line, because a filter
+	 * that shows nothing and a filter nobody needs look identical until the
+	 * number is said.
 	 */
 	const invoicesHref = $derived(
 		resolve('/practices/[practiceId]/invoices', { practiceId: page.params.practiceId! })
 	);
+
+	// What the checkbox holds before Apply, put back in step with the address
+	// after every navigation.
+	let isOverdueChecked = $state(false);
+	let filterBar = $state<{ focusStatus: () => void }>();
+	let isFocusPending = $state(false);
+	let lastNarrowing: boolean | undefined;
+	function seedDrafts() {
+		isOverdueChecked = isNarrowedToOverdue;
+	}
+	seedDrafts();
+	afterNavigate(() => {
+		seedDrafts();
+		// A change of narrowing lands on the result line once its list has
+		// loaded, never on first arrival, where the route announcer speaks.
+		if (lastNarrowing !== undefined && lastNarrowing !== isNarrowedToOverdue) isFocusPending = true;
+		lastNarrowing = isNarrowedToOverdue;
+	});
+	$effect(() => {
+		if (!isFocusPending || read?.isNarrowedToOverdue !== isNarrowedToOverdue) return;
+		isFocusPending = false;
+		filterBar?.focusStatus();
+	});
+
+	// eslint-disable-next-line unicorn/consistent-boolean-name -- mirrors the native HTMLInputElement `checked` property Checkbox's onChange wraps 1:1 (same exception Checkbox.svelte itself carries)
+	const handleToggleOverdue = (checked: boolean) => (isOverdueChecked = checked);
+
+	async function applyFilters(event: SubmitEvent) {
+		event.preventDefault();
+		await goto(isOverdueChecked ? `${invoicesHref}?overdue=true` : invoicesHref);
+	}
 
 	const columns = [
 		{ label: 'Client', accessor: (invoice: PracticeInvoice) => invoice.clientName },
@@ -154,7 +193,7 @@
 		},
 		// #2122: Overdue once the BFF counts the row late, through the one
 		// label the Engagement's Invoices section reads for every role.
-		{ label: 'Status', accessor: (invoice: PracticeInvoice) => invoiceRowStatusLabel(invoice) },
+		{ label: 'Status', accessor: (invoice: PracticeInvoice) => invoiceRowStatusLabel(invoice), content: invoiceStatus },
 		{
 			// #271: local and Stripe Invoices share one figure, so the rail
 			// is shown per row rather than as a second book.
@@ -203,6 +242,10 @@
 	/>
 {/snippet}
 
+{#snippet invoiceStatus(invoice: PracticeInvoice)}
+	<Badge label={invoiceRowStatusLabel(invoice)} variant={invoiceRowStatusVariant(invoice)} />
+{/snippet}
+
 {#snippet pendingFigure()}
 	<Skeleton variant="text" lines={1} />
 {/snippet}
@@ -210,24 +253,31 @@
 {#snippet content()}
 	<!--
 		#2015: a book with no invoice in it has nothing to total and nothing
-		to narrow, so six zeros and two chips would answer no question. The
-		narrowed list keeps both even when it is empty: the chips are its way
+		to narrow, so six zeros and a filter bar would answer no question. The
+		narrowed list keeps both even when it is empty: the bar is its way
 		back to the whole book.
 	-->
 	{#if !isBookEmpty}
 		<SummaryList rows={summary} value={read ? undefined : pendingFigure} />
 
-		<!-- One cluster, so the two filters sit side by side as one control
-		     rather than as two rows of ListPage's stack. -->
-		<cluster-l space="var(--space-3)">
-			<Link href={invoicesHref} label="All invoices" variant="chip" current={!isNarrowedToOverdue} />
-			<Link
-				href="{invoicesHref}?overdue=true"
-				label={read ? `Overdue (${read.overdueCount})` : 'Overdue'}
-				variant="chip"
-				current={isNarrowedToOverdue}
-			/>
-		</cluster-l>
+		<FilterBar
+			bind:this={filterBar}
+			action={invoicesHref}
+			onSubmit={applyFilters}
+			legend="Choose which Invoices to show"
+			status={read ? invoicesResultSummary(read.isNarrowedToOverdue, read.overdueCount) : ''}
+			empty={read !== undefined && invoices.items.length === 0}
+			clearHref={isNarrowedToOverdue ? invoicesHref : undefined}
+			foldsFieldsOnly
+		>
+			{#snippet switches()}
+				<LabeledField label="Only overdue Invoices" orientation="inline">
+					{#snippet children(control)}
+						<Checkbox name="overdue" value="true" checked={isOverdueChecked} onChange={handleToggleOverdue} {...control} />
+					{/snippet}
+				</LabeledField>
+			{/snippet}
+		</FilterBar>
 	{/if}
 
 	<!--
@@ -283,7 +333,9 @@
 		   its column from 1125px on macOS/Chromium and from 1141px in CI's Linux/Chromium, the canonical environment, with no margin beyond it.
 		   #2122 made the late row's Status read "Overdue" in place of
 		   "Open", and CI's floor check measured 1156px (72.25rem) on
-		   2026-10-26, so the floor moved up to it.
+		   2026-10-26, so the floor moved up to it. The Status became a badge
+		   (Owed, Overdue, Paid) on 2026-11-08 and the check measured 1201px,
+		   so the floor is now 75.1rem (1201px).
 		   On the hostile fixture it was 109.75rem.
 		   `DataTable.svelte`'s floor comment says why the floor is the
 		   route's own. */
@@ -297,7 +349,7 @@
 			--data-table-records-display: block;
 		}
 
-		@container invoices-table (min-width: 72.25rem) {
+		@container invoices-table (min-width: 75.1rem) {
 			.invoices-table > :global(*) {
 				--data-table-table-display: table;
 				--data-table-records-display: none;

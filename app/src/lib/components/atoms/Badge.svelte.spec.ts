@@ -156,7 +156,7 @@ describe('the five variants read as visibly different background tints (#434)', 
  * boundary -- checked here against the actual mixed background each
  * variant renders, not the underlying token values.
  */
-describe('text and border keep their contrast floor on the tinted background (#434)', () => {
+describe('text keeps its contrast floor on the tinted background, with no outline (#434)', () => {
 	it.each(['light', 'dark'] as const)('holds for every variant in the %s theme', async (theme) => {
 		await withTheme(theme, async () => {
 			for (const variant of variants) {
@@ -164,10 +164,10 @@ describe('text and border keep their contrast floor on the tinted background (#4
 				const style = getComputedStyle(container.querySelector(`span.${variant}`)!);
 				const background = pixelOf(style.backgroundColor);
 				const text = pixelOf(style.color);
-				const border = pixelOf(style.borderColor);
 
 				expect(contrast(text, background), `${variant} text on its tint`).toBeGreaterThanOrEqual(4.5);
-				expect(contrast(border, background), `${variant} border on its tint`).toBeGreaterThanOrEqual(3);
+				// A quiet badge draws no outline: the text and the icon carry the meaning.
+				expect(style.borderTopColor, `${variant} outline`).toBe('rgba(0, 0, 0, 0)');
 			}
 		});
 	});

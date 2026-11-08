@@ -120,6 +120,14 @@
 		 * layout gives every column the same share whatever it holds.
 		 */
 		wraps?: boolean;
+		/**
+		 * The one column of a `columnWidths="fill"` table that takes the room
+		 * the others leave. Every other column keeps its content's width on
+		 * one line, so a column starts where its own values make it start and
+		 * a filter that leaves a column out gives that room to this one. Read
+		 * only by that layout. One per table.
+		 */
+		grows?: boolean;
 	}
 
 	interface RowActions<T> {
@@ -185,10 +193,56 @@
 		 * the content does not decide, for sibling tables of the same
 		 * columns read one under the next -- the portal's three Invoice
 		 * sections -- so a column starts at the same place in each (Law of
-		 * Similarity). It changes the table only; the record view is
-		 * already one card width.
+		 * Similarity). `fill` takes the frame's width, up to a ceiling, for one
+		 * list a reader filters again and again: the Clients list, whose columns
+		 * moved sideways with every result under `content`. Every column but the
+		 * one marked `grows` is as wide as its longest value, and that one takes
+		 * the rest, so no column is sized by a guess at what it will hold. It
+		 * changes the table only; the record view is already one card width.
 		 */
-		columnWidths?: 'content' | 'even';
+		columnWidths?: 'content' | 'even' | 'fill';
+		/**
+		 * How a record is drawn when the frame is too narrow for the table.
+		 * `list`, the default, is the card of labeled rows. `compact` is for a
+		 * list a reader scans for one record among many: the first column as the
+		 * title, the next column on a line of its own, and the rest on one
+		 * line with no stacked labels (each label is kept for a screen reader).
+		 */
+		recordLayout?: 'list' | 'compact';
+		/**
+		 * What the table is, in a few words a screen reader reads on reaching
+		 * it, never drawn: a visually hidden `<caption>`, and the same words
+		 * as the record view's accessible name, since that view is the
+		 * tree shown when the table is not. It names the table's purpose
+		 * ("Clients") and never repeats a count the page's own status line
+		 * carries, or a screen reader hears the count twice. It earns its
+		 * place beside the page's heading because a screen reader lists a
+		 * page's tables by name, and the record view needs a name for its
+		 * group.
+		 */
+		caption?: string;
+		/**
+		 * The id of the element that says what the table holds right now (a
+		 * list's result line, "Showing 30 Clients, soonest due first."), so a
+		 * screen reader reads the count and the order on reaching the table.
+		 * Set on the `<table>` and on the record view's group.
+		 */
+		describedBy?: string;
+		/**
+		 * Whether the first column's cells are row headers
+		 * (`<th scope="row">`), so a screen reader that lands on a cell in
+		 * any column hears whose row it is. The first column is the row's
+		 * identity: it is the one `rowHref` links, and the record view's
+		 * title. On by default; a table whose first column is not what names
+		 * its rows turns it off. Drawn exactly as a `<td>` is.
+		 */
+		hasRowHeader?: boolean;
+		/**
+		 * Whether a newer page of rows is on its way while these stay on
+		 * screen, so a filter change does not blank the list. Set as
+		 * `aria-busy` on the table and on the record view's group.
+		 */
+		isBusy?: boolean;
 	}
 
 	let {
@@ -204,7 +258,12 @@
 		disclosure,
 		emptyMessage,
 		emptyAction,
-		columnWidths = 'content'
+		columnWidths = 'content',
+		recordLayout = 'list',
+		caption,
+		describedBy,
+		hasRowHeader = true,
+		isBusy = false
 	}: Properties<T> = $props();
 
 	/*
@@ -334,13 +393,19 @@
 	{:else}
 		<table
 			class="table-view"
+			aria-describedby={describedBy}
+			aria-busy={isBusy}
 			class:even={columnWidths === 'even'}
+			class:fill={columnWidths === 'fill'}
 			class:has-wrapping-column={columns.some((column) => column.wraps)}
 		>
+			{#if caption}
+				<caption class="visually-hidden">{caption}</caption>
+			{/if}
 			<thead>
 				<tr>
 					{#each columns as column (column.label)}
-						<th scope="col" class:numeric={column.numeric} class:wraps={column.wraps}>{column.label}</th>
+						<th scope="col" class:numeric={column.numeric} class:wraps={column.wraps} class:grows={column.grows}>{column.label}</th>
 					{/each}
 					{#if rowActions}
 						<!-- `actions` names the column of this table's own controls for
@@ -358,16 +423,19 @@
 							     own `<dd>` below, and that asymmetry is deliberate:
 							     all it turns on is `td.content`'s vertical padding,
 							     which a `<dd>` already carries for every cell. -->
-							<td
+							<svelte:element
+								this={columnIndex === 0 && hasRowHeader ? 'th' : 'td'}
+								scope={columnIndex === 0 && hasRowHeader ? 'row' : undefined}
 								class:numeric={column.numeric}
 								class:meta={column.variant === 'meta'}
 								class:variant-body={column.variant === 'body'}
 								class:muted={column.variant === 'muted'}
 								class:content={isContentCell(column, columnIndex)}
 								class:wraps={column.wraps}
+								class:grows={column.grows}
 							>
 								{@render cell(column, columnIndex, row, 'table')}
-							</td>
+							</svelte:element>
 						{/each}
 						{#if rowActions}
 							<td class="actions">
@@ -391,7 +459,7 @@
 		     rule (below) never actually hid, in both the browser this was
 		     built against and the test suite -- a real div doesn't have that
 		     failure mode. -->
-		<div class="record-view">
+		<div class="record-view" role={caption ? 'group' : undefined} aria-label={caption} aria-describedby={describedBy} aria-busy={isBusy}>
 			{#each rows as row, index (index)}
 				<!-- Each record is a card (#2022): its first column as the
 				     title, the thing a reader finds a record by (Serial
@@ -406,7 +474,29 @@
 				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 				<div class="record" id={rowId?.(row, 'record')} tabindex={rowId ? -1 : undefined}>
 					<div class="record-title">{@render cell(columns[0]!, 0, row, 'record')}</div>
-					{#if fields.length > 0}
+					{#if fields.length > 0 && recordLayout === 'compact'}
+						<!-- The first field is the line under the title; the rest share
+						     one line. Each label is read, never drawn, so no stacked
+						     labels take the card's height. -->
+						{@const view = 'record' as const}
+						{@const lead = fields[0]!}
+						{@const rest = fields.slice(1)}
+						<div class="compact-lead">
+							<span class="visually-hidden">{`${lead.label}: `}</span>
+							{@render cell(lead.column, lead.columnIndex, row, view)}
+						</div>
+						{#if rest.length > 0}
+							<div class="compact-meta">
+								{#each rest as field, index (field.label)}
+									{#if index > 0}<span class="compact-separator" aria-hidden="true">·</span>{/if}
+									<span class="compact-field">
+										<span class="visually-hidden">{`${field.label}: `}</span>
+										{@render cell(field.column, field.columnIndex, row, view)}
+									</span>
+								{/each}
+							</div>
+						{/if}
+					{:else if fields.length > 0}
 						<SummaryList rows={fields}>
 							{#snippet value(field)}
 								<!-- Neither `variant-body` nor `content` is written
@@ -513,6 +603,37 @@
 			table-layout: fixed;
 		}
 
+		/* `columnWidths="fill"`: the frame's width, up to a ceiling, with one
+		   column (`grows`) taking what the others leave. Each of the others
+		   asks for 1% and cannot wrap, so the table algorithm gives it its
+		   longest value and no more; the room that is left lands in the one
+		   that has no width. A filter that leaves a column out therefore
+		   moves nothing but that column. The ceiling is what #542 asked for:
+		   a cell never absorbs a whole screen. Three measures (about
+		   1750px): a list read at 1440px uses the width its container gives,
+		   with no empty band beside it, while a 4K window still stops short
+		   of a row that crosses the screen. */
+		.table-view.fill {
+			inline-size: min(100%, calc(var(--measure) * 3));
+		}
+
+		.table-view.fill :is(th, td):not(.grows) {
+			inline-size: 1%;
+			white-space: nowrap;
+		}
+
+		/* Rows that are about to be replaced (`isBusy`) dim a little, so a
+		   filter that has been applied is seen to be working before its result
+		   lands. They stay readable and in place; no delay, no animation. */
+		.table-view[aria-busy='true'],
+		.record-view[aria-busy='true'] {
+			opacity: 0.6;
+		}
+
+		.table-view.fill :is(th, td) {
+			max-inline-size: none;
+		}
+
 		/* A table with a wrapping column (#2091). The auto table layout
 		   shares the room between a column's one-word width and its
 		   one-line width in proportion to the gap between the two, so
@@ -549,8 +670,11 @@
 		th,
 		td {
 			block-size: var(--row-height);
-			padding: 0 var(--space-3);
+			/* A caller whose columns hold more than a window gives them at 1280px
+			   sets --data-table-cell-inset on an ancestor to hold its rows to one line. */
+			padding: 0 var(--data-table-cell-inset, var(--space-3));
 			font-size: var(--text-body-sm-size);
+			font-variant-numeric: tabular-nums;
 			/* The cells are `body-sm`, so they take `body-sm`'s own line
 			   height (ADR-0060: each role keeps its own leading) rather
 			   than inheriting `body`'s 1.55 from the frame (#1945). */
@@ -574,8 +698,31 @@
 			overflow-wrap: anywhere;
 		}
 
-		th {
+		/* The first column's text starts at the table's edge, so it lines up with
+		   the page title and the filter bar above, on every list. */
+		:is(th, td):first-child {
+			padding-inline-start: 0;
+		}
+
+		/* The header row: a quiet tint with a hairline under it, small
+		   semibold labels in the variant tone. */
+		thead th {
+			background-color: var(--color-surface-container);
+			color: var(--color-on-surface-variant);
 			font-weight: var(--font-weight-semibold);
+		}
+
+		/* A row hover tint. The row's link stays the one target, and the
+		   tint is never the only cue for anything. */
+		tbody tr:hover > :is(td, th) {
+			background-color: var(--color-surface-container);
+		}
+
+		/* A row header is a body cell that happens to be a `<th>`: it
+		   reads as a `<td>` does, so every `td.…` rule below is written
+		   for both. */
+		th[scope='row'] {
+			font-weight: var(--font-weight-normal);
 		}
 
 		/* A numeric column's header moves with its body cells (#509) --
@@ -598,7 +745,7 @@
 		   one line is short and bounded -- the longest built today is an
 		   on-call window, "Oct 1, 2026 – Nov 1, 2026". The record view's
 		   `dd.meta` below does not take it: a `<dd>` at 320px has to wrap. */
-		td.meta {
+		:is(td, th[scope='row']).meta {
 			font-size: var(--text-meta-size);
 			font-weight: var(--text-meta-weight);
 			line-height: var(--text-meta-leading);
@@ -607,12 +754,12 @@
 			white-space: nowrap;
 		}
 
-		td.variant-body {
+		:is(td, th[scope='row']).variant-body {
 			font-size: var(--text-body-size);
 			line-height: var(--text-body-leading);
 		}
 
-		td.muted {
+		:is(td, th[scope='row']).muted {
 			color: var(--color-on-surface-muted);
 		}
 
@@ -657,7 +804,7 @@
 		   No counterpart for the record view's `<dd>`: it carries
 		   `padding-block` for EVERY cell already (below) and sets no
 		   height at all, so a rule there would override nothing. */
-		td.content {
+		:is(td, th[scope='row']).content {
 			padding-block: round(
 				down,
 				calc((var(--row-height) - var(--border-thin) - 1lh) / 2),
@@ -670,7 +817,7 @@
 		   padding would make the row taller than its targets, and the
 		   target's own box already keeps its words off the row rule. The
 		   Clients list's "Blocked email addresses" link is this case. */
-		td.content:has(:global(a), :global(button)) {
+		:is(td, th[scope='row']).content:has(:global(a), :global(button)) {
 			padding-block: 0;
 		}
 
@@ -807,6 +954,38 @@
 			font-weight: var(--text-subheading-weight);
 			line-height: var(--text-subheading-leading);
 			letter-spacing: var(--text-subheading-tracking);
+			overflow-wrap: anywhere;
+		}
+
+		/* The compact record (`recordLayout="compact"`): a title, the next
+		   field under it, and the others on one line, so a phone's screen
+		   holds several records. The group step between cards is the
+		   related step, since the cards are rows of one list. */
+		.record:has(.compact-lead) {
+			gap: var(--space-1);
+			padding: var(--space-3) var(--space-4);
+		}
+
+		.record:has(.compact-lead) + .record {
+			margin-block-start: var(--space-related);
+		}
+
+		.compact-lead,
+		.compact-meta {
+			font-size: var(--text-body-sm-size);
+			line-height: var(--text-body-sm-leading);
+			font-variant-numeric: tabular-nums;
+		}
+
+		.compact-meta {
+			display: flex;
+			flex-wrap: wrap;
+			column-gap: var(--space-1);
+			color: var(--color-on-surface-variant);
+		}
+
+		.compact-field {
+			min-inline-size: 0;
 			overflow-wrap: anywhere;
 		}
 

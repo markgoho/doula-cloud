@@ -396,7 +396,7 @@
 				<Text text="Could not load pending requests just now." tone="muted" />
 			{:else}
 				<cluster-l space="var(--space-3)" align="center">
-					<Badge label={`${requests.count}${requests.hasMore ? '+' : ''} waiting`} variant="warning" />
+					<Badge label={`${requests.count}${requests.hasMore ? '+' : ''} waiting`} variant="info" />
 					<Link
 						href={resolve('/practices/[practiceId]/engagement-requests', {
 							practiceId: page.params.practiceId!
@@ -610,7 +610,10 @@
 		   can set a floor lower than the component's.
 
 		   Measured 2026-10-26 on macOS/Chromium: the waiting table needs
-		   427px of a 456px column and fits from 27rem. The activity table's
+		   427px of a 456px column and fits from 27rem. Re-measured
+		   2026-11-08 on Linux/Chromium, once a table's first column starts
+		   at its edge (ADR-0063): it needs 404px of a 410px column and fits
+		   from 25.5rem. The activity table's
 		   What column wraps since #2112, so its floor is When and Who beside
 		   a sentence's longest word: it needs 455px of a 448px column, its
 		   cells growing with the column's fluid type, and fits from 28.5rem
@@ -639,7 +642,7 @@
 			--data-table-records-display: block;
 		}
 
-		@container waiting-table (min-width: 27rem) {
+		@container waiting-table (min-width: 25.5rem) {
 			.waiting-table > :global(*) {
 				--data-table-table-display: table;
 				--data-table-records-display: none;

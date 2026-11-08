@@ -120,3 +120,13 @@
 <main id="main" tabindex="-1">
 	{@render children()}
 </main>
+
+<style>
+	@layer components {
+		/* The Staff edge, as practices/+layout.svelte sets it: these are
+		   Staff screens under the same top bar. */
+		main {
+			--page-column-margin-inline: 0;
+		}
+	}
+</style>
