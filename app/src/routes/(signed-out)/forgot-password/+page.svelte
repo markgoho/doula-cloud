@@ -2,10 +2,9 @@
 	import { apiBaseURL } from '#lib/api.js';
 	import { refusalErrors } from '#lib/formErrors.js';
 	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
-	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
-	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import EmailAddressField from '#lib/components/molecules/EmailAddressField.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
@@ -50,20 +49,7 @@
 		/>
 	{:else}
 		<StackedForm onSubmit={handleSubmit}>
-			<LabeledField id={emailId} label="Email address" error={submission.errorFor(emailId)}>
-				{#snippet children({ id, describedBy, invalid })}
-					<TextInput
-						{id}
-						{describedBy}
-						{invalid}
-						type="email"
-						value={email}
-						onInput={(value) => (email = value)}
-						required
-						autocomplete="username"
-					/>
-				{/snippet}
-			</LabeledField>
+			<EmailAddressField id={emailId} value={email} onInput={(value) => (email = value)} error={submission.errorFor(emailId)} />
 			<Button type="submit" label="Send reset link" loading={submission.isSubmitting} />
 		</StackedForm>
 	{/if}

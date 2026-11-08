@@ -7,11 +7,10 @@
 	import { decidePortalLanding, type PortalSessionInfo } from '#lib/portalLanding.js';
 	import { didSessionEnd } from '#lib/sessionEnded.js';
 	import { readPriorLink, readReturnTo, sameOriginPath } from '#lib/returnTo.js';
-	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
-	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import EmailAddressField from '#lib/components/molecules/EmailAddressField.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
@@ -143,20 +142,7 @@
 
 		<!-- `novalidate`: this page refuses the submit, not the browser. -->
 		<StackedForm onSubmit={handleSubmit}>
-			<LabeledField id={emailId} label="Email address" error={submission.errorFor(emailId)}>
-				{#snippet children({ id, describedBy, invalid })}
-					<TextInput
-						{id}
-						{describedBy}
-						{invalid}
-						type="email"
-						value={email}
-						onInput={(value) => (email = value)}
-						required
-						autocomplete="username"
-					/>
-				{/snippet}
-			</LabeledField>
+			<EmailAddressField id={emailId} value={email} onInput={(value) => (email = value)} error={submission.errorFor(emailId)} />
 			<Button type="submit" label="Send me a sign-in link" loading={submission.isSubmitting} />
 		</StackedForm>
 

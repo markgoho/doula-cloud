@@ -1,7 +1,5 @@
 <script lang="ts">
-	import Link from '#lib/components/atoms/Link.svelte';
-	import PortalFooter from '#lib/components/organisms/PortalFooter.svelte';
-	import SignedOutTopBar from '#lib/components/organisms/SignedOutTopBar.svelte';
+	import SignedOutShell from '../../SignedOutShell.svelte';
 
 	/*
 	 * The Client portal's own signed-out chrome: /portal/login and
@@ -18,10 +16,6 @@
 	let { children } = $props();
 </script>
 
-<Link href="#main" label="Skip to main content" variant="skip" />
-<SignedOutTopBar />
-<main id="main" tabindex="-1">
+<SignedOutShell isPortalFooterShown>
 	{@render children()}
-</main>
-<!-- #1558: the same footer, in the same place, as every signed-in Portal screen. -->
-<PortalFooter />
+</SignedOutShell>

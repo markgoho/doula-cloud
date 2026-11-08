@@ -16,6 +16,7 @@ import '#lib/styles/app.css';
 import { gotoWithOutcome } from '#lib/outcome.js';
 import { holdClientsName } from '#lib/clientsReturn.js';
 import Page from './+page.svelte';
+import { goto, pageState } from '#testing/routePage.js';
 import { toPageState } from '../../../../routeFixture.js';
 import { detail as baseDetail, fixture } from './page.fixture.js';
 import { firstName } from '#lib/personName.js';
@@ -30,23 +31,17 @@ if (!customElements.get('center-l')) registerLayoutPrimitives();
  * the fixture once the imports have run. Same installation, through the
  * same `toPageState`, as `route-continuum.svelte.spec.ts`.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
-const goto = vi.hoisted(() => vi.fn());
 const navigation = vi.hoisted(() => ({
 	afterNavigate: undefined as ((navigation: { from: { url: URL } | undefined }) => void) | undefined
 }));
-vi.mock('$app/navigation', () => ({
-	goto,
+vi.mock('$app/navigation', async () => ({
+	...(await import('#testing/routePage.js')),
 	afterNavigate: (callback: (navigation: { from: { url: URL } | undefined }) => void) => {
 		navigation.afterNavigate = callback;
 	}

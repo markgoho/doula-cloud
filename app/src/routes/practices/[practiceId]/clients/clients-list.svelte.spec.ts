@@ -16,6 +16,7 @@ import Page from './+page.svelte';
 import StaffFeedback from '#lib/components/organisms/StaffFeedback.svelte';
 import StaffTopBar from '#lib/components/organisms/StaffTopBar.svelte';
 import { TYPICAL_CLIENTS } from '../../../typicalPilot.js';
+import { goto, pageState } from '#testing/routePage.js';
 import { toApiResponder, toPageState } from '../../../routeFixture.js';
 import { clients, fixture, seedLikeClients, typical } from './page.fixture.js';
 import { heldClientsName } from '#lib/clientsReturn.js';
@@ -37,13 +38,7 @@ if (!customElements.get('center-l')) registerLayoutPrimitives();
  * test can set `all` on it directly before `render()` -- mutated before
  * render, not mid-test, since the mock is not Svelte-reactive.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>,
-	state: {} as { clientsName?: string; clientsPages?: number }
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 // Reactive, because a test moves the Name mid-render the way a history entry
 // does, and the route reads it through a derived.
@@ -51,9 +46,9 @@ class HistoryState {
 	clientsName = $state<string>();
 	clientsPages = $state<number>();
 }
-pageState.state = new HistoryState();
+const historyState = new HistoryState();
+pageState.state = historyState;
 
-const goto = vi.hoisted(() => vi.fn());
 // SvelteKit's `replaceState` rewrites the current history entry's state; the
 // stand-in does the same to the page state this file installs.
 const replaceState = vi.hoisted(() => vi.fn());
@@ -64,8 +59,8 @@ const navigation = vi.hoisted(() => ({
 	onMove: undefined as ((move: Move) => void) | undefined,
 	onBefore: undefined as (() => void) | undefined
 }));
-vi.mock('$app/navigation', () => ({
-	goto,
+vi.mock('$app/navigation', async () => ({
+	...(await import('#testing/routePage.js')),
 	replaceState,
 	beforeNavigate: (callback: () => void) => {
 		navigation.onBefore = callback;
@@ -110,15 +105,15 @@ beforeEach(() => {
 	goto.mockReset();
 	replaceState.mockReset();
 	replaceState.mockImplementation((_url: string, state: { clientsName?: string; clientsPages?: number }) => {
-		pageState.state.clientsPages = state.clientsPages;
+		historyState.clientsPages = state.clientsPages;
 	});
-	pageState.state.clientsPages = undefined;
+	historyState.clientsPages = undefined;
 	pageState.url.searchParams.delete('all');
 	pageState.url.searchParams.delete('mine');
 	pageState.url.searchParams.delete('owes');
 	pageState.url.searchParams.delete('noContract');
 	pageState.url.searchParams.delete('doula');
-	pageState.state.clientsName = undefined;
+	historyState.clientsName = undefined;
 });
 
 // What every filter-bar navigation carries beside its address (#1829): the
@@ -874,7 +869,7 @@ describe('the "Name" field', () => {
 	// navigates to or asks the BFF for holds it -- the one BFF request that
 	// carries it is a POST with it in the body.
 	it('is in no address the page navigates to or asks the BFF for', async () => {
-		pageState.state.clientsName = 'Anne & Marie 100%';
+		historyState.clientsName = 'Anne & Marie 100%';
 		await setup();
 		await waitForRows();
 
@@ -929,7 +924,7 @@ describe('the "Name" field', () => {
 	});
 
 	it('reads the history entry: filled in, sent to the BFF in a body, and worded, with "Also show anyone not yet in care" still offered', async () => {
-		pageState.state.clientsName = ' Camille ';
+		historyState.clientsName = ' Camille ';
 
 		await setup();
 
@@ -944,7 +939,7 @@ describe('the "Name" field', () => {
 	});
 
 	it('says no Client is named so, and offers the switch for the rest', async () => {
-		pageState.state.clientsName = 'Zelda';
+		historyState.clientsName = 'Zelda';
 
 		await setup(nobody);
 
@@ -958,7 +953,7 @@ describe('the "Name" field', () => {
 	});
 
 	it('says no Client is named so, and how to widen the list, once the rest are in the list', async () => {
-		pageState.state.clientsName = 'Zelda';
+		historyState.clientsName = 'Zelda';
 		pageState.url.searchParams.set('all', 'true');
 
 		await setup(nobody);
@@ -969,7 +964,7 @@ describe('the "Name" field', () => {
 	});
 
 	it('words a name beside "Who owe money"', async () => {
-		pageState.state.clientsName = 'Cam';
+		historyState.clientsName = 'Cam';
 		pageState.url.searchParams.set('owes', 'true');
 
 		await setup();
@@ -989,7 +984,7 @@ describe('the filter bar\'s layout', () => {
 	// Two rows that do not depend on each other: the switches, then the
 	// fields (Name, Doula, "Mine"), Apply and "Clear filters". Order, not pixels, is asserted.
 	it('puts the switches above the fields, Name before Doula, Apply then "Clear filters" last', async () => {
-		pageState.state.clientsName = 'Camille';
+		historyState.clientsName = 'Camille';
 		await setup(undefined, { isDoula: true, doulas });
 
 		const switchBoxes = [
@@ -1082,7 +1077,7 @@ describe('the applied filters', () => {
 	});
 
 	it('draws one tag for the name, which is in no address', async () => {
-		pageState.state.clientsName = 'Camille';
+		historyState.clientsName = 'Camille';
 
 		await setup();
 
@@ -1107,7 +1102,7 @@ describe('the applied filters', () => {
 	it('removes one filter with one press, handing the typed name on in the history entry', async () => {
 		pageState.url.searchParams.set('owes', 'true');
 		pageState.url.searchParams.set('noContract', 'true');
-		pageState.state.clientsName = 'Camille';
+		historyState.clientsName = 'Camille';
 
 		await setup();
 		await tags().getByRole('link', { name: 'Remove filter: Who owe money' }).click();
@@ -1119,7 +1114,7 @@ describe('the applied filters', () => {
 
 	it('removes the name alone, clearing it from the history entry and keeping every filter in the address', async () => {
 		pageState.url.searchParams.set('owes', 'true');
-		pageState.state.clientsName = 'Camille';
+		historyState.clientsName = 'Camille';
 
 		await setup();
 		await tags().getByRole('link', { name: 'Remove filter: Name Camille' }).click();
@@ -1198,7 +1193,7 @@ describe('"Clear filters"', () => {
 	});
 
 	it('is drawn once a name is applied, and leads to the bare Clients list', async () => {
-		pageState.state.clientsName = 'Camille';
+		historyState.clientsName = 'Camille';
 
 		await setup();
 
@@ -1218,7 +1213,7 @@ describe('"Clear filters"', () => {
 
 describe('the table\'s caption', () => {
 	it('names the table by its purpose and leaves the count to the status line', async () => {
-		pageState.state.clientsName = 'Camille';
+		historyState.clientsName = 'Camille';
 
 		await setup();
 
@@ -1871,7 +1866,7 @@ describe('where focus goes after the list changes', () => {
 		navigation.onMove!({});
 		await waitForRows();
 
-		pageState.state.clientsName = 'Cam';
+		historyState.clientsName = 'Cam';
 		navigation.onMove!({ from: { route: listRoute, params: {} } });
 
 		await expect.element(testPage.getByRole('status')).toHaveFocus();
@@ -1900,7 +1895,7 @@ describe('where focus goes after the list changes', () => {
 		await testPage.getByRole('checkbox', { name: 'Who owe money' }).click();
 
 		navigation.onBefore!();
-		pageState.state.clientsName = 'Cam';
+		historyState.clientsName = 'Cam';
 		navigation.onMove!({ from: { route: listRoute, params: {} } });
 
 		await expect.element(testPage.getByRole('checkbox', { name: 'Who owe money' })).not.toBeChecked();
@@ -2392,7 +2387,7 @@ const states: [string, number, () => void][] = [
 		2,
 		() => {
 			pageState.url.searchParams.set('doula', kimiko.value);
-			pageState.state.clientsName = 'Camille';
+			historyState.clientsName = 'Camille';
 		}
 	]
 ];
@@ -2400,7 +2395,7 @@ const states: [string, number, () => void][] = [
 async function measureState(width: number, apply: () => void) {
 	pageState.url.searchParams.delete('owes');
 	pageState.url.searchParams.delete('doula');
-	pageState.state.clientsName = undefined;
+	historyState.clientsName = undefined;
 	apply();
 	await renderListScreen({ width, height: 800 });
 	await expect.element(testPage.getByRole('rowheader', { name: TYPICAL_CLIENTS[0].name })).toBeVisible();
@@ -2661,7 +2656,7 @@ describe('the "Also show anyone not yet in care" switch beside a filter', () => 
 
 
 	it('stays drawn beside a Name, which implies no care', async () => {
-		pageState.state.clientsName = 'Camille';
+		historyState.clientsName = 'Camille';
 
 		await setup();
 
@@ -2745,7 +2740,7 @@ describe('Back to the list after Load more', () => {
 	});
 
 	it('loads that many pages again, then lands on the row she came from', async () => {
-		pageState.state.clientsPages = 3;
+		historyState.clientsPages = 3;
 		await setup(undefined, { responder: answerPages });
 
 		await expect.element(testPage.getByRole('rowheader', { name: clients[2].name })).toBeVisible();
@@ -2760,7 +2755,7 @@ describe('Back to the list after Load more', () => {
 	});
 
 	it('caps the restore at five pages', async () => {
-		pageState.state.clientsPages = 40;
+		historyState.clientsPages = 40;
 		await setup(undefined, {
 			responder: (path) => {
 				const number = Number(/cursor=cursor-(\d+)/.exec(path)?.[1] ?? 1);
@@ -2948,7 +2943,7 @@ describe('the amount on a record card', () => {
 
 describe('the Name held for the Client hub’s Back link', () => {
 	it('is the Name the list was left with', async () => {
-		pageState.state.clientsName = 'Camille';
+		historyState.clientsName = 'Camille';
 		await setup();
 
 		await expect.element(nameField()).toHaveValue('Camille');

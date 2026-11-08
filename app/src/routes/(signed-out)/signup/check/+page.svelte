@@ -26,9 +26,8 @@
 	import { legalVersionUrl, privacyPolicyUrl, termsOfServiceUrl } from '#lib/legal.js';
 	import { formatCalendarDay } from '#lib/dates.js';
 	import Button from '#lib/components/atoms/Button.svelte';
-	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
-	import WarningText from '#lib/components/atoms/WarningText.svelte';
+	import SignOutConfirmation from '#lib/components/molecules/SignOutConfirmation.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import CheckAnswers, { type AnswerSection } from '#lib/components/templates/CheckAnswers.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
@@ -345,15 +344,12 @@
 			out of it. The button she pressed is gone, so the heading takes
 			focus.
 		-->
-		<Heading level={2} text="Before you continue" focusOnAppearing />
-		<WarningText message={signOutWarning ?? ''} />
-		<Button
-			type="button"
-			label="Continue and sign out"
-			loading={submission.isSubmitting}
-			onClick={handleConfirmSignOut}
+		<SignOutConfirmation
+			warning={signOutWarning ?? ''}
+			isSubmitting={submission.isSubmitting}
+			onConfirm={handleConfirmSignOut}
+			onCancel={handleCancelSignOut}
 		/>
-		<Button type="button" label="Cancel" variant="secondary" onClick={handleCancelSignOut} />
 	{:else}
 		<!--
 			#1790: in the founder's voice, the teaser's own words for the

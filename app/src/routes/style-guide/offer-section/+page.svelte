@@ -1,5 +1,6 @@
 <script lang="ts">
 	import OfferSection from '#lib/components/organisms/OfferSection.svelte';
+	import { openOffer } from '../offerDemo.js';
 	import type { Offer } from '#lib/offer.js';
 
 	/*
@@ -8,19 +9,7 @@
 	 * and every Doula in the picker is named in full.
 	 */
 	const offers: Offer[] = [
-		{
-			offerId: 'of_1',
-			state: 'offered',
-			clientFirstInitial: 'S',
-			clientArea: 'Irondequoit and the north-east suburbs of Rochester, NY',
-			dueDate: '2027-11-02',
-			amountCents: 425_000,
-			terms:
-				'Two prenatal visits at the Client\'s home, continuous support through the birth wherever it happens, and one postpartum visit in the first fortnight.',
-			employmentType: 'contractor',
-			offeredAt: '2026-08-01T00:00:00Z',
-			expiresAt: '2026-08-08T00:00:00Z'
-		},
+		openOffer,
 		{
 			offerId: 'of_2',
 			state: 'declined',

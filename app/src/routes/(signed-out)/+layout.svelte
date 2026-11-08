@@ -1,8 +1,6 @@
 <script lang="ts">
-	import Link from '#lib/components/atoms/Link.svelte';
 	import { page } from '#lib/appState.svelte.js';
-	import PortalFooter from '#lib/components/organisms/PortalFooter.svelte';
-	import SignedOutTopBar from '#lib/components/organisms/SignedOutTopBar.svelte';
+	import SignedOutShell from '../SignedOutShell.svelte';
 	import type { RootLanding } from './+page.js';
 
 	/*
@@ -54,11 +52,6 @@
 	const isPortalScreen = $derived(isPortalPicker(page.data));
 </script>
 
-<Link href="#main" label="Skip to main content" variant="skip" />
-<SignedOutTopBar />
-<main id="main" tabindex="-1">
+<SignedOutShell isPortalFooterShown={isPortalScreen}>
 	{@render children()}
-</main>
-{#if isPortalScreen}
-	<PortalFooter />
-{/if}
+</SignedOutShell>

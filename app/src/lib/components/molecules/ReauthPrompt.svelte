@@ -39,8 +39,7 @@
 	import type { FormError, FormSubmission } from '#lib/formSubmission.svelte.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
-	import TextInput from '#lib/components/atoms/TextInput.svelte';
-	import LabeledField from './LabeledField.svelte';
+	import PasswordField from './PasswordField.svelte';
 	import StackedForm from './StackedForm.svelte';
 	import TotpCodeField from './TotpCodeField.svelte';
 
@@ -206,20 +205,7 @@
 {#snippet fields()}
 	{#if step === 'password'}
 		<Text text={prompt} />
-		<LabeledField id={passwordId} label="Password" error={submission.errorFor(passwordId)}>
-			{#snippet children({ id, describedBy, invalid })}
-				<TextInput
-					{id}
-					{describedBy}
-					{invalid}
-					type="password"
-					value={password}
-					onInput={(value) => (password = value)}
-					required
-					autocomplete="current-password"
-				/>
-			{/snippet}
-		</LabeledField>
+		<PasswordField id={passwordId} value={password} onInput={(value) => (password = value)} error={submission.errorFor(passwordId)} />
 	{:else}
 		<!--
 			No password field here: Identity Platform already accepted it,
