@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json/jsontext"
-	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -151,24 +150,13 @@ type DetailResponse struct {
 // wider of the two acts, so whatever may edit may certainly read. Must be
 // mounted behind staffauth.Middleware.
 func DetailHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, clientID, _, ok := staffauth.RequireClientReach(w, r)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		rec, ok := requireRecord(w, r, c, c.ClientID)
 		if !ok {
 			return
 		}
 
-		rec, err := fetchRecord(r.Context(), tx, practiceID, clientID)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "client not found", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		mergedInto, err := readMergedInto(r.Context(), tx, clientID)
+		mergedInto, err := readMergedInto(r.Context(), c.Tx, c.ClientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -178,18 +166,18 @@ func DetailHandler() http.Handler {
 			// Absorbed: the screen redirects rather than renders, so
 			// nothing past this point (history, resolved fields, erasure
 			// state) is worth reading.
-			apierr.WriteJSON(w, http.StatusOK, DetailResponse{ID: clientID, MergedInto: mergedInto})
+			apierr.WriteJSON(w, http.StatusOK, DetailResponse{ID: c.ClientID, MergedInto: mergedInto})
 			return
 		}
 
-		engagements, err := ListEngagementsForClient(r.Context(), tx, clientID)
+		engagements, err := ListEngagementsForClient(r.Context(), c.Tx, c.ClientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		mergedFrom, err := listMergedRecords(r.Context(), tx, clientID)
+		mergedFrom, err := listMergedRecords(r.Context(), c.Tx, c.ClientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -200,28 +188,28 @@ func DetailHandler() http.Handler {
 			absorbedIDs[i] = m.ClientID
 		}
 
-		history, err := mergedHistory(r.Context(), tx, practiceID, clientID, absorbedIDs)
+		history, err := mergedHistory(r.Context(), c.Tx, c.PracticeID, c.ClientID, absorbedIDs)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		resolvedFields, err := resolveFields(r.Context(), tx, practiceID, rec.FieldValues)
+		resolvedFields, err := resolveFields(r.Context(), c.Tx, c.PracticeID, rec.FieldValues)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		erasedAt, redactionEligibleAt, err := readErasureState(r.Context(), tx, clientID)
+		erasedAt, redactionEligibleAt, err := readErasureState(r.Context(), c.Tx, c.ClientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		portalState, err := FetchPortalInviteState(r.Context(), tx, clientID)
+		portalState, err := FetchPortalInviteState(r.Context(), c.Tx, c.ClientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -240,7 +228,7 @@ func DetailHandler() http.Handler {
 			EmailSuppressed:           portalState.EmailSuppressed,
 		}
 		apierr.WriteJSON(w, http.StatusOK, out)
-	})
+	}, staffauth.Client())
 }
 
 // mergedHistory reads clientID's activity and engagement_requests

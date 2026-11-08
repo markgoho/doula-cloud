@@ -45,22 +45,13 @@ type VoidRequestsAwaitingResponse struct {
 // only: void itself is Owner/Admin-only (#970), so nobody else has
 // anything to act on here. Must be mounted behind staffauth.Middleware.
 func VoidRequestsAwaitingHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireOwnerOrAdmin(w, r)
-		if !ok {
-			// coverage:ignore reason: belt-and-braces -- contracts.Mount's own
-			// OwnerAndAdmin declaration (g.Get) already refuses a non-owner/admin
-			// caller before this handler runs, so !ok is unreachable through the
-			// real mount.
-			return
-		}
-
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		after, ok := pagecursor.FromQuery(w, r, pagecursor.Decode, MsgInvalidCursor)
 		if !ok {
 			return
 		}
 
-		list, err := listVoidRequestsAwaiting(r.Context(), tx, practiceID, after)
+		list, err := listVoidRequestsAwaiting(r.Context(), c.Tx, c.PracticeID, after)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)

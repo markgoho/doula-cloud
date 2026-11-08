@@ -28,21 +28,9 @@ type TemplateResponse struct {
 // GetTemplateHandler lets any Staff member at the current Practice read
 // its Contract Template. Must be mounted behind staffauth.Middleware.
 func GetTemplateHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		prose, ok := requireTemplateProse(w, r, c)
 		if !ok {
-			return
-		}
-
-		prose, found, err := fetchProse(r.Context(), tx, practiceID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if !found {
-			apierr.WriteError(w, "no contract template found for this practice", http.StatusNotFound)
 			return
 		}
 
@@ -58,13 +46,7 @@ func GetTemplateHandler() http.Handler {
 // every Staff member. Must be mounted through
 // idempotency.Router.ExemptGated.
 func PutTemplateHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		var req TemplateResponse
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
@@ -75,10 +57,10 @@ func PutTemplateHandler() http.Handler {
 			return
 		}
 
-		if _, err := tx.ExecContext(r.Context(),
+		if _, err := c.Tx.ExecContext(r.Context(),
 			`INSERT INTO contract_templates (practice_id, prose) VALUES ($1, $2)
 			 ON CONFLICT (practice_id) DO UPDATE SET prose = EXCLUDED.prose`,
-			practiceID, req.Prose,
+			c.PracticeID, req.Prose,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -87,6 +69,22 @@ func PutTemplateHandler() http.Handler {
 
 		apierr.WriteJSON(w, http.StatusOK, TemplateResponse{Prose: req.Prose})
 	})
+}
+
+// requireTemplateProse reads the Practice's Contract Template prose,
+// writing the 404 when it has none and the 500 when the read fails.
+func requireTemplateProse(w http.ResponseWriter, r *http.Request, c staffauth.Call) (string, bool) {
+	prose, found, err := fetchProse(r.Context(), c.Tx, c.PracticeID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return "", false
+	}
+	if !found {
+		apierr.WriteError(w, "no contract template found for this practice", http.StatusNotFound)
+		return "", false
+	}
+	return prose, true
 }
 
 // fetchProse reads the prose stored for practiceID, reporting found=false

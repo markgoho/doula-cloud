@@ -116,11 +116,11 @@ func namesPrice(line string) bool {
 // as amended on #282 gives her "her own agreed fee only -- never the
 // Practice's price". For her, the price line leaves the prose, "price"
 // leaves the merge fields, its value leaves Values, and amountChangedAt
-// (the fact that the price moved) is withheld. A request with no Staff
-// Reader on it -- the Client portal's own Contract read -- passes
-// through unchanged: the Client reads what she agreed to pay.
-func shapeForReader(reader staffauth.Reader, hasReader bool, out ContractResponse) ContractResponse {
-	if !hasReader || !reader.IsAmbientContractor() {
+// (the fact that the price moved) is withheld. The Client portal's own
+// Contract read never comes through here: the Client reads what she
+// agreed to pay.
+func shapeForReader(reader staffauth.Reader, out ContractResponse) ContractResponse {
+	if !reader.IsAmbientContractor() {
 		return out
 	}
 	out.Prose = withoutPriceLines(out.Prose)
@@ -149,7 +149,7 @@ func resolveContractAmount(ctx context.Context, tx *sql.Tx, engagementID string)
 		 WHERE e.id = $1`,
 		engagementID,
 	).Scan(&kind, &amount); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests -- resolveContractRequest already proved the Engagement exists
+		// coverage:ignore reason: DB query failure, not exercised by unit tests -- staffauth.Engagement already proved the Engagement exists
 		return 0, "", false, fmt.Errorf("contracts: resolve contract amount: %w", err)
 	}
 	if !amount.Valid {

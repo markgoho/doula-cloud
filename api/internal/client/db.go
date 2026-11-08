@@ -5,6 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/http"
+
+	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/staffauth"
 )
 
 // insertClient writes rec as a new clients row under practiceID. rec.ID
@@ -49,6 +53,22 @@ func updateClient(ctx context.Context, tx *sql.Tx, clientID string, rec Record) 
 		return fmt.Errorf("client: update client: %w", err)
 	}
 	return nil
+}
+
+// requireRecord is fetchRecord for a handler: it writes the 404 when the
+// Client is not at this Practice and the 500 when the read fails.
+func requireRecord(w http.ResponseWriter, r *http.Request, c staffauth.Call, clientID string) (Record, bool) {
+	rec, err := fetchRecord(r.Context(), c.Tx, c.PracticeID, clientID)
+	if errors.Is(err, sql.ErrNoRows) {
+		apierr.WriteError(w, "client not found", http.StatusNotFound)
+		return Record{}, false
+	}
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return Record{}, false
+	}
+	return rec, true
 }
 
 // fetchRecord reads clientID's full Record, scoped to practiceID (RLS

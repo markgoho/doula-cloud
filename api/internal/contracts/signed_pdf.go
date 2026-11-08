@@ -56,23 +56,13 @@ func SignedPDFObjectPath(engagementID, contractID string) string {
 // her own fee is never on it. Voiding changes none of that. Must be
 // mounted behind staffauth.Middleware.
 func GetSignedContractPDFHandler(store objectstore.ObjectStore) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, engagementID, ok := resolveContractRequest(w, r)
-		if !ok {
-			return
-		}
-		reader, has := staffauth.ReaderFrom(r.Context())
-		if !has {
-			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if reader.IsAmbientContractor() {
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		if c.Reader.IsAmbientContractor() {
 			apierr.WriteError(w, staffauth.MsgContractorMoneyRefused, http.StatusForbidden)
 			return
 		}
-		serveSignedPDF(w, r, tx, store, engagementID, apierr.MsgInternalError)
-	})
+		serveSignedPDF(w, r, c.Tx, store, c.EngagementID, apierr.MsgInternalError)
+	}, staffauth.Engagement())
 }
 
 // ClientGetSignedContractPDFHandler mirrors GetSignedContractPDFHandler
@@ -84,13 +74,8 @@ func GetSignedContractPDFHandler(store objectstore.ObjectStore) http.Handler {
 // nobody else -- and a void neither widens nor narrows it. Must be
 // mounted behind clientauth.Middleware.
 func ClientGetSignedContractPDFHandler(store objectstore.ObjectStore) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, engagementID, ok := clientauth.RequireEngagementTx(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-		serveSignedPDF(w, r, tx, store, engagementID, apierr.MsgInternalError)
+	return clientauth.Handler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call) {
+		serveSignedPDF(w, r, c.Tx, store, c.EngagementID, apierr.MsgInternalError)
 	})
 }
 

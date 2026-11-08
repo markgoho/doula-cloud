@@ -151,18 +151,9 @@ type erasureScope struct {
 // gate before this runs. Widening or narrowing this route means editing
 // its role list in mount.go.
 func EraseHandler(enq tasknudge.Enqueuer) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		clientID := r.PathValue("clientId")
-		if !staffauth.ParseUUID(w, "client", clientID) {
-			return
-		}
-
-		erasedAt, ok := lookupErasedAt(w, r, tx, clientID, practiceID, true)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		clientID := c.ID("clientId")
+		erasedAt, ok := lookupErasedAt(w, r, c.Tx, clientID, c.PracticeID, true)
 		if !ok {
 			return
 		}
@@ -172,7 +163,7 @@ func EraseHandler(enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 
-		unsettled, err := unsettledInvoiceSummaries(r.Context(), tx, clientID)
+		unsettled, err := unsettledInvoiceSummaries(r.Context(), c.Tx, clientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -189,8 +180,7 @@ func EraseHandler(enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 
-		staffID, _ := staffauth.StaffID(r.Context())
-		out, err := Erase(r.Context(), tx, practiceID, clientID, activity.StaffActor(staffID), clock.Now(r.Context()).UTC())
+		out, err := Erase(r.Context(), c.Tx, c.PracticeID, clientID, activity.StaffActor(c.StaffID), clock.Now(r.Context()).UTC())
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -199,7 +189,7 @@ func EraseHandler(enq tasknudge.Enqueuer) http.Handler {
 		tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.ClientErasure))
 
 		apierr.WriteJSON(w, http.StatusOK, out)
-	})
+	}, staffauth.PathID("client", "clientId"))
 }
 
 // lookupErasedAt reads clientID's erased_at, scoped to practiceID, and
@@ -249,24 +239,9 @@ type EraseEligibility struct {
 // Admin, and this is a precheck of an Owner-only act, not a wider read.
 // Must be mounted behind staffauth.Middleware.
 func EraseEligibilityHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireOwner(w, r)
-		if !ok {
-			// coverage:ignore reason: belt-and-braces -- client.Mount's own
-			// OwnerOnly declaration (g.Get) already refuses a non-owner caller
-			// before this handler runs, so !ok is unreachable through the real
-			// mount. Since #1016 the erasure POST is declared the same way
-			// (ir.ExemptGated with staffauth.OwnerOnly), so this in-handler
-			// call is the redundant half of a pair, not the last line of
-			// defense it once was.
-			return
-		}
-		clientID := r.PathValue("clientId")
-		if !staffauth.ParseUUID(w, "client", clientID) {
-			return
-		}
-
-		erasedAt, ok := lookupErasedAt(w, r, tx, clientID, practiceID, false)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		clientID := c.ID("clientId")
+		erasedAt, ok := lookupErasedAt(w, r, c.Tx, clientID, c.PracticeID, false)
 		if !ok {
 			return
 		}
@@ -275,7 +250,7 @@ func EraseEligibilityHandler() http.Handler {
 		if erasedAt != nil {
 			out.ErasedAt = erasedAt
 		} else {
-			unsettled, err := unsettledInvoiceSummaries(r.Context(), tx, clientID)
+			unsettled, err := unsettledInvoiceSummaries(r.Context(), c.Tx, clientID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -285,7 +260,7 @@ func EraseEligibilityHandler() http.Handler {
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, out)
-	})
+	}, staffauth.PathID("client", "clientId"))
 }
 
 // Erase is the act itself, in the order the pieces depend on each other:

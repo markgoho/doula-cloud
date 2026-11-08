@@ -47,13 +47,7 @@ type SignContractRequest struct {
 // even if a future bug skipped that check. Must be mounted behind
 // clientauth.Middleware.
 func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, engagementID, ok := clientauth.RequireEngagementTx(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-
+	return clientauth.Handler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call) {
 		var req SignContractRequest
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
@@ -64,7 +58,7 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 			return
 		}
 
-		id, prose, status, values, amountCents, amountChangedAt, ok := requireContract(w, r, tx, engagementID)
+		id, prose, status, values, amountCents, amountChangedAt, ok := requireContract(w, r, c.Tx, c.EngagementID)
 		if !ok {
 			return
 		}
@@ -74,9 +68,9 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 		}
 		values = withResolvedPrice(extractMergeFields(prose), values, amountCents)
 
-		signer, err := loadSigningEngagement(r.Context(), tx, engagementID)
+		signer, err := loadSigningEngagement(r.Context(), c.Tx, c.EngagementID)
 		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests -- clientauth.Middleware has already resolved this Engagement on this tx
+			// coverage:ignore reason: DB query failure, not exercised by unit tests -- clientauth.Middleware has already resolved this Engagement on this c.Tx
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
@@ -95,13 +89,13 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		objectPath := SignedPDFObjectPath(engagementID, id)
+		objectPath := SignedPDFObjectPath(c.EngagementID, id)
 		if err := store.Put(r.Context(), objectPath, contentTypePDF, bytes.NewReader(pdfBytes)); err != nil {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		if _, err := tx.ExecContext(r.Context(),
+		if _, err := c.Tx.ExecContext(r.Context(),
 			`UPDATE contracts
 			 SET status = $1::contract_status, signer_full_name = $2, signer_attestation = $3,
 			     signed_at = $4, signer_ip = $5, signed_pdf_object_path = $6
@@ -112,21 +106,21 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if err := recordContractSigned(r.Context(), tx, engagementID, signer); err != nil {
+		if err := recordContractSigned(r.Context(), c.Tx, c.EngagementID, signer); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		out := ContractResponse{
-			EngagementID:    engagementID,
+			EngagementID:    c.EngagementID,
 			Status:          string(StatusSigned),
 			Prose:           prose,
 			MergeFields:     extractMergeFields(prose),
 			Values:          values.nonEmpty(),
 			AmountChangedAt: amountChangedAt,
 		}
-		writeContract(w, r, tx, http.StatusOK, out)
+		writeClientContract(w, r, c.Tx, http.StatusOK, out)
 	})
 }
 

@@ -78,20 +78,7 @@ type AwaitingResponse struct {
 // feed: the Contract that has been waiting longest is the one that has
 // cost the most, and it belongs at the top.
 func AwaitingSignatureHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		if !ok {
-			// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-			return
-		}
-		staffID, _ := staffauth.StaffID(r.Context())
-		reader, has := staffauth.ReaderFrom(r.Context())
-		if !has {
-			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		after, ok := pagecursor.FromQuery(w, r, pagecursor.Decode, MsgInvalidCursor)
 		if !ok {
 			return
@@ -99,10 +86,10 @@ func AwaitingSignatureHandler() http.Handler {
 
 		var list []AwaitingItem
 		var err error
-		if reader.IsAmbientContractor() {
-			list, err = listAttachedAwaiting(r.Context(), tx, practiceID, staffID, after)
+		if c.Reader.IsAmbientContractor() {
+			list, err = listAttachedAwaiting(r.Context(), c.Tx, c.PracticeID, c.StaffID, after)
 		} else {
-			list, err = listAwaiting(r.Context(), tx, practiceID, after)
+			list, err = listAwaiting(r.Context(), c.Tx, c.PracticeID, after)
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests

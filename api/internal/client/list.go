@@ -177,7 +177,7 @@ type ListResponse struct {
 // tuple has to be the sort key (#446), and pagecursor.Cursor only carries
 // (time, id), so the key rides as a time.
 func ListHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		query := r.URL.Query()
 		// The name is a Client's, and a URL is logged (#1829): it travels in
 		// ListByNameHandler's body only, so a GET that carries one is refused
@@ -190,7 +190,7 @@ func ListHandler() http.Handler {
 		if !ok {
 			return
 		}
-		serveList(w, r, ListRequest{
+		serveList(w, r, c, ListRequest{
 			All:        queryFlag(r, "all"),
 			Mine:       queryFlag(r, "mine"),
 			Owes:       queryFlag(r, "owes"),
@@ -219,7 +219,7 @@ type ListRequest struct {
 // It runs the same query with the same filters, cursor, order and role
 // narrowing, and writes nothing. Must be mounted behind staffauth.Middleware.
 func ListByNameHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		var req ListRequest
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
@@ -234,21 +234,14 @@ func ListByNameHandler() http.Handler {
 			return
 		}
 		req.Name = text
-		serveList(w, r, req)
+		serveList(w, r, c, req)
 	})
 }
 
 // serveList answers the Clients list for filters already read and checked
 // by either entry point.
-func serveList(w http.ResponseWriter, r *http.Request, req ListRequest) {
-	tx, practiceID, reader, ok := staffauth.RequireTxReader(w, r)
-	if !ok {
-		// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-		return
-	}
-	staffID, _ := staffauth.StaffID(r.Context())
-
-	if req.Owes && reader.IsAmbientContractor() {
+func serveList(w http.ResponseWriter, r *http.Request, c staffauth.Call, req ListRequest) {
+	if req.Owes && c.Reader.IsAmbientContractor() {
 		apierr.WriteError(w, "You contract for this Practice, so you cannot filter Clients by what they owe. Money is the Practice's to see.", http.StatusForbidden)
 		return
 	}
@@ -264,20 +257,20 @@ func serveList(w http.ResponseWriter, r *http.Request, req ListRequest) {
 
 	var after *pagecursor.Cursor
 	if req.Cursor != "" {
-		c, err := pagecursor.Decode(req.Cursor)
+		cur, err := pagecursor.Decode(req.Cursor)
 		if err != nil {
 			apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
 			return
 		}
-		after = &c
+		after = &cur
 	}
 
 	var list []ListItem
 	var err error
-	if reader.IsAmbientContractor() || req.Mine {
-		list, err = listAttachedClients(r.Context(), tx, practiceID, staffID, filters, after)
+	if c.Reader.IsAmbientContractor() || req.Mine {
+		list, err = listAttachedClients(r.Context(), c.Tx, c.PracticeID, c.StaffID, filters, after)
 	} else {
-		list, err = listClients(r.Context(), tx, practiceID, filters, after)
+		list, err = listClients(r.Context(), c.Tx, c.PracticeID, filters, after)
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -287,7 +280,7 @@ func serveList(w http.ResponseWriter, r *http.Request, req ListRequest) {
 
 	list, hasMore := pagecursor.Trim(list, pageSize)
 
-	if err := attachOpenEngagements(r.Context(), tx, practiceID, list, reader, staffID); err != nil {
+	if err := attachOpenEngagements(r.Context(), c.Tx, c.PracticeID, list, c.Reader, c.StaffID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
