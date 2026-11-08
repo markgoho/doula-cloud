@@ -43,7 +43,7 @@ A component is a `.svelte` file directly under `app/src/lib/components/<tier>/` 
 
 | Piece | Where it goes | Checked by |
 | --- | --- | --- |
-| A spec | `<Name>.svelte.spec.ts` beside the component | `app/src/routes/style-guide/components.spec.ts`, "a component has a spec beside it". A component tested only through the route that renders it is named in `COVERED_THROUGH_ROUTES` with the route as the reason. The 100% coverage gate (`docs/testing.md`) holds the lines either way. |
+| A spec | `<Name>.svelte.spec.ts` beside the component | `app/src/routes/style-guide/components.spec.ts`, "a component has a spec beside it". There are no exceptions: a component is placed anywhere, so its states are checked on its own. The 100% coverage gate (`docs/testing.md`) holds the lines either way. |
 | A style-guide page | `app/src/routes/style-guide/<kebab-case-slug>/+page.svelte`, the name split at each capital (`CloudMark` is `cloud-mark`) | `app/src/routes/style-guide/style-guide.spec.ts`. The index lists the page by itself: `components.ts` reads it off the files on disk. |
 | A page with no switch of its own | Other states are `variants` exported from the page's `<script module>` | `app/src/routes/style-guide/demoStates.spec.ts` |
 | An `eslint.config.js` entry, only if it renders a raw `<fieldset>` or `<label>` | `fieldOwners` in `app/eslint.config.js` (a raw control element goes in `controlOwners`, a raw heading in `headingOwners`) | `bun run lint`, the `svelte/no-restricted-html-elements` message |

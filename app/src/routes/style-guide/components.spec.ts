@@ -48,13 +48,6 @@ describe('style guide component registry', () => {
 	});
 });
 
-const COVERED_THROUGH_ROUTES: readonly string[] = [
-	'molecules/ReauthPrompt',
-	'molecules/TimezoneField',
-	'organisms/RecordPaymentForm',
-	'organisms/ReversePaymentForm'
-];
-
 function componentsOnDisk(): string[] {
 	return tiers.flatMap((tier) =>
 		readdirSync(new URL(`${tier.directory}/`, componentsRoot))
@@ -68,23 +61,14 @@ function hasSpec(component: string): boolean {
 }
 
 describe('a component has a spec beside it', () => {
-	it('finds no component without one, outside COVERED_THROUGH_ROUTES', () => {
+	it('finds no component without one', () => {
 		const missing = componentsOnDisk()
-			.filter((component) => !hasSpec(component) && !COVERED_THROUGH_ROUTES.includes(component))
+			.filter((component) => !hasSpec(component))
 			.map(
 				(component) =>
 					`app/src/lib/components/${component}.svelte has no spec: add ${component.split('/').pop()}.svelte.spec.ts beside it (docs/design/workflow.md, "What a new component needs")`
 			);
 		expect(missing, missing.join('\n')).toEqual([]);
-	});
-
-	it('names no component in COVERED_THROUGH_ROUTES that has a spec or is gone', () => {
-		const onDisk = new Set(componentsOnDisk());
-		const stale = COVERED_THROUGH_ROUTES.filter((component) => !onDisk.has(component) || hasSpec(component)).map(
-			(component) =>
-				`COVERED_THROUGH_ROUTES in app/src/routes/style-guide/components.spec.ts names ${component}, which now has a spec or no longer exists: remove the entry`
-		);
-		expect(stale, stale.join('\n')).toEqual([]);
 	});
 });
 
