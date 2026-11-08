@@ -155,13 +155,8 @@ func billingModeView(mode BillingMode, ok bool) BillingModeView {
 // Invoice section she may already see). Must be mounted behind
 // staffauth.Middleware with staffauth.AnyStaff.
 func GetBillingModeHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		mode, has, err := fetchBillingMode(r.Context(), tx, practiceID)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		mode, has, err := fetchBillingMode(r.Context(), c.Tx, c.PracticeID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -189,12 +184,7 @@ type PutBillingModeRequest struct {
 // gate before this runs. Widening or narrowing this route means editing
 // its ir.ExemptGated role list in mount.go.
 func PutBillingModeHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		var req PutBillingModeRequest
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
@@ -204,7 +194,7 @@ func PutBillingModeHandler() http.Handler {
 			apierr.WriteError(w, `billingMode must be "stripe" or "by_hand"`, http.StatusBadRequest)
 			return
 		}
-		current, has, err := fetchBillingMode(r.Context(), tx, practiceID)
+		current, has, err := fetchBillingMode(r.Context(), c.Tx, c.PracticeID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -216,8 +206,7 @@ func PutBillingModeHandler() http.Handler {
 		// its Save, and the Activity log must not say the mode changed
 		// when it did not.
 		if !has || current != mode {
-			staffID, _ := staffauth.StaffID(r.Context())
-			if err := setBillingMode(r.Context(), tx, practiceID, mode, staffID); err != nil {
+			if err := setBillingMode(r.Context(), c.Tx, c.PracticeID, mode, c.StaffID); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return

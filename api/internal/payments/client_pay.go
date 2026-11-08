@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/google/uuid"
-
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/cardpayments"
 	"doula-cloud/api/internal/clientauth"
@@ -92,22 +90,16 @@ const payableInvoiceQuery = `SELECT i.status, i.stripe_invoice_id, p.stripe_conn
 //
 // Must be mounted behind clientauth.Middleware.
 func ClientGetPaymentHandler(client Client, publishableKey string) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, engagementID, ok := clientauth.RequireEngagementTx(w, r)
+	return clientauth.Handler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call) {
+		invoiceID, ok := clientInvoiceID(w, r)
 		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-		invoiceID := r.PathValue("invoiceId")
-		if _, err := uuid.Parse(invoiceID); err != nil {
-			apierr.WriteError(w, msgClientInvoiceNotFound, http.StatusNotFound)
 			return
 		}
 
 		var status string
 		var stripeInvoiceID, accountID sql.NullString
 		var clientsCanPay, paymentProcessing bool
-		err := tx.QueryRowContext(r.Context(), payableInvoiceQuery, engagementID, invoiceID).
+		err := c.Tx.QueryRowContext(r.Context(), payableInvoiceQuery, c.EngagementID, invoiceID).
 			Scan(&status, &stripeInvoiceID, &accountID, &clientsCanPay, &paymentProcessing)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, msgClientInvoiceNotFound, http.StatusNotFound)

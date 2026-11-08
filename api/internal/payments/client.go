@@ -183,30 +183,24 @@ func scanClientInvoice(row interface{ Scan(dest ...any) error }, zone *time.Loca
 // clientauth.Middleware, which has already confirmed her Client owns
 // :engagementId.
 func ClientListInvoicesHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, engagementID, ok := clientauth.RequireEngagementTx(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-
+	return clientauth.Handler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call) {
 		after, ok := pagecursor.FromQuery(w, r, decodeInvoiceCursor, "invalid cursor")
 		if !ok {
 			return
 		}
 
-		zone, err := clientPracticeZone(r.Context(), tx, engagementID)
+		zone, err := clientPracticeZone(r.Context(), c.Tx, c.EngagementID)
 		if err != nil {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		items, hasMore, err := listClientInvoices(r.Context(), tx, engagementID, after, zone)
+		items, hasMore, err := listClientInvoices(r.Context(), c.Tx, c.EngagementID, after, zone)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		cents, count, err := ClientTotalToPay(r.Context(), tx, engagementID)
+		cents, count, err := ClientTotalToPay(r.Context(), c.Tx, c.EngagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -255,29 +249,34 @@ func listClientInvoices(ctx context.Context, tx *sql.Tx, engagementID string, af
 	return items, hasMore, nil
 }
 
+// clientInvoiceID reads {invoiceId}, answering a malformed one with the
+// same 404 an Invoice that is not hers gets.
+func clientInvoiceID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	invoiceID := r.PathValue("invoiceId")
+	if _, err := uuid.Parse(invoiceID); err != nil {
+		apierr.WriteError(w, msgClientInvoiceNotFound, http.StatusNotFound)
+		return "", false
+	}
+	return invoiceID, true
+}
+
 // ClientGetInvoiceHandler returns one Invoice of the caller's Engagement:
 // the same row the list carries, so a Client cannot see one figure on the
 // list and another on the page. A 404 covers both "no such Invoice" and
 // "not hers". Must be mounted behind clientauth.Middleware.
 func ClientGetInvoiceHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, engagementID, ok := clientauth.RequireEngagementTx(w, r)
+	return clientauth.Handler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call) {
+		invoiceID, ok := clientInvoiceID(w, r)
 		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-		invoiceID := r.PathValue("invoiceId")
-		if _, err := uuid.Parse(invoiceID); err != nil {
-			apierr.WriteError(w, msgClientInvoiceNotFound, http.StatusNotFound)
 			return
 		}
 
-		zone, err := clientPracticeZone(r.Context(), tx, engagementID)
+		zone, err := clientPracticeZone(r.Context(), c.Tx, c.EngagementID)
 		if err != nil {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		it, err := scanClientInvoice(tx.QueryRowContext(r.Context(), clientInvoiceOneQuery, engagementID, invoiceID), zone)
+		it, err := scanClientInvoice(c.Tx.QueryRowContext(r.Context(), clientInvoiceOneQuery, c.EngagementID, invoiceID), zone)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, msgClientInvoiceNotFound, http.StatusNotFound)
 			return

@@ -1,6 +1,7 @@
 package payments
 
 import (
+	"database/sql"
 	"net/http"
 
 	"doula-cloud/api/internal/activity"
@@ -39,24 +40,18 @@ const MsgConnectReturnNoAccount = "You have not started connecting Stripe yet."
 // gives: only an Owner can open the form, so only an Owner comes back
 // from it. Must be mounted behind staffauth.Middleware.
 func PostConnectReturnHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, accountID, ok := requireConnectAccount(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
+	return connectAccountHandler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call, accountID sql.NullString) {
 		if !accountID.Valid {
 			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgConnectReturnNoAccount, nil)
 			return
 		}
 
-		staffID, _ := staffauth.StaffID(r.Context())
-		if err := activity.Record(r.Context(), tx, activity.Entry{
-			PracticeID:  practiceID,
+		if err := activity.Record(r.Context(), c.Tx, activity.Entry{
+			PracticeID:  c.PracticeID,
 			SubjectKind: activity.SubjectPractice,
-			SubjectID:   practiceID,
+			SubjectID:   c.PracticeID,
 			Action:      actionConnectFormReturned,
-			Actor:       activity.StaffActor(staffID),
+			Actor:       activity.StaffActor(c.StaffID),
 			// Evidence of when a person did something, so the server's
 			// clock names it (activity.Entry.CreatedAt).
 			CreatedAt: clock.Now(r.Context()),
