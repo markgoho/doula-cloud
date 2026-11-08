@@ -172,7 +172,7 @@ const px = (value: string) => Number(value.replace('px', ''));
 
 // The words an element shows: from its first visible text to its last, leaving out text that is
 // only for a screen reader, which a clip hides but a range still measures.
-const wordsOf = (element: Element): Pick<Range, 'getBoundingClientRect' | 'getClientRects'> => {
+const wordsOf = (element: Element): { getBoundingClientRect: () => DOMRect; getClientRects: () => DOMRect[] } => {
 	const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
 	const boxes: DOMRect[] = [];
 	for (let node = walker.nextNode(); node; node = walker.nextNode()) {
@@ -182,7 +182,7 @@ const wordsOf = (element: Element): Pick<Range, 'getBoundingClientRect' | 'getCl
 		boxes.push(...range.getClientRects());
 	}
 	return {
-		getClientRects: () => boxes as unknown as DOMRectList,
+		getClientRects: () => boxes,
 		getBoundingClientRect: () => {
 			if (boxes.length === 0) return new DOMRect();
 			const left = Math.min(...boxes.map((box) => box.left));

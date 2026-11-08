@@ -2,7 +2,7 @@ package client_test
 
 import (
 	"cmp"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"slices"
@@ -43,7 +43,7 @@ func walkList(t *testing.T, srvURL, session, practiceID, query string) [][]clien
 		}
 		resp := authedGet(t, session, url)
 		var out client.ListResponse
-		err := json.NewDecoder(resp.Body).Decode(&out)
+		err := json.UnmarshalRead(resp.Body, &out)
 		_ = resp.Body.Close()
 		if err != nil || resp.StatusCode != http.StatusOK {
 			t.Fatalf("%s: status = %d, err = %v", url, resp.StatusCode, err)

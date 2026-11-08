@@ -1,7 +1,7 @@
 package client_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"strings"
 	"testing"
@@ -25,7 +25,7 @@ func listByName(t *testing.T, srvURL, session, practiceID string, req client.Lis
 	resp := authedJSON(t, session, http.MethodPost, srvURL+"/api/practices/"+practiceID+"/clients/list", req)
 	defer resp.Body.Close()
 	var out client.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil || resp.StatusCode != http.StatusOK {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil || resp.StatusCode != http.StatusOK {
 		t.Fatalf("%+v: status = %d, err = %v", req, resp.StatusCode, err)
 	}
 	return out.Items
@@ -216,7 +216,7 @@ func TestListHandler_NarrowedListPagesByCursorWithoutRepeatsOrGaps(t *testing.T)
 		resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/list",
 			client.ListRequest{Doula: doula, Name: "paged", Cursor: cursor})
 		var page client.ListResponse
-		if err := json.NewDecoder(resp.Body).Decode(&page); err != nil || resp.StatusCode != http.StatusOK {
+		if err := json.UnmarshalRead(resp.Body, &page); err != nil || resp.StatusCode != http.StatusOK {
 			t.Fatalf("page %d: status = %d, err = %v", pages+1, resp.StatusCode, err)
 		}
 		_ = resp.Body.Close()

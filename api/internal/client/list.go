@@ -417,7 +417,7 @@ func doulaParam(w http.ResponseWriter, raw string) (string, bool) {
 		return "", true
 	}
 	if _, err := uuid.Parse(raw); err != nil || len(raw) != 36 {
-		apierr.WriteError(w, "invalid doula", http.StatusBadRequest)
+		apierr.WriteError(w, "Choose a Doula from the list.", http.StatusBadRequest)
 		return "", false
 	}
 	return strings.ToLower(raw), true

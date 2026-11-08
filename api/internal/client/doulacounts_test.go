@@ -1,7 +1,7 @@
 package client_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"maps"
 	"net/http"
 	"testing"
@@ -18,7 +18,7 @@ func getDoulaCounts(t *testing.T, session, url string) client.DoulaCountsRespons
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 	var got client.DoulaCountsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	return got

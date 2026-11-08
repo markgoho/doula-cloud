@@ -1,7 +1,7 @@
 package client_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"strings"
 	"testing"
@@ -15,7 +15,7 @@ func listWith(t *testing.T, srvURL, session, practiceID, query string) []client.
 	resp := authedGet(t, session, srvURL+"/api/practices/"+practiceID+"/clients"+query)
 	defer resp.Body.Close()
 	var out client.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil || resp.StatusCode != http.StatusOK {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil || resp.StatusCode != http.StatusOK {
 		t.Fatalf("%s: status = %d, err = %v", query, resp.StatusCode, err)
 	}
 	return out.Items
@@ -152,7 +152,7 @@ func TestListHandler_OwesRefusesAnAmbientContractorButNoContractIsAllowed(t *tes
 	var body struct {
 		Message string `json:"message"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil || !strings.Contains(body.Message, "what they owe") {
+	if err := json.UnmarshalRead(resp.Body, &body); err != nil || !strings.Contains(body.Message, "what they owe") {
 		t.Fatalf("owes body = %+v, err = %v, want a plain-English refusal", body, err)
 	}
 

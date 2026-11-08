@@ -56,7 +56,7 @@ describe('PracticeList', () => {
 				'Open Feedback',
 				'Acts'
 			]);
-		await expect.element(page.getByRole('cell', { name: 'Rooted Birth Collective', exact: true })).toBeVisible();
+		await expect.element(page.getByRole('rowheader', { name: 'Rooted Birth Collective', exact: true })).toBeVisible();
 		await expect.element(page.getByRole('cell', { name: 'Renata Alvarez, renata@example.com' })).toBeVisible();
 		await expect.element(page.getByRole('cell', { name: '12 Credits' })).toBeVisible();
 		await expect
@@ -83,7 +83,7 @@ describe('PracticeList', () => {
 
 		await render(PracticeList, { list: 'deleted', fetcher, onsignedout: vi.fn() });
 
-		await expect.element(page.getByRole('cell', { name: 'Gone' })).toBeVisible();
+		await expect.element(page.getByRole('rowheader', { name: 'Gone' })).toBeVisible();
 		await expect.element(page.getByRole('link')).not.toBeInTheDocument();
 		await expect.element(page.getByRole('columnheader', { name: 'Acts' })).not.toBeInTheDocument();
 		expect(fetcher).toHaveBeenCalledWith('/api/practices/deleted', { credentials: 'include' });
@@ -98,8 +98,8 @@ describe('PracticeList', () => {
 
 		await page.getByRole('button', { name: 'Load more' }).click();
 
-		await expect.element(page.getByRole('cell', { name: 'Second', exact: true })).toBeVisible();
-		await expect.element(page.getByRole('cell', { name: 'First', exact: true })).toBeVisible();
+		await expect.element(page.getByRole('rowheader', { name: 'Second', exact: true })).toBeVisible();
+		await expect.element(page.getByRole('rowheader', { name: 'First', exact: true })).toBeVisible();
 		expect(fetcher).toHaveBeenLastCalledWith('/api/practices?cursor=c-2', { credentials: 'include' });
 		await expect.element(page.getByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
 	});
