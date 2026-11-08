@@ -8,6 +8,7 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/portalaccount"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -43,9 +44,7 @@ func TestRequireTx_HandsBackTheMiddlewareValues(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	resp := get(t, pingURL(srv, engagementID), func(req *http.Request) {
-		authntest.AddSessionCookie(req, authntest.SeedSession(t, db.App, identityUID))
-	})
+	resp := reqtest.Get(t, pingURL(srv, engagementID), reqtest.Session(authntest.SeedSession(t, db.App, identityUID)))
 	defer resp.Body.Close()
-	assertStatus(t, resp, http.StatusNoContent)
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
 }
