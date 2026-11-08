@@ -139,11 +139,12 @@ type PracticeInvoicesResponse struct {
 //
 // Must be mounted behind staffauth.Middleware.
 func GetPracticeInvoicesHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireNotAmbientContractor(w, r)
-		if !ok {
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		if c.Reader.IsAmbientContractor() {
+			apierr.WriteError(w, staffauth.MsgContractorMoneyRefused, http.StatusForbidden)
 			return
 		}
+		tx, practiceID := c.Tx, c.PracticeID
 
 		after, ok := pagecursor.FromQuery(w, r, decodeInvoiceCursor, "invalid cursor")
 		if !ok {

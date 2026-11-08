@@ -115,15 +115,8 @@ var (
 //
 // Must be mounted behind staffauth.Middleware.
 func PostConnectNudgeHandler(enq tasknudge.Enqueuer) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-
-		staffID, _ := staffauth.StaffID(r.Context())
-		err := queueConnectNudge(r.Context(), tx, practiceID, staffID)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		err := queueConnectNudge(r.Context(), c.Tx, c.PracticeID, c.StaffID)
 		switch {
 		case errors.Is(err, errConnectNudgeAlreadyConnected):
 			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgConnectNudgeAlreadyConnected, nil)

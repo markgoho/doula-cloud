@@ -3,7 +3,6 @@ package payments
 import (
 	"context"
 	"database/sql"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -256,8 +255,9 @@ type ListInvoicesResponse struct {
 // clients-can-pay gate (#270), the no-email refusal (#430), and Stripe's
 // own Create + Finalize Invoice calls.
 func PostInvoiceHandler(client Client) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, engagementID, contractID, contractStatus, amountCents, ok := resolveInvoiceEngagement(w, r)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, practiceID, engagementID, staffID := c.Tx, c.PracticeID, c.EngagementID, c.StaffID
+		contractID, contractStatus, amountCents, ok := resolveInvoiceContract(w, r, tx, engagementID)
 		if !ok {
 			return
 		}
@@ -270,8 +270,6 @@ func PostInvoiceHandler(client Client) http.Handler {
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
-
-		staffID, _ := staffauth.StaffID(r.Context())
 
 		mode, billingModeAlreadySet, err := resolveBillingMode(r.Context(), tx, practiceID, req.BillingMode)
 		if errors.Is(err, errBillingModeRequired) {
@@ -314,7 +312,7 @@ func PostInvoiceHandler(client Client) http.Handler {
 		if mode == BillingModeByHand {
 			view, err = createByHandInvoice(r.Context(), tx, practiceID, contractID, amountCents, raisedAt, dueAt)
 		} else {
-			view, err = createStripeInvoice(r.Context(), tx, client, practiceID, engagementID, contractID, amountCents, raisedAt, dueAt)
+			view, err = createStripeInvoice(r.Context(), tx, client, practiceID, engagementID, contractID, staffID, amountCents, raisedAt, dueAt)
 		}
 		if errors.Is(err, errClientNoEmail) {
 			apierr.WriteError(w, MsgClientNoEmail, http.StatusUnprocessableEntity)
@@ -345,22 +343,9 @@ func PostInvoiceHandler(client Client) http.Handler {
 			}
 		}
 
-		diff, err := json.Marshal(map[string]int64{diffKeyAmountCents: amountCents})
-		if err != nil {
-			// coverage:ignore reason: a map of one int64 always marshals cleanly, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if err := activity.Record(r.Context(), tx, activity.Entry{
-			PracticeID:  practiceID,
-			SubjectKind: activity.SubjectEngagement,
-			SubjectID:   engagementID,
-			Action:      string(activity.ActionInvoiceRaised),
-			Diff:        diff,
-			Actor:       activity.StaffActor(staffID),
-		}); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !recordEngagementActivity(w, r, c, engagementID, activity.ActionInvoiceRaised,
+			map[string]any{diffKeyAmountCents: amountCents}) {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
 
@@ -368,12 +353,12 @@ func PostInvoiceHandler(client Client) http.Handler {
 		// table) and may not read its money (its read table, as amended
 		// on #282), so what she gets back says it exists and on which
 		// rail, and names no amount.
-		if reader, has := staffauth.ReaderFrom(r.Context()); has && reader.IsAmbientContractor() {
+		if c.Reader.IsAmbientContractor() {
 			apierr.WriteJSON(w, http.StatusCreated, RaisedInvoice{ID: view.ID, Status: view.Status, BillingMode: view.BillingMode})
 			return
 		}
 		apierr.WriteJSON(w, http.StatusCreated, view)
-	})
+	}, staffauth.Engagement())
 }
 
 // RaisedInvoice is PostInvoiceHandler's 201 for a contractor Doula
@@ -441,7 +426,7 @@ func createByHandInvoice(ctx context.Context, tx *sql.Tx, practiceID, contractID
 // updated to 'open' with Stripe's own human-readable `number` as its
 // real reference. created_at is raisedAt, the instant dueAt was counted
 // from (#1992).
-func createStripeInvoice(ctx context.Context, tx *sql.Tx, client Client, practiceID, engagementID, contractID string, amountCents int64, raisedAt, dueAt time.Time) (InvoiceView, error) {
+func createStripeInvoice(ctx context.Context, tx *sql.Tx, client Client, practiceID, engagementID, contractID, staffID string, amountCents int64, raisedAt, dueAt time.Time) (InvoiceView, error) {
 	canPay, err := cardpayments.ClientsCanPay(ctx, tx, practiceID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -462,7 +447,6 @@ func createStripeInvoice(ctx context.Context, tx *sql.Tx, client Client, practic
 		return InvoiceView{}, err
 	}
 
-	staffID, _ := staffauth.StaffID(ctx)
 	stripeCustomerID, err := resolveStripeCustomer(ctx, tx, client, stripeCustomerFor{
 		PracticeID: practiceID,
 		ClientID:   clientID,
@@ -532,44 +516,21 @@ func createStripeInvoice(ctx context.Context, tx *sql.Tx, client Client, practic
 // on; any other Engagement is not found for her. Must be mounted behind
 // staffauth.Middleware.
 func GetInvoicesHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, reader, ok := staffauth.RequireTxReader(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-		engagementID := r.PathValue("engagementId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) {
-			return
-		}
-		if !staffauth.RequireEngagementAtPractice(w, r, tx, engagementID, practiceID) {
-			return
-		}
-		canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if !canAccess {
-			apierr.WriteError(w, "Engagement not found", http.StatusNotFound)
-			return
-		}
-
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		after, ok := pagecursor.FromQuery(w, r, decodeInvoiceCursor, "invalid cursor")
 		if !ok {
 			return
 		}
 
 		// #1965: the paid and due days are the Practice's own.
-		zone, err := practicetimezone.Load(r.Context(), tx, practiceID)
+		zone, err := practicetimezone.Load(r.Context(), c.Tx, c.PracticeID)
 		if err != nil {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		days := bookDays{zone: zone, now: clock.Now(r.Context())}
-		items, hasMore, err := listInvoices(r.Context(), tx, engagementID, after, days)
+		items, hasMore, err := listInvoices(r.Context(), c.Tx, c.EngagementID, after, days)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -581,7 +542,7 @@ func GetInvoicesHandler() http.Handler {
 			next := encodeInvoiceCursor(items[len(items)-1].CreatedAt, items[len(items)-1].ID)
 			nextCursor = &next
 		}
-		if reader.IsAmbientContractor() {
+		if c.Reader.IsAmbientContractor() {
 			apierr.WriteJSON(w, http.StatusOK, ContractorInvoicesResponse{
 				Items:      contractorInvoiceRows(items),
 				NextCursor: nextCursor,
@@ -590,45 +551,29 @@ func GetInvoicesHandler() http.Handler {
 			return
 		}
 		apierr.WriteJSON(w, http.StatusOK, ListInvoicesResponse{Items: items, NextCursor: nextCursor, HasMore: hasMore})
-	})
+	}, staffauth.EngagementReach("Engagement not found"))
 }
 
-// resolveInvoiceEngagement resolves the request-scoped tx, Practice id,
-// and :engagementId path segment, confirms the Engagement belongs to the
-// current Practice, and fetches its current Contract's id, status and
-// amount (the most recently created row, mirroring
+// resolveInvoiceContract fetches engagementID's current Contract's id,
+// status and amount (the most recently created row, mirroring
 // contracts.fetchContract's "most recent wins" rule) -- the shared
 // prologue for PostInvoiceHandler. amountCents is the Contract's own
 // amount_cents (#967): the only figure an Invoice is ever raised for
 // (#947). Writes the appropriate error response itself and returns
 // ok=false on any failure.
-func resolveInvoiceEngagement(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID, engagementID, contractID string, contractStatus contracts.Status, amountCents int64, ok bool) {
-	tx, practiceID, ok = staffauth.RequireTx(w, r)
-	// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-	if !ok {
-		return nil, "", "", "", "", 0, false
-	}
-
-	engagementID = r.PathValue("engagementId")
-	if !staffauth.ParseUUID(w, "engagement", engagementID) {
-		return nil, "", "", "", "", 0, false
-	}
-	if !staffauth.RequireEngagementAtPractice(w, r, tx, engagementID, practiceID) {
-		return nil, "", "", "", "", 0, false
-	}
-
+func resolveInvoiceContract(w http.ResponseWriter, r *http.Request, tx *sql.Tx, engagementID string) (contractID string, contractStatus contracts.Status, amountCents int64, ok bool) {
 	contractID, contractStatus, amountCents, err := fetchCurrentContract(r.Context(), tx, engagementID)
 	if errors.Is(err, sql.ErrNoRows) {
 		apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
-		return nil, "", "", "", "", 0, false
+		return "", "", 0, false
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return nil, "", "", "", "", 0, false
+		return "", "", 0, false
 	}
 
-	return tx, practiceID, engagementID, contractID, contractStatus, amountCents, true
+	return contractID, contractStatus, amountCents, true
 }
 
 // fetchCurrentContract returns the id, status and amount of

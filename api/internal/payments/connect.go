@@ -113,19 +113,13 @@ type ConnectStatusResponse struct {
 // gate before it runs. Widening or narrowing this route means editing
 // its ir.ExemptGated role list in mount.go.
 func PostConnectHandler(client Client) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		// Locks the Practice row for the rest of this transaction so two
 		// concurrent connect-initiation requests can't both see a null
 		// stripe_connect_account_id and both create a Stripe account --
 		// the same race-prevention shape as billing.PostPurchaseHandler's
 		// customer lock.
-		if _, err := tx.ExecContext(r.Context(), `SELECT id FROM practices WHERE id = $1 FOR UPDATE`, practiceID); err != nil {
+		if _, err := c.Tx.ExecContext(r.Context(), `SELECT id FROM practices WHERE id = $1 FOR UPDATE`, c.PracticeID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -133,8 +127,8 @@ func PostConnectHandler(client Client) http.Handler {
 
 		var accountID sql.NullString
 		var practiceName string
-		if err := tx.QueryRowContext(r.Context(),
-			`SELECT stripe_connect_account_id, name FROM practices WHERE id = $1`, practiceID,
+		if err := c.Tx.QueryRowContext(r.Context(),
+			`SELECT stripe_connect_account_id, name FROM practices WHERE id = $1`, c.PracticeID,
 		).Scan(&accountID, &practiceName); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -153,7 +147,7 @@ func PostConnectHandler(client Client) http.Handler {
 		// Refusing here means no Stripe account exists for a Practice who
 		// has not answered, so there is no half-made account to reconcile
 		// and the create-time profile below is always complete.
-		profile, err := website.ReadStripeProfile(r.Context(), tx, practiceID)
+		profile, err := website.ReadStripeProfile(r.Context(), c.Tx, c.PracticeID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -178,7 +172,7 @@ func PostConnectHandler(client Client) http.Handler {
 			// reads "From <the Practice>" rather than a statement
 			// descriptor (#247).
 			id, err := client.CreateAccount(r.Context(), AccountProfile{
-				PracticeID:          practiceID,
+				PracticeID:          c.PracticeID,
 				PracticeName:        practiceName,
 				BusinessURL:         profile.URL,
 				ProductDescription:  profile.ProductDescription,
@@ -188,8 +182,8 @@ func PostConnectHandler(client Client) http.Handler {
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
-			if _, err := tx.ExecContext(r.Context(),
-				`UPDATE practices SET stripe_connect_account_id = $1 WHERE id = $2`, id, practiceID,
+			if _, err := c.Tx.ExecContext(r.Context(),
+				`UPDATE practices SET stripe_connect_account_id = $1 WHERE id = $2`, id, c.PracticeID,
 			); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -198,7 +192,7 @@ func PostConnectHandler(client Client) http.Handler {
 			accountID = sql.NullString{String: id, Valid: true}
 		}
 
-		onboardingURL, err := client.CreateAccountLink(r.Context(), accountID.String, practiceID)
+		onboardingURL, err := client.CreateAccountLink(r.Context(), accountID.String, c.PracticeID)
 		if err != nil {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -221,33 +215,19 @@ func readConnectAccountID(ctx context.Context, tx *sql.Tx, practiceID string) (s
 	return accountID, nil
 }
 
-// requireConnectAccountID is readConnectAccountID for a handler, writing
-// the 500 itself.
-func requireConnectAccountID(w http.ResponseWriter, r *http.Request, tx *sql.Tx, practiceID string) (sql.NullString, bool) {
-	accountID, err := readConnectAccountID(r.Context(), tx, practiceID)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return sql.NullString{}, false
-	}
-	return accountID, true
-}
-
-// requireConnectAccount is the preamble of the two Connect routes that
-// read the stored account: the request-scoped tx, the Practice, and the
-// Stripe Connect account id it holds, if any.
-func requireConnectAccount(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, accountID sql.NullString, ok bool) {
-	tx, practiceID, ok = staffauth.RequireTx(w, r)
-	// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-	if !ok {
-		return nil, "", sql.NullString{}, false
-	}
-	accountID, ok = requireConnectAccountID(w, r, tx, practiceID)
-	if !ok {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return nil, "", sql.NullString{}, false
-	}
-	return tx, practiceID, accountID, true
+// connectAccountHandler is staffauth.Handler for the two Connect routes
+// that read the stored account: fn receives the Stripe Connect account id
+// the Practice holds, if any.
+func connectAccountHandler(fn func(w http.ResponseWriter, r *http.Request, c staffauth.Call, accountID sql.NullString)) http.Handler {
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		accountID, err := readConnectAccountID(r.Context(), c.Tx, c.PracticeID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		fn(w, r, c, accountID)
+	})
 }
 
 // GetConnectStatusHandler reads a Practice's Stripe Connect status.
@@ -261,13 +241,7 @@ func requireConnectAccount(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, 
 // deliberately not backed by the webhook-synced columns on practices).
 // Must be mounted behind staffauth.Middleware.
 func GetConnectStatusHandler(client Client) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _, accountID, ok := requireConnectAccount(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-
+	return connectAccountHandler(func(w http.ResponseWriter, r *http.Request, _ staffauth.Call, accountID sql.NullString) {
 		out := ConnectStatusResponse{
 			Status:             StatusNotConnected,
 			CardPaymentsStatus: CapabilityUnsupported,

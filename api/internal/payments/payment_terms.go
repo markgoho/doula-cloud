@@ -163,13 +163,8 @@ func invoiceDueAt(ctx context.Context, tx *sql.Tx, practiceID string) (raisedAt,
 // every Invoice she looks at, so the terms behind it are not a number
 // only an Owner may see. Must be mounted behind staffauth.Middleware.
 func GetPaymentTermsHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		netDays, set, err := fetchPaymentTerms(r.Context(), tx, practiceID)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		netDays, set, err := fetchPaymentTerms(r.Context(), c.Tx, c.PracticeID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -193,13 +188,7 @@ func GetPaymentTermsHandler() http.Handler {
 //
 // Must be mounted behind staffauth.Middleware.
 func PutPaymentTermsHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		var req PaymentTermsPutRequest
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
@@ -211,7 +200,7 @@ func PutPaymentTermsHandler() http.Handler {
 			return
 		}
 
-		before, set, err := fetchPaymentTerms(r.Context(), tx, practiceID)
+		before, set, err := fetchPaymentTerms(r.Context(), c.Tx, c.PracticeID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -222,7 +211,7 @@ func PutPaymentTermsHandler() http.Handler {
 		// off "whatever DoulaCloud picks" onto a number it chose, and
 		// the Activity row is the only record that it did.
 		if !set || before != req.NetDays {
-			if err := writePaymentTerms(r.Context(), tx, practiceID, req.NetDays, before, set); err != nil {
+			if err := writePaymentTerms(r.Context(), c.Tx, c.PracticeID, c.StaffID, req.NetDays, before, set); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
@@ -236,7 +225,7 @@ func PutPaymentTermsHandler() http.Handler {
 // writePaymentTerms persists the terms and records who changed them and
 // when -- one write path, so the row and its Activity entry can never
 // disagree about what happened.
-func writePaymentTerms(ctx context.Context, tx *sql.Tx, practiceID string, netDays, before int, hadOwnTerms bool) error {
+func writePaymentTerms(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID string, netDays, before int, hadOwnTerms bool) error {
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO practice_payment_terms (practice_id, net_days) VALUES ($1, $2)
 		 ON CONFLICT (practice_id) DO UPDATE SET net_days = EXCLUDED.net_days`,
@@ -256,7 +245,6 @@ func writePaymentTerms(ctx context.Context, tx *sql.Tx, practiceID string, netDa
 		return fmt.Errorf("payments: marshal payment terms diff: %w", err)
 	}
 
-	actorStaffID, _ := staffauth.StaffID(ctx)
 	if err := activity.Record(ctx, tx, activity.Entry{
 		PracticeID:  practiceID,
 		SubjectKind: activity.SubjectPractice,

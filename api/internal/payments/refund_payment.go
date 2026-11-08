@@ -181,11 +181,8 @@ func validateRefundMethod(w http.ResponseWriter, req RefundPaymentRequest, targe
 // pattern, matching PostManualPaymentHandler and
 // PostReversePaymentHandler). Must be mounted behind staffauth.Middleware.
 func PostRefundPaymentHandler(client Client) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, invoiceID, paymentID, ok := requirePaymentPath(w, r)
-		if !ok {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, practiceID, invoiceID, paymentID := c.Tx, c.PracticeID, c.ID("invoiceId"), c.ID("paymentId")
 
 		var req RefundPaymentRequest
 		if !apierr.DecodeJSON(w, r, &req) {
@@ -266,8 +263,7 @@ func PostRefundPaymentHandler(client Client) http.Handler {
 			return
 		}
 
-		staffID, _ := staffauth.StaffID(r.Context())
-		if err := recordRefundActivity(r.Context(), tx, practiceID, engagementID, paymentID, -req.AmountCents, method, activity.StaffActor(staffID), ""); err != nil {
+		if err := recordRefundActivity(r.Context(), tx, practiceID, engagementID, paymentID, -req.AmountCents, method, activity.StaffActor(c.StaffID), ""); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -287,7 +283,7 @@ func PostRefundPaymentHandler(client Client) http.Handler {
 			view.Note = &note.String
 		}
 		apierr.WriteJSON(w, http.StatusCreated, view)
-	})
+	}, staffauth.PathID("invoice", "invoiceId"), staffauth.PathID("payment", "paymentId"))
 }
 
 // recordRefundActivity writes a payment_refunded entry: who, when (the

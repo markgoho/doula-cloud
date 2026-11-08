@@ -3,6 +3,7 @@ package payments
 import (
 	"context"
 	"database/sql"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
@@ -158,26 +159,6 @@ func resolveInvoiceForPractice(ctx context.Context, tx *sql.Tx, practiceID, invo
 	return status, amountCents, stripeInvoiceID, engagementID, nil
 }
 
-// requirePaymentPath is the preamble of the routes under
-// /invoices/{invoiceId}/payments/{paymentId}: the request-scoped tx, the
-// Practice, and the two path ids, parsed.
-func requirePaymentPath(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID, invoiceID, paymentID string, ok bool) {
-	tx, practiceID, ok = staffauth.RequireTx(w, r)
-	// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-	if !ok {
-		return nil, "", "", "", false
-	}
-	invoiceID = r.PathValue("invoiceId")
-	if !staffauth.ParseUUID(w, "invoice", invoiceID) {
-		return nil, "", "", "", false
-	}
-	paymentID = r.PathValue("paymentId")
-	if !staffauth.ParseUUID(w, "payment", paymentID) {
-		return nil, "", "", "", false
-	}
-	return tx, practiceID, invoiceID, paymentID, true
-}
-
 // requireInvoiceAtPractice is resolveInvoiceForPractice for a handler: an
 // Invoice that is not this Practice's is a 404 and any other failure a
 // 500, written here.
@@ -306,16 +287,8 @@ func ReadRecordPaymentRequest(w http.ResponseWriter, r *http.Request, tx *sql.Tx
 // gate before this runs. Widening or narrowing this route means editing
 // its ir.ReplayableGated role list in mount.go.
 func PostManualPaymentHandler(client Client) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		invoiceID := r.PathValue("invoiceId")
-		if !staffauth.ParseUUID(w, "invoice", invoiceID) {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, practiceID, invoiceID := c.Tx, c.PracticeID, c.ID("invoiceId")
 
 		req, paidOn, ok := ReadRecordPaymentRequest(w, r, tx, practiceID, DateReceived)
 		if !ok {
@@ -381,23 +354,9 @@ func PostManualPaymentHandler(client Client) http.Handler {
 			return
 		}
 
-		staffID, _ := staffauth.StaffID(r.Context())
-		diff, err := json.Marshal(map[string]any{fieldMethod: string(req.Method), diffKeyAmountCents: amountCents})
-		if err != nil {
-			// coverage:ignore reason: a map of a string and an int64 always marshals cleanly, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if err := activity.Record(r.Context(), tx, activity.Entry{
-			PracticeID:  practiceID,
-			SubjectKind: activity.SubjectEngagement,
-			SubjectID:   engagementID,
-			Action:      string(activity.ActionPaymentRecorded),
-			Diff:        diff,
-			Actor:       activity.StaffActor(staffID),
-		}); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !recordEngagementActivity(w, r, c, engagementID, activity.ActionPaymentRecorded,
+			map[string]any{fieldMethod: string(req.Method), diffKeyAmountCents: amountCents}) {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
 
@@ -414,7 +373,36 @@ func PostManualPaymentHandler(client Client) http.Handler {
 			view.Note = &note.String
 		}
 		apierr.WriteJSON(w, http.StatusCreated, view)
-	})
+	}, staffauth.PathID("invoice", "invoiceId"))
+}
+
+// recordEngagementActivity records action on engagementID in the acting
+// Staff member's name, with fields as its diff when there are any. On a
+// failure it writes the 500 itself and returns false.
+func recordEngagementActivity(w http.ResponseWriter, r *http.Request, c staffauth.Call, engagementID string, action activity.EngagementAction, fields map[string]any) bool {
+	var diff jsontext.Value
+	if fields != nil {
+		var err error
+		diff, err = json.Marshal(fields)
+		if err != nil {
+			// coverage:ignore reason: a map of strings and int64s always marshals cleanly, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return false
+		}
+	}
+	if err := activity.Record(r.Context(), c.Tx, activity.Entry{
+		PracticeID:  c.PracticeID,
+		SubjectKind: activity.SubjectEngagement,
+		SubjectID:   engagementID,
+		Action:      string(action),
+		Diff:        diff,
+		Actor:       activity.StaffActor(c.StaffID),
+	}); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return false
+	}
+	return true
 }
 
 // InvoiceTransitionView is what void/write-off return: the Invoice's new
@@ -440,16 +428,8 @@ type InvoiceTransitionView struct {
 // or PostWriteOffInvoiceHandler ever runs. Widening or narrowing either
 // route means editing its own ir.ExemptGated role list in mount.go.
 func transitionByHandInvoice(newStatus, updateStatusQuery string, action activity.EngagementAction) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		invoiceID := r.PathValue("invoiceId")
-		if !staffauth.ParseUUID(w, "invoice", invoiceID) {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, practiceID, invoiceID := c.Tx, c.PracticeID, c.ID("invoiceId")
 
 		status, _, stripeInvoiceID, engagementID, ok := requireInvoiceAtPractice(w, r, tx, practiceID, invoiceID)
 		if !ok {
@@ -470,21 +450,13 @@ func transitionByHandInvoice(newStatus, updateStatusQuery string, action activit
 			return
 		}
 
-		staffID, _ := staffauth.StaffID(r.Context())
-		if err := activity.Record(r.Context(), tx, activity.Entry{
-			PracticeID:  practiceID,
-			SubjectKind: activity.SubjectEngagement,
-			SubjectID:   engagementID,
-			Action:      string(action),
-			Actor:       activity.StaffActor(staffID),
-		}); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !recordEngagementActivity(w, r, c, engagementID, action, nil) {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, InvoiceTransitionView{Status: newStatus})
-	})
+	}, staffauth.PathID("invoice", "invoiceId"))
 }
 
 // PostVoidInvoiceHandler moves a by-hand, still-open Invoice to 'void'
@@ -597,11 +569,8 @@ func resolvePaymentForReversal(ctx context.Context, tx *sql.Tx, invoiceID, payme
 // narrowing this route means editing its ir.ReplayableGated role list in
 // mount.go.
 func PostReversePaymentHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, invoiceID, paymentID, ok := requirePaymentPath(w, r)
-		if !ok {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, practiceID, invoiceID, paymentID := c.Tx, c.PracticeID, c.ID("invoiceId"), c.ID("paymentId")
 
 		var req ReversePaymentRequest
 		if !apierr.DecodeJSON(w, r, &req) {
@@ -671,27 +640,13 @@ func PostReversePaymentHandler() http.Handler {
 			return
 		}
 
-		staffID, _ := staffauth.StaffID(r.Context())
 		// reason is deliberately excluded from this diff -- PostManualPaymentHandler's
 		// own diff excludes note the same way, so a personal-data-bearing
 		// field never lands anywhere but the one column the erasure sweep
 		// (client.redactPaymentReasons) actually reaches.
-		diff, err := json.Marshal(map[string]any{diffKeyAmountCents: -amountCents, "targetPaymentId": paymentID})
-		if err != nil {
-			// coverage:ignore reason: a map of an int64 and a string always marshals cleanly, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if err := activity.Record(r.Context(), tx, activity.Entry{
-			PracticeID:  practiceID,
-			SubjectKind: activity.SubjectEngagement,
-			SubjectID:   engagementID,
-			Action:      string(activity.ActionPaymentReversed),
-			Diff:        diff,
-			Actor:       activity.StaffActor(staffID),
-		}); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !recordEngagementActivity(w, r, c, engagementID, activity.ActionPaymentReversed,
+			map[string]any{diffKeyAmountCents: -amountCents, "targetPaymentId": paymentID}) {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
 
@@ -706,5 +661,5 @@ func PostReversePaymentHandler() http.Handler {
 			CreatedAt:       createdAt,
 		}
 		apierr.WriteJSON(w, http.StatusCreated, view)
-	})
+	}, staffauth.PathID("invoice", "invoiceId"), staffauth.PathID("payment", "paymentId"))
 }
