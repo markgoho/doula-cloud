@@ -67,11 +67,8 @@ type ListResponse struct {
 // which is literally this query. The frontend reverses a page for
 // display, the same pattern message.ListHandler already established.
 func ListHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, engagementID, ok := staffauth.RequireEngagementReach(w, r, "engagement not found")
-		if !ok {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, practiceID, engagementID := c.Tx, c.PracticeID, c.EngagementID
 
 		after, ok := pagecursor.FromQuery(w, r, pagecursor.Decode, "invalid cursor")
 		if !ok {
@@ -104,7 +101,7 @@ func ListHandler() http.Handler {
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, resp)
-	})
+	}, staffauth.EngagementReach("engagement not found"))
 }
 
 // listVisits is filtered by engagementID explicitly, on top of the RLS

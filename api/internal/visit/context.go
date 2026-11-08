@@ -6,33 +6,15 @@
 package visit
 
 import (
-	"database/sql"
+	"encoding/json/v2"
 	"net/http"
 	"time"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/staffauth"
 )
-
-// requireVisitPath parses the path's Engagement and Visit ids and
-// confirms the Engagement belongs to practiceID, so a Visit can never be
-// written under an Engagement at a different Practice. It writes the 400
-// or 404 itself.
-func requireVisitPath(w http.ResponseWriter, r *http.Request, tx *sql.Tx, practiceID string) (engagementID, visitID string, ok bool) {
-	engagementID = r.PathValue("engagementId")
-	if !staffauth.ParseUUID(w, "engagement", engagementID) {
-		return "", "", false
-	}
-	visitID = r.PathValue("visitId")
-	if !staffauth.ParseUUID(w, "visit", visitID) {
-		return "", "", false
-	}
-	if !staffauth.RequireEngagementAtPractice(w, r, tx, engagementID, practiceID) {
-		return "", "", false
-	}
-	return engagementID, visitID, true
-}
 
 // parseScheduledAt turns a request's optional RFC3339 scheduledAt string
 // into a *time.Time, shared by CreateHandler and ScheduleHandler so the
@@ -63,7 +45,7 @@ func parseScheduledAt(w http.ResponseWriter, raw *string) (scheduledAt *time.Tim
 //
 // scheduledAt is what the write leaves on the row, so clearing an instant
 // (nil) activates nothing: that is the opposite act. The actor is the
-// caller, c.staffID, never the Visit's assignee -- see
+// caller, c.StaffID, never the Visit's assignee -- see
 // engagement.ActivateFromIntake, which also decides for itself that an
 // Engagement past 'intake' is left alone.
 //
@@ -71,13 +53,39 @@ func parseScheduledAt(w http.ResponseWriter, raw *string) (scheduledAt *time.Tim
 // reads in the order the acts happened: the Visit was scheduled, and that
 // changed the care phase. It writes the failure response itself and
 // reports whether the request may continue, the same polarity
-// requireVisitWrite uses.
-func activateOnScheduled(w http.ResponseWriter, r *http.Request, c visitWriteContext, engagementID string, scheduledAt *time.Time) bool {
+// the other Visit writes use.
+func activateOnScheduled(w http.ResponseWriter, r *http.Request, c staffauth.Call, engagementID string, scheduledAt *time.Time) bool {
 	if scheduledAt == nil {
 		return true
 	}
-	if _, err := engagement.ActivateFromIntake(r.Context(), c.tx, c.practiceID, engagementID, c.staffID); err != nil {
+	if _, err := engagement.ActivateFromIntake(r.Context(), c.Tx, c.PracticeID, engagementID, c.StaffID); err != nil {
 		// coverage:ignore reason: DB write failure inside the activation, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return false
+	}
+	return true
+}
+
+// recordVisitActivity writes the Engagement Activity entry a Visit write
+// leaves, naming the caller as the actor and carrying diff as its Diff. It
+// writes the failure response itself and reports whether the request may
+// continue.
+func recordVisitActivity(w http.ResponseWriter, r *http.Request, c staffauth.Call, engagementID string, action activity.EngagementAction, diff any) bool {
+	encoded, err := json.Marshal(diff)
+	if err != nil {
+		// coverage:ignore reason: every diff passed here is a map of strings, bools and times, which always marshals cleanly
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return false
+	}
+	if err := activity.Record(r.Context(), c.Tx, activity.Entry{
+		PracticeID:  c.PracticeID,
+		SubjectKind: activity.SubjectEngagement,
+		SubjectID:   engagementID,
+		Action:      string(action),
+		Diff:        encoded,
+		Actor:       activity.StaffActor(c.StaffID),
+	}); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return false
 	}

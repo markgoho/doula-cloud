@@ -110,14 +110,10 @@ type scheduleFilter struct {
 // instant on a Visit (#250) and assign it a Doula stay where they are, on
 // the Engagement page, and record themselves there.
 func PracticeScheduleHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, practiceID := c.Tx, c.PracticeID
 
-		filter, ok := parseScheduleFilter(w, r)
+		filter, ok := parseScheduleFilter(w, r, c)
 		if !ok {
 			return
 		}
@@ -154,7 +150,7 @@ func PracticeScheduleHandler() http.Handler {
 // The contractor narrowing is decided here too, from the request's own
 // Reader rather than from anything the caller sent -- a query parameter
 // could be edited, a Reader cannot.
-func parseScheduleFilter(w http.ResponseWriter, r *http.Request) (scheduleFilter, bool) {
+func parseScheduleFilter(w http.ResponseWriter, r *http.Request, c staffauth.Call) (scheduleFilter, bool) {
 	query := r.URL.Query()
 	filter := scheduleFilter{from: clock.Now(r.Context()).UTC()}
 
@@ -187,15 +183,8 @@ func parseScheduleFilter(w http.ResponseWriter, r *http.Request) (scheduleFilter
 		filter.staffID = raw
 	}
 
-	reader, has := staffauth.ReaderFrom(r.Context())
-	staffID, hasStaffID := staffauth.StaffID(r.Context())
-	if !has || !hasStaffID {
-		// coverage:ignore reason: staffauth.Middleware always places a Reader and a staff id on context before this handler runs
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return scheduleFilter{}, false
-	}
-	if reader.IsAmbientContractor() {
-		filter.contractorStaffID = staffID
+	if c.Reader.IsAmbientContractor() {
+		filter.contractorStaffID = c.StaffID
 	}
 	return filter, true
 }

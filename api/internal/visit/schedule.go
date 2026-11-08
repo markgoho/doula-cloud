@@ -2,13 +2,13 @@ package visit
 
 import (
 	"database/sql"
-	"encoding/json/v2"
 	"errors"
 	"net/http"
 	"time"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/staffauth"
 )
 
 // ScheduleRequest carries the Visit's new scheduled instant. ScheduledAt
@@ -49,17 +49,8 @@ type ScheduleResponse struct {
 // reach this Engagement at all. Who a Visit is *for* is a different act
 // with a stricter rule -- see assignee in roles.go.
 func ScheduleHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c, ok := requireVisitWrite(w, r)
-		// coverage:ignore reason: requireVisitWrite only reports false when staffauth.Middleware left no tx or no Reader on context, which cannot happen behind it
-		if !ok {
-			return
-		}
-
-		engagementID, visitID, ok := requireVisitPath(w, r, c.tx, c.practiceID)
-		if !ok {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		engagementID, visitID := c.EngagementID, c.ID("visitId")
 
 		var req ScheduleRequest
 		if !apierr.DecodeJSON(w, r, &req) {
@@ -90,7 +81,7 @@ func ScheduleHandler() http.Handler {
 		// together. Its NOT FOUND is this route's 404, same as
 		// ReassignHandler's own missing-Visit case.
 		var previous sql.NullTime
-		if err := c.tx.QueryRowContext(r.Context(),
+		if err := c.Tx.QueryRowContext(r.Context(),
 			`SELECT scheduled_at FROM visits WHERE id = $1 AND engagement_id = $2 FOR UPDATE`,
 			visitID, engagementID,
 		).Scan(&previous); err != nil {
@@ -107,7 +98,7 @@ func ScheduleHandler() http.Handler {
 			previousAt = &previous.Time
 		}
 
-		if _, err := c.tx.ExecContext(r.Context(),
+		if _, err := c.Tx.ExecContext(r.Context(),
 			`UPDATE visits SET scheduled_at = $1 WHERE id = $2 AND engagement_id = $3`,
 			scheduledAt, visitID, engagementID,
 		); err != nil {
@@ -116,22 +107,7 @@ func ScheduleHandler() http.Handler {
 			return
 		}
 
-		diff, err := json.Marshal(map[string]any{"scheduledAtBefore": previousAt, "scheduledAtAfter": scheduledAt})
-		if err != nil {
-			// coverage:ignore reason: marshaling two *time.Time values never fails
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if err := activity.Record(r.Context(), c.tx, activity.Entry{
-			PracticeID:  c.practiceID,
-			SubjectKind: activity.SubjectEngagement,
-			SubjectID:   engagementID,
-			Action:      string(activity.ActionVisitScheduled),
-			Diff:        diff,
-			Actor:       activity.StaffActor(c.staffID),
-		}); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !recordVisitActivity(w, r, c, engagementID, activity.ActionVisitScheduled, map[string]any{"scheduledAtBefore": previousAt, "scheduledAtAfter": scheduledAt}) {
 			return
 		}
 
@@ -147,5 +123,5 @@ func ScheduleHandler() http.Handler {
 			VisitID:     visitID,
 			ScheduledAt: scheduledAt,
 		})
-	})
+	}, staffauth.Engagement(), staffauth.PathID("visit", "visitId"))
 }

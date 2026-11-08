@@ -51,12 +51,8 @@ type NoDoulaResponse struct {
 // Neither mails anybody (GLOSSARY.md's Offer entry); this is where an
 // Owner or an Admin reads it, and the mount holds it to them.
 func NoDoulaHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, practiceID := c.Tx, c.PracticeID
 		var afterAt *time.Time
 		var afterID *string
 		if raw := r.URL.Query().Get("cursor"); raw != "" {

@@ -71,13 +71,8 @@ const msgContractorOriginates = "You contract for this Practice, so you cannot r
 // whatever this answered, and the two share attachment.Membership.WhyNotAttachable. Must be
 // mounted behind staffauth.Middleware.
 func DoulasHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, reader, ok := staffauth.RequireTxReader(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-		callerStaffID, _ := staffauth.StaffID(r.Context())
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, practiceID, reader, callerStaffID := c.Tx, c.PracticeID, c.Reader, c.StaffID
 		if isContractorOriginator(reader) {
 			apierr.WriteError(w, msgContractorOriginates, http.StatusForbidden)
 			return

@@ -19,32 +19,6 @@ import (
 // different act with a different rule -- see resolveAssignee below.
 const doulaRole = "doula"
 
-// visitWriteContext is the per-request state every Visit write needs:
-// the request-scoped tx staffauth.Middleware opened, the Practice it is
-// scoped to, the caller's own Reader, and her staff id. Resolved once,
-// rather than each handler reaching into context three times.
-type visitWriteContext struct {
-	tx         *sql.Tx
-	practiceID string
-	reader     staffauth.Reader
-	staffID    string
-}
-
-// requireVisitWrite resolves that state, writing the error response
-// itself if any of it is missing. It asserts no role of its own: who may
-// write a Visit is decided per act, not per endpoint -- reaching the
-// Engagement at all is already gated by staffauth.AttachingWrite, and
-// naming a person is gated by resolveAssignee below.
-func requireVisitWrite(w http.ResponseWriter, r *http.Request) (visitWriteContext, bool) {
-	tx, practiceID, reader, ok := staffauth.RequireTxReader(w, r)
-	if !ok {
-		// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-		return visitWriteContext{}, false
-	}
-	staffID, _ := staffauth.StaffID(r.Context())
-	return visitWriteContext{tx: tx, practiceID: practiceID, reader: reader, staffID: staffID}, true
-}
-
 // resolveAssignee decides who a Visit is for, whether this caller may say
 // so, and whether that person is to be granted an attachment -- writing
 // the refusal itself when she may not (#268, #914). It is the one place
@@ -76,15 +50,15 @@ func requireVisitWrite(w http.ResponseWriter, r *http.Request) (visitWriteContex
 // employee Doula is granted one, and so is a Doula who holds Owner or
 // Admin whatever her Employment type is (#1625). A contractor who holds
 // neither is not -- see grantAssignee.
-func resolveAssignee(w http.ResponseWriter, r *http.Request, c visitWriteContext, engagementID string, requested *string) (staffID string, grants, ok bool) {
-	if requested == nil || *requested == c.staffID {
-		if !c.reader.Has(doulaRole) {
+func resolveAssignee(w http.ResponseWriter, r *http.Request, c staffauth.Call, engagementID string, requested *string) (staffID string, grants, ok bool) {
+	if requested == nil || *requested == c.StaffID {
+		if !c.Reader.Has(doulaRole) {
 			apierr.WriteError(w, "You do not hold the Doula role, so you cannot log a Visit for yourself. Name the colleague this Visit is for.", http.StatusForbidden)
 			return "", false, false
 		}
-		return c.staffID, attachment.OfReader(c.reader).WhyNotAttachable() == attachment.Attachable, true
+		return c.StaffID, attachment.OfReader(c.Reader).WhyNotAttachable() == attachment.Attachable, true
 	}
-	if !c.reader.IsOwnerOrAdmin() {
+	if !c.Reader.IsOwnerOrAdmin() {
 		apierr.WriteError(w, "only an Owner or an Admin can assign a Visit to another Staff member", http.StatusForbidden)
 		return "", false, false
 	}
@@ -120,8 +94,8 @@ func resolveAssignee(w http.ResponseWriter, r *http.Request, c visitWriteContext
 // gathering of the facts for one named person and the writing of the
 // refusal: which rule failed, and the sentence it has always answered
 // with, are both unchanged.
-func requireEligibleAssignee(w http.ResponseWriter, r *http.Request, c visitWriteContext, engagementID, staffID string) (grants, ok bool) {
-	named, err := attachment.ReadMembership(r.Context(), c.tx, c.practiceID, staffID)
+func requireEligibleAssignee(w http.ResponseWriter, r *http.Request, c staffauth.Call, engagementID, staffID string) (grants, ok bool) {
+	named, err := attachment.ReadMembership(r.Context(), c.Tx, c.PracticeID, staffID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -136,7 +110,7 @@ func requireEligibleAssignee(w http.ResponseWriter, r *http.Request, c visitWrit
 	// Doula here still costs one query rather than two.
 	attached := false
 	if why == attachment.IsContractor {
-		attached, err = hasGrantedAttachment(r.Context(), c.tx, engagementID, staffID)
+		attached, err = hasGrantedAttachment(r.Context(), c.Tx, engagementID, staffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -202,11 +176,11 @@ func hasGrantedAttachment(ctx context.Context, tx *sql.Tx, engagementID, staffID
 // putOn reports whether this grant put her on the Engagement, which she
 // was not on before (#2540), so her one email is "put on a client" and
 // queueAssigneeNotice queues no second.
-func grantAssignee(w http.ResponseWriter, r *http.Request, c visitWriteContext, engagementID, staffID string, grants bool) (putOn, ok bool) {
+func grantAssignee(w http.ResponseWriter, r *http.Request, c staffauth.Call, engagementID, staffID string, grants bool) (putOn, ok bool) {
 	if !grants {
 		return false, true
 	}
-	already, err := hasGrantedAttachment(r.Context(), c.tx, engagementID, staffID)
+	already, err := hasGrantedAttachment(r.Context(), c.Tx, engagementID, staffID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -215,7 +189,7 @@ func grantAssignee(w http.ResponseWriter, r *http.Request, c visitWriteContext, 
 	if already {
 		return false, true
 	}
-	if err := attachment.Grant(r.Context(), c.tx, c.practiceID, engagementID, staffID, c.staffID); err != nil {
+	if err := attachment.Grant(r.Context(), c.Tx, c.PracticeID, engagementID, staffID, c.StaffID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return false, false
@@ -230,19 +204,19 @@ func grantAssignee(w http.ResponseWriter, r *http.Request, c visitWriteContext, 
 // The "put on a client" mail is attachment.Grant's, queued by
 // grantAssignee, so putOn queues nothing here. It reports whether she
 // has an email queued for this act.
-func queueAssigneeNotice(r *http.Request, c visitWriteContext, visitID, staffID string, putOn bool) (bool, error) {
-	if staffID == c.staffID {
+func queueAssigneeNotice(r *http.Request, c staffauth.Call, visitID, staffID string, putOn bool) (bool, error) {
+	if staffID == c.StaffID {
 		return false, nil
 	}
 	if putOn {
 		return true, nil
 	}
-	if err := staffnotice.Queue(r.Context(), c.tx, staffnotice.Notice{
-		PracticeID:       c.practiceID,
+	if err := staffnotice.Queue(r.Context(), c.Tx, staffnotice.Notice{
+		PracticeID:       c.PracticeID,
 		RecipientStaffID: staffID,
 		Kind:             staffnotice.KindVisitReassignedTo,
 		SubjectID:        visitID,
-		TriggeredBy:      c.staffID,
+		TriggeredBy:      c.StaffID,
 	}); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return false, fmt.Errorf("visit: queue assignee notice: %w", err)

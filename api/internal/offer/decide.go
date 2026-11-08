@@ -58,36 +58,25 @@ func DeclineHandler() http.Handler {
 
 // decisionHandler is the shape accept and decline share: resolve the
 // caller, lock the Engagement the Offer sits under, run the decision.
-func decisionHandler(decide func(context.Context, *sql.Tx, string, string) (DecisionResponse, int, string)) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, _, ok := staffauth.RequireTx(w, r)
-		if !ok {
-			// coverage:ignore reason: Middleware always sets a tx before this handler runs
+func decisionHandler(decide func(context.Context, *sql.Tx, string, string, string, string) (DecisionResponse, int, string)) http.Handler {
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		offerID := c.ID("offerId")
+		engagementID, status, msg := lockOwnOffer(r.Context(), c.Tx, offerID, c.StaffID)
+		if status != http.StatusOK {
+			apierr.WriteError(w, msg, status)
 			return
 		}
-		staffID, _ := staffauth.StaffID(r.Context())
-
-		offerID := r.PathValue("offerId")
-		if !staffauth.ParseUUID(w, "offer", offerID) {
-			return
-		}
-
-		resp, status, msg := decide(r.Context(), tx, offerID, staffID)
+		resp, status, msg := decide(r.Context(), c.Tx, c.PracticeID, engagementID, offerID, c.StaffID)
 		if status != http.StatusOK {
 			apierr.WriteError(w, msg, status)
 			return
 		}
 		apierr.WriteJSON(w, http.StatusOK, resp)
-	})
+	}, staffauth.PathID("offer", "offerId"))
 }
 
 // accept runs the whole acceptance in one locked window.
-func accept(ctx context.Context, tx *sql.Tx, offerID, staffID string) (DecisionResponse, int, string) {
-	engagementID, status, msg := lockOwnOffer(ctx, tx, offerID, staffID)
-	if status != http.StatusOK {
-		return DecisionResponse{}, status, msg
-	}
-
+func accept(ctx context.Context, tx *sql.Tx, practiceID, engagementID, offerID, staffID string) (DecisionResponse, int, string) {
 	var amountCents sql.NullInt64
 	var terms sql.NullString
 	err := tx.QueryRowContext(ctx,
@@ -104,7 +93,6 @@ func accept(ctx context.Context, tx *sql.Tx, offerID, staffID string) (DecisionR
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return DecisionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
-	practiceID, _ := staffauth.PracticeID(ctx)
 	if err := activity.Record(ctx, tx, activity.Entry{
 		PracticeID:  practiceID,
 		SubjectKind: activity.SubjectEngagement,
@@ -208,12 +196,7 @@ func scanIDs(rows *sql.Rows) ([]string, error) {
 // Offer already accepted, withdrawn, superseded, or expired -- is a 409,
 // because those are real disagreements about what happened, not a
 // re-sent click.
-func decline(ctx context.Context, tx *sql.Tx, offerID, staffID string) (DecisionResponse, int, string) {
-	engagementID, status, msg := lockOwnOffer(ctx, tx, offerID, staffID)
-	if status != http.StatusOK {
-		return DecisionResponse{}, status, msg
-	}
-
+func decline(ctx context.Context, tx *sql.Tx, practiceID, engagementID, offerID, staffID string) (DecisionResponse, int, string) {
 	result, err := tx.ExecContext(ctx,
 		`UPDATE engagement_offers
 		    SET state = 'declined', decided_at = now(), decided_by = $1
@@ -235,7 +218,6 @@ func decline(ctx context.Context, tx *sql.Tx, offerID, staffID string) (Decision
 		}
 		return DecisionResponse{}, http.StatusConflict, closedMessage(ctx, tx, offerID)
 	}
-	practiceID, _ := staffauth.PracticeID(ctx)
 	if err := activity.Record(ctx, tx, activity.Entry{
 		PracticeID:  practiceID,
 		SubjectKind: activity.SubjectEngagement,

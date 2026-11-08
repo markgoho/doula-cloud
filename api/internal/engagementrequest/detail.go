@@ -84,21 +84,8 @@ type DetailResponse struct {
 // disabled screen: the same 404-vs-409 split approve and refuse draw, so
 // a stale link says which of the two happened.
 func DetailHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireOwnerOrAdmin(w, r)
-		if !ok {
-			// coverage:ignore reason: belt-and-braces -- engagementrequest.Mount's
-			// own OwnerAndAdmin declaration (g.Get) already refuses a non-owner/
-			// admin caller before this handler runs, so !ok is unreachable through
-			// the real mount. Kept so a future mount that drops that declaration
-			// still refuses here rather than serving the read.
-			return
-		}
-
-		requestID := r.PathValue("requestId")
-		if !staffauth.ParseUUID(w, "request", requestID) {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, practiceID, requestID := c.Tx, c.PracticeID, c.ID("requestId")
 
 		resp, err := loadDetail(r.Context(), tx, practiceID, requestID)
 		switch {
@@ -115,7 +102,7 @@ func DetailHandler() http.Handler {
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, resp)
-	})
+	}, staffauth.PathID("request", "requestId"))
 }
 
 // loadDetail assembles the approval screen's read. It returns

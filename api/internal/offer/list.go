@@ -82,14 +82,8 @@ type ListResponse struct {
 // caller's own staff_id in SQL, so there is nothing here a role
 // declaration could usefully narrow.
 func InboxHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, _, ok := staffauth.RequireTx(w, r)
-		if !ok {
-			// coverage:ignore reason: Middleware always sets a tx before this handler runs
-			return
-		}
-		staffID, _ := staffauth.StaffID(r.Context())
-		reader, _ := staffauth.ReaderFrom(r.Context())
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, staffID, reader := c.Tx, c.StaffID, c.Reader
 
 		if err := expireOpen(r.Context(), tx, byStaffID, staffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -158,17 +152,8 @@ func InboxHandler() http.Handler {
 // said. Owner and Admin only: it names the people offered, which is
 // roster-shaped information ADR-0008's read table keeps from a Doula.
 func EngagementListHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, _, ok := staffauth.RequireTx(w, r)
-		if !ok {
-			// coverage:ignore reason: Middleware always sets a tx before this handler runs
-			return
-		}
-
-		engagementID := r.PathValue("engagementId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, engagementID := c.Tx, c.EngagementID
 		if err := expireOpen(r.Context(), tx, byEngagementID, engagementID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -201,7 +186,7 @@ func EngagementListHandler() http.Handler {
 			return
 		}
 		apierr.WriteJSON(w, http.StatusOK, page)
-	})
+	}, staffauth.EngagementID())
 }
 
 // parseCursor reads the optional ?cursor= page position, writing its own
