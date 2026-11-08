@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -29,9 +30,7 @@ func TestVisitsHandler_LeavesTheNameOffABookedVisitWhoseDoulaWasTakenOff(t *test
 	defer srv.Close()
 	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	names := map[string]string{}
 	for _, item := range decodeVisits(t, resp).Items {
 		names[item.VisitID] = item.DoulaName

@@ -7,6 +7,7 @@ import (
 
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/portalaccount"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -42,9 +43,7 @@ func TestEditHandler_EmailChangeLeavesPortalAccessAlone(t *testing.T) {
 	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID,
 		client.EditRequest{GivenName: "Portal Client", Email: "new-contact@example.com"})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	var linkedIdentity, signInAddress string
 	if err := db.Admin.QueryRowContext(t.Context(),

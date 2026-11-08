@@ -10,41 +10,20 @@ import (
 	"slices"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
 func authedGet(t *testing.T, session, url string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Get(t, url, reqtest.Session(session))
 	return resp
 }
 
 func authedJSON(t *testing.T, session, method, url string, body any) *http.Response {
 	t.Helper()
-	raw, err := json.Marshal(body)
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	req, err := http.NewRequestWithContext(t.Context(), method, url, bytes.NewReader(raw))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Do(t, method, url, reqtest.Session(session), reqtest.JSON(body))
 	return resp
 }
 
@@ -61,13 +40,8 @@ func TestCreateHandler_MinimalSavesFreely(t *testing.T) {
 	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients",
 		client.CreateRequest{GivenName: "Jamie"})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var rec client.Record
-	if err := json.UnmarshalRead(resp.Body, &rec); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
+	rec := reqtest.Decode[client.Record](t, resp)
 	if rec.GivenName != "Jamie" || rec.ID == "" {
 		t.Fatalf("unexpected record: %+v", rec)
 	}
@@ -102,15 +76,7 @@ func TestCreateHandler_InvalidBodyAndInvalidDateOfBirth(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	badBody, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients", bytes.NewReader([]byte(`{`)))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(badBody, session)
-	badBodyResp, err := http.DefaultClient.Do(badBody)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	badBodyResp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/clients", reqtest.Session(session), reqtest.Body("", []byte(`{`)))
 	defer badBodyResp.Body.Close()
 	if badBodyResp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("invalid body status = %d, want %d", badBodyResp.StatusCode, http.StatusBadRequest)
@@ -133,9 +99,7 @@ func TestCreateHandler_MissingGivenName(t *testing.T) {
 
 	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients", client.CreateRequest{})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestCreateHandler_RefusesContractor proves ADR-0017's "a contractor
@@ -152,9 +116,7 @@ func TestCreateHandler_RefusesContractor(t *testing.T) {
 	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients",
 		client.CreateRequest{GivenName: "Refused"})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 	body := readBody(t, resp)
 	if body == "" || body == "\n" {
 		t.Fatalf("expected a distinguishable error message, got %q", body)
@@ -181,9 +143,7 @@ func TestCreateHandler_OwnerWithContractorEmploymentTypeMayCreate(t *testing.T) 
 	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients",
 		client.CreateRequest{GivenName: "Solo Client"})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
 }
 
 // TestCreateHandler_RefusesOnMatchAndOverrideProceeds proves
@@ -200,13 +160,8 @@ func TestCreateHandler_RefusesOnMatchAndOverrideProceeds(t *testing.T) {
 	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients",
 		client.CreateRequest{GivenName: testSarah, Email: "sarah@example.com"})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
-	var out client.CreateResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusConflict)
+	out := reqtest.Decode[client.CreateResponse](t, resp)
 	if len(out.Matches) != 1 || out.Matches[0].ID != existingID {
 		t.Fatalf("matches = %+v, want one match on %q", out.Matches, existingID)
 	}
@@ -269,24 +224,12 @@ func TestSearchHandler_ReadsTheBodyNotTheURL(t *testing.T) {
 
 	queried := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/search?name=Nadia", client.SearchRequest{})
 	defer queried.Body.Close()
-	var out client.SearchResponse
-	if err := json.UnmarshalRead(queried.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[client.SearchResponse](t, queried)
 	if len(out.Matches) != 0 {
 		t.Fatalf("matches = %+v, want none: a name in the query string is not read", out.Matches)
 	}
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/search", bytes.NewReader([]byte(`{`)))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	malformed, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	malformed := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/clients/search", reqtest.Session(session), reqtest.RawJSON([]byte(`{`)))
 	defer malformed.Body.Close()
 	if malformed.StatusCode != http.StatusBadRequest {
 		t.Fatalf("malformed body status = %d, want %d", malformed.StatusCode, http.StatusBadRequest)
@@ -323,10 +266,7 @@ func TestSearchHandler_SaysWhenEachMatchWasAddedAndLastCaredFor(t *testing.T) {
 	defer srv.Close()
 	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/search", client.SearchRequest{Name: "Reese"})
 	defer resp.Body.Close()
-	var out client.SearchResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[client.SearchResponse](t, resp)
 	if len(out.Matches) != 1 {
 		t.Fatalf("matches = %+v, want one", out.Matches)
 	}
@@ -397,9 +337,7 @@ func TestEditHandler_RefusesOnMatchWithDifferentClientAndOverrideProceeds(t *tes
 	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+editingID,
 		client.EditRequest{GivenName: testNadia, FamilyName: testHaddad, Email: testNadiaEmail})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusConflict)
 
 	overridden := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+editingID,
 		client.EditRequest{GivenName: testNadia, FamilyName: testHaddad, Email: testNadiaEmail, Override: true})
@@ -425,9 +363,7 @@ func TestEditHandler_ChangingEmailRevokesPendingInvite(t *testing.T) {
 	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID,
 		client.EditRequest{GivenName: "Revoke Client", Email: testNewEmail})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	status, lastErr := outboxStatus(t, db, outboxID)
 	if status != deadLetteredStatus || lastErr == "" {
@@ -449,9 +385,7 @@ func TestEditHandler_EveryEditWritesOneClientEvent(t *testing.T) {
 	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID,
 		client.EditRequest{GivenName: "Event Client", Phone: "555-0199"})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	var eventCount int
 	var eventType, actorKind string
@@ -481,9 +415,7 @@ func TestEditHandler_NoChangeStillWritesOneEmptyDiffEvent(t *testing.T) {
 	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID,
 		client.EditRequest{GivenName: "Noop Client", Email: "noop@example.com"})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	var count int
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -511,10 +443,7 @@ func readClientEventDiff(t *testing.T, db *testdb.DB, session string, srv *httpt
 	_ = db
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID)
 	defer resp.Body.Close()
-	var out client.DetailResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode detail: %v", err)
-	}
+	out := reqtest.Decode[client.DetailResponse](t, resp)
 	for _, entry := range out.History {
 		if entry.ClientEvent != nil && entry.ClientEvent.EventType == action {
 			return entry.ClientEvent.Diff
@@ -538,9 +467,7 @@ func TestEditHandler_FieldValuesChangeIsDiffedAsOneWholeBlob(t *testing.T) {
 	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID,
 		client.EditRequest{GivenName: "Field Values Client", FieldValues: jsontext.Value(`{"favoriteColor":"blue"}`)})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	diffJSON := readClientEventDiff(t, db, session, srv, practiceID, clientID, "updated")
 	var diff map[string]jsontext.Value
@@ -566,13 +493,8 @@ func TestDetailHandler_ReturnsRecordEngagementsAndHistory(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out client.DetailResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[client.DetailResponse](t, resp)
 	if out.ID != clientID || len(out.Engagements) != 1 || out.Engagements[0].EngagementID != engagementID {
 		t.Fatalf("unexpected detail: %+v", out)
 	}
@@ -597,13 +519,8 @@ func TestDetailHandler_ReturnsPortalInviteState(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out client.DetailResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[client.DetailResponse](t, resp)
 	if out.PortalInviteStatus != nil {
 		t.Fatalf("PortalInviteStatus = %q, want absent for a Client never invited", *out.PortalInviteStatus)
 	}
@@ -640,10 +557,7 @@ func TestDetailHandler_ResolvedFieldsCoverActiveBlankArchivedHeldAndDropped(t *t
 	defer srv.Close()
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID)
 	defer resp.Body.Close()
-	var out client.DetailResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[client.DetailResponse](t, resp)
 
 	byID := map[string]client.ResolvedField{}
 	for _, f := range out.ResolvedFields {
@@ -684,10 +598,7 @@ func TestDetailHandler_ResolvedFieldsAreLiveNotSnapshotted(t *testing.T) {
 	defer srv.Close()
 
 	before := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID)
-	var beforeOut client.DetailResponse
-	if err := json.UnmarshalRead(before.Body, &beforeOut); err != nil {
-		t.Fatalf("decode before response: %v", err)
-	}
+	beforeOut := reqtest.Decode[client.DetailResponse](t, before)
 	_ = before.Body.Close()
 	if len(beforeOut.ResolvedFields) != 0 {
 		t.Fatalf("resolved fields before template exists = %+v, want none", beforeOut.ResolvedFields)
@@ -697,10 +608,7 @@ func TestDetailHandler_ResolvedFieldsAreLiveNotSnapshotted(t *testing.T) {
 
 	after := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID)
 	defer after.Body.Close()
-	var afterOut client.DetailResponse
-	if err := json.UnmarshalRead(after.Body, &afterOut); err != nil {
-		t.Fatalf("decode after response: %v", err)
-	}
+	afterOut := reqtest.Decode[client.DetailResponse](t, after)
 	if len(afterOut.ResolvedFields) != 1 || afterOut.ResolvedFields[0].FieldID != "new_field" {
 		t.Fatalf("resolved fields after adding a field to the template = %+v, want one field new_field", afterOut.ResolvedFields)
 	}
@@ -728,10 +636,7 @@ func TestListHandler_ClientShapedDefaultFiltersToWork(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients")
 	defer resp.Body.Close()
-	var listResp client.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	listResp := reqtest.Decode[client.ListResponse](t, resp)
 	list := listResp.Items
 	if len(list) != 1 || list[0].ClientID != withTwoEngagements {
 		t.Fatalf("default list = %+v, want exactly one row for the two-Engagement Client", list)
@@ -739,10 +644,7 @@ func TestListHandler_ClientShapedDefaultFiltersToWork(t *testing.T) {
 
 	all := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
 	defer all.Body.Close()
-	var allListResp client.ListResponse
-	if err := json.UnmarshalRead(all.Body, &allListResp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	allListResp := reqtest.Decode[client.ListResponse](t, all)
 	allList := allListResp.Items
 	if len(allList) != 2 {
 		t.Fatalf("all=true list length = %d, want 2", len(allList))
@@ -786,10 +688,7 @@ func TestListHandler_NamesEachClientInFull(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients")
 	defer resp.Body.Close()
-	var listResp client.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	listResp := reqtest.Decode[client.ListResponse](t, resp)
 	got := map[string]string{}
 	for _, item := range listResp.Items {
 		got[item.ClientID] = item.Name
@@ -828,10 +727,7 @@ func TestListHandler_PendingRequestKindsOnRow(t *testing.T) {
 
 	all := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
 	defer all.Body.Close()
-	var allResp client.ListResponse
-	if err := json.UnmarshalRead(all.Body, &allResp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	allResp := reqtest.Decode[client.ListResponse](t, all)
 	byID := map[string]client.ListItem{}
 	for _, item := range allResp.Items {
 		byID[item.ClientID] = item
@@ -852,10 +748,7 @@ func TestListHandler_PendingRequestKindsOnRow(t *testing.T) {
 
 	def := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients")
 	defer def.Body.Close()
-	var defResp client.ListResponse
-	if err := json.UnmarshalRead(def.Body, &defResp); err != nil {
-		t.Fatalf("decode default response: %v", err)
-	}
+	defResp := reqtest.Decode[client.ListResponse](t, def)
 	defByID := map[string]client.ListItem{}
 	for _, item := range defResp.Items {
 		defByID[item.ClientID] = item
@@ -904,10 +797,7 @@ func TestListHandler_PortalInviteStatusVariants(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients")
 	defer resp.Body.Close()
-	var listResp client.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	listResp := reqtest.Decode[client.ListResponse](t, resp)
 
 	byID := map[string]client.ListItem{}
 	for _, item := range listResp.Items {
@@ -988,10 +878,7 @@ func TestListHandler_EmailSuppressed(t *testing.T) {
 
 			resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
 			defer resp.Body.Close()
-			var listResp client.ListResponse
-			if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
-				t.Fatalf("decode response: %v", err)
-			}
+			listResp := reqtest.Decode[client.ListResponse](t, resp)
 
 			byID := map[string]client.ListItem{}
 			for _, item := range listResp.Items {
@@ -1029,10 +916,7 @@ func TestListHandler_ContractorSeesOnlyAttachedClients(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
 	defer resp.Body.Close()
-	var listResp client.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	listResp := reqtest.Decode[client.ListResponse](t, resp)
 	list := listResp.Items
 	if len(list) != 1 || list[0].ClientID != attachedClient {
 		t.Fatalf("contractor list = %+v, want exactly the attached client", list)
@@ -1107,10 +991,7 @@ func TestSearchHandler_RefusesContractorAndEmptyQueryReturnsNoMatches(t *testing
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("empty query status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
-	var out client.SearchResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[client.SearchResponse](t, resp)
 	if len(out.Matches) != 0 {
 		t.Fatalf("matches = %+v, want none for an empty query", out.Matches)
 	}
@@ -1132,30 +1013,13 @@ func TestEditHandler_InvalidClientIDAndBody(t *testing.T) {
 		t.Fatalf("invalid clientId status = %d, want %d", badID.StatusCode, http.StatusBadRequest)
 	}
 
-	missingRequest, err := http.NewRequestWithContext(t.Context(), http.MethodPut,
-		srv.URL+"/api/practices/"+practiceID+"/clients/00000000-0000-0000-0000-000000000000", bytes.NewReader([]byte(`{"givenName":"Ghost"}`)))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(missingRequest, session)
-	missingResp, err := http.DefaultClient.Do(missingRequest)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	missingResp := reqtest.Put(t, srv.URL+"/api/practices/"+practiceID+"/clients/00000000-0000-0000-0000-000000000000", reqtest.Session(session), reqtest.Body("", []byte(`{"givenName":"Ghost"}`)))
 	defer missingResp.Body.Close()
 	if missingResp.StatusCode != http.StatusNotFound {
 		t.Fatalf("nonexistent clientId status = %d, want %d", missingResp.StatusCode, http.StatusNotFound)
 	}
 
-	badBody, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID, bytes.NewReader([]byte(`{`)))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(badBody, session)
-	badBodyResp, err := http.DefaultClient.Do(badBody)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	badBodyResp := reqtest.Put(t, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID, reqtest.Session(session), reqtest.Body("", []byte(`{`)))
 	defer badBodyResp.Body.Close()
 	if badBodyResp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("invalid body status = %d, want %d", badBodyResp.StatusCode, http.StatusBadRequest)
@@ -1215,10 +1079,7 @@ func TestDetailHandler_MergesEventsAndRequestsIntoHistory(t *testing.T) {
 
 	created := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients",
 		client.CreateRequest{GivenName: "History Client"})
-	var rec client.Record
-	if err := json.UnmarshalRead(created.Body, &rec); err != nil {
-		t.Fatalf("decode create response: %v", err)
-	}
+	rec := reqtest.Decode[client.Record](t, created)
 	_ = created.Body.Close()
 
 	edited := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+rec.ID,
@@ -1261,10 +1122,7 @@ func TestDetailHandler_MergesEventsAndRequestsIntoHistory(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/"+rec.ID)
 	defer resp.Body.Close()
-	var out client.DetailResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[client.DetailResponse](t, resp)
 	if len(out.History) != 5 {
 		t.Fatalf("history length = %d, want 5", len(out.History))
 	}
@@ -1350,10 +1208,7 @@ func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 
 	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
 	defer firstResp.Body.Close()
-	var first client.ListResponse
-	if err := json.UnmarshalRead(firstResp.Body, &first); err != nil {
-		t.Fatalf("decode first page: %v", err)
-	}
+	first := reqtest.Decode[client.ListResponse](t, firstResp)
 	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
 		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
 			len(first.Items), first.HasMore, first.NextCursor)
@@ -1361,10 +1216,7 @@ func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 
 	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true&cursor="+*first.NextCursor)
 	defer secondResp.Body.Close()
-	var second client.ListResponse
-	if err := json.UnmarshalRead(secondResp.Body, &second); err != nil {
-		t.Fatalf("decode second page: %v", err)
-	}
+	second := reqtest.Decode[client.ListResponse](t, secondResp)
 	if len(second.Items) != 1 || second.HasMore || second.NextCursor != nil {
 		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
 			len(second.Items), second.HasMore, second.NextCursor)
@@ -1391,10 +1243,7 @@ func TestListHandler_ContractorPaginatesNewestFirst(t *testing.T) {
 
 	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
 	defer firstResp.Body.Close()
-	var first client.ListResponse
-	if err := json.UnmarshalRead(firstResp.Body, &first); err != nil {
-		t.Fatalf("decode first page: %v", err)
-	}
+	first := reqtest.Decode[client.ListResponse](t, firstResp)
 	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
 		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
 			len(first.Items), first.HasMore, first.NextCursor)
@@ -1402,10 +1251,7 @@ func TestListHandler_ContractorPaginatesNewestFirst(t *testing.T) {
 
 	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true&cursor="+*first.NextCursor)
 	defer secondResp.Body.Close()
-	var second client.ListResponse
-	if err := json.UnmarshalRead(secondResp.Body, &second); err != nil {
-		t.Fatalf("decode second page: %v", err)
-	}
+	second := reqtest.Decode[client.ListResponse](t, secondResp)
 	if len(second.Items) != 1 || second.HasMore || second.NextCursor != nil {
 		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
 			len(second.Items), second.HasMore, second.NextCursor)
@@ -1442,10 +1288,7 @@ func TestListHandler_OpenEngagementsRollup_MultipleOpenNoneDroppedCompletedExclu
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients")
 	defer resp.Body.Close()
-	var listResp client.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	listResp := reqtest.Decode[client.ListResponse](t, resp)
 	if len(listResp.Items) != 1 || listResp.Items[0].ClientID != clientID {
 		t.Fatalf("list = %+v, want exactly the rollup Client", listResp.Items)
 	}
@@ -1523,10 +1366,7 @@ func TestListHandler_OpenEngagementsRollup_AdminSeesInvoiceAndMoney(t *testing.T
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients")
 	defer resp.Body.Close()
-	var listResp client.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	listResp := reqtest.Decode[client.ListResponse](t, resp)
 	byID := map[string]client.ListItem{}
 	for _, item := range listResp.Items {
 		byID[item.ClientID] = item
@@ -1567,10 +1407,7 @@ func TestListHandler_OpenEngagementsRollup_UnpaidDepositOutranksLaterPaidBalance
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients")
 	defer resp.Body.Close()
-	var listResp client.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	listResp := reqtest.Decode[client.ListResponse](t, resp)
 	byID := map[string]client.ListItem{}
 	for _, item := range listResp.Items {
 		byID[item.ClientID] = item
@@ -1601,10 +1438,7 @@ func TestListHandler_OpenEngagementsRollup_NoClientsSkipsTheRollupQuery(t *testi
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
 	defer resp.Body.Close()
-	var listResp client.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	listResp := reqtest.Decode[client.ListResponse](t, resp)
 	if len(listResp.Items) != 0 {
 		t.Fatalf("items = %+v, want none", listResp.Items)
 	}
@@ -1630,10 +1464,7 @@ func TestListHandler_OpenEngagementsRollup_ZeroOpenEngagementsShowsNoLines(t *te
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
 	defer resp.Body.Close()
-	var listResp client.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	listResp := reqtest.Decode[client.ListResponse](t, resp)
 	byID := map[string]client.ListItem{}
 	for _, item := range listResp.Items {
 		byID[item.ClientID] = item
@@ -1666,10 +1497,7 @@ func TestListHandler_OpenEngagementsRollup_EmployeeDoulaSeesInvoiceAndMoney(t *t
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients")
 	defer resp.Body.Close()
-	var listResp client.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	listResp := reqtest.Decode[client.ListResponse](t, resp)
 	byID := map[string]client.ListItem{}
 	for _, item := range listResp.Items {
 		byID[item.ClientID] = item
@@ -1724,10 +1552,7 @@ func TestListHandler_OpenEngagementsRollup_ContractorSeesOwnFeeOnlyOnAttachedEng
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
 	defer resp.Body.Close()
-	var listResp client.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	listResp := reqtest.Decode[client.ListResponse](t, resp)
 	if len(listResp.Items) != 1 || listResp.Items[0].ClientID != clientID {
 		t.Fatalf("list = %+v, want exactly the attached Client", listResp.Items)
 	}
@@ -1774,10 +1599,7 @@ func TestListHandler_OpenEngagementsRollup_EndedAttachmentShowsNoFee(t *testing.
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
 	defer resp.Body.Close()
-	var listResp client.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	listResp := reqtest.Decode[client.ListResponse](t, resp)
 	if len(listResp.Items) != 1 || listResp.Items[0].ClientID != clientID {
 		t.Fatalf("list = %+v, want exactly the still-attached Client", listResp.Items)
 	}
@@ -1814,10 +1636,7 @@ func TestListHandler_OpenEngagementsRollup_AccruedAttachmentShowsNoFee(t *testin
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
 	defer resp.Body.Close()
-	var listResp client.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	listResp := reqtest.Decode[client.ListResponse](t, resp)
 	if len(listResp.Items) != 1 || listResp.Items[0].ClientID != clientID {
 		t.Fatalf("list = %+v, want exactly the granted-attachment Client", listResp.Items)
 	}
@@ -1853,10 +1672,7 @@ func TestListHandler_OpenEngagementsRollup_AnotherDoulasFeeNeverSurfaces(t *test
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
 	defer resp.Body.Close()
-	var listResp client.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	listResp := reqtest.Decode[client.ListResponse](t, resp)
 	if len(listResp.Items) != 1 || listResp.Items[0].ClientID != clientID {
 		t.Fatalf("list = %+v, want exactly the shared Client", listResp.Items)
 	}
@@ -1899,10 +1715,7 @@ func TestListHandler_OwnerContractorSeesWholePracticeNotOnlyHerAttachments(t *te
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients")
 	defer resp.Body.Close()
-	var listResp client.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	listResp := reqtest.Decode[client.ListResponse](t, resp)
 	byID := map[string]client.ListItem{}
 	for _, item := range listResp.Items {
 		byID[item.ClientID] = item
@@ -1967,10 +1780,7 @@ func TestListHandler_OpenEngagementsRollup_VoidedContractDoesNotDuplicateLine(t 
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients")
 	defer resp.Body.Close()
-	var listResp client.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	listResp := reqtest.Decode[client.ListResponse](t, resp)
 
 	byClient := map[string][]client.OpenEngagement{}
 	for _, item := range listResp.Items {

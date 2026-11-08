@@ -1,7 +1,6 @@
 package engagement_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -9,6 +8,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/engagement"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -19,20 +19,9 @@ import (
 
 func takeOffDoulaAs(t *testing.T, db *testdb.DB, srv *httptest.Server, uid, practiceID, engagementID, staffID string) (int, attachSelfBody) {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, attachDoulaURL(srv.URL, practiceID, engagementID, staffID), http.NoBody)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, authntest.SeedSession(t, db.App, uid))
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Delete(t, attachDoulaURL(srv.URL, practiceID, engagementID, staffID), reqtest.Session(authntest.SeedSession(t, db.App, uid)))
 	defer func() { _ = resp.Body.Close() }()
-	var out attachSelfBody
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[attachSelfBody](t, resp)
 	return resp.StatusCode, out
 }
 

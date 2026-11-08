@@ -5,11 +5,10 @@ import (
 	"encoding/json/v2"
 	"io"
 	"net/http"
-	"strings"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -183,9 +182,7 @@ func TestMergeHandler_BothUnattachedOlderSurvives(t *testing.T) {
 		resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+youngerID+"/merge",
 			client.MergeRequest{GivenName: "Robin", OtherClientID: olderID})
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusOK)
 		var out client.Record
 		_ = json.UnmarshalRead(resp.Body, &out)
 		if out.ID != olderID {
@@ -209,9 +206,7 @@ func TestMergeHandler_BothUnattachedOlderSurvives(t *testing.T) {
 		resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+olderID+"/merge",
 			client.MergeRequest{GivenName: "Robin Ellis", OtherClientID: youngerID})
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusOK)
 		var out client.Record
 		_ = json.UnmarshalRead(resp.Body, &out)
 		if out.ID != olderID {
@@ -241,9 +236,7 @@ func TestMergeHandler_AttachedSourceSurvivesAndAbsorbsTheOther(t *testing.T) {
 	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+attachedID+"/merge",
 		client.MergeRequest{GivenName: "Cora James", OtherClientID: otherID})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	if got := mergedIntoOf(t, db, otherID); got == nil || *got != attachedID {
 		t.Fatalf("other merged_into = %v, want %q -- the record carrying history survives", got, attachedID)
 	}
@@ -270,9 +263,7 @@ func TestMergeHandler_RefusesErasedTarget(t *testing.T) {
 	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+stubID+"/merge",
 		client.MergeRequest{GivenName: testMaya, OtherClientID: erasedID})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusConflict)
 }
 
 // TestMergeHandler_RefusesSelfMerge proves a Client cannot be merged into
@@ -289,9 +280,7 @@ func TestMergeHandler_RefusesSelfMerge(t *testing.T) {
 	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+soloID+"/merge",
 		client.MergeRequest{GivenName: "Solo Client", OtherClientID: soloID})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusConflict)
 }
 
 // TestMergeHandler_RefusesErasedSource proves ADR-0027's edit refusal
@@ -313,9 +302,7 @@ func TestMergeHandler_RefusesErasedSource(t *testing.T) {
 	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+erasedID+"/merge",
 		client.MergeRequest{GivenName: "Erased Client", OtherClientID: otherID})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusConflict)
 }
 
 // TestMergeHandler_InvalidInput covers MergeHandler's own request-shape
@@ -336,41 +323,27 @@ func TestMergeHandler_InvalidInput(t *testing.T) {
 		resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/not-a-uuid/merge",
 			client.MergeRequest{GivenName: testStub, OtherClientID: otherID})
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	})
 
 	t.Run("invalid body", func(t *testing.T) {
-		req, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+stubID+"/merge", strings.NewReader("{not json"))
-		req.Header.Set("Content-Type", "application/json")
-		authntest.AddSessionCookie(req, session)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("request: %v", err)
-		}
+		resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/clients/"+stubID+"/merge", reqtest.Session(session), reqtest.RawJSON([]byte("{not json")))
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	})
 
 	t.Run("blank given name", func(t *testing.T) {
 		resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+stubID+"/merge",
 			client.MergeRequest{GivenName: "  ", OtherClientID: otherID})
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	})
 
 	t.Run("invalid other client id", func(t *testing.T) {
 		resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+stubID+"/merge",
 			client.MergeRequest{GivenName: testStub, OtherClientID: "not-a-uuid"})
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	})
 }
 
@@ -392,18 +365,14 @@ func TestMergeHandler_NotFound(t *testing.T) {
 		resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+missingID+"/merge",
 			client.MergeRequest{GivenName: "Nobody", OtherClientID: otherID})
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusNotFound {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusNotFound)
 	})
 
 	t.Run("nonexistent target", func(t *testing.T) {
 		resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+stubID+"/merge",
 			client.MergeRequest{GivenName: testStub, OtherClientID: missingID})
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusNotFound {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusNotFound)
 	})
 
 	const contractorUID = "contractor-merge-not-found"
@@ -415,9 +384,7 @@ func TestMergeHandler_NotFound(t *testing.T) {
 		resp := authedJSON(t, contractorSession, http.MethodPost, contractorSrv.URL+"/api/practices/"+practiceID+"/clients/"+stubID+"/merge",
 			client.MergeRequest{GivenName: testStub, OtherClientID: otherID})
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusNotFound {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusNotFound)
 	})
 
 	t.Run("contractor cannot reach the target", func(t *testing.T) {
@@ -430,9 +397,7 @@ func TestMergeHandler_NotFound(t *testing.T) {
 		resp := authedJSON(t, reachingSession, http.MethodPost, reachingSrv.URL+"/api/practices/"+practiceID+"/clients/"+attachedID+"/merge",
 			client.MergeRequest{GivenName: "Attached To Contractor", OtherClientID: otherID})
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusNotFound {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusNotFound)
 	})
 }
 

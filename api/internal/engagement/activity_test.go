@@ -9,6 +9,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/engagement"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -30,9 +31,7 @@ func TestListActivityHandler_OwnerSeesEveryEntry(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	var got engagement.ActivityListResponse
 	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -65,9 +64,7 @@ func TestListActivityHandler_EmployeeDoulaSeesMoneyEntries(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	var got engagement.ActivityListResponse
 	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -102,9 +99,7 @@ func TestListActivityHandler_ContractorExcludesMoneyAndPracticePrice(t *testing.
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	var got engagement.ActivityListResponse
 	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -162,9 +157,7 @@ func TestListActivityHandler_InvalidEngagementIDRejected(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid/activity")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", resp.StatusCode)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestListActivityHandler_InvalidCursorRejected mirrors
@@ -181,9 +174,7 @@ func TestListActivityHandler_InvalidCursorRejected(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity?cursor=not!valid!base64!")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", resp.StatusCode)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestListActivityHandler_KeepsBirthPlanRowsAfterALoss proves #2219's
@@ -274,9 +265,7 @@ func TestListActivityHandler_ContractorWithoutAttachmentNotFound(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404", resp.StatusCode)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // reassignDiff is the diff a reassignment writes, built through the same
@@ -301,9 +290,7 @@ func readActivity(t *testing.T, db *testdb.DB, practiceID, engagementID, identit
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	var got engagement.ActivityListResponse
 	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		// coverage:ignore reason: decode failure of a response this handler just wrote

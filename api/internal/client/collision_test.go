@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -161,9 +162,7 @@ func TestEditHandler_CollisionPredicate_SubstitutionBlocksWithSubstitutionFlag(t
 	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+editingID,
 		client.EditRequest{GivenName: testNadia, FamilyName: testHaddad})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusConflict)
 	var out client.EditConflictResponse
 	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
@@ -198,7 +197,5 @@ func TestEditHandler_RefusesEditingAMergedRecord(t *testing.T) {
 	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+absorbedID,
 		client.EditRequest{GivenName: "Absorbed", AddressLocality: "Rochester"})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusConflict)
 }

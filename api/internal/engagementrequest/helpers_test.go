@@ -1,7 +1,6 @@
 package engagementrequest_test
 
 import (
-	"bytes"
 	"encoding/json/v2"
 	"io"
 	"net/http"
@@ -11,6 +10,7 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -62,17 +62,7 @@ func do(t *testing.T, url, session string, body any) response {
 		}
 		payload = encoded
 	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	if session != "" {
-		authntest.AddSessionCookie(req, session)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, url, reqtest.Session(session), reqtest.Body("", payload))
 	defer func() { _ = resp.Body.Close() }()
 	read, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -85,17 +75,7 @@ func do(t *testing.T, url, session string, body any) response {
 // in this package (DetailHandler), next to do's POST-only exchanges.
 func get(t *testing.T, url, session string) response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	if session != "" {
-		authntest.AddSessionCookie(req, session)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Get(t, url, reqtest.Session(session))
 	defer func() { _ = resp.Body.Close() }()
 	read, err := io.ReadAll(resp.Body)
 	if err != nil {

@@ -9,6 +9,7 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/portal"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -34,9 +35,7 @@ func TestVisitsHandler_HasHappenedAtScheduledAtOnTheRequestClock(t *testing.T) {
 
 	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	happened := map[string]bool{}
 	for _, v := range decodeVisits(t, resp).Items {

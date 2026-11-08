@@ -9,6 +9,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -44,9 +45,8 @@ func TestEraseEligibilityHandler_ClearWithNoInvoices(t *testing.T) {
 	defer srv.Close()
 
 	resp := eraseEligibility(t, session, srv.URL, practiceID, clientID)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	defer resp.Body.Close()
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	out := decodeEligibility(t, resp)
 	if out.ErasedAt != nil {
 		t.Fatalf("erasedAt = %v, want absent for a Client who was never erased", out.ErasedAt)
@@ -72,9 +72,8 @@ func TestEraseEligibilityHandler_NamesUnsettledInvoicesOnly(t *testing.T) {
 	defer srv.Close()
 
 	resp := eraseEligibility(t, session, srv.URL, practiceID, clientID)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	defer resp.Body.Close()
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	out := decodeEligibility(t, resp)
 	if len(out.UnsettledInvoices) != 1 {
 		t.Fatalf("unsettledInvoices = %+v, want exactly the one open invoice", out.UnsettledInvoices)
@@ -123,9 +122,8 @@ func TestEraseEligibilityHandler_AlreadyErased(t *testing.T) {
 	}
 
 	resp := eraseEligibility(t, session, srv.URL, practiceID, clientID)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	defer resp.Body.Close()
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	out := decodeEligibility(t, resp)
 	if out.ErasedAt == nil {
 		t.Fatal("erasedAt is absent for a Client who was already erased")
@@ -177,9 +175,7 @@ func TestEraseEligibilityHandler_RefusesAnUnknownClient(t *testing.T) {
 
 	resp := eraseEligibility(t, session, srv.URL, practiceID, otherClientID)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestEraseEligibilityHandler_RefusesAMalformedClientID(t *testing.T) {
@@ -192,7 +188,5 @@ func TestEraseEligibilityHandler_RefusesAMalformedClientID(t *testing.T) {
 
 	resp := eraseEligibility(t, session, srv.URL, practiceID, "not-a-uuid")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }

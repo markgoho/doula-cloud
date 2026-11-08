@@ -1,7 +1,6 @@
 package engagement_test
 
 import (
-	"bytes"
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +12,7 @@ import (
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/oncall"
 	"doula-cloud/api/internal/portal"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -48,22 +48,9 @@ type dueDateResponseBody struct {
 // putDueDate PUTs raw as the body of a due-date change, as uid.
 func putDueDate(t *testing.T, db *testdb.DB, srvURL, uid, practiceID, engagementID string, raw []byte) (int, dueDateResponseBody) {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut,
-		srvURL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/due-date", bytes.NewReader(raw))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	authntest.AddSessionCookie(req, authntest.SeedSession(t, db.App, uid))
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Put(t, srvURL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/due-date", reqtest.Session(authntest.SeedSession(t, db.App, uid)), reqtest.RawJSON(raw))
 	defer func() { _ = resp.Body.Close() }()
-	var out dueDateResponseBody
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[dueDateResponseBody](t, resp)
 	return resp.StatusCode, out
 }
 
@@ -305,23 +292,12 @@ func newCrossReadServer(t *testing.T, db *testdb.DB) *httptest.Server {
 // getAs reads url as session into T, failing on any status but 200.
 func getAs[T any](t *testing.T, session, url string) T {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Get(t, url, reqtest.Session(session))
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET %s: status = %d, want 200", url, resp.StatusCode)
 	}
-	var out T
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	out := reqtest.Decode[T](t, resp)
 	return out
 }
 

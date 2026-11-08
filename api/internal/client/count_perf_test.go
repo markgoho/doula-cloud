@@ -32,14 +32,7 @@ func TestCountClientsQueryPlanAtScale(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin tx: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set practice id: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Practice(practiceID))
 
 	rows, err := tx.QueryContext(t.Context(), "EXPLAIN (ANALYZE, BUFFERS) "+countClientsQuery, practiceID)
 	if err != nil {

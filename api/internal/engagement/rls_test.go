@@ -17,10 +17,7 @@ func TestRLS_ClientsFailsClosedWithNoPracticeSet(t *testing.T) {
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "fail-closed-staff", []string{doulaRole}, "employee")
 	testdb.SeedEngagementInStatus(t, db, practiceID, "Some Client", "some@example.com", "intake")
 
-	var count int
-	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM clients`).Scan(&count); err != nil {
-		t.Fatalf("query clients with no session vars set: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM clients`)
 	if count != 0 {
 		t.Fatalf("expected 0 rows with no session variables set, got %d", count)
 	}
@@ -38,15 +35,7 @@ func TestRLS_ClientsSelectIsScopedToPracticeID(t *testing.T) {
 	clientAtA, _ := testdb.SeedEngagementInStatus(t, db, practiceA, "Client A", "a@example.com", "intake")
 	testdb.SeedEngagementInStatus(t, db, practiceB, "Client B", "b@example.com", "intake")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Practice(practiceA))
 
 	var visibleIDs []string
 	rows, err := tx.QueryContext(t.Context(), `SELECT id FROM clients`)
@@ -80,13 +69,8 @@ func TestRLS_ClientsInsertRejectedWithNoPracticeSet(t *testing.T) {
 	// missing practice_id or given_name NOT NULL violation instead.
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "fail-closed-inserting", []string{doulaRole}, "employee")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	_, err = tx.ExecContext(t.Context(),
+	tx := db.BeginAs(t)
+	_, err := tx.ExecContext(t.Context(),
 		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, 'No Context', 'no-context@example.com')`,
 		practiceID,
 	)
@@ -104,18 +88,7 @@ func TestRLS_ClientsInsertAllowedWithPracticeSet(t *testing.T) {
 	db := testdb.New(t)
 	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "staff-inserting", []string{doulaRole}, "employee")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_staff_id', $1, true)`, staffID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Practice(practiceID), testdb.Staff(staffID))
 
 	if _, err := tx.ExecContext(t.Context(),
 		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, 'With Context', 'with-context@example.com')`,
@@ -135,20 +108,9 @@ func TestRLS_ClientsInsertRejectedForContractorMembership(t *testing.T) {
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-contractor-inserting", []string{doulaRole}, "employee")
 	contractorID := testdb.SeedContractorAtPractice(t, db, practiceID, "contractor-inserting")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Practice(practiceID), testdb.Staff(contractorID))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_staff_id', $1, true)`, contractorID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	_, err = tx.ExecContext(t.Context(),
+	_, err := tx.ExecContext(t.Context(),
 		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, 'Contractor Attempt', 'contractor-attempt@example.com')`,
 		practiceID,
 	)
@@ -172,18 +134,7 @@ func TestRLS_ClientsInsertAllowedForOwnerWithContractorEmploymentType(t *testing
 	}
 	ownerContractorID := testdb.SeedStaffAtPractice(t, db, practiceID, "owner-contractor-inserting", []string{ownerRole, doulaRole}, contractorType)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_staff_id', $1, true)`, ownerContractorID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Practice(practiceID), testdb.Staff(ownerContractorID))
 
 	if _, err := tx.ExecContext(t.Context(),
 		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, 'Owner Contractor Client', 'owner-contractor-client@example.com')`,
@@ -203,20 +154,9 @@ func TestRLS_EngagementsVisibilityIsScopedToCurrentPractice(t *testing.T) {
 	testdb.SeedEngagementInStatus(t, db, practiceA, "Client A", "a@example.com", "intake")
 	testdb.SeedEngagementInStatus(t, db, practiceB, "Client B", "b@example.com", "intake")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Practice(practiceA))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	var count int
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM engagements`).Scan(&count); err != nil {
-		t.Fatalf("query engagements: %v", err)
-	}
+	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM engagements`)
 	if count != 1 {
 		t.Fatalf("expected only Practice A's engagement visible, got count = %d", count)
 	}
@@ -233,15 +173,7 @@ func TestRLS_ClientsUpdateFollowsSelectScope(t *testing.T) {
 	practiceB, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-updating-b", []string{doulaRole}, "employee")
 	clientID, _ := testdb.SeedEngagementInStatus(t, db, practiceA, "Original Name", "original@example.com", "intake")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceB); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Practice(practiceB))
 	result, err := tx.ExecContext(t.Context(), `UPDATE clients SET given_name = 'Renamed' WHERE id = $1`, clientID)
 	if err != nil {
 		t.Fatalf("update from another practice's session: %v", err)

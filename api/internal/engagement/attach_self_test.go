@@ -1,7 +1,6 @@
 package engagement_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -9,6 +8,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/engagement"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -35,20 +35,9 @@ func attachSelfURL(base, practiceID, engagementID string) string {
 // attachSelfAs PUTs the caller's own Attachment as uid.
 func attachSelfAs(t *testing.T, db *testdb.DB, srv *httptest.Server, uid, practiceID, engagementID string) (int, attachSelfBody) {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, attachSelfURL(srv.URL, practiceID, engagementID), http.NoBody)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, authntest.SeedSession(t, db.App, uid))
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Put(t, attachSelfURL(srv.URL, practiceID, engagementID), reqtest.Session(authntest.SeedSession(t, db.App, uid)))
 	defer func() { _ = resp.Body.Close() }()
-	var out attachSelfBody
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[attachSelfBody](t, resp)
 	return resp.StatusCode, out
 }
 
@@ -95,10 +84,7 @@ func readDetail(t *testing.T, db *testdb.DB, srv *httptest.Server, uid, practice
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("detail status = %d, want 200", resp.StatusCode)
 	}
-	var d engagement.Detail
-	if err := json.UnmarshalRead(resp.Body, &d); err != nil {
-		t.Fatalf("decode detail: %v", err)
-	}
+	d := reqtest.Decode[engagement.Detail](t, resp)
 	return d
 }
 

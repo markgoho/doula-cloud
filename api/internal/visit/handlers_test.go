@@ -13,6 +13,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/visit"
 )
@@ -56,10 +57,7 @@ func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 
 	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer firstResp.Body.Close()
-	var first visit.ListResponse
-	if err := json.UnmarshalRead(firstResp.Body, &first); err != nil {
-		t.Fatalf("decode first page: %v", err)
-	}
+	first := reqtest.Decode[visit.ListResponse](t, firstResp)
 	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
 		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
 			len(first.Items), first.HasMore, first.NextCursor)
@@ -67,10 +65,7 @@ func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 
 	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits?cursor="+*first.NextCursor)
 	defer secondResp.Body.Close()
-	var second visit.ListResponse
-	if err := json.UnmarshalRead(secondResp.Body, &second); err != nil {
-		t.Fatalf("decode second page: %v", err)
-	}
+	second := reqtest.Decode[visit.ListResponse](t, secondResp)
 	if len(second.Items) != 1 || second.HasMore || second.NextCursor != nil {
 		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
 			len(second.Items), second.HasMore, second.NextCursor)
@@ -79,15 +74,7 @@ func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 
 func authedGet(t *testing.T, session, url string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Get(t, url, reqtest.Session(session))
 	return resp
 }
 
@@ -103,16 +90,7 @@ func authedPatch(t *testing.T, session, url string, body []byte) *http.Response 
 
 func authedBody(t *testing.T, session, method, url string, body []byte) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), method, url, bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Do(t, method, url, reqtest.Session(session), reqtest.RawJSON(body))
 	return resp
 }
 
@@ -128,13 +106,8 @@ func TestCreateHandler_Success(t *testing.T) {
 	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var out visit.CreateResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
+	out := reqtest.Decode[visit.CreateResponse](t, resp)
 	if out.VisitID == "" || out.StaffID != staffID {
 		t.Fatalf("unexpected response: %+v, want staffId = %q", out, staffID)
 	}
@@ -157,9 +130,7 @@ func TestCreateHandler_ForbiddenForNonDoula(t *testing.T) {
 	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 func TestCreateHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
@@ -175,9 +146,7 @@ func TestCreateHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
 	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestCreateHandler_InvalidEngagementID(t *testing.T) {
@@ -191,9 +160,7 @@ func TestCreateHandler_InvalidEngagementID(t *testing.T) {
 	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid/visits")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestListHandler_ReturnsVisitsForEngagement(t *testing.T) {
@@ -209,13 +176,8 @@ func TestListHandler_ReturnsVisitsForEngagement(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var listResp visit.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	listResp := reqtest.Decode[visit.ListResponse](t, resp)
 	list := listResp.Items
 	if len(list) != 1 || list[0].StaffID != staffID {
 		t.Fatalf("list = %+v, want one Visit assigned to %q", list, staffID)
@@ -284,13 +246,8 @@ func listDepartedAssigneeVisits(t *testing.T, db *testdb.DB, practiceID, engagem
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var listResp visit.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	listResp := reqtest.Decode[visit.ListResponse](t, resp)
 	list := listResp.Items
 	if len(list) != 1 || list[0].VisitID != visitID {
 		t.Fatalf("list = %+v, want the one Visit %q, assigned to a departed Doula", list, visitID)
@@ -314,9 +271,7 @@ func TestListHandler_VisibleToNonDoulaStaff(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 }
 
 // TestListHandler_ContractorWithoutAttachmentForbidden proves ADR-0008's
@@ -336,9 +291,7 @@ func TestListHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestListHandler_ContractorWithGrantedAttachmentSucceeds proves the
@@ -358,9 +311,7 @@ func TestListHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 }
 
 func TestListHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
@@ -376,9 +327,7 @@ func TestListHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestListHandler_InvalidEngagementID(t *testing.T) {
@@ -392,9 +341,7 @@ func TestListHandler_InvalidEngagementID(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid/visits")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestReassignHandler_Success(t *testing.T) {
@@ -415,13 +362,8 @@ func TestReassignHandler_Success(t *testing.T) {
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out visit.ReassignResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[visit.ReassignResponse](t, resp)
 	if out.VisitID != visitID || out.StaffID != targetStaffID {
 		t.Fatalf("unexpected response: %+v", out)
 	}
@@ -501,9 +443,7 @@ func TestReassignHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+otherEngagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // An Admin who is not herself a Doula is the person whose job scheduling
@@ -527,9 +467,7 @@ func TestReassignHandler_AllowedForAnAdminWhoIsNotADoula(t *testing.T) {
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 }
 
 func TestReassignHandler_TargetNotStaffAtPractice(t *testing.T) {
@@ -549,9 +487,7 @@ func TestReassignHandler_TargetNotStaffAtPractice(t *testing.T) {
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestReassignHandler_TargetNotDoula(t *testing.T) {
@@ -572,9 +508,7 @@ func TestReassignHandler_TargetNotDoula(t *testing.T) {
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestReassignHandler_VisitNotFound(t *testing.T) {
@@ -593,9 +527,7 @@ func TestReassignHandler_VisitNotFound(t *testing.T) {
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/00000000-0000-0000-0000-000000000000", body)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestReassignHandler_InvalidBody(t *testing.T) {
@@ -611,9 +543,7 @@ func TestReassignHandler_InvalidBody(t *testing.T) {
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, []byte("not json"))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestReassignHandler_InvalidStaffID(t *testing.T) {
@@ -633,9 +563,7 @@ func TestReassignHandler_InvalidStaffID(t *testing.T) {
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestReassignHandler_InvalidEngagementID(t *testing.T) {
@@ -653,9 +581,7 @@ func TestReassignHandler_InvalidEngagementID(t *testing.T) {
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid/visits/00000000-0000-0000-0000-000000000000", body)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestReassignHandler_InvalidVisitID(t *testing.T) {
@@ -674,9 +600,7 @@ func TestReassignHandler_InvalidVisitID(t *testing.T) {
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/not-a-uuid", body)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // GLOSSARY.md's Attachment entry: "An Admin may attach an employee
@@ -699,9 +623,7 @@ func TestReassignHandler_GrantsTheEmployeeItHandsTheVisitTo(t *testing.T) {
 	}
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	var origin, attachedBy string
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -735,9 +657,7 @@ func TestReassignHandler_RefusesAContractorWhoHasNotAccepted(t *testing.T) {
 	}
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", resp.StatusCode)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 
 	var count int
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -771,9 +691,7 @@ func TestReassignHandler_AllowsAnAttachedContractor(t *testing.T) {
 	}
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 }
 
 // Logging her own Visit puts an employee Doula on the birth, granted.
@@ -788,9 +706,7 @@ func TestCreateHandler_GrantsTheEmployeeWhoLoggedTheVisit(t *testing.T) {
 
 	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want 201", resp.StatusCode)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
 
 	var origin string
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -830,9 +746,7 @@ func TestCreateHandler_GrantsNothingToAContractorWhoLoggedAVisit(t *testing.T) {
 
 	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want 201", resp.StatusCode)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
 
 	var count int
 	var origin string
@@ -869,9 +783,7 @@ func TestCreateHandler_RefusesAnUnattachedContractor(t *testing.T) {
 
 	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404", resp.StatusCode)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // #250: POST .../visits now accepts an optional scheduledAt, and a Visit
@@ -892,23 +804,15 @@ func TestCreateHandler_WithScheduledAt(t *testing.T) {
 	}
 	resp := authedBody(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits", body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var out visit.CreateResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
+	out := reqtest.Decode[visit.CreateResponse](t, resp)
 	if out.ScheduledAt == nil || !out.ScheduledAt.Equal(parseRFC3339(t, scheduledAt)) {
 		t.Fatalf("ScheduledAt = %v, want %q", out.ScheduledAt, scheduledAt)
 	}
 
 	listResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer listResp.Body.Close()
-	var list visit.ListResponse
-	if err := json.UnmarshalRead(listResp.Body, &list); err != nil {
-		t.Fatalf("decode list: %v", err)
-	}
+	list := reqtest.Decode[visit.ListResponse](t, listResp)
 	if len(list.Items) != 1 || list.Items[0].ScheduledAt == nil || !list.Items[0].ScheduledAt.Equal(parseRFC3339(t, scheduledAt)) {
 		t.Fatalf("list = %+v, want one Visit scheduled at %q", list.Items, scheduledAt)
 	}
@@ -927,13 +831,8 @@ func TestCreateHandler_NoBodyStaysUnscheduled(t *testing.T) {
 
 	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var out visit.CreateResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
+	out := reqtest.Decode[visit.CreateResponse](t, resp)
 	if out.ScheduledAt != nil {
 		t.Fatalf("ScheduledAt = %v, want nil", out.ScheduledAt)
 	}
@@ -954,9 +853,7 @@ func TestCreateHandler_InvalidScheduledAt(t *testing.T) {
 	}
 	resp := authedBody(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits", body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // A malformed body -- not merely an unparsable scheduledAt value, but
@@ -973,9 +870,7 @@ func TestCreateHandler_InvalidBody(t *testing.T) {
 
 	resp := authedBody(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits", []byte("not json"))
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestScheduleHandler_SetsScheduledAt(t *testing.T) {
@@ -995,13 +890,8 @@ func TestScheduleHandler_SetsScheduledAt(t *testing.T) {
 	}
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/schedule", body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out visit.ScheduleResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[visit.ScheduleResponse](t, resp)
 	if out.VisitID != visitID || out.ScheduledAt == nil || !out.ScheduledAt.Equal(parseRFC3339(t, scheduledAt)) {
 		t.Fatalf("unexpected response: %+v", out)
 	}
@@ -1066,10 +956,7 @@ func TestScheduleHandler_ChangesThenClearsScheduledAt(t *testing.T) {
 	if clearResp.StatusCode != http.StatusOK {
 		t.Fatalf("clear status = %d, want %d", clearResp.StatusCode, http.StatusOK)
 	}
-	var out visit.ScheduleResponse
-	if err := json.UnmarshalRead(clearResp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[visit.ScheduleResponse](t, clearResp)
 	if out.ScheduledAt != nil {
 		t.Fatalf("ScheduledAt = %v, want nil after clearing", out.ScheduledAt)
 	}
@@ -1267,9 +1154,7 @@ func TestScheduleHandler_InvalidFormat(t *testing.T) {
 	}
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/schedule", body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // Setting a Visit's date is the Admin's own job, not something the Doula
@@ -1291,9 +1176,7 @@ func TestScheduleHandler_AllowedForAnAdminWhoIsNotADoula(t *testing.T) {
 	}
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/schedule", body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 }
 
 func TestScheduleHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
@@ -1313,9 +1196,7 @@ func TestScheduleHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
 	}
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+otherEngagementID+"/visits/"+visitID+"/schedule", body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestScheduleHandler_VisitNotFound(t *testing.T) {
@@ -1333,9 +1214,7 @@ func TestScheduleHandler_VisitNotFound(t *testing.T) {
 	}
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/00000000-0000-0000-0000-000000000000/schedule", body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestScheduleHandler_InvalidBody(t *testing.T) {
@@ -1350,9 +1229,7 @@ func TestScheduleHandler_InvalidBody(t *testing.T) {
 
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/schedule", []byte("not json"))
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestScheduleHandler_InvalidEngagementID(t *testing.T) {
@@ -1369,9 +1246,7 @@ func TestScheduleHandler_InvalidEngagementID(t *testing.T) {
 	}
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid/visits/00000000-0000-0000-0000-000000000000/schedule", body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestScheduleHandler_InvalidVisitID(t *testing.T) {
@@ -1389,9 +1264,7 @@ func TestScheduleHandler_InvalidVisitID(t *testing.T) {
 	}
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/not-a-uuid/schedule", body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // staffauth.AttachingWrite's own CanAccessEngagement precheck 404s an
@@ -1415,9 +1288,7 @@ func TestScheduleHandler_RefusesAnUnattachedContractor(t *testing.T) {
 	}
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/schedule", body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestListHandler_ReturnsNotes proves list.Visit round-trips notes (#251):
@@ -1436,10 +1307,7 @@ func TestListHandler_ReturnsNotes(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
-	var listResp visit.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	listResp := reqtest.Decode[visit.ListResponse](t, resp)
 	byID := map[string]visit.Visit{}
 	for _, v := range listResp.Items {
 		byID[v.VisitID] = v
@@ -1477,10 +1345,7 @@ func TestListHandler_ReturnsVisitType(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
-	var listResp visit.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	listResp := reqtest.Decode[visit.ListResponse](t, resp)
 	byID := map[string]visit.Visit{}
 	for _, v := range listResp.Items {
 		byID[v.VisitID] = v
@@ -1519,10 +1384,7 @@ func TestListHandler_ReturnsVisitType_NoOutcomeIsPrenatal(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
-	var listResp visit.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	listResp := reqtest.Decode[visit.ListResponse](t, resp)
 	if len(listResp.Items) != 1 || listResp.Items[0].VisitID != visitID {
 		t.Fatalf("items = %+v, want the one seeded Visit", listResp.Items)
 	}
@@ -1547,10 +1409,7 @@ func TestListHandler_ReturnsVisitType_UnscheduledFallsBackToCreatedAt(t *testing
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
-	var listResp visit.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	listResp := reqtest.Decode[visit.ListResponse](t, resp)
 	if len(listResp.Items) != 1 || listResp.Items[0].VisitID != visitID {
 		t.Fatalf("items = %+v, want the one seeded Visit", listResp.Items)
 	}
@@ -1585,10 +1444,7 @@ func TestListHandler_ReturnsVisitType_LossTypesPostpartumNoBranch(t *testing.T) 
 	} {
 		resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 		defer resp.Body.Close()
-		var listResp visit.ListResponse
-		if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
-			t.Fatalf("decode response: %v", err)
-		}
+		listResp := reqtest.Decode[visit.ListResponse](t, resp)
 		if len(listResp.Items) != 1 || listResp.Items[0].VisitID != visitID {
 			t.Fatalf("items = %+v, want the one seeded Visit", listResp.Items)
 		}
@@ -1615,10 +1471,7 @@ func TestListHandler_ReturnsVisitType_CorrectionRetypesWithNoVisitWrite(t *testi
 
 	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer firstResp.Body.Close()
-	var first visit.ListResponse
-	if err := json.UnmarshalRead(firstResp.Body, &first); err != nil {
-		t.Fatalf("decode first response: %v", err)
-	}
+	first := reqtest.Decode[visit.ListResponse](t, firstResp)
 	if got := first.Items[0].Type; got != visit.TypePrenatal {
 		t.Fatalf("type before correction = %q, want prenatal", got)
 	}
@@ -1631,10 +1484,7 @@ func TestListHandler_ReturnsVisitType_CorrectionRetypesWithNoVisitWrite(t *testi
 
 	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer secondResp.Body.Close()
-	var second visit.ListResponse
-	if err := json.UnmarshalRead(secondResp.Body, &second); err != nil {
-		t.Fatalf("decode second response: %v", err)
-	}
+	second := reqtest.Decode[visit.ListResponse](t, secondResp)
 	if len(second.Items) != 1 || second.Items[0].VisitID != visitID {
 		t.Fatalf("items = %+v, want the same one Visit, untouched", second.Items)
 	}
@@ -1660,13 +1510,8 @@ func TestNotesHandler_SetsNotes(t *testing.T) {
 	}
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/notes", body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out visit.NotesResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[visit.NotesResponse](t, resp)
 	if out.VisitID != visitID || out.Notes != notes {
 		t.Fatalf("unexpected response: %+v", out)
 	}
@@ -1747,10 +1592,7 @@ func TestNotesHandler_ChangesThenClearsNotes(t *testing.T) {
 	if clearResp.StatusCode != http.StatusOK {
 		t.Fatalf("clear status = %d, want %d", clearResp.StatusCode, http.StatusOK)
 	}
-	var out visit.NotesResponse
-	if err := json.UnmarshalRead(clearResp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[visit.NotesResponse](t, clearResp)
 	if out.Notes != "" {
 		t.Fatalf("Notes = %q, want empty after clearing", out.Notes)
 	}
@@ -1903,9 +1745,7 @@ func TestNotesHandler_AllowedForNonDoulaCaller(t *testing.T) {
 	}
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/notes", body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 }
 
 func TestNotesHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
@@ -1925,9 +1765,7 @@ func TestNotesHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
 	}
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+otherEngagementID+"/visits/"+visitID+"/notes", body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestNotesHandler_VisitNotFound(t *testing.T) {
@@ -1945,9 +1783,7 @@ func TestNotesHandler_VisitNotFound(t *testing.T) {
 	}
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/00000000-0000-0000-0000-000000000000/notes", body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestNotesHandler_MissingNotesRejected(t *testing.T) {
@@ -1966,9 +1802,7 @@ func TestNotesHandler_MissingNotesRejected(t *testing.T) {
 	}
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/notes", body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestNotesHandler_InvalidBody(t *testing.T) {
@@ -1983,9 +1817,7 @@ func TestNotesHandler_InvalidBody(t *testing.T) {
 
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/notes", []byte("not json"))
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestNotesHandler_InvalidEngagementID(t *testing.T) {
@@ -2002,9 +1834,7 @@ func TestNotesHandler_InvalidEngagementID(t *testing.T) {
 	}
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid/visits/00000000-0000-0000-0000-000000000000/notes", body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestNotesHandler_InvalidVisitID(t *testing.T) {
@@ -2022,9 +1852,7 @@ func TestNotesHandler_InvalidVisitID(t *testing.T) {
 	}
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/not-a-uuid/notes", body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // staffauth.AttachingWrite's own CanAccessEngagement precheck 404s an
@@ -2049,9 +1877,7 @@ func TestNotesHandler_RefusesAnUnattachedContractor(t *testing.T) {
 	}
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/notes", body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestNotesHandler_AllowsAnAttachedContractor is the other half: a
@@ -2077,9 +1903,7 @@ func TestNotesHandler_AllowsAnAttachedContractor(t *testing.T) {
 	}
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/notes", body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 }
 
 func parseRFC3339(t *testing.T, s string) time.Time {
@@ -2118,10 +1942,7 @@ func TestListHandler_TypesTheEveningOfTheBirthAsBirth(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
-	var listResp visit.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	listResp := reqtest.Decode[visit.ListResponse](t, resp)
 	byID := map[string]visit.Visit{}
 	for _, v := range listResp.Items {
 		byID[v.VisitID] = v

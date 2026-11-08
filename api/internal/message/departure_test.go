@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/push"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -64,17 +65,7 @@ func TestRemoveMembershipHandler_LeavesHerNamedInThreadAndSchedule(t *testing.T)
 		t.Fatalf("create status = %d, want %d", created.StatusCode, http.StatusCreated)
 	}
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete,
-		srv.URL+"/api/practices/"+practiceID+"/staff/"+doulaID+"/membership", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, ownerSession)
-	req.Header.Set("X-Confirmed", "true")
-	removed, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("remove request: %v", err)
-	}
+	removed := reqtest.Delete(t, srv.URL+"/api/practices/"+practiceID+"/staff/"+doulaID+"/membership", reqtest.Session(ownerSession), reqtest.Header("X-Confirmed", "true"))
 	defer removed.Body.Close()
 	if removed.StatusCode != http.StatusNoContent {
 		t.Fatalf("remove status = %d, want %d", removed.StatusCode, http.StatusNoContent)
@@ -85,10 +76,7 @@ func TestRemoveMembershipHandler_LeavesHerNamedInThreadAndSchedule(t *testing.T)
 	if threadResp.StatusCode != http.StatusOK {
 		t.Fatalf("thread status = %d, want %d", threadResp.StatusCode, http.StatusOK)
 	}
-	var thread message.ListResponse
-	if err := json.UnmarshalRead(threadResp.Body, &thread); err != nil {
-		t.Fatalf("decode thread: %v", err)
-	}
+	thread := reqtest.Decode[message.ListResponse](t, threadResp)
 	if len(thread.Items) != 1 || thread.Items[0].SenderName != doulaName {
 		t.Fatalf("thread = %+v, want her one Message, sent by %q", thread.Items, doulaName)
 	}
@@ -98,10 +86,7 @@ func TestRemoveMembershipHandler_LeavesHerNamedInThreadAndSchedule(t *testing.T)
 	if visitsResp.StatusCode != http.StatusOK {
 		t.Fatalf("visits status = %d, want %d", visitsResp.StatusCode, http.StatusOK)
 	}
-	var visits visit.ListResponse
-	if err := json.UnmarshalRead(visitsResp.Body, &visits); err != nil {
-		t.Fatalf("decode visits: %v", err)
-	}
+	visits := reqtest.Decode[visit.ListResponse](t, visitsResp)
 	if len(visits.Items) != 1 || visits.Items[0].StaffName != doulaName {
 		t.Fatalf("visits = %+v, want her one Visit, assigned to %q", visits.Items, doulaName)
 	}

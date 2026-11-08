@@ -10,6 +10,7 @@ import (
 	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/outbox"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
@@ -35,15 +36,7 @@ func runWorker(t *testing.T, db *testdb.DB, worker engagementrequest.Worker) res
 	t.Helper()
 	srv := httptest.NewServer(outbox.ProcessHandler(db.App, worker, internalauth.FromSecret(outboxWorkerSecret), outbox.NotificationDoor))
 	t.Cleanup(srv.Close)
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("X-Internal-Secret", outboxWorkerSecret)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL, reqtest.Header("X-Internal-Secret", outboxWorkerSecret))
 	defer func() { _ = resp.Body.Close() }()
 	return response{status: resp.StatusCode}
 }
@@ -92,17 +85,7 @@ func TestProcessOutboxHandler_WrongSecretUnauthorized(t *testing.T) {
 	srv := httptest.NewServer(outbox.ProcessHandler(db.App, newWorker(&mail.FakeSender{}, time.Now()), internalauth.FromSecret(outboxWorkerSecret), outbox.NotificationDoor))
 	defer srv.Close()
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("X-Internal-Secret", "wrong")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL, reqtest.Header("X-Internal-Secret", "wrong"))
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }

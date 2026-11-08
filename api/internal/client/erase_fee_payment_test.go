@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"testing"
 
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -46,9 +47,7 @@ func TestEraseHandler_RedactsFeePaymentText(t *testing.T) {
 	defer srv.Close()
 	resp := postErasure(t, session, srv, practiceID, clientID)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	var diff []byte
 	if err := db.Admin.QueryRowContext(t.Context(),

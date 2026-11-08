@@ -1,14 +1,13 @@
 package visit_test
 
 import (
-	"bytes"
 	"encoding/json/v2"
 	"net/http"
 	"reflect"
 	"testing"
 
 	"doula-cloud/api/internal/activity"
-	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/visit"
 )
@@ -19,23 +18,7 @@ import (
 // test here does.
 func createVisit(t *testing.T, session, url, key string, body visit.CreateRequest) *http.Response {
 	t.Helper()
-	encoded, err := json.Marshal(body)
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, bytes.NewReader(encoded))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	if key != "" {
-		req.Header.Set("Idempotency-Key", key)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, url, reqtest.Session(session), reqtest.HeaderIf(key != "", "Idempotency-Key", key), reqtest.JSON(body))
 	return resp
 }
 
@@ -43,13 +26,8 @@ func createVisit(t *testing.T, session, url, key string, body visit.CreateReques
 // other status -- the shape most of the success cases below want.
 func decodeCreate(t *testing.T, resp *http.Response) visit.CreateResponse {
 	t.Helper()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var out visit.CreateResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
+	out := reqtest.Decode[visit.CreateResponse](t, resp)
 	return out
 }
 
@@ -172,9 +150,7 @@ func TestCreateHandler_RefusesAColleagueNamedByAPlainDoula(t *testing.T) {
 
 	resp := createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "", visit.CreateRequest{StaffID: &targetStaffID})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 	if got := countVisits(t, db, engagementID); got != 0 {
 		t.Fatalf("visits = %d, want 0 -- a refused create must write no row", got)
 	}
@@ -293,9 +269,7 @@ func TestCreateHandler_RefusesAnIneligibleAssignee(t *testing.T) {
 
 			resp := createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "", visit.CreateRequest{StaffID: &targetStaffID})
 			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusBadRequest {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 			var out struct {
 				Message string `json:"message"`
 			}
@@ -326,9 +300,7 @@ func TestCreateHandler_InvalidAssignee(t *testing.T) {
 	badID := notAUUID
 	resp := createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "", visit.CreateRequest{StaffID: &badID})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // A contractor who already holds the granted attachment her own
@@ -576,9 +548,7 @@ func TestReassignHandler_RefusesAColleagueNamedByAPlainDoula(t *testing.T) {
 	}
 	resp := authedPatch(t, session, visitsURL(srv.URL, practiceID, engagementID)+"/"+visitID, body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 
 	var assignedTo string
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -610,9 +580,7 @@ func TestReassignHandler_APlainDoulaMayNameHerself(t *testing.T) {
 	}
 	resp := authedPatch(t, session, visitsURL(srv.URL, practiceID, engagementID)+"/"+visitID, body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 }
 
 // The mirror of TestCreateHandler_GrantsTheNamedEmployee on the reassign
@@ -637,9 +605,7 @@ func TestReassignHandler_GrantsTheNamedEmployee(t *testing.T) {
 	}
 	resp := authedPatch(t, session, visitsURL(srv.URL, practiceID, engagementID)+"/"+visitID, body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	origin, attachedBy, exists := attachment(t, db, engagementID, targetStaffID)
 	if !exists {
