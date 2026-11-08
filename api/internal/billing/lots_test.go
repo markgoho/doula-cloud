@@ -14,15 +14,10 @@ import (
 // boughtAt and paid on paymentIntentID.
 func seedPurchase(t *testing.T, db *testdb.DB, practiceID string, quantity int, unitPriceCents, taxCents int64, paymentIntentID string, boughtAt time.Time) string {
 	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO credit_ledger
+	id := testdb.Scalar[string](t, db.Admin, `INSERT INTO credit_ledger
 		     (practice_id, origin, quantity, unit_price_cents, tax_cents, stripe_payment_intent_id, created_at)
 		 VALUES ($1, 'purchase', $2, $3, $4, $5, $6) RETURNING id`,
-		practiceID, quantity, unitPriceCents, taxCents, paymentIntentID, boughtAt,
-	).Scan(&id); err != nil {
-		t.Fatalf("seed purchase lot: %v", err)
-	}
+		practiceID, quantity, unitPriceCents, taxCents, paymentIntentID, boughtAt)
 	return id
 }
 

@@ -77,12 +77,8 @@ func TestClientGetPayment_NeverReachesAnInvoiceThatIsNotHers(t *testing.T) {
 	w := newPayWorld(t, "pay-notmine")
 	other := seedClientMoney(t, w.db, "pay-notmine-other", "Other Client", "other@example.com")
 	seedConnectAccount(t, w.db, other.practiceID, "acct_other")
-	var second string
-	if err := w.db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, kind) VALUES ($1, $2, 'birth') RETURNING id`,
-		w.me.clientID, w.me.practiceID).Scan(&second); err != nil {
-		t.Fatalf("seed second engagement: %v", err)
-	}
+	second := testdb.Scalar[string](t, w.db.Admin, `INSERT INTO engagements (client_id, practice_id, kind) VALUES ($1, $2, 'birth') RETURNING id`,
+		w.me.clientID, w.me.practiceID)
 	draft := seedInvoice(t, w.db, w.me.practiceID, w.me.contractID, "in_nm_draft", invoiceStatusDraft, 100, time.Now())
 	theirs := seedInvoice(t, w.db, other.practiceID, other.contractID, "in_nm_theirs", invoiceStatusOpen, 100, time.Now())
 	elsewhere := seedInvoice(t, w.db, w.me.practiceID, seedSignedContract(t, w.db, second), "in_nm_second", invoiceStatusOpen, 100, time.Now())

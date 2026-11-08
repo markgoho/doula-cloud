@@ -1,15 +1,14 @@
 package payments_test
 
 import (
-	"bytes"
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/payments"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -17,17 +16,7 @@ const paymentTermsPath = "/payments/payment-terms"
 
 func requestPaymentTerms(t *testing.T, srv *httptest.Server, session, practiceID, method, body string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), method,
-		srv.URL+"/api/practices/"+practiceID+paymentTermsPath, bytes.NewBufferString(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Do(t, method, srv.URL+"/api/practices/"+practiceID+paymentTermsPath, reqtest.RawJSON([]byte(body)), reqtest.Session(session))
 	return resp
 }
 
@@ -119,12 +108,7 @@ func TestPutPaymentTermsHandler_RepeatRecordsNothingNew(t *testing.T) {
 	readPaymentTerms(t, srv, session, practiceID, http.MethodPut, `{"netDays":15}`)
 	readPaymentTerms(t, srv, session, practiceID, http.MethodPut, `{"netDays":15}`)
 
-	var rows int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM activity WHERE practice_id = $1 AND action = 'payment_terms_changed'`, practiceID,
-	).Scan(&rows); err != nil {
-		t.Fatalf("count activity rows: %v", err)
-	}
+	rows := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE practice_id = $1 AND action = 'payment_terms_changed'`, practiceID)
 	if rows != 1 {
 		t.Fatalf("activity rows = %d, want 1", rows)
 	}
@@ -212,11 +196,6 @@ func TestPutPaymentTermsHandler_RefusesADoula(t *testing.T) {
 // which is the only place the by-hand rail's due date exists at all.
 func invoiceDueAtOf(t *testing.T, db *testdb.DB, invoiceID string) time.Time {
 	t.Helper()
-	var dueAt time.Time
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT due_at FROM invoices WHERE id = $1`, invoiceID,
-	).Scan(&dueAt); err != nil {
-		t.Fatalf("read due_at: %v", err)
-	}
+	dueAt := testdb.Scalar[time.Time](t, db.Admin, `SELECT due_at FROM invoices WHERE id = $1`, invoiceID)
 	return dueAt
 }

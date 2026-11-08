@@ -20,12 +20,7 @@ import (
 // than just rotating the token.
 func inviteTokenExpiresAt(t *testing.T, db *testdb.DB, portalUserID string) time.Time {
 	t.Helper()
-	var expiresAt time.Time
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT invite_token_expires_at FROM client_portal_users WHERE id = $1`, portalUserID,
-	).Scan(&expiresAt); err != nil {
-		t.Fatalf("read invite_token_expires_at: %v", err)
-	}
+	expiresAt := testdb.Scalar[time.Time](t, db.Admin, `SELECT invite_token_expires_at FROM client_portal_users WHERE id = $1`, portalUserID)
 	return expiresAt
 }
 
@@ -99,12 +94,7 @@ func TestInviteHandler_Success(t *testing.T) {
 		t.Fatalf("expected pending row to have no identity_uid yet, got %q", identityUIDCol.String)
 	}
 
-	var outboxStatus string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT status FROM portal_invite_outbox WHERE client_portal_user_id = $1`, out.ClientPortalUserID,
-	).Scan(&outboxStatus); err != nil {
-		t.Fatalf("query outbox row: %v", err)
-	}
+	outboxStatus := testdb.Scalar[string](t, db.Admin, `SELECT status FROM portal_invite_outbox WHERE client_portal_user_id = $1`, out.ClientPortalUserID)
 	if outboxStatus != testOutboxStatusPending {
 		t.Fatalf("outbox status = %q, want %s", outboxStatus, testOutboxStatusPending)
 	}
@@ -157,23 +147,13 @@ func TestInviteHandler_ReinviteRotatesToken(t *testing.T) {
 	if !secondExpiresAt.After(firstExpiresAt) {
 		t.Fatalf("expected invite_token_expires_at to move forward on re-invite, first=%v second=%v", firstExpiresAt, secondExpiresAt)
 	}
-	var stillRefused bool
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT access_refused_at IS NOT NULL FROM client_portal_users WHERE id = $1`, firstOut.ClientPortalUserID,
-	).Scan(&stillRefused); err != nil {
-		t.Fatalf("query access_refused_at: %v", err)
-	}
+	stillRefused := testdb.Scalar[bool](t, db.Admin, `SELECT access_refused_at IS NOT NULL FROM client_portal_users WHERE id = $1`, firstOut.ClientPortalUserID)
 	if stillRefused {
 		t.Fatal("access_refused_at survived the re-invite, want it cleared with the rotated token")
 	}
 
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM client_portal_users WHERE client_id = (SELECT client_id FROM client_portal_users WHERE id = $1)`,
-		firstOut.ClientPortalUserID,
-	).Scan(&count); err != nil {
-		t.Fatalf("count rows: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM client_portal_users WHERE client_id = (SELECT client_id FROM client_portal_users WHERE id = $1)`,
+		firstOut.ClientPortalUserID)
 	if count != 1 {
 		t.Fatalf("expected exactly one row for the client after re-invite, got %d", count)
 	}
@@ -259,24 +239,14 @@ func TestInviteHandler_SuppressedAddressRefused(t *testing.T) {
 		t.Fatalf("expected a field-keyed details entry for email, got %+v", out.Details)
 	}
 
-	var portalUserCount int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM client_portal_users pu JOIN clients c ON c.id = pu.client_id WHERE c.email = $1`, email,
-	).Scan(&portalUserCount); err != nil {
-		t.Fatalf("count client_portal_users: %v", err)
-	}
+	portalUserCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM client_portal_users pu JOIN clients c ON c.id = pu.client_id WHERE c.email = $1`, email)
 	if portalUserCount != 0 {
 		t.Fatalf("expected no client_portal_users row for a refused invite, got %d", portalUserCount)
 	}
 
-	var outboxCount int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM portal_invite_outbox o
+	outboxCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM portal_invite_outbox o
 		 JOIN client_portal_users pu ON pu.id = o.client_portal_user_id
-		 JOIN clients c ON c.id = pu.client_id WHERE c.email = $1`, email,
-	).Scan(&outboxCount); err != nil {
-		t.Fatalf("count portal_invite_outbox: %v", err)
-	}
+		 JOIN clients c ON c.id = pu.client_id WHERE c.email = $1`, email)
 	if outboxCount != 0 {
 		t.Fatalf("expected no portal_invite_outbox row for a refused invite, got %d", outboxCount)
 	}

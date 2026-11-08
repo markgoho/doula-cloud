@@ -1,7 +1,6 @@
 package staffauth_test
 
 import (
-	"bytes"
 	"encoding/json/v2"
 	"errors"
 	"net/http"
@@ -348,18 +347,7 @@ func TestAcceptInviteHandler_NoCredential(t *testing.T) {
 	srv := newAcceptServer(t, db, "unused-uid", "unused@example.com")
 	defer srv.Close()
 
-	payload, err := json.Marshal(staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: "whatever"})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/accept-invite", bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/api/staff/accept-invite", reqtest.JSON(staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: "whatever"}))
 	defer resp.Body.Close()
 
 	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)

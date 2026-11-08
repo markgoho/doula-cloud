@@ -1,12 +1,10 @@
 package payments_test
 
 import (
-	"bytes"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -19,6 +17,7 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/payments"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -137,19 +136,13 @@ func seedInvoiceDue(t *testing.T, db *testdb.DB, practiceID, contractID, stripeI
 
 func invoiceCount(t *testing.T, db *testdb.DB) int {
 	t.Helper()
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM invoices`).Scan(&count); err != nil {
-		t.Fatalf("count invoices: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM invoices`)
 	return count
 }
 
 func invoiceStatus(t *testing.T, db *testdb.DB, invoiceID string) string {
 	t.Helper()
-	var status string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT status FROM invoices WHERE id = $1`, invoiceID).Scan(&status); err != nil {
-		t.Fatalf("query invoice status: %v", err)
-	}
+	status := testdb.Scalar[string](t, db.Admin, `SELECT status FROM invoices WHERE id = $1`, invoiceID)
 	return status
 }
 
@@ -164,17 +157,7 @@ func newInvoiceServer(t *testing.T, db *testdb.DB, uid string, client payments.C
 
 func postInvoiceBody(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID, body string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/contract/invoices", bytes.NewBufferString(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/contract/invoices", reqtest.RawJSON([]byte(body)), reqtest.Session(session))
 	return resp
 }
 
@@ -193,15 +176,7 @@ func getInvoices(t *testing.T, srv *httptest.Server, session string, practiceID,
 	if cursor != "" {
 		url += "?cursor=" + cursor
 	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Get(t, url, reqtest.Session(session))
 	return resp
 }
 
@@ -709,12 +684,7 @@ func TestPostInvoiceHandler_AmountDerivesFromContractIgnoringBody(t *testing.T) 
 		t.Fatalf("CreateInvoice calls = %v, want one call at 15000", client.CreateInvoiceCalls)
 	}
 
-	var diff []byte
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT diff FROM activity WHERE subject_id = $1 AND action = 'invoice_raised'`, engagementID,
-	).Scan(&diff); err != nil {
-		t.Fatalf("query activity row: %v", err)
-	}
+	diff := testdb.Scalar[[]byte](t, db.Admin, `SELECT diff FROM activity WHERE subject_id = $1 AND action = 'invoice_raised'`, engagementID)
 	var decoded struct {
 		AmountCents int64 `json:"amountCents"`
 	}
@@ -826,10 +796,7 @@ func TestPostInvoiceHandler_FinalizeInvoiceFailureReturns500ButPersistsDraft(t *
 	if got := invoiceCount(t, db); got != 1 {
 		t.Fatalf("invoices row count = %d, want 1", got)
 	}
-	var status string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT status FROM invoices LIMIT 1`).Scan(&status); err != nil {
-		t.Fatalf("query invoice status: %v", err)
-	}
+	status := testdb.Scalar[string](t, db.Admin, `SELECT status FROM invoices LIMIT 1`)
 	if status != invoiceStatusDraft {
 		t.Fatalf("persisted invoice status = %q, want %q", status, invoiceStatusDraft)
 	}
@@ -1104,13 +1071,10 @@ func postInvoiceWithBillingMode(t *testing.T, srv *httptest.Server, session, pra
 }
 
 // billingModeOfPractice reads practiceID's raw billing_mode column.
-func billingModeOfPractice(t *testing.T, db *testdb.DB, practiceID string) (mode string, ok bool, err error) {
+func billingModeOfPractice(t *testing.T, db *testdb.DB, practiceID string) (mode string, ok bool) {
 	t.Helper()
-	var raw sql.NullString
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT billing_mode FROM practices WHERE id = $1`, practiceID).Scan(&raw); err != nil {
-		return "", false, fmt.Errorf("query billing mode: %w", err)
-	}
-	return raw.String, raw.Valid, nil
+	raw := testdb.Scalar[sql.NullString](t, db.Admin, `SELECT billing_mode FROM practices WHERE id = $1`, practiceID)
+	return raw.String, raw.Valid
 }
 
 // TestPostInvoiceHandler_BillingModeRequiredWhenUnset proves #271's
@@ -1172,10 +1136,7 @@ func TestPostInvoiceHandler_BillingModeInvalidValueRefused(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
-	mode, ok, err := billingModeOfPractice(t, db, practiceID)
-	if err != nil {
-		t.Fatalf("query billing mode: %v", err)
-	}
+	mode, ok := billingModeOfPractice(t, db, practiceID)
 	if ok {
 		t.Fatalf("billing_mode = %q, want unset after a rejected value", mode)
 	}
@@ -1224,10 +1185,7 @@ func TestPostInvoiceHandler_FailedFirstInvoiceDoesNotLockInBillingMode(t *testin
 	if got := invoiceCount(t, db); got != 0 {
 		t.Fatalf("invoices row count = %d, want 0", got)
 	}
-	_, ok, err := billingModeOfPractice(t, db, practiceID)
-	if err != nil {
-		t.Fatalf("query billing mode: %v", err)
-	}
+	_, ok := billingModeOfPractice(t, db, practiceID)
 	if ok {
 		t.Fatalf("billing_mode was persisted even though the Invoice it was chosen for failed -- want it left unset")
 	}
@@ -1256,8 +1214,8 @@ func TestPostInvoiceHandler_RefusedForNoStripeAccountDoesNotLockInBillingMode(t 
 	if got := invoiceCount(t, db); got != 0 {
 		t.Fatalf("invoices row count = %d, want 0", got)
 	}
-	if _, ok, err := billingModeOfPractice(t, db, practiceID); err != nil || ok {
-		t.Fatalf("billing_mode = ok %v, err %v; want it left unset", ok, err)
+	if _, ok := billingModeOfPractice(t, db, practiceID); ok {
+		t.Fatalf("billing_mode is set, want it left unset")
 	}
 }
 
@@ -1304,10 +1262,7 @@ func TestPostInvoiceHandler_ByHandInvoiceCreatedOpenNoStripeCall(t *testing.T) {
 	if len(client.FinalizeInvoiceIDs) != 0 {
 		t.Fatalf("FinalizeInvoice calls = %d, want 0", len(client.FinalizeInvoiceIDs))
 	}
-	mode, ok, err := billingModeOfPractice(t, db, practiceID)
-	if err != nil {
-		t.Fatalf("query billing mode: %v", err)
-	}
+	mode, ok := billingModeOfPractice(t, db, practiceID)
 	if !ok || mode != string(payments.BillingModeByHand) {
 		t.Fatalf("billing_mode = (%q, ok=%v), want (%q, true)", mode, ok, payments.BillingModeByHand)
 	}

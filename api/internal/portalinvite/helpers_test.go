@@ -1,8 +1,6 @@
 package portalinvite_test
 
 import (
-	"bytes"
-	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,6 +9,7 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/portalinvite"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -56,33 +55,13 @@ func newAcceptServer(db *testdb.DB) *httptest.Server {
 func postInvite(t *testing.T, srv *httptest.Server, session, practiceID, engagementID string) *http.Response {
 	t.Helper()
 	url := srv.URL + "/api/practices/" + practiceID + "/engagements/" + engagementID + "/portal-invite"
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, bytes.NewReader(nil))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, url, reqtest.Session(session))
 	return resp
 }
 
 func postAccept(t *testing.T, srv *httptest.Server, body any) *http.Response {
 	t.Helper()
-	payload, err := json.Marshal(body)
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/portal/accept-invite", bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/api/portal/accept-invite", reqtest.JSON(body))
 	return resp
 }
 

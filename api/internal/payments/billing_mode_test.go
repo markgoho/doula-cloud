@@ -1,47 +1,25 @@
 package payments_test
 
 import (
-	"bytes"
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/payments"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
 func getBillingMode(t *testing.T, srv *httptest.Server, session, practiceID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/payments/billing-mode", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/payments/billing-mode", reqtest.Session(session))
 	return resp
 }
 
 func putBillingMode(t *testing.T, srv *httptest.Server, session, practiceID, mode string) *http.Response {
 	t.Helper()
-	body, err := json.Marshal(payments.PutBillingModeRequest{BillingMode: mode})
-	if err != nil {
-		t.Fatalf("marshal request: %v", err)
-	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/payments/billing-mode", bytes.NewBuffer(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Put(t, srv.URL+"/api/practices/"+practiceID+"/payments/billing-mode", reqtest.JSON(payments.PutBillingModeRequest{BillingMode: mode}), reqtest.Session(session))
 	return resp
 }
 
@@ -113,21 +91,13 @@ func TestPutBillingModeHandler_OwnerCanChangeEstablishedMode(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
-	mode, ok, err := billingModeOfPractice(t, db, practiceID)
-	if err != nil {
-		t.Fatalf("query billing mode: %v", err)
-	}
+	mode, ok := billingModeOfPractice(t, db, practiceID)
 	if !ok || mode != string(payments.BillingModeByHand) {
 		t.Fatalf("billing_mode = (%q, ok=%v), want (%q, true)", mode, ok, payments.BillingModeByHand)
 	}
 
-	var actionCount int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM activity WHERE practice_id = $1 AND subject_kind = 'practice' AND action = 'billing_mode_changed'`,
-		practiceID,
-	).Scan(&actionCount); err != nil {
-		t.Fatalf("query activity: %v", err)
-	}
+	actionCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE practice_id = $1 AND subject_kind = 'practice' AND action = 'billing_mode_changed'`,
+		practiceID)
 	if actionCount != 1 {
 		t.Fatalf("billing_mode_changed activity rows = %d, want 1", actionCount)
 	}
@@ -160,13 +130,8 @@ func TestPutBillingModeHandler_SameModeRecordsNothing(t *testing.T) {
 		t.Fatalf("billingMode = %v, want %q", out.BillingMode, payments.BillingModeStripe)
 	}
 
-	var actionCount int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM activity WHERE practice_id = $1 AND subject_kind = 'practice' AND action = 'billing_mode_changed'`,
-		practiceID,
-	).Scan(&actionCount); err != nil {
-		t.Fatalf("query activity: %v", err)
-	}
+	actionCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE practice_id = $1 AND subject_kind = 'practice' AND action = 'billing_mode_changed'`,
+		practiceID)
 	if actionCount != 0 {
 		t.Fatalf("billing_mode_changed activity rows = %d, want 0 for a save that changed nothing", actionCount)
 	}
@@ -189,10 +154,7 @@ func TestPutBillingModeHandler_NonOwnerForbidden(t *testing.T) {
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
 	}
-	mode, _, err := billingModeOfPractice(t, db, practiceID)
-	if err != nil {
-		t.Fatalf("query billing mode: %v", err)
-	}
+	mode, _ := billingModeOfPractice(t, db, practiceID)
 	if mode != string(payments.BillingModeStripe) {
 		t.Fatalf("billing_mode = %q, want unchanged %q", mode, payments.BillingModeStripe)
 	}
@@ -208,17 +170,7 @@ func TestPutBillingModeHandler_MalformedBodyRefused(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
 	defer srv.Close()
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut,
-		srv.URL+"/api/practices/"+practiceID+"/payments/billing-mode", bytes.NewBufferString("{not json"))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Put(t, srv.URL+"/api/practices/"+practiceID+"/payments/billing-mode", reqtest.RawJSON([]byte("{not json")), reqtest.Session(session))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {

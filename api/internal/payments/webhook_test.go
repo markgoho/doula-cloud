@@ -14,6 +14,7 @@ import (
 	"github.com/stripe/stripe-go/v86"
 
 	"doula-cloud/api/internal/payments"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/stripemode"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -205,15 +206,7 @@ func postConnectWebhook(t *testing.T, srv *httptest.Server, payload []byte, sign
 	t.Helper()
 	signed := stripe.GenerateTestSignedPayload(&stripe.UnsignedPayload{Payload: payload, Secret: signingSecret})
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/stripe/connect-webhook", bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Stripe-Signature", signed.Header)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/stripe/connect-webhook", reqtest.Body("", payload), reqtest.Header("Stripe-Signature", signed.Header))
 	return resp
 }
 
@@ -339,15 +332,7 @@ func postAccountWebhook(t *testing.T, srv *httptest.Server, payload []byte, sign
 	t.Helper()
 	signed := stripe.GenerateTestSignedPayload(&stripe.UnsignedPayload{Payload: payload, Secret: signingSecret})
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/stripe/account-webhook", bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Stripe-Signature", signed.Header)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/stripe/account-webhook", reqtest.Body("", payload), reqtest.Header("Stripe-Signature", signed.Header))
 	return resp
 }
 
@@ -430,24 +415,7 @@ func TestPostAccountWebhookHandler_PersistsOutstandingRequirements(t *testing.T)
 // episodes queued a row and what became of each.
 func payoutOutboxForPractice(t *testing.T, db *testdb.DB, practiceID string) []string {
 	t.Helper()
-	rows, err := db.Admin.QueryContext(t.Context(),
-		`SELECT status FROM payout_outbox WHERE practice_id = $1 ORDER BY created_at`, practiceID,
-	)
-	if err != nil {
-		t.Fatalf("query payout_outbox: %v", err)
-	}
-	defer rows.Close()
-	var statuses []string
-	for rows.Next() {
-		var status string
-		if err := rows.Scan(&status); err != nil {
-			t.Fatalf("scan payout_outbox status: %v", err)
-		}
-		statuses = append(statuses, status)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate payout_outbox: %v", err)
-	}
+	statuses := testdb.Column[string](t, db.Admin, `SELECT status FROM payout_outbox WHERE practice_id = $1 ORDER BY created_at`, practiceID)
 	return statuses
 }
 
@@ -825,15 +793,7 @@ func TestPostConnectWebhookHandler_OversizedBodyRejected(t *testing.T) {
 	defer srv.Close()
 
 	oversized := bytes.Repeat([]byte("a"), (1<<20)+1)
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/stripe/connect-webhook", bytes.NewReader(oversized))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Stripe-Signature", "t=1,v1=deadbeef")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/stripe/connect-webhook", reqtest.Body("", oversized), reqtest.Header("Stripe-Signature", "t=1,v1=deadbeef"))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -1041,12 +1001,7 @@ func TestPostConnectWebhookHandler_InvoicePaidReplayIsNoOp(t *testing.T) {
 	// row either -- this is the guarantee 00035's migration comment
 	// leans on claimEvent's stripe_webhook_events claim for, since the
 	// table itself carries no dedup index (unlike payout_outbox).
-	var outboxCount int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM payment_received_outbox pro JOIN payments p ON p.id = pro.payment_id WHERE p.invoice_id = $1`, invoiceID,
-	).Scan(&outboxCount); err != nil {
-		t.Fatalf("query payment_received_outbox: %v", err)
-	}
+	outboxCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM payment_received_outbox pro JOIN payments p ON p.id = pro.payment_id WHERE p.invoice_id = $1`, invoiceID)
 	if outboxCount != 1 {
 		t.Fatalf("payment_received_outbox rows after replay = %d, want exactly 1", outboxCount)
 	}
@@ -1590,12 +1545,7 @@ func TestPostConnectWebhookHandler_InvoicePaidRecordsFetchedPaymentReference(t *
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
-	var reference string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT stripe_payment_reference FROM payments WHERE invoice_id = $1`, invoiceID,
-	).Scan(&reference); err != nil {
-		t.Fatalf("read payment reference: %v", err)
-	}
+	reference := testdb.Scalar[string](t, db.Admin, `SELECT stripe_payment_reference FROM payments WHERE invoice_id = $1`, invoiceID)
 	if reference != "pi_from_stripe" {
 		t.Fatalf("stripe_payment_reference = %q, want the fetched PaymentIntent id", reference)
 	}

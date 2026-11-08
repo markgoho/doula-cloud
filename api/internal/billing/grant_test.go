@@ -25,12 +25,7 @@ func TestFoundingGrant_IsSpentBeforePurchasedCreditsAndIsNotRefundable(t *testin
 	// Three Credits spent against a three-Credit grant and a two-Credit
 	// purchase: FIFO means all three came out of the grant, so the
 	// purchase is untouched.
-	var drawsOnPurchase int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM credit_ledger WHERE drawn_lot_id = $1`, purchaseID,
-	).Scan(&drawsOnPurchase); err != nil {
-		t.Fatalf("count draws on purchase: %v", err)
-	}
+	drawsOnPurchase := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM credit_ledger WHERE drawn_lot_id = $1`, purchaseID)
 	if drawsOnPurchase != 0 {
 		t.Fatalf("draws on the purchase = %d, want 0 -- the grant must be spent first", drawsOnPurchase)
 	}

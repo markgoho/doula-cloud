@@ -1,7 +1,6 @@
 package billing_test
 
 import (
-	"bytes"
 	"encoding/json/v2"
 	"errors"
 	"net/http"
@@ -12,6 +11,7 @@ import (
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/legal"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -31,26 +31,13 @@ func newPurchaseServer(t *testing.T, db *testdb.DB, uid string, stripeClient bil
 
 func postPurchase(t *testing.T, srv *httptest.Server, session string, practiceID string, body string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		srv.URL+"/api/practices/"+practiceID+"/billing/purchases", bytes.NewBufferString(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/billing/purchases", reqtest.RawJSON([]byte(body)), reqtest.Session(session))
 	return resp
 }
 
 func stripeCustomerID(t *testing.T, db *testdb.DB, practiceID string) *string {
 	t.Helper()
-	var id *string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT stripe_customer_id FROM practices WHERE id = $1`, practiceID).Scan(&id); err != nil {
-		t.Fatalf("query stripe_customer_id: %v", err)
-	}
+	id := testdb.Scalar[*string](t, db.Admin, `SELECT stripe_customer_id FROM practices WHERE id = $1`, practiceID)
 	return id
 }
 
@@ -290,13 +277,8 @@ func attachMembership(t *testing.T, db *testdb.DB, practiceID, staffID, roles st
 // her a Membership at practiceID.
 func seedStaffInState(t *testing.T, db *testdb.DB, practiceID, identityUID, workState string) {
 	t.Helper()
-	var staffID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, first_name, last_name, email, work_state) VALUES ($1, $1, '', $1 || '@example.com', $2) RETURNING id`,
-		identityUID, workState,
-	).Scan(&staffID); err != nil {
-		t.Fatalf("seed staff %q in %q: %v", identityUID, workState, err)
-	}
+	staffID := testdb.Scalar[string](t, db.Admin, `INSERT INTO staff (identity_uid, first_name, last_name, email, work_state) VALUES ($1, $1, '', $1 || '@example.com', $2) RETURNING id`,
+		identityUID, workState)
 	attachMembership(t, db, practiceID, staffID, "{doula}")
 }
 
@@ -343,13 +325,8 @@ func TestPostPurchaseHandler_WhollyOutOfStatePracticeCountsNoNewYorkStaff(t *tes
 	db := testdb.New(t)
 	const uid = "purchase-out-of-state-owner"
 	practiceID := testdb.SeedPractice(t, db, "Out Of State Practice")
-	var ownerID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, first_name, last_name, email, work_state) VALUES ($1, 'Owner', '', 'oos-owner@example.com', 'NJ') RETURNING id`,
-		uid,
-	).Scan(&ownerID); err != nil {
-		t.Fatalf("seed owner: %v", err)
-	}
+	ownerID := testdb.Scalar[string](t, db.Admin, `INSERT INTO staff (identity_uid, first_name, last_name, email, work_state) VALUES ($1, 'Owner', '', 'oos-owner@example.com', 'NJ') RETURNING id`,
+		uid)
 	attachMembership(t, db, practiceID, ownerID, "{owner}")
 	seedStaffInState(t, db, practiceID, "purchase-out-of-state-pa", "PA")
 

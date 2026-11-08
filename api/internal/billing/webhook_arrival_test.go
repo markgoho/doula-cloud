@@ -3,10 +3,10 @@ package billing_test
 import (
 	"bytes"
 	"encoding/json/v2"
-	"net/http"
 	"slices"
 	"testing"
 
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/webhookarrival"
 )
@@ -55,14 +55,7 @@ func TestPostPurchaseWebhookHandler_RecordsAnArrivalForEachOutcome(t *testing.T)
 	post(checkoutCompletedPayload(t, "evt_bad_quantity", practiceID, 0, "paid"), webhookTestSecret)
 	post(buildEventPayload(t, "evt_malformed", stripeEventTypeCheckoutCompleted, map[string]any{metadataKey: 12345}), webhookTestSecret)
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/stripe/webhook", bytes.NewReader(bytes.Repeat([]byte("a"), (1<<20)+1)))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/stripe/webhook", reqtest.Body("", bytes.Repeat([]byte("a"), (1<<20)+1)))
 	_ = resp.Body.Close()
 
 	want := []arrival{

@@ -39,14 +39,9 @@ func newTestPayoutWorker(sender mail.Sender) payments.Worker {
 // superuser Admin connection -- the table carries no RLS (00034).
 func seedPayoutOutboxRow(t *testing.T, db *testdb.DB, practiceID string, attemptCount int, nextAttemptAt time.Time) string {
 	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO payout_outbox (practice_id, attempt_count, next_attempt_at)
+	id := testdb.Scalar[string](t, db.Admin, `INSERT INTO payout_outbox (practice_id, attempt_count, next_attempt_at)
 		 VALUES ($1, $2, $3) RETURNING id`,
-		practiceID, attemptCount, nextAttemptAt,
-	).Scan(&id); err != nil {
-		t.Fatalf("seed payout_outbox row: %v", err)
-	}
+		practiceID, attemptCount, nextAttemptAt)
 	return id
 }
 
@@ -158,12 +153,7 @@ func TestQueuePayoutIncompleteNotification_GraceWindowDefersTheSend(t *testing.T
 	if len(sender.Sent()) != 0 {
 		t.Fatalf("expected no mail sent immediately after queuing, got %d", len(sender.Sent()))
 	}
-	var status string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT status FROM payout_outbox WHERE practice_id = $1`, practiceID,
-	).Scan(&status); err != nil {
-		t.Fatalf("query payout_outbox: %v", err)
-	}
+	status := testdb.Scalar[string](t, db.Admin, `SELECT status FROM payout_outbox WHERE practice_id = $1`, practiceID)
 	if status != testPayoutStatusPending {
 		t.Fatalf("status = %q, want %s (not yet due)", status, testPayoutStatusPending)
 	}
@@ -187,12 +177,7 @@ func TestQueuePayoutIncompleteNotification_ConflictOnExistingPendingRowIsNoop(t 
 		t.Fatalf("commit: %v", err)
 	}
 
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM payout_outbox WHERE practice_id = $1`, practiceID,
-	).Scan(&count); err != nil {
-		t.Fatalf("query payout_outbox: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM payout_outbox WHERE practice_id = $1`, practiceID)
 	if count != 1 {
 		t.Fatalf("count = %d, want 1 (the existing pending row, untouched by DO NOTHING)", count)
 	}

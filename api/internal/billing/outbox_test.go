@@ -31,14 +31,9 @@ func newTestWorker(sender mail.Sender) billing.Worker {
 // superuser Admin connection -- the table carries no RLS (00033).
 func seedLowCreditOutboxRow(t *testing.T, db *testdb.DB, practiceID string, attemptCount int, nextAttemptAt time.Time) string {
 	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO low_credit_outbox (practice_id, attempt_count, next_attempt_at)
+	id := testdb.Scalar[string](t, db.Admin, `INSERT INTO low_credit_outbox (practice_id, attempt_count, next_attempt_at)
 		 VALUES ($1, $2, $3) RETURNING id`,
-		practiceID, attemptCount, nextAttemptAt,
-	).Scan(&id); err != nil {
-		t.Fatalf("seed low_credit_outbox row: %v", err)
-	}
+		practiceID, attemptCount, nextAttemptAt)
 	return id
 }
 
@@ -150,12 +145,7 @@ func TestQueueOutOfCreditsNotification_ConflictOnExistingPendingRowIsNoop(t *tes
 		t.Fatalf("QueueOutOfCreditsNotification: %v", err)
 	}
 
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM low_credit_outbox WHERE practice_id = $1`, practiceID,
-	).Scan(&count); err != nil {
-		t.Fatalf("query low_credit_outbox: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM low_credit_outbox WHERE practice_id = $1`, practiceID)
 	if count != 1 {
 		t.Fatalf("count = %d, want 1 (the existing pending row, untouched by DO NOTHING)", count)
 	}

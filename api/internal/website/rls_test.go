@@ -44,12 +44,7 @@ func TestRLS_FailsClosedWithNoSessionVarSet(t *testing.T) {
 	seedWebsiteEvent(t, db, practiceID, staffID)
 
 	for _, table := range []string{"practice_websites", "practice_website_events"} {
-		var count int
-		if err := db.App.QueryRowContext(t.Context(),
-			`SELECT count(*) FROM `+table, //nolint:gosec // table name is a test literal, not input
-		).Scan(&count); err != nil {
-			t.Fatalf("query %s with no session variables set: %v", table, err)
-		}
+		count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM `+table) //nolint:gosec // table name is a test literal, not input
 		if count != 0 {
 			t.Fatalf("%s: expected 0 rows with no session variables set, got %d", table, count)
 		}
@@ -82,18 +77,12 @@ func TestRLS_VisibilityIsScopedToCurrentPractice(t *testing.T) {
 		t.Fatalf("set_config: %v", err)
 	}
 
-	var url string
-	if err := tx.QueryRowContext(t.Context(), `SELECT own_url FROM practice_websites`).Scan(&url); err != nil {
-		t.Fatalf("select practice_websites as Practice A: %v", err)
-	}
+	url := testdb.Scalar[string](t, tx, `SELECT own_url FROM practice_websites`)
 	if url != "https://a.example.com" {
 		t.Fatalf("own_url = %q, want Practice A's", url)
 	}
 
-	var events int
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM practice_website_events`).Scan(&events); err != nil {
-		t.Fatalf("count practice_website_events as Practice A: %v", err)
-	}
+	events := testdb.Scalar[int](t, tx, `SELECT count(*) FROM practice_website_events`)
 	if events != 1 {
 		t.Fatalf("events visible = %d, want only Practice A's 1", events)
 	}
@@ -207,12 +196,7 @@ func TestRLS_SiteBuilderReadsEveryPublishedPageAndWritesNothing(t *testing.T) {
 		t.Fatalf("set role site_builder: %v", err)
 	}
 
-	var count int
-	if err := conn.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM practice_websites WHERE mode = 'hosted'`,
-	).Scan(&count); err != nil {
-		t.Fatalf("read published pages as site_builder: %v", err)
-	}
+	count := testdb.Scalar[int](t, conn, `SELECT count(*) FROM practice_websites WHERE mode = 'hosted'`)
 	if count != 2 {
 		t.Fatalf("site_builder sees %d published pages, want 2 -- a build that "+
 			"sees fewer than exist deletes the pages it cannot see", count)

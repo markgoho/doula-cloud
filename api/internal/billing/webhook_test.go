@@ -11,6 +11,7 @@ import (
 	"github.com/stripe/stripe-go/v86"
 
 	"doula-cloud/api/internal/billing"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/stripemode"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/webhookarrival"
@@ -85,26 +86,13 @@ func postWebhook(t *testing.T, srv *httptest.Server, payload []byte, signingSecr
 	t.Helper()
 	signed := stripe.GenerateTestSignedPayload(&stripe.UnsignedPayload{Payload: payload, Secret: signingSecret})
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/stripe/webhook", bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Stripe-Signature", signed.Header)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/stripe/webhook", reqtest.Body("", payload), reqtest.Header("Stripe-Signature", signed.Header))
 	return resp
 }
 
 func sumLedger(t *testing.T, db *testdb.DB, practiceID string) int {
 	t.Helper()
-	var sum int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT COALESCE(SUM(quantity), 0) FROM credit_ledger WHERE practice_id = $1`, practiceID,
-	).Scan(&sum); err != nil {
-		t.Fatalf("sum credit_ledger: %v", err)
-	}
+	sum := testdb.Scalar[int](t, db.Admin, `SELECT COALESCE(SUM(quantity), 0) FROM credit_ledger WHERE practice_id = $1`, practiceID)
 	return sum
 }
 
@@ -286,15 +274,7 @@ func TestPostPurchaseWebhookHandler_OversizedBodyRejected(t *testing.T) {
 	defer srv.Close()
 
 	oversized := bytes.Repeat([]byte("a"), (1<<20)+1)
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/stripe/webhook", bytes.NewReader(oversized))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Stripe-Signature", "t=1,v1=deadbeef")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/stripe/webhook", reqtest.Body("", oversized), reqtest.Header("Stripe-Signature", "t=1,v1=deadbeef"))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -346,12 +326,7 @@ func TestPostPurchaseWebhookHandler_NonexistentPracticeRejected(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
 
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM stripe_webhook_events WHERE event_id = 'evt_nonexistent_practice'`,
-	).Scan(&count); err != nil {
-		t.Fatalf("count stripe_webhook_events: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM stripe_webhook_events WHERE event_id = 'evt_nonexistent_practice'`)
 	if count != 0 {
 		t.Fatalf("stripe_webhook_events row count = %d, want 0 (rolled back)", count)
 	}

@@ -17,17 +17,8 @@ import (
 func TestRLS_PortalAccountsSelfInsertRejectsMismatchedIdentity(t *testing.T) {
 	db := testdb.New(t)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_identity_uid', 'portal_the-real-caller', true)`); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	_, err = tx.ExecContext(t.Context(),
+	tx := db.BeginAs(t, testdb.Identity("portal_the-real-caller"))
+	_, err := tx.ExecContext(t.Context(),
 		`INSERT INTO portal_accounts (identifier, sign_in_address) VALUES ('portal_someone-else', 'mismatched@example.com')`,
 	)
 	if err == nil {
@@ -60,16 +51,7 @@ func TestRLS_PortalAccountsSelfInsertFailsClosedWithNoIdentitySet(t *testing.T) 
 func TestRLS_PortalAccountsSelfInsertSucceedsForMatchingIdentity(t *testing.T) {
 	db := testdb.New(t)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_identity_uid', 'portal_matching-caller', true)`); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
+	tx := db.BeginAs(t, testdb.Identity("portal_matching-caller"))
 	if _, err := tx.ExecContext(t.Context(),
 		`INSERT INTO portal_accounts (identifier, sign_in_address) VALUES ('portal_matching-caller', 'matching@example.com')`,
 	); err != nil {

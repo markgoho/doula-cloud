@@ -13,6 +13,7 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/payments"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -60,15 +61,7 @@ func getPracticeInvoicesNarrowed(t *testing.T, srv *httptest.Server, session, pr
 	if len(params) > 0 {
 		url += "?" + strings.Join(params, "&")
 	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Get(t, url, reqtest.Session(session))
 	return resp
 }
 

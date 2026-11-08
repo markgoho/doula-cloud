@@ -1,7 +1,6 @@
 package staffauth_test
 
 import (
-	"bytes"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -125,14 +124,7 @@ func TestLookupInvitation_BadJSON(t *testing.T) {
 	db := testdb.New(t)
 	srv := newAcceptServerWithAccounts(t, db, "", "", authntest.NewFakeAccountManager())
 	defer srv.Close()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/accept-invite/lookup", bytes.NewReader([]byte("{")))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/api/staff/accept-invite/lookup", reqtest.Body("application/json", []byte("{")))
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }

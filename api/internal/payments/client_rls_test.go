@@ -81,10 +81,7 @@ func TestRLS_InvoicesClientCannotReadAnotherClientsOrPracticesInvoice(t *testing
 	seedInvoice(t, db, practiceB, seedSignedContract(t, db, engagementB), "in_client_other_practice", invoiceStatusOpen, 7000, time.Now())
 
 	tx := clientTx(t, db, clientA)
-	var id string
-	if err := tx.QueryRowContext(t.Context(), `SELECT id FROM invoices`).Scan(&id); err != nil {
-		t.Fatalf("Client A should see exactly her own Invoice: %v", err)
-	}
+	id := testdb.Scalar[string](t, tx, `SELECT id FROM invoices`)
 	if id != own {
 		t.Fatalf("visible Invoice = %q, want %q", id, own)
 	}
@@ -138,10 +135,7 @@ func TestRLS_PaymentsClientReadsOwnPaymentsOnly(t *testing.T) {
 	seedPayment(t, db, other, "pi_client_other", 7000, time.Now())
 
 	tx := clientTx(t, db, clientA)
-	var id string
-	if err := tx.QueryRowContext(t.Context(), `SELECT id FROM payments`).Scan(&id); err != nil {
-		t.Fatalf("Client A should see exactly her own Payment: %v", err)
-	}
+	id := testdb.Scalar[string](t, tx, `SELECT id FROM payments`)
 	if id != ownPayment {
 		t.Fatalf("visible Payment = %q, want %q", id, ownPayment)
 	}

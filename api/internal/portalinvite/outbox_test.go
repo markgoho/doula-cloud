@@ -36,14 +36,9 @@ func newTestWorker(sender mail.Sender) portalinvite.Worker {
 // convention.
 func seedPortalInviteOutboxRow(t *testing.T, db *testdb.DB, portalUserID string, attemptCount int, nextAttemptAt time.Time) string {
 	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO portal_invite_outbox (client_portal_user_id, attempt_count, next_attempt_at)
+	id := testdb.Scalar[string](t, db.Admin, `INSERT INTO portal_invite_outbox (client_portal_user_id, attempt_count, next_attempt_at)
 		 VALUES ($1, $2, $3) RETURNING id`,
-		portalUserID, attemptCount, nextAttemptAt,
-	).Scan(&id); err != nil {
-		t.Fatalf("seed outbox row: %v", err)
-	}
+		portalUserID, attemptCount, nextAttemptAt)
 	return id
 }
 
@@ -51,10 +46,7 @@ func seedPortalInviteOutboxRow(t *testing.T, db *testdb.DB, portalUserID string,
 // seedPendingPortalInvite created for clientID.
 func portalUserIDForClient(t *testing.T, db *testdb.DB, clientID string) string {
 	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT id FROM client_portal_users WHERE client_id = $1`, clientID).Scan(&id); err != nil {
-		t.Fatalf("look up portal user id: %v", err)
-	}
+	id := testdb.Scalar[string](t, db.Admin, `SELECT id FROM client_portal_users WHERE client_id = $1`, clientID)
 	return id
 }
 

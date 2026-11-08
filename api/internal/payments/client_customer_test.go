@@ -29,12 +29,7 @@ func mappedCustomer(t *testing.T, db *testdb.DB, clientID, accountID string) (cu
 // clientOfEngagement resolves the Client an Engagement is for.
 func clientOfEngagement(t *testing.T, db *testdb.DB, engagementID string) string {
 	t.Helper()
-	var clientID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT client_id FROM engagements WHERE id = $1`, engagementID,
-	).Scan(&clientID); err != nil {
-		t.Fatalf("read engagement client: %v", err)
-	}
+	clientID := testdb.Scalar[string](t, db.Admin, `SELECT client_id FROM engagements WHERE id = $1`, engagementID)
 	return clientID
 }
 
@@ -166,10 +161,7 @@ func TestPostInvoiceHandler_CustomerFailureRaisesNoInvoice(t *testing.T) {
 	if len(client.CreateInvoiceCalls) != 0 {
 		t.Fatalf("CreateInvoice calls = %d, want 0", len(client.CreateInvoiceCalls))
 	}
-	var invoices int
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM invoices`).Scan(&invoices); err != nil {
-		t.Fatalf("count invoices: %v", err)
-	}
+	invoices := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM invoices`)
 	if invoices != 0 {
 		t.Fatalf("invoices rows = %d, want 0", invoices)
 	}

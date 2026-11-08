@@ -55,12 +55,7 @@ func TestPostConnectNudgeHandler_CooldownEdgeOnTheRequestClock(t *testing.T) {
 			if got := postConnectNudgeAt(t, db, uid, practiceID, askedAt); got != http.StatusAccepted {
 				t.Fatalf("first status = %d, want %d", got, http.StatusAccepted)
 			}
-			var createdAt time.Time
-			if err := db.Admin.QueryRowContext(t.Context(),
-				`SELECT created_at FROM connect_nudge_outbox WHERE practice_id = $1`, practiceID,
-			).Scan(&createdAt); err != nil {
-				t.Fatalf("read created_at: %v", err)
-			}
+			createdAt := testdb.Scalar[time.Time](t, db.Admin, `SELECT created_at FROM connect_nudge_outbox WHERE practice_id = $1`, practiceID)
 			if !createdAt.Equal(askedAt) {
 				t.Fatalf("created_at = %v, want the request clock %v", createdAt, askedAt)
 			}

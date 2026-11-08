@@ -1,7 +1,6 @@
 package payments_test
 
 import (
-	"bytes"
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
@@ -10,26 +9,13 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/payments"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
 func postReversal(t *testing.T, srv *httptest.Server, session, practiceID, invoiceID, paymentID, reason string) *http.Response {
 	t.Helper()
-	body, err := json.Marshal(payments.ReversePaymentRequest{Reason: reason})
-	if err != nil {
-		t.Fatalf("marshal request: %v", err)
-	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		srv.URL+"/api/practices/"+practiceID+"/invoices/"+invoiceID+"/payments/"+paymentID+"/reverse", bytes.NewBuffer(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/invoices/"+invoiceID+"/payments/"+paymentID+"/reverse", reqtest.JSON(payments.ReversePaymentRequest{Reason: reason}), reqtest.Session(session))
 	return resp
 }
 
@@ -113,12 +99,7 @@ func TestPostReversePaymentHandler_ByHandHappyPath(t *testing.T) {
 		t.Fatalf("reversal row = %+v, want kind reversal amount %d", row, -seedByHandInvoiceAmountCents)
 	}
 
-	var actionCount int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM activity WHERE action = 'payment_reversed' AND subject_id = $1`, engagementID,
-	).Scan(&actionCount); err != nil {
-		t.Fatalf("query activity: %v", err)
-	}
+	actionCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE action = 'payment_reversed' AND subject_id = $1`, engagementID)
 	if actionCount != 1 {
 		t.Fatalf("payment_reversed activity rows = %d, want 1", actionCount)
 	}
@@ -141,10 +122,7 @@ func TestPostReversePaymentHandler_RefusedOnStripeBacked(t *testing.T) {
 	); err != nil {
 		t.Fatalf("seed manual payment on stripe-backed invoice: %v", err)
 	}
-	var paymentID string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT id FROM payments WHERE invoice_id = $1`, invoiceID).Scan(&paymentID); err != nil {
-		t.Fatalf("read seeded payment id: %v", err)
-	}
+	paymentID := testdb.Scalar[string](t, db.Admin, `SELECT id FROM payments WHERE invoice_id = $1`, invoiceID)
 	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
 	defer srv.Close()
 
@@ -436,17 +414,7 @@ func TestPostReversePaymentHandler_MalformedBodyReturns400(t *testing.T) {
 	defer srv.Close()
 	paymentID := recordPayment(t, srv, session, practiceID, invoiceID)
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		srv.URL+"/api/practices/"+practiceID+"/invoices/"+invoiceID+"/payments/"+paymentID+"/reverse", bytes.NewBufferString("{not json"))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/invoices/"+invoiceID+"/payments/"+paymentID+"/reverse", reqtest.RawJSON([]byte("{not json")), reqtest.Session(session))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {

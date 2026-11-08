@@ -144,15 +144,7 @@ func (s *agreementServer) session(uid string) string {
 
 func (s *agreementServer) do(method, session, practiceID, suffix string) *http.Response {
 	s.t.Helper()
-	req, err := http.NewRequestWithContext(s.t.Context(), method, s.srv.URL+"/api/practices/"+practiceID+suffix, nil)
-	if err != nil {
-		s.t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		s.t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Do(s.t, method, s.srv.URL+"/api/practices/"+practiceID+suffix, reqtest.Session(session))
 	return resp
 }
 

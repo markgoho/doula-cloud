@@ -54,10 +54,7 @@ func connectHistory(t *testing.T, db *testdb.DB, practiceID string) []historyRow
 
 func historyCount(t *testing.T, db *testdb.DB) int {
 	t.Helper()
-	var n int
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM stripe_connect_status_history`).Scan(&n); err != nil {
-		t.Fatalf("count history: %v", err)
-	}
+	n := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM stripe_connect_status_history`)
 	return n
 }
 
@@ -109,12 +106,7 @@ func TestPostAccountWebhookHandler_AppliedEventWritesOneHistoryRow(t *testing.T)
 		t.Fatalf("stripe_event_created_at = %v, want Stripe's own %v", h.eventCreatedAt, created)
 	}
 
-	var updatedAt time.Time
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT stripe_connect_status_updated_at FROM practices WHERE id = $1`, practiceID,
-	).Scan(&updatedAt); err != nil {
-		t.Fatalf("query practices: %v", err)
-	}
+	updatedAt := testdb.Scalar[time.Time](t, db.Admin, `SELECT stripe_connect_status_updated_at FROM practices WHERE id = $1`, practiceID)
 	if !h.processedAt.Equal(updatedAt) {
 		t.Fatalf("processed_at = %v, want the practices row's own %v", h.processedAt, updatedAt)
 	}

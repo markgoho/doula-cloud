@@ -42,17 +42,8 @@ func TestRLS_ClientPortalUsersInviteInsertFailsForClientAtOtherPractice(t *testi
 	practiceB := testdb.SeedPractice(t, db, "Practice B")
 	clientB, _ := testdb.SeedNamedEngagement(t, db, practiceB, "Client B", "clientb@example.com")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	_, err = tx.ExecContext(t.Context(),
+	tx := db.BeginAs(t, testdb.Practice(practiceA))
+	_, err := tx.ExecContext(t.Context(),
 		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid())`,
 		clientB,
 	)
@@ -69,16 +60,7 @@ func TestRLS_ClientPortalUsersInviteInsertSucceedsForClientAtOwnPractice(t *test
 	practiceID := testdb.SeedPractice(t, db, "Own Practice")
 	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Own Client", "own@example.com")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
+	tx := db.BeginAs(t, testdb.Practice(practiceID))
 	if _, err := tx.ExecContext(t.Context(),
 		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid())`,
 		clientID,
@@ -104,28 +86,13 @@ func TestRLS_ClientPortalUsersPracticeVisibilityScopedToOwnPractice(t *testing.T
 		t.Fatalf("seed portal rows: %v", err)
 	}
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	var count int
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM client_portal_users`).Scan(&count); err != nil {
-		t.Fatalf("query client_portal_users: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Practice(practiceA))
+	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM client_portal_users`)
 	if count != 1 {
 		t.Fatalf("expected exactly 1 visible row (Practice A's own), got %d", count)
 	}
 
-	var visibleClientID string
-	if err := tx.QueryRowContext(t.Context(), `SELECT client_id FROM client_portal_users`).Scan(&visibleClientID); err != nil {
-		t.Fatalf("query client_id: %v", err)
-	}
+	visibleClientID := testdb.Scalar[string](t, tx, `SELECT client_id FROM client_portal_users`)
 	if visibleClientID != clientA {
 		t.Fatalf("visible row belongs to client %q, want %q", visibleClientID, clientA)
 	}
@@ -140,24 +107,10 @@ func TestRLS_ClientPortalUsersInviteUpdateCannotTouchAcceptedRow(t *testing.T) {
 	practiceID := testdb.SeedPractice(t, db, "Accepted Row Practice")
 	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Accepted Row Client", "acceptedrow@example.com")
 	testdb.SeedPortalAccount(t, db, "already-accepted", "already-accepted@example.com")
-	var rowID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO client_portal_users (identity_uid, client_id) VALUES ('already-accepted', $1) RETURNING id`,
-		clientID,
-	).Scan(&rowID); err != nil {
-		t.Fatalf("seed accepted row: %v", err)
-	}
+	rowID := testdb.Scalar[string](t, db.Admin, `INSERT INTO client_portal_users (identity_uid, client_id) VALUES ('already-accepted', $1) RETURNING id`,
+		clientID)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
+	tx := db.BeginAs(t, testdb.Practice(practiceID))
 	result, err := tx.ExecContext(t.Context(),
 		`UPDATE client_portal_users SET invite_token = gen_random_uuid() WHERE id = $1`,
 		rowID,
@@ -183,24 +136,10 @@ func TestRLS_ClientPortalUsersInviteUpdateCannotTouchCrossPracticeRow(t *testing
 	practiceA := testdb.SeedPractice(t, db, "Update Cross Practice A")
 	practiceB := testdb.SeedPractice(t, db, "Update Cross Practice B")
 	clientB, _ := testdb.SeedNamedEngagement(t, db, practiceB, "Client B", "clientb-update@example.com")
-	var rowID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid()) RETURNING id`,
-		clientB,
-	).Scan(&rowID); err != nil {
-		t.Fatalf("seed pending row for client B: %v", err)
-	}
+	rowID := testdb.Scalar[string](t, db.Admin, `INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid()) RETURNING id`,
+		clientB)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
+	tx := db.BeginAs(t, testdb.Practice(practiceA))
 	result, err := tx.ExecContext(t.Context(),
 		`UPDATE client_portal_users SET invite_token = gen_random_uuid() WHERE id = $1`,
 		rowID,
@@ -225,20 +164,8 @@ func TestRLS_ClientPortalUsersAcceptFailsClosedWithNoInviteTokenSet(t *testing.T
 	_, inviteToken := seedPendingPortalInvite(t, db)
 	_ = inviteToken
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_identity_uid', $1, true)`, "someone"); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	var count int
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM client_portal_users WHERE identity_uid IS NULL`).Scan(&count); err != nil {
-		t.Fatalf("query pending rows with no invite_token set: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Identity("someone"))
+	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM client_portal_users WHERE identity_uid IS NULL`)
 	if count != 0 {
 		t.Fatalf("expected 0 pending rows visible with no app.invite_token set, got %d", count)
 	}
@@ -261,10 +188,7 @@ func TestRLS_ClientPortalUsersAcceptFailsClosedWithWrongInviteToken(t *testing.T
 		t.Fatalf("set_config: %v", err)
 	}
 
-	var count int
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM client_portal_users WHERE identity_uid IS NULL`).Scan(&count); err != nil {
-		t.Fatalf("query pending rows with wrong invite_token: %v", err)
-	}
+	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM client_portal_users WHERE identity_uid IS NULL`)
 	if count != 0 {
 		t.Fatalf("expected 0 pending rows visible with a non-matching app.invite_token, got %d", count)
 	}
@@ -286,10 +210,7 @@ func TestRLS_ClientPortalUsersAcceptSelectSucceedsWithMatchingToken(t *testing.T
 		t.Fatalf("set_config: %v", err)
 	}
 
-	var gotClientID string
-	if err := tx.QueryRowContext(t.Context(), `SELECT client_id FROM client_portal_users WHERE identity_uid IS NULL`).Scan(&gotClientID); err != nil {
-		t.Fatalf("query pending row with matching invite_token: %v", err)
-	}
+	gotClientID := testdb.Scalar[string](t, tx, `SELECT client_id FROM client_portal_users WHERE identity_uid IS NULL`)
 	if gotClientID != clientID {
 		t.Fatalf("client_id = %q, want %q", gotClientID, clientID)
 	}
@@ -342,10 +263,7 @@ func TestRLS_NotificationWorkerCannotReadClientPortalUsersWithoutTrustedFlag(t *
 	}
 	defer tx.Rollback()
 
-	var count int
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM client_portal_users`).Scan(&count); err != nil {
-		t.Fatalf("query client_portal_users: %v", err)
-	}
+	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM client_portal_users`)
 	if count != 0 {
 		t.Fatalf("expected zero visible rows with no session context set, got %d", count)
 	}
