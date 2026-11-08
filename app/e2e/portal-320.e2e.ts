@@ -22,7 +22,7 @@ async function expectNoSidewaysScroll(page: Page): Promise<void> {
 		scrollWidth: document.documentElement.scrollWidth,
 		clientWidth: document.documentElement.clientWidth
 	}));
-	expect(scrollWidth, `${page.url()} scrolls sideways at 320px`).toBe(clientWidth);
+	expect(scrollWidth, `${page.url()} scrolls sideways at 320px`).toBeLessThanOrEqual(clientWidth);
 }
 
 test('no signed-in portal screen scrolls sideways at 320px', async ({ page, request }) => {

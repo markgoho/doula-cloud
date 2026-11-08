@@ -36,7 +36,7 @@ async function expectNoSidewaysScroll(page: Page, where: string): Promise<void> 
 		scrollWidth: document.documentElement.scrollWidth,
 		clientWidth: document.documentElement.clientWidth
 	}));
-	expect(scrollWidth, `${where} scrolls sideways`).toBe(clientWidth);
+	expect(scrollWidth, `${where} scrolls sideways`).toBeLessThanOrEqual(clientWidth);
 }
 
 function portalScreens(engagementId: string): string[] {
@@ -145,7 +145,7 @@ async function expectFitsInColumn(page: Page, path: string): Promise<void> {
 			right: link?.getBoundingClientRect().right ?? Infinity
 		};
 	});
-	expect(fits.scrollWidth, `${where} scrolls sideways`).toBe(fits.clientWidth);
+	expect(fits.scrollWidth, `${where} scrolls sideways`).toBeLessThanOrEqual(fits.clientWidth);
 	expect(fits.right, `${where}: the link runs past the column`).toBeLessThanOrEqual(fits.clientWidth);
 }
 
