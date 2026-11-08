@@ -146,8 +146,6 @@
 			appearance: base-select;
 			margin-top: var(--space-1);
 			padding: var(--space-1);
-			font-family: var(--font-family-base);
-			font-size: var(--text-body-size);
 			color: var(--color-on-surface);
 			background-color: var(--color-surface);
 			border: var(--border-thin) solid var(--color-outline);

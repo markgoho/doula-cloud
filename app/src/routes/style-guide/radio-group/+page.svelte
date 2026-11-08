@@ -1,4 +1,5 @@
 <script lang="ts">
+	import DisabledAndFocusDemo from '../DisabledAndFocusDemo.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
@@ -82,27 +83,7 @@
 		<RadioGroup legend="Are you creating an account?" options={modeOptions} value="" onChange={() => {}} error="Select whether you are creating an account or signing in" />
 	</section>
 
-	<section>
-		<h2>Disabled</h2>
-		<p>No caller disables a radio. A disabled fieldset around a form still reaches one, and this is how it looks.</p>
-		<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- the demo IS a disabled fieldset around the group, the one way a caller's form reaches a disabled radio -->
-		<fieldset disabled class="plain-fieldset">
-			<RadioGroup legend="Are you creating an account?" options={modeOptions} value="signup" onChange={() => {}} />
-		</fieldset>
-	</section>
-
-	<section>
-		<h2>Hover and focus</h2>
-		<p>Point at an option to see its halo. Tab to the group to see its focus outline.</p>
-	</section>
+	<DisabledAndFocusDemo control="radio">
+		<RadioGroup legend="Are you creating an account?" options={modeOptions} value="signup" onChange={() => {}} />
+	</DisabledAndFocusDemo>
 </stack-l>
-
-<style>
-	@layer components {
-		.plain-fieldset {
-			margin: 0;
-			padding: 0;
-			border: none;
-		}
-	}
-</style>

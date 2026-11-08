@@ -37,7 +37,7 @@
 	import { membershipChangeSentence } from '#lib/membershipHistory.js';
 	import { gotoWithOutcome, takeOutcome } from '#lib/outcome.js';
 	import { workStateName, workStateReportedOn } from '#lib/workStates.js';
-	import { employmentTypeLabel, isOwner as checkIsOwner, rolesLabel } from '#lib/roles.js';
+	import { employmentTypeLabel, rolesLabel } from '#lib/roles.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
@@ -49,12 +49,10 @@
 	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
-	import type { PracticeSession } from '../../+layout.js';
+	import { staffRoute } from './staffRoute.svelte.js';
 	import { loadMember, rosterHref } from './member.js';
 
-	const practiceId = $derived(page.params.practiceId!);
-	const staffId = $derived(page.params.staffId!);
-	const isOwner = $derived(checkIsOwner((page.data as { session: PracticeSession }).session));
+	const route = staffRoute();
 
 	// What the change that led here did, if one did: a roles or an
 	// employment type question page. Read once, while the page renders.
@@ -81,7 +79,7 @@
 	 */
 	const workStateHistory = PaginatedList.deferred<WorkStateEntry>({
 		loadPage: async (cursor) => {
-			const loaded = await loadWorkStateHistory(apiFetchWithSession, practiceId, staffId, cursor);
+			const loaded = await loadWorkStateHistory(apiFetchWithSession, route.practiceId, route.staffId, cursor);
 			return {
 				...loaded,
 				items: loaded.items.map((change) => ({
@@ -94,7 +92,7 @@
 	});
 
 	const membershipHistory = PaginatedList.deferred<MembershipChange>({
-		loadPage: (cursor) => loadMembershipHistory(apiFetchWithSession, practiceId, staffId, cursor),
+		loadPage: (cursor) => loadMembershipHistory(apiFetchWithSession, route.practiceId, route.staffId, cursor),
 		failureMessage: 'Failed to load membership history'
 	});
 
@@ -108,7 +106,7 @@
 		void workStateHistory.ask();
 		void membershipHistory.ask();
 		try {
-			member = await loadMember(apiFetchWithSession, practiceId, staffId);
+			member = await loadMember(apiFetchWithSession, route.practiceId, route.staffId);
 		} catch (error_) {
 			loadError = error_ instanceof Error ? error_.message : 'Failed to load this Staff member';
 		}
@@ -131,14 +129,14 @@
 					{
 						label: 'Roles',
 						value: rolesLabel(member.roles) || 'No roles yet',
-						changes: isOwner ? 'roles' : undefined,
-						href: resolve('/practices/[practiceId]/staff/[staffId]/roles', { practiceId, staffId })
+						changes: route.isOwner ? 'roles' : undefined,
+						href: resolve('/practices/[practiceId]/staff/[staffId]/roles', { practiceId: route.practiceId, staffId: route.staffId })
 					},
 					{
 						label: 'Employment type',
 						value: employmentTypeLabel(member.employmentType),
-						changes: isOwner ? 'employment type' : undefined,
-						href: resolve('/practices/[practiceId]/staff/[staffId]/employment-type', { practiceId, staffId })
+						changes: route.isOwner ? 'employment type' : undefined,
+						href: resolve('/practices/[practiceId]/staff/[staffId]/employment-type', { practiceId: route.practiceId, staffId: route.staffId })
 					},
 					{
 						label: 'Works from',
@@ -167,7 +165,7 @@
 		endSessionsError = '';
 		isSessionsEnded = false;
 		try {
-			await endSessions(apiFetchWithSession, practiceId, staffId);
+			await endSessions(apiFetchWithSession, route.practiceId, route.staffId);
 			isSessionsEnded = true;
 		} catch (error_) {
 			endSessionsError = error_ instanceof Error ? error_.message : 'Failed to end sessions';
@@ -182,12 +180,12 @@
 	async function handleRemove() {
 		removeError = '';
 		try {
-			await removeMember(apiFetchWithSession, practiceId, staffId);
+			await removeMember(apiFetchWithSession, route.practiceId, route.staffId);
 		} catch (error_) {
 			removeError = error_ instanceof Error ? error_.message : 'Failed to remove this Staff member';
 			throw error_;
 		}
-		await gotoWithOutcome(rosterHref(practiceId), `${name} was removed from this Practice.`);
+		await gotoWithOutcome(rosterHref(route.practiceId), `${name} was removed from this Practice.`);
 	}
 </script>
 
@@ -198,7 +196,7 @@
 		consequence to read and a re-authentication of its own.
 	-->
 	<Link
-		href={resolve('/practices/[practiceId]/staff/[staffId]/mfa-recovery', { practiceId, staffId })}
+		href={resolve('/practices/[practiceId]/staff/[staffId]/mfa-recovery', { practiceId: route.practiceId, staffId: route.staffId })}
 		label="Send a recovery code"
 	/>
 {/snippet}
@@ -326,21 +324,21 @@
 <RecordDetail
 	title={name}
 	{outcome}
-	backHref={rosterHref(practiceId)}
+	backHref={rosterHref(route.practiceId)}
 	backLabel="Staff"
 	{summary}
 	summaryRows={[
 		{ label: 'Email address', value: 'given.family@example.com' },
-		{ label: 'Roles', value: 'Doula', action: isOwner ? 'Change' : undefined },
-		{ label: 'Employment type', value: 'Employee', action: isOwner ? 'Change' : undefined },
+		{ label: 'Roles', value: 'Doula', action: route.isOwner ? 'Change' : undefined },
+		{ label: 'Employment type', value: 'Employee', action: route.isOwner ? 'Change' : undefined },
 		{ label: 'Works from', value: 'New York, self-reported Oct 31, 2026' }
 	]}
-	actions={isOwner ? actions : undefined}
-	loadingActions={isOwner ? actions : undefined}
+	actions={route.isOwner ? actions : undefined}
+	loadingActions={route.isOwner ? actions : undefined}
 	sections={[
 		{ heading: 'Work state history', content: workStateSection },
 		{ heading: 'Membership history', content: membershipSection },
-		...(isOwner ? [{ heading: 'Access', content: accessSection }] : [])
+		...(route.isOwner ? [{ heading: 'Access', content: accessSection }] : [])
 	]}
 	loading={member || loadError ? undefined : 'Loading this Staff member'}
 	loadError={loadError || undefined}

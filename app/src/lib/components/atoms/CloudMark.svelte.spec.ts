@@ -38,7 +38,14 @@ function strokeOf(path: Element): string {
 }
 
 function tokenColor(name: string): string {
-	return pixelOf(getComputedStyle(document.documentElement).getPropertyValue(name));
+	// A token is `light-dark()`, which only an element's own color-scheme
+	// resolves, so a probe element reads it.
+	const probe = document.createElement('span');
+	probe.style.color = `var(${name})`;
+	document.documentElement.append(probe);
+	const resolved = getComputedStyle(probe).color;
+	probe.remove();
+	return pixelOf(resolved);
 }
 
 async function withTheme(theme: 'light' | 'dark', run: () => Promise<void>): Promise<void> {
