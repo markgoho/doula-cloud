@@ -63,6 +63,8 @@ One change was tried and rejected. At small sizes the outer line can read as one
 
 The palette is Plum Dusk, as [the design brief](../design/brief.md) sets it and as `app/src/lib/styles/tokens.css` holds it. The token name is the brand's name for the color. Marketing spends the token. It does not copy the value, because the value is different in the dark theme.
 
+> **Amended 2026-11-08 ([ADR-0063](../adr/0063-impeccable-is-adopted-a-screen-is-improved-by-blind-rubric-rounds-and-the-staff-app-looks-like-its-category.md)).** `tokens.css` no longer holds Plum Dusk: `--color-primary` is a blue (`oklch(40% 0.11 258)` in light) since 2026-11-07. Marketing spends the token, so `site/` follows it already, and `brand/icon.svg` and the three icons served from it (the app's favicon and installed icon, the site's favicon) take the new tile, because `scripts/brand-mark.test.ts` holds them to one drawing and `tokens.usage.spec.ts` holds the favicon to the token. Read "plum" in the table below as "the primary". `brand/mark.svg`, `brand/mark-one-color.svg` and `brand/social-card.html` still draw in the plum; whether the brand's own drawings move with the Staff app's world is open ([#2741](https://github.com/markgoho/doula-cloud/issues/2741)).
+
 | Token                        | Role in the brand                                                         |
 | ---------------------------- | ------------------------------------------------------------------------- |
 | `--color-primary`            | The plum. The outer line of the mark, the tile, a primary action, a link. |

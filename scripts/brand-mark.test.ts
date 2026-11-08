@@ -31,7 +31,7 @@ describe('the icon in a square slot', () => {
     'site/static/favicon.svg',
   ];
 
-  test.each(served)('%s is the plum tile, byte for byte', async (file) => {
+  test.each(served)('%s is the icon tile, byte for byte', async (file) => {
     expect(await read(file)).toBe(await read(`${BRAND_DRAWINGS}icon.svg`));
   });
 });

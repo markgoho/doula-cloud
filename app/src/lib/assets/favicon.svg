@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
 	<!--
-		The DoulaCloud icon: the mark on a plum tile. For each square slot
+		The DoulaCloud icon: the mark on a tile of the primary color. For each square slot
 		(browser tab, home screen, social avatar). See docs/marketing/brand.md.
 
 		The tile is `color-primary` and the strokes are `color-on-primary`,
