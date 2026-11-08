@@ -33,10 +33,10 @@ Decided on [#2717's findings](https://github.com/markgoho/doula-cloud/issues/271
 ## Which jobs run where
 
 - **Every CI job runs on our own machines through `runs-on: ${{ vars.CI_LINUX || 'ubuntu-26.04' }}`.** An unset variable means GitHub-hosted, so the switch is one repo variable.
-- **Every job that signs in to Google Cloud through Workload Identity Federation stays GitHub-hosted:** in `ci.yml`, `migrate`, `deploy-api`, `deploy-app`, `deploy-ops` and `deploy-ops-site`; `terraform-plan.yml`'s `plan` and `plan-stripe-sandbox`; the four `firebase-hosting-*` workflows, including the merge job; and `hosting-edge-check.yml`. Three reasons: a trunk merge must deploy even when both home machines are down; a production token is never minted on a machine that runs untrusted dependency code; and these jobs are short enough to fit roughly within Pro's included compute.
+- **Every job that signs in to Google Cloud through Workload Identity Federation stays GitHub-hosted:** in `ci.yml`, `migrate`, `deploy-api`, `deploy-app`, `deploy-ops` and `deploy-ops-site`; `terraform-plan.yml`'s `plan` and `plan-stripe-sandbox`; `firebase-hosting-merge.yml`; and `hosting-edge-check.yml`. Three reasons: a trunk merge must deploy even when both home machines are down; a production token is never minted on a machine that runs untrusted dependency code; and these jobs are short enough to fit roughly within Pro's included compute.
 - **The sub-minute jobs merge** (format, actionlint, docs, scripts, secrets, site and the like), because each bills a full minute on its own (#2716) and there is no memory left for a small-job pool (#2729). The spec decides the exact grouping, since `changes` gates downstream jobs and `trunk-red.yml` runs on `workflow_run`.
 
-Decided on [#2719](https://github.com/markgoho/doula-cloud/issues/2719), item 3.
+Decided on [#2719](https://github.com/markgoho/doula-cloud/issues/2719), item 3. The Firebase Hosting PR-preview workflows were on this list until [#2775](https://github.com/markgoho/doula-cloud/issues/2775) removed them as unused, 2026-11-08.
 
 ## Machines, coordinator and credentials
 

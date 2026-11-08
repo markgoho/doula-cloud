@@ -66,10 +66,10 @@ The account now holds, and holds nothing beyond: `roles/cloudsql.client` and a t
 
 `bun run build` runs `scripts/sync-practice-pages.ts` before the `site/` build, which writes `site/practice-pages/<slug>.json` for every Practice that published one (#441); the build prerenders each file into `p/<slug>.html`. It reads two variables, and neither belongs to the BFF.
 
-| Variable | Local | PR preview | Merge deploy |
-| --- | --- | --- | --- |
-| `SYNC_PRACTICE_PAGES` | unset | unset | `required`, set in `firebase-hosting-merge.yml` |
-| `DATABASE_URL` | unset | unset | built from Secret Manager `doula-cloud-pg-site-builder-dsn`, dialed through the Cloud SQL Auth Proxy on `127.0.0.1:5432` |
+| Variable | Local | Merge deploy |
+| --- | --- | --- |
+| `SYNC_PRACTICE_PAGES` | unset | `required`, set in `firebase-hosting-merge.yml` |
+| `DATABASE_URL` | unset | built from Secret Manager `doula-cloud-pg-site-builder-dsn`, dialed through the Cloud SQL Auth Proxy on `127.0.0.1:5432` |
 
 **Unset means "touch nothing", not "connect if you can".** The script prunes `site/practice-pages` before it writes, because that is the only way a Practice who switches back to her own website loses her page. So an unreachable database and an empty result set would produce the same output — every live page deleted, against a Stripe review #382 established is ongoing. `SYNC_PRACTICE_PAGES=required` makes an unreachable database fail the build instead, and the workflow's build/deploy split means a failed build uploads no artifact and the live site stays exactly as it was.
 
