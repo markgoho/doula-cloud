@@ -65,12 +65,12 @@ const fieldRestrictions = [
 	{
 		elements: ['label'],
 		message:
-			'Use LabeledField (#lib/components/molecules/LabeledField.svelte) instead of a raw <label>: it joins the label, hint and error to the control.'
+			'Use LabeledField (#lib/components/molecules/LabeledField.svelte) instead of a raw <label>: it joins the label, hint and error to the control. A new molecule that must own a raw <label> goes in `fieldOwners` in app/eslint.config.js.'
 	},
 	{
 		elements: ['fieldset'],
 		message:
-			'Use a group molecule -- ChoiceGroup, CheckboxGroup, RadioGroup, DateFields, FilterBar -- or a Template (FormPage, QuestionPage) instead of a raw <fieldset>.'
+			'Use a group molecule -- ChoiceGroup, CheckboxGroup, RadioGroup, DateFields, FilterBar -- or a Template (FormPage, QuestionPage) instead of a raw <fieldset>. A new group component that must own a raw <fieldset> goes in `fieldOwners` in app/eslint.config.js.'
 	}
 ];
 

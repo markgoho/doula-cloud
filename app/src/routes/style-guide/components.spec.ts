@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
 	atomPages,
@@ -45,6 +45,46 @@ describe('style guide component registry', () => {
 			const slugs = tier.pages.map((page) => page.slug);
 			expect(new Set(slugs).size).toBe(slugs.length);
 		}
+	});
+});
+
+const COVERED_THROUGH_ROUTES: readonly string[] = [
+	'molecules/ReauthPrompt',
+	'molecules/TimezoneField',
+	'organisms/RecordPaymentForm',
+	'organisms/ReversePaymentForm'
+];
+
+function componentsOnDisk(): string[] {
+	return tiers.flatMap((tier) =>
+		readdirSync(new URL(`${tier.directory}/`, componentsRoot))
+			.filter((file) => file.endsWith('.svelte'))
+			.map((file) => `${tier.directory}/${file.replace(/\.svelte$/, '')}`)
+	);
+}
+
+function hasSpec(component: string): boolean {
+	return existsSync(new URL(`${component}.svelte.spec.ts`, componentsRoot));
+}
+
+describe('a component has a spec beside it', () => {
+	it('finds no component without one, outside COVERED_THROUGH_ROUTES', () => {
+		const missing = componentsOnDisk()
+			.filter((component) => !hasSpec(component) && !COVERED_THROUGH_ROUTES.includes(component))
+			.map(
+				(component) =>
+					`app/src/lib/components/${component}.svelte has no spec: add ${component.split('/').pop()}.svelte.spec.ts beside it (docs/design/workflow.md, "What a new component needs")`
+			);
+		expect(missing, missing.join('\n')).toEqual([]);
+	});
+
+	it('names no component in COVERED_THROUGH_ROUTES that has a spec or is gone', () => {
+		const onDisk = new Set(componentsOnDisk());
+		const stale = COVERED_THROUGH_ROUTES.filter((component) => !onDisk.has(component) || hasSpec(component)).map(
+			(component) =>
+				`COVERED_THROUGH_ROUTES in app/src/routes/style-guide/components.spec.ts names ${component}, which now has a spec or no longer exists: remove the entry`
+		);
+		expect(stale, stale.join('\n')).toEqual([]);
 	});
 });
 
