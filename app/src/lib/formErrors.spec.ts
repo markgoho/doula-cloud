@@ -358,6 +358,16 @@ describe('apiErrorMessage', () => {
  * each one onto the route's own control id -- an unmapped key still
  * reports its message, just with no link to send the reader to.
  */
+describe('refusalError', () => {
+	it('keeps the status of the refused response, so a caller can tell a malformed request from a failed one', async () => {
+		const refused = await refusalError(jsonResponse({ error: 'doula must be a staff id' }, 400));
+
+		expect(refused).toBeInstanceOf(RefusalError);
+		expect(refused.status).toBe(400);
+		expect(new RefusalError('no status').status).toBeUndefined();
+	});
+});
+
 describe('refusalErrors', () => {
 	const FIELD_IDS = { inviteToken: 'invite-token-field' };
 

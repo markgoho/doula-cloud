@@ -8,7 +8,8 @@
  */
 import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render } from 'vitest-browser-svelte';
+import { SvelteURL } from 'svelte/reactivity';
+import { cleanup, render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { PracticeInvoiceListData } from '#lib/invoice.js';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
@@ -31,10 +32,22 @@ Object.assign(pageState, toPageState(fixture));
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
+// The route's own `afterNavigate` callback, kept so a spec can play a move to
+// this list (SvelteKit calls it after every navigation, the first load too).
+const navigation = vi.hoisted(() => ({ goto: vi.fn(), onMove: undefined as (() => void) | undefined }));
+vi.mock('$app/navigation', () => ({
+	goto: navigation.goto,
+	invalidate: vi.fn(),
+	afterNavigate: (callback: () => void) => {
+		navigation.onMove = callback;
+	}
+}));
+
 const { practiceId } = fixture.params;
 
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
+	navigation.goto.mockReset();
 	Object.assign(pageState, toPageState(fixture));
 });
 
@@ -52,7 +65,7 @@ describe('the overdue book (#768)', () => {
 
 		// $4,500.00 owed, all of it overdue -- the fixture's first
 		// row is open and past its due date.
-		await expect.element(testPage.getByText('Overdue invoices')).toBeVisible();
+		await expect.element(testPage.getByText('Overdue invoices', { exact: true })).toBeVisible();
 		await expect
 			.element(testPage.getByRole('term').filter({ hasText: /^Overdue$/ }))
 			.toBeVisible();
@@ -69,17 +82,83 @@ describe('the overdue book (#768)', () => {
 			.toBeVisible();
 	});
 
-	it('offers the narrowing as a link, carrying the practice overdue count', async () => {
+	it('offers the narrowing as the filter bar every Staff list uses, and says the whole book is shown', async () => {
 		await setup();
 
+		await expect.element(testPage.getByRole('checkbox', { name: 'Only overdue Invoices' })).not.toBeChecked();
+		await expect.element(testPage.getByRole('button', { name: 'Apply' })).toBeVisible();
+		await expect.element(testPage.getByRole('status')).toHaveTextContent('Showing every Invoice.');
+		await expect.element(testPage.getByRole('link', { name: 'Clear filters' })).not.toBeInTheDocument();
+	});
+
+	it('names the field after the address parameter, so the form reaches it with no script', async () => {
+		await setup();
+
+		await expect.element(testPage.getByRole('checkbox', { name: 'Only overdue Invoices' })).toHaveAttribute('name', 'overdue');
+		const form = testPage.getByRole('button', { name: 'Apply' }).element().closest('form')!;
+		expect(form.method).toBe('get');
+		expect(new URL(form.action).pathname).toBe(`/practices/${practiceId}/invoices`);
+	});
+
+	it('carries the overdue count in the result line once narrowed', async () => {
+		pageState.url = new URL(narrowedToOverdue.url!);
+		await setup({ ...data, isNarrowedToOverdue: true, overdueCount: 1 });
+
+		await expect.element(testPage.getByRole('status')).toHaveTextContent('Showing 1 overdue Invoice.');
+		await expect.element(testPage.getByRole('checkbox', { name: 'Only overdue Invoices' })).toBeChecked();
 		await expect
-			.element(
-				testPage.getByRole('link', { name: `Overdue (${data.overdueCount})` })
-			)
-			.toBeVisible();
-		await expect
-			.element(testPage.getByRole('link', { name: 'All invoices' }))
-			.toBeVisible();
+			.element(testPage.getByRole('link', { name: 'Clear filters' }))
+			.toHaveAttribute('href', `/practices/${practiceId}/invoices`);
+	});
+
+	// The same arrangement as the Clients list's bar: switches above, Apply with
+	// the held "Clear filters" box on one row, the count under them on the left edge, a quiet legend.
+	it('draws the filter bar the way the Clients list does, and does not move Apply once narrowed', async () => {
+		await setup();
+		const apply = () => testPage.getByRole('button', { name: 'Apply' }).element().getBoundingClientRect();
+		const before = apply();
+		const status = testPage.getByRole('status').element().getBoundingClientRect();
+		const switchBox = testPage.getByRole('checkbox', { name: 'Only overdue Invoices' }).element().getBoundingClientRect();
+		expect(switchBox.bottom).toBeLessThanOrEqual(before.top);
+		expect(status.top).toBeGreaterThanOrEqual(before.bottom);
+		const legend = testPage.getByRole('group', { name: 'Choose which Invoices to show' }).element().querySelector('legend')!;
+		expect(legend.getBoundingClientRect().height).toBeLessThanOrEqual(1);
+		await expect.element(testPage.getByRole('link', { name: 'Clear filters' })).not.toBeInTheDocument();
+
+		cleanup();
+		pageState.url = new URL(narrowedToOverdue.url!);
+		await setup({ ...data, isNarrowedToOverdue: true, overdueCount: 1 });
+
+		await expect.element(testPage.getByRole('link', { name: 'Clear filters' })).toBeVisible();
+		expect(apply().left).toBe(before.left);
+		expect(apply().top).toBe(before.top);
+		expect(testPage.getByRole('status').element().getBoundingClientRect().left).toBe(status.left);
+	});
+
+	it('goes to the overdue address on Apply with the box ticked, and to the bare one with it clear', async () => {
+		await setup();
+
+		await testPage.getByRole('checkbox', { name: 'Only overdue Invoices' }).click();
+		await testPage.getByRole('button', { name: 'Apply' }).click();
+		expect(navigation.goto).toHaveBeenLastCalledWith(`/practices/${practiceId}/invoices?overdue=true`);
+
+		await testPage.getByRole('checkbox', { name: 'Only overdue Invoices' }).click();
+		await testPage.getByRole('button', { name: 'Apply' }).click();
+		expect(navigation.goto).toHaveBeenLastCalledWith(`/practices/${practiceId}/invoices`);
+	});
+
+	it('moves focus to the result line once a changed narrowing has loaded, never on first arrival', async () => {
+		// Reactive, because the route reads the address through a derived.
+		pageState.url = new SvelteURL(fixture.url);
+		const { rerender } = await setup();
+		navigation.onMove!();
+		await expect.element(testPage.getByRole('status')).not.toHaveFocus();
+
+		pageState.url.searchParams.set('overdue', 'true');
+		navigation.onMove!();
+		await rerender({ data: { ...data, isNarrowedToOverdue: true, overdueCount: 1 } });
+
+		await expect.element(testPage.getByRole('status')).toHaveFocus();
 	});
 
 	it('asks every later page for the same narrowing it was read under', async () => {
@@ -149,9 +228,7 @@ describe('the overdue book (#768)', () => {
 		await testPage.viewport(1440, 900);
 		await render(Page, {});
 
-		await expect
-			.element(testPage.getByRole('link', { name: 'Overdue', exact: true }))
-			.toHaveAttribute('aria-current', 'page');
+		await expect.element(testPage.getByRole('checkbox', { name: 'Only overdue Invoices' })).toBeChecked();
 	});
 
 	it('keeps the pages already loaded when the same read is handed back', async () => {

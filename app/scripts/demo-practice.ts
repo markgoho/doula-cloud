@@ -225,6 +225,13 @@ async function spreadTailAcrossPhases(
 				status: 'completed',
 				endingReason: 'care_complete'
 			});
+		} else if (client.kind === 'postpartum' && client.dueDate === '') {
+			// Postpartum care under way began at a birth, so the Clients list's Due
+			// column has a day to read ("Born ...") and not a dash.
+			await send(request, 'PUT', `${engagementPath}/birth-outcome`, owner, {
+				birthOutcome: 'live_birth',
+				pregnancyEndedOn: dayAfter(today, -(10 + (index % 30)))
+			});
 		}
 	}
 }
@@ -283,6 +290,11 @@ async function seedPriyaBook(request: APIRequestContext, roster: Roster, today: 
 	}
 	const [camille, tessa, imani, grace] = book;
 	const priya = roster.staff.priya;
+	// Imani's baby came three weeks ago, which is why she is postpartum.
+	await send(request, 'PUT', `/api/practices/${roster.practiceId}/engagements/${imani.engagementId}/birth-outcome`, priya.headers, {
+		birthOutcome: 'live_birth',
+		pregnancyEndedOn: dayAfter(today, -21)
+	});
 	const messagesPath = (engagement: NamedEngagement) =>
 		`/api/practices/${roster.practiceId}/engagements/${engagement.engagementId}/messages`;
 
@@ -364,6 +376,10 @@ async function seedPriyaBook(request: APIRequestContext, roster: Roster, today: 
 async function seedAfterALoss(request: APIRequestContext, roster: Roster, today: string): Promise<void> {
 	const mira = await addPriyaClient(request, roster, today, AFTER_A_LOSS);
 	await contractFor(request, roster, today, mira, await portalSessionFor(request, roster, mira));
+	// Care was under way before the loss: a Visit on a day, which moves the
+	// Engagement from intake to active (ADR-0015), so the list reads "Active
+	// · Contract signed" beside the loss and not "Intake" with a signed Contract.
+	await scheduleVisit(request, roster, mira, roster.staff.priya.staffId, instantAfter(today, -(PREGNANCY_ENDED_DAYS_AGO + 14), 15));
 	await send(
 		request,
 		'PUT',

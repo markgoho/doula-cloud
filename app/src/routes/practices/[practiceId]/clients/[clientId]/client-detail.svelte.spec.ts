@@ -14,6 +14,7 @@ import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 // center-l never runs it, leaving every DataTable narrower than its floor.
 import '#lib/styles/app.css';
 import { gotoWithOutcome } from '#lib/outcome.js';
+import { holdClientsName } from '#lib/clientsReturn.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../../routeFixture.js';
 import { detail as baseDetail, fixture } from './page.fixture.js';
@@ -41,7 +42,15 @@ const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
 const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+const navigation = vi.hoisted(() => ({
+	afterNavigate: undefined as ((navigation: { from: { url: URL } | undefined }) => void) | undefined
+}));
+vi.mock('$app/navigation', () => ({
+	goto,
+	afterNavigate: (callback: (navigation: { from: { url: URL } | undefined }) => void) => {
+		navigation.afterNavigate = callback;
+	}
+}));
 
 const { practiceId, clientId } = fixture.params;
 // The heading names her in full (`fixture.readyText`); each line under
@@ -355,7 +364,7 @@ describe('client detail hub', () => {
 			}
 		});
 
-		await expect.element(testPage.getByRole('cell', { name: 'Birth' })).toBeVisible();
+		await expect.element(testPage.getByRole('rowheader', { name: 'Birth' })).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'Active' })).toBeVisible();
 	});
 
@@ -637,6 +646,73 @@ describe('client detail hub', () => {
 	it('links back to the Clients list', async () => {
 		await setup();
 
+		await expect
+			.element(testPage.getByRole('link', { name: 'Clients', exact: true }))
+			.toHaveAttribute('href', `/practices/${practiceId}/clients`);
+	});
+
+	it('links back to the list with the filters it was left with', async () => {
+		await setup();
+
+		navigation.afterNavigate?.({ from: { url: new URL(`https://example.test/practices/${practiceId}/clients?owes=true&doula=staff%201`) } });
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Clients', exact: true }))
+			.toHaveAttribute('href', `/practices/${practiceId}/clients?owes=true&doula=staff%201`);
+	});
+
+	// The browser's Back button restores the list's Name with its history
+	// entry; this link is a new navigation, so it hands the Name back as the
+	// entry's state, and the address stays free of it (#1829).
+	it('hands the list its Name back through history state, and never in the address', async () => {
+		await setup();
+		holdClientsName('Camille');
+		navigation.afterNavigate?.({ from: { url: new URL(`https://example.test/practices/${practiceId}/clients?owes=true`) } });
+		const back = testPage.getByRole('link', { name: 'Clients', exact: true });
+
+		await back.click();
+
+		expect(goto).toHaveBeenCalledOnce();
+		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients?owes=true`, { state: { clientsName: 'Camille' } });
+		await expect.element(back).toHaveAttribute('href', `/practices/${practiceId}/clients?owes=true`);
+		expect(String(goto.mock.calls[0][0])).not.toContain('Camille');
+	});
+
+	it('hands back an empty Name when the list held none', async () => {
+		await setup();
+		holdClientsName('');
+		navigation.afterNavigate?.({ from: { url: new URL(`https://example.test/practices/${practiceId}/clients`) } });
+
+		await testPage.getByRole('link', { name: 'Clients', exact: true }).click();
+
+		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients`, { state: { clientsName: '' } });
+	});
+
+	// #1829: a Client's name is in no URL, so the way back carries none even
+	// from an address that holds one.
+	it('links back to the list without a name, even from an address that holds one', async () => {
+		await setup();
+
+		navigation.afterNavigate?.({ from: { url: new URL(`https://example.test/practices/${practiceId}/clients?owes=true&q=Cam`) } });
+		await expect
+			.element(testPage.getByRole('link', { name: 'Clients', exact: true }))
+			.toHaveAttribute('href', `/practices/${practiceId}/clients?owes=true`);
+
+		navigation.afterNavigate?.({ from: { url: new URL(`https://example.test/practices/${practiceId}/clients?q=Cam`) } });
+		await expect
+			.element(testPage.getByRole('link', { name: 'Clients', exact: true }))
+			.toHaveAttribute('href', `/practices/${practiceId}/clients`);
+	});
+
+	it('links back to the bare list when it came from anywhere else', async () => {
+		await setup();
+
+		navigation.afterNavigate?.({ from: { url: new URL(`https://example.test/practices/${practiceId}/clients/search?q=Cam`) } });
+		await expect
+			.element(testPage.getByRole('link', { name: 'Clients', exact: true }))
+			.toHaveAttribute('href', `/practices/${practiceId}/clients`);
+
+		navigation.afterNavigate?.({ from: undefined });
 		await expect
 			.element(testPage.getByRole('link', { name: 'Clients', exact: true }))
 			.toHaveAttribute('href', `/practices/${practiceId}/clients`);

@@ -15,6 +15,14 @@ import type { RouteFixture, RouteVariant } from '../../../routeFixture.js';
 import { nth, TYPICAL_CLIENTS, TYPICAL_DOULAS } from '../../../typicalPilot.js';
 import Page from './+page.svelte';
 
+// A calendar day, `YYYY-MM-DD`, this many days before today: a live birth's postpartum words
+// count from now, so the fixture holds the day that makes them the same words whenever it runs.
+function daysAgo(days: number): string {
+	const day = new Date();
+	day.setDate(day.getDate() - days);
+	return `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+}
+
 export const clients: ClientListItem[] = [
 	{
 		clientId: 'client-1',
@@ -42,6 +50,7 @@ export const clients: ClientListItem[] = [
 				engagementId: 'engagement-1',
 				kind: 'birth',
 				engagementStatus: 'active',
+				dueDate: '2027-01-10',
 				contractStatus: 'sent',
 				// #2232: two Doulas, the longest a line's Doula text gets.
 				doulaNames: ['Yolanda Okonkwo-Fitzgerald', 'Anne-Marie Ochieng-Whitfield'],
@@ -52,28 +61,21 @@ export const clients: ClientListItem[] = [
 				 * of the two words an open Invoice can take ("Owes" is on
 				 * the typical rows below).
 				 */
-				daysOverdue: 12,
-				/*
-				 * The third optional field, and the one the first pass
-				 * missed: a fee appends a whole ` · Your fee: $1,200.00`
-				 * segment, which is render-distinct under ADR-0025's
-				 * fixture rule and is the longest a rollup line ever gets.
-				 * The spec reaches it through a spread override, which the
-				 * rule allows for a spec -- but an override is invisible to
-				 * the continuum sweep, so without it here the sweep
-				 * measured this column and never its busiest state.
-				 *
-				 * A fixture need not be role-consistent: no single reader
-				 * sees both an Invoice amount and her own fee, and this row
-				 * carries both on purpose, because the sweep's question is
-				 * how much room the widest possible line needs.
-				 */
-				feeCents: 120_000
+				daysOverdue: 12
 			},
+			/*
+			 * The third optional field: her own fee, which draws in the Money
+			 * column as "Your fee $1,200.00" and is render-distinct from an
+			 * Invoice's amount and state. A fixture need not be
+			 * role-consistent: no single reader sees both, and this row
+			 * carries both on purpose, because the sweep's question is how
+			 * much room the widest possible line needs.
+			 */
 			{
 				engagementId: 'engagement-2',
 				kind: 'postpartum',
-				engagementStatus: 'intake'
+				engagementStatus: 'intake',
+				feeCents: 120_000
 			},
 			/*
 			 * #741: the settled-Contract branch -- a deposit Invoice paid
@@ -85,6 +87,7 @@ export const clients: ClientListItem[] = [
 				engagementId: 'engagement-3',
 				kind: 'birth',
 				engagementStatus: 'active',
+				dueDate: '2027-02-21',
 				invoiceStatus: 'paid',
 				invoiceAmountCents: 100_000
 			}
@@ -93,7 +96,7 @@ export const clients: ClientListItem[] = [
 	/*
 	 * A second Client, because a list of one is a list whose every column
 	 * holds the same answer (#596). This one is the other end of all three
-	 * of them -- no work yet, never invited, no pending Request -- so the
+	 * of them -- not yet in care, never invited, no pending Request -- so the
 	 * Work column, the invite column and the empty Requests cell are all
 	 * on screen for the sweep to measure and for a spec to assert on
 	 * without inventing a row of its own.
@@ -121,16 +124,49 @@ export const clients: ClientListItem[] = [
 		portalInviteStatus: 'bounced',
 		emailSuppressed: true,
 		pendingRequestKinds: ['birth', 'postpartum']
+	},
+	/*
+	 * A fourth Client for the Due column's two ended states, which no row
+	 * above reaches: once a pregnancy has ended the cell reads "26 weeks postpartum"
+	 * for a live birth and the neutral "Ended <day>" for a loss or an outcome
+	 * nobody learned, in place of a due date or the dash. One row holds both,
+	 * as two lines, so each carries its kind's prefix, the longest a Due line
+	 * gets. A loss and an unknown outcome render the same words, so only the
+	 * loss is here. The name is hostile in the way #537 asks for: long, and
+	 * hyphenated on both sides.
+	 */
+	{
+		clientId: 'client-4',
+		name: 'Wilhelmina Featherstonehaugh-Abernathy-Villiers',
+		email: 'wilhelmina.featherstonehaugh-abernathy@example.test',
+		hasWork: true,
+		pendingRequestKinds: [],
+		openEngagements: [
+			{
+				engagementId: 'engagement-4',
+				kind: 'postpartum',
+				engagementStatus: 'active',
+				birthOutcome: 'live_birth',
+				pregnancyEndedOn: daysAgo(26 * 7 + 3)
+			},
+			{
+				engagementId: 'engagement-5',
+				kind: 'birth',
+				engagementStatus: 'active',
+				birthOutcome: 'loss',
+				pregnancyEndedOn: '2026-11-30'
+			}
+		]
 	}
 ];
 
 /*
- * "Also show Clients with no work yet" on (#458, #1945): the Work column renders only here, so
+ * "Also show Clients not yet in care" on (#458, #1945): the Work column renders only here, so
  * without this variant the sweep never measured the widest the table
  * gets. The same rows as the base, through the base's own `respond`.
  */
 export const withEveryone: RouteVariant = {
-	name: 'The Clients list, with Also show Clients with no work yet on',
+	name: 'The Clients list, with Also show anyone not yet in care on',
 	url: 'https://example.test/practices/practice-1/clients?all=true'
 };
 
@@ -183,13 +219,18 @@ const typicalClients: ClientListItem[] = TYPICAL_CLIENTS.slice(0, 8).map((person
 		hasWork: !isNew,
 		portalInviteStatus: isNew ? undefined : (index % 4 === 1 ? 'sent' : 'accepted'),
 		pendingRequestKinds: index === 5 ? ['birth'] : [],
-		openEngagements: isNew
+		// The Client with a pending birth Request has no Engagement yet: the
+		// Request is what asks for one (ADR-0017), so her row holds the one badge.
+		openEngagements: isNew || index === 5
 			? []
 			: [
 					{
 						engagementId: `engagement-${index + 1}`,
 						kind,
 						engagementStatus: 'active',
+						// Soonest first, as the BFF sends them.
+						dueDate: kind === 'postpartum' ? undefined : `2027-0${index + 1}-14`,
+						...(kind === 'postpartum' && { birthOutcome: 'live_birth', pregnancyEndedOn: daysAgo(22) }),
 						contractStatus: 'signed',
 						doulaNames: [doula.name],
 						invoiceStatus: 'open',
@@ -202,21 +243,56 @@ const typicalClients: ClientListItem[] = TYPICAL_CLIENTS.slice(0, 8).map((person
 	};
 });
 
+/*
+ * The same page with what the demo Practice holds that a typical page does
+ * not: two Doulas on one Engagement, a loss's "Ended" date, an overdue badge,
+ * and one row with two Doulas and an overdue badge together. A swept typical variant (`typicalBusiest`) -- the continuum check
+ * measures the typical page and the hostile rows; the Clients list spec holds
+ * the rows to one height here.
+ */
+const twoDoulas = { doulaNames: ['Joss Adeyemi', 'Lena Vasquez'] };
+const ended = { dueDate: undefined, birthOutcome: 'loss' as const, pregnancyEndedOn: '2026-11-02' };
+const overdue = { daysOverdue: 12 };
+const busiestLine = new Map<number, object>([
+	[0, twoDoulas],
+	[2, ended],
+	[4, { ...twoDoulas, ...overdue }],
+	// The demo's Imani: a Postpartum line, Active, Contract signed, and an overdue badge.
+	[6, { kind: 'postpartum' as const, ...overdue, dueDate: undefined, birthOutcome: 'live_birth' as const, pregnancyEndedOn: daysAgo(45) }]
+]);
+
+export const seedLikeClients: ClientListItem[] = typicalClients.map((client, index) => {
+	const [line] = client.openEngagements ?? [];
+	const busiest = busiestLine.get(index);
+	return line && busiest ? { ...client, openEngagements: [{ ...line, ...busiest }] } : client;
+});
+
 export const typical: RouteVariant = {
 	name: 'The Clients list, with typical pilot data',
 	typical: true,
 	respond: () => jsonResponse({ items: typicalClients, hasMore: false })
 };
 
+/*
+ * The demo Practice's busiest rows, swept as a typical screen too: the table's
+ * floor is the width the longest Status line, a pair of Doulas and an "Ended"
+ * date need together, since one container query serves every Client list.
+ */
+export const typicalBusiest: RouteVariant = {
+	name: 'The Clients list, with the demo Practice’s busiest rows',
+	typical: true,
+	respond: () => jsonResponse({ items: seedLikeClients, hasMore: false })
+};
+
 export const typicalWithEveryone: RouteVariant = {
 	...typical,
-	name: 'The Clients list, with typical pilot data and Also show Clients with no work yet on',
+	name: 'The Clients list, with typical pilot data and Also show anyone not yet in care on',
 	url: withEveryone.url
 };
 
 /*
- * #2624: a Doula who is not a contractor is also offered "Only my
- * Clients" in the filter bar, beside the switch for Clients with no work.
+ * #2624: a Doula who is not a contractor is also offered "Mine" in the
+ * filter bar, beside the switch for anyone not yet in care.
  * With it on the bar draws one switch fewer, a strict subset of this
  * one, so that state is not declared.
  */
@@ -233,5 +309,5 @@ export const fixture: RouteFixture = {
 	props: { data: { isContractor: false } },
 	respond: () => jsonResponse({ items: clients, hasMore: false }),
 	readyText: 'Clients',
-	variants: [asContractorWithNoClients, withEveryone, typical, typicalWithEveryone, asEmployeeDoula]
+	variants: [asContractorWithNoClients, withEveryone, typical, typicalBusiest, typicalWithEveryone, asEmployeeDoula]
 };

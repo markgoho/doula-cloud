@@ -43,11 +43,12 @@ const pages = files.filter(
 );
 
 /*
- * #2701: a Staff page's inline start edge is its Template's (ADR-0018's
- * 2026-11-07 amendment). ListPage, RecordDetail and OverviewHub start at
- * the page gutter, the capped Templates center their column, and nothing
- * under practices/ draws a frame of its own, so a new Staff page takes
- * its edge by choosing a Template and has no other way to choose one.
+ * #2701: a Staff page takes its frame from its Template, and every Staff
+ * page starts at the page gutter: the Staff shell holds the capped
+ * Templates' columns to it (ADR-0018's later 2026-11-07 amendment).
+ * Nothing under practices/ draws a frame of its own, so a new Staff page
+ * takes that edge by choosing a Template and has no other way to choose
+ * one.
  */
 describe('Staff pages leave the page frame to a Template', () => {
 	it('finds the Staff pages', () => {

@@ -360,7 +360,7 @@
 			display: block;
 			block-size: 100%;
 			border-radius: var(--radius);
-			background-color: var(--color-primary);
+			background-color: var(--color-on-surface-variant);
 		}
 
 		/*

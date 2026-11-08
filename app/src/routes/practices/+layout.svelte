@@ -53,7 +53,13 @@
 	// Client (#2183), keyed on the label every one of them already has.
 	const WAITS_FOR_A_CLIENT = new Set(['Clients', 'Schedule', 'On call', 'Invoices', 'Contracts', 'Offers']);
 
-	const isAdmin = $derived(practiceSession !== undefined && isOwnerOrAdmin(practiceSession));
+	// A URL that matches no route never runs [practiceId]/+layout.ts, so a
+	// Page not found has no Practice session; the Membership's roles keep
+	// its bar the one every other page of the Practice draws.
+	const roles = $derived(
+		practiceSession?.roles ?? session?.memberships.find((membership) => membership.practiceId === practiceId)?.roles
+	);
+	const isAdmin = $derived(roles !== undefined && isOwnerOrAdmin({ roles }));
 
 	const navItems = $derived.by((): NavItem[] => {
 		if (practiceId === undefined) return [];
@@ -208,3 +214,14 @@
 		{@render children()}
 	{/key}
 </main>
+
+<style>
+	@layer components {
+		/* One edge for every Staff page (ADR-0018, 2026-11-07): a form's
+		   capped column starts at the gutter a list starts at, rather than
+		   centering in the room past its cap. */
+		main {
+			--page-column-margin-inline: 0;
+		}
+	}
+</style>

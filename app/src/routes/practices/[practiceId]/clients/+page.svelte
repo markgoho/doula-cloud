@@ -1,25 +1,40 @@
 <script lang="ts">
 	import { page } from '#lib/appState.svelte.js';
-	import { goto } from '$app/navigation';
+	import { afterNavigate, beforeNavigate, goto, replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import { clientsResultSummary, loadClients, type ClientListItem, type OpenEngagement } from '#lib/client.js';
-	import type { ComponentProps } from 'svelte';
+	import {
+		clientsResultSummary,
+		loadClients,
+		NO_CARE_YET,
+		UNKNOWN_DOULA,
+		type ClientListItem,
+		type OpenEngagement
+	} from '#lib/client.js';
+	import { RefusalError } from '#lib/formErrors.js';
+	import { holdClientsName } from '#lib/clientsReturn.js';
+	import { onMount, untrack, type ComponentProps } from 'svelte';
 	import { kindLabel, NO_DOULA_YET_LABEL } from '#lib/engagementRequest.js';
 	import { engagementStatusText } from '#lib/engagementDetail.js';
 	import { startHref } from './new/intake.js';
+	import { formatCalendarDay, formatPostpartum } from '#lib/dates.js';
 	import { formatAmount, invoiceRowStatusLabel, invoiceRowStatusVariant, invoiceStatusLabel } from '#lib/invoice.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
+	import type { LabeledValue } from '#lib/roles.js';
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 	import Badge from '#lib/components/atoms/Badge.svelte';
+	import Button from '#lib/components/atoms/Button.svelte';
 	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import Select from '#lib/components/atoms/Select.svelte';
+	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import FilterBar from '#lib/components/molecules/FilterBar.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
-	import type { PageProps as PageProperties } from './$types';
+	import type { RouteId } from '$app/types';
+import type { PageProps as PageProperties } from './$types';
 
 	// #539 (ADR-0017): +page.ts's load already decided, before this
 	// component mounted, whether the caller is a contractor Doula with
@@ -32,6 +47,18 @@
 	// #2624: "Only my Clients" is drawn for a Doula who is not a contractor,
 	// whose list is already only hers, and where another Doula holds the role
 	// (#2675), since at a Practice with one Doula every Client is hers.
+	// She must also hold at least one live Client, or the switch could never match.
+	let hasMine = $state(false);
+	$effect(() => {
+		const gate = data?.hasMine ?? Promise.resolve(true);
+		let isCurrent = true;
+		void gate.then((answer) => {
+			if (isCurrent) hasMine = answer;
+		});
+		return () => {
+			isCurrent = false;
+		};
+	});
 	const canNarrowToMine = $derived(!isContractor && (data?.isDoula ?? false) && (data?.hasOtherDoulas ?? true));
 	// #1609: whether the Practice holds any Client record, which decides
 	// where the header link goes. Defaults to the search, which is right
@@ -49,24 +76,52 @@
 		};
 	});
 
+	// The Practice's Doulas for the "Doula" filter, read by +page.ts for an
+	// Owner or an Admin and empty for everyone else, so the filter is not
+	// drawn for them.
+	let doulas = $state.raw<LabeledValue[]>([]);
+	$effect(() => {
+		const gate = data?.doulas ?? Promise.resolve([]);
+		let isCurrent = true;
+		void gate.then((options) => {
+			if (isCurrent) doulas = options;
+		});
+		return () => {
+			isCurrent = false;
+		};
+	});
+
+	// What a person reads when a read fails: no status code and no server
+	// text, and the first line says nothing is lost.
+	const LOAD_FAILED = 'Your Clients did not load. Nothing you saved is lost.';
+	const LOAD_MORE_FAILED = 'More Clients did not load. Nothing you saved is lost. Try again.';
+
 	// Starts empty: unlike Billing and Invoices this screen fetches its own
 	// first page in the effect below rather than through a load, so every
 	// page it holds arrives through this list.
 	const clients = new PaginatedList<ClientListItem>({
 		first: { items: [], hasMore: false },
-		loadPage: (cursor) =>
-			loadClients(apiFetchWithSession, page.params.practiceId!, {
-				cursor,
-				showAll: isShowingEveryone,
-				showMine: isShowingMine
-			}),
-		failureMessage: 'Failed to load more Clients'
+		loadPage: async (cursor) => {
+			try {
+				return await loadClients(apiFetchWithSession, page.params.practiceId!, { cursor, ...appliedView() });
+			} catch {
+				throw new Error(LOAD_MORE_FAILED);
+			}
+		},
+		failureMessage: LOAD_MORE_FAILED
 	});
 	let error = $state('');
 	let isLoaded = $state(false);
+	// A later filter's page is on its way while the rows of the last one stay up.
+	let isRefreshing = $state(false);
+	// Apply was pressed and the address has not yet changed.
+	let isApplying = $state(false);
+	const isBusy = $derived(isRefreshing || isApplying);
+	// The address names a Doula the Practice does not hold, which the BFF refuses.
+	let isDoulaUnknown = $state(false);
 	const isReady = $derived(isLoaded && hasAnyClient !== undefined);
 
-	// The default filter is "Clients with work" (ADR-0017); `?all=true`
+	// The default filter is Clients in care (ADR-0017); `?all=true`
 	// switches to everyone -- including a Client whose only Request was
 	// refused. A URL param, not local state: shareable, survives a
 	// reload, and works with the back button, all for free from
@@ -74,34 +129,318 @@
 	let isShowingEveryone = $derived(page.url.searchParams.get('all') === 'true');
 
 	// #2624: `?mine=true` narrows the list to the Clients she is attached
-	// to, in the address for the same reasons. A Client with no work has no
+	// to, in the address for the same reasons. A Client not yet in care has no
 	// Doula, so the two switches never both apply.
 	let isShowingMine = $derived(canNarrowToMine && page.url.searchParams.get('mine') === 'true');
 
-	function clientsPath(isShowingEveryone: boolean, isShowingMine = false): string {
+	// #2724: `?owes=true` and `?noContract=true` narrow it the same way, to
+	// the Clients who owe money and the ones with an Engagement under way and
+	// no Contract. Money is not shown to a contractor Doula (ADR-0008), so
+	// the first never applies to her.
+	let isShowingOwing = $derived(!isContractor && page.url.searchParams.get('owes') === 'true');
+	let isShowingNoContract = $derived(page.url.searchParams.get('noContract') === 'true');
+
+	// #2724 and after: `?doula=<staffId>` narrows to one Doula's Clients and
+	// a typed name to a name. Neither is money, so they apply to everyone. The
+	// Doula stays in the address like the rest; the name does not, since a
+	// Client's name is in no URL (#1829): it rides in the history entry's
+	// state (`goto(url, { state })`), so Back and Forward restore it and a
+	// reload drops it. The BFF ANDs them with "Only my Clients", so both
+	// together are simply a narrower list.
+	let appliedDoula = $derived(page.url.searchParams.get('doula') ?? '');
+	let appliedName = $derived((page.state.clientsName ?? '').trim());
+	// Left for the Client hub's Back link, which hands it back (`clientsReturn.ts`).
+	$effect(() => {
+		holdClientsName(appliedName);
+	});
+	const isFiltered = $derived(
+		isShowingEveryone || isShowingMine || isShowingOwing || isShowingNoContract || appliedDoula !== '' || appliedName !== ''
+	);
+
+	// Mine, owing, no Contract and a Doula each imply an Engagement, which is
+	// all the switch for Clients with no care could add to them, so it is not
+	// drawn beside one. A typed name implies nothing, so it stays.
+	const isImplyingCare = $derived(isShowingMine || isShowingOwing || isShowingNoContract || appliedDoula !== '');
+
+	// The result line's id, which the table is described by.
+	const RESULT_ID = 'clients-result';
+
+	// Every filter the address names: all but the name (#1829).
+	type ClientsView = {
+		all?: boolean;
+		mine?: boolean;
+		owing?: boolean;
+		noContract?: boolean;
+		doula?: string;
+	};
+
+	// The names are the ones the filter bar's own fields carry, so its form
+	// reaches this address with no script running. `all` stays in the address
+	// beside a narrowing: the BFF ANDs them, and dropping it would untick a box
+	// the person ticked.
+	function clientsPath({ all, mine, owing, noContract, doula }: ClientsView): string {
 		const base = resolve('/practices/[practiceId]/clients', {
 			practiceId: page.params.practiceId!
 		});
-		if (isShowingMine) return `${base}?mine=true`;
-		return isShowingEveryone ? `${base}?all=true` : base;
+		const parts = [
+			mine && 'mine=true',
+			owing && 'owes=true',
+			noContract && 'noContract=true',
+			doula && `doula=${encodeURIComponent(doula)}`,
+			all && 'all=true'
+		].filter(Boolean);
+		return parts.length > 0 ? `${base}?${parts.join('&')}` : base;
 	}
 
+	// The view the address names, as `loadClients` takes it.
+	function appliedView() {
+		return {
+			showAll: isShowingEveryone,
+			showMine: isShowingMine,
+			showOwing: isShowingOwing,
+			showNoContract: isShowingNoContract,
+			doula: appliedDoula,
+			name: appliedName
+		};
+	}
+
+	/*
+	 * Where focus goes once a move to this list has loaded (the GOV.UK
+	 * pattern for a page that changes under a keyboard user; `Heading`'s
+	 * `focusOnAppearing` is the same idea for a heading). Left alone, focus
+	 * falls to the top of the page and Tab has to cross the filter bar to
+	 * reach the result.
+	 *
+	 * - A change of filter in the address (Apply, "Clear filters", back or
+	 *   forward) lands on the result line. Never on first arrival, where the
+	 *   browser and the route announcer already say where she is.
+	 * - Coming back from a Client's hub lands on that Client's row link, so
+	 *   she resumes where she left; the result line if the row is not on the
+	 *   loaded page.
+	 *
+	 * It waits for the list that matches the address, so it never lands on
+	 * the rows being replaced.
+	 */
+	const CLIENT_HUB_ROUTE = '/practices/[practiceId]/clients/[clientId]' satisfies RouteId;
+	const filterKey = $derived(JSON.stringify(appliedView()));
+	let loadedKey = $state('');
+	let filterBar = $state<{ focusStatus: () => void }>();
+	let pendingFocus = $state<{ clientId?: string }>();
+	let lastFilterKey: string | undefined;
+
+	afterNavigate(({ from }) => {
+		seedDrafts();
+		if (from?.route.id === CLIENT_HUB_ROUTE) {
+			pendingFocus = { clientId: from.params!.clientId };
+		} else if (lastFilterKey !== undefined && lastFilterKey !== filterKey) {
+			pendingFocus = {};
+		}
+		lastFilterKey = filterKey;
+	});
+
+	const rowDomId = (clientId: string, view: 'table' | 'record') => `client-row-${clientId}-${view}`;
+
+	// Both trees are in the DOM (DataTable's #666); the displayed one wins.
+	function rowLink(clientId: string): HTMLElement | undefined {
+		for (const view of ['table', 'record'] as const) {
+			const link = document.querySelector<HTMLElement>(`#${rowDomId(clientId, view)} a`);
+			if (link?.checkVisibility()) return link;
+		}
+		return undefined;
+	}
+
+	$effect(() => {
+		if (!pendingFocus || !isReady || loadedKey !== filterKey) return;
+		const { clientId } = pendingFocus;
+		pendingFocus = undefined;
+		const link = clientId === undefined ? undefined : rowLink(clientId);
+		if (link) link.focus();
+		else filterBar?.focusStatus();
+	});
+
+	// What is in the filter bar's controls before it is applied. Seeded from
+	// the address and put back in step after every navigation, as the On call
+	// screen does with its dates.
+	let isAllChecked = $state(false);
+	let isMineChecked = $state(false);
+	let isOwingChecked = $state(false);
+	let isNoContractChecked = $state(false);
+	let draftDoula = $state('');
+	let draftName = $state('');
+	// Once per navigation, never on a re-run of an effect: a box ticked in the
+	// moment before the page hydrated was overwritten by the address it had
+	// not yet been applied to.
+	//
+	// A control the person changed since the navigation began is hers: the seed
+	// never overwrites it. `beforeNavigate` clears the marks, so the next move
+	// seeds every control again.
+	let touched: string[] = [];
+	function seedDrafts() {
+		if (!touched.includes('all')) isAllChecked = isShowingEveryone;
+		if (!touched.includes('mine')) isMineChecked = isShowingMine;
+		if (!touched.includes('owes')) isOwingChecked = isShowingOwing;
+		if (!touched.includes('noContract')) isNoContractChecked = isShowingNoContract;
+		if (!touched.includes('doula')) draftDoula = appliedDoula;
+		if (!touched.includes('name')) draftName = appliedName;
+	}
+	seedDrafts();
+	beforeNavigate(() => (touched = []));
+
+	// The field's wrapper, whose form is read when the page takes over.
+	let nameField = $state<HTMLElement>();
+
+	// Nothing is disabled before the page takes over, so a name typed or a box
+	// ticked in that moment is in the controls but not yet in the drafts. Read
+	// them from the DOM before the address seeds anything, and mark each one
+	// the person's own so the seed leaves it alone. The Name has no `name`
+	// attribute (#1829), so it is read from its input.
+	onMount(() => {
+		const form = nameField?.closest('form');
+		if (!form) return;
+		// A switch the bar does not draw has no box to read, and keeps its address.
+		const adoptChecked = (key: string, isDraftChecked: boolean, set: (isChecked: boolean) => void) => {
+			const box = form.elements.namedItem(key) as HTMLInputElement | null;
+			if (!box || box.checked === isDraftChecked) return;
+			touched.push(key);
+			set(box.checked);
+		};
+		adoptChecked('all', isAllChecked, (value) => (isAllChecked = value));
+		adoptChecked('mine', isMineChecked, (value) => (isMineChecked = value));
+		adoptChecked('owes', isOwingChecked, (value) => (isOwingChecked = value));
+		adoptChecked('noContract', isNoContractChecked, (value) => (isNoContractChecked = value));
+		const typed = nameField!.querySelector('input')!.value;
+		if (typed !== draftName) {
+			touched.push('name');
+			draftName = typed;
+		}
+	});
+
 	// eslint-disable-next-line unicorn/consistent-boolean-name -- mirrors the native HTMLInputElement `checked` property Checkbox's onChange wraps 1:1 (same exception Checkbox.svelte itself carries)
-	async function handleToggleAll(checked: boolean) {
+	const handleToggleAll = (checked: boolean) => {
+		touched.push('all');
+		isAllChecked = checked;
+	};
+	// eslint-disable-next-line unicorn/consistent-boolean-name -- mirrors the native HTMLInputElement `checked` property Checkbox's onChange wraps 1:1 (same exception Checkbox.svelte itself carries)
+	const handleToggleMine = (checked: boolean) => {
+		touched.push('mine');
+		isMineChecked = checked;
+	};
+	// eslint-disable-next-line unicorn/consistent-boolean-name -- mirrors the native HTMLInputElement `checked` property Checkbox's onChange wraps 1:1 (same exception Checkbox.svelte itself carries)
+	const handleToggleOwing = (checked: boolean) => {
+		touched.push('owes');
+		isOwingChecked = checked;
+	};
+	// eslint-disable-next-line unicorn/consistent-boolean-name -- mirrors the native HTMLInputElement `checked` property Checkbox's onChange wraps 1:1 (same exception Checkbox.svelte itself carries)
+	const handleToggleNoContract = (checked: boolean) => {
+		touched.push('noContract');
+		isNoContractChecked = checked;
+	};
+
+	// The filter bar's own form, upgraded to a client-side navigation
+	// (Rule of Least Power).
+	async function applyFilters(event: SubmitEvent) {
+		event.preventDefault();
 		// Before the navigation, so a "Load more" already in flight is
 		// abandoned rather than merged into the new filter's list. The rows
 		// stay up until the new filter's first page arrives.
 		clients.abandon();
-		await goto(clientsPath(checked));
+		// Apply answers the press at once: the navigation has to run its load
+		// before the address changes and the list's own request starts.
+		isApplying = true;
+		try {
+			await goto(
+				clientsPath({
+					all: isAllChecked,
+					mine: isMineChecked,
+					owing: isOwingChecked,
+					noContract: isNoContractChecked,
+					doula: draftDoula
+				}),
+				{ state: { clientsName: draftName.trim() } }
+			);
+		} finally {
+			isApplying = false;
+		}
 	}
 
-	// eslint-disable-next-line unicorn/consistent-boolean-name -- mirrors the native HTMLInputElement `checked` property Checkbox's onChange wraps 1:1 (same exception Checkbox.svelte itself carries)
-	async function handleToggleMine(checked: boolean) {
+	const doulaOptions = $derived([{ value: '', label: 'Any Doula' }, ...doulas]);
+	// The Doula's name for the result sentence; the id's place if the roster
+	// has not landed, or does not list her (a Doula who holds no Client is left
+	// out of it).
+	function doulaNameOf(id: string): string {
+		if (id === '') return '';
+		return doulas.find((doula) => doula.value === id)?.label ?? 'that Doula';
+	}
+
+	// The GOV.UK "selected filters": one removable tag for each filter the
+	// address names, and one for the typed name. Each is a link to the list
+	// minus that one filter, so one press removes one. The name is in no
+	// address (#1829), so removing any other filter hands it on in the history
+	// entry's state, and removing the name hands on an empty one.
+	type AppliedTag = { text: string; href: string; name: string };
+	const appliedTags = $derived.by(() => {
+		const view: ClientsView = {
+			all: isShowingEveryone,
+			mine: isShowingMine,
+			owing: isShowingOwing,
+			noContract: isShowingNoContract,
+			doula: appliedDoula
+		};
+		const tags: AppliedTag[] = [];
+		const add = (text: string, without: ClientsView, name = appliedName) => {
+			tags.push({ text, href: clientsPath({ ...view, ...without }), name });
+		};
+		if (isShowingOwing) add('Who owe money', { owing: false });
+		if (isShowingNoContract) add('Active, with no Contract', { noContract: false });
+		if (isShowingMine) add('Mine', { mine: false });
+		if (appliedDoula) add(`Doula: ${doulaNameOf(appliedDoula)}`, { doula: '' });
+		if (isShowingEveryone) add(`Including ${NO_CARE_YET}`, { all: false });
+		if (appliedName) add(`Name: ${appliedName}`, {}, '');
+		return tags;
+	});
+
+	async function removeTag(event: MouseEvent, tag: AppliedTag) {
+		event.preventDefault();
 		clients.abandon();
-		await goto(clientsPath(false, checked));
+		isApplying = true;
+		try {
+			await goto(tag.href, { state: { clientsName: tag.name } });
+		} finally {
+			isApplying = false;
+		}
 	}
 
-	const summary = $derived(clientsResultSummary(clients.items.length, clients.hasMore, isShowingEveryone, isShowingMine));
+	// The longest the count line can say without a typed name: a Doula's (or the signed-in
+	// Doula's) first page of active Clients who owe money and have no Contract. The bar
+	// draws it unseen, so the line reserves one line where that fits on one and two where
+	// it does not.
+	const longestSummary = $derived(
+		[
+			clientsResultSummary(99, true, false, false, true, true, {
+				doulaName: doulas.map((doula) => doula.label).toSorted((a, b) => b.length - a.length)[0] ?? ''
+			}),
+			clientsResultSummary(99, true, false, true, true, true)
+		].toSorted((a, b) => b.length - a.length)[0]
+	);
+
+	// What the rows on screen were asked for. While a newer filter loads they
+	// still answer to the last one, so the count line and the empty state never
+	// describe rows that are not there.
+	let shown = $state.raw(appliedView());
+	const shownDoulaName = $derived(doulaNameOf(shown.doula));
+	const summary = $derived(
+		isDoulaUnknown
+			? UNKNOWN_DOULA
+			: clientsResultSummary(
+			clients.items.length,
+			clients.hasMore,
+			shown.showAll,
+			shown.showMine,
+			shown.showOwing,
+			shown.showNoContract,
+			{ doulaName: shownDoulaName, name: shown.name }
+		)
+	);
 
 	// ADR-0017: a pending Engagement Request shows on its Client's row.
 	// She can hold one of each kind at once, hence the join rather than a
@@ -113,91 +452,60 @@
 		return `${labels.join(' & ')} request pending`;
 	}
 
-	// #458: the default view is always "Clients with work" (ADR-0017), so
-	// every row there already has it -- the column would say the same
-	// thing on every row. It only carries information once the switch is on
-	// mixes the two together.
-	function workStatusText(client: ClientListItem): string {
-		return client.hasWork ? 'Has work' : 'No work yet';
-	}
-
-	type StatusBadge = { label: string; variant: ComponentProps<typeof Badge>['variant'] };
-
-	// #264 (RA-G6), #2022: the Contract lifecycle as a badge. Signed is
-	// done, sent waits on the Client, and the rest are facts with nothing
-	// to do.
-	const contractBadges: Record<string, StatusBadge> = {
-		draft: { label: 'Contract draft', variant: 'neutral' },
-		sent: { label: 'Contract sent', variant: 'info' },
-		signed: { label: 'Contract signed', variant: 'success' },
-		voided: { label: 'Contract voided', variant: 'neutral' }
+	// A line's status: its care phase and its Contract, plain words. The money
+	// is not here: the Money column says it once, with the badge that carries its
+	// meaning (an amber "owed", a red "12 days overdue"), and a screen reader
+	// hears it once there.
+	const contractFacts: Record<string, string> = {
+		draft: 'Contract draft',
+		sent: 'Contract sent',
+		signed: 'Contract signed',
+		voided: 'Contract voided'
 	};
 
-	const NO_CONTRACT_BADGE: StatusBadge = { label: 'No Contract yet', variant: 'neutral' };
+	const NO_CONTRACT = 'No Contract yet';
 
-	// #2022: one open Engagement's status as badges -- its care phase, its
-	// Contract, and its money wherever the BFF's role gate let the field
-	// through the wire at all (ADR-0006/ADR-0008). A field this Reader may
-	// not see is absent from `line` entirely, not blanked, so there is
-	// nothing here to hide -- only to append when present.
-	//
-	// The badges replace #264's sentence ("Contract: Signed · Doula: … ·
-	// Active · Outstanding ($1,500.00)"), whose one long line set this
-	// list's floor at 101.75rem, past what a desktop window holds. The
-	// Doula's name is in its own column (#2232).
-	//
-	// #741: `invoiceStatus`/`invoiceAmountCents` are the BFF's answer to
-	// "is anything outstanding under this Contract", not merely its newest
-	// Invoice's status (list.go's OpenEngagement doc comment). So an `open`
-	// result reads "Owes", never as the latest of several Invoices, and it
-	// is the one badge that asks for something. "Owes", not #741's
-	// "Outstanding": a typical row (Postpartum, Active, Contract signed and
-	// the money) wrapped at 1440px in a cell held to the measure, and the
-	// shorter word keeps it on one line. A doula says it that way too.
-	function lineBadges(line: OpenEngagement): StatusBadge[] {
-		const badges: StatusBadge[] = [
-			// #1512: the care phase in the word every Staff screen shows.
-			{ label: engagementStatusText(line.engagementStatus), variant: 'neutral' },
-			(line.contractStatus && contractBadges[line.contractStatus]) || NO_CONTRACT_BADGE
-		];
-		if (line.invoiceStatus) {
-			const amount = line.invoiceAmountCents === undefined ? '' : ` ${formatAmount(line.invoiceAmountCents)}`;
-			// #2130: a late Invoice reads Overdue, from the BFF's one count
-			// and through the label pair every Staff screen reads, so it
-			// says here what it says on its Engagement and on Invoices.
-			// #2225: a payment on its way reads so here too, ahead of both
-			// Overdue and "Owes" -- she has paid and the money is clearing.
-			const standing = {
-				status: line.invoiceStatus,
-				daysOverdue: line.daysOverdue ?? 0,
-				paymentProcessing: line.paymentProcessing ?? false
-			};
-			if (standing.paymentProcessing || standing.daysOverdue > 0) {
-				badges.push({ label: `${invoiceRowStatusLabel(standing)}${amount}`, variant: invoiceRowStatusVariant(standing) });
-			} else if (line.invoiceStatus === 'open') {
-				badges.push({ label: `Owes${amount}`, variant: 'warning' });
-			} else if (line.invoiceStatus === 'paid') {
-				badges.push({ label: `Paid${amount}`, variant: 'success' });
-			} else {
-				badges.push({ label: `Invoice ${invoiceStatusLabel(line.invoiceStatus).toLowerCase()}${amount}`, variant: 'neutral' });
-			}
-		}
-		if (line.feeCents !== undefined) {
-			badges.push({ label: `Your fee ${formatAmount(line.feeCents)}`, variant: 'neutral' });
-		}
-		return badges;
+	// #2022: one open Engagement's status -- its care phase and its Contract.
+	// No Contract is a plain fact in every care phase, never a badge: it was
+	// a warning on most of a typical page, and "Only active Clients with no
+	// Contract" is the filter that finds them. A pending Request is the one
+	// badge in this cell (ADR-0017).
+	function standingOf(line: OpenEngagement) {
+		return {
+			status: line.invoiceStatus ?? '',
+			daysOverdue: line.daysOverdue ?? 0,
+			paymentProcessing: line.paymentProcessing ?? false
+		};
 	}
 
-	// The Status cell's words. They name the cell to `DataTable`, and they
-	// decide whether a record card keeps the row at all (#2022): one clause
-	// per open Engagement, then the pending Request.
+	function lineFacts(line: OpenEngagement): string[] {
+		// #1512: the care phase in the word every Staff screen shows.
+		const facts = [engagementStatusText(line.engagementStatus)];
+		const contract = line.contractStatus && contractFacts[line.contractStatus];
+		// Under "Only active Clients with no Contract" every line would say so:
+		// the filter has said it once, in the count line.
+		if (contract) facts.push(contract);
+		else if (!shown.showNoContract) facts.push(NO_CONTRACT);
+		return facts;
+	}
+
+	// The Status cell's words, in the order the cell draws them: the kind,
+	// then the facts. They name the cell to
+	// `DataTable`, and they decide whether a record card keeps the row at
+	// all (#2022).
 	function statusText(client: ClientListItem): string {
-		const lines = (client.openEngagements ?? []).map(
-			(line) => `${kindLabel(line.kind)}: ${lineBadges(line).map((badge) => badge.label).join(', ')}`
-		);
+		const lines = (client.openEngagements ?? []).map((line) => `${kindLabel(line.kind)}: ${lineFacts(line).join(', ')}`);
 		const pending = pendingRequestText(client);
-		return [...lines, ...(pending ? [pending] : [])].join('; ');
+		const text = [...lines, ...(pending ? [pending] : [])].join('; ');
+		return text || (client.hasWork ? CARE_ENDED : NOT_YET_IN_CARE);
 	}
+
+	// A Client whose every Engagement has ended still has work (list.go's
+	// hasWorkExpr), so her row says why it holds no line rather than
+	// sitting blank. #458: one with none says so in the same cell, which
+	// is why the switch that lists her needs no Work column.
+	const CARE_ENDED = 'Care ended';
+	const NOT_YET_IN_CARE = 'Not yet in care';
 
 	// #2232 (RA-G15): who covers each open Engagement, so the list answers
 	// it with no Engagement opened. A column of its own, not words in the
@@ -212,29 +520,173 @@
 
 	// One entry per open Engagement. Where a Client holds more than one,
 	// each names its kind, so a name is never read against the wrong one.
-	function doulaLines(client: ClientListItem): { engagementId: string; text: string }[] {
+	// Two Doulas on one Engagement run on one line, comma-joined, and wrap only
+	// when the column has no room left.
+	type DoulaLine = { engagementId: string; prefix: string; text: string };
+	function doulaLines(client: ClientListItem): DoulaLine[] {
 		const lines = client.openEngagements ?? [];
-		return lines.map((line) => ({
-			engagementId: line.engagementId,
-			text: lines.length > 1 ? `${kindLabel(line.kind)}: ${doulaNamesText(line)}` : doulaNamesText(line)
-		}));
+		return lines.map((line) => {
+			const prefix = lines.length > 1 ? `${kindLabel(line.kind)}: ` : '';
+			return { engagementId: line.engagementId, prefix, text: `${prefix}${doulaNamesText(line)}` };
+		});
+	}
+
+	// The money on each open Engagement, in the Status cell's order, wherever the
+	// BFF's role gate let a field through the wire (ADR-0006/ADR-0008): the
+	// Invoice's amount and its state for an Owner, an Admin or an employed Doula,
+	// her own fee for a contractor. A field this Reader may not see is absent,
+	// so there is nothing here to hide. Where a Client holds more than one line
+	// each names its kind; a line with no money draws a dash, and a Client none
+	// of whose lines hold any draws nothing at all.
+	type MoneyLine = {
+		engagementId: string;
+		prefix: string;
+		lead: string;
+		amount: string;
+		word: string;
+		// Set where the state asks for a badge: amber for owed, red for overdue.
+		variant?: ComponentProps<typeof Badge>['variant'];
+	};
+	const NO_MONEY = 'No amount';
+
+	// The state of an Invoice, said once, here: late and owed are badges (one
+	// meaning per color), the rest plain words.
+	function moneyState(line: OpenEngagement): { word: string; variant?: MoneyLine['variant'] } {
+		const standing = standingOf(line);
+		if (standing.paymentProcessing) return { word: 'clearing' };
+		if (standing.daysOverdue > 0) {
+			const days = `${standing.daysOverdue} day${standing.daysOverdue === 1 ? '' : 's'}`;
+			return { word: `${days} ${invoiceRowStatusLabel(standing).toLowerCase()}`, variant: invoiceRowStatusVariant(standing) };
+		}
+		if (line.invoiceStatus === 'open') return { word: 'owed', variant: 'warning' };
+		return { word: invoiceStatusLabel(line.invoiceStatus ?? '').toLowerCase() };
+	}
+
+	function moneyLines(client: ClientListItem): MoneyLine[] {
+		const lines = client.openEngagements ?? [];
+		const held = lines.map((line): Omit<MoneyLine, 'engagementId' | 'prefix'> => {
+			if (line.invoiceStatus) {
+				const amount = line.invoiceAmountCents === undefined ? '' : formatAmount(line.invoiceAmountCents);
+				return { lead: '', amount, ...moneyState(line) };
+			}
+			if (line.feeCents !== undefined) return { lead: 'Your fee', amount: formatAmount(line.feeCents), word: '' };
+			return { lead: '', amount: '', word: '' };
+		});
+		if (held.every((money) => money.amount === '' && money.word === '')) return [];
+		return lines.map((line, index) => {
+			const prefix = lines.length > 1 ? `${kindLabel(line.kind)}: ` : '';
+			return { engagementId: line.engagementId, prefix, ...held[index]! };
+		});
+	}
+
+	// When each open Engagement's birth is due, in the Status cell's order, so
+	// the list reads as the order it is in. Where a Client holds more than
+	// one, each names its kind.
+	const NO_DUE_DATE = 'No due date';
+
+	// An Engagement with no date draws a dash on screen and says "No due date"
+	// to a screen reader only: beside a red Overdue badge, those words on screen
+	// read as being about the invoice.
+	type DueLine = {
+		engagementId: string;
+		prefix: string;
+		lead: string;
+		day: string;
+		// A live birth's weeks since, "3 weeks postpartum"; the birth day stays in `day`.
+		postpartum: string;
+		// The calendar day the birth happened, `YYYY-MM-DD`, for a `<time datetime>`.
+		bornOn: string;
+		date: string;
+		text: string;
+	};
+
+	// Every value says which date it is, so the column is headed "Date" and a
+	// screen reader hears one phrase per line, never a label that may be wrong:
+	// "Due Nov 9, 2026" while the birth is ahead; once the pregnancy has ended
+	// the due date forecasts nothing, so "3 weeks postpartum" for a live birth
+	// (the birth day is kept for a screen reader) and the neutral
+	// "Ended Oct 30, 2026" for a loss or an outcome nobody learned, which never
+	// says "postpartum" (docs/personas/loss-client.md). A line with no day
+	// recorded reads nothing.
+	// The word and the day apart, so the word can be muted and the days line
+	// up in a column of their own.
+	function dueParts(line: OpenEngagement): { lead: string; day: string; postpartum: string; bornOn: string } {
+		if (line.pregnancyEndedOn) {
+			const day = formatCalendarDay(line.pregnancyEndedOn);
+			if (line.birthOutcome === 'live_birth') {
+				return { lead: '', day, postpartum: formatPostpartum(line.pregnancyEndedOn), bornOn: line.pregnancyEndedOn };
+			}
+			return { lead: 'Ended', day, postpartum: '', bornOn: '' };
+		}
+		return line.dueDate
+			? { lead: 'Due', day: formatCalendarDay(line.dueDate), postpartum: '', bornOn: '' }
+			: { lead: '', day: '', postpartum: '', bornOn: '' };
+	}
+
+	function dueLines(client: ClientListItem): DueLine[] {
+		const lines = client.openEngagements ?? [];
+		return lines.map((line) => {
+			const prefix = lines.length > 1 ? `${kindLabel(line.kind)}: ` : '';
+			const { lead, day, postpartum, bornOn } = dueParts(line);
+			const date = postpartum ? `${postpartum}, born ${day}` : (day && lead ? `${lead} ${day}` : day);
+			return { engagementId: line.engagementId, prefix, lead, day, postpartum, bornOn, date, text: `${prefix}${date || NO_DUE_DATE}` };
+		});
 	}
 
 	// #2022: Email and Portal invite are on the Client hub, where the
 	// Blocked email addresses link (#785) went with them, and a pending
 	// Request is a badge in Status. What is left fits a desktop.
-	const columns = $derived([
-		{ label: 'Name', accessor: (client: ClientListItem) => client.name },
-		{ label: 'Status', accessor: statusText, content: statusCell },
-		{
+	// Name, Money, Date and Doula are each as wide as their longest value and
+	// never wrap; Status, the column with the most to say, takes the rest
+	// (`columnWidths="fill"`). A Client with two Engagements stacks hers by design.
+	const columnSet = {
+		name: { label: 'Name', accessor: (client: ClientListItem) => client.name },
+		status: { label: 'Status', accessor: statusText, content: statusCell, grows: true },
+		money: {
+			label: 'Money',
+			numeric: true,
+			// Empty on purpose: the record card draws each Engagement's money in its
+			// Status line, beside the Engagement it belongs to (the field-per-column
+			// record would wrap its line to a second row on a phone).
+			accessor: () => '',
+			content: moneyCell
+		},
+		date: {
+			// Left-aligned like the words around it: dates are read, not summed,
+			// and right-aligned they ran into the Doula's name beside them.
+			label: 'Date',
+			accessor: (client: ClientListItem) =>
+				dueLines(client)
+					.map((line) => line.text)
+					.join('; '),
+			content: dueCell
+		},
+		doula: {
 			label: 'Doula',
 			accessor: (client: ClientListItem) =>
 				doulaLines(client)
 					.map((line) => line.text)
 					.join('; '),
 			content: doulaCell
-		},
-		...(isShowingEveryone ? [{ label: 'Work', accessor: workStatusText }] : [])
+		}
+	};
+
+	// A column that would say the same thing on every row, or nothing on any,
+	// is left out (the table and the record card draw the same set). Money is
+	// there when a Client on the page has some, which no Client under "Only
+	// active Clients with no Contract" does. Under one Doula, the count line
+	// names her, so her column would repeat her name down the page.
+	const hasMoney = $derived(clients.items.some((client) => moneyLines(client).length > 0));
+	const hasDoulaColumn = $derived(shown.doula === '');
+	// A column left out gives its room to Status, the column that grows, so
+	// the columns after it start where they started. The Doula is the last
+	// column, so nothing after it moves.
+	const columns = $derived([
+		columnSet.name,
+		columnSet.status,
+		...(hasMoney ? [columnSet.money] : []),
+		columnSet.date,
+		...(hasDoulaColumn ? [columnSet.doula] : [])
 	]);
 
 	// The Client detail hub (#494) -- DataTable links only its first
@@ -246,20 +698,12 @@
 		});
 	}
 
-	// #1511: the Engagement page a rollup line's kind opens.
-	function engagementHref(line: OpenEngagement): string {
-		return resolve('/practices/[practiceId]/engagements/[engagementId]', {
-			practiceId: page.params.practiceId!,
-			engagementId: line.engagementId
-		});
-	}
-
 	// Reloads page one against the current filter -- on first mount, on a
 	// toggle click, and on a browser back/forward that lands on a
 	// different `all` value, since `isShowingEveryone` is derived from
 	// `page.url` and every one of those re-runs this effect.
 	$effect(() => {
-		void loadFirstPage(isShowingEveryone, isShowingMine);
+		void loadFirstPage(appliedView());
 	});
 
 	/*
@@ -277,20 +721,64 @@
 	 * of date -- which the effect's next run corrects -- never a list
 	 * mixing both.
 	 */
-	async function loadFirstPage(isShowingEveryone: boolean, isShowingMine: boolean) {
-		isLoaded = false;
+	let latestLoad = 0;
+	async function loadFirstPage(view: ReturnType<typeof appliedView>) {
+		const thisLoad = ++latestLoad;
+		// The rows already on screen stay up, marked busy, until the new
+		// page lands; a skeleton stands in only for the very first load.
+		isRefreshing = untrack(() => isLoaded);
 		error = '';
 		try {
-			clients.reset(
-				await loadClients(apiFetchWithSession, page.params.practiceId!, {
-					showAll: isShowingEveryone,
-					showMine: isShowingMine
-				})
-			);
+			// Back to this list from a Client: as many pages as were open, under
+			// the same filters, so the row she came from is there to land on.
+			const wanted = Math.min(untrack(() => page.state.clientsPages ?? 1), MAX_RESTORED_PAGES);
+			let first = await loadClients(apiFetchWithSession, page.params.practiceId!, view);
+			let pages = 1;
+			while (pages < wanted && first.hasMore && first.nextCursor) {
+				const next = await loadClients(apiFetchWithSession, page.params.practiceId!, { ...view, cursor: first.nextCursor });
+				if (thisLoad !== latestLoad) return;
+				first = { items: [...first.items, ...next.items], nextCursor: next.nextCursor, hasMore: next.hasMore };
+				pages += 1;
+			}
+			if (thisLoad !== latestLoad) return;
+			clients.reset(first);
+			pagesLoaded = pages;
+			loadedKey = JSON.stringify(view);
+			shown = view;
+			isDoulaUnknown = false;
 			isLoaded = true;
+			isRefreshing = false;
 		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Failed to load Clients';
+			if (thisLoad !== latestLoad) return;
+			// A Doula id the BFF refuses as malformed can never load, so Try again
+			// would only fail again: say what is wrong and offer the way out.
+			if (view.doula && error_ instanceof RefusalError && error_.status === 400) {
+				clients.reset({ items: [], hasMore: false });
+				pagesLoaded = 1;
+				loadedKey = JSON.stringify(view);
+				shown = view;
+				isDoulaUnknown = true;
+				isLoaded = true;
+				isRefreshing = false;
+				return;
+			}
+			error = LOAD_FAILED;
+			isLoaded = false;
+			isRefreshing = false;
 		}
+	}
+
+	// How many pages the list holds, kept in this history entry's state so a
+	// Back to the list can load as many again. Capped, so a reader who paged
+	// a long way gets a sane reload rather than the whole book.
+	const MAX_RESTORED_PAGES = 5;
+	let pagesLoaded = 1;
+	async function loadMore() {
+		const before = clients.items.length;
+		await clients.loadMore();
+		if (clients.items.length === before) return;
+		pagesLoaded += 1;
+		replaceState('', { clientsName: page.state.clientsName, clientsPages: pagesLoaded });
 	}
 
 	function searchHref(): string {
@@ -303,17 +791,26 @@
 	// contractor Doula, who never gets to make one -- the same screen
 	// tells her plainly that work reaches her as an Offer instead.
 	//
-	// #1706: the default filter is "Clients with work" (ADR-0017), so an
+	// #1706: the default filter is Clients in care (ADR-0017), so an
 	// empty default view at a Practice that holds a Client record (the
-	// `all=true` count +page.ts read) means nobody has work yet, not that
+	// `all=true` count +page.ts read) means nobody is in care yet, not that
 	// nobody exists -- and "No Clients yet." would contradict the "Find or
 	// add a Client" link above it. With the switch on there is no
 	// filter left to point at, so the plain message stays.
+	// Everyone else has the bar's own "Clear filters", in view at every width, so
+	// the empty state does not offer it a second time.
+	const emptyAction = $derived(
+		isContractor ? { label: 'How to add Clients of your own', href: searchHref() } : undefined
+	);
+
 	const emptyMessage = $derived.by(() => {
 		if (isContractor) return 'Work reaches you as an Offer, so there are no Clients here yet.';
-		if (isShowingMine) return 'No Clients are yours yet.';
-		if (hasAnyClient && !isShowingEveryone) {
-			return 'No Client has work yet. Turn on "Also show Clients with no work yet" to list them.';
+		// Narrowed: what was looked for, in the count line's own words.
+		if (shown.showMine || shown.showOwing || shown.showNoContract || shown.doula || shown.name) {
+			return summary;
+		}
+		if (hasAnyClient && !shown.showAll) {
+			return `No Client is in care yet. Turn on "Also show ${NO_CARE_YET}" to list them.`;
 		}
 		return 'No Clients yet.';
 	});
@@ -325,43 +822,83 @@
 		hold more than one concurrent open Engagement" is why this is a list,
 		so a second (or third) line is never dropped -- then the pending
 		Request, which a Client can hold before she has any Engagement.
-		Nothing renders for a Client with neither, and `statusText` is empty
-		for her too, so her record card leaves the row out.
+		A Client with neither reads "Care ended" or "Not yet in care".
 	-->
 	{@const pending = pendingRequestText(client)}
+	{@const money = moneyLines(client)}
 	{#if (client.openEngagements ?? []).length > 0 || pending}
 		<!--
-			#1511: each line's kind opens the Engagement's page. A new
-			Engagement has no Visit, Contract or Invoice, so no other screen
-			links to it yet. The link's description names the Client, so a
-			list of links read out of the table still tells one Client's
-			"Birth" from the next. The name is `hidden`: a description can
-			read hidden text, and the cell's own name then stays the line.
-			DataTable draws this cell once per view, hence the view in the id.
+			The name is the row's one link; each Engagement is a link on the
+			Client hub it opens (#1511), so the kind here is a word.
 		-->
-		<span id="status-{view}-{client.clientId}" hidden>{client.name}</span>
 		<ul class="status-list">
-			{#each client.openEngagements ?? [] as line (line.engagementId)}
+			{#each client.openEngagements ?? [] as line, lineIndex (line.engagementId)}
+				{@const facts = lineFacts(line)}
+				{@const owed = money[lineIndex]}
 				<li>
-					<cluster-l space="var(--space-related)" align="center">
-						<Link
-							href={engagementHref(line)}
-							label={kindLabel(line.kind)}
-							describedBy="status-{view}-{client.clientId}"
-						/>
-						{#each lineBadges(line) as badge (badge.label)}
-							<Badge label={badge.label} variant={badge.variant} />
-						{/each}
+					<cluster-l space="var(--space-1)" align="center">
+						<span class="kind">{kindLabel(line.kind)}</span>
+						<!-- A screen reader hears a comma after the kind, as it does
+						     between the facts; nothing is drawn. -->
+						<span class="visually-hidden">, </span>
+						<span class="facts">
+							<!-- The dot is drawn and the comma is read, so a screen
+							     reader hears "Intake, Contract signed", never the
+							     facts run together. The dot rides with the fact before
+							     it and the line breaks after it, so a dot ends a line
+							     and never starts one. -->
+							{#each facts as fact, index (fact)}
+								{#if index < facts.length - 1}<span class="no-break"><span>{fact}</span><span class="visually-hidden">, </span><span class="separator" aria-hidden="true">·</span></span><wbr />{:else}<span>{fact}</span>{/if}
+							{/each}
+						</span>
 					</cluster-l>
+					{#if view === 'record' && owed && (owed.amount || owed.word)}{@render recordMoney(owed)}{/if}
 				</li>
 			{/each}
 			{#if pending}
-				<!-- ADR-0017: a pending Request waits on the Practice, so it is
-				     the warning. -->
-				<li><Badge label={pending} variant="warning" /></li>
+				<!-- ADR-0017: a pending Request waits on the Practice. Blue means
+				     pending app-wide; amber is kept for what needs someone to act. -->
+				<li><Badge label={pending} variant="info" /></li>
 			{/if}
 		</ul>
+	{:else}
+		<span class="facts">{client.hasWork ? CARE_ENDED : NOT_YET_IN_CARE}</span>
 	{/if}
+{/snippet}
+
+<!-- A card's own Money line, under its Status: an Engagement's amount and state, drawn only where it
+     has some. The table draws them in its own column. -->
+{#snippet recordMoney(owed: MoneyLine)}
+	<div class="record-money">
+		<span class="visually-hidden">Money: </span><span class="no-break">{owed.lead ? `${owed.lead} ` : ''}{owed.amount}</span>
+		{#if owed.word}<span class="visually-hidden">&#44;&#32;</span>{@render stateWord(owed)}{/if}
+	</div>
+{/snippet}
+
+{#snippet dueCell(client: ClientListItem, view: DataTableView)}
+	<!-- One line per open Engagement, in the Status cell's order. Nothing for a Client with none. -->
+	{@const lines = dueLines(client)}
+	{@const doulas = hasDoulaColumn && view === 'table' ? doulaLines(client) : []}
+	{#if lines.length === 1}
+		{@render dueValue(lines[0])}{@render foldedDoula(doulas[0])}
+	{:else if lines.length > 1}
+		<ul class="status-list">
+			{#each lines as line, index (line.engagementId)}
+				<li>{@render dueValue(line)}{@render foldedDoula(doulas[index])}</li>
+			{/each}
+		</ul>
+	{/if}
+{/snippet}
+
+<!-- Between the floor and the width the Doula column fits, the column is not drawn and her name sits under the Date, so the table keeps every column's words. Not drawn at all from the wide band, and the table's own Doula cell is not drawn below it, so a screen reader hears her once. -->
+{#snippet foldedDoula(line: DoulaLine | undefined)}
+	{#if line}
+		<span class="folded-doula"><span class="visually-hidden">Doula: </span><span class="doula-names">{line.text}</span></span>
+	{/if}
+{/snippet}
+
+{#snippet dueValue(line: DueLine)}
+	{line.prefix}{#if line.postpartum}<time class="date postpartum" datetime={line.bornOn}>{line.postpartum}<span class="visually-hidden">, born {line.day}</span></time>{:else if line.day}<span class="date"><span class="lead">{line.lead}</span> <span>{line.day}</span></span>{:else}<span aria-hidden="true">—</span><span class="visually-hidden">{NO_DUE_DATE}</span>{/if}
 {/snippet}
 
 {#snippet doulaCell(client: ClientListItem)}
@@ -373,14 +910,42 @@
 	-->
 	{@const lines = doulaLines(client)}
 	{#if lines.length === 1}
-		{lines[0].text}
+		{@render doulaNames(lines[0])}
 	{:else if lines.length > 1}
 		<ul class="status-list">
 			{#each lines as line (line.engagementId)}
-				<li>{line.text}</li>
+				<li>{@render doulaNames(line)}</li>
 			{/each}
 		</ul>
 	{/if}
+{/snippet}
+
+{#snippet doulaNames(line: DoulaLine)}
+	<span class="doula-names">{line.text}</span>
+{/snippet}
+
+{#snippet moneyCell(client: ClientListItem)}
+	<!-- One line per open Engagement, in the Status cell's order. Nothing for a Client whose lines hold no money. The record card has no Money field: its Status line carries each amount. -->
+	{@const lines = moneyLines(client)}
+	{#if lines.length === 1}
+		{@render moneyValue(lines[0])}
+	{:else if lines.length > 1}
+		<ul class="status-list">
+			{#each lines as line (line.engagementId)}
+				<li>{@render moneyValue(line)}</li>
+			{/each}
+		</ul>
+	{/if}
+{/snippet}
+
+<!-- The state said once: a badge where it asks for one (amber owed, red overdue with its days), else a plain word. -->
+{#snippet stateWord(line: MoneyLine)}
+	{#if line.variant}<Badge label={line.word} variant={line.variant} />{:else}{line.word}{/if}
+{/snippet}
+
+<!-- The amount and its state in two tracks, so amounts end at one place; a fee is the words "Your fee" and the amount. -->
+{#snippet moneyValue(line: MoneyLine)}
+	{line.prefix}{#if !line.amount}<span aria-hidden="true">—</span><span class="visually-hidden">{NO_MONEY}</span>{#if line.word}<span class="visually-hidden">&#44;&#32;</span>{@render stateWord(line)}{/if}{:else if line.word}<span class="money"><span>{line.amount}</span><span class="state"><span class="visually-hidden">&#44;&#32;</span>{@render stateWord(line)}</span></span>{:else}<span class="no-break"><span class="lead">{line.lead}</span>&nbsp;{line.amount}</span>{/if}
 {/snippet}
 
 {#snippet actions()}
@@ -399,86 +964,195 @@
 		the count of records, not from the filtered rows below.
 	-->
 	{#if hasAnyClient === undefined}
-		<Skeleton variant="text" lines={1} />
+		<!-- The link's own box, drawn invisible and out of reach, so the page does not
+		     move when the read lands and the real link takes its place. -->
+		<span class="reserve" aria-hidden="true" inert>
+			<Link href={searchHref()} label="Find or add a Client" variant="start" />
+		</span>
 	{:else if hasAnyClient}
-		<Link href={searchHref()} label="Find or add a Client" />
+		<Link href={searchHref()} label="Find or add a Client" variant="start" />
 	{:else}
-		<Link href={startHref(page.params.practiceId!, 'clients')} label="Add a Client" />
+		<Link href={startHref(page.params.practiceId!, 'clients')} label="Add a Client" variant="start" />
 	{/if}
+{/snippet}
+
+{#snippet alsoShow(isReserve: boolean)}
+	<LabeledField label={`Also show ${NO_CARE_YET}`} orientation="inline">
+		{#snippet children(control)}
+			<Checkbox name="all" value="true" checked={isAllChecked} disabled={isReserve} onChange={handleToggleAll} {...control} />
+		{/snippet}
+	</LabeledField>
+{/snippet}
+
+<!-- Drawn only while a filter is applied, so the default list loses no room. The × comes first, as on the MOJ filter's tags; the name says what pressing it does. -->
+{#snippet applied()}
+	{#each appliedTags as tag (tag.text)}
+		<li>
+			<Link
+				href={tag.href}
+				label={tag.text}
+				variant="chip"
+				icon="x"
+				ariaLabel={`Remove filter: ${tag.text.replace(': ', ' ')}`}
+				onClick={(event) => removeTag(event, tag)}
+			/>
+		</li>
+	{/each}
 {/snippet}
 
 {#snippet content()}
 	<!--
-		The default view is "Clients with work" (ADR-0017); this switches to
+		The default view is Clients in care (ADR-0017); this switches to
 		everyone, including a Client whose only Request was refused -- nothing
 		new is built for her, she is simply no longer filtered out.
 
-		#2068: the toggle is the list's filter, so it sits in the list's
-		filter bar, directly above the list it narrows (Law of Proximity).
-		A switch acts at once, so the bar draws no Apply; the toggle's own
-		change navigates.
+		#2068: the filters sit in the list's filter bar, directly above the
+		list they narrow (Law of Proximity). The bar now submits, with one
+		Apply: it holds a text field and a select as well as the checkboxes,
+		and GOV.UK's filter pattern (ADR-0021) applies them together rather
+		than moving the list under a person typing. The form is a real GET, so
+		its field names are the address the page reads, with no script running.
+		What is hidden follows the applied address, not the unapplied controls.
 	-->
-	<!-- #2603: a contractor Doula is attached only through an Offer she accepted (ADR-0008), so the switch could never add a row to her list. -->
-	{#if !isContractor}
-		<FilterBar
-			action={clientsPath(false)}
-			legend={canNarrowToMine ? 'Choose which Clients to show' : 'Add to the list'}
-			status={isReady ? summary : ''}
-			empty={isReady && clients.items.length === 0}
-			isAppliedOnChange
-		>
-			<!-- #2624: a Client with no work has no Doula, so while the list is only hers the switch could add nothing. -->
-			{#if !isShowingMine}
-				<LabeledField label="Also show Clients with no work yet" orientation="inline">
-					{#snippet children(control)}
-						<Checkbox variant="toggle" checked={isShowingEveryone} onChange={handleToggleAll} {...control} />
-					{/snippet}
-				</LabeledField>
-			{/if}
-			{#if canNarrowToMine}
-				<LabeledField label="Only my Clients" orientation="inline">
-					{#snippet children(control)}
-						<Checkbox variant="toggle" checked={isShowingMine} onChange={handleToggleMine} {...control} />
-					{/snippet}
-				</LabeledField>
-			{/if}
-		</FilterBar>
-	{/if}
+	<!-- The bar and the list it narrows are one group, held closer than
+	     the page's sections; the bar's own rows sit closer still, so the table
+	     reads as apart from the controls and the count as part of the group. -->
+	<stack-l space="var(--space-related)">
+		<!-- #2603: a contractor Doula is attached only through an Offer she accepted (ADR-0008), so the switch could never add a row to her list. -->
+		{#if !isContractor}
+			<FilterBar
+				bind:this={filterBar}
+				action={clientsPath({})}
+				onSubmit={applyFilters}
+				legend="Choose which Clients to show"
+				status={isReady ? summary : ''}
+				statusRuler={longestSummary}
+				empty={isReady && clients.items.length === 0}
+				clearHref={isFiltered ? clientsPath({}) : undefined}
+				applied={appliedTags.length > 0 ? applied : undefined}
+				foldsFieldsOnly
+				{isBusy}
+				statusId={RESULT_ID}
+			>
+				<!--
+					Two rows that do not depend on each other: the switches, then
+					the fields with Apply and "Clear filters" after them. A switch
+					drawn or hidden never moves a field, and Apply never moves.
+				-->
+				{#snippet switches()}
+					<!-- One group, so "Clients" is said once, by the page, and each box reads as the end of "Show only". The legend is drawn on the boxes' own row. -->
+					<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- named boxes of a GET form beside the bar's own fields: CheckboxGroup stacks one option to a line and carries its value as an array -->
+					<fieldset class="show-only">
+						<legend>Show only</legend>
+						<div class="show-only-boxes">
+							<LabeledField label="Who owe money" orientation="inline">
+								{#snippet children(control)}
+									<Checkbox name="owes" value="true" checked={isOwingChecked} onChange={handleToggleOwing} {...control} />
+								{/snippet}
+							</LabeledField>
+							<!-- The BFF leaves out a Client whose only Engagement is still in Intake, where no Contract is expected. -->
+							<LabeledField label="Active, with no Contract" orientation="inline">
+								{#snippet children(control)}
+									<Checkbox name="noContract" value="true" checked={isNoContractChecked} onChange={handleToggleNoContract} {...control} />
+								{/snippet}
+							</LabeledField>
+							<!-- Beside the Doula select it is the other half of: whose Clients. The BFF ANDs the two, so mine and a Doula is a narrower list. -->
+							{#if canNarrowToMine && (hasMine || isShowingMine)}
+								<LabeledField label="Mine" orientation="inline">
+									{#snippet children(control)}
+										<Checkbox name="mine" value="true" checked={isMineChecked} onChange={handleToggleMine} {...control} />
+									{/snippet}
+								</LabeledField>
+							{/if}
+						</div>
+					</fieldset>
+					<!-- Last, so drawing it or not moves nothing. The default list is ADR-0017's: current care, past care, or a pending Request. The BFF ANDs this with a narrowing that implies care (mine, owing, no Contract, a Doula), so ticking it beside one changes nothing and it is not drawn. -->
+					{#if !isImplyingCare}
+						{@render alsoShow(false)}
+					{:else}
+						<!-- Unseen and out of reach; FilterBar keeps its box where the bar is wide, so the switches, the fields and Apply keep their place. -->
+						<div data-holds-space aria-hidden="true" inert>
+							{@render alsoShow(true)}
+						</div>
+					{/if}
+				{/snippet}
+				<!-- Name and Doula share a line in a narrow column, each taking half
+				     of it, and sit at their own widths where there is room. -->
+				<div class="field name" bind:this={nameField}>
+					<LabeledField label="Name" width={20}>
+						{#snippet children({ id, describedBy, invalid, width })}
+							<TextInput
+								{id}
+								{describedBy}
+								{invalid}
+								{width}
+								type="search"
+								maxlength={100}
+								autocomplete="off"
+								value={draftName}
+								onInput={(value) => {
+									touched.push('name');
+									draftName = value;
+								}}
+							/>
+						{/snippet}
+					</LabeledField>
+				</div>
+				{#if doulas.length > 0}
+					<!-- Only an Owner or an Admin reads the roster this lists (ADR-0008). Drawn while "Only my Clients" is on too, so Apply never moves: the BFF ANDs the filters, so mine and a Doula is a narrower list. -->
+					<div class="field doula">
+						<LabeledField label="Doula" width={30}>
+							{#snippet children({ id, describedBy, invalid, width })}
+								<Select {id} {describedBy} {invalid} {width} name="doula" options={doulaOptions} bind:value={draftDoula} onChange={() => {
+									touched.push('doula');
+								}} />
+							{/snippet}
+						</LabeledField>
+					</div>
+				{/if}
+			</FilterBar>
+		{/if}
 
-	{#if error}
-		<Notice message={error} variant="error" />
-	{:else if isReady}
-		<!--
-			No floor of its own (#2022): with Email, Portal invite and the
-			Engagements sentence gone, the typical pilot screen's table fits
-			`DataTable`'s own 55rem, so the 101.75rem this route used to set
-			(#1945, #1981) went with them. #2130 put an "Overdue $1,500.00"
-			badge on a typical row and measured again on 2026-10-26: the
-			typical table needs 782px on macOS/Chromium with it and without
-			it, under the 880px (55rem) floor, so the floor did not move.
+		{#if error}
+			<stack-l space="var(--space-related)">
+				<Notice message={error} variant="error" />
+				<Button label="Try again" onClick={() => loadFirstPage(appliedView())} />
+			</stack-l>
+		{:else if isReady}
+			<!--
+				The floor is this route's own (`.clients-table`, below).
 
-			#539, #501 (ADR-0017): hiding "Find or add a Client" above took
-			away this door's only link for a contractor Doula, so it comes
-			back as the empty list's action (#2015) -- once she has an
-			attached Client, the narrowed list is already her route to it.
-			Everyone else has "Find or add a Client" above the list.
-		-->
-		<DataTable
-			{columns}
-			rows={clients.items}
-			rowHref={clientHref}
-			hasMore={clients.hasMore}
-			onLoadMore={() => clients.loadMore()}
-			isLoadingMore={clients.isLoadingMore}
-			loadMoreError={clients.loadMoreError}
-			{emptyMessage}
-			emptyAction={isContractor
-				? { label: 'How to add Clients of your own', href: searchHref() }
-				: undefined}
-		/>
-	{:else}
-		<Skeleton variant="row" lines={8} label="Loading Clients" />
-	{/if}
+				#539, #501 (ADR-0017): hiding "Find or add a Client" above took
+				away this door's only link for a contractor Doula, so it comes
+				back as the empty list's action (#2015) -- once she has an
+				attached Client, the narrowed list is already her route to it.
+				Everyone else has "Find or add a Client" above the list.
+			-->
+			<!-- Five columns, four of them as wide as their values and one that takes the rest. The
+			     table is a table from the width the busiest typical row needs, and records below it. -->
+			<div class="clients-table" class:has-doula={hasDoulaColumn}>
+			<DataTable
+				{columns}
+				rows={clients.items}
+				rowHref={clientHref}
+				rowId={(client, view) => rowDomId(client.clientId, view)}
+				hasMore={clients.hasMore}
+				onLoadMore={loadMore}
+				isLoadingMore={clients.isLoadingMore}
+				loadMoreError={clients.loadMoreError}
+				{emptyMessage}
+				caption="Clients"
+				columnWidths="fill"
+				recordLayout="compact"
+				describedBy={isContractor ? undefined : RESULT_ID}
+				{isBusy}
+				{emptyAction}
+			/>
+			</div>
+		{:else}
+			<Skeleton variant="row" lines={8} label="Loading Clients" />
+		{/if}
+	</stack-l>
 {/snippet}
 
 <ListPage title="Clients" actions={isContractor ? undefined : actions} {content} />
@@ -495,6 +1169,257 @@
 			display: grid;
 			gap: var(--space-1);
 			margin: 0;
+		}
+
+		/* Three widths, each measured on the typical screens
+		   `route-continuum.svelte.spec.ts` sweeps, the busiest being the demo
+		   Practice's (two Doulas, an "Ended" date, an overdue badge and a
+		   Postpartum line), on the drag surface in macOS/Chromium. A container
+		   query serves every Client list, so each width is the busiest's.
+
+		   Below the first (55rem): records. From it: the table, with the Doula
+		   folded under the Date and the Status free to wrap to two lines, and every
+		   row two lines tall so the rows are equal. From the second (75.2rem, the
+		   discovered `min-width` query, the width every column needs on one line):
+		   the Doula has her own column and every row is one line.
+		   `DataTable.svelte`'s floor comment says why a floor can be the route's. */
+		.clients-table {
+			container: clients-table / inline-size;
+			/* The Money column's right edge, written once: the amounts end a
+			   state track and a gap before the cell's inset, and the header ends
+			   where they do. */
+			--money-state-track: 19.7ch;
+			--money-state-gap: var(--space-1);
+			/* The room a cell keeps either side, so two columns are two insets apart. */
+			--data-table-cell-inset: var(--space-2);
+			/* The Name column's least width, a long two-word name, so what follows it
+			   starts at one place whichever Clients the page holds; a longer name
+			   widens it. */
+			--name-track: 15ch;
+			/* The Status column's width: its busiest line on one line, and no wider, so
+			   a wide window leaves no gap between the status words and the Money. */
+			--status-track: 32ch;
+		}
+
+		.clients-table > :global(*) {
+			font-size: var(--text-body-size);
+			--data-table-table-display: none;
+			--data-table-records-display: grid;
+		}
+
+		/* The table shrinks to its columns instead of filling the frame. */
+		.clients-table :global(.table-view.fill),
+		.clients-table :global(.table-view.fill :is(th, td):not(.grows)) {
+			inline-size: auto;
+		}
+
+		.clients-table :global(.table-view :is(th, td):first-child) {
+			min-inline-size: var(--name-track);
+		}
+
+		.clients-table :global(.table-view th.grows) {
+			inline-size: var(--status-track);
+		}
+
+		/* Records fill the container, in as many columns as it holds. */
+		.clients-table :global(.record-view) {
+			grid-template-columns: repeat(auto-fill, minmax(min(100%, 38ch), 1fr));
+			gap: var(--space-related);
+			align-items: start;
+		}
+
+		.clients-table :global(.record-view .record) {
+			max-inline-size: none;
+			margin-block-start: 0;
+		}
+
+		.folded-doula {
+			display: block;
+			color: var(--color-on-surface-variant);
+		}
+
+		@container clients-table (width >= 55rem) {
+			.clients-table > :global(*) {
+				--data-table-table-display: table;
+				--data-table-records-display: none;
+			}
+
+			.clients-table :global(.table-view td.grows) {
+				overflow-wrap: normal;
+			}
+
+			/* The Doula's own column is not drawn; her name is under the Date. */
+			.has-doula :global(.table-view :is(th, td):last-child) {
+				display: none;
+			}
+
+			.clients-table :global(.table-view tbody :is(td, th)) {
+				block-size: calc(var(--row-height) + 1lh + var(--space-1));
+			}
+		}
+
+		@container clients-table (min-width: 75.2rem) {
+			.has-doula :global(.table-view :is(th, td):last-child) {
+				display: table-cell;
+			}
+
+			.clients-table :global(.table-view tbody :is(td, th)) {
+				block-size: var(--row-height);
+			}
+
+			.folded-doula {
+				display: none;
+			}
+		}
+
+		.clients-table :global(th.numeric) {
+			padding-inline-end: calc(var(--data-table-cell-inset, var(--space-3)) + var(--money-state-track) + var(--money-state-gap));
+		}
+
+		/* The header's tint reaches the same inset past the first column's text
+		   as it does past the last column's, so its two ends are alike while the
+		   text stays on the page's left edge. */
+		.clients-table :global(.table-view thead th:first-child) {
+			position: relative;
+		}
+
+		.clients-table :global(.table-view thead th:first-child)::before {
+			content: '';
+			position: absolute;
+			inset-block: 0 calc(-1 * var(--border-thin));
+			inset-inline-end: 100%;
+			inline-size: var(--data-table-cell-inset);
+			border-block-end: var(--border-thin) solid var(--color-outline-variant);
+			background-color: var(--color-surface-container);
+		}
+
+		/* A card's fields come in one order: the name, the Status, the Money where
+		   the Client has some, then the Date and the Doula a line each, since two
+		   fields on one line wrap to a second at some widths and not at others. A
+		   field a Client has nothing in is not drawn, so cards differ in height. */
+		.clients-table :global(.record-view .compact-meta) {
+			flex-direction: column;
+		}
+
+		.clients-table :global(.record-view .compact-separator) {
+			display: none;
+		}
+
+		.record-money {
+			display: flex;
+			align-items: center;
+			gap: var(--space-1);
+		}
+
+		.reserve {
+			display: contents;
+			visibility: hidden;
+		}
+
+		/* The group of narrowing boxes with its visible legend on their own row:
+		   a floated legend is an ordinary box beside the boxes, where a rendered
+		   one would take a row above them. */
+		.show-only {
+			margin: 0;
+			padding: 0;
+			border: 0;
+			min-inline-size: 0;
+		}
+
+		.show-only legend {
+			float: inline-start;
+			display: flex;
+			align-items: center;
+			min-block-size: var(--hit-target-min);
+			padding: 0;
+			margin-inline-end: var(--space-related);
+			font-size: var(--text-label-size);
+			font-weight: var(--font-weight-medium);
+			color: var(--color-on-surface-variant);
+		}
+
+		.show-only-boxes {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: var(--space-1) var(--space-related);
+		}
+
+		/* A live birth's "3 weeks postpartum": one phrase, not the two tracks of a day. */
+		.date.postpartum {
+			display: inline;
+		}
+
+		.kind {
+			font-weight: var(--font-weight-semibold);
+		}
+
+		.facts,
+		.lead {
+			color: var(--color-on-surface-variant);
+		}
+
+		/* The dot between two facts, spaced by a token: whitespace inside
+		   the span would be trimmed. */
+		.separator {
+			padding-inline: var(--space-1);
+		}
+
+		/* The amount and its state in two tracks, so every amount in the column
+		   ends at the same place whatever the state beside it says. The state
+		   track holds the longest state word ("overdue", "clearing") with room to
+		   spare, and the cell keeps a gap after it, so a state word never touches
+		   the Date column's first letter. */
+		.money {
+			/* The state's badge is a pill taller than a line of text by its own block
+			   padding; this margin takes that padding back, so a row with a badge is as
+			   tall as a row without one. */
+			margin-block: calc(var(--space-1) / -2);
+			display: inline-grid;
+			grid-template-columns: auto var(--money-state-track);
+			column-gap: var(--money-state-gap);
+		}
+
+		/* The lead word and the day in two tracks, so every day in the column
+		   starts at one place whichever word leads it. The lead track holds the
+		   longest ("Ended") with room to spare. The words stay one phrase to a
+		   screen reader: the space between them is in the text. */
+		.date {
+			display: inline-grid;
+			grid-template-columns: 5.4ch auto;
+			column-gap: var(--space-1);
+			white-space: nowrap;
+		}
+
+		/* One line, though a cell breaks a word anywhere: a state word is never
+		   split to fit its track. */
+		.money {
+			white-space: nowrap;
+		}
+
+		/* A date, or an amount with its word, is never broken across two lines. */
+		.no-break {
+			white-space: nowrap;
+		}
+
+		.state {
+			color: var(--color-on-surface-variant);
+			text-align: start;
+		}
+
+		/* Name and Doula: in a narrow column each takes half of the line, and
+		   where there is room each stops at its own width. Apply wraps under
+		   them only when the line is full. */
+		.field {
+			flex: 1 1 8rem;
+		}
+
+		.name {
+			max-inline-size: 22ch;
+		}
+
+		.doula {
+			max-inline-size: 34ch;
 		}
 	}
 </style>

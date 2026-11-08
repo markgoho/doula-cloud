@@ -78,11 +78,12 @@
 			min-inline-size: 0;
 		}
 
-		/* The subject of the screen, so it takes the accent (brief:
-		   Iconography); the duotone's own 20% layer is the quiet half. */
+		/* The subject of the screen, in a neutral so the one blue keeps
+		   meaning a link or the primary action (brief: Iconography); the
+		   duotone's own 20% layer is the quiet half. */
 		.icon {
 			display: inline-flex;
-			color: var(--color-primary);
+			color: var(--color-on-surface-variant);
 		}
 	}
 </style>

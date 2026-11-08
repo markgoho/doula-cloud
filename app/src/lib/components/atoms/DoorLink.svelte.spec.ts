@@ -1,21 +1,25 @@
 import '#lib/styles/app.css';
 import { page } from 'vitest/browser';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import DoorLink from './DoorLink.svelte';
 
 interface SetupOptions {
 	variant?: 'primary' | 'secondary';
+	lastUsed?: boolean;
 }
 
-async function setup({ variant }: SetupOptions = {}) {
+async function setup({ variant, lastUsed }: SetupOptions = {}) {
+	const onClick = vi.fn((event: MouseEvent) => event.preventDefault());
 	await render(DoorLink, {
 		href: '/login',
 		label: 'Staff sign in',
 		description: 'For doulas and practice owners.',
-		variant
+		variant,
+		lastUsed,
+		onClick
 	});
-	return { link: page.getByRole('link') };
+	return { link: page.getByRole('link'), onClick };
 }
 
 describe('DoorLink', () => {
@@ -63,6 +67,32 @@ describe('DoorLink', () => {
 	it('draws the arrow on the primary door only', async () => {
 		const primary = await setup({ variant: 'primary' });
 		expect(primary.link.element().querySelector('svg')).not.toBeNull();
+	});
+
+	// The lamp (the surface brief for `/`): the state is a line of text
+	// heard after the description, never color alone.
+	it('says it was used last on this device, after its line', async () => {
+		const { link } = await setup({ lastUsed: true });
+
+		await expect.element(page.getByText('Last used on this device')).toBeVisible();
+		await expect.element(link).toHaveAccessibleName('Staff sign in');
+		await expect
+			.element(link)
+			.toHaveAccessibleDescription('For doulas and practice owners. Last used on this device');
+	});
+
+	it('says nothing about last use on a door this device has not used', async () => {
+		await setup();
+
+		await expect.element(page.getByText('Last used on this device')).not.toBeInTheDocument();
+	});
+
+	it('reports a press to its caller', async () => {
+		const { link, onClick } = await setup();
+
+		await link.click();
+
+		expect(onClick).toHaveBeenCalledOnce();
 	});
 
 	it('draws no arrow on a bordered door', async () => {

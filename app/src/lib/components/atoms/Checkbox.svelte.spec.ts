@@ -39,6 +39,18 @@ describe('Checkbox.svelte', () => {
 		expect(secondId).not.toBe(firstId);
 	});
 
+	it('carries the caller-supplied value a form submits when it is checked', async () => {
+		await setup({ name: 'owes', value: 'true', checked: true });
+
+		await expect.element(page.getByRole('checkbox')).toHaveAttribute('value', 'true');
+	});
+
+	it('carries no value of its own when none is given, so a form submits the browser\'s "on"', async () => {
+		await setup({ name: 'owes', checked: true });
+
+		await expect.element(page.getByRole('checkbox')).not.toHaveAttribute('value');
+	});
+
 	it('accepts a caller-supplied id', async () => {
 		await setup({ id: 'consent-photos' });
 

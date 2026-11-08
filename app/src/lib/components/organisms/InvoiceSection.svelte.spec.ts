@@ -195,7 +195,7 @@ describe('InvoiceSection.svelte', () => {
 		await expect.element(invoiceTitle('STRIPE-in_1')).toBeVisible();
 		await expect.element(invoiceFact('Jan 1, 2026')).toBeVisible();
 		await expect.element(invoiceFact('$150.00')).toBeVisible();
-		await expect.element(invoiceFact('Open')).toBeVisible();
+		await expect.element(invoiceFact('Owed')).toBeVisible();
 	});
 
 	// The card's title is the Invoice column; its facts follow in order.
@@ -217,7 +217,7 @@ describe('InvoiceSection.svelte', () => {
 		await setup({ invoices: [{ ...invoiceOpen, daysOverdue: 12 }], isOwnerOrAdmin: true });
 
 		await expect.element(invoiceFact('Overdue')).toBeVisible();
-		await expect.element(invoiceFact('Open')).not.toBeInTheDocument();
+		await expect.element(invoiceFact('Owed')).not.toBeInTheDocument();
 		await expect.element(page.getByRole('button', { name: 'Record payment' })).toBeVisible();
 	});
 

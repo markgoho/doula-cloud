@@ -55,7 +55,7 @@
 	let { practiceName, switcherLabel, navItems, name, accountHref, signOut }: Properties = $props();
 </script>
 
-<header>
+<header data-shell>
 	<div class="bar">
 		<div class="brand-and-nav">
 			<Link href={resolve('/(signed-out)')} label={practiceName} ariaLabel={switcherLabel} variant="brand" />

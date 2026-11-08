@@ -97,11 +97,13 @@ function colorNamesIn(declarations: Map<string, string>): string[] {
 const light = block(':root');
 const darkBySystem = block(":root:not([data-theme='light'])");
 const darkByOverride = block(":root[data-theme='dark']");
+const shell = block('[data-shell]');
 
 const themes = [
 	['light', light],
 	['dark (system preference)', darkBySystem],
-	['dark (manual override)', darkByOverride]
+	['dark (manual override)', darkByOverride],
+	['the shell (top bars, in both themes)', shell]
 ] as const;
 
 // Anything a person can end up reading text on top of.
@@ -110,7 +112,8 @@ const textGrounds = [
 	'--color-surface',
 	'--color-surface-container',
 	'--color-surface-container-high',
-	'--color-surface-container-highest'
+	'--color-surface-container-highest',
+	'--color-lamp-surface'
 ];
 
 const bodyTextRoles = [
@@ -118,6 +121,7 @@ const bodyTextRoles = [
 	'--color-on-surface-variant',
 	'--color-on-surface-muted',
 	'--color-primary',
+	'--color-lamp',
 	'--color-error',
 	'--color-status',
 	'--color-info',
@@ -143,6 +147,10 @@ describe('the two dark blocks stay in sync', () => {
 
 	it('covers exactly the color tokens the light theme declares', () => {
 		expect(colorNamesIn(darkBySystem)).toStrictEqual(colorNamesIn(light));
+	});
+
+	it('the shell covers exactly the color tokens the light theme declares, so nothing in a bar falls through to the page', () => {
+		expect(colorNamesIn(shell)).toStrictEqual(colorNamesIn(light));
 	});
 
 	it('varies color only -- type, spacing, shape and motion are declared once', () => {
@@ -212,6 +220,19 @@ describe.each(themes)('%s', (_name, palette) => {
 		const card = palette.get('--color-surface-bright')!;
 		const ground = palette.get('--color-surface')!;
 		expect(luminance(card)).not.toBeCloseTo(luminance(ground), 3);
+	});
+});
+
+describe.each(themes.filter(([name]) => name !== 'light'))('%s: the one blue reads as blue', (_name, palette) => {
+	it('keeps enough chroma that the primary is not read as the secondary gray', () => {
+		expect(parseOklch(palette.get('--color-primary')!).c).toBeGreaterThanOrEqual(0.09);
+		expect(parseOklch(palette.get('--color-primary-hover')!).c).toBeGreaterThanOrEqual(0.05);
+	});
+
+	it('stays apart from secondary text in chroma', () => {
+		const blue = parseOklch(palette.get('--color-primary')!);
+		const gray = parseOklch(palette.get('--color-on-surface-variant')!);
+		expect(blue.c - gray.c).toBeGreaterThanOrEqual(0.06);
 	});
 });
 

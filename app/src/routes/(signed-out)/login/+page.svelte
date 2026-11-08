@@ -442,7 +442,7 @@
 		</cluster-l>
 		<!-- #2025: the other door, named as the signed-out landing names it. A
 		     group of its own: it is not another way into this account. -->
-		<Link href={resolve('/portal/(signed-out)/login')} label="Client portal sign in" />
+		<Link href={resolve('/portal/(signed-out)/login')} label="Client sign in" />
 	{:else if step === 'confirm-sign-out'}
 		<!--
 			#610: the warning goes on the button that acts, not on a screen
@@ -487,7 +487,7 @@
 <!-- #2025: both doors say "Sign in", so the lede says which one this is, in the landing door's own words. -->
 <EntryPage
 	title="Sign in"
-	lede="For doulas and practice owners."
+	lede="For doulas, practice owners, and office staff."
 	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 	{content}
 />

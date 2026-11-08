@@ -396,7 +396,7 @@
 				<Text text="Could not load pending requests just now." tone="muted" />
 			{:else}
 				<cluster-l space="var(--space-3)" align="center">
-					<Badge label={`${requests.count}${requests.hasMore ? '+' : ''} waiting`} variant="warning" />
+					<Badge label={`${requests.count}${requests.hasMore ? '+' : ''} waiting`} variant="info" />
 					<Link
 						href={resolve('/practices/[practiceId]/engagement-requests', {
 							practiceId: page.params.practiceId!

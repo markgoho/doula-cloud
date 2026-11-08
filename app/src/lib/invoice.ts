@@ -516,7 +516,7 @@ export function formatAmount(amountCents: number): string {
  * rather than to a blank, so a status Stripe adds later still reads. */
 const invoiceStatusLabels: Record<string, string> = {
 	draft: 'Draft',
-	open: 'Open',
+	open: 'Owed',
 	paid: 'Paid',
 	uncollectible: 'Uncollectible',
 	void: 'Void'
@@ -527,17 +527,19 @@ export function invoiceStatusLabel(status: string): string {
 }
 
 /** Which Badge variant each status wears (#2059), kept beside the labels
- * so a status and its color are decided in one place. Open waits on the
- * Client, so it is the information; Uncollectible is money the Practice
- * will not see, so it is the warning; Draft and Void are settled with no
- * money moving, so they are neutral. An unknown status is neutral too. */
-const invoiceStatusVariants: Record<string, 'info' | 'success' | 'warning' | 'neutral'> = {
-	open: 'info',
+ * so a status and its color are decided in one place. Owed (the stored
+ * 'open') needs the Client to pay, so it is the warning, the amber of what
+ * needs someone to act; Uncollectible is a collection that
+ * failed, so it is the error (red means late or failed, and nothing else);
+ * Draft and Void are settled with no money moving, so they are neutral. An
+ * unknown status is neutral too. */
+const invoiceStatusVariants: Record<string, 'warning' | 'success' | 'error' | 'neutral'> = {
+	open: 'warning',
 	paid: 'success',
-	uncollectible: 'warning'
+	uncollectible: 'error'
 };
 
-export function invoiceStatusVariant(status: string): 'info' | 'success' | 'warning' | 'neutral' {
+export function invoiceStatusVariant(status: string): 'info' | 'warning' | 'success' | 'error' | 'neutral' {
 	return invoiceStatusVariants[status] ?? 'neutral';
 }
 
@@ -613,12 +615,12 @@ export function invoiceRowStatusLabel(invoice: InvoiceStanding): string {
 	return invoice.daysOverdue > 0 ? 'Overdue' : invoiceStatusLabel(invoice.status);
 }
 
-/** The Badge variant beside invoiceRowStatusLabel: Overdue is the
- * warning, as late money is. A payment on its way is information, as
- * Open is. */
-export function invoiceRowStatusVariant(invoice: InvoiceStanding): 'info' | 'success' | 'warning' | 'neutral' {
+/** The Badge variant beside invoiceRowStatusLabel: Overdue is the error,
+ * so late money never shares a color with money merely owed. A payment on
+ * its way is information, as Open is. */
+export function invoiceRowStatusVariant(invoice: InvoiceStanding): 'info' | 'warning' | 'success' | 'error' | 'neutral' {
 	if (invoice.paymentProcessing) return 'info';
-	return invoice.daysOverdue > 0 ? 'warning' : invoiceStatusVariant(invoice.status);
+	return invoice.daysOverdue > 0 ? 'error' : invoiceStatusVariant(invoice.status);
 }
 
 /**
@@ -688,6 +690,17 @@ export function dueLabel(invoice: Pick<PracticeInvoice, 'dueOn' | 'daysOverdue'>
 		return due;
 	}
 	return `${due} — ${late} ${late === 1 ? 'day' : 'days'} overdue`;
+}
+
+/**
+ * The Invoices list's result line, the status of its filter bar: the whole
+ * book, or the overdue count (#768) the narrowing carries, which is the
+ * number the old "Overdue (n)" chip showed.
+ */
+export function invoicesResultSummary(isNarrowedToOverdue: boolean, overdueCount: number): string {
+	if (!isNarrowedToOverdue) return 'Showing every Invoice.';
+	if (overdueCount === 0) return 'No Invoice is overdue.';
+	return `Showing ${overdueCount} overdue ${overdueCount === 1 ? 'Invoice' : 'Invoices'}.`;
 }
 
 /** A Practice's payment terms (#768): how many days after an Invoice is

@@ -25,11 +25,11 @@ export type ConnectStatus =
  */
 export const CONNECT_STATUS_BADGES: Record<
 	ConnectStatus,
-	{ label: string; variant: 'neutral' | 'warning' | 'success' }
+	{ label: string; variant: 'neutral' | 'info' | 'warning' | 'success' }
 > = {
 	not_connected: { label: 'Not connected', variant: 'neutral' },
 	onboarding_incomplete: { label: 'Onboarding incomplete', variant: 'warning' },
-	pending: { label: 'Awaiting Stripe review', variant: 'warning' },
+	pending: { label: 'Awaiting Stripe review', variant: 'info' },
 	payouts_restricted: { label: 'Taking payments, payouts on hold', variant: 'warning' },
 	active: { label: 'Taking payments', variant: 'success' }
 };

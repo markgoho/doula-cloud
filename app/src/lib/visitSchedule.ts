@@ -183,5 +183,5 @@ export async function loadPracticeSchedule(
 export function scheduleResultSummary(count: number, hasMore: boolean): string {
 	if (count === 0) return 'No scheduled visits in this range.';
 	const visits = count === 1 ? '1 scheduled visit' : `${count} scheduled visits`;
-	return hasMore ? `Showing ${visits} so far. More remain.` : `Showing ${visits}.`;
+	return hasMore ? `Showing the first ${visits}.` : `Showing ${visits}.`;
 }

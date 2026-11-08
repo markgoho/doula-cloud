@@ -9,14 +9,12 @@
 	 * case. A Template that cannot be instantiated without an empty state
 	 * makes forgetting it a type error.
 	 *
-	 * The title is set at the brief's `display` type step where its column
-	 * holds a reading measure, and at `heading-lg` below that (#1632). The
-	 * display step is why `Heading` deliberately cannot reach it (#417): a
-	 * rule that depends on everyone remembering it is not a rule, so the
-	 * step lives in Templates and nowhere a route can pass it. This title
-	 * and `LandingPage`'s greeting (#1645) are the two places that spend it.
+	 * The title is the page `Heading` every Template draws, so a hub's
+	 * <h1> is the size of every other screen's. It was the display step
+	 * here once (#1632), which made the Overview's title alone larger.
 	 */
 	import type { Snippet } from 'svelte';
+	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
@@ -91,7 +89,7 @@
 			<Notice variant="error" message={loadError} />
 		{:else if loading}
 			<stack-l space="var(--space-section)">
-				<h1>{title}</h1>
+				<Heading level={1} variant="page" text={title} />
 				<Skeleton variant="text" lines={6} label={loading} />
 			</stack-l>
 		{:else}
@@ -99,7 +97,7 @@
 				{#if outcome}
 					<Notice variant="status" message={outcome} isFocusedOnAppear />
 				{/if}
-				<h1>{title}</h1>
+				<Heading level={1} variant="page" text={title} />
 				{#if isEmpty}
 					<div class="empty">{@render empty()}</div>
 				{:else}
@@ -120,51 +118,6 @@
 	@layer components {
 		container-l {
 			padding-block: var(--space-8);
-		}
-
-		/*
-		 * The title is the heading-lg step until the column holds a reading
-		 * measure, and the display step from there up (#1632). A Practice
-		 * name runs to 75 characters, and at the display step on a phone it
-		 * wraps to seven lines and pushes the empty Practice's one link
-		 * below the first screen (ADR-0048 asks that screen for one act).
-		 * The same words, the same tree: only the type step changes, so
-		 * this query picks a step, not a DOM tree -- the second kind the
-		 * floor check admits (`floor.svelte.spec.ts`).
-		 */
-		h1 {
-			margin: 0;
-			font-family: var(--font-family-base);
-			font-size: var(--text-heading-lg-size);
-			font-weight: var(--text-heading-lg-weight);
-			line-height: var(--text-heading-lg-leading);
-			letter-spacing: var(--text-heading-lg-tracking);
-			color: var(--color-on-surface);
-		}
-
-		/*
-		 * The floor is the container width at which the column inside
-		 * `center-l`'s gutters first reaches `--measure`, measured on
-		 * /style-guide/overview-hub (the measure criterion in
-		 * `floor.svelte.spec.ts`), measured 2026-10-03. It is the larger of
-		 * two environments' fixed points, because a floor has to be
-		 * sufficient in every one: on macOS the column reaches `--measure`
-		 * at 596px (564px against 564.6px), and on CI's Linux runner
-		 * `--measure` is 585px there, so the column reaches it only at
-		 * about 620px. A wider gutter or a wider `--measure` moves it.
-		 *
-		 * Re-measured 2026-10-25 (#1943): `--measure` is 65ch, so the 16px
-		 * body floor (ADR-0060) widened it. On macOS at 620px the column
-		 * reached 588px against a 604.2px measure; 40rem (640px) holds on
-		 * macOS and in CI's Linux/Chromium.
-		 */
-		@container overview-hub (min-width: 40rem) {
-			h1 {
-				font-size: var(--text-display-size);
-				font-weight: var(--text-display-weight);
-				line-height: var(--text-display-leading);
-				letter-spacing: var(--text-display-tracking);
-			}
 		}
 	}
 </style>

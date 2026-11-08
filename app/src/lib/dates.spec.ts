@@ -6,6 +6,7 @@ import {
 	formatInstant,
 	formatInstantWithClock,
 	formatInstantWithSeconds,
+	formatPostpartum,
 	formatPortalVisit,
 	formatScheduledVisit,
 	toDatetimeLocalValue
@@ -128,5 +129,27 @@ describe('formatInstantWithSeconds (#2666)', () => {
 		['morning', local(2026, 11, 2, 10, 46, 43), 'Nov 2, 2026, 10:46:43am']
 	])('reads %s to the second, in the reader own zone', (_name, iso, want) => {
 		expect(formatInstantWithSeconds(iso)).toBe(want);
+	});
+});
+
+describe('formatPostpartum', () => {
+	const now = new Date(2026, 10, 8, 15, 30);
+
+	it.each([
+		['2026-11-08', '0 days postpartum'],
+		['2026-11-07', '1 day postpartum'],
+		['2026-11-03', '5 days postpartum'],
+		['2026-10-26', '13 days postpartum'],
+		['2026-10-25', '2 weeks postpartum'],
+		['2026-10-18', '3 weeks postpartum'],
+		['2026-10-12', '3 weeks postpartum'],
+		['2026-08-01', '14 weeks postpartum'],
+		['2026-11-20', '0 days postpartum']
+	])('reads a birth on %s as %s', (birthDay, want) => {
+		expect(formatPostpartum(birthDay, now)).toBe(want);
+	});
+
+	it('counts calendar days across a clock change, not hours', () => {
+		expect(formatPostpartum('2026-10-18', new Date(2026, 10, 1, 0, 5))).toBe('2 weeks postpartum');
 	});
 });

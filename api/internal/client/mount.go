@@ -27,6 +27,10 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, nudge tasknudge.Enq
 	// contractor narrowing is inside, as the list's is. The literal
 	// segment outranks {clientId} below in the mux's precedence.
 	g.Get("/api/practices/{practiceId}/clients/count", staffauth.AnyStaff, CountHandler())
+	// The Clients list's "Doula" filter and "Only my Clients" switch: how many
+	// Clients each Doula holds, in one read. AnyStaff like the list; a
+	// contractor is narrowed to her own count inside.
+	g.Get("/api/practices/{practiceId}/clients/doula-counts", staffauth.AnyStaff, DoulaCountsHandler())
 	// #1829: a read sent as a POST, so the four fields a Client is
 	// searched on travel in the body and never in a request log's URL.
 	// AnyStaff is the declaration the GET it replaced carried; the
@@ -35,6 +39,11 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, nudge tasknudge.Enq
 	ir.ExemptGated("POST /api/practices/{practiceId}/clients/search",
 		"a read sent as a POST so a Client's details stay out of the URL (#1829): it writes nothing, so a repeat has nothing to replay",
 		false, staffauth.AnyStaff, SearchHandler())
+	// #1829: the Clients list read with its filters in a body, the only way
+	// to filter by name -- the GET refuses ?q. A read, so nothing to replay.
+	ir.ExemptGated("POST /api/practices/{practiceId}/clients/list",
+		"a read sent as a POST so a Client's name stays out of the URL (#1829): it writes nothing, so a repeat has nothing to replay",
+		false, staffauth.AnyStaff, ListByNameHandler())
 	ir.Replayable("POST /api/practices/{practiceId}/clients", false, CreateHandler())
 	g.Get("/api/practices/{practiceId}/clients/{clientId}", staffauth.AnyStaff, DetailHandler())
 	ir.Exempt("PUT /api/practices/{practiceId}/clients/{clientId}",

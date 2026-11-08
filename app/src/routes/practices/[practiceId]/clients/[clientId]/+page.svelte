@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { firstName, fullName } from '#lib/personName.js';
+	import { heldClientsName } from '#lib/clientsReturn.js';
 	import {
 		loadClientDetail,
 		pendingRequests,
@@ -72,7 +73,35 @@
 	// #2142: back to the Clients list, as the Engagement page does
 	// (#1998). One href for every role: a contractor Doula's Clients list
 	// is the same route, serving her the Clients she is attached to.
-	const clientsHref = $derived(resolve('/practices/[practiceId]/clients', { practiceId: page.params.practiceId! }));
+	const clientsListPath = $derived(resolve('/practices/[practiceId]/clients', { practiceId: page.params.practiceId! }));
+	// Arriving from this Practice's Clients list, back returns to that exact
+	// address, so the filters she set are still on. A name is never carried
+	// (#1829): the list keeps it in history state, and an address that holds
+	// one (an old link) is passed on without it.
+	let listAddress = $state('');
+	afterNavigate(({ from }) => {
+		if (!from || from.url.pathname !== clientsListPath) {
+			listAddress = '';
+			return;
+		}
+		const kept = [...from.url.searchParams]
+			.filter(([key]) => key !== 'q')
+			.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
+		listAddress = kept.length > 0 ? `${clientsListPath}?${kept.join('&')}` : clientsListPath;
+	});
+	const clientsHref = $derived(listAddress || clientsListPath);
+
+	// The browser's Back button restores the list's history entry, Name and
+	// all. This link is a new navigation, which would drop the Name, so from
+	// the list it hands the held Name back as the entry's state (never in the
+	// address, #1829). A new tab, a download or any other way out of the
+	// page's own navigation is left to the browser, and so is a link followed
+	// with no script.
+	function backToList(event: MouseEvent) {
+		if (!listAddress || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+		event.preventDefault();
+		void goto(clientsHref, { state: { clientsName: heldClientsName() } });
+	}
 
 	// What the save that led here did, if one did (#1710): her details
 	// journey (a Change on a row, or its check page), a duplicate page, or a request to start work
@@ -715,6 +744,7 @@
 	{title}
 	backHref={clientsHref}
 	backLabel="Clients"
+	onBack={backToList}
 	{outcome}
 	{summary}
 	{actions}

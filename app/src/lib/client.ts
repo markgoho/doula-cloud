@@ -51,6 +51,16 @@ export interface OpenEngagement {
 	kind: string;
 	engagementStatus: string;
 	/**
+	 * When the birth is due, as `YYYY-MM-DD`. Absent when none is on file.
+	 */
+	dueDate?: string;
+	/** ADR-0015's birth outcome -- `live_birth`, `loss` or `unknown` -- and the
+	 * day the pregnancy ended, `YYYY-MM-DD` (migration 00093). Each is absent
+	 * until recorded; `unknown` may carry no date. Not money, so every role
+	 * receives them. */
+	birthOutcome?: string;
+	pregnancyEndedOn?: string;
+	/**
 	 * Absent when no Contract has been created yet for this Engagement.
 	 */
 	contractStatus?: string;
@@ -88,7 +98,7 @@ function clientsPath(practiceId: string): string {
 	return `/api/practices/${practiceId}/clients`;
 }
 
-/** The two axes `loadClients` reads: the default "Clients with work" filter
+/** The two axes `loadClients` reads: the default filter, Clients in care
  * flips to everyone with `showAll` (ListHandler's `?all=true`, #499), and
  * `cursor` is undefined for the first page. Built by hand rather than with
  * a mutable `URLSearchParams` -- `svelte/prefer-svelte-reactivity` bans
@@ -100,26 +110,64 @@ export interface LoadClientsOptions {
 	 * Only the Clients she is attached to (ListHandler's `?mine=true`, #2624).
 	 */
 	showMine?: boolean;
+	/**
+	 * Only the Clients who owe money (ListHandler's `?owes=true`, #2724).
+	 * The BFF refuses it to a contractor Doula.
+	 */
+	showOwing?: boolean;
+	/**
+	 * Only the Clients with an Engagement under way and no Contract
+	 * (ListHandler's `?noContract=true`, #2724).
+	 */
+	showNoContract?: boolean;
+	/**
+	 * Only the Clients with an open Engagement this Staff member is attached
+	 * to (ListHandler's `?doula=<staffId>`).
+	 */
+	doula?: string;
+	/**
+	 * Only the Clients whose name holds this text. Sent in a POST body
+	 * (ListByNameHandler), never in the address (#1829).
+	 */
+	name?: string;
 }
 
-function clientsQuery({ cursor, showAll, showMine }: LoadClientsOptions): string {
+function clientsQuery({ cursor, showAll, showMine, showOwing, showNoContract, doula }: LoadClientsOptions): string {
 	const parts: string[] = [];
 	if (showAll) parts.push('all=true');
 	if (showMine) parts.push('mine=true');
+	if (showOwing) parts.push('owes=true');
+	if (showNoContract) parts.push('noContract=true');
+	if (doula) parts.push(`doula=${encodeURIComponent(doula)}`);
 	if (cursor) parts.push(`cursor=${encodeURIComponent(cursor)}`);
 	return parts.length > 0 ? `?${parts.join('&')}` : '';
 }
 
 /** Loads one page of a Practice's Clients, Client-shaped -- ListHandler's
- * default "Clients with work" filter (ADR-0017), narrowed further for a
- * contractor Doula server-side. Throws with the response body text on a
+ * default filter, Clients in care (ADR-0017), narrowed further for a
+ * contractor Doula server-side. A name filter makes it a POST with every
+ * filter in the body (#1829): a Client's name is in no URL, so in no log. Throws with the response body text on a
  * non-2xx response, mirroring loadBalance's error-surfacing convention. */
 export async function loadClients(
 	fetcher: Fetcher,
 	practiceId: string,
 	options: LoadClientsOptions = {}
 ): Promise<ClientListPage> {
-	const response = await fetcher(`${clientsPath(practiceId)}${clientsQuery(options)}`);
+	const response = options.name
+		? await fetcher(`${clientsPath(practiceId)}/list`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					name: options.name,
+					all: options.showAll ?? false,
+					mine: options.showMine ?? false,
+					owes: options.showOwing ?? false,
+					noContract: options.showNoContract ?? false,
+					doula: options.doula ?? '',
+					cursor: options.cursor ?? ''
+				})
+			})
+		: await fetcher(`${clientsPath(practiceId)}${clientsQuery(options)}`);
 	if (!response.ok) {
 		throw await refusalError(response);
 	}
@@ -167,24 +215,123 @@ export async function loadClientCount(fetcher: Fetcher, practiceId: string): Pro
 }
 
 /**
+ * How many Clients each Doula holds a live attachment on -- `client.
+ * DoulaCountsHandler`, one read for the Doula filter's "(no Clients)" marks and
+ * the "Only my Clients" switch. A Doula with none is absent from `doulas`.
+ * Throws as `loadClients` does.
+ */
+export interface DoulaCounts {
+	mine: number;
+	doulas: Record<string, number>;
+}
+
+export async function loadDoulaCounts(fetcher: Fetcher, practiceId: string): Promise<DoulaCounts> {
+	const response = await fetcher(`${clientsPath(practiceId)}/doula-counts`);
+	if (!response.ok) {
+		throw await refusalError(response);
+	}
+	return response.json();
+}
+
+const ORDER_SUFFIX = ', soonest due first, then most recently ended';
+const CLEAR_FILTERS = 'Clear the filters to widen the list.';
+/**
+ * The default list holds a Client with any Engagement, in any status, so current
+ * or past care, or a pending Request (ADR-0017); its count line does not name
+ * that group. This is the switch's word for the rest: the Clients who match neither.
+ */
+export const NO_CARE_YET = 'anyone not yet in care';
+const WIDEN_TO_NO_CARE = `Turn on "Also show ${NO_CARE_YET}" to look among them.`;
+/**
+ * Stands where a Doula's name would, when the address names one the Practice
+ * does not hold.
+ */
+export const UNKNOWN_DOULA = 'That Doula is not in this Practice.';
+
+/**
  * The Clients list's result, as its filter bar's status line (#2068): read
- * out when "Also show Clients with no work yet" changes what the list holds. The same shape as
- * the Schedule's `scheduleResultSummary`.
+ * out when "Also show Clients with no care or request yet" changes what the list holds. The same shape as
+ * the Schedule's `scheduleResultSummary`. A list that holds Clients also says how it is ordered:
+ * the BFF puts births not yet ended first, soonest due, then the most recent.
  */
 export function clientsResultSummary(
 	count: number,
 	hasMore: boolean,
 	isShowingEveryone: boolean,
-	isShowingMine = false
+	isShowingMine = false,
+	isShowingOwing = false,
+	isShowingNoContract = false,
+	{ doulaName = '', name = '' }: { doulaName?: string; name?: string } = {}
 ): string {
-	if (isShowingMine) {
-		if (count === 0) return 'No Clients are yours yet.';
-		return `Showing ${count} of your Clients${hasMore ? ' so far. More remain.' : '.'}`;
+	const narrowing = { isShowingEveryone, isShowingMine, isShowingOwing, isShowingNoContract, doulaName, name };
+	// Mine, owing, no Contract and a Doula each imply an Engagement, so the switch for the rest
+	// changes nothing beside them.
+	const isImplyingCare = isShowingMine || isShowingOwing || isShowingNoContract || doulaName !== '';
+	if (count === 0) {
+		if (isShowingMine || isShowingOwing || isShowingNoContract || doulaName || name) {
+			const isOnlyAmongCare = name !== '' && !isShowingEveryone && !isImplyingCare;
+			return `${noClientsMessage(narrowing)} ${isOnlyAmongCare ? WIDEN_TO_NO_CARE : CLEAR_FILTERS}`;
+		}
+		return isShowingEveryone ? 'No Clients.' : 'No Clients in care yet.';
 	}
-	const kind = isShowingEveryone ? '' : ' with work';
-	if (count === 0) return `No Clients${kind}.`;
-	const clients = count === 1 ? `1 Client${kind}` : `${count} Clients${kind}`;
-	return hasMore ? `Showing ${clients} so far. More remain.` : `Showing ${clients}.`;
+	const isPlural = count !== 1;
+	const active = isShowingNoContract ? 'active ' : '';
+	let clients = `${count} ${active}Client${isPlural ? 's' : ''}`;
+	if (doulaName) {
+		clients = hasMore
+			? `${count} of ${doulaName}'s ${active}Clients`
+			: `${doulaName}'s ${count} ${active}Client${isPlural ? 's' : ''}`;
+	} else if (isShowingMine) clients = `${count} of your ${active}Clients`;
+	const named = name ? ` named "${name}"` : '';
+	let traits = '';
+	if (isShowingOwing) {
+		traits = ` ${isPlural ? 'who owe' : 'who owes'} money${isShowingNoContract ? ` and ${isPlural ? 'have' : 'has'} no Contract` : ''}`;
+	} else if (isShowingNoContract) {
+		traits = ' with no Contract';
+	}
+	// Mine, owing, no Contract and a Doula each imply an Engagement, so the switch for the rest
+	// changes nothing beside them and the line has nothing to say about it. The default list
+	// does not name its group; the list with the switch on says what it adds.
+	const included = isShowingEveryone && !isImplyingCare ? `, including ${NO_CARE_YET}` : '';
+	return `${hasMore ? 'Showing the first' : 'Showing'} ${clients}${named}${traits}${included}${ORDER_SUFFIX}.`;
+}
+
+/*
+ * What a narrowed list that holds nobody was looking for, in the words the
+ * count line uses for the same narrowing: "None of Priya Raman's Clients owe
+ * money." The route's empty state reads the same sentence.
+ */
+function noClientsMessage(narrowing: {
+	isShowingEveryone: boolean;
+	isShowingMine: boolean;
+	isShowingOwing: boolean;
+	isShowingNoContract: boolean;
+	doulaName: string;
+	name: string;
+}): string {
+	const { isShowingMine, isShowingOwing, isShowingNoContract, doulaName, name } = narrowing;
+	const active = isShowingNoContract ? 'active ' : '';
+	const named = name ? ` named "${name}"` : '';
+	const hasTraits = isShowingOwing || isShowingNoContract;
+	const traits = (isOne: boolean) =>
+		[
+			isShowingOwing && (isOne ? 'owes money' : 'owe money'),
+			isShowingNoContract && (isOne ? 'is missing a Contract' : 'are missing a Contract')
+		]
+			.filter(Boolean)
+			.join(' and ');
+	let whose = '';
+	if (doulaName && isShowingMine) whose = `your ${active}Clients with ${doulaName}`;
+	else if (doulaName) whose = `${doulaName}'s ${active}Clients`;
+	else if (isShowingMine) whose = `your ${active}Clients`;
+	if (!whose) {
+		return hasTraits ? `No ${active}Client${named} ${traits(true)}.` : `No Client is named "${name}".`;
+	}
+	if (hasTraits) return `None of ${whose}${named} ${traits(false)}.`;
+	if (name) return `None of ${whose} is named "${name}".`;
+	if (doulaName && isShowingMine) return `You have no Clients with ${doulaName}.`;
+	if (doulaName) return `${doulaName} has no Clients.`;
+	return 'You are not the Doula for any Client yet.';
 }
 
 /** One Client ADR-0017's match query turned up against a create or an

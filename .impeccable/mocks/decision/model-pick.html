@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Clients - DoulaCloud</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Source+Sans+3:wght@400;600;700&display=swap">
+<style>
+:root{--indigo:#24264f;--saffron:#e1a32e;--magenta:#b3306a;--teal:#1f6b66;--ground:#f7f6f3;--ink:#1d1b2e;--quiet:#5b5a68;--line:#dcd9d2}
+html,body{width:1440px;height:900px;overflow:hidden;margin:0}
+body{background:var(--ground);color:var(--ink);font:16px/1.4 "Source Sans 3",sans-serif;font-variant-numeric:tabular-nums}
+h1,.brand{font-family:"Bricolage Grotesque",sans-serif}
+header{background:var(--indigo);color:#f1eefb;height:56px;display:flex;align-items:center;padding:0 32px;gap:28px}
+.brand{font-weight:700;font-size:21px;margin-right:8px}
+nav{display:flex;gap:4px;flex:1}
+nav a{color:#d8d5ee;text-decoration:none;padding:8px 11px;border-radius:4px;font-size:15px}
+nav a[aria-current]{background:rgba(255,255,255,.14);color:#fff;font-weight:600;box-shadow:inset 0 -2px var(--saffron)}
+.who{display:flex;align-items:center;gap:12px;font-size:15px}
+.av{width:34px;height:34px;border-radius:50%;background:var(--saffron);color:var(--indigo);display:grid;place-items:center;font-weight:700;font-size:14px}
+.weave{height:6px;background:repeating-linear-gradient(90deg,var(--indigo) 0 14px,var(--saffron) 14px 22px,var(--magenta) 22px 36px,var(--teal) 36px 44px)}
+main{padding:28px 32px;max-width:1100px}
+.titlerow{display:flex;align-items:center;gap:20px;margin-bottom:20px}
+h1{font-size:36px;margin:0;font-weight:700;letter-spacing:-.01em}
+.btn{font:600 16px "Source Sans 3",sans-serif;background:var(--saffron);color:#1d1b2e;border:1px solid #b9801a;border-radius:6px;padding:9px 18px}
+fieldset{border:1px solid var(--line);border-radius:6px;padding:12px 18px 16px;margin:0 0 16px;display:flex;flex-wrap:wrap;gap:12px 28px;align-items:flex-end}
+legend{font-weight:600;padding:0 6px}
+label{display:flex;align-items:center;gap:8px}
+input[type=checkbox]{width:18px;height:18px;accent-color:var(--teal);margin:0}
+.fld{flex-direction:column;align-items:flex-start;gap:4px;font-weight:600;font-size:15px}
+.fld input,.fld select{font:16px "Source Sans 3",sans-serif;padding:8px 10px;border:1px solid #8a8896;border-radius:4px;background:#fff;width:190px;color:var(--ink)}
+.btn.s{background:var(--indigo);color:#fff;border-color:var(--indigo)}
+.count{margin:0 0 8px;color:var(--quiet)}
+table{border-collapse:collapse;width:100%;background:#fff;border:1px solid var(--line)}
+th{text-align:left;font-size:14px;font-weight:700;color:var(--indigo);padding:10px 14px;border-bottom:2px solid var(--indigo);background:#efede7}
+td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:hover td{background:#fbf3df}
+td a{color:var(--teal);font-weight:600}
+.kind{font-weight:700}.q{color:var(--quiet)}
+.badge{display:inline-block;padding:1px 9px;border-radius:999px;font-weight:600;font-size:14px;background:var(--magenta);color:#fff}
+.badge.late{background:#fff;color:var(--magenta);border:1px solid var(--magenta)}
+.due{display:flex;align-items:center;gap:12px;white-space:nowrap}
+.slot{width:96px;display:flex}
+.t{height:6px;border-radius:3px;background:
+ repeating-linear-gradient(90deg,transparent 0 5px,rgba(255,255,255,.55) 5px 6px),
+ linear-gradient(180deg,var(--a) 0 2px,var(--b) 2px 4px,var(--a) 4px 6px)}
+.birth{--a:var(--indigo);--b:var(--saffron)}.post{--a:var(--magenta);--b:var(--teal)}
+</style></head><body>
+<header><span class="brand">DoulaCloud</span>
+<nav><a href="#">Overview</a><a href="#" aria-current="page">Clients</a><a href="#">Schedule</a><a href="#">On call</a><a href="#">Invoices</a><a href="#">Contracts</a><a href="#">Credits</a><a href="#">Staff</a><a href="#">Offers</a><a href="#">Settings</a></nav>
+<div class="who">Rooted Birth Collective <span class="av">RA</span></div></header>
+<div class="weave"></div>
+<main>
+<div class="titlerow"><h1>Clients</h1><button class="btn">Find or add a Client</button></div>
+<form><fieldset><legend>Choose which Clients to show</legend>
+<label><input type="checkbox"> Only my Clients</label>
+<label><input type="checkbox"> Only Clients who owe money</label>
+<label><input type="checkbox"> Only active Clients with no Contract</label>
+<label><input type="checkbox"> Also show Clients not yet in care</label>
+<label class="fld">Name<input type="text"></label>
+<label class="fld">Doula<select><option>Any Doula</option></select></label>
+<button class="btn s" type="button">Apply</button></fieldset></form>
+<p class="count">Showing the first 30 Clients, soonest due first.</p>
+<table><thead><tr><th>Name</th><th>Status</th><th>Due</th><th>Doula</th></tr></thead><tbody>
+<tr><td><a href="#">Casey Estrada</a></td><td><span class="kind">Birth</span> <span class="q">· Intake · No Contract yet</span></td><td><div class="due"><span class="slot"><i class="t birth" style="width:96px"></i></span>Nov 9, 2026</div></td><td>Rowan Petrosyan</td></tr>
+<tr><td><a href="#">Quinn Estrada</a></td><td><span class="kind">Birth</span> <span class="q">· Intake · No Contract yet</span></td><td><div class="due"><span class="slot"><i class="t birth" style="width:96px"></i></span>Nov 10, 2026</div></td><td>Rowan Petrosyan</td></tr>
+<tr><td><a href="#">Morgan Grier</a></td><td><span class="kind">Birth</span> <span class="q">· Active · No Contract yet</span></td><td><div class="due"><span class="slot"><i class="t birth" style="width:75px"></i></span>Nov 26, 2026</div></td><td>Marisol Terrazas</td></tr>
+<tr><td><a href="#">Camille Boyd</a></td><td><span class="kind">Birth</span> · <span class="badge">Owes $1,500.00</span> <span class="q">· Active · Contract signed</span></td><td><div class="due"><span class="slot"><i class="t birth" style="width:67px"></i></span>Nov 28, 2026</div></td><td>Priya Raman</td></tr>
+<tr><td><a href="#">Imani Brooks</a></td><td><span class="kind">Postpartum</span> · <span class="badge late">$950.00 overdue by 12 days</span> <span class="q">· Active · Contract signed</span></td><td><div class="due"><span class="slot"><i class="t post" style="width:96px"></i></span>Born Oct 27, 2026</div></td><td>Priya Raman</td></tr>
+<tr><td><a href="#">Tessa Moreau</a></td><td><span class="kind">Birth</span> <span class="q">· Active · Contract signed · Paid $1,500.00</span></td><td><div class="due"><span class="slot"><i class="t birth" style="width:30px"></i></span>Dec 23, 2026</div></td><td>Priya Raman</td></tr>
+<tr><td><a href="#">Reese Calloway</a></td><td><span class="kind">Birth</span> <span class="q">· Active · No Contract yet</span></td><td><div class="due"><span class="slot"><i class="t birth" style="width:25px"></i></span>Dec 31, 2026</div></td><td>Joss Adeyemi</td></tr>
+<tr><td><a href="#">Jamie Dunmore</a></td><td><span class="kind">Birth</span> <span class="q">· Active · No Contract yet</span></td><td><div class="due"><span class="slot"><i class="t birth" style="width:24px"></i></span>Jan 3, 2027</div></td><td>Joss Adeyemi</td></tr>
+<tr><td><a href="#">Mira Castellanos</a></td><td><span class="kind">Birth</span> <span class="q">· Intake · Contract signed</span></td><td><div class="due"><span class="slot"><i class="t birth" style="width:21px"></i></span>Jan 11, 2027</div></td><td>Priya Raman</td></tr>
+<tr><td><a href="#">Grace Whitfield</a></td><td><span class="kind">Birth</span> <span class="q">· Intake · Contract sent</span></td><td><div class="due"><span class="slot"><i class="t birth" style="width:17px"></i></span>Jan 27, 2027</div></td><td>Priya Raman</td></tr>
+</tbody></table></main></body></html>

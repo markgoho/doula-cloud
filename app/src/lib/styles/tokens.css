@@ -32,42 +32,51 @@
 	   form-control chrome, spellcheck underlines. It tracks the same
 	   three-way resolution as the palette below, #438. */
 	color-scheme: light;
-	--color-surface-bright: oklch(98.5% 0.008 7);
-	--color-surface: oklch(96.7% 0.011 357);
-	--color-surface-container: oklch(94.9% 0.011 357);
-	--color-surface-container-high: oklch(93.3% 0.01 2);
-	--color-surface-container-highest: oklch(91.5% 0.011 355);
+	--color-surface-bright: oklch(99.7% 0.002 255);
+	--color-surface: oklch(99% 0.003 255);
+	--color-surface-container: oklch(96.6% 0.007 255);
+	--color-surface-container-high: oklch(94.6% 0.009 255);
+	--color-surface-container-highest: oklch(92.2% 0.011 255);
 
 	/* Text, three tones. `on-surface-muted` exists because `outline` cannot
 	   carry text at 4.5:1 -- see #417's Q1. */
-	--color-on-surface: oklch(22.4% 0.009 352);
-	--color-on-surface-variant: oklch(40% 0.023 343);
-	--color-on-surface-muted: oklch(50.8% 0.023 346);
+	--color-on-surface: oklch(23% 0.025 260);
+	--color-on-surface-variant: oklch(40% 0.03 258);
+	--color-on-surface-muted: oklch(49.5% 0.03 258);
 
 	/* Borders. `outline` is a control boundary and must clear 3:1 (WCAG SC
 	   1.4.11); `outline-variant` is a decorative hairline and is exempt.
 	   This is #99's --color-input-border / --color-border distinction,
 	   preserved under M3's names. */
-	--color-outline: oklch(57.3% 0.023 346);
-	--color-outline-variant: oklch(83.1% 0.026 346);
+	--color-outline: oklch(57% 0.03 258);
+	--color-outline-variant: oklch(90.5% 0.012 258);
 
 	/* Accent. Spent on primary actions and active state only. Note hover is
 	   LIGHTER than rest in both themes -- the brief's `primary-container`
 	   tone -- which is the reverse of the old --color-accent-strong. */
-	--color-primary: oklch(41.2% 0.119 339);
-	--color-primary-hover: oklch(49.9% 0.121 339);
-	--color-on-primary: oklch(99% 0.005 339);
+	--color-primary: oklch(40% 0.11 258);
+	--color-primary-hover: oklch(48% 0.12 258);
+	--color-on-primary: oklch(98.5% 0.005 255);
 
-	/* Status. Keeps its own hues; deliberately not harmonized toward plum. */
+	/* The lamp: the one warm light on what matters now (the surface brief
+	   for `/`). Its own role, never an action or a warning: amber on the
+	   primary would read as the warning hue. `lamp` is text and an edge,
+	   `lamp-surface` the warmer ground it sits on. Light is burnt amber so
+	   it still reads at 4.5:1 as text. */
+	--color-lamp: oklch(48% 0.11 62);
+	--color-lamp-surface: oklch(95.5% 0.03 80);
+
+	/* Status. Keeps its own hues; deliberately not harmonized toward the
+	   palette. */
 	--color-error: oklch(50.6% 0.193 28);
 	--color-on-error: oklch(99% 0.005 28);
 	--color-status: oklch(45% 0.15 145);
-	--color-info: oklch(45% 0.15 250);
+	--color-info: oklch(45% 0.15 215);
 	--color-warning: oklch(45% 0.15 85);
 	/* A text-hierarchy token would be --color-on-surface-*; this one sits in
 	   the error/status/info/warning severity family for Badge's neutral
 	   variant, so the two can diverge independently. */
-	--color-neutral: oklch(45% 0.02 350);
+	--color-neutral: oklch(45% 0.02 285);
 
 	/* ------------------------------------------------------------------
 	 * The ramp -- #531, #540.
@@ -230,6 +239,13 @@
 	   cannot be a minimum. WCAG 2.5.5 states 44px as a floor, so this one
 	   is fixed at every width. */
 	--hit-target-min: 2.75rem;
+	/* The start button's whole box: one line of body text, its block
+	   padding and its border. The Link reads it as the button's floor and a
+	   list's title row reserves it, so the title sits at one place whether
+	   or not the list carries the button. */
+	--start-button-block-size: calc(
+		var(--text-body-size) * var(--text-body-leading) + 2 * var(--space-2) + 2 * var(--border-thin)
+	);
 
 	/* Shape. One corner radius only -- the brief forbids a second, larger
 	   one, so there is deliberately no --radius-md to reach for.
@@ -412,47 +428,90 @@
 @media (prefers-color-scheme: dark) {
 	:root:not([data-theme='light']) {
 		color-scheme: dark;
-		--color-surface-bright: oklch(22% 0.01 350);
-		--color-surface: oklch(17.5% 0.01 350);
-		--color-surface-container: oklch(26% 0.011 350);
-		--color-surface-container-high: oklch(29.5% 0.011 350);
-		--color-surface-container-highest: oklch(33% 0.011 350);
-		--color-on-surface: oklch(93% 0.008 350);
-		--color-on-surface-variant: oklch(78% 0.02 346);
-		--color-on-surface-muted: oklch(71% 0.022 346);
-		--color-outline: oklch(60% 0.023 346);
-		--color-outline-variant: oklch(40% 0.024 346);
-		--color-primary: oklch(84% 0.116 341);
-		--color-primary-hover: oklch(90% 0.08 341);
-		--color-on-primary: oklch(22% 0.03 339);
+		--color-surface-bright: oklch(25% 0.024 258);
+		--color-surface: oklch(21.5% 0.022 258);
+		--color-surface-container: oklch(28% 0.025 258);
+		--color-surface-container-high: oklch(31.5% 0.026 258);
+		--color-surface-container-highest: oklch(33.5% 0.027 258);
+		--color-on-surface: oklch(90% 0.012 255);
+		--color-on-surface-variant: oklch(80% 0.018 255);
+		--color-on-surface-muted: oklch(73% 0.02 255);
+		--color-outline: oklch(61% 0.03 255);
+		--color-outline-variant: oklch(34% 0.025 258);
+		--color-primary: oklch(79% 0.095 250);
+		--color-primary-hover: oklch(86% 0.06 250);
+		--color-on-primary: oklch(20% 0.03 258);
+		--color-lamp: oklch(80% 0.13 75);
+		--color-lamp-surface: oklch(27% 0.03 70);
 		--color-error: oklch(75% 0.19 28);
 		--color-on-error: oklch(22% 0.03 28);
 		--color-status: oklch(72% 0.15 145);
-		--color-info: oklch(72% 0.15 250);
+		--color-info: oklch(72% 0.15 215);
 		--color-warning: oklch(72% 0.15 85);
-		--color-neutral: oklch(72% 0.02 350);
+		--color-neutral: oklch(72% 0.02 285);
 	}
 }
 
 :root[data-theme='dark'] {
 	color-scheme: dark;
-	--color-surface-bright: oklch(22% 0.01 350);
-	--color-surface: oklch(17.5% 0.01 350);
-	--color-surface-container: oklch(26% 0.011 350);
-	--color-surface-container-high: oklch(29.5% 0.011 350);
-	--color-surface-container-highest: oklch(33% 0.011 350);
-	--color-on-surface: oklch(93% 0.008 350);
-	--color-on-surface-variant: oklch(78% 0.02 346);
-	--color-on-surface-muted: oklch(71% 0.022 346);
-	--color-outline: oklch(60% 0.023 346);
-	--color-outline-variant: oklch(40% 0.024 346);
-	--color-primary: oklch(84% 0.116 341);
-	--color-primary-hover: oklch(90% 0.08 341);
-	--color-on-primary: oklch(22% 0.03 339);
+	--color-surface-bright: oklch(25% 0.024 258);
+	--color-surface: oklch(21.5% 0.022 258);
+	--color-surface-container: oklch(28% 0.025 258);
+	--color-surface-container-high: oklch(31.5% 0.026 258);
+	--color-surface-container-highest: oklch(33.5% 0.027 258);
+	--color-on-surface: oklch(90% 0.012 255);
+	--color-on-surface-variant: oklch(80% 0.018 255);
+	--color-on-surface-muted: oklch(73% 0.02 255);
+	--color-outline: oklch(61% 0.03 255);
+	--color-outline-variant: oklch(34% 0.025 258);
+	--color-primary: oklch(79% 0.095 250);
+	--color-primary-hover: oklch(86% 0.06 250);
+	--color-on-primary: oklch(20% 0.03 258);
+	--color-lamp: oklch(80% 0.13 75);
+	--color-lamp-surface: oklch(27% 0.03 70);
 	--color-error: oklch(75% 0.19 28);
 	--color-on-error: oklch(22% 0.03 28);
 	--color-status: oklch(72% 0.15 145);
-	--color-info: oklch(72% 0.15 250);
+	--color-info: oklch(72% 0.15 215);
 	--color-warning: oklch(72% 0.15 85);
-	--color-neutral: oklch(72% 0.02 350);
+	--color-neutral: oklch(72% 0.02 285);
+}
+
+/*
+ * The shell -- the room's walls (the surface brief for `/`).
+ *
+ * The top bars and the narrow menu sheet carry `data-shell`, and inside
+ * them every color token resolves to this one night palette, in both
+ * themes: by day the walls stay night blue over a pale work area, and at
+ * night they sit a step deeper than the page. Components inside a bar read
+ * the same tokens they read anywhere, so nothing in them names the shell.
+ *
+ * It declares every color token the light theme does, and `tokens.spec.ts`
+ * proves it against the same WCAG floors as the three theme blocks. The
+ * primary is a soft blue with some color in it, as in the dark theme: the brightest
+ * pixels on a night screen carry no saturated blue.
+ */
+[data-shell] {
+	color-scheme: dark;
+	--color-surface-bright: oklch(19% 0.04 262);
+	--color-surface: oklch(16% 0.035 262);
+	--color-surface-container: oklch(23% 0.04 262);
+	--color-surface-container-high: oklch(26.5% 0.042 262);
+	--color-surface-container-highest: oklch(30% 0.044 262);
+	--color-on-surface: oklch(90% 0.012 255);
+	--color-on-surface-variant: oklch(80% 0.018 255);
+	--color-on-surface-muted: oklch(73% 0.02 255);
+	--color-outline: oklch(61% 0.03 255);
+	--color-outline-variant: oklch(30% 0.03 258);
+	--color-primary: oklch(79% 0.095 250);
+	--color-primary-hover: oklch(86% 0.06 250);
+	--color-on-primary: oklch(20% 0.03 258);
+	--color-lamp: oklch(80% 0.13 75);
+	--color-lamp-surface: oklch(27% 0.03 70);
+	--color-error: oklch(75% 0.19 28);
+	--color-on-error: oklch(22% 0.03 28);
+	--color-status: oklch(72% 0.15 145);
+	--color-info: oklch(72% 0.15 215);
+	--color-warning: oklch(72% 0.15 85);
+	--color-neutral: oklch(72% 0.02 285);
 }

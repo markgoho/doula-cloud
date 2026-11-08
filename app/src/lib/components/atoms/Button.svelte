@@ -285,13 +285,17 @@
 		button.size-sm {
 			--button-inset: var(--space-3);
 			padding: var(--space-1) var(--button-inset);
-			font-size: var(--text-body-sm-size);
+			font-size: inherit;
 		}
 
+		/* The label takes the size of the text around it, the body step: a
+		   `cqi` in the token re-resolved here would answer the button's own
+		   container and could differ from its neighbors' by a fraction of a
+		   pixel, two sizes where the scale has one. */
 		button.size-md {
 			--button-inset: var(--space-4);
 			padding: var(--space-2) var(--button-inset);
-			font-size: var(--text-body-size);
+			font-size: inherit;
 		}
 
 		button.size-lg {

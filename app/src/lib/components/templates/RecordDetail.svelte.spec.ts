@@ -134,30 +134,24 @@ describe('RecordDetail.svelte', () => {
 	});
 
 	it('renders no contents region unless it is asked for', async () => {
-		const { container } = await setup();
+		await setup();
 
-		expect(container.querySelector('.contents-rail')).toBeNull();
-		expect(container.querySelector('.contents-strip')).toBeNull();
+		await expect.element(page.getByText('Jump to')).not.toBeInTheDocument();
 	});
 
-	it('lists every section in the contents region, and links only to itself', async () => {
+	// One list at every width (ADR-0018, 2026-11-07): no rail beside the
+	// record, so the title starts at the gutter every Staff page starts at.
+	it('lists every section once under the title, and links only to itself', async () => {
 		const { container } = await setup({ isContentsShown: true });
 
-		const rail = container.querySelector('.contents-rail')!;
-		const hrefs = [...rail.querySelectorAll('a')].map((anchor) => anchor.getAttribute('href'));
-		expect(hrefs).toEqual(['#visits', '#invoices']);
+		await expect.element(page.getByText('Jump to')).toBeVisible();
+		expect(page.getByRole('link', { name: 'Visits' }).all()).toHaveLength(1);
+		expect(page.getByRole('link', { name: 'Visits' }).element()).toHaveAttribute('href', '#visits');
+		expect(page.getByRole('link', { name: 'Invoices' }).element()).toHaveAttribute('href', '#invoices');
 
 		// It is not a nav: the region derives from `sections`, so there is no
 		// way for a route to put a route in it. ADR-0018.
 		expect(container.querySelector('nav')).toBeNull();
-	});
-
-	it('offers the same contents as a jump-to strip for a narrow viewport', async () => {
-		const { container } = await setup({ isContentsShown: true });
-
-		const strip = container.querySelector('.contents-strip')!;
-		const hrefs = [...strip.querySelectorAll('a')].map((anchor) => anchor.getAttribute('href'));
-		expect(hrefs).toEqual(['#visits', '#invoices']);
 	});
 
 	// #2004: the contents come after the record's own title and before its
@@ -167,11 +161,11 @@ describe('RecordDetail.svelte', () => {
 	// sections. Before, they came after the last section, which is where
 	// the narrow page drew them too.
 	it('reads the title, then the contents, then the sections', async () => {
-		const { container } = await setup({ isContentsShown: true });
+		await setup({ isContentsShown: true });
 
 		const title = page.getByRole('heading', { level: 1, name: 'Ada Lovelace' }).element();
 		const firstSection = page.getByRole('heading', { level: 2, name: 'Visits' }).element();
-		const strip = container.querySelector('.contents-strip')!;
+		const strip = page.getByText('Jump to').element();
 
 		expect(title.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 		expect(strip.compareDocumentPosition(firstSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -180,12 +174,11 @@ describe('RecordDetail.svelte', () => {
 	// #2257: on a phone the summary card pushed the strip below the first
 	// screen, so the strip now comes before the summary.
 	it('puts the jump-to strip between the title and the summary', async () => {
-		const { container } = await setup({ isContentsShown: true, summary: textSnippet('Due Mar 4') });
+		await setup({ isContentsShown: true, summary: textSnippet('Due Mar 4') });
 
 		const title = page.getByRole('heading', { level: 1, name: 'Ada Lovelace' }).element();
 		const summary = page.getByText('Due Mar 4').element();
-		// Case 1 of the querySelector exception: the strip and the rail hold the same links.
-		const strip = container.querySelector('.contents-strip')!;
+		const strip = page.getByText('Jump to').element();
 
 		expect(title.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 		expect(strip.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -225,14 +218,12 @@ describe('RecordDetail.svelte', () => {
 
 	// #2257: the headings a route names while loading are its sections', so
 	// the contents are drawn from them at once, and land where the loaded
-	// ones do. Case 1 of the querySelector exception: two copies of one list.
+	// ones do.
 	it('draws the contents from the named sections while loading, if the loaded record will have them (#480, #2257)', async () => {
 		const { container } = await setup({ loading: 'Loading the work', isContentsShown: true });
 
-		for (const region of ['.contents-rail', '.contents-strip']) {
-			const hrefs = [...container.querySelectorAll(`${region} a`)].map((anchor) => anchor.getAttribute('href'));
-			expect(hrefs).toEqual(['#visits', '#invoices']);
-		}
+		expect(page.getByRole('link', { name: 'Visits' }).element()).toHaveAttribute('href', '#visits');
+		expect(page.getByRole('link', { name: 'Invoices' }).element()).toHaveAttribute('href', '#invoices');
 		expect(container.querySelector('#invoices')).not.toBeNull();
 		expect(page.getByRole('status').all()).toHaveLength(1);
 	});
@@ -309,10 +300,10 @@ describe('RecordDetail.svelte', () => {
 		await expect.element(page.getByRole('link', { name: 'Send a recovery code' })).toBeVisible();
 	});
 
-	it('does not reserve a contents rail while loading a record with no rail', async () => {
-		const { container } = await setup({ loading: 'Loading the work' });
+	it('draws no contents while loading a record that has none', async () => {
+		await setup({ loading: 'Loading the work' });
 
-		expect(container.querySelector('.contents-rail')).toBeNull();
+		await expect.element(page.getByText('Jump to')).not.toBeInTheDocument();
 	});
 
 	it('reserves the page frame for a Notice on a load failure, instead of rendering the record (#480)', async () => {

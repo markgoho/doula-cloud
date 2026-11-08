@@ -92,7 +92,7 @@ describe('the blocked email addresses screen', () => {
 		await setup();
 
 		await expect
-			.element(testPage.getByRole('cell', { name: bounced!.address, exact: true }))
+			.element(testPage.getByRole('rowheader', { name: bounced!.address, exact: true }))
 			.toBeVisible();
 		await expect
 			.element(testPage.getByRole('cell', { name: 'The email could not be delivered' }))
@@ -146,11 +146,11 @@ describe('the blocked email addresses screen', () => {
 			.element(testPage.getByText(`${bounced!.address} can receive email again.`))
 			.toBeVisible();
 		await expect
-			.element(testPage.getByRole('cell', { name: bounced!.address, exact: true }))
+			.element(testPage.getByRole('rowheader', { name: bounced!.address, exact: true }))
 			.not.toBeInTheDocument();
 		// The complaint is untouched -- it was never this action's row.
 		await expect
-			.element(testPage.getByRole('cell', { name: complained!.address, exact: true }))
+			.element(testPage.getByRole('rowheader', { name: complained!.address, exact: true }))
 			.toBeVisible();
 	});
 
@@ -211,6 +211,6 @@ describe('the blocked email addresses screen', () => {
 		await expect
 			.element(testPage.getByRole('heading', { name: 'Blocked email addresses' }))
 			.toBeVisible();
-		expect(document.documentElement.scrollWidth).toBe(document.documentElement.clientWidth);
+		expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
 	});
 });

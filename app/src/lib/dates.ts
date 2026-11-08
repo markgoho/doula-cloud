@@ -66,6 +66,23 @@ export function formatCalendarDay(value: string): string {
 }
 
 /**
+ * How long ago a birth was, in whole weeks: "3 weeks postpartum", and under
+ * fourteen days in days, "5 days postpartum". `birthDay` is a calendar day,
+ * `YYYY-MM-DD`, counted against the reader's calendar day so a zone cannot
+ * move it. For a live birth only: a pregnancy that ended in a loss, or in an
+ * outcome nobody learned, is never called postpartum (`docs/personas/loss-client.md`).
+ * `now` defaults to the real clock and is a parameter only so a test can pin it.
+ */
+export function formatPostpartum(birthDay: string, now: Date = new Date()): string {
+	const [year, month, day] = birthDay.split('-').map(Number);
+	const born = Date.UTC(year!, month! - 1, day!);
+	const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+	const days = Math.max(0, Math.round((today - born) / DAY_MS));
+	if (days < 14) return `${days} day${days === 1 ? '' : 's'} postpartum`;
+	return `${Math.floor(days / 7)} weeks postpartum`;
+}
+
+/**
  * A calendar month, `YYYY-MM`, built from its parts for the same reason
  * as `formatCalendarDay`: "Feb 2027".
  */

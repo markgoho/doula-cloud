@@ -214,7 +214,7 @@ describe('PortalTopBar tabs (#2007)', () => {
  */
 describe('PortalTopBar, with a Practice name long enough to wrap (#1573)', () => {
 	const LONG_NAME = 'Highland Midwifery & Birth Support Collective of Western New York';
-	const JUST_ABOVE_THE_FLOOR = 1540;
+	const JUST_ABOVE_THE_FLOOR = 1550;
 
 	async function setupLong(width: number) {
 		const result = await setup({

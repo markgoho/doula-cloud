@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Clients - DoulaCloud</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;700&family=Barlow:wght@500;600;700&display=swap">
+<style>
+:root{--ground:#121c26;--panel:#18242f;--line:#2b3a48;--text:#e9edf1;--mute:#a9b6c3;--amber:#f0b232;--red:#d64a3a;--redfill:#b93a2b}
+html,body{width:1440px;height:900px;overflow:hidden;margin:0}
+body{background:var(--ground);color:var(--text);font:400 15px/1.4 Overpass,sans-serif}
+a{color:var(--text)}
+.bar{display:flex;align-items:center;gap:28px;height:56px;padding:0 32px;background:#0c141b;border-bottom:1px solid var(--line)}
+.bar b{font:700 20px Overpass;margin-right:8px}
+.bar nav{display:flex;gap:4px;flex:1}
+.bar nav a{padding:17px 11px;text-decoration:none;color:var(--mute);font-weight:600}
+.bar nav a[aria-current]{color:var(--text);box-shadow:inset 0 -3px var(--text)}
+.org{color:var(--mute)}
+.av{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:50%;background:var(--text);color:var(--ground);font-weight:700;margin-left:12px}
+main{padding:24px 32px}
+.head{display:flex;align-items:center;gap:24px}
+h1{margin:0;font:700 34px Overpass}
+.btn{font:600 15px Overpass;padding:9px 16px;border-radius:4px;border:1px solid var(--text);background:var(--text);color:var(--ground);cursor:pointer}
+fieldset{margin:18px 0 0;padding:14px 18px 16px;border:1px solid var(--line);border-radius:4px;display:flex;flex-wrap:wrap;gap:12px 28px;align-items:end}
+legend{padding:0 6px;font-weight:700}
+label{display:flex;gap:8px;align-items:center}
+input[type=checkbox]{width:18px;height:18px;accent-color:#9fc3e6;margin:0}
+.f{flex-direction:column;align-items:stretch;gap:4px;font-weight:600}
+input[type=text],select{height:38px;box-sizing:border-box;padding:0 10px;font:400 15px Overpass;color:var(--text);background:var(--panel);border:1px solid #6d8196;border-radius:4px;width:210px}
+.res{margin:16px 0 8px;color:var(--mute)}
+table{width:100%;border-collapse:collapse;table-layout:fixed}
+th{text-align:left;font:600 14px Overpass;color:var(--mute);padding:8px 14px;border-bottom:2px solid var(--text)}
+td{padding:9px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+col.n{width:270px}col.d{width:200px}col.o{width:220px}
+td.due{font-family:Barlow,sans-serif;font-variant-numeric:tabular-nums lining-nums;font-weight:600;font-size:25px;letter-spacing:.01em;white-space:nowrap;background:var(--panel);border-left:1px solid var(--line);border-right:1px solid var(--line)}
+td.n a{font-weight:700;font-size:17px}
+.st{color:var(--mute)}.st b{font-weight:700;color:var(--text)}
+.badge{display:inline-block;padding:1px 8px;border-radius:3px;border:1px solid var(--red);background:rgba(214,74,58,.16);color:var(--text);font:600 14px Barlow;font-variant-numeric:tabular-nums}
+.badge.err{background:var(--redfill)}
+tr.lit td{background:rgba(240,178,50,.12);border-top:1px solid var(--amber);border-bottom:1px solid var(--amber)}
+tr.lit td.due{background:rgba(240,178,50,.2)}
+.chg{display:block;color:var(--amber);font-size:14px;font-weight:600}
+</style></head><body>
+<header class="bar"><b>DoulaCloud</b>
+<nav aria-label="Main"><a href="#">Overview</a><a href="#" aria-current="page">Clients</a><a href="#">Schedule</a><a href="#">On call</a><a href="#">Invoices</a><a href="#">Contracts</a><a href="#">Credits</a><a href="#">Staff</a><a href="#">Offers</a><a href="#">Settings</a></nav>
+<span class="org">Rooted Birth Collective</span><span class="av">RA</span></header>
+<main>
+<div class="head"><h1>Clients</h1><button class="btn" type="button">Find or add a Client</button></div>
+<form><fieldset><legend>Choose which Clients to show</legend>
+<label><input type="checkbox">Only my Clients</label>
+<label><input type="checkbox">Only Clients who owe money</label>
+<label><input type="checkbox">Only active Clients with no Contract</label>
+<label><input type="checkbox">Also show Clients not yet in care</label>
+<label class="f">Name<input type="text"></label>
+<label class="f">Doula<select><option>Any Doula</option></select></label>
+<button class="btn" type="button">Apply</button></fieldset></form>
+<p class="res">Showing the first 30 Clients, soonest due first.</p>
+<table><colgroup><col class="n"><col class="d"><col><col class="o"></colgroup>
+<thead><tr><th>Name</th><th>Due</th><th>Status</th><th>Doula</th></tr></thead><tbody>
+<tr><td class="n"><a href="#">Casey Estrada</a></td><td class="due">Nov 9, 2026</td><td class="st"><b>Birth</b> · Intake · No Contract yet</td><td>Rowan Petrosyan</td></tr>
+<tr><td class="n"><a href="#">Quinn Estrada</a></td><td class="due">Nov 10, 2026</td><td class="st"><b>Birth</b> · Intake · No Contract yet</td><td>Rowan Petrosyan</td></tr>
+<tr class="lit"><td class="n"><a href="#">Morgan Grier</a><span class="chg">Changed since you last looked: Doula added</span></td><td class="due">Nov 26, 2026</td><td class="st"><b>Birth</b> · Active · No Contract yet</td><td>Marisol Terrazas</td></tr>
+<tr><td class="n"><a href="#">Camille Boyd</a></td><td class="due">Nov 28, 2026</td><td class="st"><b>Birth</b> <span class="badge">Owes $1,500.00</span> · Active · Contract signed</td><td>Priya Raman</td></tr>
+<tr><td class="n"><a href="#">Imani Brooks</a></td><td class="due">Born Oct 27, 2026</td><td class="st"><b>Postpartum</b> <span class="badge err">$950.00 overdue by 12 days</span> · Active · Contract signed</td><td>Priya Raman</td></tr>
+<tr><td class="n"><a href="#">Tessa Moreau</a></td><td class="due">Dec 23, 2026</td><td class="st"><b>Birth</b> · Active · Contract signed · Paid $1,500.00</td><td>Priya Raman</td></tr>
+<tr><td class="n"><a href="#">Reese Calloway</a></td><td class="due">Dec 31, 2026</td><td class="st"><b>Birth</b> · Active · No Contract yet</td><td>Joss Adeyemi</td></tr>
+<tr><td class="n"><a href="#">Jamie Dunmore</a></td><td class="due">Jan 3, 2027</td><td class="st"><b>Birth</b> · Active · No Contract yet</td><td>Joss Adeyemi</td></tr>
+<tr><td class="n"><a href="#">Mira Castellanos</a></td><td class="due">Jan 11, 2027</td><td class="st"><b>Birth</b> · Intake · Contract signed</td><td>Priya Raman</td></tr>
+<tr><td class="n"><a href="#">Grace Whitfield</a></td><td class="due">Jan 27, 2027</td><td class="st"><b>Birth</b> · Intake · Contract sent</td><td>Priya Raman</td></tr>
+</tbody></table></main></body></html>

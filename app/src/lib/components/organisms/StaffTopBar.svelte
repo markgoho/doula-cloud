@@ -102,7 +102,7 @@
 	first row, the nav on the row under them, so Tab walks the bar the way
 	the eye does.
 -->
-<header>
+<header data-shell>
 	<div class="wide">
 		<div class="brand">
 			<BrandLockup />
@@ -147,7 +147,7 @@
 		does after a press on the wide bar's nav. A menu's own panel inside
 		the sheet shuts first, on its own listener.
 	-->
-	<dialog bind:this={sheet} class="sheet" aria-label="Practice menu" {@attach shutOnLinkPress}>
+	<dialog bind:this={sheet} class="sheet" data-shell aria-label="Practice menu" {@attach shutOnLinkPress}>
 		<div class="sheet-bar">
 			<Button label="Close menu" icon="x" iconOnly variant="bare" onClick={closeSheet} />
 			<BrandLockup />

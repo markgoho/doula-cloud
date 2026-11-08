@@ -10,6 +10,7 @@
 	import LandingPage from '#lib/components/templates/LandingPage.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import DoorLink from '#lib/components/atoms/DoorLink.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
 
 	import { GREETINGS } from '#lib/greeting.js';
 
@@ -19,25 +20,23 @@
 </script>
 
 {#snippet content()}
-	<stack-l space="var(--space-4)">
-		<DoorLink
-			href="/style-guide/landing-page"
-			label="Staff sign in"
-			description="For doulas and practice owners."
-			variant="primary"
-		/>
+	<stack-l space="var(--space-6)">
 		<grid-l min="var(--door-min)" space="var(--space-4)">
 			<DoorLink
 				href="/style-guide/landing-page"
-				label="Client portal sign in"
-				description={PORTAL_DOOR_LINE}
+				label="Staff sign in"
+				description="For doulas, practice owners, and office staff."
 			/>
 			<DoorLink
 				href="/style-guide/landing-page"
-				label="Set up a Practice"
-				description="New here? Your first three clients are free."
+				label="Client sign in"
+				description={PORTAL_DOOR_LINE}
 			/>
 		</grid-l>
+		<p class="new-here">
+			New here? <Link href="/style-guide/landing-page" label="Set up a Practice" />. Your first
+			three clients are free.
+		</p>
 	</stack-l>
 {/snippet}
 
@@ -51,7 +50,7 @@
 </div>
 
 <LandingPage
-	title="Sign in or set up a Practice"
+	title="Sign in"
 	{greeting}
 	lede="Welcome to DoulaCloud."
 	{content}
@@ -61,6 +60,11 @@
 	@layer components {
 		/* Not part of the Template -- a switch so each greeting can be seen
 		   without editing this file. */
+		.new-here {
+			margin: 0;
+			color: var(--color-on-surface-variant);
+		}
+
 		.controls {
 			display: flex;
 			gap: var(--space-3);

@@ -39,7 +39,7 @@ const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
 const invalidate = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ invalidate }));
+vi.mock('$app/navigation', () => ({ invalidate, goto: vi.fn(), afterNavigate: vi.fn() }));
 
 const [openInvoice, paidInvoice] = data.items;
 const { practiceId } = fixture.params;
@@ -104,6 +104,13 @@ describe('the Practice-wide invoice list (#265)', () => {
 		await expect.element(testPage.getByRole('cell', { name: 'Paid', exact: true })).toBeVisible();
 	});
 
+	it('reads an open Invoice that is not yet late as Owed', async () => {
+		await setup({ ...data, items: [{ ...openInvoice, daysOverdue: 0 }] });
+
+		await expect.element(testPage.getByRole('cell', { name: 'Owed', exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Open', exact: true })).not.toBeInTheDocument();
+	});
+
 	it('names each Client as the way in to that Invoice on her Engagement', async () => {
 		await setup();
 
@@ -148,7 +155,7 @@ describe('the Practice-wide invoice list (#265)', () => {
 			.toBeVisible();
 		// #2015: an empty book has nothing to total and nothing to narrow.
 		await expect.element(testPage.getByText('Clients owe')).not.toBeInTheDocument();
-		await expect.element(testPage.getByRole('link', { name: 'All invoices' })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('checkbox', { name: 'Only overdue Invoices' })).not.toBeInTheDocument();
 	});
 
 	it('appends the next page rather than replacing the one already read', async () => {
@@ -222,12 +229,12 @@ async function setupLoading() {
 }
 
 describe('the Practice-wide invoice list while its read runs (#2255)', () => {
-	it('draws the totals’ labels and the narrowing links, and says what it is loading', async () => {
+	it('draws the totals’ labels and the filter bar, and says what it is loading', async () => {
 		await setupLoading();
 
 		await expect.element(testPage.getByText('Clients owe')).toBeVisible();
-		await expect.element(testPage.getByRole('link', { name: 'All invoices' })).toHaveAttribute('aria-current', 'page');
-		await expect.element(testPage.getByRole('link', { name: 'Overdue', exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('checkbox', { name: 'Only overdue Invoices' })).not.toBeChecked();
+		await expect.element(testPage.getByRole('button', { name: 'Apply' })).toBeVisible();
 		await expect.element(testPage.getByRole('status', { name: 'Loading your invoices' })).toBeVisible();
 	});
 });

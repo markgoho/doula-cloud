@@ -178,11 +178,11 @@
 		   its targets are always the same height. The inline floor
 		   subtracts the variant's own padding, as the 44px rule on
 		   `.label` below does. */
-		:global(td) a {
+		:global(:is(td, th[scope='row'])) a {
 			min-block-size: var(--row-target-min);
 		}
 
-		:global(td) .label {
+		:global(:is(td, th[scope='row'])) .label {
 			min-inline-size: calc(
 				var(--row-target-min) - var(--link-inset-start, 0rem) - var(--link-inset-end, 0rem)
 			);
@@ -402,6 +402,7 @@
 			gap: var(--space-2);
 			--link-inset-start: var(--space-4);
 			--link-inset-end: var(--space-4);
+			min-block-size: var(--start-button-block-size);
 			padding-block: var(--space-2);
 			padding-inline: var(--link-inset-start) var(--link-inset-end);
 			border: var(--border-thin) solid transparent;
@@ -558,7 +559,6 @@
 			--link-inset-end: var(--space-4);
 			padding-block: var(--space-2);
 			padding-inline: var(--link-inset-start) var(--link-inset-end);
-			transform: translateY(calc(-100% - var(--space-4)));
 			border: var(--border-thin) solid var(--color-primary);
 			border-radius: var(--radius);
 			background-color: var(--color-surface-bright);
@@ -568,8 +568,13 @@
 			text-decoration: none;
 		}
 
-		a.skip:focus {
-			transform: none;
+		/* Clipped to nothing at rest rather than moved off the top: a skip
+		   link inside a page (FilterBar's "Skip to results") has no top of
+		   the page to hide above, and a translate left it on screen. */
+		a.skip:not(:focus) {
+			clip-path: inset(50%);
+			overflow: hidden;
+			white-space: nowrap;
 		}
 	}
 </style>

@@ -75,7 +75,7 @@ const portalPicker: RouteVariant = {
 export const signedOut = {
 	name: 'The root landing screen (signed out)',
 	props: { data: { type: 'signed-out' } satisfies RootLanding },
-	readyText: 'Sign in or set up a Practice'
+	readyText: 'Sign in'
 } as const satisfies RouteVariant;
 
 export const fixture: RouteFixture = {

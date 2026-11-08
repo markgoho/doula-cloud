@@ -173,6 +173,7 @@ vi.mock('$app/state', () => ({ page: pageState }));
  */
 vi.mock('$app/navigation', () => ({
 	afterNavigate: vi.fn(),
+	beforeNavigate: vi.fn(),
 	goto: vi.fn(),
 	invalidate: vi.fn(),
 	invalidateAll: vi.fn(),
@@ -519,8 +520,8 @@ function toRouteFloorKey(condition: Condition): string {
  * screen fits under `DataTable`'s own 55rem keep that floor and are not
  * here: the activity ledgers other than the hub's, a Client's history, both Contracts tables,
  * Engagement Requests, the schedule, Blocked email addresses and Pending
- * invitations. Since #2022 the Clients list is one of them: its cells were
- * cut to Name and a Status of badges, and its typical screen fits. Since
+ * invitations. The Clients list was one of them (#2022): its cells were
+ * cut to Name and a Status of badges (the money badges moved to the Money column), then grew a Money, a Date and a Doula column, and its table is as wide as the five need on one line (a floor of its own, 75.2rem, set by the demo Practice’s busiest rows: below it the Doula folds under the Date and the rows are two lines, and below 55rem the list is records). Since
  * #2091 the Visits on an Engagement are too: their Notes column wraps, so
  * the table's floor is its facts beside a note's longest word. Since
  * #2098 the Engagement's Activity ledger and both histories on a Staff
@@ -539,6 +540,7 @@ const ROUTE_FLOORS: Readonly<Record<string, string>> = {
 	'practices/[practiceId]/invoices#invoices-table': 'The invoice list',
 	'practices/[practiceId]/on-call#roster-table': 'The on-call roster',
 	'practices/[practiceId]/staff#members-table': 'Staff members',
+	'practices/[practiceId]/clients#clients-table': 'The Clients list',
 };
 
 describe('the floor check, over routes (#1945)', () => {

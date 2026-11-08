@@ -34,16 +34,43 @@
 	 * announced (#2015). It is hidden with a class rather than removed, so
 	 * the live region exists before its text changes.
 	 *
-	 * `isAppliedOnChange` (#2068) is the bar whose every control acts the
-	 * moment it changes -- the Clients list's "Also show Clients with no work yet" toggle. A
-	 * switch is a setting that takes effect at once, so an Apply after it
-	 * would be a second press for nothing; the bar draws none. The route
-	 * navigates from the control's own change. Schedule and On call keep
-	 * Apply: a date is typed a character at a time, and a list that
-	 * reloaded on each one would move under the person typing it.
+	 * Apply follows the fields and "Clear filters" follows Apply. The link's
+	 * box is always there: while no filter is on it is drawn hidden
+	 * (`visibility: hidden`, so it holds its space and is out of the tab order
+	 * and the accessibility tree), so Apply sits in the same place whether or
+	 * not the link is shown. A bar with switches gives them a row above the
+	 * fields, and a switch the route does not draw right now but marks
+	 * `data-holds-space` keeps its box the same way. The count has a row of its
+	 * own under the controls and keeps its height while it is empty. So applying
+	 * a filter moves neither Apply nor the list under the bar.
+	 *
+ * With `foldsFieldsOnly`, `children` stay in view at every width and only
+	 * `folded` folds; Apply and "Clear filters" are one item of the row.
+	 *
+	 * In a narrow column the controls fold behind a native `<details>`
+	 * ("Filters", or "Filters: Only my Clients" / "Filters: 2 on" given
+	 * `activeLabels`; it opens only when the person opens it) so a phone's
+	 * first screen holds the list, as the MOJ filter does. A "Skip to
+	 * results" link is the bar's first stop, drawn only while focused, and
+	 * moves focus to the status line.
+	 * The status line stays outside it. In a wide column, one that holds
+	 * the fullest field row on a line, the summary is not drawn and the
+	 * controls show in full. The switch is a query on the bar's own
+	 * container (floor.svelte.spec.ts holds its criterion), and the closed
+	 * content is shown by undoing the user agent's own
+	 * `content-visibility: hidden` on `::details-content`, so it is in the
+	 * accessibility tree only while shown. No script.
+	 *
+	 * Every bar has Apply: a date or a name is typed a character at a time,
+	 * and a list that reloaded on each one would move under the person
+	 * typing it, so a bar that holds one such field applies every control
+	 * with it (GOV.UK's filter pattern). The bar of switches that acted
+	 * the moment they changed (#2068) went when the Clients list gained a
+	 * Name and a Doula field.
 	 */
 	import type { Snippet } from 'svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
 
 	interface Properties {
 		/**
@@ -52,8 +79,6 @@
 		action: string;
 		/**
 		 * The route's client-side navigation. It owns `preventDefault()`.
-		 * A bar with Apply needs it; an `isAppliedOnChange` bar of controls
-		 * that never submit a form (a switch) has nothing to hand it.
 		 */
 		onSubmit?: (event: SubmitEvent) => void;
 		/**
@@ -71,41 +96,225 @@
 		 */
 		empty?: boolean;
 		/**
-		 * Every control acts the moment it changes (a toggle), so the bar
-		 * draws no Apply. The route navigates from the control's change.
+		 * Where "Clear filters" goes: the list with nothing applied. Given
+		 * only while a filter is on. The link follows Apply, so Apply sits
+		 * in the same place whether or not it is there.
 		 */
-		isAppliedOnChange?: boolean;
+		clearHref?: string;
 		/**
-		 * The fields, each a `LabeledField` with a named control.
+		 * The filters that are on, by name, for the summary a narrow column
+		 * draws: "Filters: Only my Clients" for one, "Filters: 2 on" for
+		 * more. The summary stays closed until the person opens it, so a
+		 * phone's first screen holds the list.
 		 */
-		children: Snippet;
+		activeLabels?: string[];
+		/**
+		 * The id of the result line, so a table can be described by it
+		 * (`DataTable`'s `describedBy`) and the skip link can land on it.
+		 * Generated when not given.
+		 */
+		statusId?: string;
+		/**
+		 * With `foldsFieldsOnly`: the longest wording the result line can say, which the
+		 * bar draws unseen under it. The line then reserves what that wording takes at the
+		 * bar's width (one line where it fits on one) and never more, so the list does not
+		 * move between results. Without it the line reserves two lines.
+		 */
+		statusRuler?: string;
+		/**
+		 * The filters that are on, as GOV.UK's "selected filters": one `<li>` for
+		 * each, a removable tag, drawn in a list directly above the result line.
+		 * Given only while a filter is on, so the bar draws no row for them
+		 * otherwise.
+		 */
+		applied?: Snippet;
+		/**
+		 * Switches that sit in a row of their own above the fields, so a
+		 * switch drawn or hidden never moves a field or Apply.
+		 */
+		switches?: Snippet;
+		/**
+		 * Keep the switches and Apply in view at every width and fold only
+		 * the fields behind the summary, for a bar whose switches are the
+		 * filters most often wanted. The summary then names the fields that
+		 * are on (`activeLabels`: only those).
+		 */
+		foldsFieldsOnly?: boolean;
+		/**
+		 * Whether a newer result is on its way. Apply shows its loading state,
+		 * so a press is answered at once and cannot be sent twice.
+		 */
+		isBusy?: boolean;
+		/**
+		 * With `foldsFieldsOnly`: the fields that fold behind the summary in a
+		 * narrow column, such as a rarely wanted select. `children` then stays
+		 * in view at every width, for the field a reader reaches for most (a
+		 * name to find a record by).
+		 */
+		folded?: Snippet;
+		/**
+		 * The fields, each a `LabeledField` with a named control. A bar of
+		 * switches alone, such as the Invoices list's, has none.
+		 */
+		children?: Snippet;
 	}
 
-	let { action, onSubmit, legend, status, empty = false, isAppliedOnChange = false, children }: Properties = $props();
+	const uid = $props.id();
+	let {
+		action,
+		onSubmit,
+		legend,
+		status,
+		empty = false,
+		clearHref,
+		activeLabels = [],
+		statusId = `filter-bar-status-${uid}`,
+		statusRuler,
+		applied,
+		switches,
+		foldsFieldsOnly = false,
+		isBusy = false,
+		folded,
+		children
+	}: Properties = $props();
+
+	const summary = $derived.by(() => {
+		const noun = foldsFieldsOnly ? 'More filters' : 'Filters';
+		if (activeLabels.length === 0) return noun;
+		if (activeLabels.length === 1) return `${noun}: ${activeLabels[0]}`;
+		return `${noun}: ${activeLabels.length} on`;
+	});
+
+	let statusLine = $state<HTMLParagraphElement>();
+
+	/**
+	 * Moves focus to the result line, so a keyboard user who has just applied
+	 * a filter lands on its result and not at the top of the page. The route
+	 * calls it; it takes tabindex="-1" so it never joins the tab order.
+	 */
+	export function focusStatus() {
+		statusLine!.focus();
+	}
+
+	// Closed until the person opens it, then the element's own, so a rerender
+	// for another reason never closes what the person just opened
+	// (`atoms/Details.svelte`).
+	let isOpen = $state(false);
 </script>
 
+{#snippet clear()}
+	<!-- Always a box, so Apply does not move when the link comes or goes. Without
+	     `clearHref` it is drawn hidden: out of sight, out of the tab order and
+	     out of the accessibility tree, holding only its space. -->
+	<span class="clear" class:reserve={!clearHref} inert={!clearHref}>
+		<Link href={clearHref ?? action} label="Clear filters" />
+	</span>
+{/snippet}
+
+{#snippet result()}
+	<div class="count" class:ruled={statusRuler !== undefined}>
+		<p id={statusId} role="status" class="status" class:visually-hidden={empty} tabindex="-1" bind:this={statusLine}>{status}</p>
+		{#if statusRuler !== undefined}<span class="ruler" aria-hidden="true">{statusRuler}</span>{/if}
+	</div>
+{/snippet}
+
 <!-- stacked-form:ignore: #2026 -- the one GET narrowing form. Its fields sit side by side and wrap on their own, and `StackedForm` would both stack them and take away the GET submission this form is built on. -->
-<form method="get" {action} onsubmit={onSubmit}>
-	<fieldset>
-		<legend>{legend}</legend>
-		<cluster-l space="var(--space-related)" align="flex-end">
-			{@render children()}
-			{#if !isAppliedOnChange}
-				<Button type="submit" label="Apply" variant="secondary" />
-			{/if}
-		</cluster-l>
-	</fieldset>
-	<p role="status" class="status" class:visually-hidden={empty}>{status}</p>
+<form method="get" {action} onsubmit={onSubmit} class:dense={foldsFieldsOnly}>
+	<!-- The first stop in the bar, drawn only while focused: a keyboard user
+	     crosses the controls only when she means to. -->
+	<Link
+		href={`#${statusId}`}
+		label="Skip to results"
+		variant="skip"
+		onClick={(event) => {
+			event.preventDefault();
+			focusStatus();
+		}}
+	/>
+	{#if foldsFieldsOnly}
+		<!-- Switches and Apply stay in view at any width; only the fields fold,
+		     behind a summary that names the ones that are on. In a wide column
+		     the fold is not drawn and the fields sit beside Apply on one row. -->
+		<fieldset>
+			<legend class="quiet">{legend}</legend>
+			<stack-l class="controls" space="var(--space-1)">
+				{#if switches}
+					<cluster-l class="switches" space="var(--space-related)" align="center">
+						{@render switches()}
+					</cluster-l>
+				{/if}
+				<cluster-l class="fields" space="var(--space-related)" align="flex-end">
+					{@render children?.()}
+					{#if folded}
+						<details class="fold" open={isOpen} ontoggle={(event) => (isOpen = event.currentTarget.open)}>
+							<summary class="toggle">{summary}</summary>
+							{@render folded()}
+						</details>
+					{/if}
+					<!-- One item of the row, so Apply and "Clear filters" wrap together
+					     and Apply keeps the width of its words in a narrow bar. -->
+					<div class="actions">
+						<Button type="submit" label="Apply" variant="secondary" loading={isBusy} />
+						{@render clear()}
+					</div>
+				</cluster-l>
+			</stack-l>
+		</fieldset>
+	{:else}
+	<details open={isOpen} ontoggle={(event) => (isOpen = event.currentTarget.open)}>
+		<summary class="toggle">{summary}</summary>
+		<fieldset>
+			<legend>{legend}</legend>
+			<stack-l space="var(--space-related)">
+				{#if switches}
+					<cluster-l space="var(--space-related)" align="center">
+						{@render switches()}
+					</cluster-l>
+				{/if}
+				<cluster-l class="fields" space="var(--space-related)" align="flex-end">
+					{@render children?.()}
+					<Button type="submit" label="Apply" variant="secondary" loading={isBusy} />
+					{@render clear()}
+				</cluster-l>
+			</stack-l>
+		</fieldset>
+	</details>
+	{/if}
+	{#if applied}
+		<ul class="applied" aria-label="Applied filters">
+			{@render applied()}
+		</ul>
+	{/if}
+	<!-- On the bar's left edge, in a row of its own directly above the list, at every width,
+	     and one line tall while empty: what is applied never moves Apply or the list. -->
+	{@render result()}
 </form>
 
 <style>
 	@layer components {
-		/* The legend, the fields and the status line, at the step that
-		   joins related items into one group (#2020). */
+		/* The controls from the result line under them: the group step, since
+		   the result line belongs to the list it counts and sits tight to
+		   it. Inside the controls, the related step (#2020). */
 		form {
 			display: flex;
 			flex-direction: column;
-			gap: var(--space-related);
+			gap: var(--space-group);
+			position: relative;
+		}
+
+		/* The skip link sits in the gap above the bar (the group step every list
+		   screen leaves between its title row and the bar), fitted to it, so
+		   focusing it moves nothing and it covers no switch, label or field. At rest
+		   it is the same box, clipped to nothing. The gap is the least 28px, so the
+		   link is at least 26px tall, over the 24px a target needs. */
+		form > :global(a.skip) {
+			inset-block-start: calc(var(--border-thin) - var(--space-group));
+			box-sizing: border-box;
+			display: inline-flex;
+			align-items: center;
+			block-size: calc(var(--space-group) - 2 * var(--border-thin));
+			min-block-size: 0;
+			padding-block: 0;
 		}
 
 		fieldset {
@@ -133,10 +342,201 @@
 			min-inline-size: 0;
 		}
 
+		/* The bar is its own container, so the filters collapse behind one
+		   summary by the room the bar has, not the window's (ADR-0024). */
+		form {
+			container: filter-bar / inline-size;
+		}
+
+		/* The base size re-resolved against the bar (#544): a `cqi` resolves
+		   against the nearest ancestor container, which the bar cannot be
+		   for itself. */
+		form > * {
+			font-size: var(--text-body-size);
+		}
+
+		.toggle {
+			cursor: pointer;
+			min-block-size: var(--space-6);
+			padding-block: var(--space-1);
+			font-size: var(--text-label-size);
+			font-weight: var(--font-weight-medium);
+			color: var(--color-on-surface-variant);
+		}
+
+		/* In a column that holds every control on one row each, the
+		   controls show in full and the summary is not drawn. A closed
+		   <details> hides its content through `::details-content`, so the
+		   content is shown by undoing that, and stays out of the
+		   accessibility tree whenever it is hidden. */
+		/* The folded fields (`foldsFieldsOnly`): their own row in a narrow
+		   column, one field under the next. */
+		.fold {
+			min-inline-size: 0;
+		}
+
+		/* Closed, the summary shares a row with Apply; open, the fields take
+		   the row to themselves. */
+		.fold[open] {
+			flex-basis: 100%;
+		}
+
+		/* The switches are stacked at a phone's width; each keeps its own
+		   target, so the rows sit close. */
+		.switches {
+			row-gap: var(--space-1);
+		}
+
+		/* Where the switches are stacked, a switch that is not drawn leaves no row. */
+		.switches > :global([data-holds-space]) {
+			display: none;
+		}
+
+		/* Apply and "Clear filters" share a line whatever the room, centered
+		   on one another. Apply fills a narrow container as a screen's own
+		   action does (Button.svelte); here it is one control among several
+		   in a bar, so it keeps the width of its words. */
+		.actions {
+			display: flex;
+			align-items: center;
+			gap: var(--space-related);
+		}
+
+		.actions :global(button.fills-narrow) {
+			inline-size: auto;
+		}
+
+		.fold::details-content {
+			display: flex;
+			flex-direction: column;
+			gap: var(--space-related);
+			padding-block-start: var(--space-related);
+		}
+
+		/* In a narrow column the group is named for a screen reader and not
+		   drawn: its switches say what they do, and a phone's first screen
+		   is the list (a legend line there is the height of a Client).
+		   `foldsFieldsOnly` only; the other bar draws its legend folded. */
+		legend.quiet {
+			position: absolute;
+			inline-size: var(--border-thin);
+			block-size: var(--border-thin);
+			margin: 0;
+			overflow: hidden;
+			clip-path: inset(50%);
+			white-space: nowrap;
+		}
+
+		/* The count line sits close to the controls it reports on, and is
+		   capped at the reading measure like any sentence. */
+		.dense {
+			gap: var(--space-2);
+		}
+
+		/* The tags wrap on their own and sit with the controls they report on. */
+		.applied {
+			display: flex;
+			flex-wrap: wrap;
+			gap: var(--space-1) var(--space-2);
+			margin: 0;
+			padding: 0;
+			list-style: none;
+		}
+
+		/* A tag is a target the height of a table row's (`--row-target-min`, 44px at a
+		   coarse pointer), not the 44px of a link on its own: the list under it is a
+		   table of such rows, and a taller tag row costs it a row. */
+		.applied :global(a.chip) {
+			min-block-size: var(--row-target-min);
+			padding-block: var(--space-1);
+		}
+
+		/* The count and its ruler share one box, so it is as tall as the taller of the two. */
+		.count {
+			display: grid;
+		}
+
+		.count > * {
+			grid-area: 1 / 1;
+		}
+
+		/* Two lines tall whatever it says, and no wider than a reading line (75ch), so the
+		   longest count wraps inside its own box and applying a filter never moves the list. */
+		.dense > .count {
+			min-block-size: 2lh;
+		}
+
+		.dense .status,
+		.dense .ruler {
+			max-inline-size: 75ch;
+		}
+
+		/* With a ruler, the longest wording the count can say, drawn unseen in the same box, the
+		   box takes what that wording takes at this width, up to two lines: one where it fits
+		   on one, two where it does not, with no width query. */
+		.dense > .count.ruled {
+			min-block-size: 1lh;
+		}
+
+		.ruler {
+			margin: 0;
+			max-block-size: 2lh;
+			overflow: hidden;
+			visibility: hidden;
+			font-size: var(--text-meta-size);
+			line-height: var(--text-meta-leading);
+		}
+
+		/* The link's box when no filter is on: hidden, not removed, so its space
+		   is held. `visibility: hidden` also takes it out of the tab order and
+		   the accessibility tree. */
+		.reserve {
+			visibility: hidden;
+		}
+
+		@container filter-bar (min-width: 42rem) {
+			/* A switch the route does not draw right now but marks
+			   `data-holds-space` keeps its box in the row, unseen and out of reach
+			   (the route also makes it `inert`), so the switches and everything
+			   under them stay put. A real box: `display: contents` holds no space. */
+			.switches > :global([data-holds-space]) {
+				display: block;
+				visibility: hidden;
+			}
+
+			/* The fields join the row Apply is on. */
+			.fold {
+				display: contents;
+			}
+
+			.fold::details-content {
+				display: contents;
+			}
+
+			.toggle {
+				display: none;
+			}
+
+			details::details-content {
+				content-visibility: visible;
+			}
+		}
+
 		.status {
 			margin: 0;
+			/* One line's height even while empty, so the list does not move when
+			   the count arrives. */
+			min-block-size: 1lh;
+			max-inline-size: var(--measure);
 			color: var(--color-on-surface-variant);
 			font-size: var(--text-meta-size);
+			line-height: var(--text-meta-leading);
+		}
+
+		/* Focus lands here after a filter is applied (`focusStatus`). */
+		.status:focus-visible {
+			outline: var(--focus-ring-width) solid var(--color-primary);
+			outline-offset: var(--focus-ring-offset);
 		}
 	}
 </style>

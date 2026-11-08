@@ -10,7 +10,19 @@
  * what comes back from it.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { dueLabel, loadPaymentTerms, practiceInvoicesPath, setPaymentTerms } from './invoice.js';
+import { dueLabel, invoicesResultSummary, loadPaymentTerms, practiceInvoicesPath, setPaymentTerms } from './invoice.js';
+
+describe('invoicesResultSummary', () => {
+	it.each([
+		[false, 0, 'Showing every Invoice.'],
+		[false, 3, 'Showing every Invoice.'],
+		[true, 0, 'No Invoice is overdue.'],
+		[true, 1, 'Showing 1 overdue Invoice.'],
+		[true, 4, 'Showing 4 overdue Invoices.']
+	])('narrowed %s with %i overdue reads "%s"', (isNarrowed, count, text) => {
+		expect(invoicesResultSummary(isNarrowed, count)).toBe(text);
+	});
+});
 import { jsonResponse } from './testResponse.js';
 
 describe('dueLabel', () => {

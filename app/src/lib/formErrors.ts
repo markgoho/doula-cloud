@@ -243,11 +243,14 @@ function targetedErrors(
  */
 export class RefusalError extends Error {
 	readonly details?: Record<string, string>;
+	// The HTTP status of the refused response, where one was read.
+	readonly status?: number;
 
-	constructor(message: string, details?: Record<string, string>) {
+	constructor(message: string, details?: Record<string, string>, status?: number) {
 		super(message);
 		this.name = 'RefusalError';
 		this.details = details;
+		this.status = status;
 	}
 }
 
@@ -261,7 +264,7 @@ export class RefusalError extends Error {
  */
 export async function refusalError(response: Response): Promise<RefusalError> {
 	const parsed = await parseRefusal(response, { opaque5xx: false });
-	return new RefusalError(parsed.message ?? parsed.text, parsed.details);
+	return new RefusalError(parsed.message ?? parsed.text, parsed.details, response.status);
 }
 
 /*

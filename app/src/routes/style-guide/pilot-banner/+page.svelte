@@ -15,12 +15,13 @@
 
 	<section>
 		<h2>Staff</h2>
-		<!-- The longest realistic sentence (ADR-0025): the Staff copy runs
-		     longer than the Portal's, so this is the one the continuum sweep
-		     has to clear at 320px (#1502 Q4). -->
+		<!-- The Staff copy is kept to one line down to 320px: the tag and a
+		     short control, with no sentence between them (#1502 Q4). The
+		     Portal's below is the longer pair the continuum sweep has to
+		     clear at 320px. -->
 		<PilotBanner
-			sentence="DoulaCloud is new, and you are one of the first to use it."
-			controlText="Tell us what is not working or what you need"
+			sentence=""
+			controlText="Tell us what you think"
 			open={false}
 			controlsId="feedback-drawer-staff"
 			{onOpenFeedback}
