@@ -27,18 +27,8 @@ type RefuseRequest struct {
 // before this runs. Widening or narrowing this route means editing its
 // role list in mount.go.
 func RefuseHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, _, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		approverStaffID, _ := staffauth.StaffID(r.Context())
-
-		requestID := r.PathValue("requestId")
-		if !staffauth.ParseUUID(w, "request", requestID) {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, approverStaffID, requestID := c.Tx, c.StaffID, c.ID("requestId")
 
 		var body RefuseRequest
 		if !apierr.DecodeJSON(w, r, &body) {
@@ -66,7 +56,7 @@ func RefuseHandler() http.Handler {
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, DecisionResponse{RequestID: requestID, State: "refused"})
-	})
+	}, staffauth.PathID("request", "requestId"))
 }
 
 // writeRequestNotDecidable reports why a Request could not be acted on:
@@ -76,8 +66,17 @@ func RefuseHandler() http.Handler {
 // DetailHandler, where it explains a Request that is no longer pending --
 // the same two answers either way.
 func writeRequestNotDecidable(w http.ResponseWriter, r *http.Request, tx *sql.Tx, requestID string) {
-	var state string
-	err := tx.QueryRowContext(r.Context(), `SELECT state::text FROM engagement_requests WHERE id = $1`, requestID).Scan(&state)
+	writeRequestNotActionable(w, r, tx, requestID, "")
+}
+
+// writeRequestNotActionable is writeRequestNotDecidable for an act only
+// the Request's requester may do: when onlyStaffID is not empty and
+// somebody else made the Request, the answer is a 403 instead.
+func writeRequestNotActionable(w http.ResponseWriter, r *http.Request, tx *sql.Tx, requestID, onlyStaffID string) {
+	var requestedBy, state string
+	err := tx.QueryRowContext(r.Context(),
+		`SELECT requested_by::text, state::text FROM engagement_requests WHERE id = $1`, requestID,
+	).Scan(&requestedBy, &state)
 	if errors.Is(err, sql.ErrNoRows) {
 		apierr.WriteError(w, "engagement request not found", http.StatusNotFound)
 		return
@@ -85,6 +84,10 @@ func writeRequestNotDecidable(w http.ResponseWriter, r *http.Request, tx *sql.Tx
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+	if onlyStaffID != "" && requestedBy != onlyStaffID {
+		apierr.WriteError(w, "only the staff member who made this request may withdraw it", http.StatusForbidden)
 		return
 	}
 	apierr.WriteError(w, "that request is no longer pending -- it is "+state, http.StatusConflict)

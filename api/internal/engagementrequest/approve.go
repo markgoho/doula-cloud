@@ -49,18 +49,8 @@ const liveEngagementWarning = "this client already has live work"
 // before this runs. Widening or narrowing this route means editing its
 // role list in mount.go.
 func ApproveHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		approverStaffID, _ := staffauth.StaffID(r.Context())
-
-		requestID := r.PathValue("requestId")
-		if !staffauth.ParseUUID(w, "request", requestID) {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, practiceID, approverStaffID, requestID := c.Tx, c.PracticeID, c.StaffID, c.ID("requestId")
 
 		engagementID, warning, err := approve(r.Context(), tx, practiceID, requestID, approverStaffID)
 		if err != nil {
@@ -73,7 +63,7 @@ func ApproveHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 			resp.Warning = liveEngagementWarning
 		}
 		apierr.WriteJSON(w, http.StatusOK, resp)
-	})
+	}, staffauth.PathID("request", "requestId"))
 }
 
 // writeApproveErr turns approve's error into the right response, queuing

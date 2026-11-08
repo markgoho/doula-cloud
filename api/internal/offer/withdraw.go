@@ -25,18 +25,8 @@ import (
 // before this runs. Widening or narrowing this route means editing its
 // role list in mount.go.
 func WithdrawHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		actorStaffID, _ := staffauth.StaffID(r.Context())
-
-		offerID := r.PathValue("offerId")
-		if !staffauth.ParseUUID(w, "offer", offerID) {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, practiceID, actorStaffID, offerID := c.Tx, c.PracticeID, c.StaffID, c.ID("offerId")
 
 		if err := expireOpen(r.Context(), tx, byID, offerID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -74,7 +64,7 @@ func WithdrawHandler() http.Handler {
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, DecisionResponse{OfferID: offerID, State: "withdrawn"})
-	})
+	}, staffauth.PathID("offer", "offerId"))
 }
 
 // CloseOnCompletion is the Engagement-completes half of the lifecycle:

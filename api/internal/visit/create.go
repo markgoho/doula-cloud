@@ -1,7 +1,6 @@
 package visit
 
 import (
-	"encoding/json/v2"
 	"net/http"
 	"time"
 
@@ -66,20 +65,8 @@ type CreateResponse struct {
 // who cannot reach the Engagement at all is already refused upstream by
 // staffauth.AttachingWrite, before any of this runs.
 func CreateHandler(enq tasknudge.Enqueuer) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c, ok := requireVisitWrite(w, r)
-		// coverage:ignore reason: requireVisitWrite only reports false when staffauth.Middleware left no tx or no Reader on context, which cannot happen behind it
-		if !ok {
-			return
-		}
-
-		engagementID := r.PathValue("engagementId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) {
-			return
-		}
-		if !staffauth.RequireEngagementAtPractice(w, r, c.tx, engagementID, c.practiceID) {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		engagementID := c.EngagementID
 
 		var req CreateRequest
 		if !apierr.DecodeJSONOptional(w, r, &req) {
@@ -98,7 +85,7 @@ func CreateHandler(enq tasknudge.Enqueuer) http.Handler {
 		}
 
 		visitID := uuid.NewString()
-		if _, err := c.tx.ExecContext(r.Context(),
+		if _, err := c.Tx.ExecContext(r.Context(),
 			`INSERT INTO visits (id, engagement_id, staff_id, scheduled_at) VALUES ($1, $2, $3, $4)`,
 			visitID, engagementID, staffID, scheduledAt,
 		); err != nil {
@@ -111,22 +98,8 @@ func CreateHandler(enq tasknudge.Enqueuer) http.Handler {
 		// an entry that answers it only sometimes cannot be read back as an
 		// answer at all. The actor is the Entry's own Actor, so the two
 		// together say who did it and to whom.
-		diff, err := json.Marshal(map[string]string{"assignedStaffId": staffID})
-		if err != nil {
-			// coverage:ignore reason: a map of strings always marshals cleanly, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if err := activity.Record(r.Context(), c.tx, activity.Entry{
-			PracticeID:  c.practiceID,
-			SubjectKind: activity.SubjectEngagement,
-			SubjectID:   engagementID,
-			Action:      string(activity.ActionVisitLogged),
-			Diff:        diff,
-			Actor:       activity.StaffActor(c.staffID),
-		}); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !recordVisitActivity(w, r, c, engagementID, activity.ActionVisitLogged, map[string]string{"assignedStaffId": staffID}) {
+			// coverage:ignore reason: recordVisitActivity only reports false on a DB write failure, not exercised by unit tests
 			return
 		}
 
@@ -167,5 +140,5 @@ func CreateHandler(enq tasknudge.Enqueuer) http.Handler {
 			ScheduledAt:      scheduledAt,
 			NotifiedStaffIDs: notified,
 		})
-	})
+	}, staffauth.Engagement())
 }

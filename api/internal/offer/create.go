@@ -71,18 +71,8 @@ type CreateResponse struct {
 // before this runs. Widening or narrowing this route means editing its
 // role list in mount.go.
 func CreateHandler(enq tasknudge.Enqueuer) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		actorStaffID, _ := staffauth.StaffID(r.Context())
-
-		engagementID := r.PathValue("engagementId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, practiceID, actorStaffID, engagementID := c.Tx, c.PracticeID, c.StaffID, c.EngagementID
 
 		var req CreateRequest
 		if !apierr.DecodeJSON(w, r, &req) {
@@ -117,7 +107,7 @@ func CreateHandler(enq tasknudge.Enqueuer) http.Handler {
 		}
 
 		apierr.WriteJSON(w, status, resp)
-	})
+	}, staffauth.EngagementID())
 }
 
 // resolveClientArea returns provided unchanged when the sender typed

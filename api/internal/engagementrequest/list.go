@@ -57,15 +57,8 @@ type ListResponse struct {
 // it belongs at the top. Decided Requests never appear -- a decided
 // Request is history, and its history lives on the Client's record.
 func ListHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireOwnerOrAdmin(w, r)
-		if !ok {
-			// coverage:ignore reason: belt-and-braces -- engagementrequest.Mount's
-			// own OwnerAndAdmin declaration (g.Get) already refuses a non-owner/
-			// admin caller before this handler runs, so !ok is unreachable through
-			// the real mount.
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, practiceID := c.Tx, c.PracticeID
 
 		after, ok := pagecursor.FromQuery(w, r, pagecursor.Decode, "invalid cursor")
 		if !ok {

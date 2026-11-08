@@ -49,20 +49,10 @@ type RequestResponse struct {
 // Must be mounted behind staffauth.Middleware; db and enq are needed only
 // for that collapsed path's own possible ErrNoCreditsRemaining branch.
 func RequestHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, reader, ok := staffauth.RequireTxReader(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-		staffID, _ := staffauth.StaffID(r.Context())
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, practiceID, reader, staffID, clientID := c.Tx, c.PracticeID, c.Reader, c.StaffID, c.ID("clientId")
 		if isContractorOriginator(reader) {
 			apierr.WriteError(w, msgContractorOriginates, http.StatusForbidden)
-			return
-		}
-
-		clientID := r.PathValue("clientId")
-		if !staffauth.ParseUUID(w, "client", clientID) {
 			return
 		}
 		if !clientExists(r.Context(), tx, clientID) {
@@ -128,7 +118,7 @@ func RequestHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 			resp.Warning = liveEngagementWarning
 		}
 		apierr.WriteJSON(w, http.StatusCreated, resp)
-	})
+	}, staffauth.PathID("client", "clientId"))
 }
 
 // collapse finishes the pending row RequestHandler just inserted with an

@@ -2,7 +2,6 @@ package visit
 
 import (
 	"database/sql"
-	"encoding/json/v2"
 	"errors"
 	"net/http"
 
@@ -42,17 +41,8 @@ type NotesResponse struct {
 // exact seam ADR-0008's write table already reuses for this Engagement.
 // Must be mounted behind staffauth.Middleware.
 func NotesHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-
-		engagementID, visitID, ok := requireVisitPath(w, r, tx, practiceID)
-		if !ok {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, engagementID, visitID := c.Tx, c.EngagementID, c.ID("visitId")
 
 		var req NotesRequest
 		if !apierr.DecodeJSON(w, r, &req) {
@@ -108,30 +98,15 @@ func NotesHandler() http.Handler {
 		// (ADR-0027) -- worse for a bereavement Visit's notes than for
 		// nowhere at all. hadNotes/hasNotes still make a first write, an
 		// edit and a clear three distinguishable rows without the text.
-		diff, err := json.Marshal(map[string]any{
+		if !recordVisitActivity(w, r, c, engagementID, activity.ActionVisitNotesEdited, map[string]any{
 			"visitId":  visitID,
 			"hadNotes": previous.Valid,
 			"hasNotes": *req.Notes != "",
-		})
-		if err != nil {
-			// coverage:ignore reason: a map of a string, a bool and a bool always marshals cleanly, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		staffID, _ := staffauth.StaffID(r.Context())
-		if err := activity.Record(r.Context(), tx, activity.Entry{
-			PracticeID:  practiceID,
-			SubjectKind: activity.SubjectEngagement,
-			SubjectID:   engagementID,
-			Action:      string(activity.ActionVisitNotesEdited),
-			Diff:        diff,
-			Actor:       activity.StaffActor(staffID),
-		}); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		}) {
+			// coverage:ignore reason: recordVisitActivity only reports false on a DB write failure, not exercised by unit tests
 			return
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, NotesResponse{VisitID: visitID, Notes: *req.Notes})
-	})
+	}, staffauth.PathID("visit", "visitId"), staffauth.Engagement())
 }

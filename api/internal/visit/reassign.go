@@ -2,7 +2,6 @@ package visit
 
 import (
 	"database/sql"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -39,17 +38,8 @@ type ReassignResponse struct {
 // plain Doula may only ever name herself), whether that person may be
 // named, and whether she is granted an attachment for it.
 func ReassignHandler(enq tasknudge.Enqueuer) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c, ok := requireVisitWrite(w, r)
-		// coverage:ignore reason: requireVisitWrite only reports false when staffauth.Middleware left no tx or no Reader on context, which cannot happen behind it
-		if !ok {
-			return
-		}
-
-		engagementID, visitID, ok := requireVisitPath(w, r, c.tx, c.practiceID)
-		if !ok {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		engagementID, visitID := c.EngagementID, c.ID("visitId")
 
 		var req ReassignRequest
 		if !apierr.DecodeJSON(w, r, &req) {
@@ -79,7 +69,7 @@ func ReassignHandler(enq tasknudge.Enqueuer) http.Handler {
 		var previousStaffID string
 		var scheduledAt sql.NullTime
 		var createdAt time.Time
-		if err := c.tx.QueryRowContext(r.Context(),
+		if err := c.Tx.QueryRowContext(r.Context(),
 			`SELECT staff_id, scheduled_at, created_at FROM visits WHERE id = $1 AND engagement_id = $2 FOR UPDATE`,
 			visitID, engagementID,
 		).Scan(&previousStaffID, &scheduledAt, &createdAt); err != nil {
@@ -91,7 +81,7 @@ func ReassignHandler(enq tasknudge.Enqueuer) http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if _, err := c.tx.ExecContext(r.Context(),
+		if _, err := c.Tx.ExecContext(r.Context(),
 			`UPDATE visits SET staff_id = $1 WHERE id = $2 AND engagement_id = $3`,
 			staffID, visitID, engagementID,
 		); err != nil {
@@ -110,27 +100,13 @@ func ReassignHandler(enq tasknudge.Enqueuer) http.Handler {
 		if scheduledAt.Valid {
 			visitScheduledAt = &scheduledAt.Time
 		}
-		diff, err := json.Marshal(map[string]any{
+		if !recordVisitActivity(w, r, c, engagementID, activity.ActionVisitReassigned, map[string]any{
 			activity.DiffKeyAssignedStaffIDBefore: previousStaffID,
 			activity.DiffKeyAssignedStaffIDAfter:  staffID,
 			activity.DiffKeyVisitScheduledAt:      visitScheduledAt,
 			activity.DiffKeyVisitCreatedAt:        createdAt,
-		})
-		if err != nil {
-			// coverage:ignore reason: a map of strings always marshals cleanly, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if err := activity.Record(r.Context(), c.tx, activity.Entry{
-			PracticeID:  c.practiceID,
-			SubjectKind: activity.SubjectEngagement,
-			SubjectID:   engagementID,
-			Action:      string(activity.ActionVisitReassigned),
-			Diff:        diff,
-			Actor:       activity.StaffActor(c.staffID),
-		}); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		}) {
+			// coverage:ignore reason: recordVisitActivity only reports false on a DB write failure, not exercised by unit tests
 			return
 		}
 
@@ -155,7 +131,7 @@ func ReassignHandler(enq tasknudge.Enqueuer) http.Handler {
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, ReassignResponse{VisitID: visitID, StaffID: staffID, NotifiedStaffIDs: notified})
-	})
+	}, staffauth.PathID("visit", "visitId"), staffauth.Engagement())
 }
 
 // queueReassignNotices queues the email to the Doula a Visit moved onto
@@ -163,10 +139,10 @@ func ReassignHandler(enq tasknudge.Enqueuer) http.Handler {
 // transaction, and returns who they are. A move onto the person already
 // holding it tells nobody, and nobody is told about a move she made
 // herself. The one it moved onto gets queueAssigneeNotice's one email.
-func queueReassignNotices(r *http.Request, c visitWriteContext, visitID, previousStaffID, staffID string, putOn bool) ([]string, error) {
+func queueReassignNotices(r *http.Request, c staffauth.Call, visitID, previousStaffID, staffID string, putOn bool) ([]string, error) {
 	notified := []string{}
 	if previousStaffID == staffID {
-		if putOn && staffID != c.staffID {
+		if putOn && staffID != c.StaffID {
 			notified = append(notified, staffID)
 		}
 		return notified, nil
@@ -179,15 +155,15 @@ func queueReassignNotices(r *http.Request, c visitWriteContext, visitID, previou
 	if queued {
 		notified = append(notified, staffID)
 	}
-	if previousStaffID == c.staffID {
+	if previousStaffID == c.StaffID {
 		return notified, nil
 	}
-	if err := staffnotice.Queue(r.Context(), c.tx, staffnotice.Notice{
-		PracticeID:       c.practiceID,
+	if err := staffnotice.Queue(r.Context(), c.Tx, staffnotice.Notice{
+		PracticeID:       c.PracticeID,
 		RecipientStaffID: previousStaffID,
 		Kind:             staffnotice.KindVisitReassignedFrom,
 		SubjectID:        visitID,
-		TriggeredBy:      c.staffID,
+		TriggeredBy:      c.StaffID,
 	}); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return nil, fmt.Errorf("visit: queue reassign notice: %w", err)

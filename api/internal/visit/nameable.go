@@ -137,20 +137,8 @@ type AssigneesResponse struct {
 // is why both halves compute the answer from decideNameable rather than
 // from two independent queries.
 func AssigneesHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, engagementID, ok := staffauth.RequireEngagement(w, r)
-		if !ok {
-			return
-		}
-
-		callerStaffID, hasStaffID := staffauth.StaffID(r.Context())
-		if !hasStaffID {
-			// coverage:ignore reason: staffauth.Middleware always places a staff id on context before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		list, err := listVisitAssignees(r.Context(), tx, practiceID, engagementID, callerStaffID)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		list, err := listVisitAssignees(r.Context(), c.Tx, c.PracticeID, c.EngagementID, c.StaffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -158,7 +146,7 @@ func AssigneesHandler() http.Handler {
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, AssigneesResponse{Items: list})
-	})
+	}, staffauth.Engagement())
 }
 
 // doulaRosterQuery reads the Practice's Doulas, by name. Ordered so the
