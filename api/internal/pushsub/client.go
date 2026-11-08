@@ -21,13 +21,11 @@ const ownerTypeClient = "client"
 // clientauth.Middleware.
 func ClientRegisterHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, has := clientauth.Tx(r.Context())
-		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
-		if !has {
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		tx, clientID, ok := clientauth.RequireClientTx(w, r)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
-		clientID, _ := clientauth.ClientID(r.Context())
 
 		req, ok := decodeSubscribeRequest(w, r)
 		if !ok {
@@ -48,13 +46,11 @@ func ClientRegisterHandler() http.Handler {
 // population. Must be mounted behind clientauth.Middleware.
 func ClientUnregisterHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, has := clientauth.Tx(r.Context())
-		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
-		if !has {
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		tx, clientID, ok := clientauth.RequireClientTx(w, r)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
-		clientID, _ := clientauth.ClientID(r.Context())
 
 		endpoint, ok := requireEndpointQueryParam(w, r)
 		if !ok {

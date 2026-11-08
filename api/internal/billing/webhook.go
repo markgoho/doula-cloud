@@ -12,6 +12,7 @@ import (
 	"github.com/stripe/stripe-go/v86"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/stripemode"
 	"doula-cloud/api/internal/webhookarrival"
@@ -138,18 +139,12 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string, mode stripemod
 			return
 		}
 
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		tx, ok := dbtx.Begin(w, r, db)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
-		committed := false
-		defer func() {
-			if !committed {
-				_ = tx.Rollback()
-			}
-		}()
+		defer dbtx.Rollback(tx)
 
 		// The webhook runs with no staffauth.Middleware in front of it, so
 		// nothing else sets this session variable -- the Stripe signature
@@ -163,26 +158,17 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string, mode stripemod
 			return
 		}
 
-		result, err := tx.ExecContext(r.Context(),
+		rows, ok := dbtx.ExecRows(r.Context(), w, tx,
 			`INSERT INTO stripe_webhook_events (event_id) VALUES ($1) ON CONFLICT (event_id) DO NOTHING`, event.ID,
 		)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		rows, err := result.RowsAffected()
-		if err != nil {
-			// coverage:ignore reason: driver RowsAffected failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 		if rows == 0 {
 			// Already processed this Stripe event id -- commit the no-op
 			// tx and acknowledge, without crediting a second time.
-			if err := tx.Commit(); err == nil {
-				committed = true
-			}
+			_ = tx.Commit()
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -201,12 +187,6 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string, mode stripemod
 			return
 		}
 
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		committed = true
-		w.WriteHeader(http.StatusOK)
+		dbtx.CommitWith(w, tx, http.StatusOK)
 	})
 }

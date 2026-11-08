@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -49,21 +50,14 @@ func RefuseHandler() http.Handler {
 			return
 		}
 
-		result, err := tx.ExecContext(r.Context(),
+		rows, ok := dbtx.ExecRows(r.Context(), w, tx,
 			`UPDATE engagement_requests
 			    SET state = 'refused', decided_by = $1, decided_at = now(), reason = $2
 			  WHERE id = $3 AND state = 'pending'`,
 			approverStaffID, reason, requestID,
 		)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		rows, err := result.RowsAffected()
-		if err != nil {
-			// coverage:ignore reason: driver RowsAffected failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 		if rows == 0 {

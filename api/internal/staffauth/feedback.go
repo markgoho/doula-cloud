@@ -13,6 +13,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/feedback"
 	"doula-cloud/api/internal/ratelimit"
 	"doula-cloud/api/internal/tasknudge"
@@ -83,24 +84,14 @@ func FeedbackHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 		if !ok {
 			return
 		}
-		committed := false
-		defer func() {
-			if !committed {
-				_ = tx.Rollback()
-			}
-		}()
+		defer dbtx.Rollback(tx)
 
 		var req FeedbackRequest
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 
-		if !feedback.ValidKind(req.Kind) {
-			apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "kind", MsgFeedbackKindNeeded)
-			return
-		}
-		if !feedback.ValidText(req.Text) {
-			apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "text", MsgFeedbackTextTooLong)
+		if !feedback.RequireValid(w, req.Kind, req.Text, MsgFeedbackKindNeeded, MsgFeedbackTextTooLong) {
 			return
 		}
 
@@ -147,27 +138,15 @@ func FeedbackHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 			RolesLiteral: rolesLiteral,
 			SentAt:       clock.Now(r.Context()),
 		}
-		if err := feedback.Insert(r.Context(), tx, row); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		// #1524: the outbox row that opens a private GitHub issue for this
-		// piece, queued in the same transaction as the insert above so a
-		// crash between the two never leaves a piece of Feedback with no
-		// issue ever queued for it.
-		if err := feedback.EnqueueIssueOutbox(r.Context(), tx, id); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !feedback.Save(r.Context(), w, tx, row) {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !dbtx.Commit(w, tx) {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
-		committed = true
 		// This handler commits its own write rather than running inside
 		// staffauth.Middleware's request-scoped transaction (billing.
 		// QueueOutOfCreditsNotification's own reasoning), so the nudge

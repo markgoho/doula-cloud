@@ -13,6 +13,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -182,18 +183,12 @@ func withTokenTx(w http.ResponseWriter, r *http.Request, db *sql.DB, token, code
 		return
 	}
 
-	tx, err := db.BeginTx(r.Context(), nil)
-	if err != nil {
-		// coverage:ignore reason: DB connection failure, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+	tx, ok := dbtx.Begin(w, r, db)
+	if !ok {
+		// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 		return
 	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = tx.Rollback()
-		}
-	}()
+	defer dbtx.Rollback(tx)
 
 	offer, status, refusalCode, msg := resolveByToken(r.Context(), tx, offerID, token, code)
 	if status != http.StatusOK {
@@ -201,12 +196,10 @@ func withTokenTx(w http.ResponseWriter, r *http.Request, db *sql.DB, token, code
 		// discovery is worth keeping, the same reasoning acceptInvite
 		// applies to an expiry it flips on the way past.
 		if status == http.StatusForbidden {
-			if err := tx.Commit(); err != nil {
-				// coverage:ignore reason: DB commit failure, not exercised by unit tests
-				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			if !dbtx.Commit(w, tx) {
+				// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 				return
 			}
-			committed = true
 		}
 		if refusalCode == "" {
 			refusalCode = apierr.CodeForStatus(status)
@@ -220,12 +213,10 @@ func withTokenTx(w http.ResponseWriter, r *http.Request, db *sql.DB, token, code
 		apierr.WriteError(w, msg, status)
 		return
 	}
-	if err := tx.Commit(); err != nil {
-		// coverage:ignore reason: DB commit failure, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+	if !dbtx.Commit(w, tx) {
+		// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 		return
 	}
-	committed = true
 	apierr.WriteJSON(w, http.StatusOK, body)
 }
 

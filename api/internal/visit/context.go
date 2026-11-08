@@ -6,38 +6,32 @@
 package visit
 
 import (
-	"context"
 	"database/sql"
-	"fmt"
 	"net/http"
 	"time"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/engagement"
+	"doula-cloud/api/internal/staffauth"
 )
 
-// requireEngagementAtPractice confirms engagementID exists and belongs to
-// practiceID, returning sql.ErrNoRows if not -- callers translate that into
-// a 404, the same way engagement.DetailHandler does for the engagement
-// itself. Shared by CreateHandler, ListHandler, ReassignHandler,
-// ScheduleHandler, and NotesHandler so a Visit can never be created,
-// listed, reassigned, scheduled, or have its notes written under an
-// Engagement at a different Practice, even one an attacker guesses the id
-// of.
-func requireEngagementAtPractice(ctx context.Context, tx *sql.Tx, engagementID, practiceID string) error {
-	var exists bool
-	err := tx.QueryRowContext(ctx,
-		`SELECT EXISTS(SELECT 1 FROM engagements WHERE id = $1 AND practice_id = $2)`,
-		engagementID, practiceID,
-	).Scan(&exists)
-	// coverage:ignore reason: DB query failure, not exercised by unit tests
-	if err != nil {
-		return fmt.Errorf("visit: check engagement at practice: %w", err)
+// requireVisitPath parses the path's Engagement and Visit ids and
+// confirms the Engagement belongs to practiceID, so a Visit can never be
+// written under an Engagement at a different Practice. It writes the 400
+// or 404 itself.
+func requireVisitPath(w http.ResponseWriter, r *http.Request, tx *sql.Tx, practiceID string) (engagementID, visitID string, ok bool) {
+	engagementID = r.PathValue("engagementId")
+	if !staffauth.ParseUUID(w, "engagement", engagementID) {
+		return "", "", false
 	}
-	if !exists {
-		return sql.ErrNoRows
+	visitID = r.PathValue("visitId")
+	if !staffauth.ParseUUID(w, "visit", visitID) {
+		return "", "", false
 	}
-	return nil
+	if !staffauth.RequireEngagementAtPractice(w, r, tx, engagementID, practiceID) {
+		return "", "", false
+	}
+	return engagementID, visitID, true
 }
 
 // parseScheduledAt turns a request's optional RFC3339 scheduledAt string

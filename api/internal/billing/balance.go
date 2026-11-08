@@ -125,14 +125,9 @@ func GetBalanceHandler(terms legal.Document) http.Handler {
 			return
 		}
 
-		var after *pagecursor.Cursor
-		if raw := r.URL.Query().Get("cursor"); raw != "" {
-			c, err := pagecursor.Decode(raw)
-			if err != nil {
-				apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
-				return
-			}
-			after = &c
+		after, ok := pagecursor.FromQuery(w, r, pagecursor.Decode, "invalid cursor")
+		if !ok {
+			return
 		}
 
 		balance, err := Balance(r.Context(), tx, practiceID)
@@ -149,10 +144,7 @@ func GetBalanceHandler(terms legal.Document) http.Handler {
 			return
 		}
 
-		hasMore := len(entries) > pageSize
-		if hasMore {
-			entries = entries[:pageSize]
-		}
+		entries, hasMore := pagecursor.Trim(entries, pageSize)
 		ledger := LedgerPage{Items: entries, HasMore: hasMore}
 		if hasMore {
 			last := entries[len(entries)-1]

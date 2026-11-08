@@ -345,12 +345,10 @@ func recordConnectNudgeRecipients(ctx context.Context, tx *sql.Tx, id string, st
 // Connect account right now -- the live read of exactly the condition
 // GetConnectStatusHandler reports as not_connected.
 func connectAccountMissing(ctx context.Context, tx *sql.Tx, practiceID string) (bool, error) {
-	var accountID sql.NullString
-	if err := tx.QueryRowContext(ctx,
-		`SELECT stripe_connect_account_id FROM practices WHERE id = $1`, practiceID,
-	).Scan(&accountID); err != nil {
+	accountID, err := readConnectAccountID(ctx, tx, practiceID)
+	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return false, fmt.Errorf("payments: recheck connect account: %w", err)
+		return false, err
 	}
 	return !accountID.Valid, nil
 }

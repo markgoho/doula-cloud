@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/cardpayments"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/overdue"
+	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/practicetimezone"
 	"doula-cloud/api/internal/staffauth"
@@ -144,14 +145,9 @@ func GetPracticeInvoicesHandler() http.Handler {
 			return
 		}
 
-		var after *invoiceCursor
-		if raw := r.URL.Query().Get("cursor"); raw != "" {
-			c, err := decodeInvoiceCursor(raw)
-			if err != nil {
-				apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
-				return
-			}
-			after = &c
+		after, ok := pagecursor.FromQuery(w, r, decodeInvoiceCursor, "invalid cursor")
+		if !ok {
+			return
 		}
 		// #1965: one zone and one instant for the whole response, so the
 		// rows, the narrowing and the totals cannot disagree about which
@@ -341,10 +337,7 @@ func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, af
 		return nil, false, fmt.Errorf("payments: iterate practice invoice rows: %w", err)
 	}
 
-	hasMore := len(items) > invoicePageSize
-	if hasMore {
-		items = items[:invoicePageSize]
-	}
+	items, hasMore := pagecursor.Trim(items, invoicePageSize)
 	return items, hasMore, nil
 }
 

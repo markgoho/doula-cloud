@@ -80,13 +80,7 @@ func CreateHandler(store objectstore.ObjectStore, pusher push.Pusher) http.Handl
 		if !staffauth.ParseUUID(w, "engagement", engagementID) {
 			return
 		}
-		if err := requireEngagementAtPractice(r.Context(), tx, engagementID, practiceID); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				apierr.WriteError(w, "engagement not found", http.StatusNotFound)
-				return
-			}
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !staffauth.RequireEngagementAtPractice(w, r, tx, engagementID, practiceID) {
 			return
 		}
 

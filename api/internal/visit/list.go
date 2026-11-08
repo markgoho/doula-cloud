@@ -3,7 +3,6 @@ package visit
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -69,51 +68,14 @@ type ListResponse struct {
 // display, the same pattern message.ListHandler already established.
 func ListHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
+		tx, practiceID, engagementID, ok := staffauth.RequireEngagementReach(w, r, "engagement not found")
 		if !ok {
 			return
 		}
 
-		engagementID := r.PathValue("engagementId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) {
+		after, ok := pagecursor.FromQuery(w, r, pagecursor.Decode, "invalid cursor")
+		if !ok {
 			return
-		}
-		if err := requireEngagementAtPractice(r.Context(), tx, engagementID, practiceID); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				apierr.WriteError(w, "engagement not found", http.StatusNotFound)
-				return
-			}
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		reader, has := staffauth.ReaderFrom(r.Context())
-		if !has {
-			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if !canAccess {
-			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
-			return
-		}
-
-		var after *pagecursor.Cursor
-		if raw := r.URL.Query().Get("cursor"); raw != "" {
-			c, err := pagecursor.Decode(raw)
-			if err != nil {
-				apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
-				return
-			}
-			after = &c
 		}
 
 		// Read once for the whole page, before the rows: every Visit on
@@ -133,10 +95,7 @@ func ListHandler() http.Handler {
 			return
 		}
 
-		hasMore := len(list) > pageSize
-		if hasMore {
-			list = list[:pageSize]
-		}
+		list, hasMore := pagecursor.Trim(list, pageSize)
 		resp := ListResponse{Items: list, HasMore: hasMore}
 		if hasMore {
 			last := list[len(list)-1]

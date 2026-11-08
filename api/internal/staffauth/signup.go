@@ -12,6 +12,7 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/ianazone"
 	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/sessionmint"
@@ -108,12 +109,7 @@ func SignupHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.Enqueuer) 
 		if !ok {
 			return
 		}
-		committed := false
-		defer func() {
-			if !committed {
-				_ = tx.Rollback()
-			}
-		}()
+		defer dbtx.Rollback(tx)
 
 		var req SignupRequest
 		if !apierr.DecodeJSON(w, r, &req) {
@@ -171,7 +167,7 @@ func SignupHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.Enqueuer) 
 			return sessionmint.Result{IdentityUID: verified.UID, Body: resp, Status: http.StatusCreated}, nil
 		}
 
-		committed = sessionmint.Issue(w, r, tx, enq, sessionmint.Staff(verified), step, nil)
+		sessionmint.Issue(w, r, tx, enq, sessionmint.Staff(verified), step, nil)
 	})
 }
 

@@ -46,21 +46,8 @@ func ReassignHandler(enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 
-		engagementID := r.PathValue("engagementId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) {
-			return
-		}
-		visitID := r.PathValue("visitId")
-		if !staffauth.ParseUUID(w, "visit", visitID) {
-			return
-		}
-		if err := requireEngagementAtPractice(r.Context(), c.tx, engagementID, c.practiceID); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				apierr.WriteError(w, "engagement not found", http.StatusNotFound)
-				return
-			}
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		engagementID, visitID, ok := requireVisitPath(w, r, c.tx, c.practiceID)
+		if !ok {
 			return
 		}
 

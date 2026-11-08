@@ -347,31 +347,17 @@ func GetContractHandler() http.Handler {
 			return
 		}
 
-		reader, has := staffauth.ReaderFrom(r.Context())
-		if !has {
-			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		reader, ok := staffauth.RequireReader(w, r)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
-		canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if !canAccess {
-			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
+		if !staffauth.RequireEngagementAccess(w, r, tx, engagementID, "no contract found for this engagement") {
 			return
 		}
 
-		id, prose, status, values, amountCents, amountChangedAt, err := fetchContract(r.Context(), tx, engagementID)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		id, prose, status, values, amountCents, amountChangedAt, ok := requireContract(w, r, tx, engagementID)
+		if !ok {
 			return
 		}
 		mergeFields := extractMergeFields(prose)
@@ -422,14 +408,8 @@ func PutContractHandler() http.Handler {
 			return
 		}
 
-		id, prose, status, storedValues, amountCents, amountChangedAt, err := fetchContract(r.Context(), tx, engagementID)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		id, prose, status, storedValues, amountCents, amountChangedAt, ok := requireContract(w, r, tx, engagementID)
+		if !ok {
 			return
 		}
 		if ok, refusal := TransitionEdit.Check(Status(status)); !ok {
@@ -569,6 +549,22 @@ func fetchContract(ctx context.Context, tx *sql.Tx, engagementID string) (id, pr
 		return "", "", "", nil, 0, nil, fmt.Errorf("contracts: unmarshal merge field values: %w", err)
 	}
 	return id, prose, status, values, amountCents, amountChangedAt, nil
+}
+
+// requireContract is fetchContract for a handler: an Engagement with no
+// Contract yet is a 404 and any other failure a 500, written here.
+func requireContract(w http.ResponseWriter, r *http.Request, tx *sql.Tx, engagementID string) (id, prose, status string, values MergeFieldValues, amountCents int64, amountChangedAt *time.Time, ok bool) {
+	id, prose, status, values, amountCents, amountChangedAt, err := fetchContract(r.Context(), tx, engagementID)
+	if errors.Is(err, sql.ErrNoRows) {
+		apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
+		return "", "", "", nil, 0, nil, false
+	}
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return "", "", "", nil, 0, nil, false
+	}
+	return id, prose, status, values, amountCents, amountChangedAt, true
 }
 
 // clientNameMergeKey and PracticeNameMergeKey are the merge fields this

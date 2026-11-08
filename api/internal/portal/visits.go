@@ -103,14 +103,9 @@ func VisitsHandler() http.Handler {
 		}
 		engagementID, _ := clientauth.EngagementID(r.Context())
 
-		var after *pagecursor.Cursor
-		if raw := r.URL.Query().Get("cursor"); raw != "" {
-			c, err := pagecursor.Decode(raw)
-			if err != nil {
-				apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
-				return
-			}
-			after = &c
+		after, ok := pagecursor.FromQuery(w, r, pagecursor.Decode, "invalid cursor")
+		if !ok {
+			return
 		}
 
 		list, err := listPortalVisits(r.Context(), tx, engagementID, after)
@@ -120,10 +115,7 @@ func VisitsHandler() http.Handler {
 			return
 		}
 
-		hasMore := len(list) > visitPageSize
-		if hasMore {
-			list = list[:visitPageSize]
-		}
+		list, hasMore := pagecursor.Trim(list, visitPageSize)
 		resp := VisitsResponse{Items: list, HasMore: hasMore}
 		if hasMore {
 			last := list[len(list)-1]

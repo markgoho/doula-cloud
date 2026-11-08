@@ -3,7 +3,6 @@ package contracts
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -170,14 +169,8 @@ func PostVoidRequestHandler() http.Handler {
 			return
 		}
 
-		id, _, status, _, _, _, err := fetchContract(r.Context(), tx, engagementID)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		id, _, status, _, _, _, ok := requireContract(w, r, tx, engagementID)
+		if !ok {
 			return
 		}
 		if Status(status) != StatusSigned {
@@ -258,14 +251,8 @@ func PostVoidRequestDeclineHandler() http.Handler {
 			return
 		}
 
-		id, _, _, _, _, _, err := fetchContract(r.Context(), tx, engagementID)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		id, _, _, _, _, _, ok := requireContract(w, r, tx, engagementID)
+		if !ok {
 			return
 		}
 

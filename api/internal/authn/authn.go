@@ -22,6 +22,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 )
 
 // SessionCookieName is the name of the session cookie Begin reads. It
@@ -173,13 +174,7 @@ func BeginBootstrap(w http.ResponseWriter, r *http.Request, verifier Verifier, d
 // their credential check inside, writing a 500 if the database cannot be
 // reached at all.
 func beginTx(w http.ResponseWriter, r *http.Request, db *sql.DB) (*sql.Tx, bool) {
-	tx, err := db.BeginTx(r.Context(), nil)
-	if err != nil {
-		// coverage:ignore reason: DB connection failure, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return nil, false
-	}
-	return tx, true
+	return dbtx.Begin(w, r, db)
 }
 
 // MsgInvalidSession is the one thing a caller is told when the __session

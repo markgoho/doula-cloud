@@ -137,14 +137,8 @@ func PostInstanceHandler() http.Handler {
 			return
 		}
 
-		fields, found, err := fetchFields(r.Context(), tx, practiceID, planType)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if !found {
-			apierr.WriteError(w, "no plan template found for this practice and plan type", http.StatusNotFound)
+		fields, ok := requireTemplateFields(w, r, tx, practiceID, planType)
+		if !ok {
 			return
 		}
 
@@ -255,20 +249,7 @@ func GetInstanceHandler() http.Handler {
 // case. Answers is already normalized (nonEmpty), so a caller never
 // re-applies it.
 func loadInstanceForStaff(w http.ResponseWriter, r *http.Request, tx *sql.Tx, engagementID, planType string) (fields []Field, answers Answers, clientAcknowledgedAt *time.Time, ok bool) {
-	reader, has := staffauth.ReaderFrom(r.Context())
-	if !has {
-		// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return nil, nil, nil, false
-	}
-	canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return nil, nil, nil, false
-	}
-	if !canAccess {
-		apierr.WriteError(w, "no plan instance found for this engagement and plan type", http.StatusNotFound)
+	if !staffauth.RequireEngagementAccess(w, r, tx, engagementID, "no plan instance found for this engagement and plan type") {
 		return nil, nil, nil, false
 	}
 

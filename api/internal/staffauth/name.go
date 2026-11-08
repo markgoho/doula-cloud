@@ -9,6 +9,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/dbtx"
 )
 
 // The json tags of the two name fields, which signup, Invitation
@@ -115,12 +116,7 @@ func UpdateNameHandler(db *sql.DB) http.Handler {
 		if !ok {
 			return
 		}
-		committed := false
-		defer func() {
-			if !committed {
-				_ = tx.Rollback()
-			}
-		}()
+		defer dbtx.Rollback(tx)
 
 		var req UpdateNameRequest
 		if !apierr.DecodeJSON(w, r, &req) {
@@ -151,12 +147,10 @@ func UpdateNameHandler(db *sql.DB) http.Handler {
 			return
 		}
 
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !dbtx.Commit(w, tx) {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
-		committed = true
 
 		apierr.WriteJSON(w, http.StatusOK, NameResponse{FirstName: first, LastName: last})
 	})

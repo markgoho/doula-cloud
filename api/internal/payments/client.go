@@ -12,6 +12,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/practicetimezone"
 )
 
@@ -183,22 +184,15 @@ func scanClientInvoice(row interface{ Scan(dest ...any) error }, zone *time.Loca
 // :engagementId.
 func ClientListInvoicesHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, has := clientauth.Tx(r.Context())
-		if !has {
-			// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		tx, engagementID, ok := clientauth.RequireEngagementTx(w, r)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
-		engagementID, _ := clientauth.EngagementID(r.Context())
 
-		var after *invoiceCursor
-		if raw := r.URL.Query().Get("cursor"); raw != "" {
-			c, err := decodeInvoiceCursor(raw)
-			if err != nil {
-				apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
-				return
-			}
-			after = &c
+		after, ok := pagecursor.FromQuery(w, r, decodeInvoiceCursor, "invalid cursor")
+		if !ok {
+			return
 		}
 
 		zone, err := clientPracticeZone(r.Context(), tx, engagementID)
@@ -257,10 +251,7 @@ func listClientInvoices(ctx context.Context, tx *sql.Tx, engagementID string, af
 		return nil, false, fmt.Errorf("payments: iterate client invoice rows: %w", err)
 	}
 
-	hasMore := len(items) > invoicePageSize
-	if hasMore {
-		items = items[:invoicePageSize]
-	}
+	items, hasMore := pagecursor.Trim(items, invoicePageSize)
 	return items, hasMore, nil
 }
 
@@ -270,13 +261,11 @@ func listClientInvoices(ctx context.Context, tx *sql.Tx, engagementID string, af
 // "not hers". Must be mounted behind clientauth.Middleware.
 func ClientGetInvoiceHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, has := clientauth.Tx(r.Context())
-		if !has {
-			// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		tx, engagementID, ok := clientauth.RequireEngagementTx(w, r)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
-		engagementID, _ := clientauth.EngagementID(r.Context())
 		invoiceID := r.PathValue("invoiceId")
 		if _, err := uuid.Parse(invoiceID); err != nil {
 			apierr.WriteError(w, msgClientInvoiceNotFound, http.StatusNotFound)

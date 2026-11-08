@@ -29,38 +29,13 @@ import (
 // actually shows today, which is not what this ticket assumed.
 func ClientListHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, has := clientauth.Tx(r.Context())
-		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
-		if !has {
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		engagementID, _ := clientauth.EngagementID(r.Context())
-
-		var after *messageCursor
-		if raw := r.URL.Query().Get("cursor"); raw != "" {
-			c, err := decodeCursor(raw)
-			if err != nil {
-				apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
-				return
-			}
-			after = &c
-		}
-
-		items, hasMore, err := listMessages(r.Context(), tx, engagementID, after, activity.StaffActorDisplayName)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		tx, engagementID, ok := clientauth.RequireEngagementTx(w, r)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 
-		resp := ListResponse{Items: items, HasMore: hasMore}
-		if hasMore {
-			next := encodeCursor(items[len(items)-1].CreatedAt, items[len(items)-1].MessageID)
-			resp.NextCursor = &next
-		}
-
-		apierr.WriteJSON(w, http.StatusOK, resp)
+		writeThreadPage(w, r, tx, engagementID, activity.StaffActorDisplayName)
 	})
 }
 
@@ -76,13 +51,11 @@ func ClientListHandler() http.Handler {
 // instead of posting the Message twice.
 func ClientCreateHandler(store objectstore.ObjectStore, pusher push.Pusher) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, has := clientauth.Tx(r.Context())
-		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
-		if !has {
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		tx, clientID, ok := clientauth.RequireClientTx(w, r)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
-		clientID, _ := clientauth.ClientID(r.Context())
 		engagementID, _ := clientauth.EngagementID(r.Context())
 
 		messageID := uuid.NewString()

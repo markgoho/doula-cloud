@@ -85,13 +85,11 @@ func GetSignedContractPDFHandler(store objectstore.ObjectStore) http.Handler {
 // mounted behind clientauth.Middleware.
 func ClientGetSignedContractPDFHandler(store objectstore.ObjectStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, has := clientauth.Tx(r.Context())
-		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
-		if !has {
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		tx, engagementID, ok := clientauth.RequireEngagementTx(w, r)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
-		engagementID, _ := clientauth.EngagementID(r.Context())
 		serveSignedPDF(w, r, tx, store, engagementID, apierr.MsgInternalError)
 	})
 }

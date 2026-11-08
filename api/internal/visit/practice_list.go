@@ -122,14 +122,9 @@ func PracticeScheduleHandler() http.Handler {
 			return
 		}
 
-		var after *pagecursor.Cursor
-		if raw := r.URL.Query().Get("cursor"); raw != "" {
-			c, err := pagecursor.Decode(raw)
-			if err != nil {
-				apierr.WriteError(w, MsgInvalidCursor, http.StatusBadRequest)
-				return
-			}
-			after = &c
+		after, ok := pagecursor.FromQuery(w, r, pagecursor.Decode, MsgInvalidCursor)
+		if !ok {
+			return
 		}
 
 		list, err := listScheduledVisits(r.Context(), tx, practiceID, filter, after)
@@ -139,10 +134,7 @@ func PracticeScheduleHandler() http.Handler {
 			return
 		}
 
-		hasMore := len(list) > schedulePageSize
-		if hasMore {
-			list = list[:schedulePageSize]
-		}
+		list, hasMore := pagecursor.Trim(list, schedulePageSize)
 		resp := PracticeScheduleResponse{Items: list, HasMore: hasMore}
 		if hasMore {
 			last := list[len(list)-1]

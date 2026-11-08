@@ -1,13 +1,9 @@
 package plans
 
 import (
-	"context"
 	"database/sql"
-	"errors"
-	"fmt"
 	"net/http"
 
-	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -28,13 +24,7 @@ func resolveInstanceRequest(w http.ResponseWriter, r *http.Request) (tx *sql.Tx,
 	if !staffauth.ParseUUID(w, "engagement", engagementID) {
 		return nil, "", "", false
 	}
-	if err := requireEngagementAtPractice(r.Context(), tx, engagementID, practiceID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
-			return nil, "", "", false
-		}
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+	if !staffauth.RequireEngagementAtPractice(w, r, tx, engagementID, practiceID) {
 		return nil, "", "", false
 	}
 
@@ -43,23 +33,4 @@ func resolveInstanceRequest(w http.ResponseWriter, r *http.Request) (tx *sql.Tx,
 		return nil, "", "", false
 	}
 	return tx, engagementID, planType, true
-}
-
-// requireEngagementAtPractice confirms engagementID exists and belongs to
-// practiceID, returning sql.ErrNoRows if not -- callers translate that
-// into a 404, mirroring visit.requireEngagementAtPractice.
-func requireEngagementAtPractice(ctx context.Context, tx *sql.Tx, engagementID, practiceID string) error {
-	var exists bool
-	err := tx.QueryRowContext(ctx,
-		`SELECT EXISTS(SELECT 1 FROM engagements WHERE id = $1 AND practice_id = $2)`,
-		engagementID, practiceID,
-	).Scan(&exists)
-	// coverage:ignore reason: DB query failure, not exercised by unit tests
-	if err != nil {
-		return fmt.Errorf("plans: check engagement at practice: %w", err)
-	}
-	if !exists {
-		return sql.ErrNoRows
-	}
-	return nil
 }

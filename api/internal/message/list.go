@@ -3,7 +3,6 @@ package message
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -57,51 +56,9 @@ type ListResponse struct {
 // Must be mounted behind staffauth.Middleware.
 func ListHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
+		tx, _, engagementID, ok := staffauth.RequireEngagementReach(w, r, "engagement not found")
 		if !ok {
 			return
-		}
-
-		engagementID := r.PathValue("engagementId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) {
-			return
-		}
-		if err := requireEngagementAtPractice(r.Context(), tx, engagementID, practiceID); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				apierr.WriteError(w, "engagement not found", http.StatusNotFound)
-				return
-			}
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		reader, has := staffauth.ReaderFrom(r.Context())
-		if !has {
-			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if !canAccess {
-			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
-			return
-		}
-
-		var after *messageCursor
-		if raw := r.URL.Query().Get("cursor"); raw != "" {
-			c, err := decodeCursor(raw)
-			if err != nil {
-				apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
-				return
-			}
-			after = &c
 		}
 
 		// activity.DepartedStaffName is the Staff-side reader's own
@@ -110,21 +67,33 @@ func ListHandler() http.Handler {
 		// ledger) now sees the same word here, instead of an empty
 		// senderName, for a sender whose Membership has ended (see
 		// listMessages' own doc comment).
-		items, hasMore, err := listMessages(r.Context(), tx, engagementID, after, activity.DepartedStaffName)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		resp := ListResponse{Items: items, HasMore: hasMore}
-		if hasMore {
-			next := encodeCursor(items[len(items)-1].CreatedAt, items[len(items)-1].MessageID)
-			resp.NextCursor = &next
-		}
-
-		apierr.WriteJSON(w, http.StatusOK, resp)
+		writeThreadPage(w, r, tx, engagementID, activity.DepartedStaffName)
 	})
+}
+
+// writeThreadPage answers one page of an Engagement's thread, newest
+// first, for the cursor in the request. departedStaffName is what a
+// sender whose Membership has ended reads as to this reader.
+func writeThreadPage(w http.ResponseWriter, r *http.Request, tx *sql.Tx, engagementID, departedStaffName string) {
+	after, ok := pagecursor.FromQuery(w, r, decodeCursor, "invalid cursor")
+	if !ok {
+		return
+	}
+
+	items, hasMore, err := listMessages(r.Context(), tx, engagementID, after, departedStaffName)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+
+	resp := ListResponse{Items: items, HasMore: hasMore}
+	if hasMore {
+		next := encodeCursor(items[len(items)-1].CreatedAt, items[len(items)-1].MessageID)
+		resp.NextCursor = &next
+	}
+
+	apierr.WriteJSON(w, http.StatusOK, resp)
 }
 
 // listMessagesQuery and listMessagesAfterQuery share the same column list
@@ -186,10 +155,7 @@ func listMessages(ctx context.Context, tx *sql.Tx, engagementID string, after *m
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return nil, false, err
 	}
-	hasMore := len(items) > pageSize
-	if hasMore {
-		items = items[:pageSize]
-	}
+	items, hasMore := pagecursor.Trim(items, pageSize)
 	return items, hasMore, nil
 }
 

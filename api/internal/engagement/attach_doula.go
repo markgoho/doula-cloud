@@ -1,13 +1,10 @@
 package engagement
 
 import (
-	"database/sql"
-	"errors"
 	"net/http"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/attachment"
-	"doula-cloud/api/internal/staffauth"
 )
 
 // The refusals of AttachDoulaHandler. The Engagement hub prints each as
@@ -44,48 +41,16 @@ const (
 // Owner or an Admin (staffauth.OwnerAndAdmin).
 func AttachDoulaHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
+		c, ok := beginDoulaChange(w, r)
 		if !ok {
 			return
 		}
-		callerID, _ := staffauth.StaffID(r.Context())
-
-		reader, has := staffauth.ReaderFrom(r.Context())
-		if !has {
-			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		engagementID := r.PathValue("engagementId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) {
-			return
-		}
-		doulaID := r.PathValue("staffId")
-		if !staffauth.ParseUUID(w, "staff", doulaID) {
-			return
-		}
-
-		var status string
-		err := tx.QueryRowContext(r.Context(),
-			`SELECT status::text FROM engagements WHERE id = $1 AND practice_id = $2 FOR UPDATE`,
-			engagementID, practiceID,
-		).Scan(&status)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, msgAttachDoulaNoEngagement, http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if status == StatusCompleted {
+		if c.status == StatusCompleted {
 			apierr.WriteError(w, msgAttachSelfIsCompleted, http.StatusConflict)
 			return
 		}
 
-		membership, err := attachment.ReadMembership(r.Context(), tx, practiceID, doulaID)
+		membership, err := attachment.ReadMembership(r.Context(), c.tx, c.practiceID, c.doulaID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -104,30 +69,16 @@ func AttachDoulaHandler() http.Handler {
 		case attachment.Attachable:
 		}
 
-		doulas, err := readAttachedDoulas(r.Context(), tx, engagementID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		doulas, ok := attachIfAbsent(w, r, c.tx, c.practiceID, c.engagementID, c.doulaID, c.callerID)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
-		}
-		if !isOn(doulas, doulaID) {
-			if err := attachment.Grant(r.Context(), tx, practiceID, engagementID, doulaID, callerID); err != nil {
-				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-				return
-			}
-			doulas, err = readAttachedDoulas(r.Context(), tx, engagementID)
-			if err != nil {
-				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-				return
-			}
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, AttachSelfResponse{
-			EngagementID:  engagementID,
+			EngagementID:  c.engagementID,
 			Doulas:        doulas,
-			CanAttachSelf: canAttachSelf(reader, callerID, status, doulas),
+			CanAttachSelf: canAttachSelf(c.reader, c.callerID, c.status, doulas),
 		})
 	})
 }

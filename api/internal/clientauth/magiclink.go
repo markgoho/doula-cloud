@@ -15,6 +15,7 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/sessionmint"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
@@ -86,18 +87,12 @@ func RequestMagicLinkHandler(db *sql.DB) http.Handler {
 			return
 		}
 
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		tx, ok := dbtx.Begin(w, r, db)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
-		committed := false
-		defer func() {
-			if !committed {
-				_ = tx.Rollback()
-			}
-		}()
+		defer dbtx.Rollback(tx)
 
 		identifier, found, err := findPortalAccountByAddress(r.Context(), tx, address)
 		if err != nil {
@@ -147,14 +142,7 @@ func RequestMagicLinkHandler(db *sql.DB) http.Handler {
 			return
 		}
 
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		committed = true
-
-		w.WriteHeader(http.StatusAccepted)
+		dbtx.CommitWith(w, tx, http.StatusAccepted)
 	})
 }
 
@@ -266,13 +254,8 @@ type redeemMagicLinkResponse struct {
 // queues a notice, and the outbox wants a nudge once this commits.
 func RedeemMagicLinkHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req RedeemMagicLinkRequest
-		if !apierr.DecodeJSON(w, r, &req) {
-			return
-		}
-		req.Token = strings.TrimSpace(req.Token)
-		if req.Token == "" {
-			apierr.WriteError(w, "token is required", http.StatusBadRequest)
+		req, ok := authtoken.DecodeSpend(w, r, func(q *RedeemMagicLinkRequest) *string { return &q.Token })
+		if !ok {
 			return
 		}
 

@@ -92,14 +92,9 @@ func AwaitingSignatureHandler() http.Handler {
 			return
 		}
 
-		var after *pagecursor.Cursor
-		if raw := r.URL.Query().Get("cursor"); raw != "" {
-			c, err := pagecursor.Decode(raw)
-			if err != nil {
-				apierr.WriteError(w, MsgInvalidCursor, http.StatusBadRequest)
-				return
-			}
-			after = &c
+		after, ok := pagecursor.FromQuery(w, r, pagecursor.Decode, MsgInvalidCursor)
+		if !ok {
+			return
 		}
 
 		var list []AwaitingItem
@@ -115,10 +110,7 @@ func AwaitingSignatureHandler() http.Handler {
 			return
 		}
 
-		hasMore := len(list) > awaitingPageSize
-		if hasMore {
-			list = list[:awaitingPageSize]
-		}
+		list, hasMore := pagecursor.Trim(list, awaitingPageSize)
 		resp := AwaitingResponse{Items: list, HasMore: hasMore}
 		if hasMore {
 			last := list[len(list)-1]

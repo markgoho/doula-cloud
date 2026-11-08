@@ -110,13 +110,11 @@ type Detail struct {
 // mounted behind clientauth.Middleware.
 func DetailHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, has := clientauth.Tx(r.Context())
-		if !has {
-			// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		tx, clientID, ok := clientauth.RequireClientTx(w, r)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
-		clientID, _ := clientauth.ClientID(r.Context())
 		engagementID, _ := clientauth.EngagementID(r.Context())
 
 		var d Detail

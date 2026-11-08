@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json/v2"
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -103,24 +102,13 @@ func ListMembershipHistoryHandler() http.Handler {
 		// Practice, so a staff id belonging to somebody else's Practice
 		// is a 404 rather than an empty history that would confirm the
 		// person exists.
-		if _, err := membershipCreatedAt(r.Context(), tx, practiceID, staffID); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				apierr.WriteError(w, "staff member not found", http.StatusNotFound)
-				return
-			}
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if _, ok := requireMembershipCreatedAt(w, r, tx, practiceID, staffID); !ok {
 			return
 		}
 
-		var after *pagecursor.Cursor
-		if raw := r.URL.Query().Get("cursor"); raw != "" {
-			c, err := pagecursor.Decode(raw)
-			if err != nil {
-				apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
-				return
-			}
-			after = &c
+		after, ok := pagecursor.FromQuery(w, r, pagecursor.Decode, "invalid cursor")
+		if !ok {
+			return
 		}
 
 		page, err := listMembershipChanges(r.Context(), tx, practiceID, staffID, after)

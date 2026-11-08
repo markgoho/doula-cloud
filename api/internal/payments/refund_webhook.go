@@ -171,28 +171,16 @@ func handleCreditNoteCreated(w http.ResponseWriter, r *http.Request, db *sql.DB,
 		return
 	}
 
-	tx, alreadyProcessed, err := claimEvent(r.Context(), db, event.ID)
-	if err != nil {
-		// coverage:ignore reason: claimEvent's own failures are DB failures, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+	tx, committed, ok := beginEvent(w, r, db, event.ID)
+	if !ok {
 		return
 	}
-	committed := false
-	defer func() {
-		if !committed {
-			// coverage:ignore reason: only reached after a DB failure, not exercised by unit tests
-			_ = tx.Rollback()
-		}
-	}()
-	if alreadyProcessed {
-		commitAndAck(w, tx, &committed)
-		return
-	}
+	defer rollbackUnlessCommitted(tx, committed)
 
 	invoiceID, practiceID, err := resolveInvoiceForEvent(r.Context(), tx, note.Invoice, event.Account)
 	if errors.Is(err, sql.ErrNoRows) {
 		log.Printf("payments: connect webhook: dropping credit_note.created for unresolved invoice %q (account %q, event id %s)", note.Invoice, event.Account, event.ID)
-		commitAndAck(w, tx, &committed)
+		commitAndAck(w, tx, committed)
 		return
 	}
 	if err != nil {
@@ -214,7 +202,7 @@ func handleCreditNoteCreated(w http.ResponseWriter, r *http.Request, db *sql.DB,
 	if err == nil {
 		err = recordStripeRefund(r.Context(), tx, practiceID, invoiceID, targetPaymentID, note.returned(), note.reference())
 	}
-	finishRefundEvent(w, tx, &committed, event, err)
+	finishRefundEvent(w, tx, committed, event, err)
 }
 
 // handleRefundCreated records a card Refund as a Refund row, unless its
@@ -235,23 +223,11 @@ func handleRefundCreated(w http.ResponseWriter, r *http.Request, db *sql.DB, eve
 		return
 	}
 
-	tx, alreadyProcessed, err := claimEvent(r.Context(), db, event.ID)
-	if err != nil {
-		// coverage:ignore reason: claimEvent's own failures are DB failures, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+	tx, committed, ok := beginEvent(w, r, db, event.ID)
+	if !ok {
 		return
 	}
-	committed := false
-	defer func() {
-		if !committed {
-			// coverage:ignore reason: only reached after a DB failure, not exercised by unit tests
-			_ = tx.Rollback()
-		}
-	}()
-	if alreadyProcessed {
-		commitAndAck(w, tx, &committed)
-		return
-	}
+	defer rollbackUnlessCommitted(tx, committed)
 
 	practiceID, err := resolvePracticeForEvent(r.Context(), tx, event.Account)
 	var invoiceID, targetPaymentID string
@@ -264,7 +240,7 @@ func handleRefundCreated(w http.ResponseWriter, r *http.Request, db *sql.DB, eve
 		// Not every Refund on a Practice's account is against an Invoice
 		// DoulaCloud raised; one that is not has nothing to attach to.
 		log.Printf("payments: connect webhook: dropping refund.created %s for unresolved payment %q (account %q, event id %s)", refund.ID, refund.PaymentIntent, event.Account, event.ID)
-		commitAndAck(w, tx, &committed)
+		commitAndAck(w, tx, committed)
 		return
 	}
 	if err != nil {
@@ -272,5 +248,5 @@ func handleRefundCreated(w http.ResponseWriter, r *http.Request, db *sql.DB, eve
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
-	finishRefundEvent(w, tx, &committed, event, recordStripeRefund(r.Context(), tx, practiceID, invoiceID, targetPaymentID, refund.Amount, refund.ID))
+	finishRefundEvent(w, tx, committed, event, recordStripeRefund(r.Context(), tx, practiceID, invoiceID, targetPaymentID, refund.Amount, refund.ID))
 }

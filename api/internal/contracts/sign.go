@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -49,13 +48,11 @@ type SignContractRequest struct {
 // clientauth.Middleware.
 func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, has := clientauth.Tx(r.Context())
-		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
-		if !has {
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		tx, engagementID, ok := clientauth.RequireEngagementTx(w, r)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
-		engagementID, _ := clientauth.EngagementID(r.Context())
 
 		var req SignContractRequest
 		if !apierr.DecodeJSON(w, r, &req) {
@@ -67,14 +64,8 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 			return
 		}
 
-		id, prose, status, values, amountCents, amountChangedAt, err := fetchContract(r.Context(), tx, engagementID)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		id, prose, status, values, amountCents, amountChangedAt, ok := requireContract(w, r, tx, engagementID)
+		if !ok {
 			return
 		}
 		if ok, refusal := TransitionSign.Check(Status(status)); !ok {

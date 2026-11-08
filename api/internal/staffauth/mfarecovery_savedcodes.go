@@ -10,6 +10,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
+	"doula-cloud/api/internal/dbtx"
 )
 
 // savedCodeSetSize is how many saved recovery codes a sole Owner holds
@@ -222,12 +223,7 @@ func RotateSavedCodesHandler(db *sql.DB) http.Handler {
 		if !ok {
 			return
 		}
-		committed := false
-		defer func() {
-			if !committed {
-				_ = tx.Rollback()
-			}
-		}()
+		defer dbtx.Rollback(tx)
 
 		// 00033's trust flag, for the read requireSelf below cannot
 		// open: isSoleOwnerAnywhere looks across every Practice this
@@ -292,12 +288,10 @@ func RotateSavedCodesHandler(db *sql.DB) http.Handler {
 			codes = append(codes, code)
 		}
 
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !dbtx.Commit(w, tx) {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
-		committed = true
 
 		apierr.WriteJSON(w, http.StatusOK, RotateSavedCodesResponse{Codes: codes})
 	})

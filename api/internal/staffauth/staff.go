@@ -110,14 +110,9 @@ func ListStaffHandler() http.Handler {
 			return
 		}
 
-		var after *pagecursor.Cursor
-		if raw := r.URL.Query().Get("cursor"); raw != "" {
-			c, err := pagecursor.Decode(raw)
-			if err != nil {
-				apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
-				return
-			}
-			after = &c
+		after, ok := pagecursor.FromQuery(w, r, pagecursor.Decode, "invalid cursor")
+		if !ok {
+			return
 		}
 
 		members, err := listMembers(r.Context(), tx, practiceID)
@@ -133,10 +128,7 @@ func ListStaffHandler() http.Handler {
 			return
 		}
 
-		hasMore := len(invitations) > invitationPageSize
-		if hasMore {
-			invitations = invitations[:invitationPageSize]
-		}
+		invitations, hasMore := pagecursor.Trim(invitations, invitationPageSize)
 		invitationPage := InvitationPage{Items: invitations, HasMore: hasMore}
 		if hasMore {
 			last := invitations[len(invitations)-1]

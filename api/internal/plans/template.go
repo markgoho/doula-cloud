@@ -97,14 +97,8 @@ func GetTemplateHandler() http.Handler {
 			return
 		}
 
-		fields, found, err := fetchFields(r.Context(), tx, practiceID, planType)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if !found {
-			apierr.WriteError(w, "no plan template found for this practice and plan type", http.StatusNotFound)
+		fields, ok := requireTemplateFields(w, r, tx, practiceID, planType)
+		if !ok {
 			return
 		}
 
@@ -256,6 +250,22 @@ func normalizeFields(fields []Field) ([]Field, string) {
 		out[i] = Field{ID: f.ID, Type: f.Type, Label: f.Label, Options: f.Options, Order: i}
 	}
 	return out, ""
+}
+
+// requireTemplateFields is fetchFields for a handler: a Practice with no
+// template for planType is a 404 and any other failure a 500, written here.
+func requireTemplateFields(w http.ResponseWriter, r *http.Request, tx *sql.Tx, practiceID, planType string) ([]Field, bool) {
+	fields, found, err := fetchFields(r.Context(), tx, practiceID, planType)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return nil, false
+	}
+	if !found {
+		apierr.WriteError(w, "no plan template found for this practice and plan type", http.StatusNotFound)
+		return nil, false
+	}
+	return fields, true
 }
 
 // fetchFields reads the field list stored for practiceID and planType,

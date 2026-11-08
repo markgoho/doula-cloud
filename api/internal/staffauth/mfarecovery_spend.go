@@ -12,6 +12,7 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 )
 
 // msgMFARecoveryInvalid is the one message #615's spend endpoint ever
@@ -70,18 +71,12 @@ func SpendMFARecoveryHandler(accounts authn.AccountManager, db *sql.DB) http.Han
 			return
 		}
 
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		tx, ok := dbtx.Begin(w, r, db)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
-		committed := false
-		defer func() {
-			if !committed {
-				_ = tx.Rollback()
-			}
-		}()
+		defer dbtx.Rollback(tx)
 
 		// This request carries no session and never will (spending a
 		// recovery code mints none) -- neither app.current_practice_id nor
@@ -114,14 +109,7 @@ func SpendMFARecoveryHandler(accounts authn.AccountManager, db *sql.DB) http.Han
 			return
 		}
 
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		committed = true
-
-		w.WriteHeader(http.StatusNoContent)
+		dbtx.CommitWith(w, tx, http.StatusNoContent)
 	})
 }
 

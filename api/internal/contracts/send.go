@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json/v2"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -78,14 +77,8 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 			return
 		}
 
-		id, prose, status, values, amountCents, amountChangedAt, err := fetchContract(r.Context(), tx, engagementID)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		id, prose, status, values, amountCents, amountChangedAt, ok := requireContract(w, r, tx, engagementID)
+		if !ok {
 			return
 		}
 		if ok, refusal := TransitionSend.Check(Status(status)); !ok {

@@ -1,9 +1,7 @@
 package contracts
 
 import (
-	"database/sql"
 	"encoding/json/v2"
-	"errors"
 	"net/http"
 
 	"doula-cloud/api/internal/activity"
@@ -48,23 +46,8 @@ type ContractAmountResponse struct {
 // PutTemplateHandler's Owner-only rule moved there.
 func PutContractAmountHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
+		tx, practiceID, engagementID, ok := staffauth.RequireEngagement(w, r)
 		if !ok {
-			return
-		}
-
-		engagementID := r.PathValue("engagementId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) {
-			return
-		}
-		if err := requireEngagementAtPractice(r.Context(), tx, engagementID, practiceID); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				apierr.WriteError(w, "engagement not found", http.StatusNotFound)
-				return
-			}
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -77,14 +60,8 @@ func PutContractAmountHandler() http.Handler {
 			return
 		}
 
-		id, _, status, _, before, _, err := fetchContract(r.Context(), tx, engagementID)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		id, _, status, _, before, _, ok := requireContract(w, r, tx, engagementID)
+		if !ok {
 			return
 		}
 		if ok, refusal := TransitionOverrideAmount.Check(Status(status)); !ok {

@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/internalauth"
 )
 
@@ -40,19 +41,12 @@ func internalHandler(db *sql.DB, auth *internalauth.Guard, run func(context.Cont
 			return
 		}
 
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		tx, ok := dbtx.Begin(w, r, db)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
-		committed := false
-		defer func() {
-			if !committed {
-				// coverage:ignore reason: only reached by a DB failure after BeginTx succeeds -- these endpoints take no request input past the secret check
-				_ = tx.Rollback()
-			}
-		}()
+		defer dbtx.Rollback(tx)
 
 		if _, err := tx.ExecContext(r.Context(),
 			`SELECT set_config('app.site_worker_trusted', 'true', true)`); err != nil {
@@ -67,12 +61,6 @@ func internalHandler(db *sql.DB, auth *internalauth.Guard, run func(context.Cont
 			return
 		}
 
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		committed = true
-		w.WriteHeader(http.StatusOK)
+		dbtx.CommitWith(w, tx, http.StatusOK)
 	})
 }
