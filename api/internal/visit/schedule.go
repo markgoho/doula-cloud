@@ -108,6 +108,7 @@ func ScheduleHandler() http.Handler {
 		}
 
 		if !recordVisitActivity(w, r, c, engagementID, activity.ActionVisitScheduled, map[string]any{"scheduledAtBefore": previousAt, "scheduledAtAfter": scheduledAt}) {
+			// coverage:ignore reason: recordVisitActivity only reports false on a DB write failure, not exercised by unit tests
 			return
 		}
 

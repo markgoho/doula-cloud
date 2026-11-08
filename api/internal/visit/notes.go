@@ -103,6 +103,7 @@ func NotesHandler() http.Handler {
 			"hadNotes": previous.Valid,
 			"hasNotes": *req.Notes != "",
 		}) {
+			// coverage:ignore reason: recordVisitActivity only reports false on a DB write failure, not exercised by unit tests
 			return
 		}
 

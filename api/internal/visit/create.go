@@ -99,6 +99,7 @@ func CreateHandler(enq tasknudge.Enqueuer) http.Handler {
 		// answer at all. The actor is the Entry's own Actor, so the two
 		// together say who did it and to whom.
 		if !recordVisitActivity(w, r, c, engagementID, activity.ActionVisitLogged, map[string]string{"assignedStaffId": staffID}) {
+			// coverage:ignore reason: recordVisitActivity only reports false on a DB write failure, not exercised by unit tests
 			return
 		}
 

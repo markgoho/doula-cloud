@@ -106,6 +106,7 @@ func ReassignHandler(enq tasknudge.Enqueuer) http.Handler {
 			activity.DiffKeyVisitScheduledAt:      visitScheduledAt,
 			activity.DiffKeyVisitCreatedAt:        createdAt,
 		}) {
+			// coverage:ignore reason: recordVisitActivity only reports false on a DB write failure, not exercised by unit tests
 			return
 		}
 
