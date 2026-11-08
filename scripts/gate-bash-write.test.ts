@@ -324,9 +324,25 @@ describe('gate-bash-write', () => {
       expect(exitCode).toBe(2);
     });
 
-    test('still blocks when the `cd` leaves the repository entirely', async () => {
+    test('allows a relative path after a `cd` that leaves the repository (#2768)', async () => {
       const { exitCode } = await invoke(
         "cd /tmp && sed -i '' 's/x/y/' CLAUDE.md",
+        { cwd: SOURCE_ROOT }
+      );
+      expect(exitCode).toBe(0);
+    });
+
+    test('allows the memory-file append after a `cd` into the home directory (#2768)', async () => {
+      const { exitCode } = await invoke(
+        'cd ~/.claude/projects/-home-mark-github-doula-cloud/memory && echo x >> MEMORY.md',
+        { cwd: SOURCE_ROOT }
+      );
+      expect(exitCode).toBe(0);
+    });
+
+    test('still blocks a relative path after a `cd` out of the repository and back into the main checkout', async () => {
+      const { exitCode } = await invoke(
+        `cd /tmp && cd ${SOURCE_ROOT} && echo hi > CLAUDE.md`,
         { cwd: SOURCE_ROOT }
       );
       expect(exitCode).toBe(2);
@@ -349,9 +365,9 @@ describe('gate-bash-write', () => {
       expect(exitCode).toBe(2);
     });
 
-    test('still blocks when the `cd` argument is a home-relative path', async () => {
+    test('still blocks when the `cd` argument names another user home', async () => {
       const { exitCode } = await invoke(
-        "cd ~/Github && sed -i '' 's/x/y/' CLAUDE.md",
+        "cd ~someone/Github && sed -i '' 's/x/y/' CLAUDE.md",
         { cwd: SOURCE_ROOT }
       );
       expect(exitCode).toBe(2);
