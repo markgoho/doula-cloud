@@ -20,51 +20,47 @@ func TestGapNoticeWorker_GapStillOpenUntilEndsAtOnTheWorkerClock(t *testing.T) {
 		beforeEnd  time.Duration
 		wantMailed bool
 	}{
-		{"just-before-end", time.Microsecond, true},
-		{"at-end", 0, false},
+		{"just before the end the notice is mailed", time.Microsecond, true},
+		{"at the end nothing is mailed", 0, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			db := testdb.New(t)
-			f := newNoticeFixture(t, db, "notice-edge-"+c.name)
-			var endsAt time.Time
-			if err := db.Admin.QueryRowContext(t.Context(),
-				`SELECT ends_at FROM engagement_coverage_gaps WHERE id = $1`, f.gapID).Scan(&endsAt); err != nil {
-				t.Fatalf("read ends_at: %v", err)
-			}
-
+			e := newNoticeEnv(t)
+			endsAt := testdb.Scalar[time.Time](t, e.db.Admin, `SELECT ends_at FROM engagement_coverage_gaps WHERE id = $1`, e.GapID)
 			sender := &mail.FakeSender{}
 			now := endsAt.Add(-c.beforeEnd)
-			runWorkerWith(t, db, oncall.GapNoticeWorker{
+
+			e.runWorkerWith(oncall.GapNoticeWorker{
 				Sender: sender, Now: func() time.Time { return now },
 				AppBaseURL: testAppBaseURL, From: "from@example.test", ReplyTo: "reply@example.test",
 			})
+
 			if mailed := len(sender.Sent()) > 0; mailed != c.wantMailed {
 				t.Fatalf("mailed = %v (%d messages), want %v", mailed, len(sender.Sent()), c.wantMailed)
 			}
-			if got := noticeStatus(t, db, f.gapID); got != statusSent {
+			if got := e.noticeStatus(); got != statusSent {
 				t.Fatalf("status = %q, want sent", got)
 			}
 		})
 	}
 }
 
-// runWorkerWith is runWorker for a worker the caller built, so a test can
+// runWorkerWith runs one pass of a worker the caller built, so a test can
 // fix its clock.
-func runWorkerWith(t *testing.T, db *testdb.DB, w oncall.GapNoticeWorker) {
-	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
+func (e noticeEnv) runWorkerWith(w oncall.GapNoticeWorker) {
+	e.t.Helper()
+	tx, err := e.db.App.BeginTx(e.t.Context(), nil)
 	if err != nil {
-		t.Fatalf("begin: %v", err)
+		e.t.Fatalf("begin: %v", err)
 	}
-	defer tx.Rollback()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
-		t.Fatalf("set trusted door: %v", err)
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(e.t.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
+		e.t.Fatalf("set trusted door: %v", err)
 	}
-	if err := w.ProcessPending(t.Context(), tx); err != nil {
-		t.Fatalf("ProcessPending: %v", err)
+	if err := w.ProcessPending(e.t.Context(), tx); err != nil {
+		e.t.Fatalf("ProcessPending: %v", err)
 	}
 	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
+		e.t.Fatalf("commit: %v", err)
 	}
 }

@@ -9,263 +9,207 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/engagement"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
-// TestListActivityHandler_OwnerSeesEveryEntry proves the Owner column of
-// ADR-0008's read table: nothing is filtered, including money actions.
-func TestListActivityHandler_OwnerSeesEveryEntry(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "owner-activity-full"
-	practiceID := testdb.SeedPractice(t, db, "Owner Activity Full")
-	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
-	clientID, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "owner-activity-full-client@example.com", "active")
-
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionEngagementCreated), activity.StaffActor(ownerID))
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionInvoiceRaised), activity.StaffActor(ownerID))
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionInvoicePaid), activity.ClientActor(clientID))
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	var got engagement.ActivityListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(got.Items) != 3 {
-		t.Fatalf("Owner got %d items, want 3 (no filtering)", len(got.Items))
-	}
+// seedActivity writes one entry on the Engagement's ledger.
+func (e *env) seedActivity(action activity.EngagementAction, actor activity.Actor) {
+	e.t.Helper()
+	testdb.SeedActivity(e.t, e.db, e.Practice.ID, activity.SubjectEngagement, e.Engagement.ID, string(action), actor)
 }
 
-// TestListActivityHandler_EmployeeDoulaSeesMoneyEntries proves the
-// employee-Doula column as amended by #282: Invoice/payment and
-// Contract-money entries reach her the same as an Owner or Admin, since
-// employment type -- not role -- is now the boundary.
-func TestListActivityHandler_EmployeeDoulaSeesMoneyEntries(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-activity-money"
-	practiceID := testdb.SeedPractice(t, db, "Doula Activity Money")
-	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "doula-activity-money-client@example.com", "active")
-
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionEngagementCreated), activity.StaffActor(doulaID))
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionVisitLogged), activity.StaffActor(doulaID))
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionInvoiceRaised), activity.StaffActor(doulaID))
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionInvoicePaid), activity.SystemActor())
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractSent), activity.StaffActor(doulaID))
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractPriced), activity.StaffActor(doulaID))
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	var got engagement.ActivityListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(got.Items) != 6 {
-		t.Fatalf("employee Doula got %d items, want 6 (no filtering)", len(got.Items))
-	}
+// seedActivityWithDiff is seedActivity carrying diff.
+func (e *env) seedActivityWithDiff(action activity.EngagementAction, actor activity.Actor, diff jsontext.Value) {
+	e.t.Helper()
+	testdb.SeedActivityWithDiff(e.t, e.db, e.Practice.ID, activity.SubjectEngagement, e.Engagement.ID, string(action), actor, diff)
 }
 
-// TestListActivityHandler_ContractorExcludesMoneyAndPracticePrice proves
-// the contractor column: neither Invoice/payment nor the Practice's
-// Contract price ever reach her, per ADR-0008 as amended by #282 ("her
-// own agreed fee only ... never the Practice's price"). Her own Offer
-// acceptance and the Contract entity's own lifecycle (#972: no longer in
-// the money set) both stay visible; only the price itself
-// (contract_priced) and Invoice/payment history are held back.
-func TestListActivityHandler_ContractorExcludesMoneyAndPracticePrice(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "contractor-activity-money"
-	practiceID := testdb.SeedPractice(t, db, "Contractor Activity Money")
-	contractorID := testdb.SeedContractorAtPractice(t, db, practiceID, identityUID)
-	clientID, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "contractor-activity-money-client@example.com", "active")
-	testdb.SeedGrantedAttachment(t, db, engagementID, contractorID)
+// activityAs reads the Engagement's ledger as who.
+func (e *env) activityAs(who fixture.StaffRecord) engagement.ActivityListResponse {
+	e.t.Helper()
+	return reqtest.Expect[engagement.ActivityListResponse](e.t, http.MethodGet, e.engagementURL("/activity"), http.StatusOK, e.as(who))
+}
 
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionOfferAccepted), activity.StaffActor(contractorID))
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractSigned), activity.ClientActor(clientID))
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractPriced), activity.StaffActor(contractorID))
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionInvoicePaid), activity.SystemActor())
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	var got engagement.ActivityListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode: %v", err)
+// actionsSeen is the set of actions the ledger shows who.
+func (e *env) actionsSeen(who fixture.StaffRecord) map[string]bool {
+	e.t.Helper()
+	seen := map[string]bool{}
+	for _, item := range e.activityAs(who).Items {
+		seen[item.Action] = true
 	}
-	gotActions := map[string]bool{}
-	for _, item := range got.Items {
-		gotActions[item.Action] = true
+	return seen
+}
+
+// TestListActivityHandler_WhoSeesWhichEntries is ADR-0008's read table
+// for the ledger, as amended by #282: an Owner and an employee Doula see
+// every entry, money included, since employment type -- not role -- is the
+// boundary; a contractor sees neither Invoice/payment nor the Practice's
+// Contract price, per "her own agreed fee only ... never the Practice's
+// price", while her own Offer acceptance and the Contract's own lifecycle
+// (#972: no longer in the money set) stay visible. Staff still see a
+// void request and its refusal: this is a Client-portal filter, not a
+// Staff one (#1096). And a Birth Plan row stays on the Practice's own
+// ledger after a loss, which the portal leaves out (#2219).
+func TestListActivityHandler_WhoSeesWhichEntries(t *testing.T) {
+	staff, client, system := "staff", "client", "system"
+	type entry struct {
+		action activity.EngagementAction
+		by     string
 	}
-	if len(got.Items) != 2 || !gotActions[string(activity.ActionOfferAccepted)] || !gotActions[string(activity.ActionContractSigned)] {
-		t.Fatalf("contractor got %+v, want exactly [offer_accepted, contract_signed]", got.Items)
+	cases := []struct {
+		name      string
+		viewer    []fixture.StaffOption
+		attached  bool
+		seeded    []entry
+		afterLoss bool
+		want      []activity.EngagementAction
+	}{
+		{
+			name:   "an Owner sees every entry, money included",
+			viewer: []fixture.StaffOption{fixture.Owner()},
+			seeded: []entry{{activity.ActionEngagementCreated, staff}, {activity.ActionInvoiceRaised, staff}, {activity.ActionInvoicePaid, client}},
+			want:   []activity.EngagementAction{activity.ActionEngagementCreated, activity.ActionInvoiceRaised, activity.ActionInvoicePaid},
+		},
+		{
+			name:   "an employee Doula sees money entries the same as an Owner",
+			viewer: []fixture.StaffOption{fixture.Doula()},
+			seeded: []entry{
+				{activity.ActionEngagementCreated, staff}, {activity.ActionVisitLogged, staff}, {activity.ActionInvoiceRaised, staff},
+				{activity.ActionInvoicePaid, system}, {activity.ActionContractSent, staff}, {activity.ActionContractPriced, staff},
+			},
+			want: []activity.EngagementAction{
+				activity.ActionEngagementCreated, activity.ActionVisitLogged, activity.ActionInvoiceRaised,
+				activity.ActionInvoicePaid, activity.ActionContractSent, activity.ActionContractPriced,
+			},
+		},
+		{
+			name:     "a contractor sees no Invoice, payment or Practice price",
+			viewer:   []fixture.StaffOption{fixture.Contractor()},
+			attached: true,
+			seeded: []entry{
+				{activity.ActionOfferAccepted, staff}, {activity.ActionContractSigned, client},
+				{activity.ActionContractPriced, staff}, {activity.ActionInvoicePaid, system},
+			},
+			want: []activity.EngagementAction{activity.ActionOfferAccepted, activity.ActionContractSigned},
+		},
+		{
+			name:   "an Owner sees a void request and its refusal",
+			viewer: []fixture.StaffOption{fixture.Owner()},
+			seeded: []entry{{activity.ActionContractVoidRequested, staff}, {activity.ActionContractVoidDeclined, staff}},
+			want:   []activity.EngagementAction{activity.ActionContractVoidRequested, activity.ActionContractVoidDeclined},
+		},
+		{
+			name:      "an Owner sees every Birth Plan row after a loss",
+			viewer:    []fixture.StaffOption{fixture.Owner()},
+			afterLoss: true,
+			seeded: func() []entry {
+				var out []entry
+				for _, a := range activity.BirthPlanActions() {
+					out = append(out, entry{a, staff})
+				}
+				return out
+			}(),
+			want: activity.BirthPlanActions(),
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(tc.viewer...), withEngagement(fixture.Status(fixture.StatusActive)))
+			if tc.attached {
+				testdb.SeedGrantedAttachment(t, e.db, e.Engagement.ID, e.Staff.ID)
+			}
+			if tc.afterLoss {
+				e.exec(`UPDATE engagements SET birth_outcome = 'loss', pregnancy_ended_on = '2027-03-04'::date WHERE id = $1`, e.Engagement.ID)
+			}
+			for _, s := range tc.seeded {
+				actor := activity.StaffActor(e.Staff.ID)
+				switch s.by {
+				case client:
+					actor = activity.ClientActor(e.Engagement.Client.ID)
+				case system:
+					actor = activity.SystemActor()
+				}
+				e.seedActivity(s.action, actor)
+			}
+
+			got := e.actionsSeen(e.Staff)
+
+			if len(got) != len(tc.want) {
+				t.Fatalf("saw %v, want exactly %v", got, tc.want)
+			}
+			for _, a := range tc.want {
+				if !got[string(a)] {
+					t.Fatalf("saw %v, want exactly %v", got, tc.want)
+				}
+			}
+		})
 	}
 }
 
 // TestListActivityHandler_SystemActorRendersAsDoulaCloud asserts
 // ADR-0022's exact display string -- never "System".
 func TestListActivityHandler_SystemActorRendersAsDoulaCloud(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "owner-activity-system-name"
-	practiceID := testdb.SeedPractice(t, db, "Owner Activity System Name")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "owner-activity-system-name-client@example.com", "active")
+	e := newOwnerEnv(t, withEngagement(fixture.Status(fixture.StatusActive)))
+	e.seedActivity(activity.ActionPortalInviteSent, activity.SystemActor())
 
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionPortalInviteSent), activity.SystemActor())
+	got := e.activityAs(e.Staff)
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
-	defer resp.Body.Close()
-	var got engagement.ActivityListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
 	if len(got.Items) != 1 {
 		t.Fatalf("got %d items, want 1", len(got.Items))
 	}
 	if got.Items[0].ActorName != "DoulaCloud" {
 		t.Fatalf("system actor ActorName = %q, want %q", got.Items[0].ActorName, "DoulaCloud")
 	}
-	if got.Items[0].ActorName == "System" {
-		t.Fatal("system actor must never render as \"System\"")
-	}
 }
 
-// TestListActivityHandler_InvalidEngagementIDRejected mirrors
-// DetailHandler's own bad-UUID handling.
-func TestListActivityHandler_InvalidEngagementIDRejected(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "owner-activity-bad-engagement-id"
-	practiceID := testdb.SeedPractice(t, db, "Owner Activity Bad Engagement Id")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid/activity")
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-// TestListActivityHandler_InvalidCursorRejected mirrors
-// visit.TestListHandler_InvalidCursorRejected.
-func TestListActivityHandler_InvalidCursorRejected(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "owner-activity-bad-cursor"
-	practiceID := testdb.SeedPractice(t, db, "Owner Activity Bad Cursor")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "owner-activity-bad-cursor-client@example.com", "active")
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity?cursor=not!valid!base64!")
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-// TestListActivityHandler_KeepsBirthPlanRowsAfterALoss proves #2219's
-// Staff half: the portal leaves Birth Plan rows out wherever a Birth Plan
-// is not offered, but the Practice's own ledger still answers "who
-// started this Birth Plan, and when?" after a loss.
-func TestListActivityHandler_KeepsBirthPlanRowsAfterALoss(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "owner-activity-birth-plan-loss"
-	practiceID := testdb.SeedPractice(t, db, "Owner Activity Birth Plan Loss")
-	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "owner-activity-birth-plan-loss-client@example.com", "active")
-	for _, a := range activity.BirthPlanActions() {
-		testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(a), activity.StaffActor(ownerID))
+// TestListActivityHandler_RefusesWhatItCannotServe covers the refusals
+// of the ledger read: an engagement id that is not a uuid mirrors
+// DetailHandler's own handling, a cursor that is not a cursor mirrors
+// visit.TestListHandler_InvalidCursorRejected, and a contractor with no
+// open, granted attachment gets a 404, the same as the Engagement detail
+// read, mirroring visit.ListHandler's gate.
+func TestListActivityHandler_RefusesWhatItCannotServe(t *testing.T) {
+	cases := []struct {
+		name   string
+		viewer []fixture.StaffOption
+		path   func(e *env) string
+		want   int
+	}{
+		{"an engagement id that is not a uuid", []fixture.StaffOption{fixture.Owner()}, func(e *env) string { return e.urlOf("not-a-uuid", "/activity") }, http.StatusBadRequest},
+		{"a cursor that is not valid", []fixture.StaffOption{fixture.Owner()}, func(e *env) string { return e.engagementURL("/activity?cursor=not!valid!base64!") }, http.StatusBadRequest},
+		{"a contractor not attached to it", []fixture.StaffOption{fixture.Contractor()}, func(e *env) string { return e.engagementURL("/activity") }, http.StatusNotFound},
 	}
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE engagements SET birth_outcome = 'loss', pregnancy_ended_on = '2027-03-04'::date WHERE id = $1`,
-		engagementID); err != nil {
-		t.Fatalf("record the loss: %v", err)
-	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(tc.viewer...), withEngagement(fixture.Status(fixture.StatusActive)))
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
-	defer resp.Body.Close()
-	var got engagement.ActivityListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(got.Items) != len(activity.BirthPlanActions()) {
-		t.Fatalf("Owner got %d items after a loss, want %d (every Birth Plan row kept)", len(got.Items), len(activity.BirthPlanActions()))
+			reqtest.ExpectStatus(t, http.MethodGet, tc.path(e), tc.want, e.signedIn)
+		})
 	}
 }
 
 // TestListActivityHandler_PaginatesNewestFirst mirrors
 // visit.TestListHandler_PaginatesNewestFirst.
 func TestListActivityHandler_PaginatesNewestFirst(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "owner-activity-paging"
-	practiceID := testdb.SeedPractice(t, db, "Owner Activity Paging")
-	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "owner-activity-paging-client@example.com", "active")
-
+	e := newOwnerEnv(t, withEngagement(fixture.Status(fixture.StatusActive)))
 	const total = 31 // activityPageSize (30) + 1, to force a second page
 	for range total {
-		testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionVisitLogged), activity.StaffActor(ownerID))
+		e.seedActivity(activity.ActionVisitLogged, activity.StaffActor(e.Staff.ID))
 	}
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
-	defer firstResp.Body.Close()
-	var first engagement.ActivityListResponse
-	if err := json.UnmarshalRead(firstResp.Body, &first); err != nil {
-		t.Fatalf("decode first page: %v", err)
-	}
+	first := e.activityAs(e.Staff)
 	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
 		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
 			len(first.Items), first.HasMore, first.NextCursor)
 	}
 
-	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity?cursor="+*first.NextCursor)
-	defer secondResp.Body.Close()
-	var second engagement.ActivityListResponse
-	if err := json.UnmarshalRead(secondResp.Body, &second); err != nil {
-		t.Fatalf("decode second page: %v", err)
-	}
+	second := reqtest.Expect[engagement.ActivityListResponse](t, http.MethodGet, e.engagementURL("/activity?cursor="+*first.NextCursor), http.StatusOK, e.signedIn)
 	if len(second.Items) != 1 || second.HasMore || second.NextCursor != nil {
 		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
 			len(second.Items), second.HasMore, second.NextCursor)
 	}
-}
-
-// TestListActivityHandler_ContractorWithoutAttachmentNotFound mirrors
-// visit.ListHandler's gate: a contractor with no open, granted
-// attachment gets a 404, same as the Engagement detail read.
-func TestListActivityHandler_ContractorWithoutAttachmentNotFound(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "contractor-activity-unattached"
-	practiceID := testdb.SeedPractice(t, db, "Contractor Activity Unattached")
-	testdb.SeedContractorAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "contractor-activity-unattached-client@example.com", "active")
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // reassignDiff is the diff a reassignment writes, built through the same
@@ -283,134 +227,6 @@ func reassignDiff(t *testing.T, before, after string) jsontext.Value {
 	return raw
 }
 
-func readActivity(t *testing.T, db *testdb.DB, practiceID, engagementID, identityUID string) engagement.ActivityListResponse {
-	t.Helper()
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	var got engagement.ActivityListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		// coverage:ignore reason: decode failure of a response this handler just wrote
-		t.Fatalf("decode: %v", err)
-	}
-	return got
-}
-
-// TestListActivityHandler_ReassignmentNamesBothPeople is #887's read
-// side: the ledger reads the two ids out of the diff and resolves them
-// to names server-side, the way actorName is already resolved, so a
-// reader is told which Doula the Visit left and which one it reached.
-func TestListActivityHandler_ReassignmentNamesBothPeople(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "owner-activity-reassign"
-	practiceID := testdb.SeedPractice(t, db, "Reassignment Names")
-	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
-	fromID := testdb.SeedStaffAtPractice(t, db, practiceID, "reassign-from", []string{doulaRole}, "employee")
-	toID := testdb.SeedStaffAtPractice(t, db, practiceID, "reassign-to", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "reassign-names-client@example.com", "active")
-
-	testdb.SeedActivityWithDiff(t, db, practiceID, activity.SubjectEngagement, engagementID,
-		string(activity.ActionVisitReassigned), activity.StaffActor(ownerID), reassignDiff(t, fromID, toID))
-
-	got := readActivity(t, db, practiceID, engagementID, identityUID)
-	if len(got.Items) != 1 {
-		t.Fatalf("got %d items, want 1", len(got.Items))
-	}
-	// SeedStaffAtPractice names a Staff row "Test Staff "+identityUID, so
-	// the two names asserted here are the ones the query resolved out of
-	// the ids in the diff, not values this test wrote into it.
-	want := "Visit reassigned from Test Staff reassign-from to Test Staff reassign-to"
-	if got.Items[0].Detail != want {
-		t.Fatalf("detail = %q, want %q", got.Items[0].Detail, want)
-	}
-}
-
-// TestListActivityHandler_ReassignmentFromSomebodyGone holds the entry
-// readable when one end of the move no longer resolves to a Staff row:
-// a reader is told a colleague has gone, never shown a bare uuid (#887).
-func TestListActivityHandler_ReassignmentFromSomebodyGone(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "owner-activity-reassign-gone"
-	const departedID = "11111111-2222-3333-4444-555555555555"
-	practiceID := testdb.SeedPractice(t, db, "Reassignment Gone")
-	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
-	toID := testdb.SeedStaffAtPractice(t, db, practiceID, "reassign-gone-to", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "reassign-gone-client@example.com", "active")
-
-	testdb.SeedActivityWithDiff(t, db, practiceID, activity.SubjectEngagement, engagementID,
-		string(activity.ActionVisitReassigned), activity.StaffActor(ownerID), reassignDiff(t, departedID, toID))
-
-	got := readActivity(t, db, practiceID, engagementID, identityUID)
-	if len(got.Items) != 1 {
-		t.Fatalf("got %d items, want 1", len(got.Items))
-	}
-	detail := got.Items[0].Detail
-	if strings.Contains(detail, departedID) {
-		t.Fatalf("detail = %q, which shows a bare uuid", detail)
-	}
-	want := "Visit reassigned from a former colleague to Test Staff reassign-gone-to"
-	if detail != want {
-		t.Fatalf("detail = %q, want %q", detail, want)
-	}
-}
-
-// TestListActivityHandler_AttachmentNamesTheDoulaAndWhoAttachedHer is
-// #1596's read side: a doula_attached entry answers "who attached the
-// Doula, and when" in one row. The Who column is the person who decided
-// it, the sentence names the Doula out of the id in the diff, and
-// CreatedAt is the instant.
-func TestListActivityHandler_AttachmentNamesTheDoulaAndWhoAttachedHer(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "owner-activity-attached"
-	practiceID := testdb.SeedPractice(t, db, "Attachment Names")
-	ownerID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, identityUID, "Renata Alvarez", []string{ownerRole}, "employee")
-	doulaID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "attached-doula", "Hana Kim", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "attached-client@example.com", "intake")
-
-	testdb.SeedActivityWithDiff(t, db, practiceID, activity.SubjectEngagement, engagementID,
-		string(activity.ActionDoulaAttached), activity.StaffActor(ownerID), attachedDiff(t, doulaID))
-
-	got := readActivity(t, db, practiceID, engagementID, identityUID)
-	if len(got.Items) != 1 {
-		t.Fatalf("got %d items, want 1", len(got.Items))
-	}
-	entry := got.Items[0]
-	if want := "Put on this work as the Doula: Hana Kim"; entry.Detail != want {
-		t.Fatalf("detail = %q, want %q", entry.Detail, want)
-	}
-	if entry.ActorName != "Renata Alvarez" {
-		t.Fatalf("actorName = %q, want the person who attached her", entry.ActorName)
-	}
-	if entry.CreatedAt.IsZero() {
-		t.Fatal("createdAt is zero, want the instant she was attached")
-	}
-}
-
-// TestListActivityHandler_AttachmentOfSomebodyGone holds the entry
-// readable once the Doula it names no longer resolves to a Staff row.
-func TestListActivityHandler_AttachmentOfSomebodyGone(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "owner-activity-attached-gone"
-	const departedID = "11111111-2222-3333-4444-555555555555"
-	practiceID := testdb.SeedPractice(t, db, "Attachment Gone")
-	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "attached-gone-client@example.com", "intake")
-
-	testdb.SeedActivityWithDiff(t, db, practiceID, activity.SubjectEngagement, engagementID,
-		string(activity.ActionDoulaAttached), activity.StaffActor(ownerID), attachedDiff(t, departedID))
-
-	got := readActivity(t, db, practiceID, engagementID, identityUID)
-	if len(got.Items) != 1 {
-		t.Fatalf("got %d items, want 1", len(got.Items))
-	}
-	if want := "Put on this work as the Doula: a former colleague"; got.Items[0].Detail != want {
-		t.Fatalf("detail = %q, want %q", got.Items[0].Detail, want)
-	}
-}
-
 func attachedDiff(t *testing.T, staffID string) jsontext.Value {
 	t.Helper()
 	raw, err := json.Marshal(map[string]string{activity.DiffKeyAttachedStaffID: staffID})
@@ -421,91 +237,87 @@ func attachedDiff(t *testing.T, staffID string) jsontext.Value {
 	return raw
 }
 
+// TestListActivityHandler_DetailNamesPeopleOutOfTheDiff is #887's, #1596's
+// and #2271's read side: the ledger reads the ids out of an entry's diff
+// and resolves them to names server-side, the way actorName is already
+// resolved, so a reader is told which Doula a Visit left and reached, who
+// was attached and by whom, and whose fee was paid -- and when one end no
+// longer resolves to a Staff row it is told a colleague has gone, never
+// shown a bare uuid.
+func TestListActivityHandler_DetailNamesPeopleOutOfTheDiff(t *testing.T) {
+	const departedID = "11111111-2222-3333-4444-555555555555"
+	cases := []struct {
+		name   string
+		action activity.EngagementAction
+		diff   func(t *testing.T, from, to fixture.StaffRecord) jsontext.Value
+		want   string
+	}{
+		{"a reassignment names both people", activity.ActionVisitReassigned,
+			func(t *testing.T, from, to fixture.StaffRecord) jsontext.Value {
+				return reassignDiff(t, from.ID, to.ID)
+			},
+			"Visit reassigned from Hana Kim to Mei Tan"},
+		{"a reassignment from somebody gone", activity.ActionVisitReassigned,
+			func(t *testing.T, _, to fixture.StaffRecord) jsontext.Value {
+				return reassignDiff(t, departedID, to.ID)
+			},
+			"Visit reassigned from a former colleague to Mei Tan"},
+		{"an attachment names the Doula", activity.ActionDoulaAttached,
+			func(t *testing.T, from, _ fixture.StaffRecord) jsontext.Value { return attachedDiff(t, from.ID) },
+			"Put on this work as the Doula: Hana Kim"},
+		{"an attachment of somebody gone", activity.ActionDoulaAttached,
+			func(t *testing.T, _, _ fixture.StaffRecord) jsontext.Value { return attachedDiff(t, departedID) },
+			"Put on this work as the Doula: a former colleague"},
+		{"a fee payment names whose fee it was", activity.ActionContractorFeePaid,
+			func(t *testing.T, from, _ fixture.StaffRecord) jsontext.Value { return attachedDiff(t, from.ID) },
+			"Fee paid to Hana Kim"},
+		{"a fee payment reversal names whose fee it was", activity.ActionContractorFeePaymentReversed,
+			func(t *testing.T, from, _ fixture.StaffRecord) jsontext.Value { return attachedDiff(t, from.ID) },
+			"Fee payment removed for Hana Kim"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newOwnerEnv(t, signedInAs(fixture.StaffName("Renata Alvarez")), withEngagement(fixture.Status(fixture.StatusActive)))
+			from := e.staff(fixture.StaffName("Hana Kim"))
+			to := e.staff(fixture.StaffName("Mei Tan"))
+			e.seedActivityWithDiff(tc.action, activity.StaffActor(e.Staff.ID), tc.diff(t, from, to))
+
+			got := e.activityAs(e.Staff)
+
+			if len(got.Items) != 1 {
+				t.Fatalf("got %d items, want 1", len(got.Items))
+			}
+			entry := got.Items[0]
+			if entry.Detail != tc.want {
+				t.Fatalf("detail = %q, want %q", entry.Detail, tc.want)
+			}
+			if strings.Contains(entry.Detail, departedID) {
+				t.Fatalf("detail = %q, which shows a bare uuid", entry.Detail)
+			}
+			if entry.ActorName != "Renata Alvarez" || entry.CreatedAt.IsZero() {
+				t.Fatalf("entry = %+v, want who did it and when", entry)
+			}
+		})
+	}
+}
+
 // TestListActivityHandler_OtherActionsCarryNoDetail holds every other
 // action to the rendering it has today: no detail field at all, so the
 // app falls back to its own generic description (#887).
 func TestListActivityHandler_OtherActionsCarryNoDetail(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "owner-activity-no-detail"
-	practiceID := testdb.SeedPractice(t, db, "No Detail")
-	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "no-detail-client@example.com", "active")
-
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID,
-		string(activity.ActionVisitLogged), activity.StaffActor(ownerID))
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
-	defer resp.Body.Close()
+	e := newOwnerEnv(t, withEngagement(fixture.Status(fixture.StatusActive)))
+	e.seedActivity(activity.ActionVisitLogged, activity.StaffActor(e.Staff.ID))
 
 	// Decoded loosely rather than into ActivityEntry, because what is
 	// asserted is the key's absence, which the struct cannot show.
-	var raw struct {
+	raw := reqtest.Expect[struct {
 		Items []map[string]jsontext.Value `json:"items"`
-	}
-	if err := json.UnmarshalRead(resp.Body, &raw); err != nil {
-		// coverage:ignore reason: decode failure of a response this handler just wrote
-		t.Fatalf("decode: %v", err)
-	}
+	}](t, http.MethodGet, e.engagementURL("/activity"), http.StatusOK, e.signedIn)
+
 	if len(raw.Items) != 1 {
 		t.Fatalf("got %d items, want 1", len(raw.Items))
 	}
 	if _, has := raw.Items[0]["detail"]; has {
 		t.Fatalf("a visit_logged entry carried a detail field: %v", raw.Items[0])
-	}
-}
-
-// TestListActivityHandler_StaffStillSeeVoidDeliberation proves the half of
-// #1096 that does not change: a void request and its refusal leave a
-// Client's own portal ledger, and stay exactly where the Practice does its
-// deliberating. Neither carries a dollar figure, so the money gate does not
-// reach them either -- this is a Client-portal filter, not a Staff one.
-func TestListActivityHandler_StaffStillSeeVoidDeliberation(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "owner-activity-void-deliberation"
-	practiceID := testdb.SeedPractice(t, db, "Void Deliberation")
-	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "void-deliberation-client@example.com", "active")
-
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID,
-		string(activity.ActionContractVoidRequested), activity.StaffActor(ownerID))
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID,
-		string(activity.ActionContractVoidDeclined), activity.StaffActor(ownerID))
-
-	got := readActivity(t, db, practiceID, engagementID, identityUID)
-	seen := map[string]bool{}
-	for _, item := range got.Items {
-		seen[item.Action] = true
-	}
-	if len(got.Items) != 2 || !seen[string(activity.ActionContractVoidRequested)] || !seen[string(activity.ActionContractVoidDeclined)] {
-		t.Fatalf("Items = %+v, want both void-deliberation rows on the Staff feed", got.Items)
-	}
-}
-
-// TestListActivityHandler_FeePaymentNamesTheDoula is #2271's read side:
-// a Fee Payment and its reversal name whose fee it was, never the amount.
-func TestListActivityHandler_FeePaymentNamesTheDoula(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "owner-activity-fee"
-	practiceID := testdb.SeedPractice(t, db, "Fee Names")
-	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
-	doulaID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "fee-doula", "Lena Vasquez", []string{doulaRole}, "contractor")
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "fee-client@example.com", "active")
-
-	testdb.SeedActivityWithDiff(t, db, practiceID, activity.SubjectEngagement, engagementID,
-		string(activity.ActionContractorFeePaid), activity.StaffActor(ownerID), attachedDiff(t, doulaID))
-	testdb.SeedActivityWithDiff(t, db, practiceID, activity.SubjectEngagement, engagementID,
-		string(activity.ActionContractorFeePaymentReversed), activity.StaffActor(ownerID), attachedDiff(t, doulaID))
-
-	details := map[string]string{}
-	for _, item := range readActivity(t, db, practiceID, engagementID, identityUID).Items {
-		details[item.Action] = item.Detail
-	}
-	if got := details[string(activity.ActionContractorFeePaid)]; got != "Fee paid to Lena Vasquez" {
-		t.Fatalf("paid detail = %q", got)
-	}
-	if got := details[string(activity.ActionContractorFeePaymentReversed)]; got != "Fee payment removed for Lena Vasquez" {
-		t.Fatalf("reversed detail = %q", got)
 	}
 }

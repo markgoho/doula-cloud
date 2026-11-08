@@ -2,12 +2,10 @@ package engagement_test
 
 import (
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/activity"
-	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/engagement"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
@@ -17,69 +15,64 @@ import (
 // who and when; the Doula gets one mail, unless she is the one who
 // pressed; her Visits that have not happened stay hers.
 
-func takeOffDoulaAs(t *testing.T, db *testdb.DB, srv *httptest.Server, uid, practiceID, engagementID, staffID string) (int, attachSelfBody) {
-	t.Helper()
-	resp := reqtest.Delete(t, attachDoulaURL(srv.URL, practiceID, engagementID, staffID), reqtest.Session(authntest.SeedSession(t, db.App, uid)))
-	defer func() { _ = resp.Body.Close() }()
-	out := reqtest.Decode[attachSelfBody](t, resp)
-	return resp.StatusCode, out
+// takeOff takes staffID off engagementID as the Staff member at the
+// screen and requires want.
+func (e *env) takeOff(engagementID, staffID string, want int) attachSelfBody {
+	e.t.Helper()
+	return reqtest.Expect[attachSelfBody](e.t, http.MethodDelete, e.urlOf(engagementID, "/attachments/"+staffID), want, e.signedIn)
 }
 
-func countTakenOffNotices(t *testing.T, db *testdb.DB, engagementID, staffID string) int {
-	t.Helper()
-	var n int
-	if err := db.Admin.QueryRowContext(t.Context(),
+func (e *env) countTakenOffNotices(staffID string) int {
+	e.t.Helper()
+	return testdb.Scalar[int](e.t, e.db.Admin,
 		`SELECT count(*) FROM staff_notice_outbox
 		  WHERE kind = 'taken_off_engagement' AND subject_id = $1 AND recipient_staff_id = $2`,
-		engagementID, staffID).Scan(&n); err != nil {
-		t.Fatalf("count notices: %v", err)
-	}
-	return n
+		e.Engagement.ID, staffID)
 }
 
-func seedVisitAt(t *testing.T, db *testdb.DB, engagementID, staffID, when string) {
+func (e *env) seedVisitAt(staffID, when string) {
+	e.t.Helper()
+	e.exec(`INSERT INTO visits (engagement_id, staff_id, scheduled_at) VALUES ($1, $2, $3::timestamptz)`, e.Engagement.ID, staffID, when)
+}
+
+// ownerWithDoulaOnIt is the Owner at the screen and a Doula she has put
+// on an active Engagement.
+func ownerWithDoulaOnIt(t *testing.T) attachingEnv {
 	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO visits (engagement_id, staff_id, scheduled_at) VALUES ($1, $2, $3::timestamptz)`,
-		engagementID, staffID, when); err != nil {
-		t.Fatalf("seed visit: %v", err)
-	}
+	e := newAttachingEnv(t, ownerCase, nil, withEngagement(fixture.Status(fixture.StatusActive)))
+	e.put(http.StatusOK)
+	return e
 }
 
 func TestTakeOffDoulaHandler_EndsTheAttachmentAndRecordsIt(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "take-off-doula"
-	srv, practiceID, callerID, doulaID, engagementID := newAttachDoulaServer(t, db, uid, []string{ownerRole}, []string{doulaRole}, employeeType, engagement.StatusActive)
-	attachDoulaAs(t, db, srv, uid, practiceID, engagementID, doulaID)
-	seedVisitAt(t, db, engagementID, doulaID, "2999-01-01T12:00:00Z")
-	seedVisitAt(t, db, engagementID, doulaID, "2001-01-01T12:00:00Z")
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO visits (engagement_id, staff_id) VALUES ($1, $2)`, engagementID, doulaID); err != nil {
-		t.Fatalf("seed undated visit: %v", err)
-	}
+	e := ownerWithDoulaOnIt(t)
+	e.seedVisitAt(e.Doula.ID, "2999-01-01T12:00:00Z")
+	e.seedVisitAt(e.Doula.ID, "2001-01-01T12:00:00Z")
+	e.exec(`INSERT INTO visits (engagement_id, staff_id) VALUES ($1, $2)`, e.Engagement.ID, e.Doula.ID)
 
-	_, on := attachDoulaAs(t, db, srv, uid, practiceID, engagementID, doulaID)
+	on := e.put(http.StatusOK)
 	if len(on.Doulas) != 1 || on.Doulas[0].OpenVisits != 2 {
 		t.Fatalf("doulas before = %+v, want one with 2 Visits that have not happened (one future, one undated; the past one is not counted)", on.Doulas)
 	}
 
-	status, body := takeOffDoulaAs(t, db, srv, uid, practiceID, engagementID, doulaID)
-	if status != http.StatusOK || len(body.Doulas) != 0 {
-		t.Fatalf("status = %d doulas = %+v, want 200 and nobody on it", status, body.Doulas)
+	body := e.takeOff(e.Engagement.ID, e.Doula.ID, http.StatusOK)
+
+	if len(body.Doulas) != 0 {
+		t.Fatalf("doulas = %+v, want nobody on it", body.Doulas)
 	}
 	var endedBy string
 	var rows int
-	if err := db.Admin.QueryRowContext(t.Context(),
+	if err := e.db.Admin.QueryRowContext(t.Context(),
 		`SELECT count(*), max(ended_by::text) FROM engagement_attachments
 		  WHERE engagement_id = $1 AND staff_id = $2 AND ended_at IS NOT NULL`,
-		engagementID, doulaID).Scan(&rows, &endedBy); err != nil {
+		e.Engagement.ID, e.Doula.ID).Scan(&rows, &endedBy); err != nil {
 		t.Fatalf("read ended attachment: %v", err)
 	}
-	if rows != 1 || endedBy != callerID {
+	if rows != 1 || endedBy != e.Staff.ID {
 		t.Fatalf("ended rows = %d by %q, want one ended by the caller", rows, endedBy)
 	}
-	assertDiff(t, readFactDiff(t, db, engagementID, "doula_taken_off"), map[string]any{activity.DiffKeyAttachedStaffID: doulaID})
-	ledger := readActivity(t, db, practiceID, engagementID, uid)
+	assertDiff(t, readFactDiff(t, e.db, e.Engagement.ID, "doula_taken_off"), map[string]any{activity.DiffKeyAttachedStaffID: e.Doula.ID})
+	ledger := e.activityAs(e.Staff)
 	var found bool
 	for _, entry := range ledger.Items {
 		if entry.Action == "doula_taken_off" {
@@ -92,57 +85,45 @@ func TestTakeOffDoulaHandler_EndsTheAttachmentAndRecordsIt(t *testing.T) {
 	if !found {
 		t.Fatalf("ledger = %+v, want a doula_taken_off entry", ledger.Items)
 	}
-	if n := countTakenOffNotices(t, db, engagementID, doulaID); n != 1 {
+	if n := e.countTakenOffNotices(e.Doula.ID); n != 1 {
 		t.Fatalf("notices = %d, want 1", n)
 	}
-	var visits int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM visits WHERE engagement_id = $1 AND staff_id = $2`, engagementID, doulaID).Scan(&visits); err != nil || visits != 3 {
-		t.Fatalf("visits = %d (%v), want all three still hers", visits, err)
+	if visits := testdb.Scalar[int](t, e.db.Admin, `SELECT count(*) FROM visits WHERE engagement_id = $1 AND staff_id = $2`, e.Engagement.ID, e.Doula.ID); visits != 3 {
+		t.Fatalf("visits = %d, want all three still hers", visits)
 	}
 }
 
 func TestTakeOffDoulaHandler_SafeToRepeat(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "take-off-doula-repeat"
-	srv, practiceID, _, doulaID, engagementID := newAttachDoulaServer(t, db, uid, []string{ownerRole}, []string{doulaRole}, employeeType, engagement.StatusActive)
-	attachDoulaAs(t, db, srv, uid, practiceID, engagementID, doulaID)
+	e := ownerWithDoulaOnIt(t)
 
-	first, _ := takeOffDoulaAs(t, db, srv, uid, practiceID, engagementID, doulaID)
-	second, _ := takeOffDoulaAs(t, db, srv, uid, practiceID, engagementID, doulaID)
-	if first != http.StatusOK || second != http.StatusOK {
-		t.Fatalf("statuses = %d, %d, want 200 twice", first, second)
-	}
-	if n := countActivityActions(t, db, engagementID, "doula_taken_off"); n != 1 {
+	e.takeOff(e.Engagement.ID, e.Doula.ID, http.StatusOK)
+	e.takeOff(e.Engagement.ID, e.Doula.ID, http.StatusOK)
+
+	if n := e.countActivity("doula_taken_off"); n != 1 {
 		t.Fatalf("doula_taken_off entries = %d, want 1", n)
 	}
-	if n := countTakenOffNotices(t, db, engagementID, doulaID); n != 1 {
+	if n := e.countTakenOffNotices(e.Doula.ID); n != 1 {
 		t.Fatalf("notices = %d, want 1", n)
 	}
 }
 
 func TestTakeOffDoulaHandler_NobodyIsMailedAboutHerOwnTakingOff(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "take-off-doula-self"
-	srv, practiceID, callerID, _, engagementID := newAttachDoulaServer(t, db, uid, []string{ownerRole, doulaRole}, []string{doulaRole}, employeeType, engagement.StatusActive)
-	attachDoulaAs(t, db, srv, uid, practiceID, engagementID, callerID)
+	e := newAttachingEnv(t, roleCase{"owner and doula", []fixture.StaffOption{fixture.Owner(), fixture.Doula()}}, nil,
+		withEngagement(fixture.Status(fixture.StatusActive)))
+	e.attachDoula(e.Engagement.ID, e.Staff.ID, http.StatusOK)
 
-	if status, _ := takeOffDoulaAs(t, db, srv, uid, practiceID, engagementID, callerID); status != http.StatusOK {
-		t.Fatalf("status = %d, want 200", status)
-	}
-	if n := countActivityActions(t, db, engagementID, "doula_taken_off"); n != 1 {
+	e.takeOff(e.Engagement.ID, e.Staff.ID, http.StatusOK)
+
+	if n := e.countActivity("doula_taken_off"); n != 1 {
 		t.Fatalf("doula_taken_off entries = %d, want 1", n)
 	}
-	if n := countTakenOffNotices(t, db, engagementID, callerID); n != 0 {
+	if n := e.countTakenOffNotices(e.Staff.ID); n != 0 {
 		t.Fatalf("notices = %d, want none for the person who pressed", n)
 	}
 }
 
 func TestTakeOffDoulaHandler_RefusalsAndRoles(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "take-off-doula-refusals"
-	srv, practiceID, _, doulaID, engagementID := newAttachDoulaServer(t, db, uid, []string{ownerRole}, []string{doulaRole}, employeeType, engagement.StatusActive)
-	attachDoulaAs(t, db, srv, uid, practiceID, engagementID, doulaID)
+	e := ownerWithDoulaOnIt(t)
 	const missing = "11111111-1111-1111-1111-111111111111"
 
 	cases := []struct {
@@ -151,24 +132,20 @@ func TestTakeOffDoulaHandler_RefusalsAndRoles(t *testing.T) {
 		staffID      string
 		wantStatus   int
 	}{
-		{"unknown engagement", missing, doulaID, http.StatusNotFound},
-		{"malformed engagement", malformedUUID, doulaID, http.StatusBadRequest},
-		{"malformed staff", engagementID, malformedUUID, http.StatusBadRequest},
+		{"unknown engagement", missing, e.Doula.ID, http.StatusNotFound},
+		{"malformed engagement", malformedUUID, e.Doula.ID, http.StatusBadRequest},
+		{"malformed staff", e.Engagement.ID, malformedUUID, http.StatusBadRequest},
 	}
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if status, _ := takeOffDoulaAs(t, db, srv, uid, practiceID, tc.engagementID, tc.staffID); status != tc.wantStatus {
-				t.Fatalf("status = %d, want %d", status, tc.wantStatus)
-			}
+		t.Run(tc.name, func(*testing.T) {
+			e.takeOff(tc.engagementID, tc.staffID, tc.wantStatus)
 		})
 	}
 
 	t.Run("a doula cannot take a colleague off", func(t *testing.T) {
-		doulaUID := uid + "-doula"
-		if status, _ := takeOffDoulaAs(t, db, srv, doulaUID, practiceID, engagementID, doulaID); status != http.StatusForbidden {
-			t.Fatalf("status = %d, want 403", status)
-		}
-		if got := readOpenAttachments(t, db, engagementID, doulaID); len(got) != 1 {
+		reqtest.ExpectStatus(t, http.MethodDelete, e.urlOf(e.Engagement.ID, "/attachments/"+e.Doula.ID), http.StatusForbidden, e.as(e.Doula))
+
+		if got := readOpenAttachments(t, e.db, e.Engagement.ID, e.Doula.ID); len(got) != 1 {
 			t.Fatalf("attachment = %+v, want it still open", got)
 		}
 	})

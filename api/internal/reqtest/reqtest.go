@@ -171,3 +171,32 @@ func DecodeStatus[T any](t *testing.T, resp *http.Response, want int) T {
 	RequireStatus(t, resp, want)
 	return Decode[T](t, resp)
 }
+
+// Expect sends one request, requires want, and returns the body decoded as
+// a T. The body is closed before it returns, so a test names only what it
+// asks for and what it expects back:
+//
+//	d := reqtest.Expect[engagement.Detail](t, http.MethodGet, url, http.StatusOK, session)
+func Expect[T any](t *testing.T, method, url string, want int, opts ...Option) T {
+	t.Helper()
+	return DecodeStatus[T](t, Do(t, method, url, opts...), want) //nolint:bodyclose // DecodeStatus closes the body
+}
+
+// ExpectBody sends one request, requires want, and returns the raw body,
+// for a test whose subject is what the bytes do or do not contain.
+func ExpectBody(t *testing.T, method, url string, want int, opts ...Option) []byte {
+	t.Helper()
+	resp := Do(t, method, url, opts...) //nolint:bodyclose // ReadBody closes the body
+	RequireStatus(t, resp, want)
+	return ReadBody(t, resp)
+}
+
+// ExpectStatus sends one request and requires want, for a refusal or a
+// write whose answer the test does not read. The body is closed before it
+// returns.
+func ExpectStatus(t *testing.T, method, url string, want int, opts ...Option) {
+	t.Helper()
+	resp := Do(t, method, url, opts...)
+	defer func() { _ = resp.Body.Close() }()
+	RequireStatus(t, resp, want)
+}

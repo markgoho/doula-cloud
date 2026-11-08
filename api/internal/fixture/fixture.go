@@ -113,6 +113,7 @@ type StaffRecord struct {
 }
 
 type staffSpec struct {
+	noRole     bool
 	uid        string
 	name       string
 	roles      []string
@@ -148,6 +149,12 @@ func Roles(roles ...string) StaffOption {
 	return func(s *staffSpec) { s.roles = roles }
 }
 
+// NoRole gives her a Membership that grants no role at all, the bare Staff
+// member a role table's last row stands for.
+func NoRole() StaffOption {
+	return func(s *staffSpec) { s.roles = []string{}; s.noRole = true }
+}
+
 // Contractor makes her a contractor. The default is an employee.
 func Contractor() StaffOption {
 	return func(s *staffSpec) { s.employment = contractor }
@@ -179,7 +186,7 @@ func Staff(t *testing.T, db *testdb.DB, p PracticeRecord, opts ...StaffOption) S
 	if spec.name == "" {
 		spec.name = "Test Staff " + spec.uid
 	}
-	if len(spec.roles) == 0 {
+	if len(spec.roles) == 0 && !spec.noRole {
 		spec.roles = []string{RoleDoula}
 	}
 	id := testdb.SeedNamedStaffAtPractice(t, db, p.ID, spec.uid, spec.name, spec.roles, spec.employment)
@@ -266,6 +273,7 @@ type engagementSpec struct {
 	kind      string
 	status    string
 	doulas    []StaffRecord
+	dueDate   any
 }
 
 // EngagementOption shapes the Engagement a builder seeds.
@@ -295,6 +303,11 @@ func Status(status string) EngagementOption {
 	return func(s *engagementSpec) { s.status = status }
 }
 
+// DueDate sets the Engagement's due date, as YYYY-MM-DD. The default is none.
+func DueDate(date string) EngagementOption {
+	return func(s *engagementSpec) { s.dueDate = date }
+}
+
 // WithDoula attaches d to the Engagement with an open granted Attachment.
 // It can be given more than once.
 func WithDoula(d StaffRecord) EngagementOption {
@@ -316,10 +329,10 @@ func Engagement(t *testing.T, db *testdb.DB, p PracticeRecord, opts ...Engagemen
 	}
 	var id string
 	err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, kind, status, ending_reason, birth_outcome)
-		 VALUES ($1, $2, $3::engagement_kind, $4::engagement_status, $5, $6) RETURNING id`,
+		`INSERT INTO engagements (client_id, practice_id, kind, status, ending_reason, birth_outcome, due_date)
+		 VALUES ($1, $2, $3::engagement_kind, $4::engagement_status, $5, $6, $7) RETURNING id`,
 		c.ID, p.ID, spec.kind, spec.status,
-		testdb.EndingReasonForStatus(spec.status), testdb.BirthOutcomeForStatus(spec.status),
+		testdb.EndingReasonForStatus(spec.status), testdb.BirthOutcomeForStatus(spec.status), spec.dueDate,
 	).Scan(&id)
 	must(t, "seed engagement", err)
 	for _, d := range spec.doulas {

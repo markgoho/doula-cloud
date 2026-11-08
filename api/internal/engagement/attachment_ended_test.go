@@ -1,70 +1,57 @@
 package engagement_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
 	"testing"
 
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/engagement"
-	"doula-cloud/api/internal/testdb"
+	"doula-cloud/api/internal/fixture"
+	"doula-cloud/api/internal/reqtest"
 )
 
 // The tests in this file are #2270: a contractor whose Attachment on an
 // Engagement has ended reads that the work ended and when, at the
 // address she had, and nothing else about the Engagement.
 
-func detailRefusal(t *testing.T, db *testdb.DB, srvURL, uid, practiceID, engagementID string) (int, apierr.APIError) {
-	t.Helper()
-	resp := authedGet(t, authntest.SeedSession(t, db.App, uid), srvURL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
-	defer func() { _ = resp.Body.Close() }()
-	var body apierr.APIError
-	if err := json.UnmarshalRead(resp.Body, &body); err != nil {
-		t.Fatalf("decode refusal: %v", err)
-	}
-	return resp.StatusCode, body
+// detailRefusal reads the Engagement as the contractor at the screen and
+// requires want.
+func (e *env) detailRefusal(want int) apierr.APIError {
+	e.t.Helper()
+	return reqtest.Expect[apierr.APIError](e.t, http.MethodGet, e.engagementURL(""), want, e.signedIn)
 }
 
-func endAttachments(t *testing.T, db *testdb.DB, engagementID, endedAt string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE engagement_attachments SET ended_at = $2::timestamptz, ended_by = staff_id WHERE engagement_id = $1`,
-		engagementID, endedAt); err != nil {
-		t.Fatalf("end attachments: %v", err)
-	}
+func (e *env) endAttachments(endedAt string) {
+	e.t.Helper()
+	e.exec(`UPDATE engagement_attachments SET ended_at = $2::timestamptz, ended_by = staff_id WHERE engagement_id = $1`, e.Engagement.ID, endedAt)
 }
 
-func seedAcceptedOffer(t *testing.T, db *testdb.DB, engagementID, staffID, dueDate string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO engagement_offers
+func (e *env) seedAcceptedOffer(dueDate string) {
+	e.t.Helper()
+	e.exec(`INSERT INTO engagement_offers
 		     (engagement_id, staff_id, employment_type, amount_cents, terms, client_first_initial, client_area,
 		      due_date, state, offered_by, expires_at, decided_at, decided_by)
 		 VALUES ($1, $2, 'contractor', 55000, 'Primary doula', 'A', 'Rochester', $3::date, 'accepted', $2,
 		         now() + interval '7 days', now(), $2)`,
-		engagementID, staffID, dueDate); err != nil {
-		t.Fatalf("seed accepted offer: %v", err)
-	}
+		e.Engagement.ID, e.Staff.ID, dueDate)
+}
+
+// contractorWhoWasPaid is the contractor at the screen, with a fee
+// Attachment on an active Engagement.
+func contractorWhoWasPaid(t *testing.T) *env {
+	t.Helper()
+	e := newEnv(t, signedInAs(fixture.Contractor()), withEngagement(fixture.Status(fixture.StatusActive)))
+	seedFeeAttachment(t, e.db, e.Engagement.ID, e.Staff.ID, e.Staff.ID, 55000, "2026-10-01T12:00:00Z")
+	return e
 }
 
 func TestDetailHandler_EndedAttachmentSaysTheWorkEnded(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "ended-lena"
-	srv, practiceID, staffID, engagementID := newAttachSelfServer(t, db, uid, doulaName, []string{doulaRole}, contractorType, engagement.StatusActive)
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE practices SET timezone = 'America/New_York' WHERE id = $1`, practiceID); err != nil {
-		t.Fatalf("set timezone: %v", err)
-	}
-	seedFeeAttachment(t, db, engagementID, staffID, staffID, 55000, "2026-10-01T12:00:00Z")
-	seedAcceptedOffer(t, db, engagementID, staffID, "2027-02-14")
+	e := contractorWhoWasPaid(t)
+	e.seedAcceptedOffer("2027-02-14")
 	// 02:00 UTC on Nov 1 is still Oct 31 in the Practice's zone.
-	endAttachments(t, db, engagementID, "2026-11-01T02:00:00Z")
+	e.endAttachments("2026-11-01T02:00:00Z")
 
-	status, body := detailRefusal(t, db, srv.URL, uid, practiceID, engagementID)
-	if status != http.StatusGone {
-		t.Fatalf("status = %d, want 410", status)
-	}
+	body := e.detailRefusal(http.StatusGone)
+
 	if body.Code != apierr.CodeAttachmentEnded {
 		t.Fatalf("code = %q, want %q", body.Code, apierr.CodeAttachmentEnded)
 	}
@@ -77,34 +64,24 @@ func TestDetailHandler_EndedAttachmentSaysTheWorkEnded(t *testing.T) {
 }
 
 func TestDetailHandler_EndedAttachmentWithoutADueMonth(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "ended-no-offer"
-	srv, practiceID, staffID, engagementID := newAttachSelfServer(t, db, uid, doulaName, []string{doulaRole}, contractorType, engagement.StatusActive)
-	seedFeeAttachment(t, db, engagementID, staffID, staffID, 55000, "2026-10-01T12:00:00Z")
-	endAttachments(t, db, engagementID, "2026-10-31T15:00:00Z")
+	e := contractorWhoWasPaid(t)
+	e.endAttachments("2026-10-31T15:00:00Z")
 
-	_, body := detailRefusal(t, db, srv.URL, uid, practiceID, engagementID)
-	if want := "Your work on this birth ended on Oct 31, 2026."; body.Message != want {
-		t.Fatalf("message = %q, want %q", body.Message, want)
+	if body := e.detailRefusal(http.StatusGone); body.Message != "Your work on this birth ended on Oct 31, 2026." {
+		t.Fatalf("message = %q, want the birth sentence", body.Message)
 	}
 
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE engagements SET kind = 'postpartum', due_date = NULL WHERE id = $1`, engagementID); err != nil {
-		t.Fatalf("make postpartum: %v", err)
-	}
-	_, body = detailRefusal(t, db, srv.URL, uid, practiceID, engagementID)
-	if want := "Your postpartum work with this Client ended on Oct 31, 2026."; body.Message != want {
-		t.Fatalf("message = %q, want %q", body.Message, want)
+	e.exec(`UPDATE engagements SET kind = 'postpartum', due_date = NULL WHERE id = $1`, e.Engagement.ID)
+
+	if body := e.detailRefusal(http.StatusGone); body.Message != "Your postpartum work with this Client ended on Oct 31, 2026." {
+		t.Fatalf("message = %q, want the postpartum sentence", body.Message)
 	}
 }
 
 func TestDetailHandler_ContractorNeverOnItStillGetsNotFound(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "never-on-it"
-	srv, practiceID, _, engagementID := newAttachSelfServer(t, db, uid, doulaName, []string{doulaRole}, contractorType, engagement.StatusActive)
+	e := newEnv(t, signedInAs(fixture.Contractor()), withEngagement(fixture.Status(fixture.StatusActive)))
 
-	status, body := detailRefusal(t, db, srv.URL, uid, practiceID, engagementID)
-	if status != http.StatusNotFound || body.Code != apierr.CodeNotFound {
-		t.Fatalf("status, code = %d, %q, want 404 NOT_FOUND", status, body.Code)
+	if body := e.detailRefusal(http.StatusNotFound); body.Code != apierr.CodeNotFound {
+		t.Fatalf("code = %q, want NOT_FOUND", body.Code)
 	}
 }

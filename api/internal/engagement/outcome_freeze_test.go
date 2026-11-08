@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"doula-cloud/api/internal/engagement"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -12,16 +12,15 @@ import (
 // already recorded, written through the Admin connection so the freeze
 // is proved against the database itself rather than against the handler
 // that normally writes it.
-func seedFrozenEngagement(t *testing.T, db *testdb.DB, uid string) string {
+func seedFrozenEngagement(t *testing.T, db *testdb.DB) fixture.EngagementRecord {
 	t.Helper()
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, employeeType)
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", uid+"@example.com", engagement.StatusActive)
+	e := fixture.Engagement(t, db, fixture.Practice(t, db), fixture.Status(fixture.StatusActive))
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`UPDATE engagements SET birth_outcome = 'loss', pregnancy_ended_on = $2::date WHERE id = $1`,
-		engagementID, lossOn); err != nil {
+		e.ID, lossOn); err != nil {
 		t.Fatalf("seed frozen outcome: %v", err)
 	}
-	return engagementID
+	return e
 }
 
 // TestFreezeTrigger_RefusesAnOverwriteWithoutTheDoor proves ADR-0015's
@@ -41,9 +40,9 @@ func TestFreezeTrigger_RefusesAnOverwriteWithoutTheDoor(t *testing.T) {
 	for _, tc := range writes {
 		t.Run(tc.name, func(t *testing.T) {
 			db := testdb.New(t)
-			engagementID := seedFrozenEngagement(t, db, "freeze-"+strings.ReplaceAll(tc.name, " ", "-"))
+			e := seedFrozenEngagement(t, db)
 
-			_, err := db.Admin.ExecContext(t.Context(), tc.sql, engagementID)
+			_, err := db.Admin.ExecContext(t.Context(), tc.sql, e.ID)
 			if err == nil {
 				t.Fatal("update succeeded, want the freeze trigger to refuse it")
 			}
@@ -61,7 +60,7 @@ func TestFreezeTrigger_RefusesAnOverwriteWithoutTheDoor(t *testing.T) {
 // trigger reads it.
 func TestFreezeTrigger_OpensForTheCorrectionDoor(t *testing.T) {
 	db := testdb.New(t)
-	engagementID := seedFrozenEngagement(t, db, "freeze-door")
+	e := seedFrozenEngagement(t, db)
 
 	tx, err := db.Admin.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -73,7 +72,7 @@ func TestFreezeTrigger_OpensForTheCorrectionDoor(t *testing.T) {
 		t.Fatalf("open the door: %v", err)
 	}
 	if _, err := tx.ExecContext(t.Context(),
-		`UPDATE engagements SET birth_outcome = 'live_birth' WHERE id = $1`, engagementID); err != nil {
+		`UPDATE engagements SET birth_outcome = 'live_birth' WHERE id = $1`, e.ID); err != nil {
 		t.Fatalf("corrected update: %v", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -87,11 +86,11 @@ func TestFreezeTrigger_OpensForTheCorrectionDoor(t *testing.T) {
 // written to fire on any UPDATE would break every completion.
 func TestFreezeTrigger_LeavesEveryOtherColumnAlone(t *testing.T) {
 	db := testdb.New(t)
-	engagementID := seedFrozenEngagement(t, db, "freeze-other-columns")
+	e := seedFrozenEngagement(t, db)
 
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`UPDATE engagements SET status = 'completed', ending_reason = 'care_complete', kind = 'postpartum'
-		  WHERE id = $1`, engagementID); err != nil {
+		  WHERE id = $1`, e.ID); err != nil {
 		t.Fatalf("update of unfrozen columns: %v", err)
 	}
 }
@@ -107,13 +106,13 @@ func TestFreezeTrigger_LeavesEveryOtherColumnAlone(t *testing.T) {
 // stands, which is what this test is for.
 func TestFreezeTrigger_RefusesARepointedClient(t *testing.T) {
 	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "freeze-client", []string{ownerRole}, employeeType)
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "freeze-client@example.com", engagement.StatusActive)
-	_, otherEngagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Other", "freeze-other@example.com", engagement.StatusActive)
+	p := fixture.Practice(t, db)
+	e := fixture.Engagement(t, db, p, fixture.Status(fixture.StatusActive))
+	other := fixture.Engagement(t, db, p, fixture.Status(fixture.StatusActive))
 
 	_, err := db.Admin.ExecContext(t.Context(),
 		`UPDATE engagements SET client_id = (SELECT client_id FROM engagements WHERE id = $2) WHERE id = $1`,
-		engagementID, otherEngagementID)
+		e.ID, other.ID)
 	if err == nil {
 		t.Fatal("update succeeded, want client_id to be immutable")
 	}
@@ -146,11 +145,9 @@ func TestOutcomeIsDatedConstraint(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			db := testdb.New(t)
-			uid := "outcome-dated-" + strings.ReplaceAll(tc.name, " ", "-")
-			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, employeeType)
-			_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", uid+"@example.com", engagement.StatusActive)
+			e := fixture.Engagement(t, db, fixture.Practice(t, db), fixture.Status(fixture.StatusActive))
 
-			_, err := db.Admin.ExecContext(t.Context(), tc.sql, engagementID)
+			_, err := db.Admin.ExecContext(t.Context(), tc.sql, e.ID)
 			if tc.wantRefuse {
 				if err == nil {
 					t.Fatal("update succeeded, want engagements_outcome_is_dated to refuse it")

@@ -2,12 +2,11 @@ package engagement_test
 
 import (
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/engagement"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
@@ -28,17 +27,16 @@ type attachSelfBody struct {
 // doulaName is the person at the screen in every test here.
 const doulaName = "Hana Kim"
 
-func attachSelfURL(base, practiceID, engagementID string) string {
-	return base + "/api/practices/" + practiceID + "/engagements/" + engagementID + "/attachments/me"
+// attachSelf presses the control as the Staff member at the screen and
+// requires want.
+func (e *env) attachSelf(want int) attachSelfBody {
+	e.t.Helper()
+	return e.attachSelfTo(e.Engagement.ID, want)
 }
 
-// attachSelfAs PUTs the caller's own Attachment as uid.
-func attachSelfAs(t *testing.T, db *testdb.DB, srv *httptest.Server, uid, practiceID, engagementID string) (int, attachSelfBody) {
-	t.Helper()
-	resp := reqtest.Put(t, attachSelfURL(srv.URL, practiceID, engagementID), reqtest.Session(authntest.SeedSession(t, db.App, uid)))
-	defer func() { _ = resp.Body.Close() }()
-	out := reqtest.Decode[attachSelfBody](t, resp)
-	return resp.StatusCode, out
+func (e *env) attachSelfTo(engagementID string, want int) attachSelfBody {
+	e.t.Helper()
+	return reqtest.Expect[attachSelfBody](e.t, http.MethodPut, e.urlOf(engagementID, "/attachments/me"), want, e.signedIn)
 }
 
 // attachmentRow is one engagement_attachments row, read past RLS.
@@ -76,29 +74,16 @@ func readOpenAttachments(t *testing.T, db *testdb.DB, engagementID, staffID stri
 	return out
 }
 
-// readDetail GETs the Engagement as uid.
-func readDetail(t *testing.T, db *testdb.DB, srv *httptest.Server, uid, practiceID, engagementID string) engagement.Detail {
-	t.Helper()
-	resp := authedGet(t, authntest.SeedSession(t, db.App, uid), srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("detail status = %d, want 200", resp.StatusCode)
-	}
-	d := reqtest.Decode[engagement.Detail](t, resp)
-	return d
+// attachments is what the Staff member at the screen holds on the Engagement.
+func (e *env) attachments() []attachmentRow {
+	e.t.Helper()
+	return readOpenAttachments(e.t, e.db, e.Engagement.ID, e.Staff.ID)
 }
 
-// newAttachSelfServer seeds a Practice, one Staff member named name
-// holding roles as employmentType, and an Engagement in status with
-// nobody on it.
-func newAttachSelfServer(t *testing.T, db *testdb.DB, uid, name string, roles []string, employmentType, status string) (srv *httptest.Server, practiceID, staffID, engagementID string) {
-	t.Helper()
-	practiceID = testdb.SeedPractice(t, db, "Attach Self "+uid)
-	staffID = testdb.SeedNamedStaffAtPractice(t, db, practiceID, uid, name, roles, employmentType)
-	_, engagementID = testdb.SeedEngagementInStatus(t, db, practiceID, "Client", uid+"-client@example.com", status)
-	srv, _ = newServer(t, db, uid)
-	t.Cleanup(srv.Close)
-	return srv, practiceID, staffID, engagementID
+// countActivity counts the Engagement's activity rows carrying action.
+func (e *env) countActivity(action string) int {
+	e.t.Helper()
+	return countActivityActions(e.t, e.db, e.Engagement.ID, action)
 }
 
 // TestAttachSelfHandler_RoleTable is the whole rule, at the boundary
@@ -112,28 +97,25 @@ func newAttachSelfServer(t *testing.T, db *testdb.DB, uid, name string, roles []
 // every row, so the screen never draws a control the write refuses.
 func TestAttachSelfHandler_RoleTable(t *testing.T) {
 	cases := []struct {
-		name           string
-		roles          []string
-		employmentType string
-		wantOK         bool
+		name   string
+		opts   []fixture.StaffOption
+		wantOK bool
 	}{
-		{"employee doula", []string{doulaRole}, employeeType, true},
-		{"owner who is an employee doula", []string{ownerRole, doulaRole}, employeeType, true},
-		{"admin who is an employee doula", []string{adminRole, doulaRole}, employeeType, true},
-		{"owner with no doula role", []string{ownerRole}, employeeType, false},
-		{"admin with no doula role", []string{adminRole}, employeeType, false},
-		{"staff with no role", []string{}, employeeType, false},
-		{"owner who is a contractor doula", []string{ownerRole, doulaRole}, contractorType, true},
-		{"admin who is a contractor doula", []string{adminRole, doulaRole}, contractorType, true},
-		{"owner who is a contractor with no doula role", []string{ownerRole}, contractorType, false},
+		{"employee doula", []fixture.StaffOption{fixture.Doula()}, true},
+		{"owner who is an employee doula", []fixture.StaffOption{fixture.Owner(), fixture.Doula()}, true},
+		{"admin who is an employee doula", []fixture.StaffOption{fixture.Admin(), fixture.Doula()}, true},
+		{"owner with no doula role", []fixture.StaffOption{fixture.Owner()}, false},
+		{"admin with no doula role", []fixture.StaffOption{fixture.Admin()}, false},
+		{"staff with no role", []fixture.StaffOption{fixture.NoRole()}, false},
+		{"owner who is a contractor doula", []fixture.StaffOption{fixture.Owner(), fixture.Doula(), fixture.Contractor()}, true},
+		{"admin who is a contractor doula", []fixture.StaffOption{fixture.Admin(), fixture.Doula(), fixture.Contractor()}, true},
+		{"owner who is a contractor with no doula role", []fixture.StaffOption{fixture.Owner(), fixture.Contractor()}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			db := testdb.New(t)
-			uid := "attach-self-" + tc.name
-			srv, practiceID, staffID, engagementID := newAttachSelfServer(t, db, uid, doulaName, tc.roles, tc.employmentType, engagement.StatusIntake)
+			e := newEnv(t, signedInAs(append(tc.opts, fixture.StaffName(doulaName))...))
 
-			before := readDetail(t, db, srv, uid, practiceID, engagementID)
+			before := e.detail()
 			if before.CanAttachSelf != tc.wantOK {
 				t.Fatalf("detail canAttachSelf = %v, want %v", before.CanAttachSelf, tc.wantOK)
 			}
@@ -141,39 +123,36 @@ func TestAttachSelfHandler_RoleTable(t *testing.T) {
 				t.Fatalf("detail doulas = %v, want none before the press", before.Doulas)
 			}
 
-			status, body := attachSelfAs(t, db, srv, uid, practiceID, engagementID)
+			body := e.attachSelf(okOrForbidden(tc.wantOK))
 
 			if !tc.wantOK {
-				if status != http.StatusForbidden || body.Code != apierr.CodeForbidden {
-					t.Fatalf("status = %d code = %q, want 403 FORBIDDEN", status, body.Code)
+				if body.Code != apierr.CodeForbidden {
+					t.Fatalf("code = %q, want FORBIDDEN", body.Code)
 				}
 				if body.Message == "" {
 					t.Fatal("refusal carries no message, want the reason")
 				}
-				if got := readOpenAttachments(t, db, engagementID, staffID); len(got) != 0 {
+				if got := e.attachments(); len(got) != 0 {
 					t.Fatalf("a refused press wrote an attachment: %+v", got)
 				}
-				if n := countActivityActions(t, db, engagementID, "doula_attached"); n != 0 {
+				if n := e.countActivity("doula_attached"); n != 0 {
 					t.Fatalf("doula_attached entries = %d, want 0", n)
 				}
 				return
 			}
 
-			if status != http.StatusOK {
-				t.Fatalf("status = %d, want 200: %s", status, body.Message)
-			}
 			if body.CanAttachSelf {
 				t.Fatal("response canAttachSelf = true, want false once she is on it")
 			}
-			if len(body.Doulas) != 1 || body.Doulas[0].StaffID != staffID || body.Doulas[0].Name != doulaName {
+			if len(body.Doulas) != 1 || body.Doulas[0].StaffID != e.Staff.ID || body.Doulas[0].Name != doulaName {
 				t.Fatalf("response doulas = %+v, want her alone", body.Doulas)
 			}
 
-			rows := readOpenAttachments(t, db, engagementID, staffID)
+			rows := e.attachments()
 			if len(rows) != 1 {
 				t.Fatalf("open attachments = %d, want 1", len(rows))
 			}
-			if rows[0].origin != "granted" || rows[0].attachedBy != staffID {
+			if rows[0].origin != "granted" || rows[0].attachedBy != e.Staff.ID {
 				t.Fatalf("attachment = %+v, want granted and attached_by herself", rows[0])
 			}
 			if rows[0].feeCents != nil || rows[0].feeTerms != nil {
@@ -182,11 +161,11 @@ func TestAttachSelfHandler_RoleTable(t *testing.T) {
 
 			// The audit trail: one entry, she is the actor, and the diff
 			// names her as the Doula.
-			if n := countActivityActions(t, db, engagementID, "doula_attached"); n != 1 {
+			if n := e.countActivity("doula_attached"); n != 1 {
 				t.Fatalf("doula_attached entries = %d, want 1", n)
 			}
-			assertDiff(t, readFactDiff(t, db, engagementID, "doula_attached"), map[string]any{"attachedStaffId": staffID})
-			ledger := readActivity(t, db, practiceID, engagementID, uid)
+			assertDiff(t, readFactDiff(t, e.db, e.Engagement.ID, "doula_attached"), map[string]any{"attachedStaffId": e.Staff.ID})
+			ledger := e.activityAs(e.Staff)
 			if len(ledger.Items) != 1 {
 				t.Fatalf("ledger items = %d, want 1", len(ledger.Items))
 			}
@@ -195,7 +174,7 @@ func TestAttachSelfHandler_RoleTable(t *testing.T) {
 				t.Fatalf("ledger entry = %+v, want who, what and when", entry)
 			}
 
-			after := readDetail(t, db, srv, uid, practiceID, engagementID)
+			after := e.detail()
 			if after.CanAttachSelf {
 				t.Fatal("detail canAttachSelf = true after the press, want false")
 			}
@@ -212,24 +191,23 @@ func TestAttachSelfHandler_RoleTable(t *testing.T) {
 // Engagement she holds an Attachment on (her own acceptance of an Offer)
 // the read draws no control.
 func TestAttachSelfHandler_ContractorDoula(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "attach-self-contractor"
-	srv, practiceID, staffID, engagementID := newAttachSelfServer(t, db, uid, "Lena Vasquez", []string{doulaRole}, contractorType, engagement.StatusIntake)
+	e := newEnv(t, signedInAs(fixture.Contractor()))
 
-	status, body := attachSelfAs(t, db, srv, uid, practiceID, engagementID)
-	if status != http.StatusForbidden || body.Code != apierr.CodeForbidden {
-		t.Fatalf("status = %d code = %q, want 403 FORBIDDEN", status, body.Code)
+	body := e.attachSelf(http.StatusForbidden)
+	missing := e.attachSelfTo("11111111-1111-1111-1111-111111111111", http.StatusForbidden)
+
+	if body.Code != apierr.CodeForbidden {
+		t.Fatalf("code = %q, want FORBIDDEN", body.Code)
 	}
-	missing, missingBody := attachSelfAs(t, db, srv, uid, practiceID, "11111111-1111-1111-1111-111111111111")
-	if missing != status || missingBody.Message != body.Message {
-		t.Fatalf("refusal changed with the Engagement: %d %q against %d %q", missing, missingBody.Message, status, body.Message)
+	if missing.Message != body.Message {
+		t.Fatalf("refusal changed with the Engagement: %q against %q", missing.Message, body.Message)
 	}
-	if got := readOpenAttachments(t, db, engagementID, staffID); len(got) != 0 {
+	if got := e.attachments(); len(got) != 0 {
 		t.Fatalf("a refused press wrote an attachment: %+v", got)
 	}
 
-	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
-	if d := readDetail(t, db, srv, uid, practiceID, engagementID); d.CanAttachSelf {
+	testdb.SeedGrantedAttachment(t, e.db, e.Engagement.ID, e.Staff.ID)
+	if e.detail().CanAttachSelf {
 		t.Fatal("detail canAttachSelf = true for a contractor, want false")
 	}
 }
@@ -238,22 +216,18 @@ func TestAttachSelfHandler_ContractorDoula(t *testing.T) {
 // gets the same 200 and nothing is written, so a double press or a retry
 // leaves one row and one ledger entry.
 func TestAttachSelfHandler_SafeToRepeat(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "attach-self-repeat"
-	srv, practiceID, staffID, engagementID := newAttachSelfServer(t, db, uid, doulaName, []string{doulaRole}, employeeType, engagement.StatusActive)
+	e := newEnv(t, withEngagement(fixture.Status(fixture.StatusActive)))
 
-	first, firstBody := attachSelfAs(t, db, srv, uid, practiceID, engagementID)
-	second, secondBody := attachSelfAs(t, db, srv, uid, practiceID, engagementID)
-	if first != http.StatusOK || second != http.StatusOK {
-		t.Fatalf("statuses = %d, %d, want 200 twice", first, second)
+	first := e.attachSelf(http.StatusOK)
+	second := e.attachSelf(http.StatusOK)
+
+	if len(second.Doulas) != len(first.Doulas) || second.CanAttachSelf {
+		t.Fatalf("second answer = %+v, want the first again", second)
 	}
-	if len(secondBody.Doulas) != len(firstBody.Doulas) || secondBody.CanAttachSelf {
-		t.Fatalf("second answer = %+v, want the first again", secondBody)
-	}
-	if got := readOpenAttachments(t, db, engagementID, staffID); len(got) != 1 {
+	if got := e.attachments(); len(got) != 1 {
 		t.Fatalf("open attachments = %d, want 1", len(got))
 	}
-	if n := countActivityActions(t, db, engagementID, "doula_attached"); n != 1 {
+	if n := e.countActivity("doula_attached"); n != 1 {
 		t.Fatalf("doula_attached entries = %d, want 1", n)
 	}
 }
@@ -263,29 +237,21 @@ func TestAttachSelfHandler_SafeToRepeat(t *testing.T) {
 // attached_by) is left as it is. The press does not rewrite who attached
 // her, and the read draws no control.
 func TestAttachSelfHandler_AlreadyGrantedByAnotherWriter(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "attach-self-already"
-	srv, practiceID, staffID, engagementID := newAttachSelfServer(t, db, uid, doulaName, []string{doulaRole}, employeeType, engagement.StatusIntake)
-	adminID := testdb.SeedStaffAtPractice(t, db, practiceID, "attach-self-already-admin", []string{adminRole}, employeeType)
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by) VALUES ($1, $2, 'granted', $3)`,
-		engagementID, staffID, adminID,
-	); err != nil {
-		t.Fatalf("seed attachment: %v", err)
-	}
+	e := newEnv(t)
+	admin := e.staff(fixture.Admin())
+	e.exec(`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by) VALUES ($1, $2, 'granted', $3)`,
+		e.Engagement.ID, e.Staff.ID, admin.ID)
 
-	if d := readDetail(t, db, srv, uid, practiceID, engagementID); d.CanAttachSelf {
+	if e.detail().CanAttachSelf {
 		t.Fatal("detail canAttachSelf = true for a person already on it, want false")
 	}
-	status, _ := attachSelfAs(t, db, srv, uid, practiceID, engagementID)
-	if status != http.StatusOK {
-		t.Fatalf("status = %d, want 200", status)
-	}
-	rows := readOpenAttachments(t, db, engagementID, staffID)
-	if len(rows) != 1 || rows[0].attachedBy != adminID {
+	e.attachSelf(http.StatusOK)
+
+	rows := e.attachments()
+	if len(rows) != 1 || rows[0].attachedBy != admin.ID {
 		t.Fatalf("attachment = %+v, want the earlier writer's row unchanged", rows)
 	}
-	if n := countActivityActions(t, db, engagementID, "doula_attached"); n != 0 {
+	if n := e.countActivity("doula_attached"); n != 0 {
 		t.Fatalf("doula_attached entries = %d, want 0", n)
 	}
 }
@@ -296,23 +262,19 @@ func TestAttachSelfHandler_AlreadyGrantedByAnotherWriter(t *testing.T) {
 // not "the Doula" on any screen, so she has the control, and the press
 // upgrades the row in place.
 func TestAttachSelfHandler_UpgradesAnAccruedAttachment(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "attach-self-accrued"
-	srv, practiceID, staffID, engagementID := newAttachSelfServer(t, db, uid, doulaName, []string{doulaRole}, employeeType, engagement.StatusActive)
-	testdb.SeedAttachment(t, db, engagementID, staffID, "accrued", false)
+	e := newEnv(t, withEngagement(fixture.Status(fixture.StatusActive)))
+	testdb.SeedAttachment(t, e.db, e.Engagement.ID, e.Staff.ID, "accrued", false)
 
-	if d := readDetail(t, db, srv, uid, practiceID, engagementID); !d.CanAttachSelf || len(d.Doulas) != 0 {
+	if d := e.detail(); !d.CanAttachSelf || len(d.Doulas) != 0 {
 		t.Fatalf("detail = canAttachSelf %v, doulas %v; want the control and nobody named", d.CanAttachSelf, d.Doulas)
 	}
-	status, _ := attachSelfAs(t, db, srv, uid, practiceID, engagementID)
-	if status != http.StatusOK {
-		t.Fatalf("status = %d, want 200", status)
-	}
-	rows := readOpenAttachments(t, db, engagementID, staffID)
+	e.attachSelf(http.StatusOK)
+
+	rows := e.attachments()
 	if len(rows) != 1 || rows[0].origin != "granted" {
 		t.Fatalf("attachments = %+v, want the one row, granted", rows)
 	}
-	if n := countActivityActions(t, db, engagementID, "doula_attached"); n != 1 {
+	if n := e.countActivity("doula_attached"); n != 1 {
 		t.Fatalf("doula_attached entries = %d, want 1", n)
 	}
 }
@@ -322,18 +284,17 @@ func TestAttachSelfHandler_UpgradesAnAccruedAttachment(t *testing.T) {
 // every Attachment, so a new one on a completed Engagement is the state
 // completion just cleared. intake and active both admit the press.
 func TestAttachSelfHandler_RefusesACompletedEngagement(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "attach-self-completed"
-	srv, practiceID, staffID, engagementID := newAttachSelfServer(t, db, uid, doulaName, []string{doulaRole}, employeeType, engagement.StatusCompleted)
+	e := newEnv(t, withEngagement(fixture.Status(fixture.StatusCompleted)))
 
-	if d := readDetail(t, db, srv, uid, practiceID, engagementID); d.CanAttachSelf {
+	if e.detail().CanAttachSelf {
 		t.Fatal("detail canAttachSelf = true on a completed Engagement, want false")
 	}
-	status, body := attachSelfAs(t, db, srv, uid, practiceID, engagementID)
-	if status != http.StatusConflict || body.Code != apierr.CodeConflict {
-		t.Fatalf("status = %d code = %q, want 409 CONFLICT", status, body.Code)
+	body := e.attachSelf(http.StatusConflict)
+
+	if body.Code != apierr.CodeConflict {
+		t.Fatalf("code = %q, want CONFLICT", body.Code)
 	}
-	if got := readOpenAttachments(t, db, engagementID, staffID); len(got) != 0 {
+	if got := e.attachments(); len(got) != 0 {
 		t.Fatalf("a refused press wrote an attachment: %+v", got)
 	}
 }
@@ -342,20 +303,22 @@ func TestAttachSelfHandler_RefusesACompletedEngagement(t *testing.T) {
 // Practice is not found, the same as one that does not exist, and a
 // malformed id is a 400.
 func TestAttachSelfHandler_UnknownEngagement(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "attach-self-unknown"
-	srv, practiceID, _, _ := newAttachSelfServer(t, db, uid, doulaName, []string{doulaRole}, employeeType, engagement.StatusIntake)
-	otherPractice := testdb.SeedPractice(t, db, "Another Practice")
-	_, otherEngagement := testdb.SeedEngagement(t, db, otherPractice)
+	e := newEnv(t)
+	elsewhere := fixture.Engagement(t, e.db, fixture.Practice(t, e.db))
 
-	if status, _ := attachSelfAs(t, db, srv, uid, practiceID, otherEngagement); status != http.StatusNotFound {
-		t.Fatalf("another Practice's Engagement: status = %d, want 404", status)
+	tests := []struct {
+		name         string
+		engagementID string
+		want         int
+	}{
+		{"another Practice's Engagement", elsewhere.ID, http.StatusNotFound},
+		{"an Engagement that does not exist", "11111111-1111-1111-1111-111111111111", http.StatusNotFound},
+		{"an id that is not a uuid", "not-a-uuid", http.StatusBadRequest},
 	}
-	if status, _ := attachSelfAs(t, db, srv, uid, practiceID, "11111111-1111-1111-1111-111111111111"); status != http.StatusNotFound {
-		t.Fatalf("unknown Engagement: status = %d, want 404", status)
-	}
-	if status, _ := attachSelfAs(t, db, srv, uid, practiceID, "not-a-uuid"); status != http.StatusBadRequest {
-		t.Fatalf("malformed id: status = %d, want 400", status)
+	for _, tt := range tests {
+		t.Run(tt.name, func(*testing.T) {
+			e.attachSelfTo(tt.engagementID, tt.want)
+		})
 	}
 }
 
@@ -364,18 +327,17 @@ func TestAttachSelfHandler_UnknownEngagement(t *testing.T) {
 // accrued one and an ended one do not. A colleague on it does not take
 // the reader's own control away.
 func TestDetailHandler_DoulasNamesEveryGrantedAttachment(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "detail-doulas"
-	srv, practiceID, _, engagementID := newAttachSelfServer(t, db, uid, doulaName, []string{doulaRole}, employeeType, engagement.StatusIntake)
-	granted := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "detail-doulas-granted", "Renata Alvarez", []string{doulaRole}, employeeType)
-	accrued := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "detail-doulas-accrued", "Priya Shah", []string{doulaRole}, employeeType)
-	ended := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "detail-doulas-ended", "Mei Tan", []string{doulaRole}, employeeType)
-	testdb.SeedGrantedAttachment(t, db, engagementID, granted)
-	testdb.SeedAttachment(t, db, engagementID, accrued, "accrued", false)
-	testdb.SeedAttachment(t, db, engagementID, ended, "granted", true)
+	e := newEnv(t)
+	granted := e.staff(fixture.StaffName("Renata Alvarez"))
+	accrued := e.staff(fixture.StaffName("Priya Shah"))
+	ended := e.staff(fixture.StaffName("Mei Tan"))
+	testdb.SeedGrantedAttachment(t, e.db, e.Engagement.ID, granted.ID)
+	testdb.SeedAttachment(t, e.db, e.Engagement.ID, accrued.ID, "accrued", false)
+	testdb.SeedAttachment(t, e.db, e.Engagement.ID, ended.ID, "granted", true)
 
-	d := readDetail(t, db, srv, uid, practiceID, engagementID)
-	if len(d.Doulas) != 1 || d.Doulas[0].StaffID != granted || d.Doulas[0].Name != "Renata Alvarez" {
+	d := e.detail()
+
+	if len(d.Doulas) != 1 || d.Doulas[0].StaffID != granted.ID || d.Doulas[0].Name != "Renata Alvarez" {
 		t.Fatalf("doulas = %+v, want Renata Alvarez alone", d.Doulas)
 	}
 	if !d.CanAttachSelf {

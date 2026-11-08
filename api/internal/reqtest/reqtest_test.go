@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"doula-cloud/api/internal/reqtest"
@@ -161,4 +162,26 @@ func TestDecodeStatus_ChecksTheStatusThenReadsTheBody(t *testing.T) {
 	if got.Method != "made" {
 		t.Fatalf("method = %q, want made", got.Method)
 	}
+}
+
+func TestExpect_ReturnsTheDecodedBodyOfTheExpectedStatus(t *testing.T) {
+	srv := echoServer(t)
+	got := reqtest.Expect[echo](t, http.MethodPut, srv.URL, http.StatusOK,
+		reqtest.Session("tok"), reqtest.JSON(map[string]string{"a": "b"}))
+	if got.Method != http.MethodPut || got.Body != `{"a":"b"}` {
+		t.Fatalf("echo = %+v, want the PUT and its JSON body back", got)
+	}
+}
+
+func TestExpectBody_ReturnsTheRawBytes(t *testing.T) {
+	srv := echoServer(t)
+	body := reqtest.ExpectBody(t, http.MethodGet, srv.URL, http.StatusOK)
+	if !strings.Contains(string(body), `"method":"GET"`) {
+		t.Fatalf("body = %s, want the echo of a GET", body)
+	}
+}
+
+func TestExpectStatus_PassesOnTheExpectedStatus(t *testing.T) {
+	srv := echoServer(t)
+	reqtest.ExpectStatus(t, http.MethodDelete, srv.URL, http.StatusOK)
 }
