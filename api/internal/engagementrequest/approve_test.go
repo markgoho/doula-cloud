@@ -28,6 +28,7 @@ func TestApproveHandler_CreatesEngagementConsumesCreditAndStampsRequest(t *testi
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/approve", reqtest.Session(session))
+	defer resp.Body.Close()
 	out := reqtest.DecodeStatus[engagementrequest.ApproveResponse](t, resp, http.StatusOK)
 	if out.EngagementID == "" || out.State != testStateApproved {
 		t.Fatalf("response = %+v, want approved with an engagementId", out)
@@ -62,6 +63,7 @@ func TestApproveHandler_EmptyBalanceLeavesRequestPendingAndQueuesNotification(t 
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/approve", reqtest.Session(session))
+	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusPaymentRequired)
 
 	row := readRequest(t, db, requestID)
@@ -88,6 +90,7 @@ func TestApproveHandler_DoulaForbidden(t *testing.T) {
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/approve", reqtest.Session(session))
+	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
@@ -105,9 +108,11 @@ func TestApproveHandler_AlreadyDecidedConflict(t *testing.T) {
 	defer srv.Close()
 
 	first := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/approve", reqtest.Session(session))
+	defer first.Body.Close()
 	reqtest.RequireStatus(t, first, http.StatusOK)
 
 	second := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/approve", reqtest.Session(session))
+	defer second.Body.Close()
 	reqtest.RequireStatus(t, second, http.StatusConflict)
 }
 
@@ -121,6 +126,7 @@ func TestApproveHandler_NotFound(t *testing.T) {
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/00000000-0000-0000-0000-000000000000/approve", reqtest.Session(session))
+	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
@@ -135,6 +141,7 @@ func TestApproveHandler_InvalidRequestIDRejected(t *testing.T) {
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/not-a-uuid/approve", reqtest.Session(session))
+	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
@@ -153,6 +160,7 @@ func TestApproveHandler_WarnsOnLiveEngagement(t *testing.T) {
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/approve", reqtest.Session(session))
+	defer resp.Body.Close()
 	out := reqtest.DecodeStatus[engagementrequest.ApproveResponse](t, resp, http.StatusOK)
 	if out.Warning == "" {
 		t.Fatal("expected a live-engagement warning, got none")

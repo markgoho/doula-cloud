@@ -55,11 +55,14 @@ func TestWorker_SendsOneMailPerOwnerAndAdminContentFree(t *testing.T) {
 	srv, session := newServer(t, db, doula, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/clients/"+client.ID+"/engagement-requests", reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate}))
+	defer resp.Body.Close()
 	out := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, resp, http.StatusCreated)
 
 	sender := &mail.FakeSender{}
 	worker := newWorker(sender, time.Now())
-	reqtest.RequireStatus(t, runWorker(t, db, worker), http.StatusOK)
+	resp = runWorker(t, db, worker)
+	defer resp.Body.Close()
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	sent := sender.Sent()
 	if len(sent) != 2 {

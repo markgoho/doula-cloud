@@ -34,7 +34,9 @@ func TestDetailHandler_ReturnsEveryFactTheApprovalScreenShows(t *testing.T) {
 	srv, session := newServer(t, db, admin, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	out := reqtest.DecodeStatus[engagementrequest.DetailResponse](t, reqtest.Get(t, detailURL(srv.URL, p.ID, requestID), reqtest.Session(session)), http.StatusOK)
+	outResp := reqtest.Get(t, detailURL(srv.URL, p.ID, requestID), reqtest.Session(session))
+	defer outResp.Body.Close()
+	out := reqtest.DecodeStatus[engagementrequest.DetailResponse](t, outResp, http.StatusOK)
 
 	if out.Note == nil || *out.Note != "She asked for a home birth" {
 		t.Fatalf("note = %v, want the requester's own words", out.Note)
@@ -76,7 +78,9 @@ func TestDetailHandler_KnownClientCarriesHerEngagementsAndTheLiveWarning(t *test
 	srv, session := newServer(t, db, owner, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	out := reqtest.DecodeStatus[engagementrequest.DetailResponse](t, reqtest.Get(t, detailURL(srv.URL, p.ID, requestID), reqtest.Session(session)), http.StatusOK)
+	outResp := reqtest.Get(t, detailURL(srv.URL, p.ID, requestID), reqtest.Session(session))
+	defer outResp.Body.Close()
+	out := reqtest.DecodeStatus[engagementrequest.DetailResponse](t, outResp, http.StatusOK)
 
 	if out.Client.IsNewToPractice {
 		t.Fatal("isNewToPractice = true, want false for a Client with Engagements here")
@@ -104,7 +108,9 @@ func TestDetailHandler_AnEarlierRequestAloneMakesHerKnown(t *testing.T) {
 	srv, session := newServer(t, db, admin, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	out := reqtest.DecodeStatus[engagementrequest.DetailResponse](t, reqtest.Get(t, detailURL(srv.URL, p.ID, requestID), reqtest.Session(session)), http.StatusOK)
+	outResp := reqtest.Get(t, detailURL(srv.URL, p.ID, requestID), reqtest.Session(session))
+	defer outResp.Body.Close()
+	out := reqtest.DecodeStatus[engagementrequest.DetailResponse](t, outResp, http.StatusOK)
 
 	if out.Client.IsNewToPractice {
 		t.Fatal("isNewToPractice = true, want false for a Client who was already asked about")
@@ -126,7 +132,9 @@ func TestDetailHandler_RefusesADoula(t *testing.T) {
 	srv, session := newServer(t, db, doula, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	reqtest.RequireStatus(t, reqtest.Get(t, detailURL(srv.URL, p.ID, requestID), reqtest.Session(session)), http.StatusForbidden)
+	resp := reqtest.Get(t, detailURL(srv.URL, p.ID, requestID), reqtest.Session(session))
+	defer resp.Body.Close()
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 // TestDetailHandler_RejectsAMalformedOrUnknownRequestID proves a bad id
@@ -140,8 +148,12 @@ func TestDetailHandler_RejectsAMalformedOrUnknownRequestID(t *testing.T) {
 	srv, session := newServer(t, db, admin, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	reqtest.RequireStatus(t, reqtest.Get(t, detailURL(srv.URL, p.ID, "not-a-uuid"), reqtest.Session(session)), http.StatusBadRequest)
-	reqtest.RequireStatus(t, reqtest.Get(t, detailURL(srv.URL, p.ID, "00000000-0000-0000-0000-000000000000"), reqtest.Session(session)), http.StatusNotFound)
+	resp := reqtest.Get(t, detailURL(srv.URL, p.ID, "not-a-uuid"), reqtest.Session(session))
+	defer resp.Body.Close()
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+	resp = reqtest.Get(t, detailURL(srv.URL, p.ID, "00000000-0000-0000-0000-000000000000"), reqtest.Session(session))
+	defer resp.Body.Close()
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestDetailHandler_RefusesADecidedRequest proves a stale link to a
@@ -158,6 +170,10 @@ func TestDetailHandler_RefusesADecidedRequest(t *testing.T) {
 	srv, session := newServer(t, db, admin, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	reqtest.RequireStatus(t, reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/approve", reqtest.Session(session)), http.StatusOK)
-	reqtest.RequireStatus(t, reqtest.Get(t, detailURL(srv.URL, p.ID, requestID), reqtest.Session(session)), http.StatusConflict)
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/approve", reqtest.Session(session))
+	defer resp.Body.Close()
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	resp = reqtest.Get(t, detailURL(srv.URL, p.ID, requestID), reqtest.Session(session))
+	defer resp.Body.Close()
+	reqtest.RequireStatus(t, resp, http.StatusConflict)
 }

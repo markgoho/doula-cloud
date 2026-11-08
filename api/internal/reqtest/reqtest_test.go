@@ -155,7 +155,9 @@ func TestDecodeStatus_ChecksTheStatusThenReadsTheBody(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	got := reqtest.DecodeStatus[echo](t, reqtest.Get(t, srv.URL), http.StatusCreated)
+	gotResp := reqtest.Get(t, srv.URL)
+	defer gotResp.Body.Close()
+	got := reqtest.DecodeStatus[echo](t, gotResp, http.StatusCreated)
 	if got.Method != "made" {
 		t.Fatalf("method = %q, want made", got.Method)
 	}

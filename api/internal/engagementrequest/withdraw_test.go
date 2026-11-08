@@ -25,6 +25,7 @@ func TestWithdrawHandler_RequesterWithdrawsOwnPendingRequest(t *testing.T) {
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/withdraw", reqtest.Session(session))
+	defer resp.Body.Close()
 	out := reqtest.DecodeStatus[engagementrequest.DecisionResponse](t, resp, http.StatusOK)
 	if out.State != "withdrawn" {
 		t.Fatalf("state = %q, want withdrawn", out.State)
@@ -50,6 +51,7 @@ func TestWithdrawHandler_OnlyRequesterMayWithdraw(t *testing.T) {
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/withdraw", reqtest.Session(session))
+	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 
 	row := readRequest(t, db, requestID)
@@ -71,9 +73,11 @@ func TestWithdrawHandler_OnlyPendingMayBeWithdrawn(t *testing.T) {
 	defer srv.Close()
 
 	first := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/withdraw", reqtest.Session(session))
+	defer first.Body.Close()
 	reqtest.RequireStatus(t, first, http.StatusOK)
 
 	second := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/withdraw", reqtest.Session(session))
+	defer second.Body.Close()
 	reqtest.RequireStatus(t, second, http.StatusConflict)
 }
 
@@ -88,6 +92,7 @@ func TestWithdrawHandler_InvalidRequestIDRejected(t *testing.T) {
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/not-a-uuid/withdraw", reqtest.Session(session))
+	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
@@ -101,5 +106,6 @@ func TestWithdrawHandler_NotFound(t *testing.T) {
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/00000000-0000-0000-0000-000000000000/withdraw", reqtest.Session(session))
+	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }

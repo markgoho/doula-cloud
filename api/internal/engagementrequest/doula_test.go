@@ -110,7 +110,9 @@ func TestRequestHandler_APlainDoulaNamesHerself(t *testing.T) {
 	srv, session := newServer(t, db, doula, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	out := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate, DoulaStaffID: &doula.ID})), http.StatusCreated)
+	outResp := reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate, DoulaStaffID: &doula.ID}))
+	defer outResp.Body.Close()
+	out := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, outResp, http.StatusCreated)
 	if out.State != testStatePending {
 		t.Fatalf("state = %q, want pending", out.State)
 	}
@@ -120,7 +122,9 @@ func TestRequestHandler_APlainDoulaNamesHerself(t *testing.T) {
 
 	ownerSrv, ownerSession := newServer(t, db, owner, &tasknudge.FakeEnqueuer{})
 	defer ownerSrv.Close()
-	detail := reqtest.DecodeStatus[engagementrequest.DetailResponse](t, reqtest.Get(t, detailURL(ownerSrv.URL, p.ID, out.RequestID), reqtest.Session(ownerSession)), http.StatusOK)
+	detailResp := reqtest.Get(t, detailURL(ownerSrv.URL, p.ID, out.RequestID), reqtest.Session(ownerSession))
+	defer detailResp.Body.Close()
+	detail := reqtest.DecodeStatus[engagementrequest.DetailResponse](t, detailResp, http.StatusOK)
 	if detail.DoulaStaffID == nil || *detail.DoulaStaffID != doula.ID || detail.DoulaName == nil || *detail.DoulaName != "Hana Kim" {
 		t.Fatalf("detail doula = %v / %v, want %s / Hana Kim", detail.DoulaStaffID, detail.DoulaName, doula.ID)
 	}
@@ -140,8 +144,12 @@ func TestRequestHandler_NoDoulaYetNamesNobody(t *testing.T) {
 	defer srv.Close()
 
 	blank := "  "
-	absent := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate})), http.StatusCreated)
-	blanked := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindPostpartum, DoulaStaffID: &blank})), http.StatusCreated)
+	absentResp := reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate}))
+	defer absentResp.Body.Close()
+	absent := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, absentResp, http.StatusCreated)
+	blankedResp := reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindPostpartum, DoulaStaffID: &blank}))
+	defer blankedResp.Body.Close()
+	blanked := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, blankedResp, http.StatusCreated)
 	for _, requestID := range []string{absent.RequestID, blanked.RequestID} {
 		if got := namedDoula(t, db, requestID); got != nil {
 			t.Fatalf("stored doula = %v, want none", *got)
@@ -151,6 +159,7 @@ func TestRequestHandler_NoDoulaYetNamesNobody(t *testing.T) {
 	ownerSrv, ownerSession := newServer(t, db, owner, &tasknudge.FakeEnqueuer{})
 	defer ownerSrv.Close()
 	resp := reqtest.Get(t, detailURL(ownerSrv.URL, p.ID, absent.RequestID), reqtest.Session(ownerSession))
+	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusOK)
 	raw := reqtest.Decode[map[string]jsontext.Value](t, resp)
 	if _, has := raw["doulaStaffId"]; has {

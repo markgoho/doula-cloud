@@ -23,7 +23,9 @@ func readDoulas(t *testing.T, db *testdb.DB, practiceID string, who fixture.Staf
 	t.Helper()
 	srv, session := newServer(t, db, who, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
-	out := reqtest.DecodeStatus[engagementrequest.DoulasResponse](t, reqtest.Get(t, doulasURL(srv.URL, practiceID), reqtest.Session(session)), http.StatusOK)
+	outResp := reqtest.Get(t, doulasURL(srv.URL, practiceID), reqtest.Session(session))
+	defer outResp.Body.Close()
+	out := reqtest.DecodeStatus[engagementrequest.DoulasResponse](t, outResp, http.StatusOK)
 	return out
 }
 
@@ -223,5 +225,7 @@ func TestDoulasHandler_RefusesAContractor(t *testing.T) {
 
 	srv, session := newServer(t, db, contractor, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
-	reqtest.RequireStatus(t, reqtest.Get(t, doulasURL(srv.URL, p.ID), reqtest.Session(session)), http.StatusForbidden)
+	resp := reqtest.Get(t, doulasURL(srv.URL, p.ID), reqtest.Session(session))
+	defer resp.Body.Close()
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }

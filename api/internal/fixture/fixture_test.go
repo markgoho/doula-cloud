@@ -59,7 +59,7 @@ func TestStaff_OptionsShowTheState(t *testing.T) {
 		fixture.Owner(), fixture.Admin(), fixture.Doula(), fixture.Contractor(),
 		fixture.StaffName("Renata Alvarez"), fixture.StaffUID("renata"))
 
-	if s.UID != "renata" || !slices.Equal(s.Roles, []string{"owner", "admin", "doula"}) || s.Employment != "contractor" {
+	if s.UID != "renata" || !slices.Equal(s.Roles, []string{fixture.RoleOwner, fixture.RoleAdmin, fixture.RoleDoula}) || s.Employment != "contractor" {
 		t.Fatalf("record = %+v, want Renata as a contractor Owner, Admin and Doula", s)
 	}
 	first := testdb.Scalar[string](t, db.Admin, `SELECT first_name || ' ' || last_name FROM staff WHERE id = $1`, s.ID)
@@ -75,7 +75,7 @@ func TestStaff_RolesReplacesWhatEarlierOptionsAdded(t *testing.T) {
 
 	s := fixture.Staff(t, db, p, fixture.Owner(), fixture.Roles(fixture.RoleAdmin, fixture.RoleDoula))
 
-	if !slices.Equal(s.Roles, []string{"admin", "doula"}) {
+	if !slices.Equal(s.Roles, []string{fixture.RoleAdmin, fixture.RoleDoula}) {
 		t.Fatalf("roles = %v, want admin and doula", s.Roles)
 	}
 }
@@ -86,7 +86,7 @@ func TestStaff_FounderHoldsOwnerAdminAndDoula(t *testing.T) {
 
 	s := fixture.Staff(t, db, p, fixture.Founder())
 
-	if !slices.Equal(s.Roles, []string{"owner", "admin", "doula"}) {
+	if !slices.Equal(s.Roles, []string{fixture.RoleOwner, fixture.RoleAdmin, fixture.RoleDoula}) {
 		t.Fatalf("roles = %v, want owner, admin and doula", s.Roles)
 	}
 }
@@ -123,6 +123,17 @@ func TestEngagement_DefaultsToAnIntakeBirthForANewClient(t *testing.T) {
 		`SELECT client_id::text || kind::text || status::text FROM engagements WHERE id = $1`, e.ID)
 	if got != e.Client.ID+"birthintake" {
 		t.Fatalf("stored = %q", got)
+	}
+}
+
+func TestEngagement_NewClientTakesTheClientOptions(t *testing.T) {
+	db := testdb.New(t)
+	p := fixture.Practice(t, db)
+
+	e := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Tess"), fixture.NoEmail()))
+
+	if e.Client.Name != "Tess" || e.Client.Email != "" {
+		t.Fatalf("client = %+v, want Tess with no address", e.Client)
 	}
 }
 

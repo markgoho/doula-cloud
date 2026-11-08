@@ -27,6 +27,7 @@ func TestRequestHandler_DoulaCreatesPendingRequestAndMailsOwnersAndAdmins(t *tes
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/clients/"+client.ID+"/engagement-requests", reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate}))
+	defer resp.Body.Close()
 	out := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, resp, http.StatusCreated)
 	if out.State != testStatePending || out.EngagementID != "" {
 		t.Fatalf("response = %+v, want pending with no engagementId", out)
@@ -53,6 +54,7 @@ func TestRequestHandler_ContractorForbidden(t *testing.T) {
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/clients/"+client.ID+"/engagement-requests", reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate}))
+	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
@@ -70,9 +72,11 @@ func TestRequestHandler_DuplicatePendingSameKindRefused(t *testing.T) {
 	defer srv.Close()
 
 	first := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/clients/"+client.ID+"/engagement-requests", reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate}))
+	defer first.Body.Close()
 	reqtest.RequireStatus(t, first, http.StatusCreated)
 
 	second := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/clients/"+client.ID+"/engagement-requests", reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate}))
+	defer second.Body.Close()
 	reqtest.RequireStatus(t, second, http.StatusConflict)
 }
 
@@ -86,9 +90,11 @@ func TestRequestHandler_DifferentKindAllowed(t *testing.T) {
 	defer srv.Close()
 
 	first := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/clients/"+client.ID+"/engagement-requests", reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate}))
+	defer first.Body.Close()
 	reqtest.RequireStatus(t, first, http.StatusCreated)
 
 	second := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/clients/"+client.ID+"/engagement-requests", reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindPostpartum, DueDate: testDueDate}))
+	defer second.Body.Close()
 	reqtest.RequireStatus(t, second, http.StatusCreated)
 }
 
@@ -105,6 +111,7 @@ func TestRequestHandler_LiveEngagementWarns(t *testing.T) {
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/clients/"+client.ID+"/engagement-requests", reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindPostpartum, DueDate: testDueDate}))
+	defer resp.Body.Close()
 	out := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, resp, http.StatusCreated)
 	if out.Warning == "" {
 		t.Fatal("expected a live-engagement warning, got none")
@@ -124,6 +131,7 @@ func TestRequestHandler_SoloOwnerCollapsesToApprovedAndMailsNobody(t *testing.T)
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/clients/"+client.ID+"/engagement-requests", reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate}))
+	defer resp.Body.Close()
 	out := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, resp, http.StatusCreated)
 	if out.State != testStateApproved || out.EngagementID == "" {
 		t.Fatalf("response = %+v, want approved with an engagementId", out)
@@ -158,6 +166,7 @@ func TestRequestHandler_SoloOwnerNoCreditsLeavesNothingBehind(t *testing.T) {
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/clients/"+client.ID+"/engagement-requests", reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate}))
+	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusPaymentRequired)
 
 	var count int
@@ -185,6 +194,7 @@ func TestRequestHandler_ClientNotFound(t *testing.T) {
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/clients/"+otherClient.ID+"/engagement-requests", reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate}))
+	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
@@ -200,6 +210,7 @@ func TestRequestHandler_InvalidKindRejected(t *testing.T) {
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/clients/"+client.ID+"/engagement-requests", reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: "adoption", DueDate: testDueDate}))
+	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
@@ -214,6 +225,7 @@ func TestRequestHandler_InvalidClientIDRejected(t *testing.T) {
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/clients/not-a-uuid/engagement-requests", reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate}))
+	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
@@ -228,6 +240,7 @@ func TestRequestHandler_InvalidBodyRejected(t *testing.T) {
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/clients/"+client.ID+"/engagement-requests", reqtest.Session(session), reqtest.JSON("not json"))
+	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
@@ -243,6 +256,7 @@ func TestRequestHandler_NoDueDateAllowed(t *testing.T) {
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/clients/"+client.ID+"/engagement-requests", reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindPostpartum}))
+	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusCreated)
 }
 
@@ -258,6 +272,7 @@ func TestRequestHandler_InvalidDueDateRejected(t *testing.T) {
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/clients/"+client.ID+"/engagement-requests", reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: "not-a-date"}))
+	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
@@ -275,6 +290,7 @@ func TestRequestHandler_SoloOwnerCollapseWarnsOnLiveEngagement(t *testing.T) {
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/clients/"+client.ID+"/engagement-requests", reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindPostpartum, DueDate: testDueDate}))
+	defer resp.Body.Close()
 	out := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, resp, http.StatusCreated)
 	if out.Warning == "" {
 		t.Fatal("expected a live-engagement warning on the collapsed path, got none")

@@ -27,9 +27,11 @@ func TestRefuseHandler_RequiresReasonAndStampsRequest(t *testing.T) {
 	defer srv.Close()
 
 	noReason := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/refuse", reqtest.Session(session), reqtest.JSON(engagementrequest.RefuseRequest{}))
+	defer noReason.Body.Close()
 	reqtest.RequireStatus(t, noReason, http.StatusBadRequest)
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/refuse", reqtest.Session(session), reqtest.JSON(engagementrequest.RefuseRequest{Reason: "already has a doula elsewhere"}))
+	defer resp.Body.Close()
 	out := reqtest.DecodeStatus[engagementrequest.DecisionResponse](t, resp, http.StatusOK)
 	if out.State != "refused" {
 		t.Fatalf("state = %q, want refused", out.State)
@@ -52,6 +54,7 @@ func TestRefuseHandler_InvalidRequestIDRejected(t *testing.T) {
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/not-a-uuid/refuse", reqtest.Session(session), reqtest.JSON(engagementrequest.RefuseRequest{Reason: "no"}))
+	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
@@ -68,6 +71,7 @@ func TestRefuseHandler_InvalidBodyRejected(t *testing.T) {
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/refuse", reqtest.Session(session), reqtest.JSON("not json"))
+	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
@@ -81,6 +85,7 @@ func TestRefuseHandler_NotFound(t *testing.T) {
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/00000000-0000-0000-0000-000000000000/refuse", reqtest.Session(session), reqtest.JSON(engagementrequest.RefuseRequest{Reason: "no"}))
+	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
@@ -115,6 +120,7 @@ func TestRefuseHandler_DoulaForbidden(t *testing.T) {
 	defer srv.Close()
 
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/refuse", reqtest.Session(session), reqtest.JSON(engagementrequest.RefuseRequest{Reason: "no"}))
+	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
@@ -132,8 +138,10 @@ func TestRefuseHandler_AlreadyDecidedConflict(t *testing.T) {
 	defer srv.Close()
 
 	first := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/refuse", reqtest.Session(session), reqtest.JSON(engagementrequest.RefuseRequest{Reason: "no"}))
+	defer first.Body.Close()
 	reqtest.RequireStatus(t, first, http.StatusOK)
 
 	second := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/refuse", reqtest.Session(session), reqtest.JSON(engagementrequest.RefuseRequest{Reason: "no"}))
+	defer second.Body.Close()
 	reqtest.RequireStatus(t, second, http.StatusConflict)
 }

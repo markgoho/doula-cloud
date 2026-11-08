@@ -3,6 +3,7 @@ package message_test
 import (
 	"testing"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/testdb"
 )
@@ -12,15 +13,15 @@ import (
 // newest Message with the sender's name the thread gives her.
 func TestClientLatest(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Riverside Doulas")
-	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	doulaID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "latest-doula", "Priya Raman", []string{"doula"}, "employee")
+	p := fixture.Practice(t, db, fixture.PracticeName("Riverside Doulas"))
+	engagement := fixture.Engagement(t, db, p)
+	doula := fixture.Staff(t, db, p, fixture.StaffName("Priya Raman"))
 
 	read := func(t *testing.T) (message.Message, bool) {
 		t.Helper()
-		tx := db.BeginAs(t, testdb.Client(clientID))
+		tx := db.BeginAs(t, testdb.Client(engagement.Client.ID))
 		defer func() { _ = tx.Rollback() }()
-		latest, found, err := message.ClientLatest(t.Context(), tx, engagementID)
+		latest, found, err := message.ClientLatest(t.Context(), tx, engagement.ID)
 		if err != nil {
 			t.Fatalf("latest: %v", err)
 		}
@@ -35,7 +36,7 @@ func TestClientLatest(t *testing.T) {
 		`INSERT INTO messages (engagement_id, sender_type, sender_id, body, created_at)
 		 VALUES ($1, 'client', $2, 'An older note.', now() - interval '2 days'),
 		        ($1, 'staff', $3, 'Thursday works. See you at 2.', now() - interval '1 hour')`,
-		engagementID, clientID, doulaID); err != nil {
+		engagement.ID, engagement.Client.ID, doula.ID); err != nil {
 		t.Fatalf("seed messages: %v", err)
 	}
 	latest, found := read(t)

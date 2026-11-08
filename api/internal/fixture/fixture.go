@@ -261,10 +261,11 @@ type EngagementRecord struct {
 }
 
 type engagementSpec struct {
-	client *ClientRecord
-	kind   string
-	status string
-	doulas []StaffRecord
+	client    *ClientRecord
+	newClient []ClientOption
+	kind      string
+	status    string
+	doulas    []StaffRecord
 }
 
 // EngagementOption shapes the Engagement a builder seeds.
@@ -274,6 +275,12 @@ type EngagementOption func(*engagementSpec)
 // new Client with the Client builder's defaults.
 func ForClient(c ClientRecord) EngagementOption {
 	return func(s *engagementSpec) { s.client = &c }
+}
+
+// NewClient seeds the Engagement's Client with these options, for a test
+// that cares how its Client is named or reached but needs no record of her.
+func NewClient(opts ...ClientOption) EngagementOption {
+	return func(s *engagementSpec) { s.newClient = opts }
 }
 
 // Kind sets the Engagement's kind. The default is KindBirth.
@@ -305,7 +312,7 @@ func Engagement(t *testing.T, db *testdb.DB, p PracticeRecord, opts ...Engagemen
 	if spec.client != nil {
 		c = *spec.client
 	} else {
-		c = Client(t, db, p)
+		c = Client(t, db, p, spec.newClient...)
 	}
 	var id string
 	err := db.Admin.QueryRowContext(t.Context(),

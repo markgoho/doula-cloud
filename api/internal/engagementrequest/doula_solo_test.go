@@ -44,7 +44,9 @@ func TestRequestHandler_ASoloOwnerIsOnHerOwnEngagementInOneAct(t *testing.T) {
 	srv, session := newServer(t, db, owner, enq)
 	defer srv.Close()
 
-	out := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate, DoulaStaffID: &owner.ID})), http.StatusCreated)
+	outResp := reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate, DoulaStaffID: &owner.ID}))
+	defer outResp.Body.Close()
+	out := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, outResp, http.StatusCreated)
 	if out.State != testStateApproved || out.EngagementID == "" {
 		t.Fatalf("response = %+v, want approved with an engagementId", out)
 	}
@@ -77,7 +79,9 @@ func TestRequestHandler_ASoloOwnerWhoIsAContractorIsOnHerOwnEngagement(t *testin
 	srv, session := newServer(t, db, owner, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	out := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate, DoulaStaffID: &owner.ID})), http.StatusCreated)
+	outResp := reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate, DoulaStaffID: &owner.ID}))
+	defer outResp.Body.Close()
+	out := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, outResp, http.StatusCreated)
 	if out.State != testStateApproved || out.EngagementID == "" {
 		t.Fatalf("response = %+v, want approved with an engagementId", out)
 	}
@@ -107,7 +111,9 @@ func TestRequestHandler_ASoloOwnerWithNoDoulaYetIsNotAttached(t *testing.T) {
 	srv, session := newServer(t, db, agencyOwner, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	out := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate})), http.StatusCreated)
+	outResp := reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate}))
+	defer outResp.Body.Close()
+	out := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, outResp, http.StatusCreated)
 	if out.State != testStateApproved || out.EngagementID == "" {
 		t.Fatalf("response = %+v, want approved with an engagementId", out)
 	}
@@ -137,10 +143,14 @@ func TestSoloOwnersFirstBirthNeedsNoFurtherActToBeOnCall(t *testing.T) {
 	srv, session := newServerWithOnCall(t, db, owner)
 	defer srv.Close()
 
-	started := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate, DoulaStaffID: &owner.ID})), http.StatusCreated)
+	startedResp := reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate, DoulaStaffID: &owner.ID}))
+	defer startedResp.Body.Close()
+	started := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, startedResp, http.StatusCreated)
 	onCallURL := srv.URL + "/api/practices/" + p.ID + "/engagements/" + started.EngagementID + "/on-call"
 
-	atIntake := reqtest.DecodeStatus[oncall.EngagementOnCall](t, reqtest.Get(t, onCallURL, reqtest.Session(session)), http.StatusOK)
+	atIntakeResp := reqtest.Get(t, onCallURL, reqtest.Session(session))
+	defer atIntakeResp.Body.Close()
+	atIntake := reqtest.DecodeStatus[oncall.EngagementOnCall](t, atIntakeResp, http.StatusOK)
 	assertSoloOwnerOnCall(t, atIntake, owner.ID, "intake")
 
 	if _, err := db.Admin.ExecContext(t.Context(),
@@ -149,7 +159,9 @@ func TestSoloOwnersFirstBirthNeedsNoFurtherActToBeOnCall(t *testing.T) {
 		t.Fatalf("move engagement to active: %v", err)
 	}
 
-	active := reqtest.DecodeStatus[oncall.EngagementOnCall](t, reqtest.Get(t, onCallURL, reqtest.Session(session)), http.StatusOK)
+	activeResp := reqtest.Get(t, onCallURL, reqtest.Session(session))
+	defer activeResp.Body.Close()
+	active := reqtest.DecodeStatus[oncall.EngagementOnCall](t, activeResp, http.StatusOK)
 	assertSoloOwnerOnCall(t, active, owner.ID, "active")
 
 	if _, err := db.Admin.ExecContext(t.Context(),
@@ -158,7 +170,9 @@ func TestSoloOwnersFirstBirthNeedsNoFurtherActToBeOnCall(t *testing.T) {
 		t.Fatalf("move engagement to completed: %v", err)
 	}
 
-	completed := reqtest.DecodeStatus[oncall.EngagementOnCall](t, reqtest.Get(t, onCallURL, reqtest.Session(session)), http.StatusOK)
+	completedResp := reqtest.Get(t, onCallURL, reqtest.Session(session))
+	defer completedResp.Body.Close()
+	completed := reqtest.DecodeStatus[oncall.EngagementOnCall](t, completedResp, http.StatusOK)
 	if completed.Window != nil || completed.NoWindowReason != oncall.NoWindowCompleted {
 		t.Fatalf("completed: window = %+v, reason = %q, want no window and %q",
 			completed.Window, completed.NoWindowReason, oncall.NoWindowCompleted)

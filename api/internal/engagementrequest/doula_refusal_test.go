@@ -43,8 +43,9 @@ func TestRequestHandler_RefusesAPersonWhoCannotBeNamed(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := reqtest.DecodeStatus[apierr.APIError](t, reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate, DoulaStaffID: &tc.doula})),
-				http.StatusBadRequest)
+			gotResp := reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate, DoulaStaffID: &tc.doula}))
+			defer gotResp.Body.Close()
+			got := reqtest.DecodeStatus[apierr.APIError](t, gotResp, http.StatusBadRequest)
 			if got.Code != "INVALID_ARGUMENT" || got.Details["doulaStaffId"] != tc.detail {
 				t.Fatalf("refusal = %+v, want INVALID_ARGUMENT naming doulaStaffId with %q", got, tc.detail)
 			}
@@ -71,8 +72,9 @@ func TestRequestHandler_AnOwnerWithNoDoulaRoleCannotNameHerself(t *testing.T) {
 	srv, session := newServer(t, db, owner, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	got := reqtest.DecodeStatus[apierr.APIError](t, reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate, DoulaStaffID: &owner.ID})),
-		http.StatusBadRequest)
+	gotResp := reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate, DoulaStaffID: &owner.ID}))
+	defer gotResp.Body.Close()
+	got := reqtest.DecodeStatus[apierr.APIError](t, gotResp, http.StatusBadRequest)
 	if got.Details["doulaStaffId"] != engagementrequest.MsgDoulaNotADoula {
 		t.Fatalf("refusal = %+v, want the no-Doula-role sentence", got)
 	}
@@ -97,8 +99,9 @@ func TestRequestHandler_APlainDoulaNamesNobodyButHerself(t *testing.T) {
 
 	var first apierr.APIError
 	for i, named := range []string{colleague.ID, contractor.ID, unknownStaffID} {
-		got := reqtest.DecodeStatus[apierr.APIError](t, reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate, DoulaStaffID: &named})),
-			http.StatusForbidden)
+		gotResp := reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate, DoulaStaffID: &named}))
+		defer gotResp.Body.Close()
+		got := reqtest.DecodeStatus[apierr.APIError](t, gotResp, http.StatusForbidden)
 		if got.Code != "FORBIDDEN" || got.Details["doulaStaffId"] != engagementrequest.MsgDoulaNotHerself {
 			t.Fatalf("refusal = %+v, want FORBIDDEN naming doulaStaffId", got)
 		}

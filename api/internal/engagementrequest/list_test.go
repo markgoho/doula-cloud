@@ -37,7 +37,9 @@ func TestListHandler_GathersEveryPendingRequestOldestFirst(t *testing.T) {
 	srv, session := newServer(t, db, admin, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	out := reqtest.DecodeStatus[engagementrequest.ListResponse](t, reqtest.Get(t, listURL(srv.URL, p.ID), reqtest.Session(session)), http.StatusOK)
+	outResp := reqtest.Get(t, listURL(srv.URL, p.ID), reqtest.Session(session))
+	defer outResp.Body.Close()
+	out := reqtest.DecodeStatus[engagementrequest.ListResponse](t, outResp, http.StatusOK)
 
 	if len(out.Items) != 2 || out.HasMore || out.NextCursor != nil {
 		t.Fatalf("page = %d items, hasMore=%v, cursor=%v; want both Requests on one page",
@@ -74,9 +76,13 @@ func TestListHandler_OmitsDecidedRequests(t *testing.T) {
 
 	srv, session := newServer(t, db, owner, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
-	reqtest.RequireStatus(t, reqtest.Post(t, detailURL(srv.URL, p.ID, decided)+"/approve", reqtest.Session(session)), http.StatusOK)
+	resp := reqtest.Post(t, detailURL(srv.URL, p.ID, decided)+"/approve", reqtest.Session(session))
+	defer resp.Body.Close()
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
-	out := reqtest.DecodeStatus[engagementrequest.ListResponse](t, reqtest.Get(t, listURL(srv.URL, p.ID), reqtest.Session(session)), http.StatusOK)
+	outResp := reqtest.Get(t, listURL(srv.URL, p.ID), reqtest.Session(session))
+	defer outResp.Body.Close()
+	out := reqtest.DecodeStatus[engagementrequest.ListResponse](t, outResp, http.StatusOK)
 
 	if len(out.Items) != 1 || out.Items[0].RequestID != waiting {
 		t.Fatalf("items = %+v, want only the Request still waiting", out.Items)
@@ -96,7 +102,9 @@ func TestListHandler_RefusesADoula(t *testing.T) {
 	srv, session := newServer(t, db, doula, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	reqtest.RequireStatus(t, reqtest.Get(t, listURL(srv.URL, p.ID), reqtest.Session(session)), http.StatusForbidden)
+	resp := reqtest.Get(t, listURL(srv.URL, p.ID), reqtest.Session(session))
+	defer resp.Body.Close()
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 // TestListHandler_RejectsAMalformedCursor proves a cursor nobody this
@@ -111,6 +119,7 @@ func TestListHandler_RejectsAMalformedCursor(t *testing.T) {
 
 	for _, cursor := range []string{"not!valid!base64!", "YmFkdGltZXxzb21lLWlk"} {
 		resp := reqtest.Get(t, listURL(srv.URL, p.ID)+"?cursor="+cursor, reqtest.Session(session))
+		defer resp.Body.Close()
 		reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	}
 }
@@ -131,13 +140,17 @@ func TestListHandler_WalksTheCursor(t *testing.T) {
 	srv, session := newServer(t, db, admin, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	first := reqtest.DecodeStatus[engagementrequest.ListResponse](t, reqtest.Get(t, listURL(srv.URL, p.ID), reqtest.Session(session)), http.StatusOK)
+	firstResp := reqtest.Get(t, listURL(srv.URL, p.ID), reqtest.Session(session))
+	defer firstResp.Body.Close()
+	first := reqtest.DecodeStatus[engagementrequest.ListResponse](t, firstResp, http.StatusOK)
 	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
 		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
 			len(first.Items), first.HasMore, first.NextCursor)
 	}
 
-	second := reqtest.DecodeStatus[engagementrequest.ListResponse](t, reqtest.Get(t, listURL(srv.URL, p.ID)+"?cursor="+*first.NextCursor, reqtest.Session(session)), http.StatusOK)
+	secondResp := reqtest.Get(t, listURL(srv.URL, p.ID)+"?cursor="+*first.NextCursor, reqtest.Session(session))
+	defer secondResp.Body.Close()
+	second := reqtest.DecodeStatus[engagementrequest.ListResponse](t, secondResp, http.StatusOK)
 	if len(second.Items) != 1 || second.HasMore || second.NextCursor != nil {
 		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
 			len(second.Items), second.HasMore, second.NextCursor)

@@ -62,7 +62,9 @@ func TestApproveHandler_AttachesTheNamedDoula(t *testing.T) {
 	srv, session := newServer(t, db, admin, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	out := reqtest.DecodeStatus[engagementrequest.ApproveResponse](t, reqtest.Post(t, approveURL(srv.URL, p.ID, requestID), reqtest.Session(session)), http.StatusOK)
+	outResp := reqtest.Post(t, approveURL(srv.URL, p.ID, requestID), reqtest.Session(session))
+	defer outResp.Body.Close()
+	out := reqtest.DecodeStatus[engagementrequest.ApproveResponse](t, outResp, http.StatusOK)
 
 	got := attachmentsOn(t, db, out.EngagementID)
 	if len(got) != 1 {
@@ -101,7 +103,9 @@ func TestApproveHandler_AttachesAnOwnerOrAdminWhoIsAContractorDoula(t *testing.T
 			srv, session := newServer(t, db, approver, &tasknudge.FakeEnqueuer{})
 			defer srv.Close()
 
-			out := reqtest.DecodeStatus[engagementrequest.ApproveResponse](t, reqtest.Post(t, approveURL(srv.URL, p.ID, requestID), reqtest.Session(session)), http.StatusOK)
+			outResp := reqtest.Post(t, approveURL(srv.URL, p.ID, requestID), reqtest.Session(session))
+			defer outResp.Body.Close()
+			out := reqtest.DecodeStatus[engagementrequest.ApproveResponse](t, outResp, http.StatusOK)
 
 			got := attachmentsOn(t, db, out.EngagementID)
 			if len(got) != 1 || got[0].staffID != named.ID || got[0].origin != grantedOrigin || got[0].attachedBy != approver.ID || !got[0].open {
@@ -131,7 +135,9 @@ func TestApproveHandler_NoDoulaYetWritesNoAttachment(t *testing.T) {
 	srv, session := newServer(t, db, admin, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	out := reqtest.DecodeStatus[engagementrequest.ApproveResponse](t, reqtest.Post(t, approveURL(srv.URL, p.ID, requestID), reqtest.Session(session)), http.StatusOK)
+	outResp := reqtest.Post(t, approveURL(srv.URL, p.ID, requestID), reqtest.Session(session))
+	defer outResp.Body.Close()
+	out := reqtest.DecodeStatus[engagementrequest.ApproveResponse](t, outResp, http.StatusOK)
 
 	if got := attachmentsOn(t, db, out.EngagementID); len(got) != 0 {
 		t.Fatalf("attachments = %+v, want none for No Doula yet", got)
@@ -181,7 +187,9 @@ func TestApproveHandler_RefusesADoulaWhoCanNoLongerBeAttached(t *testing.T) {
 			srv, session := newServer(t, db, admin, &tasknudge.FakeEnqueuer{})
 			defer srv.Close()
 
-			got := reqtest.DecodeStatus[apierr.APIError](t, reqtest.Post(t, approveURL(srv.URL, p.ID, requestID), reqtest.Session(session)), http.StatusConflict)
+			gotResp := reqtest.Post(t, approveURL(srv.URL, p.ID, requestID), reqtest.Session(session))
+			defer gotResp.Body.Close()
+			got := reqtest.DecodeStatus[apierr.APIError](t, gotResp, http.StatusConflict)
 			if !strings.Contains(got.Message, tc.reason) {
 				t.Fatalf("refusal message = %q, want it to name the reason %q", got.Message, tc.reason)
 			}

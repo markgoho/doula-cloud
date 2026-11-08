@@ -51,6 +51,20 @@ Ryuk being disabled locally is why `testdb.Main` exists: without an explicit `co
 
 Every package that calls `testdb.New` must wire up its own `TestMain` -- four didn't (`internal/mfarecoverymail`, `internal/outbox`, `internal/sessionmint`, `internal/sessionnotice`), which meant those packages leaked their container on every run, clean or not, until #889 gave each one the same three-line `TestMain` every other package already had.
 
+### Seeding a Practice, Staff, Client or Engagement: `api/internal/fixture`
+
+A test starts from builders, not from a per-package seeder. Each takes the test and the `*testdb.DB`, returns a record carrying the IDs, and takes options for only the state the test is about (#2743):
+
+```go
+p := fixture.Practice(t, db, fixture.Credits(3))
+owner := fixture.Staff(t, db, p, fixture.Owner())
+doula := fixture.Staff(t, db, p, fixture.StaffName("Hana Kim"), fixture.Contractor())
+e := fixture.Engagement(t, db, p, fixture.Status(fixture.StatusActive), fixture.WithDoula(doula))
+resp := reqtest.Get(t, url, reqtest.Session(fixture.Session(t, db, owner)))
+```
+
+Defaults are an employee Doula, a Client named "Test Client" with a unique address, and an intake birth Engagement for a new Client. `fixture.WithPortalLogin()` gives a Client an accepted Portal Account so `fixture.Session` can sign her in. The builders write through the Admin connection, as the `testdb.Seed*` functions do, and write no activity row; a test that asserts on activity seeds its own. A test that needs an exact identity (a shared Staff and Client uid, an RLS session variable) passes `fixture.StaffUID`. A new option goes in `fixture` when a second package needs it.
+
 ### A due-time fixture must not compare two clocks
 
 The host and the database run on different clocks whenever the container engine is VM-backed — Podman on macOS, Docker Desktop on macOS. The VM keeps its own time, drifts against the host's, and does not resync when the Mac wakes. CI never sees this: on `ubuntu-latest` the container shares the runner's kernel clock, so the skew is structurally zero.

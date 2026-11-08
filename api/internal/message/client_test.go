@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/objectstore"
@@ -28,39 +28,37 @@ import (
 // backed by a fresh in-memory ObjectStore and a fresh in-memory Pusher --
 // no real GCS bucket or VAPID/push service reachable from api/ tests, per
 // docs/testing/api.md.
-func newPortalServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
+func newPortalServer(t *testing.T, db *testdb.DB, who fixture.Signer) (srv *httptest.Server, session string) {
 	t.Helper()
-	return newPortalServerWithPusher(t, db, uid, push.NewFakePusher())
+	return newPortalServerWithPusher(t, db, who, push.NewFakePusher())
 }
 
 // newPortalServerWithPusher mirrors newPortalServer but lets the caller
 // inject pusher directly, so a test can inspect what Message creation
 // sent to it.
-func newPortalServerWithPusher(t *testing.T, db *testdb.DB, uid string, pusher push.Pusher) (srv *httptest.Server, session string) {
+func newPortalServerWithPusher(t *testing.T, db *testdb.DB, who fixture.Signer, pusher push.Pusher) (srv *httptest.Server, session string) {
 	t.Helper()
 	store := objectstore.NewMemoryStore()
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
 	message.Mount(g, ir, db.App, store, pusher)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, testdb.PortalUID(uid))
+	return httptest.NewServer(mux), fixture.Session(t, db, who)
 }
 
 func TestClientCreateHandler_Success(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "client-creating"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.WithPortalLogin(), fixture.ClientName("Jordan Client"), fixture.ClientEmail("jordan@example.com")))
 
-	srv, session := newPortalServer(t, db, identityUID)
+	srv, session := newPortalServer(t, db, engagement.Client)
 	defer srv.Close()
 
 	body, err := json.Marshal(message.CreateRequest{Body: "Question about my next visit."})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPost(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/api/portal/engagements/"+engagement.ID+"/messages", body)
 	defer resp.Body.Close()
 
 	reqtest.RequireStatus(t, resp, http.StatusCreated)
@@ -68,7 +66,7 @@ func TestClientCreateHandler_Success(t *testing.T) {
 	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if out.MessageID == "" || out.SenderType != "client" || out.SenderID != clientID ||
+	if out.MessageID == "" || out.SenderType != "client" || out.SenderID != engagement.Client.ID ||
 		out.SenderName != "Jordan Client" || out.Body != "Question about my next visit." || out.CreatedAt.IsZero() {
 		t.Fatalf("unexpected response: %+v", out)
 	}
@@ -76,16 +74,14 @@ func TestClientCreateHandler_Success(t *testing.T) {
 
 func TestClientCreateHandler_EmptyBodyRejected(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "client-empty-body"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.WithPortalLogin(), fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	srv, session := newPortalServer(t, db, identityUID)
+	srv, session := newPortalServer(t, db, engagement.Client)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "   "})
-	resp := authedPost(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/api/portal/engagements/"+engagement.ID+"/messages", body)
 	defer resp.Body.Close()
 
 	// The JSON path is the one an empty compose form takes, since the app
@@ -96,15 +92,13 @@ func TestClientCreateHandler_EmptyBodyRejected(t *testing.T) {
 
 func TestClientCreateHandler_InvalidJSONBody(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "client-bad-json"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.WithPortalLogin(), fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	srv, session := newPortalServer(t, db, identityUID)
+	srv, session := newPortalServer(t, db, engagement.Client)
 	defer srv.Close()
 
-	resp := authedPost(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages", []byte("not json"))
+	resp := authedPost(t, session, srv.URL+"/api/portal/engagements/"+engagement.ID+"/messages", []byte("not json"))
 	defer resp.Body.Close()
 
 	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
@@ -119,17 +113,16 @@ func TestClientCreateHandler_InvalidJSONBody(t *testing.T) {
 // handler, by rls_test.go's TestRLS_MessagesClientTierScopedToOwnEngagement.
 func TestClientCreateHandler_NotLinkedToClientForbidden(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Owner Client", "owner@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Owner Client"), fixture.ClientEmail("owner@example.com")))
 
-	unrelatedClientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Unrelated Client", "unrelated@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID("client-elsewhere"), unrelatedClientID)
+	engagement2 := fixture.Engagement(t, db, p, fixture.NewClient(fixture.WithPortalLogin(), fixture.ClientName("Unrelated Client"), fixture.ClientEmail("unrelated@example.com")))
 
-	srv, session := newPortalServer(t, db, "client-elsewhere")
+	srv, session := newPortalServer(t, db, engagement2.Client)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "trying to post anyway"})
-	resp := authedPost(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/api/portal/engagements/"+engagement.ID+"/messages", body)
 	defer resp.Body.Close()
 
 	reqtest.RequireStatus(t, resp, http.StatusForbidden)
@@ -137,15 +130,13 @@ func TestClientCreateHandler_NotLinkedToClientForbidden(t *testing.T) {
 
 func TestClientListHandler_EmptyThread(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "client-empty-thread"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.WithPortalLogin(), fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	srv, session := newPortalServer(t, db, identityUID)
+	srv, session := newPortalServer(t, db, engagement.Client)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages")
+	resp := authedGet(t, session, srv.URL+"/api/portal/engagements/"+engagement.ID+"/messages")
 	defer resp.Body.Close()
 
 	reqtest.RequireStatus(t, resp, http.StatusOK)
@@ -160,15 +151,13 @@ func TestClientListHandler_EmptyThread(t *testing.T) {
 
 func TestClientListHandler_InvalidCursorRejected(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "client-bad-cursor"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.WithPortalLogin(), fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	srv, session := newPortalServer(t, db, identityUID)
+	srv, session := newPortalServer(t, db, engagement.Client)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages?cursor=not!valid!base64!")
+	resp := authedGet(t, session, srv.URL+"/api/portal/engagements/"+engagement.ID+"/messages?cursor=not!valid!base64!")
 	defer resp.Body.Close()
 
 	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
@@ -180,20 +169,18 @@ func TestClientListHandler_InvalidCursorRejected(t *testing.T) {
 // way the Staff-side one is.
 func TestClientListHandler_PaginatesNewestFirst(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "client-paging"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.WithPortalLogin(), fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
 	const total = 35 // pageSize (30) + 5, to force a second page
 	for i := range total {
-		seedMessage(t, db, engagementID, "client", clientID, "message "+string(rune('A'+i%26)))
+		seedMessage(t, db, engagement.ID, "client", engagement.Client.ID, "message "+string(rune('A'+i%26)))
 	}
 
-	srv, session := newPortalServer(t, db, identityUID)
+	srv, session := newPortalServer(t, db, engagement.Client)
 	defer srv.Close()
 
-	firstResp := authedGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages")
+	firstResp := authedGet(t, session, srv.URL+"/api/portal/engagements/"+engagement.ID+"/messages")
 	defer firstResp.Body.Close()
 	if firstResp.StatusCode != http.StatusOK {
 		t.Fatalf("first page status = %d, want %d", firstResp.StatusCode, http.StatusOK)
@@ -207,7 +194,7 @@ func TestClientListHandler_PaginatesNewestFirst(t *testing.T) {
 			len(first.Items), first.HasMore, first.NextCursor)
 	}
 
-	secondResp := authedGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages?cursor="+*first.NextCursor)
+	secondResp := authedGet(t, session, srv.URL+"/api/portal/engagements/"+engagement.ID+"/messages?cursor="+*first.NextCursor)
 	defer secondResp.Body.Close()
 	if secondResp.StatusCode != http.StatusOK {
 		t.Fatalf("second page status = %d, want %d", secondResp.StatusCode, http.StatusOK)
@@ -226,17 +213,16 @@ func TestClientListHandler_PaginatesNewestFirst(t *testing.T) {
 // TestClientCreateHandler_NotLinkedToClientForbidden for reads.
 func TestClientListHandler_NotLinkedToClientForbidden(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	ownerClientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Owner Client", "owner@example.com")
-	seedMessage(t, db, engagementID, "client", ownerClientID, "not visible to other clients")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Owner Client"), fixture.ClientEmail("owner@example.com")))
+	seedMessage(t, db, engagement.ID, "client", engagement.Client.ID, "not visible to other clients")
 
-	unrelatedClientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Unrelated Client", "unrelated@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID("client-listing-elsewhere"), unrelatedClientID)
+	engagement2 := fixture.Engagement(t, db, p, fixture.NewClient(fixture.WithPortalLogin(), fixture.ClientName("Unrelated Client"), fixture.ClientEmail("unrelated@example.com")))
 
-	srv, session := newPortalServer(t, db, "client-listing-elsewhere")
+	srv, session := newPortalServer(t, db, engagement2.Client)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages")
+	resp := authedGet(t, session, srv.URL+"/api/portal/engagements/"+engagement.ID+"/messages")
 	defer resp.Body.Close()
 
 	reqtest.RequireStatus(t, resp, http.StatusForbidden)
@@ -250,31 +236,28 @@ func TestClientListHandler_NotLinkedToClientForbidden(t *testing.T) {
 // from both sides and asserts each sees both messages, in the same
 // newest-first order, with the correct senderType/senderName per row.
 func TestSharedThread_StaffAndClientSeeOneContinuousThread(t *testing.T) {
-	const identityUIDStaff = "shared-thread-staff"
-	const identityUIDClient = "shared-thread-client"
 	const bodyFromStaff = "Hi, checking in before your visit."
 	const bodyFromClient = "Thanks, see you then!"
 
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Shared Practice")
-	testdb.SeedNamedStaffAtPractice(t, db, practiceID, identityUIDStaff, "Jamie Doula", []string{doulaRole}, "employee")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUIDClient), clientID)
+	p := fixture.Practice(t, db, fixture.PracticeName("Shared Practice"))
+	staff := fixture.Staff(t, db, p, fixture.StaffName("Jamie Doula"))
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.WithPortalLogin(), fixture.ClientName("Jordan Client"), fixture.ClientEmail("jordan@example.com")))
 
-	staffSrv, staffSession := newServer(t, db, identityUIDStaff)
+	staffSrv, staffSession := newServer(t, db, staff)
 	defer staffSrv.Close()
-	portalSrv, portalSession := newPortalServer(t, db, identityUIDClient)
+	portalSrv, portalSession := newPortalServer(t, db, engagement.Client)
 	defer portalSrv.Close()
 
 	staffBody, _ := json.Marshal(message.CreateRequest{Body: bodyFromStaff})
-	staffResp := authedPost(t, staffSession, staffSrv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", staffBody)
+	staffResp := authedPost(t, staffSession, staffSrv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages", staffBody)
 	defer staffResp.Body.Close()
 	if staffResp.StatusCode != http.StatusCreated {
 		t.Fatalf("staff create status = %d, want %d", staffResp.StatusCode, http.StatusCreated)
 	}
 
 	clientBody, _ := json.Marshal(message.CreateRequest{Body: bodyFromClient})
-	clientResp := authedPost(t, portalSession, portalSrv.URL+"/api/portal/engagements/"+engagementID+"/messages", clientBody)
+	clientResp := authedPost(t, portalSession, portalSrv.URL+"/api/portal/engagements/"+engagement.ID+"/messages", clientBody)
 	defer clientResp.Body.Close()
 	if clientResp.StatusCode != http.StatusCreated {
 		t.Fatalf("client create status = %d, want %d", clientResp.StatusCode, http.StatusCreated)
@@ -294,7 +277,7 @@ func TestSharedThread_StaffAndClientSeeOneContinuousThread(t *testing.T) {
 		}
 	}
 
-	staffListResp := authedGet(t, staffSession, staffSrv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
+	staffListResp := authedGet(t, staffSession, staffSrv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages")
 	defer staffListResp.Body.Close()
 	var staffView message.ListResponse
 	if err := json.UnmarshalRead(staffListResp.Body, &staffView); err != nil {
@@ -302,7 +285,7 @@ func TestSharedThread_StaffAndClientSeeOneContinuousThread(t *testing.T) {
 	}
 	assertBothMessagesInOrder(t, staffView.Items)
 
-	clientListResp := authedGet(t, portalSession, portalSrv.URL+"/api/portal/engagements/"+engagementID+"/messages")
+	clientListResp := authedGet(t, portalSession, portalSrv.URL+"/api/portal/engagements/"+engagement.ID+"/messages")
 	defer clientListResp.Body.Close()
 	var clientView message.ListResponse
 	if err := json.UnmarshalRead(clientListResp.Body, &clientView); err != nil {
@@ -316,15 +299,13 @@ func TestSharedThread_StaffAndClientSeeOneContinuousThread(t *testing.T) {
 // Client-portal side.
 func TestClientCreateHandler_AttachmentUploadAndDownloadRoundTrip(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "client-attachment"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.WithPortalLogin(), fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	srv, session := newPortalServer(t, db, identityUID)
+	srv, session := newPortalServer(t, db, engagement.Client)
 	defer srv.Close()
 
-	resp := authedMultipartPost(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages",
+	resp := authedMultipartPost(t, session, srv.URL+"/api/portal/engagements/"+engagement.ID+"/messages",
 		"Here's a photo", "photo.png", pngBytes)
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusCreated)
@@ -336,7 +317,7 @@ func TestClientCreateHandler_AttachmentUploadAndDownloadRoundTrip(t *testing.T) 
 		t.Fatalf("attachmentContentType = %q, want image/png", created.AttachmentContentType)
 	}
 
-	dlResp := authedGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages/"+created.MessageID+"/attachment")
+	dlResp := authedGet(t, session, srv.URL+"/api/portal/engagements/"+engagement.ID+"/messages/"+created.MessageID+"/attachment")
 	defer dlResp.Body.Close()
 	if dlResp.StatusCode != http.StatusOK {
 		t.Fatalf("download status = %d, want %d", dlResp.StatusCode, http.StatusOK)
@@ -354,15 +335,13 @@ func TestClientCreateHandler_AttachmentUploadAndDownloadRoundTrip(t *testing.T) 
 // TestAttachmentHandler_InvalidMessageID for the Client-portal side.
 func TestClientAttachmentHandler_InvalidMessageID(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "client-bad-message-id"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.WithPortalLogin(), fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	srv, session := newPortalServer(t, db, identityUID)
+	srv, session := newPortalServer(t, db, engagement.Client)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages/not-a-uuid/attachment")
+	resp := authedGet(t, session, srv.URL+"/api/portal/engagements/"+engagement.ID+"/messages/not-a-uuid/attachment")
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
@@ -372,13 +351,12 @@ func TestClientAttachmentHandler_InvalidMessageID(t *testing.T) {
 // download route.
 func TestClientAttachmentHandler_NotLinkedToClientForbidden(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	ownerClientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Owner Client", "owner@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID("client-owner-of-thread"), ownerClientID)
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.WithPortalLogin(), fixture.ClientName("Owner Client"), fixture.ClientEmail("owner@example.com")))
 
-	ownerSrv, ownerSession := newPortalServer(t, db, "client-owner-of-thread")
+	ownerSrv, ownerSession := newPortalServer(t, db, engagement.Client)
 	defer ownerSrv.Close()
-	createResp := authedMultipartPost(t, ownerSession, ownerSrv.URL+"/api/portal/engagements/"+engagementID+"/messages",
+	createResp := authedMultipartPost(t, ownerSession, ownerSrv.URL+"/api/portal/engagements/"+engagement.ID+"/messages",
 		"", "photo.png", pngBytes)
 	defer createResp.Body.Close()
 	var created message.Message
@@ -386,13 +364,12 @@ func TestClientAttachmentHandler_NotLinkedToClientForbidden(t *testing.T) {
 		t.Fatalf("decode create response: %v", err)
 	}
 
-	unrelatedClientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Unrelated Client", "unrelated@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID("client-elsewhere-dl"), unrelatedClientID)
+	engagement2 := fixture.Engagement(t, db, p, fixture.NewClient(fixture.WithPortalLogin(), fixture.ClientName("Unrelated Client"), fixture.ClientEmail("unrelated@example.com")))
 
-	unrelatedSrv, unrelatedSession := newPortalServer(t, db, "client-elsewhere-dl")
+	unrelatedSrv, unrelatedSession := newPortalServer(t, db, engagement2.Client)
 	defer unrelatedSrv.Close()
 
-	resp := authedGet(t, unrelatedSession, unrelatedSrv.URL+"/api/portal/engagements/"+engagementID+"/messages/"+created.MessageID+"/attachment")
+	resp := authedGet(t, unrelatedSession, unrelatedSrv.URL+"/api/portal/engagements/"+engagement.ID+"/messages/"+created.MessageID+"/attachment")
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
@@ -404,30 +381,27 @@ func TestClientAttachmentHandler_NotLinkedToClientForbidden(t *testing.T) {
 // a thread of unattributed messages. 00111's reach through the Message
 // itself keeps it.
 func TestClientListHandler_NamesASenderWhoHasLeftThePractice(t *testing.T) {
-	const identityUIDStaff = "departed-sender-staff"
-	const identityUIDClient = "departed-sender-client"
 	const body = "I'll see you on Thursday."
 
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Departed Sender Practice")
-	staffID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, identityUIDStaff, "Maya Okonkwo", []string{doulaRole}, "employee")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Nadia Client", "nadia-thread@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUIDClient), clientID)
+	p := fixture.Practice(t, db, fixture.PracticeName("Departed Sender Practice"))
+	staff := fixture.Staff(t, db, p, fixture.StaffName("Maya Okonkwo"))
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.WithPortalLogin(), fixture.ClientName("Nadia Client"), fixture.ClientEmail("nadia-thread@example.com")))
 
-	staffSrv, staffSession := newServer(t, db, identityUIDStaff)
+	staffSrv, staffSession := newServer(t, db, staff)
 	defer staffSrv.Close()
 	staffBody, _ := json.Marshal(message.CreateRequest{Body: body})
-	created := authedPost(t, staffSession, staffSrv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", staffBody)
+	created := authedPost(t, staffSession, staffSrv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages", staffBody)
 	defer created.Body.Close()
 	if created.StatusCode != http.StatusCreated {
 		t.Fatalf("staff create status = %d, want %d", created.StatusCode, http.StatusCreated)
 	}
 
-	testdb.RemoveMembership(t, db, staffID)
+	testdb.RemoveMembership(t, db, staff.ID)
 
-	portalSrv, portalSession := newPortalServer(t, db, identityUIDClient)
+	portalSrv, portalSession := newPortalServer(t, db, engagement.Client)
 	defer portalSrv.Close()
-	resp := authedGet(t, portalSession, portalSrv.URL+"/api/portal/engagements/"+engagementID+"/messages")
+	resp := authedGet(t, portalSession, portalSrv.URL+"/api/portal/engagements/"+engagement.ID+"/messages")
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusOK)
 
@@ -453,36 +427,33 @@ func TestClientListHandler_NamesASenderWhoHasLeftThePractice(t *testing.T) {
 // (TestVisitsHandler_StandsInForADoulaWhoDeletedHerLogin); the Message
 // thread must not disagree by showing an empty name instead.
 func TestClientListHandler_StandsInForASenderWhoDeletedHerLogin(t *testing.T) {
-	const identityUIDStaff = "deleted-login-sender-staff"
-	const identityUIDClient = "deleted-login-sender-client"
 	const body = "See you Thursday."
 
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Deleted Login Sender Practice")
-	staffID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, identityUIDStaff, "Maya Okonkwo", []string{doulaRole}, "employee")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Nadia Client", "nadia-deleted-sender@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUIDClient), clientID)
+	p := fixture.Practice(t, db, fixture.PracticeName("Deleted Login Sender Practice"))
+	staff := fixture.Staff(t, db, p, fixture.StaffName("Maya Okonkwo"))
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.WithPortalLogin(), fixture.ClientName("Nadia Client"), fixture.ClientEmail("nadia-deleted-sender@example.com")))
 
-	staffSrv, staffSession := newServer(t, db, identityUIDStaff)
+	staffSrv, staffSession := newServer(t, db, staff)
 	defer staffSrv.Close()
 	staffBody, _ := json.Marshal(message.CreateRequest{Body: body})
-	created := authedPost(t, staffSession, staffSrv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", staffBody)
+	created := authedPost(t, staffSession, staffSrv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages", staffBody)
 	defer created.Body.Close()
 	if created.StatusCode != http.StatusCreated {
 		t.Fatalf("staff create status = %d, want %d", created.StatusCode, http.StatusCreated)
 	}
 
-	testdb.RemoveMembership(t, db, staffID)
+	testdb.RemoveMembership(t, db, staff.ID)
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`UPDATE staff SET first_name = $1, last_name = $2, deleted_at = now() WHERE id = $3`,
-		staffauth.DeletedStaffFirstName, staffauth.DeletedStaffLastName, staffID,
+		staffauth.DeletedStaffFirstName, staffauth.DeletedStaffLastName, staff.ID,
 	); err != nil {
 		t.Fatalf("redact staff row: %v", err)
 	}
 
-	portalSrv, portalSession := newPortalServer(t, db, identityUIDClient)
+	portalSrv, portalSession := newPortalServer(t, db, engagement.Client)
 	defer portalSrv.Close()
-	resp := authedGet(t, portalSession, portalSrv.URL+"/api/portal/engagements/"+engagementID+"/messages")
+	resp := authedGet(t, portalSession, portalSrv.URL+"/api/portal/engagements/"+engagement.ID+"/messages")
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusOK)
 
