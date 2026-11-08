@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/engagementrequest"
+	"doula-cloud/api/internal/fixture"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
@@ -14,24 +16,23 @@ import (
 // as herself.
 func TestWithdrawHandler_RequesterWithdrawsOwnPendingRequest(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
-	requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, doulaID)
+	p := fixture.Practice(t, db)
+	doula := fixture.Staff(t, db, p)
+	client := fixture.Client(t, db, p)
+	requestID := pendingRequest(t, db, p, client, testKindBirth, doula)
 
-	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
+	srv, session := newServer(t, db, doula, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/withdraw", session, nil)
-	var out engagementrequest.DecisionResponse
-	decode(t, resp, http.StatusOK, &out)
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/withdraw", reqtest.Session(session))
+	out := reqtest.DecodeStatus[engagementrequest.DecisionResponse](t, resp, http.StatusOK)
 	if out.State != "withdrawn" {
 		t.Fatalf("state = %q, want withdrawn", out.State)
 	}
 
 	row := readRequest(t, db, requestID)
-	if row.state != "withdrawn" || row.decidedBy == nil || *row.decidedBy != doulaID {
-		t.Fatalf("request row = %+v, want withdrawn/decided by %s (herself)", row, doulaID)
+	if row.state != "withdrawn" || row.decidedBy == nil || *row.decidedBy != doula.ID {
+		t.Fatalf("request row = %+v, want withdrawn/decided by %s (herself)", row, doula.ID)
 	}
 }
 
@@ -39,17 +40,17 @@ func TestWithdrawHandler_RequesterWithdrawsOwnPendingRequest(t *testing.T) {
 // member -- even an Owner -- cannot withdraw someone else's Request.
 func TestWithdrawHandler_OnlyRequesterMayWithdraw(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	testdb.SeedStaffAtPractice(t, db, practiceID, "owner-1", []string{ownerRole}, employeeType)
-	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
-	requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, doulaID)
+	p := fixture.Practice(t, db)
+	doula := fixture.Staff(t, db, p)
+	owner := fixture.Staff(t, db, p, fixture.Owner())
+	client := fixture.Client(t, db, p)
+	requestID := pendingRequest(t, db, p, client, testKindBirth, doula)
 
-	srv, session := newServer(t, db, "owner-1", &tasknudge.FakeEnqueuer{})
+	srv, session := newServer(t, db, owner, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/withdraw", session, nil)
-	expectStatus(t, resp, http.StatusForbidden)
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/withdraw", reqtest.Session(session))
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 
 	row := readRequest(t, db, requestID)
 	if row.state != testStatePending {
@@ -61,44 +62,44 @@ func TestWithdrawHandler_OnlyRequesterMayWithdraw(t *testing.T) {
 // cannot be withdrawn.
 func TestWithdrawHandler_OnlyPendingMayBeWithdrawn(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
-	requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, doulaID)
+	p := fixture.Practice(t, db)
+	doula := fixture.Staff(t, db, p)
+	client := fixture.Client(t, db, p)
+	requestID := pendingRequest(t, db, p, client, testKindBirth, doula)
 
-	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
+	srv, session := newServer(t, db, doula, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	first := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/withdraw", session, nil)
-	expectStatus(t, first, http.StatusOK)
+	first := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/withdraw", reqtest.Session(session))
+	reqtest.RequireStatus(t, first, http.StatusOK)
 
-	second := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/withdraw", session, nil)
-	expectStatus(t, second, http.StatusConflict)
+	second := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/withdraw", reqtest.Session(session))
+	reqtest.RequireStatus(t, second, http.StatusConflict)
 }
 
 // TestWithdrawHandler_InvalidRequestIDRejected proves a malformed path
 // segment is a 400, not a query against a bogus id.
 func TestWithdrawHandler_InvalidRequestIDRejected(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	p := fixture.Practice(t, db)
+	doula := fixture.Staff(t, db, p)
 
-	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
+	srv, session := newServer(t, db, doula, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/not-a-uuid/withdraw", session, nil)
-	expectStatus(t, resp, http.StatusBadRequest)
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/not-a-uuid/withdraw", reqtest.Session(session))
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestWithdrawHandler_NotFound proves a bogus request id is a 404.
 func TestWithdrawHandler_NotFound(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	p := fixture.Practice(t, db)
+	doula := fixture.Staff(t, db, p)
 
-	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
+	srv, session := newServer(t, db, doula, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/00000000-0000-0000-0000-000000000000/withdraw", session, nil)
-	expectStatus(t, resp, http.StatusNotFound)
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/00000000-0000-0000-0000-000000000000/withdraw", reqtest.Session(session))
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }

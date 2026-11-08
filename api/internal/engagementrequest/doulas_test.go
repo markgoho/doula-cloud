@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/engagementrequest"
+	"doula-cloud/api/internal/fixture"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -16,13 +18,12 @@ func doulasURL(base, practiceID string) string {
 	return base + "/api/practices/" + practiceID + "/engagement-request-doulas"
 }
 
-// readDoulas reads the Start work form's list as uid.
-func readDoulas(t *testing.T, db *testdb.DB, practiceID, uid string) engagementrequest.DoulasResponse {
+// readDoulas reads the Start work form's list as who.
+func readDoulas(t *testing.T, db *testdb.DB, practiceID string, who fixture.StaffRecord) engagementrequest.DoulasResponse {
 	t.Helper()
-	srv, session := newServer(t, db, uid, &tasknudge.FakeEnqueuer{})
+	srv, session := newServer(t, db, who, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
-	var out engagementrequest.DoulasResponse
-	decode(t, get(t, doulasURL(srv.URL, practiceID), session), http.StatusOK, &out)
+	out := reqtest.DecodeStatus[engagementrequest.DoulasResponse](t, reqtest.Get(t, doulasURL(srv.URL, practiceID), reqtest.Session(session)), http.StatusOK)
 	return out
 }
 
@@ -39,10 +40,11 @@ func names(list []engagementrequest.RequestDoula) []string {
 // answer when the form opens.
 func TestDoulasHandler_TheOnlyDoulaIsListedAndMarked(t *testing.T) {
 	db := testdb.New(t)
-	practiceID, ownerID := testdb.SeedStaffAtNewPractice(t, db, "solo-owner", founderRoles, employeeType)
+	p := fixture.Practice(t, db)
+	owner := fixture.Staff(t, db, p, fixture.Founder())
 
-	got := readDoulas(t, db, practiceID, "solo-owner")
-	if len(got.Items) != 1 || got.Items[0].StaffID != ownerID {
+	got := readDoulas(t, db, p.ID, owner)
+	if len(got.Items) != 1 || got.Items[0].StaffID != owner.ID {
 		t.Fatalf("items = %+v, want the Owner alone", got.Items)
 	}
 	if !got.CallerIsOnlyDoula {
@@ -57,27 +59,27 @@ func TestDoulasHandler_TheOnlyDoulaIsListedAndMarked(t *testing.T) {
 // her, because she is not the only Doula.
 func TestDoulasHandler_AnOwnerReadsEveryEmployeeDoula(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	ownerID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "owner-1", "Renata Alvarez", founderRoles, employeeType)
-	testdb.SeedNamedStaffAtPractice(t, db, practiceID, "doula-z", "Zora Bell", []string{doulaRole}, employeeType)
-	testdb.SeedNamedStaffAtPractice(t, db, practiceID, "doula-a", "Amara Okafor", []string{doulaRole}, employeeType)
-	testdb.SeedNamedStaffAtPractice(t, db, practiceID, "contractor-1", "Lena Vasquez", []string{doulaRole}, contractorType)
-	testdb.SeedNamedStaffAtPractice(t, db, practiceID, "admin-1", "Priya Nair", []string{adminRole}, employeeType)
+	p := fixture.Practice(t, db)
+	owner := fixture.Staff(t, db, p, fixture.StaffName("Renata Alvarez"), fixture.Founder())
+	fixture.Staff(t, db, p, fixture.StaffName("Zora Bell"))
+	fixture.Staff(t, db, p, fixture.StaffName("Amara Okafor"))
+	fixture.Staff(t, db, p, fixture.StaffName("Lena Vasquez"), fixture.Contractor())
+	fixture.Staff(t, db, p, fixture.StaffName("Priya Nair"), fixture.Admin())
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO practice_invitations
 		     (practice_id, address, roles, employment_type, token_digest, invited_by, expires_at)
 		 VALUES ($1, 'invited@example.com', '{doula}'::practice_role[], 'employee', $2, $3, $4)`,
-		practiceID, staffauth.TokenDigest("invited-token"), ownerID, time.Date(2099, time.January, 1, 0, 0, 0, 0, time.UTC),
+		p.ID, staffauth.TokenDigest("invited-token"), owner.ID, time.Date(2099, time.January, 1, 0, 0, 0, 0, time.UTC),
 	); err != nil {
 		t.Fatalf("seed invitation: %v", err)
 	}
 
-	got := readDoulas(t, db, practiceID, "owner-1")
+	got := readDoulas(t, db, p.ID, owner)
 	want := []string{"Renata Alvarez", "Zora Bell", "Amara Okafor"} // last name, then first name (#1537)
 	if !slices.Equal(names(got.Items), want) {
 		t.Fatalf("items = %v, want %v", names(got.Items), want)
 	}
-	if got.Items[0].StaffID != ownerID {
+	if got.Items[0].StaffID != owner.ID {
 		t.Fatalf("first item = %+v, want the person at the form", got.Items[0])
 	}
 	if got.CallerIsOnlyDoula {
@@ -90,11 +92,11 @@ func TestDoulasHandler_AnOwnerReadsEveryEmployeeDoula(t *testing.T) {
 // colleagues and not herself.
 func TestDoulasHandler_AnOwnerWithNoDoulaRoleIsNotListed(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	testdb.SeedNamedStaffAtPractice(t, db, practiceID, "admin-1", "Priya Nair", []string{adminRole}, employeeType)
-	testdb.SeedNamedStaffAtPractice(t, db, practiceID, "doula-1", "Hana Kim", []string{doulaRole}, employeeType)
+	p := fixture.Practice(t, db)
+	admin := fixture.Staff(t, db, p, fixture.StaffName("Priya Nair"), fixture.Admin())
+	fixture.Staff(t, db, p, fixture.StaffName("Hana Kim"))
 
-	got := readDoulas(t, db, practiceID, "admin-1")
+	got := readDoulas(t, db, p.ID, admin)
 	if !slices.Equal(names(got.Items), []string{"Hana Kim"}) {
 		t.Fatalf("items = %v, want the one Doula and not the Admin", names(got.Items))
 	}
@@ -111,13 +113,13 @@ func TestDoulasHandler_AnOwnerWithNoDoulaRoleIsNotListed(t *testing.T) {
 // her session and not the superuser's.
 func TestDoulasHandler_APlainDoulaReadsHerselfOnly(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, "owner-1", []string{ownerRole}, employeeType)
-	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	testdb.SeedStaffAtPractice(t, db, practiceID, "doula-2", []string{doulaRole}, employeeType)
+	p := fixture.Practice(t, db)
+	fixture.Staff(t, db, p, fixture.Owner())
+	doula := fixture.Staff(t, db, p)
+	fixture.Staff(t, db, p)
 
-	got := readDoulas(t, db, practiceID, "doula-1")
-	if len(got.Items) != 1 || got.Items[0].StaffID != doulaID {
+	got := readDoulas(t, db, p.ID, doula)
+	if len(got.Items) != 1 || got.Items[0].StaffID != doula.ID {
 		t.Fatalf("items = %+v, want herself alone", got.Items)
 	}
 	if got.CallerIsOnlyDoula {
@@ -130,11 +132,11 @@ func TestDoulasHandler_APlainDoulaReadsHerselfOnly(t *testing.T) {
 // Owner who is no Doula is selected on her own form.
 func TestDoulasHandler_APlainDoulaWhoIsTheOnlyDoulaIsMarked(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, "owner-1", []string{ownerRole}, employeeType)
-	testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	p := fixture.Practice(t, db)
+	fixture.Staff(t, db, p, fixture.Owner())
+	doula := fixture.Staff(t, db, p)
 
-	if got := readDoulas(t, db, practiceID, "doula-1"); !got.CallerIsOnlyDoula {
+	if got := readDoulas(t, db, p.ID, doula); !got.CallerIsOnlyDoula {
 		t.Fatal("callerIsOnlyDoula = false, want true for the Practice's one Doula")
 	}
 }
@@ -147,26 +149,29 @@ func TestDoulasHandler_APlainDoulaWhoIsTheOnlyDoulaIsMarked(t *testing.T) {
 // not listed.
 func TestDoulasHandler_AnOwnerOrAdminWhoIsAContractorDoulaIsListed(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	p := fixture.Practice(t, db)
 	const ownerName, adminName = "Deborah Ridge", "Maya Okonkwo"
-	ownerID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "owner-1", ownerName, []string{ownerRole, doulaRole}, contractorType)
-	testdb.SeedNamedStaffAtPractice(t, db, practiceID, "admin-1", adminName, []string{adminRole, doulaRole}, contractorType)
-	testdb.SeedNamedStaffAtPractice(t, db, practiceID, "contractor-1", "Lena Vasquez", []string{doulaRole}, contractorType)
+	owner := fixture.Staff(t, db, p, fixture.StaffName(ownerName), fixture.Owner(), fixture.Doula(), fixture.Contractor())
+	admin := fixture.Staff(t, db, p, fixture.StaffName(adminName), fixture.Admin(), fixture.Doula(), fixture.Contractor())
+	fixture.Staff(t, db, p, fixture.StaffName("Lena Vasquez"), fixture.Contractor())
 
-	for _, uid := range []string{"owner-1", "admin-1"} {
-		got := readDoulas(t, db, practiceID, uid)
-		want := []string{ownerName, adminName}
-		if uid == "admin-1" {
-			want = []string{adminName, ownerName}
-		}
-		if !slices.Equal(names(got.Items), want) {
-			t.Fatalf("%s items = %v, want %v", uid, names(got.Items), want)
+	for _, caller := range []struct {
+		who  fixture.StaffRecord
+		name string
+		want []string
+	}{
+		{owner, "owner", []string{ownerName, adminName}},
+		{admin, "admin", []string{adminName, ownerName}},
+	} {
+		got := readDoulas(t, db, p.ID, caller.who)
+		if !slices.Equal(names(got.Items), caller.want) {
+			t.Fatalf("%s items = %v, want %v", caller.name, names(got.Items), caller.want)
 		}
 		if got.CallerIsOnlyDoula {
-			t.Fatalf("%s callerIsOnlyDoula = true, want false with other Doulas at the Practice", uid)
+			t.Fatalf("%s callerIsOnlyDoula = true, want false with other Doulas at the Practice", caller.name)
 		}
 	}
-	if got := readDoulas(t, db, practiceID, "owner-1"); got.Items[0].StaffID != ownerID {
+	if got := readDoulas(t, db, p.ID, owner); got.Items[0].StaffID != owner.ID {
 		t.Fatalf("first item = %+v, want the person at the form", got.Items[0])
 	}
 }
@@ -177,10 +182,11 @@ func TestDoulasHandler_AnOwnerOrAdminWhoIsAContractorDoulaIsListed(t *testing.T)
 // form opens, as for each solo Owner.
 func TestDoulasHandler_ASoloOwnerWhoIsAContractorIsSelected(t *testing.T) {
 	db := testdb.New(t)
-	practiceID, ownerID := testdb.SeedStaffAtNewPractice(t, db, "solo-owner", founderRoles, contractorType)
+	p := fixture.Practice(t, db)
+	owner := fixture.Staff(t, db, p, fixture.Founder(), fixture.Contractor())
 
-	got := readDoulas(t, db, practiceID, "solo-owner")
-	if len(got.Items) != 1 || got.Items[0].StaffID != ownerID {
+	got := readDoulas(t, db, p.ID, owner)
+	if len(got.Items) != 1 || got.Items[0].StaffID != owner.ID {
 		t.Fatalf("items = %+v, want the Owner alone", got.Items)
 	}
 	if !got.CallerIsOnlyDoula {
@@ -193,11 +199,12 @@ func TestDoulasHandler_ASoloOwnerWhoIsAContractorIsSelected(t *testing.T) {
 // listed, and her being at the Practice still stops the pre-selection.
 func TestDoulasHandler_AContractorCountsAsAnotherDoula(t *testing.T) {
 	db := testdb.New(t)
-	practiceID, ownerID := testdb.SeedStaffAtNewPractice(t, db, "owner-1", founderRoles, employeeType)
-	testdb.SeedContractorAtPractice(t, db, practiceID, "contractor-1")
+	p := fixture.Practice(t, db)
+	owner := fixture.Staff(t, db, p, fixture.Founder())
+	fixture.Staff(t, db, p, fixture.Contractor())
 
-	got := readDoulas(t, db, practiceID, "owner-1")
-	if len(got.Items) != 1 || got.Items[0].StaffID != ownerID {
+	got := readDoulas(t, db, p.ID, owner)
+	if len(got.Items) != 1 || got.Items[0].StaffID != owner.ID {
 		t.Fatalf("items = %+v, want the Owner alone", got.Items)
 	}
 	if got.CallerIsOnlyDoula {
@@ -210,11 +217,11 @@ func TestDoulasHandler_AContractorCountsAsAnotherDoula(t *testing.T) {
 // the ask.
 func TestDoulasHandler_RefusesAContractor(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, "owner-1", []string{ownerRole}, employeeType)
-	testdb.SeedContractorAtPractice(t, db, practiceID, "contractor-1")
+	p := fixture.Practice(t, db)
+	fixture.Staff(t, db, p, fixture.Owner())
+	contractor := fixture.Staff(t, db, p, fixture.Contractor())
 
-	srv, session := newServer(t, db, "contractor-1", &tasknudge.FakeEnqueuer{})
+	srv, session := newServer(t, db, contractor, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
-	expectStatus(t, get(t, doulasURL(srv.URL, practiceID), session), http.StatusForbidden)
+	reqtest.RequireStatus(t, reqtest.Get(t, doulasURL(srv.URL, p.ID), reqtest.Session(session)), http.StatusForbidden)
 }

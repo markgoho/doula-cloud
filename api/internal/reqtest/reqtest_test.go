@@ -147,3 +147,16 @@ func TestRequireStatus_PassesOnAMatch(t *testing.T) {
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusTeapot)
 }
+
+func TestDecodeStatus_ChecksTheStatusThenReadsTheBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		_ = json.MarshalWrite(w, echo{Method: "made"})
+	}))
+	t.Cleanup(srv.Close)
+
+	got := reqtest.DecodeStatus[echo](t, reqtest.Get(t, srv.URL), http.StatusCreated)
+	if got.Method != "made" {
+		t.Fatalf("method = %q, want made", got.Method)
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/engagementrequest"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/outbox"
@@ -32,13 +33,11 @@ func newWorker(sender mail.Sender, now time.Time) engagementrequest.Worker {
 // runWorker drives one ProcessPending pass through the same endpoint
 // Cloud Scheduler calls, so the trusted-worker session variable the RLS
 // policies read is set the way production sets it.
-func runWorker(t *testing.T, db *testdb.DB, worker engagementrequest.Worker) response {
+func runWorker(t *testing.T, db *testdb.DB, worker engagementrequest.Worker) *http.Response {
 	t.Helper()
 	srv := httptest.NewServer(outbox.ProcessHandler(db.App, worker, internalauth.FromSecret(outboxWorkerSecret), outbox.NotificationDoor))
 	t.Cleanup(srv.Close)
-	resp := reqtest.Post(t, srv.URL, reqtest.Header("X-Internal-Secret", outboxWorkerSecret))
-	defer func() { _ = resp.Body.Close() }()
-	return response{status: resp.StatusCode}
+	return reqtest.Post(t, srv.URL, reqtest.Header("X-Internal-Secret", outboxWorkerSecret))
 }
 
 // TestWorker_SendsOneMailPerOwnerAndAdminContentFree proves the worker
@@ -47,22 +46,20 @@ func runWorker(t *testing.T, db *testdb.DB, worker engagementrequest.Worker) res
 // sent.
 func TestWorker_SendsOneMailPerOwnerAndAdminContentFree(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	testdb.SeedStaffAtPractice(t, db, practiceID, "owner-1", []string{ownerRole}, employeeType)
-	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
-	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
+	p := fixture.Practice(t, db)
+	doula := fixture.Staff(t, db, p)
+	fixture.Staff(t, db, p, fixture.Owner())
+	fixture.Staff(t, db, p, fixture.Admin())
+	client := fixture.Client(t, db, p)
 
-	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
+	srv, session := newServer(t, db, doula, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
-	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
-		engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate})
-	var out engagementrequest.RequestResponse
-	decode(t, resp, http.StatusCreated, &out)
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/clients/"+client.ID+"/engagement-requests", reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate}))
+	out := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, resp, http.StatusCreated)
 
 	sender := &mail.FakeSender{}
 	worker := newWorker(sender, time.Now())
-	expectStatus(t, runWorker(t, db, worker), http.StatusOK)
+	reqtest.RequireStatus(t, runWorker(t, db, worker), http.StatusOK)
 
 	sent := sender.Sent()
 	if len(sent) != 2 {

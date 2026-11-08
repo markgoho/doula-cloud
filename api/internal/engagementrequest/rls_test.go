@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"testing"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -34,15 +35,15 @@ func beginAs(t *testing.T, db *testdb.DB, practiceID, staffID string) *sql.Tx {
 // RequestHandler's own Go-level check.
 func TestRLS_ContractorInsertRefused(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	contractorID := testdb.SeedStaffAtPractice(t, db, practiceID, "contractor-1", []string{doulaRole}, contractorType)
-	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
-	tx := beginAs(t, db, practiceID, contractorID)
+	p := fixture.Practice(t, db)
+	contractor := fixture.Staff(t, db, p, fixture.Contractor())
+	client := fixture.Client(t, db, p)
+	tx := beginAs(t, db, p.ID, contractor.ID)
 
 	_, err := tx.ExecContext(t.Context(),
 		`INSERT INTO engagement_requests (practice_id, client_id, kind, due_date, requested_by)
 		 VALUES ($1, $2, 'birth', $3, $4)`,
-		practiceID, clientID, testDueDate, contractorID,
+		p.ID, client.ID, testDueDate, contractor.ID,
 	)
 	if err == nil {
 		t.Fatal("expected engagement_requests_insert to refuse a contractor Doula's INSERT, got no error")
@@ -54,15 +55,15 @@ func TestRLS_ContractorInsertRefused(t *testing.T) {
 // gate working, not a blanket refusal.
 func TestRLS_EmployeeDoulaInsertAllowed(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
-	tx := beginAs(t, db, practiceID, doulaID)
+	p := fixture.Practice(t, db)
+	doula := fixture.Staff(t, db, p)
+	client := fixture.Client(t, db, p)
+	tx := beginAs(t, db, p.ID, doula.ID)
 
 	_, err := tx.ExecContext(t.Context(),
 		`INSERT INTO engagement_requests (practice_id, client_id, kind, due_date, requested_by)
 		 VALUES ($1, $2, 'birth', $3, $4)`,
-		practiceID, clientID, testDueDate, doulaID,
+		p.ID, client.ID, testDueDate, doula.ID,
 	)
 	if err != nil {
 		t.Fatalf("expected an employee Doula's INSERT to be admitted, got: %v", err)
@@ -74,15 +75,15 @@ func TestRLS_EmployeeDoulaInsertAllowed(t *testing.T) {
 // Admin membership.
 func TestRLS_ContractorOwnerInsertAllowed(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "owner-1", []string{ownerRole}, contractorType)
-	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
-	tx := beginAs(t, db, practiceID, ownerID)
+	p := fixture.Practice(t, db)
+	owner := fixture.Staff(t, db, p, fixture.Owner(), fixture.Contractor())
+	client := fixture.Client(t, db, p)
+	tx := beginAs(t, db, p.ID, owner.ID)
 
 	_, err := tx.ExecContext(t.Context(),
 		`INSERT INTO engagement_requests (practice_id, client_id, kind, due_date, requested_by)
 		 VALUES ($1, $2, 'birth', $3, $4)`,
-		practiceID, clientID, testDueDate, ownerID,
+		p.ID, client.ID, testDueDate, owner.ID,
 	)
 	if err != nil {
 		t.Fatalf("expected a contractor Owner's INSERT to be admitted, got: %v", err)

@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/engagementrequest"
+	"doula-cloud/api/internal/fixture"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
@@ -16,19 +18,17 @@ import (
 // CHECK constraints demand.
 func TestApproveHandler_CreatesEngagementConsumesCreditAndStampsRequest(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
-	seedCredits(t, db, practiceID)
-	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
-	requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, doulaID)
+	p := fixture.Practice(t, db, fixture.Credits(3))
+	doula := fixture.Staff(t, db, p)
+	admin := fixture.Staff(t, db, p, fixture.Admin())
+	client := fixture.Client(t, db, p)
+	requestID := pendingRequest(t, db, p, client, testKindBirth, doula)
 
-	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
+	srv, session := newServer(t, db, admin, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/approve", session, nil)
-	var out engagementrequest.ApproveResponse
-	decode(t, resp, http.StatusOK, &out)
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/approve", reqtest.Session(session))
+	out := reqtest.DecodeStatus[engagementrequest.ApproveResponse](t, resp, http.StatusOK)
 	if out.EngagementID == "" || out.State != testStateApproved {
 		t.Fatalf("response = %+v, want approved with an engagementId", out)
 	}
@@ -41,7 +41,7 @@ func TestApproveHandler_CreatesEngagementConsumesCreditAndStampsRequest(t *testi
 	if kind != testKindBirth || dueDate == nil || *dueDate != testDueDate {
 		t.Fatalf("engagement = kind %q due %v, want birth/%s", kind, dueDate, testDueDate)
 	}
-	if got := creditLedgerCount(t, db, practiceID); got != 2 {
+	if got := creditLedgerCount(t, db, p.ID); got != 2 {
 		t.Fatalf("credit_ledger rows = %d, want 2 (signup_bonus + consumption)", got)
 	}
 }
@@ -52,26 +52,26 @@ func TestApproveHandler_CreatesEngagementConsumesCreditAndStampsRequest(t *testi
 // stays pending, and the out-of-Credits Notification is queued.
 func TestApproveHandler_EmptyBalanceLeavesRequestPendingAndQueuesNotification(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
-	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
-	requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, doulaID)
+	p := fixture.Practice(t, db)
+	doula := fixture.Staff(t, db, p)
+	admin := fixture.Staff(t, db, p, fixture.Admin())
+	client := fixture.Client(t, db, p)
+	requestID := pendingRequest(t, db, p, client, testKindBirth, doula)
 
-	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
+	srv, session := newServer(t, db, admin, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/approve", session, nil)
-	expectStatus(t, resp, http.StatusPaymentRequired)
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/approve", reqtest.Session(session))
+	reqtest.RequireStatus(t, resp, http.StatusPaymentRequired)
 
 	row := readRequest(t, db, requestID)
 	if row.state != testStatePending || row.decidedBy != nil || row.engagementID != nil {
 		t.Fatalf("request row = %+v, want still pending/undecided", row)
 	}
-	if got := creditLedgerCount(t, db, practiceID); got != 0 {
+	if got := creditLedgerCount(t, db, p.ID); got != 0 {
 		t.Fatalf("credit_ledger rows = %d, want 0", got)
 	}
-	if got := lowCreditOutboxCount(t, db, practiceID); got != 1 {
+	if got := lowCreditOutboxCount(t, db, p.ID); got != 1 {
 		t.Fatalf("low_credit_outbox rows = %d, want 1", got)
 	}
 }
@@ -79,85 +79,81 @@ func TestApproveHandler_EmptyBalanceLeavesRequestPendingAndQueuesNotification(t 
 // TestApproveHandler_DoulaForbidden proves approve is Owner/Admin only.
 func TestApproveHandler_DoulaForbidden(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	seedCredits(t, db, practiceID)
-	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
-	requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, doulaID)
+	p := fixture.Practice(t, db, fixture.Credits(3))
+	doula := fixture.Staff(t, db, p)
+	client := fixture.Client(t, db, p)
+	requestID := pendingRequest(t, db, p, client, testKindBirth, doula)
 
-	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
+	srv, session := newServer(t, db, doula, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/approve", session, nil)
-	expectStatus(t, resp, http.StatusForbidden)
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/approve", reqtest.Session(session))
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 // TestApproveHandler_AlreadyDecidedConflict proves a second approval of
 // the same Request is a 409, not a second Engagement.
 func TestApproveHandler_AlreadyDecidedConflict(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
-	seedCredits(t, db, practiceID)
-	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
-	requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, doulaID)
+	p := fixture.Practice(t, db, fixture.Credits(3))
+	doula := fixture.Staff(t, db, p)
+	admin := fixture.Staff(t, db, p, fixture.Admin())
+	client := fixture.Client(t, db, p)
+	requestID := pendingRequest(t, db, p, client, testKindBirth, doula)
 
-	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
+	srv, session := newServer(t, db, admin, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	first := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/approve", session, nil)
-	expectStatus(t, first, http.StatusOK)
+	first := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/approve", reqtest.Session(session))
+	reqtest.RequireStatus(t, first, http.StatusOK)
 
-	second := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/approve", session, nil)
-	expectStatus(t, second, http.StatusConflict)
+	second := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/approve", reqtest.Session(session))
+	reqtest.RequireStatus(t, second, http.StatusConflict)
 }
 
 // TestApproveHandler_NotFound proves a bogus request id is a 404.
 func TestApproveHandler_NotFound(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
+	p := fixture.Practice(t, db)
+	admin := fixture.Staff(t, db, p, fixture.Admin())
 
-	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
+	srv, session := newServer(t, db, admin, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/00000000-0000-0000-0000-000000000000/approve", session, nil)
-	expectStatus(t, resp, http.StatusNotFound)
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/00000000-0000-0000-0000-000000000000/approve", reqtest.Session(session))
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestApproveHandler_InvalidRequestIDRejected proves a malformed path
 // segment is a 400, not a query against a bogus id.
 func TestApproveHandler_InvalidRequestIDRejected(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
+	p := fixture.Practice(t, db)
+	admin := fixture.Staff(t, db, p, fixture.Admin())
 
-	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
+	srv, session := newServer(t, db, admin, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/not-a-uuid/approve", session, nil)
-	expectStatus(t, resp, http.StatusBadRequest)
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/not-a-uuid/approve", reqtest.Session(session))
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestApproveHandler_WarnsOnLiveEngagement proves the second-live-Engagement
 // warning also appears at approval time.
 func TestApproveHandler_WarnsOnLiveEngagement(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
-	seedCredits(t, db, practiceID)
-	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
-	seedEngagementInStatus(t, db, practiceID, clientID, "active")
-	requestID := pendingRequest(t, db, practiceID, clientID, testKindPostpartum, doulaID)
+	p := fixture.Practice(t, db, fixture.Credits(3))
+	doula := fixture.Staff(t, db, p)
+	admin := fixture.Staff(t, db, p, fixture.Admin())
+	client := fixture.Client(t, db, p)
+	fixture.Engagement(t, db, p, fixture.ForClient(client), fixture.Status(fixture.StatusActive))
+	requestID := pendingRequest(t, db, p, client, testKindPostpartum, doula)
 
-	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
+	srv, session := newServer(t, db, admin, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/approve", session, nil)
-	var out engagementrequest.ApproveResponse
-	decode(t, resp, http.StatusOK, &out)
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/approve", reqtest.Session(session))
+	out := reqtest.DecodeStatus[engagementrequest.ApproveResponse](t, resp, http.StatusOK)
 	if out.Warning == "" {
 		t.Fatal("expected a live-engagement warning, got none")
 	}
