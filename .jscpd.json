@@ -1,0 +1,15 @@
+{
+  "path": ["app/src", "api"],
+  "format": ["typescript", "svelte", "css", "go"],
+  "minTokens": 50,
+  "reporters": ["json"],
+  "output": ".jscpd-report",
+  "gitignore": true,
+  "ignore": [
+    "**/node_modules/**",
+    "api/internal/pdffont/fonts/**",
+    "api/db/migrations/**",
+    "app/src/lib/components/atoms/Icon/generated/**"
+  ],
+  "silent": true
+}

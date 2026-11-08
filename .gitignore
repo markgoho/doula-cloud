@@ -107,3 +107,6 @@ override.tf.json
 # Impeccable is a user-level install (ADR-0063); its per-run cache is local
 .impeccable/hook.cache.json
 /.svelte-kit/
+
+# jscpd report (bun run dupes)
+/.jscpd-report
