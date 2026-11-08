@@ -36,13 +36,8 @@ type SearchResponse struct {
 // search has no destination for her to reach. Must be mounted behind
 // staffauth.Middleware.
 func SearchHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, reader, ok := staffauth.RequireTxReader(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-		if reader.IsAmbientContractor() {
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		if c.Reader.IsAmbientContractor() {
 			apierr.WriteError(w, "You contract for this Practice, so you cannot search its Clients. Work reaches you as an Offer.", http.StatusForbidden)
 			return
 		}
@@ -51,7 +46,7 @@ func SearchHandler() http.Handler {
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
-		matches, err := FindMatches(r.Context(), tx, practiceID, req.Name, req.Name, req.DateOfBirth, req.Email, req.Phone, "")
+		matches, err := FindMatches(r.Context(), c.Tx, c.PracticeID, req.Name, req.Name, req.DateOfBirth, req.Email, req.Phone, "")
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)

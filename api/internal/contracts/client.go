@@ -50,27 +50,21 @@ func ClientContractGlance(ctx context.Context, tx *sql.Tx, engagementID string) 
 // error" shape plans.ClientGetBirthPlanHandler relies on. Must be
 // mounted behind clientauth.Middleware.
 func ClientGetContractHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, engagementID, ok := clientauth.RequireEngagementTx(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-
-		_, prose, status, values, amountCents, amountChangedAt, ok := requireContract(w, r, tx, engagementID)
+	return clientauth.Handler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call) {
+		_, prose, status, values, amountCents, amountChangedAt, ok := requireContract(w, r, c.Tx, c.EngagementID)
 		if !ok {
 			return
 		}
 		mergeFields := extractMergeFields(prose)
 
 		out := ContractResponse{
-			EngagementID:    engagementID,
+			EngagementID:    c.EngagementID,
 			Status:          status,
 			Prose:           prose,
 			MergeFields:     mergeFields,
 			Values:          withResolvedPrice(mergeFields, values.nonEmpty(), amountCents),
 			AmountChangedAt: amountChangedAt,
 		}
-		writeContract(w, r, tx, http.StatusOK, out)
+		writeClientContract(w, r, c.Tx, http.StatusOK, out)
 	})
 }

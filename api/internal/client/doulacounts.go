@@ -5,9 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
-
-	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/staffauth"
 )
 
 // DoulaCountsResponse is how many Clients each Doula holds a live attachment
@@ -42,22 +39,7 @@ const doulaCountsQuery = `SELECT da.staff_id, count(DISTINCT c.id)
 // she does not see another Doula's list. Must be mounted behind
 // staffauth.Middleware.
 func DoulaCountsHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, reader, ok := staffauth.RequireTxReader(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-		staffID, _ := staffauth.StaffID(r.Context())
-
-		resp, err := countDoulaClients(r.Context(), tx, practiceID, staffID, reader.IsAmbientContractor())
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		apierr.WriteJSON(w, http.StatusOK, resp)
-	})
+	return countHandler(countDoulaClients)
 }
 
 func countDoulaClients(ctx context.Context, tx *sql.Tx, practiceID, staffID string, onlyHers bool) (DoulaCountsResponse, error) {

@@ -105,38 +105,32 @@ func listVoidRequests(ctx context.Context, tx *sql.Tx, contractID string) ([]Voi
 // request endpoint is reachable by a contractor on a granted attachment,
 // so this must never hand her the Practice's price the way a caller
 // blindly copying void.go's own response-building would.
-func respondWithContract(w http.ResponseWriter, r *http.Request, tx *sql.Tx, engagementID string, status int) {
-	id, prose, contractStatus, values, amountCents, amountChangedAt, err := fetchContract(r.Context(), tx, engagementID)
+func respondWithContract(w http.ResponseWriter, r *http.Request, c staffauth.Call, status int) {
+	id, prose, contractStatus, values, amountCents, amountChangedAt, err := fetchContract(r.Context(), c.Tx, c.EngagementID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests -- the caller just wrote this row
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 	mergeFields := extractMergeFields(prose)
-	voidRequests, err := listVoidRequests(r.Context(), tx, id)
+	voidRequests, err := listVoidRequests(r.Context(), c.Tx, id)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return
-	}
-	reader, has := staffauth.ReaderFrom(r.Context())
-	if !has {
-		// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 	// #968: an ambient contractor never reads amount_changed_at either,
 	// the same withholding GetContractHandler applies -- it would
 	// otherwise leak "the price changed" with the value itself removed.
-	if reader.IsAmbientContractor() {
+	if c.Reader.IsAmbientContractor() {
 		amountChangedAt = nil
 	}
-	writeContract(w, r, tx, status, ContractResponse{
-		EngagementID:    engagementID,
+	writeContract(w, r, c, status, ContractResponse{
+		EngagementID:    c.EngagementID,
 		Status:          contractStatus,
 		Prose:           prose,
 		MergeFields:     mergeFields,
-		Values:          priceForReader(reader, mergeFields, values.nonEmpty(), amountCents),
+		Values:          priceForReader(c.Reader, mergeFields, values.nonEmpty(), amountCents),
 		AmountChangedAt: amountChangedAt,
 		VoidRequests:    voidRequests,
 	})
@@ -163,13 +157,8 @@ func respondWithContract(w http.ResponseWriter, r *http.Request, tx *sql.Tx, eng
 // so a contractor's reach is checked before the handler runs at all.
 // Must be mounted through idempotency.Router.ExemptGated.
 func PostVoidRequestHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, engagementID, ok := resolveContractRequest(w, r)
-		if !ok {
-			return
-		}
-
-		id, _, status, _, _, _, ok := requireContract(w, r, tx, engagementID)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		id, _, status, _, _, _, ok := requireContract(w, r, c.Tx, c.EngagementID)
 		if !ok {
 			return
 		}
@@ -190,13 +179,10 @@ func PostVoidRequestHandler() http.Handler {
 			return
 		}
 
-		staffID, _ := staffauth.StaffID(r.Context())
-		practiceID, _ := staffauth.PracticeID(r.Context())
-
-		if _, err := tx.ExecContext(r.Context(),
+		if _, err := c.Tx.ExecContext(r.Context(),
 			`INSERT INTO contract_void_requests (contract_id, engagement_id, practice_id, requested_by, reason)
 			 VALUES ($1, $2, $3, $4, $5)`,
-			id, engagementID, practiceID, staffID, reason,
+			id, c.EngagementID, c.PracticeID, c.StaffID, reason,
 		); err != nil {
 			if pgerr.IsUniqueViolation(err) {
 				apierr.WriteError(w, msgVoidRequestAlreadyOpen, http.StatusConflict)
@@ -207,20 +193,14 @@ func PostVoidRequestHandler() http.Handler {
 			return
 		}
 
-		if err := activity.Record(r.Context(), tx, activity.Entry{
-			PracticeID:  practiceID,
-			SubjectKind: activity.SubjectEngagement,
-			SubjectID:   engagementID,
-			Action:      string(activity.ActionContractVoidRequested),
-			Actor:       activity.StaffActor(staffID),
-		}); err != nil {
+		if err := recordEngagementActivity(r.Context(), c, activity.ActionContractVoidRequested, nil); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		respondWithContract(w, r, tx, engagementID, http.StatusCreated)
-	})
+		respondWithContract(w, r, c, http.StatusCreated)
+	}, staffauth.Engagement())
 }
 
 // PostVoidRequestDeclineHandler is the other half of #971's ask: an
@@ -241,17 +221,8 @@ func PostVoidRequestHandler() http.Handler {
 // Contract's request entirely. Must be mounted through
 // idempotency.Router.ExemptGated.
 func PostVoidRequestDeclineHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, engagementID, ok := resolveContractRequest(w, r)
-		if !ok {
-			return
-		}
-		requestID := r.PathValue("requestId")
-		if !staffauth.ParseUUID(w, "void request", requestID) {
-			return
-		}
-
-		id, _, _, _, _, _, ok := requireContract(w, r, tx, engagementID)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		id, _, _, _, _, _, ok := requireContract(w, r, c.Tx, c.EngagementID)
 		if !ok {
 			return
 		}
@@ -266,13 +237,11 @@ func PostVoidRequestDeclineHandler() http.Handler {
 			return
 		}
 
-		staffID, _ := staffauth.StaffID(r.Context())
-
-		res, err := tx.ExecContext(r.Context(),
+		res, err := c.Tx.ExecContext(r.Context(),
 			`UPDATE contract_void_requests
 			    SET status = 'declined', decided_by = $1, decided_at = now(), decline_reason = $2
 			  WHERE id = $3 AND contract_id = $4 AND status = 'open'`,
-			staffID, reason, requestID, id,
+			c.StaffID, reason, c.ID("requestId"), id,
 		)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -290,19 +259,12 @@ func PostVoidRequestDeclineHandler() http.Handler {
 			return
 		}
 
-		practiceID, _ := staffauth.PracticeID(r.Context())
-		if err := activity.Record(r.Context(), tx, activity.Entry{
-			PracticeID:  practiceID,
-			SubjectKind: activity.SubjectEngagement,
-			SubjectID:   engagementID,
-			Action:      string(activity.ActionContractVoidDeclined),
-			Actor:       activity.StaffActor(staffID),
-		}); err != nil {
+		if err := recordEngagementActivity(r.Context(), c, activity.ActionContractVoidDeclined, nil); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		respondWithContract(w, r, tx, engagementID, http.StatusOK)
-	})
+		respondWithContract(w, r, c, http.StatusOK)
+	}, staffauth.Engagement(), staffauth.PathID("void request", "requestId"))
 }

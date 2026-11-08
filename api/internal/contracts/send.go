@@ -71,13 +71,8 @@ type sendPushPayload struct {
 // Doula, or a contractor on a granted attachment -- may send. Must be
 // mounted through idempotency.Router.ExemptGated.
 func PostSendContractHandler(pusher push.Pusher) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, engagementID, ok := resolveContractRequest(w, r)
-		if !ok {
-			return
-		}
-
-		id, prose, status, values, amountCents, amountChangedAt, ok := requireContract(w, r, tx, engagementID)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		id, prose, status, values, amountCents, amountChangedAt, ok := requireContract(w, r, c.Tx, c.EngagementID)
 		if !ok {
 			return
 		}
@@ -86,7 +81,7 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 			return
 		}
 
-		invited, refused, err := clientHasPortalInvite(r.Context(), tx, engagementID)
+		invited, refused, err := clientHasPortalInvite(r.Context(), c.Tx, c.EngagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -112,7 +107,7 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 			return
 		}
 
-		if _, err := tx.ExecContext(r.Context(),
+		if _, err := c.Tx.ExecContext(r.Context(),
 			`UPDATE contracts SET status = $1::contract_status WHERE id = $2`,
 			string(StatusSent), id,
 		); err != nil {
@@ -120,32 +115,24 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		practiceID, _ := staffauth.PracticeID(r.Context())
-		staffID, _ := staffauth.StaffID(r.Context())
-		if err := activity.Record(r.Context(), tx, activity.Entry{
-			PracticeID:  practiceID,
-			SubjectKind: activity.SubjectEngagement,
-			SubjectID:   engagementID,
-			Action:      string(activity.ActionContractSent),
-			Actor:       activity.StaffActor(staffID),
-		}); err != nil {
+		if err := recordEngagementActivity(r.Context(), c, activity.ActionContractSent, nil); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		notifyClient(r.Context(), tx, pusher, engagementID)
+		notifyClient(r.Context(), c.Tx, pusher, c.EngagementID)
 
 		out := ContractResponse{
-			EngagementID:    engagementID,
+			EngagementID:    c.EngagementID,
 			Status:          string(StatusSent),
 			Prose:           prose,
 			MergeFields:     mergeFields,
 			Values:          values.nonEmpty(),
 			AmountChangedAt: amountChangedAt,
 		}
-		writeContract(w, r, tx, http.StatusOK, out)
-	})
+		writeContract(w, r, c, http.StatusOK, out)
+	}, staffauth.Engagement())
 }
 
 // clientHasPortalInvite reports whether engagementID's Client has ever
@@ -163,7 +150,7 @@ func clientHasPortalInvite(ctx context.Context, tx *sql.Tx, engagementID string)
 		`SELECT client_id FROM engagements WHERE id = $1`,
 		engagementID,
 	).Scan(&clientID); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests -- resolveContractRequest already proved the Engagement exists
+		// coverage:ignore reason: DB query failure, not exercised by unit tests -- staffauth.Engagement already proved the Engagement exists
 		return false, false, fmt.Errorf("contracts: resolve engagement client: %w", err)
 	}
 	state, err := client.FetchPortalInviteState(ctx, tx, clientID)

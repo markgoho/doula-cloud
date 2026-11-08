@@ -1,8 +1,6 @@
 package client
 
 import (
-	"database/sql"
-	"errors"
 	"net/http"
 	"strings"
 
@@ -72,21 +70,9 @@ func writeConflict(w http.ResponseWriter, body EditConflictResponse) {
 // portal invite in the same transaction. Must be mounted behind
 // staffauth.Middleware.
 func EditHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, clientID, _, ok := staffauth.RequireClientReach(w, r)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		old, ok := requireRecord(w, r, c, c.ClientID)
 		if !ok {
-			return
-		}
-		staffID, _ := staffauth.StaffID(r.Context())
-
-		old, err := fetchRecord(r.Context(), tx, practiceID, clientID)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "client not found", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -94,7 +80,7 @@ func EditHandler() http.Handler {
 		// so recordEvent could not seal the edit's diff anyway -- but the
 		// refusal is here, at the top and in words, rather than being
 		// left to surface as a sealing failure further down.
-		erased, err := isErased(r.Context(), tx, clientID)
+		erased, err := isErased(r.Context(), c.Tx, c.ClientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -110,7 +96,7 @@ func EditHandler() http.Handler {
 		// zero rows on the UPDATE below rather than error -- this refusal
 		// is what turns that into an honest response instead of a 200
 		// that wrote nothing.
-		mergedInto, err := readMergedInto(r.Context(), tx, clientID)
+		mergedInto, err := readMergedInto(r.Context(), c.Tx, c.ClientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -128,10 +114,10 @@ func EditHandler() http.Handler {
 		if !normalizeAndValidate(w, &req.Record) {
 			return
 		}
-		req.ID = clientID
+		req.ID = c.ClientID
 
 		if !req.Override {
-			collisions, err := FindCollisions(r.Context(), tx, practiceID, req.GivenName, req.FamilyName, req.DateOfBirth, req.Email, req.Phone, clientID)
+			collisions, err := FindCollisions(r.Context(), c.Tx, c.PracticeID, req.GivenName, req.FamilyName, req.DateOfBirth, req.Email, req.Phone, c.ClientID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -148,9 +134,9 @@ func EditHandler() http.Handler {
 				!strings.EqualFold(strings.TrimSpace(old.PreferredName), strings.TrimSpace(req.PreferredName))
 			if nameChanged {
 				var substitutions []CollisionMatch
-				for _, c := range collisions {
-					if c.NameSubstitution {
-						substitutions = append(substitutions, CollisionMatch{Match: c.Match})
+				for _, col := range collisions {
+					if col.NameSubstitution {
+						substitutions = append(substitutions, CollisionMatch{Match: col.Match})
 					}
 				}
 				if len(substitutions) > 0 {
@@ -160,13 +146,7 @@ func EditHandler() http.Handler {
 			}
 
 			if len(collisions) > 0 {
-				sourceAttached, err := isAttachedRecord(r.Context(), tx, clientID)
-				if err != nil {
-					// coverage:ignore reason: DB query failure, not exercised by unit tests
-					apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-					return
-				}
-				sourceCreatedAt, err := clientCreatedAt(r.Context(), tx, clientID)
+				sourceAttached, sourceCreatedAt, err := mergeFacts(r.Context(), c.Tx, c.ClientID)
 				if err != nil {
 					// coverage:ignore reason: DB query failure, not exercised by unit tests
 					apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -174,16 +154,16 @@ func EditHandler() http.Handler {
 				}
 
 				matches := make([]CollisionMatch, len(collisions))
-				for i, c := range collisions {
-					otherAttached, err := isAttachedRecord(r.Context(), tx, c.ID)
+				for i, col := range collisions {
+					otherAttached, err := isAttachedRecord(r.Context(), c.Tx, col.ID)
 					if err != nil {
 						// coverage:ignore reason: DB query failure, not exercised by unit tests
 						apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 						return
 					}
 					matches[i] = CollisionMatch{
-						Match:        c.Match,
-						WouldSurvive: resolveMergeDirection(sourceAttached, otherAttached, sourceCreatedAt, c.CreatedAt),
+						Match:        col.Match,
+						WouldSurvive: resolveMergeDirection(sourceAttached, otherAttached, sourceCreatedAt, col.CreatedAt),
 					}
 				}
 				writeConflict(w, EditConflictResponse{Matches: matches})
@@ -191,18 +171,18 @@ func EditHandler() http.Handler {
 			}
 		}
 
-		if err := updateClient(r.Context(), tx, clientID, req.Record); err != nil {
+		if err := updateClient(r.Context(), c.Tx, c.ClientID, req.Record); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if err := recordEvent(r.Context(), tx, practiceID, clientID, eventUpdated, diffRecords(old, req.Record), staffID); err != nil {
+		if err := recordEvent(r.Context(), c.Tx, c.PracticeID, c.ClientID, eventUpdated, diffRecords(old, req.Record), c.StaffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if old.Email != req.Email {
-			if err := portalinvite.RevokePending(r.Context(), tx, clientID, portalinvite.RevokedEmailChanged); err != nil {
+			if err := portalinvite.RevokePending(r.Context(), c.Tx, c.ClientID, portalinvite.RevokedEmailChanged); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
@@ -210,5 +190,5 @@ func EditHandler() http.Handler {
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, req.Record)
-	})
+	}, staffauth.Client())
 }

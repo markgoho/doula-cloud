@@ -101,7 +101,22 @@ type PutContractRequest struct {
 //
 // out.EngagementID is the Engagement asked about: every construction
 // site sets it, and it is the same id the caller's own tx is scoped to.
-func writeContract(w http.ResponseWriter, r *http.Request, tx *sql.Tx, status int, out ContractResponse) {
+func writeContract(w http.ResponseWriter, r *http.Request, c staffauth.Call, status int, out ContractResponse) {
+	writeContractFor(w, r, c.Tx, &c, status, out)
+}
+
+// writeClientContract is writeContract for the Client portal's own reads
+// (client.go, sign.go). They run with no Practice scope, under which the
+// ledger reads nothing, so the trail is a Staff read only rather than one
+// that is quietly empty there. The Client reads what she agreed to pay, so
+// nothing is shaped away.
+func writeClientContract(w http.ResponseWriter, r *http.Request, tx *sql.Tx, status int, out ContractResponse) {
+	writeContractFor(w, r, tx, nil, status, out)
+}
+
+// writeContractFor is the one place a Contract response is finished:
+// staff is the Staff caller, or nil for the Client portal.
+func writeContractFor(w http.ResponseWriter, r *http.Request, tx *sql.Tx, staff *staffauth.Call, status int, out ContractResponse) {
 	_, hasSignedPDF, err := signedPDFObjectPath(r.Context(), tx, out.EngagementID)
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
@@ -109,20 +124,16 @@ func writeContract(w http.ResponseWriter, r *http.Request, tx *sql.Tx, status in
 		return
 	}
 	out.HasSignedPDF = hasSignedPDF
-	reader, hasReader := staffauth.ReaderFrom(r.Context())
-	// The Client portal's own read (client.go) runs with no Practice
-	// scope, under which the ledger reads nothing, so the trail is a
-	// Staff read only rather than one that is quietly empty there.
-	if hasReader {
-		practiceID, _ := staffauth.PracticeID(r.Context())
-		out.Sent, out.Signed, err = contractTrail(r.Context(), tx, practiceID, out.EngagementID)
+	if staff != nil {
+		out.Sent, out.Signed, err = contractTrail(r.Context(), tx, staff.PracticeID, out.EngagementID)
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		if err != nil {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
+		out = shapeForReader(staff.Reader, out)
 	}
-	apierr.WriteJSON(w, status, shapeForReader(reader, hasReader, out))
+	apierr.WriteJSON(w, status, out)
 }
 
 // contractTrail reads when engagementID's current Contract -- the newest,
@@ -208,26 +219,14 @@ func (v MergeFieldValues) nonEmpty() MergeFieldValues {
 // contractor on a granted attachment -- may create. Must be mounted
 // through idempotency.Router.ExemptGated.
 func PostContractHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, engagementID, ok := resolveContractRequest(w, r)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		prose, ok := requireTemplateProse(w, r, c)
 		if !ok {
-			return
-		}
-		practiceID, _ := staffauth.PracticeID(r.Context())
-
-		prose, found, err := fetchProse(r.Context(), tx, practiceID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if !found {
-			apierr.WriteError(w, "no contract template found for this practice", http.StatusNotFound)
 			return
 		}
 
 		mergeFields := extractMergeFields(prose)
-		values, err := resolveMergeFieldValues(r.Context(), tx, engagementID, mergeFields)
+		values, err := resolveMergeFieldValues(r.Context(), c.Tx, c.EngagementID, mergeFields)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -239,7 +238,7 @@ func PostContractHandler() http.Handler {
 		// rate for the Engagement's kind means no Contract -- refused
 		// before any row is written, naming the kind so an Owner or
 		// Admin knows exactly what to set.
-		amountCents, kind, hasRate, err := resolveContractAmount(r.Context(), tx, engagementID)
+		amountCents, kind, hasRate, err := resolveContractAmount(r.Context(), c.Tx, c.EngagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -257,9 +256,9 @@ func PostContractHandler() http.Handler {
 			return
 		}
 
-		if _, err := tx.ExecContext(r.Context(),
+		if _, err := c.Tx.ExecContext(r.Context(),
 			`INSERT INTO contracts (engagement_id, prose, merge_field_values, amount_cents) VALUES ($1, $2, $3, $4)`,
-			engagementID, prose, valuesJSON, amountCents,
+			c.EngagementID, prose, valuesJSON, amountCents,
 		); err != nil {
 			if pgerr.IsUniqueViolation(err) {
 				apierr.WriteError(w, "a contract already exists for this work", http.StatusConflict)
@@ -275,14 +274,7 @@ func PostContractHandler() http.Handler {
 		// a contractor too. The price this Contract was created with is
 		// recorded separately below, as ActionContractPriced, which
 		// stays in the money set.
-		staffID, _ := staffauth.StaffID(r.Context())
-		if err := activity.Record(r.Context(), tx, activity.Entry{
-			PracticeID:  practiceID,
-			SubjectKind: activity.SubjectEngagement,
-			SubjectID:   engagementID,
-			Action:      string(activity.ActionContractCreated),
-			Actor:       activity.StaffActor(staffID),
-		}); err != nil {
+		if err := recordEngagementActivity(r.Context(), c, activity.ActionContractCreated, nil); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -298,28 +290,21 @@ func PostContractHandler() http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if err := activity.Record(r.Context(), tx, activity.Entry{
-			PracticeID:  practiceID,
-			SubjectKind: activity.SubjectEngagement,
-			SubjectID:   engagementID,
-			Action:      string(activity.ActionContractPriced),
-			Diff:        pricedDiff,
-			Actor:       activity.StaffActor(staffID),
-		}); err != nil {
+		if err := recordEngagementActivity(r.Context(), c, activity.ActionContractPriced, pricedDiff); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		out := ContractResponse{
-			EngagementID: engagementID,
+			EngagementID: c.EngagementID,
 			Status:       string(StatusDraft),
 			Prose:        prose,
 			MergeFields:  mergeFields,
 			Values:       withResolvedPrice(mergeFields, values, amountCents),
 		}
-		writeContract(w, r, tx, http.StatusCreated, out)
-	})
+		writeContract(w, r, c, http.StatusCreated, out)
+	}, staffauth.Engagement())
 }
 
 // GetContractHandler views the Contract for :engagementId, for anyone
@@ -341,22 +326,8 @@ func PostContractHandler() http.Handler {
 // price key reachable at all" guarantee the deleted split used to give.
 // Must be mounted behind staffauth.Middleware.
 func GetContractHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, engagementID, ok := resolveContractRequest(w, r)
-		if !ok {
-			return
-		}
-
-		reader, ok := staffauth.RequireReader(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-		if !staffauth.RequireEngagementAccess(w, r, tx, engagementID, "no contract found for this engagement") {
-			return
-		}
-
-		id, prose, status, values, amountCents, amountChangedAt, ok := requireContract(w, r, tx, engagementID)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		id, prose, status, values, amountCents, amountChangedAt, ok := requireContract(w, r, c.Tx, c.EngagementID)
 		if !ok {
 			return
 		}
@@ -366,11 +337,11 @@ func GetContractHandler() http.Handler {
 		// (priceForReader), so amountChangedAt is withheld from her the
 		// same way -- it would otherwise leak "the price changed" even
 		// with the value itself removed.
-		if reader.IsAmbientContractor() {
+		if c.Reader.IsAmbientContractor() {
 			amountChangedAt = nil
 		}
 
-		voidRequests, err := listVoidRequests(r.Context(), tx, id)
+		voidRequests, err := listVoidRequests(r.Context(), c.Tx, id)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -378,17 +349,17 @@ func GetContractHandler() http.Handler {
 		}
 
 		full := ContractResponse{
-			EngagementID:    engagementID,
+			EngagementID:    c.EngagementID,
 			Status:          status,
 			Prose:           prose,
 			MergeFields:     mergeFields,
-			Values:          priceForReader(reader, mergeFields, values.nonEmpty(), amountCents),
+			Values:          priceForReader(c.Reader, mergeFields, values.nonEmpty(), amountCents),
 			AmountChangedAt: amountChangedAt,
 			VoidRequests:    voidRequests,
 		}
 
-		writeContract(w, r, tx, http.StatusOK, full)
-	})
+		writeContract(w, r, c, http.StatusOK, full)
+	}, staffauth.EngagementReach("no contract found for this engagement"))
 }
 
 // PutContractHandler replaces the full Values map of the Contract for
@@ -402,13 +373,8 @@ func GetContractHandler() http.Handler {
 // Template prose names. Must be mounted through
 // idempotency.Router.ExemptGated.
 func PutContractHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, engagementID, ok := resolveContractRequest(w, r)
-		if !ok {
-			return
-		}
-
-		id, prose, status, storedValues, amountCents, amountChangedAt, ok := requireContract(w, r, tx, engagementID)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		id, prose, status, storedValues, amountCents, amountChangedAt, ok := requireContract(w, r, c.Tx, c.EngagementID)
 		if !ok {
 			return
 		}
@@ -441,7 +407,7 @@ func PutContractHandler() http.Handler {
 			return
 		}
 
-		if _, err := tx.ExecContext(r.Context(),
+		if _, err := c.Tx.ExecContext(r.Context(),
 			`UPDATE contracts SET merge_field_values = $1 WHERE id = $2`,
 			valuesJSON, id,
 		); err != nil {
@@ -456,16 +422,7 @@ func PutContractHandler() http.Handler {
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
-			practiceID, _ := staffauth.PracticeID(r.Context())
-			staffID, _ := staffauth.StaffID(r.Context())
-			if err := activity.Record(r.Context(), tx, activity.Entry{
-				PracticeID:  practiceID,
-				SubjectKind: activity.SubjectEngagement,
-				SubjectID:   engagementID,
-				Action:      string(activity.ActionContractEdited),
-				Diff:        diff,
-				Actor:       activity.StaffActor(staffID),
-			}); err != nil {
+			if err := recordEngagementActivity(r.Context(), c, activity.ActionContractEdited, diff); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
@@ -473,15 +430,15 @@ func PutContractHandler() http.Handler {
 		}
 
 		out := ContractResponse{
-			EngagementID:    engagementID,
+			EngagementID:    c.EngagementID,
 			Status:          status,
 			Prose:           prose,
 			MergeFields:     mergeFields,
 			Values:          withResolvedPrice(mergeFields, req.Values, amountCents),
 			AmountChangedAt: amountChangedAt,
 		}
-		writeContract(w, r, tx, http.StatusOK, out)
-	})
+		writeContract(w, r, c, http.StatusOK, out)
+	}, staffauth.Engagement())
 }
 
 // changedMergeFields names, sorted, every merge field whose value a save
@@ -616,7 +573,7 @@ func resolveMergeFieldValues(ctx context.Context, tx *sql.Tx, engagementID strin
 		 WHERE e.id = $1`,
 		engagementID,
 	).Scan(&givenName, &familyName, &practiceName); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests -- resolveContractRequest already proved the Engagement (and therefore its Client and Practice) exists
+		// coverage:ignore reason: DB query failure, not exercised by unit tests -- staffauth.Engagement already proved the Engagement (and therefore its Client and Practice) exists
 		return nil, fmt.Errorf("contracts: resolve merge field values: %w", err)
 	}
 

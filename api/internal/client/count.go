@@ -45,15 +45,15 @@ const countAttachedClientsQuery = `SELECT count(*)
 // same seat ListHandler decides it from. Must be mounted behind
 // staffauth.Middleware.
 func CountHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, reader, ok := staffauth.RequireTxReader(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-		staffID, _ := staffauth.StaffID(r.Context())
+	return countHandler(countClients)
+}
 
-		resp, err := countClients(r.Context(), tx, practiceID, staffID, reader.IsAmbientContractor())
+// countHandler serves what count reads for the caller: her Practice, her
+// id, and whether she is narrowed to her own Clients. Shared by
+// CountHandler and DoulaCountsHandler, which differ only in the count.
+func countHandler[T any](count func(ctx context.Context, tx *sql.Tx, practiceID, staffID string, narrowed bool) (T, error)) http.Handler {
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		resp, err := count(r.Context(), c.Tx, c.PracticeID, c.StaffID, c.Reader.IsAmbientContractor())
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)

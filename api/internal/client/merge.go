@@ -65,24 +65,12 @@ type MergeResponse struct {
 // (no chains); or when the two ids are the same. Must be mounted behind
 // staffauth.Middleware.
 func MergeHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, clientID, reader, ok := staffauth.RequireClientReach(w, r)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		sourceOnFile, ok := requireRecord(w, r, c, c.ClientID)
 		if !ok {
 			return
 		}
-		staffID, _ := staffauth.StaffID(r.Context())
-
-		sourceOnFile, err := fetchRecord(r.Context(), tx, practiceID, clientID)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "client not found", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		sourceErased, err := isErased(r.Context(), tx, clientID)
+		sourceErased, err := isErased(r.Context(), c.Tx, c.ClientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -92,7 +80,7 @@ func MergeHandler() http.Handler {
 			apierr.WriteError(w, "this client's data has been erased and cannot be edited", http.StatusConflict)
 			return
 		}
-		sourceMergedInto, err := readMergedInto(r.Context(), tx, clientID)
+		sourceMergedInto, err := readMergedInto(r.Context(), c.Tx, c.ClientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -114,30 +102,24 @@ func MergeHandler() http.Handler {
 		if !normalizeAndValidate(w, &req.Record) {
 			return
 		}
-		req.ID = clientID
+		req.ID = c.ClientID
 		otherClientID := req.OtherClientID
 		if !staffauth.ParseUUID(w, "otherClient", otherClientID) {
 			return
 		}
-		if otherClientID == clientID {
+		if otherClientID == c.ClientID {
 			apierr.WriteError(w, "A Client record cannot be merged into itself.", http.StatusConflict)
 			return
 		}
 
-		if !staffauth.RequireClientAccess(w, r, tx, reader, otherClientID) {
+		if !staffauth.RequireClientAccess(w, r, c.Tx, c.Reader, otherClientID) {
 			return
 		}
-		otherOnFile, err := fetchRecord(r.Context(), tx, practiceID, otherClientID)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "client not found", http.StatusNotFound)
+		otherOnFile, ok := requireRecord(w, r, c, otherClientID)
+		if !ok {
 			return
 		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		otherMergedInto, err := readMergedInto(r.Context(), tx, otherClientID)
+		otherMergedInto, err := readMergedInto(r.Context(), c.Tx, otherClientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -147,7 +129,7 @@ func MergeHandler() http.Handler {
 			apierr.WriteError(w, "that client record has already been merged into another", http.StatusConflict)
 			return
 		}
-		otherErased, err := isErased(r.Context(), tx, otherClientID)
+		otherErased, err := isErased(r.Context(), c.Tx, otherClientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -158,26 +140,13 @@ func MergeHandler() http.Handler {
 			return
 		}
 
-		sourceAttached, err := isAttachedRecord(r.Context(), tx, clientID)
+		sourceAttached, sourceCreatedAt, err := mergeFacts(r.Context(), c.Tx, c.ClientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		otherAttached, err := isAttachedRecord(r.Context(), tx, otherClientID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		sourceCreatedAt, err := clientCreatedAt(r.Context(), tx, clientID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		otherCreatedAt, err := clientCreatedAt(r.Context(), tx, otherClientID)
+		otherAttached, otherCreatedAt, err := mergeFacts(r.Context(), c.Tx, otherClientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -195,10 +164,10 @@ func MergeHandler() http.Handler {
 		var survivorID, absorbedID string
 		var survivorTyped, survivorOnFile, absorbedRecord Record
 		if resolveMergeDirection(sourceAttached, otherAttached, sourceCreatedAt, otherCreatedAt) {
-			survivorID, absorbedID = otherClientID, clientID
+			survivorID, absorbedID = otherClientID, c.ClientID
 			survivorTyped, survivorOnFile, absorbedRecord = otherOnFile, otherOnFile, req.Record
 		} else {
-			survivorID, absorbedID = clientID, otherClientID
+			survivorID, absorbedID = c.ClientID, otherClientID
 			survivorTyped, survivorOnFile, absorbedRecord = req.Record, sourceOnFile, otherOnFile
 		}
 
@@ -206,7 +175,7 @@ func MergeHandler() http.Handler {
 		// kind cannot live under one Client
 		// (engagement_requests_one_pending, 00042), and a merge that
 		// discovered that at the UPDATE could only report it as a 500.
-		if kind, err := pendingRequestKindCollision(r.Context(), tx, absorbedID, survivorID); err != nil {
+		if kind, err := pendingRequestKindCollision(r.Context(), c.Tx, absorbedID, survivorID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -222,12 +191,12 @@ func MergeHandler() http.Handler {
 		// row as their precondition, so the database verifies a merge is
 		// under way from a durable fact rather than from a session flag
 		// this handler would otherwise have to be trusted to set.
-		if err := setMergedInto(r.Context(), tx, absorbedID, survivorID, staffID, clock.Now(r.Context()).UTC()); err != nil {
+		if err := setMergedInto(r.Context(), c.Tx, absorbedID, survivorID, c.StaffID, clock.Now(r.Context()).UTC()); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		moved, err := moveAttachments(r.Context(), tx, absorbedID, survivorID)
+		moved, err := moveAttachments(r.Context(), c.Tx, absorbedID, survivorID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -236,7 +205,7 @@ func MergeHandler() http.Handler {
 
 		merged := fold(absorbedRecord, survivorTyped)
 		merged.ID = survivorID
-		if err := updateClient(r.Context(), tx, survivorID, merged); err != nil {
+		if err := updateClient(r.Context(), c.Tx, survivorID, merged); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -244,13 +213,13 @@ func MergeHandler() http.Handler {
 		survivorDiff := diffRecords(survivorOnFile, merged)
 		survivorDiff["mergedFrom"] = change{From: nil, To: absorbedID}
 		survivorDiff["moved"] = change{From: nil, To: moved}
-		if err := recordEvent(r.Context(), tx, practiceID, survivorID, eventMerged, survivorDiff, staffID); err != nil {
+		if err := recordEvent(r.Context(), c.Tx, c.PracticeID, survivorID, eventMerged, survivorDiff, c.StaffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if strings.TrimSpace(survivorOnFile.Email) != strings.TrimSpace(merged.Email) {
-			if err := portalinvite.RevokePending(r.Context(), tx, survivorID, portalinvite.RevokedEmailChanged); err != nil {
+			if err := portalinvite.RevokePending(r.Context(), c.Tx, survivorID, portalinvite.RevokedEmailChanged); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
@@ -263,17 +232,17 @@ func MergeHandler() http.Handler {
 		// can never be re-sealed under the survivor's key, so the merged
 		// Client carries two audit trails permanently and an erasure has
 		// to shred both.
-		if err := recordEvent(r.Context(), tx, practiceID, absorbedID, eventAbsorbed, map[string]change{
+		if err := recordEvent(r.Context(), c.Tx, c.PracticeID, absorbedID, eventAbsorbed, map[string]change{
 			"mergedInto": {From: nil, To: survivorID},
 			"moved":      {From: nil, To: moved},
-		}, staffID); err != nil {
+		}, c.StaffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, MergeResponse{Record: merged, MergedFrom: absorbedID, Moved: moved})
-	})
+	}, staffauth.Client())
 }
 
 // isAttachedRecord reports whether clientID is "attached": it has an
@@ -344,6 +313,16 @@ func resolveMergeDirection(sourceAttached, otherAttached bool, sourceCreatedAt, 
 		return otherAttached
 	}
 	return otherCreatedAt.Before(sourceCreatedAt)
+}
+
+// mergeFacts reads the two facts resolveMergeDirection compares for one
+// record.
+func mergeFacts(ctx context.Context, tx *sql.Tx, clientID string) (attached bool, createdAt time.Time, err error) {
+	attached, err = isAttachedRecord(ctx, tx, clientID)
+	if err == nil {
+		createdAt, err = clientCreatedAt(ctx, tx, clientID)
+	}
+	return attached, createdAt, err
 }
 
 // clientCreatedAt reads clientID's created_at -- what resolveMergeDirection

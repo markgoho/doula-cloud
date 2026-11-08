@@ -44,14 +44,8 @@ type CreateResponse struct {
 // intake's own duplicate screen already answers. Must be mounted behind
 // staffauth.Middleware.
 func CreateHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, reader, ok := staffauth.RequireTxReader(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-		staffID, _ := staffauth.StaffID(r.Context())
-		if reader.IsAmbientContractor() {
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		if c.Reader.IsAmbientContractor() {
 			apierr.WriteError(w, "You contract for this Practice, so you cannot add a Client here. Work reaches you as an Offer.", http.StatusForbidden)
 			return
 		}
@@ -65,7 +59,7 @@ func CreateHandler() http.Handler {
 		}
 
 		if !req.Override {
-			collisions, err := FindCollisions(r.Context(), tx, practiceID, req.GivenName, req.FamilyName, req.DateOfBirth, req.Email, req.Phone, "")
+			collisions, err := FindCollisions(r.Context(), c.Tx, c.PracticeID, req.GivenName, req.FamilyName, req.DateOfBirth, req.Email, req.Phone, "")
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -73,8 +67,8 @@ func CreateHandler() http.Handler {
 			}
 			if len(collisions) > 0 {
 				matches := make([]Match, len(collisions))
-				for i, c := range collisions {
-					matches[i] = c.Match
+				for i, col := range collisions {
+					matches[i] = col.Match
 				}
 				apierr.WriteJSON(w, http.StatusConflict, CreateResponse{Matches: matches})
 				return
@@ -82,7 +76,7 @@ func CreateHandler() http.Handler {
 		}
 
 		req.ID = uuid.NewString()
-		if err := insertClient(r.Context(), tx, practiceID, req.Record); err != nil {
+		if err := insertClient(r.Context(), c.Tx, c.PracticeID, req.Record); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -91,12 +85,12 @@ func CreateHandler() http.Handler {
 		// Client and the key sealing her history either both exist or
 		// neither does -- ADR-0027. It has to precede recordEvent, which
 		// seals the created diff under it.
-		if err := clientkey.Ensure(r.Context(), tx, practiceID, req.ID); err != nil {
+		if err := clientkey.Ensure(r.Context(), c.Tx, c.PracticeID, req.ID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if err := recordEvent(r.Context(), tx, practiceID, req.ID, eventCreated, createdDiff(req.Record), staffID); err != nil {
+		if err := recordEvent(r.Context(), c.Tx, c.PracticeID, req.ID, eventCreated, createdDiff(req.Record), c.StaffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return

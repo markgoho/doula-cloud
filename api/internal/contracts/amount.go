@@ -45,12 +45,7 @@ type ContractAmountResponse struct {
 // editing its ir.ExemptGated role list in mount.go, the same way
 // PutTemplateHandler's Owner-only rule moved there.
 func PutContractAmountHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, engagementID, ok := staffauth.RequireEngagement(w, r)
-		if !ok {
-			return
-		}
-
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		var req PutContractAmountRequest
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
@@ -60,7 +55,7 @@ func PutContractAmountHandler() http.Handler {
 			return
 		}
 
-		id, _, status, _, before, _, ok := requireContract(w, r, tx, engagementID)
+		id, _, status, _, before, _, ok := requireContract(w, r, c.Tx, c.EngagementID)
 		if !ok {
 			return
 		}
@@ -70,7 +65,7 @@ func PutContractAmountHandler() http.Handler {
 		}
 
 		if before != req.AmountCents {
-			if _, err := tx.ExecContext(r.Context(),
+			if _, err := c.Tx.ExecContext(r.Context(),
 				`UPDATE contracts SET amount_cents = $1, amount_overridden = true, amount_changed_at = now() WHERE id = $2`,
 				req.AmountCents, id,
 			); err != nil {
@@ -86,15 +81,7 @@ func PutContractAmountHandler() http.Handler {
 				return
 			}
 
-			staffID, _ := staffauth.StaffID(r.Context())
-			if err := activity.Record(r.Context(), tx, activity.Entry{
-				PracticeID:  practiceID,
-				SubjectKind: activity.SubjectEngagement,
-				SubjectID:   engagementID,
-				Action:      string(activity.ActionContractAmountOverridden),
-				Diff:        diffJSON,
-				Actor:       activity.StaffActor(staffID),
-			}); err != nil {
+			if err := recordEngagementActivity(r.Context(), c, activity.ActionContractAmountOverridden, diffJSON); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
@@ -102,5 +89,5 @@ func PutContractAmountHandler() http.Handler {
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, ContractAmountResponse(req))
-	})
+	}, staffauth.Engagement())
 }
