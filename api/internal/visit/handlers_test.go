@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"strings"
@@ -57,7 +57,7 @@ func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer firstResp.Body.Close()
 	var first visit.ListResponse
-	if err := json.NewDecoder(firstResp.Body).Decode(&first); err != nil {
+	if err := json.UnmarshalRead(firstResp.Body, &first); err != nil {
 		t.Fatalf("decode first page: %v", err)
 	}
 	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
@@ -68,7 +68,7 @@ func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits?cursor="+*first.NextCursor)
 	defer secondResp.Body.Close()
 	var second visit.ListResponse
-	if err := json.NewDecoder(secondResp.Body).Decode(&second); err != nil {
+	if err := json.UnmarshalRead(secondResp.Body, &second); err != nil {
 		t.Fatalf("decode second page: %v", err)
 	}
 	if len(second.Items) != 1 || second.HasMore || second.NextCursor != nil {
@@ -132,7 +132,7 @@ func TestCreateHandler_Success(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 	var out visit.CreateResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.VisitID == "" || out.StaffID != staffID {
@@ -213,7 +213,7 @@ func TestListHandler_ReturnsVisitsForEngagement(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var listResp visit.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	list := listResp.Items
@@ -288,7 +288,7 @@ func listDepartedAssigneeVisits(t *testing.T, db *testdb.DB, practiceID, engagem
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var listResp visit.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	list := listResp.Items
@@ -419,7 +419,7 @@ func TestReassignHandler_Success(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out visit.ReassignResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.VisitID != visitID || out.StaffID != targetStaffID {
@@ -896,7 +896,7 @@ func TestCreateHandler_WithScheduledAt(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 	var out visit.CreateResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.ScheduledAt == nil || !out.ScheduledAt.Equal(parseRFC3339(t, scheduledAt)) {
@@ -906,7 +906,7 @@ func TestCreateHandler_WithScheduledAt(t *testing.T) {
 	listResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer listResp.Body.Close()
 	var list visit.ListResponse
-	if err := json.NewDecoder(listResp.Body).Decode(&list); err != nil {
+	if err := json.UnmarshalRead(listResp.Body, &list); err != nil {
 		t.Fatalf("decode list: %v", err)
 	}
 	if len(list.Items) != 1 || list.Items[0].ScheduledAt == nil || !list.Items[0].ScheduledAt.Equal(parseRFC3339(t, scheduledAt)) {
@@ -931,7 +931,7 @@ func TestCreateHandler_NoBodyStaysUnscheduled(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 	var out visit.CreateResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.ScheduledAt != nil {
@@ -999,7 +999,7 @@ func TestScheduleHandler_SetsScheduledAt(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out visit.ScheduleResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.VisitID != visitID || out.ScheduledAt == nil || !out.ScheduledAt.Equal(parseRFC3339(t, scheduledAt)) {
@@ -1067,7 +1067,7 @@ func TestScheduleHandler_ChangesThenClearsScheduledAt(t *testing.T) {
 		t.Fatalf("clear status = %d, want %d", clearResp.StatusCode, http.StatusOK)
 	}
 	var out visit.ScheduleResponse
-	if err := json.NewDecoder(clearResp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(clearResp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.ScheduledAt != nil {
@@ -1437,7 +1437,7 @@ func TestListHandler_ReturnsNotes(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 	var listResp visit.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	byID := map[string]visit.Visit{}
@@ -1478,7 +1478,7 @@ func TestListHandler_ReturnsVisitType(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 	var listResp visit.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	byID := map[string]visit.Visit{}
@@ -1520,7 +1520,7 @@ func TestListHandler_ReturnsVisitType_NoOutcomeIsPrenatal(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 	var listResp visit.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(listResp.Items) != 1 || listResp.Items[0].VisitID != visitID {
@@ -1548,7 +1548,7 @@ func TestListHandler_ReturnsVisitType_UnscheduledFallsBackToCreatedAt(t *testing
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 	var listResp visit.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(listResp.Items) != 1 || listResp.Items[0].VisitID != visitID {
@@ -1586,7 +1586,7 @@ func TestListHandler_ReturnsVisitType_LossTypesPostpartumNoBranch(t *testing.T) 
 		resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 		defer resp.Body.Close()
 		var listResp visit.ListResponse
-		if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
 			t.Fatalf("decode response: %v", err)
 		}
 		if len(listResp.Items) != 1 || listResp.Items[0].VisitID != visitID {
@@ -1616,7 +1616,7 @@ func TestListHandler_ReturnsVisitType_CorrectionRetypesWithNoVisitWrite(t *testi
 	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer firstResp.Body.Close()
 	var first visit.ListResponse
-	if err := json.NewDecoder(firstResp.Body).Decode(&first); err != nil {
+	if err := json.UnmarshalRead(firstResp.Body, &first); err != nil {
 		t.Fatalf("decode first response: %v", err)
 	}
 	if got := first.Items[0].Type; got != visit.TypePrenatal {
@@ -1632,7 +1632,7 @@ func TestListHandler_ReturnsVisitType_CorrectionRetypesWithNoVisitWrite(t *testi
 	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer secondResp.Body.Close()
 	var second visit.ListResponse
-	if err := json.NewDecoder(secondResp.Body).Decode(&second); err != nil {
+	if err := json.UnmarshalRead(secondResp.Body, &second); err != nil {
 		t.Fatalf("decode second response: %v", err)
 	}
 	if len(second.Items) != 1 || second.Items[0].VisitID != visitID {
@@ -1664,7 +1664,7 @@ func TestNotesHandler_SetsNotes(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out visit.NotesResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.VisitID != visitID || out.Notes != notes {
@@ -1748,7 +1748,7 @@ func TestNotesHandler_ChangesThenClearsNotes(t *testing.T) {
 		t.Fatalf("clear status = %d, want %d", clearResp.StatusCode, http.StatusOK)
 	}
 	var out visit.NotesResponse
-	if err := json.NewDecoder(clearResp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(clearResp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Notes != "" {
@@ -2119,7 +2119,7 @@ func TestListHandler_TypesTheEveningOfTheBirthAsBirth(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 	var listResp visit.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &listResp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	byID := map[string]visit.Visit{}

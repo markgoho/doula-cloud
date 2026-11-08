@@ -1,7 +1,7 @@
 package visit_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 	"time"
@@ -45,7 +45,7 @@ func TestVisitReads_FlagAnOpenVisitWhoseDoulaWasTakenOff(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 	var list visit.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil || resp.StatusCode != http.StatusOK {
+	if err := json.UnmarshalRead(resp.Body, &list); err != nil || resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, err = %v", resp.StatusCode, err)
 	}
 	for _, v := range list.Items {

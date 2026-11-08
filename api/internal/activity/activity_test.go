@@ -1,7 +1,8 @@
 package activity_test
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"slices"
 	"testing"
 	"time"
@@ -82,7 +83,7 @@ func TestRecord_ClientActor(t *testing.T) {
 		SubjectKind: "contract",
 		SubjectID:   clientID,
 		Action:      "signed",
-		Diff:        json.RawMessage(`{}`),
+		Diff:        jsontext.Value(`{}`),
 		Actor:       activity.ClientActor(clientID),
 	}); err != nil {
 		t.Fatalf("record: %v", err)

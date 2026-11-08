@@ -3,7 +3,7 @@ package staffauth_test
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -87,7 +87,7 @@ func TestSignupHandler_MintsNoSavedCodesForAnUnenrolledFoundingOwner(t *testing.
 		t.Fatalf("status = %d, want 201", resp.StatusCode)
 	}
 	var signed staffauth.SignupResponse
-	if err := json.NewDecoder(resp.Body).Decode(&signed); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &signed); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 
@@ -163,7 +163,7 @@ func TestAcceptInvite_SecondOwnerRevokesFirstOwnersSavedCodes(t *testing.T) {
 		t.Fatalf("accept status = %d, want 200", acceptResp.StatusCode)
 	}
 	var accepted staffauth.AcceptInviteResponse
-	if err := json.NewDecoder(acceptResp.Body).Decode(&accepted); err != nil {
+	if err := json.UnmarshalRead(acceptResp.Body, &accepted); err != nil {
 		t.Fatalf("decode accept response: %v", err)
 	}
 
@@ -304,7 +304,7 @@ func TestRotateSavedCodesHandler_ReturnsTenLiveCodesMatchingHashes(t *testing.T)
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 	var body staffauth.RotateSavedCodesResponse
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(body.Codes) != 10 {
@@ -340,7 +340,7 @@ func TestRotateSavedCodesHandler_RevokesPriorBatch(t *testing.T) {
 
 	first := postRotate(t, srv, session)
 	var firstBatch staffauth.RotateSavedCodesResponse
-	if err := json.NewDecoder(first.Body).Decode(&firstBatch); err != nil {
+	if err := json.UnmarshalRead(first.Body, &firstBatch); err != nil {
 		t.Fatalf("decode first response: %v", err)
 	}
 	_ = first.Body.Close()

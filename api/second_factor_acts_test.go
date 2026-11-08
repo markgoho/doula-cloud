@@ -2,7 +2,7 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -113,7 +113,7 @@ func doSecondFactorAct(t *testing.T, srv *httptest.Server, session string, tc se
 	t.Helper()
 	var body bytes.Buffer
 	if tc.body != nil {
-		if err := json.NewEncoder(&body).Encode(tc.body); err != nil {
+		if err := json.MarshalWrite(&body, tc.body); err != nil {
 			t.Fatalf("encode body: %v", err)
 		}
 	}

@@ -1,7 +1,8 @@
 package contracts_test
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -213,7 +214,7 @@ func TestPostSendContractHandler_NoPortalInvite(t *testing.T) {
 	getResp := getContract(t, srv, session, practiceID, engagementID)
 	defer getResp.Body.Close()
 	var getOut contracts.ContractResponse
-	if err := json.NewDecoder(getResp.Body).Decode(&getOut); err != nil {
+	if err := json.UnmarshalRead(getResp.Body, &getOut); err != nil {
 		t.Fatalf("decode GET response: %v", err)
 	}
 	if getOut.Status != statusDraft {
@@ -262,7 +263,7 @@ func TestPostSendContractHandler_Success(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out contracts.ContractResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Status != statusSent {
@@ -275,7 +276,7 @@ func TestPostSendContractHandler_Success(t *testing.T) {
 	getResp := getContract(t, srv, session, practiceID, engagementID)
 	defer getResp.Body.Close()
 	var getOut contracts.ContractResponse
-	if err := json.NewDecoder(getResp.Body).Decode(&getOut); err != nil {
+	if err := json.UnmarshalRead(getResp.Body, &getOut); err != nil {
 		t.Fatalf("decode GET response: %v", err)
 	}
 	if getOut.Status != statusSent {
@@ -296,7 +297,7 @@ func TestPostSendContractHandler_Success(t *testing.T) {
 	if payload.EngagementID != engagementID {
 		t.Fatalf("push payload engagementId = %q, want %q", payload.EngagementID, engagementID)
 	}
-	var raw map[string]json.RawMessage
+	var raw map[string]jsontext.Value
 	if err := json.Unmarshal(calls[0].Payload, &raw); err != nil {
 		t.Fatalf("decode push payload as raw map: %v", err)
 	}
@@ -407,7 +408,7 @@ func TestPostSendContractHandler_BlankMergeFieldRejected(t *testing.T) {
 	getResp := getContract(t, srv, session, practiceID, engagementID)
 	defer getResp.Body.Close()
 	var getOut contracts.ContractResponse
-	if err := json.NewDecoder(getResp.Body).Decode(&getOut); err != nil {
+	if err := json.UnmarshalRead(getResp.Body, &getOut); err != nil {
 		t.Fatalf("decode GET response: %v", err)
 	}
 	if getOut.Status != statusDraft {

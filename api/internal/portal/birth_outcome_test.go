@@ -1,7 +1,8 @@
 package portal_test
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"testing"
@@ -48,7 +49,7 @@ func TestDetailHandler_NeverShowsTheBirthOutcome(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read body: %v", err)
 	}
-	var fields map[string]json.RawMessage
+	var fields map[string]jsontext.Value
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -111,8 +112,8 @@ func TestDetailHandler_NoDueDateOnceAnOutcomeIsRecorded(t *testing.T) {
 			if resp.StatusCode != http.StatusOK {
 				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 			}
-			var fields map[string]json.RawMessage
-			if err := json.NewDecoder(resp.Body).Decode(&fields); err != nil {
+			var fields map[string]jsontext.Value
+			if err := json.UnmarshalRead(resp.Body, &fields); err != nil {
 				t.Fatalf("decode response: %v", err)
 			}
 			if _, present := fields["dueDate"]; present != tt.wantKeys {
@@ -180,7 +181,7 @@ func TestDetailHandler_BirthPlanFollowsTheOutcome(t *testing.T) {
 			}
 
 			var out portal.Detail
-			if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 				t.Fatalf("decode response: %v", err)
 			}
 			if out.OffersBirthPlan != tt.want {

@@ -1,7 +1,7 @@
 package contracts_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -86,7 +86,7 @@ func TestVoidRequestsAwaitingHandler_ListsOnlyOpenRequests(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out contracts.VoidRequestsAwaitingResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(out.Items) != 1 {
@@ -146,7 +146,7 @@ func TestVoidRequestsAwaitingHandler_WalksTheCursor(t *testing.T) {
 	first := getVoidRequestsAwaiting(t, srv, session, practiceID)
 	defer first.Body.Close()
 	var firstPage contracts.VoidRequestsAwaitingResponse
-	if err := json.NewDecoder(first.Body).Decode(&firstPage); err != nil {
+	if err := json.UnmarshalRead(first.Body, &firstPage); err != nil {
 		t.Fatalf("decode first page: %v", err)
 	}
 	if len(firstPage.Items) != 30 || !firstPage.HasMore || firstPage.NextCursor == nil {
@@ -165,7 +165,7 @@ func TestVoidRequestsAwaitingHandler_WalksTheCursor(t *testing.T) {
 	}
 	defer second.Body.Close()
 	var secondPage contracts.VoidRequestsAwaitingResponse
-	if err := json.NewDecoder(second.Body).Decode(&secondPage); err != nil {
+	if err := json.UnmarshalRead(second.Body, &secondPage); err != nil {
 		t.Fatalf("decode second page: %v", err)
 	}
 	if len(secondPage.Items) != 1 || secondPage.HasMore || secondPage.NextCursor != nil {

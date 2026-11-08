@@ -2,7 +2,7 @@ package contracts_test
 
 import (
 	"database/sql"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -139,7 +139,7 @@ func TestPostVoidContractHandler_Success(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out contracts.ContractResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Status != statusVoided {
@@ -152,7 +152,7 @@ func TestPostVoidContractHandler_Success(t *testing.T) {
 	getResp := getContract(t, srv, session, practiceID, engagementID)
 	defer getResp.Body.Close()
 	var getOut contracts.ContractResponse
-	if err := json.NewDecoder(getResp.Body).Decode(&getOut); err != nil {
+	if err := json.UnmarshalRead(getResp.Body, &getOut); err != nil {
 		t.Fatalf("decode GET response: %v", err)
 	}
 	if getOut.Status != statusVoided {
@@ -207,7 +207,7 @@ func TestPostContractHandler_AllowedAfterVoid(t *testing.T) {
 		t.Fatalf("create-after-void status = %d, want %d (the recreate flow must not 409 forever)", createResp.StatusCode, http.StatusCreated)
 	}
 	var created contracts.ContractResponse
-	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+	if err := json.UnmarshalRead(createResp.Body, &created); err != nil {
 		t.Fatalf("decode create response: %v", err)
 	}
 	if created.Status != statusDraft {

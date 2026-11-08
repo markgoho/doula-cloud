@@ -2,7 +2,7 @@ package visit_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"reflect"
 	"testing"
@@ -47,7 +47,7 @@ func decodeCreate(t *testing.T, resp *http.Response) visit.CreateResponse {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 	var out visit.CreateResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	return out
@@ -299,7 +299,7 @@ func TestCreateHandler_RefusesAnIneligibleAssignee(t *testing.T) {
 			var out struct {
 				Message string `json:"message"`
 			}
-			if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 				t.Fatalf("decode response: %v", err)
 			}
 			if out.Message != testCase.wantMsg {

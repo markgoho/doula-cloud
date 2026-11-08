@@ -3,7 +3,8 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"time"
@@ -33,13 +34,13 @@ type logOwner struct {
 }
 
 type logRow struct {
-	ID          string          `json:"id"`
-	At          time.Time       `json:"at"`
-	Operator    string          `json:"operator"`
-	Action      string          `json:"action"`
-	Subject     *logSubject     `json:"subject"`
-	Details     json.RawMessage `json:"details"`
-	RequestedBy *logOwner       `json:"requestedBy,omitempty"`
+	ID          string         `json:"id"`
+	At          time.Time      `json:"at"`
+	Operator    string         `json:"operator"`
+	Action      string         `json:"action"`
+	Subject     *logSubject    `json:"subject"`
+	Details     jsontext.Value `json:"details"`
+	RequestedBy *logOwner      `json:"requestedBy,omitempty"`
 }
 
 type logPage struct {

@@ -2,7 +2,7 @@ package staffauth
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 
 	"doula-cloud/api/internal/activity"

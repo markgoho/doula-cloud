@@ -1,7 +1,7 @@
 package portalinvite_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -130,7 +130,7 @@ func TestAcceptSecondPracticeInvite_SessionListsBothPractices(t *testing.T) {
 	}
 
 	var out clientauth.SessionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode session response: %v", err)
 	}
 	if len(out.Engagements) != 2 {

@@ -117,7 +117,7 @@ func isJSONEnvelopePackage(rel string) bool {
 // cache-hit replay writes a previously-encoded body byte-for-byte, and
 // the three webhook handlers read the raw body for an HMAC check before
 // calling json.Unmarshal on the already-read bytes (never
-// json.NewDecoder). A new match anywhere else is a regression to fix,
+// json.UnmarshalRead). A new match anywhere else is a regression to fix,
 // not a file to add here -- adding an entry needs the same kind of
 // reasoning #859's own PR body recorded for these.
 var jsonUsageExceptions = map[string]bool{
@@ -126,8 +126,8 @@ var jsonUsageExceptions = map[string]bool{
 
 // TestNoDirectJSONUsage is #842's own AST check (TestNoDirectHTTPError,
 // above) extended per #848: a handler outside apierr that sets the JSON
-// Content-Type, encodes with json.NewEncoder, or decodes with
-// json.NewDecoder is a copy of apierr.WriteJSON/DecodeJSON's own job,
+// Content-Type, encodes with json.MarshalWrite, or decodes with
+// json.UnmarshalRead is a copy of apierr.WriteJSON/DecodeJSON's own job,
 // which #859 swept away -- this is what stops that sweep from silently
 // regressing one file at a time.
 func TestNoDirectJSONUsage(t *testing.T) {
@@ -149,9 +149,9 @@ func TestNoDirectJSONUsage(t *testing.T) {
 				return true
 			}
 
-			// json.NewEncoder(...) / json.NewDecoder(...)
+			// json.MarshalWrite(...) / json.UnmarshalRead(...)
 			if ident, ok := sel.X.(*ast.Ident); ok && ident.Name == "json" &&
-				(sel.Sel.Name == "NewEncoder" || sel.Sel.Name == "NewDecoder") {
+				(sel.Sel.Name == "MarshalWrite" || sel.Sel.Name == "UnmarshalRead") {
 				offenses = append(offenses, rel+":"+fset.Position(call.Pos()).String()+": json."+sel.Sel.Name)
 				return true
 			}

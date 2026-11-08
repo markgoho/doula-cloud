@@ -1,7 +1,7 @@
 package billing_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -83,7 +83,7 @@ func readBalance(t *testing.T, srv *httptest.Server, session, practiceID string)
 		t.Fatalf("billing read status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out billing.BalanceResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode billing read: %v", err)
 	}
 	return out

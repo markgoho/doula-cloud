@@ -1,7 +1,8 @@
 package main
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -78,9 +79,9 @@ func (s *opsStack) list(path, cookie string) *httptest.ResponseRecorder {
 }
 
 type listPage struct {
-	Items      []map[string]json.RawMessage `json:"items"`
-	NextCursor *string                      `json:"nextCursor"`
-	HasMore    bool                         `json:"hasMore"`
+	Items      []map[string]jsontext.Value `json:"items"`
+	NextCursor *string                     `json:"nextCursor"`
+	HasMore    bool                        `json:"hasMore"`
 }
 
 func decodeList(t *testing.T, w *httptest.ResponseRecorder) listPage {
@@ -101,7 +102,7 @@ func compactJSON(t *testing.T, raw string) string {
 	if err := json.Unmarshal([]byte(raw), &v); err != nil {
 		t.Fatalf("decode %s: %v", raw, err)
 	}
-	out, _ := json.Marshal(v)
+	out, _ := json.Marshal(v, json.Deterministic(true))
 	return string(out)
 }
 

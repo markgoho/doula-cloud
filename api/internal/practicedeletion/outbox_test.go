@@ -2,7 +2,7 @@ package practicedeletion_test
 
 import (
 	"database/sql"
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 	"time"
 

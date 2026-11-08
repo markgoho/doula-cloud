@@ -1,7 +1,8 @@
 package portal_test
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -102,7 +103,7 @@ func TestDetailHandler_Success(t *testing.T) {
 	}
 
 	var out portal.Detail
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.EngagementID != engagementID {
@@ -159,8 +160,8 @@ func TestDetailHandler_NullDueDate(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 
-	var raw map[string]json.RawMessage
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+	var raw map[string]jsontext.Value
+	if err := json.UnmarshalRead(resp.Body, &raw); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if _, present := raw["dueDate"]; present {
@@ -209,7 +210,7 @@ func TestDetailHandler_PostpartumEngagementDoesNotOfferBirthPlan(t *testing.T) {
 		t.Fatalf("offersBirthPlan = %v, want false for a postpartum Engagement", out.OffersBirthPlan)
 	}
 
-	var raw map[string]json.RawMessage
+	var raw map[string]jsontext.Value
 	if err := json.Unmarshal(body, &raw); err != nil {
 		t.Fatalf("decode raw response: %v", err)
 	}
@@ -285,7 +286,7 @@ func TestDetailHandler_TotalToPayCents(t *testing.T) {
 		}
 		defer resp.Body.Close()
 		var out portal.Detail
-		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 			t.Fatalf("decode response: %v", err)
 		}
 		return out
@@ -337,7 +338,7 @@ func TestDetailHandler_IsOneOfSeveral(t *testing.T) {
 		}
 		defer resp.Body.Close()
 		var out portal.Detail
-		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 			t.Fatalf("decode response: %v", err)
 		}
 		return out

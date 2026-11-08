@@ -2,7 +2,7 @@ package client_test
 
 import (
 	"database/sql"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"strings"
 	"testing"
@@ -131,7 +131,7 @@ func TestMergeHandler_MovesEngagementsRequestsAndPortalLinks(t *testing.T) {
 		t.Fatalf("status = %d, want %d: %s", resp.StatusCode, http.StatusOK, readBody(t, resp))
 	}
 	var out client.MergeResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.MergedFrom != absorbedID {
@@ -226,7 +226,7 @@ func TestDetailHandler_MergedClientShowsBothHistoriesAsTwo(t *testing.T) {
 		t.Fatalf("detail status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out client.DetailResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode detail: %v", err)
 	}
 
@@ -291,7 +291,7 @@ func TestEraseHandler_ReachesTheAbsorbedRecord(t *testing.T) {
 		t.Fatalf("erase status = %d, want %d: %s", erase.StatusCode, http.StatusOK, readBody(t, erase))
 	}
 	var erasure client.ErasureResponse
-	if err := json.NewDecoder(erase.Body).Decode(&erasure); err != nil {
+	if err := json.UnmarshalRead(erase.Body, &erasure); err != nil {
 		t.Fatalf("decode erasure: %v", err)
 	}
 	if erasure.StripeCustomersQueued != 1 {
@@ -332,7 +332,7 @@ func TestEraseHandler_ReachesTheAbsorbedRecord(t *testing.T) {
 	detail := authedJSON(t, session, http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/clients/"+survivorID, nil)
 	defer detail.Body.Close()
 	var out client.DetailResponse
-	if err := json.NewDecoder(detail.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(detail.Body, &out); err != nil {
 		t.Fatalf("decode detail: %v", err)
 	}
 	if len(out.MergedFrom) != 1 {
@@ -371,7 +371,7 @@ func TestMergeHandler_RevokesTheAbsorbedRecordsPendingInvitation(t *testing.T) {
 		t.Fatalf("status = %d, want %d: %s", resp.StatusCode, http.StatusOK, readBody(t, resp))
 	}
 	var out client.MergeResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Moved.RevokedInvitations != 1 || out.Moved.PortalAccounts != 0 {

@@ -2,7 +2,7 @@ package notificationpref_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -52,7 +52,7 @@ func decodePreference(t *testing.T, resp *http.Response) notificationpref.Prefer
 	t.Helper()
 	defer resp.Body.Close()
 	var out notificationpref.PreferenceResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode preference response: %v", err)
 	}
 	return out

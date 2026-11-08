@@ -1,7 +1,8 @@
 package activityfeed_test
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 	"time"
@@ -24,18 +25,18 @@ func TestPracticeHandler_ReassignmentRowsSayWhichVisitMoved(t *testing.T) {
 	actor := activity.StaffActor(ownerID)
 
 	testdb.SeedActivityWithDiff(t, db, practiceID, activity.SubjectEngagement, engagementID, action, actor,
-		json.RawMessage(`{"visitScheduledAt":null,"visitCreatedAt":"2026-11-02T10:11:43.648104Z"}`))
+		jsontext.Value(`{"visitScheduledAt":null,"visitCreatedAt":"2026-11-02T10:11:43.648104Z"}`))
 	testdb.SeedActivityWithDiff(t, db, practiceID, activity.SubjectEngagement, engagementID, action, actor,
-		json.RawMessage(`{"visitScheduledAt":"2026-11-13T21:00:00Z","visitCreatedAt":"2026-11-02T10:11:43.327441Z"}`))
+		jsontext.Value(`{"visitScheduledAt":"2026-11-13T21:00:00Z","visitCreatedAt":"2026-11-02T10:11:43.327441Z"}`))
 	testdb.SeedActivityWithDiff(t, db, practiceID, activity.SubjectEngagement, engagementID, action, actor,
-		json.RawMessage(`{"assignedStaffIdBefore":"`+ownerID+`","assignedStaffIdAfter":"`+ownerID+`"}`))
+		jsontext.Value(`{"assignedStaffIdBefore":"`+ownerID+`","assignedStaffIdAfter":"`+ownerID+`"}`))
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
 	defer resp.Body.Close()
 	var got activityfeed.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil || resp.StatusCode != http.StatusOK {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil || resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, err = %v", resp.StatusCode, err)
 	}
 	if len(got.Items) != 3 {

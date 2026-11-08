@@ -1,7 +1,7 @@
 package message_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"testing"
@@ -28,7 +28,7 @@ func TestAwaitingReplyHandler_EmptyPracticeHasNoEngagementsWaiting(t *testing.T)
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var got message.AwaitingReplyResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(got.Items) != 0 || got.HasMore || got.NextCursor != nil {
@@ -68,7 +68,7 @@ func TestAwaitingReplyHandler_OnlyEngagementsAwaitingReplyAppear(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply")
 	defer resp.Body.Close()
 	var got message.AwaitingReplyResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(got.Items) != 1 {
@@ -107,7 +107,7 @@ func TestAwaitingReplyHandler_ContractorSeesOnlyHerAttachedEngagements(t *testin
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply")
 	defer resp.Body.Close()
 	var got message.AwaitingReplyResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(got.Items) != 1 || got.Items[0].EngagementID != attachedEngagementID {
@@ -159,7 +159,7 @@ func TestAwaitingReplyHandler_OwnerOrAdminContractorSeesTheWholePractice(t *test
 				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 			}
 			var out message.AwaitingReplyResponse
-			if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 				t.Fatalf("decode: %v", err)
 			}
 
@@ -216,7 +216,7 @@ func TestAwaitingReplyHandler_PaginatesAcrossPages(t *testing.T) {
 	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply")
 	defer firstResp.Body.Close()
 	var first message.AwaitingReplyResponse
-	if err := json.NewDecoder(firstResp.Body).Decode(&first); err != nil {
+	if err := json.UnmarshalRead(firstResp.Body, &first); err != nil {
 		t.Fatalf("decode first page: %v", err)
 	}
 	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
@@ -227,7 +227,7 @@ func TestAwaitingReplyHandler_PaginatesAcrossPages(t *testing.T) {
 	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply?cursor="+*first.NextCursor)
 	defer secondResp.Body.Close()
 	var second message.AwaitingReplyResponse
-	if err := json.NewDecoder(secondResp.Body).Decode(&second); err != nil {
+	if err := json.UnmarshalRead(secondResp.Body, &second); err != nil {
 		t.Fatalf("decode second page: %v", err)
 	}
 	if len(second.Items) != 5 || second.HasMore || second.NextCursor != nil {
@@ -274,7 +274,7 @@ func TestAwaitingReplyHandler_ContractorPaginatesAcrossPages(t *testing.T) {
 	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply")
 	defer firstResp.Body.Close()
 	var first message.AwaitingReplyResponse
-	if err := json.NewDecoder(firstResp.Body).Decode(&first); err != nil {
+	if err := json.UnmarshalRead(firstResp.Body, &first); err != nil {
 		t.Fatalf("decode first page: %v", err)
 	}
 	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
@@ -285,7 +285,7 @@ func TestAwaitingReplyHandler_ContractorPaginatesAcrossPages(t *testing.T) {
 	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply?cursor="+*first.NextCursor)
 	defer secondResp.Body.Close()
 	var second message.AwaitingReplyResponse
-	if err := json.NewDecoder(secondResp.Body).Decode(&second); err != nil {
+	if err := json.UnmarshalRead(secondResp.Body, &second); err != nil {
 		t.Fatalf("decode second page: %v", err)
 	}
 	if len(second.Items) != 5 || second.HasMore || second.NextCursor != nil {

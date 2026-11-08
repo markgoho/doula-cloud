@@ -2,7 +2,7 @@ package practicetimezone_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -91,7 +91,7 @@ func decodeDetails(t *testing.T, resp *http.Response) map[string]string {
 	var out struct {
 		Details map[string]string `json:"details"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode refusal: %v", err)
 	}
 	return out.Details
@@ -114,7 +114,7 @@ func TestGetHandler_ReadsThePracticesOwnZone(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out practicetimezone.Response
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Timezone != seededZone {
@@ -139,7 +139,7 @@ func TestPutHandler_OwnerStatesAZone(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out practicetimezone.Response
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Timezone != denverZone {

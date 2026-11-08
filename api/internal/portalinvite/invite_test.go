@@ -2,7 +2,7 @@ package portalinvite_test
 
 import (
 	"database/sql"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"strings"
 	"testing"
@@ -78,7 +78,7 @@ func TestInviteHandler_Success(t *testing.T) {
 	}
 
 	var out portalinvite.InviteResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.ClientPortalUserID == "" || out.InviteToken == "" {
@@ -121,7 +121,7 @@ func TestInviteHandler_ReinviteRotatesToken(t *testing.T) {
 
 	first := postInvite(t, srv, session, practiceID, engagementID)
 	var firstOut portalinvite.InviteResponse
-	if err := json.NewDecoder(first.Body).Decode(&firstOut); err != nil {
+	if err := json.UnmarshalRead(first.Body, &firstOut); err != nil {
 		t.Fatalf("decode first response: %v", err)
 	}
 	_ = first.Body.Close()
@@ -143,7 +143,7 @@ func TestInviteHandler_ReinviteRotatesToken(t *testing.T) {
 		t.Fatalf("second status = %d, want %d", second.StatusCode, http.StatusOK)
 	}
 	var secondOut portalinvite.InviteResponse
-	if err := json.NewDecoder(second.Body).Decode(&secondOut); err != nil {
+	if err := json.UnmarshalRead(second.Body, &secondOut); err != nil {
 		t.Fatalf("decode second response: %v", err)
 	}
 

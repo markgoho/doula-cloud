@@ -1,7 +1,7 @@
 package session_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 
@@ -16,7 +16,7 @@ func decodeCreate(t *testing.T, resp *http.Response) session.CreateResponse {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var body session.CreateResponse
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &body); err != nil {
 		t.Fatalf("decode create body: %v", err)
 	}
 	return body

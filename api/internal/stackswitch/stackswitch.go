@@ -31,7 +31,8 @@ package stackswitch
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"log"
@@ -188,7 +189,7 @@ var knownFields = map[string]bool{"document": true, "effective": true, "material
 // apierr's TestNoDirectJSONUsage refuses, so the field names are
 // checked by hand instead.
 func decodeVersions(raw string) ([]appendedVersion, error) {
-	var fields []map[string]json.RawMessage
+	var fields []map[string]jsontext.Value
 	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
 		return nil, fmt.Errorf("stackswitch: %s: %w", LegalVar, err)
 	}

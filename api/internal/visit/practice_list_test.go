@@ -1,7 +1,7 @@
 package visit_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -43,7 +43,7 @@ func getSchedule(t *testing.T, session, requestURL string) visit.PracticeSchedul
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var page visit.PracticeScheduleResponse
-	if err := json.NewDecoder(resp.Body).Decode(&page); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &page); err != nil {
 		t.Fatalf("decode schedule: %v", err)
 	}
 	return page

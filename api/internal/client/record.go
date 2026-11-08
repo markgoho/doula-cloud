@@ -2,7 +2,7 @@ package client
 
 import (
 	"database/sql"
-	"encoding/json"
+	"encoding/json/jsontext"
 )
 
 // Record is a Client's structural core -- the twelve columns ADR-0017
@@ -12,19 +12,19 @@ import (
 // already uses for Terms. DateOfBirth is a plain "YYYY-MM-DD" string, or
 // "" when unset.
 type Record struct {
-	ID                string          `json:"id"`
-	GivenName         string          `json:"givenName"`
-	FamilyName        string          `json:"familyName"`
-	PreferredName     string          `json:"preferredName"`
-	Email             string          `json:"email"`
-	Phone             string          `json:"phone"`
-	AddressLine1      string          `json:"addressLine1"`
-	AddressLine2      string          `json:"addressLine2"`
-	AddressLocality   string          `json:"addressLocality"`
-	AddressRegion     string          `json:"addressRegion"`
-	AddressPostalCode string          `json:"addressPostalCode"`
-	DateOfBirth       string          `json:"dateOfBirth"`
-	FieldValues       json.RawMessage `json:"fieldValues,omitempty"`
+	ID                string         `json:"id"`
+	GivenName         string         `json:"givenName"`
+	FamilyName        string         `json:"familyName"`
+	PreferredName     string         `json:"preferredName"`
+	Email             string         `json:"email"`
+	Phone             string         `json:"phone"`
+	AddressLine1      string         `json:"addressLine1"`
+	AddressLine2      string         `json:"addressLine2"`
+	AddressLocality   string         `json:"addressLocality"`
+	AddressRegion     string         `json:"addressRegion"`
+	AddressPostalCode string         `json:"addressPostalCode"`
+	DateOfBirth       string         `json:"dateOfBirth"`
+	FieldValues       jsontext.Value `json:"fieldValues,omitempty"`
 }
 
 // nullIfEmpty turns "" into a SQL NULL, and anything else into itself --

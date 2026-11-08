@@ -1,7 +1,8 @@
 package engagement_test
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"net/http"
 	"strings"
 	"testing"
@@ -33,7 +34,7 @@ func TestListActivityHandler_OwnerSeesEveryEntry(t *testing.T) {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 	var got engagement.ActivityListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(got.Items) != 3 {
@@ -68,7 +69,7 @@ func TestListActivityHandler_EmployeeDoulaSeesMoneyEntries(t *testing.T) {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 	var got engagement.ActivityListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(got.Items) != 6 {
@@ -105,7 +106,7 @@ func TestListActivityHandler_ContractorExcludesMoneyAndPracticePrice(t *testing.
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 	var got engagement.ActivityListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	gotActions := map[string]bool{}
@@ -134,7 +135,7 @@ func TestListActivityHandler_SystemActorRendersAsDoulaCloud(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
 	var got engagement.ActivityListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(got.Items) != 1 {
@@ -210,7 +211,7 @@ func TestListActivityHandler_KeepsBirthPlanRowsAfterALoss(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
 	var got engagement.ActivityListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(got.Items) != len(activity.BirthPlanActions()) {
@@ -238,7 +239,7 @@ func TestListActivityHandler_PaginatesNewestFirst(t *testing.T) {
 	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
 	defer firstResp.Body.Close()
 	var first engagement.ActivityListResponse
-	if err := json.NewDecoder(firstResp.Body).Decode(&first); err != nil {
+	if err := json.UnmarshalRead(firstResp.Body, &first); err != nil {
 		t.Fatalf("decode first page: %v", err)
 	}
 	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
@@ -249,7 +250,7 @@ func TestListActivityHandler_PaginatesNewestFirst(t *testing.T) {
 	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity?cursor="+*first.NextCursor)
 	defer secondResp.Body.Close()
 	var second engagement.ActivityListResponse
-	if err := json.NewDecoder(secondResp.Body).Decode(&second); err != nil {
+	if err := json.UnmarshalRead(secondResp.Body, &second); err != nil {
 		t.Fatalf("decode second page: %v", err)
 	}
 	if len(second.Items) != 1 || second.HasMore || second.NextCursor != nil {
@@ -280,7 +281,7 @@ func TestListActivityHandler_ContractorWithoutAttachmentNotFound(t *testing.T) {
 
 // reassignDiff is the diff a reassignment writes, built through the same
 // constants the write side uses so this fixture cannot drift from it.
-func reassignDiff(t *testing.T, before, after string) json.RawMessage {
+func reassignDiff(t *testing.T, before, after string) jsontext.Value {
 	t.Helper()
 	raw, err := json.Marshal(map[string]string{
 		activity.DiffKeyAssignedStaffIDBefore: before,
@@ -304,7 +305,7 @@ func readActivity(t *testing.T, db *testdb.DB, practiceID, engagementID, identit
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 	var got engagement.ActivityListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		// coverage:ignore reason: decode failure of a response this handler just wrote
 		t.Fatalf("decode: %v", err)
 	}
@@ -423,7 +424,7 @@ func TestListActivityHandler_AttachmentOfSomebodyGone(t *testing.T) {
 	}
 }
 
-func attachedDiff(t *testing.T, staffID string) json.RawMessage {
+func attachedDiff(t *testing.T, staffID string) jsontext.Value {
 	t.Helper()
 	raw, err := json.Marshal(map[string]string{activity.DiffKeyAttachedStaffID: staffID})
 	if err != nil {
@@ -454,9 +455,9 @@ func TestListActivityHandler_OtherActionsCarryNoDetail(t *testing.T) {
 	// Decoded loosely rather than into ActivityEntry, because what is
 	// asserted is the key's absence, which the struct cannot show.
 	var raw struct {
-		Items []map[string]json.RawMessage `json:"items"`
+		Items []map[string]jsontext.Value `json:"items"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &raw); err != nil {
 		// coverage:ignore reason: decode failure of a response this handler just wrote
 		t.Fatalf("decode: %v", err)
 	}

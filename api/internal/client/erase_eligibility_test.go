@@ -1,7 +1,7 @@
 package client_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 	"time"
@@ -25,7 +25,7 @@ func decodeEligibility(t *testing.T, resp *http.Response) client.EraseEligibilit
 	t.Helper()
 	defer resp.Body.Close()
 	var out client.EraseEligibility
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode eligibility: %v", err)
 	}
 	return out

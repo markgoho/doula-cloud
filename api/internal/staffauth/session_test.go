@@ -1,7 +1,7 @@
 package staffauth_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -98,7 +98,7 @@ func TestSessionHandler_SingleMembership(t *testing.T) {
 	}
 
 	var out staffauth.SessionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.StaffID != staffID {
@@ -141,7 +141,7 @@ func TestSessionHandler_SecondFactor(t *testing.T) {
 	resp1 := getSession(t, srv, unenrolled)
 	defer resp1.Body.Close()
 	var out1 staffauth.SessionResponse
-	if err := json.NewDecoder(resp1.Body).Decode(&out1); err != nil {
+	if err := json.UnmarshalRead(resp1.Body, &out1); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out1.SecondFactor {
@@ -152,7 +152,7 @@ func TestSessionHandler_SecondFactor(t *testing.T) {
 	resp2 := getSession(t, srv, enrolled)
 	defer resp2.Body.Close()
 	var out2 staffauth.SessionResponse
-	if err := json.NewDecoder(resp2.Body).Decode(&out2); err != nil {
+	if err := json.UnmarshalRead(resp2.Body, &out2); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if !out2.SecondFactor {
@@ -183,7 +183,7 @@ func TestSessionHandler_MultiplePracticesWithLastUsed(t *testing.T) {
 	defer resp.Body.Close()
 
 	var out staffauth.SessionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(out.Memberships) != 2 {
@@ -270,7 +270,7 @@ func decodeSession(t *testing.T, srv *httptest.Server, session string) staffauth
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out staffauth.SessionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	return out

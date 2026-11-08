@@ -1,7 +1,7 @@
 package clientauth_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 
@@ -48,7 +48,7 @@ func requestThenRedeem(t *testing.T, db *testdb.DB, identifier, requestBody stri
 		OK       bool    `json:"ok"`
 		ReturnTo *string `json:"returnTo"`
 	}
-	if err := json.NewDecoder(redeemed.Body).Decode(&body); err != nil {
+	if err := json.UnmarshalRead(redeemed.Body, &body); err != nil {
 		t.Fatalf("decode redeem body: %v", err)
 	}
 	if body.ReturnTo == nil {

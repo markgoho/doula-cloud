@@ -1,7 +1,7 @@
 package payments_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -63,7 +63,7 @@ func nudgeRefusalMessage(t *testing.T, resp *http.Response) string {
 	var body struct {
 		Message string `json:"message"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &body); err != nil {
 		t.Fatalf("decode refusal: %v", err)
 	}
 	return body.Message

@@ -2,7 +2,7 @@ package contracts_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -247,7 +247,7 @@ func TestGetTemplateHandler_AnyMemberAllowed(t *testing.T) {
 	}
 
 	var out contracts.TemplateResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Prose != "Some prose with {{client_name}}" {
@@ -343,7 +343,7 @@ func TestPutTemplateHandler_Success(t *testing.T) {
 	}
 
 	var putOut contracts.TemplateResponse
-	if err := json.NewDecoder(putResp.Body).Decode(&putOut); err != nil {
+	if err := json.UnmarshalRead(putResp.Body, &putOut); err != nil {
 		t.Fatalf("decode PUT response: %v", err)
 	}
 	if putOut.Prose != "Agreement with {{client_name}}" {
@@ -356,7 +356,7 @@ func TestPutTemplateHandler_Success(t *testing.T) {
 		t.Fatalf("GET status = %d, want %d", getResp.StatusCode, http.StatusOK)
 	}
 	var getOut contracts.TemplateResponse
-	if err := json.NewDecoder(getResp.Body).Decode(&getOut); err != nil {
+	if err := json.UnmarshalRead(getResp.Body, &getOut); err != nil {
 		t.Fatalf("decode GET response: %v", err)
 	}
 	if getOut.Prose != "Agreement with {{client_name}}" {
@@ -386,7 +386,7 @@ func TestPutTemplateHandler_ReplacesExistingRow(t *testing.T) {
 	getResp := getTemplate(t, srv, session, practiceID)
 	defer getResp.Body.Close()
 	var out contracts.TemplateResponse
-	if err := json.NewDecoder(getResp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(getResp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Prose != "New prose" {

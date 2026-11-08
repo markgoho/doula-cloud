@@ -2,7 +2,7 @@ package staffauth_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -117,7 +117,7 @@ func TestUpdateMembershipHandler_EditsBothHalvesAtOnce(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var updated staffauth.UpdateMembershipResponse
-	if err := json.NewDecoder(resp.Body).Decode(&updated); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &updated); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if updated.EmploymentType != contractorType || len(updated.Roles) != 2 {

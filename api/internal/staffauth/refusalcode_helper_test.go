@@ -1,7 +1,7 @@
 package staffauth_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 
@@ -13,7 +13,7 @@ func requireErrorCode(t *testing.T, resp *http.Response, want apierr.Code) {
 	var body struct {
 		Code string `json:"code"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &body); err != nil {
 		t.Fatalf("decode refusal: %v", err)
 	}
 	if body.Code != string(want) {

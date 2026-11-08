@@ -1,7 +1,7 @@
 package clientfieldtemplate_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 
@@ -28,7 +28,7 @@ func TestGetHandler_EmptyByDefault(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out clientfieldtemplate.TemplateResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(out.Fields) != 0 {
@@ -54,7 +54,7 @@ func TestGetHandler_AnyStaffAllowed(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out clientfieldtemplate.TemplateResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(out.Fields) != 1 || out.Fields[0].ID != "f1" {
@@ -257,7 +257,7 @@ func TestPutHandler_ArchiveThenUnarchiveRoundTrips(t *testing.T) {
 		t.Fatalf("archive status = %d, want %d", archive.StatusCode, http.StatusOK)
 	}
 	var archived clientfieldtemplate.TemplateResponse
-	if err := json.NewDecoder(archive.Body).Decode(&archived); err != nil {
+	if err := json.UnmarshalRead(archive.Body, &archived); err != nil {
 		t.Fatalf("decode archive response: %v", err)
 	}
 	if len(archived.Fields) != 2 || archived.Fields[0].ID != "f2" || archived.Fields[0].Order != 0 {
@@ -273,7 +273,7 @@ func TestPutHandler_ArchiveThenUnarchiveRoundTrips(t *testing.T) {
 	}})
 	defer unarchive.Body.Close()
 	var restored clientfieldtemplate.TemplateResponse
-	if err := json.NewDecoder(unarchive.Body).Decode(&restored); err != nil {
+	if err := json.UnmarshalRead(unarchive.Body, &restored); err != nil {
 		t.Fatalf("decode unarchive response: %v", err)
 	}
 	if restored.Fields[0].ID != "f1" || restored.Fields[0].Archived {

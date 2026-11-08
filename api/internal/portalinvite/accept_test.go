@@ -3,7 +3,7 @@ package portalinvite_test
 import (
 	"bytes"
 	"database/sql"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"strings"
@@ -142,7 +142,7 @@ func TestAcceptInviteHandler_Success(t *testing.T) {
 	}
 
 	var out portalinvite.AcceptInviteResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.ClientID != clientID {
@@ -341,7 +341,7 @@ func TestAcceptInviteHandler_SignInAddressReusedSamePracticeConflict(t *testing.
 		Code    string `json:"code"`
 		Message string `json:"message"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &body); err != nil {
 		t.Fatalf("decode refusal: %v", err)
 	}
 	var practiceName string

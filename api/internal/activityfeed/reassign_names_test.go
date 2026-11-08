@@ -1,7 +1,8 @@
 package activityfeed_test
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 
@@ -10,8 +11,8 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-func reassignment(fromID, toID string) json.RawMessage {
-	return json.RawMessage(`{"assignedStaffIdBefore":"` + fromID + `","assignedStaffIdAfter":"` + toID + `"}`)
+func reassignment(fromID, toID string) jsontext.Value {
+	return jsontext.Value(`{"assignedStaffIdBefore":"` + fromID + `","assignedStaffIdAfter":"` + toID + `"}`)
 }
 
 func practiceFeed(t *testing.T, db *testdb.DB, uid, practiceID string) []activityfeed.Entry {
@@ -21,7 +22,7 @@ func practiceFeed(t *testing.T, db *testdb.DB, uid, practiceID string) []activit
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
 	defer resp.Body.Close()
 	var got activityfeed.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil || resp.StatusCode != http.StatusOK {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil || resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, err = %v", resp.StatusCode, err)
 	}
 	return got.Items

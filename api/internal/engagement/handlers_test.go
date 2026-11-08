@@ -1,7 +1,8 @@
 package engagement_test
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 
@@ -40,7 +41,7 @@ func TestDetailHandler_Success(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var d engagement.Detail
-	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &d); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if d.EngagementID != engagementID || d.ClientName != "Detail Client" || d.Status != engagement.StatusActive {
@@ -72,7 +73,7 @@ func TestDetailHandler_ClientDisplayName(t *testing.T) {
 	defer resp.Body.Close()
 
 	var d engagement.Detail
-	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &d); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if d.ClientDisplayName != "Ama Okafor" || d.ClientName != "Ama" {
@@ -105,7 +106,7 @@ func TestDetailHandler_DueDate(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var d engagement.Detail
-	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &d); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if d.DueDate == nil || *d.DueDate != "2027-06-15" {
@@ -132,7 +133,7 @@ func TestDetailHandler_Kind(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var d engagement.Detail
-	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &d); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if d.Kind != string(engagement.KindPostpartum) {
@@ -159,8 +160,8 @@ func TestDetailHandler_NullDueDate(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
-	var raw map[string]json.RawMessage
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+	var raw map[string]jsontext.Value
+	if err := json.UnmarshalRead(resp.Body, &raw); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if _, present := raw["dueDate"]; present {
@@ -228,7 +229,7 @@ func TestDetailHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var d engagement.Detail
-	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &d); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(d.StatusMoves) != 0 {
@@ -269,7 +270,7 @@ func TestDetailHandler_StatusMoves(t *testing.T) {
 				t.Fatalf("status = %d, want 200", resp.StatusCode)
 			}
 			var d engagement.Detail
-			if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+			if err := json.UnmarshalRead(resp.Body, &d); err != nil {
 				t.Fatalf("decode response: %v", err)
 			}
 			if len(d.StatusMoves) != len(tc.want) || (len(tc.want) > 0 && d.StatusMoves[0] != tc.want[0]) {
@@ -310,7 +311,7 @@ func TestDetailHandler_ClientPortalState(t *testing.T) {
 			t.Fatalf("status = %d, want 200", resp.StatusCode)
 		}
 		var d engagement.Detail
-		if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+		if err := json.UnmarshalRead(resp.Body, &d); err != nil {
 			t.Fatalf("decode response: %v", err)
 		}
 		return d
@@ -356,7 +357,7 @@ func TestDetailHandler_ClientsCanPay(t *testing.T) {
 			t.Fatalf("status = %d, want 200", resp.StatusCode)
 		}
 		var d engagement.Detail
-		if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+		if err := json.UnmarshalRead(resp.Body, &d); err != nil {
 			t.Fatalf("decode response: %v", err)
 		}
 		return d

@@ -2,7 +2,7 @@ package staffauth_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -39,7 +39,7 @@ func decodeLookup(t *testing.T, resp *http.Response) staffauth.LookupInvitationR
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var got staffauth.LookupInvitationResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	return got

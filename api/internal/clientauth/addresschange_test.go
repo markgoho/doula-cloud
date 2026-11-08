@@ -1,7 +1,7 @@
 package clientauth_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -265,7 +265,7 @@ func TestRequestAddressChangeHandler_Refusals(t *testing.T) {
 			var body struct {
 				Details map[string]string `json:"details"`
 			}
-			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			if err := json.UnmarshalRead(resp.Body, &body); err != nil {
 				t.Fatalf("decode refusal: %v", err)
 			}
 			if body.Details[tc.wantField] == "" {
@@ -336,7 +336,7 @@ func TestSpendAddressChangeHandler_MovesTheAddressAndRecordsIt(t *testing.T) {
 	var body struct {
 		SignInAddress string `json:"signInAddress"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &body); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
 	if body.SignInAddress != newSignInAddress {

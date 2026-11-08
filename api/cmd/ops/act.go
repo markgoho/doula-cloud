@@ -3,7 +3,8 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -62,7 +63,7 @@ func practiceIDFrom(w http.ResponseWriter, r *http.Request) (string, bool) {
 
 // A request naming its own actor is refused, not ignored.
 func decodeDeclared(w http.ResponseWriter, r *http.Request, declared map[string]bool, msgOther string, target any) bool {
-	var fields map[string]json.RawMessage
+	var fields map[string]jsontext.Value
 	if !apierr.DecodeJSON(w, r, &fields) {
 		return false
 	}

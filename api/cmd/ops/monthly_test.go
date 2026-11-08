@@ -1,7 +1,8 @@
 package main
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -80,10 +81,10 @@ func (s *opsStack) consume(practiceID, clientName string, at time.Time) {
 }
 
 type monthlyRead struct {
-	Month     string                       `json:"month"`
-	Months    []string                     `json:"months"`
-	Practices []map[string]json.RawMessage `json:"practices"`
-	Totals    map[string]int               `json:"totals"`
+	Month     string                      `json:"month"`
+	Months    []string                    `json:"months"`
+	Practices []map[string]jsontext.Value `json:"practices"`
+	Totals    map[string]int              `json:"totals"`
 }
 
 func (s *opsStack) monthly(query, cookie string) *httptest.ResponseRecorder {

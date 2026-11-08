@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -351,7 +352,7 @@ func TestPostInvoiceHandler_CreatesInvoiceWhenConnected(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 	var out payments.InvoiceView
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.ContractID != contractID {
@@ -445,7 +446,7 @@ func TestPostInvoiceHandler_UnbillableContractRefused(t *testing.T) {
 			var out struct {
 				Message string `json:"message"`
 			}
-			if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 				t.Fatalf("decode response: %v", err)
 			}
 			if !strings.Contains(out.Message, status) {
@@ -496,7 +497,7 @@ func TestPostInvoiceHandler_ClientWithNoEmailRefuses(t *testing.T) {
 	var out struct {
 		Message string `json:"message"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Message != payments.MsgClientNoEmail {
@@ -633,8 +634,8 @@ func TestPostInvoiceHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T
 	// comes back is not money she may read (its read table: "her own
 	// agreed fee only -- never the Practice's price"). The 201 says the
 	// Invoice exists and which rail it went on, and names no amount.
-	var fields map[string]json.RawMessage
-	if err := json.NewDecoder(resp.Body).Decode(&fields); err != nil {
+	var fields map[string]jsontext.Value
+	if err := json.UnmarshalRead(resp.Body, &fields); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	for _, key := range []string{"amountCents", "currency", "refundedCents", "activePaymentId"} {
@@ -698,7 +699,7 @@ func TestPostInvoiceHandler_AmountDerivesFromContractIgnoringBody(t *testing.T) 
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 	var out payments.InvoiceView
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.AmountCents != 15000 {
@@ -862,7 +863,7 @@ func TestGetInvoicesHandler_ListsAcrossVoidedContract(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out payments.ListInvoicesResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.HasMore {
@@ -904,7 +905,7 @@ func TestGetInvoicesHandler_ByHandPaidOnIsTheTypedDay(t *testing.T) {
 	defer resp.Body.Close()
 
 	var out payments.ListInvoicesResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(out.Items) != 1 || out.Items[0].PaidOn == nil {
@@ -973,7 +974,7 @@ func TestGetInvoicesHandler_EmptyBeforeAnyContract(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out payments.ListInvoicesResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(out.Items) != 0 {
@@ -1027,7 +1028,7 @@ func TestGetInvoicesHandler_PaginatesWithCursor(t *testing.T) {
 	first := getInvoices(t, srv, session, practiceID, engagementID, "")
 	defer first.Body.Close()
 	var firstPage payments.ListInvoicesResponse
-	if err := json.NewDecoder(first.Body).Decode(&firstPage); err != nil {
+	if err := json.UnmarshalRead(first.Body, &firstPage); err != nil {
 		t.Fatalf("decode first page: %v", err)
 	}
 	if !firstPage.HasMore {
@@ -1047,7 +1048,7 @@ func TestGetInvoicesHandler_PaginatesWithCursor(t *testing.T) {
 	second := getInvoices(t, srv, session, practiceID, engagementID, *firstPage.NextCursor)
 	defer second.Body.Close()
 	var secondPage payments.ListInvoicesResponse
-	if err := json.NewDecoder(second.Body).Decode(&secondPage); err != nil {
+	if err := json.UnmarshalRead(second.Body, &secondPage); err != nil {
 		t.Fatalf("decode second page: %v", err)
 	}
 	if secondPage.HasMore {
@@ -1136,7 +1137,7 @@ func TestPostInvoiceHandler_BillingModeRequiredWhenUnset(t *testing.T) {
 		Message string            `json:"message"`
 		Details map[string]string `json:"details"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Message != payments.MsgBillingModeRequired {
@@ -1282,7 +1283,7 @@ func TestPostInvoiceHandler_ByHandInvoiceCreatedOpenNoStripeCall(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 	var out payments.InvoiceView
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.ContractID != contractID {
@@ -1328,7 +1329,7 @@ func TestPostInvoiceHandler_ByHandInvoiceSequenceIncrementsAcrossInvoices(t *tes
 
 	first := postInvoiceWithBillingMode(t, srv, session, practiceID, engagementID, string(payments.BillingModeByHand))
 	var firstOut payments.InvoiceView
-	if err := json.NewDecoder(first.Body).Decode(&firstOut); err != nil {
+	if err := json.UnmarshalRead(first.Body, &firstOut); err != nil {
 		t.Fatalf("decode first response: %v", err)
 	}
 	_ = first.Body.Close()
@@ -1337,7 +1338,7 @@ func TestPostInvoiceHandler_ByHandInvoiceSequenceIncrementsAcrossInvoices(t *tes
 	// per #271, must not have its own value honored) repeat billingMode.
 	second := postInvoice(t, srv, session, practiceID, engagementID)
 	var secondOut payments.InvoiceView
-	if err := json.NewDecoder(second.Body).Decode(&secondOut); err != nil {
+	if err := json.UnmarshalRead(second.Body, &secondOut); err != nil {
 		t.Fatalf("decode second response: %v", err)
 	}
 	_ = second.Body.Close()
@@ -1374,7 +1375,7 @@ func TestPostInvoiceHandler_ByHandInvoiceIgnoresLaterBillingModeRequest(t *testi
 	resp := postInvoiceWithBillingMode(t, srv, session, practiceID, engagementID, string(payments.BillingModeStripe))
 	defer resp.Body.Close()
 	var out payments.InvoiceView
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.BillingMode != string(payments.BillingModeByHand) {
@@ -1434,7 +1435,7 @@ func TestPostInvoiceHandler_StripeInvoiceUsesStripeNumberAsReference(t *testing.
 	resp := postInvoice(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 	var out payments.InvoiceView
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.BillingMode != string(payments.BillingModeStripe) {
@@ -1462,7 +1463,7 @@ func TestGetInvoicesHandler_ByHandInvoiceReportsByHandBillingMode(t *testing.T) 
 	resp := getInvoices(t, srv, session, practiceID, engagementID, "")
 	defer resp.Body.Close()
 	var out payments.ListInvoicesResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(out.Items) != 1 {

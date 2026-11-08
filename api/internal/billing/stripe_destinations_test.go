@@ -1,7 +1,7 @@
 package billing
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"os"
 	"slices"
 	"testing"

@@ -1,7 +1,7 @@
 package visit_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 
@@ -39,7 +39,7 @@ func getAssignees(t *testing.T, session, url string) (int, map[string]visit.Assi
 		return resp.StatusCode, nil
 	}
 	var out visit.AssigneesResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		// coverage:ignore reason: decode failure of a response this handler always writes as JSON
 		t.Fatalf("decode response: %v", err)
 	}

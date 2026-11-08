@@ -2,7 +2,7 @@ package payments_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -43,7 +43,7 @@ func recordPayment(t *testing.T, srv *httptest.Server, session, practiceID, invo
 		t.Fatalf("record payment: status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 	var out payments.PaymentView
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode recorded payment: %v", err)
 	}
 	return out.ID
@@ -91,7 +91,7 @@ func TestPostReversePaymentHandler_ByHandHappyPath(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 	var out payments.PaymentView
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.AmountCents != -seedByHandInvoiceAmountCents {
@@ -220,7 +220,7 @@ func TestPostReversePaymentHandler_ReversalCannotBeReversed(t *testing.T) {
 		t.Fatalf("first reversal status = %d, want %d", firstReversal.StatusCode, http.StatusCreated)
 	}
 	var reversal payments.PaymentView
-	if err := json.NewDecoder(firstReversal.Body).Decode(&reversal); err != nil {
+	if err := json.UnmarshalRead(firstReversal.Body, &reversal); err != nil {
 		t.Fatalf("decode first reversal: %v", err)
 	}
 
@@ -387,7 +387,7 @@ func TestGetInvoicesHandler_ActivePaymentIDTracksReversal(t *testing.T) {
 	beforeResp := getInvoices(t, srv, session, practiceID, engagementID, "")
 	defer beforeResp.Body.Close()
 	var before payments.ListInvoicesResponse
-	if err := json.NewDecoder(beforeResp.Body).Decode(&before); err != nil {
+	if err := json.UnmarshalRead(beforeResp.Body, &before); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(before.Items) != 1 || before.Items[0].ActivePaymentID != nil {
@@ -399,7 +399,7 @@ func TestGetInvoicesHandler_ActivePaymentIDTracksReversal(t *testing.T) {
 	afterPaymentResp := getInvoices(t, srv, session, practiceID, engagementID, "")
 	defer afterPaymentResp.Body.Close()
 	var afterPayment payments.ListInvoicesResponse
-	if err := json.NewDecoder(afterPaymentResp.Body).Decode(&afterPayment); err != nil {
+	if err := json.UnmarshalRead(afterPaymentResp.Body, &afterPayment); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(afterPayment.Items) != 1 || afterPayment.Items[0].ActivePaymentID == nil || *afterPayment.Items[0].ActivePaymentID != paymentID {
@@ -415,7 +415,7 @@ func TestGetInvoicesHandler_ActivePaymentIDTracksReversal(t *testing.T) {
 	afterReversalResp := getInvoices(t, srv, session, practiceID, engagementID, "")
 	defer afterReversalResp.Body.Close()
 	var afterReversal payments.ListInvoicesResponse
-	if err := json.NewDecoder(afterReversalResp.Body).Decode(&afterReversal); err != nil {
+	if err := json.UnmarshalRead(afterReversalResp.Body, &afterReversal); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(afterReversal.Items) != 1 || afterReversal.Items[0].ActivePaymentID != nil {

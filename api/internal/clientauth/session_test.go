@@ -1,7 +1,7 @@
 package clientauth_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -100,7 +100,7 @@ func TestSessionHandler_SingleEngagement(t *testing.T) {
 	}
 
 	var out clientauth.SessionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(out.Engagements) != 1 || out.Engagements[0].EngagementID != engagementID {
@@ -138,7 +138,7 @@ func TestSessionHandler_MultipleEngagements(t *testing.T) {
 	defer resp.Body.Close()
 
 	var out clientauth.SessionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(out.Engagements) != 2 {
@@ -178,7 +178,7 @@ func TestSessionHandler_MultipleClients(t *testing.T) {
 	}
 
 	var out clientauth.SessionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(out.Engagements) != 2 {
@@ -223,7 +223,7 @@ func TestSessionHandler_MultipleClients_Isolation(t *testing.T) {
 	}
 
 	var out clientauth.SessionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(out.Engagements) != 1 || out.Engagements[0].EngagementID != engagementA {
@@ -250,7 +250,7 @@ func TestSessionHandler_NoStaffOnlyFact(t *testing.T) {
 	defer resp.Body.Close()
 
 	var out map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	engagements, ok := out["engagements"].([]any)

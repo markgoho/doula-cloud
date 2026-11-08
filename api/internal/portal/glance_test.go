@@ -1,7 +1,8 @@
 package portal_test
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"testing"
@@ -12,7 +13,7 @@ import (
 )
 
 // getDetail reads the portal Detail of engagementID as identityUID.
-func getDetail(t *testing.T, db *testdb.DB, identityUID, engagementID string) (portal.Detail, map[string]json.RawMessage) {
+func getDetail(t *testing.T, db *testdb.DB, identityUID, engagementID string) (portal.Detail, map[string]jsontext.Value) {
 	t.Helper()
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -33,7 +34,7 @@ func getDetail(t *testing.T, db *testdb.DB, identityUID, engagementID string) (p
 	if err != nil {
 		t.Fatalf("read response: %v", err)
 	}
-	var raw map[string]json.RawMessage
+	var raw map[string]jsontext.Value
 	if err := json.Unmarshal(body, &raw); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}

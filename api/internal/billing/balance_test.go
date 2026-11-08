@@ -1,7 +1,7 @@
 package billing_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -170,7 +170,7 @@ func TestGetBalanceHandler_AdminAllowed(t *testing.T) {
 	}
 
 	var out billing.BalanceResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Balance != 8 {
@@ -208,7 +208,7 @@ func TestGetBalanceHandler_EmptyLedgerReturnsZeroBalance(t *testing.T) {
 	}
 
 	var out billing.BalanceResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Balance != 0 {
@@ -234,7 +234,7 @@ func TestGetBalanceHandler_IncludesCreditPrice(t *testing.T) {
 	defer resp.Body.Close()
 
 	var out billing.BalanceResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Price.UnitAmountCents != seedUnitPriceCents || out.Price.Currency != usd {
@@ -313,7 +313,7 @@ func TestGetBalanceHandler_PaginatesNewestFirst(t *testing.T) {
 	firstResp := getBalance(t, srv, session, practiceID)
 	defer firstResp.Body.Close()
 	var first billing.BalanceResponse
-	if err := json.NewDecoder(firstResp.Body).Decode(&first); err != nil {
+	if err := json.UnmarshalRead(firstResp.Body, &first); err != nil {
 		t.Fatalf("decode first page: %v", err)
 	}
 	if len(first.Ledger.Items) != 30 || !first.Ledger.HasMore || first.Ledger.NextCursor == nil {
@@ -333,7 +333,7 @@ func TestGetBalanceHandler_PaginatesNewestFirst(t *testing.T) {
 	}
 	defer secondResp.Body.Close()
 	var second billing.BalanceResponse
-	if err := json.NewDecoder(secondResp.Body).Decode(&second); err != nil {
+	if err := json.UnmarshalRead(secondResp.Body, &second); err != nil {
 		t.Fatalf("decode second page: %v", err)
 	}
 	if len(second.Ledger.Items) != 1 || second.Ledger.HasMore || second.Ledger.NextCursor != nil {

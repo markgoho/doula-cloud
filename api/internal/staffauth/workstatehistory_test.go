@@ -1,7 +1,7 @@
 package staffauth_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -45,7 +45,7 @@ func getWorkStateHistory(t *testing.T, srv *httptest.Server, session, practiceID
 func decodeWorkStateHistory(t *testing.T, resp *http.Response) staffauth.WorkStateHistory {
 	t.Helper()
 	var out staffauth.WorkStateHistory
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	return out

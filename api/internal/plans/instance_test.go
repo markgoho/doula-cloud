@@ -1,7 +1,7 @@
 package plans_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 
@@ -108,7 +108,7 @@ func TestPostInstanceHandler_Success(t *testing.T) {
 	}
 
 	var out plans.InstanceResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.EngagementID != engagementID || out.PlanType != carePlanType {
@@ -285,7 +285,7 @@ func TestGetInstanceHandler_Success(t *testing.T) {
 	}
 
 	var out plans.InstanceResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(out.Fields) != 1 || out.Fields[0].ID != "f1" {
@@ -451,7 +451,7 @@ func TestPutInstanceHandler_OmittedAnswersNormalizesToEmptyObject(t *testing.T) 
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out plans.InstanceResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Answers == nil || len(out.Answers) != 0 {
@@ -484,7 +484,7 @@ func TestPutInstanceHandler_Success(t *testing.T) {
 		t.Fatalf("first PUT status = %d, want %d", firstResp.StatusCode, http.StatusOK)
 	}
 	var firstOut plans.InstanceResponse
-	if err := json.NewDecoder(firstResp.Body).Decode(&firstOut); err != nil {
+	if err := json.UnmarshalRead(firstResp.Body, &firstOut); err != nil {
 		t.Fatalf("decode first PUT response: %v", err)
 	}
 	if len(firstOut.Fields) != 2 {
@@ -497,7 +497,7 @@ func TestPutInstanceHandler_Success(t *testing.T) {
 	getResp := getInstance(t, srv, session, practiceID, engagementID, carePlanType)
 	defer getResp.Body.Close()
 	var getOut plans.InstanceResponse
-	if err := json.NewDecoder(getResp.Body).Decode(&getOut); err != nil {
+	if err := json.UnmarshalRead(getResp.Body, &getOut); err != nil {
 		t.Fatalf("decode GET response: %v", err)
 	}
 	if getOut.Answers[nameFieldID] != jamieAnswer || getOut.Answers["consent"] != true {
@@ -509,7 +509,7 @@ func TestPutInstanceHandler_Success(t *testing.T) {
 	})
 	defer secondResp.Body.Close()
 	var secondOut plans.InstanceResponse
-	if err := json.NewDecoder(secondResp.Body).Decode(&secondOut); err != nil {
+	if err := json.UnmarshalRead(secondResp.Body, &secondOut); err != nil {
 		t.Fatalf("decode second PUT response: %v", err)
 	}
 	if _, stillPresent := secondOut.Answers["consent"]; stillPresent {
@@ -686,7 +686,7 @@ func TestPostInstanceHandler_RecordsWhoStartedIt(t *testing.T) {
 				t.Fatalf("POST status = %d, want %d", postResp.StatusCode, http.StatusCreated)
 			}
 			var posted plans.InstanceResponse
-			if err := json.NewDecoder(postResp.Body).Decode(&posted); err != nil {
+			if err := json.UnmarshalRead(postResp.Body, &posted); err != nil {
 				t.Fatalf("decode POST: %v", err)
 			}
 			wantBy := "Test Staff " + uid
@@ -745,7 +745,7 @@ func decodeInstance(t *testing.T, resp *http.Response) plans.InstanceResponse {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out plans.InstanceResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	return out
@@ -782,7 +782,7 @@ func TestPlanTemplateEditDoesNotMutateExistingInstance(t *testing.T) {
 	getResp := getInstance(t, srv, session, practiceID, engagementID, carePlanType)
 	defer getResp.Body.Close()
 	var out plans.InstanceResponse
-	if err := json.NewDecoder(getResp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(getResp.Body, &out); err != nil {
 		t.Fatalf("decode GET response: %v", err)
 	}
 	if len(out.Fields) != 1 || out.Fields[0].ID != "f1" {
@@ -815,7 +815,7 @@ func TestPutInstanceHandler_AnswersChangeClearsClientAcknowledgment(t *testing.T
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out plans.InstanceResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.ClientAcknowledgedAt != nil {
@@ -849,7 +849,7 @@ func TestPutInstanceHandler_UnchangedAnswersKeepsClientAcknowledgment(t *testing
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out plans.InstanceResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.ClientAcknowledgedAt == nil {
@@ -874,7 +874,7 @@ func TestGetInstanceHandler_ReflectsClientAcknowledgment(t *testing.T) {
 	resp := getInstance(t, srv, session, practiceID, engagementID, birthPlanType)
 	defer resp.Body.Close()
 	var out plans.InstanceResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.ClientAcknowledgedAt == nil {

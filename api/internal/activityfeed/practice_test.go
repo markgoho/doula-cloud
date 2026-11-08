@@ -1,7 +1,7 @@
 package activityfeed_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"testing"
@@ -35,7 +35,7 @@ func TestPracticeHandler_SpansEverySubjectKindNewestFirst(t *testing.T) {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 	var got activityfeed.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(got.Items) != 3 {
@@ -85,7 +85,7 @@ func TestPracticeHandler_ResolvesActorNameForEveryActorKind(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
 	defer resp.Body.Close()
 	var got activityfeed.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(got.Items) != 2 {
@@ -132,7 +132,7 @@ func TestPracticeHandler_BatchOverflowStillPaginatesCorrectly(t *testing.T) {
 		}
 		resp := authedGet(t, session, url)
 		var got activityfeed.ListResponse
-		if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 			t.Fatalf("decode page %d: %v", page, err)
 		}
 		_ = resp.Body.Close()
@@ -184,7 +184,7 @@ func TestPracticeHandler_EmptyPracticeHasNoActivity(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
 	defer resp.Body.Close()
 	var got activityfeed.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(got.Items) != 0 || got.HasMore || got.NextCursor != nil {
@@ -213,7 +213,7 @@ func TestPracticeHandler_UnregisteredSubjectKindNeverAppears(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
 	defer resp.Body.Close()
 	var got activityfeed.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(got.Items) != 1 || got.Items[0].SubjectKind != activity.SubjectEngagement {
@@ -261,7 +261,7 @@ func TestPracticeHandler_PracticeScopedRowVisibleToOwnerAndAdminOnly(t *testing.
 			resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
 			defer resp.Body.Close()
 			var got activityfeed.ListResponse
-			if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+			if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 				t.Fatalf("decode: %v", err)
 			}
 			if len(got.Items) != len(tc.wantActions) {
@@ -304,7 +304,7 @@ func TestPracticeHandler_MoneyTierAppliedPerRow(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
 	defer resp.Body.Close()
 	var got activityfeed.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(got.Items) != 1 || got.Items[0].Action != string(activity.ActionVisitLogged) {
@@ -374,7 +374,7 @@ func TestPracticeHandler_ContractorPageBoundaryNeverLeaksForbiddenRows(t *testin
 	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
 	defer firstResp.Body.Close()
 	var first activityfeed.ListResponse
-	if err := json.NewDecoder(firstResp.Body).Decode(&first); err != nil {
+	if err := json.UnmarshalRead(firstResp.Body, &first); err != nil {
 		t.Fatalf("decode first page: %v", err)
 	}
 	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
@@ -385,7 +385,7 @@ func TestPracticeHandler_ContractorPageBoundaryNeverLeaksForbiddenRows(t *testin
 	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity?cursor="+*first.NextCursor)
 	defer secondResp.Body.Close()
 	var second activityfeed.ListResponse
-	if err := json.NewDecoder(secondResp.Body).Decode(&second); err != nil {
+	if err := json.UnmarshalRead(secondResp.Body, &second); err != nil {
 		t.Fatalf("decode second page: %v", err)
 	}
 	if second.HasMore || second.NextCursor != nil {

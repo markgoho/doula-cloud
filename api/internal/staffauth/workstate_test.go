@@ -2,7 +2,7 @@ package staffauth_test
 
 import (
 	"database/sql"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -200,7 +200,7 @@ func TestRoster_CarriesWorkStateAndItsDate(t *testing.T) {
 	})
 	defer resp.Body.Close()
 	var created staffauth.SignupResponse
-	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &created); err != nil {
 		t.Fatalf("decode signup: %v", err)
 	}
 
@@ -212,7 +212,7 @@ func TestRoster_CarriesWorkStateAndItsDate(t *testing.T) {
 		t.Fatalf("roster status = %d, want %d", listResp.StatusCode, http.StatusOK)
 	}
 	var roster staffauth.Roster
-	if err := json.NewDecoder(listResp.Body).Decode(&roster); err != nil {
+	if err := json.UnmarshalRead(listResp.Body, &roster); err != nil {
 		t.Fatalf("decode roster: %v", err)
 	}
 	if len(roster.Members) != 1 {
@@ -379,7 +379,7 @@ func TestUpdateWorkState_MovesTheValueAndRecordsBothSides(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var got staffauth.WorkStateResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if got.WorkState != "NJ" {

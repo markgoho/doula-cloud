@@ -1,7 +1,7 @@
 package engagement_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -46,7 +46,7 @@ func attachSelfAs(t *testing.T, db *testdb.DB, srv *httptest.Server, uid, practi
 	}
 	defer func() { _ = resp.Body.Close() }()
 	var out attachSelfBody
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	return resp.StatusCode, out
@@ -96,7 +96,7 @@ func readDetail(t *testing.T, db *testdb.DB, srv *httptest.Server, uid, practice
 		t.Fatalf("detail status = %d, want 200", resp.StatusCode)
 	}
 	var d engagement.Detail
-	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &d); err != nil {
 		t.Fatalf("decode detail: %v", err)
 	}
 	return d

@@ -1,7 +1,7 @@
 package payments_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"strings"
@@ -59,7 +59,7 @@ func TestGetInvoicesHandler_StaffWhoReadMoneyReadHowItWasPaid(t *testing.T) {
 				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 			}
 			var out payments.ListInvoicesResponse
-			if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 				t.Fatalf("decode: %v", err)
 			}
 			if len(out.Items) != 1 {

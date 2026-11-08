@@ -2,7 +2,7 @@ package payments_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -113,7 +113,7 @@ func TestPostManualPaymentHandler_ByHandCheckHappyPath(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 	var out payments.PaymentView
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.AmountCents != 15000 {
@@ -163,7 +163,7 @@ func TestPostManualPaymentHandler_OtherMethodRequiresNote(t *testing.T) {
 	var out struct {
 		Details map[string]string `json:"details"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if want := `Enter a note for "Other"`; out.Details["note"] != want {
@@ -215,7 +215,7 @@ func TestPostManualPaymentHandler_InvalidMethodRefused(t *testing.T) {
 	var out struct {
 		Details map[string]string `json:"details"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if want := "Select how the payment was made"; out.Details["method"] != want {
@@ -247,7 +247,7 @@ func TestPostManualPaymentHandler_MissingMethodRefused(t *testing.T) {
 	var out struct {
 		Details map[string]string `json:"details"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if want := "Select how the payment was made"; out.Details["method"] != want {
@@ -346,7 +346,7 @@ func TestPostManualPaymentHandler_MalformedDateRefused(t *testing.T) {
 	var out struct {
 		Details map[string]string `json:"details"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if want := "Enter the date received as a real date, like 2027-04-23"; out.Details["paidOn"] != want {
@@ -554,7 +554,7 @@ func TestPostVoidInvoiceHandler_HappyPath(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out payments.InvoiceTransitionView
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Status != "void" {

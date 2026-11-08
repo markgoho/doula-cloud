@@ -1,7 +1,7 @@
 package clientauth_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -38,7 +38,7 @@ func priorLinkReturnTo(t *testing.T, srv *httptest.Server, session, token string
 	var body struct {
 		ReturnTo string `json:"returnTo"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	return body.ReturnTo

@@ -2,7 +2,7 @@ package payments_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -147,7 +147,7 @@ func TestPostConnectHandler_OwnerCreatesAccountAndAccountLink(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out payments.ConnectResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.OnboardingURL == "" {
@@ -295,7 +295,7 @@ func TestGetConnectStatusHandler_NotConnected(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out payments.ConnectStatusResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Status != payments.StatusNotConnected {
@@ -327,7 +327,7 @@ func TestGetConnectStatusHandler_AdminReadsStatus(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out payments.ConnectStatusResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Status != payments.StatusNotConnected {
@@ -413,7 +413,7 @@ func TestGetConnectStatusHandler_OnboardingIncomplete(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out payments.ConnectStatusResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Status != payments.StatusOnboardingIncomplete {
@@ -450,7 +450,7 @@ func TestGetConnectStatusHandler_Pending(t *testing.T) {
 	defer resp.Body.Close()
 
 	var out payments.ConnectStatusResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Status != payments.StatusPending {
@@ -486,7 +486,7 @@ func TestGetConnectStatusHandler_FreshAccountReportsOnboardingIncomplete(t *test
 	defer resp.Body.Close()
 
 	var out payments.ConnectStatusResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Status != payments.StatusOnboardingIncomplete {
@@ -520,7 +520,7 @@ func TestGetConnectStatusHandler_MixedStateWithRequirementsIsNotPending(t *testi
 	defer resp.Body.Close()
 
 	var out payments.ConnectStatusResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Status != payments.StatusOnboardingIncomplete {
@@ -552,7 +552,7 @@ func TestGetConnectStatusHandler_PayoutsRestricted(t *testing.T) {
 	defer resp.Body.Close()
 
 	var out payments.ConnectStatusResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Status != payments.StatusPayoutsRestricted {
@@ -581,7 +581,7 @@ func TestGetConnectStatusHandler_Active(t *testing.T) {
 	defer resp.Body.Close()
 
 	var out payments.ConnectStatusResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Status != payments.StatusActive {

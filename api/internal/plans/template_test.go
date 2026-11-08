@@ -2,7 +2,7 @@ package plans_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -241,7 +241,7 @@ func TestGetTemplateHandler_AnyMemberAllowed(t *testing.T) {
 			}
 
 			var out plans.TemplateResponse
-			if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 				t.Fatalf("decode response: %v", err)
 			}
 			if out.PlanType != "care_plan" {
@@ -392,7 +392,7 @@ func TestPutTemplateHandler_Success(t *testing.T) {
 	}
 
 	var putOut plans.TemplateResponse
-	if err := json.NewDecoder(putResp.Body).Decode(&putOut); err != nil {
+	if err := json.UnmarshalRead(putResp.Body, &putOut); err != nil {
 		t.Fatalf("decode PUT response: %v", err)
 	}
 	if len(putOut.Fields) != 2 || putOut.Fields[0].ID != secondFieldID || putOut.Fields[0].Order != 0 || putOut.Fields[1].ID != firstFieldID || putOut.Fields[1].Order != 1 {
@@ -405,7 +405,7 @@ func TestPutTemplateHandler_Success(t *testing.T) {
 		t.Fatalf("GET status = %d, want %d", getResp.StatusCode, http.StatusOK)
 	}
 	var getOut plans.TemplateResponse
-	if err := json.NewDecoder(getResp.Body).Decode(&getOut); err != nil {
+	if err := json.UnmarshalRead(getResp.Body, &getOut); err != nil {
 		t.Fatalf("decode GET response: %v", err)
 	}
 	if len(getOut.Fields) != 2 || getOut.Fields[0].ID != secondFieldID || getOut.Fields[1].ID != firstFieldID {
@@ -437,7 +437,7 @@ func TestPutTemplateHandler_ReplacesExistingRow(t *testing.T) {
 	getResp := getTemplate(t, srv, session, practiceID, "care_plan")
 	defer getResp.Body.Close()
 	var out plans.TemplateResponse
-	if err := json.NewDecoder(getResp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(getResp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(out.Fields) != 1 || out.Fields[0].ID != "new" {

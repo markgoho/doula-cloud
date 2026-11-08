@@ -1,7 +1,7 @@
 package staffauth_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -34,7 +34,7 @@ func TestSignupHandler_EnqueuesTheWelcomeCreditsEmailOnce(t *testing.T) {
 	body := staffauth.SignupRequest{WorkState: "NY", FirstName: jamieName, LastName: ownerLastName}
 	resp := postSignup(t, srv, "tok", body)
 	var out staffauth.SignupResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	_ = resp.Body.Close()

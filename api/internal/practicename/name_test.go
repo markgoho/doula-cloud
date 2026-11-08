@@ -2,7 +2,7 @@ package practicename_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -90,7 +90,7 @@ func TestPutHandler_OwnerRenamesAndItIsRecorded(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out practicename.Response
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if out.Name != newName {
@@ -161,7 +161,7 @@ func TestPutHandler_RefusesAnEmptyName(t *testing.T) {
 			var out struct {
 				Details map[string]string `json:"details"`
 			}
-			if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 				t.Fatalf("decode refusal: %v", err)
 			}
 			if out.Details["name"] != "Enter the name of your Practice" {

@@ -2,7 +2,7 @@ package contracts_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -61,7 +61,7 @@ func decodeContractResponse(t *testing.T, resp *http.Response, wantStatus int) c
 		t.Fatalf("status = %d, want %d", resp.StatusCode, wantStatus)
 	}
 	var out contracts.ContractResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	return out

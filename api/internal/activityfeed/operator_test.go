@@ -1,7 +1,7 @@
 package activityfeed_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 	"time"
@@ -28,7 +28,7 @@ func TestPracticeHandler_NamesAnOperatorAsThePersonWithDoulaCloud(t *testing.T) 
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 	var got activityfeed.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(got.Items) != 1 {

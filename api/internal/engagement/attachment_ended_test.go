@@ -1,7 +1,7 @@
 package engagement_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 
@@ -20,7 +20,7 @@ func detailRefusal(t *testing.T, db *testdb.DB, srvURL, uid, practiceID, engagem
 	resp := authedGet(t, authntest.SeedSession(t, db.App, uid), srvURL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
 	defer func() { _ = resp.Body.Close() }()
 	var body apierr.APIError
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &body); err != nil {
 		t.Fatalf("decode refusal: %v", err)
 	}
 	return resp.StatusCode, body

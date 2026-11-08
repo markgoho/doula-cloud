@@ -2,7 +2,7 @@ package mailsuppress_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -83,7 +83,7 @@ func TestListHandler_ShowsThisPracticesSuppressedAddresses(t *testing.T) {
 			Clearable bool   `json:"clearable"`
 		} `json:"suppressions"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(got.Suppressions) != 2 {

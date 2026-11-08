@@ -1,7 +1,7 @@
 package plans_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 
@@ -74,7 +74,7 @@ func TestClientBirthPlan_SuppressionIsDerivedNotStored(t *testing.T) {
 			t.Fatalf("%s: GET status = %d, want %d", when, resp.StatusCode, http.StatusOK)
 		}
 		var out plans.InstanceResponse
-		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 			t.Fatalf("%s: decode response: %v", when, err)
 		}
 		// The Plan Instance itself is untouched throughout: the same

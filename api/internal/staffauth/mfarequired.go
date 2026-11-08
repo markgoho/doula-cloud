@@ -1,7 +1,7 @@
 package staffauth
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"net/http"
 
 	"doula-cloud/api/internal/activity"
@@ -77,7 +77,7 @@ func PutMFARequiredHandler() http.Handler {
 				SubjectKind: activity.SubjectPractice,
 				SubjectID:   practiceID,
 				Action:      action,
-				Diff:        json.RawMessage("{}"),
+				Diff:        jsontext.Value("{}"),
 				Actor:       activity.StaffActor(actorStaffID),
 			}); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests

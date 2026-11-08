@@ -2,7 +2,7 @@ package apierr_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -145,7 +145,7 @@ func TestWriteJSON(t *testing.T) {
 		t.Fatalf("Content-Type = %q, want application/json", got)
 	}
 	var out payload
-	if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(rec.Body, &out); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
 	if out.Name != testPayloadName {
@@ -187,6 +187,40 @@ func TestDecodeJSON(t *testing.T) {
 			t.Fatalf("body = %+v, want {INVALID_ARGUMENT invalid request body}", out2)
 		}
 	})
+
+	t.Run("ignores a key no field names", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(`{"name":"`+testPayloadName+`","extra":"x"}`))
+
+		var out reqBody
+		if ok := apierr.DecodeJSON(rec, req, &out); !ok || out.Name != testPayloadName {
+			t.Fatalf("DecodeJSON = %v, %+v, want true and {%s}", ok, out, testPayloadName)
+		}
+	})
+
+	for name, body := range map[string]string{
+		"a duplicate key":              `{"name":"a","name":"b"}`,
+		"a key whose case differs":     `{"Name":"a"}`,
+		"invalid UTF-8 in a string":    "{\"name\":\"a\xffb\"}",
+		"data after the closing brace": `{"name":"a"}{"name":"b"}`,
+	} {
+		t.Run("refuses "+name+" with the 400 error shape", func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(body))
+
+			var out reqBody
+			if ok := apierr.DecodeJSON(rec, req, &out); ok {
+				t.Fatalf("DecodeJSON returned true, want false")
+			}
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+			}
+			got := apierrtest.Decode(t, rec.Result())
+			if got.Code != apierr.CodeInvalidArgument || got.Message != "invalid request body" {
+				t.Fatalf("body = %+v, want {INVALID_ARGUMENT invalid request body}", got)
+			}
+		})
+	}
 
 	t.Run("oversized body writes 413 payload-too-large and returns false", func(t *testing.T) {
 		rec := httptest.NewRecorder()

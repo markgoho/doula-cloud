@@ -3,7 +3,8 @@ package client
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 
 	"doula-cloud/api/internal/clientfieldtemplate"
@@ -23,26 +24,26 @@ const noLongerCollected = "No longer collected"
 // the form; an archived field appears only when the Client holds a
 // stored value under its id, marked with Note.
 type ResolvedField struct {
-	FieldID string          `json:"fieldId"`
-	Label   string          `json:"label"`
-	Type    string          `json:"type"`
-	Options []string        `json:"options,omitempty"`
-	Value   json.RawMessage `json:"value"`
-	Note    string          `json:"note,omitempty"`
+	FieldID string         `json:"fieldId"`
+	Label   string         `json:"label"`
+	Type    string         `json:"type"`
+	Options []string       `json:"options,omitempty"`
+	Value   jsontext.Value `json:"value"`
+	Note    string         `json:"note,omitempty"`
 }
 
 // resolveFields reads practiceID's Client Field Template and pairs it
 // with fieldValues (a Client's stored field_values JSONB), producing one
 // ResolvedField per active field and per archived field the Client still
 // holds a value in.
-func resolveFields(ctx context.Context, tx *sql.Tx, practiceID string, fieldValues json.RawMessage) ([]ResolvedField, error) {
+func resolveFields(ctx context.Context, tx *sql.Tx, practiceID string, fieldValues jsontext.Value) ([]ResolvedField, error) {
 	fields, err := clientfieldtemplate.FetchFields(ctx, tx, practiceID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return nil, fmt.Errorf("client: fetch client field template: %w", err)
 	}
 
-	values := map[string]json.RawMessage{}
+	values := map[string]jsontext.Value{}
 	if len(fieldValues) > 0 {
 		if err := json.Unmarshal(fieldValues, &values); err != nil {
 			// coverage:ignore reason: field_values is always written as a JSON object, not exercised by unit tests

@@ -8,10 +8,13 @@
 package apierr
 
 import (
-	"encoding/json"
+	"bytes"
+	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"reflect"
 )
 
 // Code is a machine-readable APIError.Code value, drawn from the
@@ -256,8 +259,12 @@ const MaxRequestBodyBytes = 1 << 20 // 1 MiB
 func WriteJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	// coverage:ignore reason: response encoding failure, not exercised by unit tests
-	_ = json.NewEncoder(w).Encode(v)
+	body, err := json.Marshal(v, json.Deterministic(true))
+	if err != nil {
+		// coverage:ignore reason: response encoding failure, not exercised by unit tests
+		return
+	}
+	_, _ = w.Write(append(body, '\n'))
 }
 
 // Write sends status with body {code, message, details} as JSON. details
@@ -341,10 +348,14 @@ func DecodeJSONOptional(w http.ResponseWriter, r *http.Request, v any) bool {
 // it.
 func decodeJSON(w http.ResponseWriter, r *http.Request, v any, allowEmpty bool) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBodyBytes)
-	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
-		if allowEmpty && errors.Is(err, io.EOF) {
-			return true
-		}
+	body, err := io.ReadAll(r.Body)
+	if err == nil && allowEmpty && len(bytes.Trim(body, " \t\r\n")) == 0 {
+		return true
+	}
+	if err == nil {
+		err = unmarshalExactCase(body, v)
+	}
+	if err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			Write(w, http.StatusRequestEntityTooLarge, CodePayloadTooLarge, "request body exceeds 1 MiB", nil)
 			return false
@@ -353,6 +364,25 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any, allowEmpty bool) 
 		return false
 	}
 	return true
+}
+
+var errKeyCase = errors.New("apierr: a key differs from its field's name only by case")
+
+// unmarshalExactCase decodes body into v with json v2's case-sensitive
+// matching, then refuses a body that a case-insensitive decode would have
+// read differently: a key such as "Name" for a field tagged "name" is
+// otherwise silently dropped, leaving the field at its zero value.
+func unmarshalExactCase(body []byte, v any) error {
+	if err := json.Unmarshal(body, v); err != nil {
+		return fmt.Errorf("apierr: decode request body: %w", err)
+	}
+	typ := reflect.TypeOf(v).Elem()
+	exact, loose := reflect.New(typ), reflect.New(typ)
+	_ = json.Unmarshal(body, exact.Interface())
+	if err := json.Unmarshal(body, loose.Interface(), json.MatchCaseInsensitiveNames(true)); err != nil || !reflect.DeepEqual(exact.Interface(), loose.Interface()) {
+		return errKeyCase
+	}
+	return nil
 }
 
 // WriteError is Write with its code chosen from status via CodeForStatus,

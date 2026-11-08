@@ -1,7 +1,8 @@
 package main
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"net/http"
 	"slices"
 	"testing"
@@ -193,9 +194,9 @@ func TestFeedbackPiece_NamesAClientSenderByHerNameAndSignInAddress(t *testing.T)
 	w := s.list("/api/feedback/"+s.clientPiece, s.signedInCookie())
 
 	var piece struct {
-		Role   string          `json:"role"`
-		Sender json.RawMessage `json:"sender"`
-		Issue  json.RawMessage `json:"issue"`
+		Role   string         `json:"role"`
+		Sender jsontext.Value `json:"sender"`
+		Issue  jsontext.Value `json:"issue"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &piece); err != nil || w.Code != http.StatusOK {
 		t.Fatalf("status %d, body %s, err %v", w.Code, w.Body, err)

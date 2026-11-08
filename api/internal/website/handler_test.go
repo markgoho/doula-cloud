@@ -3,7 +3,7 @@ package website_test
 import (
 	"bytes"
 	"database/sql"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -79,7 +79,7 @@ func getWebsite(t *testing.T, srv *httptest.Server, session, practiceID string) 
 func decodeWebsite(t *testing.T, resp *http.Response) website.Response {
 	t.Helper()
 	var out website.Response
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	return out

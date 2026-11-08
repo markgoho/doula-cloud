@@ -1,7 +1,7 @@
 package message_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -86,7 +86,7 @@ func TestRemoveMembershipHandler_LeavesHerNamedInThreadAndSchedule(t *testing.T)
 		t.Fatalf("thread status = %d, want %d", threadResp.StatusCode, http.StatusOK)
 	}
 	var thread message.ListResponse
-	if err := json.NewDecoder(threadResp.Body).Decode(&thread); err != nil {
+	if err := json.UnmarshalRead(threadResp.Body, &thread); err != nil {
 		t.Fatalf("decode thread: %v", err)
 	}
 	if len(thread.Items) != 1 || thread.Items[0].SenderName != doulaName {
@@ -99,7 +99,7 @@ func TestRemoveMembershipHandler_LeavesHerNamedInThreadAndSchedule(t *testing.T)
 		t.Fatalf("visits status = %d, want %d", visitsResp.StatusCode, http.StatusOK)
 	}
 	var visits visit.ListResponse
-	if err := json.NewDecoder(visitsResp.Body).Decode(&visits); err != nil {
+	if err := json.UnmarshalRead(visitsResp.Body, &visits); err != nil {
 		t.Fatalf("decode visits: %v", err)
 	}
 	if len(visits.Items) != 1 || visits.Items[0].StaffName != doulaName {

@@ -1,7 +1,7 @@
 package payments_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -163,7 +163,7 @@ func TestInvoicePaid_8pmEasternIsPaidOnThatDay(t *testing.T) {
 	listResp := getInvoices(t, srv, session, practiceID, engagementID, "")
 	defer listResp.Body.Close()
 	var section payments.ListInvoicesResponse
-	if err := json.NewDecoder(listResp.Body).Decode(&section); err != nil {
+	if err := json.UnmarshalRead(listResp.Body, &section); err != nil {
 		t.Fatalf("decode engagement invoices: %v", err)
 	}
 	if len(section.Items) != 1 || section.Items[0].PaidOn == nil || *section.Items[0].PaidOn != dayOct25 {
