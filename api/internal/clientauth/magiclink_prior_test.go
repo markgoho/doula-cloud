@@ -1,7 +1,7 @@
 package clientauth_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 
@@ -36,7 +36,7 @@ func redeemLink(t *testing.T, db *testdb.DB, token string) (status int, returnTo
 	var body struct {
 		ReturnTo string `json:"returnTo"`
 	}
-	if err := json.NewDecoder(redeemed.Body).Decode(&body); err != nil {
+	if err := json.UnmarshalRead(redeemed.Body, &body); err != nil {
 		t.Fatalf("decode redeem body: %v", err)
 	}
 	return redeemed.StatusCode, body.ReturnTo

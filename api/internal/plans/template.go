@@ -11,7 +11,8 @@ package plans
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -198,7 +199,7 @@ func saveTemplateFields(ctx context.Context, tx *sql.Tx, practiceID, staffID, pl
 		return nil
 	}
 
-	diff, err := json.Marshal(map[string]json.RawMessage{"before": previousJSON, "after": fieldsJSON})
+	diff, err := json.Marshal(map[string]jsontext.Value{"before": previousJSON, "after": fieldsJSON})
 	if err != nil {
 		// coverage:ignore reason: both sides always marshal cleanly, not exercised by unit tests
 		return fmt.Errorf("plans: marshal diff: %w", err)

@@ -3,7 +3,7 @@ package client
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"net/http"
@@ -34,12 +34,12 @@ import (
 // (activity.DepartedStaffName, #887). Both are now resolved once, in the
 // one reader every subject-scoped history goes through.
 type Event struct {
-	EventType    string          `json:"eventType"`
-	Diff         json.RawMessage `json:"diff"`
-	ActorKind    string          `json:"actorKind"`
-	ActorStaffID *string         `json:"actorStaffId,omitempty"`
-	ActorName    string          `json:"actorName"`
-	CreatedAt    time.Time       `json:"createdAt"`
+	EventType    string         `json:"eventType"`
+	Diff         jsontext.Value `json:"diff"`
+	ActorKind    string         `json:"actorKind"`
+	ActorStaffID *string        `json:"actorStaffId,omitempty"`
+	ActorName    string         `json:"actorName"`
+	CreatedAt    time.Time      `json:"createdAt"`
 }
 
 // RequestSummary is one engagement_requests row -- the audit record for
@@ -142,7 +142,7 @@ type DetailResponse struct {
 	// on #2022, so her hub is where a Practice reads whether she was
 	// invited and whether her address is blocked (#785).
 	PortalInviteStatus *string `json:"portalInviteStatus,omitempty"`
-	EmailSuppressed    bool    `json:"emailSuppressed,omitempty"`
+	EmailSuppressed    bool    `json:"emailSuppressed,omitzero"`
 }
 
 // DetailHandler views one Client's full record. Access follows
@@ -519,13 +519,13 @@ const unreadableDiff = `{"erased":true}`
 // ciphertext) lands in the same place rather than failing the read: the
 // screen's honest answer to "what changed here?" in that case is the
 // same as after erasure -- it cannot be read.
-func openDiff(ctx context.Context, tx *sql.Tx, clientID string, stored []byte) json.RawMessage {
+func openDiff(ctx context.Context, tx *sql.Tx, clientID string, stored []byte) jsontext.Value {
 	if !clientkey.IsSealed(stored) {
 		return stored
 	}
 	opened, err := clientkey.Open(ctx, tx, clientID, stored)
 	if err != nil {
-		return json.RawMessage(unreadableDiff)
+		return jsontext.Value(unreadableDiff)
 	}
 	return opened
 }

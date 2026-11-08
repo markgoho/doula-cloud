@@ -2,7 +2,7 @@ package contracts_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -196,7 +196,7 @@ func TestPostContractHandler_Success(t *testing.T) {
 	}
 
 	var out contracts.ContractResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.EngagementID != engagementID {
@@ -281,7 +281,7 @@ func TestPostContractHandler_NoClientNameFieldLeavesValuesEmpty(t *testing.T) {
 	defer resp.Body.Close()
 
 	var out contracts.ContractResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(out.Values) != 0 {
@@ -307,7 +307,7 @@ func TestPostContractHandler_ResolvesPracticeName(t *testing.T) {
 	defer resp.Body.Close()
 
 	var out contracts.ContractResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Values["practice_name"] != "Test Practice" {
@@ -350,7 +350,7 @@ func TestPutContractHandler_OverwrittenResolvedValueSurvivesReload(t *testing.T)
 	getResp := getContract(t, srv, session, practiceID, engagementID)
 	defer getResp.Body.Close()
 	var getOut contracts.ContractResponse
-	if err := json.NewDecoder(getResp.Body).Decode(&getOut); err != nil {
+	if err := json.UnmarshalRead(getResp.Body, &getOut); err != nil {
 		t.Fatalf("decode GET response: %v", err)
 	}
 	if getOut.Values["practice_name"] != overwrittenPracticeName {
@@ -376,7 +376,7 @@ func TestPostContractHandler_DedupesRepeatedMergeField(t *testing.T) {
 	defer resp.Body.Close()
 
 	var out contracts.ContractResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(out.MergeFields) != 1 || out.MergeFields[0] != clientNameKey {
@@ -517,7 +517,7 @@ func TestGetContractHandler_ContractorWithGrantedAttachmentSeesScope(t *testing.
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out contracts.ContractResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.EngagementID != engagementID {
@@ -558,7 +558,7 @@ func TestGetContractHandler_AmountChangedAtHiddenFromContractor(t *testing.T) {
 	defer resp.Body.Close()
 
 	var out contracts.ContractResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.AmountChangedAt != nil {
@@ -589,7 +589,7 @@ func TestGetContractHandler_AmountChangedAtVisibleToEmployee(t *testing.T) {
 	defer resp.Body.Close()
 
 	var out contracts.ContractResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.AmountChangedAt == nil {
@@ -618,7 +618,7 @@ func TestGetContractHandler_EmployedDoulaSeesMoney(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out contracts.ContractResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Values[priceKey] != testRateAmountDollars {
@@ -651,7 +651,7 @@ func TestGetContractHandler_ContractorWithGrantedAttachmentNoRawPriceStored(t *t
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out contracts.ContractResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if _, present := out.Values[priceKey]; present {
@@ -795,7 +795,7 @@ func TestPutContractHandler_StatusFieldIgnored(t *testing.T) {
 	}
 
 	var out contracts.ContractResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Status != statusDraft {
@@ -825,7 +825,7 @@ func TestPutContractHandler_EmptyBodyDefaultsToEmptyValues(t *testing.T) {
 	}
 
 	var out contracts.ContractResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	// price still resolves even against an otherwise-empty Values map --
@@ -881,7 +881,7 @@ func TestPutContractHandler_Success(t *testing.T) {
 	getResp := getContract(t, srv, session, practiceID, engagementID)
 	defer getResp.Body.Close()
 	var out contracts.ContractResponse
-	if err := json.NewDecoder(getResp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(getResp.Body, &out); err != nil {
 		t.Fatalf("decode GET response: %v", err)
 	}
 	// price is resolved from amount_cents, never from what was PUT (#967);
@@ -923,7 +923,7 @@ func TestContract_TemplateEditDoesNotAlterExistingSnapshot(t *testing.T) {
 	getResp := getContract(t, srv, session, practiceID, engagementID)
 	defer getResp.Body.Close()
 	var out contracts.ContractResponse
-	if err := json.NewDecoder(getResp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(getResp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Prose != mergeFieldProse {

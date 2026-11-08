@@ -3,7 +3,7 @@ package staffauth_test
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -861,7 +861,7 @@ func TestMiddleware_PendingDeletionLockout_ExemptsSessionForEveryRole(t *testing
 	assertStatus(t, resp, http.StatusOK)
 
 	var body staffauth.PracticeSessionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &body); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
 	if !body.PendingDeletion {

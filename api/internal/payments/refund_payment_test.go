@@ -2,7 +2,7 @@ package payments_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -59,7 +59,7 @@ func decodePaymentView(t *testing.T, resp *http.Response) payments.PaymentView {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 	var out payments.PaymentView
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode payment view: %v", err)
 	}
 	return out
@@ -588,7 +588,7 @@ func TestRefundedInvoice_BookFiguresTellTheTruth(t *testing.T) {
 	book := getPracticeInvoicesNarrowed(t, f.srv, f.session, f.practiceID, "", "")
 	defer book.Body.Close()
 	var totals payments.PracticeInvoicesResponse
-	if err := json.NewDecoder(book.Body).Decode(&totals); err != nil {
+	if err := json.UnmarshalRead(book.Body, &totals); err != nil {
 		t.Fatalf("decode practice invoices: %v", err)
 	}
 	if totals.OutstandingCents != 0 || totals.OutstandingCount != 0 {
@@ -604,7 +604,7 @@ func TestRefundedInvoice_BookFiguresTellTheTruth(t *testing.T) {
 	list := getInvoices(t, f.srv, f.session, f.practiceID, f.engagementID, "")
 	defer list.Body.Close()
 	var page payments.ListInvoicesResponse
-	if err := json.NewDecoder(list.Body).Decode(&page); err != nil {
+	if err := json.UnmarshalRead(list.Body, &page); err != nil {
 		t.Fatalf("decode invoices: %v", err)
 	}
 	if len(page.Items) != 1 {
@@ -632,7 +632,7 @@ func TestStripeCardPayment_IsOfferedAsActive(t *testing.T) {
 	list := getInvoices(t, f.srv, f.session, f.practiceID, f.engagementID, "")
 	defer list.Body.Close()
 	var page payments.ListInvoicesResponse
-	if err := json.NewDecoder(list.Body).Decode(&page); err != nil {
+	if err := json.UnmarshalRead(list.Body, &page); err != nil {
 		t.Fatalf("decode invoices: %v", err)
 	}
 	if got := page.Items[0].ActivePaymentID; got == nil || *got != f.paymentID {

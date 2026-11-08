@@ -8,7 +8,7 @@
 package apierrtest
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 
@@ -29,7 +29,7 @@ import (
 func Decode(t *testing.T, resp *http.Response) apierr.APIError {
 	t.Helper()
 	var out apierr.APIError
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		// coverage:ignore reason: the failure branch ends the calling test by design; exercising it would need a testing.T substitute this repo has no precedent for
 		t.Fatalf("decode section 7 error envelope: %v", err)
 	}

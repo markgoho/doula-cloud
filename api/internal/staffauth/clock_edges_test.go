@@ -1,7 +1,7 @@
 package staffauth_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -61,7 +61,7 @@ func TestListStaffHandler_InvitationExpiredAtExpiresAtOnTheRequestClock(t *testi
 			assertStatus(t, resp, http.StatusOK)
 
 			var roster staffauth.Roster
-			if err := json.NewDecoder(resp.Body).Decode(&roster); err != nil {
+			if err := json.UnmarshalRead(resp.Body, &roster); err != nil {
 				t.Fatalf("decode response: %v", err)
 			}
 			if len(roster.Invitations.Items) != 1 || roster.Invitations.Items[0].InvitationID != invitationID {

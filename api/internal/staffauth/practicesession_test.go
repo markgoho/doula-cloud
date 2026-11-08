@@ -1,7 +1,7 @@
 package staffauth_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -59,7 +59,7 @@ func TestPracticeSessionHandler_ReportsPracticeAndRoles(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out staffauth.PracticeSessionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.PracticeID != practiceID {
@@ -110,7 +110,7 @@ func TestPracticeSessionHandler_HasClients(t *testing.T) {
 		resp := getPracticeSession(t, srv, session, practiceID)
 		defer resp.Body.Close()
 		var out staffauth.PracticeSessionResponse
-		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 			t.Fatalf("decode response: %v", err)
 		}
 		return out
@@ -151,7 +151,7 @@ func TestPracticeSessionHandler_HasOtherDoulas(t *testing.T) {
 		resp := getPracticeSession(t, srv, session, practiceID)
 		defer resp.Body.Close()
 		var out staffauth.PracticeSessionResponse
-		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 			t.Fatalf("decode response: %v", err)
 		}
 		return out
@@ -188,7 +188,7 @@ func TestPracticeSessionHandler_ClientsCanPay(t *testing.T) {
 		resp := getPracticeSession(t, srv, session, practiceID)
 		defer resp.Body.Close()
 		var out staffauth.PracticeSessionResponse
-		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 			t.Fatalf("decode response: %v", err)
 		}
 		return out
@@ -222,7 +222,7 @@ func TestPracticeSessionHandler_BillingMode(t *testing.T) {
 		resp := getPracticeSession(t, srv, session, practiceID)
 		defer resp.Body.Close()
 		var out staffauth.PracticeSessionResponse
-		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 			t.Fatalf("decode response: %v", err)
 		}
 		return out
@@ -255,7 +255,7 @@ func TestPracticeSessionHandler_EmployeeNotContractor(t *testing.T) {
 	defer resp.Body.Close()
 
 	var out staffauth.PracticeSessionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.IsContractor {

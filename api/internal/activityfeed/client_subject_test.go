@@ -1,7 +1,7 @@
 package activityfeed_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"doula-cloud/api/internal/activity"
@@ -40,7 +40,7 @@ func TestPracticeHandler_NamesTheClientEveryEngagementAndClientRowIsAbout(t *tes
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
 	defer resp.Body.Close()
 	var got activityfeed.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	bySubjectKind := map[string]string{}
@@ -94,7 +94,7 @@ func TestPracticeHandler_TellsTwoClientsWithOneFirstNameApart(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
 	defer resp.Body.Close()
 	var got activityfeed.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	bySubject := map[string]string{}

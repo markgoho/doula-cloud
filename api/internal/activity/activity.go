@@ -9,7 +9,7 @@ package activity
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"fmt"
 	"time"
 )
@@ -69,7 +69,7 @@ type Entry struct {
 	SubjectKind string
 	SubjectID   string
 	Action      string
-	Diff        json.RawMessage
+	Diff        jsontext.Value
 	Actor       Actor
 	// CreatedAt is the instant the row records, when its write site has to
 	// name it: a row that is evidence of when a person did something reads
@@ -129,7 +129,7 @@ func Record(ctx context.Context, tx *sql.Tx, e Entry, opts ...RecordOption) erro
 
 	diff := e.Diff
 	if diff == nil {
-		diff = json.RawMessage("{}")
+		diff = jsontext.Value("{}")
 	}
 
 	var createdAt sql.NullTime

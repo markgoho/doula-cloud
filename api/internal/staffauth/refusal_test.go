@@ -1,7 +1,7 @@
 package staffauth_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -44,7 +44,7 @@ func TestGatedRouter_MountGatedRefusalNamesTheSeat(t *testing.T) {
 		var body struct {
 			Message string `json:"message"`
 		}
-		err := json.NewDecoder(resp.Body).Decode(&body)
+		err := json.UnmarshalRead(resp.Body, &body)
 		_ = resp.Body.Close()
 		if err != nil {
 			t.Fatalf("%s: decode body: %v", path, err)

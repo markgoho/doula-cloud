@@ -8,7 +8,8 @@
 package apierr
 
 import (
-	"encoding/json"
+	"bytes"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"net/http"
@@ -256,8 +257,12 @@ const MaxRequestBodyBytes = 1 << 20 // 1 MiB
 func WriteJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	// coverage:ignore reason: response encoding failure, not exercised by unit tests
-	_ = json.NewEncoder(w).Encode(v)
+	body, err := json.Marshal(v, json.Deterministic(true))
+	if err != nil {
+		// coverage:ignore reason: response encoding failure, not exercised by unit tests
+		return
+	}
+	_, _ = w.Write(append(body, '\n'))
 }
 
 // Write sends status with body {code, message, details} as JSON. details
@@ -341,10 +346,14 @@ func DecodeJSONOptional(w http.ResponseWriter, r *http.Request, v any) bool {
 // it.
 func decodeJSON(w http.ResponseWriter, r *http.Request, v any, allowEmpty bool) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBodyBytes)
-	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
-		if allowEmpty && errors.Is(err, io.EOF) {
-			return true
-		}
+	body, err := io.ReadAll(r.Body)
+	if err == nil && allowEmpty && len(bytes.Trim(body, " \t\r\n")) == 0 {
+		return true
+	}
+	if err == nil {
+		err = json.Unmarshal(body, v)
+	}
+	if err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			Write(w, http.StatusRequestEntityTooLarge, CodePayloadTooLarge, "request body exceeds 1 MiB", nil)
 			return false

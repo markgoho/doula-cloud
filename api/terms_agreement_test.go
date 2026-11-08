@@ -2,7 +2,8 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -42,7 +43,7 @@ func TestAgreementGate_RealRoutes(t *testing.T) {
 	testdb.SeedStaffAtPractice(t, db, practiceID, doulaUID, []string{roleDoula}, "employee")
 	clientID := testdb.SeedNamedClient(t, db, practiceID, "Sarah", "sarah@example.test")
 	testdb.SeedActivityWithDiff(t, db, practiceID, activity.SubjectPractice, practiceID, staffauth.ActionTermsAccepted,
-		activity.StaffActor(ownerID), json.RawMessage(`{"termsVersion":"2026-09-29","privacyVersion":"2026-10-22","ipAddress":"127.0.0.1"}`))
+		activity.StaffActor(ownerID), jsontext.Value(`{"termsVersion":"2026-09-29","privacyVersion":"2026-10-22","ipAddress":"127.0.0.1"}`))
 	testdb.SeedLegalPublication(t, db, "terms", "2026-11-01", true, now)
 
 	deps := testDeps()
@@ -61,7 +62,7 @@ func TestAgreementGate_RealRoutes(t *testing.T) {
 		t.Helper()
 		var buf bytes.Buffer
 		if body != nil {
-			if err := json.NewEncoder(&buf).Encode(body); err != nil {
+			if err := json.MarshalWrite(&buf, body); err != nil {
 				t.Fatalf("encode: %v", err)
 			}
 		}

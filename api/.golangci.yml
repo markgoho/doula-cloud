@@ -17,6 +17,7 @@ linters:
     - bodyclose
     - contextcheck
     - copyloopvar
+    - depguard
     - durationcheck
     - errname
     - errorlint
@@ -44,6 +45,16 @@ linters:
     - whitespace
     - wrapcheck
   settings:
+    depguard:
+      rules:
+        json-v2:
+          list-mode: lax
+          allow:
+            - encoding/json/v2
+            - encoding/json/jsontext
+          deny:
+            - pkg: encoding/json
+              desc: "use encoding/json/v2 (and encoding/json/jsontext) -- see issue #2730"
     # #773: the gate that keeps the bare-time.Now() count from silently
     # climbing again -- every production call site reads through
     # api/internal/clock's Now(ctx) or an injected clock.Clock instead.

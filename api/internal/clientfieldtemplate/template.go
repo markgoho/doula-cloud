@@ -14,7 +14,8 @@ package clientfieldtemplate
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -180,7 +181,7 @@ func saveFields(ctx context.Context, tx *sql.Tx, practiceID, staffID string, pre
 		return nil
 	}
 
-	diff, err := json.Marshal(map[string]json.RawMessage{"before": previousJSON, "after": fieldsJSON})
+	diff, err := json.Marshal(map[string]jsontext.Value{"before": previousJSON, "after": fieldsJSON})
 	if err != nil {
 		// coverage:ignore reason: both sides always marshal cleanly, not exercised by unit tests
 		return fmt.Errorf("clientfieldtemplate: marshal diff: %w", err)

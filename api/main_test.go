@@ -5,7 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -366,7 +366,7 @@ func TestRoutes_SignupLoginLanding(t *testing.T) {
 		t.Fatalf("signup status = %d, want %d", signupResp.StatusCode, http.StatusCreated)
 	}
 	var signedUp staffauth.SignupResponse
-	if err := json.NewDecoder(signupResp.Body).Decode(&signedUp); err != nil {
+	if err := json.UnmarshalRead(signupResp.Body, &signedUp); err != nil {
 		t.Fatalf("decode signup response: %v", err)
 	}
 
@@ -386,7 +386,7 @@ func TestRoutes_SignupLoginLanding(t *testing.T) {
 	}
 	defer sessionResp.Body.Close()
 	var session staffauth.SessionResponse
-	if err := json.NewDecoder(sessionResp.Body).Decode(&session); err != nil {
+	if err := json.UnmarshalRead(sessionResp.Body, &session); err != nil {
 		t.Fatalf("decode session response: %v", err)
 	}
 	if len(session.Memberships) != 1 || session.Memberships[0].PracticeID != signedUp.PracticeID {
@@ -404,7 +404,7 @@ func TestRoutes_SignupLoginLanding(t *testing.T) {
 		t.Fatalf("landing status = %d, want %d", landingResp.StatusCode, http.StatusOK)
 	}
 	var landing staffauth.PracticeSessionResponse
-	if err := json.NewDecoder(landingResp.Body).Decode(&landing); err != nil {
+	if err := json.UnmarshalRead(landingResp.Body, &landing); err != nil {
 		t.Fatalf("decode landing response: %v", err)
 	}
 	if landing.PracticeName != "Riverside Doulas" {
@@ -453,7 +453,7 @@ func TestRoutes_PracticeSessionContractorFlag(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var landing staffauth.PracticeSessionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&landing); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &landing); err != nil {
 		t.Fatalf("decode landing response: %v", err)
 	}
 	if !landing.IsContractor {

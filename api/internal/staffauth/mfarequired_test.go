@@ -2,7 +2,7 @@ package staffauth_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -252,7 +252,7 @@ func TestGetMFAImpactHandler_CountsEveryoneWithoutAFactor(t *testing.T) {
 		Required            bool `json:"required"`
 		WithoutSecondFactor int  `json:"withoutSecondFactor"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &body); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
 	if !body.Required {

@@ -3,7 +3,7 @@ package contracts_test
 import (
 	"bytes"
 	"database/sql"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"testing"
@@ -296,7 +296,7 @@ func assertNoSignedContractMessage(t *testing.T, resp *http.Response) {
 	var body struct {
 		Message string `json:"message"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &body); err != nil {
 		t.Fatalf("decode error body: %v", err)
 	}
 	if body.Message != contracts.MsgNoSignedContract {
@@ -563,7 +563,7 @@ func decodeContract(t *testing.T, resp *http.Response) contracts.ContractRespons
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out contracts.ContractResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	return out

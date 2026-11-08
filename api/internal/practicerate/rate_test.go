@@ -2,7 +2,7 @@ package practicerate_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -108,7 +108,7 @@ func TestGetRatesHandler_NoRateSetIsValid(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out practicerate.RatesResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(out.Rates) != 2 {
@@ -154,7 +154,7 @@ func TestGetRatesHandler_AnyRoleReads(t *testing.T) {
 				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 			}
 			var out practicerate.RatesResponse
-			if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 				t.Fatalf("decode response: %v", err)
 			}
 			var found bool
@@ -302,7 +302,7 @@ func TestPutRateHandler_Success(t *testing.T) {
 		t.Fatalf("PUT status = %d, want %d", putResp.StatusCode, http.StatusOK)
 	}
 	var putOut practicerate.Rate
-	if err := json.NewDecoder(putResp.Body).Decode(&putOut); err != nil {
+	if err := json.UnmarshalRead(putResp.Body, &putOut); err != nil {
 		t.Fatalf("decode PUT response: %v", err)
 	}
 	if putOut.AmountCents == nil || *putOut.AmountCents != 15000 {
@@ -318,7 +318,7 @@ func TestPutRateHandler_Success(t *testing.T) {
 	getResp := getRates(t, srv, session, practiceID)
 	defer getResp.Body.Close()
 	var getOut practicerate.RatesResponse
-	if err := json.NewDecoder(getResp.Body).Decode(&getOut); err != nil {
+	if err := json.UnmarshalRead(getResp.Body, &getOut); err != nil {
 		t.Fatalf("decode GET response: %v", err)
 	}
 	for _, rate := range getOut.Rates {

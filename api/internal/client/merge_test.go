@@ -1,7 +1,8 @@
 package client_test
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"strings"
@@ -91,7 +92,7 @@ func TestMergeHandler_AbsorbsUnattachedIntoAttachedMatch(t *testing.T) {
 		t.Fatalf("status = %d, want %d, body=%s", resp.StatusCode, http.StatusOK, body)
 	}
 	var out client.Record
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.ID != survivorID {
@@ -126,7 +127,7 @@ func TestMergeHandler_AbsorbsUnattachedIntoAttachedMatch(t *testing.T) {
 	// Excluded from the Clients list.
 	listResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
 	var list client.ListResponse
-	if err := json.NewDecoder(listResp.Body).Decode(&list); err != nil {
+	if err := json.UnmarshalRead(listResp.Body, &list); err != nil {
 		t.Fatalf("decode list: %v", err)
 	}
 	_ = listResp.Body.Close()
@@ -139,7 +140,7 @@ func TestMergeHandler_AbsorbsUnattachedIntoAttachedMatch(t *testing.T) {
 	// Excluded from search.
 	searchResp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/search", client.SearchRequest{Name: "Maya"})
 	var search client.SearchResponse
-	if err := json.NewDecoder(searchResp.Body).Decode(&search); err != nil {
+	if err := json.UnmarshalRead(searchResp.Body, &search); err != nil {
 		t.Fatalf("decode search: %v", err)
 	}
 	_ = searchResp.Body.Close()
@@ -152,7 +153,7 @@ func TestMergeHandler_AbsorbsUnattachedIntoAttachedMatch(t *testing.T) {
 	// Detail redirects rather than renders.
 	detailResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/"+stubID)
 	var detail client.DetailResponse
-	if err := json.NewDecoder(detailResp.Body).Decode(&detail); err != nil {
+	if err := json.UnmarshalRead(detailResp.Body, &detail); err != nil {
 		t.Fatalf("decode detail: %v", err)
 	}
 	_ = detailResp.Body.Close()
@@ -186,7 +187,7 @@ func TestMergeHandler_BothUnattachedOlderSurvives(t *testing.T) {
 			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 		}
 		var out client.Record
-		_ = json.NewDecoder(resp.Body).Decode(&out)
+		_ = json.UnmarshalRead(resp.Body, &out)
 		if out.ID != olderID {
 			t.Fatalf("survivor = %q, want the older record %q", out.ID, olderID)
 		}
@@ -212,7 +213,7 @@ func TestMergeHandler_BothUnattachedOlderSurvives(t *testing.T) {
 			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 		}
 		var out client.Record
-		_ = json.NewDecoder(resp.Body).Decode(&out)
+		_ = json.UnmarshalRead(resp.Body, &out)
 		if out.ID != olderID {
 			t.Fatalf("survivor = %q, want the older record %q even though it is the one open for editing", out.ID, olderID)
 		}
@@ -461,7 +462,7 @@ func TestMergeHandler_ChangedEmailRevokesPendingInviteAndOverlaysFieldValues(t *
 	// happens to already be on the stub's own row.
 	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+stubID+"/merge",
 		client.MergeRequest{
-			GivenName: "Nia", Email: testNewEmail, FieldValues: json.RawMessage(`{"referralSource":"Hospital"}`),
+			GivenName: "Nia", Email: testNewEmail, FieldValues: jsontext.Value(`{"referralSource":"Hospital"}`),
 			OtherClientID: survivorID,
 		})
 	defer resp.Body.Close()
@@ -470,7 +471,7 @@ func TestMergeHandler_ChangedEmailRevokesPendingInviteAndOverlaysFieldValues(t *
 		t.Fatalf("status = %d, want %d, body=%s", resp.StatusCode, http.StatusOK, body)
 	}
 	var out client.Record
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Email != testNewEmail {

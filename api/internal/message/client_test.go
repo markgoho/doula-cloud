@@ -2,7 +2,7 @@ package message_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -66,7 +66,7 @@ func TestClientCreateHandler_Success(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 	var out message.Message
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.MessageID == "" || out.SenderType != "client" || out.SenderID != clientID ||
@@ -157,7 +157,7 @@ func TestClientListHandler_EmptyThread(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out message.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(out.Items) != 0 || out.HasMore || out.NextCursor != nil {
@@ -208,7 +208,7 @@ func TestClientListHandler_PaginatesNewestFirst(t *testing.T) {
 		t.Fatalf("first page status = %d, want %d", firstResp.StatusCode, http.StatusOK)
 	}
 	var first message.ListResponse
-	if err := json.NewDecoder(firstResp.Body).Decode(&first); err != nil {
+	if err := json.UnmarshalRead(firstResp.Body, &first); err != nil {
 		t.Fatalf("decode first page: %v", err)
 	}
 	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
@@ -222,7 +222,7 @@ func TestClientListHandler_PaginatesNewestFirst(t *testing.T) {
 		t.Fatalf("second page status = %d, want %d", secondResp.StatusCode, http.StatusOK)
 	}
 	var second message.ListResponse
-	if err := json.NewDecoder(secondResp.Body).Decode(&second); err != nil {
+	if err := json.UnmarshalRead(secondResp.Body, &second); err != nil {
 		t.Fatalf("decode second page: %v", err)
 	}
 	if len(second.Items) != 5 || second.HasMore || second.NextCursor != nil {
@@ -308,7 +308,7 @@ func TestSharedThread_StaffAndClientSeeOneContinuousThread(t *testing.T) {
 	staffListResp := authedGet(t, staffSession, staffSrv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
 	defer staffListResp.Body.Close()
 	var staffView message.ListResponse
-	if err := json.NewDecoder(staffListResp.Body).Decode(&staffView); err != nil {
+	if err := json.UnmarshalRead(staffListResp.Body, &staffView); err != nil {
 		t.Fatalf("decode staff-side list: %v", err)
 	}
 	assertBothMessagesInOrder(t, staffView.Items)
@@ -316,7 +316,7 @@ func TestSharedThread_StaffAndClientSeeOneContinuousThread(t *testing.T) {
 	clientListResp := authedGet(t, portalSession, portalSrv.URL+"/api/portal/engagements/"+engagementID+"/messages")
 	defer clientListResp.Body.Close()
 	var clientView message.ListResponse
-	if err := json.NewDecoder(clientListResp.Body).Decode(&clientView); err != nil {
+	if err := json.UnmarshalRead(clientListResp.Body, &clientView); err != nil {
 		t.Fatalf("decode client-side list: %v", err)
 	}
 	assertBothMessagesInOrder(t, clientView.Items)
@@ -342,7 +342,7 @@ func TestClientCreateHandler_AttachmentUploadAndDownloadRoundTrip(t *testing.T) 
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 	var created message.Message
-	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &created); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if created.AttachmentContentType != pngContentType {
@@ -397,7 +397,7 @@ func TestClientAttachmentHandler_NotLinkedToClientForbidden(t *testing.T) {
 		"", "photo.png", pngBytes)
 	defer createResp.Body.Close()
 	var created message.Message
-	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+	if err := json.UnmarshalRead(createResp.Body, &created); err != nil {
 		t.Fatalf("decode create response: %v", err)
 	}
 
@@ -451,7 +451,7 @@ func TestClientListHandler_NamesASenderWhoHasLeftThePractice(t *testing.T) {
 	}
 
 	var thread message.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&thread); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &thread); err != nil {
 		t.Fatalf("decode thread: %v", err)
 	}
 	if len(thread.Items) != 1 {
@@ -508,7 +508,7 @@ func TestClientListHandler_StandsInForASenderWhoDeletedHerLogin(t *testing.T) {
 	}
 
 	var thread message.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&thread); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &thread); err != nil {
 		t.Fatalf("decode thread: %v", err)
 	}
 	if len(thread.Items) != 1 {

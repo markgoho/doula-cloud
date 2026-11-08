@@ -1,7 +1,7 @@
 package client_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 
@@ -94,7 +94,7 @@ func TestEditHandler_CollisionPredicate_SharedDateOfBirthWithNameWordAsks(t *tes
 		t.Fatalf("status = %d, want %d (shared DOB + shared name word is a possible duplicate)", resp.StatusCode, http.StatusConflict)
 	}
 	var out client.EditConflictResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Substitution {
@@ -165,7 +165,7 @@ func TestEditHandler_CollisionPredicate_SubstitutionBlocksWithSubstitutionFlag(t
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
 	}
 	var out client.EditConflictResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if !out.Substitution {

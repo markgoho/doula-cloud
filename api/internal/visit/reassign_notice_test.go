@@ -1,7 +1,7 @@
 package visit_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"slices"
 	"testing"
@@ -54,7 +54,7 @@ func reassign(t *testing.T, db *testdb.DB, uid, practiceID, engagementID, visitI
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out visit.ReassignResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	return out

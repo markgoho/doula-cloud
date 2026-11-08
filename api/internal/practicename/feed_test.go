@@ -1,7 +1,7 @@
 package practicename_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -44,7 +44,7 @@ func TestPutHandler_TheRenameShowsInThePracticesActivity(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	var feed activityfeed.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&feed); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &feed); err != nil {
 		t.Fatalf("decode feed: %v", err)
 	}
 	for _, item := range feed.Items {

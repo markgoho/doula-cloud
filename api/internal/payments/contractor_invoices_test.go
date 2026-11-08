@@ -1,7 +1,8 @@
 package payments_test
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"strconv"
@@ -90,7 +91,7 @@ func TestGetInvoicesHandler_AContractorReadsDatesAndStatusNeverMoney(t *testing.
 	}
 
 	var envelope struct {
-		Items []map[string]json.RawMessage `json:"items"`
+		Items []map[string]jsontext.Value `json:"items"`
 	}
 	if err := json.Unmarshal(raw, &envelope); err != nil {
 		t.Fatalf("decode envelope: %v", err)
@@ -179,7 +180,7 @@ func TestGetInvoicesHandler_AContractorPages(t *testing.T) {
 	first := getInvoices(t, srv, session, practiceID, engagementID, "")
 	defer first.Body.Close()
 	var page payments.ContractorInvoicesResponse
-	if err := json.NewDecoder(first.Body).Decode(&page); err != nil {
+	if err := json.UnmarshalRead(first.Body, &page); err != nil {
 		t.Fatalf("decode first page: %v", err)
 	}
 	if !page.HasMore || page.NextCursor == nil || len(page.Items) != 30 {
@@ -189,7 +190,7 @@ func TestGetInvoicesHandler_AContractorPages(t *testing.T) {
 	second := getInvoices(t, srv, session, practiceID, engagementID, *page.NextCursor)
 	defer second.Body.Close()
 	var next payments.ContractorInvoicesResponse
-	if err := json.NewDecoder(second.Body).Decode(&next); err != nil {
+	if err := json.UnmarshalRead(second.Body, &next); err != nil {
 		t.Fatalf("decode second page: %v", err)
 	}
 	if next.HasMore || len(next.Items) != 1 {

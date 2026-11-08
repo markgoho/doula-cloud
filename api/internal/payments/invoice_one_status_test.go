@@ -1,7 +1,7 @@
 package payments_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"strings"
 	"testing"
@@ -59,7 +59,7 @@ func TestAnOverdueInvoiceReadsOverdueInEveryView(t *testing.T) {
 		}
 		resp := getInvoices(t, srv, session, me.practiceID, me.engagementID, "")
 		var section payments.ListInvoicesResponse
-		err := json.NewDecoder(resp.Body).Decode(&section)
+		err := json.UnmarshalRead(resp.Body, &section)
 		_ = resp.Body.Close()
 		if resp.StatusCode != http.StatusOK || err != nil {
 			t.Fatalf("%s: status %d, decode %v", s.name, resp.StatusCode, err)
@@ -75,7 +75,7 @@ func TestAnOverdueInvoiceReadsOverdueInEveryView(t *testing.T) {
 	testdb.SeedGrantedAttachment(t, db, me.engagementID, contractorID)
 	resp := getInvoices(t, srv, authntest.SeedSessionAt(t, db.App, contractorUID, now), me.practiceID, me.engagementID, "")
 	var rows payments.ContractorInvoicesResponse
-	err := json.NewDecoder(resp.Body).Decode(&rows)
+	err := json.UnmarshalRead(resp.Body, &rows)
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusOK || err != nil {
 		t.Fatalf("contractor: status %d, decode %v", resp.StatusCode, err)

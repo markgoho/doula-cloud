@@ -1,7 +1,8 @@
 package portal_test
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 
@@ -68,8 +69,8 @@ func TestDetailHandler_SaysWhenCareHasEnded(t *testing.T) {
 			if resp.StatusCode != http.StatusOK {
 				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 			}
-			var fields map[string]json.RawMessage
-			if err := json.NewDecoder(resp.Body).Decode(&fields); err != nil {
+			var fields map[string]jsontext.Value
+			if err := json.UnmarshalRead(resp.Body, &fields); err != nil {
 				t.Fatalf("decode response: %v", err)
 			}
 			var careEnded bool

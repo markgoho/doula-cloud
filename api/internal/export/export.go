@@ -4,7 +4,7 @@ import (
 	"archive/zip"
 	"database/sql"
 	"encoding/csv"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"log"
 	"net/http"

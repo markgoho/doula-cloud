@@ -3,7 +3,7 @@ package clientkey_test
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"strings"
 	"testing"
@@ -160,13 +160,13 @@ func TestSeal_WithoutAKeyRefuses(t *testing.T) {
 }
 
 func TestIsSealed_RejectsAPlaintextDiff(t *testing.T) {
-	if clientkey.IsSealed(json.RawMessage(`{"givenName":{"from":"","to":"Ada"}}`)) {
+	if clientkey.IsSealed(jsontext.Value(`{"givenName":{"from":"","to":"Ada"}}`)) {
 		t.Fatal("IsSealed(plaintext diff) = true, want false")
 	}
-	if clientkey.IsSealed(json.RawMessage(`not json`)) {
+	if clientkey.IsSealed(jsontext.Value(`not json`)) {
 		t.Fatal("IsSealed(garbage) = true, want false")
 	}
-	if clientkey.IsSealed(json.RawMessage(`{"v":1}`)) {
+	if clientkey.IsSealed(jsontext.Value(`{"v":1}`)) {
 		t.Fatal("IsSealed(envelope with no ciphertext) = true, want false")
 	}
 }
@@ -188,7 +188,7 @@ func TestOpen_RejectsATamperedEnvelope(t *testing.T) {
 		"flipped ciphertext":   `{"v":1,"enc":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := clientkey.Open(t.Context(), tx, clientID, json.RawMessage(envelope)); err == nil {
+			if _, err := clientkey.Open(t.Context(), tx, clientID, jsontext.Value(envelope)); err == nil {
 				t.Fatalf("open(%s) = nil error, want a refusal", envelope)
 			}
 		})

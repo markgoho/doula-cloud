@@ -2,7 +2,7 @@ package oncall_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -117,7 +117,7 @@ func decode[T any](t *testing.T, resp *http.Response, want int) T {
 		_, _ = body.ReadFrom(resp.Body)
 		t.Fatalf("status = %d, want %d: %s", resp.StatusCode, want, body.String())
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	return out

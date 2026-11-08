@@ -1,7 +1,7 @@
 package contracts_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -69,7 +69,7 @@ func decodeAwaiting(t *testing.T, session, url string) contracts.AwaitingRespons
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out contracts.AwaitingResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
 	return out

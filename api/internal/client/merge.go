@@ -3,7 +3,8 @@ package client
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"maps"
@@ -635,15 +636,15 @@ func fold(absorbed, survivor Record) Record {
 // stored blobs instead of one blob and one answer map. A field this
 // Practice asks today does not erase one it asked last year: an absent
 // key on the absorbed side leaves the survivor's own value in place.
-func mergeFieldValues(survivor, absorbed json.RawMessage) json.RawMessage {
-	merged := map[string]json.RawMessage{}
+func mergeFieldValues(survivor, absorbed jsontext.Value) jsontext.Value {
+	merged := map[string]jsontext.Value{}
 	_ = json.Unmarshal(survivor, &merged)
-	var absorbedValues map[string]json.RawMessage
+	var absorbedValues map[string]jsontext.Value
 	_ = json.Unmarshal(absorbed, &absorbedValues)
 	maps.Copy(merged, absorbedValues)
 	out, err := json.Marshal(merged)
 	if err != nil {
-		// coverage:ignore reason: a map of string to json.RawMessage always marshals cleanly, not exercised by unit tests
+		// coverage:ignore reason: a map of string to jsontext.Value always marshals cleanly, not exercised by unit tests
 		return []byte("{}")
 	}
 	return out

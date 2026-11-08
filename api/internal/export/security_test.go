@@ -2,7 +2,7 @@ package export_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"go/parser"
 	"go/token"
 	"net/http"

@@ -1,7 +1,8 @@
 package engagementrequest_test
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 
@@ -172,7 +173,7 @@ func TestRequestHandler_NoDoulaYetNamesNobody(t *testing.T) {
 	defer ownerSrv.Close()
 	resp := get(t, detailURL(ownerSrv.URL, practiceID, absent.RequestID), ownerSession)
 	expectStatus(t, resp, http.StatusOK)
-	var raw map[string]json.RawMessage
+	var raw map[string]jsontext.Value
 	if err := json.Unmarshal(resp.body, &raw); err != nil {
 		t.Fatalf("decode detail: %v", err)
 	}

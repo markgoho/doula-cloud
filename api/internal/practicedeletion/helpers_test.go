@@ -2,7 +2,7 @@ package practicedeletion_test
 
 import (
 	"database/sql"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -80,7 +80,7 @@ func authedGet(t *testing.T, session, url string) *http.Response {
 func decodeJSON(t *testing.T, resp *http.Response, v any) {
 	t.Helper()
 	defer resp.Body.Close()
-	if err := json.NewDecoder(resp.Body).Decode(v); err != nil {
+	if err := json.UnmarshalRead(resp.Body, v); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 }

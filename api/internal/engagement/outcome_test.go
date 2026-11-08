@@ -2,7 +2,8 @@ package engagement_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -73,7 +74,7 @@ func recordOutcomeAs(t *testing.T, db *testdb.DB, srv *httptest.Server, uid, pra
 	}
 	defer func() { _ = resp.Body.Close() }()
 	var out outcomeResponseBody
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	return resp.StatusCode, out
@@ -417,8 +418,8 @@ func TestDetailHandler_BirthOutcome(t *testing.T) {
 	detailURL := srv.URL + "/api/practices/" + practiceID + "/engagements/" + engagementID
 
 	resp := authedGet(t, authntest.SeedSession(t, db.App, uid), detailURL)
-	var raw map[string]json.RawMessage
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+	var raw map[string]jsontext.Value
+	if err := json.UnmarshalRead(resp.Body, &raw); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	_ = resp.Body.Close()
@@ -436,7 +437,7 @@ func TestDetailHandler_BirthOutcome(t *testing.T) {
 	resp = authedGet(t, authntest.SeedSession(t, db.App, uid), detailURL)
 	defer func() { _ = resp.Body.Close() }()
 	var d engagement.Detail
-	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &d); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if d.BirthOutcome == nil || *d.BirthOutcome != engagement.OutcomeLoss {

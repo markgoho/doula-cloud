@@ -1,7 +1,7 @@
 package practicerate_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -100,7 +100,7 @@ func TestDeleteRateHandler_AdminRemovesRateAndRecordsIt(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var removed practicerate.Rate
-	if err := json.NewDecoder(resp.Body).Decode(&removed); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &removed); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if removed.Kind != birthKind || removed.AmountCents != nil {
@@ -110,7 +110,7 @@ func TestDeleteRateHandler_AdminRemovesRateAndRecordsIt(t *testing.T) {
 	get := getRates(t, srv, session, practiceID)
 	defer get.Body.Close()
 	var out practicerate.RatesResponse
-	if err := json.NewDecoder(get.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(get.Body, &out); err != nil {
 		t.Fatalf("decode rates: %v", err)
 	}
 	for _, rate := range out.Rates {

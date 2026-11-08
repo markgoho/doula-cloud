@@ -3,7 +3,8 @@ package payments
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -297,7 +298,7 @@ func recordInvoicePaid(ctx context.Context, tx *sql.Tx, practiceID, invoiceID st
 // Client through invoices -> contracts -> engagements. byClient picks the
 // actor: the Client herself for her own payment or attempt, DoulaCloud
 // for what the Practice did in her own Stripe account (ADR-0022).
-func recordInvoiceEvent(ctx context.Context, tx *sql.Tx, practiceID, invoiceID string, action activity.EngagementAction, diff json.RawMessage, byClient bool) error {
+func recordInvoiceEvent(ctx context.Context, tx *sql.Tx, practiceID, invoiceID string, action activity.EngagementAction, diff jsontext.Value, byClient bool) error {
 	var engagementID, clientID string
 	if err := tx.QueryRowContext(ctx,
 		`SELECT e.id, e.client_id

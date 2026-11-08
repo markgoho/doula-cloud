@@ -3,7 +3,7 @@ package staffauth
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"net/http"
@@ -77,7 +77,7 @@ func EndSessionsHandler(enq tasknudge.Enqueuer) http.Handler {
 			SubjectKind: activity.SubjectMembership,
 			SubjectID:   targetStaffID,
 			Action:      string(activity.ActionSessionsEnded),
-			Diff:        json.RawMessage("{}"),
+			Diff:        jsontext.Value("{}"),
 			Actor:       activity.StaffActor(actorStaffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests

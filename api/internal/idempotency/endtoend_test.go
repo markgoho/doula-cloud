@@ -2,7 +2,7 @@ package idempotency_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"mime/multipart"
 	"net/http"
@@ -59,7 +59,7 @@ func TestEndToEnd_PortalInviteReplaysOnRetry(t *testing.T) {
 	decode := func(resp *http.Response) portalinvite.InviteResponse {
 		t.Helper()
 		var out portalinvite.InviteResponse
-		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 			t.Fatalf("decode response: %v", err)
 		}
 		return out
@@ -134,7 +134,7 @@ func TestEndToEnd_PortalInviteReplaysOnRetryEvenWhenNudgeEnqueueFails(t *testing
 	decode := func(resp *http.Response) portalinvite.InviteResponse {
 		t.Helper()
 		var out portalinvite.InviteResponse
-		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 			t.Fatalf("decode response: %v", err)
 		}
 		return out
@@ -205,7 +205,7 @@ func TestEndToEnd_CreateClientNoDuplicateRowOnRetry(t *testing.T) {
 	decode := func(resp *http.Response) client.Record {
 		t.Helper()
 		var out client.Record
-		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 			t.Fatalf("decode response: %v", err)
 		}
 		return out
@@ -306,7 +306,7 @@ func TestEndToEnd_MessageCreateNoDuplicateRowOnRetry(t *testing.T) {
 	decode := func(resp *http.Response) message.Message {
 		t.Helper()
 		var out message.Message
-		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 			t.Fatalf("decode response: %v", err)
 		}
 		return out
@@ -430,7 +430,7 @@ func TestEndToEnd_MessageCreateMultipartNoDuplicateUploadOnRetry(t *testing.T) {
 	decode := func(resp *http.Response) message.Message {
 		t.Helper()
 		var out message.Message
-		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 			t.Fatalf("decode response: %v", err)
 		}
 		return out

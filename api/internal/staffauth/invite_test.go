@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -88,7 +88,7 @@ func TestInviteHandler_CreatesInvitationAndNoStaffRow(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 	var created staffauth.InviteResponse
-	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &created); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if created.InvitationID == "" || created.ExpiresAt == "" {
@@ -159,7 +159,7 @@ func TestInviteHandler_ReInviteRotatesTheSameInvitation(t *testing.T) {
 	})
 	defer first.Body.Close()
 	var created staffauth.InviteResponse
-	if err := json.NewDecoder(first.Body).Decode(&created); err != nil {
+	if err := json.UnmarshalRead(first.Body, &created); err != nil {
 		t.Fatalf("decode first: %v", err)
 	}
 
@@ -171,7 +171,7 @@ func TestInviteHandler_ReInviteRotatesTheSameInvitation(t *testing.T) {
 		t.Fatalf("re-invite status = %d, want %d", second.StatusCode, http.StatusOK)
 	}
 	var rotated staffauth.InviteResponse
-	if err := json.NewDecoder(second.Body).Decode(&rotated); err != nil {
+	if err := json.UnmarshalRead(second.Body, &rotated); err != nil {
 		t.Fatalf("decode second: %v", err)
 	}
 	if rotated.InvitationID != created.InvitationID {

@@ -3,7 +3,8 @@ package engagement
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"time"
@@ -26,10 +27,10 @@ const activityPageSize = 30
 // "DoulaCloud" for a system actor (ADR-0022: never "System"), the acting Staff
 // member's name, or the acting Client's preferred name.
 type ActivityEntry struct {
-	Action    string          `json:"action"`
-	Diff      json.RawMessage `json:"diff"`
-	ActorKind string          `json:"actorKind"`
-	ActorName string          `json:"actorName"`
+	Action    string         `json:"action"`
+	Diff      jsontext.Value `json:"diff"`
+	ActorKind string         `json:"actorKind"`
+	ActorName string         `json:"actorName"`
 	// Detail is one sentence describing what the diff says, already in
 	// people's names -- present only for an action that has something
 	// to add beyond its own name, absent for every other one, so a

@@ -1,7 +1,7 @@
 package portal_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"strings"
@@ -48,7 +48,7 @@ func seedPortalVisit(t *testing.T, db *testdb.DB, engagementID, staffID string, 
 func decodeVisits(t *testing.T, resp *http.Response) portal.VisitsResponse {
 	t.Helper()
 	var out portal.VisitsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	return out

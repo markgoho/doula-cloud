@@ -56,7 +56,7 @@ type BirthOutcomeRequest struct {
 	// Practice looked and never learned.
 	BirthOutcome     *string `json:"birthOutcome"`
 	PregnancyEndedOn *string `json:"pregnancyEndedOn,omitempty"`
-	Correction       bool    `json:"correction,omitempty"`
+	Correction       bool    `json:"correction,omitzero"`
 }
 
 // BirthOutcomeResponse confirms the two facts the Engagement now holds.

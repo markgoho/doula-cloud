@@ -3,7 +3,7 @@ package engagement
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 
 	"doula-cloud/api/internal/activity"

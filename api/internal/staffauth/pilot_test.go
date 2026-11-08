@@ -1,7 +1,7 @@
 package staffauth_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -74,7 +74,7 @@ func assertSignedUpWithWelcomeCredits(t *testing.T, db *testdb.DB, resp *http.Re
 		t.Fatalf("status = %d, want 201", resp.StatusCode)
 	}
 	var out staffauth.SignupResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	credits := countRows(t, db,

@@ -2,7 +2,7 @@ package engagement_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -61,7 +61,7 @@ func putDueDate(t *testing.T, db *testdb.DB, srvURL, uid, practiceID, engagement
 	}
 	defer func() { _ = resp.Body.Close() }()
 	var out dueDateResponseBody
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	return resp.StatusCode, out
@@ -319,7 +319,7 @@ func getAs[T any](t *testing.T, session, url string) T {
 		t.Fatalf("GET %s: status = %d, want 200", url, resp.StatusCode)
 	}
 	var out T
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	return out

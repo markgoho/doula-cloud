@@ -2,7 +2,7 @@ package staffauth_test
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 
@@ -157,7 +157,7 @@ func TestPracticeSession_CarriesTheSecondFactor(t *testing.T) {
 			t.Fatalf("request: %v", err)
 		}
 		var body staffauth.PracticeSessionResponse
-		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		if err := json.UnmarshalRead(resp.Body, &body); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
 		_ = resp.Body.Close()

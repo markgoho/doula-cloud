@@ -3,7 +3,7 @@ package message_test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"mime/multipart"
@@ -169,7 +169,7 @@ func TestCreateHandler_Success(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 	var out message.Message
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.MessageID == "" || out.SenderType != "staff" || out.SenderID != staffID ||
@@ -277,7 +277,7 @@ func TestListHandler_EmptyThread(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out message.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(out.Items) != 0 || out.HasMore || out.NextCursor != nil {
@@ -388,7 +388,7 @@ func TestListHandler_AnyStaffAtSamePracticeSeesAndCanReplyToSameThread(t *testin
 		t.Fatalf("Staff B list status = %d, want %d", listResp.StatusCode, http.StatusOK)
 	}
 	var listed message.ListResponse
-	if err := json.NewDecoder(listResp.Body).Decode(&listed); err != nil {
+	if err := json.UnmarshalRead(listResp.Body, &listed); err != nil {
 		t.Fatalf("decode list response: %v", err)
 	}
 	if len(listed.Items) != 1 || listed.Items[0].Body != messageFromA || listed.Items[0].SenderName != "Staff A" {
@@ -405,7 +405,7 @@ func TestListHandler_AnyStaffAtSamePracticeSeesAndCanReplyToSameThread(t *testin
 	finalResp := authedGet(t, sessionA, srvA.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
 	defer finalResp.Body.Close()
 	var final message.ListResponse
-	if err := json.NewDecoder(finalResp.Body).Decode(&final); err != nil {
+	if err := json.UnmarshalRead(finalResp.Body, &final); err != nil {
 		t.Fatalf("decode final list response: %v", err)
 	}
 	if len(final.Items) != 2 {
@@ -482,7 +482,7 @@ func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 		t.Fatalf("first page status = %d, want %d", firstResp.StatusCode, http.StatusOK)
 	}
 	var first message.ListResponse
-	if err := json.NewDecoder(firstResp.Body).Decode(&first); err != nil {
+	if err := json.UnmarshalRead(firstResp.Body, &first); err != nil {
 		t.Fatalf("decode first page: %v", err)
 	}
 	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
@@ -496,7 +496,7 @@ func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 		t.Fatalf("second page status = %d, want %d", secondResp.StatusCode, http.StatusOK)
 	}
 	var second message.ListResponse
-	if err := json.NewDecoder(secondResp.Body).Decode(&second); err != nil {
+	if err := json.UnmarshalRead(secondResp.Body, &second); err != nil {
 		t.Fatalf("decode second page: %v", err)
 	}
 	if len(second.Items) != 5 || second.HasMore || second.NextCursor != nil {
@@ -538,7 +538,7 @@ func TestCreateHandler_AttachmentUploadAndDownloadRoundTrip(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 	var created message.Message
-	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &created); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if created.AttachmentContentType != pngContentType || created.AttachmentFilename != "photo.png" {
@@ -585,7 +585,7 @@ func TestCreateHandler_MultipartTextOnlyNoAttachmentField(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 	var created message.Message
-	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &created); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if created.Body != "text only, sent as multipart" || created.AttachmentFilename != "" {
@@ -613,7 +613,7 @@ func TestCreateHandler_AttachmentOnlyNoBody(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 	var created message.Message
-	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &created); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if created.Body != "" || created.AttachmentFilename != "photo.png" {
@@ -641,7 +641,7 @@ func TestCreateHandler_AttachmentPDFAccepted(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 	var created message.Message
-	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &created); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if created.AttachmentContentType != "application/pdf" {
@@ -686,7 +686,7 @@ func TestCreateHandler_AttachmentTypeList(t *testing.T) {
 				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 			}
 			var created message.Message
-			if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+			if err := json.UnmarshalRead(resp.Body, &created); err != nil {
 				t.Fatalf("decode response: %v", err)
 			}
 			if created.AttachmentContentType != tc.contentType {
@@ -745,7 +745,7 @@ func assertFieldRefusal(t *testing.T, resp *http.Response, status int, field, wa
 		t.Fatalf("status = %d, want %d", resp.StatusCode, status)
 	}
 	var refusal apierr.APIError
-	if err := json.NewDecoder(resp.Body).Decode(&refusal); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &refusal); err != nil {
 		t.Fatalf("decode refusal: %v", err)
 	}
 	if refusal.Message != want || refusal.Details[field] != want {
@@ -1033,7 +1033,7 @@ func TestAttachmentHandler_WrongEngagementNotFound(t *testing.T) {
 		"", "photo.png", pngBytes)
 	defer createResp.Body.Close()
 	var created message.Message
-	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+	if err := json.UnmarshalRead(createResp.Body, &created); err != nil {
 		t.Fatalf("decode create response: %v", err)
 	}
 
@@ -1064,7 +1064,7 @@ func TestCreateHandler_JSONRequestStillTextOnly(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 	var created message.Message
-	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &created); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if created.AttachmentFilename != "" || created.AttachmentContentType != "" {
@@ -1121,7 +1121,7 @@ func TestListHandler_SenderWhoDeletedHerLoginShowsAFormerColleague(t *testing.T)
 	}
 
 	var thread message.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&thread); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &thread); err != nil {
 		t.Fatalf("decode thread: %v", err)
 	}
 	if len(thread.Items) != 1 {
@@ -1171,7 +1171,7 @@ func TestListHandler_SenderWhoPlainlyLeftStillNamesHer(t *testing.T) {
 	}
 
 	var thread message.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&thread); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &thread); err != nil {
 		t.Fatalf("decode thread: %v", err)
 	}
 	if len(thread.Items) != 1 {

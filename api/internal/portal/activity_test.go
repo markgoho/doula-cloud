@@ -1,7 +1,7 @@
 package portal_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -93,7 +93,7 @@ func TestActivityHandler_ReturnsOwnEngagementActivity(t *testing.T) {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 	var got activityfeed.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(got.Items) != 1 || got.Items[0].Action != string(activity.ActionContractSent) {
@@ -124,7 +124,7 @@ func TestActivityHandler_RedactsStaffActorNames(t *testing.T) {
 	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
 	var got activityfeed.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	byAction := map[string]activityfeed.Entry{}
@@ -157,7 +157,7 @@ func TestActivityHandler_KeepsMoneyEntries(t *testing.T) {
 	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
 	var got activityfeed.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(got.Items) != 1 || got.Items[0].Action != string(activity.ActionInvoiceRaised) {
@@ -185,7 +185,7 @@ func TestActivityHandler_HidesStaffingEntries(t *testing.T) {
 	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
 	var got activityfeed.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(got.Items) != 1 || got.Items[0].Action != string(activity.ActionVisitLogged) {
@@ -214,7 +214,7 @@ func TestActivityHandler_HidesTheCarePlan(t *testing.T) {
 	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
 	var got activityfeed.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	actions := make([]string, 0, len(got.Items))
@@ -250,7 +250,7 @@ func TestActivityHandler_HidesVoidDeliberation(t *testing.T) {
 	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
 	var got activityfeed.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(got.Items) != 1 || got.Items[0].Action != string(activity.ActionContractVoided) {
@@ -282,7 +282,7 @@ func TestActivityHandler_HidesTheEngagementAudit(t *testing.T) {
 	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
 	var got activityfeed.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(got.Items) != 1 || got.Items[0].Action != string(activity.ActionEngagementCompleted) {
@@ -309,7 +309,7 @@ func TestActivityHandler_PaginatesNewestFirst(t *testing.T) {
 	firstResp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
 	defer firstResp.Body.Close()
 	var first activityfeed.ListResponse
-	if err := json.NewDecoder(firstResp.Body).Decode(&first); err != nil {
+	if err := json.UnmarshalRead(firstResp.Body, &first); err != nil {
 		t.Fatalf("decode first page: %v", err)
 	}
 	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
@@ -320,7 +320,7 @@ func TestActivityHandler_PaginatesNewestFirst(t *testing.T) {
 	secondResp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity?cursor="+*first.NextCursor)
 	defer secondResp.Body.Close()
 	var second activityfeed.ListResponse
-	if err := json.NewDecoder(secondResp.Body).Decode(&second); err != nil {
+	if err := json.UnmarshalRead(secondResp.Body, &second); err != nil {
 		t.Fatalf("decode second page: %v", err)
 	}
 	if len(second.Items) != 1 || second.HasMore || second.NextCursor != nil {

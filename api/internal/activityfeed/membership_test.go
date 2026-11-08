@@ -1,7 +1,7 @@
 package activityfeed_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 
@@ -52,7 +52,7 @@ func TestPracticeHandler_SurfacesEveryMembershipEvent(t *testing.T) {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 	var got activityfeed.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 
@@ -112,7 +112,7 @@ func TestPracticeHandler_NamesADepartedMembershipSubject(t *testing.T) {
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
 	defer resp.Body.Close()
 	var got activityfeed.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(got.Items) != 1 {
@@ -152,7 +152,7 @@ func TestPracticeHandler_RedactedDepartedSubjectReadsAsAFormerColleague(t *testi
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
 	defer resp.Body.Close()
 	var got activityfeed.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(got.Items) != 1 {
@@ -212,7 +212,7 @@ func TestPracticeHandler_MembershipRowsFollowTheRoster(t *testing.T) {
 			resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
 			defer resp.Body.Close()
 			var got activityfeed.ListResponse
-			if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+			if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 				t.Fatalf("decode: %v", err)
 			}
 			hasMembership, hasEngagement := false, false

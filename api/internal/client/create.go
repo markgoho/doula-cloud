@@ -1,7 +1,7 @@
 package client
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"net/http"
 	"strings"
 	"time"
@@ -141,7 +141,7 @@ func normalizeAndValidate(w http.ResponseWriter, rec *Record) bool {
 	rec.AddressPostalCode = strings.TrimSpace(rec.AddressPostalCode)
 	rec.DateOfBirth = strings.TrimSpace(rec.DateOfBirth)
 	if len(rec.FieldValues) == 0 {
-		rec.FieldValues = json.RawMessage("{}")
+		rec.FieldValues = jsontext.Value("{}")
 	}
 
 	// Both refusals name the field they are about in Details

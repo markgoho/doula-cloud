@@ -2,7 +2,7 @@ package activitypage_test
 
 import (
 	"database/sql"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"fmt"
 	"os"
 	"strings"
@@ -86,7 +86,7 @@ func TestList_CarriesTheCallersOwnDiffAndRowID(t *testing.T) {
 	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "activitypage-diff@example.com", "active")
 
 	testdb.SeedActivityWithDiff(t, db, practiceID, activity.SubjectEngagement, engagementID, "visit_logged",
-		activity.StaffActor(ownerID), json.RawMessage(`{"kind": "postpartum"}`))
+		activity.StaffActor(ownerID), jsontext.Value(`{"kind": "postpartum"}`))
 
 	tx := beginScopedTx(t, db, practiceID)
 	page, err := activitypage.List(t.Context(), tx, activitypage.Query{

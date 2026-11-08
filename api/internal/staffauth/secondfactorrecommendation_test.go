@@ -1,7 +1,7 @@
 package staffauth_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -62,7 +62,7 @@ func (s *recommendationServer) recommended(session, practiceID string) bool {
 		s.t.Fatalf("GET status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var out staffauth.SecondFactorRecommendationResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		s.t.Fatalf("decode: %v", err)
 	}
 	return out.Recommended

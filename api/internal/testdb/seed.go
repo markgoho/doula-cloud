@@ -1,7 +1,8 @@
 package testdb
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"strings"
 	"testing"
 
@@ -396,7 +397,7 @@ func SeedActivity(t *testing.T, db *DB, practiceID, subjectKind, subjectID, acti
 // of the test -- a visit_reassigned entry naming both ends of the move,
 // for instance. A nil diff takes activity.Record's own default, which is
 // what SeedActivity passes.
-func SeedActivityWithDiff(t *testing.T, db *DB, practiceID, subjectKind, subjectID, action string, actor activity.Actor, diff json.RawMessage) {
+func SeedActivityWithDiff(t *testing.T, db *DB, practiceID, subjectKind, subjectID, action string, actor activity.Actor, diff jsontext.Value) {
 	t.Helper()
 	tx, err := db.Admin.BeginTx(t.Context(), nil)
 	if err != nil {

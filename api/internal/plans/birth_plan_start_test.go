@@ -1,7 +1,7 @@
 package plans_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 
@@ -52,7 +52,7 @@ func TestPostInstanceHandler_RefusesBirthPlanItDoesNotOffer(t *testing.T) {
 				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
 			}
 			var body apierr.APIError
-			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			if err := json.UnmarshalRead(resp.Body, &body); err != nil {
 				t.Fatalf("decode: %v", err)
 			}
 			if body.Code != apierr.CodeConflict || body.Message != tc.wantMsg {

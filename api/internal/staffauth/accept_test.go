@@ -2,7 +2,7 @@ package staffauth_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -97,7 +97,7 @@ func TestAcceptInviteHandler_CreatesStaffAndMembership(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var accepted staffauth.AcceptInviteResponse
-	if err := json.NewDecoder(resp.Body).Decode(&accepted); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &accepted); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if accepted.PracticeID != practiceID {
@@ -192,7 +192,7 @@ func TestAcceptInviteHandler_ResolvesAnExistingStaffRow(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var accepted staffauth.AcceptInviteResponse
-	if err := json.NewDecoder(resp.Body).Decode(&accepted); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &accepted); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if accepted.StaffID != existingID {
@@ -467,7 +467,7 @@ func TestAcceptInviteHandler_BackfillsOfferStaffID(t *testing.T) {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 	var accepted staffauth.AcceptInviteResponse
-	if err := json.NewDecoder(resp.Body).Decode(&accepted); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &accepted); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
 

@@ -1,7 +1,8 @@
 package main
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"maps"
 	"os"
 	"regexp"
@@ -27,7 +28,7 @@ func TestStripeDestinationsCoverEveryStripeRoute(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read destinations.json: %v", err)
 	}
-	var destinations map[string]json.RawMessage
+	var destinations map[string]jsontext.Value
 	if err := json.Unmarshal(raw, &destinations); err != nil {
 		t.Fatalf("parse destinations.json: %v", err)
 	}

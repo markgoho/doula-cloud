@@ -1,7 +1,7 @@
 package plans_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -100,7 +100,7 @@ func changedAt(t *testing.T, db *testdb.DB, engagementID, planType string) time.
 func decodeMastheadBody(t *testing.T, resp *http.Response) plans.InstanceResponse {
 	t.Helper()
 	var out plans.InstanceResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	return out

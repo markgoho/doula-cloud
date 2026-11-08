@@ -22,7 +22,8 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 )
@@ -56,7 +57,7 @@ type Sealed struct {
 // plaintext diff. The read path needs this because rows written before
 // #394 are plaintext and stay that way -- activity is append-only, so
 // there is no migration that could have converted them.
-func IsSealed(raw json.RawMessage) bool {
+func IsSealed(raw jsontext.Value) bool {
 	var s Sealed
 	if err := json.Unmarshal(raw, &s); err != nil {
 		return false
@@ -111,7 +112,7 @@ func Destroy(ctx context.Context, tx *sql.Tx, clientID string) error {
 // after erasure is the correct answer: nothing further should be written
 // about a Client whose key is gone, and the caller refuses rather than
 // falling back to plaintext.
-func Seal(ctx context.Context, tx *sql.Tx, clientID string, plaintext []byte) (json.RawMessage, error) {
+func Seal(ctx context.Context, tx *sql.Tx, clientID string, plaintext []byte) (jsontext.Value, error) {
 	key, err := fetchKey(ctx, tx, clientID)
 	if err != nil {
 		return nil, err
@@ -141,7 +142,7 @@ func Seal(ctx context.Context, tx *sql.Tx, clientID string, plaintext []byte) (j
 // Reports ErrNoKey once the key has been destroyed -- the whole point of
 // the design, and the case every reader has to render rather than treat
 // as an error.
-func Open(ctx context.Context, tx *sql.Tx, clientID string, envelope json.RawMessage) ([]byte, error) {
+func Open(ctx context.Context, tx *sql.Tx, clientID string, envelope jsontext.Value) ([]byte, error) {
 	var s Sealed
 	if err := json.Unmarshal(envelope, &s); err != nil || s.Version != sealedVersion {
 		return nil, fmt.Errorf("clientkey: unrecognized sealed envelope")

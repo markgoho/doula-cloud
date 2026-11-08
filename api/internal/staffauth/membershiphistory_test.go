@@ -1,7 +1,7 @@
 package staffauth_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -46,7 +46,7 @@ func getMembershipHistory(t *testing.T, srv *httptest.Server, session, practiceI
 func decodeMembershipHistory(t *testing.T, resp *http.Response) staffauth.MembershipHistory {
 	t.Helper()
 	var out staffauth.MembershipHistory
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	return out

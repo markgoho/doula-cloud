@@ -1,7 +1,7 @@
 package staffauth_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -107,7 +107,7 @@ func TestListStaffHandler_Success(t *testing.T) {
 	}
 
 	var roster staffauth.Roster
-	if err := json.NewDecoder(resp.Body).Decode(&roster); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &roster); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(roster.Members) != 3 {
@@ -174,7 +174,7 @@ func TestListStaffHandler_PendingInvitationsAreTheirOwnGroup(t *testing.T) {
 	defer resp.Body.Close()
 
 	var roster staffauth.Roster
-	if err := json.NewDecoder(resp.Body).Decode(&roster); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &roster); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(roster.Members) != 1 {
@@ -234,7 +234,7 @@ func TestListStaffHandler_ReInviteAfterASendDoesNotDuplicate(t *testing.T) {
 	defer resp.Body.Close()
 
 	var roster staffauth.Roster
-	if err := json.NewDecoder(resp.Body).Decode(&roster); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &roster); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(roster.Invitations.Items) != 1 {
@@ -293,7 +293,7 @@ func TestListStaffHandler_PaginatesInvitationsNewestFirst(t *testing.T) {
 	firstResp := getStaffList(t, srv, session, practiceID)
 	defer firstResp.Body.Close()
 	var first staffauth.Roster
-	if err := json.NewDecoder(firstResp.Body).Decode(&first); err != nil {
+	if err := json.UnmarshalRead(firstResp.Body, &first); err != nil {
 		t.Fatalf("decode first page: %v", err)
 	}
 	if len(first.Invitations.Items) != 30 || !first.Invitations.HasMore || first.Invitations.NextCursor == nil {
@@ -313,7 +313,7 @@ func TestListStaffHandler_PaginatesInvitationsNewestFirst(t *testing.T) {
 	}
 	defer secondResp.Body.Close()
 	var second staffauth.Roster
-	if err := json.NewDecoder(secondResp.Body).Decode(&second); err != nil {
+	if err := json.UnmarshalRead(secondResp.Body, &second); err != nil {
 		t.Fatalf("decode second page: %v", err)
 	}
 	if len(second.Invitations.Items) != 1 || second.Invitations.HasMore || second.Invitations.NextCursor != nil {

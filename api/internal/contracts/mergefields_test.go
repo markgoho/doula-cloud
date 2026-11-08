@@ -1,7 +1,8 @@
 package contracts_test
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 
@@ -22,8 +23,8 @@ func assertEmptyMergeFields(t *testing.T, resp *http.Response, wantStatus int) {
 	if resp.StatusCode != wantStatus {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, wantStatus)
 	}
-	var raw map[string]json.RawMessage
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+	var raw map[string]jsontext.Value
+	if err := json.UnmarshalRead(resp.Body, &raw); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if got := string(raw["mergeFields"]); got != "[]" {

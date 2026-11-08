@@ -1,7 +1,8 @@
 package main
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"net/http"
 	"net/url"
 	"testing"
@@ -67,8 +68,8 @@ func TestOperatorLog_NamesEachSubjectAndTheOwnerWhoAskedForARefund(t *testing.T)
 	page := decodeList(t, s.list(logPath, cookie))
 
 	type row struct {
-		Subject     json.RawMessage `json:"subject"`
-		RequestedBy json.RawMessage `json:"requestedBy"`
+		Subject     jsontext.Value `json:"subject"`
+		RequestedBy jsontext.Value `json:"requestedBy"`
 	}
 	var rows []row
 	raw, _ := json.Marshal(page.Items)

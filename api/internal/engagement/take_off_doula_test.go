@@ -1,7 +1,7 @@
 package engagement_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -30,7 +30,7 @@ func takeOffDoulaAs(t *testing.T, db *testdb.DB, srv *httptest.Server, uid, prac
 	}
 	defer func() { _ = resp.Body.Close() }()
 	var out attachSelfBody
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	return resp.StatusCode, out

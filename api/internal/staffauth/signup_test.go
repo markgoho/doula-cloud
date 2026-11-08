@@ -2,7 +2,7 @@ package staffauth_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -224,7 +224,7 @@ func TestSignupHandler_EmptyPracticeNameTakesHerName(t *testing.T) {
 				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 			}
 			var out staffauth.SignupResponse
-			if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 				t.Fatalf("decode response: %v", err)
 			}
 			if got, want := storedPracticeName(t, db, out.PracticeID), maryAnne+" "+smith; got != want {
@@ -311,7 +311,7 @@ func TestSignupHandler_ZoneIsStatedNotInherited(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 	var out staffauth.SignupResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	var stored string
@@ -384,7 +384,7 @@ func TestSignupHandler_Success(t *testing.T) {
 	}
 
 	var out staffauth.SignupResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.StaffID == "" || out.PracticeID == "" {
@@ -489,7 +489,7 @@ func TestSignupHandler_GrantsSignupBonus(t *testing.T) {
 	defer resp.Body.Close()
 
 	var out staffauth.SignupResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 
@@ -524,7 +524,7 @@ func TestSignupHandler_SeedsDefaultPlanTemplates(t *testing.T) {
 	defer resp.Body.Close()
 
 	var out staffauth.SignupResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 
@@ -568,7 +568,7 @@ func TestSignupHandler_SeededPlansShowNoGroupOverSeven(t *testing.T) {
 	})
 	defer resp.Body.Close()
 	var out staffauth.SignupResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 
@@ -630,7 +630,7 @@ func TestSignupHandler_PainReliefIsAskedOnTheBirthPlanOnly(t *testing.T) {
 	})
 	defer resp.Body.Close()
 	var out staffauth.SignupResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 
@@ -685,7 +685,7 @@ func TestSignupHandler_SeededTemplatesRoundTripThroughPlansAPI(t *testing.T) {
 	})
 	defer signupResp.Body.Close()
 	var signedUp staffauth.SignupResponse
-	if err := json.NewDecoder(signupResp.Body).Decode(&signedUp); err != nil {
+	if err := json.UnmarshalRead(signupResp.Body, &signedUp); err != nil {
 		t.Fatalf("decode signup response: %v", err)
 	}
 
@@ -705,7 +705,7 @@ func TestSignupHandler_SeededTemplatesRoundTripThroughPlansAPI(t *testing.T) {
 			t.Fatalf("GET %s status = %d, want %d", planType, getResp.StatusCode, http.StatusOK)
 		}
 		var seeded plans.TemplateResponse
-		if err := json.NewDecoder(getResp.Body).Decode(&seeded); err != nil {
+		if err := json.UnmarshalRead(getResp.Body, &seeded); err != nil {
 			t.Fatalf("decode GET %s response: %v", planType, err)
 		}
 		if len(seeded.Fields) == 0 {
@@ -749,7 +749,7 @@ func TestSignupHandler_SeedsDefaultContractTemplate(t *testing.T) {
 	defer resp.Body.Close()
 
 	var out staffauth.SignupResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 
@@ -799,7 +799,7 @@ func TestSignupHandler_SeededContractTemplateRoundTripsThroughContractsAPI(t *te
 	})
 	defer signupResp.Body.Close()
 	var signedUp staffauth.SignupResponse
-	if err := json.NewDecoder(signupResp.Body).Decode(&signedUp); err != nil {
+	if err := json.UnmarshalRead(signupResp.Body, &signedUp); err != nil {
 		t.Fatalf("decode signup response: %v", err)
 	}
 
@@ -818,7 +818,7 @@ func TestSignupHandler_SeededContractTemplateRoundTripsThroughContractsAPI(t *te
 		t.Fatalf("GET status = %d, want %d", getResp.StatusCode, http.StatusOK)
 	}
 	var seeded contracts.TemplateResponse
-	if err := json.NewDecoder(getResp.Body).Decode(&seeded); err != nil {
+	if err := json.UnmarshalRead(getResp.Body, &seeded); err != nil {
 		t.Fatalf("decode GET response: %v", err)
 	}
 	if seeded.Prose == "" {
@@ -903,7 +903,7 @@ func TestSignupHandler_TakesEmailFromVerifiedToken(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 	var out staffauth.SignupResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 

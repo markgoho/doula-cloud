@@ -25,6 +25,7 @@ Once an API contract is live, downstream consumers (the Svelte app, third-party 
 4. **Avoid Proliferation of Versions (`/v1/`, `/v2/`)**:
    * Versioning introduces duplicate routing, fragmented test suites, and branching in core business logic.
    * Design endpoints defensively upfront so version bumps remain a rare last resort.
+5. **One JSON Package**: The API encodes and decodes with `encoding/json/v2` (#2730); `api/.golangci.yml` refuses an import of `encoding/json`. Under v2 a nil slice or map encodes as `[]` or `{}`, `omitempty` keeps a `0` or `false`, so a bool or number that should vanish when zero takes `omitzero`, and keys match case-sensitively: a tag on a third party's payload must be the provider's key to the letter, or the field silently stays at its zero value. `apierr.DecodeJSON` refuses a duplicate key, invalid UTF-8 and trailing data. A key whose case differs from the tag is an unknown member and is ignored.
 
 ```go
 // Good: Clear DTO isolated from DB row structures
