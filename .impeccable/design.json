@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-08T05:22:09Z",
+  "generatedAt": "2026-11-08T17:02:56Z",
   "title": "Design System: DoulaCloud Staff app",
   "extensions": {
     "colorMeta": {
@@ -17,10 +17,10 @@
       "primary": { "role": "primary", "displayName": "Ink Blue", "canonical": "oklch(40% 0.11 258)", "dark": "oklch(79% 0.095 250)", "shell": "oklch(79% 0.095 250)", "tonalRamp": ["oklch(40% 0.11 258)", "oklch(48% 0.12 258)", "oklch(79% 0.095 250)", "oklch(86% 0.06 250)"], "rampSource": "the built light rest and hover, then dark rest and hover" },
       "primary-hover": { "role": "primary", "displayName": "Ink Blue Hover", "canonical": "oklch(48% 0.12 258)", "dark": "oklch(86% 0.06 250)", "shell": "oklch(86% 0.06 250)" },
       "on-primary": { "role": "primary", "displayName": "On Ink", "canonical": "oklch(98.5% 0.005 255)", "dark": "oklch(20% 0.03 258)", "shell": "oklch(20% 0.03 258)" },
-      "error": { "role": "status", "displayName": "Signal Red", "canonical": "oklch(50.6% 0.193 28)", "dark": "oklch(75% 0.19 28)", "shell": "oklch(75% 0.19 28)", "meaning": "error, overdue, destructive" },
+      "error": { "role": "status", "displayName": "Signal Red", "canonical": "oklch(50.6% 0.193 28)", "dark": "oklch(75% 0.19 28)", "shell": "oklch(75% 0.19 28)", "meaning": "late or failed; destructive" },
       "on-error": { "role": "status", "displayName": "On Red", "canonical": "oklch(99% 0.005 28)", "dark": "oklch(22% 0.03 28)", "shell": "oklch(22% 0.03 28)" },
-      "warning": { "role": "status", "displayName": "Amber", "canonical": "oklch(45% 0.15 85)", "dark": "oklch(72% 0.15 85)", "shell": "oklch(72% 0.15 85)", "meaning": "owes, warning" },
-      "info": { "role": "status", "displayName": "Teal Blue", "canonical": "oklch(45% 0.15 215)", "dark": "oklch(72% 0.15 215)", "shell": "oklch(72% 0.15 215)", "meaning": "information, pending" },
+      "warning": { "role": "status", "displayName": "Amber", "canonical": "oklch(45% 0.15 85)", "dark": "oklch(72% 0.15 85)", "shell": "oklch(72% 0.15 85)", "meaning": "needs someone to act" },
+      "info": { "role": "status", "displayName": "Teal Blue", "canonical": "oklch(45% 0.15 215)", "dark": "oklch(72% 0.15 215)", "shell": "oklch(72% 0.15 215)", "meaning": "information, or anything pending or waiting on someone else" },
       "status": { "role": "status", "displayName": "Green", "canonical": "oklch(45% 0.15 145)", "dark": "oklch(72% 0.15 145)", "shell": "oklch(72% 0.15 145)", "meaning": "success" },
       "neutral": { "role": "status", "displayName": "Slate", "canonical": "oklch(45% 0.02 285)", "dark": "oklch(72% 0.02 285)", "shell": "oklch(72% 0.02 285)", "meaning": "neutral" }
     },
@@ -112,8 +112,8 @@
       "name": "Status badge",
       "kind": "chip",
       "refersTo": "badge",
-      "description": "A quiet filled pill, one meaning per hue: warning amber owes, error red overdue, info blue pending, success green, neutral gray. The build draws a 16px Phosphor icon before the word; omitted here.",
-      "html": "<span class=\"ds-badge ds-badge-warning\">Owes</span> <span class=\"ds-badge ds-badge-error\">Overdue</span> <span class=\"ds-badge ds-badge-info\">Pending</span> <span class=\"ds-badge ds-badge-success\">Paid</span> <span class=\"ds-badge ds-badge-neutral\">Ended</span>",
+      "description": "A quiet filled pill, one meaning per hue: amber needs someone to act, red late or failed, blue information or pending, green success, gray neutral. The build draws a 16px Phosphor icon before the word; omitted here.",
+      "html": "<span class=\"ds-badge ds-badge-warning\">owed</span> <span class=\"ds-badge ds-badge-error\">12 days overdue</span> <span class=\"ds-badge ds-badge-info\">Pending</span> <span class=\"ds-badge ds-badge-success\">Paid</span> <span class=\"ds-badge ds-badge-neutral\">Ended</span>",
       "css": ".ds-badge { display: inline-flex; align-items: center; gap: var(--space-1); padding: calc(var(--space-1) / 2) var(--space-3); border: 1px solid transparent; border-radius: 999px; font-family: var(--font-family-base); font-size: var(--text-body-sm-size); font-weight: 500; line-height: 1.2; color: color-mix(in oklab, var(--badge-hue) 78%, var(--color-on-surface)); background-color: color-mix(in oklab, var(--badge-hue) 20%, var(--color-surface-bright)); } .ds-badge-warning { --badge-hue: var(--color-warning); } .ds-badge-error { --badge-hue: var(--color-error); } .ds-badge-info { --badge-hue: var(--color-info); } .ds-badge-success { --badge-hue: var(--color-status); } .ds-badge-neutral { --badge-hue: var(--color-neutral); }"
     },
     {
@@ -151,7 +151,7 @@
   ],
   "narrative": {
     "northStar": "The Familiar Room, Finished",
-    "overview": "The Staff app is the category standard for a working tool, executed at the craft level of Linear, Stripe Dashboard and GOV.UK services (PRODUCT.md, Brand Commitments, chosen 2026-11-08). A doula or an owner opening Clients should know where everything is before noticing the look: a top bar with the nav, a title with one start action beside it, a filter bar, a result line, a table. Nothing about the arrangement is novel. The character is that nothing is out of place: every row is the same height, every number lines up, every badge means one thing, and both themes are proved, not hoped for.\n\nThe working ground is near-white in light and a deep blue-gray in dark (the 3am scene), with a near-black ink, neutral hairlines, and one blue spent on links, the primary action and the marker of where you are. Hanken Grotesk runs at a small, strict scale whose floor is 16px everywhere. Density is a desk tool's: a 40px table row at a fine pointer, 44px wherever an input can tap. The two worlds this one refuses are the costume world (a themed skin that performs a mood) and the half-finished default (a gray screen, one accent, loose spacing).\n\nThe Staff app has no signature component yet. The candidate, the care timeline (each Client's care as a block on a time axis), is not built; it is under test and is kept only if it beats a plain Due column on the Clients rubric's jobs. Until one wins, distinctiveness comes from craft alone.",
+    "overview": "The Staff app is the category standard for a working tool, executed at the craft level of Linear, Stripe Dashboard and GOV.UK services (PRODUCT.md, Brand Commitments, chosen 2026-11-08). A doula or an owner opening Clients should know where everything is before noticing the look: a top bar with the nav, a title with one start action beside it, a filter bar, a result line, a table. Nothing about the arrangement is novel. The character is that nothing is out of place: every row is the same height, every number lines up, every badge means one thing, and both themes are proved, not hoped for.\n\nThe working ground is near-white in light and a deep blue-gray in dark (the 3am scene), with a near-black ink, neutral hairlines, and one blue spent on links, the primary action and the marker of where you are. Hanken Grotesk runs at a small, strict scale whose floor is 16px everywhere. Density is a desk tool's: a 40px table row at a fine pointer, 44px wherever an input can tap. The two worlds this one refuses are the costume world (a themed skin that performs a mood) and the half-finished default (a gray screen, one accent, loose spacing).\n\nThe Staff app's signature component is the activity ledger (PRODUCT.md, Positioning item 4): who did what and when, drawn the same way wherever a record is shown. It is the shared columns in `activityLedger.ts`, appearing on the Engagement record, the Practice overview and the Activity screen, and on the Client's own portal Engagement. A list is not a record, so the Clients list carries none by design. A list-level candidate was tried there and rejected: the due strip (each Client's care as a block on a time axis beside the date). All three round-7 graders judged it worse than the plain date text, so it was reverted. It took width, so an overdue row wrapped at 1440px; its amber clashed with Owes; its crowding was computed over the filtered page, not the Practice; its axis labels sat under the 16px type floor; and nothing in the Clients list's jobs used it. Distinctiveness comes from craft (PRODUCT.md).",
     "keyCharacteristics": [
       "Near-white working ground, near-black ink, neutral hairlines; nothing pure white or pure black in either theme.",
       "One blue, for links, the primary action, the current place and the focus ring.",
@@ -164,8 +164,8 @@
     ],
     "rules": [
       { "name": "The One Blue Rule", "body": "The primary is spent on links, the primary action or start link, the marker of the current place (nav item, step, applied chip), the focus ring and the selection tint. A decorative icon or a progress track is Secondary Ink, not blue. A start link and a primary Button never share a screen region: the accent is spent once.", "section": "colors" },
-      { "name": "The One Meaning Per Hue Rule", "body": "Amber is owes or a warning, red is overdue or an error, blue is information or pending, green is success, gray is neutral, app-wide. A new state picks the meaning it shares, never a new hue. `Badge.svelte.spec.ts` holds the five tints visibly apart and their text at 4.5:1 in both themes; `clients-list.svelte.spec.ts` holds a pending Request to the blue badge so amber stays for what a Client owes.", "section": "colors" },
-      { "name": "The Derived Dark Rule", "body": "The dark theme is derived, not invented: hues are held, only lightness moves, and the surface ladder inverts so the page ground is the darkest step. The system-preference block and the `[data-theme]` override are byte-identical, and `tokens.spec.ts` proves both, and the shell palette, against the WCAG floors.", "section": "colors" },
+      { "name": "The One Meaning Per Hue Rule", "body": "Amber means one thing, needs someone to act (owing money is one such thing); red means one thing, late or failed (an overdue Invoice, a failed email delivery); blue is information or anything pending or waiting, green is success, gray is neutral, app-wide. A new state picks the meaning it shares, never a new hue. `Badge.svelte.spec.ts` holds the five tints visibly apart and their text at 4.5:1 in both themes; `clients-list.svelte.spec.ts` holds a pending Request to the blue badge so amber stays for what needs someone to act. `Badge.svelte` states the same meanings in its own comment.", "section": "colors" },
+      { "name": "The Derived Dark Rule", "body": "The dark theme is derived, not invented: hues are held, only lightness moves, and the surface ladder inverts so the page ground is the darkest step. The system-preference block and the `[data-theme]` override are byte-identical, and `tokens.spec.ts` proves both, and the shell palette, against the WCAG floors. The dark primary carries real chroma (oklch(79% 0.095 250), hover oklch(86% 0.06 250)): at the earlier 0.045 it read as gray beside the secondary ink, so the one blue is held at a chroma that still reads as blue while its lightness stays high enough for 4.5:1 on every dark ground.", "section": "colors" },
       { "name": "The Night Walls Rule", "body": "The Staff top bar and its narrow menu sheet carry `data-shell`, inside which every color token resolves to one night palette in both themes: night-blue walls over a pale work area by day, a step deeper than the page at night. Components inside the bar read the same tokens they read anywhere.", "section": "colors" },
       { "name": "The Themed Browser Rule", "body": "The browser's own surfaces follow the theme: `color-scheme` is declared in every theme block, the root canvas is the page ground, the selection is a 28% primary tint with ink text, the caret is ink, the scrollbar is thin in the Control Edge color, and the favicon and manifest take their colors from the tokens (`tokens.usage.spec.ts` holds the favicon). Selection, caret and scrollbar are build-held in `base.css`, not yet spec-held.", "section": "colors" },
       { "name": "The One Title Rule", "body": "Every page title is the page Heading at `heading-lg`. `templates/pageTitle.usage.spec.ts` fails a raw `<h1>` outside QuestionPage, a title at another step, or a level-1 Heading in another variant; `expectOneFramedHeading` holds one `<h1>` per screen inside the Template's frame.", "section": "typography" },
@@ -180,7 +180,7 @@
     ],
     "dos": [
       "**Do** spend the primary only on a link, the primary action or start link, the current place, the focus ring and the selection tint.",
-      "**Do** pick a status hue by meaning: amber owes or warning, red overdue or error, blue information or pending, green success, gray neutral.",
+      "**Do** pick a status hue by meaning: amber needs someone to act (owing money is one such thing), red late or failed, blue information or anything pending or waiting, green success, gray neutral.",
       "**Do** set every date, amount and count in tabular figures, and right-align a numeric column.",
       "**Do** draw every page title as the page Heading at `heading-lg`, inside the Template's frame, on the frame's left edge.",
       "**Do** separate surfaces by a step on the surface ladder or a hairline.",
@@ -192,7 +192,7 @@
       "**Don't** name a color, a px length or a font size of a component's own; spend a token (`tokens.usage.spec.ts`).",
       "**Don't** set text in all caps or under 16px.",
       "**Don't** add a second corner radius or a cast shadow.",
-      "**Don't** give a new state a new hue, or use amber for anything but owes or a warning.",
+      "**Don't** give a new state a new hue, or use amber for anything but needs someone to act, or red for anything but late or failed.",
       "**Don't** use a width media query or a static `vw` for layout.",
       "**Don't** put a start link beside a primary Button."
     ]
