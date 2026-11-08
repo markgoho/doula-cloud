@@ -2,7 +2,7 @@ You are an independent grader of one screen of DoulaCloud, the Staff Clients lis
 
 Read first (your only standard):
 - Usability (/40): /home/mark/github/doula-cloud/.claude/worktrees/impeccable-trial/.impeccable/rubrics/clients-list.md
-- Craft (/20): /home/mark/github/doula-cloud/.claude/worktrees/impeccable-trial/.impeccable/rubrics/craft.md, with /home/mark/github/doula-cloud/.claude/worktrees/impeccable-trial/.claude/skills/impeccable/reference/craft-floor.md as its floor. The committed direction is in /home/mark/github/doula-cloud/.claude/worktrees/impeccable-trial/.impeccable/surfaces/practices-practiceid-clients-page-svelte-300821a3.md and PRODUCT.md's Brand Commitments (the category standard at the craft level of Linear, Stripe Dashboard and GOV.UK services) — grade craft against that bar, not against a bolder world.
+- Craft (/20): /home/mark/github/doula-cloud/.claude/worktrees/impeccable-trial/.impeccable/rubrics/craft.md, with the user-level skill's ~/.claude/skills/impeccable/reference/craft-floor.md as its floor. The committed direction is in /home/mark/github/doula-cloud/.claude/worktrees/impeccable-trial/.impeccable/surfaces/practices-practiceid-clients-page-svelte-300821a3.md and PRODUCT.md's Brand Commitments (the category standard at the craft level of Linear, Stripe Dashboard and GOV.UK services) — grade craft against that bar, not against a bolder world.
 - Constraints: ADR-0021 (GOV.UK service patterns, docs/design/govuk-alignment.md), ADR-0024 (intrinsic layout, no viewport queries), the Voice section of docs/design/brief.md, WCAG 2.2 AA, and #1829 (a Client's name never in a URL).
 
 The screen:

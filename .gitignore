@@ -104,7 +104,6 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 
-# Impeccable: the launcher downloads and checksums its engine; per-run cache is local
-.claude/skills/impeccable/scripts/bin/
+# Impeccable is a user-level install (ADR-0063); its per-run cache is local
 .impeccable/hook.cache.json
 /.svelte-kit/
