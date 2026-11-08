@@ -35,16 +35,7 @@ type RuleRequest struct {
 //
 // Must be mounted behind staffauth.Middleware.
 func PutRuleHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		engagementID := r.PathValue("engagementId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		var req RuleRequest
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
@@ -71,10 +62,10 @@ func PutRuleHandler() http.Handler {
 		var kind string
 		var beforeRule sql.NullString
 		var beforeWeek sql.NullInt64
-		err := tx.QueryRowContext(r.Context(),
+		err := c.Tx.QueryRowContext(r.Context(),
 			`SELECT kind::text, on_call_start_rule::text, on_call_start_week
 			   FROM engagements WHERE id = $1 AND practice_id = $2 FOR UPDATE`,
-			engagementID, practiceID,
+			c.EngagementID, c.PracticeID,
 		).Scan(&kind, &beforeRule, &beforeWeek)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
@@ -95,15 +86,15 @@ func PutRuleHandler() http.Handler {
 			before.StartRule = &rule
 		}
 		if !sameRule(before, req) {
-			if _, err := tx.ExecContext(r.Context(),
+			if _, err := c.Tx.ExecContext(r.Context(),
 				`UPDATE engagements SET on_call_start_rule = $2, on_call_start_week = $3 WHERE id = $1`,
-				engagementID, req.StartRule, req.StartWeek,
+				c.EngagementID, req.StartRule, req.StartWeek,
 			); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
-			if err := recordEngagement(r.Context(), tx, practiceID, engagementID, activity.ActionOnCallRuleChanged,
+			if err := recordEngagement(r.Context(), c.Tx, c.PracticeID, c.EngagementID, activity.ActionOnCallRuleChanged,
 				map[string]RuleRequest{diffBefore: before, diffAfter: req}); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -111,7 +102,7 @@ func PutRuleHandler() http.Handler {
 			}
 		}
 		apierr.WriteJSON(w, http.StatusOK, req)
-	})
+	}, staffauth.EngagementID())
 }
 
 // NarrowingRequest is one Doula's narrowing, as calendar days in the
@@ -130,16 +121,8 @@ type NarrowingRequest struct {
 //
 // Must be mounted behind staffauth.Middleware.
 func PutNarrowingHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		engagementID, staffID := r.PathValue("engagementId"), r.PathValue("staffId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) || !staffauth.ParseUUID(w, "staff", staffID) {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		staffID := c.ID("staffId")
 		var req NarrowingRequest
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
@@ -163,14 +146,14 @@ func PutNarrowingHandler() http.Handler {
 
 		var before NarrowingRequest
 		var from, to sql.NullString
-		err := tx.QueryRowContext(r.Context(),
+		err := c.Tx.QueryRowContext(r.Context(),
 			`SELECT ea.on_call_from::text, ea.on_call_to::text
 			   FROM engagement_attachments ea
 			   JOIN engagements e ON e.id = ea.engagement_id
 			  WHERE ea.engagement_id = $1 AND ea.staff_id = $2 AND e.practice_id = $3
 			    AND ea.origin = 'granted' AND ea.ended_at IS NULL
 			  FOR UPDATE OF ea`,
-			engagementID, staffID, practiceID,
+			c.EngagementID, staffID, c.PracticeID,
 		).Scan(&from, &to)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
@@ -184,16 +167,16 @@ func PutNarrowingHandler() http.Handler {
 		before.From, before.To = nullString(from), nullString(to)
 
 		if !sameString(before.From, req.From) || !sameString(before.To, req.To) {
-			if _, err := tx.ExecContext(r.Context(),
+			if _, err := c.Tx.ExecContext(r.Context(),
 				`UPDATE engagement_attachments SET on_call_from = $3, on_call_to = $4
 				  WHERE engagement_id = $1 AND staff_id = $2 AND ended_at IS NULL`,
-				engagementID, staffID, req.From, req.To,
+				c.EngagementID, staffID, req.From, req.To,
 			); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
-			if err := recordEngagement(r.Context(), tx, practiceID, engagementID, activity.ActionOnCallNarrowingChanged,
+			if err := recordEngagement(r.Context(), c.Tx, c.PracticeID, c.EngagementID, activity.ActionOnCallNarrowingChanged,
 				map[string]any{"staffId": staffID, diffBefore: before, diffAfter: req}); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -201,7 +184,7 @@ func PutNarrowingHandler() http.Handler {
 			}
 		}
 		apierr.WriteJSON(w, http.StatusOK, req)
-	})
+	}, staffauth.EngagementID(), staffauth.PathID("staff", "staffId"))
 }
 
 // recordEngagement writes one on-call action to an Engagement's ledger,

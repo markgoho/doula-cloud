@@ -20,19 +20,13 @@ const ownerTypeClient = "client"
 // identity, not a single Engagement. Must be mounted behind
 // clientauth.Middleware.
 func ClientRegisterHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, clientID, ok := clientauth.RequireClientTx(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-
+	return clientauth.Handler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call) {
 		req, ok := decodeSubscribeRequest(w, r)
 		if !ok {
 			return
 		}
 
-		if err := upsertSubscription(r, tx, ownerTypeClient, clientID, req); err != nil {
+		if err := upsertSubscription(r, c.Tx, ownerTypeClient, c.ClientID, req); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -45,19 +39,13 @@ func ClientRegisterHandler() http.Handler {
 // ClientUnregisterHandler mirrors UnregisterHandler for the Client-portal
 // population. Must be mounted behind clientauth.Middleware.
 func ClientUnregisterHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, clientID, ok := clientauth.RequireClientTx(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-
+	return clientauth.Handler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call) {
 		endpoint, ok := requireEndpointQueryParam(w, r)
 		if !ok {
 			return
 		}
 
-		if err := deleteSubscription(r, tx, ownerTypeClient, clientID, endpoint); err != nil {
+		if err := deleteSubscription(r, c.Tx, ownerTypeClient, c.ClientID, endpoint); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return

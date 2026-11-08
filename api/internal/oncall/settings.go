@@ -45,13 +45,8 @@ type Settings struct {
 //
 // Must be mounted behind staffauth.Middleware.
 func GetSettingsHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		s, err := loadPracticeSettings(r.Context(), tx, practiceID)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		s, err := loadPracticeSettings(r.Context(), c.Tx, c.PracticeID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -68,12 +63,7 @@ func GetSettingsHandler() http.Handler {
 //
 // Must be mounted behind staffauth.Middleware.
 func PutSettingsHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		var req Settings
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
@@ -93,14 +83,14 @@ func PutSettingsHandler() http.Handler {
 			return
 		}
 
-		current, err := loadPracticeSettings(r.Context(), tx, practiceID)
+		current, err := loadPracticeSettings(r.Context(), c.Tx, c.PracticeID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if before := settingsOf(current.rule); before != req {
-			if err := writeSettings(r.Context(), tx, practiceID, before, req); err != nil {
+			if err := writeSettings(r.Context(), c.Tx, c.PracticeID, before, req); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return

@@ -292,32 +292,15 @@ func refuseUnreachable(w http.ResponseWriter, r *http.Request, tx *sql.Tx, pract
 // except a contractor Doula without an open, granted attachment on it
 // (ADR-0008). Must be mounted behind staffauth.Middleware.
 func DetailHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-
-		engagementID := r.PathValue("engagementId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) {
-			return
-		}
-
-		reader, has := staffauth.ReaderFrom(r.Context())
-		if !has {
-			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		canAccess, err := c.Reader.CanAccessEngagement(r.Context(), c.Tx, c.EngagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !canAccess {
-			refuseUnreachable(w, r, tx, practiceID, engagementID)
+			refuseUnreachable(w, r, c.Tx, c.PracticeID, c.EngagementID)
 			return
 		}
 
@@ -325,13 +308,13 @@ func DetailHandler() http.Handler {
 		var givenName string
 		var familyName, preferredName sql.NullString
 		var dueDate sql.NullString
-		err = tx.QueryRowContext(r.Context(),
+		err = c.Tx.QueryRowContext(r.Context(),
 			`SELECT e.id, c.id, c.given_name, c.family_name, c.preferred_name, e.status, e.created_at, e.due_date::text,
 			        e.kind::text, e.birth_outcome::text, e.pregnancy_ended_on::text
 			 FROM engagements e
 			 JOIN clients c ON c.id = e.client_id
 			 WHERE e.id = $1 AND e.practice_id = $2`,
-			engagementID, practiceID,
+			c.EngagementID, c.PracticeID,
 		).Scan(&d.EngagementID, &d.ClientID, &givenName, &familyName, &preferredName, &d.Status, &d.CreatedAt, &dueDate,
 			&d.Kind, &d.BirthOutcome, &d.PregnancyEndedOn)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -348,12 +331,12 @@ func DetailHandler() http.Handler {
 		if dueDate.Valid {
 			d.DueDate = &dueDate.String
 		}
-		d.StatusMoves = legalMoves(reader, d.Status)
+		d.StatusMoves = legalMoves(c.Reader, d.Status)
 		birthPlan := BirthPlanInputs{Kind: Kind(d.Kind), BirthOutcome: d.BirthOutcome}
 		d.OffersBirthPlanToStart = OffersBirthPlanToStart(birthPlan)
 		d.OffersBirthPlan = OffersBirthPlan(birthPlan)
 
-		portalState, err := client.FetchPortalInviteState(r.Context(), tx, d.ClientID)
+		portalState, err := client.FetchPortalInviteState(r.Context(), c.Tx, d.ClientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -363,40 +346,39 @@ func DetailHandler() http.Handler {
 		d.ClientEmailSuppressed = portalState.EmailSuppressed
 		d.ClientHasEmail = portalState.HasEmail
 
-		d.ClientsCanPay, err = cardpayments.ClientsCanPay(r.Context(), tx, practiceID)
+		d.ClientsCanPay, err = cardpayments.ClientsCanPay(r.Context(), c.Tx, c.PracticeID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		d.Doulas, err = readAttachedDoulas(r.Context(), tx, engagementID)
+		d.Doulas, err = readAttachedDoulas(r.Context(), c.Tx, c.EngagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		staffID, _ := staffauth.StaffID(r.Context())
-		d.CanAttachSelf = canAttachSelf(reader, staffID, d.Status, d.Doulas)
-		d.YourFee, err = readOwnFee(r.Context(), tx, engagementID, staffID)
+		d.CanAttachSelf = canAttachSelf(c.Reader, c.StaffID, d.Status, d.Doulas)
+		d.YourFee, err = readOwnFee(r.Context(), c.Tx, c.EngagementID, c.StaffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if err := readRecordFlags(r.Context(), tx, &d); err != nil {
+		if err := readRecordFlags(r.Context(), c.Tx, &d); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if reader.IsOwnerOrAdmin() {
-			d.HasDoulaFees, err = hasDoulaFees(r.Context(), tx, engagementID)
+		if c.Reader.IsOwnerOrAdmin() {
+			d.HasDoulaFees, err = hasDoulaFees(r.Context(), c.Tx, c.EngagementID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
-			d.StartNote, err = readStartNote(r.Context(), tx, engagementID)
+			d.StartNote, err = readStartNote(r.Context(), c.Tx, c.EngagementID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -405,5 +387,5 @@ func DetailHandler() http.Handler {
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, d)
-	})
+	}, staffauth.EngagementID())
 }

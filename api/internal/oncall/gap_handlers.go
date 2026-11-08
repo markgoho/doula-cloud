@@ -1,6 +1,7 @@
 package oncall
 
 import (
+	"database/sql"
 	"errors"
 	"net/http"
 
@@ -22,8 +23,8 @@ import (
 //
 // Must be mounted behind staffauth.Middleware and AttachingWrite.
 func CreateGapHandler(enq tasknudge.Enqueuer) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c, ok := beginGapWrite(w, r)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, call staffauth.Call) {
+		c, ok := beginGapWrite(w, r, call)
 		if !ok {
 			return
 		}
@@ -43,9 +44,8 @@ func CreateGapHandler(enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 
-		tx, _ := staffauth.Tx(r.Context())
 		var gapID string
-		if err := tx.QueryRowContext(r.Context(),
+		if err := c.tx.QueryRowContext(r.Context(),
 			`INSERT INTO engagement_coverage_gaps
 			     (engagement_id, staff_id, covering_staff_id, starts_at, ends_at, reason, created_by)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
@@ -59,8 +59,8 @@ func CreateGapHandler(enq tasknudge.Enqueuer) http.Handler {
 			// coverage:ignore reason: finish only reports false on a DB failure, not exercised by unit tests
 			return
 		}
-		writeGap(w, r, gapID, http.StatusCreated)
-	})
+		writeGap(w, r, c.tx, gapID, http.StatusCreated)
+	}, staffauth.EngagementID())
 }
 
 // UpdateGapHandler replaces a live gap's facts. Adding a covering Doula
@@ -69,21 +69,17 @@ func CreateGapHandler(enq tasknudge.Enqueuer) http.Handler {
 //
 // Must be mounted behind staffauth.Middleware and AttachingWrite.
 func UpdateGapHandler(enq tasknudge.Enqueuer) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c, ok := beginGapWrite(w, r)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, call staffauth.Call) {
+		c, ok := beginGapWrite(w, r, call)
 		if !ok {
 			return
 		}
-		gapID := r.PathValue("gapId")
-		if !staffauth.ParseUUID(w, "gap", gapID) {
-			return
-		}
+		gapID := call.ID("gapId")
 		var req GapRequest
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 
-		tx, _ := staffauth.Tx(r.Context())
 		before, ok := lockGapFor(w, r, c, gapID)
 		if !ok {
 			return
@@ -100,7 +96,7 @@ func UpdateGapHandler(enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 
-		if _, err := tx.ExecContext(r.Context(),
+		if _, err := c.tx.ExecContext(r.Context(),
 			`UPDATE engagement_coverage_gaps
 			    SET staff_id = $2, covering_staff_id = $3, starts_at = $4, ends_at = $5, reason = $6,
 			        updated_by = $7, updated_at = now()
@@ -115,8 +111,8 @@ func UpdateGapHandler(enq tasknudge.Enqueuer) http.Handler {
 			// coverage:ignore reason: finish only reports false on a DB failure, not exercised by unit tests
 			return
 		}
-		writeGap(w, r, gapID, http.StatusOK)
-	})
+		writeGap(w, r, c.tx, gapID, http.StatusOK)
+	}, staffauth.EngagementID(), staffauth.PathID("gap", "gapId"))
 }
 
 // ClearGapHandler clears a live gap: the Doula can be reached again, or
@@ -125,22 +121,18 @@ func UpdateGapHandler(enq tasknudge.Enqueuer) http.Handler {
 //
 // Must be mounted behind staffauth.Middleware and AttachingWrite.
 func ClearGapHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c, ok := beginGapWrite(w, r)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, call staffauth.Call) {
+		c, ok := beginGapWrite(w, r, call)
 		if !ok {
 			return
 		}
-		gapID := r.PathValue("gapId")
-		if !staffauth.ParseUUID(w, "gap", gapID) {
-			return
-		}
+		gapID := call.ID("gapId")
 		before, ok := lockGapFor(w, r, c, gapID)
 		if !ok {
 			return
 		}
 
-		tx, _ := staffauth.Tx(r.Context())
-		if _, err := tx.ExecContext(r.Context(),
+		if _, err := c.tx.ExecContext(r.Context(),
 			`UPDATE engagement_coverage_gaps SET cleared_by = $2, cleared_at = now() WHERE id = $1`,
 			gapID, c.actorID,
 		); err != nil {
@@ -148,21 +140,20 @@ func ClearGapHandler() http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if err := recordGap(r.Context(), tx, c.practiceID, c.engagementID, c.actorID,
+		if err := recordGap(r.Context(), c.tx, c.practiceID, c.engagementID, c.actorID,
 			activity.ActionCoverageGapCleared, gapDiff{GapID: gapID, Before: &before}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
-	})
+	}, staffauth.EngagementID(), staffauth.PathID("gap", "gapId"))
 }
 
 // lockGapFor locks a live gap on the request's Engagement and checks the
 // caller may change it, writing the refusal itself when not.
 func lockGapFor(w http.ResponseWriter, r *http.Request, c gapWrite, gapID string) (gapFacts, bool) {
-	tx, _ := staffauth.Tx(r.Context())
-	before, err := lockLiveGap(r.Context(), tx, c.engagementID, gapID)
+	before, err := lockLiveGap(r.Context(), c.tx, c.engagementID, gapID)
 	switch {
 	case errors.Is(err, errGapNotFound):
 		apierr.Write(w, http.StatusNotFound, apierr.CodeNotFound, MsgGapNotFound, nil)
@@ -182,8 +173,7 @@ func lockGapFor(w http.ResponseWriter, r *http.Request, c gapWrite, gapID string
 // finish records the write and, where the saved gap has nobody covering
 // it, queues the Notification and nudges the worker.
 func (c gapWrite) finish(w http.ResponseWriter, r *http.Request, enq tasknudge.Enqueuer, gapID string, action activity.EngagementAction, diff gapDiff, saved gapFacts) bool {
-	tx, _ := staffauth.Tx(r.Context())
-	if err := recordGap(r.Context(), tx, c.practiceID, c.engagementID, c.actorID, action, diff); err != nil {
+	if err := recordGap(r.Context(), c.tx, c.practiceID, c.engagementID, c.actorID, action, diff); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return false
@@ -191,7 +181,7 @@ func (c gapWrite) finish(w http.ResponseWriter, r *http.Request, enq tasknudge.E
 	if saved.CoveringStaffID != nil {
 		return true
 	}
-	queued, err := queueGapNotice(r.Context(), tx, c.practiceID, gapID, c.actorID)
+	queued, err := queueGapNotice(r.Context(), c.tx, c.practiceID, gapID, c.actorID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -204,8 +194,7 @@ func (c gapWrite) finish(w http.ResponseWriter, r *http.Request, enq tasknudge.E
 }
 
 // writeGap re-reads the saved gap and writes it as the response.
-func writeGap(w http.ResponseWriter, r *http.Request, gapID string, status int) {
-	tx, _ := staffauth.Tx(r.Context())
+func writeGap(w http.ResponseWriter, r *http.Request, tx *sql.Tx, gapID string, status int) {
 	g, err := readGap(r.Context(), tx, gapID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests

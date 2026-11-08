@@ -36,16 +36,8 @@ type PreferenceResponse struct {
 // GetHandler reports whether push is currently on for the caller's own
 // Engagement. Must be mounted behind clientauth.Middleware.
 func GetHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, ok := clientauth.RequireTx(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-		identityUID, _ := clientauth.IdentityUID(r.Context())
-		engagementID, _ := clientauth.EngagementID(r.Context())
-
-		enabled, err := readEnabled(r.Context(), tx, identityUID, engagementID)
+	return clientauth.Handler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call) {
+		enabled, err := readEnabled(r.Context(), c.Tx, c.IdentityUID, c.EngagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -65,27 +57,18 @@ type SetRequest struct {
 // and records who did it, when, and to which value (CLAUDE.md's audit
 // trail expectation). Must be mounted behind clientauth.Middleware.
 func SetHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, ok := clientauth.RequireTx(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-		identityUID, _ := clientauth.IdentityUID(r.Context())
-		engagementID, _ := clientauth.EngagementID(r.Context())
-		clientID, _ := clientauth.ClientID(r.Context())
-
+	return clientauth.Handler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call) {
 		var req SetRequest
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 
-		if err := upsertPreference(r.Context(), tx, identityUID, engagementID, !req.Enabled); err != nil {
+		if err := upsertPreference(r.Context(), c.Tx, c.IdentityUID, c.EngagementID, !req.Enabled); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if err := recordPreferenceChange(r.Context(), tx, engagementID, clientID, req.Enabled); err != nil {
+		if err := recordPreferenceChange(r.Context(), c.Tx, c.EngagementID, c.ClientID, req.Enabled); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return

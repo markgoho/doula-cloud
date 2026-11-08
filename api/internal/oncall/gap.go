@@ -67,6 +67,7 @@ type GapRequest struct {
 
 // gapWrite is the per-request state every gap write needs, resolved once.
 type gapWrite struct {
+	tx           *sql.Tx
 	practiceID   string
 	engagementID string
 	actorID      string
@@ -79,18 +80,9 @@ type gapWrite struct {
 // window, writing the refusal itself when there is none. Reaching the
 // Engagement at all is AttachingWrite's refusal at the mount; this only
 // adds the on-call facts.
-func beginGapWrite(w http.ResponseWriter, r *http.Request) (gapWrite, bool) {
-	tx, practiceID, ok := staffauth.RequireTx(w, r)
-	// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-	if !ok {
-		return gapWrite{}, false
-	}
-	engagementID := r.PathValue("engagementId")
-	if !staffauth.ParseUUID(w, "engagement", engagementID) {
-		return gapWrite{}, false
-	}
-	reader, _ := staffauth.ReaderFrom(r.Context())
-	actorID, _ := staffauth.StaffID(r.Context())
+func beginGapWrite(w http.ResponseWriter, r *http.Request, call staffauth.Call) (gapWrite, bool) {
+	tx, practiceID, engagementID := call.Tx, call.PracticeID, call.EngagementID
+	reader, actorID := call.Reader, call.StaffID
 
 	settings, err := loadPracticeSettings(r.Context(), tx, practiceID)
 	if err != nil {
@@ -119,6 +111,7 @@ func beginGapWrite(w http.ResponseWriter, r *http.Request) (gapWrite, bool) {
 		return gapWrite{}, false
 	}
 	return gapWrite{
+		tx:           tx,
 		practiceID:   practiceID,
 		engagementID: engagementID,
 		actorID:      actorID,

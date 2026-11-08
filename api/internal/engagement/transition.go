@@ -200,24 +200,13 @@ const MsgBirthOutcomeFirst = "Record what happened to the pregnancy first. If th
 //
 // Must be mounted behind staffauth.Middleware.
 func TransitionHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, reader, ok := staffauth.RequireTxReader(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-
-		engagementID := r.PathValue("engagementId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) {
-			return
-		}
-
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		// The contractor refusal is outright (ADR-0015: "the contractor
 		// cell is refused every one of these moves"), so it is checked
 		// before the request body is even decoded -- the same ordering
 		// CompleteHandler's RequireOwnerOrAdmin already used for its own
 		// role gate.
-		if refuseFactWrite(w, reader, "a contractor Doula cannot change the status of this work") {
+		if refuseFactWrite(w, c.Reader, "a contractor Doula cannot change the status of this work") {
 			return
 		}
 
@@ -241,9 +230,9 @@ func TransitionHandler() http.Handler {
 		}
 
 		var current engagementStatusRow
-		err := tx.QueryRowContext(r.Context(),
+		err := c.Tx.QueryRowContext(r.Context(),
 			`SELECT status, ending_reason, ending_note, birth_outcome::text
-			   FROM engagements WHERE id = $1`, engagementID,
+			   FROM engagements WHERE id = $1`, c.EngagementID,
 		).Scan(&current.status, &current.endingReason, &current.endingNote, &current.birthOutcome)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
@@ -255,7 +244,6 @@ func TransitionHandler() http.Handler {
 			return
 		}
 
-		actorStaffID, _ := staffauth.StaffID(r.Context())
 		isReopen := current.status == StatusCompleted && req.Status == StatusActive
 		isNoOp := current.status == req.Status
 
@@ -267,7 +255,7 @@ func TransitionHandler() http.Handler {
 		// rows (active -> intake, completed -> intake) can never name
 		// "intake" as a target at all, so they are already rejected by
 		// the 400 above. What is left to gate here is role, not legality.
-		if !isNoOp && isReopen && !reader.IsOwnerOrAdmin() {
+		if !isNoOp && isReopen && !c.Reader.IsOwnerOrAdmin() {
 			apierr.WriteError(w, "only a Practice Owner or Admin can reopen completed work", http.StatusForbidden)
 			return
 		}
@@ -297,7 +285,7 @@ func TransitionHandler() http.Handler {
 			// Engagement already holds; the completion cascade below
 			// still runs.
 		case isActivation:
-			moved, err := ActivateFromIntake(r.Context(), tx, practiceID, engagementID, actorStaffID)
+			moved, err := ActivateFromIntake(r.Context(), c.Tx, c.PracticeID, c.EngagementID, c.StaffID)
 			if err != nil || !moved {
 				// coverage:ignore reason: DB write failure or a concurrent writer already moved this Engagement, neither exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -312,10 +300,10 @@ func TransitionHandler() http.Handler {
 				newEndingReason, newEndingNote = nil, nil
 			}
 
-			result, err := tx.ExecContext(r.Context(),
+			result, err := c.Tx.ExecContext(r.Context(),
 				`UPDATE engagements SET status = $1, ending_reason = $2, ending_note = $3
 				  WHERE id = $4 AND status = $5`,
-				req.Status, newEndingReason, newEndingNote, engagementID, current.status,
+				req.Status, newEndingReason, newEndingNote, c.EngagementID, current.status,
 			)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -332,7 +320,7 @@ func TransitionHandler() http.Handler {
 			if isReopen {
 				action = activity.ActionEngagementReopened
 			}
-			if err := recordFact(r.Context(), tx, practiceID, engagementID, actorStaffID, action, map[string]any{
+			if err := recordFact(r.Context(), c.Tx, c.PracticeID, c.EngagementID, c.StaffID, action, map[string]any{
 				"statusBefore":       current.status,
 				"statusAfter":        req.Status,
 				"endingReasonBefore": current.endingReason,
@@ -352,12 +340,12 @@ func TransitionHandler() http.Handler {
 		// anything a partial earlier run left behind still closes
 		// (CompleteHandler's own idempotence, carried over).
 		if req.Status == StatusCompleted {
-			if err := offer.CloseOnCompletion(r.Context(), tx, engagementID); err != nil {
+			if err := offer.CloseOnCompletion(r.Context(), c.Tx, c.EngagementID); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
-			if err := staffauth.EndAttachments(r.Context(), tx, engagementID, actorStaffID); err != nil {
+			if err := staffauth.EndAttachments(r.Context(), c.Tx, c.EngagementID, c.StaffID); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
@@ -365,9 +353,9 @@ func TransitionHandler() http.Handler {
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, TransitionResponse{
-			EngagementID: engagementID,
+			EngagementID: c.EngagementID,
 			Status:       req.Status,
-			StatusMoves:  legalMoves(reader, req.Status),
+			StatusMoves:  legalMoves(c.Reader, req.Status),
 		})
-	})
+	}, staffauth.EngagementID())
 }

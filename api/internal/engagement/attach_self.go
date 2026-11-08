@@ -204,23 +204,12 @@ func refuseSelfAttach(w http.ResponseWriter, reader staffauth.Reader) bool {
 // never granted, and it attaches nobody who holds Owner or Admin. Must
 // be mounted behind staffauth.Middleware.
 func AttachSelfHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, reader, ok := staffauth.RequireTxReader(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-		staffID, _ := staffauth.StaffID(r.Context())
-
-		engagementID := r.PathValue("engagementId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) {
-			return
-		}
-		if refuseSelfAttach(w, reader) {
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		if refuseSelfAttach(w, c.Reader) {
 			return
 		}
 
-		status, ok := lockEngagementStatus(w, r, tx, engagementID, practiceID, "engagement not found")
+		status, ok := lockEngagementStatus(w, r, c.Tx, c.EngagementID, c.PracticeID, "engagement not found")
 		if !ok {
 			return
 		}
@@ -229,16 +218,16 @@ func AttachSelfHandler() http.Handler {
 			return
 		}
 
-		doulas, ok := attachIfAbsent(w, r, tx, practiceID, engagementID, staffID, staffID)
+		doulas, ok := attachIfAbsent(w, r, c.Tx, c.PracticeID, c.EngagementID, c.StaffID, c.StaffID)
 		if !ok {
 			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, AttachSelfResponse{
-			EngagementID:  engagementID,
+			EngagementID:  c.EngagementID,
 			Doulas:        doulas,
-			CanAttachSelf: canAttachSelf(reader, staffID, status, doulas),
+			CanAttachSelf: canAttachSelf(c.Reader, c.StaffID, status, doulas),
 		})
-	})
+	}, staffauth.EngagementID())
 }

@@ -72,18 +72,8 @@ type DueDateChangeResponse struct {
 //
 // Must be mounted behind staffauth.Middleware.
 func ChangeDueDateHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, reader, ok := staffauth.RequireTxReader(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-
-		engagementID := r.PathValue("engagementId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) {
-			return
-		}
-		if refuseFactWrite(w, reader, "A contractor Doula cannot change the due date of this work") {
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		if refuseFactWrite(w, c.Reader, "A contractor Doula cannot change the due date of this work") {
 			return
 		}
 
@@ -101,9 +91,9 @@ func ChangeDueDateHandler() http.Handler {
 		target := day.Format(time.DateOnly)
 
 		var current *string
-		err = tx.QueryRowContext(r.Context(),
+		err = c.Tx.QueryRowContext(r.Context(),
 			`SELECT due_date::text FROM engagements WHERE id = $1 AND practice_id = $2`,
-			engagementID, practiceID,
+			c.EngagementID, c.PracticeID,
 		).Scan(&current)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "Engagement not found", http.StatusNotFound)
@@ -116,14 +106,14 @@ func ChangeDueDateHandler() http.Handler {
 		}
 
 		if current != nil && *current == target {
-			apierr.WriteJSON(w, http.StatusOK, DueDateChangeResponse{EngagementID: engagementID, DueDate: target})
+			apierr.WriteJSON(w, http.StatusOK, DueDateChangeResponse{EngagementID: c.EngagementID, DueDate: target})
 			return
 		}
 
-		result, err := tx.ExecContext(r.Context(),
+		result, err := c.Tx.ExecContext(r.Context(),
 			`UPDATE engagements SET due_date = $1::date
 			  WHERE id = $2 AND practice_id = $3 AND due_date IS NOT DISTINCT FROM $4::date`,
-			target, engagementID, practiceID, current,
+			target, c.EngagementID, c.PracticeID, current,
 		)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -136,14 +126,13 @@ func ChangeDueDateHandler() http.Handler {
 			return
 		}
 
-		actorStaffID, _ := staffauth.StaffID(r.Context())
-		if err := recordFact(r.Context(), tx, practiceID, engagementID, actorStaffID, activity.ActionDueDateChanged,
+		if err := recordFact(r.Context(), c.Tx, c.PracticeID, c.EngagementID, c.StaffID, activity.ActionDueDateChanged,
 			map[string]any{"dueDateBefore": current, "dueDateAfter": target}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		apierr.WriteJSON(w, http.StatusOK, DueDateChangeResponse{EngagementID: engagementID, DueDate: target})
-	})
+		apierr.WriteJSON(w, http.StatusOK, DueDateChangeResponse{EngagementID: c.EngagementID, DueDate: target})
+	}, staffauth.EngagementID())
 }
