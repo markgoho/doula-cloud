@@ -3,10 +3,7 @@ package message
 import (
 	"net/http"
 
-	"github.com/google/uuid"
-
 	"doula-cloud/api/internal/activity"
-	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/push"
@@ -28,14 +25,8 @@ import (
 // unchanged -- see listMessages' own doc comment for what that side
 // actually shows today, which is not what this ticket assumed.
 func ClientListHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, engagementID, ok := clientauth.RequireEngagementTx(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-
-		writeThreadPage(w, r, tx, engagementID, activity.StaffActorDisplayName)
+	return clientauth.Handler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call) {
+		writeThreadPage(w, r, c.Tx, c.EngagementID, activity.StaffActorDisplayName)
 	})
 }
 
@@ -50,28 +41,7 @@ func ClientListHandler() http.Handler {
 // Idempotency-Key replays the first response, keyed to the calling Client,
 // instead of posting the Message twice.
 func ClientCreateHandler(store objectstore.ObjectStore, pusher push.Pusher) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, clientID, ok := clientauth.RequireClientTx(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-		engagementID, _ := clientauth.EngagementID(r.Context())
-
-		messageID := uuid.NewString()
-		body, attachment, ok := decodeCreate(w, r, store, engagementID, messageID, apierr.MsgInternalError)
-		if !ok {
-			return
-		}
-
-		item, err := insertMessage(r.Context(), tx, messageID, engagementID, senderTypeClient, clientID, body, attachment)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		notifyRecipient(r.Context(), tx, pusher, engagementID, senderTypeClient)
-		writeCreated(w, item)
+	return clientauth.Handler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call) {
+		postMessage(w, r, c.Tx, store, pusher, c.EngagementID, senderTypeClient, c.ClientID)
 	})
 }

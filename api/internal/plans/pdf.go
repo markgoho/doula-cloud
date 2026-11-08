@@ -10,6 +10,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/pdffont"
+	"doula-cloud/api/internal/staffauth"
 )
 
 // contentTypePDF is the Birth Plan PDF's Content-Type -- this package's
@@ -149,23 +150,19 @@ func serveBirthPlanPDF(w http.ResponseWriter, r *http.Request, tx *sql.Tx, engag
 // handler refuses it the same way a nonexistent instance 404s, rather
 // than rendering one. Must be mounted behind staffauth.Middleware.
 func GetBirthPlanPDFHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, engagementID, planType, ok := resolveInstanceRequest(w, r)
-		if !ok {
-			return
-		}
+	return instanceHandler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call, planType string) {
 		if planType != birthPlanType {
-			apierr.WriteError(w, "no plan instance found for this engagement and plan type", http.StatusNotFound)
+			apierr.WriteError(w, noPlanInstanceFound, http.StatusNotFound)
 			return
 		}
 
-		fields, answers, _, ok := loadInstanceForStaff(w, r, tx, engagementID, planType)
+		fields, answers, _, ok := loadInstanceForStaff(w, r, c.Tx, c.EngagementID, planType)
 		if !ok {
 			return
 		}
 
-		serveBirthPlanPDF(w, r, tx, engagementID, fields, answers)
-	})
+		serveBirthPlanPDF(w, r, c.Tx, c.EngagementID, fields, answers)
+	}, true)
 }
 
 // ClientGetBirthPlanPDFHandler mirrors ClientGetBirthPlanHandler,
@@ -174,22 +171,12 @@ func GetBirthPlanPDFHandler() http.Handler {
 // Care Plan stays structurally unreachable from the Client-portal
 // population. Must be mounted behind clientauth.Middleware.
 func ClientGetBirthPlanPDFHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, engagementID, ok := clientauth.RequireEngagementTx(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-
-		if refuseUnlessBirthPlanOffered(r.Context(), w, tx, engagementID) {
-			return
-		}
-
-		fields, answers, _, ok := requireBirthPlanInstance(w, r, tx, engagementID)
+	return clientauth.Handler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call) {
+		fields, answers, _, ok := requireOfferedBirthPlan(w, r, c)
 		if !ok {
 			return
 		}
 
-		serveBirthPlanPDF(w, r, tx, engagementID, fields, answers.nonEmpty())
+		serveBirthPlanPDF(w, r, c.Tx, c.EngagementID, fields, answers)
 	})
 }

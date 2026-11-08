@@ -65,8 +65,7 @@ type InstanceResponse struct {
 
 // planStamp reads action's newest row on engagementID from the activity
 // ledger, on the Staff caller's own Practice-scoped tx.
-func planStamp(r *http.Request, tx *sql.Tx, engagementID string, action activity.EngagementAction) (*activitypage.Stamp, error) {
-	practiceID, _ := staffauth.PracticeID(r.Context())
+func planStamp(r *http.Request, tx *sql.Tx, practiceID, engagementID string, action activity.EngagementAction) (*activitypage.Stamp, error) {
 	stamp, err := activitypage.Latest(r.Context(), tx, activitypage.LatestQuery{
 		PracticeID:  practiceID,
 		SubjectKind: activity.SubjectEngagement,
@@ -82,23 +81,34 @@ func planStamp(r *http.Request, tx *sql.Tx, engagementID string, action activity
 
 // withTrail fills out's audit stamps -- the Plan's start and its last
 // save -- from the ledger, and a Birth Plan's masthead.
-func withTrail(r *http.Request, tx *sql.Tx, out *InstanceResponse) error {
+func withTrail(r *http.Request, tx *sql.Tx, practiceID string, out *InstanceResponse) error {
 	if err := withMasthead(r.Context(), tx, out); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return err
 	}
-	started, err := planStamp(r, tx, out.EngagementID, startedAction(out.PlanType))
+	started, err := planStamp(r, tx, practiceID, out.EngagementID, startedAction(out.PlanType))
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
 		return err
 	}
-	edited, err := planStamp(r, tx, out.EngagementID, editedAction(out.PlanType))
+	edited, err := planStamp(r, tx, practiceID, out.EngagementID, editedAction(out.PlanType))
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
 		return err
 	}
 	out.Started, out.LastEdited = started, edited
 	return nil
+}
+
+// writeInstance answers status with out, its audit stamps and masthead
+// filled in from the ledger.
+func writeInstance(w http.ResponseWriter, r *http.Request, c staffauth.Call, status int, out InstanceResponse) {
+	if err := withTrail(r, c.Tx, c.PracticeID, &out); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+	apierr.WriteJSON(w, status, out)
 }
 
 // PutInstanceRequest is the body of a PUT Plan Instance request: a full
@@ -127,17 +137,12 @@ func (a Answers) nonEmpty() Answers {
 // Engagement + plan type (POST creates; PutInstanceHandler edits). Must
 // be mounted behind staffauth.Middleware.
 func PostInstanceHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, engagementID, planType, ok := resolveInstanceRequest(w, r)
-		if !ok {
-			return
-		}
-		practiceID, _ := staffauth.PracticeID(r.Context())
-		if planType == birthPlanType && refuseBirthPlanStart(w, r, tx, engagementID) {
+	return instanceHandler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call, planType string) {
+		if planType == birthPlanType && refuseBirthPlanStart(w, r, c.Tx, c.EngagementID) {
 			return
 		}
 
-		fields, ok := requireTemplateFields(w, r, tx, practiceID, planType)
+		fields, ok := requireTemplateFields(w, r, c.Tx, c.PracticeID, planType)
 		if !ok {
 			return
 		}
@@ -149,9 +154,9 @@ func PostInstanceHandler() http.Handler {
 			return
 		}
 
-		if _, err := tx.ExecContext(r.Context(),
+		if _, err := c.Tx.ExecContext(r.Context(),
 			`INSERT INTO plan_instances (engagement_id, plan_type, fields, changed_at) VALUES ($1, $2, $3, $4)`,
-			engagementID, planType, fieldsJSON, clock.Now(r.Context()),
+			c.EngagementID, planType, fieldsJSON, clock.Now(r.Context()),
 		); err != nil {
 			if pgerr.IsUniqueViolation(err) {
 				apierr.WriteError(w, "a plan instance already exists for this work and plan type", http.StatusConflict)
@@ -162,27 +167,21 @@ func PostInstanceHandler() http.Handler {
 			return
 		}
 
-		staffID, _ := staffauth.StaffID(r.Context())
-		if err := activity.Record(r.Context(), tx, activity.Entry{
-			PracticeID:  practiceID,
+		if err := activity.Record(r.Context(), c.Tx, activity.Entry{
+			PracticeID:  c.PracticeID,
 			SubjectKind: activity.SubjectEngagement,
-			SubjectID:   engagementID,
+			SubjectID:   c.EngagementID,
 			Action:      string(startedAction(planType)),
-			Actor:       activity.StaffActor(staffID),
+			Actor:       activity.StaffActor(c.StaffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: Answers{}}
-		if err := withTrail(r, tx, &out); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		apierr.WriteJSON(w, http.StatusCreated, out)
-	})
+		out := InstanceResponse{EngagementID: c.EngagementID, PlanType: planType, Fields: fields, Answers: Answers{}}
+		writeInstance(w, r, c, http.StatusCreated, out)
+	}, false)
 }
 
 // The two refusals refuseBirthPlanStart answers with, read by Staff.
@@ -217,45 +216,30 @@ func refuseBirthPlanStart(w http.ResponseWriter, r *http.Request, tx *sql.Tx, en
 // Doula, same as engagement.DetailHandler. Must be mounted behind
 // staffauth.Middleware.
 func GetInstanceHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, engagementID, planType, ok := resolveInstanceRequest(w, r)
+	return instanceHandler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call, planType string) {
+		fields, answers, clientAcknowledgedAt, ok := loadInstanceForStaff(w, r, c.Tx, c.EngagementID, planType)
 		if !ok {
 			return
 		}
 
-		fields, answers, clientAcknowledgedAt, ok := loadInstanceForStaff(w, r, tx, engagementID, planType)
-		if !ok {
-			return
-		}
-
-		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: answers, ClientAcknowledgedAt: clientAcknowledgedAt}
-		if err := withTrail(r, tx, &out); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		apierr.WriteJSON(w, http.StatusOK, out)
-	})
+		out := InstanceResponse{EngagementID: c.EngagementID, PlanType: planType, Fields: fields, Answers: answers, ClientAcknowledgedAt: clientAcknowledgedAt}
+		writeInstance(w, r, c, http.StatusOK, out)
+	}, true)
 }
 
-// loadInstanceForStaff resolves and reads the Plan Instance for
-// engagementID + planType on the calling Staff member's own tx, applying
-// ADR-0008's attachment narrowing via staffauth.Reader.CanAccessEngagement
-// -- shared by GetInstanceHandler (JSON, above) and
+// loadInstanceForStaff reads the Plan Instance for engagementID +
+// planType on the calling Staff member's own tx, for a request
+// instanceHandler already narrowed by ADR-0008's attachment rule --
+// shared by GetInstanceHandler (JSON, above) and
 // GetBirthPlanPDFHandler (#306, pdf.go), so the two surfaces can never
 // drift on who can reach an instance. Writes the appropriate error
-// response itself and returns ok=false on any failure, matching
-// resolveInstanceRequest's own contract; callers just return in that
-// case. Answers is already normalized (nonEmpty), so a caller never
-// re-applies it.
+// response itself and returns ok=false on any failure; callers just
+// return in that case. Answers is already normalized (nonEmpty), so a
+// caller never re-applies it.
 func loadInstanceForStaff(w http.ResponseWriter, r *http.Request, tx *sql.Tx, engagementID, planType string) (fields []Field, answers Answers, clientAcknowledgedAt *time.Time, ok bool) {
-	if !staffauth.RequireEngagementAccess(w, r, tx, engagementID, "no plan instance found for this engagement and plan type") {
-		return nil, nil, nil, false
-	}
-
 	fields, rawAnswers, clientAcknowledgedAt, err := fetchInstance(r.Context(), tx, engagementID, planType)
 	if errors.Is(err, sql.ErrNoRows) {
-		apierr.WriteError(w, "no plan instance found for this engagement and plan type", http.StatusNotFound)
+		apierr.WriteError(w, noPlanInstanceFound, http.StatusNotFound)
 		return nil, nil, nil, false
 	}
 	if err != nil {
@@ -271,15 +255,10 @@ func loadInstanceForStaff(w http.ResponseWriter, r *http.Request, tx *sql.Tx, en
 // creation and never editable via this endpoint. Must be mounted behind
 // staffauth.Middleware.
 func PutInstanceHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, engagementID, planType, ok := resolveInstanceRequest(w, r)
-		if !ok {
-			return
-		}
-
-		fields, _, _, err := fetchInstance(r.Context(), tx, engagementID, planType)
+	return instanceHandler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call, planType string) {
+		fields, _, _, err := fetchInstance(r.Context(), c.Tx, c.EngagementID, planType)
 		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "no plan instance found for this engagement and plan type", http.StatusNotFound)
+			apierr.WriteError(w, noPlanInstanceFound, http.StatusNotFound)
 			return
 		}
 		if err != nil {
@@ -319,7 +298,7 @@ func PutInstanceHandler() http.Handler {
 		// three, so they cannot disagree.
 		var clientAcknowledgedAt sql.NullTime
 		var answersChanged bool
-		if err := tx.QueryRowContext(r.Context(),
+		if err := c.Tx.QueryRowContext(r.Context(),
 			`WITH was AS (
 			     SELECT answers IS DISTINCT FROM $1::jsonb AS changed
 			     FROM plan_instances
@@ -331,21 +310,19 @@ func PutInstanceHandler() http.Handler {
 			     changed_at = CASE WHEN answers IS DISTINCT FROM $1::jsonb THEN $4 ELSE changed_at END
 			 WHERE engagement_id = $2 AND plan_type = $3
 			 RETURNING client_acknowledged_at, (SELECT changed FROM was)`,
-			answersJSON, engagementID, planType, clock.Now(r.Context()),
+			answersJSON, c.EngagementID, planType, clock.Now(r.Context()),
 		).Scan(&clientAcknowledgedAt, &answersChanged); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if answersChanged {
-			practiceID, _ := staffauth.PracticeID(r.Context())
-			staffID, _ := staffauth.StaffID(r.Context())
-			if err := activity.Record(r.Context(), tx, activity.Entry{
-				PracticeID:  practiceID,
+			if err := activity.Record(r.Context(), c.Tx, activity.Entry{
+				PracticeID:  c.PracticeID,
 				SubjectKind: activity.SubjectEngagement,
-				SubjectID:   engagementID,
+				SubjectID:   c.EngagementID,
 				Action:      string(editedAction(planType)),
-				Actor:       activity.StaffActor(staffID),
+				Actor:       activity.StaffActor(c.StaffID),
 			}); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -353,14 +330,9 @@ func PutInstanceHandler() http.Handler {
 			}
 		}
 
-		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: req.Answers, ClientAcknowledgedAt: nullTimePtr(clientAcknowledgedAt)}
-		if err := withTrail(r, tx, &out); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		apierr.WriteJSON(w, http.StatusOK, out)
-	})
+		out := InstanceResponse{EngagementID: c.EngagementID, PlanType: planType, Fields: fields, Answers: req.Answers, ClientAcknowledgedAt: nullTimePtr(clientAcknowledgedAt)}
+		writeInstance(w, r, c, http.StatusOK, out)
+	}, false)
 }
 
 // editedAction is the activity action a save of planType records (#2066):

@@ -86,24 +86,15 @@ func planTypeFromPath(w http.ResponseWriter, r *http.Request) (string, bool) {
 // its Plan Template for :planType. Must be mounted behind
 // staffauth.Middleware.
 func GetTemplateHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		planType, ok := planTypeFromPath(w, r)
-		if !ok {
-			return
-		}
-
-		fields, ok := requireTemplateFields(w, r, tx, practiceID, planType)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		planType := r.PathValue("planType")
+		fields, ok := requireTemplateFields(w, r, c.Tx, c.PracticeID, planType)
 		if !ok {
 			return
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, TemplateResponse{PlanType: planType, Fields: fields})
-	})
+	}, planTypeGate())
 }
 
 // PutTemplateHandler lets a Practice Owner replace the full field list of
@@ -114,17 +105,8 @@ func GetTemplateHandler() http.Handler {
 // admitting every Staff member. Must be mounted through
 // idempotency.Router.ExemptGated.
 func PutTemplateHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-
-		planType, ok := planTypeFromPath(w, r)
-		if !ok {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		planType := r.PathValue("planType")
 
 		var req TemplateResponse
 		if !apierr.DecodeJSON(w, r, &req) {
@@ -137,15 +119,14 @@ func PutTemplateHandler() http.Handler {
 			return
 		}
 
-		staffID, _ := staffauth.StaffID(r.Context())
-		if err := saveTemplateFields(r.Context(), tx, practiceID, staffID, planType, fields); err != nil {
+		if err := saveTemplateFields(r.Context(), c.Tx, c.PracticeID, c.StaffID, planType, fields); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, TemplateResponse{PlanType: planType, Fields: fields})
-	})
+	}, planTypeGate())
 }
 
 // saveTemplateFields upserts practiceID's planType template and, when

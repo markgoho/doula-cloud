@@ -4,12 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/legal"
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/staffauth"
@@ -118,26 +116,20 @@ func ledgerHistory(ctx context.Context, tx *sql.Tx, practiceID string, after *pa
 // terms is the version history the price is read from: legal.Terms in
 // production, a fixture in a test.
 func GetBalanceHandler(terms legal.Document) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		after, ok := pagecursor.FromQuery(w, r, pagecursor.Decode, "invalid cursor")
 		if !ok {
 			return
 		}
 
-		balance, err := Balance(r.Context(), tx, practiceID)
+		balance, err := Balance(r.Context(), c.Tx, c.PracticeID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		entries, err := ledgerHistory(r.Context(), tx, practiceID, after)
+		entries, err := ledgerHistory(r.Context(), c.Tx, c.PracticeID, after)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -152,10 +144,8 @@ func GetBalanceHandler(terms legal.Document) http.Handler {
 			ledger.NextCursor = &next
 		}
 
-		pricing, err := creditPriceNow(r.Context(), tx, terms, clock.Now(r.Context()))
-		if err != nil {
-			log.Printf("billing: read credit price: %v", err)
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		pricing, ok := requireCreditPrice(w, r, c.Tx, terms)
+		if !ok {
 			return
 		}
 

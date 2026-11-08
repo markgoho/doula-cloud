@@ -62,29 +62,13 @@ func ClientBirthPlanGlance(ctx context.Context, tx *sql.Tx, engagementID string)
 // corresponding PUT/POST route for this population. Must be mounted behind
 // clientauth.Middleware.
 func ClientGetBirthPlanHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, engagementID, ok := clientauth.RequireEngagementTx(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-
-		if refuseUnlessBirthPlanOffered(r.Context(), w, tx, engagementID) {
-			return
-		}
-
-		fields, answers, clientAcknowledgedAt, ok := requireBirthPlanInstance(w, r, tx, engagementID)
+	return clientauth.Handler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call) {
+		fields, answers, clientAcknowledgedAt, ok := requireOfferedBirthPlan(w, r, c)
 		if !ok {
 			return
 		}
 
-		out := InstanceResponse{EngagementID: engagementID, PlanType: birthPlanType, Fields: fields, Answers: answers.nonEmpty(), ClientAcknowledgedAt: clientAcknowledgedAt}
-		if err := withMasthead(r.Context(), tx, &out); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		apierr.WriteJSON(w, http.StatusOK, out)
+		writeClientBirthPlan(w, r, c, fields, answers, clientAcknowledgedAt)
 	})
 }
 
@@ -97,24 +81,13 @@ func ClientGetBirthPlanHandler() http.Handler {
 // stored answers clears it (PutInstanceHandler). Must be mounted behind
 // clientauth.Middleware.
 func ClientAcknowledgeBirthPlanHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, engagementID, ok := clientauth.RequireEngagementTx(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-		clientID, _ := clientauth.ClientID(r.Context())
-
-		// The same gate the read carries: a Client who is not offered a
-		// Birth Plan cannot stamp client_acknowledged_at on one either.
-		// Hiding the read and leaving the write open would let a stale
-		// portal tab record that she read a document the product has
-		// stopped offering her.
-		if refuseUnlessBirthPlanOffered(r.Context(), w, tx, engagementID) {
-			return
-		}
-
-		fields, answers, _, ok := requireBirthPlanInstance(w, r, tx, engagementID)
+	return clientauth.Handler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call) {
+		// requireOfferedBirthPlan is the same gate the read carries: a
+		// Client who is not offered a Birth Plan cannot stamp
+		// client_acknowledged_at on one either. Hiding the read and
+		// leaving the write open would let a stale portal tab record that
+		// she read a document the product has stopped offering her.
+		fields, answers, _, ok := requireOfferedBirthPlan(w, r, c)
 		if !ok {
 			return
 		}
@@ -126,8 +99,8 @@ func ClientAcknowledgeBirthPlanHandler() http.Handler {
 		// The function re-checks ownership itself, the same caution
 		// portal_account_reuse_for_accept takes for the same reason.
 		var clientAcknowledgedAt sql.NullTime
-		if err := tx.QueryRowContext(r.Context(),
-			`SELECT acknowledge_birth_plan($1)`, engagementID,
+		if err := c.Tx.QueryRowContext(r.Context(),
+			`SELECT acknowledge_birth_plan($1)`, c.EngagementID,
 		).Scan(&clientAcknowledgedAt); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -144,19 +117,13 @@ func ClientAcknowledgeBirthPlanHandler() http.Handler {
 		// don't validate against a state the code's own invariants rule
 		// out) -- the function's own check is defense-in-depth for a
 		// future bug in that boundary, not a case this handler expects.
-		if err := recordBirthPlanAcknowledged(r.Context(), tx, engagementID, clientID); err != nil {
+		if err := recordBirthPlanAcknowledged(r.Context(), c.Tx, c.EngagementID, c.ClientID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		out := InstanceResponse{EngagementID: engagementID, PlanType: birthPlanType, Fields: fields, Answers: answers.nonEmpty(), ClientAcknowledgedAt: nullTimePtr(clientAcknowledgedAt)}
-		if err := withMasthead(r.Context(), tx, &out); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		apierr.WriteJSON(w, http.StatusOK, out)
+		writeClientBirthPlan(w, r, c, fields, answers, nullTimePtr(clientAcknowledgedAt))
 	})
 }
 
@@ -187,11 +154,15 @@ func recordBirthPlanAcknowledged(ctx context.Context, tx *sql.Tx, engagementID, 
 	return nil
 }
 
-// requireBirthPlanInstance is fetchInstance for a Client-portal handler:
-// an Engagement with no Birth Plan yet is a 404 and any other failure a
-// 500, written here.
-func requireBirthPlanInstance(w http.ResponseWriter, r *http.Request, tx *sql.Tx, engagementID string) (fields []Field, answers Answers, clientAcknowledgedAt *time.Time, ok bool) {
-	fields, answers, clientAcknowledgedAt, err := fetchInstance(r.Context(), tx, engagementID, birthPlanType)
+// requireOfferedBirthPlan is fetchInstance for a Client-portal handler,
+// behind the gate refuseUnlessBirthPlanOffered asks: an Engagement that is
+// not offered a Birth Plan, or has none yet, is a 404 and any other
+// failure a 500, written here. Answers is already normalized (nonEmpty).
+func requireOfferedBirthPlan(w http.ResponseWriter, r *http.Request, c clientauth.Call) (fields []Field, answers Answers, clientAcknowledgedAt *time.Time, ok bool) {
+	if refuseUnlessBirthPlanOffered(r.Context(), w, c.Tx, c.EngagementID) {
+		return nil, nil, nil, false
+	}
+	fields, answers, clientAcknowledgedAt, err := fetchInstance(r.Context(), c.Tx, c.EngagementID, birthPlanType)
 	if errors.Is(err, sql.ErrNoRows) {
 		apierr.WriteError(w, msgNoBirthPlan, http.StatusNotFound)
 		return nil, nil, nil, false
@@ -201,7 +172,19 @@ func requireBirthPlanInstance(w http.ResponseWriter, r *http.Request, tx *sql.Tx
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return nil, nil, nil, false
 	}
-	return fields, answers, clientAcknowledgedAt, true
+	return fields, answers.nonEmpty(), clientAcknowledgedAt, true
+}
+
+// writeClientBirthPlan answers 200 with the Client's Birth Plan and its
+// masthead.
+func writeClientBirthPlan(w http.ResponseWriter, r *http.Request, c clientauth.Call, fields []Field, answers Answers, clientAcknowledgedAt *time.Time) {
+	out := InstanceResponse{EngagementID: c.EngagementID, PlanType: birthPlanType, Fields: fields, Answers: answers, ClientAcknowledgedAt: clientAcknowledgedAt}
+	if err := withMasthead(r.Context(), c.Tx, &out); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+	apierr.WriteJSON(w, http.StatusOK, out)
 }
 
 // refuseUnlessBirthPlanOffered applies ADR-0015's suppression rule to a

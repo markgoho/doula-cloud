@@ -103,24 +103,15 @@ type View struct {
 // standing Fee Payment. An ended Attachment is listed too: a Practice
 // usually pays after the birth, by when the Attachment has ended.
 func ListHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		engagementID := r.PathValue("engagementId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) {
-			return
-		}
-		items, err := listFees(r.Context(), tx, practiceID, engagementID)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		items, err := listFees(r.Context(), c.Tx, c.PracticeID, c.EngagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		apierr.WriteJSON(w, http.StatusOK, ListResponse{Items: items})
-	})
+	}, staffauth.EngagementID())
 }
 
 func listFees(ctx context.Context, tx *sql.Tx, practiceID, engagementID string) ([]DoulaFee, error) {
@@ -209,18 +200,31 @@ func lockFee(ctx context.Context, tx *sql.Tx, practiceID, engagementID, attachme
 	return feeCents, doulaStaffID, nil
 }
 
-// readPath parses the Engagement and Attachment ids every write here
-// carries, writing a 400 for a malformed one.
-func readPath(w http.ResponseWriter, r *http.Request) (engagementID, attachmentID string, ok bool) {
-	engagementID = r.PathValue("engagementId")
-	if !staffauth.ParseUUID(w, "engagement", engagementID) {
-		return "", "", false
+// requireFee locks the Attachment's contractor fee for the Engagement, a
+// 404 when there is none and a 500 on any other failure, written here.
+func requireFee(w http.ResponseWriter, r *http.Request, c staffauth.Call, attachmentID string) (feeCents int64, doulaStaffID string, ok bool) {
+	feeCents, doulaStaffID, err := lockFee(r.Context(), c.Tx, c.PracticeID, c.EngagementID, attachmentID)
+	if errors.Is(err, sql.ErrNoRows) {
+		apierr.WriteError(w, MsgFeeNotFound, http.StatusNotFound)
+		return 0, "", false
 	}
-	attachmentID = r.PathValue("attachmentId")
-	if !staffauth.ParseUUID(w, "attachment", attachmentID) {
-		return "", "", false
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return 0, "", false
 	}
-	return engagementID, attachmentID, true
+	return feeCents, doulaStaffID, true
+}
+
+// recordAndRespond writes the Activity row for a stored Fee Payment view,
+// attributed to the acting Staff member, then answers 201 with it.
+func recordAndRespond(w http.ResponseWriter, r *http.Request, c staffauth.Call, doulaStaffID string, action activity.EngagementAction, view View) {
+	if err := record(r.Context(), c.Tx, c.PracticeID, c.EngagementID, doulaStaffID, action, c.StaffID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+	apierr.WriteJSON(w, http.StatusCreated, view)
 }
 
 // record writes the Engagement's Activity row for a Fee Payment or its
@@ -249,33 +253,19 @@ func record(ctx context.Context, tx *sql.Tx, practiceID, engagementID, doulaStaf
 // accepted fee. Refused when a Fee Payment already stands on it. Owner
 // and Admin only, declared at the mount.
 func RecordHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		engagementID, attachmentID, ok := readPath(w, r)
-		if !ok {
-			return
-		}
-		req, paidOn, ok := payments.ReadRecordPaymentRequest(w, r, tx, practiceID, payments.DatePaid)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		attachmentID := c.ID("attachmentId")
+		req, paidOn, ok := payments.ReadRecordPaymentRequest(w, r, c.Tx, c.PracticeID, payments.DatePaid)
 		if !ok {
 			return
 		}
 
-		feeCents, doulaStaffID, err := lockFee(r.Context(), tx, practiceID, engagementID, attachmentID)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, MsgFeeNotFound, http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		feeCents, doulaStaffID, ok := requireFee(w, r, c, attachmentID)
+		if !ok {
 			return
 		}
 		var alreadyPaid bool
-		if err := tx.QueryRowContext(r.Context(),
+		if err := c.Tx.QueryRowContext(r.Context(),
 			`SELECT EXISTS (
 			     SELECT 1 FROM attachment_fee_payments f
 			      WHERE f.attachment_id = $1 AND f.kind = 'recorded'
@@ -295,7 +285,6 @@ func RecordHandler() http.Handler {
 		if req.Note != "" {
 			note = sql.NullString{String: req.Note, Valid: true}
 		}
-		staffID, _ := staffauth.StaffID(r.Context())
 		view := View{
 			AttachmentID: attachmentID,
 			Kind:         kindRecorded,
@@ -304,17 +293,12 @@ func RecordHandler() http.Handler {
 			PaidOn:       paidOn.Format(time.DateOnly),
 			RecordedAt:   clock.Now(r.Context()),
 		}
-		if err := tx.QueryRowContext(r.Context(),
+		if err := c.Tx.QueryRowContext(r.Context(),
 			`INSERT INTO attachment_fee_payments
 			     (practice_id, attachment_id, kind, amount_cents, method, note, paid_on, recorded_by, recorded_at)
 			 VALUES ($1, $2, 'recorded', $3, $4, $5, $6, $7, $8) RETURNING id`,
-			practiceID, attachmentID, feeCents, string(req.Method), note, paidOn, staffID, view.RecordedAt,
+			c.PracticeID, attachmentID, feeCents, string(req.Method), note, paidOn, c.StaffID, view.RecordedAt,
 		).Scan(&view.ID); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if err := record(r.Context(), tx, practiceID, engagementID, doulaStaffID, activity.ActionContractorFeePaid, staffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -322,8 +306,8 @@ func RecordHandler() http.Handler {
 		if note.Valid {
 			view.Note = &note.String
 		}
-		apierr.WriteJSON(w, http.StatusCreated, view)
-	})
+		recordAndRespond(w, r, c, doulaStaffID, activity.ActionContractorFeePaid, view)
+	}, staffauth.EngagementID(), staffauth.PathID("attachment", "attachmentId"))
 }
 
 // ReverseHandler undoes a mistaken Fee Payment with an additive reversal
@@ -331,20 +315,8 @@ func RecordHandler() http.Handler {
 // reversal cannot itself be reversed, and a Fee Payment is reversed once.
 // Owner and Admin only, declared at the mount.
 func ReverseHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		engagementID, attachmentID, ok := readPath(w, r)
-		if !ok {
-			return
-		}
-		paymentID := r.PathValue("paymentId")
-		if !staffauth.ParseUUID(w, "payment", paymentID) {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		attachmentID, paymentID := c.ID("attachmentId"), c.ID("paymentId")
 		var req ReverseRequest
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
@@ -356,19 +328,13 @@ func ReverseHandler() http.Handler {
 			return
 		}
 
-		_, doulaStaffID, err := lockFee(r.Context(), tx, practiceID, engagementID, attachmentID)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, MsgFeeNotFound, http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		_, doulaStaffID, ok := requireFee(w, r, c, attachmentID)
+		if !ok {
 			return
 		}
 		var amountCents int64
 		var alreadyReversed bool
-		err = tx.QueryRowContext(r.Context(),
+		err := c.Tx.QueryRowContext(r.Context(),
 			`SELECT f.amount_cents,
 			        EXISTS (SELECT 1 FROM attachment_fee_payments rv WHERE rv.target_id = f.id)
 			   FROM attachment_fee_payments f
@@ -389,7 +355,6 @@ func ReverseHandler() http.Handler {
 			return
 		}
 
-		staffID, _ := staffauth.StaffID(r.Context())
 		view := View{
 			AttachmentID: attachmentID,
 			Kind:         kindReversal,
@@ -398,21 +363,16 @@ func ReverseHandler() http.Handler {
 			Reason:       &req.Reason,
 			RecordedAt:   clock.Now(r.Context()),
 		}
-		if err := tx.QueryRowContext(r.Context(),
+		if err := c.Tx.QueryRowContext(r.Context(),
 			`INSERT INTO attachment_fee_payments
 			     (practice_id, attachment_id, kind, amount_cents, target_id, reason, recorded_by, recorded_at)
 			 VALUES ($1, $2, 'reversal', $3, $4, $5, $6, $7) RETURNING id`,
-			practiceID, attachmentID, view.AmountCents, paymentID, req.Reason, staffID, view.RecordedAt,
+			c.PracticeID, attachmentID, view.AmountCents, paymentID, req.Reason, c.StaffID, view.RecordedAt,
 		).Scan(&view.ID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if err := record(r.Context(), tx, practiceID, engagementID, doulaStaffID, activity.ActionContractorFeePaymentReversed, staffID); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		apierr.WriteJSON(w, http.StatusCreated, view)
-	})
+		recordAndRespond(w, r, c, doulaStaffID, activity.ActionContractorFeePaymentReversed, view)
+	}, staffauth.EngagementID(), staffauth.PathID("attachment", "attachmentId"), staffauth.PathID("payment", "paymentId"))
 }
