@@ -21,7 +21,10 @@ describe('style guide retrofit coverage', () => {
 
 			it(`has a /style-guide page for the ${tier} component "${componentName}"`, () => {
 				const pagePath = new URL(`${slug}/+page.svelte`, import.meta.url);
-				expect(existsSync(pagePath)).toBe(true);
+				expect(
+					existsSync(pagePath),
+					`${tier}/${file} has no style-guide page: add app/src/routes/style-guide/${slug}/+page.svelte (docs/design/workflow.md, "What a new component needs")`
+				).toBe(true);
 			});
 		}
 	}

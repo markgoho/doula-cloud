@@ -37,6 +37,23 @@ There is no design file. A drawing of a screen that the Svelte already renders i
 
    **This machine's Chrome inverts page colors** with an extension, so a screenshot taken through it is evidence about layout and never about the palette. For color, use a clean browser or read the computed value rather than the picture.
 
+## What a new component needs
+
+A component is a `.svelte` file directly under `app/src/lib/components/<tier>/` (`atoms`, `molecules`, `organisms`, `templates`). Each piece below is checked, and the failure names the missing file and where it goes.
+
+| Piece | Where it goes | Checked by |
+| --- | --- | --- |
+| A spec | `<Name>.svelte.spec.ts` beside the component | `app/src/routes/style-guide/components.spec.ts`, "a component has a spec beside it". A component tested only through the route that renders it is named in `COVERED_THROUGH_ROUTES` with the route as the reason. The 100% coverage gate (`docs/testing.md`) holds the lines either way. |
+| A style-guide page | `app/src/routes/style-guide/<kebab-case-slug>/+page.svelte`, the name split at each capital (`CloudMark` is `cloud-mark`) | `app/src/routes/style-guide/style-guide.spec.ts`. The index lists the page by itself: `components.ts` reads it off the files on disk. |
+| A page with no switch of its own | Other states are `variants` exported from the page's `<script module>` | `app/src/routes/style-guide/demoStates.spec.ts` |
+| An `eslint.config.js` entry, only if it renders a raw `<fieldset>` or `<label>` | `fieldOwners` in `app/eslint.config.js` (a raw control element goes in `controlOwners`, a raw heading in `headingOwners`) | `bun run lint`, the `svelte/no-restricted-html-elements` message |
+
+The component's tier follows ADR-0018.
+
+### A shell that owns `<main>` is not a component
+
+A page-level shell renders `<main>` and the site chrome around it. A style-guide page lives inside the guide's own `<main>`, so it cannot host one, and ADR-0018 keeps `banner` and `main` out of every Template. Such a shell lives beside the routes it frames, as `app/src/routes/SignedOutShell.svelte` does, or in a `+layout.svelte`. Put the parts of it that are not landmarks (a top bar, a footer) in `organisms/` and give those their style-guide pages.
+
 ## Committing
 
 The Svelte change and its style-guide page go in the same PR. A prototype branch never merges; what it decided lands as a token, a component or a brief line, and the PR body names the prototype's issue and artifact.
