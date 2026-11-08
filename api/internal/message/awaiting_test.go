@@ -2,10 +2,10 @@ package message_test
 
 import (
 	"encoding/json/v2"
-	"fmt"
 	"net/http"
 	"testing"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
@@ -16,14 +16,13 @@ import (
 // #455's AC1, and the block's own zero-Client-message state.
 func TestAwaitingReplyHandler_EmptyPracticeHasNoEngagementsWaiting(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-awaiting-empty"
-	practiceID := testdb.SeedPractice(t, db, "Awaiting Empty Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	p := fixture.Practice(t, db, fixture.PracticeName("Awaiting Empty Practice"))
+	staff := fixture.Staff(t, db, p)
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+p.ID+"/messages/awaiting-reply")
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusOK)
 	var got message.AwaitingReplyResponse
@@ -42,29 +41,28 @@ func TestAwaitingReplyHandler_EmptyPracticeHasNoEngagementsWaiting(t *testing.T)
 // does not, even though the Client wrote there too.
 func TestAwaitingReplyHandler_OnlyEngagementsAwaitingReplyAppear(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-awaiting-mixed"
-	practiceID := testdb.SeedPractice(t, db, "Awaiting Mixed Practice")
-	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	p := fixture.Practice(t, db, fixture.PracticeName("Awaiting Mixed Practice"))
+	staff := fixture.Staff(t, db, p)
 
-	waitingClientID, waitingEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Priya", "priya@example.com")
+	waitingEngagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Priya"), fixture.ClientEmail("priya@example.com")))
 	// #2111: the Overview's table sets every waiting Client side by side,
 	// so it names her in full.
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE clients SET family_name = 'Shah' WHERE id = $1`, waitingClientID,
+		`UPDATE clients SET family_name = 'Shah' WHERE id = $1`, waitingEngagement.Client.ID,
 	); err != nil {
 		t.Fatalf("seed family_name: %v", err)
 	}
-	seedMessage(t, db, waitingEngagementID, "staff", staffID, "How are you feeling?")
-	seedMessage(t, db, waitingEngagementID, "client", waitingClientID, "A little tired today.")
+	seedMessage(t, db, waitingEngagement.ID, "staff", staff.ID, "How are you feeling?")
+	seedMessage(t, db, waitingEngagement.ID, "client", waitingEngagement.Client.ID, "A little tired today.")
 
-	repliedClientID, repliedEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Renata", "renata@example.com")
-	seedMessage(t, db, repliedEngagementID, "client", repliedClientID, "Question about my plan.")
-	seedMessage(t, db, repliedEngagementID, "staff", staffID, "Answered -- let me know if that helps.")
+	repliedEngagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Renata"), fixture.ClientEmail("renata@example.com")))
+	seedMessage(t, db, repliedEngagement.ID, "client", repliedEngagement.Client.ID, "Question about my plan.")
+	seedMessage(t, db, repliedEngagement.ID, "staff", staff.ID, "Answered -- let me know if that helps.")
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+p.ID+"/messages/awaiting-reply")
 	defer resp.Body.Close()
 	var got message.AwaitingReplyResponse
 	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
@@ -73,8 +71,8 @@ func TestAwaitingReplyHandler_OnlyEngagementsAwaitingReplyAppear(t *testing.T) {
 	if len(got.Items) != 1 {
 		t.Fatalf("Items = %+v, want exactly the one Engagement still awaiting a reply", got.Items)
 	}
-	if got.Items[0].EngagementID != waitingEngagementID {
-		t.Fatalf("EngagementID = %q, want %q", got.Items[0].EngagementID, waitingEngagementID)
+	if got.Items[0].EngagementID != waitingEngagement.ID {
+		t.Fatalf("EngagementID = %q, want %q", got.Items[0].EngagementID, waitingEngagement.ID)
 	}
 	if got.Items[0].ClientName != "Priya Shah" {
 		t.Fatalf("ClientName = %q, want %q", got.Items[0].ClientName, "Priya Shah")
@@ -89,27 +87,25 @@ func TestAwaitingReplyHandler_OnlyEngagementsAwaitingReplyAppear(t *testing.T) {
 // single Engagement's thread.
 func TestAwaitingReplyHandler_ContractorSeesOnlyHerAttachedEngagements(t *testing.T) {
 	db := testdb.New(t)
-	const contractorUID = "contractor-awaiting-narrowed"
-	practiceID := testdb.SeedPractice(t, db, "Awaiting Contractor Practice")
-	contractorID := testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
+	p := fixture.Practice(t, db, fixture.PracticeName("Awaiting Contractor Practice"))
+	contractor := fixture.Staff(t, db, p, fixture.Contractor())
 
-	attachedClientID, attachedEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Attached Client", "attached@example.com")
-	testdb.SeedGrantedAttachment(t, db, attachedEngagementID, contractorID)
-	seedMessage(t, db, attachedEngagementID, "client", attachedClientID, "Waiting on you.")
+	attachedEngagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Attached Client"), fixture.ClientEmail("attached@example.com")), fixture.WithDoula(contractor))
+	seedMessage(t, db, attachedEngagement.ID, "client", attachedEngagement.Client.ID, "Waiting on you.")
 
-	unattachedClientID, unattachedEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Unattached Client", "unattached@example.com")
-	seedMessage(t, db, unattachedEngagementID, "client", unattachedClientID, "Also waiting.")
+	unattachedEngagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Unattached Client"), fixture.ClientEmail("unattached@example.com")))
+	seedMessage(t, db, unattachedEngagement.ID, "client", unattachedEngagement.Client.ID, "Also waiting.")
 
-	srv, session := newServer(t, db, contractorUID)
+	srv, session := newServer(t, db, contractor)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+p.ID+"/messages/awaiting-reply")
 	defer resp.Body.Close()
 	var got message.AwaitingReplyResponse
 	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(got.Items) != 1 || got.Items[0].EngagementID != attachedEngagementID {
+	if len(got.Items) != 1 || got.Items[0].EngagementID != attachedEngagement.ID {
 		t.Fatalf("Items = %+v, want exactly the one attached Engagement (no leak of the unattached one)", got.Items)
 	}
 }
@@ -128,31 +124,31 @@ func TestAwaitingReplyHandler_OwnerOrAdminContractorSeesTheWholePractice(t *test
 
 	cases := []struct {
 		name     string
-		uid      string
 		roles    []string
 		attached bool
 	}{
-		{"an Owner who is a contractor, with no Attachment", "awaiting-reply-owner-contractor", []string{ownerRole}, false},
-		{"an Admin who is a contractor, with no Attachment", "awaiting-reply-admin-contractor", []string{adminRole}, false},
-		{"an Owner who is a contractor Doula, attached to one Engagement", "awaiting-reply-owner-contractor-doula", []string{ownerRole, doulaRole}, true},
-		{"an Admin who is a contractor Doula, attached to one Engagement", "awaiting-reply-admin-contractor-doula", []string{adminRole, doulaRole}, true},
+		{"an Owner who is a contractor, with no Attachment", []string{ownerRole}, false},
+		{"an Admin who is a contractor, with no Attachment", []string{adminRole}, false},
+		{"an Owner who is a contractor Doula, attached to one Engagement", []string{ownerRole, doulaRole}, true},
+		{"an Admin who is a contractor Doula, attached to one Engagement", []string{adminRole, doulaRole}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, tc.uid, tc.roles, "contractor")
+			p := fixture.Practice(t, db)
+			staff := fixture.Staff(t, db, p, fixture.Roles(tc.roles...), fixture.Contractor())
 
-			firstClientID, first := testdb.SeedNamedEngagement(t, db, practiceID, "First Client", tc.uid+"-first@example.com")
-			seedMessage(t, db, first, "client", firstClientID, "Waiting on you.")
+			first := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("First Client")))
+			seedMessage(t, db, first.ID, "client", first.Client.ID, "Waiting on you.")
 			if tc.attached {
-				testdb.SeedGrantedAttachment(t, db, first, staffID)
+				testdb.SeedGrantedAttachment(t, db, first.ID, staff.ID)
 			}
-			secondClientID, second := testdb.SeedNamedEngagement(t, db, practiceID, "Second Client", tc.uid+"-second@example.com")
-			seedMessage(t, db, second, "client", secondClientID, "Also waiting.")
+			second := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Second Client")))
+			seedMessage(t, db, second.ID, "client", second.Client.ID, "Also waiting.")
 
-			srv, session := newServer(t, db, tc.uid)
+			srv, session := newServer(t, db, staff)
 			defer srv.Close()
 
-			resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply")
+			resp := authedGet(t, session, srv.URL+"/api/practices/"+p.ID+"/messages/awaiting-reply")
 			defer resp.Body.Close()
 			reqtest.RequireStatus(t, resp, http.StatusOK)
 			var out message.AwaitingReplyResponse
@@ -164,7 +160,7 @@ func TestAwaitingReplyHandler_OwnerOrAdminContractorSeesTheWholePractice(t *test
 			for _, item := range out.Items {
 				got[item.EngagementID] = true
 			}
-			if len(out.Items) != 2 || !got[first] || !got[second] {
+			if len(out.Items) != 2 || !got[first.ID] || !got[second.ID] {
 				t.Fatalf("Items = %+v, want both Engagements that await a reply at the Practice -- an Owner or an Admin is not narrowed to her own Attachments", out.Items)
 			}
 		})
@@ -175,14 +171,13 @@ func TestAwaitingReplyHandler_OwnerOrAdminContractorSeesTheWholePractice(t *test
 // activityfeed.TestPracticeHandler_InvalidCursorRejected.
 func TestAwaitingReplyHandler_InvalidCursorRejected(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-awaiting-bad-cursor"
-	practiceID := testdb.SeedPractice(t, db, "Awaiting Bad Cursor Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	p := fixture.Practice(t, db, fixture.PracticeName("Awaiting Bad Cursor Practice"))
+	staff := fixture.Staff(t, db, p)
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply?cursor=not!valid!base64!")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+p.ID+"/messages/awaiting-reply?cursor=not!valid!base64!")
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
@@ -193,22 +188,21 @@ func TestAwaitingReplyHandler_InvalidCursorRejected(t *testing.T) {
 // with no gap or duplicate at the boundary.
 func TestAwaitingReplyHandler_PaginatesAcrossPages(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-awaiting-pages"
-	practiceID := testdb.SeedPractice(t, db, "Awaiting Pages Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	p := fixture.Practice(t, db, fixture.PracticeName("Awaiting Pages Practice"))
+	staff := fixture.Staff(t, db, p)
 
 	const total = 35 // awaitingPageSize (30) + 5, to force a second page
 	engagementIDs := make([]string, total)
 	for i := range total {
-		clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, fmt.Sprintf("Client %d", i), fmt.Sprintf("client-%d@example.com", i))
-		seedMessage(t, db, engagementID, "client", clientID, "Waiting.")
-		engagementIDs[i] = engagementID
+		engagement := fixture.Engagement(t, db, p)
+		seedMessage(t, db, engagement.ID, "client", engagement.Client.ID, "Waiting.")
+		engagementIDs[i] = engagement.ID
 	}
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
-	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply")
+	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+p.ID+"/messages/awaiting-reply")
 	defer firstResp.Body.Close()
 	var first message.AwaitingReplyResponse
 	if err := json.UnmarshalRead(firstResp.Body, &first); err != nil {
@@ -219,7 +213,7 @@ func TestAwaitingReplyHandler_PaginatesAcrossPages(t *testing.T) {
 			len(first.Items), first.HasMore, first.NextCursor)
 	}
 
-	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply?cursor="+*first.NextCursor)
+	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+p.ID+"/messages/awaiting-reply?cursor="+*first.NextCursor)
 	defer secondResp.Body.Close()
 	var second message.AwaitingReplyResponse
 	if err := json.UnmarshalRead(secondResp.Body, &second); err != nil {
@@ -250,23 +244,21 @@ func TestAwaitingReplyHandler_PaginatesAcrossPages(t *testing.T) {
 // TestAwaitingReplyHandler_PaginatesAcrossPages above.
 func TestAwaitingReplyHandler_ContractorPaginatesAcrossPages(t *testing.T) {
 	db := testdb.New(t)
-	const contractorUID = "contractor-awaiting-pages"
-	practiceID := testdb.SeedPractice(t, db, "Awaiting Contractor Pages Practice")
-	contractorID := testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
+	p := fixture.Practice(t, db, fixture.PracticeName("Awaiting Contractor Pages Practice"))
+	contractor := fixture.Staff(t, db, p, fixture.Contractor())
 
 	const total = 35 // awaitingPageSize (30) + 5, to force a second page
 	engagementIDs := make([]string, total)
 	for i := range total {
-		clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, fmt.Sprintf("Attached Client %d", i), fmt.Sprintf("attached-%d@example.com", i))
-		testdb.SeedGrantedAttachment(t, db, engagementID, contractorID)
-		seedMessage(t, db, engagementID, "client", clientID, "Waiting.")
-		engagementIDs[i] = engagementID
+		engagement := fixture.Engagement(t, db, p, fixture.WithDoula(contractor))
+		seedMessage(t, db, engagement.ID, "client", engagement.Client.ID, "Waiting.")
+		engagementIDs[i] = engagement.ID
 	}
 
-	srv, session := newServer(t, db, contractorUID)
+	srv, session := newServer(t, db, contractor)
 	defer srv.Close()
 
-	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply")
+	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+p.ID+"/messages/awaiting-reply")
 	defer firstResp.Body.Close()
 	var first message.AwaitingReplyResponse
 	if err := json.UnmarshalRead(firstResp.Body, &first); err != nil {
@@ -277,7 +269,7 @@ func TestAwaitingReplyHandler_ContractorPaginatesAcrossPages(t *testing.T) {
 			len(first.Items), first.HasMore, first.NextCursor)
 	}
 
-	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply?cursor="+*first.NextCursor)
+	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+p.ID+"/messages/awaiting-reply?cursor="+*first.NextCursor)
 	defer secondResp.Body.Close()
 	var second message.AwaitingReplyResponse
 	if err := json.UnmarshalRead(secondResp.Body, &second); err != nil {

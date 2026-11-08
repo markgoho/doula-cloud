@@ -13,7 +13,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/objectstore"
@@ -27,34 +27,34 @@ import (
 // behind staffauth.Middleware, backed by a fresh in-memory ObjectStore and
 // a fresh in-memory Pusher -- no real GCS bucket or VAPID/push service
 // reachable from api/ tests, per docs/testing/api.md.
-func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
+func newServer(t *testing.T, db *testdb.DB, who fixture.Signer) (srv *httptest.Server, session string) {
 	t.Helper()
-	return newServerWithStoreAndPusher(t, db, uid, objectstore.NewMemoryStore(), push.NewFakePusher())
+	return newServerWithStoreAndPusher(t, db, who, objectstore.NewMemoryStore(), push.NewFakePusher())
 }
 
 // newServerWithStore mirrors newServer but lets the caller inject store
 // directly, so a test can exercise the handler's error-handling around a
 // store failure (e.g. a GCS outage) -- a path MemoryStore's happy path
 // never reaches.
-func newServerWithStore(t *testing.T, db *testdb.DB, uid string, store objectstore.ObjectStore) (srv *httptest.Server, session string) {
+func newServerWithStore(t *testing.T, db *testdb.DB, who fixture.Signer, store objectstore.ObjectStore) (srv *httptest.Server, session string) {
 	t.Helper()
-	return newServerWithStoreAndPusher(t, db, uid, store, push.NewFakePusher())
+	return newServerWithStoreAndPusher(t, db, who, store, push.NewFakePusher())
 }
 
 // newServerWithPusher mirrors newServer but lets the caller inject pusher
 // directly, so a test can inspect what Message creation sent to it.
-func newServerWithPusher(t *testing.T, db *testdb.DB, uid string, pusher push.Pusher) (srv *httptest.Server, session string) {
+func newServerWithPusher(t *testing.T, db *testdb.DB, who fixture.Signer, pusher push.Pusher) (srv *httptest.Server, session string) {
 	t.Helper()
-	return newServerWithStoreAndPusher(t, db, uid, objectstore.NewMemoryStore(), pusher)
+	return newServerWithStoreAndPusher(t, db, who, objectstore.NewMemoryStore(), pusher)
 }
 
-func newServerWithStoreAndPusher(t *testing.T, db *testdb.DB, uid string, store objectstore.ObjectStore, pusher push.Pusher) (srv *httptest.Server, session string) {
+func newServerWithStoreAndPusher(t *testing.T, db *testdb.DB, who fixture.Signer, store objectstore.ObjectStore, pusher push.Pusher) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
 	message.Mount(g, ir, db.App, store, pusher)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+	return httptest.NewServer(mux), fixture.Session(t, db, who)
 }
 
 // failingStore is an objectstore.ObjectStore whose Put and Get always
@@ -124,24 +124,23 @@ var pngBytes = []byte{
 
 func TestCreateHandler_Success(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-creating"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	staffID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, identityUID, "Jamie Doula", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p, fixture.StaffName("Jamie Doula"))
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
 	body, err := json.Marshal(message.CreateRequest{Body: "Hi, checking in on your appointment."})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages", body)
 	defer resp.Body.Close()
 
 	reqtest.RequireStatus(t, resp, http.StatusCreated)
 	out := reqtest.Decode[message.Message](t, resp)
-	if out.MessageID == "" || out.SenderType != "staff" || out.SenderID != staffID ||
+	if out.MessageID == "" || out.SenderType != "staff" || out.SenderID != staff.ID ||
 		out.SenderName != "Jamie Doula" || out.Body != "Hi, checking in on your appointment." || out.CreatedAt.IsZero() {
 		t.Fatalf("unexpected response: %+v", out)
 	}
@@ -149,16 +148,15 @@ func TestCreateHandler_Success(t *testing.T) {
 
 func TestCreateHandler_EmptyBodyRejected(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-empty-body"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "   "})
-	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages", body)
 	defer resp.Body.Close()
 
 	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
@@ -166,15 +164,14 @@ func TestCreateHandler_EmptyBodyRejected(t *testing.T) {
 
 func TestCreateHandler_InvalidJSONBody(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-bad-json"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
-	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", []byte("not json"))
+	resp := authedPost(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages", []byte("not json"))
 	defer resp.Body.Close()
 
 	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
@@ -182,15 +179,14 @@ func TestCreateHandler_InvalidJSONBody(t *testing.T) {
 
 func TestCreateHandler_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-bad-engagement-id"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "hello"})
-	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid/messages", body)
+	resp := authedPost(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/not-a-uuid/messages", body)
 	defer resp.Body.Close()
 
 	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
@@ -205,17 +201,17 @@ func TestCreateHandler_InvalidEngagementID(t *testing.T) {
 // TestRLS_MessagesPracticeTierScopedToOwnPractice, added in #57.
 func TestCreateHandler_NotFoundForEngagementAtDifferentPractice(t *testing.T) {
 	db := testdb.New(t)
-	homePracticeID := testdb.SeedPractice(t, db, "Home Practice")
-	testdb.SeedStaffAtPractice(t, db, homePracticeID, "staff-elsewhere", []string{doulaRole}, "employee")
+	homePractice := fixture.Practice(t, db, fixture.PracticeName("Home Practice"))
+	staff := fixture.Staff(t, db, homePractice)
 
-	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, otherPracticeID, "Other Client", "other@example.com")
+	otherPractice := fixture.Practice(t, db, fixture.PracticeName("Other Practice"))
+	engagement := fixture.Engagement(t, db, otherPractice, fixture.NewClient(fixture.ClientName("Other Client"), fixture.ClientEmail("other@example.com")))
 
-	srv, session := newServer(t, db, "staff-elsewhere")
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "hello"})
-	resp := authedPost(t, session, srv.URL+"/api/practices/"+homePracticeID+"/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/api/practices/"+homePractice.ID+"/engagements/"+engagement.ID+"/messages", body)
 	defer resp.Body.Close()
 
 	reqtest.RequireStatus(t, resp, http.StatusNotFound)
@@ -223,15 +219,14 @@ func TestCreateHandler_NotFoundForEngagementAtDifferentPractice(t *testing.T) {
 
 func TestListHandler_EmptyThread(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-empty-thread"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages")
 	defer resp.Body.Close()
 
 	reqtest.RequireStatus(t, resp, http.StatusOK)
@@ -243,14 +238,13 @@ func TestListHandler_EmptyThread(t *testing.T) {
 
 func TestListHandler_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-list-bad-id"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid/messages")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/not-a-uuid/messages")
 	defer resp.Body.Close()
 
 	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
@@ -263,18 +257,18 @@ func TestListHandler_InvalidEngagementID(t *testing.T) {
 // this is the app-layer check, not messages' own RLS policy.
 func TestListHandler_NotFoundForEngagementAtDifferentPractice(t *testing.T) {
 	db := testdb.New(t)
-	homePracticeID := testdb.SeedPractice(t, db, "Home Practice")
-	testdb.SeedStaffAtPractice(t, db, homePracticeID, "staff-listing-elsewhere", []string{doulaRole}, "employee")
+	homePractice := fixture.Practice(t, db, fixture.PracticeName("Home Practice"))
+	homeStaff := fixture.Staff(t, db, homePractice)
 
-	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
-	otherStaffID := testdb.SeedStaffAtPractice(t, db, otherPracticeID, "staff-owns-thread", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, otherPracticeID, "Other Client", "other@example.com")
-	seedMessage(t, db, engagementID, "staff", otherStaffID, "not visible across practices")
+	otherPractice := fixture.Practice(t, db, fixture.PracticeName("Other Practice"))
+	otherStaff := fixture.Staff(t, db, otherPractice)
+	engagement := fixture.Engagement(t, db, otherPractice, fixture.NewClient(fixture.ClientName("Other Client"), fixture.ClientEmail("other@example.com")))
+	seedMessage(t, db, engagement.ID, "staff", otherStaff.ID, "not visible across practices")
 
-	srv, session := newServer(t, db, "staff-listing-elsewhere")
+	srv, session := newServer(t, db, homeStaff)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+homePracticeID+"/engagements/"+engagementID+"/messages")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+homePractice.ID+"/engagements/"+engagement.ID+"/messages")
 	defer resp.Body.Close()
 
 	reqtest.RequireStatus(t, resp, http.StatusNotFound)
@@ -282,12 +276,11 @@ func TestListHandler_NotFoundForEngagementAtDifferentPractice(t *testing.T) {
 
 func TestListHandler_InvalidCursorRejected(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-bad-cursor"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
 	// Three distinct ways a cursor can be malformed: not valid base64 at
@@ -299,7 +292,7 @@ func TestListHandler_InvalidCursorRejected(t *testing.T) {
 		"YmFkdGltZXxzb21lLWlk", // base64("badtime|some-id")
 	}
 	for _, cursor := range cases {
-		resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages?cursor="+cursor)
+		resp := authedGet(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages?cursor="+cursor)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusBadRequest {
@@ -317,24 +310,24 @@ func TestListHandler_AnyStaffAtSamePracticeSeesAndCanReplyToSameThread(t *testin
 	const messageFromA = "message from A"
 
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Shared Practice")
-	testdb.SeedNamedStaffAtPractice(t, db, practiceID, "staff-a", "Staff A", []string{doulaRole}, "employee")
-	testdb.SeedNamedStaffAtPractice(t, db, practiceID, "staff-b", "Staff B", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Shared Practice"))
+	staffA := fixture.Staff(t, db, p, fixture.StaffName("Staff A"))
+	staffB := fixture.Staff(t, db, p, fixture.StaffName("Staff B"))
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	srvA, sessionA := newServer(t, db, "staff-a")
+	srvA, sessionA := newServer(t, db, staffA)
 	defer srvA.Close()
 	bodyA, _ := json.Marshal(message.CreateRequest{Body: messageFromA})
-	respA := authedPost(t, sessionA, srvA.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", bodyA)
+	respA := authedPost(t, sessionA, srvA.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages", bodyA)
 	defer respA.Body.Close()
 	if respA.StatusCode != http.StatusCreated {
 		t.Fatalf("Staff A create status = %d, want %d", respA.StatusCode, http.StatusCreated)
 	}
 
-	srvB, sessionB := newServer(t, db, "staff-b")
+	srvB, sessionB := newServer(t, db, staffB)
 	defer srvB.Close()
 
-	listResp := authedGet(t, sessionB, srvB.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
+	listResp := authedGet(t, sessionB, srvB.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages")
 	defer listResp.Body.Close()
 	if listResp.StatusCode != http.StatusOK {
 		t.Fatalf("Staff B list status = %d, want %d", listResp.StatusCode, http.StatusOK)
@@ -345,13 +338,13 @@ func TestListHandler_AnyStaffAtSamePracticeSeesAndCanReplyToSameThread(t *testin
 	}
 
 	bodyB, _ := json.Marshal(message.CreateRequest{Body: "reply from B"})
-	replyResp := authedPost(t, sessionB, srvB.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", bodyB)
+	replyResp := authedPost(t, sessionB, srvB.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages", bodyB)
 	defer replyResp.Body.Close()
 	if replyResp.StatusCode != http.StatusCreated {
 		t.Fatalf("Staff B reply status = %d, want %d", replyResp.StatusCode, http.StatusCreated)
 	}
 
-	finalResp := authedGet(t, sessionA, srvA.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
+	finalResp := authedGet(t, sessionA, srvA.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages")
 	defer finalResp.Body.Close()
 	final := reqtest.Decode[message.ListResponse](t, finalResp)
 	if len(final.Items) != 2 {
@@ -368,14 +361,14 @@ func TestListHandler_AnyStaffAtSamePracticeSeesAndCanReplyToSameThread(t *testin
 // gets the same "not found" response an out-of-practice Engagement gets.
 func TestListHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Contractor Messages Practice")
-	testdb.SeedContractorAtPractice(t, db, practiceID, "contractor-unattached-messages")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client-cm@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Contractor Messages Practice"))
+	contractor := fixture.Staff(t, db, p, fixture.Contractor())
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client-cm@example.com")))
 
-	srv, session := newServer(t, db, "contractor-unattached-messages")
+	srv, session := newServer(t, db, contractor)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages")
 	defer resp.Body.Close()
 
 	reqtest.RequireStatus(t, resp, http.StatusNotFound)
@@ -385,15 +378,15 @@ func TestListHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 // other half: an open, granted attachment reaches.
 func TestListHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Contractor Messages Practice 2")
-	staffID := testdb.SeedContractorAtPractice(t, db, practiceID, "contractor-attached-messages")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client-cm2@example.com")
-	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
+	p := fixture.Practice(t, db, fixture.PracticeName("Contractor Messages Practice 2"))
+	staff := fixture.Staff(t, db, p, fixture.Contractor())
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client-cm2@example.com")))
+	testdb.SeedGrantedAttachment(t, db, engagement.ID, staff.ID)
 
-	srv, session := newServer(t, db, "contractor-attached-messages")
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages")
 	defer resp.Body.Close()
 
 	reqtest.RequireStatus(t, resp, http.StatusOK)
@@ -405,20 +398,19 @@ func TestListHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
 // that reaches the remainder with hasMore false.
 func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-paging"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
 	const total = 35 // pageSize (30) + 5, to force a second page
 	for i := range total {
-		seedMessage(t, db, engagementID, "staff", staffID, "message "+string(rune('A'+i%26)))
+		seedMessage(t, db, engagement.ID, "staff", staff.ID, "message "+string(rune('A'+i%26)))
 	}
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
-	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
+	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages")
 	defer firstResp.Body.Close()
 	if firstResp.StatusCode != http.StatusOK {
 		t.Fatalf("first page status = %d, want %d", firstResp.StatusCode, http.StatusOK)
@@ -429,7 +421,7 @@ func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 			len(first.Items), first.HasMore, first.NextCursor)
 	}
 
-	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages?cursor="+*first.NextCursor)
+	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages?cursor="+*first.NextCursor)
 	defer secondResp.Body.Close()
 	if secondResp.StatusCode != http.StatusOK {
 		t.Fatalf("second page status = %d, want %d", secondResp.StatusCode, http.StatusOK)
@@ -459,15 +451,14 @@ func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 // client-declared) content type.
 func TestCreateHandler_AttachmentUploadAndDownloadRoundTrip(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-attachment"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
-	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
+	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages",
 		"Here's the photo", "photo.png", pngBytes)
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusCreated)
@@ -476,7 +467,7 @@ func TestCreateHandler_AttachmentUploadAndDownloadRoundTrip(t *testing.T) {
 		t.Fatalf("attachment metadata = %+v, want image/png photo.png", created)
 	}
 
-	dlResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages/"+created.MessageID+"/attachment")
+	dlResp := authedGet(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages/"+created.MessageID+"/attachment")
 	defer dlResp.Body.Close()
 	if dlResp.StatusCode != http.StatusOK {
 		t.Fatalf("download status = %d, want %d", dlResp.StatusCode, http.StatusOK)
@@ -501,15 +492,14 @@ func TestCreateHandler_AttachmentUploadAndDownloadRoundTrip(t *testing.T) {
 // succeeds as a text-only Message, the same as the JSON path.
 func TestCreateHandler_MultipartTextOnlyNoAttachmentField(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-multipart-text-only"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
-	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
+	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages",
 		"text only, sent as multipart", "", nil)
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusCreated)
@@ -524,15 +514,14 @@ func TestCreateHandler_MultipartTextOnlyNoAttachmentField(t *testing.T) {
 // is present.
 func TestCreateHandler_AttachmentOnlyNoBody(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-attachment-only"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
-	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
+	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages",
 		"", "photo.png", pngBytes)
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusCreated)
@@ -546,16 +535,15 @@ func TestCreateHandler_AttachmentOnlyNoBody(t *testing.T) {
 // content type -- image/* isn't the only kind #56's resolution allows.
 func TestCreateHandler_AttachmentPDFAccepted(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-pdf"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
 	pdfBytes := []byte("%PDF-1.4\nfake pdf content for content-type sniffing\n")
-	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
+	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages",
 		"Here's the contract", "form.pdf", pdfBytes)
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusCreated)
@@ -575,14 +563,13 @@ func TestCreateHandler_AttachmentPDFAccepted(t *testing.T) {
 // let it through.
 func TestCreateHandler_AttachmentTypeList(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-type-list"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
-	url := srv.URL + "/api/practices/" + practiceID + "/engagements/" + engagementID + "/messages"
+	url := srv.URL + "/api/practices/" + p.ID + "/engagements/" + engagement.ID + "/messages"
 
 	accepted := []struct {
 		filename, contentType string
@@ -633,15 +620,14 @@ func TestCreateHandler_AttachmentTypeList(t *testing.T) {
 // -- http.DetectContentType calls no bytes "text/plain" (#1952).
 func TestCreateHandler_AttachmentEmptyRejected(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-empty-attachment"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
-	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
+	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages",
 		"an empty file", "empty.png", nil)
 	defer resp.Body.Close()
 	assertFieldRefusal(t, resp, http.StatusBadRequest, "attachment", message.MsgAttachmentEmpty)
@@ -664,16 +650,15 @@ func assertFieldRefusal(t *testing.T, resp *http.Response, status int, field, wa
 // ever called.
 func TestCreateHandler_AttachmentOversizedRejected(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-oversized"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
 	oversized := bytes.Repeat([]byte("a"), 10<<20+32<<10) // 10MB + 32KB: over the cap, under the request-body ceiling
-	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
+	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages",
 		"too big", "big.png", oversized)
 	defer resp.Body.Close()
 	assertFieldRefusal(t, resp, http.StatusRequestEntityTooLarge, "attachment", message.MsgAttachmentTooLarge)
@@ -686,16 +671,15 @@ func TestCreateHandler_AttachmentOversizedRejected(t *testing.T) {
 // the same "attachment too large" failure from the caller's perspective.
 func TestCreateHandler_RequestWayOversizedRejectedAtParse(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-way-oversized"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
 	wayOversized := bytes.Repeat([]byte("a"), 11<<20) // past maxCreateRequestBytes entirely
-	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
+	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages",
 		"way too big", "big.png", wayOversized)
 	defer resp.Body.Close()
 	assertFieldRefusal(t, resp, http.StatusRequestEntityTooLarge, "attachment", message.MsgAttachmentTooLarge)
@@ -706,15 +690,14 @@ func TestCreateHandler_RequestWayOversizedRejectedAtParse(t *testing.T) {
 // 400, not the 413 reserved for the size failure.
 func TestCreateHandler_MalformedMultipartRejected(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-malformed-multipart"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
-	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", reqtest.Session(session), reqtest.Body("multipart/form-data; boundary=doesnotmatch", []byte("not actually multipart")))
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages", reqtest.Session(session), reqtest.Body("multipart/form-data; boundary=doesnotmatch", []byte("not actually multipart")))
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
@@ -724,15 +707,14 @@ func TestCreateHandler_MalformedMultipartRejected(t *testing.T) {
 // handler too, not just the DB constraint.
 func TestCreateHandler_EmptyBodyAndNoAttachmentRejected(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-empty-multipart"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
-	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", "", "", nil)
+	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages", "", "", nil)
 	defer resp.Body.Close()
 	assertFieldRefusal(t, resp, http.StatusBadRequest, "body", message.MsgMessageOrFile)
 }
@@ -743,15 +725,14 @@ func TestCreateHandler_EmptyBodyAndNoAttachmentRejected(t *testing.T) {
 // #60 built ObjectStore as a seam specifically so this path is testable.
 func TestCreateHandler_StorePutFailureReturns500(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-store-put-fails"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	srv, session := newServerWithStore(t, db, identityUID, failingStore{})
+	srv, session := newServerWithStore(t, db, staff, failingStore{})
 	defer srv.Close()
 
-	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
+	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages",
 		"", "photo.png", pngBytes)
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusInternalServerError)
@@ -763,17 +744,16 @@ func TestCreateHandler_StorePutFailureReturns500(t *testing.T) {
 // bypassing Put) whose ObjectStore.Get fails.
 func TestAttachmentHandler_StoreGetFailureReturns500(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-store-get-fails"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
-	messageID := seedMessageWithAttachment(t, db, engagementID, "staff", staffID,
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
+	messageID := seedMessageWithAttachment(t, db, engagement.ID, "staff", staff.ID,
 		"messages/whatever/path", pngContentType, "photo.png", int64(len(pngBytes)))
 
-	srv, session := newServerWithStore(t, db, identityUID, failingStore{})
+	srv, session := newServerWithStore(t, db, staff, failingStore{})
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages/"+messageID+"/attachment")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages/"+messageID+"/attachment")
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusInternalServerError)
 }
@@ -785,17 +765,16 @@ func TestAttachmentHandler_StoreGetFailureReturns500(t *testing.T) {
 // storage-layer failure.
 func TestAttachmentHandler_StoreGetNotFoundReturns404(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-store-get-not-found"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
-	messageID := seedMessageWithAttachment(t, db, engagementID, "staff", staffID,
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
+	messageID := seedMessageWithAttachment(t, db, engagement.ID, "staff", staff.ID,
 		"messages/never/put", pngContentType, "photo.png", int64(len(pngBytes)))
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages/"+messageID+"/attachment")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages/"+messageID+"/attachment")
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
@@ -804,21 +783,20 @@ func TestAttachmentHandler_StoreGetNotFoundReturns404(t *testing.T) {
 // has no attachment to download.
 func TestAttachmentHandler_NoAttachmentNotFound(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-no-attachment"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
-	seedMessage(t, db, engagementID, "staff", staffID, "text only, no attachment")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
+	seedMessage(t, db, engagement.ID, "staff", staff.ID, "text only, no attachment")
 
 	var messageID string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT id FROM messages WHERE engagement_id = $1`, engagementID).Scan(&messageID); err != nil {
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT id FROM messages WHERE engagement_id = $1`, engagement.ID).Scan(&messageID); err != nil {
 		t.Fatalf("query message id: %v", err)
 	}
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages/"+messageID+"/attachment")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages/"+messageID+"/attachment")
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
@@ -827,15 +805,14 @@ func TestAttachmentHandler_NoAttachmentNotFound(t *testing.T) {
 // is validated the same way engagementId is.
 func TestAttachmentHandler_InvalidMessageID(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-bad-message-id"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages/not-a-uuid/attachment")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages/not-a-uuid/attachment")
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
@@ -844,14 +821,13 @@ func TestAttachmentHandler_InvalidMessageID(t *testing.T) {
 // TestCreateHandler_InvalidEngagementID for the attachment download route.
 func TestAttachmentHandler_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-bad-engagement-attachment"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid/messages/00000000-0000-0000-0000-000000000000/attachment")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/not-a-uuid/messages/00000000-0000-0000-0000-000000000000/attachment")
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
@@ -862,16 +838,16 @@ func TestAttachmentHandler_InvalidEngagementID(t *testing.T) {
 // reach the Engagement at all, let alone its attachment.
 func TestAttachmentHandler_EngagementNotFoundAtDifferentPractice(t *testing.T) {
 	db := testdb.New(t)
-	homePracticeID := testdb.SeedPractice(t, db, "Home Practice")
-	testdb.SeedStaffAtPractice(t, db, homePracticeID, "staff-attachment-elsewhere", []string{doulaRole}, "employee")
+	homePractice := fixture.Practice(t, db, fixture.PracticeName("Home Practice"))
+	staff := fixture.Staff(t, db, homePractice)
 
-	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, otherPracticeID, "Other Client", "other@example.com")
+	otherPractice := fixture.Practice(t, db, fixture.PracticeName("Other Practice"))
+	engagement := fixture.Engagement(t, db, otherPractice, fixture.NewClient(fixture.ClientName("Other Client"), fixture.ClientEmail("other@example.com")))
 
-	srv, session := newServer(t, db, "staff-attachment-elsewhere")
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+homePracticeID+"/engagements/"+engagementID+"/messages/00000000-0000-0000-0000-000000000000/attachment")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+homePractice.ID+"/engagements/"+engagement.ID+"/messages/00000000-0000-0000-0000-000000000000/attachment")
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
@@ -880,14 +856,14 @@ func TestAttachmentHandler_EngagementNotFoundAtDifferentPractice(t *testing.T) {
 // ADR-0008's attachment rule on the attachment-download route too.
 func TestAttachmentHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Contractor Attachment Practice")
-	testdb.SeedContractorAtPractice(t, db, practiceID, "contractor-unattached-download")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client-ca@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Contractor Attachment Practice"))
+	contractor := fixture.Staff(t, db, p, fixture.Contractor())
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client-ca@example.com")))
 
-	srv, session := newServer(t, db, "contractor-unattached-download")
+	srv, session := newServer(t, db, contractor)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages/00000000-0000-0000-0000-000000000000/attachment")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages/00000000-0000-0000-0000-000000000000/attachment")
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
@@ -898,21 +874,20 @@ func TestAttachmentHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 // Engagement's URL, even one at the same Practice.
 func TestAttachmentHandler_WrongEngagementNotFound(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-cross-engagement"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client One", "one@example.com")
-	_, otherEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client Two", "two@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client One"), fixture.ClientEmail("one@example.com")))
+	otherEngagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client Two"), fixture.ClientEmail("two@example.com")))
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
-	createResp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
+	createResp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages",
 		"", "photo.png", pngBytes)
 	defer createResp.Body.Close()
 	created := reqtest.Decode[message.Message](t, createResp)
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+otherEngagementID+"/messages/"+created.MessageID+"/attachment")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+otherEngagement.ID+"/messages/"+created.MessageID+"/attachment")
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
@@ -922,16 +897,15 @@ func TestAttachmentHandler_WrongEngagementNotFound(t *testing.T) {
 // attachment, matching pre-#60 behavior exactly.
 func TestCreateHandler_JSONRequestStillTextOnly(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-json-unchanged"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, staff)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "plain JSON, no attachment"})
-	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages", body)
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusCreated)
 	created := reqtest.Decode[message.Message](t, resp)
@@ -953,36 +927,34 @@ func TestCreateHandler_JSONRequestStillTextOnly(t *testing.T) {
 // but staff_visible_to_own_practice_membership_history refuses a row
 // with deleted_at set.
 func TestListHandler_SenderWhoDeletedHerLoginShowsAFormerColleague(t *testing.T) {
-	const identityUIDSender = "staff-side-deleted-login-sender"
-	const identityUIDReader = "staff-side-deleted-login-reader"
 	const body = "See you Thursday."
 
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Staff Side Deleted Login Practice")
-	senderID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, identityUIDSender, "Maya Okonkwo", []string{doulaRole}, "employee")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUIDReader, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Nadia Client", "nadia-staff-side@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Staff Side Deleted Login Practice"))
+	sender := fixture.Staff(t, db, p, fixture.StaffName("Maya Okonkwo"))
+	staff := fixture.Staff(t, db, p, fixture.Owner())
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Nadia Client"), fixture.ClientEmail("nadia-staff-side@example.com")))
 
-	senderSrv, senderSession := newServer(t, db, identityUIDSender)
+	senderSrv, senderSession := newServer(t, db, sender)
 	defer senderSrv.Close()
 	b, _ := json.Marshal(message.CreateRequest{Body: body})
-	created := authedPost(t, senderSession, senderSrv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", b)
+	created := authedPost(t, senderSession, senderSrv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages", b)
 	defer created.Body.Close()
 	if created.StatusCode != http.StatusCreated {
 		t.Fatalf("create status = %d, want %d", created.StatusCode, http.StatusCreated)
 	}
 
-	testdb.EndMembership(t, db, practiceID, senderID, senderID)
+	testdb.EndMembership(t, db, p.ID, sender.ID, sender.ID)
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`UPDATE staff SET first_name = $1, last_name = $2, deleted_at = now() WHERE id = $3`,
-		staffauth.DeletedStaffFirstName, staffauth.DeletedStaffLastName, senderID,
+		staffauth.DeletedStaffFirstName, staffauth.DeletedStaffLastName, sender.ID,
 	); err != nil {
 		t.Fatalf("redact staff row: %v", err)
 	}
 
-	readerSrv, readerSession := newServer(t, db, identityUIDReader)
+	readerSrv, readerSession := newServer(t, db, staff)
 	defer readerSrv.Close()
-	resp := authedGet(t, readerSession, readerSrv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
+	resp := authedGet(t, readerSession, readerSrv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages")
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusOK)
 
@@ -1004,30 +976,28 @@ func TestListHandler_SenderWhoDeletedHerLoginShowsAFormerColleague(t *testing.T)
 // staff_visible_to_own_practice_membership_history does: the Practice's
 // own Membership history names her, so the thread still does too.
 func TestListHandler_SenderWhoPlainlyLeftStillNamesHer(t *testing.T) {
-	const identityUIDSender = "staff-side-plain-departure-sender"
-	const identityUIDReader = "staff-side-plain-departure-reader"
 	const body = "See you Thursday."
 
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Staff Side Plain Departure Practice")
-	senderID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, identityUIDSender, "Priya Chandra", []string{doulaRole}, "employee")
-	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUIDReader, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Nadia Client", "nadia-staff-side-plain@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Staff Side Plain Departure Practice"))
+	sender := fixture.Staff(t, db, p, fixture.StaffName("Priya Chandra"))
+	owner := fixture.Staff(t, db, p, fixture.Owner())
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Nadia Client"), fixture.ClientEmail("nadia-staff-side-plain@example.com")))
 
-	senderSrv, senderSession := newServer(t, db, identityUIDSender)
+	senderSrv, senderSession := newServer(t, db, sender)
 	defer senderSrv.Close()
 	b, _ := json.Marshal(message.CreateRequest{Body: body})
-	created := authedPost(t, senderSession, senderSrv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", b)
+	created := authedPost(t, senderSession, senderSrv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages", b)
 	defer created.Body.Close()
 	if created.StatusCode != http.StatusCreated {
 		t.Fatalf("create status = %d, want %d", created.StatusCode, http.StatusCreated)
 	}
 
-	testdb.EndMembership(t, db, practiceID, senderID, ownerID)
+	testdb.EndMembership(t, db, p.ID, sender.ID, owner.ID)
 
-	readerSrv, readerSession := newServer(t, db, identityUIDReader)
+	readerSrv, readerSession := newServer(t, db, owner)
 	defer readerSrv.Close()
-	resp := authedGet(t, readerSession, readerSrv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
+	resp := authedGet(t, readerSession, readerSrv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages")
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusOK)
 

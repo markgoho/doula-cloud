@@ -2,11 +2,12 @@ package engagementrequest_test
 
 import (
 	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"net/http"
 	"testing"
 
 	"doula-cloud/api/internal/engagementrequest"
+	"doula-cloud/api/internal/fixture"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
@@ -27,21 +28,6 @@ func requestsURL(base, practiceID, clientID string) string {
 
 func approveURL(base, practiceID, requestID string) string {
 	return base + "/api/practices/" + practiceID + "/engagement-requests/" + requestID + "/approve"
-}
-
-// refusal is the error body docs/api-design.md section 7 gives every
-// refusal.
-type refusal struct {
-	Code    string            `json:"code"`
-	Message string            `json:"message"`
-	Details map[string]string `json:"details"`
-}
-
-func decodeRefusal(t *testing.T, resp response, want int) refusal {
-	t.Helper()
-	var out refusal
-	decode(t, resp, want, &out)
-	return out
 }
 
 // namedDoula reads who a Request names straight from the database.
@@ -116,31 +102,31 @@ func attachmentsOn(t *testing.T, db *testdb.DB, engagementID string) []attachmen
 // screen's read carries her id and her name.
 func TestRequestHandler_APlainDoulaNamesHerself(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	doulaID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "doula-1", "Hana Kim", []string{doulaRole}, employeeType)
-	testdb.SeedStaffAtPractice(t, db, practiceID, "owner-1", []string{ownerRole}, employeeType)
-	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
+	p := fixture.Practice(t, db)
+	doula := fixture.Staff(t, db, p, fixture.StaffName("Hana Kim"))
+	owner := fixture.Staff(t, db, p, fixture.Owner())
+	client := fixture.Client(t, db, p)
 
-	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
+	srv, session := newServer(t, db, doula, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	var out engagementrequest.RequestResponse
-	decode(t, do(t, requestsURL(srv.URL, practiceID, clientID), session,
-		engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate, DoulaStaffID: &doulaID}),
-		http.StatusCreated, &out)
+	outResp := reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate, DoulaStaffID: &doula.ID}))
+	defer outResp.Body.Close()
+	out := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, outResp, http.StatusCreated)
 	if out.State != testStatePending {
 		t.Fatalf("state = %q, want pending", out.State)
 	}
-	if got := namedDoula(t, db, out.RequestID); got == nil || *got != doulaID {
-		t.Fatalf("stored doula = %v, want %s", got, doulaID)
+	if got := namedDoula(t, db, out.RequestID); got == nil || *got != doula.ID {
+		t.Fatalf("stored doula = %v, want %s", got, doula.ID)
 	}
 
-	ownerSrv, ownerSession := newServer(t, db, "owner-1", &tasknudge.FakeEnqueuer{})
+	ownerSrv, ownerSession := newServer(t, db, owner, &tasknudge.FakeEnqueuer{})
 	defer ownerSrv.Close()
-	var detail engagementrequest.DetailResponse
-	decode(t, get(t, detailURL(ownerSrv.URL, practiceID, out.RequestID), ownerSession), http.StatusOK, &detail)
-	if detail.DoulaStaffID == nil || *detail.DoulaStaffID != doulaID || detail.DoulaName == nil || *detail.DoulaName != "Hana Kim" {
-		t.Fatalf("detail doula = %v / %v, want %s / Hana Kim", detail.DoulaStaffID, detail.DoulaName, doulaID)
+	detailResp := reqtest.Get(t, detailURL(ownerSrv.URL, p.ID, out.RequestID), reqtest.Session(ownerSession))
+	defer detailResp.Body.Close()
+	detail := reqtest.DecodeStatus[engagementrequest.DetailResponse](t, detailResp, http.StatusOK)
+	if detail.DoulaStaffID == nil || *detail.DoulaStaffID != doula.ID || detail.DoulaName == nil || *detail.DoulaName != "Hana Kim" {
+		t.Fatalf("detail doula = %v / %v, want %s / Hana Kim", detail.DoulaStaffID, detail.DoulaName, doula.ID)
 	}
 }
 
@@ -149,34 +135,33 @@ func TestRequestHandler_APlainDoulaNamesHerself(t *testing.T) {
 // approval screen's read carries neither field.
 func TestRequestHandler_NoDoulaYetNamesNobody(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	testdb.SeedStaffAtPractice(t, db, practiceID, "owner-1", []string{ownerRole}, employeeType)
-	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
+	p := fixture.Practice(t, db)
+	doula := fixture.Staff(t, db, p)
+	owner := fixture.Staff(t, db, p, fixture.Owner())
+	client := fixture.Client(t, db, p)
 
-	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
+	srv, session := newServer(t, db, doula, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
 	blank := "  "
-	var absent, blanked engagementrequest.RequestResponse
-	decode(t, do(t, requestsURL(srv.URL, practiceID, clientID), session,
-		engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate}), http.StatusCreated, &absent)
-	decode(t, do(t, requestsURL(srv.URL, practiceID, clientID), session,
-		engagementrequest.RequestBody{Kind: testKindPostpartum, DoulaStaffID: &blank}), http.StatusCreated, &blanked)
+	absentResp := reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate}))
+	defer absentResp.Body.Close()
+	absent := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, absentResp, http.StatusCreated)
+	blankedResp := reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindPostpartum, DoulaStaffID: &blank}))
+	defer blankedResp.Body.Close()
+	blanked := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, blankedResp, http.StatusCreated)
 	for _, requestID := range []string{absent.RequestID, blanked.RequestID} {
 		if got := namedDoula(t, db, requestID); got != nil {
 			t.Fatalf("stored doula = %v, want none", *got)
 		}
 	}
 
-	ownerSrv, ownerSession := newServer(t, db, "owner-1", &tasknudge.FakeEnqueuer{})
+	ownerSrv, ownerSession := newServer(t, db, owner, &tasknudge.FakeEnqueuer{})
 	defer ownerSrv.Close()
-	resp := get(t, detailURL(ownerSrv.URL, practiceID, absent.RequestID), ownerSession)
-	expectStatus(t, resp, http.StatusOK)
-	var raw map[string]jsontext.Value
-	if err := json.Unmarshal(resp.body, &raw); err != nil {
-		t.Fatalf("decode detail: %v", err)
-	}
+	resp := reqtest.Get(t, detailURL(ownerSrv.URL, p.ID, absent.RequestID), reqtest.Session(ownerSession))
+	defer resp.Body.Close()
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	raw := reqtest.Decode[map[string]jsontext.Value](t, resp)
 	if _, has := raw["doulaStaffId"]; has {
 		t.Fatalf("detail carries doulaStaffId %s, want it absent for No Doula yet", raw["doulaStaffId"])
 	}

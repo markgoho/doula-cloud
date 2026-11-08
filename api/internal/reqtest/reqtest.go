@@ -154,11 +154,20 @@ func Decode[T any](t *testing.T, resp *http.Response) T {
 	return out
 }
 
-// RequireStatus fails the test unless resp carries want.
+// RequireStatus fails the test, naming the body the response carried,
+// unless resp carries want.
 func RequireStatus(t *testing.T, resp *http.Response, want int) {
 	t.Helper()
 	if resp.StatusCode != want {
 		// coverage:ignore reason: the failure branch ends the calling test by design; exercising it would need a testing.T substitute this repo has no precedent for
-		t.Fatalf("status = %d, want %d", resp.StatusCode, want)
+		t.Fatalf("status = %d, want %d: %s", resp.StatusCode, want, ReadBody(t, resp))
 	}
+}
+
+// DecodeStatus is RequireStatus then Decode, for a test that asserts the
+// status and reads the body in one step.
+func DecodeStatus[T any](t *testing.T, resp *http.Response, want int) T {
+	t.Helper()
+	RequireStatus(t, resp, want)
+	return Decode[T](t, resp)
 }

@@ -1,16 +1,13 @@
 package engagementrequest_test
 
 import (
-	"encoding/json/v2"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/engagementrequest"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/idempotency"
-	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -32,120 +29,25 @@ const (
 
 // newServer mounts this package's whole surface through
 // engagementrequest.Mount, the same call main.go makes on the real
-// GatedRouter and idempotency.Router, and seeds a live session for uid.
-func newServer(t *testing.T, db *testdb.DB, uid string, enq tasknudge.Enqueuer) (srv *httptest.Server, session string) {
+// GatedRouter and idempotency.Router, and seeds a live session for who.
+func newServer(t *testing.T, db *testdb.DB, who fixture.StaffRecord, enq tasknudge.Enqueuer) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
 	engagementrequest.Mount(g, ir, db.App, enq)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
-}
-
-// response is one finished exchange -- status and body, with the
-// http.Response already closed.
-type response struct {
-	status int
-	body   []byte
-}
-
-// do POSTs body (or an empty body when nil) carrying session's __session
-// cookie, reads the whole response, and closes it. Every endpoint in this
-// package is a POST, so the method is fixed rather than a parameter.
-func do(t *testing.T, url, session string, body any) response {
-	t.Helper()
-	var payload []byte
-	if body != nil {
-		encoded, err := json.Marshal(body)
-		if err != nil {
-			t.Fatalf("marshal body: %v", err)
-		}
-		payload = encoded
-	}
-	resp := reqtest.Post(t, url, reqtest.Session(session), reqtest.Body("", payload))
-	defer func() { _ = resp.Body.Close() }()
-	read, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read body: %v", err)
-	}
-	return response{status: resp.StatusCode, body: read}
-}
-
-// get GETs url carrying session's __session cookie -- the one read path
-// in this package (DetailHandler), next to do's POST-only exchanges.
-func get(t *testing.T, url, session string) response {
-	t.Helper()
-	resp := reqtest.Get(t, url, reqtest.Session(session))
-	defer func() { _ = resp.Body.Close() }()
-	read, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read body: %v", err)
-	}
-	return response{status: resp.StatusCode, body: read}
-}
-
-// decode unmarshals a response body into out, failing the test if the
-// status is not want.
-func decode(t *testing.T, resp response, want int, out any) {
-	t.Helper()
-	expectStatus(t, resp, want)
-	if out == nil {
-		return
-	}
-	if err := json.Unmarshal(resp.body, out); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
-}
-
-// expectStatus fails unless resp's status is want.
-func expectStatus(t *testing.T, resp response, want int) {
-	t.Helper()
-	if resp.status != want {
-		t.Fatalf("status = %d, want %d: %s", resp.status, want, resp.body)
-	}
-}
-
-// seedEngagementInStatus inserts an Engagement for an existing clientID
-// at practiceID with the given status ('intake', 'active', 'postpartum',
-// or 'completed'). Stays local under this name rather than testdb:
-// callers here already have a Client seeded (testdb.SeedNamedClient) and
-// only need a second/explicit-status Engagement added to it, the one
-// shape testdb.SeedEngagementInStatus (which always seeds its own new
-// Client) doesn't cover.
-func seedEngagementInStatus(t *testing.T, db *testdb.DB, practiceID, clientID, status string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, kind, status, ending_reason, birth_outcome)
-		 VALUES ($1, $2, 'birth', $3::engagement_status, $4, $5)`,
-		clientID, practiceID, status,
-		testdb.EndingReasonForStatus(status), testdb.BirthOutcomeForStatus(status),
-	); err != nil {
-		t.Fatalf("seed engagement: %v", err)
-	}
-}
-
-// seedCredits appends a signup_bonus credit_ledger row giving practiceID
-// a balance of 3 -- every test that needs a nonzero balance needs the
-// same amount, so this takes no quantity parameter.
-func seedCredits(t *testing.T, db *testdb.DB, practiceID string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO credit_ledger (practice_id, origin, quantity) VALUES ($1, 'signup_bonus', 3)`,
-		practiceID,
-	); err != nil {
-		t.Fatalf("seed credits: %v", err)
-	}
+	return httptest.NewServer(mux), fixture.Session(t, db, who)
 }
 
 // pendingRequest inserts a pending engagement_requests row directly,
 // bypassing the endpoint, for tests exercising approve/refuse/withdraw in
 // isolation.
-func pendingRequest(t *testing.T, db *testdb.DB, practiceID, clientID, kind, requestedBy string) (requestID string) {
+func pendingRequest(t *testing.T, db *testdb.DB, p fixture.PracticeRecord, c fixture.ClientRecord, kind string, requestedBy fixture.StaffRecord) (requestID string) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
 		`INSERT INTO engagement_requests (practice_id, client_id, kind, due_date, requested_by)
 		 VALUES ($1, $2, $3::engagement_kind, $4, $5) RETURNING id`,
-		practiceID, clientID, kind, testDueDate, requestedBy,
+		p.ID, c.ID, kind, testDueDate, requestedBy.ID,
 	).Scan(&requestID); err != nil {
 		t.Fatalf("seed pending request: %v", err)
 	}

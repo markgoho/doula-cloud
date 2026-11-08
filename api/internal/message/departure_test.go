@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/objectstore"
@@ -28,17 +28,15 @@ import (
 // reaches her row for every Staff-side reader, not only the Activity
 // feed it was written for.
 func TestRemoveMembershipHandler_LeavesHerNamedInThreadAndSchedule(t *testing.T) {
-	const ownerUID = "departure-e2e-owner"
-	const doulaUID = "departure-e2e-doula"
 	const doulaName = "Priya Chandra"
 
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Departure End To End Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, ownerUID, []string{ownerRole}, "employee")
-	doulaID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, doulaUID, doulaName, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Nadia Client", "nadia-departure-e2e@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Departure End To End Practice"))
+	owner := fixture.Staff(t, db, p, fixture.Owner())
+	doula := fixture.Staff(t, db, p, fixture.StaffName(doulaName))
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Nadia Client"), fixture.ClientEmail("nadia-departure-e2e@example.com")))
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO visits (engagement_id, staff_id) VALUES ($1, $2)`, engagementID, doulaID,
+		`INSERT INTO visits (engagement_id, staff_id) VALUES ($1, $2)`, engagement.ID, doula.ID,
 	); err != nil {
 		t.Fatalf("seed visit: %v", err)
 	}
@@ -54,10 +52,10 @@ func TestRemoveMembershipHandler_LeavesHerNamedInThreadAndSchedule(t *testing.T)
 		"test mount of the production route", false, staffauth.OwnerOnly, staffauth.RemoveMembershipHandler())
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	ownerSession := authntest.SeedSession(t, db.App, ownerUID)
-	doulaSession := authntest.SeedSession(t, db.App, doulaUID)
+	ownerSession := fixture.Session(t, db, owner)
+	doulaSession := fixture.Session(t, db, doula)
 
-	engagementURL := srv.URL + "/api/practices/" + practiceID + "/engagements/" + engagementID
+	engagementURL := srv.URL + "/api/practices/" + p.ID + "/engagements/" + engagement.ID
 	b, _ := json.Marshal(message.CreateRequest{Body: "See you Thursday."})
 	created := authedPost(t, doulaSession, engagementURL+"/messages", b)
 	defer created.Body.Close()
@@ -65,7 +63,7 @@ func TestRemoveMembershipHandler_LeavesHerNamedInThreadAndSchedule(t *testing.T)
 		t.Fatalf("create status = %d, want %d", created.StatusCode, http.StatusCreated)
 	}
 
-	removed := reqtest.Delete(t, srv.URL+"/api/practices/"+practiceID+"/staff/"+doulaID+"/membership", reqtest.Session(ownerSession), reqtest.Header("X-Confirmed", "true"))
+	removed := reqtest.Delete(t, srv.URL+"/api/practices/"+p.ID+"/staff/"+doula.ID+"/membership", reqtest.Session(ownerSession), reqtest.Header("X-Confirmed", "true"))
 	defer removed.Body.Close()
 	if removed.StatusCode != http.StatusNoContent {
 		t.Fatalf("remove status = %d, want %d", removed.StatusCode, http.StatusNoContent)

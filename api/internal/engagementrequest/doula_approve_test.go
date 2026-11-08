@@ -7,7 +7,10 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/engagementrequest"
+	"doula-cloud/api/internal/fixture"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
@@ -49,26 +52,26 @@ func doulaAttachedRows(t *testing.T, db *testdb.DB, engagementID string) (actors
 // attached her.
 func TestApproveHandler_AttachesTheNamedDoula(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	adminID := testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
-	seedCredits(t, db, practiceID)
-	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
-	requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, doulaID)
-	nameDoula(t, db, requestID, doulaID)
+	p := fixture.Practice(t, db, fixture.Credits(3))
+	doula := fixture.Staff(t, db, p)
+	admin := fixture.Staff(t, db, p, fixture.Admin())
+	client := fixture.Client(t, db, p)
+	requestID := pendingRequest(t, db, p, client, testKindBirth, doula)
+	nameDoula(t, db, requestID, doula.ID)
 
-	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
+	srv, session := newServer(t, db, admin, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	var out engagementrequest.ApproveResponse
-	decode(t, do(t, approveURL(srv.URL, practiceID, requestID), session, nil), http.StatusOK, &out)
+	outResp := reqtest.Post(t, approveURL(srv.URL, p.ID, requestID), reqtest.Session(session))
+	defer outResp.Body.Close()
+	out := reqtest.DecodeStatus[engagementrequest.ApproveResponse](t, outResp, http.StatusOK)
 
 	got := attachmentsOn(t, db, out.EngagementID)
 	if len(got) != 1 {
 		t.Fatalf("attachments = %d, want exactly 1", len(got))
 	}
 	a := got[0]
-	if a.staffID != doulaID || a.origin != grantedOrigin || a.attachedBy != adminID || !a.open {
+	if a.staffID != doula.ID || a.origin != grantedOrigin || a.attachedBy != admin.ID || !a.open {
 		t.Fatalf("attachment = %+v, want an open granted one for the Doula, attached by the approver", a)
 	}
 	if a.feeAmountCents != nil || a.feeTerms != nil {
@@ -76,7 +79,7 @@ func TestApproveHandler_AttachesTheNamedDoula(t *testing.T) {
 	}
 
 	actors, doulas := doulaAttachedRows(t, db, out.EngagementID)
-	if len(actors) != 1 || actors[0] != adminID || doulas[0] != doulaID {
+	if len(actors) != 1 || actors[0] != admin.ID || doulas[0] != doula.ID {
 		t.Fatalf("doula_attached rows = actors %v doulas %v, want one by the approver naming the Doula", actors, doulas)
 	}
 }
@@ -90,29 +93,29 @@ func TestApproveHandler_AttachesAnOwnerOrAdminWhoIsAContractorDoula(t *testing.T
 	for _, role := range []string{ownerRole, adminRole} {
 		t.Run(role, func(t *testing.T) {
 			db := testdb.New(t)
-			practiceID := testdb.SeedPractice(t, db, "Test Practice")
-			namedID := testdb.SeedStaffAtPractice(t, db, practiceID, "named-1", []string{role, doulaRole}, contractorType)
-			approverID := testdb.SeedStaffAtPractice(t, db, practiceID, "approver-1", []string{adminRole}, employeeType)
-			seedCredits(t, db, practiceID)
-			clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
-			requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, namedID)
-			nameDoula(t, db, requestID, namedID)
+			p := fixture.Practice(t, db, fixture.Credits(3))
+			named := fixture.Staff(t, db, p, fixture.Roles(role, doulaRole), fixture.Contractor())
+			approver := fixture.Staff(t, db, p, fixture.Admin())
+			client := fixture.Client(t, db, p)
+			requestID := pendingRequest(t, db, p, client, testKindBirth, named)
+			nameDoula(t, db, requestID, named.ID)
 
-			srv, session := newServer(t, db, "approver-1", &tasknudge.FakeEnqueuer{})
+			srv, session := newServer(t, db, approver, &tasknudge.FakeEnqueuer{})
 			defer srv.Close()
 
-			var out engagementrequest.ApproveResponse
-			decode(t, do(t, approveURL(srv.URL, practiceID, requestID), session, nil), http.StatusOK, &out)
+			outResp := reqtest.Post(t, approveURL(srv.URL, p.ID, requestID), reqtest.Session(session))
+			defer outResp.Body.Close()
+			out := reqtest.DecodeStatus[engagementrequest.ApproveResponse](t, outResp, http.StatusOK)
 
 			got := attachmentsOn(t, db, out.EngagementID)
-			if len(got) != 1 || got[0].staffID != namedID || got[0].origin != grantedOrigin || got[0].attachedBy != approverID || !got[0].open {
+			if len(got) != 1 || got[0].staffID != named.ID || got[0].origin != grantedOrigin || got[0].attachedBy != approver.ID || !got[0].open {
 				t.Fatalf("attachments = %+v, want one open granted one for the named Doula, attached by the approver", got)
 			}
 			if got[0].feeAmountCents != nil || got[0].feeTerms != nil {
 				t.Fatalf("attachment fee = %v / %v, want none: a fee is only ever copied from an Offer", got[0].feeAmountCents, got[0].feeTerms)
 			}
 			actors, doulas := doulaAttachedRows(t, db, out.EngagementID)
-			if len(actors) != 1 || actors[0] != approverID || doulas[0] != namedID {
+			if len(actors) != 1 || actors[0] != approver.ID || doulas[0] != named.ID {
 				t.Fatalf("doula_attached rows = actors %v doulas %v, want one by the approver naming the Doula", actors, doulas)
 			}
 		})
@@ -123,18 +126,18 @@ func TestApproveHandler_AttachesAnOwnerOrAdminWhoIsAContractorDoula(t *testing.T
 // answer at approval: the Engagement exists with nobody on it.
 func TestApproveHandler_NoDoulaYetWritesNoAttachment(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
-	seedCredits(t, db, practiceID)
-	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
-	requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, doulaID)
+	p := fixture.Practice(t, db, fixture.Credits(3))
+	doula := fixture.Staff(t, db, p)
+	admin := fixture.Staff(t, db, p, fixture.Admin())
+	client := fixture.Client(t, db, p)
+	requestID := pendingRequest(t, db, p, client, testKindBirth, doula)
 
-	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
+	srv, session := newServer(t, db, admin, &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	var out engagementrequest.ApproveResponse
-	decode(t, do(t, approveURL(srv.URL, practiceID, requestID), session, nil), http.StatusOK, &out)
+	outResp := reqtest.Post(t, approveURL(srv.URL, p.ID, requestID), reqtest.Session(session))
+	defer outResp.Body.Close()
+	out := reqtest.DecodeStatus[engagementrequest.ApproveResponse](t, outResp, http.StatusOK)
 
 	if got := attachmentsOn(t, db, out.EngagementID); len(got) != 0 {
 		t.Fatalf("attachments = %+v, want none for No Doula yet", got)
@@ -153,39 +156,40 @@ func TestApproveHandler_NoDoulaYetWritesNoAttachment(t *testing.T) {
 func TestApproveHandler_RefusesADoulaWhoCanNoLongerBeAttached(t *testing.T) {
 	cases := []struct {
 		name   string
-		change func(t *testing.T, db *testdb.DB, practiceID, doulaID, adminID string)
+		change func(t *testing.T, db *testdb.DB, p fixture.PracticeRecord, doula, admin fixture.StaffRecord)
 		reason string
 	}{
-		{"her Membership ended", func(t *testing.T, db *testdb.DB, practiceID, doulaID, adminID string) {
+		{"her Membership ended", func(t *testing.T, db *testdb.DB, p fixture.PracticeRecord, doula, admin fixture.StaffRecord) {
 			t.Helper()
-			testdb.EndMembership(t, db, practiceID, doulaID, adminID)
+			testdb.EndMembership(t, db, p.ID, doula.ID, admin.ID)
 		}, "no longer Staff at this Practice"},
-		{"she is now a contractor", func(t *testing.T, db *testdb.DB, practiceID, doulaID, _ string) {
+		{"she is now a contractor", func(t *testing.T, db *testdb.DB, p fixture.PracticeRecord, doula, _ fixture.StaffRecord) {
 			t.Helper()
-			setMembership(t, db, practiceID, doulaID, "{doula}", contractorType)
+			setMembership(t, db, p.ID, doula.ID, "{doula}", contractorType)
 		}, "Hana Kim is now a contractor"},
-		{"she no longer holds the Doula role", func(t *testing.T, db *testdb.DB, practiceID, doulaID, _ string) {
+		{"she no longer holds the Doula role", func(t *testing.T, db *testdb.DB, p fixture.PracticeRecord, doula, _ fixture.StaffRecord) {
 			t.Helper()
-			setMembership(t, db, practiceID, doulaID, "{admin}", employeeType)
+			setMembership(t, db, p.ID, doula.ID, "{admin}", employeeType)
 		}, "Hana Kim no longer holds the Doula role"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			db := testdb.New(t)
-			practiceID := testdb.SeedPractice(t, db, "Test Practice")
-			askerID := testdb.SeedStaffAtPractice(t, db, practiceID, "asker-1", []string{doulaRole}, employeeType)
-			doulaID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "doula-1", "Hana Kim", []string{doulaRole}, employeeType)
-			adminID := testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
-			seedCredits(t, db, practiceID)
-			clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
-			requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, askerID)
-			nameDoula(t, db, requestID, doulaID)
-			tc.change(t, db, practiceID, doulaID, adminID)
+			p := fixture.Practice(t, db, fixture.Credits(3))
+			asker := fixture.Staff(t, db, p)
+			doula := fixture.Staff(t, db, p, fixture.StaffName("Hana Kim"))
+			admin := fixture.Staff(t, db, p, fixture.Admin())
+			client := fixture.Client(t, db, p)
+			requestID := pendingRequest(t, db, p, client, testKindBirth, asker)
+			nameDoula(t, db, requestID, doula.ID)
+			tc.change(t, db, p, doula, admin)
 
-			srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
+			srv, session := newServer(t, db, admin, &tasknudge.FakeEnqueuer{})
 			defer srv.Close()
 
-			got := decodeRefusal(t, do(t, approveURL(srv.URL, practiceID, requestID), session, nil), http.StatusConflict)
+			gotResp := reqtest.Post(t, approveURL(srv.URL, p.ID, requestID), reqtest.Session(session))
+			defer gotResp.Body.Close()
+			got := reqtest.DecodeStatus[apierr.APIError](t, gotResp, http.StatusConflict)
 			if !strings.Contains(got.Message, tc.reason) {
 				t.Fatalf("refusal message = %q, want it to name the reason %q", got.Message, tc.reason)
 			}
@@ -195,10 +199,10 @@ func TestApproveHandler_RefusesADoulaWhoCanNoLongerBeAttached(t *testing.T) {
 			if row := readRequest(t, db, requestID); row.state != testStatePending || row.decidedBy != nil {
 				t.Fatalf("request row = %+v, want it still pending", row)
 			}
-			if n := countRows(t, db, "engagements", practiceID); n != 0 {
+			if n := countRows(t, db, "engagements", p.ID); n != 0 {
 				t.Fatalf("engagements rows = %d, want 0", n)
 			}
-			if n := creditLedgerCount(t, db, practiceID); n != 1 {
+			if n := creditLedgerCount(t, db, p.ID); n != 1 {
 				t.Fatalf("credit_ledger rows = %d, want 1 (the signup bonus, nothing spent)", n)
 			}
 		})

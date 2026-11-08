@@ -3,6 +3,7 @@ package message_test
 import (
 	"testing"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -16,10 +17,10 @@ import (
 // genuinely exists.
 func TestRLS_MessagesFailsClosedWithNoSessionVarsSet(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Fail Closed Practice")
-	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "fail-closed-staff", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Some Client", "some@example.com")
-	seedMessage(t, db, engagementID, "staff", staffID, "hello")
+	p := fixture.Practice(t, db, fixture.PracticeName("Fail Closed Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Some Client"), fixture.ClientEmail("some@example.com")))
+	seedMessage(t, db, engagement.ID, "staff", staff.ID, "hello")
 
 	count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM messages`)
 	if count != 0 {
@@ -33,21 +34,21 @@ func TestRLS_MessagesFailsClosedWithNoSessionVarsSet(t *testing.T) {
 // Practice gets zero rows, per the ticket's acceptance criteria.
 func TestRLS_MessagesPracticeTierScopedToOwnPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := testdb.SeedPractice(t, db, "Practice A")
-	staffA := testdb.SeedStaffAtPractice(t, db, practiceA, "staff-a", []string{doulaRole}, "employee")
-	_, engagementA := testdb.SeedNamedEngagement(t, db, practiceA, "Client A", "a@example.com")
-	seedMessage(t, db, engagementA, "staff", staffA, "message at A")
+	practiceA := fixture.Practice(t, db, fixture.PracticeName("Practice A"))
+	staffA := fixture.Staff(t, db, practiceA)
+	engagementA := fixture.Engagement(t, db, practiceA, fixture.NewClient(fixture.ClientName("Client A"), fixture.ClientEmail("a@example.com")))
+	seedMessage(t, db, engagementA.ID, "staff", staffA.ID, "message at A")
 
-	practiceB := testdb.SeedPractice(t, db, "Practice B")
-	testdb.SeedStaffAtPractice(t, db, practiceB, "staff-b", []string{doulaRole}, "employee")
+	practiceB := fixture.Practice(t, db, fixture.PracticeName("Practice B"))
+	fixture.Staff(t, db, practiceB)
 
-	tx := db.BeginAs(t, testdb.Practice(practiceA))
+	tx := db.BeginAs(t, testdb.Practice(practiceA.ID))
 	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM messages`)
 	if count != 1 {
 		t.Fatalf("expected Practice A to see its own message, got count = %d", count)
 	}
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceB); err != nil {
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceB.ID); err != nil {
 		t.Fatalf("set_config: %v", err)
 	}
 	count = testdb.Scalar[int](t, tx, `SELECT count(*) FROM messages`)
@@ -62,19 +63,19 @@ func TestRLS_MessagesPracticeTierScopedToOwnPractice(t *testing.T) {
 // rows, per the ticket's acceptance criteria.
 func TestRLS_MessagesClientTierScopedToOwnEngagement(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientA, engagementA := testdb.SeedNamedEngagement(t, db, practiceID, "Client A", "a@example.com")
-	seedMessage(t, db, engagementA, "client", clientA, "message from client A")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	engagementA := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client A"), fixture.ClientEmail("a@example.com")))
+	seedMessage(t, db, engagementA.ID, "client", engagementA.Client.ID, "message from client A")
 
-	clientB, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Client B", "b@example.com")
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client B"), fixture.ClientEmail("b@example.com")))
 
-	tx := db.BeginAs(t, testdb.Client(clientA))
+	tx := db.BeginAs(t, testdb.Client(engagementA.Client.ID))
 	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM messages`)
 	if count != 1 {
 		t.Fatalf("expected Client A to see its own Engagement's message, got count = %d", count)
 	}
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientB); err != nil {
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, engagement.Client.ID); err != nil {
 		t.Fatalf("set_config: %v", err)
 	}
 	count = testdb.Scalar[int](t, tx, `SELECT count(*) FROM messages`)
@@ -90,15 +91,15 @@ func TestRLS_MessagesClientTierScopedToOwnEngagement(t *testing.T) {
 // connection RLS actually applies to.
 func TestRLS_MessagesPracticeTierAllowsStaffInsert(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Insert Practice")
-	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "insert-staff", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Insert Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	tx := db.BeginAs(t, testdb.Practice(practiceID))
+	tx := db.BeginAs(t, testdb.Practice(p.ID))
 
 	if _, err := tx.ExecContext(t.Context(),
 		`INSERT INTO messages (engagement_id, sender_type, sender_id, body) VALUES ($1, 'staff', $2, 'hello from staff')`,
-		engagementID, staffID,
+		engagement.ID, staff.ID,
 	); err != nil {
 		t.Fatalf("expected Staff INSERT to be allowed with a Practice context set, got error: %v", err)
 	}
@@ -110,14 +111,14 @@ func TestRLS_MessagesPracticeTierAllowsStaffInsert(t *testing.T) {
 // can INSERT a Message through db.App.
 func TestRLS_MessagesClientTierAllowsClientInsert(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Insert Practice")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Insert Practice"))
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	tx := db.BeginAs(t, testdb.Client(clientID))
+	tx := db.BeginAs(t, testdb.Client(engagement.Client.ID))
 
 	if _, err := tx.ExecContext(t.Context(),
 		`INSERT INTO messages (engagement_id, sender_type, sender_id, body) VALUES ($1, 'client', $2, 'hello from client')`,
-		engagementID, clientID,
+		engagement.ID, engagement.Client.ID,
 	); err != nil {
 		t.Fatalf("expected Client INSERT to be allowed with a Client context set, got error: %v", err)
 	}
@@ -130,13 +131,13 @@ func TestRLS_MessagesClientTierAllowsClientInsert(t *testing.T) {
 // policies under test elsewhere in this file.
 func TestMessages_HasContentConstraintRejectsEmptyMessage(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "staff-empty-msg", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
 	_, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO messages (engagement_id, sender_type, sender_id) VALUES ($1, 'staff', $2)`,
-		engagementID, staffID,
+		engagement.ID, staff.ID,
 	)
 	if err == nil {
 		t.Fatal("expected INSERT with neither body nor attachment to be rejected, got no error")
@@ -149,14 +150,14 @@ func TestMessages_HasContentConstraintRejectsEmptyMessage(t *testing.T) {
 // TestMessages_HasContentConstraintRejectsEmptyMessage above.
 func TestMessages_AttachmentColumnsMustAllBeSetTogether(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "staff-partial-attachment", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
 	_, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO messages (engagement_id, sender_type, sender_id, attachment_object_path)
 		 VALUES ($1, 'staff', $2, 'objects/some-file.png')`,
-		engagementID, staffID,
+		engagement.ID, staff.ID,
 	)
 	if err == nil {
 		t.Fatal("expected INSERT with only attachment_object_path set to be rejected, got no error")
@@ -168,9 +169,9 @@ func TestMessages_AttachmentColumnsMustAllBeSetTogether(t *testing.T) {
 // even though a matching row genuinely exists.
 func TestRLS_PushSubscriptionsFailsClosedWithNoSessionVarsSet(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "fail-closed-push-staff", []string{doulaRole}, "employee")
-	testdb.SeedPushSubscription(t, db, "staff", staffID, "https://push.example.com/fail-closed")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	testdb.SeedPushSubscription(t, db, "staff", staff.ID, "https://push.example.com/fail-closed")
 
 	count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM push_subscriptions`)
 	if count != 0 {
@@ -187,15 +188,15 @@ func TestRLS_PushSubscriptionsFailsClosedWithNoSessionVarsSet(t *testing.T) {
 // to which subscription is visible.
 func TestRLS_PushSubscriptionsStaffScopedToOwnIdentity(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := testdb.SeedPractice(t, db, "Practice A")
-	staffA := testdb.SeedStaffAtPractice(t, db, practiceA, "push-staff-a", []string{doulaRole}, "employee")
-	subA := testdb.SeedPushSubscription(t, db, "staff", staffA, "https://push.example.com/staff-a")
+	practiceA := fixture.Practice(t, db, fixture.PracticeName("Practice A"))
+	staffA := fixture.Staff(t, db, practiceA)
+	subA := testdb.SeedPushSubscription(t, db, "staff", staffA.ID, "https://push.example.com/staff-a")
 
-	practiceB := testdb.SeedPractice(t, db, "Practice B")
-	staffB := testdb.SeedStaffAtPractice(t, db, practiceB, "push-staff-b", []string{doulaRole}, "employee")
-	testdb.SeedPushSubscription(t, db, "staff", staffB, "https://push.example.com/staff-b")
+	practiceB := fixture.Practice(t, db, fixture.PracticeName("Practice B"))
+	staffB := fixture.Staff(t, db, practiceB)
+	testdb.SeedPushSubscription(t, db, "staff", staffB.ID, "https://push.example.com/staff-b")
 
-	tx := db.BeginAs(t, testdb.Identity("push-staff-a"), testdb.Practice(practiceA))
+	tx := db.BeginAs(t, testdb.Identity(staffA.UID), testdb.Practice(practiceA.ID))
 
 	var visibleIDs []string
 	rows, err := tx.QueryContext(t.Context(), `SELECT id FROM push_subscriptions`)
@@ -224,14 +225,14 @@ func TestRLS_PushSubscriptionsStaffScopedToOwnIdentity(t *testing.T) {
 // own subscription row specifically, never another Client's.
 func TestRLS_PushSubscriptionsClientScopedToOwnIdentity(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientA, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Client A", "a@example.com")
-	subA := testdb.SeedPushSubscription(t, db, "client", clientA, "https://push.example.com/client-a")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client A"), fixture.ClientEmail("a@example.com")))
+	subA := testdb.SeedPushSubscription(t, db, "client", engagement.Client.ID, "https://push.example.com/client-a")
 
-	clientB, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Client B", "b@example.com")
-	testdb.SeedPushSubscription(t, db, "client", clientB, "https://push.example.com/client-b")
+	engagement2 := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client B"), fixture.ClientEmail("b@example.com")))
+	testdb.SeedPushSubscription(t, db, "client", engagement2.Client.ID, "https://push.example.com/client-b")
 
-	tx := db.BeginAs(t, testdb.Client(clientA))
+	tx := db.BeginAs(t, testdb.Client(engagement.Client.ID))
 
 	var visibleIDs []string
 	rows, err := tx.QueryContext(t.Context(), `SELECT id FROM push_subscriptions`)
@@ -261,15 +262,15 @@ func TestRLS_PushSubscriptionsClientScopedToOwnIdentity(t *testing.T) {
 // current_staff_id()) through db.App.
 func TestRLS_PushSubscriptionsStaffTierAllowsInsert(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "insert-push-staff", []string{doulaRole}, "employee")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
 
-	tx := db.BeginAs(t, testdb.Identity("insert-push-staff"), testdb.Practice(practiceID))
+	tx := db.BeginAs(t, testdb.Identity(staff.UID), testdb.Practice(p.ID))
 
 	if _, err := tx.ExecContext(t.Context(),
 		`INSERT INTO push_subscriptions (owner_type, owner_id, endpoint, p256dh_key, auth_key)
 		 VALUES ('staff', $1, 'https://push.example.com/insert-staff', 'p256dh-key', 'auth-key')`,
-		staffID,
+		staff.ID,
 	); err != nil {
 		t.Fatalf("expected Staff INSERT to be allowed for their own identity, got error: %v", err)
 	}
@@ -280,15 +281,15 @@ func TestRLS_PushSubscriptionsStaffTierAllowsInsert(t *testing.T) {
 // population.
 func TestRLS_PushSubscriptionsClientTierAllowsInsert(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
-	tx := db.BeginAs(t, testdb.Client(clientID))
+	tx := db.BeginAs(t, testdb.Client(engagement.Client.ID))
 
 	if _, err := tx.ExecContext(t.Context(),
 		`INSERT INTO push_subscriptions (owner_type, owner_id, endpoint, p256dh_key, auth_key)
 		 VALUES ('client', $1, 'https://push.example.com/insert-client', 'p256dh-key', 'auth-key')`,
-		clientID,
+		engagement.Client.ID,
 	); err != nil {
 		t.Fatalf("expected Client INSERT to be allowed for their own identity, got error: %v", err)
 	}
@@ -305,14 +306,14 @@ func TestRLS_PushSubscriptionsStaffRowHiddenDuringClientPortalContext(t *testing
 	db := testdb.New(t)
 	const sharedUID = "shared-push-identity"
 
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, sharedUID, []string{doulaRole}, "employee")
-	testdb.SeedPushSubscription(t, db, "staff", staffID, "https://push.example.com/shared-staff")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p, fixture.StaffUID(sharedUID))
+	testdb.SeedPushSubscription(t, db, "staff", staff.ID, "https://push.example.com/shared-staff")
 
-	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Shared Client", "shared@example.com")
-	testdb.SeedPortalUser(t, db, sharedUID, clientID)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Shared Client"), fixture.ClientEmail("shared@example.com")))
+	testdb.SeedPortalUser(t, db, sharedUID, engagement.Client.ID)
 
-	tx := db.BeginAs(t, testdb.Identity(sharedUID), testdb.Client(clientID))
+	tx := db.BeginAs(t, testdb.Identity(sharedUID), testdb.Client(engagement.Client.ID))
 
 	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM push_subscriptions WHERE owner_type = 'staff'`)
 	if count != 0 {

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/reqtest"
@@ -30,18 +31,17 @@ type pushNotificationPayload struct {
 // the Client-portal route needs only the Engagement id).
 func TestCreateHandler_NotifiesClientPushSubscription(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-notifies-client"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
-	testdb.SeedPushSubscription(t, db, "client", clientID, "https://push.example.com/client-recipient")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
+	testdb.SeedPushSubscription(t, db, "client", engagement.Client.ID, "https://push.example.com/client-recipient")
 
 	pusher := push.NewFakePusher()
-	srv, session := newServerWithPusher(t, db, identityUID, pusher)
+	srv, session := newServerWithPusher(t, db, staff, pusher)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "Hi, checking in."})
-	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages", body)
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusCreated)
 
@@ -56,8 +56,8 @@ func TestCreateHandler_NotifiesClientPushSubscription(t *testing.T) {
 	if err := json.Unmarshal(calls[0].Payload, &payload); err != nil {
 		t.Fatalf("decode push payload: %v", err)
 	}
-	if payload.EngagementID != engagementID || payload.PracticeID != "" {
-		t.Fatalf("push payload = %+v, want {EngagementID: %q, PracticeID: \"\"}", payload, engagementID)
+	if payload.EngagementID != engagement.ID || payload.PracticeID != "" {
+		t.Fatalf("push payload = %+v, want {EngagementID: %q, PracticeID: \"\"}", payload, engagement.ID)
 	}
 	if raw := string(calls[0].Payload); strings.Contains(raw, "Hi, checking in") {
 		t.Fatalf("push payload leaked message content: %s", raw)
@@ -71,21 +71,19 @@ func TestCreateHandler_NotifiesClientPushSubscription(t *testing.T) {
 // the Client-portal one).
 func TestClientCreateHandler_NotifiesStaffPushSubscriptions(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "client-notifies-staff"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	staffAID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "staff-a-push", "Staff A", []string{doulaRole}, "employee")
-	staffBID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "staff-b-push", "Staff B", []string{doulaRole}, "employee")
-	testdb.SeedPushSubscription(t, db, "staff", staffAID, "https://push.example.com/staff-a")
-	testdb.SeedPushSubscription(t, db, "staff", staffBID, "https://push.example.com/staff-b")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staffA := fixture.Staff(t, db, p, fixture.StaffName("Staff A"))
+	staffB := fixture.Staff(t, db, p, fixture.StaffName("Staff B"))
+	testdb.SeedPushSubscription(t, db, "staff", staffA.ID, "https://push.example.com/staff-a")
+	testdb.SeedPushSubscription(t, db, "staff", staffB.ID, "https://push.example.com/staff-b")
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.WithPortalLogin(), fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
 	pusher := push.NewFakePusher()
-	srv, session := newPortalServerWithPusher(t, db, identityUID, pusher)
+	srv, session := newPortalServerWithPusher(t, db, engagement.Client, pusher)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "Question about my visit."})
-	resp := authedPost(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/api/portal/engagements/"+engagement.ID+"/messages", body)
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusCreated)
 
@@ -100,8 +98,8 @@ func TestClientCreateHandler_NotifiesStaffPushSubscriptions(t *testing.T) {
 		if err := json.Unmarshal(c.Payload, &payload); err != nil {
 			t.Fatalf("decode push payload: %v", err)
 		}
-		if payload.EngagementID != engagementID || payload.PracticeID != practiceID {
-			t.Fatalf("push payload = %+v, want engagement %q at practice %q", payload, engagementID, practiceID)
+		if payload.EngagementID != engagement.ID || payload.PracticeID != p.ID {
+			t.Fatalf("push payload = %+v, want engagement %q at practice %q", payload, engagement.ID, p.ID)
 		}
 	}
 	if !notified["https://push.example.com/staff-a"] || !notified["https://push.example.com/staff-b"] {
@@ -114,17 +112,16 @@ func TestClientCreateHandler_NotifiesStaffPushSubscriptions(t *testing.T) {
 // subscription -- push delivery is best-effort, not a precondition.
 func TestCreateHandler_NoSubscriptionsMeansNoPushCalls(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-no-subs"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 
 	pusher := push.NewFakePusher()
-	srv, session := newServerWithPusher(t, db, identityUID, pusher)
+	srv, session := newServerWithPusher(t, db, staff, pusher)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "no subscribers yet"})
-	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages", body)
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusCreated)
 	if calls := pusher.Calls(); len(calls) != 0 {
@@ -139,19 +136,18 @@ func TestCreateHandler_NoSubscriptionsMeansNoPushCalls(t *testing.T) {
 // 500.
 func TestCreateHandler_PushFailureDoesNotBlockMessageCreation(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-push-fails"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
-	testdb.SeedPushSubscription(t, db, "client", clientID, "https://push.example.com/gone")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
+	testdb.SeedPushSubscription(t, db, "client", engagement.Client.ID, "https://push.example.com/gone")
 
 	pusher := push.NewFakePusher()
 	pusher.Err = errors.New("simulated push service failure")
-	srv, session := newServerWithPusher(t, db, identityUID, pusher)
+	srv, session := newServerWithPusher(t, db, staff, pusher)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "still gets created"})
-	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages", body)
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusCreated)
 	if calls := pusher.Calls(); len(calls) != 1 {
@@ -166,20 +162,18 @@ func TestCreateHandler_PushFailureDoesNotBlockMessageCreation(t *testing.T) {
 // UI state.
 func TestCreateHandler_MutedEngagementReceivesNoClientPush(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-notifies-muted-client"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
-	testdb.SeedPushSubscription(t, db, "client", clientID, "https://push.example.com/muted-client")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID("client-muted-portal-account"), clientID)
-	seedMutedPushPreference(t, db, testdb.PortalUID("client-muted-portal-account"), engagementID)
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.WithPortalLogin(), fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
+	testdb.SeedPushSubscription(t, db, "client", engagement.Client.ID, "https://push.example.com/muted-client")
+	seedMutedPushPreference(t, db, engagement.Client.PortalUID, engagement.ID)
 
 	pusher := push.NewFakePusher()
-	srv, session := newServerWithPusher(t, db, identityUID, pusher)
+	srv, session := newServerWithPusher(t, db, staff, pusher)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "should not push"})
-	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages", body)
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusCreated)
 	if calls := pusher.Calls(); len(calls) != 0 {
@@ -193,19 +187,18 @@ func TestCreateHandler_MutedEngagementReceivesNoClientPush(t *testing.T) {
 // though a Staff member at the same Practice also has one registered.
 func TestCreateHandler_DoesNotNotifyStaffSubscriptionsForClientRecipient(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-population-filter"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-	testdb.SeedPushSubscription(t, db, "staff", staffID, "https://push.example.com/staff-own")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
-	testdb.SeedPushSubscription(t, db, "client", clientID, "https://push.example.com/client-only")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	staff := fixture.Staff(t, db, p)
+	testdb.SeedPushSubscription(t, db, "staff", staff.ID, "https://push.example.com/staff-own")
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
+	testdb.SeedPushSubscription(t, db, "client", engagement.Client.ID, "https://push.example.com/client-only")
 
 	pusher := push.NewFakePusher()
-	srv, session := newServerWithPusher(t, db, identityUID, pusher)
+	srv, session := newServerWithPusher(t, db, staff, pusher)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "checking population filter"})
-	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/api/practices/"+p.ID+"/engagements/"+engagement.ID+"/messages", body)
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusCreated)
 

@@ -3,6 +3,7 @@ package message_test
 import (
 	"testing"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -18,18 +19,18 @@ import (
 // lets a Client see their own clients row and no other Client's.
 func TestRLS_ClientsSelfVisibilityScopedToOwnRow(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientA, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Client A", "a@example.com")
-	clientB, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Client B", "b@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client A"), fixture.ClientEmail("a@example.com")))
+	engagement2 := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client B"), fixture.ClientEmail("b@example.com")))
 
-	tx := db.BeginAs(t, testdb.Client(clientA))
+	tx := db.BeginAs(t, testdb.Client(engagement.Client.ID))
 
-	name := testdb.Scalar[string](t, tx, `SELECT given_name FROM clients WHERE id = $1`, clientA)
+	name := testdb.Scalar[string](t, tx, `SELECT given_name FROM clients WHERE id = $1`, engagement.Client.ID)
 	if name != "Client A" {
 		t.Fatalf("name = %q, want %q", name, "Client A")
 	}
 
-	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM clients WHERE id = $1`, clientB)
+	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM clients WHERE id = $1`, engagement2.Client.ID)
 	if count != 0 {
 		t.Fatalf("expected Client A to see zero rows for Client B, got count = %d", count)
 	}
@@ -41,16 +42,16 @@ func TestRLS_ClientsSelfVisibilityScopedToOwnRow(t *testing.T) {
 // unrelated Practice.
 func TestRLS_StaffVisibleToOwnClientPortalEngagements(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := testdb.SeedPractice(t, db, "Practice A")
-	staffAtA := testdb.SeedNamedStaffAtPractice(t, db, practiceA, "staff-at-a", "Staff At A", []string{doulaRole}, "employee")
-	clientA, _ := testdb.SeedNamedEngagement(t, db, practiceA, "Client A", "a@example.com")
+	practiceA := fixture.Practice(t, db, fixture.PracticeName("Practice A"))
+	staffAtA := fixture.Staff(t, db, practiceA, fixture.StaffName("Staff At A"))
+	engagement := fixture.Engagement(t, db, practiceA, fixture.NewClient(fixture.ClientName("Client A"), fixture.ClientEmail("a@example.com")))
 
-	practiceB := testdb.SeedPractice(t, db, "Practice B")
-	testdb.SeedNamedStaffAtPractice(t, db, practiceB, "staff-at-b", "Staff At B", []string{doulaRole}, "employee")
+	practiceB := fixture.Practice(t, db, fixture.PracticeName("Practice B"))
+	fixture.Staff(t, db, practiceB, fixture.StaffName("Staff At B"))
 
-	tx := db.BeginAs(t, testdb.Client(clientA))
+	tx := db.BeginAs(t, testdb.Client(engagement.Client.ID))
 
-	name := testdb.Scalar[string](t, tx, `SELECT name FROM staff WHERE id = $1`, staffAtA)
+	name := testdb.Scalar[string](t, tx, `SELECT name FROM staff WHERE id = $1`, staffAtA.ID)
 	if name != "Staff At A" {
 		t.Fatalf("name = %q, want %q", name, "Staff At A")
 	}
@@ -69,20 +70,20 @@ func TestRLS_StaffVisibleToOwnClientPortalEngagements(t *testing.T) {
 // the Client portal reads a Staff name on both screens.
 func TestRLS_StaffVisibleToOwnClientPortalHistory(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "History Practice")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Nadia Client", "nadia@example.com")
+	p := fixture.Practice(t, db, fixture.PracticeName("History Practice"))
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Nadia Client"), fixture.ClientEmail("nadia@example.com")))
 
-	visited := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "history-visited", "Maya Okonkwo", []string{doulaRole}, "employee")
-	messaged := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "history-messaged", "Priya Raman", []string{doulaRole}, "employee")
-	stranger := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "history-stranger", "Never Met", []string{doulaRole}, "employee")
+	visited := fixture.Staff(t, db, p, fixture.StaffName("Maya Okonkwo"))
+	messaged := fixture.Staff(t, db, p, fixture.StaffName("Priya Raman"))
+	stranger := fixture.Staff(t, db, p, fixture.StaffName("Never Met"))
 
 	// The case the reach has to refuse and a Practice-wide one would not:
 	// a Doula who did the same work, at the same Practice, for somebody
 	// else. Both halves of the reach get one, so neither EXISTS can be
 	// widened to the Practice without this failing.
-	_, othersEngagement := testdb.SeedNamedEngagement(t, db, practiceID, "Another Client", "another@example.com")
-	visitedOther := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "history-visited-other", "Somebody Else's Doula", []string{doulaRole}, "employee")
-	messagedOther := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "history-messaged-other", "Somebody Else's Admin", []string{doulaRole}, "employee")
+	othersEngagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Another Client"), fixture.ClientEmail("another@example.com")))
+	visitedOther := fixture.Staff(t, db, p, fixture.StaffName("Somebody Else's Doula"))
+	messagedOther := fixture.Staff(t, db, p, fixture.StaffName("Somebody Else's Admin"))
 
 	seedVisit := func(engagement, staffID string) {
 		t.Helper()
@@ -102,23 +103,23 @@ func TestRLS_StaffVisibleToOwnClientPortalHistory(t *testing.T) {
 			t.Fatalf("seed message: %v", err)
 		}
 	}
-	seedVisit(engagementID, visited)
-	seedStaffMessage(engagementID, messaged)
-	seedVisit(othersEngagement, visitedOther)
-	seedStaffMessage(othersEngagement, messagedOther)
+	seedVisit(engagement.ID, visited.ID)
+	seedStaffMessage(engagement.ID, messaged.ID)
+	seedVisit(othersEngagement.ID, visitedOther.ID)
+	seedStaffMessage(othersEngagement.ID, messagedOther.ID)
 	// Every one of them leaves, so nothing below is answered by 00009.
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`DELETE FROM practice_memberships WHERE practice_id = $1`, practiceID,
+		`DELETE FROM practice_memberships WHERE practice_id = $1`, p.ID,
 	); err != nil {
 		t.Fatalf("remove memberships: %v", err)
 	}
 
-	tx := db.BeginAs(t, testdb.Client(clientID))
+	tx := db.BeginAs(t, testdb.Client(engagement.Client.ID))
 
 	for _, want := range []struct {
 		staffID string
 		name    string
-	}{{visited, "Maya Okonkwo"}, {messaged, "Priya Raman"}} {
+	}{{visited.ID, "Maya Okonkwo"}, {messaged.ID, "Priya Raman"}} {
 		name := testdb.Scalar[string](t, tx, `SELECT name FROM staff WHERE id = $1`, want.staffID)
 		if name != want.name {
 			t.Fatalf("name = %q, want %q", name, want.name)
@@ -129,9 +130,9 @@ func TestRLS_StaffVisibleToOwnClientPortalHistory(t *testing.T) {
 		staffID string
 		why     string
 	}{
-		{stranger, "never worked with anyone"},
-		{visitedOther, "worked another Client's Visit at the same Practice"},
-		{messagedOther, "sent a Message on another Client's Engagement at the same Practice"},
+		{stranger.ID, "never worked with anyone"},
+		{visitedOther.ID, "worked another Client's Visit at the same Practice"},
+		{messagedOther.ID, "sent a Message on another Client's Engagement at the same Practice"},
 	} {
 		count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM staff WHERE id = $1`, refused.staffID)
 		if count != 0 {
@@ -147,27 +148,27 @@ func TestRLS_StaffVisibleToOwnClientPortalHistory(t *testing.T) {
 // nothing else.
 func TestRLS_StaffPortalHistoryGrantsAStaffSessionNothing(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Staff Session Practice")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Nadia Client", "nadia2@example.com")
-	departed := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "session-departed", "Maya Okonkwo", []string{doulaRole}, "employee")
-	reader := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "session-reader", "Renata Owner", []string{ownerRole}, "employee")
+	p := fixture.Practice(t, db, fixture.PracticeName("Staff Session Practice"))
+	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Nadia Client"), fixture.ClientEmail("nadia2@example.com")))
+	departed := fixture.Staff(t, db, p, fixture.StaffName("Maya Okonkwo"))
+	reader := fixture.Staff(t, db, p, fixture.StaffName("Renata Owner"), fixture.Owner())
 
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO visits (engagement_id, staff_id, scheduled_at) VALUES ($1, $2, now() - interval '3 days')`,
-		engagementID, departed,
+		engagement.ID, departed.ID,
 	); err != nil {
 		t.Fatalf("seed visit: %v", err)
 	}
-	testdb.RemoveMembership(t, db, departed)
+	testdb.RemoveMembership(t, db, departed.ID)
 
-	tx := db.BeginAs(t, testdb.Practice(practiceID))
+	tx := db.BeginAs(t, testdb.Practice(p.ID))
 
-	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM staff WHERE id = $1`, departed)
+	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM staff WHERE id = $1`, departed.ID)
 	if count != 0 {
-		t.Fatalf("expected a Staff session to see zero rows for a departed Staff member, got count = %d", count)
+		t.Fatalf("expected a Staff session to see zero rows for a departed.ID Staff member, got count = %d", count)
 	}
 
-	name := testdb.Scalar[string](t, tx, `SELECT name FROM staff WHERE id = $1`, reader)
+	name := testdb.Scalar[string](t, tx, `SELECT name FROM staff WHERE id = $1`, reader.ID)
 	if name != "Renata Owner" {
 		t.Fatalf("name = %q, want %q", name, "Renata Owner")
 	}

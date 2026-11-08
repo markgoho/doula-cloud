@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -50,7 +51,7 @@ func TestAwaitingReplyQueryPlanAtScale(t *testing.T) {
 	}
 
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Perf Practice")
+	p := fixture.Practice(t, db, fixture.PracticeName("Perf Practice"))
 
 	const engagementCount = 500
 	const messagesPerEngagement = 10
@@ -58,13 +59,13 @@ func TestAwaitingReplyQueryPlanAtScale(t *testing.T) {
 		var clientID, engagementID string
 		if err := db.Admin.QueryRowContext(t.Context(),
 			`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, $2, $3) RETURNING id`,
-			practiceID, fmt.Sprintf("Perf Client %d", i), fmt.Sprintf("perf-%d@example.com", i),
+			p.ID, fmt.Sprintf("Perf Client %d", i), fmt.Sprintf("perf-%d@example.com", i),
 		).Scan(&clientID); err != nil {
 			t.Fatalf("seed client: %v", err)
 		}
 		if err := db.Admin.QueryRowContext(t.Context(),
 			`INSERT INTO engagements (client_id, practice_id, status, kind) VALUES ($1, $2, 'active', 'birth') RETURNING id`,
-			clientID, practiceID,
+			clientID, p.ID,
 		).Scan(&engagementID); err != nil {
 			t.Fatalf("seed engagement: %v", err)
 		}
@@ -86,7 +87,7 @@ func TestAwaitingReplyQueryPlanAtScale(t *testing.T) {
 		}
 	}
 
-	tx := db.BeginAs(t, testdb.Practice(practiceID))
+	tx := db.BeginAs(t, testdb.Practice(p.ID))
 
 	query := fmt.Sprintf(`SELECT e.id, c.given_name, c.preferred_name, m.created_at
 		FROM engagements e
@@ -95,7 +96,7 @@ func TestAwaitingReplyQueryPlanAtScale(t *testing.T) {
 		WHERE e.practice_id = $1 AND m.sender_type = $2
 		ORDER BY m.created_at DESC, e.id DESC LIMIT %d`, awaitingReplyLateral, awaitingPageSize+1)
 
-	rows, err := tx.QueryContext(t.Context(), "EXPLAIN (ANALYZE, BUFFERS) "+query, practiceID, senderTypeClient)
+	rows, err := tx.QueryContext(t.Context(), "EXPLAIN (ANALYZE, BUFFERS) "+query, p.ID, senderTypeClient)
 	if err != nil {
 		t.Fatalf("explain: %v", err)
 	}
