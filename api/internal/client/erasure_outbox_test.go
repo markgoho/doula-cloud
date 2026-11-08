@@ -87,20 +87,12 @@ func seedInvoicedClient(t *testing.T, db *testdb.DB, practiceID, clientID, custo
 // Job is deferred to Stripe's 90-day floor past her newest invoice, and
 // that date is visible to the Practice rather than implied.
 func TestEraseHandler_QueuesStripeWorkAndReportsWhenItCanRun(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-erase-stripe"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID := seedFullClient(t, db, practiceID, staffID)
-	seedInvoicedClient(t, db, practiceID, clientID, "cus_recent", "paid", 10*24*time.Hour)
+	e := newEraseEnv(t)
+	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_recent", "paid", 10*24*time.Hour)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.signedIn)
 
-	resp := postErasure(t, session, srv, practiceID, clientID)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-
-	acts := readOutbox(t, db, clientID)
+	acts := readOutbox(t, e.db, e.ClientID)
 	if len(acts) != 2 {
 		t.Fatalf("outbox rows = %+v, want a delete and a redaction", acts)
 	}
@@ -120,7 +112,7 @@ func TestEraseHandler_QueuesStripeWorkAndReportsWhenItCanRun(t *testing.T) {
 		t.Fatalf("redaction due in %v, want about 80 days -- Stripe's 90-day floor past a 10-day-old invoice", wait)
 	}
 
-	detail := readDetail(t, session, srv, practiceID, clientID)
+	detail := e.detail()
 	if detail.StripeRedactionEligibleAt == nil {
 		t.Fatal("detail carries no stripeRedactionEligibleAt, want the Practice to see the Stripe half is scheduled")
 	}
@@ -130,9 +122,9 @@ func TestEraseHandler_QueuesStripeWorkAndReportsWhenItCanRun(t *testing.T) {
 
 	// Her Contract's captured merge fields went with her.
 	var mergeFields string
-	if err := db.Admin.QueryRowContext(t.Context(),
+	if err := e.db.Admin.QueryRowContext(t.Context(),
 		`SELECT ct.merge_field_values::text FROM contracts ct
-		   JOIN engagements e ON e.id = ct.engagement_id WHERE e.client_id = $1`, clientID,
+		   JOIN engagements e ON e.id = ct.engagement_id WHERE e.client_id = $1`, e.ClientID,
 	).Scan(&mergeFields); err != nil {
 		t.Fatalf("read merge fields: %v", err)
 	}
@@ -145,20 +137,12 @@ func TestEraseHandler_QueuesStripeWorkAndReportsWhenItCanRun(t *testing.T) {
 // of the floor: an invoice already past 90 days waits for nothing, and
 // there is no future date to show.
 func TestEraseHandler_RedactionIsDueAtOnceForAnOldInvoice(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-erase-old-invoice"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID := seedFullClient(t, db, practiceID, staffID)
-	seedInvoicedClient(t, db, practiceID, clientID, "cus_old", "paid", 200*24*time.Hour)
+	e := newEraseEnv(t)
+	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_old", "paid", 200*24*time.Hour)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.signedIn)
 
-	resp := postErasure(t, session, srv, practiceID, clientID)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-
-	acts := readOutbox(t, db, clientID)
+	acts := readOutbox(t, e.db, e.ClientID)
 	redact, ok := acts["stripe_redaction_job|cus_old"]
 	if !ok {
 		t.Fatalf("no redaction row queued: %+v", acts)
@@ -169,7 +153,7 @@ func TestEraseHandler_RedactionIsDueAtOnceForAnOldInvoice(t *testing.T) {
 	// The date is still reported: the redaction has not run yet, and
 	// "absent" is reserved for a redaction that actually succeeded. It
 	// is simply already in the past.
-	detail := readDetail(t, session, srv, practiceID, clientID)
+	detail := e.detail()
 	if detail.StripeRedactionEligibleAt == nil {
 		t.Fatal("stripeRedactionEligibleAt is absent while the redaction is still outstanding")
 	}
@@ -187,21 +171,13 @@ func TestEraseHandler_RedactionIsDueAtOnceForAnOldInvoice(t *testing.T) {
 // bug this test exists to keep out -- would hold the old one hostage to
 // the new one turning 90.
 func TestEraseHandler_EachStripeCustomerGetsItsOwnEligibilityDate(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-erase-two-customers"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID := seedFullClient(t, db, practiceID, staffID)
-	seedInvoicedClient(t, db, practiceID, clientID, "cus_ancient", "paid", 200*24*time.Hour)
-	seedInvoicedClient(t, db, practiceID, clientID, "cus_fresh", "paid", 10*24*time.Hour)
+	e := newEraseEnv(t)
+	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_ancient", "paid", 200*24*time.Hour)
+	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_fresh", "paid", 10*24*time.Hour)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.signedIn)
 
-	resp := postErasure(t, session, srv, practiceID, clientID)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-
-	acts := readOutbox(t, db, clientID)
+	acts := readOutbox(t, e.db, e.ClientID)
 	ancient, ok := acts["stripe_redaction_job|cus_ancient"]
 	if !ok {
 		t.Fatalf("no redaction row for the older Customer: %+v", acts)
@@ -219,7 +195,7 @@ func TestEraseHandler_EachStripeCustomerGetsItsOwnEligibilityDate(t *testing.T) 
 
 	// The Practice is shown when the Stripe half finishes, which is the
 	// later of the two.
-	detail := readDetail(t, session, srv, practiceID, clientID)
+	detail := e.detail()
 	if detail.StripeRedactionEligibleAt == nil {
 		t.Fatal("detail carries no stripeRedactionEligibleAt")
 	}
@@ -234,21 +210,11 @@ func TestEraseHandler_EachStripeCustomerGetsItsOwnEligibilityDate(t *testing.T) 
 // redaction fails. Stripe's Redaction Jobs API is not enabled on this
 // account (ADR-0027), so a failing job is today's normal path.
 func TestEraseHandler_RedactionStateSurvivesRetriesAndDeadLettering(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-erase-redaction-fails"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID := seedFullClient(t, db, practiceID, staffID)
-	seedInvoicedClient(t, db, practiceID, clientID, "cus_failing", "paid", 10*24*time.Hour)
+	e := newEraseEnv(t)
+	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_failing", "paid", 10*24*time.Hour)
+	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.signedIn)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-	resp := postErasure(t, session, srv, practiceID, clientID)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("erase status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-
-	atErasure := readDetail(t, session, srv, practiceID, clientID).StripeRedactionEligibleAt
+	atErasure := e.detail().StripeRedactionEligibleAt
 	if atErasure == nil {
 		t.Fatal("no stripeRedactionEligibleAt right after the erasure")
 	}
@@ -259,18 +225,18 @@ func TestEraseHandler_RedactionStateSurvivesRetriesAndDeadLettering(t *testing.T
 	stripe := &fakeStripeEraser{redactErr: errors.New("Unrecognized request URL")}
 	worker := client.ErasureWorker{Stripe: stripe, Now: time.Now}
 	for range len(outbox.BackoffSchedule) + 1 {
-		forceOutboxDueNow(t, db, clientID)
-		runWorker(t, db, worker)
+		forceOutboxDueNow(t, e.db, e.ClientID)
+		runWorker(t, e.db, worker)
 	}
 
-	if status := readOutboxStatus(t, db, clientID)["stripe_redaction_job|cus_failing"]; status != deadLetteredStatus {
+	if status := readOutboxStatus(t, e.db, e.ClientID)["stripe_redaction_job|cus_failing"]; status != deadLetteredStatus {
 		t.Fatalf("redaction status = %q, want dead_lettered after the schedule is exhausted", status)
 	}
-	if reason := readOutboxReason(t, db, clientID)["stripe_redaction_job|cus_failing"]; reason != "retries_exhausted" {
+	if reason := readOutboxReason(t, e.db, e.ClientID)["stripe_redaction_job|cus_failing"]; reason != "retries_exhausted" {
 		t.Fatalf("redaction dead_letter_reason = %q, want retries_exhausted", reason)
 	}
 
-	after := readDetail(t, session, srv, practiceID, clientID).StripeRedactionEligibleAt
+	after := e.detail().StripeRedactionEligibleAt
 	if after == nil {
 		t.Fatal("stripeRedactionEligibleAt vanished once the redaction dead-lettered -- a failed redaction must not read as a finished one")
 	}
@@ -283,24 +249,14 @@ func TestEraseHandler_RedactionStateSurvivesRetriesAndDeadLettering(t *testing.T
 // once the redaction actually runs, there is nothing left to wait for
 // and the date goes.
 func TestErasureWorker_ClearsTheRedactionStateOnSuccess(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-erase-redaction-succeeds"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID := seedFullClient(t, db, practiceID, staffID)
-	seedInvoicedClient(t, db, practiceID, clientID, "cus_done", "paid", 200*24*time.Hour)
+	e := newEraseEnv(t)
+	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_done", "paid", 200*24*time.Hour)
+	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.signedIn)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-	resp := postErasure(t, session, srv, practiceID, clientID)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("erase status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	forceOutboxDueNow(t, e.db, e.ClientID)
+	runWorker(t, e.db, client.ErasureWorker{Stripe: &fakeStripeEraser{}, Now: time.Now})
 
-	forceOutboxDueNow(t, db, clientID)
-	runWorker(t, db, client.ErasureWorker{Stripe: &fakeStripeEraser{}, Now: time.Now})
-
-	if got := readDetail(t, session, srv, practiceID, clientID).StripeRedactionEligibleAt; got != nil {
+	if got := e.detail().StripeRedactionEligibleAt; got != nil {
 		t.Fatalf("stripeRedactionEligibleAt = %v, want absent once the redaction has run", got)
 	}
 }
@@ -311,29 +267,20 @@ func TestErasureWorker_ClearsTheRedactionStateOnSuccess(t *testing.T) {
 func TestEraseHandler_RefusesWhileAnInvoiceIsUnsettled(t *testing.T) {
 	for _, status := range []string{"draft", "open"} {
 		t.Run(status, func(t *testing.T) {
-			db := testdb.New(t)
-			uid := "owner-erase-unsettled-" + status
-			practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-			clientID := seedFullClient(t, db, practiceID, staffID)
-			seedInvoicedClient(t, db, practiceID, clientID, "cus_"+status, status, time.Hour)
+			e := newEraseEnv(t)
+			seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_"+status, status, time.Hour)
 
-			srv, session := newServer(t, db, uid)
-			defer srv.Close()
-
-			resp := postErasure(t, session, srv, practiceID, clientID)
-			defer resp.Body.Close()
-			reqtest.RequireStatus(t, resp, http.StatusConflict)
 			// The code, not the prose, is what tells this refusal from
 			// "already erased" -- see EraseHandler's own doc comment.
 			// The message still has to name the blocking invoice.
-			got := apierrtest.Decode(t, resp)
+			got := apierrtest.Expect(t, http.MethodPost, e.erasureURL(), http.StatusConflict, e.signedIn)
 			if got.Code != apierr.CodeFailedPrecondition {
 				t.Fatalf("code = %q, want %q", got.Code, apierr.CodeFailedPrecondition)
 			}
 			if !strings.Contains(got.Message, "in_cus_"+status) {
 				t.Fatalf("message = %q, want it to name invoice %q", got.Message, "in_cus_"+status)
 			}
-			if rows := readOutbox(t, db, clientID); len(rows) != 0 {
+			if rows := readOutbox(t, e.db, e.ClientID); len(rows) != 0 {
 				t.Fatalf("outbox rows = %+v, want none after a refusal", rows)
 			}
 		})
@@ -404,33 +351,25 @@ func TestEraseHandler_DeletesHerPortalLoginAndEndsHerSessions(t *testing.T) {
 // is nothing to delete and nothing to queue; the pending token is
 // revoked and that is the whole act.
 func TestEraseHandler_RevokesAnUnacceptedPortalInvite(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-erase-pending-invite"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID := seedFullClient(t, db, practiceID, staffID)
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid())`, clientID,
+	e := newEraseEnv(t)
+	if _, err := e.db.Admin.ExecContext(t.Context(),
+		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid())`, e.ClientID,
 	); err != nil {
 		t.Fatalf("seed portal invite: %v", err)
 	}
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postErasure(t, session, srv, practiceID, clientID)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
+	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.signedIn)
 
 	var token *string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT invite_token::text FROM client_portal_users WHERE client_id = $1`, clientID,
+	if err := e.db.Admin.QueryRowContext(t.Context(),
+		`SELECT invite_token::text FROM client_portal_users WHERE client_id = $1`, e.ClientID,
 	).Scan(&token); err != nil {
 		t.Fatalf("read portal user: %v", err)
 	}
 	if token != nil {
 		t.Fatalf("invite_token = %q, want NULL", *token)
 	}
-	if rows := readOutbox(t, db, clientID); len(rows) != 0 {
+	if rows := readOutbox(t, e.db, e.ClientID); len(rows) != 0 {
 		t.Fatalf("outbox rows = %+v, want none -- there is no account to delete", rows)
 	}
 }
@@ -480,22 +419,16 @@ func TestErasureWorker_PerformsEveryQueuedAct(t *testing.T) {
 // to give up on an erasure, so the row goes back on the retry schedule
 // rather than being marked done.
 func TestErasureWorker_RetriesAFailedAct(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-worker-retry"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID := seedFullClient(t, db, practiceID, staffID)
-	seedInvoicedClient(t, db, practiceID, clientID, "cus_retry", "paid", 200*24*time.Hour)
-
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-	resp := postErasure(t, session, srv, practiceID, clientID)
+	e := newEraseEnv(t)
+	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_retry", "paid", 200*24*time.Hour)
+	resp := postErasure(t, e.session, e.srv, e.Practice.ID, e.ClientID)
 	defer resp.Body.Close()
 
 	stripe := &fakeStripeEraser{deleteErr: errors.New("stripe is down"), redactErr: errors.New("stripe is down")}
-	forceOutboxDueNow(t, db, clientID)
-	runWorker(t, db, client.ErasureWorker{Stripe: stripe, Now: time.Now})
+	forceOutboxDueNow(t, e.db, e.ClientID)
+	runWorker(t, e.db, client.ErasureWorker{Stripe: stripe, Now: time.Now})
 
-	for act, status := range readOutboxStatus(t, db, clientID) {
+	for act, status := range readOutboxStatus(t, e.db, e.ClientID) {
 		if status != pendingStatus {
 			t.Errorf("%s = %q, want pending -- a failed act is retried, not abandoned", act, status)
 		}
@@ -506,32 +439,26 @@ func TestErasureWorker_RetriesAFailedAct(t *testing.T) {
 // nothing to reach and nothing to wait for, so the row is dead-lettered
 // rather than retried forever or falsely marked done.
 func TestErasureWorker_DeadLettersWhenThePracticeHasNoConnectedAccount(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-worker-no-account"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID := seedFullClient(t, db, practiceID, staffID)
-	seedInvoicedClient(t, db, practiceID, clientID, "cus_orphan", "paid", 200*24*time.Hour)
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE practices SET stripe_connect_account_id = NULL WHERE id = $1`, practiceID,
+	e := newEraseEnv(t)
+	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_orphan", "paid", 200*24*time.Hour)
+	if _, err := e.db.Admin.ExecContext(t.Context(),
+		`UPDATE practices SET stripe_connect_account_id = NULL WHERE id = $1`, e.Practice.ID,
 	); err != nil {
 		t.Fatalf("clear connect account: %v", err)
 	}
-
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-	resp := postErasure(t, session, srv, practiceID, clientID)
+	resp := postErasure(t, e.session, e.srv, e.Practice.ID, e.ClientID)
 	defer resp.Body.Close()
 
 	stripe := &fakeStripeEraser{}
-	forceOutboxDueNow(t, db, clientID)
-	runWorker(t, db, client.ErasureWorker{Stripe: stripe, Now: time.Now})
+	forceOutboxDueNow(t, e.db, e.ClientID)
+	runWorker(t, e.db, client.ErasureWorker{Stripe: stripe, Now: time.Now})
 
-	for act, status := range readOutboxStatus(t, db, clientID) {
+	for act, status := range readOutboxStatus(t, e.db, e.ClientID) {
 		if status != deadLetteredStatus {
 			t.Errorf("%s = %q, want dead_lettered", act, status)
 		}
 	}
-	for act, reason := range readOutboxReason(t, db, clientID) {
+	for act, reason := range readOutboxReason(t, e.db, e.ClientID) {
 		if reason != "own_data" {
 			t.Errorf("%s dead_letter_reason = %q, want own_data", act, reason)
 		}
@@ -546,25 +473,15 @@ func TestErasureWorker_DeadLettersWhenThePracticeHasNoConnectedAccount(t *testin
 // is outbox.ProcessHandler's, tested there, so this proves the wiring --
 // a correct secret runs the worker, a wrong one does not.
 func TestProcessErasureOutboxHandler_RunsDueActsBehindTheWorkerSecret(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-erasure-endpoint"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID := seedFullClient(t, db, practiceID, staffID)
-	seedInvoicedClient(t, db, practiceID, clientID, "cus_endpoint", "paid", 200*24*time.Hour)
-
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-	resp := postErasure(t, session, srv, practiceID, clientID)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("erase status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	e := newEraseEnv(t)
+	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_endpoint", "paid", 200*24*time.Hour)
+	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.signedIn)
 
 	stripe := &fakeStripeEraser{}
 	worker := client.ErasureWorker{Stripe: stripe, Now: time.Now}
 	mux := http.NewServeMux()
 	mux.Handle("POST /internal/clients/process-erasure-outbox",
-		outbox.ProcessHandler(db.App, worker, internalauth.FromSecret("correct-secret"), outbox.NotificationDoor))
+		outbox.ProcessHandler(e.db.App, worker, internalauth.FromSecret("correct-secret"), outbox.NotificationDoor))
 	workerSrv := httptest.NewServer(mux)
 	defer workerSrv.Close()
 
@@ -577,7 +494,7 @@ func TestProcessErasureOutboxHandler_RunsDueActsBehindTheWorkerSecret(t *testing
 		t.Fatalf("customer deletes = %v, want none behind a rejected secret", stripe.deleted)
 	}
 
-	forceOutboxDueNow(t, db, clientID)
+	forceOutboxDueNow(t, e.db, e.ClientID)
 	right := postProcessErasure(t, workerSrv, "correct-secret")
 	defer right.Body.Close()
 	if right.StatusCode != http.StatusOK {

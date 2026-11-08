@@ -7,7 +7,9 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -271,4 +273,46 @@ func outboxStatus(t *testing.T, db *testdb.DB, outboxID string) (status, lastErr
 		lastError, _ = le.(string)
 	}
 	return status, lastError
+}
+
+// eraseEnv is what an erasure test starts from: a Practice with this
+// package's whole surface mounted on a server, its Owner signed in, and one
+// Client with every identifying column filled in -- the state an erasure
+// has something to do to.
+type eraseEnv struct {
+	t   *testing.T
+	db  *testdb.DB
+	srv *httptest.Server
+
+	Practice fixture.PracticeRecord
+	Owner    fixture.StaffRecord
+	ClientID string
+
+	session  string
+	signedIn reqtest.Option
+}
+
+func newEraseEnv(t *testing.T) *eraseEnv {
+	t.Helper()
+	db := testdb.New(t)
+	e := &eraseEnv{t: t, db: db, Practice: fixture.Practice(t, db)}
+	e.Owner = fixture.Staff(t, db, e.Practice, fixture.Owner())
+	e.ClientID = seedFullClient(t, db, e.Practice.ID, e.Owner.ID)
+	srv, session := newServer(t, db, e.Owner.UID)
+	t.Cleanup(srv.Close)
+	e.srv = srv
+	e.session = session
+	e.signedIn = reqtest.Session(session)
+	return e
+}
+
+// erasureURL is the route that erases the Client.
+func (e *eraseEnv) erasureURL() string {
+	return e.srv.URL + "/api/practices/" + e.Practice.ID + "/clients/" + e.ClientID + "/erasure"
+}
+
+// detail reads the Client as the Owner.
+func (e *eraseEnv) detail() client.DetailResponse {
+	e.t.Helper()
+	return reqtest.Expect[client.DetailResponse](e.t, http.MethodGet, e.srv.URL+"/api/practices/"+e.Practice.ID+"/clients/"+e.ClientID, http.StatusOK, e.signedIn)
 }

@@ -58,17 +58,9 @@ func postErasure(t *testing.T, session string, srv *httptest.Server, practiceID,
 // criterion: every identifying field is gone, erased_at is set, and the
 // row's id -- and so every foreign key pointing at it -- is untouched.
 func TestEraseHandler_RedactsTheRecordInPlace(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-erase-redacts"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID := seedFullClient(t, db, practiceID, staffID)
+	e := newEraseEnv(t)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postErasure(t, session, srv, practiceID, clientID)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
+	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.signedIn)
 
 	var row struct {
 		id                                                    string
@@ -77,17 +69,17 @@ func TestEraseHandler_RedactsTheRecordInPlace(t *testing.T) {
 		fieldValues                                           string
 		erasedAt                                              *time.Time
 	}
-	if err := db.Admin.QueryRowContext(t.Context(),
+	if err := e.db.Admin.QueryRowContext(t.Context(),
 		`SELECT id, given_name, family_name, preferred_name, email, phone, address_line1,
 		        date_of_birth::text, address_locality, field_values::text, erased_at
-		   FROM clients WHERE id = $1`, clientID,
+		   FROM clients WHERE id = $1`, e.ClientID,
 	).Scan(&row.id, &row.givenName, &row.family, &row.preferred, &row.email, &row.phone,
 		&row.line1, &row.dob, &row.locality, &row.fieldValues, &row.erasedAt); err != nil {
 		t.Fatalf("read client: %v", err)
 	}
 
-	if row.id != clientID {
-		t.Fatalf("id = %q, want the row to keep its id %q", row.id, clientID)
+	if row.id != e.ClientID {
+		t.Fatalf("id = %q, want the row to keep its id %q", row.id, e.ClientID)
 	}
 	if row.givenName != client.ErasedGivenName {
 		t.Fatalf("given_name = %q, want %q", row.givenName, client.ErasedGivenName)
@@ -114,16 +106,10 @@ func TestEraseHandler_RedactsTheRecordInPlace(t *testing.T) {
 // unreadable, and the activity row it lives in is byte-for-byte the row
 // that was written -- no UPDATE, no DELETE.
 func TestEraseHandler_ShredsHerHistoryWithoutTouchingIt(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-erase-shreds"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID := seedFullClient(t, db, practiceID, staffID)
+	e := newEraseEnv(t)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	editOnce(t, session, srv, practiceID, clientID)
-	before := readActivityRows(t, db, clientID)
+	editOnce(t, e.session, e.srv, e.Practice.ID, e.ClientID)
+	before := readActivityRows(t, e.db, e.ClientID)
 	if len(before) != 1 {
 		t.Fatalf("seeded activity rows = %d, want 1", len(before))
 	}
@@ -131,11 +117,9 @@ func TestEraseHandler_ShredsHerHistoryWithoutTouchingIt(t *testing.T) {
 		t.Fatalf("seeded activity row is not sealed: %q", before[0])
 	}
 
-	resp := postErasure(t, session, srv, practiceID, clientID)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
+	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.signedIn)
 
-	after := readActivityRows(t, db, clientID)
+	after := readActivityRows(t, e.db, e.ClientID)
 	if len(after) != 2 {
 		t.Fatalf("activity rows after erasure = %d, want 2 (the sealed one plus the plaintext 'erased' row)", len(after))
 	}
@@ -145,8 +129,8 @@ func TestEraseHandler_ShredsHerHistoryWithoutTouchingIt(t *testing.T) {
 
 	// Her key is gone.
 	var keys int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM client_data_keys WHERE client_id = $1`, clientID,
+	if err := e.db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM client_data_keys WHERE client_id = $1`, e.ClientID,
 	).Scan(&keys); err != nil {
 		t.Fatalf("count keys: %v", err)
 	}
@@ -155,7 +139,7 @@ func TestEraseHandler_ShredsHerHistoryWithoutTouchingIt(t *testing.T) {
 	}
 
 	// And the read path says so rather than failing.
-	detail := readDetail(t, session, srv, practiceID, clientID)
+	detail := e.detail()
 	var sealed, erasedEntry *client.Event
 	for i, entry := range detail.History {
 		if entry.ClientEvent == nil {
@@ -386,20 +370,14 @@ func TestEraseHandler_RefusesEveryRoleButOwner(t *testing.T) {
 // TestEraseHandler_RefusesASecondErasure -- the act is irreversible, so a
 // repeat is a mistake worth naming rather than absorbing.
 func TestEraseHandler_RefusesASecondErasure(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-erase-twice"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID := seedFullClient(t, db, practiceID, staffID)
+	e := newEraseEnv(t)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	first := postErasure(t, session, srv, practiceID, clientID)
+	first := postErasure(t, e.session, e.srv, e.Practice.ID, e.ClientID)
 	defer first.Body.Close()
 	if first.StatusCode != http.StatusOK {
 		t.Fatalf("first status = %d, want %d", first.StatusCode, http.StatusOK)
 	}
-	second := postErasure(t, session, srv, practiceID, clientID)
+	second := postErasure(t, e.session, e.srv, e.Practice.ID, e.ClientID)
 	defer second.Body.Close()
 	if second.StatusCode != http.StatusConflict {
 		t.Fatalf("second status = %d, want %d", second.StatusCode, http.StatusConflict)
@@ -446,21 +424,15 @@ func TestEraseHandler_RefusesAMalformedClientID(t *testing.T) {
 // TestEditHandler_RefusesAnErasedClient -- her record is not editable
 // afterwards, and the refusal says why.
 func TestEditHandler_RefusesAnErasedClient(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-erase-then-edit"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID := seedFullClient(t, db, practiceID, staffID)
+	e := newEraseEnv(t)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	erased := postErasure(t, session, srv, practiceID, clientID)
+	erased := postErasure(t, e.session, e.srv, e.Practice.ID, e.ClientID)
 	defer erased.Body.Close()
 	if erased.StatusCode != http.StatusOK {
 		t.Fatalf("erase status = %d, want %d", erased.StatusCode, http.StatusOK)
 	}
 
-	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID,
+	resp := authedJSON(t, e.session, http.MethodPut, e.srv.URL+"/api/practices/"+e.Practice.ID+"/clients/"+e.ClientID,
 		client.EditRequest{GivenName: "Ada", Override: true})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {

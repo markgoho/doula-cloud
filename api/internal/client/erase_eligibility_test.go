@@ -36,15 +36,9 @@ func decodeEligibility(t *testing.T, resp *http.Response) client.EraseEligibilit
 // billing history at all is immediately eligible: not erased, and no
 // invoice stands in the way.
 func TestEraseEligibilityHandler_ClearWithNoInvoices(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-eligibility-clear"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID := seedFullClient(t, db, practiceID, staffID)
+	e := newEraseEnv(t)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	resp := eraseEligibility(t, session, srv.URL, practiceID, clientID)
+	resp := eraseEligibility(t, e.session, e.srv.URL, e.Practice.ID, e.ClientID)
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusOK)
 	out := decodeEligibility(t, resp)
@@ -61,17 +55,11 @@ func TestEraseEligibilityHandler_ClearWithNoInvoices(t *testing.T) {
 // paid one does not, and every name shown is one the eventual 409 would
 // have named too.
 func TestEraseEligibilityHandler_NamesUnsettledInvoicesOnly(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-eligibility-invoices"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID := seedFullClient(t, db, practiceID, staffID)
-	seedInvoicedClient(t, db, practiceID, clientID, "cus_open", "open", time.Hour)
-	seedInvoicedClient(t, db, practiceID, clientID, "cus_paid", "paid", time.Hour)
+	e := newEraseEnv(t)
+	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_open", "open", time.Hour)
+	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_paid", "paid", time.Hour)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	resp := eraseEligibility(t, session, srv.URL, practiceID, clientID)
+	resp := eraseEligibility(t, e.session, e.srv.URL, e.Practice.ID, e.ClientID)
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusOK)
 	out := decodeEligibility(t, resp)
@@ -94,7 +82,7 @@ func TestEraseEligibilityHandler_NamesUnsettledInvoicesOnly(t *testing.T) {
 
 	// The same fact, confirmed against the actual 409: attempting the
 	// erasure now refuses on exactly the invoice the precheck named.
-	postResp := postErasure(t, session, srv, practiceID, clientID)
+	postResp := postErasure(t, e.session, e.srv, e.Practice.ID, e.ClientID)
 	defer postResp.Body.Close()
 	if postResp.StatusCode != http.StatusConflict {
 		t.Fatalf("erasure status = %d, want %d given the precheck found an unsettled invoice", postResp.StatusCode, http.StatusConflict)
@@ -107,21 +95,15 @@ func TestEraseEligibilityHandler_NamesUnsettledInvoicesOnly(t *testing.T) {
 // TestEraseEligibilityHandler_AlreadyErased -- once erased, the precheck
 // says so and stops naming invoices; the act cannot run again regardless.
 func TestEraseEligibilityHandler_AlreadyErased(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-eligibility-erased"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID := seedFullClient(t, db, practiceID, staffID)
+	e := newEraseEnv(t)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	first := postErasure(t, session, srv, practiceID, clientID)
+	first := postErasure(t, e.session, e.srv, e.Practice.ID, e.ClientID)
 	defer first.Body.Close()
 	if first.StatusCode != http.StatusOK {
 		t.Fatalf("seeding erasure: status = %d, want %d", first.StatusCode, http.StatusOK)
 	}
 
-	resp := eraseEligibility(t, session, srv.URL, practiceID, clientID)
+	resp := eraseEligibility(t, e.session, e.srv.URL, e.Practice.ID, e.ClientID)
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusOK)
 	out := decodeEligibility(t, resp)
