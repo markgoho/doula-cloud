@@ -2,13 +2,13 @@ package staffauth_test
 
 import (
 	"context"
-	"encoding/json/v2"
 	"net/http"
 	"testing"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -17,13 +17,7 @@ import (
 // practiceID, whoever tried.
 func countRefusals(t *testing.T, db *testdb.DB, practiceID string) int {
 	t.Helper()
-	var n int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM activity WHERE practice_id = $1 AND action = $2`,
-		practiceID, staffauth.ActionSecondFactorRefused,
-	).Scan(&n); err != nil {
-		t.Fatalf("count refusals: %v", err)
-	}
+	n := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE practice_id = $1 AND action = $2`, practiceID, staffauth.ActionSecondFactorRefused)
 	return n
 }
 
@@ -49,11 +43,7 @@ func TestSecondFactorAct_RefusesAndRecords(t *testing.T) {
 	if n := countRefusals(t, db, practiceID); n != 1 {
 		t.Fatalf("refusals recorded = %d, want 1", n)
 	}
-	var required bool
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT require_mfa_for_all_staff FROM practices WHERE id = $1`, practiceID).Scan(&required); err != nil {
-		t.Fatalf("read switch: %v", err)
-	}
+	required := testdb.Scalar[bool](t, db.Admin, `SELECT require_mfa_for_all_staff FROM practices WHERE id = $1`, practiceID)
 	if required {
 		t.Fatal("switch is on after a refused request")
 	}
@@ -122,15 +112,7 @@ func TestSecondFactorAct_OtherOwnerRoutesAdmitAnOwnerWithNoFactor(t *testing.T) 
 	srv, _ := newMFARequiredServer(t, db, authntest.NewFakeAccountManager())
 	defer srv.Close()
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/mfa-required/impact", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, authntest.SeedSessionWithSecondFactor(t, db.App, ownerUID, false))
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/mfa-required/impact", reqtest.Session(authntest.SeedSessionWithSecondFactor(t, db.App, ownerUID, false)))
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -147,19 +129,8 @@ func TestPracticeSession_CarriesTheSecondFactor(t *testing.T) {
 
 		srv, _ := newMFARequiredServer(t, db, authntest.NewFakeAccountManager())
 
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/session", nil)
-		if err != nil {
-			t.Fatalf("build request: %v", err)
-		}
-		authntest.AddSessionCookie(req, authntest.SeedSessionWithSecondFactor(t, db.App, doulaUID, secondFactor))
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("request: %v", err)
-		}
-		var body staffauth.PracticeSessionResponse
-		if err := json.UnmarshalRead(resp.Body, &body); err != nil {
-			t.Fatalf("decode: %v", err)
-		}
+		resp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/session", reqtest.Session(authntest.SeedSessionWithSecondFactor(t, db.App, doulaUID, secondFactor)))
+		body := reqtest.Decode[staffauth.PracticeSessionResponse](t, resp)
 		_ = resp.Body.Close()
 		srv.Close()
 		if body.SecondFactor != secondFactor {

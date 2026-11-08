@@ -1,13 +1,12 @@
 package staffauth_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -44,19 +43,7 @@ func storedNames(t *testing.T, db *testdb.DB, identityUID string) (first, last, 
 
 func putJSON(t *testing.T, url, session, body string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, url, strings.NewReader(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if session != "" {
-		authntest.AddSessionCookie(req, session)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Put(t, url, reqtest.Session(session), reqtest.RawJSON([]byte(body)))
 }
 
 func TestSignup_StoresBothNamesAndRecordsTheStatement(t *testing.T) {
@@ -68,9 +55,7 @@ func TestSignup_StoresBothNamesAndRecordsTheStatement(t *testing.T) {
 		PracticeName: "Two Names Practice", FirstName: "  Mary Anne ", LastName: " Smith ", WorkState: "NY", Timezone: signupZone,
 	})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
 
 	first, last, printed, kinds := storedNames(t, db, "two-names-uid")
 	if first != maryAnne || last != smith {
@@ -93,9 +78,7 @@ func TestSignup_RefusesEachEmptyNameOnItsOwn(t *testing.T) {
 		PracticeName: "P", FirstName: "Mary", LastName: "  ", WorkState: "NY", Timezone: signupZone,
 	})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	details := decodeDetails(t, resp)
 	if details["lastName"] != staffauth.MsgLastNameNeeded {
 		t.Fatalf("details = %v, want a lastName entry", details)
@@ -114,9 +97,7 @@ func TestAcceptInvite_RefusesEachEmptyNameOnItsOwn(t *testing.T) {
 
 	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{InviteToken: token, FirstName: "", LastName: "Vasquez", WorkState: "NY"})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	details := decodeDetails(t, resp)
 	if details["firstName"] != staffauth.MsgFirstNameNeeded {
 		t.Fatalf("details = %v, want a firstName entry", details)
@@ -135,9 +116,7 @@ func TestAcceptInvite_StoresBothNamesAndRecordsTheStatement(t *testing.T) {
 
 	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{InviteToken: token, FirstName: leaFirstName, LastName: "de la Cruz", WorkState: "NY"})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	first, last, printed, kinds := storedNames(t, db, "lena2-uid")
 	if first != "Lena" || last != "de la Cruz" || printed != "Lena de la Cruz" {
 		t.Fatalf("names = %q, %q, %q", first, last, printed)
@@ -156,9 +135,7 @@ func TestUpdateName_MissingCookie(t *testing.T) {
 
 	resp := putJSON(t, srv.URL+"/api/staff/name", "", `{"firstName":"A","lastName":"B"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 func TestUpdateName_UnknownStaff(t *testing.T) {
@@ -168,9 +145,7 @@ func TestUpdateName_UnknownStaff(t *testing.T) {
 
 	resp := putJSON(t, srv.URL+"/api/staff/name", session, `{"firstName":"A","lastName":"B"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestUpdateName_RejectsMalformedBody(t *testing.T) {
@@ -181,9 +156,7 @@ func TestUpdateName_RejectsMalformedBody(t *testing.T) {
 
 	resp := putJSON(t, srv.URL+"/api/staff/name", session, `not json`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestUpdateName_RefusesEachEmptyNameAndChangesNothing(t *testing.T) {
@@ -194,9 +167,7 @@ func TestUpdateName_RefusesEachEmptyNameAndChangesNothing(t *testing.T) {
 
 	resp := putJSON(t, srv.URL+"/api/staff/name", session, `{"firstName":" ","lastName":""}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	details := decodeDetails(t, resp)
 	if details["firstName"] != staffauth.MsgFirstNameNeeded || details["lastName"] != staffauth.MsgLastNameNeeded {
 		t.Fatalf("details = %v, want both entries", details)
@@ -215,13 +186,8 @@ func TestUpdateName_ChangesBothAndRecordsWhoAndWhen(t *testing.T) {
 
 	resp := putJSON(t, srv.URL+"/api/staff/name", session, `{"firstName":" Mary Anne ","lastName":"Smith"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var got staffauth.NameResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	got := reqtest.Decode[staffauth.NameResponse](t, resp)
 	if got.FirstName != maryAnne || got.LastName != smith {
 		t.Fatalf("response = %+v", got)
 	}
@@ -232,12 +198,7 @@ func TestUpdateName_ChangesBothAndRecordsWhoAndWhen(t *testing.T) {
 	if len(kinds) != 1 || kinds[0] != "changed" {
 		t.Fatalf("name events = %v, want one 'changed'", kinds)
 	}
-	var actor string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT actor_staff_id FROM staff_name_events WHERE staff_id = $1`, staffID,
-	).Scan(&actor); err != nil {
-		t.Fatalf("read actor: %v", err)
-	}
+	actor := testdb.Scalar[string](t, db.Admin, `SELECT actor_staff_id FROM staff_name_events WHERE staff_id = $1`, staffID)
 	if actor != staffID {
 		t.Fatalf("actor_staff_id = %q, want her own id %q", actor, staffID)
 	}

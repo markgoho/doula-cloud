@@ -1,7 +1,6 @@
 package contracts_test
 
 import (
-	"bytes"
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +15,7 @@ import (
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/practicerate"
 	"doula-cloud/api/internal/push"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -26,17 +26,7 @@ func contractAmountURL(srv *httptest.Server, practiceID, engagementID string) st
 
 func putContractAmountRaw(t *testing.T, srv *httptest.Server, session, practiceID, engagementID string, body []byte) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, contractAmountURL(srv, practiceID, engagementID), bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Put(t, contractAmountURL(srv, practiceID, engagementID), reqtest.Session(session), reqtest.RawJSON(body))
 }
 
 func putContractAmount(t *testing.T, srv *httptest.Server, session, practiceID, engagementID string, amountCents int64) *http.Response {
@@ -66,9 +56,7 @@ func TestPostContractHandler_NoRateSet(t *testing.T) {
 	resp := postContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusConflict)
 	out := apierrtest.Decode(t, resp)
 	if out.Code != apierr.CodeFailedPrecondition {
 		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeFailedPrecondition)
@@ -102,15 +90,7 @@ func TestPostContractHandler_RemovedRateRefusedLikeNoRate(t *testing.T) {
 	defer srv.Close()
 	session := authntest.SeedSession(t, db.App, uid)
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, srv.URL+"/api/practices/"+practiceID+"/rates/birth", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	del, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	del := reqtest.Delete(t, srv.URL+"/api/practices/"+practiceID+"/rates/birth", reqtest.Session(session))
 	defer del.Body.Close()
 	if del.StatusCode != http.StatusOK {
 		t.Fatalf("DELETE status = %d, want %d", del.StatusCode, http.StatusOK)
@@ -118,9 +98,7 @@ func TestPostContractHandler_RemovedRateRefusedLikeNoRate(t *testing.T) {
 
 	resp := postContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusConflict)
 	out := apierrtest.Decode(t, resp)
 	const want = "Your Practice has no birth rate yet. Set one on the Rates page in Settings before you create a Contract."
 	if out.Message != want {
@@ -153,9 +131,7 @@ func TestPutContractAmountHandler_NonOwnerAdminForbidden(t *testing.T) {
 			resp := putContractAmount(t, srv, session, practiceID, engagementID, 20000)
 			defer resp.Body.Close()
 
-			if resp.StatusCode != http.StatusForbidden {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusForbidden)
 		})
 	}
 }
@@ -175,9 +151,7 @@ func TestPutContractAmountHandler_AdminAllowed(t *testing.T) {
 	resp := putContractAmount(t, srv, session, practiceID, engagementID, 20000)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 }
 
 // TestPutContractAmountHandler_Success proves an Owner's override
@@ -197,23 +171,15 @@ func TestPutContractAmountHandler_Success(t *testing.T) {
 	resp := putContractAmount(t, srv, session, practiceID, engagementID, 30000)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out contracts.ContractAmountResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[contracts.ContractAmountResponse](t, resp)
 	if out.AmountCents != 30000 {
 		t.Fatalf("amountCents = %d, want 30000", out.AmountCents)
 	}
 
 	getResp := getContract(t, srv, session, practiceID, engagementID)
 	defer getResp.Body.Close()
-	var getOut contracts.ContractResponse
-	if err := json.UnmarshalRead(getResp.Body, &getOut); err != nil {
-		t.Fatalf("decode GET response: %v", err)
-	}
+	getOut := reqtest.Decode[contracts.ContractResponse](t, getResp)
 	if getOut.Values[priceKey] != "$300.00" {
 		t.Fatalf("values[price] after override = %q, want %q", getOut.Values[priceKey], "$300.00")
 	}
@@ -230,12 +196,7 @@ func TestPutContractAmountHandler_Success(t *testing.T) {
 	// #968's AC: an overridden Contract keeps the override and never
 	// re-derives when a later rate change comes through -- amount_overridden
 	// is the column practicerate.PutRateHandler's reprice pass excludes on.
-	var overridden bool
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT amount_overridden FROM contracts WHERE engagement_id = $1`, engagementID,
-	).Scan(&overridden); err != nil {
-		t.Fatalf("query amount_overridden: %v", err)
-	}
+	overridden := testdb.Scalar[bool](t, db.Admin, `SELECT amount_overridden FROM contracts WHERE engagement_id = $1`, engagementID)
 	if !overridden {
 		t.Fatalf("amount_overridden = false, want true after an Owner/Admin override")
 	}
@@ -269,13 +230,7 @@ func TestPutContractAmountHandler_RepeatedIdenticalValueRecordsNoNewActivity(t *
 		t.Fatalf("second PUT status = %d, want %d", second.StatusCode, http.StatusOK)
 	}
 
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = 'contract_amount_overridden'`,
-		engagementID,
-	).Scan(&count); err != nil {
-		t.Fatalf("count activity rows: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = 'contract_amount_overridden'`, engagementID)
 	if count != 0 {
 		t.Fatalf("activity rows = %d, want 0 (the amount never actually changed, 15000 == 15000)", count)
 	}
@@ -305,9 +260,7 @@ func TestPutContractAmountHandler_NonPositiveAmountRejected(t *testing.T) {
 			resp := putContractAmount(t, srv, session, practiceID, engagementID, tc.amountCents)
 			defer resp.Body.Close()
 
-			if resp.StatusCode != http.StatusBadRequest {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 		})
 	}
 }
@@ -326,9 +279,7 @@ func TestPutContractAmountHandler_InvalidBody(t *testing.T) {
 	resp := putContractAmountRaw(t, srv, session, practiceID, engagementID, []byte("not json"))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestPutContractAmountHandler_InvalidEngagementID proves a malformed
@@ -343,9 +294,7 @@ func TestPutContractAmountHandler_InvalidEngagementID(t *testing.T) {
 	resp := putContractAmount(t, srv, session, practiceID, "not-a-uuid", 20000)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestPutContractAmountHandler_EngagementNotFound proves an Engagement
@@ -363,9 +312,7 @@ func TestPutContractAmountHandler_EngagementNotFound(t *testing.T) {
 	resp := putContractAmount(t, srv, session, practiceID, otherEngagementID, 20000)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestPutContractAmountHandler_NoContractNotFound proves overriding an
@@ -382,9 +329,7 @@ func TestPutContractAmountHandler_NoContractNotFound(t *testing.T) {
 	resp := putContractAmount(t, srv, session, practiceID, engagementID, 20000)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestPutContractAmountHandler_NotDraftRejected table-drives #967's AC
@@ -408,9 +353,7 @@ func TestPutContractAmountHandler_NotDraftRejected(t *testing.T) {
 			resp := putContractAmount(t, srv, session, practiceID, engagementID, 20000)
 			defer resp.Body.Close()
 
-			if resp.StatusCode != http.StatusConflict {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusConflict)
 		})
 	}
 }

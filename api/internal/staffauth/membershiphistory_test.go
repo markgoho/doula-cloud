@@ -10,6 +10,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -31,24 +32,12 @@ func newMembershipHistoryServer(t *testing.T, db *testdb.DB, uid string) (srv *h
 func getMembershipHistory(t *testing.T, srv *httptest.Server, session, practiceID, staffID, query string) *http.Response {
 	t.Helper()
 	url := srv.URL + "/api/practices/" + practiceID + "/staff/" + staffID + "/membership-history" + query
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Get(t, url, reqtest.Session(session))
 }
 
 func decodeMembershipHistory(t *testing.T, resp *http.Response) staffauth.MembershipHistory {
 	t.Helper()
-	var out staffauth.MembershipHistory
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[staffauth.MembershipHistory](t, resp)
 	return out
 }
 
@@ -106,9 +95,7 @@ func TestListMembershipHistory_DoulaForbidden(t *testing.T) {
 	resp := getMembershipHistory(t, srv, session, practiceID, staffID, "")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 // TestListMembershipHistory_ReadsTheWholeTrail is the ticket's core
@@ -138,9 +125,7 @@ func TestListMembershipHistory_ReadsTheWholeTrail(t *testing.T) {
 	resp := getMembershipHistory(t, srv, session, practiceID, doulaID, "")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	history := decodeMembershipHistory(t, resp)
 	if len(history.Items) != 3 {
@@ -402,9 +387,7 @@ func TestListMembershipHistory_OtherPracticesStaffIsNotFound(t *testing.T) {
 	resp := getMembershipHistory(t, srv, session, practiceID, elsewhereID, "")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestListMembershipHistory_PaginatesOldestPagesLast is the AC about a
@@ -466,9 +449,7 @@ func TestListMembershipHistory_RejectsBadCursor(t *testing.T) {
 	resp := getMembershipHistory(t, srv, session, practiceID, ownerID, "?cursor=not-a-cursor")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestListMembershipHistory_RejectsBadStaffID(t *testing.T) {
@@ -482,7 +463,5 @@ func TestListMembershipHistory_RejectsBadStaffID(t *testing.T) {
 	resp := getMembershipHistory(t, srv, session, practiceID, "not-a-uuid", "")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }

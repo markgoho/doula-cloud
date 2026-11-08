@@ -1,7 +1,6 @@
 package contracts_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,6 +10,7 @@ import (
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/push"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -44,32 +44,12 @@ func newPortalServerWithStore(t *testing.T, db *testdb.DB, uid string, store obj
 
 func getClientContract(t *testing.T, srv *httptest.Server, session string, engagementID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/portal/engagements/"+engagementID+"/contract", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Get(t, srv.URL+"/api/portal/engagements/"+engagementID+"/contract", reqtest.Session(session))
 }
 
 func getClientContractPDFRaw(t *testing.T, srv *httptest.Server, session string, engagementID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/portal/engagements/"+engagementID+"/contract/pdf", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	if session != "" {
-		authntest.AddSessionCookie(req, session)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Get(t, srv.URL+"/api/portal/engagements/"+engagementID+"/contract/pdf", reqtest.Session(session))
 }
 
 func getClientContractPDF(t *testing.T, srv *httptest.Server, session string, engagementID string) *http.Response {
@@ -93,13 +73,8 @@ func TestClientGetContractHandler_Success(t *testing.T) {
 	resp := getClientContract(t, srv, session, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out contracts.ContractResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[contracts.ContractResponse](t, resp)
 	if out.EngagementID != engagementID || out.Status != statusSent || out.Prose != mergeFieldProse {
 		t.Fatalf("unexpected response: %+v", out)
 	}
@@ -123,9 +98,7 @@ func TestClientGetContractHandler_SignedAndVoidedAllowed(t *testing.T) {
 			resp := getClientContract(t, srv, session, engagementID)
 			defer resp.Body.Close()
 
-			if resp.StatusCode != http.StatusOK {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusOK)
 		})
 	}
 }
@@ -148,9 +121,7 @@ func TestClientGetContractHandler_DraftNeverReturned404s(t *testing.T) {
 	resp := getClientContract(t, srv, session, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestClientGetContractHandler_NoContractYet404 proves an Engagement with
@@ -168,9 +139,7 @@ func TestClientGetContractHandler_NoContractYet404(t *testing.T) {
 	resp := getClientContract(t, srv, session, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestClientGetContractHandler_OtherClientsEngagementRejected proves
@@ -191,7 +160,5 @@ func TestClientGetContractHandler_OtherClientsEngagementRejected(t *testing.T) {
 	resp := getClientContract(t, srv, session, otherEngagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }

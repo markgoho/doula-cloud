@@ -10,6 +10,7 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/stackswitch"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
@@ -38,7 +39,7 @@ func TestMiddleware_CompletesOnAOneConnectionPool(t *testing.T) {
 		t.Fatalf("request did not complete on a one-connection pool: %v", err)
 	}
 	defer resp.Body.Close()
-	assertStatus(t, resp, http.StatusOK)
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	renewed := false
 	for _, c := range resp.Cookies() {
@@ -50,11 +51,7 @@ func TestMiddleware_CompletesOnAOneConnectionPool(t *testing.T) {
 		t.Fatal("session past half its life was not renewed")
 	}
 
-	var lastPracticeID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT last_practice_id FROM staff WHERE id = $1`, staffID).Scan(&lastPracticeID); err != nil {
-		t.Fatalf("read stamp: %v", err)
-	}
+	lastPracticeID := testdb.Scalar[string](t, db.Admin, `SELECT last_practice_id FROM staff WHERE id = $1`, staffID)
 	if lastPracticeID != practiceID {
 		t.Fatalf("last_practice_id = %q, want %q", lastPracticeID, practiceID)
 	}
@@ -113,5 +110,5 @@ func TestMiddleware_CompletesOnAOneConnectionPoolWithTheStackClock(t *testing.T)
 		t.Fatalf("request did not complete on a one-connection pool with the stack clock: %v", err)
 	}
 	defer resp.Body.Close()
-	assertStatus(t, resp, http.StatusOK)
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 }

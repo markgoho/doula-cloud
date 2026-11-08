@@ -4,16 +4,17 @@ import (
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/portalaccount"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -40,19 +41,7 @@ func newAddressChangeServer(db *testdb.DB) *httptest.Server {
 // session.
 func postAddressJSON(t *testing.T, srv *httptest.Server, path, session, body string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+path, strings.NewReader(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if session != "" {
-		authntest.AddSessionCookie(req, session)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Post(t, srv.URL+path, reqtest.Session(session), reqtest.RawJSON([]byte(body)))
 }
 
 // seedSignedInClient builds the whole fixture the change flow needs: a
@@ -74,12 +63,7 @@ func seedSignedInClient(t *testing.T, db *testdb.DB, oldAddress string) (identif
 
 func signInAddressOf(t *testing.T, db *testdb.DB, identifier string) string {
 	t.Helper()
-	var address string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT sign_in_address FROM portal_accounts WHERE identifier = $1`, identifier,
-	).Scan(&address); err != nil {
-		t.Fatalf("read sign_in_address: %v", err)
-	}
+	address := testdb.Scalar[string](t, db.Admin, `SELECT sign_in_address FROM portal_accounts WHERE identifier = $1`, identifier)
 	return address
 }
 
@@ -106,9 +90,7 @@ func TestRequestAddressChangeHandler_MailsTheNewAddressOnly(t *testing.T) {
 
 	resp := postAddressJSON(t, srv, "/api/portal/sign-in-address/request", session, `{"email":"New@Example.com"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusAccepted {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusAccepted)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusAccepted)
 
 	_, toAddress := pendingAddressChangeToken(t, db, identifier)
 	if toAddress != newSignInAddress {
@@ -201,23 +183,12 @@ func TestRequestAddressChangeHandler_ReRequestRetiresTheFirstAddress(t *testing.
 	second := postAddressJSON(t, srv, "/api/portal/sign-in-address/request", session, `{"email":"second@example.com"}`)
 	_ = second.Body.Close()
 
-	var live int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM auth_tokens WHERE identity_uid = $1 AND purpose = 'client_sign_in_address_change' AND used_at IS NULL`,
-		identifier,
-	).Scan(&live); err != nil {
-		t.Fatalf("count auth_tokens: %v", err)
-	}
+	live := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM auth_tokens WHERE identity_uid = $1 AND purpose = 'client_sign_in_address_change' AND used_at IS NULL`, identifier)
 	if live != 1 {
 		t.Fatalf("live tokens = %d, want 1", live)
 	}
 
-	var stranded int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM portal_sign_in_address_changes WHERE token_hash = $1`, authtoken.Digest(firstToken),
-	).Scan(&stranded); err != nil {
-		t.Fatalf("count portal_sign_in_address_changes: %v", err)
-	}
+	stranded := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM portal_sign_in_address_changes WHERE token_hash = $1`, authtoken.Digest(firstToken))
 	if stranded != 0 {
 		t.Fatal("the superseded address survived the re-request")
 	}
@@ -256,9 +227,7 @@ func TestRequestAddressChangeHandler_Refusals(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			resp := postAddressJSON(t, srv, "/api/portal/sign-in-address/request", tc.session, tc.body)
 			defer resp.Body.Close()
-			if resp.StatusCode != tc.want {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, tc.want)
-			}
+			reqtest.RequireStatus(t, resp, tc.want)
 			if tc.wantField == "" {
 				return
 			}
@@ -291,9 +260,7 @@ func TestRequestAddressChangeHandler_StaffSessionRefused(t *testing.T) {
 
 	resp := postAddressJSON(t, srv, "/api/portal/sign-in-address/request", staffSession, `{"email":"new@example.com"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 // TestRequestAddressChangeHandler_PortalTierWithoutAnAccountRefused is
@@ -311,9 +278,7 @@ func TestRequestAddressChangeHandler_PortalTierWithoutAnAccountRefused(t *testin
 
 	resp := postAddressJSON(t, srv, "/api/portal/sign-in-address/request", orphanSession, `{"email":"new@example.com"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 func TestSpendAddressChangeHandler_MovesTheAddressAndRecordsIt(t *testing.T) {
@@ -330,9 +295,7 @@ func TestSpendAddressChangeHandler_MovesTheAddressAndRecordsIt(t *testing.T) {
 	// a device she has never signed in on.
 	resp := postAddressJSON(t, srv, "/api/portal/sign-in-address", "", `{"token":"`+token+`"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	var body struct {
 		SignInAddress string `json:"signInAddress"`
 	}
@@ -354,13 +317,7 @@ func TestSpendAddressChangeHandler_MovesTheAddressAndRecordsIt(t *testing.T) {
 		}
 	}
 
-	var actorClient string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT actor_client_id FROM activity WHERE subject_kind = 'client' AND subject_id = $1 AND action = 'portal_sign_in_address_changed'`,
-		clientID,
-	).Scan(&actorClient); err != nil {
-		t.Fatalf("read activity row: %v", err)
-	}
+	actorClient := testdb.Scalar[string](t, db.Admin, `SELECT actor_client_id FROM activity WHERE subject_kind = 'client' AND subject_id = $1 AND action = 'portal_sign_in_address_changed'`, clientID)
 	if actorClient != clientID {
 		t.Fatalf("actor_client_id = %q, want %q", actorClient, clientID)
 	}
@@ -391,9 +348,7 @@ func TestSpendAddressChangeHandler_RecordsOnceAtEachPractice(t *testing.T) {
 
 	resp := postAddressJSON(t, srv, "/api/portal/sign-in-address", "", `{"token":"`+token+`"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	rows, err := db.Admin.QueryContext(t.Context(),
 		`SELECT subject_id, practice_id, actor_client_id FROM activity WHERE subject_kind = 'client' AND action = 'portal_sign_in_address_changed'`,
@@ -456,9 +411,7 @@ func TestSpendAddressChangeHandler_OldAddressStopsSigningIn(t *testing.T) {
 
 	oldResp := postJSON(t, linkSrv, "/api/portal/magic-link/request", `{"email":"old@example.com"}`)
 	defer oldResp.Body.Close()
-	if oldResp.StatusCode != http.StatusAccepted {
-		t.Fatalf("status = %d, want %d", oldResp.StatusCode, http.StatusAccepted)
-	}
+	reqtest.RequireStatus(t, oldResp, http.StatusAccepted)
 	if got := countLiveMagicLinkTokens(t, db, identifier); got != 0 {
 		t.Fatalf("live sign-in tokens for the old address = %d, want 0", got)
 	}
@@ -487,21 +440,14 @@ func TestSpendAddressChangeHandler_AddressTakenSinceTheLinkWasSent(t *testing.T)
 
 	resp := postAddressJSON(t, srv, "/api/portal/sign-in-address", "", `{"token":"`+token+`"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusConflict)
 	if got := signInAddressOf(t, db, identifier); got != oldSignInAddress {
 		t.Fatalf("sign_in_address = %q, want it unmoved", got)
 	}
 
 	// The whole transaction rolled back, token included, so the link she
 	// holds still works once she picks another address.
-	var used any
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT used_at FROM auth_tokens WHERE token_hash = $1`, authtoken.Digest(token),
-	).Scan(&used); err != nil {
-		t.Fatalf("read auth_tokens: %v", err)
-	}
+	used := testdb.Scalar[any](t, db.Admin, `SELECT used_at FROM auth_tokens WHERE token_hash = $1`, authtoken.Digest(token))
 	if used != nil {
 		t.Fatal("the refused confirmation burned her link")
 	}
@@ -534,10 +480,8 @@ func TestSpendAddressChangeHandler_Refusals(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			resp := postAddressJSON(t, srv, "/api/portal/sign-in-address", "", tc.body)
 			defer resp.Body.Close()
-			if resp.StatusCode != tc.want {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, tc.want)
-			}
-			requireErrorCode(t, resp, tc.wantCode)
+			reqtest.RequireStatus(t, resp, tc.want)
+			apierrtest.RequireCode(t, resp, tc.wantCode)
 		})
 	}
 }
@@ -556,16 +500,9 @@ func TestSpendAddressChangeHandler_MagicLinkTokenIsNotAConfirmation(t *testing.T
 	req := postJSON(t, linkSrv, "/api/portal/magic-link/request", `{"email":"old@example.com"}`)
 	_ = req.Body.Close()
 
-	var token string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT token FROM portal_magic_link_outbox WHERE identity_uid = $1`, identifier,
-	).Scan(&token); err != nil {
-		t.Fatalf("read magic link token: %v", err)
-	}
+	token := testdb.Scalar[string](t, db.Admin, `SELECT token FROM portal_magic_link_outbox WHERE identity_uid = $1`, identifier)
 
 	resp := postAddressJSON(t, srv, "/api/portal/sign-in-address", "", `{"token":"`+token+`"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }

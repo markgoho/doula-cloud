@@ -1,11 +1,11 @@
 package plans_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
 	"testing"
 
 	"doula-cloud/api/internal/plans"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -23,9 +23,7 @@ func TestPostInstanceHandler_InvalidEngagementID(t *testing.T) {
 	resp := postInstance(t, srv, session, practiceID, "not-a-uuid", carePlanType)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestPostInstanceHandler_UnknownPlanType(t *testing.T) {
@@ -40,9 +38,7 @@ func TestPostInstanceHandler_UnknownPlanType(t *testing.T) {
 	resp := postInstance(t, srv, session, practiceID, engagementID, "not_a_plan_type")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestPostInstanceHandler_EngagementNotFound proves an Engagement id from a
@@ -61,9 +57,7 @@ func TestPostInstanceHandler_EngagementNotFound(t *testing.T) {
 	resp := postInstance(t, srv, session, practiceID, otherEngagementID, carePlanType)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestPostInstanceHandler_NoTemplate proves the "should not happen post-#63"
@@ -81,9 +75,7 @@ func TestPostInstanceHandler_NoTemplate(t *testing.T) {
 	resp := postInstance(t, srv, session, practiceID, engagementID, carePlanType)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestPostInstanceHandler_Success proves a Plan Instance is created with a
@@ -103,14 +95,9 @@ func TestPostInstanceHandler_Success(t *testing.T) {
 	resp := postInstance(t, srv, session, practiceID, engagementID, carePlanType)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
 
-	var out plans.InstanceResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[plans.InstanceResponse](t, resp)
 	if out.EngagementID != engagementID || out.PlanType != carePlanType {
 		t.Fatalf("out = %+v, want engagementId %q planType %q", out, engagementID, carePlanType)
 	}
@@ -158,9 +145,7 @@ func TestGetInstanceHandler_InvalidEngagementID(t *testing.T) {
 	resp := getInstance(t, srv, session, practiceID, "not-a-uuid", carePlanType)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestGetInstanceHandler_UnknownPlanType(t *testing.T) {
@@ -175,9 +160,7 @@ func TestGetInstanceHandler_UnknownPlanType(t *testing.T) {
 	resp := getInstance(t, srv, session, practiceID, engagementID, "not_a_plan_type")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestGetInstanceHandler_EngagementNotFound(t *testing.T) {
@@ -193,9 +176,7 @@ func TestGetInstanceHandler_EngagementNotFound(t *testing.T) {
 	resp := getInstance(t, srv, session, practiceID, otherEngagementID, carePlanType)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestGetInstanceHandler_NotFound(t *testing.T) {
@@ -210,9 +191,7 @@ func TestGetInstanceHandler_NotFound(t *testing.T) {
 	resp := getInstance(t, srv, session, practiceID, engagementID, carePlanType)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestGetInstanceHandler_ContractorWithoutAttachmentForbidden proves
@@ -235,9 +214,7 @@ func TestGetInstanceHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 	resp := getInstance(t, srv, session, practiceID, engagementID, birthPlanType)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestGetInstanceHandler_ContractorWithGrantedAttachmentSucceeds proves
@@ -259,9 +236,7 @@ func TestGetInstanceHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T
 	resp := getInstance(t, srv, session, practiceID, engagementID, birthPlanType)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 }
 
 func TestGetInstanceHandler_Success(t *testing.T) {
@@ -280,14 +255,9 @@ func TestGetInstanceHandler_Success(t *testing.T) {
 	resp := getInstance(t, srv, session, practiceID, engagementID, birthPlanType)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
-	var out plans.InstanceResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[plans.InstanceResponse](t, resp)
 	if len(out.Fields) != 1 || out.Fields[0].ID != "f1" {
 		t.Fatalf("fields = %+v, want the stored snapshot", out.Fields)
 	}
@@ -307,9 +277,7 @@ func TestPutInstanceHandler_InvalidEngagementID(t *testing.T) {
 	resp := putInstance(t, srv, session, practiceID, "not-a-uuid", carePlanType, plans.PutInstanceRequest{})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestPutInstanceHandler_UnknownPlanType(t *testing.T) {
@@ -324,9 +292,7 @@ func TestPutInstanceHandler_UnknownPlanType(t *testing.T) {
 	resp := putInstance(t, srv, session, practiceID, engagementID, "not_a_plan_type", plans.PutInstanceRequest{})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestPutInstanceHandler_EngagementNotFound(t *testing.T) {
@@ -342,9 +308,7 @@ func TestPutInstanceHandler_EngagementNotFound(t *testing.T) {
 	resp := putInstance(t, srv, session, practiceID, otherEngagementID, carePlanType, plans.PutInstanceRequest{})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestPutInstanceHandler_NotFound(t *testing.T) {
@@ -359,9 +323,7 @@ func TestPutInstanceHandler_NotFound(t *testing.T) {
 	resp := putInstance(t, srv, session, practiceID, engagementID, carePlanType, plans.PutInstanceRequest{})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestPutInstanceHandler_InvalidBody(t *testing.T) {
@@ -377,9 +339,7 @@ func TestPutInstanceHandler_InvalidBody(t *testing.T) {
 	resp := putInstanceRaw(t, srv, session, practiceID, engagementID, carePlanType, []byte("not json"))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestPutInstanceHandler_ValidationRejections table-drives validateAnswers's
@@ -423,9 +383,7 @@ func TestPutInstanceHandler_ValidationRejections(t *testing.T) {
 			resp := putInstance(t, srv, session, practiceID, engagementID, carePlanType, plans.PutInstanceRequest{Answers: tc.answers})
 			defer resp.Body.Close()
 
-			if resp.StatusCode != http.StatusBadRequest {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 		})
 	}
 }
@@ -447,13 +405,8 @@ func TestPutInstanceHandler_OmittedAnswersNormalizesToEmptyObject(t *testing.T) 
 	resp := putInstanceRaw(t, srv, session, practiceID, engagementID, carePlanType, []byte(`{}`))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out plans.InstanceResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[plans.InstanceResponse](t, resp)
 	if out.Answers == nil || len(out.Answers) != 0 {
 		t.Fatalf("answers = %+v, want a non-nil empty object", out.Answers)
 	}
@@ -483,10 +436,7 @@ func TestPutInstanceHandler_Success(t *testing.T) {
 	if firstResp.StatusCode != http.StatusOK {
 		t.Fatalf("first PUT status = %d, want %d", firstResp.StatusCode, http.StatusOK)
 	}
-	var firstOut plans.InstanceResponse
-	if err := json.UnmarshalRead(firstResp.Body, &firstOut); err != nil {
-		t.Fatalf("decode first PUT response: %v", err)
-	}
+	firstOut := reqtest.Decode[plans.InstanceResponse](t, firstResp)
 	if len(firstOut.Fields) != 2 {
 		t.Fatalf("fields = %+v, want the unchanged 2-field snapshot", firstOut.Fields)
 	}
@@ -496,10 +446,7 @@ func TestPutInstanceHandler_Success(t *testing.T) {
 
 	getResp := getInstance(t, srv, session, practiceID, engagementID, carePlanType)
 	defer getResp.Body.Close()
-	var getOut plans.InstanceResponse
-	if err := json.UnmarshalRead(getResp.Body, &getOut); err != nil {
-		t.Fatalf("decode GET response: %v", err)
-	}
+	getOut := reqtest.Decode[plans.InstanceResponse](t, getResp)
 	if getOut.Answers[nameFieldID] != jamieAnswer || getOut.Answers["consent"] != true {
 		t.Fatalf("GET answers after PUT = %+v, want the just-written answers", getOut.Answers)
 	}
@@ -508,10 +455,7 @@ func TestPutInstanceHandler_Success(t *testing.T) {
 		Answers: plans.Answers{nameFieldID: jamieAnswer},
 	})
 	defer secondResp.Body.Close()
-	var secondOut plans.InstanceResponse
-	if err := json.UnmarshalRead(secondResp.Body, &secondOut); err != nil {
-		t.Fatalf("decode second PUT response: %v", err)
-	}
+	secondOut := reqtest.Decode[plans.InstanceResponse](t, secondResp)
 	if _, stillPresent := secondOut.Answers["consent"]; stillPresent {
 		t.Fatalf("answers = %+v, want consent dropped by the full-replacement PUT", secondOut.Answers)
 	}
@@ -548,13 +492,7 @@ func TestPutInstanceHandler_RecordsWhichPlanChanged(t *testing.T) {
 				t.Fatalf("PUT status = %d, want %d", resp.StatusCode, http.StatusOK)
 			}
 
-			var action string
-			if err := db.Admin.QueryRowContext(t.Context(),
-				`SELECT action FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1`,
-				engagementID,
-			).Scan(&action); err != nil {
-				t.Fatalf("query activity: %v", err)
-			}
+			action := testdb.Scalar[string](t, db.Admin, `SELECT action FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1`, engagementID)
 			if action != tc.want {
 				t.Fatalf("activity action = %q, want %q", action, tc.want)
 			}
@@ -580,13 +518,7 @@ func TestPutInstanceHandler_ASaveThatChangesNothingRecordsNothing(t *testing.T) 
 			defer srv.Close()
 
 			edits := func() int {
-				var n int
-				if err := db.Admin.QueryRowContext(t.Context(),
-					`SELECT count(*) FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 AND action LIKE '%plan_edited'`,
-					engagementID,
-				).Scan(&n); err != nil {
-					t.Fatalf("count edits: %v", err)
-				}
+				n := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 AND action LIKE '%plan_edited'`, engagementID)
 				return n
 			}
 			save := func(answers plans.Answers) {
@@ -685,10 +617,7 @@ func TestPostInstanceHandler_RecordsWhoStartedIt(t *testing.T) {
 			if postResp.StatusCode != http.StatusCreated {
 				t.Fatalf("POST status = %d, want %d", postResp.StatusCode, http.StatusCreated)
 			}
-			var posted plans.InstanceResponse
-			if err := json.UnmarshalRead(postResp.Body, &posted); err != nil {
-				t.Fatalf("decode POST: %v", err)
-			}
+			posted := reqtest.Decode[plans.InstanceResponse](t, postResp)
 			wantBy := "Test Staff " + uid
 			if posted.Started == nil || posted.Started.By != wantBy || posted.Started.At.IsZero() {
 				t.Fatalf("POST response: started = %+v, want its instant, by %q", posted.Started, wantBy)
@@ -741,13 +670,8 @@ func TestPostInstanceHandler_RecordsWhoStartedIt(t *testing.T) {
 // closes it.
 func decodeInstance(t *testing.T, resp *http.Response) plans.InstanceResponse {
 	t.Helper()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out plans.InstanceResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[plans.InstanceResponse](t, resp)
 	return out
 }
 
@@ -781,10 +705,7 @@ func TestPlanTemplateEditDoesNotMutateExistingInstance(t *testing.T) {
 
 	getResp := getInstance(t, srv, session, practiceID, engagementID, carePlanType)
 	defer getResp.Body.Close()
-	var out plans.InstanceResponse
-	if err := json.UnmarshalRead(getResp.Body, &out); err != nil {
-		t.Fatalf("decode GET response: %v", err)
-	}
+	out := reqtest.Decode[plans.InstanceResponse](t, getResp)
 	if len(out.Fields) != 1 || out.Fields[0].ID != "f1" {
 		t.Fatalf("instance fields = %+v, want the original 1-field snapshot untouched by the later template edit", out.Fields)
 	}
@@ -811,13 +732,8 @@ func TestPutInstanceHandler_AnswersChangeClearsClientAcknowledgment(t *testing.T
 		Answers: plans.Answers{nameFieldID: "Alex"},
 	})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out plans.InstanceResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[plans.InstanceResponse](t, resp)
 	if out.ClientAcknowledgedAt != nil {
 		t.Fatalf("clientAcknowledgedAt = %v, want nil after an answers-changing edit", out.ClientAcknowledgedAt)
 	}
@@ -845,13 +761,8 @@ func TestPutInstanceHandler_UnchangedAnswersKeepsClientAcknowledgment(t *testing
 		Answers: plans.Answers{nameFieldID: jamieAnswer},
 	})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out plans.InstanceResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[plans.InstanceResponse](t, resp)
 	if out.ClientAcknowledgedAt == nil {
 		t.Fatalf("clientAcknowledgedAt = nil, want the pre-existing acknowledgment kept since answers didn't change")
 	}
@@ -873,10 +784,7 @@ func TestGetInstanceHandler_ReflectsClientAcknowledgment(t *testing.T) {
 
 	resp := getInstance(t, srv, session, practiceID, engagementID, birthPlanType)
 	defer resp.Body.Close()
-	var out plans.InstanceResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[plans.InstanceResponse](t, resp)
 	if out.ClientAcknowledgedAt == nil {
 		t.Fatalf("clientAcknowledgedAt = nil, want Staff's own read to show the Client's acknowledgment")
 	}

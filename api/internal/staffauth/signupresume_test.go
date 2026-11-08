@@ -1,12 +1,12 @@
 package staffauth_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
 	"testing"
 
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -36,34 +36,18 @@ func TestSignupHandler_ResumesStaffRowWithNoMembership(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var out staffauth.SignupResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
+	out := reqtest.Decode[staffauth.SignupResponse](t, resp)
 	if out.StaffID != seeded {
 		t.Fatalf("staffId = %q, want the existing row %q", out.StaffID, seeded)
 	}
 
-	var staffCount int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM staff WHERE identity_uid = $1`, resumeUID,
-	).Scan(&staffCount); err != nil {
-		t.Fatalf("count staff: %v", err)
-	}
+	staffCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM staff WHERE identity_uid = $1`, resumeUID)
 	if staffCount != 1 {
 		t.Fatalf("staff rows = %d, want exactly 1", staffCount)
 	}
 
-	var roleCount int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT array_length(roles, 1) FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`,
-		out.PracticeID, seeded,
-	).Scan(&roleCount); err != nil {
-		t.Fatalf("query membership roles: %v", err)
-	}
+	roleCount := testdb.Scalar[int](t, db.Admin, `SELECT array_length(roles, 1) FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`, out.PracticeID, seeded)
 	if roleCount != 3 {
 		t.Fatalf("roles = %d, want 3 (owner, admin, doula)", roleCount)
 	}
@@ -83,13 +67,8 @@ func TestSignupHandler_ResumesStaffRowWithNoMembership(t *testing.T) {
 	if stored != "VT" {
 		t.Fatalf("work_state = %q, want %q", stored, "VT")
 	}
-	var previous string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT coalesce(previous_work_state, '') FROM staff_work_state_events
-		  WHERE staff_id = $1 ORDER BY created_at DESC LIMIT 1`, seeded,
-	).Scan(&previous); err != nil {
-		t.Fatalf("query work state event: %v", err)
-	}
+	previous := testdb.Scalar[string](t, db.Admin, `SELECT coalesce(previous_work_state, '') FROM staff_work_state_events
+		  WHERE staff_id = $1 ORDER BY created_at DESC LIMIT 1`, seeded)
 	if previous != "NY" {
 		t.Fatalf("previous_work_state = %q, want %q -- a resumed signup records a correction, not a first assertion", previous, "NY")
 	}
@@ -107,17 +86,9 @@ func TestSignupHandler_QueuesTheVerificationMail(t *testing.T) {
 		WorkState: "NY", PracticeName: "Quiet Practice", FirstName: jamieName, LastName: ownerLastName,
 	})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
 
-	var mailCount int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM staff_token_mail_outbox WHERE identity_uid = $1`,
-		resumeUID,
-	).Scan(&mailCount); err != nil {
-		t.Fatalf("count outbox: %v", err)
-	}
+	mailCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM staff_token_mail_outbox WHERE identity_uid = $1`, resumeUID)
 	if mailCount != 1 {
 		t.Fatalf("outbox messages = %d, want 1 on a first signup", mailCount)
 	}
@@ -136,17 +107,9 @@ func TestSignupHandler_ResumeQueuesNoSecondVerificationMail(t *testing.T) {
 		WorkState: "NY", PracticeName: "Quiet Practice", FirstName: jamieName, LastName: ownerLastName,
 	})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
 
-	var mailCount int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM staff_token_mail_outbox WHERE identity_uid = $1`,
-		resumeUID,
-	).Scan(&mailCount); err != nil {
-		t.Fatalf("count outbox: %v", err)
-	}
+	mailCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM staff_token_mail_outbox WHERE identity_uid = $1`, resumeUID)
 	if mailCount != 0 {
 		t.Fatalf("outbox messages = %d, want 0 on a resumed signup", mailCount)
 	}
@@ -166,13 +129,8 @@ func TestSignupHandler_ResumeWithEmptyPracticeNameTakesHerName(t *testing.T) {
 		WorkState: "NY", FirstName: jamieName, LastName: ownerLastName,
 	})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var out staffauth.SignupResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
+	out := reqtest.Decode[staffauth.SignupResponse](t, resp)
 	if got := storedPracticeName(t, db, out.PracticeID); got != jamieOwnerName {
 		t.Fatalf("practices.name = %q, want her own name %q", got, jamieOwnerName)
 	}
@@ -208,12 +166,7 @@ func TestSignupHandler_RefusesWhenAlreadyInAPractice(t *testing.T) {
 		t.Fatalf("message = %q, want %q", out.Message, staffauth.MsgAlreadyBelongsToPractice)
 	}
 
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM practices WHERE name = $1`, secondName,
-	).Scan(&count); err != nil {
-		t.Fatalf("count practices: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM practices WHERE name = $1`, secondName)
 	if count != 0 {
 		t.Fatalf("refused signup left %d Practice rows behind, want 0", count)
 	}

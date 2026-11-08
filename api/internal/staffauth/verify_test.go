@@ -4,14 +4,15 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -45,18 +46,7 @@ func newVerifyRequestServerWithoutStaff(t *testing.T, db *testdb.DB, uid string)
 
 func postVerifyRequest(t *testing.T, srv *httptest.Server, session string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/verify-email/request", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	if session != "" {
-		authntest.AddSessionCookie(req, session)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Post(t, srv.URL+"/api/staff/verify-email/request", reqtest.Session(session))
 }
 
 func newVerifySpendServer(accounts *authntest.FakeAccountManager, db *testdb.DB) *httptest.Server {
@@ -69,39 +59,18 @@ func newVerifySpendServer(accounts *authntest.FakeAccountManager, db *testdb.DB)
 
 func postVerifySpend(t *testing.T, srv *httptest.Server, body string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/verify-email", strings.NewReader(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Post(t, srv.URL+"/api/staff/verify-email", reqtest.RawJSON([]byte(body)))
 }
 
 func countPendingTokenMail(t *testing.T, db *testdb.DB, identityUID, kind string) int {
 	t.Helper()
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM staff_token_mail_outbox WHERE identity_uid = $1 AND kind = $2 AND status = 'pending'`,
-		identityUID, kind,
-	).Scan(&count); err != nil {
-		t.Fatalf("count pending token mail: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM staff_token_mail_outbox WHERE identity_uid = $1 AND kind = $2 AND status = 'pending'`, identityUID, kind)
 	return count
 }
 
 func countLiveAuthTokens(t *testing.T, db *testdb.DB, identityUID string, purpose authtoken.Purpose) int {
 	t.Helper()
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM auth_tokens WHERE identity_uid = $1 AND purpose = $2 AND used_at IS NULL`,
-		identityUID, purpose,
-	).Scan(&count); err != nil {
-		t.Fatalf("count live auth tokens: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM auth_tokens WHERE identity_uid = $1 AND purpose = $2 AND used_at IS NULL`, identityUID, purpose)
 	return count
 }
 
@@ -112,9 +81,7 @@ func TestRequestVerificationHandler_MissingCookieUnauthorized(t *testing.T) {
 
 	resp := postVerifyRequest(t, srv, "")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 // TestRequestVerificationHandler_NoStaffRowQueuesNothing is #1024's own
@@ -133,9 +100,7 @@ func TestRequestVerificationHandler_NoStaffRowQueuesNothing(t *testing.T) {
 
 	resp := postVerifyRequest(t, srv, session)
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 	if got := countLiveAuthTokens(t, db, uid, authtoken.PurposeStaffEmailVerification); got != 0 {
 		t.Errorf("live verification tokens = %d, want 0 -- a token was minted for a uid with no staff row", got)
 	}
@@ -152,9 +117,7 @@ func TestRequestVerificationHandler_QueuesTokenMail(t *testing.T) {
 
 	resp := postVerifyRequest(t, srv, session)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusAccepted {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusAccepted)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusAccepted)
 	if countLiveAuthTokens(t, db, uid, authtoken.PurposeStaffEmailVerification) != 1 {
 		t.Fatal("expected exactly one live verification token")
 	}
@@ -192,9 +155,7 @@ func TestSpendVerificationHandler_MissingToken(t *testing.T) {
 
 	resp := postVerifySpend(t, srv, `{"token":""}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestSpendVerificationHandler_InvalidRequestBody(t *testing.T) {
@@ -204,9 +165,7 @@ func TestSpendVerificationHandler_InvalidRequestBody(t *testing.T) {
 
 	resp := postVerifySpend(t, srv, `not json`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestSpendVerificationHandler_UnknownTokenInvalid(t *testing.T) {
@@ -216,10 +175,8 @@ func TestSpendVerificationHandler_UnknownTokenInvalid(t *testing.T) {
 
 	resp := postVerifySpend(t, srv, `{"token":"never-minted"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-	requireErrorCode(t, resp, apierr.CodeLinkUnusable)
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+	apierrtest.RequireCode(t, resp, apierr.CodeLinkUnusable)
 }
 
 func TestSpendVerificationHandler_Success(t *testing.T) {
@@ -236,9 +193,7 @@ func TestSpendVerificationHandler_Success(t *testing.T) {
 
 	resp := postVerifySpend(t, srv, `{"token":"`+token+`"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
 	account, err := accounts.GetAccount(t.Context(), uid)
 	if err != nil {
 		t.Fatalf("GetAccount: %v", err)
@@ -273,9 +228,7 @@ func TestSpendVerificationHandler_AccountManagerFailureRollsBackTheSpend(t *test
 
 	resp := postVerifySpend(t, srv, `{"token":"`+token+`"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusInternalServerError)
 
 	accounts.Err = nil
 	if _, err := authtoken.Spend(t.Context(), db.App, token, authtoken.PurposeStaffEmailVerification, time.Now()); err != nil {

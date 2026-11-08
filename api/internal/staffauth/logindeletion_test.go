@@ -10,6 +10,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -93,9 +94,7 @@ func TestDeleteLoginHandler_RedactsRowAndDestroysAccount(t *testing.T) {
 
 	resp := deleteLogin(t, srv, session, true)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
 
 	name, email, identityUID, deleted := readStaffRow(t, db, staffID)
 	if name != staffauth.DeletedStaffName {
@@ -149,9 +148,7 @@ func TestDeleteLoginHandler_EndsEveryMembershipWithItsOwnEvent(t *testing.T) {
 
 	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, uid), true)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
 
 	for _, practiceID := range []string{firstPractice, secondPractice} {
 		if n := countRows(t, db,
@@ -163,14 +160,8 @@ func TestDeleteLoginHandler_EndsEveryMembershipWithItsOwnEvent(t *testing.T) {
 		}
 	}
 
-	var diff string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT diff::text FROM activity
-		  WHERE practice_id = $1 AND subject_id = $2 AND action = 'removed'`,
-		secondPractice, staffID,
-	).Scan(&diff); err != nil {
-		t.Fatalf("read removal diff: %v", err)
-	}
+	diff := testdb.Scalar[string](t, db.Admin, `SELECT diff::text FROM activity
+		  WHERE practice_id = $1 AND subject_id = $2 AND action = 'removed'`, secondPractice, staffID)
 	if !strings.Contains(diff, "admin") || !strings.Contains(diff, contractorType) {
 		t.Fatalf("removal diff = %s, want the roles and employment type the membership held", diff)
 	}
@@ -195,9 +186,7 @@ func TestDeleteLoginHandler_EndsEverySession(t *testing.T) {
 
 	resp := deleteLogin(t, srv, session, true)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
 	if got := authntest.CountFor(t, db.App, uid); got != 0 {
 		t.Fatalf("session rows left = %d, want none anywhere", got)
 	}
@@ -231,9 +220,7 @@ func TestDeleteLoginHandler_RefusesWhileSoleOwner(t *testing.T) {
 
 	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, uid), true)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusConflict)
 	body, err := readBody(resp)
 	if err != nil {
 		t.Fatalf("read body: %v", err)
@@ -274,9 +261,7 @@ func TestDeleteLoginHandler_RefusesWhileSoleOwnerOfPracticePendingDeletion(t *te
 
 	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, uid), true)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusConflict)
 	body, err := readBody(resp)
 	if err != nil {
 		t.Fatalf("read body: %v", err)
@@ -306,9 +291,7 @@ func TestDeleteLoginHandler_AllowsSoleOwnerOfFinalizedPractice(t *testing.T) {
 
 	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, uid), true)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
 	if _, _, _, deleted := readStaffRow(t, db, staffID); !deleted {
 		t.Fatal("she was refused over a practice nobody can reach any more")
 	}
@@ -331,9 +314,7 @@ func TestDeleteLoginHandler_AllowsOwnerWithACoOwner(t *testing.T) {
 
 	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, uid), true)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
 	if _, _, _, deleted := readStaffRow(t, db, staffID); !deleted {
 		t.Fatal("an Owner with a co-Owner was refused")
 	}
@@ -363,9 +344,7 @@ func TestDeleteLoginHandler_RequiresConfirmation(t *testing.T) {
 
 	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, uid), false)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	if _, _, _, deleted := readStaffRow(t, db, staffID); deleted {
 		t.Fatal("an unconfirmed request deleted her login")
 	}
@@ -379,19 +358,9 @@ func TestDeleteLoginHandler_RefusesWithoutASession(t *testing.T) {
 	srv := newDeleteLoginServer(t, db, authntest.NewFakeAccountManager())
 	defer srv.Close()
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, srv.URL+"/api/staff/account", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("X-Confirmed", "true")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Delete(t, srv.URL+"/api/staff/account", reqtest.Header("X-Confirmed", "true"))
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 // TestDeleteLoginHandler_RefusesASessionWithNoStaffRow covers the person
@@ -405,9 +374,7 @@ func TestDeleteLoginHandler_RefusesASessionWithNoStaffRow(t *testing.T) {
 
 	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, "a-uid-with-no-staff-row"), true)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestDeleteLoginHandler_RefusesASecondDelete is the ticket's
@@ -463,9 +430,7 @@ func TestDeleteLoginHandler_IdentityPlatformFailureRollsEverythingBack(t *testin
 
 	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, uid), true)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusInternalServerError)
 	if _, _, _, deleted := readStaffRow(t, db, staffID); deleted {
 		t.Fatal("her row was redacted even though the account delete failed")
 	}
@@ -493,9 +458,7 @@ func TestDeleteLoginHandler_AbsentIdentityPlatformAccountIsSuccess(t *testing.T)
 
 	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, uid), true)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
 	if _, _, _, deleted := readStaffRow(t, db, staffID); !deleted {
 		t.Fatal("an already-absent Identity Platform account stopped the redaction")
 	}
@@ -519,9 +482,7 @@ func TestDeleteLoginHandler_KeepsHerAuthoredWork(t *testing.T) {
 
 	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, uid), true)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
 
 	if n := countRows(t, db,
 		`SELECT count(*) FROM activity a JOIN staff s ON s.id = a.actor_staff_id
@@ -560,9 +521,7 @@ func TestDeleteLoginHandler_LeavesHerFeedbackInPlace(t *testing.T) {
 
 	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, uid), true)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
 
 	if n := countRows(t, db,
 		`SELECT count(*) FROM feedback f JOIN staff s ON s.id = f.staff_id
@@ -595,9 +554,7 @@ func TestDeleteLoginHandler_ResolvesQueuedMailAddressedToHer(t *testing.T) {
 
 	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, uid), true)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
 
 	for _, table := range []string{
 		"staff_token_mail_outbox",

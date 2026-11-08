@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -73,18 +74,7 @@ func (f attachFixture) write(t *testing.T, uid, outcome string) {
 func (f attachFixture) writeStatus(t *testing.T, uid, outcome string) *http.Response {
 	t.Helper()
 	session := authntest.SeedSession(t, f.db.App, uid)
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		f.srv.URL+"/practices/"+f.practiceID+"/engagements/"+f.engagementID+"/writes", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("X-Test-Status", outcome)
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Post(t, f.srv.URL+"/practices/"+f.practiceID+"/engagements/"+f.engagementID+"/writes", reqtest.Session(session), reqtest.Header("X-Test-Status", outcome))
 }
 
 // attachmentFor reads the open attachment for staffID, if there is one.
@@ -188,9 +178,7 @@ func TestAttachingWrite_RefusesAContractorWithOnlyAnAccruedAttachment(t *testing
 	resp := f.writeStatus(t, "attach-accrued-only-contractor", "ok")
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // A contractor who holds an open, granted attachment -- an accepted Offer
@@ -204,9 +192,7 @@ func TestAttachingWrite_AllowsAContractorWithAGrantedAttachment(t *testing.T) {
 	resp := f.writeStatus(t, "attach-granted-contractor", "ok")
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
 }
 
 // A contractor whose granted attachment has since ended is refused again
@@ -220,9 +206,7 @@ func TestAttachingWrite_RefusesAContractorWhoseAttachmentHasEnded(t *testing.T) 
 	resp := f.writeStatus(t, "attach-ended-contractor", "ok")
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // An employee Doula keeps the ambient write grant #227 decided -- no
@@ -235,9 +219,7 @@ func TestAttachingWrite_AllowsAnEmployeeDoulaWithNoAttachment(t *testing.T) {
 	resp := f.writeStatus(t, "attach-employee-doula", "ok")
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
 }
 
 // A malformed engagementId is left for the wrapped handler's own
@@ -258,16 +240,7 @@ func TestAttachingWrite_MalformedEngagementIDReachesTheHandler(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	session := authntest.SeedSession(t, db.App, "attach-malformed-doula")
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid/writes", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid/writes", reqtest.Session(session))
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -313,14 +286,7 @@ func TestGrant_UpgradesAnAccruedAttachmentInPlace(t *testing.T) {
 	seedMembershipWithRoles(t, f.db, f.practiceID, doulaID, "{doula}")
 	f.write(t, "grant-doula", "ok")
 
-	tx, err := f.db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, f.practiceID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := f.db.BeginAs(t, testdb.Practice(f.practiceID))
 	fee := int64(52000)
 	terms := "Two prenatal visits."
 	if err := staffauth.Grant(t.Context(), tx, f.engagementID, doulaID, doulaID, &fee, &terms); err != nil {
@@ -350,14 +316,7 @@ func TestEndGranted_EndsOnlyAGrantedAttachment(t *testing.T) {
 	seedMembershipWithRoles(t, f.db, f.practiceID, ownerID, "{owner}")
 	f.write(t, "end-granted-doula", "ok")
 
-	tx, err := f.db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, f.practiceID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := f.db.BeginAs(t, testdb.Practice(f.practiceID))
 
 	if ended, err := staffauth.EndGranted(t.Context(), tx, f.engagementID, doulaID, ownerID); err != nil || ended {
 		t.Fatalf("EndGranted on an accrued attachment = %v, %v, want false", ended, err)
@@ -369,14 +328,8 @@ func TestEndGranted_EndsOnlyAGrantedAttachment(t *testing.T) {
 		t.Fatalf("EndGranted on a granted attachment = %v, %v, want true", ended, err)
 	}
 
-	var endedBy string
-	if err := tx.QueryRowContext(t.Context(),
-		`SELECT ended_by::text FROM engagement_attachments
-		  WHERE engagement_id = $1 AND staff_id = $2 AND ended_at IS NOT NULL`,
-		f.engagementID, doulaID,
-	).Scan(&endedBy); err != nil {
-		t.Fatalf("read ended attachment: %v", err)
-	}
+	endedBy := testdb.Scalar[string](t, tx, `SELECT ended_by::text FROM engagement_attachments
+		  WHERE engagement_id = $1 AND staff_id = $2 AND ended_at IS NOT NULL`, f.engagementID, doulaID)
 	if endedBy != ownerID {
 		t.Fatalf("ended_by = %q, want the person who ended it", endedBy)
 	}
@@ -392,26 +345,13 @@ func TestEndAttachments_ClosesOpenRowsOnly(t *testing.T) {
 	seedMembershipWithRoles(t, f.db, f.practiceID, ownerID, "{owner}")
 	f.write(t, "end-doula", "ok")
 
-	tx, err := f.db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, f.practiceID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := f.db.BeginAs(t, testdb.Practice(f.practiceID))
 	if err := staffauth.EndAttachments(t.Context(), tx, f.engagementID, ownerID); err != nil {
 		t.Fatalf("EndAttachments: %v", err)
 	}
 
-	var endedBy string
-	if err := tx.QueryRowContext(t.Context(),
-		`SELECT ended_by::text FROM engagement_attachments
-		  WHERE engagement_id = $1 AND staff_id = $2 AND ended_at IS NOT NULL`,
-		f.engagementID, doulaID,
-	).Scan(&endedBy); err != nil {
-		t.Fatalf("read ended attachment: %v", err)
-	}
+	endedBy := testdb.Scalar[string](t, tx, `SELECT ended_by::text FROM engagement_attachments
+		  WHERE engagement_id = $1 AND staff_id = $2 AND ended_at IS NOT NULL`, f.engagementID, doulaID)
 	if endedBy != ownerID {
 		t.Fatalf("ended_by = %q, want the person who ended it", endedBy)
 	}

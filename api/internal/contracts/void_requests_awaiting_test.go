@@ -1,13 +1,12 @@
 package contracts_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -17,16 +16,7 @@ func voidRequestsAwaitingURL(srv *httptest.Server, practiceID string) string {
 
 func getVoidRequestsAwaiting(t *testing.T, srv *httptest.Server, session, practiceID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, voidRequestsAwaitingURL(srv, practiceID), nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Get(t, voidRequestsAwaitingURL(srv, practiceID), reqtest.Session(session))
 }
 
 // TestVoidRequestsAwaitingHandler_RefusedByRole proves the roll-up is
@@ -44,9 +34,7 @@ func TestVoidRequestsAwaitingHandler_RefusedByRole(t *testing.T) {
 	resp := getVoidRequestsAwaiting(t, srv, session, practiceID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 // TestVoidRequestsAwaitingHandler_ListsOnlyOpenRequests proves the
@@ -82,13 +70,8 @@ func TestVoidRequestsAwaitingHandler_ListsOnlyOpenRequests(t *testing.T) {
 	resp := getVoidRequestsAwaiting(t, srv, session, practiceID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out contracts.VoidRequestsAwaitingResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[contracts.VoidRequestsAwaitingResponse](t, resp)
 	if len(out.Items) != 1 {
 		t.Fatalf("items = %+v, want exactly the one still-open request", out.Items)
 	}
@@ -110,20 +93,10 @@ func TestVoidRequestsAwaitingHandler_RejectsAMalformedCursor(t *testing.T) {
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, voidRequestsAwaitingURL(srv, practiceID)+"?cursor=not!valid!base64!", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Get(t, voidRequestsAwaitingURL(srv, practiceID)+"?cursor=not!valid!base64!", reqtest.Session(session))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestVoidRequestsAwaitingHandler_WalksTheCursor mirrors
@@ -145,29 +118,15 @@ func TestVoidRequestsAwaitingHandler_WalksTheCursor(t *testing.T) {
 
 	first := getVoidRequestsAwaiting(t, srv, session, practiceID)
 	defer first.Body.Close()
-	var firstPage contracts.VoidRequestsAwaitingResponse
-	if err := json.UnmarshalRead(first.Body, &firstPage); err != nil {
-		t.Fatalf("decode first page: %v", err)
-	}
+	firstPage := reqtest.Decode[contracts.VoidRequestsAwaitingResponse](t, first)
 	if len(firstPage.Items) != 30 || !firstPage.HasMore || firstPage.NextCursor == nil {
 		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
 			len(firstPage.Items), firstPage.HasMore, firstPage.NextCursor)
 	}
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, voidRequestsAwaitingURL(srv, practiceID)+"?cursor="+*firstPage.NextCursor, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	second, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	second := reqtest.Get(t, voidRequestsAwaitingURL(srv, practiceID)+"?cursor="+*firstPage.NextCursor, reqtest.Session(session))
 	defer second.Body.Close()
-	var secondPage contracts.VoidRequestsAwaitingResponse
-	if err := json.UnmarshalRead(second.Body, &secondPage); err != nil {
-		t.Fatalf("decode second page: %v", err)
-	}
+	secondPage := reqtest.Decode[contracts.VoidRequestsAwaitingResponse](t, second)
 	if len(secondPage.Items) != 1 || secondPage.HasMore || secondPage.NextCursor != nil {
 		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
 			len(secondPage.Items), secondPage.HasMore, secondPage.NextCursor)

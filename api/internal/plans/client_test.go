@@ -1,7 +1,6 @@
 package plans_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -9,6 +8,7 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/plans"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -30,30 +30,12 @@ func newPortalServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Ser
 
 func getClientBirthPlan(t *testing.T, srv *httptest.Server, session string, engagementID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/portal/engagements/"+engagementID+"/birth-plan", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Get(t, srv.URL+"/api/portal/engagements/"+engagementID+"/birth-plan", reqtest.Session(session))
 }
 
 func postAcknowledgeBirthPlan(t *testing.T, srv *httptest.Server, session string, engagementID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/portal/engagements/"+engagementID+"/birth-plan/acknowledge", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Post(t, srv.URL+"/api/portal/engagements/"+engagementID+"/birth-plan/acknowledge", reqtest.Session(session))
 }
 
 func TestClientGetBirthPlanHandler_Success(t *testing.T) {
@@ -73,13 +55,8 @@ func TestClientGetBirthPlanHandler_Success(t *testing.T) {
 	resp := getClientBirthPlan(t, srv, session, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out plans.InstanceResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[plans.InstanceResponse](t, resp)
 	if out.EngagementID != engagementID || out.PlanType != birthPlanType || out.Answers["location"] != hospital {
 		t.Fatalf("unexpected response: %+v", out)
 	}
@@ -98,9 +75,7 @@ func TestClientGetBirthPlanHandler_NoInstanceYet404(t *testing.T) {
 	resp := getClientBirthPlan(t, srv, session, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestClientGetBirthPlanHandler_CarePlanNeverReturned proves the
@@ -124,9 +99,7 @@ func TestClientGetBirthPlanHandler_CarePlanNeverReturned(t *testing.T) {
 	resp := getClientBirthPlan(t, srv, session, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestClientGetBirthPlanHandler_PostpartumEngagementRefused proves #311's
@@ -146,9 +119,7 @@ func TestClientGetBirthPlanHandler_PostpartumEngagementRefused(t *testing.T) {
 	resp := getClientBirthPlan(t, srv, session, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestClientGetBirthPlanHandler_OtherClientsEngagementRejected(t *testing.T) {
@@ -165,9 +136,7 @@ func TestClientGetBirthPlanHandler_OtherClientsEngagementRejected(t *testing.T) 
 	resp := getClientBirthPlan(t, srv, session, otherEngagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 // TestClientAcknowledgeBirthPlanHandler_Success is #301's central AC: a
@@ -190,23 +159,15 @@ func TestClientAcknowledgeBirthPlanHandler_Success(t *testing.T) {
 	resp := postAcknowledgeBirthPlan(t, srv, session, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out plans.InstanceResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[plans.InstanceResponse](t, resp)
 	if out.ClientAcknowledgedAt == nil {
 		t.Fatalf("clientAcknowledgedAt = nil, want it set by the acknowledge write")
 	}
 
 	getResp := getClientBirthPlan(t, srv, session, engagementID)
 	defer getResp.Body.Close()
-	var getOut plans.InstanceResponse
-	if err := json.UnmarshalRead(getResp.Body, &getOut); err != nil {
-		t.Fatalf("decode GET response: %v", err)
-	}
+	getOut := reqtest.Decode[plans.InstanceResponse](t, getResp)
 	if getOut.ClientAcknowledgedAt == nil {
 		t.Fatalf("a subsequent GET clientAcknowledgedAt = nil, want the acknowledgment to persist")
 	}
@@ -237,9 +198,7 @@ func TestClientAcknowledgeBirthPlanHandler_NoInstanceYet404(t *testing.T) {
 	resp := postAcknowledgeBirthPlan(t, srv, session, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestClientAcknowledgeBirthPlanHandler_OtherClientsEngagementRejected(t *testing.T) {
@@ -256,7 +215,5 @@ func TestClientAcknowledgeBirthPlanHandler_OtherClientsEngagementRejected(t *tes
 	resp := postAcknowledgeBirthPlan(t, srv, session, otherEngagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }

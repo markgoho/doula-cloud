@@ -12,6 +12,7 @@ import (
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/legal"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -96,13 +97,8 @@ func TestSignupHandler_RecordsTheOwnersAgreement(t *testing.T) {
 	body.TermsVersion, body.PrivacyVersion = "1999-01-01", "1999-01-01"
 	resp := postSignup(t, srv, "tok", body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var out staffauth.SignupResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
+	out := reqtest.Decode[staffauth.SignupResponse](t, resp)
 
 	rows := termsAcceptedRows(t, db)
 	if len(rows) != 1 {
@@ -144,9 +140,7 @@ func TestSignupHandler_DuringANoticeRecordsTheVersionInForceAndTheComingOne(t *t
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY", Timezone: signupZone, FirstName: jamieName, LastName: ownerLastName})
 	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
 	rows := termsAcceptedRows(t, db)
 	if len(rows) != 1 {
 		t.Fatalf("terms_accepted rows = %d, want 1", len(rows))
@@ -171,9 +165,7 @@ func TestSignupHandler_AFailedSignupRecordsNoAgreement(t *testing.T) {
 		}
 		resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY", FirstName: jamieName, LastName: ownerLastName})
 		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusInternalServerError {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusInternalServerError)
 		if rows := termsAcceptedRows(t, db); len(rows) != 0 {
 			t.Fatalf("terms_accepted rows = %d, want 0", len(rows))
 		}
@@ -211,13 +203,8 @@ func getComingVersions(t *testing.T, srv *httptest.Server) map[string]any {
 		t.Fatalf("GET /api/legal/coming: %v", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out map[string]any
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[map[string]any](t, resp)
 	return out
 }
 
@@ -256,9 +243,7 @@ func TestComingVersions_TheFormNamesTheVersionsTheRecordRecords(t *testing.T) {
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY", Timezone: signupZone, FirstName: jamieName, LastName: ownerLastName})
 	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
 	rows := termsAcceptedRows(t, db)
 	if len(rows) != 1 {
 		t.Fatalf("terms_accepted rows = %d, want 1", len(rows))

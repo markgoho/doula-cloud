@@ -4,37 +4,23 @@ import (
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
 func postPriorLink(t *testing.T, srv *httptest.Server, session, body string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/portal/session/prior-link", strings.NewReader(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if session != "" {
-		authntest.AddSessionCookie(req, session)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Post(t, srv.URL+"/api/portal/session/prior-link", reqtest.Session(session), reqtest.RawJSON([]byte(body)))
 }
 
 func priorLinkReturnTo(t *testing.T, srv *httptest.Server, session, token string) string {
 	t.Helper()
 	resp := postPriorLink(t, srv, session, `{"token":"`+token+`"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	var body struct {
 		ReturnTo string `json:"returnTo"`
 	}
@@ -90,9 +76,7 @@ func TestPriorLink_RefusesWithoutASession(t *testing.T) {
 
 	resp := postPriorLink(t, srv, "", `{"token":"anything"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 func TestPriorLink_RefusesABodyThatIsNotJSON(t *testing.T) {
@@ -104,7 +88,5 @@ func TestPriorLink_RefusesABodyThatIsNotJSON(t *testing.T) {
 
 	resp := postPriorLink(t, srv, session, `not json`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }

@@ -32,14 +32,8 @@ func newMagicLinkWorker(sender mail.Sender) clientauth.MagicLinkWorker {
 
 func seedMagicLinkRow(t *testing.T, db *testdb.DB, identityUID string, attemptCount int, nextAttemptAt time.Time) string {
 	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO portal_magic_link_outbox (identity_uid, token, attempt_count, next_attempt_at)
-		 VALUES ($1, 'link-token', $2, $3) RETURNING id`,
-		identityUID, attemptCount, nextAttemptAt,
-	).Scan(&id); err != nil {
-		t.Fatalf("seed magic link row: %v", err)
-	}
+	id := testdb.Scalar[string](t, db.Admin, `INSERT INTO portal_magic_link_outbox (identity_uid, token, attempt_count, next_attempt_at)
+		 VALUES ($1, 'link-token', $2, $3) RETURNING id`, identityUID, attemptCount, nextAttemptAt)
 	return id
 }
 
@@ -104,10 +98,7 @@ func TestMagicLinkWorker_ProcessPending_ErasureCascadesAwayThePendingRow(t *test
 		t.Fatalf("delete portal account: %v", err)
 	}
 
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM portal_magic_link_outbox WHERE id = $1`, rowID).Scan(&count); err != nil {
-		t.Fatalf("count outbox rows: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM portal_magic_link_outbox WHERE id = $1`, rowID)
 	if count != 0 {
 		t.Fatal("expected the outbox row to be cascade-deleted with its Portal Account")
 	}

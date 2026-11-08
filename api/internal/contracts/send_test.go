@@ -11,9 +11,9 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/push"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -32,16 +32,7 @@ func sendContractURL(srv *httptest.Server, practiceID, engagementID string) stri
 
 func postSendContract(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, sendContractURL(srv, practiceID, engagementID), nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Post(t, sendContractURL(srv, practiceID, engagementID), reqtest.Session(session))
 }
 
 func TestPostSendContractHandler_InvalidEngagementID(t *testing.T) {
@@ -55,9 +46,7 @@ func TestPostSendContractHandler_InvalidEngagementID(t *testing.T) {
 	resp := postSendContract(t, srv, session, practiceID, "not-a-uuid")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestPostSendContractHandler_EngagementNotFound(t *testing.T) {
@@ -73,9 +62,7 @@ func TestPostSendContractHandler_EngagementNotFound(t *testing.T) {
 	resp := postSendContract(t, srv, session, practiceID, otherEngagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestPostSendContractHandler_NoContract(t *testing.T) {
@@ -90,9 +77,7 @@ func TestPostSendContractHandler_NoContract(t *testing.T) {
 	resp := postSendContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestPostSendContractHandler_ContractorWithoutAttachmentNotFound is
@@ -111,9 +96,7 @@ func TestPostSendContractHandler_ContractorWithoutAttachmentNotFound(t *testing.
 	resp := postSendContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestPostSendContractHandler_NonDraftRejected proves Send 409s once a
@@ -133,9 +116,7 @@ func TestPostSendContractHandler_NonDraftRejected(t *testing.T) {
 			resp := postSendContract(t, srv, session, practiceID, engagementID)
 			defer resp.Body.Close()
 
-			if resp.StatusCode != http.StatusConflict {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusConflict)
 		})
 	}
 }
@@ -162,19 +143,12 @@ func TestPostSendContractHandler_RefusedInviteHoldsTheSendBack(t *testing.T) {
 	resp := postSendContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusConflict)
 	out := apierrtest.Decode(t, resp)
 	if out.Code != apierr.CodeFailedPrecondition || !strings.Contains(out.Message, "signs in through another record") {
 		t.Fatalf("refusal = %+v, want FAILED_PRECONDITION naming the other record's sign-in", out)
 	}
-	var status string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT status::text FROM contracts WHERE engagement_id = $1`, engagementID,
-	).Scan(&status); err != nil {
-		t.Fatalf("query contract status: %v", err)
-	}
+	status := testdb.Scalar[string](t, db.Admin, `SELECT status::text FROM contracts WHERE engagement_id = $1`, engagementID)
 	if status != statusDraft {
 		t.Fatalf("status after refused Send = %q, want draft", status)
 	}
@@ -200,9 +174,7 @@ func TestPostSendContractHandler_NoPortalInvite(t *testing.T) {
 	resp := postSendContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusConflict)
 	out := apierrtest.Decode(t, resp)
 	if out.Code != apierr.CodeFailedPrecondition {
 		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeFailedPrecondition)
@@ -213,23 +185,14 @@ func TestPostSendContractHandler_NoPortalInvite(t *testing.T) {
 
 	getResp := getContract(t, srv, session, practiceID, engagementID)
 	defer getResp.Body.Close()
-	var getOut contracts.ContractResponse
-	if err := json.UnmarshalRead(getResp.Body, &getOut); err != nil {
-		t.Fatalf("decode GET response: %v", err)
-	}
+	getOut := reqtest.Decode[contracts.ContractResponse](t, getResp)
 	if getOut.Status != statusDraft {
 		t.Fatalf("status after refused Send = %q, want draft (unchanged)", getOut.Status)
 	}
 	if calls := pusher.Calls(); len(calls) != 0 {
 		t.Fatalf("Pusher.Send call count = %d, want 0 (refused before any write)", len(calls))
 	}
-	var activityCount int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM activity WHERE subject_id = $1 AND action = 'contract_sent'`,
-		engagementID,
-	).Scan(&activityCount); err != nil {
-		t.Fatalf("count activity rows: %v", err)
-	}
+	activityCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE subject_id = $1 AND action = 'contract_sent'`, engagementID)
 	if activityCount != 0 {
 		t.Fatalf("contract_sent activity rows = %d, want 0 (refused before any write)", activityCount)
 	}
@@ -259,13 +222,8 @@ func TestPostSendContractHandler_Success(t *testing.T) {
 	resp := postSendContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out contracts.ContractResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[contracts.ContractResponse](t, resp)
 	if out.Status != statusSent {
 		t.Fatalf("status = %q, want sent", out.Status)
 	}
@@ -275,10 +233,7 @@ func TestPostSendContractHandler_Success(t *testing.T) {
 
 	getResp := getContract(t, srv, session, practiceID, engagementID)
 	defer getResp.Body.Close()
-	var getOut contracts.ContractResponse
-	if err := json.UnmarshalRead(getResp.Body, &getOut); err != nil {
-		t.Fatalf("decode GET response: %v", err)
-	}
+	getOut := reqtest.Decode[contracts.ContractResponse](t, getResp)
 	if getOut.Status != statusSent {
 		t.Fatalf("GET status after Send = %q, want sent (the transition persisted)", getOut.Status)
 	}
@@ -328,9 +283,7 @@ func TestPostSendContractHandler_NoSubscriptionNoPush(t *testing.T) {
 	resp := postSendContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	if calls := pusher.Calls(); len(calls) != 0 {
 		t.Fatalf("Pusher.Send call count = %d, want 0 (no subscription registered)", len(calls))
 	}
@@ -360,9 +313,7 @@ func TestPostSendContractHandler_PushFailureDoesNotBlockSend(t *testing.T) {
 	resp := postSendContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	if calls := pusher.Calls(); len(calls) != 1 {
 		t.Fatalf("Pusher.Send call count = %d, want 1 (still attempted): %+v", len(calls), calls)
 	}
@@ -391,9 +342,7 @@ func TestPostSendContractHandler_BlankMergeFieldRejected(t *testing.T) {
 	resp := postSendContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusConflict)
 	out := apierrtest.Decode(t, resp)
 	if out.Code != apierr.CodeFailedPrecondition {
 		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeFailedPrecondition)
@@ -407,23 +356,14 @@ func TestPostSendContractHandler_BlankMergeFieldRejected(t *testing.T) {
 
 	getResp := getContract(t, srv, session, practiceID, engagementID)
 	defer getResp.Body.Close()
-	var getOut contracts.ContractResponse
-	if err := json.UnmarshalRead(getResp.Body, &getOut); err != nil {
-		t.Fatalf("decode GET response: %v", err)
-	}
+	getOut := reqtest.Decode[contracts.ContractResponse](t, getResp)
 	if getOut.Status != statusDraft {
 		t.Fatalf("status after refused Send = %q, want draft (unchanged)", getOut.Status)
 	}
 	if calls := pusher.Calls(); len(calls) != 0 {
 		t.Fatalf("Pusher.Send call count = %d, want 0 (refused before any write)", len(calls))
 	}
-	var activityCount int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM activity WHERE subject_id = $1 AND action = 'contract_sent'`,
-		engagementID,
-	).Scan(&activityCount); err != nil {
-		t.Fatalf("count activity rows: %v", err)
-	}
+	activityCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE subject_id = $1 AND action = 'contract_sent'`, engagementID)
 	if activityCount != 0 {
 		t.Fatalf("contract_sent activity rows = %d, want 0 (refused before any write)", activityCount)
 	}
@@ -452,9 +392,7 @@ func TestPostSendContractHandler_WhitespaceOnlyMergeFieldRejected(t *testing.T) 
 	resp := postSendContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusConflict)
 	out := apierrtest.Decode(t, resp)
 	if _, ok := out.Details[clientNameKey]; !ok {
 		t.Fatalf("details = %+v, want an entry for %q", out.Details, clientNameKey)

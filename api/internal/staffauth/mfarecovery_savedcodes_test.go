@@ -3,7 +3,6 @@ package staffauth_test
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,6 +12,7 @@ import (
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -29,28 +29,12 @@ func newRotateSavedCodesServer(t *testing.T, db *testdb.DB, uid string) (srv *ht
 
 func postRotate(t *testing.T, srv *httptest.Server, session string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/mfa-recovery/saved-codes/rotate", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	if session != "" {
-		authntest.AddSessionCookie(req, session)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Post(t, srv.URL+"/api/staff/mfa-recovery/saved-codes/rotate", reqtest.Session(session))
 }
 
 func liveSavedCodesFor(t *testing.T, db *testdb.DB, staffID string) int {
 	t.Helper()
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM staff_mfa_recovery_codes WHERE staff_id = $1 AND used_at IS NULL AND revoked_at IS NULL`, staffID,
-	).Scan(&count); err != nil {
-		t.Fatalf("count live saved codes: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM staff_mfa_recovery_codes WHERE staff_id = $1 AND used_at IS NULL AND revoked_at IS NULL`, staffID)
 	return count
 }
 
@@ -86,10 +70,7 @@ func TestSignupHandler_MintsNoSavedCodesForAnUnenrolledFoundingOwner(t *testing.
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want 201", resp.StatusCode)
 	}
-	var signed staffauth.SignupResponse
-	if err := json.UnmarshalRead(resp.Body, &signed); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	signed := reqtest.Decode[staffauth.SignupResponse](t, resp)
 
 	if got := liveSavedCodesFor(t, db, signed.StaffID); got != 0 {
 		t.Fatalf("live saved codes = %d, want 0 (no second factor yet)", got)
@@ -162,10 +143,7 @@ func TestAcceptInvite_SecondOwnerRevokesFirstOwnersSavedCodes(t *testing.T) {
 	if acceptResp.StatusCode != http.StatusOK {
 		t.Fatalf("accept status = %d, want 200", acceptResp.StatusCode)
 	}
-	var accepted staffauth.AcceptInviteResponse
-	if err := json.UnmarshalRead(acceptResp.Body, &accepted); err != nil {
-		t.Fatalf("decode accept response: %v", err)
-	}
+	accepted := reqtest.Decode[staffauth.AcceptInviteResponse](t, acceptResp)
 
 	if got := liveSavedCodesFor(t, db, founderID); got != 0 {
 		t.Fatalf("founder live codes after second owner joined = %d, want 0 (revoked)", got)
@@ -303,10 +281,7 @@ func TestRotateSavedCodesHandler_ReturnsTenLiveCodesMatchingHashes(t *testing.T)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	var body staffauth.RotateSavedCodesResponse
-	if err := json.UnmarshalRead(resp.Body, &body); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	body := reqtest.Decode[staffauth.RotateSavedCodesResponse](t, resp)
 	if len(body.Codes) != 10 {
 		t.Fatalf("codes = %d, want 10", len(body.Codes))
 	}
@@ -316,13 +291,7 @@ func TestRotateSavedCodesHandler_ReturnsTenLiveCodesMatchingHashes(t *testing.T)
 			t.Fatalf("duplicate code in returned set: %q", code)
 		}
 		seen[code] = true
-		var count int
-		if err := db.Admin.QueryRowContext(t.Context(),
-			`SELECT count(*) FROM staff_mfa_recovery_codes WHERE staff_id = $1 AND code_hash = $2 AND used_at IS NULL AND revoked_at IS NULL`,
-			staffID, digestHex(code),
-		).Scan(&count); err != nil {
-			t.Fatalf("query code_hash: %v", err)
-		}
+		count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM staff_mfa_recovery_codes WHERE staff_id = $1 AND code_hash = $2 AND used_at IS NULL AND revoked_at IS NULL`, staffID, digestHex(code))
 		if count != 1 {
 			t.Fatalf("returned code %q has no matching live row (count=%d)", code, count)
 		}
@@ -339,10 +308,7 @@ func TestRotateSavedCodesHandler_RevokesPriorBatch(t *testing.T) {
 	defer srv.Close()
 
 	first := postRotate(t, srv, session)
-	var firstBatch staffauth.RotateSavedCodesResponse
-	if err := json.UnmarshalRead(first.Body, &firstBatch); err != nil {
-		t.Fatalf("decode first response: %v", err)
-	}
+	firstBatch := reqtest.Decode[staffauth.RotateSavedCodesResponse](t, first)
 	_ = first.Body.Close()
 
 	second := postRotate(t, srv, session)

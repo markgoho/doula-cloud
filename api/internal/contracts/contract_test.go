@@ -1,15 +1,14 @@
 package contracts_test
 
 import (
-	"bytes"
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/activity"
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -44,46 +43,17 @@ func contractURL(srv *httptest.Server, practiceID, engagementID string) string {
 
 func postContract(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, contractURL(srv, practiceID, engagementID), nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Post(t, contractURL(srv, practiceID, engagementID), reqtest.Session(session))
 }
 
 func getContract(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, contractURL(srv, practiceID, engagementID), nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Get(t, contractURL(srv, practiceID, engagementID), reqtest.Session(session))
 }
 
 func getContractPDFRaw(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, contractURL(srv, practiceID, engagementID)+"/pdf", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	if session != "" {
-		authntest.AddSessionCookie(req, session)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Get(t, contractURL(srv, practiceID, engagementID)+"/pdf", reqtest.Session(session))
 }
 
 func getContractPDF(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string) *http.Response {
@@ -93,17 +63,7 @@ func getContractPDF(t *testing.T, srv *httptest.Server, session string, practice
 
 func putContractRaw(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string, body []byte) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, contractURL(srv, practiceID, engagementID), bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Put(t, contractURL(srv, practiceID, engagementID), reqtest.Session(session), reqtest.RawJSON(body))
 }
 
 func putContract(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string, values contracts.MergeFieldValues) *http.Response {
@@ -126,9 +86,7 @@ func TestPostContractHandler_InvalidEngagementID(t *testing.T) {
 	resp := postContract(t, srv, session, practiceID, "not-a-uuid")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestPostContractHandler_EngagementNotFound proves an Engagement id from
@@ -147,9 +105,7 @@ func TestPostContractHandler_EngagementNotFound(t *testing.T) {
 	resp := postContract(t, srv, session, practiceID, otherEngagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestPostContractHandler_NoTemplate proves the "should not happen
@@ -167,9 +123,7 @@ func TestPostContractHandler_NoTemplate(t *testing.T) {
 	resp := postContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestPostContractHandler_Success proves a Contract is created as a
@@ -191,14 +145,9 @@ func TestPostContractHandler_Success(t *testing.T) {
 	resp := postContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
 
-	var out contracts.ContractResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[contracts.ContractResponse](t, resp)
 	if out.EngagementID != engagementID {
 		t.Fatalf("engagementId = %q, want %q", out.EngagementID, engagementID)
 	}
@@ -239,9 +188,7 @@ func TestPostContractHandler_RecordsCreatedAndPricedSeparately(t *testing.T) {
 
 	resp := postContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
 
 	createdDiff := assertActivityActor(t, db, engagementID, activity.ActionContractCreated, staffID)
 	if string(createdDiff) != "{}" {
@@ -280,10 +227,7 @@ func TestPostContractHandler_NoClientNameFieldLeavesValuesEmpty(t *testing.T) {
 	resp := postContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	var out contracts.ContractResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[contracts.ContractResponse](t, resp)
 	if len(out.Values) != 0 {
 		t.Fatalf("values = %+v, want empty -- no client_name field to prefill", out.Values)
 	}
@@ -306,10 +250,7 @@ func TestPostContractHandler_ResolvesPracticeName(t *testing.T) {
 	resp := postContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	var out contracts.ContractResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[contracts.ContractResponse](t, resp)
 	if out.Values["practice_name"] != "Test Practice" {
 		t.Fatalf("values[practice_name] = %q, want %q", out.Values["practice_name"], "Test Practice")
 	}
@@ -349,10 +290,7 @@ func TestPutContractHandler_OverwrittenResolvedValueSurvivesReload(t *testing.T)
 
 	getResp := getContract(t, srv, session, practiceID, engagementID)
 	defer getResp.Body.Close()
-	var getOut contracts.ContractResponse
-	if err := json.UnmarshalRead(getResp.Body, &getOut); err != nil {
-		t.Fatalf("decode GET response: %v", err)
-	}
+	getOut := reqtest.Decode[contracts.ContractResponse](t, getResp)
 	if getOut.Values["practice_name"] != overwrittenPracticeName {
 		t.Fatalf("values[practice_name] after reload = %q, want %q", getOut.Values["practice_name"], overwrittenPracticeName)
 	}
@@ -375,10 +313,7 @@ func TestPostContractHandler_DedupesRepeatedMergeField(t *testing.T) {
 	resp := postContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	var out contracts.ContractResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[contracts.ContractResponse](t, resp)
 	if len(out.MergeFields) != 1 || out.MergeFields[0] != clientNameKey {
 		t.Fatalf("mergeFields = %v, want [client_name] deduped", out.MergeFields)
 	}
@@ -429,9 +364,7 @@ func TestPostContractHandler_ContractorWithoutAttachmentNotFound(t *testing.T) {
 	resp := postContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestGetContractHandler_InvalidEngagementID(t *testing.T) {
@@ -445,9 +378,7 @@ func TestGetContractHandler_InvalidEngagementID(t *testing.T) {
 	resp := getContract(t, srv, session, practiceID, "not-a-uuid")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestGetContractHandler_NotFound(t *testing.T) {
@@ -462,9 +393,7 @@ func TestGetContractHandler_NotFound(t *testing.T) {
 	resp := getContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestGetContractHandler_ContractorWithoutAttachmentForbidden proves
@@ -484,9 +413,7 @@ func TestGetContractHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 	resp := getContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestGetContractHandler_ContractorWithGrantedAttachmentSeesScope proves
@@ -513,13 +440,8 @@ func TestGetContractHandler_ContractorWithGrantedAttachmentSeesScope(t *testing.
 	resp := getContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out contracts.ContractResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[contracts.ContractResponse](t, resp)
 	if out.EngagementID != engagementID {
 		t.Fatalf("engagementId = %q, want %q", out.EngagementID, engagementID)
 	}
@@ -557,10 +479,7 @@ func TestGetContractHandler_AmountChangedAtHiddenFromContractor(t *testing.T) {
 	resp := getContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	var out contracts.ContractResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[contracts.ContractResponse](t, resp)
 	if out.AmountChangedAt != nil {
 		t.Fatalf("amountChangedAt = %v, want nil for an ambient contractor (#968, ADR-0008)", out.AmountChangedAt)
 	}
@@ -588,10 +507,7 @@ func TestGetContractHandler_AmountChangedAtVisibleToEmployee(t *testing.T) {
 	resp := getContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	var out contracts.ContractResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[contracts.ContractResponse](t, resp)
 	if out.AmountChangedAt == nil {
 		t.Fatalf("amountChangedAt = nil, want set -- an employed Doula reads Contract money now (#282)")
 	}
@@ -614,13 +530,8 @@ func TestGetContractHandler_EmployedDoulaSeesMoney(t *testing.T) {
 	resp := getContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out contracts.ContractResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[contracts.ContractResponse](t, resp)
 	if out.Values[priceKey] != testRateAmountDollars {
 		t.Fatalf("Values[price] = %q, want %q -- an employed Doula reads Contract money now, resolved from amount_cents", out.Values[priceKey], testRateAmountDollars)
 	}
@@ -647,13 +558,8 @@ func TestGetContractHandler_ContractorWithGrantedAttachmentNoRawPriceStored(t *t
 	resp := getContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out contracts.ContractResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[contracts.ContractResponse](t, resp)
 	if _, present := out.Values[priceKey]; present {
 		t.Fatalf("Values = %+v, want no price key reachable for a contractor", out.Values)
 	}
@@ -670,9 +576,7 @@ func TestPutContractHandler_InvalidEngagementID(t *testing.T) {
 	resp := putContract(t, srv, session, practiceID, "not-a-uuid", contracts.MergeFieldValues{})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestPutContractHandler_NotFound(t *testing.T) {
@@ -687,9 +591,7 @@ func TestPutContractHandler_NotFound(t *testing.T) {
 	resp := putContract(t, srv, session, practiceID, engagementID, contracts.MergeFieldValues{clientNameKey: jamieName})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestPutContractHandler_ContractorWithoutAttachmentNotFound is #970's AC
@@ -711,9 +613,7 @@ func TestPutContractHandler_ContractorWithoutAttachmentNotFound(t *testing.T) {
 	resp := putContract(t, srv, session, practiceID, engagementID, contracts.MergeFieldValues{clientNameKey: jamieName})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestPutContractHandler_NonDraftRejected proves PUT 409s once a Contract
@@ -732,9 +632,7 @@ func TestPutContractHandler_NonDraftRejected(t *testing.T) {
 	resp := putContract(t, srv, session, practiceID, engagementID, contracts.MergeFieldValues{clientNameKey: jamieName})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusConflict)
 }
 
 func TestPutContractHandler_InvalidBody(t *testing.T) {
@@ -750,9 +648,7 @@ func TestPutContractHandler_InvalidBody(t *testing.T) {
 	resp := putContractRaw(t, srv, session, practiceID, engagementID, []byte("not json"))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestPutContractHandler_UnknownMergeFieldKeyRejected(t *testing.T) {
@@ -768,9 +664,7 @@ func TestPutContractHandler_UnknownMergeFieldKeyRejected(t *testing.T) {
 	resp := putContract(t, srv, session, practiceID, engagementID, contracts.MergeFieldValues{"not_a_field": "x"})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestPutContractHandler_StatusFieldIgnored proves no request body field
@@ -790,14 +684,9 @@ func TestPutContractHandler_StatusFieldIgnored(t *testing.T) {
 		[]byte(`{"status":"signed","values":{"client_name":"Jamie"}}`))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
-	var out contracts.ContractResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[contracts.ContractResponse](t, resp)
 	if out.Status != statusDraft {
 		t.Fatalf("status = %q, want draft (unaffected by the request body)", out.Status)
 	}
@@ -820,14 +709,9 @@ func TestPutContractHandler_EmptyBodyDefaultsToEmptyValues(t *testing.T) {
 	resp := putContractRaw(t, srv, session, practiceID, engagementID, []byte(`{}`))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
-	var out contracts.ContractResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[contracts.ContractResponse](t, resp)
 	// price still resolves even against an otherwise-empty Values map --
 	// it is never sourced from what Staff PUTs (#967).
 	if len(out.Values) != 1 || out.Values[priceKey] != testRateAmountDollars {
@@ -853,9 +737,7 @@ func TestPutContractHandler_PriceRejected(t *testing.T) {
 		contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: "$1"})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestPutContractHandler_Success proves a full Values replace round-trips
@@ -880,10 +762,7 @@ func TestPutContractHandler_Success(t *testing.T) {
 
 	getResp := getContract(t, srv, session, practiceID, engagementID)
 	defer getResp.Body.Close()
-	var out contracts.ContractResponse
-	if err := json.UnmarshalRead(getResp.Body, &out); err != nil {
-		t.Fatalf("decode GET response: %v", err)
-	}
+	out := reqtest.Decode[contracts.ContractResponse](t, getResp)
 	// price is resolved from amount_cents, never from what was PUT (#967);
 	// seedContract's own hardcoded amount_cents (template_test.go) is
 	// what this renders as.
@@ -922,10 +801,7 @@ func TestContract_TemplateEditDoesNotAlterExistingSnapshot(t *testing.T) {
 
 	getResp := getContract(t, srv, session, practiceID, engagementID)
 	defer getResp.Body.Close()
-	var out contracts.ContractResponse
-	if err := json.UnmarshalRead(getResp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[contracts.ContractResponse](t, getResp)
 	if out.Prose != mergeFieldProse {
 		t.Fatalf("prose = %q, want the original snapshot unaffected by the template edit", out.Prose)
 	}

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -62,9 +63,7 @@ func TestGetBirthPlanPDFHandler_Success(t *testing.T) {
 	resp := getInstancePDF(t, srv.Client(), srv.URL+instancePath(practiceID, engagementID, birthPlanType)+"/pdf", session)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	requirePDFBody(t, resp)
 }
 
@@ -89,9 +88,7 @@ func TestGetBirthPlanPDFHandler_CarePlanRejected(t *testing.T) {
 	resp := getInstancePDF(t, srv.Client(), srv.URL+instancePath(practiceID, engagementID, carePlanType)+"/pdf", session)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestGetBirthPlanPDFHandler_NoInstance proves an Engagement with no Plan
@@ -108,9 +105,7 @@ func TestGetBirthPlanPDFHandler_NoInstance(t *testing.T) {
 	resp := getInstancePDF(t, srv.Client(), srv.URL+instancePath(practiceID, engagementID, birthPlanType)+"/pdf", session)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestGetBirthPlanPDFHandler_CrossPracticeRejected proves a Staff member
@@ -130,9 +125,7 @@ func TestGetBirthPlanPDFHandler_CrossPracticeRejected(t *testing.T) {
 	resp := getInstancePDF(t, srv.Client(), srv.URL+instancePath(practiceID, otherEngagementID, birthPlanType)+"/pdf", session)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestGetBirthPlanPDFHandler_ContractorWithoutAttachmentForbidden proves
@@ -154,9 +147,7 @@ func TestGetBirthPlanPDFHandler_ContractorWithoutAttachmentForbidden(t *testing.
 	resp := getInstancePDF(t, srv.Client(), srv.URL+instancePath(practiceID, engagementID, birthPlanType)+"/pdf", session)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestGetBirthPlanPDFHandler_Unauthenticated proves a request with no
@@ -173,9 +164,7 @@ func TestGetBirthPlanPDFHandler_Unauthenticated(t *testing.T) {
 	resp := getInstancePDF(t, srv.Client(), srv.URL+instancePath(practiceID, engagementID, birthPlanType)+"/pdf", "")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 // TestClientGetBirthPlanPDFHandler_Success proves a Client can download a
@@ -197,9 +186,7 @@ func TestClientGetBirthPlanPDFHandler_Success(t *testing.T) {
 	resp := getInstancePDF(t, srv.Client(), srv.URL+"/api/portal/engagements/"+engagementID+"/birth-plan/pdf", session)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	requirePDFBody(t, resp)
 }
 
@@ -218,9 +205,7 @@ func TestClientGetBirthPlanPDFHandler_NoInstance(t *testing.T) {
 	resp := getInstancePDF(t, srv.Client(), srv.URL+"/api/portal/engagements/"+engagementID+"/birth-plan/pdf", session)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestClientGetBirthPlanPDFHandler_PostpartumEngagementRefused proves
@@ -240,9 +225,7 @@ func TestClientGetBirthPlanPDFHandler_PostpartumEngagementRefused(t *testing.T) 
 	resp := getInstancePDF(t, srv.Client(), srv.URL+"/api/portal/engagements/"+engagementID+"/birth-plan/pdf", session)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestClientGetBirthPlanPDFHandler_OtherClientsEngagementRejected proves a
@@ -265,7 +248,5 @@ func TestClientGetBirthPlanPDFHandler_OtherClientsEngagementRejected(t *testing.
 	resp := getInstancePDF(t, srv.Client(), srv.URL+"/api/portal/engagements/"+otherEngagementID+"/birth-plan/pdf", session)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }

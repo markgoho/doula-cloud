@@ -2,16 +2,15 @@ package staffauth_test
 
 import (
 	"database/sql"
-	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -50,9 +49,7 @@ func TestSignup_RejectsMissingWorkState(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // A two-letter string that is not a state is refused by the handler rather
@@ -69,9 +66,7 @@ func TestSignup_RejectsUnknownWorkState(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // The form offers a fixed <select>, but a form is not an enforcement
@@ -88,9 +83,7 @@ func TestSignup_NormalizesWorkStateAndRecordsFirstEvent(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
 	state, events := readWorkState(t, db, workStateUID)
 	if state != "NJ" {
 		t.Fatalf("work_state = %q, want %q", state, "NJ")
@@ -117,9 +110,7 @@ func TestAcceptInvite_RecordsWorkStateForANewPerson(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	state, events := readWorkState(t, db, "rosa-uid")
 	if state != "PA" {
 		t.Fatalf("work_state = %q, want %q", state, "PA")
@@ -142,9 +133,7 @@ func TestAcceptInvite_RejectsUnknownWorkStateForANewPerson(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // A contractor doula joining her second Practice keeps the work state she
@@ -176,9 +165,7 @@ func TestAcceptInvite_IgnoresWorkStateForAnExistingPerson(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	state, events := readWorkState(t, db, "roaming-uid")
 	if state != "NY" {
 		t.Fatalf("work_state = %q, want %q -- the second Practice must not overwrite it", state, "NY")
@@ -199,10 +186,7 @@ func TestRoster_CarriesWorkStateAndItsDate(t *testing.T) {
 		PracticeName: "Roster Practice", FirstName: "Ada", LastName: "Frost", WorkState: "CT",
 	})
 	defer resp.Body.Close()
-	var created staffauth.SignupResponse
-	if err := json.UnmarshalRead(resp.Body, &created); err != nil {
-		t.Fatalf("decode signup: %v", err)
-	}
+	created := reqtest.Decode[staffauth.SignupResponse](t, resp)
 
 	listSrv, sess := newStaffListServer(t, db, "roster-work-state-uid")
 	defer listSrv.Close()
@@ -211,10 +195,7 @@ func TestRoster_CarriesWorkStateAndItsDate(t *testing.T) {
 	if listResp.StatusCode != http.StatusOK {
 		t.Fatalf("roster status = %d, want %d", listResp.StatusCode, http.StatusOK)
 	}
-	var roster staffauth.Roster
-	if err := json.UnmarshalRead(listResp.Body, &roster); err != nil {
-		t.Fatalf("decode roster: %v", err)
-	}
+	roster := reqtest.Decode[staffauth.Roster](t, listResp)
 	if len(roster.Members) != 1 {
 		t.Fatalf("members = %d, want 1", len(roster.Members))
 	}
@@ -243,19 +224,7 @@ func newWorkStateServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Serv
 
 func putWorkState(t *testing.T, srv *httptest.Server, session, body string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/api/staff/work-state", strings.NewReader(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if session != "" {
-		authntest.AddSessionCookie(req, session)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Put(t, srv.URL+"/api/staff/work-state", reqtest.Session(session), reqtest.RawJSON([]byte(body)))
 }
 
 // latestWorkStateEvent returns both sides of the newest audit row for a
@@ -281,12 +250,7 @@ func latestWorkStateEvent(t *testing.T, db *testdb.DB, identityUID string) (prev
 // rather than trusting the response body to have told the truth.
 func reportedAt(t *testing.T, db *testdb.DB, identityUID string) time.Time {
 	t.Helper()
-	var at time.Time
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT work_state_reported_at FROM staff WHERE identity_uid = $1`, identityUID,
-	).Scan(&at); err != nil {
-		t.Fatalf("read work_state_reported_at: %v", err)
-	}
+	at := testdb.Scalar[time.Time](t, db.Admin, `SELECT work_state_reported_at FROM staff WHERE identity_uid = $1`, identityUID)
 	return at
 }
 
@@ -298,9 +262,7 @@ func TestUpdateWorkState_MissingCookie(t *testing.T) {
 	resp := putWorkState(t, srv, "", `{"workState":"NJ"}`)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 // A live session whose identity resolves to no staff row: the shape a
@@ -313,9 +275,7 @@ func TestUpdateWorkState_UnknownStaff(t *testing.T) {
 	resp := putWorkState(t, srv, session, `{"workState":"NJ"}`)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestUpdateWorkState_RejectsMalformedBody(t *testing.T) {
@@ -327,9 +287,7 @@ func TestUpdateWorkState_RejectsMalformedBody(t *testing.T) {
 	resp := putWorkState(t, srv, session, `not json`)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // Refused by the handler rather than by 00043's CHECK constraint, so the
@@ -345,9 +303,7 @@ func TestUpdateWorkState_RejectsSomethingThatIsNotAState(t *testing.T) {
 	resp := putWorkState(t, srv, session, `{"workState":"Ontario"}`)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	out := apierrtest.Decode(t, resp)
 	if out.Message != staffauth.MsgWorkStateRequired {
 		t.Fatalf("message = %q, want %q", out.Message, staffauth.MsgWorkStateRequired)
@@ -375,13 +331,8 @@ func TestUpdateWorkState_MovesTheValueAndRecordsBothSides(t *testing.T) {
 	resp := putWorkState(t, srv, session, `{"workState":" nj "}`)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var got staffauth.WorkStateResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	got := reqtest.Decode[staffauth.WorkStateResponse](t, resp)
 	if got.WorkState != "NJ" {
 		t.Fatalf("response workState = %q, want %q", got.WorkState, "NJ")
 	}
@@ -397,12 +348,7 @@ func TestUpdateWorkState_MovesTheValueAndRecordsBothSides(t *testing.T) {
 	if previous != "NY" || current != "NJ" {
 		t.Fatalf("event = %q -> %q, want %q -> %q", previous, current, "NY", "NJ")
 	}
-	var staffID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT id FROM staff WHERE identity_uid = $1`, "she-moved-uid",
-	).Scan(&staffID); err != nil {
-		t.Fatalf("read staff id: %v", err)
-	}
+	staffID := testdb.Scalar[string](t, db.Admin, `SELECT id FROM staff WHERE identity_uid = $1`, "she-moved-uid")
 	if actor != staffID {
 		t.Fatalf("actor_staff_id = %q, want her own id %q", actor, staffID)
 	}
@@ -431,9 +377,7 @@ func TestUpdateWorkState_SameStateIsAReAssertion(t *testing.T) {
 	resp := putWorkState(t, srv, session, `{"workState":"NY"}`)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	_, events := readWorkState(t, db, "still-here-uid")
 	if events != 1 {
 		t.Fatalf("work state events = %d, want 1 -- an unchanged value is still an assertion", events)
@@ -463,9 +407,7 @@ func TestUpdateWorkState_AnOwnerCorrectsOnlyHerself(t *testing.T) {
 	resp := putWorkState(t, srv, session, `{"workState":"VT"}`)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	if state, _ := readWorkState(t, db, "owner-correcting-uid"); state != "VT" {
 		t.Fatalf("owner work_state = %q, want %q", state, "VT")
 	}

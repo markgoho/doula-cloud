@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/authtoken"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -71,9 +72,7 @@ func TestRedeemMagicLinkHandler_UnconfirmedStaffSessionWarnsAndSpendsNothing(t *
 	resp := postRedeem(t, srv, token, staffToken, false)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusConflict)
 	out := apierrtest.Decode(t, resp)
 	if out.Code != authn.EvictionUnconfirmed {
 		t.Fatalf("code = %q, want %q", out.Code, authn.EvictionUnconfirmed)
@@ -105,9 +104,7 @@ func TestRedeemMagicLinkHandler_ConfirmedEvictsAndNotifiesTheStaffSession(t *tes
 	resp := postRedeem(t, srv, token, staffToken, true)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	if got := countRows(t, db, `SELECT count(*) FROM sessions WHERE identity_uid = $1`, identifier); got != 1 {
 		t.Errorf("portal session rows = %d, want 1", got)
 	}
@@ -142,9 +139,7 @@ func TestRedeemMagicLinkHandler_LivePortalSessionSignsStraightThrough(t *testing
 	resp := postRedeem(t, srv, token, existing, false)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	if got := countRows(t, db, `SELECT count(*) FROM sessions WHERE identity_uid = $1`, "portal_someone-else"); got != 1 {
 		t.Errorf("the other portal session rows = %d, want 1 -- a same-population sign-in evicts nothing", got)
 	}
@@ -161,7 +156,5 @@ func TestRedeemMagicLinkHandler_DeadTokenIsRefusedBeforeTheWarning(t *testing.T)
 	resp := postRedeem(t, srv, "never-issued", staffToken, false)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }

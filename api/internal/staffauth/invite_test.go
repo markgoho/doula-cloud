@@ -1,7 +1,6 @@
 package staffauth_test
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json/v2"
@@ -15,6 +14,7 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/mailsuppress"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -53,18 +53,7 @@ func postInvite(t *testing.T, srv *httptest.Server, session, practiceID string, 
 
 func doInviteRequest(t *testing.T, srv *httptest.Server, session, path string, payload []byte) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+path, bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Confirmed", "true")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Post(t, srv.URL+path, reqtest.Session(session), reqtest.RawJSON(payload), reqtest.Header("X-Confirmed", "true"))
 }
 
 // TestInviteHandler_CreatesInvitationAndNoStaffRow is the ticket's
@@ -84,13 +73,8 @@ func TestInviteHandler_CreatesInvitationAndNoStaffRow(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var created staffauth.InviteResponse
-	if err := json.UnmarshalRead(resp.Body, &created); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
+	created := reqtest.Decode[staffauth.InviteResponse](t, resp)
 	if created.InvitationID == "" || created.ExpiresAt == "" {
 		t.Fatalf("response = %+v, want an invitation id and expiry", created)
 	}
@@ -118,22 +102,12 @@ func TestInviteHandler_CreatesInvitationAndNoStaffRow(t *testing.T) {
 
 	// The mailable token lives only in the outbox row; the Invitation
 	// keeps its digest, and the Owner's response keeps neither.
-	var token string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT invite_token::text FROM staff_invite_outbox WHERE invitation_id = $1`, created.InvitationID,
-	).Scan(&token); err != nil {
-		t.Fatalf("read queued outbox row: %v", err)
-	}
+	token := testdb.Scalar[string](t, db.Admin, `SELECT invite_token::text FROM staff_invite_outbox WHERE invitation_id = $1`, created.InvitationID)
 	if staffauth.TokenDigest(token) != digest {
 		t.Fatalf("stored digest does not match the queued token")
 	}
 
-	var staffCount int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM staff WHERE lower(email) = 'lena@example.com'`,
-	).Scan(&staffCount); err != nil {
-		t.Fatalf("count staff: %v", err)
-	}
+	staffCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM staff WHERE lower(email) = 'lena@example.com'`)
 	if staffCount != 0 {
 		t.Fatalf("staff rows for the invitee = %d, want 0", staffCount)
 	}
@@ -158,10 +132,7 @@ func TestInviteHandler_ReInviteRotatesTheSameInvitation(t *testing.T) {
 		Email: "again@example.com", Roles: []string{doulaRole}, EmploymentType: employeeType,
 	})
 	defer first.Body.Close()
-	var created staffauth.InviteResponse
-	if err := json.UnmarshalRead(first.Body, &created); err != nil {
-		t.Fatalf("decode first: %v", err)
-	}
+	created := reqtest.Decode[staffauth.InviteResponse](t, first)
 
 	second := postInvite(t, srv, session, practiceID, staffauth.InviteRequest{
 		Email: "AGAIN@example.com", Roles: []string{adminRole}, EmploymentType: contractorType,
@@ -170,20 +141,12 @@ func TestInviteHandler_ReInviteRotatesTheSameInvitation(t *testing.T) {
 	if second.StatusCode != http.StatusOK {
 		t.Fatalf("re-invite status = %d, want %d", second.StatusCode, http.StatusOK)
 	}
-	var rotated staffauth.InviteResponse
-	if err := json.UnmarshalRead(second.Body, &rotated); err != nil {
-		t.Fatalf("decode second: %v", err)
-	}
+	rotated := reqtest.Decode[staffauth.InviteResponse](t, second)
 	if rotated.InvitationID != created.InvitationID {
 		t.Fatalf("re-invite created a second Invitation (%q vs %q)", rotated.InvitationID, created.InvitationID)
 	}
 
-	var pending int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM practice_invitations WHERE practice_id = $1 AND status = 'pending'`, practiceID,
-	).Scan(&pending); err != nil {
-		t.Fatalf("count pending: %v", err)
-	}
+	pending := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM practice_invitations WHERE practice_id = $1 AND status = 'pending'`, practiceID)
 	if pending != 1 {
 		t.Fatalf("pending invitations = %d, want 1", pending)
 	}
@@ -217,9 +180,7 @@ func TestInviteHandler_AlreadyAMemberConflicts(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusConflict)
 	// docs/api-design.md section 7's own worked example (#488): a rule
 	// only the server knows, said in the reader's words and keyed onto
 	// the control that caused it.
@@ -251,9 +212,7 @@ func TestInviteHandler_SuppressedAddressRefused(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	refusal := apierrtest.Decode(t, resp)
 	if refusal.Code != apierr.CodeInvalidArgument {
 		t.Fatalf("code = %q, want %q", refusal.Code, apierr.CodeInvalidArgument)
@@ -262,23 +221,12 @@ func TestInviteHandler_SuppressedAddressRefused(t *testing.T) {
 		t.Fatalf("details = %v, want an email entry naming Blocked email addresses", refusal.Details)
 	}
 
-	var invitationCount int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM practice_invitations WHERE practice_id = $1 AND lower(address) = $2`,
-		practiceID, email,
-	).Scan(&invitationCount); err != nil {
-		t.Fatalf("count practice_invitations: %v", err)
-	}
+	invitationCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM practice_invitations WHERE practice_id = $1 AND lower(address) = $2`, practiceID, email)
 	if invitationCount != 0 {
 		t.Fatalf("expected no practice_invitations row for a refused invite, got %d", invitationCount)
 	}
 
-	var outboxCount int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM staff_invite_outbox`,
-	).Scan(&outboxCount); err != nil {
-		t.Fatalf("count staff_invite_outbox: %v", err)
-	}
+	outboxCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM staff_invite_outbox`)
 	if outboxCount != 0 {
 		t.Fatalf("expected no staff_invite_outbox row for a refused invite, got %d", outboxCount)
 	}
@@ -313,9 +261,7 @@ func TestInviteHandler_ClearedSuppressionAllowsInvite(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
 }
 
 func TestInviteHandler_Rejects(t *testing.T) {
@@ -342,9 +288,7 @@ func TestInviteHandler_Rejects(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			resp := postInvite(t, srv, session, practiceID, tc.body)
 			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusBadRequest {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 		})
 	}
 
@@ -354,9 +298,7 @@ func TestInviteHandler_Rejects(t *testing.T) {
 	t.Run("no employment type", func(t *testing.T) {
 		resp := postInvite(t, srv, session, practiceID, staffauth.InviteRequest{Email: validAddress, Roles: []string{doulaRole}})
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 		if details := decodeDetails(t, resp); details["employmentType"] != staffauth.MsgEmploymentTypeNeeded {
 			t.Fatalf("details[employmentType] = %q, want %q", details["employmentType"], staffauth.MsgEmploymentTypeNeeded)
 		}
@@ -365,9 +307,7 @@ func TestInviteHandler_Rejects(t *testing.T) {
 	t.Run("invalid body", func(t *testing.T) {
 		resp := doInviteRequest(t, srv, session, "/api/practices/"+practiceID+"/staff/invitations", []byte("not json"))
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	})
 }
 
@@ -384,9 +324,7 @@ func TestInviteHandler_NonOwnerForbidden(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 func TestRevokeInvitationHandler_Success(t *testing.T) {
@@ -402,9 +340,7 @@ func TestRevokeInvitationHandler_Success(t *testing.T) {
 		"/api/practices/"+practiceID+"/staff/invitations/"+invitationID+"/revoke", nil)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
 
 	var status, revokedBy string
 	var revokedAt time.Time
@@ -430,18 +366,14 @@ func TestRevokeInvitationHandler_NotFound(t *testing.T) {
 		resp := doInviteRequest(t, srv, session,
 			"/api/practices/"+practiceID+"/staff/invitations/"+emptyUUID+"/revoke", nil)
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusNotFound {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusNotFound)
 	})
 
 	t.Run("malformed id", func(t *testing.T) {
 		resp := doInviteRequest(t, srv, session,
 			"/api/practices/"+practiceID+"/staff/invitations/not-a-uuid/revoke", nil)
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	})
 
 	t.Run("already revoked", func(t *testing.T) {
@@ -454,9 +386,7 @@ func TestRevokeInvitationHandler_NotFound(t *testing.T) {
 		resp := doInviteRequest(t, srv, session,
 			"/api/practices/"+practiceID+"/staff/invitations/"+invitationID+"/revoke", nil)
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusNotFound {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusNotFound)
 	})
 }
 
@@ -469,28 +399,12 @@ func TestRevokeInvitationHandler_RequiresConfirmation(t *testing.T) {
 	srv, session, _ := newInviteServer(t, db, ownerUID)
 	defer srv.Close()
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		srv.URL+"/api/practices/"+practiceID+"/staff/invitations/"+invitationID+"/revoke", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/staff/invitations/"+invitationID+"/revoke", reqtest.Session(session))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 
-	var status string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT status::text FROM practice_invitations WHERE id = $1`, invitationID,
-	).Scan(&status); err != nil {
-		t.Fatalf("read invitation: %v", err)
-	}
+	status := testdb.Scalar[string](t, db.Admin, `SELECT status::text FROM practice_invitations WHERE id = $1`, invitationID)
 	if status != statusPending {
 		t.Fatalf("status = %q, want the unconfirmed request to have revoked nothing", status)
 	}
@@ -509,7 +423,5 @@ func TestRevokeInvitationHandler_NonOwnerForbidden(t *testing.T) {
 		"/api/practices/"+practiceID+"/staff/invitations/"+invitationID+"/revoke", nil)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }

@@ -59,12 +59,7 @@ func seedSavedCode(t *testing.T, db *testdb.DB, staffID, code string) {
 
 func liveSavedCodeCount(t *testing.T, db *testdb.DB, staffID string) int {
 	t.Helper()
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM staff_mfa_recovery_codes WHERE staff_id = $1 AND used_at IS NULL AND revoked_at IS NULL`, staffID,
-	).Scan(&count); err != nil {
-		t.Fatalf("count live saved codes: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM staff_mfa_recovery_codes WHERE staff_id = $1 AND used_at IS NULL AND revoked_at IS NULL`, staffID)
 	return count
 }
 

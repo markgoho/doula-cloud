@@ -4,11 +4,11 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -25,19 +25,7 @@ func newChangeEmailServer(t *testing.T, db *testdb.DB, accounts *authntest.FakeA
 
 func putEmail(t *testing.T, srv *httptest.Server, session, body string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/api/staff/email", strings.NewReader(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if session != "" {
-		authntest.AddSessionCookie(req, session)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Put(t, srv.URL+"/api/staff/email", reqtest.Session(session), reqtest.RawJSON([]byte(body)))
 }
 
 func TestChangeEmailHandler_MissingCookieUnauthorized(t *testing.T) {
@@ -47,9 +35,7 @@ func TestChangeEmailHandler_MissingCookieUnauthorized(t *testing.T) {
 
 	resp := putEmail(t, srv, "", `{"newEmail":"new@example.com"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 func TestChangeEmailHandler_MissingNewEmail(t *testing.T) {
@@ -63,9 +49,7 @@ func TestChangeEmailHandler_MissingNewEmail(t *testing.T) {
 
 	resp := putEmail(t, srv, session, `{"newEmail":""}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestChangeEmailHandler_InvalidRequestBody(t *testing.T) {
@@ -79,9 +63,7 @@ func TestChangeEmailHandler_InvalidRequestBody(t *testing.T) {
 
 	resp := putEmail(t, srv, session, `not json`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestChangeEmailHandler_Success proves the full chain: the Admin SDK
@@ -99,9 +81,7 @@ func TestChangeEmailHandler_Success(t *testing.T) {
 
 	resp := putEmail(t, srv, session, `{"newEmail":"  New@Example.com  "}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
 
 	account, err := accounts.GetAccount(t.Context(), uid)
 	if err != nil {
@@ -114,10 +94,7 @@ func TestChangeEmailHandler_Success(t *testing.T) {
 		t.Fatal("EmailVerified = true, want false after an address change")
 	}
 
-	var staffEmail string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT email FROM staff WHERE identity_uid = $1`, uid).Scan(&staffEmail); err != nil {
-		t.Fatalf("query staff email: %v", err)
-	}
+	staffEmail := testdb.Scalar[string](t, db.Admin, `SELECT email FROM staff WHERE identity_uid = $1`, uid)
 	if staffEmail != "new@example.com" {
 		t.Fatalf("staff.email = %q, want new@example.com", staffEmail)
 	}
@@ -132,12 +109,7 @@ func TestChangeEmailHandler_Success(t *testing.T) {
 		t.Fatalf("old_email/status = %q/%q, want old@example.com/%s", oldEmail, status, statusPending)
 	}
 
-	var pendingVerify int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM staff_token_mail_outbox WHERE identity_uid = $1 AND kind = 'email_verification' AND status = 'pending'`, uid,
-	).Scan(&pendingVerify); err != nil {
-		t.Fatalf("count pending verification rows: %v", err)
-	}
+	pendingVerify := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM staff_token_mail_outbox WHERE identity_uid = $1 AND kind = 'email_verification' AND status = 'pending'`, uid)
 	if pendingVerify != 1 {
 		t.Fatalf("pending verification rows = %d, want 1", pendingVerify)
 	}
@@ -154,9 +126,7 @@ func TestChangeEmailHandler_GetAccountFailureReturns500(t *testing.T) {
 
 	resp := putEmail(t, srv, session, `{"newEmail":"new@example.com"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusInternalServerError)
 }
 
 // TestChangeEmailHandler_SetEmailFailureReturns500 proves changeEmail's
@@ -174,9 +144,7 @@ func TestChangeEmailHandler_SetEmailFailureReturns500(t *testing.T) {
 
 	resp := putEmail(t, srv, session, `{"newEmail":"new@example.com"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusInternalServerError)
 }
 
 func TestChangeEmailHandler_NoStaffRowNotFound(t *testing.T) {
@@ -191,7 +159,5 @@ func TestChangeEmailHandler_NoStaffRowNotFound(t *testing.T) {
 
 	resp := putEmail(t, srv, session, `{"newEmail":"new@example.com"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }

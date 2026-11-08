@@ -8,6 +8,7 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -29,19 +30,7 @@ func postFinishEnrollment(t *testing.T, srv *httptest.Server) *http.Response {
 
 func postFinishEnrollmentWithSession(t *testing.T, srv *httptest.Server, session string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/mfa", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Authorization", "Bearer tok")
-	if session != "" {
-		authntest.AddSessionCookie(req, session)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Post(t, srv.URL+"/api/staff/mfa", reqtest.Session(session), reqtest.Header("Authorization", "Bearer tok"))
 }
 
 // TestFinishEnrollmentHandler_Success proves decision 4's happy path: a
@@ -57,9 +46,7 @@ func TestFinishEnrollmentHandler_Success(t *testing.T) {
 
 	resp := postFinishEnrollment(t, srv)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	var cookie *http.Cookie
 	for _, c := range resp.Cookies() {
@@ -71,12 +58,7 @@ func TestFinishEnrollmentHandler_Success(t *testing.T) {
 		t.Fatalf("no __session cookie set")
 	}
 
-	var secondFactor bool
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT second_factor FROM sessions WHERE identity_uid = $1`, identityUID,
-	).Scan(&secondFactor); err != nil {
-		t.Fatalf("read session row: %v", err)
-	}
+	secondFactor := testdb.Scalar[bool](t, db.Admin, `SELECT second_factor FROM sessions WHERE identity_uid = $1`, identityUID)
 	if !secondFactor {
 		t.Fatalf("session.second_factor = false, want true")
 	}
@@ -109,9 +91,7 @@ func TestFinishEnrollmentHandler_TokenWithoutSecondFactorRejected(t *testing.T) 
 
 	resp := postFinishEnrollment(t, srv)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	if got := authntest.CountFor(t, db.App, identityUID); got != 0 {
 		t.Fatalf("session rows = %d, want 0 -- no session should be minted", got)
 	}
@@ -131,9 +111,7 @@ func TestFinishEnrollmentHandler_UnknownStaff(t *testing.T) {
 
 	resp := postFinishEnrollment(t, srv)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestFinishEnrollmentHandler_InvalidToken(t *testing.T) {
@@ -143,9 +121,7 @@ func TestFinishEnrollmentHandler_InvalidToken(t *testing.T) {
 
 	resp := postFinishEnrollment(t, srv)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 // TestFinishEnrollmentHandler_EndsPriorSession proves the voluntary
@@ -165,9 +141,7 @@ func TestFinishEnrollmentHandler_EndsPriorSession(t *testing.T) {
 
 	resp := postFinishEnrollmentWithSession(t, srv, priorSession)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	if got := authntest.CountFor(t, db.App, identityUID); got != 1 {
 		t.Fatalf("session rows = %d, want 1 (the prior one ended, the new one minted)", got)

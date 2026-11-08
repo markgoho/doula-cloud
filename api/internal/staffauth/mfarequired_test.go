@@ -9,6 +9,7 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -51,9 +52,7 @@ func TestPutMFARequiredHandler_NonOwnerForbidden(t *testing.T) {
 
 	resp := putMFARequired(t, srv, seedSession(doulaUID), practiceID, true, true)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 func TestPutMFARequiredHandler_RequiresConfirmation(t *testing.T) {
@@ -66,9 +65,7 @@ func TestPutMFARequiredHandler_RequiresConfirmation(t *testing.T) {
 
 	resp := putMFARequired(t, srv, seedSession(ownerUID), practiceID, true, false)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestPutMFARequiredHandler_ThrowsAndRecords proves the switch actually
@@ -84,16 +81,9 @@ func TestPutMFARequiredHandler_ThrowsAndRecords(t *testing.T) {
 
 	resp := putMFARequired(t, srv, seedSession(ownerUID), practiceID, true, true)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
 
-	var required bool
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT require_mfa_for_all_staff FROM practices WHERE id = $1`, practiceID,
-	).Scan(&required); err != nil {
-		t.Fatalf("read practices row: %v", err)
-	}
+	required := testdb.Scalar[bool](t, db.Admin, `SELECT require_mfa_for_all_staff FROM practices WHERE id = $1`, practiceID)
 	if !required {
 		t.Fatalf("require_mfa_for_all_staff = false, want true")
 	}
@@ -134,12 +124,7 @@ func TestPutMFARequiredHandler_NoOpRecordsNothing(t *testing.T) {
 		t.Fatalf("second status = %d, want %d", resp2.StatusCode, http.StatusNoContent)
 	}
 
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM activity WHERE subject_kind = 'practice' AND subject_id = $1`, practiceID,
-	).Scan(&count); err != nil {
-		t.Fatalf("count activity rows: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE subject_kind = 'practice' AND subject_id = $1`, practiceID)
 	if count != 0 {
 		t.Fatalf("activity rows = %d, want 0 for a same-value PUT", count)
 	}
@@ -156,17 +141,9 @@ func TestPutMFARequiredHandler_ClearsAndRecords(t *testing.T) {
 
 	resp := putMFARequired(t, srv, seedSession(ownerUID), practiceID, false, true)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
 
-	var action string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT action FROM activity WHERE subject_kind = 'practice' AND subject_id = $1 AND action = 'mfa_required_disabled'`,
-		practiceID,
-	).Scan(&action); err != nil {
-		t.Fatalf("read activity row: %v", err)
-	}
+	testdb.Scalar[string](t, db.Admin, `SELECT action FROM activity WHERE subject_kind = 'practice' AND subject_id = $1 AND action = 'mfa_required_disabled'`, practiceID)
 }
 
 func TestPutMFARequiredHandler_MalformedBody(t *testing.T) {
@@ -185,9 +162,7 @@ func TestPutMFARequiredHandler_MalformedBody(t *testing.T) {
 		t.Fatalf("request: %v", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestGetMFAImpactHandler_DoulaForbidden(t *testing.T) {
@@ -205,9 +180,7 @@ func TestGetMFAImpactHandler_DoulaForbidden(t *testing.T) {
 		t.Fatalf("request: %v", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 // TestGetMFAImpactHandler_CountsEveryoneWithoutAFactor proves the count
@@ -244,9 +217,7 @@ func TestGetMFAImpactHandler_CountsEveryoneWithoutAFactor(t *testing.T) {
 		t.Fatalf("request: %v", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	var body struct {
 		Required            bool `json:"required"`

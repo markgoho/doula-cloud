@@ -10,23 +10,13 @@ import (
 
 func pendingMagicLinkToken(t *testing.T, db *testdb.DB, identifier string) string {
 	t.Helper()
-	var token string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT token FROM portal_magic_link_outbox WHERE identity_uid = $1 AND status = 'pending'`, identifier,
-	).Scan(&token); err != nil {
-		t.Fatalf("read pending magic link token: %v", err)
-	}
+	token := testdb.Scalar[string](t, db.Admin, `SELECT token FROM portal_magic_link_outbox WHERE identity_uid = $1 AND status = 'pending'`, identifier)
 	return token
 }
 
 func countMagicLinkReturns(t *testing.T, db *testdb.DB, identifier string) int {
 	t.Helper()
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM portal_magic_link_returns WHERE identifier = $1`, identifier,
-	).Scan(&count); err != nil {
-		t.Fatalf("count portal_magic_link_returns: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM portal_magic_link_returns WHERE identifier = $1`, identifier)
 	return count
 }
 

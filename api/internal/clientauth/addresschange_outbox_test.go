@@ -18,14 +18,8 @@ func newAddressChangeWorker(sender mail.Sender) clientauth.AddressChangeWorker {
 
 func seedAddressChangeRow(t *testing.T, db *testdb.DB, identityUID, toAddress string, attemptCount int, nextAttemptAt time.Time) string {
 	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO portal_address_change_outbox (identity_uid, to_address, token, attempt_count, next_attempt_at)
-		 VALUES ($1, $2, 'confirm-token', $3, $4) RETURNING id`,
-		identityUID, toAddress, attemptCount, nextAttemptAt,
-	).Scan(&id); err != nil {
-		t.Fatalf("seed address change row: %v", err)
-	}
+	id := testdb.Scalar[string](t, db.Admin, `INSERT INTO portal_address_change_outbox (identity_uid, to_address, token, attempt_count, next_attempt_at)
+		 VALUES ($1, $2, 'confirm-token', $3, $4) RETURNING id`, identityUID, toAddress, attemptCount, nextAttemptAt)
 	return id
 }
 

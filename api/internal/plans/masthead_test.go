@@ -1,7 +1,6 @@
 package plans_test
 
 import (
-	"encoding/json/v2"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +14,7 @@ import (
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/pdftext"
 	"doula-cloud/api/internal/plans"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -87,22 +87,13 @@ func setChangedAt(t *testing.T, db *testdb.DB, engagementID, planType string, at
 
 func changedAt(t *testing.T, db *testdb.DB, engagementID, planType string) time.Time {
 	t.Helper()
-	var at time.Time
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT changed_at FROM plan_instances WHERE engagement_id = $1 AND plan_type = $2`,
-		engagementID, planType,
-	).Scan(&at); err != nil {
-		t.Fatalf("read changed_at: %v", err)
-	}
+	at := testdb.Scalar[time.Time](t, db.Admin, `SELECT changed_at FROM plan_instances WHERE engagement_id = $1 AND plan_type = $2`, engagementID, planType)
 	return at
 }
 
 func decodeMastheadBody(t *testing.T, resp *http.Response) plans.InstanceResponse {
 	t.Helper()
-	var out plans.InstanceResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[plans.InstanceResponse](t, resp)
 	return out
 }
 
@@ -174,9 +165,7 @@ func TestGetInstanceHandler_BirthPlanCarriesItsMasthead(t *testing.T) {
 
 	resp := getInstance(t, srv, session, practiceID, engagementID, birthPlanType)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	wantMasthead(t, decodeMastheadBody(t, resp).Masthead)
 }
 
@@ -195,9 +184,7 @@ func TestGetInstanceHandler_CarePlanHasNoMasthead(t *testing.T) {
 
 	resp := getInstance(t, srv, session, practiceID, engagementID, carePlanType)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	if got := decodeMastheadBody(t, resp).Masthead; got != nil {
 		t.Fatalf("masthead = %+v, want none on a Care Plan", got)
 	}
@@ -218,9 +205,7 @@ func TestClientGetBirthPlanHandler_CarriesItsMasthead(t *testing.T) {
 
 	resp := getClientBirthPlan(t, srv, session, engagementID)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	wantMasthead(t, decodeMastheadBody(t, resp).Masthead)
 }
 
@@ -240,9 +225,7 @@ func TestClientAcknowledgeBirthPlanHandler_CarriesItsMasthead(t *testing.T) {
 
 	resp := postAcknowledgeBirthPlan(t, srv, session, engagementID)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	wantMasthead(t, decodeMastheadBody(t, resp).Masthead)
 }
 
@@ -261,9 +244,7 @@ func TestGetBirthPlanPDFHandler_NamesThePlan(t *testing.T) {
 
 	resp := getInstancePDF(t, srv.Client(), srv.URL+instancePath(practiceID, engagementID, birthPlanType)+"/pdf", session)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	wantPDFNamesThePlan(t, resp)
 }
 
@@ -282,9 +263,7 @@ func TestClientGetBirthPlanPDFHandler_NamesThePlan(t *testing.T) {
 
 	resp := getInstancePDF(t, http.DefaultClient, srv.URL+"/api/portal/engagements/"+engagementID+"/birth-plan/pdf", session)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	wantPDFNamesThePlan(t, resp)
 }
 
@@ -305,9 +284,7 @@ func TestPostInstanceHandler_ChangedAtIsTheRequestClock(t *testing.T) {
 
 	resp := postInstance(t, srv, session, practiceID, engagementID, birthPlanType)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
 	if got := changedAt(t, db, engagementID, birthPlanType); !got.Equal(mastheadNow) {
 		t.Fatalf("changed_at = %v, want %v", got, mastheadNow)
 	}
@@ -369,9 +346,7 @@ func TestGetInstanceHandler_MastheadWithNoDoulaNamesOnlyThePractice(t *testing.T
 
 	resp := getInstance(t, srv, session, practiceID, engagementID, birthPlanType)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	wantMastheadDoulas(t, decodeMastheadBody(t, resp).Masthead)
 }
 
@@ -390,9 +365,7 @@ func TestClientGetBirthPlanPDFHandler_MastheadWithNoDoulaNamesOnlyThePractice(t 
 
 	resp := getInstancePDF(t, http.DefaultClient, srv.URL+"/api/portal/engagements/"+engagementID+"/birth-plan/pdf", session)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	wantPDFMasthead(t, resp)
 }
 
@@ -419,9 +392,7 @@ func TestClientGetBirthPlanHandler_MastheadNamesEveryDoulaOnTheEngagement(t *tes
 
 	resp := getClientBirthPlan(t, srv, session, engagementID)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	wantMastheadDoulas(t, decodeMastheadBody(t, resp).Masthead, mastheadDoula, "Lena Vasquez")
 }
 
@@ -442,8 +413,6 @@ func TestGetBirthPlanPDFHandler_MastheadNamesEveryDoulaOnTheEngagement(t *testin
 
 	resp := getInstancePDF(t, srv.Client(), srv.URL+instancePath(practiceID, engagementID, birthPlanType)+"/pdf", session)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	wantPDFMasthead(t, resp, "Doulas: "+mastheadDoula+", Lena Vasquez")
 }

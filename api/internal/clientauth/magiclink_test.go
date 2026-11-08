@@ -3,15 +3,16 @@ package clientauth_test
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -30,38 +31,18 @@ func newMagicLinkRedeemServer(db *testdb.DB) *httptest.Server {
 
 func postJSON(t *testing.T, srv *httptest.Server, path, body string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+path, strings.NewReader(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Post(t, srv.URL+path, reqtest.RawJSON([]byte(body)))
 }
 
 func countLiveMagicLinkTokens(t *testing.T, db *testdb.DB, identifier string) int {
 	t.Helper()
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM auth_tokens WHERE identity_uid = $1 AND purpose = 'client_magic_link' AND used_at IS NULL`,
-		identifier,
-	).Scan(&count); err != nil {
-		t.Fatalf("count auth_tokens: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM auth_tokens WHERE identity_uid = $1 AND purpose = 'client_magic_link' AND used_at IS NULL`, identifier)
 	return count
 }
 
 func countPendingMagicLinkMail(t *testing.T, db *testdb.DB, identifier string) int {
 	t.Helper()
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM portal_magic_link_outbox WHERE identity_uid = $1 AND status = 'pending'`, identifier,
-	).Scan(&count); err != nil {
-		t.Fatalf("count portal_magic_link_outbox: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM portal_magic_link_outbox WHERE identity_uid = $1 AND status = 'pending'`, identifier)
 	return count
 }
 
@@ -72,9 +53,7 @@ func TestRequestMagicLinkHandler_MissingEmail(t *testing.T) {
 
 	resp := postJSON(t, srv, "/api/portal/magic-link/request", `{"email":""}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestRequestMagicLinkHandler_InvalidRequestBody(t *testing.T) {
@@ -84,9 +63,7 @@ func TestRequestMagicLinkHandler_InvalidRequestBody(t *testing.T) {
 
 	resp := postJSON(t, srv, "/api/portal/magic-link/request", `not json`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestRequestMagicLinkHandler_UnknownAddressStillAccepted proves #168's
@@ -99,14 +76,9 @@ func TestRequestMagicLinkHandler_UnknownAddressStillAccepted(t *testing.T) {
 
 	resp := postJSON(t, srv, "/api/portal/magic-link/request", `{"email":"nobody@example.com"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusAccepted {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusAccepted)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusAccepted)
 
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM auth_tokens`).Scan(&count); err != nil {
-		t.Fatalf("count auth_tokens: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM auth_tokens`)
 	if count != 0 {
 		t.Fatal("expected no token minted for an unknown address")
 	}
@@ -122,9 +94,7 @@ func TestRequestMagicLinkHandler_KnownAddressQueuesLinkMail(t *testing.T) {
 	// Case and whitespace should not matter -- the lookup normalizes both.
 	resp := postJSON(t, srv, "/api/portal/magic-link/request", `{"email":"  Known@Example.com  "}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusAccepted {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusAccepted)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusAccepted)
 
 	if countLiveMagicLinkTokens(t, db, identifier) != 1 {
 		t.Fatal("expected exactly one live magic-link token")
@@ -148,9 +118,7 @@ func TestRequestMagicLinkHandler_ReRequestResetsTheSameRow(t *testing.T) {
 	for range 2 {
 		resp := postJSON(t, srv, "/api/portal/magic-link/request", `{"email":"rerequest@example.com"}`)
 		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusAccepted {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusAccepted)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusAccepted)
 	}
 
 	if countLiveMagicLinkTokens(t, db, identifier) != 1 {
@@ -168,9 +136,7 @@ func TestRedeemMagicLinkHandler_MissingToken(t *testing.T) {
 
 	resp := postJSON(t, srv, "/api/portal/magic-link", `{"token":""}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestRedeemMagicLinkHandler_InvalidRequestBody(t *testing.T) {
@@ -180,9 +146,7 @@ func TestRedeemMagicLinkHandler_InvalidRequestBody(t *testing.T) {
 
 	resp := postJSON(t, srv, "/api/portal/magic-link", `not json`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestRedeemMagicLinkHandler_UnknownTokenInvalid(t *testing.T) {
@@ -192,10 +156,8 @@ func TestRedeemMagicLinkHandler_UnknownTokenInvalid(t *testing.T) {
 
 	resp := postJSON(t, srv, "/api/portal/magic-link", `{"token":"never-minted"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-	requireErrorCode(t, resp, apierr.CodeLinkUnusable)
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+	apierrtest.RequireCode(t, resp, apierr.CodeLinkUnusable)
 }
 
 // TestRedeemMagicLinkHandler_Success proves the token is single-use and
@@ -212,9 +174,7 @@ func TestRedeemMagicLinkHandler_Success(t *testing.T) {
 	defer srv.Close()
 
 	resp := postJSON(t, srv, "/api/portal/magic-link", `{"token":"`+token+`"}`)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	var foundCookie bool
 	for _, c := range resp.Cookies() {
 		if c.Name == authn.SessionCookieName {
@@ -229,10 +189,7 @@ func TestRedeemMagicLinkHandler_Success(t *testing.T) {
 		t.Fatal("no __session cookie set on successful redeem")
 	}
 
-	var sessionCount int
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM sessions WHERE identity_uid = $1`, identifier).Scan(&sessionCount); err != nil {
-		t.Fatalf("count sessions: %v", err)
-	}
+	sessionCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM sessions WHERE identity_uid = $1`, identifier)
 	if sessionCount != 1 {
 		t.Fatalf("sessions = %d, want 1", sessionCount)
 	}
@@ -264,7 +221,5 @@ func TestRedeemMagicLinkHandler_SessionStoreFailureRollsBackTheSpend(t *testing.
 
 	resp := postJSON(t, srv, "/api/portal/magic-link", `{"token":"`+token+`"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusInternalServerError)
 }

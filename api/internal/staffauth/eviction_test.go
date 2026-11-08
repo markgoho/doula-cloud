@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/portalaccount"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -64,16 +65,11 @@ func TestSignupHandler_LivePortalSessionRefusesThenConfirmedRetrySucceeds(t *tes
 
 	refused := signupReq(false)
 	defer refused.Body.Close()
-	if refused.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", refused.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, refused, http.StatusConflict)
 	if got := apierrtest.Decode(t, refused).Code; got != authn.EvictionUnconfirmed {
 		t.Errorf("code = %q, want %q", got, authn.EvictionUnconfirmed)
 	}
-	var practiceCount int
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM practices WHERE name = 'Evicting Practice'`).Scan(&practiceCount); err != nil {
-		t.Fatalf("count practices: %v", err)
-	}
+	practiceCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM practices WHERE name = 'Evicting Practice'`)
 	if practiceCount != 0 {
 		t.Errorf("practices named 'Evicting Practice' = %d, want 0 -- a refused mint rolls the signup back", practiceCount)
 	}
@@ -83,9 +79,7 @@ func TestSignupHandler_LivePortalSessionRefusesThenConfirmedRetrySucceeds(t *tes
 
 	confirmed := signupReq(true)
 	defer confirmed.Body.Close()
-	if confirmed.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", confirmed.StatusCode, http.StatusCreated)
-	}
+	reqtest.RequireStatus(t, confirmed, http.StatusCreated)
 	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM practices WHERE name = 'Evicting Practice'`).Scan(&practiceCount); err != nil {
 		t.Fatalf("count practices: %v", err)
 	}
@@ -133,16 +127,11 @@ func TestAcceptInviteHandler_LivePortalSessionRefusesThenConfirmedRetrySucceeds(
 
 	refused := acceptReq(false)
 	defer refused.Body.Close()
-	if refused.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", refused.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, refused, http.StatusConflict)
 	if got := apierrtest.Decode(t, refused).Code; got != authn.EvictionUnconfirmed {
 		t.Errorf("code = %q, want %q", got, authn.EvictionUnconfirmed)
 	}
-	var status string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT status FROM practice_invitations WHERE token_digest = $1`, staffauth.TokenDigest(inviteToken)).Scan(&status); err != nil {
-		t.Fatalf("read invitation status: %v", err)
-	}
+	status := testdb.Scalar[string](t, db.Admin, `SELECT status FROM practice_invitations WHERE token_digest = $1`, staffauth.TokenDigest(inviteToken))
 	if status != statusPending {
 		t.Errorf("invitation status = %q, want %q -- a refused mint leaves it claimable", status, statusPending)
 	}
@@ -152,9 +141,7 @@ func TestAcceptInviteHandler_LivePortalSessionRefusesThenConfirmedRetrySucceeds(
 
 	confirmed := acceptReq(true)
 	defer confirmed.Body.Close()
-	if confirmed.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", confirmed.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, confirmed, http.StatusOK)
 	if err := db.Admin.QueryRowContext(t.Context(), `SELECT status FROM practice_invitations WHERE token_digest = $1`, staffauth.TokenDigest(inviteToken)).Scan(&status); err != nil {
 		t.Fatalf("read invitation status: %v", err)
 	}
@@ -191,16 +178,11 @@ func TestFinishEnrollmentHandler_LivePortalSessionRefusesThenConfirmedRetrySucce
 
 	refused := enrollReq(false)
 	defer refused.Body.Close()
-	if refused.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", refused.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, refused, http.StatusConflict)
 	if got := apierrtest.Decode(t, refused).Code; got != authn.EvictionUnconfirmed {
 		t.Errorf("code = %q, want %q", got, authn.EvictionUnconfirmed)
 	}
-	var eventCount int
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM staff_auth_events WHERE staff_id = $1`, staffID).Scan(&eventCount); err != nil {
-		t.Fatalf("count staff_auth_events: %v", err)
-	}
+	eventCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM staff_auth_events WHERE staff_id = $1`, staffID)
 	if eventCount != 0 {
 		t.Errorf("staff_auth_events rows = %d, want 0 -- a refused mint records no enrollment", eventCount)
 	}
@@ -210,9 +192,7 @@ func TestFinishEnrollmentHandler_LivePortalSessionRefusesThenConfirmedRetrySucce
 
 	confirmed := enrollReq(true)
 	defer confirmed.Body.Close()
-	if confirmed.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", confirmed.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, confirmed, http.StatusOK)
 	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM staff_auth_events WHERE staff_id = $1`, staffID).Scan(&eventCount); err != nil {
 		t.Fatalf("count staff_auth_events: %v", err)
 	}
