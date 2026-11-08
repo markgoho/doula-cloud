@@ -1,7 +1,6 @@
 package payments
 
 import (
-	"database/sql"
 	"net/http"
 
 	"doula-cloud/api/internal/activity"
@@ -47,12 +46,8 @@ func PostConnectReturnHandler() http.Handler {
 			return
 		}
 
-		var accountID sql.NullString
-		if err := tx.QueryRowContext(r.Context(),
-			`SELECT stripe_connect_account_id FROM practices WHERE id = $1`, practiceID,
-		).Scan(&accountID); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		accountID, ok := requireConnectAccountID(w, r, tx, practiceID)
+		if !ok {
 			return
 		}
 		if !accountID.Valid {

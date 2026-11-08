@@ -24,12 +24,7 @@ func AttachmentHandler(store objectstore.ObjectStore) http.Handler {
 			return
 		}
 
-		messageID := r.PathValue("messageId")
-		if !staffauth.ParseUUID(w, "message", messageID) {
-			return
-		}
-
-		serveAttachment(w, r, tx, store, engagementID, messageID, apierr.MsgInternalError)
+		serveAttachment(w, r, tx, store, engagementID)
 	})
 }
 
@@ -40,20 +35,12 @@ func AttachmentHandler(store objectstore.ObjectStore) http.Handler {
 // clientauth.Middleware.
 func ClientAttachmentHandler(store objectstore.ObjectStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, has := clientauth.Tx(r.Context())
-		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
-		if !has {
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		engagementID, _ := clientauth.EngagementID(r.Context())
-
-		messageID := r.PathValue("messageId")
-		if !staffauth.ParseUUID(w, "message", messageID) {
+		tx, engagementID, ok := clientauth.RequireEngagementTx(w, r)
+		if !ok {
 			return
 		}
 
-		serveAttachment(w, r, tx, store, engagementID, messageID, apierr.MsgInternalError)
+		serveAttachment(w, r, tx, store, engagementID)
 	})
 }
 
@@ -62,7 +49,12 @@ func ClientAttachmentHandler(store objectstore.ObjectStore) http.Handler {
 // filter runs on top of messages' own RLS, the same posture listMessages
 // takes -- then streams the object's bytes from store. Shared by
 // AttachmentHandler and ClientAttachmentHandler.
-func serveAttachment(w http.ResponseWriter, r *http.Request, tx *sql.Tx, store objectstore.ObjectStore, engagementID, messageID, internalErrorMsg string) {
+func serveAttachment(w http.ResponseWriter, r *http.Request, tx *sql.Tx, store objectstore.ObjectStore, engagementID string) {
+	messageID := r.PathValue("messageId")
+	if !staffauth.ParseUUID(w, "message", messageID) {
+		return
+	}
+
 	var objectPath, contentType, filename sql.NullString
 	err := tx.QueryRowContext(r.Context(),
 		`SELECT attachment_object_path, attachment_content_type, attachment_filename
@@ -75,7 +67,7 @@ func serveAttachment(w http.ResponseWriter, r *http.Request, tx *sql.Tx, store o
 	}
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
-		apierr.WriteError(w, internalErrorMsg, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 
@@ -85,7 +77,7 @@ func serveAttachment(w http.ResponseWriter, r *http.Request, tx *sql.Tx, store o
 		return
 	}
 	if err != nil {
-		apierr.WriteError(w, internalErrorMsg, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 	defer func() { _ = obj.Close() }()

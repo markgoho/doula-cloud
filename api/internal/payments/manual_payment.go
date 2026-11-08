@@ -158,6 +158,43 @@ func resolveInvoiceForPractice(ctx context.Context, tx *sql.Tx, practiceID, invo
 	return status, amountCents, stripeInvoiceID, engagementID, nil
 }
 
+// requirePaymentPath is the preamble of the routes under
+// /invoices/{invoiceId}/payments/{paymentId}: the request-scoped tx, the
+// Practice, and the two path ids, parsed.
+func requirePaymentPath(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID, invoiceID, paymentID string, ok bool) {
+	tx, practiceID, ok = staffauth.RequireTx(w, r)
+	// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
+	if !ok {
+		return nil, "", "", "", false
+	}
+	invoiceID = r.PathValue("invoiceId")
+	if !staffauth.ParseUUID(w, "invoice", invoiceID) {
+		return nil, "", "", "", false
+	}
+	paymentID = r.PathValue("paymentId")
+	if !staffauth.ParseUUID(w, "payment", paymentID) {
+		return nil, "", "", "", false
+	}
+	return tx, practiceID, invoiceID, paymentID, true
+}
+
+// requireInvoiceAtPractice is resolveInvoiceForPractice for a handler: an
+// Invoice that is not this Practice's is a 404 and any other failure a
+// 500, written here.
+func requireInvoiceAtPractice(w http.ResponseWriter, r *http.Request, tx *sql.Tx, practiceID, invoiceID string) (status string, amountCents int64, stripeInvoiceID sql.NullString, engagementID string, ok bool) {
+	status, amountCents, stripeInvoiceID, engagementID, err := resolveInvoiceForPractice(r.Context(), tx, practiceID, invoiceID)
+	if errors.Is(err, sql.ErrNoRows) {
+		apierr.WriteError(w, "invoice not found", http.StatusNotFound)
+		return "", 0, sql.NullString{}, "", false
+	}
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return "", 0, sql.NullString{}, "", false
+	}
+	return status, amountCents, stripeInvoiceID, engagementID, true
+}
+
 // paidOnAfterPracticeToday reports whether paidOn is later than the
 // Practice's own calendar day at instant at, in loc -- the Practice's
 // stated zone (ADR-0036, #1167). paidOn is always parsed in paidOnLayout
@@ -285,14 +322,8 @@ func PostManualPaymentHandler(client Client) http.Handler {
 			return
 		}
 
-		status, amountCents, stripeInvoiceID, engagementID, err := resolveInvoiceForPractice(r.Context(), tx, practiceID, invoiceID)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "invoice not found", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		status, amountCents, stripeInvoiceID, engagementID, ok := requireInvoiceAtPractice(w, r, tx, practiceID, invoiceID)
+		if !ok {
 			return
 		}
 		if status != invoiceStatusOpen {
@@ -420,14 +451,8 @@ func transitionByHandInvoice(newStatus, updateStatusQuery string, action activit
 			return
 		}
 
-		status, _, stripeInvoiceID, engagementID, err := resolveInvoiceForPractice(r.Context(), tx, practiceID, invoiceID)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "invoice not found", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		status, _, stripeInvoiceID, engagementID, ok := requireInvoiceAtPractice(w, r, tx, practiceID, invoiceID)
+		if !ok {
 			return
 		}
 		if stripeInvoiceID.Valid {
@@ -573,17 +598,8 @@ func resolvePaymentForReversal(ctx context.Context, tx *sql.Tx, invoiceID, payme
 // mount.go.
 func PostReversePaymentHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
+		tx, practiceID, invoiceID, paymentID, ok := requirePaymentPath(w, r)
 		if !ok {
-			return
-		}
-		invoiceID := r.PathValue("invoiceId")
-		if !staffauth.ParseUUID(w, "invoice", invoiceID) {
-			return
-		}
-		paymentID := r.PathValue("paymentId")
-		if !staffauth.ParseUUID(w, "payment", paymentID) {
 			return
 		}
 
@@ -603,14 +619,8 @@ func PostReversePaymentHandler() http.Handler {
 			return
 		}
 
-		status, _, stripeInvoiceID, engagementID, err := resolveInvoiceForPractice(r.Context(), tx, practiceID, invoiceID)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "invoice not found", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		status, _, stripeInvoiceID, engagementID, ok := requireInvoiceAtPractice(w, r, tx, practiceID, invoiceID)
+		if !ok {
 			return
 		}
 		if stripeInvoiceID.Valid {

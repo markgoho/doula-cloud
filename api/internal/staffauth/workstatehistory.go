@@ -90,14 +90,8 @@ func ListWorkStateHistoryHandler() http.Handler {
 		// to the current Practice, so a staff id belonging to somebody
 		// else's Practice is a 404 rather than an empty history that
 		// would confirm the person exists.
-		memberSince, err := membershipCreatedAt(r.Context(), tx, practiceID, staffID)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				apierr.WriteError(w, "staff member not found", http.StatusNotFound)
-				return
-			}
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		memberSince, ok := requireMembershipCreatedAt(w, r, tx, practiceID, staffID)
+		if !ok {
 			return
 		}
 
@@ -121,6 +115,23 @@ func ListWorkStateHistoryHandler() http.Handler {
 
 		apierr.WriteJSON(w, http.StatusOK, resp)
 	})
+}
+
+// requireMembershipCreatedAt is membershipCreatedAt for a handler: a staff
+// id with no Membership at this Practice is a 404, and any other failure a
+// 500, written here.
+func requireMembershipCreatedAt(w http.ResponseWriter, r *http.Request, tx *sql.Tx, practiceID, staffID string) (time.Time, bool) {
+	createdAt, err := membershipCreatedAt(r.Context(), tx, practiceID, staffID)
+	if errors.Is(err, sql.ErrNoRows) {
+		apierr.WriteError(w, "staff member not found", http.StatusNotFound)
+		return time.Time{}, false
+	}
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return time.Time{}, false
+	}
+	return createdAt, true
 }
 
 // membershipCreatedAt reads when this person joined the current Practice.
@@ -207,9 +218,6 @@ func listWorkStateChanges(ctx context.Context, tx *sql.Tx, staffID string, after
 		return nil, false, fmt.Errorf("staffauth: iterate work state history: %w", err)
 	}
 
-	hasMore := len(items) > workStateHistoryPageSize
-	if hasMore {
-		items = items[:workStateHistoryPageSize]
-	}
+	items, hasMore := pagecursor.Trim(items, workStateHistoryPageSize)
 	return items, hasMore, nil
 }

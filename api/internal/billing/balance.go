@@ -144,10 +144,7 @@ func GetBalanceHandler(terms legal.Document) http.Handler {
 			return
 		}
 
-		hasMore := len(entries) > pageSize
-		if hasMore {
-			entries = entries[:pageSize]
-		}
+		entries, hasMore := pagecursor.Trim(entries, pageSize)
 		ledger := LedgerPage{Items: entries, HasMore: hasMore}
 		if hasMore {
 			last := entries[len(entries)-1]

@@ -137,14 +137,8 @@ func PostInstanceHandler() http.Handler {
 			return
 		}
 
-		fields, found, err := fetchFields(r.Context(), tx, practiceID, planType)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if !found {
-			apierr.WriteError(w, "no plan template found for this practice and plan type", http.StatusNotFound)
+		fields, ok := requireTemplateFields(w, r, tx, practiceID, planType)
+		if !ok {
 			return
 		}
 

@@ -337,10 +337,7 @@ func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, af
 		return nil, false, fmt.Errorf("payments: iterate practice invoice rows: %w", err)
 	}
 
-	hasMore := len(items) > invoicePageSize
-	if hasMore {
-		items = items[:invoicePageSize]
-	}
+	items, hasMore := pagecursor.Trim(items, invoicePageSize)
 	return items, hasMore, nil
 }
 

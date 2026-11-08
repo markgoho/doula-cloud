@@ -46,15 +46,8 @@ func ReassignHandler(enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 
-		engagementID := r.PathValue("engagementId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) {
-			return
-		}
-		visitID := r.PathValue("visitId")
-		if !staffauth.ParseUUID(w, "visit", visitID) {
-			return
-		}
-		if !staffauth.RequireEngagementAtPractice(w, r, c.tx, engagementID, c.practiceID) {
+		engagementID, visitID, ok := requireVisitPath(w, r, c.tx, c.practiceID)
+		if !ok {
 			return
 		}
 

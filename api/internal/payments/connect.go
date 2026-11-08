@@ -1,7 +1,9 @@
 package payments
 
 import (
+	"context"
 	"database/sql"
+	"fmt"
 	"net/http"
 
 	"doula-cloud/api/internal/apierr"
@@ -206,6 +208,31 @@ func PostConnectHandler(client Client) http.Handler {
 	})
 }
 
+// readConnectAccountID reads the Stripe Connect account id stored for
+// practiceID; Valid is false while the Practice has not started connecting.
+func readConnectAccountID(ctx context.Context, tx *sql.Tx, practiceID string) (sql.NullString, error) {
+	var accountID sql.NullString
+	if err := tx.QueryRowContext(ctx,
+		`SELECT stripe_connect_account_id FROM practices WHERE id = $1`, practiceID,
+	).Scan(&accountID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return sql.NullString{}, fmt.Errorf("payments: read connect account: %w", err)
+	}
+	return accountID, nil
+}
+
+// requireConnectAccountID is readConnectAccountID for a handler, writing
+// the 500 itself.
+func requireConnectAccountID(w http.ResponseWriter, r *http.Request, tx *sql.Tx, practiceID string) (sql.NullString, bool) {
+	accountID, err := readConnectAccountID(r.Context(), tx, practiceID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return sql.NullString{}, false
+	}
+	return accountID, true
+}
+
 // GetConnectStatusHandler reads a Practice's Stripe Connect status.
 // ADR-0008's read table gives Stripe Connect state to an Owner and an
 // Admin, and to no Doula of either employment type (#267) -- enforced by
@@ -224,12 +251,8 @@ func GetConnectStatusHandler(client Client) http.Handler {
 			return
 		}
 
-		var accountID sql.NullString
-		if err := tx.QueryRowContext(r.Context(),
-			`SELECT stripe_connect_account_id FROM practices WHERE id = $1`, practiceID,
-		).Scan(&accountID); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		accountID, ok := requireConnectAccountID(w, r, tx, practiceID)
+		if !ok {
 			return
 		}
 

@@ -49,15 +49,8 @@ func NotesHandler() http.Handler {
 			return
 		}
 
-		engagementID := r.PathValue("engagementId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) {
-			return
-		}
-		visitID := r.PathValue("visitId")
-		if !staffauth.ParseUUID(w, "visit", visitID) {
-			return
-		}
-		if !staffauth.RequireEngagementAtPractice(w, r, tx, engagementID, practiceID) {
+		engagementID, visitID, ok := requireVisitPath(w, r, tx, practiceID)
+		if !ok {
 			return
 		}
 

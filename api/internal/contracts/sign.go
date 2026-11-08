@@ -48,13 +48,10 @@ type SignContractRequest struct {
 // clientauth.Middleware.
 func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, has := clientauth.Tx(r.Context())
-		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
-		if !has {
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		tx, engagementID, ok := clientauth.RequireEngagementTx(w, r)
+		if !ok {
 			return
 		}
-		engagementID, _ := clientauth.EngagementID(r.Context())
 
 		var req SignContractRequest
 		if !apierr.DecodeJSON(w, r, &req) {

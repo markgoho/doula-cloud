@@ -110,10 +110,7 @@ func AwaitingSignatureHandler() http.Handler {
 			return
 		}
 
-		hasMore := len(list) > awaitingPageSize
-		if hasMore {
-			list = list[:awaitingPageSize]
-		}
+		list, hasMore := pagecursor.Trim(list, awaitingPageSize)
 		resp := AwaitingResponse{Items: list, HasMore: hasMore}
 		if hasMore {
 			last := list[len(list)-1]

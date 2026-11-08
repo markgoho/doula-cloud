@@ -61,32 +61,39 @@ func ListHandler() http.Handler {
 			return
 		}
 
-		after, ok := pagecursor.FromQuery(w, r, decodeCursor, "invalid cursor")
-		if !ok {
-			return
-		}
-
 		// activity.DepartedStaffName is the Staff-side reader's own
 		// fallback (#1322): a Staff reader who sees "a former colleague"
 		// elsewhere (activitypage, oncall, the Engagement's own Activity
 		// ledger) now sees the same word here, instead of an empty
 		// senderName, for a sender whose Membership has ended (see
 		// listMessages' own doc comment).
-		items, hasMore, err := listMessages(r.Context(), tx, engagementID, after, activity.DepartedStaffName)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		resp := ListResponse{Items: items, HasMore: hasMore}
-		if hasMore {
-			next := encodeCursor(items[len(items)-1].CreatedAt, items[len(items)-1].MessageID)
-			resp.NextCursor = &next
-		}
-
-		apierr.WriteJSON(w, http.StatusOK, resp)
+		writeThreadPage(w, r, tx, engagementID, activity.DepartedStaffName)
 	})
+}
+
+// writeThreadPage answers one page of an Engagement's thread, newest
+// first, for the cursor in the request. departedStaffName is what a
+// sender whose Membership has ended reads as to this reader.
+func writeThreadPage(w http.ResponseWriter, r *http.Request, tx *sql.Tx, engagementID, departedStaffName string) {
+	after, ok := pagecursor.FromQuery(w, r, decodeCursor, "invalid cursor")
+	if !ok {
+		return
+	}
+
+	items, hasMore, err := listMessages(r.Context(), tx, engagementID, after, departedStaffName)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+
+	resp := ListResponse{Items: items, HasMore: hasMore}
+	if hasMore {
+		next := encodeCursor(items[len(items)-1].CreatedAt, items[len(items)-1].MessageID)
+		resp.NextCursor = &next
+	}
+
+	apierr.WriteJSON(w, http.StatusOK, resp)
 }
 
 // listMessagesQuery and listMessagesAfterQuery share the same column list
@@ -148,10 +155,7 @@ func listMessages(ctx context.Context, tx *sql.Tx, engagementID string, after *m
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return nil, false, err
 	}
-	hasMore := len(items) > pageSize
-	if hasMore {
-		items = items[:pageSize]
-	}
+	items, hasMore := pagecursor.Trim(items, pageSize)
 	return items, hasMore, nil
 }
 

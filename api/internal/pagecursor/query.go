@@ -22,3 +22,13 @@ func FromQuery[T any](w http.ResponseWriter, r *http.Request, decode func(string
 	}
 	return &c, true
 }
+
+// Trim cuts a page fetched with one row past size back to size, and
+// reports whether that extra row was there, which is how a list answers
+// hasMore without a count.
+func Trim[T any](items []T, size int) (page []T, hasMore bool) {
+	if len(items) > size {
+		return items[:size], true
+	}
+	return items, false
+}

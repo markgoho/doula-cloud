@@ -5,7 +5,6 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/attachment"
-	"doula-cloud/api/internal/staffauth"
 )
 
 // TakeOffDoulaHandler takes a named Doula off an Engagement: the Doula
@@ -29,31 +28,17 @@ import (
 // and the mount admits only an Owner or an Admin (staffauth.OwnerAndAdmin).
 func TakeOffDoulaHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, reader, ok := staffauth.RequireTxReader(w, r)
-		if !ok {
-			return
-		}
-		callerID, _ := staffauth.StaffID(r.Context())
-		engagementID := r.PathValue("engagementId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) {
-			return
-		}
-		doulaID := r.PathValue("staffId")
-		if !staffauth.ParseUUID(w, "staff", doulaID) {
-			return
-		}
-
-		status, ok := lockEngagementStatus(w, r, tx, engagementID, practiceID, msgAttachDoulaNoEngagement)
+		c, ok := beginDoulaChange(w, r)
 		if !ok {
 			return
 		}
 
-		if _, err := attachment.TakeOff(r.Context(), tx, practiceID, engagementID, doulaID, callerID); err != nil {
+		if _, err := attachment.TakeOff(r.Context(), c.tx, c.practiceID, c.engagementID, c.doulaID, c.callerID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		doulas, err := readAttachedDoulas(r.Context(), tx, engagementID)
+		doulas, err := readAttachedDoulas(r.Context(), c.tx, c.engagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -61,9 +46,9 @@ func TakeOffDoulaHandler() http.Handler {
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, AttachSelfResponse{
-			EngagementID:  engagementID,
+			EngagementID:  c.engagementID,
 			Doulas:        doulas,
-			CanAttachSelf: canAttachSelf(reader, callerID, status, doulas),
+			CanAttachSelf: canAttachSelf(c.reader, c.callerID, c.status, doulas),
 		})
 	})
 }

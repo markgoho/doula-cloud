@@ -16,7 +16,7 @@ const gateNotFound = "gate: engagement not found"
 // Engagement at another Practice (or one that does not exist) is a 404
 // for every caller, and a contractor Doula reaches only an Engagement she
 // holds a granted attachment on.
-func TestRequireEngagementGates(t *testing.T) {
+func TestRequireEngagementAndClientGates(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Engagement Gate Practice")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
@@ -28,9 +28,9 @@ func TestRequireEngagementGates(t *testing.T) {
 		attachedUID   = "gate-contractor-attached"
 		unattachedUID = "gate-contractor-unattached"
 	)
-	testdb.SeedStaffAtPractice(t, db, practiceID, ownerUID, []string{"owner"}, "employee")
-	attachedID := testdb.SeedStaffAtPractice(t, db, practiceID, attachedUID, []string{"doula"}, "contractor")
-	testdb.SeedStaffAtPractice(t, db, practiceID, unattachedUID, []string{"doula"}, "contractor")
+	testdb.SeedStaffAtPractice(t, db, practiceID, ownerUID, []string{ownerRole}, "employee")
+	attachedID := testdb.SeedStaffAtPractice(t, db, practiceID, attachedUID, []string{doulaRole}, "contractor")
+	testdb.SeedStaffAtPractice(t, db, practiceID, unattachedUID, []string{doulaRole}, "contractor")
 	testdb.SeedAttachment(t, db, engagementID, attachedID, "granted", false)
 
 	mux := http.NewServeMux()
@@ -49,23 +49,50 @@ func TestRequireEngagementGates(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	}
 	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}", staffauth.Middleware(db.App)(http.HandlerFunc(gate)))
+	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/reach", staffauth.Middleware(db.App)(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if _, _, _, ok := staffauth.RequireEngagementReach(w, r, gateNotFound); !ok {
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		})))
+	mux.Handle("GET /practices/{practiceId}/clients/{clientId}", staffauth.Middleware(db.App)(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if _, _, _, _, ok := staffauth.RequireClientReach(w, r); !ok {
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		})))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
+	var clientID string
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT client_id FROM engagements WHERE id = $1`, engagementID).Scan(&clientID); err != nil {
+		t.Fatalf("read client id: %v", err)
+	}
+	enc := "/engagements/" + engagementID
+
 	cases := []struct {
-		name         string
-		uid          string
-		engagementID string
-		want         int
+		name string
+		uid  string
+		path string
+		want int
 	}{
-		{"owner, own engagement", ownerUID, engagementID, http.StatusNoContent},
-		{"owner, engagement at another practice", ownerUID, otherEngagementID, http.StatusNotFound},
-		{"contractor, attached", attachedUID, engagementID, http.StatusNoContent},
-		{"contractor, not attached", unattachedUID, engagementID, http.StatusNotFound},
+		{"owner, own engagement", ownerUID, enc, http.StatusNoContent},
+		{"owner, engagement at another practice", ownerUID, "/engagements/" + otherEngagementID, http.StatusNotFound},
+		{"contractor, attached", attachedUID, enc, http.StatusNoContent},
+		{"contractor, not attached", unattachedUID, enc, http.StatusNotFound},
+		{"reach: owner", ownerUID, enc + "/reach", http.StatusNoContent},
+		{"reach: contractor not attached", unattachedUID, enc + "/reach", http.StatusNotFound},
+		{"reach: malformed id", ownerUID, "/engagements/not-a-uuid/reach", http.StatusBadRequest},
+		{"client: owner", ownerUID, "/clients/" + clientID, http.StatusNoContent},
+		{"client: contractor attached", attachedUID, "/clients/" + clientID, http.StatusNoContent},
+		{"client: contractor not attached", unattachedUID, "/clients/" + clientID, http.StatusNotFound},
+		{"client: malformed id", ownerUID, "/clients/not-a-uuid", http.StatusBadRequest},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/"+practiceID+"/engagements/"+tc.engagementID, nil)
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/"+practiceID+tc.path, nil)
 			if err != nil {
 				t.Fatalf("build request: %v", err)
 			}

@@ -9,7 +9,6 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/objectstore"
-	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/push"
 )
 
@@ -30,33 +29,12 @@ import (
 // actually shows today, which is not what this ticket assumed.
 func ClientListHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, has := clientauth.Tx(r.Context())
-		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
-		if !has {
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		engagementID, _ := clientauth.EngagementID(r.Context())
-
-		after, ok := pagecursor.FromQuery(w, r, decodeCursor, "invalid cursor")
+		tx, engagementID, ok := clientauth.RequireEngagementTx(w, r)
 		if !ok {
 			return
 		}
 
-		items, hasMore, err := listMessages(r.Context(), tx, engagementID, after, activity.StaffActorDisplayName)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		resp := ListResponse{Items: items, HasMore: hasMore}
-		if hasMore {
-			next := encodeCursor(items[len(items)-1].CreatedAt, items[len(items)-1].MessageID)
-			resp.NextCursor = &next
-		}
-
-		apierr.WriteJSON(w, http.StatusOK, resp)
+		writeThreadPage(w, r, tx, engagementID, activity.StaffActorDisplayName)
 	})
 }
 
@@ -72,13 +50,10 @@ func ClientListHandler() http.Handler {
 // instead of posting the Message twice.
 func ClientCreateHandler(store objectstore.ObjectStore, pusher push.Pusher) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, has := clientauth.Tx(r.Context())
-		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
-		if !has {
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		tx, clientID, ok := clientauth.RequireClientTx(w, r)
+		if !ok {
 			return
 		}
-		clientID, _ := clientauth.ClientID(r.Context())
 		engagementID, _ := clientauth.EngagementID(r.Context())
 
 		messageID := uuid.NewString()

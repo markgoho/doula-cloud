@@ -72,8 +72,7 @@ var moneyActions = activitygate.RestrictedActions(activity.SubjectEngagement)
 // staffauth.Middleware.
 func ListActivityHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
+		tx, practiceID, reader, ok := staffauth.RequireTxReader(w, r)
 		if !ok {
 			return
 		}
@@ -83,12 +82,6 @@ func ListActivityHandler() http.Handler {
 			return
 		}
 
-		reader, has := staffauth.ReaderFrom(r.Context())
-		if !has {
-			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
 		canAccess, err := activitygate.CanAccessSubject(r.Context(), tx, reader, activity.SubjectEngagement, engagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests

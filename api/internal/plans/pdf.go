@@ -3,7 +3,6 @@ package plans
 import (
 	"bytes"
 	"database/sql"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -176,26 +175,17 @@ func GetBirthPlanPDFHandler() http.Handler {
 // population. Must be mounted behind clientauth.Middleware.
 func ClientGetBirthPlanPDFHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, has := clientauth.Tx(r.Context())
-		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
-		if !has {
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		tx, engagementID, ok := clientauth.RequireEngagementTx(w, r)
+		if !ok {
 			return
 		}
-		engagementID, _ := clientauth.EngagementID(r.Context())
 
 		if refuseUnlessBirthPlanOffered(r.Context(), w, tx, engagementID) {
 			return
 		}
 
-		fields, answers, _, err := fetchInstance(r.Context(), tx, engagementID, birthPlanType)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, msgNoBirthPlan, http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		fields, answers, _, ok := requireBirthPlanInstance(w, r, tx, engagementID)
+		if !ok {
 			return
 		}
 

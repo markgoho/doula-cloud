@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
 )
 
@@ -52,13 +51,10 @@ func ClientContractGlance(ctx context.Context, tx *sql.Tx, engagementID string) 
 // mounted behind clientauth.Middleware.
 func ClientGetContractHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, has := clientauth.Tx(r.Context())
-		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
-		if !has {
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		tx, engagementID, ok := clientauth.RequireEngagementTx(w, r)
+		if !ok {
 			return
 		}
-		engagementID, _ := clientauth.EngagementID(r.Context())
 
 		_, prose, status, values, amountCents, amountChangedAt, ok := requireContract(w, r, tx, engagementID)
 		if !ok {

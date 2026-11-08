@@ -5,7 +5,6 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/attachment"
-	"doula-cloud/api/internal/staffauth"
 )
 
 // The refusals of AttachDoulaHandler. The Engagement hub prints each as
@@ -42,30 +41,16 @@ const (
 // Owner or an Admin (staffauth.OwnerAndAdmin).
 func AttachDoulaHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, reader, ok := staffauth.RequireTxReader(w, r)
+		c, ok := beginDoulaChange(w, r)
 		if !ok {
 			return
 		}
-		callerID, _ := staffauth.StaffID(r.Context())
-		engagementID := r.PathValue("engagementId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) {
-			return
-		}
-		doulaID := r.PathValue("staffId")
-		if !staffauth.ParseUUID(w, "staff", doulaID) {
-			return
-		}
-
-		status, ok := lockEngagementStatus(w, r, tx, engagementID, practiceID, msgAttachDoulaNoEngagement)
-		if !ok {
-			return
-		}
-		if status == StatusCompleted {
+		if c.status == StatusCompleted {
 			apierr.WriteError(w, msgAttachSelfIsCompleted, http.StatusConflict)
 			return
 		}
 
-		membership, err := attachment.ReadMembership(r.Context(), tx, practiceID, doulaID)
+		membership, err := attachment.ReadMembership(r.Context(), c.tx, c.practiceID, c.doulaID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -84,15 +69,15 @@ func AttachDoulaHandler() http.Handler {
 		case attachment.Attachable:
 		}
 
-		doulas, ok := attachIfAbsent(w, r, tx, practiceID, engagementID, doulaID, callerID)
+		doulas, ok := attachIfAbsent(w, r, c.tx, c.practiceID, c.engagementID, c.doulaID, c.callerID)
 		if !ok {
 			return
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, AttachSelfResponse{
-			EngagementID:  engagementID,
+			EngagementID:  c.engagementID,
 			Doulas:        doulas,
-			CanAttachSelf: canAttachSelf(reader, callerID, status, doulas),
+			CanAttachSelf: canAttachSelf(c.reader, c.callerID, c.status, doulas),
 		})
 	})
 }

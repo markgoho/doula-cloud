@@ -128,10 +128,7 @@ func ListStaffHandler() http.Handler {
 			return
 		}
 
-		hasMore := len(invitations) > invitationPageSize
-		if hasMore {
-			invitations = invitations[:invitationPageSize]
-		}
+		invitations, hasMore := pagecursor.Trim(invitations, invitationPageSize)
 		invitationPage := InvitationPage{Items: invitations, HasMore: hasMore}
 		if hasMore {
 			last := invitations[len(invitations)-1]

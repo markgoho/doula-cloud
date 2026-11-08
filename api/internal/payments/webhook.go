@@ -289,6 +289,63 @@ func resolveInvoiceForEvent(ctx context.Context, tx *sql.Tx, stripeInvoiceID, ac
 	return invoiceID, practiceID, nil
 }
 
+// resolveEventInvoice is resolveInvoiceForEvent for an event handler. An
+// unrecognized account or unknown Stripe invoice id is logged and dropped
+// -- committed and acknowledged, per #82's ticket body, not treated as an
+// error -- and ok is false; a database failure is a 500.
+func resolveEventInvoice(w http.ResponseWriter, r *http.Request, tx *sql.Tx, committed *bool, event WebhookEvent, stripeInvoiceID string) (invoiceID, practiceID string, ok bool) {
+	invoiceID, practiceID, err := resolveInvoiceForEvent(r.Context(), tx, stripeInvoiceID, event.Account)
+	if errors.Is(err, sql.ErrNoRows) {
+		webhookarrival.Mark(r.Context(), webhookarrival.Dropped)
+		log.Printf("payments: connect webhook: dropping %s for unresolved invoice %q (account %q, event id %s)", event.Type, stripeInvoiceID, event.Account, event.ID)
+		commitAndAck(w, tx, committed)
+		return "", "", false
+	}
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return "", "", false
+	}
+	return invoiceID, practiceID, true
+}
+
+// invoiceEvent is what an event about one Invoice holds once it is claimed
+// and resolved: the open transaction, whether it committed, and the
+// Invoice and Practice the Stripe invoice id named.
+type invoiceEvent struct {
+	tx                    *sql.Tx
+	committed             *bool
+	invoiceID, practiceID string
+}
+
+func (e invoiceEvent) rollbackUnlessCommitted() {
+	rollbackUnlessCommitted(e.tx, e.committed)
+}
+
+// beginInvoiceEvent is the prologue of every handler for an event about
+// one Invoice: decode the payload, claim the event, and resolve the
+// Invoice it names (stripeInvoiceID reads that id off the decoded
+// payload). ok=false means the response is already written -- a 500, or
+// the 200 acknowledging a replay or an event for an Invoice this system
+// does not know. Callers defer ev.rollbackUnlessCommitted() straight
+// after.
+func beginInvoiceEvent[T any](w http.ResponseWriter, r *http.Request, db *sql.DB, event WebhookEvent, stripeInvoiceID func(T) string) (obj T, ev invoiceEvent, ok bool) {
+	if err := json.Unmarshal(event.Data, &obj); err != nil {
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return obj, invoiceEvent{}, false
+	}
+	tx, committed, ok := beginEvent(w, r, db, event.ID)
+	if !ok {
+		return obj, invoiceEvent{}, false
+	}
+	invoiceID, practiceID, ok := resolveEventInvoice(w, r, tx, committed, event, stripeInvoiceID(obj))
+	if !ok {
+		rollbackUnlessCommitted(tx, committed)
+		return obj, invoiceEvent{}, false
+	}
+	return obj, invoiceEvent{tx: tx, committed: committed, invoiceID: invoiceID, practiceID: practiceID}, true
+}
+
 // recordInvoicePaid writes #476's activity row for the invoice.paid
 // event -- actor_kind 'client' (ADR-0022: "Amara paid the invoice" is
 // her act), the paying Client's identity threaded through via
@@ -341,33 +398,12 @@ func recordInvoiceEvent(ctx context.Context, tx *sql.Tx, practiceID, invoiceID s
 // matching invoices row, creates exactly one payments row recording the
 // amount actually paid and when, and flips the Invoice's status to paid.
 func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, client Client, event WebhookEvent, enq tasknudge.Enqueuer) {
-	var inv invoicePaidObject
-	if err := json.Unmarshal(event.Data, &inv); err != nil {
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return
-	}
-
-	tx, committed, ok := beginEvent(w, r, db, event.ID)
+	inv, ev, ok := beginInvoiceEvent(w, r, db, event, func(o invoicePaidObject) string { return o.ID })
 	if !ok {
 		return
 	}
-	defer rollbackUnlessCommitted(tx, committed)
-
-	invoiceID, practiceID, err := resolveInvoiceForEvent(r.Context(), tx, inv.ID, event.Account)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			// Unrecognized account or unknown Stripe invoice id -- logged
-			// and dropped, per #82's ticket body, not treated as an
-			// error.
-			webhookarrival.Mark(r.Context(), webhookarrival.Dropped)
-			log.Printf("payments: connect webhook: dropping invoice.paid for unresolved invoice %q (account %q, event id %s)", inv.ID, event.Account, event.ID)
-			commitAndAck(w, tx, committed)
-			return
-		}
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return
-	}
+	defer ev.rollbackUnlessCommitted()
+	tx, committed, invoiceID, practiceID := ev.tx, ev.committed, ev.invoiceID, ev.practiceID
 
 	// #271's already-paid guard: FOR UPDATE locks the row against a
 	// concurrent writer -- specifically PostManualPaymentHandler's own
@@ -457,30 +493,12 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 // redirect method waits on her (requires_action), which is no failure
 // and records nothing (#2225).
 func handleInvoicePaymentFailed(w http.ResponseWriter, r *http.Request, db *sql.DB, client Client, event WebhookEvent) {
-	var inv invoiceEventObject
-	if err := json.Unmarshal(event.Data, &inv); err != nil {
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return
-	}
-
-	tx, committed, ok := beginEvent(w, r, db, event.ID)
+	inv, ev, ok := beginInvoiceEvent(w, r, db, event, func(o invoiceEventObject) string { return o.ID })
 	if !ok {
 		return
 	}
-	defer rollbackUnlessCommitted(tx, committed)
-
-	invoiceID, practiceID, err := resolveInvoiceForEvent(r.Context(), tx, inv.ID, event.Account)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			webhookarrival.Mark(r.Context(), webhookarrival.Dropped)
-			log.Printf("payments: connect webhook: dropping invoice.payment_failed for unresolved invoice %q (account %q, event id %s)", inv.ID, event.Account, event.ID)
-			commitAndAck(w, tx, committed)
-			return
-		}
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return
-	}
+	defer ev.rollbackUnlessCommitted()
+	tx, committed, invoiceID, practiceID := ev.tx, ev.committed, ev.invoiceID, ev.practiceID
 
 	// Stripe asks before anything is written: the same event arrives the
 	// moment a redirect method sends her away to approve it, and that is
@@ -534,30 +552,12 @@ func handleInvoicePaymentFailed(w http.ResponseWriter, r *http.Request, db *sql.
 // footing a Dashboard Refund stands on (#1009). An Invoice already paid
 // or voided here is logged and acknowledged, unchanged.
 func handleInvoiceMarkedUncollectible(w http.ResponseWriter, r *http.Request, db *sql.DB, event WebhookEvent) {
-	var inv invoiceEventObject
-	if err := json.Unmarshal(event.Data, &inv); err != nil {
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return
-	}
-
-	tx, committed, ok := beginEvent(w, r, db, event.ID)
+	inv, ev, ok := beginInvoiceEvent(w, r, db, event, func(o invoiceEventObject) string { return o.ID })
 	if !ok {
 		return
 	}
-	defer rollbackUnlessCommitted(tx, committed)
-
-	invoiceID, practiceID, err := resolveInvoiceForEvent(r.Context(), tx, inv.ID, event.Account)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			webhookarrival.Mark(r.Context(), webhookarrival.Dropped)
-			log.Printf("payments: connect webhook: dropping invoice.marked_uncollectible for unresolved invoice %q (account %q, event id %s)", inv.ID, event.Account, event.ID)
-			commitAndAck(w, tx, committed)
-			return
-		}
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return
-	}
+	defer ev.rollbackUnlessCommitted()
+	tx, committed, invoiceID, practiceID := ev.tx, ev.committed, ev.invoiceID, ev.practiceID
 
 	var currentStatus string
 	if err := tx.QueryRowContext(r.Context(),
@@ -640,16 +640,8 @@ func handlePaymentIntentProcessing(w http.ResponseWriter, r *http.Request, db *s
 		return
 	}
 
-	invoiceID, practiceID, err := resolveInvoiceForEvent(r.Context(), tx, intent.StripeInvoiceID, event.Account)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			webhookarrival.Mark(r.Context(), webhookarrival.Dropped)
-			log.Printf("payments: connect webhook: dropping payment_intent.processing for unresolved invoice %q (account %q, event id %s)", intent.StripeInvoiceID, event.Account, event.ID)
-			commitAndAck(w, tx, committed)
-			return
-		}
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+	invoiceID, practiceID, ok := resolveEventInvoice(w, r, tx, committed, event, intent.StripeInvoiceID)
+	if !ok {
 		return
 	}
 

@@ -37,10 +37,8 @@ type PreferenceResponse struct {
 // Engagement. Must be mounted behind clientauth.Middleware.
 func GetHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, has := clientauth.Tx(r.Context())
-		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
-		if !has {
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		tx, ok := clientauth.RequireTx(w, r)
+		if !ok {
 			return
 		}
 		identityUID, _ := clientauth.IdentityUID(r.Context())
@@ -67,10 +65,8 @@ type SetRequest struct {
 // trail expectation). Must be mounted behind clientauth.Middleware.
 func SetHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, has := clientauth.Tx(r.Context())
-		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
-		if !has {
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		tx, ok := clientauth.RequireTx(w, r)
+		if !ok {
 			return
 		}
 		identityUID, _ := clientauth.IdentityUID(r.Context())

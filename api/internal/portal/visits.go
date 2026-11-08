@@ -115,10 +115,7 @@ func VisitsHandler() http.Handler {
 			return
 		}
 
-		hasMore := len(list) > visitPageSize
-		if hasMore {
-			list = list[:visitPageSize]
-		}
+		list, hasMore := pagecursor.Trim(list, visitPageSize)
 		resp := VisitsResponse{Items: list, HasMore: hasMore}
 		if hasMore {
 			last := list[len(list)-1]

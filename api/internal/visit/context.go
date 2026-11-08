@@ -6,12 +6,33 @@
 package visit
 
 import (
+	"database/sql"
 	"net/http"
 	"time"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/engagement"
+	"doula-cloud/api/internal/staffauth"
 )
+
+// requireVisitPath parses the path's Engagement and Visit ids and
+// confirms the Engagement belongs to practiceID, so a Visit can never be
+// written under an Engagement at a different Practice. It writes the 400
+// or 404 itself.
+func requireVisitPath(w http.ResponseWriter, r *http.Request, tx *sql.Tx, practiceID string) (engagementID, visitID string, ok bool) {
+	engagementID = r.PathValue("engagementId")
+	if !staffauth.ParseUUID(w, "engagement", engagementID) {
+		return "", "", false
+	}
+	visitID = r.PathValue("visitId")
+	if !staffauth.ParseUUID(w, "visit", visitID) {
+		return "", "", false
+	}
+	if !staffauth.RequireEngagementAtPractice(w, r, tx, engagementID, practiceID) {
+		return "", "", false
+	}
+	return engagementID, visitID, true
+}
 
 // parseScheduledAt turns a request's optional RFC3339 scheduledAt string
 // into a *time.Time, shared by CreateHandler and ScheduleHandler so the

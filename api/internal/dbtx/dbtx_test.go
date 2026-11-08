@@ -12,7 +12,7 @@ import (
 func TestLifecycle(t *testing.T) {
 	db := testdb.New(t)
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/x", nil)
+	r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x", nil)
 
 	tx, ok := dbtx.Begin(w, r, db.Admin)
 	if !ok {

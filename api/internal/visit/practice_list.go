@@ -134,10 +134,7 @@ func PracticeScheduleHandler() http.Handler {
 			return
 		}
 
-		hasMore := len(list) > schedulePageSize
-		if hasMore {
-			list = list[:schedulePageSize]
-		}
+		list, hasMore := pagecursor.Trim(list, schedulePageSize)
 		resp := PracticeScheduleResponse{Items: list, HasMore: hasMore}
 		if hasMore {
 			last := list[len(list)-1]

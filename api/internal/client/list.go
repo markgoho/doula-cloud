@@ -284,10 +284,7 @@ func serveList(w http.ResponseWriter, r *http.Request, req ListRequest) {
 		return
 	}
 
-	hasMore := len(list) > pageSize
-	if hasMore {
-		list = list[:pageSize]
-	}
+	list, hasMore := pagecursor.Trim(list, pageSize)
 
 	if err := attachOpenEngagements(r.Context(), tx, practiceID, list, reader, staffID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests

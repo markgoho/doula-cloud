@@ -660,12 +660,10 @@ func fetchCurrentContract(ctx context.Context, tx *sql.Tx, engagementID string) 
 // erroring here is cheap, and the alternative is calling Stripe with an
 // empty account id.
 func fetchConnectAccountID(ctx context.Context, tx *sql.Tx, practiceID string) (accountID string, err error) {
-	var acct sql.NullString
-	if err := tx.QueryRowContext(ctx,
-		`SELECT stripe_connect_account_id FROM practices WHERE id = $1`, practiceID,
-	).Scan(&acct); err != nil {
+	acct, err := readConnectAccountID(ctx, tx, practiceID)
+	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return "", fmt.Errorf("payments: fetch connect account: %w", err)
+		return "", err
 	}
 	if !acct.Valid {
 		return "", fmt.Errorf("payments: card_payments active with no connect account linked for practice %s", practiceID)
@@ -899,10 +897,7 @@ func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *i
 		return nil, false, fmt.Errorf("payments: iterate invoice rows: %w", err)
 	}
 
-	hasMore := len(items) > invoicePageSize
-	if hasMore {
-		items = items[:invoicePageSize]
-	}
+	items, hasMore := pagecursor.Trim(items, invoicePageSize)
 	return items, hasMore, nil
 }
 

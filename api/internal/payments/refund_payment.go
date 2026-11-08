@@ -182,17 +182,8 @@ func validateRefundMethod(w http.ResponseWriter, req RefundPaymentRequest, targe
 // PostReversePaymentHandler). Must be mounted behind staffauth.Middleware.
 func PostRefundPaymentHandler(client Client) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
+		tx, practiceID, invoiceID, paymentID, ok := requirePaymentPath(w, r)
 		if !ok {
-			return
-		}
-		invoiceID := r.PathValue("invoiceId")
-		if !staffauth.ParseUUID(w, "invoice", invoiceID) {
-			return
-		}
-		paymentID := r.PathValue("paymentId")
-		if !staffauth.ParseUUID(w, "payment", paymentID) {
 			return
 		}
 
@@ -207,14 +198,8 @@ func PostRefundPaymentHandler(client Client) http.Handler {
 			return
 		}
 
-		status, _, stripeInvoiceID, engagementID, err := resolveInvoiceForPractice(r.Context(), tx, practiceID, invoiceID)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "invoice not found", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		status, _, stripeInvoiceID, engagementID, ok := requireInvoiceAtPractice(w, r, tx, practiceID, invoiceID)
+		if !ok {
 			return
 		}
 		if status != invoiceStatusPaid {

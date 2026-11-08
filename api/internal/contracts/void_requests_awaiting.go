@@ -67,10 +67,7 @@ func VoidRequestsAwaitingHandler() http.Handler {
 			return
 		}
 
-		hasMore := len(list) > voidRequestsAwaitingPageSize
-		if hasMore {
-			list = list[:voidRequestsAwaitingPageSize]
-		}
+		list, hasMore := pagecursor.Trim(list, voidRequestsAwaitingPageSize)
 		resp := VoidRequestsAwaitingResponse{Items: list, HasMore: hasMore}
 		if hasMore {
 			last := list[len(list)-1]
