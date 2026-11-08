@@ -60,6 +60,15 @@ func Header(key, value string) Option {
 	return func(r *request) { r.headers = append(r.headers, [2]string{key, value}) }
 }
 
+// HeaderIf sets the header only when cond holds, so a test that is
+// table-driven over the header being present passes one option for both cases.
+func HeaderIf(cond bool, key, value string) Option {
+	if !cond {
+		return func(*request) {}
+	}
+	return Header(key, value)
+}
+
 // Do sends one request with http.DefaultClient and returns the response.
 // The caller owns resp.Body.
 func Do(t *testing.T, method, url string, opts ...Option) *http.Response {

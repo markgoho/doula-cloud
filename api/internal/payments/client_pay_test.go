@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/payments"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -66,15 +66,7 @@ func TestClientGetPayment_SetsNoStoreOnTheCredential(t *testing.T) {
 	invoiceID := seedInvoice(t, db, me.practiceID, me.contractID, "in_pay_cache", invoiceStatusOpen, 5000, time.Now())
 	srv := newClientMoneyServer(t, db)
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+clientPaymentPath(me.engagementID, invoiceID), nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, portalSession(t, db, uid))
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Get(t, srv.URL+clientPaymentPath(me.engagementID, invoiceID), reqtest.Session(portalSession(t, db, uid)))
 	defer func() { _ = resp.Body.Close() }()
 	if got := resp.Header.Get("Cache-Control"); got != "no-store" {
 		t.Fatalf("Cache-Control = %q, want no-store", got)

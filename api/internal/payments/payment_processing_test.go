@@ -64,12 +64,7 @@ func paymentIntentProcessingPayload(t *testing.T, eventID, accountID, paymentInt
 
 func processingSince(t *testing.T, db *testdb.DB, invoiceID string) sql.NullTime {
 	t.Helper()
-	var since sql.NullTime
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT payment_processing_since FROM invoices WHERE id = $1`, invoiceID,
-	).Scan(&since); err != nil {
-		t.Fatalf("read payment_processing_since: %v", err)
-	}
+	since := testdb.Scalar[sql.NullTime](t, db.Admin, `SELECT payment_processing_since FROM invoices WHERE id = $1`, invoiceID)
 	return since
 }
 

@@ -1,7 +1,6 @@
 package payments_test
 
 import (
-	"bytes"
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
@@ -9,8 +8,8 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierrtest"
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/payments"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -20,21 +19,7 @@ const kindRefund = "refund"
 
 func postRefund(t *testing.T, srv *httptest.Server, session, practiceID, invoiceID, paymentID string, req payments.RefundPaymentRequest) *http.Response {
 	t.Helper()
-	body, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("marshal request: %v", err)
-	}
-	httpReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		srv.URL+"/api/practices/"+practiceID+"/invoices/"+invoiceID+"/payments/"+paymentID+"/refund", bytes.NewBuffer(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(httpReq, session)
-	httpReq.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(httpReq)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/invoices/"+invoiceID+"/payments/"+paymentID+"/refund", reqtest.JSON(req), reqtest.Session(session))
 	return resp
 }
 
@@ -93,12 +78,7 @@ func seedStripePayment(t *testing.T, db *testdb.DB, invoiceID string, amountCent
 // NULL.
 func paymentRowCount(t *testing.T, db *testdb.DB, invoiceID string) int {
 	t.Helper()
-	var n int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM payments WHERE invoice_id = $1`, invoiceID,
-	).Scan(&n); err != nil {
-		t.Fatalf("count payments: %v", err)
-	}
+	n := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM payments WHERE invoice_id = $1`, invoiceID)
 	return n
 }
 
@@ -345,17 +325,7 @@ func TestPostRefundPaymentHandler_MalformedInputs(t *testing.T) {
 		t.Fatalf("malformed payment id status = %d, want %d", badPayment.StatusCode, http.StatusBadRequest)
 	}
 
-	httpReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		f.srv.URL+"/api/practices/"+f.practiceID+"/invoices/"+f.invoiceID+"/payments/"+f.paymentID+"/refund", bytes.NewBufferString("{not json"))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(httpReq, f.session)
-	httpReq.Header.Set("Content-Type", "application/json")
-	badBody, err := http.DefaultClient.Do(httpReq)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	badBody := reqtest.Post(t, f.srv.URL+"/api/practices/"+f.practiceID+"/invoices/"+f.invoiceID+"/payments/"+f.paymentID+"/refund", reqtest.RawJSON([]byte("{not json")), reqtest.Session(f.session))
 	defer badBody.Body.Close()
 	if badBody.StatusCode != http.StatusBadRequest {
 		t.Fatalf("malformed body status = %d, want %d", badBody.StatusCode, http.StatusBadRequest)

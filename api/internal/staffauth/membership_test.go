@@ -45,31 +45,14 @@ func patchMembershipRaw(t *testing.T, srv *httptest.Server, session, practiceID,
 // membershipEvents reads a Membership's recorded history, newest first.
 func membershipEvents(t *testing.T, db *testdb.DB, practiceID, staffID string) []string {
 	t.Helper()
-	rows, err := db.Admin.QueryContext(t.Context(),
-		`SELECT action || ':' || COALESCE(diff->'roles'->>'from', '') ||
+	out := testdb.Column[string](t, db.Admin, `SELECT action || ':' || COALESCE(diff->'roles'->>'from', '') ||
 		        '->' || COALESCE(diff->'roles'->>'to', '') ||
 		        '/' || COALESCE(diff->'employmentType'->>'from', '') ||
 		        '->' || COALESCE(diff->'employmentType'->>'to', '')
 		 FROM activity
 		 WHERE practice_id = $1 AND subject_kind = 'membership' AND subject_id = $2
 		 ORDER BY created_at, action`,
-		practiceID, staffID,
-	)
-	if err != nil {
-		t.Fatalf("read membership events: %v", err)
-	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var s string
-		if err := rows.Scan(&s); err != nil {
-			t.Fatalf("scan membership event: %v", err)
-		}
-		out = append(out, s)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate membership events: %v", err)
-	}
+		practiceID, staffID)
 	return out
 }
 

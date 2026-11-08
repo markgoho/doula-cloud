@@ -21,10 +21,7 @@ func TestRLS_InvoicesFailsClosedWithNoSessionVarSet(t *testing.T) {
 	contractID := seedDraftContract(t, db, engagementID)
 	seedInvoice(t, db, practiceID, contractID, "in_rls_closed", invoiceStatusOpen, 5000, time.Now())
 
-	var count int
-	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM invoices`).Scan(&count); err != nil {
-		t.Fatalf("query invoices with no session variables set: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM invoices`)
 	if count != 0 {
 		t.Fatalf("expected 0 rows with no session variables set, got %d", count)
 	}
@@ -43,32 +40,8 @@ func TestRLS_InvoicesVisibilityIsScopedToCurrentPractice(t *testing.T) {
 	invoiceA := seedInvoice(t, db, practiceA, contractA, "in_rls_a", invoiceStatusOpen, 5000, time.Now())
 	seedInvoice(t, db, practiceB, contractB, "in_rls_b", invoiceStatusOpen, 7000, time.Now())
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	var visibleIDs []string
-	rows, err := tx.QueryContext(t.Context(), `SELECT id FROM invoices`)
-	if err != nil {
-		t.Fatalf("query invoices: %v", err)
-	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		visibleIDs = append(visibleIDs, id)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate rows: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Practice(practiceA))
+	visibleIDs := testdb.Column[string](t, tx, `SELECT id FROM invoices`)
 
 	if len(visibleIDs) != 1 || visibleIDs[0] != invoiceA {
 		t.Fatalf("visible invoices = %v, want only %q", visibleIDs, invoiceA)
@@ -85,17 +58,8 @@ func TestRLS_InvoicesCannotInsertForAnotherPractice(t *testing.T) {
 	_, engagementA := testdb.SeedNamedEngagement(t, db, practiceA, "Client A", "a@example.com")
 	contractA := seedDraftContract(t, db, engagementA)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceB); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	_, err = tx.ExecContext(t.Context(),
+	tx := db.BeginAs(t, testdb.Practice(practiceB))
+	_, err := tx.ExecContext(t.Context(),
 		`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, amount_cents, reference, due_at) VALUES ($1, $2, 'in_rls_insert', 5000, 'in_rls_insert', now())`,
 		practiceA, contractA,
 	)

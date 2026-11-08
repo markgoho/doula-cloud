@@ -9,6 +9,7 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -25,22 +26,7 @@ func newVouchServer(t *testing.T, db *testdb.DB, verifier authn.Verifier, enq ta
 
 func vouchRequest(t *testing.T, srv *httptest.Server, session, practiceID, staffID string, bearer string, confirmed bool) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		srv.URL+"/api/practices/"+practiceID+"/staff/"+staffID+"/mfa-recovery/vouch", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	if bearer != "" {
-		req.Header.Set("Authorization", "Bearer "+bearer)
-	}
-	if confirmed {
-		req.Header.Set("X-Confirmed", "true")
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/staff/"+staffID+"/mfa-recovery/vouch", reqtest.Session(session), reqtest.HeaderIf(bearer != "", "Authorization", "Bearer "+bearer), reqtest.HeaderIf(confirmed, "X-Confirmed", "true"))
 	return resp
 }
 

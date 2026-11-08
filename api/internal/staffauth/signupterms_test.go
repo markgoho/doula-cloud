@@ -194,14 +194,7 @@ func TestSignupHandler_AFailedSignupRecordsNoAgreement(t *testing.T) {
 // test can tell an empty list from a null.
 func getComingVersions(t *testing.T, srv *httptest.Server) map[string]any {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/legal/coming", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET /api/legal/coming: %v", err)
-	}
+	resp := reqtest.Get(t, srv.URL+"/api/legal/coming")
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusOK)
 	out := reqtest.Decode[map[string]any](t, resp)

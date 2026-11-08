@@ -9,6 +9,7 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -40,16 +41,7 @@ func (s *recommendationServer) session(uid string, secondFactor bool) string {
 
 func (s *recommendationServer) do(method, session, practiceID, suffix string) *http.Response {
 	s.t.Helper()
-	req, err := http.NewRequestWithContext(s.t.Context(), method,
-		s.srv.URL+"/api/practices/"+practiceID+"/second-factor-recommendation"+suffix, nil)
-	if err != nil {
-		s.t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		s.t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Do(s.t, method, s.srv.URL+"/api/practices/"+practiceID+"/second-factor-recommendation"+suffix, reqtest.Session(session))
 	return resp
 }
 
@@ -299,24 +291,8 @@ func TestSecondFactorRecommendation_SendsNoMessage(t *testing.T) {
 // _outbox, so a new outbox cannot escape the check.
 func outboxRowCount(t *testing.T, db *testdb.DB) int {
 	t.Helper()
-	rows, err := db.Admin.QueryContext(t.Context(),
-		`SELECT table_name FROM information_schema.tables
+	tables := testdb.Column[string](t, db.Admin, `SELECT table_name FROM information_schema.tables
 		  WHERE table_schema = 'public' AND table_name LIKE '%\_outbox'`)
-	if err != nil {
-		t.Fatalf("list outbox tables: %v", err)
-	}
-	defer rows.Close()
-	var tables []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			t.Fatalf("scan table name: %v", err)
-		}
-		tables = append(tables, name)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("list outbox tables: %v", err)
-	}
 	if len(tables) == 0 {
 		t.Fatal("found no outbox tables, want several")
 	}

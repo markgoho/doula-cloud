@@ -32,18 +32,7 @@ func newDeleteLoginServer(t *testing.T, db *testdb.DB, accounts *authntest.FakeA
 // X-Confirmed backstop, which is the only header this endpoint reads.
 func deleteLogin(t *testing.T, srv *httptest.Server, session string, confirmed bool) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, srv.URL+"/api/staff/account", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	if confirmed {
-		req.Header.Set("X-Confirmed", "true")
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Delete(t, srv.URL+"/api/staff/account", reqtest.Session(session), reqtest.HeaderIf(confirmed, "X-Confirmed", "true"))
 	return resp
 }
 

@@ -28,10 +28,7 @@ func beginAsPractice(t *testing.T, db *testdb.DB, practiceID string) *sql.Tx {
 
 func ledgerRowCount(t *testing.T, db *testdb.DB, practiceID string) int {
 	t.Helper()
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM credit_ledger WHERE practice_id = $1`, practiceID).Scan(&count); err != nil {
-		t.Fatalf("count credit_ledger rows: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM credit_ledger WHERE practice_id = $1`, practiceID)
 	return count
 }
 

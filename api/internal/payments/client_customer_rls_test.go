@@ -36,11 +36,7 @@ func TestRLS_ClientStripeCustomersFailsClosedWithNoSessionVarSet(t *testing.T) {
 	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	seedClientCustomer(t, db, practiceID, engagementID, "acct_rls_closed", "cus_rls_closed")
 
-	var count int
-	if err := db.App.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM client_stripe_customers`).Scan(&count); err != nil {
-		t.Fatalf("query client_stripe_customers with no session variables set: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM client_stripe_customers`)
 	if count != 0 {
 		t.Fatalf("expected 0 rows with no session variables set, got %d", count)
 	}
@@ -68,22 +64,7 @@ func TestRLS_ClientStripeCustomersIsScopedToCurrentPractice(t *testing.T) {
 		t.Fatalf("set_config: %v", err)
 	}
 
-	var visible []string
-	rows, err := tx.QueryContext(t.Context(), `SELECT stripe_customer_id FROM client_stripe_customers`)
-	if err != nil {
-		t.Fatalf("query client_stripe_customers: %v", err)
-	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		visible = append(visible, id)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate rows: %v", err)
-	}
+	visible := testdb.Column[string](t, tx, `SELECT stripe_customer_id FROM client_stripe_customers`)
 
 	if len(visible) != 1 || visible[0] != "cus_rls_a" {
 		t.Fatalf("visible mappings = %v, want only %q", visible, "cus_rls_a")

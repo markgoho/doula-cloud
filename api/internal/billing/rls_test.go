@@ -12,13 +12,8 @@ import (
 
 func seedSignupBonus(t *testing.T, db *testdb.DB, practiceID string) string {
 	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO credit_ledger (practice_id, origin, quantity) VALUES ($1, 'signup_bonus', 3) RETURNING id`,
-		practiceID,
-	).Scan(&id); err != nil {
-		t.Fatalf("seed credit_ledger row: %v", err)
-	}
+	id := testdb.Scalar[string](t, db.Admin, `INSERT INTO credit_ledger (practice_id, origin, quantity) VALUES ($1, 'signup_bonus', 3) RETURNING id`,
+		practiceID)
 	return id
 }
 
@@ -29,10 +24,7 @@ func TestRLS_CreditLedgerFailsClosedWithNoSessionVarSet(t *testing.T) {
 	practiceID := testdb.SeedPractice(t, db, "Some Practice")
 	seedSignupBonus(t, db, practiceID)
 
-	var count int
-	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM credit_ledger`).Scan(&count); err != nil {
-		t.Fatalf("query credit_ledger with no session variables set: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM credit_ledger`)
 	if count != 0 {
 		t.Fatalf("expected 0 rows with no session variables set, got %d", count)
 	}
@@ -48,32 +40,8 @@ func TestRLS_CreditLedgerVisibilityIsScopedToCurrentPractice(t *testing.T) {
 	rowA := seedSignupBonus(t, db, practiceA)
 	seedSignupBonus(t, db, practiceB)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	var visibleIDs []string
-	rows, err := tx.QueryContext(t.Context(), `SELECT id FROM credit_ledger`)
-	if err != nil {
-		t.Fatalf("query credit_ledger: %v", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		visibleIDs = append(visibleIDs, id)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate rows: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Practice(practiceA))
+	visibleIDs := testdb.Column[string](t, tx, `SELECT id FROM credit_ledger`)
 
 	if len(visibleIDs) != 1 || visibleIDs[0] != rowA {
 		t.Fatalf("visible credit_ledger rows = %v, want only %q", visibleIDs, rowA)
@@ -88,17 +56,8 @@ func TestRLS_CreditLedgerCannotInsertForAnotherPractice(t *testing.T) {
 	practiceA := testdb.SeedPractice(t, db, "Practice A")
 	practiceB := testdb.SeedPractice(t, db, "Practice B")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceB); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	_, err = tx.ExecContext(t.Context(),
+	tx := db.BeginAs(t, testdb.Practice(practiceB))
+	_, err := tx.ExecContext(t.Context(),
 		`INSERT INTO credit_ledger (practice_id, origin, quantity) VALUES ($1, 'purchase', 5)`,
 		practiceA,
 	)

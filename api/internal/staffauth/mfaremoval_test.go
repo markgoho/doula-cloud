@@ -26,18 +26,7 @@ func newRemoveSecondFactorServer(t *testing.T, db *testdb.DB, verifier authn.Ver
 
 func deleteSecondFactor(t *testing.T, srv *httptest.Server, session, bearer string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, srv.URL+"/api/staff/mfa", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	if bearer != "" {
-		req.Header.Set("Authorization", "Bearer "+bearer)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Delete(t, srv.URL+"/api/staff/mfa", reqtest.Session(session), reqtest.HeaderIf(bearer != "", "Authorization", "Bearer "+bearer))
 	return resp
 }
 

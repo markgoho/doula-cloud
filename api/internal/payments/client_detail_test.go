@@ -121,12 +121,8 @@ func TestClientGetInvoice_RefusesWhatIsNotHers(t *testing.T) {
 	me := seedClientMoney(t, db, uid, "Jordan Client", "jordan@example.com")
 	other := seedClientMoney(t, db, "client-refuse-other", "Other Client", "other@example.com")
 	// A second Engagement of her own: same Client, different Engagement.
-	var second string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, kind) VALUES ($1, $2, 'birth') RETURNING id`,
-		me.clientID, me.practiceID).Scan(&second); err != nil {
-		t.Fatalf("seed second engagement: %v", err)
-	}
+	second := testdb.Scalar[string](t, db.Admin, `INSERT INTO engagements (client_id, practice_id, kind) VALUES ($1, $2, 'birth') RETURNING id`,
+		me.clientID, me.practiceID)
 	secondContract := seedSignedContract(t, db, second)
 	draft := seedInvoice(t, db, me.practiceID, me.contractID, "in_rf_draft", "draft", 100, time.Now())
 	theirs := seedInvoice(t, db, other.practiceID, other.contractID, "in_rf_theirs", invoiceStatusOpen, 100, time.Now())

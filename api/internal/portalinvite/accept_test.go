@@ -1,7 +1,6 @@
 package portalinvite_test
 
 import (
-	"bytes"
 	"database/sql"
 	"encoding/json/v2"
 	"io"
@@ -12,8 +11,10 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/portalaccount"
 	"doula-cloud/api/internal/portalinvite"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/session"
 	"doula-cloud/api/internal/testdb"
 )
@@ -34,15 +35,7 @@ func TestAcceptInviteHandler_InvalidBody(t *testing.T) {
 	srv := newAcceptServer(db)
 	defer srv.Close()
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/portal/accept-invite", bytes.NewReader([]byte("not json")))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/api/portal/accept-invite", reqtest.RawJSON([]byte("not json")))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -74,7 +67,7 @@ func TestAcceptInviteHandler_UnknownToken(t *testing.T) {
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
 	}
-	requireErrorCode(t, resp, apierr.CodeLinkUnusable)
+	apierrtest.RequireCode(t, resp, apierr.CodeLinkUnusable)
 }
 
 // #2025: a link cut short when it was copied carries part of a token.
@@ -91,7 +84,7 @@ func TestAcceptInviteHandler_TokenThatIsNotAUUID(t *testing.T) {
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
 	}
-	requireErrorCode(t, resp, apierr.CodeLinkUnusable)
+	apierrtest.RequireCode(t, resp, apierr.CodeLinkUnusable)
 }
 
 // TestAcceptInviteHandler_ExpiredInvite proves #616's AC: an invitation
@@ -112,7 +105,7 @@ func TestAcceptInviteHandler_ExpiredInvite(t *testing.T) {
 	if resp.StatusCode != http.StatusGone {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusGone)
 	}
-	requireErrorCode(t, resp, apierr.CodeLinkUnusable)
+	apierrtest.RequireCode(t, resp, apierr.CodeLinkUnusable)
 
 	var identityUID sql.NullString
 	var storedToken string
@@ -164,10 +157,7 @@ func TestAcceptInviteHandler_Success(t *testing.T) {
 		t.Fatalf("expected invite_token cleared after accept, got %q", storedToken.String)
 	}
 
-	var signInAddress string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT sign_in_address FROM portal_accounts WHERE identifier = $1`, identityUID).Scan(&signInAddress); err != nil {
-		t.Fatalf("query portal account: %v", err)
-	}
+	signInAddress := testdb.Scalar[string](t, db.Admin, `SELECT sign_in_address FROM portal_accounts WHERE identifier = $1`, identityUID)
 	if signInAddress != "invited@example.com" {
 		t.Fatalf("sign_in_address = %q, want the invited Client's own contact address", signInAddress)
 	}
@@ -267,18 +257,12 @@ func TestAcceptInviteHandler_SignInAddressReused(t *testing.T) {
 		t.Fatalf("status = %d, want %d, body = %s", resp.StatusCode, http.StatusOK, body)
 	}
 
-	var identityUID string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT identity_uid FROM client_portal_users WHERE client_id = $1`, clientID).Scan(&identityUID); err != nil {
-		t.Fatalf("query claimed row: %v", err)
-	}
+	identityUID := testdb.Scalar[string](t, db.Admin, `SELECT identity_uid FROM client_portal_users WHERE client_id = $1`, clientID)
 	if identityUID != "portal_existing-account" {
 		t.Fatalf("identity_uid = %q, want the existing Portal Account reused, not a fresh mint", identityUID)
 	}
 
-	var accountCount int
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM portal_accounts WHERE lower(sign_in_address) = lower('invited@example.com')`).Scan(&accountCount); err != nil {
-		t.Fatalf("count portal accounts: %v", err)
-	}
+	accountCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM portal_accounts WHERE lower(sign_in_address) = lower('invited@example.com')`)
 	if accountCount != 1 {
 		t.Fatalf("portal_accounts rows for this address = %d, want 1 (no second account minted)", accountCount)
 	}
@@ -327,10 +311,7 @@ func TestAcceptInviteHandler_SignInAddressReusedSamePracticeConflict(t *testing.
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
 	}
 
-	var identityUID sql.NullString
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT identity_uid FROM client_portal_users WHERE client_id = $1`, clientID).Scan(&identityUID); err != nil {
-		t.Fatalf("query pending row: %v", err)
-	}
+	identityUID := testdb.Scalar[sql.NullString](t, db.Admin, `SELECT identity_uid FROM client_portal_users WHERE client_id = $1`, clientID)
 	if identityUID.Valid {
 		t.Fatalf("expected the pending row to remain unclaimed, got identity_uid %q", identityUID.String)
 	}
@@ -344,10 +325,7 @@ func TestAcceptInviteHandler_SignInAddressReusedSamePracticeConflict(t *testing.
 	if err := json.UnmarshalRead(resp.Body, &body); err != nil {
 		t.Fatalf("decode refusal: %v", err)
 	}
-	var practiceName string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT name FROM practices WHERE id = $1`, practiceID).Scan(&practiceName); err != nil {
-		t.Fatalf("query practice name: %v", err)
-	}
+	practiceName := testdb.Scalar[string](t, db.Admin, `SELECT name FROM practices WHERE id = $1`, practiceID)
 	if body.Code != string(apierr.CodePortalAccessAlreadyHere) {
 		t.Fatalf("code = %q, want %q", body.Code, apierr.CodePortalAccessAlreadyHere)
 	}
@@ -373,12 +351,7 @@ func TestAcceptInviteHandler_SignInAddressReusedSamePracticeConflict(t *testing.
 	}
 
 	// #2522: and the refusal leaves the fact the invite's status reads.
-	var refused bool
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT access_refused_at IS NOT NULL FROM client_portal_users WHERE client_id = $1`, clientID,
-	).Scan(&refused); err != nil {
-		t.Fatalf("query access_refused_at: %v", err)
-	}
+	refused := testdb.Scalar[bool](t, db.Admin, `SELECT access_refused_at IS NOT NULL FROM client_portal_users WHERE client_id = $1`, clientID)
 	if !refused {
 		t.Fatal("access_refused_at is unset, want the refused accept recorded on the row")
 	}

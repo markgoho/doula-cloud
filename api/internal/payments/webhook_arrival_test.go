@@ -2,13 +2,13 @@ package payments_test
 
 import (
 	"bytes"
-	"net/http"
 	"net/http/httptest"
 	"slices"
 	"testing"
 	"time"
 
 	"doula-cloud/api/internal/payments"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/webhookarrival"
 )
@@ -32,14 +32,7 @@ func arrivalsOn(t *testing.T, db *testdb.DB, route string) []arrival {
 
 func postUnsigned(t *testing.T, srv *httptest.Server, path string, body []byte) {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+path, bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+path, reqtest.Body("", body))
 	_ = resp.Body.Close()
 }
 

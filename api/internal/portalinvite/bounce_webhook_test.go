@@ -1,7 +1,6 @@
 package portalinvite_test
 
 import (
-	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/portalinvite"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/webhookarrival"
 )
@@ -61,14 +61,7 @@ func signedMailgunPayload(t *testing.T, signingKey, event, severity, recipient, 
 
 func postBounceWebhook(t *testing.T, srv *httptest.Server, payload []byte) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/mailgun/webhook", bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/mailgun/webhook", reqtest.Body("", payload))
 	return resp
 }
 

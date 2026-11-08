@@ -1,7 +1,6 @@
 package website_test
 
 import (
-	"bytes"
 	"database/sql"
 	"encoding/json/v2"
 	"net/http"
@@ -13,6 +12,7 @@ import (
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -48,31 +48,13 @@ func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, s
 
 func putWebsite(t *testing.T, srv *httptest.Server, session, practiceID, body string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut,
-		srv.URL+"/api/practices/"+practiceID+"/website", bytes.NewBufferString(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Put(t, srv.URL+"/api/practices/"+practiceID+"/website", reqtest.Body("", []byte(body)), reqtest.Session(session))
 	return resp
 }
 
 func getWebsite(t *testing.T, srv *httptest.Server, session, practiceID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
-		srv.URL+"/api/practices/"+practiceID+"/website", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/website", reqtest.Session(session))
 	return resp
 }
 
@@ -301,12 +283,7 @@ func TestPutHandler_RepublishingTheSameWordsIsAnAct(t *testing.T) {
 	second := putWebsite(t, srv, session, practiceID, body)
 	_ = second.Body.Close()
 
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM practice_website_events WHERE practice_id = $1`, practiceID,
-	).Scan(&count); err != nil {
-		t.Fatalf("count events: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM practice_website_events WHERE practice_id = $1`, practiceID)
 	if count != 2 {
 		t.Fatalf("got %d events, want 2 -- a re-assertion is a real act", count)
 	}
@@ -340,12 +317,7 @@ func TestPutHandler_RefusesANonOwner(t *testing.T) {
 					t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
 				}
 
-				var count int
-				if err := db.Admin.QueryRowContext(t.Context(),
-					`SELECT count(*) FROM practice_websites WHERE practice_id = $1`, practiceID,
-				).Scan(&count); err != nil {
-					t.Fatalf("count rows: %v", err)
-				}
+				count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM practice_websites WHERE practice_id = $1`, practiceID)
 				if count != 0 {
 					t.Fatalf("got %d rows, want none written by a non-Owner", count)
 				}
@@ -467,12 +439,7 @@ func TestPutHandler_RefusesPastTheBudget(t *testing.T) {
 // the screen has no use for it yet.
 func slugOf(t *testing.T, db *testdb.DB, practiceID string) string {
 	t.Helper()
-	var slug sql.NullString
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT slug FROM practice_websites WHERE practice_id = $1`, practiceID,
-	).Scan(&slug); err != nil {
-		t.Fatalf("read slug: %v", err)
-	}
+	slug := testdb.Scalar[sql.NullString](t, db.Admin, `SELECT slug FROM practice_websites WHERE practice_id = $1`, practiceID)
 	return slug.String
 }
 
@@ -567,12 +534,7 @@ func TestPutHandler_TwoPracticesOfTheSameNameGetDifferentAddresses(t *testing.T)
 
 	// The audit row still landed: the retry is a savepoint, not a lost
 	// transaction, so the record of who published survives the collision.
-	var events int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM practice_website_events WHERE practice_id = $1`, secondPractice,
-	).Scan(&events); err != nil {
-		t.Fatalf("count events: %v", err)
-	}
+	events := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM practice_website_events WHERE practice_id = $1`, secondPractice)
 	if events != 1 {
 		t.Fatalf("got %d events for the second Practice, want 1", events)
 	}
@@ -691,12 +653,7 @@ func TestPutHandler_OwnSiteOnlyQueuesNothing(t *testing.T) {
 // queuedRebuilds counts what #443's outbox holds for one Practice.
 func queuedRebuilds(t *testing.T, db *testdb.DB, practiceID string) int {
 	t.Helper()
-	var n int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM site_build_outbox WHERE practice_id = $1`, practiceID,
-	).Scan(&n); err != nil {
-		t.Fatalf("count queued rebuilds: %v", err)
-	}
+	n := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM site_build_outbox WHERE practice_id = $1`, practiceID)
 	return n
 }
 

@@ -1,7 +1,6 @@
 package staffauth_test
 
 import (
-	"bytes"
 	"encoding/json/v2"
 	"errors"
 	"net/http"
@@ -98,22 +97,7 @@ func postSignup(t *testing.T, srv *httptest.Server, token string, body any) *htt
 		req.Timezone = signupZone
 		body = req
 	}
-	payload, err := json.Marshal(body)
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/signup", bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/api/staff/signup", reqtest.JSON(body), reqtest.HeaderIf(token != "", "Authorization", "Bearer "+token))
 	return resp
 }
 
@@ -464,24 +448,7 @@ func TestSignupHandler_SeedsDefaultPlanTemplates(t *testing.T) {
 
 	out := reqtest.Decode[staffauth.SignupResponse](t, resp)
 
-	var planTypes []string
-	rows, err := db.Admin.QueryContext(t.Context(),
-		`SELECT plan_type::text FROM plan_templates WHERE practice_id = $1 ORDER BY plan_type`, out.PracticeID,
-	)
-	if err != nil {
-		t.Fatalf("query plan_templates: %v", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var pt string
-		if err := rows.Scan(&pt); err != nil {
-			t.Fatalf("scan plan_type: %v", err)
-		}
-		planTypes = append(planTypes, pt)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate plan_templates rows: %v", err)
-	}
+	planTypes := testdb.Column[string](t, db.Admin, `SELECT plan_type::text FROM plan_templates WHERE practice_id = $1 ORDER BY plan_type`, out.PracticeID)
 	if len(planTypes) != 2 || planTypes[0] != birthPlanType || planTypes[1] != carePlanType {
 		t.Fatalf("seeded plan_types = %v, want [birth_plan care_plan]", planTypes)
 	}
@@ -607,16 +574,7 @@ func TestSignupHandler_SeededTemplatesRoundTripThroughPlansAPI(t *testing.T) {
 	signedUp := reqtest.Decode[staffauth.SignupResponse](t, signupResp)
 
 	for _, planType := range []string{carePlanType, birthPlanType} {
-		getReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
-			srv.URL+"/api/practices/"+signedUp.PracticeID+"/plan-templates/"+planType, nil)
-		if err != nil {
-			t.Fatalf("build GET request: %v", err)
-		}
-		authntest.AddSessionCookie(getReq, session)
-		getResp, err := http.DefaultClient.Do(getReq)
-		if err != nil {
-			t.Fatalf("GET request: %v", err)
-		}
+		getResp := reqtest.Get(t, srv.URL+"/api/practices/"+signedUp.PracticeID+"/plan-templates/"+planType, reqtest.Session(session))
 		defer getResp.Body.Close()
 		if getResp.StatusCode != http.StatusOK {
 			t.Fatalf("GET %s status = %d, want %d", planType, getResp.StatusCode, http.StatusOK)
@@ -629,21 +587,7 @@ func TestSignupHandler_SeededTemplatesRoundTripThroughPlansAPI(t *testing.T) {
 			t.Fatalf("expected seeded %s fields to be non-empty", planType)
 		}
 
-		putBody, err := json.Marshal(seeded)
-		if err != nil {
-			t.Fatalf("marshal seeded %s fields: %v", planType, err)
-		}
-		putReq, err := http.NewRequestWithContext(t.Context(), http.MethodPut,
-			srv.URL+"/api/practices/"+signedUp.PracticeID+"/plan-templates/"+planType, bytes.NewReader(putBody))
-		if err != nil {
-			t.Fatalf("build PUT request: %v", err)
-		}
-		authntest.AddSessionCookie(putReq, session)
-		putReq.Header.Set("Content-Type", "application/json")
-		putResp, err := http.DefaultClient.Do(putReq)
-		if err != nil {
-			t.Fatalf("PUT request: %v", err)
-		}
+		putResp := reqtest.Put(t, srv.URL+"/api/practices/"+signedUp.PracticeID+"/plan-templates/"+planType, reqtest.JSON(seeded), reqtest.Session(session))
 		defer putResp.Body.Close()
 		if putResp.StatusCode != http.StatusOK {
 			t.Fatalf("PUT %s status = %d, want %d", planType, putResp.StatusCode, http.StatusOK)
@@ -709,16 +653,7 @@ func TestSignupHandler_SeededContractTemplateRoundTripsThroughContractsAPI(t *te
 	defer signupResp.Body.Close()
 	signedUp := reqtest.Decode[staffauth.SignupResponse](t, signupResp)
 
-	getReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
-		srv.URL+"/api/practices/"+signedUp.PracticeID+"/contract-template", nil)
-	if err != nil {
-		t.Fatalf("build GET request: %v", err)
-	}
-	authntest.AddSessionCookie(getReq, session)
-	getResp, err := http.DefaultClient.Do(getReq)
-	if err != nil {
-		t.Fatalf("GET request: %v", err)
-	}
+	getResp := reqtest.Get(t, srv.URL+"/api/practices/"+signedUp.PracticeID+"/contract-template", reqtest.Session(session))
 	defer getResp.Body.Close()
 	if getResp.StatusCode != http.StatusOK {
 		t.Fatalf("GET status = %d, want %d", getResp.StatusCode, http.StatusOK)
@@ -728,21 +663,7 @@ func TestSignupHandler_SeededContractTemplateRoundTripsThroughContractsAPI(t *te
 		t.Fatal("expected seeded prose to be non-empty")
 	}
 
-	putBody, err := json.Marshal(seeded)
-	if err != nil {
-		t.Fatalf("marshal seeded prose: %v", err)
-	}
-	putReq, err := http.NewRequestWithContext(t.Context(), http.MethodPut,
-		srv.URL+"/api/practices/"+signedUp.PracticeID+"/contract-template", bytes.NewReader(putBody))
-	if err != nil {
-		t.Fatalf("build PUT request: %v", err)
-	}
-	authntest.AddSessionCookie(putReq, session)
-	putReq.Header.Set("Content-Type", "application/json")
-	putResp, err := http.DefaultClient.Do(putReq)
-	if err != nil {
-		t.Fatalf("PUT request: %v", err)
-	}
+	putResp := reqtest.Put(t, srv.URL+"/api/practices/"+signedUp.PracticeID+"/contract-template", reqtest.JSON(seeded), reqtest.Session(session))
 	defer putResp.Body.Close()
 	if putResp.StatusCode != http.StatusOK {
 		t.Fatalf("PUT status = %d, want %d", putResp.StatusCode, http.StatusOK)

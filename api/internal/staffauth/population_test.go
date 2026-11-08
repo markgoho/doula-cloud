@@ -12,6 +12,7 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/portalaccount"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -188,19 +189,9 @@ func TestStaffFamilyRefusesAPortalSession(t *testing.T) {
 // for the wrong reason.
 func callWithPortalSession(t *testing.T, srv *httptest.Server, method, pattern, token string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), method, srv.URL+pattern, strings.NewReader("{}"))
-	if err != nil {
-		// coverage:ignore reason: a malformed request built from the router's own registry, not reachable from a test
-		t.Fatalf("build %s %s: %v", method, pattern, err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Confirmed", "true")
-	authntest.AddSessionCookie(req, token)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		// coverage:ignore reason: a transport failure against this test's own httptest server
-		t.Fatalf("%s %s: %v", method, pattern, err)
-	}
+	resp := reqtest.Do(t, method, srv.URL+pattern,
+		reqtest.RawJSON([]byte("{}")),
+		reqtest.Header("X-Confirmed", "true"),
+		reqtest.Session(token))
 	return resp
 }

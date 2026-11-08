@@ -113,6 +113,17 @@ func TestHeader_SetsTheHeader(t *testing.T) {
 	}
 }
 
+func TestHeaderIf_SetsTheHeaderOnlyWhenTheConditionHolds(t *testing.T) {
+	srv := echoServer(t)
+
+	with := echoFrom(t, reqtest.Get, srv.URL, reqtest.HeaderIf(true, "X-Custom", "yes"))
+	without := echoFrom(t, reqtest.Get, srv.URL, reqtest.HeaderIf(false, "X-Custom", "yes"))
+
+	if with.Custom != "yes" || without.Custom != "" {
+		t.Fatalf("X-Custom = %q when true, %q when false", with.Custom, without.Custom)
+	}
+}
+
 func TestReadBody_ReturnsTheBytes(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("hello"))

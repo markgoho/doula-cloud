@@ -1,7 +1,6 @@
 package payments_test
 
 import (
-	"bytes"
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
@@ -10,24 +9,14 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/payments"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
 func postPaymentBody(t *testing.T, srv *httptest.Server, session, practiceID, invoiceID, body string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		srv.URL+"/api/practices/"+practiceID+"/invoices/"+invoiceID+"/payments", bytes.NewBufferString(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/invoices/"+invoiceID+"/payments", reqtest.RawJSON([]byte(body)), reqtest.Session(session))
 	return resp
 }
 
@@ -42,17 +31,7 @@ func postPayment(t *testing.T, srv *httptest.Server, session, practiceID, invoic
 
 func postInvoiceTransition(t *testing.T, srv *httptest.Server, session, practiceID, invoiceID, action string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		srv.URL+"/api/practices/"+practiceID+"/invoices/"+invoiceID+"/"+action, bytes.NewBufferString("{}"))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/invoices/"+invoiceID+"/"+action, reqtest.RawJSON([]byte("{}")), reqtest.Session(session))
 	return resp
 }
 
@@ -128,12 +107,7 @@ func TestPostManualPaymentHandler_ByHandCheckHappyPath(t *testing.T) {
 		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusPaid)
 	}
 
-	var actionCount int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM activity WHERE action = 'payment_recorded' AND subject_id = $1`, engagementID,
-	).Scan(&actionCount); err != nil {
-		t.Fatalf("query activity: %v", err)
-	}
+	actionCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE action = 'payment_recorded' AND subject_id = $1`, engagementID)
 	if actionCount != 1 {
 		t.Fatalf("payment_recorded activity rows = %d, want 1", actionCount)
 	}
@@ -253,10 +227,7 @@ func TestPostManualPaymentHandler_MissingMethodRefused(t *testing.T) {
 	if want := "Select how the payment was made"; out.Details["method"] != want {
 		t.Fatalf("details[method] = %q, want %q", out.Details["method"], want)
 	}
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM payments WHERE invoice_id = $1`, invoiceID).Scan(&count); err != nil {
-		t.Fatalf("count payments: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM payments WHERE invoice_id = $1`, invoiceID)
 	if count != 0 {
 		t.Fatalf("payments = %d, want 0", count)
 	}
@@ -564,12 +535,7 @@ func TestPostVoidInvoiceHandler_HappyPath(t *testing.T) {
 		t.Fatalf("persisted invoice status = %q, want %q", got, "void")
 	}
 
-	var actionCount int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM activity WHERE action = 'invoice_voided' AND subject_id = $1`, engagementID,
-	).Scan(&actionCount); err != nil {
-		t.Fatalf("query activity: %v", err)
-	}
+	actionCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE action = 'invoice_voided' AND subject_id = $1`, engagementID)
 	if actionCount != 1 {
 		t.Fatalf("invoice_voided activity rows = %d, want 1", actionCount)
 	}
@@ -663,12 +629,7 @@ func TestPostWriteOffInvoiceHandler_HappyPath(t *testing.T) {
 		t.Fatalf("persisted invoice status = %q, want %q", got, invoiceStatusUncollectible)
 	}
 
-	var actionCount int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM activity WHERE action = 'invoice_written_off' AND subject_id = $1`, engagementID,
-	).Scan(&actionCount); err != nil {
-		t.Fatalf("query activity: %v", err)
-	}
+	actionCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE action = 'invoice_written_off' AND subject_id = $1`, engagementID)
 	if actionCount != 1 {
 		t.Fatalf("invoice_written_off activity rows = %d, want 1", actionCount)
 	}

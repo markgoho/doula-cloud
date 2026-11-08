@@ -1,7 +1,6 @@
 package staffauth_test
 
 import (
-	"bytes"
 	"encoding/json/v2"
 	"net/http"
 	"testing"
@@ -29,13 +28,6 @@ import (
 // package-wide, not just within one file.
 const statusPending = "pending"
 
-func addPortalSessionCookie(req *http.Request, token string, confirmed bool) {
-	authntest.AddSessionCookie(req, token)
-	if confirmed {
-		req.Header.Set("X-Confirmed", "true")
-	}
-}
-
 func TestSignupHandler_LivePortalSessionRefusesThenConfirmedRetrySucceeds(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "signup-with-portal-session"
@@ -49,17 +41,7 @@ func TestSignupHandler_LivePortalSessionRefusesThenConfirmedRetrySucceeds(t *tes
 		t.Fatalf("marshal body: %v", err)
 	}
 	signupReq := func(confirmed bool) *http.Response {
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/signup", bytes.NewReader(body))
-		if err != nil {
-			t.Fatalf("build request: %v", err)
-		}
-		req.Header.Set("Authorization", "Bearer any-token")
-		req.Header.Set("Content-Type", "application/json")
-		addPortalSessionCookie(req, portalToken, confirmed)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("request: %v", err)
-		}
+		resp := reqtest.Post(t, srv.URL+"/api/staff/signup", reqtest.RawJSON(body), reqtest.Header("Authorization", "Bearer any-token"), reqtest.Session(portalToken), reqtest.HeaderIf(confirmed, "X-Confirmed", "true"))
 		return resp
 	}
 
@@ -111,17 +93,7 @@ func TestAcceptInviteHandler_LivePortalSessionRefusesThenConfirmedRetrySucceeds(
 		t.Fatalf("marshal body: %v", err)
 	}
 	acceptReq := func(confirmed bool) *http.Response {
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/accept-invite", bytes.NewReader(body))
-		if err != nil {
-			t.Fatalf("build request: %v", err)
-		}
-		req.Header.Set("Authorization", "Bearer any-token")
-		req.Header.Set("Content-Type", "application/json")
-		addPortalSessionCookie(req, portalToken, confirmed)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("request: %v", err)
-		}
+		resp := reqtest.Post(t, srv.URL+"/api/staff/accept-invite", reqtest.RawJSON(body), reqtest.Header("Authorization", "Bearer any-token"), reqtest.Session(portalToken), reqtest.HeaderIf(confirmed, "X-Confirmed", "true"))
 		return resp
 	}
 
@@ -163,16 +135,7 @@ func TestFinishEnrollmentHandler_LivePortalSessionRefusesThenConfirmedRetrySucce
 	defer srv.Close()
 
 	enrollReq := func(confirmed bool) *http.Response {
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/mfa", nil)
-		if err != nil {
-			t.Fatalf("build request: %v", err)
-		}
-		req.Header.Set("Authorization", "Bearer tok")
-		addPortalSessionCookie(req, portalToken, confirmed)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("request: %v", err)
-		}
+		resp := reqtest.Post(t, srv.URL+"/api/staff/mfa", reqtest.Header("Authorization", "Bearer tok"), reqtest.Session(portalToken), reqtest.HeaderIf(confirmed, "X-Confirmed", "true"))
 		return resp
 	}
 

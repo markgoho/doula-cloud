@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/portalinvite"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -37,15 +37,7 @@ func newAcceptThenSessionServer(t *testing.T, db *testdb.DB) *httptest.Server {
 // says the frontend makes straight after a successful accept.
 func getPortalSession(t *testing.T, srv *httptest.Server, session string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/portal/session", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Get(t, srv.URL+"/api/portal/session", reqtest.Session(session))
 	return resp
 }
 
@@ -113,12 +105,7 @@ func TestAcceptSecondPracticeInvite_SessionListsBothPractices(t *testing.T) {
 	// Asserted here because everything below it depends on it: two
 	// accounts would mean two identities, and each would honestly see one
 	// Practice.
-	var accounts int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM portal_accounts WHERE lower(sign_in_address) = lower($1)`, invitedAddress,
-	).Scan(&accounts); err != nil {
-		t.Fatalf("count portal accounts: %v", err)
-	}
+	accounts := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM portal_accounts WHERE lower(sign_in_address) = lower($1)`, invitedAddress)
 	if accounts != 1 {
 		t.Fatalf("portal_accounts rows for her address = %d, want 1 reused across both Practices", accounts)
 	}

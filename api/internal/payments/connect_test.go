@@ -1,7 +1,6 @@
 package payments_test
 
 import (
-	"bytes"
 	"encoding/json/v2"
 	"errors"
 	"net/http"
@@ -13,6 +12,7 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/payments"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -77,10 +77,7 @@ func seedHostedPageInState(t *testing.T, db *testdb.DB, practiceID, slug, descri
 
 func stripeConnectAccountID(t *testing.T, db *testdb.DB, practiceID string) *string {
 	t.Helper()
-	var id *string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT stripe_connect_account_id FROM practices WHERE id = $1`, practiceID).Scan(&id); err != nil {
-		t.Fatalf("query stripe_connect_account_id: %v", err)
-	}
+	id := testdb.Scalar[*string](t, db.Admin, `SELECT stripe_connect_account_id FROM practices WHERE id = $1`, practiceID)
 	return id
 }
 
@@ -100,30 +97,13 @@ func newConnectServer(t *testing.T, db *testdb.DB, uid string, client payments.C
 
 func postConnect(t *testing.T, srv *httptest.Server, session string, practiceID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		srv.URL+"/api/practices/"+practiceID+"/payments/connect", bytes.NewBufferString(``))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/payments/connect", reqtest.Session(session))
 	return resp
 }
 
 func getConnectStatus(t *testing.T, srv *httptest.Server, session string, practiceID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/payments/connect", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/payments/connect", reqtest.Session(session))
 	return resp
 }
 
@@ -657,10 +637,7 @@ func TestPostConnectHandler_PassesPracticeNameToStripe(t *testing.T) {
 	if len(client.AccountProfiles) != 1 {
 		t.Fatalf("AccountProfiles = %v, want exactly one CreateAccount call", client.AccountProfiles)
 	}
-	var want string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT name FROM practices WHERE id = $1`, practiceID).Scan(&want); err != nil {
-		t.Fatalf("read practice name: %v", err)
-	}
+	want := testdb.Scalar[string](t, db.Admin, `SELECT name FROM practices WHERE id = $1`, practiceID)
 	if client.AccountProfiles[0].PracticeName != want {
 		t.Fatalf("display name sent to Stripe = %q, want the Practice's own name %q", client.AccountProfiles[0].PracticeName, want)
 	}

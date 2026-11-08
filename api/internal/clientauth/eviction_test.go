@@ -3,7 +3,6 @@ package clientauth_test
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -20,20 +19,10 @@ import (
 // per confirmed.
 func postRedeem(t *testing.T, srv *httptest.Server, token, cookieToken string, confirmed bool) *http.Response {
 	t.Helper()
-	body := strings.NewReader(`{"token":"` + token + `"}`)
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/portal/magic-link", body)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	authntest.AddSessionCookie(req, cookieToken)
-	if confirmed {
-		req.Header.Set("X-Confirmed", "true")
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/api/portal/magic-link",
+		reqtest.RawJSON([]byte(`{"token":"`+token+`"}`)),
+		reqtest.Session(cookieToken),
+		reqtest.HeaderIf(confirmed, "X-Confirmed", "true"))
 	return resp
 }
 

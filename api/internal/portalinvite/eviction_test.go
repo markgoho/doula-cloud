@@ -1,8 +1,6 @@
 package portalinvite_test
 
 import (
-	"bytes"
-	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,6 +9,7 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/portalinvite"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -21,35 +20,16 @@ import (
 // one.
 func postAcceptWithSession(t *testing.T, srv *httptest.Server, inviteToken, cookieToken string, confirmed bool) *http.Response {
 	t.Helper()
-	payload, err := json.Marshal(portalinvite.AcceptInviteRequest{InviteToken: inviteToken})
-	if err != nil {
-		// coverage:ignore reason: marshaling a two-field struct cannot fail
-		t.Fatalf("marshal body: %v", err)
-	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/portal/accept-invite", bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	authntest.AddSessionCookie(req, cookieToken)
-	if confirmed {
-		req.Header.Set("X-Confirmed", "true")
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/api/portal/accept-invite",
+		reqtest.JSON(portalinvite.AcceptInviteRequest{InviteToken: inviteToken}),
+		reqtest.Session(cookieToken),
+		reqtest.HeaderIf(confirmed, "X-Confirmed", "true"))
 	return resp
 }
 
 func countSessionsFor(t *testing.T, db *testdb.DB, identityUID string) int {
 	t.Helper()
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM sessions WHERE identity_uid = $1`, identityUID,
-	).Scan(&count); err != nil {
-		t.Fatalf("count sessions: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM sessions WHERE identity_uid = $1`, identityUID)
 	return count
 }
 
@@ -75,12 +55,7 @@ func TestAcceptInviteHandler_UnconfirmedStaffSessionWarnsAndClaimsNothing(t *tes
 	}
 	// The refusal rolled back everything acceptInvite wrote, so the
 	// invitation is still unclaimed and the confirmed retry claims it.
-	var identityUID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT coalesce(identity_uid, '') FROM client_portal_users WHERE client_id = $1`, clientID,
-	).Scan(&identityUID); err != nil {
-		t.Fatalf("query portal row: %v", err)
-	}
+	identityUID := testdb.Scalar[string](t, db.Admin, `SELECT coalesce(identity_uid, '') FROM client_portal_users WHERE client_id = $1`, clientID)
 	if identityUID != "" {
 		t.Fatalf("identity_uid = %q, want empty -- a refused accept may claim nothing", identityUID)
 	}

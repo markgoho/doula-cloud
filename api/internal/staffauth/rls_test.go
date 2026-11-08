@@ -91,16 +91,7 @@ func TestRLS_StaffSelfVisibilityOnlyAppliesBeforePracticeIsChosen(t *testing.T) 
 	unrelatedPractice := testdb.SeedPractice(t, db, "Unrelated Practice")
 	staffID := testdb.SeedStaff(t, db, "self-visibility-uid")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_identity_uid', $1, true)`, "self-visibility-uid"); err != nil {
-		t.Fatalf("set_config identity: %v", err)
-	}
-
+	tx := db.BeginAs(t, testdb.Identity("self-visibility-uid"))
 	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM staff WHERE id = $1`, staffID)
 	if count != 1 {
 		t.Fatalf("expected caller's own staff row visible before a Practice is chosen, got count = %d", count)

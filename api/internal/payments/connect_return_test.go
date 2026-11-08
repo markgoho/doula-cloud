@@ -10,6 +10,7 @@ import (
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/payments"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -35,27 +36,13 @@ func newConnectReturnServer(t *testing.T, db *testdb.DB, uid string) (srv *httpt
 
 func postConnectReturn(t *testing.T, srv *httptest.Server, session, practiceID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		srv.URL+"/api/practices/"+practiceID+"/payments/connect/return", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/payments/connect/return", reqtest.Session(session))
 	return resp
 }
 
 func connectReturnCount(t *testing.T, db *testdb.DB, practiceID string) int {
 	t.Helper()
-	var n int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM activity WHERE practice_id = $1 AND action = $2`, practiceID, connectReturnActionName,
-	).Scan(&n); err != nil {
-		t.Fatalf("count return rows: %v", err)
-	}
+	n := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE practice_id = $1 AND action = $2`, practiceID, connectReturnActionName)
 	return n
 }
 

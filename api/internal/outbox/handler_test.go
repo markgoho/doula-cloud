@@ -10,6 +10,7 @@ import (
 
 	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/outbox"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -46,17 +47,7 @@ func newHandlerServerWithDoor(db *testdb.DB, worker outbox.Processor, secret, do
 
 func postProcess(t *testing.T, srv *httptest.Server, headerSecret string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/process", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	if headerSecret != "" {
-		req.Header.Set("X-Internal-Secret", headerSecret)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/process", reqtest.HeaderIf(headerSecret != "", "X-Internal-Secret", headerSecret))
 	return resp
 }
 

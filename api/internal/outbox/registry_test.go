@@ -11,6 +11,7 @@ import (
 
 	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/outbox"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
@@ -215,14 +216,6 @@ func (p *doorReadingProcessor) ProcessPending(ctx context.Context, tx *sql.Tx) e
 
 func postTo(t *testing.T, srv *httptest.Server, path, headerSecret string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+path, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("X-Internal-Secret", headerSecret)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+path, reqtest.Header("X-Internal-Secret", headerSecret))
 	return resp
 }

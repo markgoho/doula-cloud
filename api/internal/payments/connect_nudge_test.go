@@ -12,6 +12,7 @@ import (
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/payments"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -43,16 +44,7 @@ func newConnectNudgeServer(t *testing.T, db *testdb.DB, uid string) (srv *httpte
 
 func postConnectNudge(t *testing.T, srv *httptest.Server, session, practiceID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		srv.URL+"/api/practices/"+practiceID+connectNudgePath, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+connectNudgePath, reqtest.Session(session))
 	return resp
 }
 
@@ -96,12 +88,7 @@ func runConnectNudgeWorker(t *testing.T, db *testdb.DB, w payments.ConnectNudgeW
 
 func connectNudgeRowCount(t *testing.T, db *testdb.DB, practiceID string) int {
 	t.Helper()
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM connect_nudge_outbox WHERE practice_id = $1`, practiceID,
-	).Scan(&count); err != nil {
-		t.Fatalf("count connect_nudge_outbox: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM connect_nudge_outbox WHERE practice_id = $1`, practiceID)
 	return count
 }
 
@@ -159,13 +146,8 @@ func TestPostConnectNudgeHandler_QueuesRecordsAndNudges(t *testing.T) {
 		t.Fatalf("status = %q, want %s", rowStatus, testPayoutStatusPending)
 	}
 
-	var actor string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT actor_staff_id FROM activity WHERE practice_id = $1 AND action = $2`,
-		practiceID, connectNudgeActionName,
-	).Scan(&actor); err != nil {
-		t.Fatalf("query activity: %v", err)
-	}
+	actor := testdb.Scalar[string](t, db.Admin, `SELECT actor_staff_id FROM activity WHERE practice_id = $1 AND action = $2`,
+		practiceID, connectNudgeActionName)
 	if actor != staffID {
 		t.Fatalf("activity actor = %q, want %q", actor, staffID)
 	}
@@ -347,29 +329,19 @@ func TestConnectNudgeWorker_MailsEveryOwnerAndNamesNobody(t *testing.T) {
 
 	// #917's "to whom": the roster this attempt resolved, written onto the
 	// row so it is still answerable after the roster moves.
-	var notified int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT cardinality(notified_owner_staff_ids) FROM connect_nudge_outbox WHERE practice_id = $1`,
-		practiceID,
-	).Scan(&notified); err != nil {
-		t.Fatalf("query notified_owner_staff_ids: %v", err)
-	}
+	notified := testdb.Scalar[int](t, db.Admin, `SELECT cardinality(notified_owner_staff_ids) FROM connect_nudge_outbox WHERE practice_id = $1`,
+		practiceID)
 	if notified != 2 {
 		t.Fatalf("notified_owner_staff_ids holds %d ids, want 2 (the two Owners mailed)", notified)
 	}
-	var everyIDIsAnOwner bool
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT NOT EXISTS (
+	everyIDIsAnOwner := testdb.Scalar[bool](t, db.Admin, `SELECT NOT EXISTS (
 			SELECT 1 FROM connect_nudge_outbox o, unnest(o.notified_owner_staff_ids) AS notified_id
 			WHERE o.practice_id = $1
 			  AND NOT EXISTS (
 				SELECT 1 FROM practice_memberships pm
 				WHERE pm.practice_id = $1 AND pm.staff_id = notified_id AND 'owner' = ANY(pm.roles)
 			  )
-		 )`, practiceID,
-	).Scan(&everyIDIsAnOwner); err != nil {
-		t.Fatalf("check notified ids are Owners: %v", err)
-	}
+		 )`, practiceID)
 	if !everyIDIsAnOwner {
 		t.Fatal("notified_owner_staff_ids names somebody who is not an Owner of this Practice")
 	}
@@ -397,12 +369,7 @@ func TestConnectNudgeWorker_SkipsAPracticeThatConnectedBeforeTheSend(t *testing.
 	if len(sender.Sent()) != 0 {
 		t.Fatalf("sent %d messages, want 0 -- the Practice connected before the send", len(sender.Sent()))
 	}
-	var status string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT status FROM connect_nudge_outbox WHERE practice_id = $1`, practiceID,
-	).Scan(&status); err != nil {
-		t.Fatalf("query connect_nudge_outbox: %v", err)
-	}
+	status := testdb.Scalar[string](t, db.Admin, `SELECT status FROM connect_nudge_outbox WHERE practice_id = $1`, practiceID)
 	if status != testPayoutStatusSent {
 		t.Fatalf("status = %q, want %s (marked sent with nothing to mail)", status, testPayoutStatusSent)
 	}
@@ -427,24 +394,14 @@ func TestConnectNudgeWorker_ZeroOwnersMarksSentWithNoMail(t *testing.T) {
 	if len(sender.Sent()) != 0 {
 		t.Fatalf("sent %d messages, want 0", len(sender.Sent()))
 	}
-	var status string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT status FROM connect_nudge_outbox WHERE practice_id = $1`, practiceID,
-	).Scan(&status); err != nil {
-		t.Fatalf("query connect_nudge_outbox: %v", err)
-	}
+	status := testdb.Scalar[string](t, db.Admin, `SELECT status FROM connect_nudge_outbox WHERE practice_id = $1`, practiceID)
 	if status != testPayoutStatusSent {
 		t.Fatalf("status = %q, want %s", status, testPayoutStatusSent)
 	}
 	// An empty array rather than NULL: nobody was addressed, which is a
 	// different fact from a row no attempt has reached yet.
-	var notified int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT cardinality(notified_owner_staff_ids) FROM connect_nudge_outbox WHERE practice_id = $1`,
-		practiceID,
-	).Scan(&notified); err != nil {
-		t.Fatalf("query notified_owner_staff_ids: %v", err)
-	}
+	notified := testdb.Scalar[int](t, db.Admin, `SELECT cardinality(notified_owner_staff_ids) FROM connect_nudge_outbox WHERE practice_id = $1`,
+		practiceID)
 	if notified != 0 {
 		t.Fatalf("notified_owner_staff_ids holds %d ids, want an empty array", notified)
 	}

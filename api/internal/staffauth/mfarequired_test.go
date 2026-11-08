@@ -1,7 +1,6 @@
 package staffauth_test
 
 import (
-	"bytes"
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
@@ -26,19 +25,7 @@ func newMFARequiredServer(t *testing.T, db *testdb.DB, accounts *authntest.FakeA
 
 func putMFARequired(t *testing.T, srv *httptest.Server, session, practiceID string, required bool, confirmed bool) *http.Response {
 	t.Helper()
-	body, _ := json.Marshal(map[string]bool{"required": required})
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/mfa-required", bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	if confirmed {
-		req.Header.Set("X-Confirmed", "true")
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Put(t, srv.URL+"/api/practices/"+practiceID+"/mfa-required", reqtest.JSON(map[string]bool{"required": required}), reqtest.Session(session), reqtest.HeaderIf(confirmed, "X-Confirmed", "true"))
 	return resp
 }
 
@@ -154,13 +141,7 @@ func TestPutMFARequiredHandler_MalformedBody(t *testing.T) {
 	srv, seedSession := newMFARequiredServer(t, db, authntest.NewFakeAccountManager())
 	defer srv.Close()
 
-	req, _ := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/mfa-required", bytes.NewReader([]byte("not json")))
-	authntest.AddSessionCookie(req, seedSession(ownerUID))
-	req.Header.Set("X-Confirmed", "true")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Put(t, srv.URL+"/api/practices/"+practiceID+"/mfa-required", reqtest.Body("application/json", []byte("not json")), reqtest.Session(seedSession(ownerUID)), reqtest.Header("X-Confirmed", "true"))
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
@@ -173,12 +154,7 @@ func TestGetMFAImpactHandler_DoulaForbidden(t *testing.T) {
 	srv, seedSession := newMFARequiredServer(t, db, authntest.NewFakeAccountManager())
 	defer srv.Close()
 
-	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/mfa-required/impact", nil)
-	authntest.AddSessionCookie(req, seedSession(doulaUID))
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/mfa-required/impact", reqtest.Session(seedSession(doulaUID)))
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
@@ -210,12 +186,7 @@ func TestGetMFAImpactHandler_CountsEveryoneWithoutAFactor(t *testing.T) {
 	srv, seedSession := newMFARequiredServer(t, db, accounts)
 	defer srv.Close()
 
-	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/mfa-required/impact", nil)
-	authntest.AddSessionCookie(req, seedSession(ownerUID))
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/mfa-required/impact", reqtest.Session(seedSession(ownerUID)))
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusOK)
 

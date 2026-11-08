@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/legal"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -33,14 +34,9 @@ func seedLedgerRow(t *testing.T, db *testdb.DB, practiceID, origin string, quant
 	if origin == originPurchase {
 		unitPriceCents, paymentIntentID = seedUnitPriceCents, "pi_seed"
 	}
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO credit_ledger (practice_id, origin, quantity, unit_price_cents, tax_cents, stripe_payment_intent_id)
+	id := testdb.Scalar[string](t, db.Admin, `INSERT INTO credit_ledger (practice_id, origin, quantity, unit_price_cents, tax_cents, stripe_payment_intent_id)
 		 VALUES ($1, $2::credit_ledger_origin, $3, $4, $5, $6) RETURNING id`,
-		practiceID, origin, quantity, unitPriceCents, taxCents, paymentIntentID,
-	).Scan(&id); err != nil {
-		t.Fatalf("seed credit_ledger row: %v", err)
-	}
+		practiceID, origin, quantity, unitPriceCents, taxCents, paymentIntentID)
 	return id
 }
 
@@ -89,15 +85,7 @@ func newBillingServerAt(t *testing.T, db *testdb.DB, uid string, client billing.
 
 func getBalance(t *testing.T, srv *httptest.Server, session string, practiceID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/billing", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/billing", reqtest.Session(session))
 	return resp
 }
 
@@ -277,16 +265,7 @@ func TestGetBalanceHandler_InvalidCursorRejected(t *testing.T) {
 	defer srv.Close()
 
 	for _, cursor := range []string{"not!valid!base64!", "YmFkdGltZXxzb21lLWlk"} {
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
-			srv.URL+"/api/practices/"+practiceID+"/billing?cursor="+cursor, nil)
-		if err != nil {
-			t.Fatalf("build request: %v", err)
-		}
-		authntest.AddSessionCookie(req, session)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("request: %v", err)
-		}
+		resp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/billing?cursor="+cursor, reqtest.Session(session))
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Fatalf("cursor %q: status = %d, want %d", cursor, resp.StatusCode, http.StatusBadRequest)
@@ -321,16 +300,7 @@ func TestGetBalanceHandler_PaginatesNewestFirst(t *testing.T) {
 			len(first.Ledger.Items), first.Ledger.HasMore, first.Ledger.NextCursor)
 	}
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
-		srv.URL+"/api/practices/"+practiceID+"/billing?cursor="+*first.Ledger.NextCursor, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	secondResp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	secondResp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/billing?cursor="+*first.Ledger.NextCursor, reqtest.Session(session))
 	defer secondResp.Body.Close()
 	var second billing.BalanceResponse
 	if err := json.UnmarshalRead(secondResp.Body, &second); err != nil {
