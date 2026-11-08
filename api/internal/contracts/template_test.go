@@ -3,16 +3,11 @@ package contracts_test
 import (
 	"encoding/json/v2"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
-	"doula-cloud/api/internal/idempotency"
-	"doula-cloud/api/internal/objectstore"
-	"doula-cloud/api/internal/push"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -144,87 +139,32 @@ func voidContractRow(t *testing.T, db *testdb.DB, contractID string) {
 	}
 }
 
-func newContractServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
-	t.Helper()
-	return newContractServerWithPusherAndStore(t, db, uid, push.NewFakePusher(), objectstore.NewMemoryStore())
+// putTemplate sends a PUT of prose to the Practice's Contract Template.
+func (e *env) putTemplate(prose string, want int) contracts.TemplateResponse {
+	e.t.Helper()
+	return reqtest.Expect[contracts.TemplateResponse](e.t, http.MethodPut, e.templateURL(), want, e.signedIn,
+		reqtest.JSON(contracts.TemplateResponse{Prose: prose}))
 }
 
-// newContractServerWithPusher mirrors newContractServer but lets the
-// caller inject pusher, so a test can inspect what Send triggers --
-// mirrors message/handlers_test.go's newServerWithPusher.
-func newContractServerWithPusher(t *testing.T, db *testdb.DB, uid string, pusher push.Pusher) (srv *httptest.Server, session string) {
-	t.Helper()
-	return newContractServerWithPusherAndStore(t, db, uid, pusher, objectstore.NewMemoryStore())
-}
-
-// newContractServerWithStore mirrors newContractServer but lets the
-// caller inject store, so a test can seed what the Signed PDF endpoint
-// reads back.
-func newContractServerWithStore(t *testing.T, db *testdb.DB, uid string, store objectstore.ObjectStore) (srv *httptest.Server, session string) {
-	t.Helper()
-	return newContractServerWithPusherAndStore(t, db, uid, push.NewFakePusher(), store)
-}
-
-func newContractServerWithPusherAndStore(t *testing.T, db *testdb.DB, uid string, pusher push.Pusher, store objectstore.ObjectStore) (srv *httptest.Server, session string) {
-	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	contracts.Mount(g, ir, db.App, store, pusher)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
-}
-
-func getTemplate(t *testing.T, srv *httptest.Server, session string, practiceID string) *http.Response {
-	t.Helper()
-	return reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/contract-template", reqtest.Session(session))
-}
-
-func putTemplateRaw(t *testing.T, srv *httptest.Server, session string, practiceID string, body []byte) *http.Response {
-	t.Helper()
-	return reqtest.Put(t, srv.URL+"/api/practices/"+practiceID+"/contract-template", reqtest.Session(session), reqtest.RawJSON(body))
-}
-
-func putTemplate(t *testing.T, srv *httptest.Server, session string, practiceID string, body contracts.TemplateResponse) *http.Response {
-	t.Helper()
-	payload, err := json.Marshal(body)
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	return putTemplateRaw(t, srv, session, practiceID, payload)
+// template reads the Practice's Contract Template.
+func (e *env) template() contracts.TemplateResponse {
+	e.t.Helper()
+	return reqtest.Expect[contracts.TemplateResponse](e.t, http.MethodGet, e.templateURL(), http.StatusOK, e.signedIn)
 }
 
 func TestGetTemplateHandler_NotFound(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-not-found"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	e := newEnv(t)
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getTemplate(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
+	reqtest.ExpectStatus(t, http.MethodGet, e.templateURL(), http.StatusNotFound, e.signedIn)
 }
 
 // TestGetTemplateHandler_AnyMemberAllowed proves a non-Owner member (a
 // doula) can read the template -- only PUT is Owner-gated.
 func TestGetTemplateHandler_AnyMemberAllowed(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-any-member"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	seedContractTemplate(t, db, practiceID, "Some prose with {{client_name}}")
+	e := newEnv(t)
+	e.seedTemplate("Some prose with {{client_name}}")
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getTemplate(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-
-	out := reqtest.Decode[contracts.TemplateResponse](t, resp)
-	if out.Prose != "Some prose with {{client_name}}" {
+	if out := e.template(); out.Prose != "Some prose with {{client_name}}" {
 		t.Fatalf("prose = %q, want the seeded prose", out.Prose)
 	}
 }
@@ -235,60 +175,33 @@ func TestGetTemplateHandler_AnyMemberAllowed(t *testing.T) {
 // mount declaration must keep exactly that population, not widen it to
 // Owner and Admin the way most of this package's other role rules do.
 func TestPutTemplateHandler_NonOwnerForbidden(t *testing.T) {
-	for _, roles := range [][]string{{doulaRole}, {adminRole}} {
-		t.Run(roles[0], func(t *testing.T) {
-			db := testdb.New(t)
-			uid := "put-non-owner-" + roles[0]
-			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, roles, "employee")
+	cases := map[string]fixture.StaffOption{"doula": fixture.Doula(), "admin": fixture.Admin()}
+	for name, role := range cases {
+		t.Run(name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(role))
 
-			srv, session := newContractServer(t, db, uid)
-			defer srv.Close()
-
-			resp := putTemplate(t, srv, session, practiceID, contracts.TemplateResponse{Prose: "Some prose"})
-			defer resp.Body.Close()
-
-			reqtest.RequireStatus(t, resp, http.StatusForbidden)
+			e.putTemplate("Some prose", http.StatusForbidden)
 		})
 	}
 }
 
-func TestPutTemplateHandler_InvalidBody(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-invalid-body"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := putTemplateRaw(t, srv, session, practiceID, []byte("not json"))
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-// TestPutTemplateHandler_BlankProseRejected table-drives an empty and a
-// whitespace-only prose, both of which normalize to "" after trimming.
-func TestPutTemplateHandler_BlankProseRejected(t *testing.T) {
+// TestPutTemplateHandler_Refusals table-drives a body that is not JSON
+// and an empty and a whitespace-only prose, the last two of which
+// normalize to "" after trimming.
+func TestPutTemplateHandler_Refusals(t *testing.T) {
 	cases := []struct {
-		name  string
-		prose string
+		name string
+		body reqtest.Option
 	}{
-		{"empty", ""},
-		{"whitespace only", "   \n\t  "},
+		{"body is not JSON", reqtest.RawJSON([]byte("not json"))},
+		{"empty", reqtest.JSON(contracts.TemplateResponse{Prose: ""})},
+		{"whitespace only", reqtest.JSON(contracts.TemplateResponse{Prose: "   \n\t  "})},
 	}
-
-	db := testdb.New(t)
-	const uid = "put-blank-prose"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+	e := newEnv(t, signedInAs(fixture.Owner()))
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			resp := putTemplate(t, srv, session, practiceID, contracts.TemplateResponse{Prose: tc.prose})
-			defer resp.Body.Close()
-
-			reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+			reqtest.ExpectStatus(t, http.MethodPut, e.templateURL(), http.StatusBadRequest, e.signedIn, tc.body)
 		})
 	}
 }
@@ -296,33 +209,14 @@ func TestPutTemplateHandler_BlankProseRejected(t *testing.T) {
 // TestPutTemplateHandler_Success proves a full replace round-trips through
 // GET, and that surrounding whitespace is trimmed.
 func TestPutTemplateHandler_Success(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-success"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	e := newEnv(t, signedInAs(fixture.Owner()))
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	putResp := putTemplate(t, srv, session, practiceID, contracts.TemplateResponse{Prose: "  Agreement with {{client_name}}  "})
-	defer putResp.Body.Close()
-
-	if putResp.StatusCode != http.StatusOK {
-		t.Fatalf("PUT status = %d, want %d", putResp.StatusCode, http.StatusOK)
+	if out := e.putTemplate("  Agreement with {{client_name}}  ", http.StatusOK); out.Prose != "Agreement with {{client_name}}" {
+		t.Fatalf("PUT prose = %q, want trimmed", out.Prose)
 	}
 
-	putOut := reqtest.Decode[contracts.TemplateResponse](t, putResp)
-	if putOut.Prose != "Agreement with {{client_name}}" {
-		t.Fatalf("PUT prose = %q, want trimmed", putOut.Prose)
-	}
-
-	getResp := getTemplate(t, srv, session, practiceID)
-	defer getResp.Body.Close()
-	if getResp.StatusCode != http.StatusOK {
-		t.Fatalf("GET status = %d, want %d", getResp.StatusCode, http.StatusOK)
-	}
-	getOut := reqtest.Decode[contracts.TemplateResponse](t, getResp)
-	if getOut.Prose != "Agreement with {{client_name}}" {
-		t.Fatalf("GET prose after PUT = %q, want the just-written prose", getOut.Prose)
+	if out := e.template(); out.Prose != "Agreement with {{client_name}}" {
+		t.Fatalf("GET prose after PUT = %q, want the just-written prose", out.Prose)
 	}
 }
 
@@ -330,23 +224,12 @@ func TestPutTemplateHandler_Success(t *testing.T) {
 // seeded by signup (or a prior PUT) rather than conflicting with it -- the
 // ON CONFLICT DO UPDATE path.
 func TestPutTemplateHandler_ReplacesExistingRow(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-replace"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	seedContractTemplate(t, db, practiceID, "Old prose")
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	e.seedTemplate("Old prose")
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+	e.putTemplate("New prose", http.StatusOK)
 
-	resp := putTemplate(t, srv, session, practiceID, contracts.TemplateResponse{Prose: "New prose"})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-
-	getResp := getTemplate(t, srv, session, practiceID)
-	defer getResp.Body.Close()
-	out := reqtest.Decode[contracts.TemplateResponse](t, getResp)
-	if out.Prose != "New prose" {
+	if out := e.template(); out.Prose != "New prose" {
 		t.Fatalf("prose = %q, want only the replacement prose", out.Prose)
 	}
 }

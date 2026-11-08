@@ -1,10 +1,12 @@
 package contracts_test
 
 import (
+	"net/http"
 	"testing"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/contracts"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -14,43 +16,26 @@ import (
 // shows it without reading again -- and a send recorded before this
 // Contract existed (a voided predecessor's) is not this Contract's.
 func TestContractTrail_SentAndSigned(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "trail-sent-signed"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "trail@example.com")
+	e := newEnv(t)
 	// A predecessor's send, recorded before this Contract was created.
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID,
-		string(activity.ActionContractSent), activity.StaffActor(staffID))
-	seedContractWithValues(t, db, engagementID,
-		contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: testPriceValue})
-	testdb.SeedPendingPortalInvite(t, db, clientID)
+	testdb.SeedActivity(t, e.db, e.Practice.ID, activity.SubjectEngagement, e.Engagement.ID,
+		string(activity.ActionContractSent), activity.StaffActor(e.Staff.ID))
+	e.seedFilledDraft()
+	testdb.SeedPendingPortalInvite(t, e.db, e.Engagement.Client.ID)
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	draftResp := getContract(t, srv, session, practiceID, engagementID)
-	defer draftResp.Body.Close()
-	draft := decodeContract(t, draftResp)
+	draft := e.contract()
 	if draft.Sent != nil || draft.Signed != nil {
 		t.Fatalf("a Draft: sent = %+v, signed = %+v, want neither", draft.Sent, draft.Signed)
 	}
 
-	sentResp := postSendContract(t, srv, session, practiceID, engagementID)
-	defer sentResp.Body.Close()
-	sent := decodeContract(t, sentResp)
-	if sent.Sent == nil || sent.Sent.By != "Test Staff "+uid || sent.Sent.At.IsZero() {
+	sent := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.send(), http.StatusOK, e.signedIn)
+	if sent.Sent == nil || sent.Sent.By != e.Staff.Name || sent.Sent.At.IsZero() {
 		t.Fatalf("the send's response: sent = %+v, want its instant, by the sender", sent.Sent)
 	}
 
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE contracts SET status = 'voided', signed_at = now(), signer_full_name = 'Jordan Q. Client'
-		 WHERE engagement_id = $1`, engagementID,
-	); err != nil {
-		t.Fatalf("sign and void: %v", err)
-	}
-	voidedResp := getContract(t, srv, session, practiceID, engagementID)
-	defer voidedResp.Body.Close()
-	voided := decodeContract(t, voidedResp)
+	e.exec(`UPDATE contracts SET status = 'voided', signed_at = now(), signer_full_name = 'Jordan Q. Client'
+		 WHERE engagement_id = $1`, e.Engagement.ID)
+	voided := e.contract()
 	if voided.Signed == nil || voided.Signed.By != "Jordan Q. Client" || voided.Signed.At.IsZero() {
 		t.Errorf("signed = %+v, want the instant and the typed legal name", voided.Signed)
 	}

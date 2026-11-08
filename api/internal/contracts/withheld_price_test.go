@@ -7,7 +7,8 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/contracts"
-	"doula-cloud/api/internal/testdb"
+	"doula-cloud/api/internal/fixture"
+	"doula-cloud/api/internal/reqtest"
 )
 
 // The tests in this file are #2003: a Contract never renders a merge
@@ -38,37 +39,21 @@ func assertNoPrice(t *testing.T, out contracts.ContractResponse) {
 }
 
 func TestGetContractHandler_ContractorReadsNoPriceLine(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "withheld-price-get-contractor"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, statusDraft, pricedProse)
-	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
+	e := newEnv(t, signedInAs(fixture.Contractor()), attachedToEngagement())
+	seedContract(t, e.db, e.Engagement.ID, statusDraft, pricedProse)
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getContract(t, srv, session, practiceID, engagementID)
-	defer func() { _ = resp.Body.Close() }()
-	assertNoPrice(t, decodeContractResponse(t, resp, http.StatusOK))
+	assertNoPrice(t, e.contract())
 }
 
 // The write responses are Contract-shaped too: a contractor who saves a
 // draft's merge fields must not read the price in what comes back.
 func TestPutContractHandler_ContractorReadsNoPriceLine(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "withheld-price-put-contractor"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, statusDraft, pricedProse)
-	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
+	e := newEnv(t, signedInAs(fixture.Contractor()), attachedToEngagement())
+	seedContract(t, e.db, e.Engagement.ID, statusDraft, pricedProse)
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPut, e.contractURL(""), http.StatusOK, e.signedIn,
+		putting(contracts.MergeFieldValues{clientNameKey: jamieName}))
 
-	resp := putContract(t, srv, session, practiceID, engagementID, contracts.MergeFieldValues{clientNameKey: jamieName})
-	defer func() { _ = resp.Body.Close() }()
-	out := decodeContractResponse(t, resp, http.StatusOK)
 	assertNoPrice(t, out)
 	if out.Values[clientNameKey] != jamieName {
 		t.Fatalf("values[client_name] = %q, want %q: scope still reaches her", out.Values[clientNameKey], jamieName)
@@ -78,18 +63,11 @@ func TestPutContractHandler_ContractorReadsNoPriceLine(t *testing.T) {
 // An employed Doula is inside the business (#282): she reads the price
 // line, filled.
 func TestGetContractHandler_EmployeeReadsThePriceLine(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "withheld-price-get-employee"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, statusDraft, pricedProse)
+	e := newEnv(t)
+	seedContract(t, e.db, e.Engagement.ID, statusDraft, pricedProse)
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+	out := e.contract()
 
-	resp := getContract(t, srv, session, practiceID, engagementID)
-	defer func() { _ = resp.Body.Close() }()
-	out := decodeContractResponse(t, resp, http.StatusOK)
 	if out.Prose != pricedProse {
 		t.Fatalf("prose = %q, want it whole for an employee", out.Prose)
 	}

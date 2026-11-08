@@ -3,76 +3,28 @@ package contracts_test
 import (
 	"database/sql"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/contracts"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
-// employeeType and contractorType are named once here so golangci-lint's
-// goconst check doesn't see the two stored employment_type values
-// repeated as raw string literals in TestPostVoidContractHandler_RefusedByRole's
-// own table below -- the rest of this file's calls stay on the raw
-// "employee" literal every other seed call in this package uses.
-const (
-	employeeType   = "employee"
-	contractorType = "contractor"
-)
-
-func voidContractURL(srv *httptest.Server, practiceID, engagementID string) string {
-	return srv.URL + "/api/practices/" + practiceID + "/engagements/" + engagementID + "/contract/void"
+// voidURL is the route that voids the Engagement's Contract.
+func (e *env) voidURL() string {
+	return e.contractURL("/void")
 }
 
-func postVoidContract(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string) *http.Response {
-	t.Helper()
-	return reqtest.Post(t, voidContractURL(srv, practiceID, engagementID), reqtest.Session(session))
-}
-
-func TestPostVoidContractHandler_InvalidEngagementID(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "void-invalid-engagement-id"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postVoidContract(t, srv, session, practiceID, "not-a-uuid")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-func TestPostVoidContractHandler_EngagementNotFound(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "void-no-engagement"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
-	_, otherEngagementID := testdb.SeedEngagement(t, db, otherPracticeID)
-
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postVoidContract(t, srv, session, practiceID, otherEngagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
+func TestPostVoidContractHandler_RefusesAnEngagementItCannotReach(t *testing.T) {
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	e.refusesEngagementsItCannotReach(http.MethodPost, "/void")
 }
 
 func TestPostVoidContractHandler_NoContract(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "void-no-contract"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	e := newEnv(t, signedInAs(fixture.Owner()))
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postVoidContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
+	reqtest.ExpectStatus(t, http.MethodPost, e.voidURL(), http.StatusNotFound, e.signedIn)
 }
 
 // TestPostVoidContractHandler_NonSignedRejected proves Void 409s from
@@ -81,19 +33,10 @@ func TestPostVoidContractHandler_NoContract(t *testing.T) {
 func TestPostVoidContractHandler_NonSignedRejected(t *testing.T) {
 	for _, status := range []string{statusDraft, statusSent, statusVoided} {
 		t.Run(status, func(t *testing.T) {
-			db := testdb.New(t)
-			uid := "void-non-signed-" + status
-			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-			_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-			seedContract(t, db, engagementID, status, mergeFieldProse)
+			e := newEnv(t, signedInAs(fixture.Owner()))
+			e.seedContract(status)
 
-			srv, session := newContractServer(t, db, uid)
-			defer srv.Close()
-
-			resp := postVoidContract(t, srv, session, practiceID, engagementID)
-			defer resp.Body.Close()
-
-			reqtest.RequireStatus(t, resp, http.StatusConflict)
+			reqtest.ExpectStatus(t, http.MethodPost, e.voidURL(), http.StatusConflict, e.signedIn)
 		})
 	}
 }
@@ -105,35 +48,22 @@ func TestPostVoidContractHandler_NonSignedRejected(t *testing.T) {
 // untouched by Void -- the ticket's "never deletes or alters" AC for the
 // historical record.
 func TestPostVoidContractHandler_Success(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "void-success"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	_, objectPath := seedSignedContract(t, db, engagementID)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	_, objectPath := seedSignedContract(t, e.db, e.Engagement.ID)
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.voidURL(), http.StatusOK, e.signedIn)
 
-	resp := postVoidContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	out := reqtest.Decode[contracts.ContractResponse](t, resp)
 	if out.Status != statusVoided {
 		t.Fatalf("status = %q, want voided", out.Status)
 	}
 	if out.Prose != mergeFieldProse {
 		t.Fatalf("prose = %q, want the original snapshot unchanged", out.Prose)
 	}
-
-	getResp := getContract(t, srv, session, practiceID, engagementID)
-	defer getResp.Body.Close()
-	getOut := reqtest.Decode[contracts.ContractResponse](t, getResp)
-	if getOut.Status != statusVoided {
-		t.Fatalf("GET status after Void = %q, want voided (the transition persisted)", getOut.Status)
+	if got := e.contract().Status; got != statusVoided {
+		t.Fatalf("GET status after Void = %q, want voided (the transition persisted)", got)
 	}
 
-	storedObjectPath := testdb.Scalar[sql.NullString](t, db.Admin, `SELECT signed_pdf_object_path FROM contracts WHERE engagement_id = $1`, engagementID)
+	storedObjectPath := testdb.Scalar[sql.NullString](t, e.db.Admin, `SELECT signed_pdf_object_path FROM contracts WHERE engagement_id = $1`, e.Engagement.ID)
 	if !storedObjectPath.Valid || storedObjectPath.String != objectPath {
 		t.Fatalf("signed_pdf_object_path = %+v, want unchanged at %q", storedObjectPath, objectPath)
 	}
@@ -151,30 +81,14 @@ func TestPostVoidContractHandler_Success(t *testing.T) {
 // fetchContract's returned id (rather than re-deriving "the" row from
 // engagement_id) in every UPDATE is for.
 func TestPostContractHandler_AllowedAfterVoid(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "post-after-void"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	testdb.SeedPendingPortalInvite(t, db, clientID)
-	seedContractTemplate(t, db, practiceID, mergeFieldProse)
-	testdb.SeedPracticeRate(t, db, practiceID, "birth", testRateAmountCents)
-	_, oldObjectPath := seedSignedContract(t, db, engagementID)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	testdb.SeedPendingPortalInvite(t, e.db, e.Engagement.Client.ID)
+	e.readyToDraft(mergeFieldProse)
+	_, oldObjectPath := seedSignedContract(t, e.db, e.Engagement.ID)
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+	reqtest.ExpectStatus(t, http.MethodPost, e.voidURL(), http.StatusOK, e.signedIn)
 
-	voidResp := postVoidContract(t, srv, session, practiceID, engagementID)
-	defer voidResp.Body.Close()
-	if voidResp.StatusCode != http.StatusOK {
-		t.Fatalf("void status = %d, want %d", voidResp.StatusCode, http.StatusOK)
-	}
-
-	createResp := postContract(t, srv, session, practiceID, engagementID)
-	defer createResp.Body.Close()
-	if createResp.StatusCode != http.StatusCreated {
-		t.Fatalf("create-after-void status = %d, want %d (the recreate flow must not 409 forever)", createResp.StatusCode, http.StatusCreated)
-	}
-	created := reqtest.Decode[contracts.ContractResponse](t, createResp)
+	created := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.contractURL(""), http.StatusCreated, e.signedIn)
 	if created.Status != statusDraft {
 		t.Fatalf("new contract status = %q, want draft", created.Status)
 	}
@@ -184,22 +98,14 @@ func TestPostContractHandler_AllowedAfterVoid(t *testing.T) {
 	// mergeFieldProse's other field, price, resolves automatically from
 	// amount_cents (#967) -- neither needs a PUT to reach the assertions
 	// below, so this just round-trips client_name unchanged.
-	putResp := putContract(t, srv, session, practiceID, engagementID,
-		contracts.MergeFieldValues{clientNameKey: created.Values[clientNameKey]})
-	defer putResp.Body.Close()
-	if putResp.StatusCode != http.StatusOK {
-		t.Fatalf("put status = %d, want %d", putResp.StatusCode, http.StatusOK)
-	}
+	reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), http.StatusOK, e.signedIn,
+		putting(contracts.MergeFieldValues{clientNameKey: created.Values[clientNameKey]}))
 
-	sendResp := postSendContract(t, srv, session, practiceID, engagementID)
-	defer sendResp.Body.Close()
-	if sendResp.StatusCode != http.StatusOK {
-		t.Fatalf("send-after-recreate status = %d, want %d", sendResp.StatusCode, http.StatusOK)
-	}
+	reqtest.ExpectStatus(t, http.MethodPost, e.send(), http.StatusOK, e.signedIn)
 
-	rows, err := db.Admin.QueryContext(t.Context(),
+	rows, err := e.db.Admin.QueryContext(t.Context(),
 		`SELECT status, signed_pdf_object_path FROM contracts WHERE engagement_id = $1 ORDER BY created_at`,
-		engagementID,
+		e.Engagement.ID,
 	)
 	if err != nil {
 		t.Fatalf("query contract rows: %v", err)
@@ -241,31 +147,21 @@ func TestPostContractHandler_AllowedAfterVoid(t *testing.T) {
 // does.
 func TestPostVoidContractHandler_RefusedByRole(t *testing.T) {
 	cases := []struct {
-		name           string
-		roles          []string
-		employmentType string
-		wantStatus     int
+		name       string
+		staff      []fixture.StaffOption
+		wantStatus int
 	}{
-		{"owner", []string{ownerRole}, employeeType, http.StatusOK},
-		{"admin", []string{adminRole}, employeeType, http.StatusOK},
-		{"employed doula", []string{doulaRole}, employeeType, http.StatusForbidden},
-		{"contractor doula", []string{doulaRole}, contractorType, http.StatusForbidden},
+		{"owner", []fixture.StaffOption{fixture.Owner()}, http.StatusOK},
+		{"admin", []fixture.StaffOption{fixture.Admin()}, http.StatusOK},
+		{"employed doula", []fixture.StaffOption{fixture.Doula()}, http.StatusForbidden},
+		{"contractor doula", []fixture.StaffOption{fixture.Doula(), fixture.Contractor()}, http.StatusForbidden},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			db := testdb.New(t)
-			uid := "void-role-" + tc.name
-			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, tc.roles, tc.employmentType)
-			_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-			seedSignedContract(t, db, engagementID)
+			e := newEnv(t, signedInAs(tc.staff...))
+			seedSignedContract(t, e.db, e.Engagement.ID)
 
-			srv, session := newContractServer(t, db, uid)
-			defer srv.Close()
-
-			resp := postVoidContract(t, srv, session, practiceID, engagementID)
-			defer resp.Body.Close()
-
-			reqtest.RequireStatus(t, resp, tc.wantStatus)
+			reqtest.ExpectStatus(t, http.MethodPost, e.voidURL(), tc.wantStatus, e.signedIn)
 		})
 	}
 }

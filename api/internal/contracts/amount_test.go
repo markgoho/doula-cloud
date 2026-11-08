@@ -3,39 +3,29 @@ package contracts_test
 import (
 	"encoding/json/v2"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
-	"doula-cloud/api/internal/idempotency"
-	"doula-cloud/api/internal/objectstore"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/practicerate"
-	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
-func contractAmountURL(srv *httptest.Server, practiceID, engagementID string) string {
-	return contractURL(srv, practiceID, engagementID) + "/amount"
+// noBirthRate is the refusal for a Contract of a kind whose rate is not
+// set (#1885): the full sentence, so a reword is a deliberate test change.
+const noBirthRate = "Your Practice has no birth rate yet. Set one on the Rates page in Settings before you create a Contract."
+
+// amounting is the body of a PUT that overrides a Contract's amount.
+func amounting(amountCents int64) reqtest.Option {
+	return reqtest.JSON(contracts.PutContractAmountRequest{AmountCents: amountCents})
 }
 
-func putContractAmountRaw(t *testing.T, srv *httptest.Server, session, practiceID, engagementID string, body []byte) *http.Response {
-	t.Helper()
-	return reqtest.Put(t, contractAmountURL(srv, practiceID, engagementID), reqtest.Session(session), reqtest.RawJSON(body))
-}
-
-func putContractAmount(t *testing.T, srv *httptest.Server, session, practiceID, engagementID string, amountCents int64) *http.Response {
-	t.Helper()
-	payload, err := json.Marshal(contracts.PutContractAmountRequest{AmountCents: amountCents})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	return putContractAmountRaw(t, srv, session, practiceID, engagementID, payload)
+func (e *env) amountURL() string {
+	return e.contractURL("/amount")
 }
 
 // TestPostContractHandler_NoRateSet proves #967's AC: creating a Contract
@@ -44,27 +34,16 @@ func putContractAmount(t *testing.T, srv *httptest.Server, session, practiceID, 
 // Template exists (so this refusal isn't NoTemplate's), but no
 // practice_rates row does.
 func TestPostContractHandler_NoRateSet(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "post-no-rate"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContractTemplate(t, db, practiceID, mergeFieldProse)
+	e := newEnv(t)
+	e.seedTemplate(mergeFieldProse)
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+	out := apierrtest.Expect(t, http.MethodPost, e.contractURL(""), http.StatusConflict, e.signedIn)
 
-	resp := postContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusConflict)
-	out := apierrtest.Decode(t, resp)
 	if out.Code != apierr.CodeFailedPrecondition {
 		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeFailedPrecondition)
 	}
-	// #1885: the full sentence, so a reword is a deliberate test change.
-	const want = "Your Practice has no birth rate yet. Set one on the Rates page in Settings before you create a Contract."
-	if out.Message != want {
-		t.Fatalf("message = %q, want %q", out.Message, want)
+	if out.Message != noBirthRate {
+		t.Fatalf("message = %q, want %q", out.Message, noBirthRate)
 	}
 }
 
@@ -74,84 +53,38 @@ func TestPostContractHandler_NoRateSet(t *testing.T) {
 // DELETE, not a hand-deleted row, so the two packages agree on what "no
 // rate" means.
 func TestPostContractHandler_RemovedRateRefusedLikeNoRate(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "post-removed-rate"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContractTemplate(t, db, practiceID, mergeFieldProse)
-	testdb.SeedPracticeRate(t, db, practiceID, "birth", 240000)
+	e := newEnv(t, signedInAs(fixture.Owner()), alsoMounting(practicerate.Mount))
+	e.readyToDraft(mergeFieldProse)
 
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	contracts.Mount(g, ir, db.App, objectstore.NewMemoryStore(), push.NewFakePusher())
-	practicerate.Mount(g, ir)
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-	session := authntest.SeedSession(t, db.App, uid)
+	reqtest.ExpectStatus(t, http.MethodDelete, e.srv.URL+"/api/practices/"+e.Practice.ID+"/rates/birth", http.StatusOK, e.signedIn)
 
-	del := reqtest.Delete(t, srv.URL+"/api/practices/"+practiceID+"/rates/birth", reqtest.Session(session))
-	defer del.Body.Close()
-	if del.StatusCode != http.StatusOK {
-		t.Fatalf("DELETE status = %d, want %d", del.StatusCode, http.StatusOK)
-	}
-
-	resp := postContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusConflict)
-	out := apierrtest.Decode(t, resp)
-	const want = "Your Practice has no birth rate yet. Set one on the Rates page in Settings before you create a Contract."
-	if out.Message != want {
-		t.Fatalf("message = %q, want %q", out.Message, want)
+	out := apierrtest.Expect(t, http.MethodPost, e.contractURL(""), http.StatusConflict, e.signedIn)
+	if out.Message != noBirthRate {
+		t.Fatalf("message = %q, want %q", out.Message, noBirthRate)
 	}
 }
 
-// TestPutContractAmountHandler_NonOwnerAdminForbidden table-drives #967's
-// AC that the API refuses a Doula, employee or contractor.
-func TestPutContractAmountHandler_NonOwnerAdminForbidden(t *testing.T) {
+// TestPutContractAmountHandler_RefusedByRole table-drives #967's AC that
+// the API refuses a Doula, employee or contractor, and admits an Admin,
+// not only an Owner, to override a Contract's amount.
+func TestPutContractAmountHandler_RefusedByRole(t *testing.T) {
 	cases := []struct {
-		name           string
-		employmentType string
+		name       string
+		staff      []fixture.StaffOption
+		wantStatus int
 	}{
-		{"employee doula", "employee"},
-		{"contractor doula", "contractor"},
+		{"admin", []fixture.StaffOption{fixture.Admin()}, http.StatusOK},
+		{"employee doula", []fixture.StaffOption{fixture.Doula()}, http.StatusForbidden},
+		{"contractor doula", []fixture.StaffOption{fixture.Doula(), fixture.Contractor()}, http.StatusForbidden},
 	}
-
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			db := testdb.New(t)
-			uid := "amount-forbidden-" + tc.name
-			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, tc.employmentType)
-			_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-			seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
+			e := newEnv(t, signedInAs(tc.staff...))
+			e.seedDraft()
 
-			srv, session := newContractServer(t, db, uid)
-			defer srv.Close()
-
-			resp := putContractAmount(t, srv, session, practiceID, engagementID, 20000)
-			defer resp.Body.Close()
-
-			reqtest.RequireStatus(t, resp, http.StatusForbidden)
+			reqtest.ExpectStatus(t, http.MethodPut, e.amountURL(), tc.wantStatus, e.signedIn, amounting(20000))
 		})
 	}
-}
-
-// TestPutContractAmountHandler_AdminAllowed proves an Admin, not only an
-// Owner, may override a Contract's amount.
-func TestPutContractAmountHandler_AdminAllowed(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "amount-admin-allowed"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{adminRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
-
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := putContractAmount(t, srv, session, practiceID, engagementID, 20000)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
 }
 
 // TestPutContractAmountHandler_Success proves an Owner's override
@@ -159,32 +92,20 @@ func TestPutContractAmountHandler_AdminAllowed(t *testing.T) {
 // new amount), and is recorded in the activity ledger with before/after
 // amounts and the acting Staff member.
 func TestPutContractAmountHandler_Success(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "amount-success"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	e.seedDraft()
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+	out := reqtest.Expect[contracts.ContractAmountResponse](t, http.MethodPut, e.amountURL(), http.StatusOK, e.signedIn, amounting(30000))
 
-	resp := putContractAmount(t, srv, session, practiceID, engagementID, 30000)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	out := reqtest.Decode[contracts.ContractAmountResponse](t, resp)
 	if out.AmountCents != 30000 {
 		t.Fatalf("amountCents = %d, want 30000", out.AmountCents)
 	}
-
-	getResp := getContract(t, srv, session, practiceID, engagementID)
-	defer getResp.Body.Close()
-	getOut := reqtest.Decode[contracts.ContractResponse](t, getResp)
-	if getOut.Values[priceKey] != "$300.00" {
-		t.Fatalf("values[price] after override = %q, want %q", getOut.Values[priceKey], "$300.00")
+	got := e.contract()
+	if got.Values[priceKey] != "$300.00" {
+		t.Fatalf("values[price] after override = %q, want %q", got.Values[priceKey], "$300.00")
 	}
 
-	diff := assertActivityActor(t, db, engagementID, activity.ActionContractAmountOverridden, staffID)
+	diff := assertActivityActor(t, e.db, e.Engagement.ID, activity.ActionContractAmountOverridden, e.Staff.ID)
 	var parsedDiff activity.AmountDiff
 	if err := json.Unmarshal(diff, &parsedDiff); err != nil {
 		t.Fatalf("unmarshal diff: %v", err)
@@ -196,11 +117,11 @@ func TestPutContractAmountHandler_Success(t *testing.T) {
 	// #968's AC: an overridden Contract keeps the override and never
 	// re-derives when a later rate change comes through -- amount_overridden
 	// is the column practicerate.PutRateHandler's reprice pass excludes on.
-	overridden := testdb.Scalar[bool](t, db.Admin, `SELECT amount_overridden FROM contracts WHERE engagement_id = $1`, engagementID)
+	overridden := testdb.Scalar[bool](t, e.db.Admin, `SELECT amount_overridden FROM contracts WHERE engagement_id = $1`, e.Engagement.ID)
 	if !overridden {
 		t.Fatalf("amount_overridden = false, want true after an Owner/Admin override")
 	}
-	if getOut.AmountChangedAt == nil {
+	if got.AmountChangedAt == nil {
 		t.Fatalf("GET amountChangedAt = nil, want set -- an Owner/Admin can see the price changed and when (#968)")
 	}
 }
@@ -209,151 +130,56 @@ func TestPutContractAmountHandler_Success(t *testing.T) {
 // proves the idempotent-PUT shape: a retry with the same amount writes
 // no second activity row, mirroring practicerate's own repeat case.
 func TestPutContractAmountHandler_RepeatedIdenticalValueRecordsNoNewActivity(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "amount-repeat"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	e.seedDraft()
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+	reqtest.ExpectStatus(t, http.MethodPut, e.amountURL(), http.StatusOK, e.signedIn, amounting(15000))
+	reqtest.ExpectStatus(t, http.MethodPut, e.amountURL(), http.StatusOK, e.signedIn, amounting(15000))
 
-	first := putContractAmount(t, srv, session, practiceID, engagementID, 15000)
-	defer first.Body.Close()
-	if first.StatusCode != http.StatusOK {
-		t.Fatalf("first PUT status = %d, want %d", first.StatusCode, http.StatusOK)
-	}
-
-	second := putContractAmount(t, srv, session, practiceID, engagementID, 15000)
-	defer second.Body.Close()
-	if second.StatusCode != http.StatusOK {
-		t.Fatalf("second PUT status = %d, want %d", second.StatusCode, http.StatusOK)
-	}
-
-	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = 'contract_amount_overridden'`, engagementID)
+	count := testdb.Scalar[int](t, e.db.Admin, `SELECT count(*) FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = 'contract_amount_overridden'`, e.Engagement.ID)
 	if count != 0 {
 		t.Fatalf("activity rows = %d, want 0 (the amount never actually changed, 15000 == 15000)", count)
 	}
 }
 
-// TestPutContractAmountHandler_NonPositiveAmountRejected table-drives
-// zero and negative amounts, both invalid.
-func TestPutContractAmountHandler_NonPositiveAmountRejected(t *testing.T) {
+// TestPutContractAmountHandler_Refusals table-drives what an override is
+// refused for. Zero and negative amounts are both invalid, and malformed
+// JSON is refused. #967's AC is that "a signed Contract's amount never
+// changes for any reason" -- TransitionOverrideAmount refuses everything
+// but Draft, so sent, signed and voided all 409 -- and an Engagement with
+// no Contract at all 404s.
+func TestPutContractAmountHandler_Refusals(t *testing.T) {
 	cases := []struct {
-		name        string
-		amountCents int64
+		name   string
+		status string
+		body   reqtest.Option
+		want   int
 	}{
-		{"zero", 0},
-		{"negative", -100},
+		{"zero", statusDraft, amounting(0), http.StatusBadRequest},
+		{"negative", statusDraft, amounting(-100), http.StatusBadRequest},
+		{"body is not JSON", statusDraft, reqtest.RawJSON([]byte("not json")), http.StatusBadRequest},
+		{"sent", statusSent, amounting(20000), http.StatusConflict},
+		{"signed", statusSigned, amounting(20000), http.StatusConflict},
+		{"voided", statusVoided, amounting(20000), http.StatusConflict},
+		{"no contract", "", amounting(20000), http.StatusNotFound},
 	}
-
-	db := testdb.New(t)
-	const uid = "amount-non-positive"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			resp := putContractAmount(t, srv, session, practiceID, engagementID, tc.amountCents)
-			defer resp.Body.Close()
+			e := newEnv(t, signedInAs(fixture.Owner()))
+			if tc.status != "" {
+				e.seedContract(tc.status)
+			}
 
-			reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+			reqtest.ExpectStatus(t, http.MethodPut, e.amountURL(), tc.want, e.signedIn, tc.body)
 		})
 	}
 }
 
-// TestPutContractAmountHandler_InvalidBody proves malformed JSON is
-// refused.
-func TestPutContractAmountHandler_InvalidBody(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "amount-invalid-body"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := putContractAmountRaw(t, srv, session, practiceID, engagementID, []byte("not json"))
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-// TestPutContractAmountHandler_InvalidEngagementID proves a malformed
-// path segment is refused before any query runs.
-func TestPutContractAmountHandler_InvalidEngagementID(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "amount-invalid-engagement"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := putContractAmount(t, srv, session, practiceID, "not-a-uuid", 20000)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-// TestPutContractAmountHandler_EngagementNotFound proves an Engagement
-// belonging to another Practice 404s rather than leaking that it exists.
-func TestPutContractAmountHandler_EngagementNotFound(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "amount-engagement-not-found"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
-	_, otherEngagementID := testdb.SeedEngagement(t, db, otherPracticeID)
-
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := putContractAmount(t, srv, session, practiceID, otherEngagementID, 20000)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
-// TestPutContractAmountHandler_NoContractNotFound proves overriding an
-// Engagement with no Contract at all 404s.
-func TestPutContractAmountHandler_NoContractNotFound(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "amount-no-contract"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := putContractAmount(t, srv, session, practiceID, engagementID, 20000)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
-// TestPutContractAmountHandler_NotDraftRejected table-drives #967's AC
-// directly: "a signed Contract's amount never changes for any reason" --
-// TransitionOverrideAmount refuses everything but Draft, so sent, signed
-// and voided all 409.
-func TestPutContractAmountHandler_NotDraftRejected(t *testing.T) {
-	cases := []string{"sent", "signed", "voided"}
-
-	for _, status := range cases {
-		t.Run(status, func(t *testing.T) {
-			db := testdb.New(t)
-			uid := "amount-not-draft-" + status
-			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-			_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-			seedContract(t, db, engagementID, status, mergeFieldProse)
-
-			srv, session := newContractServer(t, db, uid)
-			defer srv.Close()
-
-			resp := putContractAmount(t, srv, session, practiceID, engagementID, 20000)
-			defer resp.Body.Close()
-
-			reqtest.RequireStatus(t, resp, http.StatusConflict)
-		})
-	}
+// TestPutContractAmountHandler_RefusesAnEngagementItCannotReach proves a
+// malformed path segment is refused before any query runs, and an
+// Engagement belonging to another Practice 404s rather than leaking that
+// it exists.
+func TestPutContractAmountHandler_RefusesAnEngagementItCannotReach(t *testing.T) {
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	e.refusesEngagementsItCannotReach(http.MethodPut, "/amount", amounting(20000))
 }

@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/reqtest"
 )
 
 // Decode reads resp's body as one section 7 error envelope, for an
@@ -34,6 +35,17 @@ func Decode(t *testing.T, resp *http.Response) apierr.APIError {
 		t.Fatalf("decode section 7 error envelope: %v", err)
 	}
 	return out
+}
+
+// Expect sends one request, requires want, and returns the refusal's
+// section 7 envelope, for a test that asserts on a refusal's code, message
+// or details. The body is closed before it returns.
+func Expect(t *testing.T, method, url string, want int, opts ...reqtest.Option) apierr.APIError {
+	t.Helper()
+	resp := reqtest.Do(t, method, url, opts...)
+	defer func() { _ = resp.Body.Close() }()
+	reqtest.RequireStatus(t, resp, want)
+	return Decode(t, resp)
 }
 
 // RequireCode fails the test unless resp carries an error envelope whose

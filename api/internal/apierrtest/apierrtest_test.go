@@ -44,6 +44,20 @@ func TestDecode_LeavesDetailsNilWhenAbsent(t *testing.T) {
 	}
 }
 
+func TestExpect_ReturnsTheEnvelopeOfTheExpectedStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		apierr.Write(w, http.StatusConflict, apierr.CodeConflict, "already sent",
+			map[string]string{"amountCents": "Enter an amount"})
+	}))
+	t.Cleanup(srv.Close)
+
+	got := apierrtest.Expect(t, http.MethodPost, srv.URL, http.StatusConflict)
+
+	if got.Code != apierr.CodeConflict || got.Details["amountCents"] != "Enter an amount" {
+		t.Fatalf("envelope = %+v, want CONFLICT with an amountCents entry", got)
+	}
+}
+
 func TestRequireCode_PassesOnAMatchingCode(t *testing.T) {
 	rec := httptest.NewRecorder()
 	apierr.WriteError(rec, "engagement not found", http.StatusNotFound)

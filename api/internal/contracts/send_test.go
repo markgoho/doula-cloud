@@ -12,7 +12,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/contracts"
-	"doula-cloud/api/internal/push"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
@@ -35,49 +35,43 @@ func postSendContract(t *testing.T, srv *httptest.Server, session string, practi
 	return reqtest.Post(t, sendContractURL(srv, practiceID, engagementID), reqtest.Session(session))
 }
 
-func TestPostSendContractHandler_InvalidEngagementID(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "send-invalid-engagement-id"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postSendContract(t, srv, session, practiceID, "not-a-uuid")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+func (e *env) send() string {
+	return e.contractURL("/send")
 }
 
-func TestPostSendContractHandler_EngagementNotFound(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "send-no-engagement"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
-	_, otherEngagementID := testdb.SeedEngagement(t, db, otherPracticeID)
+// requireNothingSent proves a refused Send wrote nothing: the Contract is
+// still a draft, no contract_sent activity row exists, and no push fired.
+func (e *env) requireNothingSent() {
+	e.t.Helper()
+	if got := e.contract().Status; got != statusDraft {
+		e.t.Fatalf("status after refused Send = %q, want draft (unchanged)", got)
+	}
+	if calls := e.pusher.Calls(); len(calls) != 0 {
+		e.t.Fatalf("Pusher.Send call count = %d, want 0 (refused before any write)", len(calls))
+	}
+	activityCount := testdb.Scalar[int](e.t, e.db.Admin, `SELECT count(*) FROM activity WHERE subject_id = $1 AND action = 'contract_sent'`, e.Engagement.ID)
+	if activityCount != 0 {
+		e.t.Fatalf("contract_sent activity rows = %d, want 0 (refused before any write)", activityCount)
+	}
+}
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+// seedFilledDraft seeds a draft whose merge fields are all filled in, so
+// Send's completeness check passes.
+func (e *env) seedFilledDraft() {
+	e.t.Helper()
+	seedContractWithValues(e.t, e.db, e.Engagement.ID,
+		contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: testPriceValue})
+}
 
-	resp := postSendContract(t, srv, session, practiceID, otherEngagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
+func TestPostSendContractHandler_RefusesAnEngagementItCannotReach(t *testing.T) {
+	e := newEnv(t)
+	e.refusesEngagementsItCannotReach(http.MethodPost, "/send")
 }
 
 func TestPostSendContractHandler_NoContract(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "send-no-contract"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	e := newEnv(t)
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postSendContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
+	reqtest.ExpectStatus(t, http.MethodPost, e.send(), http.StatusNotFound, e.signedIn)
 }
 
 // TestPostSendContractHandler_ContractorWithoutAttachmentNotFound is
@@ -85,18 +79,9 @@ func TestPostSendContractHandler_NoContract(t *testing.T) {
 // no role restriction of its own, so an unattached contractor still gets
 // 404 from AttachingWrite's reach test before the handler ever runs.
 func TestPostSendContractHandler_ContractorWithoutAttachmentNotFound(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "send-contractor-unattached"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	e := newEnv(t, signedInAs(fixture.Contractor()))
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postSendContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
+	reqtest.ExpectStatus(t, http.MethodPost, e.send(), http.StatusNotFound, e.signedIn)
 }
 
 // TestPostSendContractHandler_NonDraftRejected proves Send 409s once a
@@ -104,19 +89,10 @@ func TestPostSendContractHandler_ContractorWithoutAttachmentNotFound(t *testing.
 func TestPostSendContractHandler_NonDraftRejected(t *testing.T) {
 	for _, status := range []string{statusSent, statusSigned, statusVoided} {
 		t.Run(status, func(t *testing.T) {
-			db := testdb.New(t)
-			uid := "send-non-draft-" + status
-			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-			_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-			seedContract(t, db, engagementID, status, mergeFieldProse)
+			e := newEnv(t)
+			e.seedContract(status)
 
-			srv, session := newContractServer(t, db, uid)
-			defer srv.Close()
-
-			resp := postSendContract(t, srv, session, practiceID, engagementID)
-			defer resp.Body.Close()
-
-			reqtest.RequireStatus(t, resp, http.StatusConflict)
+			reqtest.ExpectStatus(t, http.MethodPost, e.send(), http.StatusConflict, e.signedIn)
 		})
 	}
 }
@@ -125,33 +101,17 @@ func TestPostSendContractHandler_NonDraftRejected(t *testing.T) {
 // an invite whose accept was refused holds Send back as never-invited
 // does, and says the way on without naming the other record.
 func TestPostSendContractHandler_RefusedInviteHoldsTheSendBack(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "send-refused-invite"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Refused Client", "refused-send@example.com")
-	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
-	testdb.SeedPendingPortalInvite(t, db, clientID)
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE client_portal_users SET access_refused_at = now() WHERE client_id = $1`, clientID,
-	); err != nil {
-		t.Fatalf("mark refused: %v", err)
-	}
+	e := newEnv(t)
+	e.seedDraft()
+	testdb.SeedPendingPortalInvite(t, e.db, e.Engagement.Client.ID)
+	e.exec(`UPDATE client_portal_users SET access_refused_at = now() WHERE client_id = $1`, e.Engagement.Client.ID)
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+	out := apierrtest.Expect(t, http.MethodPost, e.send(), http.StatusConflict, e.signedIn)
 
-	resp := postSendContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusConflict)
-	out := apierrtest.Decode(t, resp)
 	if out.Code != apierr.CodeFailedPrecondition || !strings.Contains(out.Message, "signs in through another record") {
 		t.Fatalf("refusal = %+v, want FAILED_PRECONDITION naming the other record's sign-in", out)
 	}
-	status := testdb.Scalar[string](t, db.Admin, `SELECT status::text FROM contracts WHERE engagement_id = $1`, engagementID)
-	if status != statusDraft {
-		t.Fatalf("status after refused Send = %q, want draft", status)
-	}
+	e.requireNothingSent()
 }
 
 // TestPostSendContractHandler_NoPortalInvite proves the #255 precondition:
@@ -160,42 +120,19 @@ func TestPostSendContractHandler_RefusedInviteHoldsTheSendBack(t *testing.T) {
 // stays a draft, no contract-sent activity entry is written, and no push
 // fires.
 func TestPostSendContractHandler_NoPortalInvite(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "send-no-portal-invite"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Never Invited Client", "never-invited@example.com")
-	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
-	testdb.SeedPushSubscription(t, db, "client", clientID, "https://push.example.com/no-invite-recipient")
+	e := newEnv(t)
+	e.seedDraft()
+	testdb.SeedPushSubscription(t, e.db, "client", e.Engagement.Client.ID, "https://push.example.com/no-invite-recipient")
 
-	pusher := push.NewFakePusher()
-	srv, session := newContractServerWithPusher(t, db, uid, pusher)
-	defer srv.Close()
+	out := apierrtest.Expect(t, http.MethodPost, e.send(), http.StatusConflict, e.signedIn)
 
-	resp := postSendContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusConflict)
-	out := apierrtest.Decode(t, resp)
 	if out.Code != apierr.CodeFailedPrecondition {
 		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeFailedPrecondition)
 	}
 	if !strings.Contains(out.Message, "invited") {
 		t.Fatalf("message = %q, want it to name the missing invite", out.Message)
 	}
-
-	getResp := getContract(t, srv, session, practiceID, engagementID)
-	defer getResp.Body.Close()
-	getOut := reqtest.Decode[contracts.ContractResponse](t, getResp)
-	if getOut.Status != statusDraft {
-		t.Fatalf("status after refused Send = %q, want draft (unchanged)", getOut.Status)
-	}
-	if calls := pusher.Calls(); len(calls) != 0 {
-		t.Fatalf("Pusher.Send call count = %d, want 0 (refused before any write)", len(calls))
-	}
-	activityCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE subject_id = $1 AND action = 'contract_sent'`, engagementID)
-	if activityCount != 0 {
-		t.Fatalf("contract_sent activity rows = %d, want 0 (refused before any write)", activityCount)
-	}
+	e.requireNothingSent()
 }
 
 // TestPostSendContractHandler_Success proves the draft -> sent transition,
@@ -206,39 +143,24 @@ func TestPostSendContractHandler_NoPortalInvite(t *testing.T) {
 // Client holds a pending (not yet accepted) portal invite -- #255's own
 // AC that Send succeeds before acceptance, not only after it.
 func TestPostSendContractHandler_Success(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "send-success"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	seedContractWithValues(t, db, engagementID,
-		contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: testPriceValue})
-	testdb.SeedPushSubscription(t, db, "client", clientID, "https://push.example.com/client-recipient")
-	testdb.SeedPendingPortalInvite(t, db, clientID)
+	e := newEnv(t)
+	e.seedFilledDraft()
+	testdb.SeedPushSubscription(t, e.db, "client", e.Engagement.Client.ID, "https://push.example.com/client-recipient")
+	testdb.SeedPendingPortalInvite(t, e.db, e.Engagement.Client.ID)
 
-	pusher := push.NewFakePusher()
-	srv, session := newContractServerWithPusher(t, db, uid, pusher)
-	defer srv.Close()
+	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.send(), http.StatusOK, e.signedIn)
 
-	resp := postSendContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	out := reqtest.Decode[contracts.ContractResponse](t, resp)
 	if out.Status != statusSent {
 		t.Fatalf("status = %q, want sent", out.Status)
 	}
 	if out.Prose != mergeFieldProse {
 		t.Fatalf("prose = %q, want the original snapshot unchanged", out.Prose)
 	}
-
-	getResp := getContract(t, srv, session, practiceID, engagementID)
-	defer getResp.Body.Close()
-	getOut := reqtest.Decode[contracts.ContractResponse](t, getResp)
-	if getOut.Status != statusSent {
-		t.Fatalf("GET status after Send = %q, want sent (the transition persisted)", getOut.Status)
+	if got := e.contract().Status; got != statusSent {
+		t.Fatalf("GET status after Send = %q, want sent (the transition persisted)", got)
 	}
 
-	calls := pusher.Calls()
+	calls := e.pusher.Calls()
 	if len(calls) != 1 {
 		t.Fatalf("Pusher.Send call count = %d, want 1: %+v", len(calls), calls)
 	}
@@ -249,8 +171,8 @@ func TestPostSendContractHandler_Success(t *testing.T) {
 	if err := json.Unmarshal(calls[0].Payload, &payload); err != nil {
 		t.Fatalf("decode push payload: %v", err)
 	}
-	if payload.EngagementID != engagementID {
-		t.Fatalf("push payload engagementId = %q, want %q", payload.EngagementID, engagementID)
+	if payload.EngagementID != e.Engagement.ID {
+		t.Fatalf("push payload engagementId = %q, want %q", payload.EngagementID, e.Engagement.ID)
 	}
 	var raw map[string]jsontext.Value
 	if err := json.Unmarshal(calls[0].Payload, &raw); err != nil {
@@ -268,23 +190,12 @@ func TestPostSendContractHandler_Success(t *testing.T) {
 // succeeds for a Client who has already accepted, not only a pending one
 // (TestPostSendContractHandler_Success covers the pending case).
 func TestPostSendContractHandler_NoSubscriptionNoPush(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "send-no-subscription"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContractWithValues(t, db, engagementID,
-		contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: testPriceValue})
-	testdb.SeedPortalUser(t, db, "send-no-subscription-portal", clientID)
+	e := newEnv(t, withPortalLogin())
+	e.seedFilledDraft()
 
-	pusher := push.NewFakePusher()
-	srv, session := newContractServerWithPusher(t, db, uid, pusher)
-	defer srv.Close()
+	reqtest.ExpectStatus(t, http.MethodPost, e.send(), http.StatusOK, e.signedIn)
 
-	resp := postSendContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	if calls := pusher.Calls(); len(calls) != 0 {
+	if calls := e.pusher.Calls(); len(calls) != 0 {
 		t.Fatalf("Pusher.Send call count = %d, want 0 (no subscription registered)", len(calls))
 	}
 }
@@ -296,25 +207,15 @@ func TestPostSendContractHandler_NoSubscriptionNoPush(t *testing.T) {
 // surfaced as a 500 -- mirrors message's
 // TestCreateHandler_PushFailureDoesNotBlockMessageCreation.
 func TestPostSendContractHandler_PushFailureDoesNotBlockSend(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "send-push-fails"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	seedContractWithValues(t, db, engagementID,
-		contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: testPriceValue})
-	testdb.SeedPushSubscription(t, db, "client", clientID, "https://push.example.com/gone")
-	testdb.SeedPendingPortalInvite(t, db, clientID)
+	e := newEnv(t)
+	e.seedFilledDraft()
+	testdb.SeedPushSubscription(t, e.db, "client", e.Engagement.Client.ID, "https://push.example.com/gone")
+	testdb.SeedPendingPortalInvite(t, e.db, e.Engagement.Client.ID)
+	e.pusher.Err = errors.New("simulated push service failure")
 
-	pusher := push.NewFakePusher()
-	pusher.Err = errors.New("simulated push service failure")
-	srv, session := newContractServerWithPusher(t, db, uid, pusher)
-	defer srv.Close()
+	reqtest.ExpectStatus(t, http.MethodPost, e.send(), http.StatusOK, e.signedIn)
 
-	resp := postSendContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	if calls := pusher.Calls(); len(calls) != 1 {
+	if calls := e.pusher.Calls(); len(calls) != 1 {
 		t.Fatalf("Pusher.Send call count = %d, want 1 (still attempted): %+v", len(calls), calls)
 	}
 }
@@ -328,22 +229,12 @@ func TestPostSendContractHandler_PushFailureDoesNotBlockSend(t *testing.T) {
 // automatically from amount_cents (#967) and is never among the missing
 // fields, however empty merge_field_values is.
 func TestPostSendContractHandler_BlankMergeFieldRejected(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "send-blank-merge-field"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Never Filled Client", "never-filled@example.com")
-	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
-	testdb.SeedPendingPortalInvite(t, db, clientID)
+	e := newEnv(t)
+	e.seedDraft()
+	testdb.SeedPendingPortalInvite(t, e.db, e.Engagement.Client.ID)
 
-	pusher := push.NewFakePusher()
-	srv, session := newContractServerWithPusher(t, db, uid, pusher)
-	defer srv.Close()
+	out := apierrtest.Expect(t, http.MethodPost, e.send(), http.StatusConflict, e.signedIn)
 
-	resp := postSendContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusConflict)
-	out := apierrtest.Decode(t, resp)
 	if out.Code != apierr.CodeFailedPrecondition {
 		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeFailedPrecondition)
 	}
@@ -353,20 +244,7 @@ func TestPostSendContractHandler_BlankMergeFieldRejected(t *testing.T) {
 	if _, ok := out.Details[priceKey]; ok {
 		t.Fatalf("details = %+v, want no entry for %q -- it resolves automatically from amount_cents (#967)", out.Details, priceKey)
 	}
-
-	getResp := getContract(t, srv, session, practiceID, engagementID)
-	defer getResp.Body.Close()
-	getOut := reqtest.Decode[contracts.ContractResponse](t, getResp)
-	if getOut.Status != statusDraft {
-		t.Fatalf("status after refused Send = %q, want draft (unchanged)", getOut.Status)
-	}
-	if calls := pusher.Calls(); len(calls) != 0 {
-		t.Fatalf("Pusher.Send call count = %d, want 0 (refused before any write)", len(calls))
-	}
-	activityCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE subject_id = $1 AND action = 'contract_sent'`, engagementID)
-	if activityCount != 0 {
-		t.Fatalf("contract_sent activity rows = %d, want 0 (refused before any write)", activityCount)
-	}
+	e.requireNothingSent()
 }
 
 // TestPostSendContractHandler_WhitespaceOnlyMergeFieldRejected proves a
@@ -378,22 +256,12 @@ func TestPostSendContractHandler_BlankMergeFieldRejected(t *testing.T) {
 // regardless of what seedContractWithValues stores for it), so it is the
 // "filled" side of this proof rather than a candidate for it.
 func TestPostSendContractHandler_WhitespaceOnlyMergeFieldRejected(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "send-whitespace-merge-field"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Whitespace Client", "whitespace@example.com")
-	seedContractWithValues(t, db, engagementID,
-		contracts.MergeFieldValues{clientNameKey: "   "})
-	testdb.SeedPendingPortalInvite(t, db, clientID)
+	e := newEnv(t)
+	seedContractWithValues(t, e.db, e.Engagement.ID, contracts.MergeFieldValues{clientNameKey: "   "})
+	testdb.SeedPendingPortalInvite(t, e.db, e.Engagement.Client.ID)
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+	out := apierrtest.Expect(t, http.MethodPost, e.send(), http.StatusConflict, e.signedIn)
 
-	resp := postSendContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusConflict)
-	out := apierrtest.Decode(t, resp)
 	if _, ok := out.Details[clientNameKey]; !ok {
 		t.Fatalf("details = %+v, want an entry for %q", out.Details, clientNameKey)
 	}
