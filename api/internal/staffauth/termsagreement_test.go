@@ -14,6 +14,7 @@ import (
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/legal"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -378,9 +379,7 @@ func TestAgreeToTerms_RefusesAStaffMemberWhoIsNotAnOwner(t *testing.T) {
 
 	resp := s.do(http.MethodPost, s.session("doula-presses"), practiceID, "/terms-agreement")
 	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 	if rows := termsAcceptedRows(t, db); len(rows) != 1 {
 		t.Fatalf("terms_accepted rows = %d, want only the signup's", len(rows))
 	}

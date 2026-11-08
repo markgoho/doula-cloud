@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/portalaccount"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -20,37 +20,14 @@ func pingURL(srv *httptest.Server, engagementID string) string {
 	return srv.URL + "/portal/engagements/" + engagementID + "/ping"
 }
 
-// get issues a GET with whatever credential setup applies to req.
-func get(t *testing.T, url string, setup func(*http.Request)) *http.Response {
-	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	setup(req)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
-}
-
-// assertStatus fails the test unless resp carries want.
-func assertStatus(t *testing.T, resp *http.Response, want int) {
-	t.Helper()
-	if resp.StatusCode != want {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, want)
-	}
-}
-
 func TestMiddleware_MissingCredential(t *testing.T) {
 	db := testdb.New(t)
 	srv, _ := newServer(t, db, "no-cookie-sent")
 	defer srv.Close()
 
-	resp := get(t, pingURL(srv, emptyUUID), func(*http.Request) {})
+	resp := reqtest.Get(t, pingURL(srv, emptyUUID))
 	defer resp.Body.Close()
-	assertStatus(t, resp, http.StatusUnauthorized)
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 // TestMiddleware_BearerTokenAloneIsRejected is #151's AC on the Client
@@ -65,11 +42,9 @@ func TestMiddleware_BearerTokenAloneIsRejected(t *testing.T) {
 	srv, _ := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := get(t, pingURL(srv, engagementID), func(req *http.Request) {
-		req.Header.Set("Authorization", "Bearer would-verify-fine")
-	})
+	resp := reqtest.Get(t, pingURL(srv, engagementID), reqtest.Header("Authorization", "Bearer would-verify-fine"))
 	defer resp.Body.Close()
-	assertStatus(t, resp, http.StatusUnauthorized)
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 // TestMiddleware_UnknownSession covers a cookie that names no live
@@ -79,11 +54,9 @@ func TestMiddleware_UnknownSession(t *testing.T) {
 	srv, _ := newServer(t, db, "irrelevant")
 	defer srv.Close()
 
-	resp := get(t, pingURL(srv, emptyUUID), func(req *http.Request) {
-		authntest.AddSessionCookie(req, "never-issued")
-	})
+	resp := reqtest.Get(t, pingURL(srv, emptyUUID), reqtest.Session("never-issued"))
 	defer resp.Body.Close()
-	assertStatus(t, resp, http.StatusUnauthorized)
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 func TestMiddleware_InvalidEngagementID(t *testing.T) {
@@ -91,11 +64,9 @@ func TestMiddleware_InvalidEngagementID(t *testing.T) {
 	srv, session := newServer(t, db, portalaccount.Prefix+"some-uid")
 	defer srv.Close()
 
-	resp := get(t, pingURL(srv, "not-a-uuid"), func(req *http.Request) {
-		authntest.AddSessionCookie(req, session)
-	})
+	resp := reqtest.Get(t, pingURL(srv, "not-a-uuid"), reqtest.Session(session))
 	defer resp.Body.Close()
-	assertStatus(t, resp, http.StatusBadRequest)
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestMiddleware_PopulationResolutionFailure(t *testing.T) {
@@ -105,14 +76,10 @@ func TestMiddleware_PopulationResolutionFailure(t *testing.T) {
 	srv, session := newServer(t, db, portalaccount.Prefix+"unknown-uid")
 	defer srv.Close()
 
-	resp := get(t, pingURL(srv, emptyUUID), func(req *http.Request) {
-		authntest.AddSessionCookie(req, session)
-	})
+	resp := reqtest.Get(t, pingURL(srv, emptyUUID), reqtest.Session(session))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 func TestMiddleware_EngagementNotLinkedToClient(t *testing.T) {
@@ -128,14 +95,10 @@ func TestMiddleware_EngagementNotLinkedToClient(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := get(t, pingURL(srv, otherEngagementID), func(req *http.Request) {
-		authntest.AddSessionCookie(req, session)
-	})
+	resp := reqtest.Get(t, pingURL(srv, otherEngagementID), reqtest.Session(session))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 func TestMiddleware_Success(t *testing.T) {
@@ -146,14 +109,10 @@ func TestMiddleware_Success(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := get(t, pingURL(srv, engagementID), func(req *http.Request) {
-		authntest.AddSessionCookie(req, session)
-	})
+	resp := reqtest.Get(t, pingURL(srv, engagementID), reqtest.Session(session))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	if got := resp.Header.Get("X-Client-Id"); got != clientID {
 		t.Fatalf("X-Client-Id = %q, want %q", got, clientID)
 	}
@@ -191,9 +150,7 @@ func TestMiddleware_ResolvesTheClientThatOwnsTheEngagementAcrossPractices(t *tes
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := get(t, pingURL(srv, engagementB), func(req *http.Request) {
-		authntest.AddSessionCookie(req, session)
-	})
+	resp := reqtest.Get(t, pingURL(srv, engagementB), reqtest.Session(session))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -214,10 +171,7 @@ func TestMiddleware_PendingDeletionLockout(t *testing.T) {
 	const identityUID = portalaccount.Prefix + "client-pending-deletion"
 	_, engagementID := seedClientWithEngagement(t, db, identityUID)
 
-	var practiceID string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT practice_id FROM engagements WHERE id = $1`, engagementID).Scan(&practiceID); err != nil {
-		t.Fatalf("read practice id: %v", err)
-	}
+	practiceID := testdb.Scalar[string](t, db.Admin, `SELECT practice_id FROM engagements WHERE id = $1`, engagementID)
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`UPDATE practices SET deletion_requested_at = now(), deletion_finalize_at = now() + interval '30 days' WHERE id = $1`,
 		practiceID,
@@ -228,9 +182,7 @@ func TestMiddleware_PendingDeletionLockout(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := get(t, pingURL(srv, engagementID), func(req *http.Request) {
-		authntest.AddSessionCookie(req, session)
-	})
+	resp := reqtest.Get(t, pingURL(srv, engagementID), reqtest.Session(session))
 	defer resp.Body.Close()
-	assertStatus(t, resp, http.StatusForbidden)
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }

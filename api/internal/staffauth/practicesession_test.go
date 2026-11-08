@@ -1,13 +1,13 @@
 package staffauth_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -26,16 +26,7 @@ func newPracticeSessionServer(t *testing.T, db *testdb.DB, uid string) (srv *htt
 
 func getPracticeSession(t *testing.T, srv *httptest.Server, session, practiceID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/session", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/session", reqtest.Session(session))
 }
 
 // TestPracticeSessionHandler_ReportsPracticeAndRoles proves the moved
@@ -55,13 +46,8 @@ func TestPracticeSessionHandler_ReportsPracticeAndRoles(t *testing.T) {
 	resp := getPracticeSession(t, srv, session, practiceID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out staffauth.PracticeSessionResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[staffauth.PracticeSessionResponse](t, resp)
 	if out.PracticeID != practiceID {
 		t.Fatalf("practiceId = %q, want %q", out.PracticeID, practiceID)
 	}
@@ -80,10 +66,7 @@ func TestPracticeSessionHandler_ReportsPracticeAndRoles(t *testing.T) {
 		t.Fatalf("staffId = %q, want %q", out.StaffID, staffID)
 	}
 
-	var lastPracticeID string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT last_practice_id FROM staff WHERE identity_uid = $1`, uid).Scan(&lastPracticeID); err != nil {
-		t.Fatalf("query last_practice_id: %v", err)
-	}
+	lastPracticeID := testdb.Scalar[string](t, db.Admin, `SELECT last_practice_id FROM staff WHERE identity_uid = $1`, uid)
 	if lastPracticeID != practiceID {
 		t.Fatalf("last_practice_id = %q, want %q", lastPracticeID, practiceID)
 	}
@@ -109,10 +92,7 @@ func TestPracticeSessionHandler_HasClients(t *testing.T) {
 		t.Helper()
 		resp := getPracticeSession(t, srv, session, practiceID)
 		defer resp.Body.Close()
-		var out staffauth.PracticeSessionResponse
-		if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-			t.Fatalf("decode response: %v", err)
-		}
+		out := reqtest.Decode[staffauth.PracticeSessionResponse](t, resp)
 		return out
 	}
 
@@ -150,10 +130,7 @@ func TestPracticeSessionHandler_HasOtherDoulas(t *testing.T) {
 		t.Helper()
 		resp := getPracticeSession(t, srv, session, practiceID)
 		defer resp.Body.Close()
-		var out staffauth.PracticeSessionResponse
-		if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-			t.Fatalf("decode response: %v", err)
-		}
+		out := reqtest.Decode[staffauth.PracticeSessionResponse](t, resp)
 		return out
 	}
 
@@ -187,10 +164,7 @@ func TestPracticeSessionHandler_ClientsCanPay(t *testing.T) {
 		t.Helper()
 		resp := getPracticeSession(t, srv, session, practiceID)
 		defer resp.Body.Close()
-		var out staffauth.PracticeSessionResponse
-		if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-			t.Fatalf("decode response: %v", err)
-		}
+		out := reqtest.Decode[staffauth.PracticeSessionResponse](t, resp)
 		return out
 	}
 
@@ -221,10 +195,7 @@ func TestPracticeSessionHandler_BillingMode(t *testing.T) {
 		t.Helper()
 		resp := getPracticeSession(t, srv, session, practiceID)
 		defer resp.Body.Close()
-		var out staffauth.PracticeSessionResponse
-		if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-			t.Fatalf("decode response: %v", err)
-		}
+		out := reqtest.Decode[staffauth.PracticeSessionResponse](t, resp)
 		return out
 	}
 
@@ -254,10 +225,7 @@ func TestPracticeSessionHandler_EmployeeNotContractor(t *testing.T) {
 	resp := getPracticeSession(t, srv, session, practiceID)
 	defer resp.Body.Close()
 
-	var out staffauth.PracticeSessionResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[staffauth.PracticeSessionResponse](t, resp)
 	if out.IsContractor {
 		t.Fatal("isContractor = true, want false for an employee")
 	}

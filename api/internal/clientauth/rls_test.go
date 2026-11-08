@@ -19,10 +19,7 @@ func TestRLS_ClientPortalUsersFailsClosedWithNoSessionVarsSet(t *testing.T) {
 	db := testdb.New(t)
 	seedClientWithEngagement(t, db, "fail-closed-portal-uid")
 
-	var count int
-	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM client_portal_users`).Scan(&count); err != nil {
-		t.Fatalf("query client_portal_users with no session vars set: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM client_portal_users`)
 	if count != 0 {
 		t.Fatalf("expected 0 rows with no session variables set, got %d", count)
 	}
@@ -38,20 +35,9 @@ func TestRLS_ClientPortalUsersSelfVisibilityOnlyAppliesBeforeClientIsChosen(t *t
 	const identityUID = "self-visibility-portal-uid"
 	clientID, _ := seedClientWithEngagement(t, db, identityUID)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Identity(identityUID))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_identity_uid', $1, true)`, identityUID); err != nil {
-		t.Fatalf("set_config identity: %v", err)
-	}
-
-	var count int
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM client_portal_users WHERE identity_uid = $1`, identityUID).Scan(&count); err != nil {
-		t.Fatalf("query client_portal_users before client id set: %v", err)
-	}
+	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM client_portal_users WHERE identity_uid = $1`, identityUID)
 	if count != 1 {
 		t.Fatalf("expected caller's own row visible before a Client is chosen, got count = %d", count)
 	}
@@ -77,10 +63,7 @@ func TestRLS_EngagementsFailsClosedForClientTierWithNoSessionVarsSet(t *testing.
 	db := testdb.New(t)
 	seedClientWithEngagement(t, db, "fail-closed-engagement-uid")
 
-	var count int
-	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM engagements`).Scan(&count); err != nil {
-		t.Fatalf("query engagements with no session vars set: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM engagements`)
 	if count != 0 {
 		t.Fatalf("expected 0 rows with no session variables set, got %d", count)
 	}
@@ -96,32 +79,9 @@ func TestRLS_EngagementsClientVisibilityIsScopedToCurrentClient(t *testing.T) {
 	clientA, engagementA := seedClientWithEngagement(t, db, "client-a-uid")
 	_, engagementB := seedClientWithEngagement(t, db, "client-b-uid")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Client(clientA))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	var visibleIDs []string
-	rows, err := tx.QueryContext(t.Context(), `SELECT id FROM engagements`)
-	if err != nil {
-		t.Fatalf("query engagements: %v", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		visibleIDs = append(visibleIDs, id)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate rows: %v", err)
-	}
+	visibleIDs := testdb.Column[string](t, tx, `SELECT id FROM engagements`)
 
 	if len(visibleIDs) != 1 || visibleIDs[0] != engagementA {
 		t.Fatalf("visible engagements = %v, want only %q", visibleIDs, engagementA)
@@ -147,32 +107,9 @@ func TestRLS_EngagementsIdentityVisibilityScopesAcrossPracticesNotJustClients(t 
 	testdb.SeedPortalUser(t, db, identityUID, clientA)
 	testdb.AttachPortalUser(t, db, identityUID, clientB)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Identity(identityUID))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_identity_uid', $1, true)`, identityUID); err != nil {
-		t.Fatalf("set_config identity: %v", err)
-	}
-
-	var visibleIDs []string
-	rows, err := tx.QueryContext(t.Context(), `SELECT id FROM engagements`)
-	if err != nil {
-		t.Fatalf("query engagements: %v", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		visibleIDs = append(visibleIDs, id)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate rows: %v", err)
-	}
+	visibleIDs := testdb.Column[string](t, tx, `SELECT id FROM engagements`)
 
 	if len(visibleIDs) != 2 {
 		t.Fatalf("visible engagements = %v, want exactly %q and %q", visibleIDs, engagementA, engagementB)
@@ -203,23 +140,9 @@ func TestRLS_StaffSelfVisibilityHiddenDuringClientPortalContext(t *testing.T) {
 		t.Fatalf("seed staff row with shared identity_uid: %v", err)
 	}
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Identity(sharedUID), testdb.Client(clientID))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_identity_uid', $1, true)`, sharedUID); err != nil {
-		t.Fatalf("set_config identity: %v", err)
-	}
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
-		t.Fatalf("set_config client: %v", err)
-	}
-
-	var count int
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM staff WHERE identity_uid = $1`, sharedUID).Scan(&count); err != nil {
-		t.Fatalf("query staff during client-portal context: %v", err)
-	}
+	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM staff WHERE identity_uid = $1`, sharedUID)
 	if count != 0 {
 		t.Fatalf("expected the shared identity's staff row to stay hidden during a Client-portal context, got count = %d", count)
 	}

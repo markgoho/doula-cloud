@@ -18,13 +18,7 @@ const scopeProse = "Agreement for {{client_name}}: {{scope_of_service}} at {{pri
 
 func countContractEdited(t *testing.T, db *testdb.DB, engagementID string) int {
 	t.Helper()
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = $2`,
-		engagementID, string(activity.ActionContractEdited),
-	).Scan(&count); err != nil {
-		t.Fatalf("count contract_edited rows: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = $2`, engagementID, string(activity.ActionContractEdited))
 	return count
 }
 

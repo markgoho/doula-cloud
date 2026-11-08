@@ -2,7 +2,6 @@ package clientauth_test
 
 import (
 	"database/sql"
-	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,6 +14,7 @@ import (
 	"doula-cloud/api/internal/feedback"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/portalaccount"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -29,19 +29,7 @@ func newPortalFeedbackServer(db *testdb.DB) *httptest.Server {
 
 func postPortalFeedback(t *testing.T, srv *httptest.Server, session, body string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/portal/feedback", strings.NewReader(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if session != "" {
-		authntest.AddSessionCookie(req, session)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Post(t, srv.URL+"/api/portal/feedback", reqtest.Session(session), reqtest.RawJSON([]byte(body)))
 }
 
 // readPortalFeedbackRow reads the columns each test here checks, via the
@@ -75,9 +63,7 @@ func TestPortalFeedback_MissingCookie(t *testing.T) {
 
 	resp := postPortalFeedback(t, srv, "", `{"kind":"idea_or_request"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 // TestPortalFeedback_SessionWithNoPortalAccountRefused is the case
@@ -92,9 +78,7 @@ func TestPortalFeedback_SessionWithNoPortalAccountRefused(t *testing.T) {
 	session := authntest.SeedSession(t, db.App, portalaccount.Prefix+"no-account-row")
 	resp := postPortalFeedback(t, srv, session, `{"kind":"idea_or_request"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 func TestPortalFeedback_MalformedBody(t *testing.T) {
@@ -105,9 +89,7 @@ func TestPortalFeedback_MalformedBody(t *testing.T) {
 
 	resp := postPortalFeedback(t, srv, session, `not json`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestPortalFeedback_RejectsMissingKind(t *testing.T) {
@@ -118,9 +100,7 @@ func TestPortalFeedback_RejectsMissingKind(t *testing.T) {
 
 	resp := postPortalFeedback(t, srv, session, `{"text":"something"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	out := apierrtest.Decode(t, resp)
 	if out.Details["kind"] != clientauth.MsgFeedbackKindNeeded {
 		t.Fatalf("details[kind] = %q, want %q", out.Details["kind"], clientauth.MsgFeedbackKindNeeded)
@@ -135,9 +115,7 @@ func TestPortalFeedback_RejectsUnknownKind(t *testing.T) {
 
 	resp := postPortalFeedback(t, srv, session, `{"kind":"not_a_real_kind"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestPortalFeedback_RejectsTextOverFiveThousandCharacters(t *testing.T) {
@@ -149,9 +127,7 @@ func TestPortalFeedback_RejectsTextOverFiveThousandCharacters(t *testing.T) {
 	overLimit := strings.Repeat("a", feedback.MaxTextRunes+1)
 	resp := postPortalFeedback(t, srv, session, `{"kind":"idea_or_request","text":"`+overLimit+`"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	out := apierrtest.Decode(t, resp)
 	if out.Details["text"] != clientauth.MsgFeedbackTextTooLong {
 		t.Fatalf("details[text] = %q, want %q", out.Details["text"], clientauth.MsgFeedbackTextTooLong)
@@ -168,27 +144,11 @@ func TestPortalFeedback_NoEngagementLeavesClientAndPracticeNull(t *testing.T) {
 	srv := newPortalFeedbackServer(db)
 	defer srv.Close()
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/portal/feedback",
-		strings.NewReader(`{"kind":"something_else","text":"","page":{"url":"/portal","route":{"id":"/portal"}},"appBuild":"abc1234","screenWidth":375}`))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/20100101 Firefox/130.0")
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/api/portal/feedback", reqtest.Session(session), reqtest.RawJSON([]byte(`{"kind":"something_else","text":"","page":{"url":"/portal","route":{"id":"/portal"}},"appBuild":"abc1234","screenWidth":375}`)), reqtest.Header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/20100101 Firefox/130.0"))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var out clientauth.PortalFeedbackResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
+	out := reqtest.Decode[clientauth.PortalFeedbackResponse](t, resp)
 	if out.ID == "" {
 		t.Fatal("response id is empty")
 	}
@@ -219,20 +179,10 @@ func TestPortalFeedback_QueuesTheIssueOutboxRow(t *testing.T) {
 
 	resp := postPortalFeedback(t, srv, session, `{"kind":"idea_or_request"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var out clientauth.PortalFeedbackResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
+	out := reqtest.Decode[clientauth.PortalFeedbackResponse](t, resp)
 
-	var status string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT status::text FROM feedback_issue_outbox WHERE feedback_id = $1`, out.ID,
-	).Scan(&status); err != nil {
-		t.Fatalf("read outbox row: %v", err)
-	}
+	status := testdb.Scalar[string](t, db.Admin, `SELECT status::text FROM feedback_issue_outbox WHERE feedback_id = $1`, out.ID)
 	if status != "pending" {
 		t.Errorf("outbox status = %q, want pending", status)
 	}
@@ -246,9 +196,7 @@ func TestPortalFeedback_RejectsMalformedEngagementID(t *testing.T) {
 
 	resp := postPortalFeedback(t, srv, session, `{"kind":"idea_or_request","engagementId":"not-a-uuid"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestPortalFeedback_RefusesAnEngagementSheDoesNotHold is #1523's own AC:
@@ -265,13 +213,8 @@ func TestPortalFeedback_RefusesAnEngagementSheDoesNotHold(t *testing.T) {
 
 	resp := postPortalFeedback(t, srv, session, `{"kind":"idea_or_request","engagementId":"`+otherEngagementID+`"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM feedback WHERE practice_id = $1`, practiceID).Scan(&count); err != nil {
-		t.Fatalf("count: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM feedback WHERE practice_id = $1`, practiceID)
 	if count != 0 {
 		t.Fatalf("feedback rows for an Engagement she does not hold = %d, want 0", count)
 	}
@@ -292,13 +235,8 @@ func TestPortalFeedback_RecordsClientAndPracticeForHerOwnEngagement(t *testing.T
 
 	resp := postPortalFeedback(t, srv, session, `{"kind":"not_working","engagementId":"`+engagementID+`"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var out clientauth.PortalFeedbackResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
+	out := reqtest.Decode[clientauth.PortalFeedbackResponse](t, resp)
 
 	_, _, gotClientID, gotPracticeID := readPortalFeedbackRow(t, db, out.ID)
 	if !gotClientID.Valid || gotClientID.String != clientID {

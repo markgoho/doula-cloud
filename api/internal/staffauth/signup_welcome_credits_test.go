@@ -1,7 +1,6 @@
 package staffauth_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,6 +9,7 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -33,10 +33,7 @@ func TestSignupHandler_EnqueuesTheWelcomeCreditsEmailOnce(t *testing.T) {
 
 	body := staffauth.SignupRequest{WorkState: "NY", FirstName: jamieName, LastName: ownerLastName}
 	resp := postSignup(t, srv, "tok", body)
-	var out staffauth.SignupResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[staffauth.SignupResponse](t, resp)
 	_ = resp.Body.Close()
 
 	retry := postSignup(t, srv, "tok", body)

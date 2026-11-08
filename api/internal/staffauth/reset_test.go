@@ -14,6 +14,7 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -33,16 +34,7 @@ func newResetSpendServer(accounts *authntest.FakeAccountManager, db *testdb.DB) 
 
 func postJSONTo(t *testing.T, srv *httptest.Server, path, body string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+path, strings.NewReader(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Post(t, srv.URL+path, reqtest.RawJSON([]byte(body)))
 }
 
 func TestRequestResetHandler_MissingEmail(t *testing.T) {
@@ -52,9 +44,7 @@ func TestRequestResetHandler_MissingEmail(t *testing.T) {
 
 	resp := postJSONTo(t, srv, "/api/staff/password-reset/request", `{"email":""}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	// #488: the refusal names the field at fault, keyed by the DTO json
 	// tag the screen maps onto its own control.
 	if details := decodeDetails(t, resp); details["email"] != staffauth.MsgOwnAddressNeeded {
@@ -69,9 +59,7 @@ func TestRequestResetHandler_InvalidRequestBody(t *testing.T) {
 
 	resp := postJSONTo(t, srv, "/api/staff/password-reset/request", `not json`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestRequestResetHandler_UnknownAddressStillAccepted proves #168's
@@ -85,14 +73,9 @@ func TestRequestResetHandler_UnknownAddressStillAccepted(t *testing.T) {
 
 	resp := postJSONTo(t, srv, "/api/staff/password-reset/request", `{"email":"nobody@example.com"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusAccepted {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusAccepted)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusAccepted)
 
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM auth_tokens`).Scan(&count); err != nil {
-		t.Fatalf("count auth_tokens: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM auth_tokens`)
 	if count != 0 {
 		t.Fatal("expected no token minted for an unknown address")
 	}
@@ -109,9 +92,7 @@ func TestRequestResetHandler_KnownAddressQueuesTokenMail(t *testing.T) {
 	// Case and whitespace should not matter -- NormalizeAddress handles both.
 	resp := postJSONTo(t, srv, "/api/staff/password-reset/request", `{"email":"  Known@Example.com  "}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusAccepted {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusAccepted)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusAccepted)
 
 	if countLiveAuthTokens(t, db, uid, authtoken.PurposeStaffPasswordReset) != 1 {
 		t.Fatal("expected exactly one live reset token")
@@ -130,9 +111,7 @@ func TestRequestResetHandler_AccountManagerErrorReturns500(t *testing.T) {
 
 	resp := postJSONTo(t, srv, "/api/staff/password-reset/request", `{"email":"anyone@example.com"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusInternalServerError)
 }
 
 func TestSpendResetHandler_MissingToken(t *testing.T) {
@@ -142,9 +121,7 @@ func TestSpendResetHandler_MissingToken(t *testing.T) {
 
 	resp := postJSONTo(t, srv, "/api/staff/password-reset", `{"token":"","newPassword":"a-long-enough-password"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestSpendResetHandler_InvalidRequestBody(t *testing.T) {
@@ -154,9 +131,7 @@ func TestSpendResetHandler_InvalidRequestBody(t *testing.T) {
 
 	resp := postJSONTo(t, srv, "/api/staff/password-reset", `not json`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestSpendResetHandler_PasswordTooShort(t *testing.T) {
@@ -166,9 +141,7 @@ func TestSpendResetHandler_PasswordTooShort(t *testing.T) {
 
 	resp := postJSONTo(t, srv, "/api/staff/password-reset", `{"token":"some-token","newPassword":"short"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	// #488: the refusal names newPassword, and the sentence it names it
 	// with agrees with the limit the Message reports. MsgPasswordTooShort
 	// spells the number out rather than building it from
@@ -214,9 +187,7 @@ func TestSpendResetHandler_PasswordTooCommon(t *testing.T) {
 			}
 			// A password that is not on the list goes on to the token, which
 			// is unknown here, so it is refused for that instead.
-			if resp.StatusCode != http.StatusBadRequest {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 		})
 	}
 }
@@ -231,9 +202,7 @@ func TestSpendResetHandler_PasswordLengthCountsCharacters(t *testing.T) {
 	resp := postJSONTo(t, srv, "/api/staff/password-reset",
 		`{"token":"some-token","newPassword":"`+strings.Repeat("é", 14)+`"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestSpendResetHandler_UnknownTokenInvalid(t *testing.T) {
@@ -243,10 +212,8 @@ func TestSpendResetHandler_UnknownTokenInvalid(t *testing.T) {
 
 	resp := postJSONTo(t, srv, "/api/staff/password-reset", `{"token":"never-minted","newPassword":"a-long-enough-password"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-	requireErrorCode(t, resp, apierr.CodeLinkUnusable)
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+	apierrtest.RequireCode(t, resp, apierr.CodeLinkUnusable)
 }
 
 // TestSpendResetHandler_Success proves the three properties reset has
@@ -266,9 +233,7 @@ func TestSpendResetHandler_Success(t *testing.T) {
 	defer srv.Close()
 
 	resp := postJSONTo(t, srv, "/api/staff/password-reset", `{"token":"`+token+`","newPassword":"a-new-password-15ch"}`)
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
 	_ = resp.Body.Close()
 	if len(resp.Cookies()) > 0 {
 		t.Fatal("a reset response must not mint a session cookie")
@@ -306,9 +271,7 @@ func TestSpendResetHandler_SetPasswordFailureRollsBackTheSpend(t *testing.T) {
 
 	resp := postJSONTo(t, srv, "/api/staff/password-reset", `{"token":"`+token+`","newPassword":"a-new-password-15ch"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusInternalServerError)
 
 	accounts.Err = nil
 	if _, err := authtoken.Spend(t.Context(), db.App, token, authtoken.PurposeStaffPasswordReset, time.Now()); err != nil {

@@ -17,10 +17,7 @@ func TestRLS_PlanTemplatesFailsClosedWithNoSessionVarSet(t *testing.T) {
 	practiceID := testdb.SeedPractice(t, db, "Some Practice")
 	seedPlanTemplate(t, db, practiceID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
 
-	var count int
-	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM plan_templates`).Scan(&count); err != nil {
-		t.Fatalf("query plan_templates with no session vars set: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM plan_templates`)
 	if count != 0 {
 		t.Fatalf("expected 0 rows with no session variable set, got %d", count)
 	}
@@ -36,32 +33,9 @@ func TestRLS_PlanTemplatesVisibilityIsScopedToCurrentPractice(t *testing.T) {
 	seedPlanTemplate(t, db, practiceA, carePlanType, `[{"id":"a","type":"short_text","label":"A field","order":0}]`)
 	seedPlanTemplate(t, db, practiceB, carePlanType, `[{"id":"b","type":"short_text","label":"B field","order":0}]`)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Practice(practiceA))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	var visiblePracticeIDs []string
-	rows, err := tx.QueryContext(t.Context(), `SELECT practice_id FROM plan_templates`)
-	if err != nil {
-		t.Fatalf("query plan_templates: %v", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		visiblePracticeIDs = append(visiblePracticeIDs, id)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate rows: %v", err)
-	}
+	visiblePracticeIDs := testdb.Column[string](t, tx, `SELECT practice_id FROM plan_templates`)
 
 	if len(visiblePracticeIDs) != 1 || visiblePracticeIDs[0] != practiceA {
 		t.Fatalf("visible practice_ids = %v, want only %q", visiblePracticeIDs, practiceA)
@@ -81,10 +55,7 @@ func TestRLS_PlanInstancesFailsClosedWithNoSessionVarSet(t *testing.T) {
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedInstance(t, db, engagementID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`, `{}`)
 
-	var count int
-	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM plan_instances`).Scan(&count); err != nil {
-		t.Fatalf("query plan_instances with no session vars set: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM plan_instances`)
 	if count != 0 {
 		t.Fatalf("expected 0 rows with no session variable set, got %d", count)
 	}
@@ -102,32 +73,9 @@ func TestRLS_PlanInstancesSelectIsScopedViaEngagementsExistsSubquery(t *testing.
 	seedInstance(t, db, engagementA, carePlanType, `[{"id":"a","type":"short_text","label":"A field","order":0}]`, `{}`)
 	seedInstance(t, db, engagementB, carePlanType, `[{"id":"b","type":"short_text","label":"B field","order":0}]`, `{}`)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Practice(practiceA))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	var visibleEngagementIDs []string
-	rows, err := tx.QueryContext(t.Context(), `SELECT engagement_id FROM plan_instances`)
-	if err != nil {
-		t.Fatalf("query plan_instances: %v", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		visibleEngagementIDs = append(visibleEngagementIDs, id)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate rows: %v", err)
-	}
+	visibleEngagementIDs := testdb.Column[string](t, tx, `SELECT engagement_id FROM plan_instances`)
 
 	if len(visibleEngagementIDs) != 1 || visibleEngagementIDs[0] != engagementA {
 		t.Fatalf("visible engagement_ids = %v, want only %q", visibleEngagementIDs, engagementA)
@@ -146,15 +94,7 @@ func TestRLS_PlanInstancesUpdateRejectedAcrossPractice(t *testing.T) {
 	_, engagementB := testdb.SeedEngagement(t, db, practiceB)
 	seedInstance(t, db, engagementB, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`, `{}`)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Practice(practiceA))
 
 	result, err := tx.ExecContext(t.Context(),
 		`UPDATE plan_instances SET answers = '{"f1":"hacked"}' WHERE engagement_id = $1 AND plan_type = $2`,

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/plans"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -154,7 +155,5 @@ func TestClientAcknowledgeBirthPlan_PostpartumEngagementRefused(t *testing.T) {
 
 	resp := postAcknowledgeBirthPlan(t, srv, session, engagementID)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }

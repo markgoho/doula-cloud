@@ -2,7 +2,6 @@ package staffauth_test
 
 import (
 	"bytes"
-	"encoding/json/v2"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -10,38 +9,22 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
 func postLookup(t *testing.T, srv *httptest.Server, token string) *http.Response {
 	t.Helper()
-	payload, err := json.Marshal(staffauth.LookupInvitationRequest{InviteToken: token})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/accept-invite/lookup", bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Post(t, srv.URL+"/api/staff/accept-invite/lookup", reqtest.JSON(staffauth.LookupInvitationRequest{InviteToken: token}))
 }
 
 func decodeLookup(t *testing.T, resp *http.Response) staffauth.LookupInvitationResponse {
 	t.Helper()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var got staffauth.LookupInvitationResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	got := reqtest.Decode[staffauth.LookupInvitationResponse](t, resp)
 	return got
 }
 
@@ -52,10 +35,7 @@ func TestLookupInvitation_NamesThePracticeTheAddressAndTheRoles(t *testing.T) {
 	db := testdb.New(t)
 	ownerID, practiceID := seedOwnerMembership(t, db, "owner-whose-invite-is-read")
 	_, token := seedInvitationWithToken(t, db, practiceID, ownerID, "Dee@Example.com", "{admin,doula}", employeeType, time.Now().Add(time.Hour))
-	var practiceName string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT name FROM practices WHERE id = $1`, practiceID).Scan(&practiceName); err != nil {
-		t.Fatalf("read practice name: %v", err)
-	}
+	practiceName := testdb.Scalar[string](t, db.Admin, `SELECT name FROM practices WHERE id = $1`, practiceID)
 
 	srv := newAcceptServerWithAccounts(t, db, "", "", authntest.NewFakeAccountManager())
 	defer srv.Close()
@@ -114,18 +94,13 @@ func TestLookupInvitation_Refusals(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			resp := postLookup(t, srv, tc.token)
 			defer resp.Body.Close()
-			if resp.StatusCode != tc.want {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, tc.want)
-			}
-			requireErrorCode(t, resp, tc.code)
+			reqtest.RequireStatus(t, resp, tc.want)
+			apierrtest.RequireCode(t, resp, tc.code)
 		})
 	}
 
 	// A read writes nothing: the accept path is what marks it expired.
-	var status string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT status::text FROM practice_invitations WHERE id = $1`, expiredID).Scan(&status); err != nil {
-		t.Fatalf("read invitation: %v", err)
-	}
+	status := testdb.Scalar[string](t, db.Admin, `SELECT status::text FROM practice_invitations WHERE id = $1`, expiredID)
 	if status != statusPending {
 		t.Fatalf("status = %q, want pending", status)
 	}
@@ -143,9 +118,7 @@ func TestLookupInvitation_AccountLookupFailureIs500(t *testing.T) {
 
 	resp := postLookup(t, srv, token)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusInternalServerError)
 }
 
 func TestLookupInvitation_BadJSON(t *testing.T) {
@@ -161,7 +134,5 @@ func TestLookupInvitation_BadJSON(t *testing.T) {
 		t.Fatalf("request: %v", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }

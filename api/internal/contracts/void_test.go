@@ -2,13 +2,12 @@ package contracts_test
 
 import (
 	"database/sql"
-	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -28,16 +27,7 @@ func voidContractURL(srv *httptest.Server, practiceID, engagementID string) stri
 
 func postVoidContract(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, voidContractURL(srv, practiceID, engagementID), nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Post(t, voidContractURL(srv, practiceID, engagementID), reqtest.Session(session))
 }
 
 func TestPostVoidContractHandler_InvalidEngagementID(t *testing.T) {
@@ -51,9 +41,7 @@ func TestPostVoidContractHandler_InvalidEngagementID(t *testing.T) {
 	resp := postVoidContract(t, srv, session, practiceID, "not-a-uuid")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestPostVoidContractHandler_EngagementNotFound(t *testing.T) {
@@ -69,9 +57,7 @@ func TestPostVoidContractHandler_EngagementNotFound(t *testing.T) {
 	resp := postVoidContract(t, srv, session, practiceID, otherEngagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestPostVoidContractHandler_NoContract(t *testing.T) {
@@ -86,9 +72,7 @@ func TestPostVoidContractHandler_NoContract(t *testing.T) {
 	resp := postVoidContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestPostVoidContractHandler_NonSignedRejected proves Void 409s from
@@ -109,9 +93,7 @@ func TestPostVoidContractHandler_NonSignedRejected(t *testing.T) {
 			resp := postVoidContract(t, srv, session, practiceID, engagementID)
 			defer resp.Body.Close()
 
-			if resp.StatusCode != http.StatusConflict {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusConflict)
 		})
 	}
 }
@@ -135,13 +117,8 @@ func TestPostVoidContractHandler_Success(t *testing.T) {
 	resp := postVoidContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out contracts.ContractResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[contracts.ContractResponse](t, resp)
 	if out.Status != statusVoided {
 		t.Fatalf("status = %q, want voided", out.Status)
 	}
@@ -151,21 +128,12 @@ func TestPostVoidContractHandler_Success(t *testing.T) {
 
 	getResp := getContract(t, srv, session, practiceID, engagementID)
 	defer getResp.Body.Close()
-	var getOut contracts.ContractResponse
-	if err := json.UnmarshalRead(getResp.Body, &getOut); err != nil {
-		t.Fatalf("decode GET response: %v", err)
-	}
+	getOut := reqtest.Decode[contracts.ContractResponse](t, getResp)
 	if getOut.Status != statusVoided {
 		t.Fatalf("GET status after Void = %q, want voided (the transition persisted)", getOut.Status)
 	}
 
-	var storedObjectPath sql.NullString
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT signed_pdf_object_path FROM contracts WHERE engagement_id = $1`,
-		engagementID,
-	).Scan(&storedObjectPath); err != nil {
-		t.Fatalf("query signed_pdf_object_path: %v", err)
-	}
+	storedObjectPath := testdb.Scalar[sql.NullString](t, db.Admin, `SELECT signed_pdf_object_path FROM contracts WHERE engagement_id = $1`, engagementID)
 	if !storedObjectPath.Valid || storedObjectPath.String != objectPath {
 		t.Fatalf("signed_pdf_object_path = %+v, want unchanged at %q", storedObjectPath, objectPath)
 	}
@@ -206,10 +174,7 @@ func TestPostContractHandler_AllowedAfterVoid(t *testing.T) {
 	if createResp.StatusCode != http.StatusCreated {
 		t.Fatalf("create-after-void status = %d, want %d (the recreate flow must not 409 forever)", createResp.StatusCode, http.StatusCreated)
 	}
-	var created contracts.ContractResponse
-	if err := json.UnmarshalRead(createResp.Body, &created); err != nil {
-		t.Fatalf("decode create response: %v", err)
-	}
+	created := reqtest.Decode[contracts.ContractResponse](t, createResp)
 	if created.Status != statusDraft {
 		t.Fatalf("new contract status = %q, want draft", created.Status)
 	}
@@ -300,9 +265,7 @@ func TestPostVoidContractHandler_RefusedByRole(t *testing.T) {
 			resp := postVoidContract(t, srv, session, practiceID, engagementID)
 			defer resp.Body.Close()
 
-			if resp.StatusCode != tc.wantStatus {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, tc.wantStatus)
-			}
+			reqtest.RequireStatus(t, resp, tc.wantStatus)
 		})
 	}
 }

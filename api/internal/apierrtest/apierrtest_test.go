@@ -43,3 +43,10 @@ func TestDecode_LeavesDetailsNilWhenAbsent(t *testing.T) {
 		t.Fatalf("envelope = %+v, want NOT_FOUND with no details", got)
 	}
 }
+
+func TestRequireCode_PassesOnAMatchingCode(t *testing.T) {
+	rec := httptest.NewRecorder()
+	apierr.WriteError(rec, "engagement not found", http.StatusNotFound)
+
+	apierrtest.RequireCode(t, rec.Result(), apierr.CodeNotFound)
+}

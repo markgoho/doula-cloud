@@ -17,6 +17,7 @@ import (
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/plans"
 	"doula-cloud/api/internal/push"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/session"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
@@ -124,9 +125,7 @@ func TestSignupHandler_MissingToken(t *testing.T) {
 	resp := postSignup(t, srv, "", staffauth.SignupRequest{WorkState: "NY", PracticeName: "P", FirstName: "S", LastName: placeholderLastName})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 	if c := sessionCookie(resp); c != nil {
 		t.Fatalf("cookie set on missing token: %+v", c)
 	}
@@ -140,9 +139,7 @@ func TestSignupHandler_TokenVerificationFailure(t *testing.T) {
 	resp := postSignup(t, srv, "bad-token", staffauth.SignupRequest{WorkState: "NY", PracticeName: "P", FirstName: "S", LastName: placeholderLastName})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 	if c := sessionCookie(resp); c != nil {
 		t.Fatalf("cookie set on invalid token: %+v", c)
 	}
@@ -157,21 +154,10 @@ func TestSignupHandler_InvalidBody(t *testing.T) {
 	srv := newSignupServer(authntest.Verifier{UID: "bad-body-uid"}, db)
 	defer srv.Close()
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/signup", bytes.NewReader([]byte("not json")))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Authorization", "Bearer tok")
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/api/staff/signup", reqtest.RawJSON([]byte("not json")), reqtest.Header("Authorization", "Bearer tok"))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestSignupHandler_MissingFields(t *testing.T) {
@@ -182,9 +168,7 @@ func TestSignupHandler_MissingFields(t *testing.T) {
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY", PracticeName: "P", FirstName: "", LastName: placeholderLastName})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	// #488: the refusal names the field at fault, keyed by the DTO's own
 	// json tag, and names only that one -- the last name was sent.
 	details := decodeDetails(t, resp)
@@ -220,13 +204,8 @@ func TestSignupHandler_EmptyPracticeNameTakesHerName(t *testing.T) {
 			resp := postSignup(t, srv, "tok", body)
 			defer resp.Body.Close()
 
-			if resp.StatusCode != http.StatusCreated {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-			}
-			var out staffauth.SignupResponse
-			if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-				t.Fatalf("decode response: %v", err)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusCreated)
+			out := reqtest.Decode[staffauth.SignupResponse](t, resp)
 			if got, want := storedPracticeName(t, db, out.PracticeID), maryAnne+" "+smith; got != want {
 				t.Fatalf("practices.name = %q, want her own name %q", got, want)
 			}
@@ -238,12 +217,7 @@ func TestSignupHandler_EmptyPracticeNameTakesHerName(t *testing.T) {
 // signupresume_test.go.
 func storedPracticeName(t *testing.T, db *testdb.DB, practiceID string) string {
 	t.Helper()
-	var stored string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT name FROM practices WHERE id = $1`, practiceID,
-	).Scan(&stored); err != nil {
-		t.Fatalf("read the Practice's name: %v", err)
-	}
+	stored := testdb.Scalar[string](t, db.Admin, `SELECT name FROM practices WHERE id = $1`, practiceID)
 	return stored
 }
 
@@ -258,9 +232,7 @@ func TestSignupHandler_MissingBothNames(t *testing.T) {
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY"})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	details := decodeDetails(t, resp)
 	if details["firstName"] != staffauth.MsgFirstNameNeeded || details["lastName"] != staffauth.MsgLastNameNeeded {
 		t.Fatalf("details = %v, want both name entries", details)
@@ -283,9 +255,7 @@ func TestSignupHandler_MissingWorkState(t *testing.T) {
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{PracticeName: "P", FirstName: "S", LastName: placeholderLastName, WorkState: "ZZ"})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	if details := decodeDetails(t, resp); details["workState"] != staffauth.MsgWorkStateNeeded {
 		t.Fatalf("details = %v, want workState entry", details)
 	}
@@ -307,19 +277,9 @@ func TestSignupHandler_ZoneIsStatedNotInherited(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var out staffauth.SignupResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	var stored string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT timezone FROM practices WHERE id = $1`, out.PracticeID,
-	).Scan(&stored); err != nil {
-		t.Fatalf("read the new Practice's zone: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
+	out := reqtest.Decode[staffauth.SignupResponse](t, resp)
+	stored := testdb.Scalar[string](t, db.Admin, `SELECT timezone FROM practices WHERE id = $1`, out.PracticeID)
 	if stored != "America/Denver" {
 		t.Fatalf("stored zone = %q, want the one she stated", stored)
 	}
@@ -379,25 +339,14 @@ func TestSignupHandler_Success(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
 
-	var out staffauth.SignupResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[staffauth.SignupResponse](t, resp)
 	if out.StaffID == "" || out.PracticeID == "" {
 		t.Fatalf("expected non-empty ids, got %+v", out)
 	}
 
-	var roleCount int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT array_length(roles, 1) FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`,
-		out.PracticeID, out.StaffID,
-	).Scan(&roleCount); err != nil {
-		t.Fatalf("query membership roles: %v", err)
-	}
+	roleCount := testdb.Scalar[int](t, db.Admin, `SELECT array_length(roles, 1) FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`, out.PracticeID, out.StaffID)
 	if roleCount != 3 {
 		t.Fatalf("expected 3 roles (owner, admin, doula), got %d", roleCount)
 	}
@@ -437,19 +386,12 @@ func TestSignupHandler_SessionStoreFailure(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusInternalServerError)
 	if c := sessionCookie(resp); c != nil {
 		t.Fatalf("cookie set on session store failure: %+v", c)
 	}
 
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM practices WHERE name = $1`, practiceName,
-	).Scan(&count); err != nil {
-		t.Fatalf("query practices: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM practices WHERE name = $1`, practiceName)
 	if count != 0 {
 		t.Fatalf("expected no Practice committed after mint failure, found %d", count)
 	}
@@ -488,10 +430,7 @@ func TestSignupHandler_GrantsSignupBonus(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	var out staffauth.SignupResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[staffauth.SignupResponse](t, resp)
 
 	var origin string
 	var quantity, rowCount int
@@ -523,10 +462,7 @@ func TestSignupHandler_SeedsDefaultPlanTemplates(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	var out staffauth.SignupResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[staffauth.SignupResponse](t, resp)
 
 	var planTypes []string
 	rows, err := db.Admin.QueryContext(t.Context(),
@@ -567,20 +503,12 @@ func TestSignupHandler_SeededPlansShowNoGroupOverSeven(t *testing.T) {
 		FirstName:    jamieName, LastName: ownerLastName,
 	})
 	defer resp.Body.Close()
-	var out staffauth.SignupResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[staffauth.SignupResponse](t, resp)
 
 	const budget = 7
 	const formButtons = 2 // Save and Cancel
 	for _, planType := range []string{carePlanType, birthPlanType} {
-		var raw []byte
-		if err := db.Admin.QueryRowContext(t.Context(),
-			`SELECT fields FROM plan_templates WHERE practice_id = $1 AND plan_type = $2`, out.PracticeID, planType,
-		).Scan(&raw); err != nil {
-			t.Fatalf("query %s template: %v", planType, err)
-		}
+		raw := testdb.Scalar[[]byte](t, db.Admin, `SELECT fields FROM plan_templates WHERE practice_id = $1 AND plan_type = $2`, out.PracticeID, planType)
 		var fields []struct {
 			Type    string   `json:"type"`
 			Label   string   `json:"label"`
@@ -629,18 +557,10 @@ func TestSignupHandler_PainReliefIsAskedOnTheBirthPlanOnly(t *testing.T) {
 		PracticeName: "Pain Practice", FirstName: jamieName, LastName: ownerLastName,
 	})
 	defer resp.Body.Close()
-	var out staffauth.SignupResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[staffauth.SignupResponse](t, resp)
 
 	for planType, wantAsked := range map[string]bool{birthPlanType: true, carePlanType: false} {
-		var raw []byte
-		if err := db.Admin.QueryRowContext(t.Context(),
-			`SELECT fields FROM plan_templates WHERE practice_id = $1 AND plan_type = $2`, out.PracticeID, planType,
-		).Scan(&raw); err != nil {
-			t.Fatalf("query %s template: %v", planType, err)
-		}
+		raw := testdb.Scalar[[]byte](t, db.Admin, `SELECT fields FROM plan_templates WHERE practice_id = $1 AND plan_type = $2`, out.PracticeID, planType)
 		var fields []struct {
 			Label string `json:"label"`
 		}
@@ -684,10 +604,7 @@ func TestSignupHandler_SeededTemplatesRoundTripThroughPlansAPI(t *testing.T) {
 		PracticeName: "Roundtrip Practice", FirstName: jamieName, LastName: ownerLastName,
 	})
 	defer signupResp.Body.Close()
-	var signedUp staffauth.SignupResponse
-	if err := json.UnmarshalRead(signupResp.Body, &signedUp); err != nil {
-		t.Fatalf("decode signup response: %v", err)
-	}
+	signedUp := reqtest.Decode[staffauth.SignupResponse](t, signupResp)
 
 	for _, planType := range []string{carePlanType, birthPlanType} {
 		getReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
@@ -748,17 +665,9 @@ func TestSignupHandler_SeedsDefaultContractTemplate(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	var out staffauth.SignupResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[staffauth.SignupResponse](t, resp)
 
-	var prose string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT prose FROM contract_templates WHERE practice_id = $1`, out.PracticeID,
-	).Scan(&prose); err != nil {
-		t.Fatalf("query contract_templates: %v", err)
-	}
+	prose := testdb.Scalar[string](t, db.Admin, `SELECT prose FROM contract_templates WHERE practice_id = $1`, out.PracticeID)
 	if prose == "" {
 		t.Fatal("expected a non-empty seeded contract template prose")
 	}
@@ -798,10 +707,7 @@ func TestSignupHandler_SeededContractTemplateRoundTripsThroughContractsAPI(t *te
 		PracticeName: "Roundtrip Contract Practice", FirstName: jamieName, LastName: ownerLastName,
 	})
 	defer signupResp.Body.Close()
-	var signedUp staffauth.SignupResponse
-	if err := json.UnmarshalRead(signupResp.Body, &signedUp); err != nil {
-		t.Fatalf("decode signup response: %v", err)
-	}
+	signedUp := reqtest.Decode[staffauth.SignupResponse](t, signupResp)
 
 	getReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
 		srv.URL+"/api/practices/"+signedUp.PracticeID+"/contract-template", nil)
@@ -817,10 +723,7 @@ func TestSignupHandler_SeededContractTemplateRoundTripsThroughContractsAPI(t *te
 	if getResp.StatusCode != http.StatusOK {
 		t.Fatalf("GET status = %d, want %d", getResp.StatusCode, http.StatusOK)
 	}
-	var seeded contracts.TemplateResponse
-	if err := json.UnmarshalRead(getResp.Body, &seeded); err != nil {
-		t.Fatalf("decode GET response: %v", err)
-	}
+	seeded := reqtest.Decode[contracts.TemplateResponse](t, getResp)
 	if seeded.Prose == "" {
 		t.Fatal("expected seeded prose to be non-empty")
 	}
@@ -862,9 +765,7 @@ func TestSignupHandler_RefusesTokenWithNoAddress(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 	out := apierrtest.Decode(t, resp)
 	if out.Message != staffauth.MsgNoAddressToCreateAPractice {
 		t.Fatalf("message = %q, want %q", out.Message, staffauth.MsgNoAddressToCreateAPractice)
@@ -873,12 +774,7 @@ func TestSignupHandler_RefusesTokenWithNoAddress(t *testing.T) {
 		t.Fatalf("cookie set on refused signup: %+v", c)
 	}
 
-	var practices int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM practices WHERE name = $1`, addresslessPractice,
-	).Scan(&practices); err != nil {
-		t.Fatalf("count practices: %v", err)
-	}
+	practices := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM practices WHERE name = $1`, addresslessPractice)
 	if practices != 0 {
 		t.Fatalf("practices = %d, want 0 -- the refusal must roll back", practices)
 	}
@@ -899,20 +795,10 @@ func TestSignupHandler_TakesEmailFromVerifiedToken(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var out staffauth.SignupResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
+	out := reqtest.Decode[staffauth.SignupResponse](t, resp)
 
-	var email string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT email FROM staff WHERE id = $1`, out.StaffID,
-	).Scan(&email); err != nil {
-		t.Fatalf("query staff email: %v", err)
-	}
+	email := testdb.Scalar[string](t, db.Admin, `SELECT email FROM staff WHERE id = $1`, out.StaffID)
 	if email != jamieEmail {
 		t.Fatalf("staff.email = %q, want %q", email, jamieEmail)
 	}

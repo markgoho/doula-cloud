@@ -37,6 +37,7 @@ const TEST_SEGMENTS = new Set([
   'testdb',
   'authntest',
   'apierrtest',
+  'reqtest',
 ]);
 
 /** True when a file exists only to test, fake or stage something. */

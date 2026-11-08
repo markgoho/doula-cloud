@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/objectstore"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -37,33 +37,12 @@ func signContractURL(srv *httptest.Server, engagementID string) string {
 
 func postSignContractRaw(t *testing.T, srv *httptest.Server, session string, engagementID string, body []byte) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, signContractURL(srv, engagementID), bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Post(t, signContractURL(srv, engagementID), reqtest.Session(session), reqtest.RawJSON(body))
 }
 
 func postSignContractRawWithXFF(t *testing.T, srv *httptest.Server, session string, engagementID string, body []byte, xff string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, signContractURL(srv, engagementID), bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Forwarded-For", xff)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Post(t, signContractURL(srv, engagementID), reqtest.Session(session), reqtest.RawJSON(body), reqtest.Header("X-Forwarded-For", xff))
 }
 
 func postSignContract(t *testing.T, srv *httptest.Server, session string, engagementID, fullLegalName string, attestation bool) *http.Response {
@@ -136,13 +115,8 @@ func TestClientPostSignContractHandler_Success(t *testing.T) {
 	resp := postSignContract(t, srv, session, engagementID, "Jordan Client", true)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out contracts.ContractResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[contracts.ContractResponse](t, resp)
 	if out.Status != statusSigned {
 		t.Fatalf("status = %q, want signed", out.Status)
 	}
@@ -191,9 +165,7 @@ func TestClientPostSignContractHandler_ClientSuppliedSignedAtAndIPIgnored(t *tes
 	resp := postSignContractRawWithXFF(t, srv, session, engagementID, []byte(spoofed), "10.0.0.2, 203.0.113.7, 74.125.210.71")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	row := fetchSignedRow(t, db, engagementID)
 	if row.signedAt == nil || row.signedAt.Before(before) {
@@ -222,9 +194,7 @@ func TestClientPostSignContractHandler_NoXFFFallsBackToRemoteAddr(t *testing.T) 
 	resp := postSignContract(t, srv, session, engagementID, "Jordan Client", true)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	row := fetchSignedRow(t, db, engagementID)
 	if !row.signerIP.Valid || row.signerIP.String != "127.0.0.1" {
@@ -251,9 +221,7 @@ func TestClientPostSignContractHandler_OtherClientsEngagementRejected(t *testing
 	resp := postSignContract(t, srv, session, otherEngagementID, "Jordan Client", true)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 
 	row := fetchSignedRow(t, db, otherEngagementID)
 	if row.status != statusSent {
@@ -288,9 +256,7 @@ func TestClientPostSignContractHandler_NonSentRejected(t *testing.T) {
 			resp := postSignContract(t, srv, session, engagementID, "Jordan Client", true)
 			defer resp.Body.Close()
 
-			if resp.StatusCode != testCase.want {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, testCase.want)
-			}
+			reqtest.RequireStatus(t, resp, testCase.want)
 		})
 	}
 }
@@ -310,9 +276,7 @@ func TestClientPostSignContractHandler_NoContractYet404(t *testing.T) {
 	resp := postSignContract(t, srv, session, engagementID, "Jordan Client", true)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestClientPostSignContractHandler_InvalidBody proves malformed JSON
@@ -331,9 +295,7 @@ func TestClientPostSignContractHandler_InvalidBody(t *testing.T) {
 	resp := postSignContractRaw(t, srv, session, engagementID, []byte("not json"))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestClientPostSignContractHandler_MissingFieldsRejected proves both a
@@ -365,9 +327,7 @@ func TestClientPostSignContractHandler_MissingFieldsRejected(t *testing.T) {
 			resp := postSignContract(t, srv, session, engagementID, testCase.fullLegalName, testCase.attestation)
 			defer resp.Body.Close()
 
-			if resp.StatusCode != http.StatusBadRequest {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 
 			row := fetchSignedRow(t, db, engagementID)
 			if row.status != statusSent {
@@ -399,9 +359,7 @@ func TestClientPostSignContractHandler_RendersAndStoresSignedPDF(t *testing.T) {
 	resp := postSignContract(t, srv, session, engagementID, "Jordan Client", true)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	row := fetchSignedRow(t, db, engagementID)
 	wantKey := contracts.SignedPDFObjectPath(engagementID, row.id)
@@ -442,9 +400,7 @@ func TestClientPostSignContractHandler_PDFStoreFailureRejected(t *testing.T) {
 	resp := postSignContract(t, srv, session, engagementID, "Jordan Client", true)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusInternalServerError)
 
 	row := fetchSignedRow(t, db, engagementID)
 	if row.status != "sent" {

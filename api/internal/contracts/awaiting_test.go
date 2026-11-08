@@ -1,7 +1,6 @@
 package contracts_test
 
 import (
-	"encoding/json/v2"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,8 +9,8 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -45,16 +44,7 @@ func awaitingURL(srv *httptest.Server, practiceID string) string {
 
 func getAwaiting(t *testing.T, session, url string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Get(t, url, reqtest.Session(session))
 }
 
 // decodeAwaiting fetches one page and decodes it, failing the test unless
@@ -65,13 +55,8 @@ func decodeAwaiting(t *testing.T, session, url string) contracts.AwaitingRespons
 	t.Helper()
 	resp := getAwaiting(t, session, url)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out contracts.AwaitingResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[contracts.AwaitingResponse](t, resp)
 	return out
 }
 
@@ -90,9 +75,7 @@ func TestAwaitingSignatureHandler_EmptyPracticeAnswersWithAnEmptyList(t *testing
 
 	resp := getAwaiting(t, session, awaitingURL(srv, practiceID))
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("read body: %v", err)

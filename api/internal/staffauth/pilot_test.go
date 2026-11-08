@@ -1,7 +1,6 @@
 package staffauth_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,6 +10,7 @@ import (
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -73,10 +73,7 @@ func assertSignedUpWithWelcomeCredits(t *testing.T, db *testdb.DB, resp *http.Re
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want 201", resp.StatusCode)
 	}
-	var out staffauth.SignupResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[staffauth.SignupResponse](t, resp)
 	credits := countRows(t, db,
 		`SELECT COALESCE(sum(quantity), 0) FROM credit_ledger WHERE practice_id = $1 AND origin = 'signup_bonus'`, out.PracticeID)
 	if credits != 3 {

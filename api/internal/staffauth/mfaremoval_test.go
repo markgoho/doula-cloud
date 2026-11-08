@@ -9,6 +9,7 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -60,9 +61,7 @@ func TestRemoveSecondFactorHandler_Success(t *testing.T) {
 
 	resp := deleteSecondFactor(t, srv, session, "fresh-token")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
 
 	if accounts.HasSecondFactor(identityUID) {
 		t.Fatalf("expected the Admin SDK factor to be cleared")
@@ -96,9 +95,7 @@ func TestRemoveSecondFactorHandler_MissingBearerUnauthorized(t *testing.T) {
 
 	resp := deleteSecondFactor(t, srv, session, "")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 func TestRemoveSecondFactorHandler_StaleReauthUnauthorized(t *testing.T) {
@@ -112,9 +109,7 @@ func TestRemoveSecondFactorHandler_StaleReauthUnauthorized(t *testing.T) {
 
 	resp := deleteSecondFactor(t, srv, session, "stale-token")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 func TestRemoveSecondFactorHandler_ReauthUIDMismatchUnauthorized(t *testing.T) {
@@ -128,9 +123,7 @@ func TestRemoveSecondFactorHandler_ReauthUIDMismatchUnauthorized(t *testing.T) {
 
 	resp := deleteSecondFactor(t, srv, session, "someone-elses-token")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 // TestRemoveSecondFactorHandler_UnknownStaffNotFound pins the family's
@@ -147,9 +140,7 @@ func TestRemoveSecondFactorHandler_UnknownStaffNotFound(t *testing.T) {
 
 	resp := deleteSecondFactor(t, srv, session, "tok")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestRemoveSecondFactorHandler_MissingSessionUnauthorized(t *testing.T) {
@@ -159,7 +150,5 @@ func TestRemoveSecondFactorHandler_MissingSessionUnauthorized(t *testing.T) {
 
 	resp := deleteSecondFactor(t, srv, "never-issued", "tok")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }

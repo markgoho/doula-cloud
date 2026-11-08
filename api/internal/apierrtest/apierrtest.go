@@ -35,3 +35,13 @@ func Decode(t *testing.T, resp *http.Response) apierr.APIError {
 	}
 	return out
 }
+
+// RequireCode fails the test unless resp carries an error envelope whose
+// code is want.
+func RequireCode(t *testing.T, resp *http.Response, want apierr.Code) {
+	t.Helper()
+	if got := Decode(t, resp).Code; got != want {
+		// coverage:ignore reason: the failure branch ends the calling test by design; exercising it would need a testing.T substitute this repo has no precedent for
+		t.Fatalf("code = %q, want %q", got, want)
+	}
+}

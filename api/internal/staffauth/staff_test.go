@@ -1,7 +1,6 @@
 package staffauth_test
 
 import (
-	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +9,7 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -30,16 +30,7 @@ func newStaffListServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.
 
 func getStaffList(t *testing.T, srv *httptest.Server, session, practiceID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/staff", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/staff", reqtest.Session(session))
 }
 
 func TestListStaffHandler_DoulaForbidden(t *testing.T) {
@@ -53,9 +44,7 @@ func TestListStaffHandler_DoulaForbidden(t *testing.T) {
 	resp := getStaffList(t, srv, session, practiceID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 // TestListStaffHandler_AdminSuccess proves ADR-0008's read table widened
@@ -75,9 +64,7 @@ func TestListStaffHandler_AdminSuccess(t *testing.T) {
 	resp := getStaffList(t, srv, session, practiceID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 }
 
 func TestListStaffHandler_Success(t *testing.T) {
@@ -102,14 +89,9 @@ func TestListStaffHandler_Success(t *testing.T) {
 	resp := getStaffList(t, srv, session, practiceID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
-	var roster staffauth.Roster
-	if err := json.UnmarshalRead(resp.Body, &roster); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	roster := reqtest.Decode[staffauth.Roster](t, resp)
 	if len(roster.Members) != 3 {
 		t.Fatalf("members = %+v, want 3 entries", roster.Members)
 	}
@@ -173,10 +155,7 @@ func TestListStaffHandler_PendingInvitationsAreTheirOwnGroup(t *testing.T) {
 	resp := getStaffList(t, srv, session, practiceID)
 	defer resp.Body.Close()
 
-	var roster staffauth.Roster
-	if err := json.UnmarshalRead(resp.Body, &roster); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	roster := reqtest.Decode[staffauth.Roster](t, resp)
 	if len(roster.Members) != 1 {
 		t.Fatalf("members = %+v, want only the Owner", roster.Members)
 	}
@@ -233,10 +212,7 @@ func TestListStaffHandler_ReInviteAfterASendDoesNotDuplicate(t *testing.T) {
 	resp := getStaffList(t, srv, session, practiceID)
 	defer resp.Body.Close()
 
-	var roster staffauth.Roster
-	if err := json.UnmarshalRead(resp.Body, &roster); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	roster := reqtest.Decode[staffauth.Roster](t, resp)
 	if len(roster.Invitations.Items) != 1 {
 		t.Fatalf("invitations = %+v, want exactly 1", roster.Invitations)
 	}
@@ -256,16 +232,7 @@ func TestListStaffHandler_InvalidCursorRejected(t *testing.T) {
 	defer srv.Close()
 
 	for _, cursor := range []string{"not!valid!base64!", "YmFkdGltZXxzb21lLWlk"} {
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
-			srv.URL+"/api/practices/"+practiceID+"/staff?cursor="+cursor, nil)
-		if err != nil {
-			t.Fatalf("build request: %v", err)
-		}
-		authntest.AddSessionCookie(req, session)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("request: %v", err)
-		}
+		resp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/staff?cursor="+cursor, reqtest.Session(session))
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Fatalf("cursor %q: status = %d, want %d", cursor, resp.StatusCode, http.StatusBadRequest)
@@ -292,30 +259,15 @@ func TestListStaffHandler_PaginatesInvitationsNewestFirst(t *testing.T) {
 
 	firstResp := getStaffList(t, srv, session, practiceID)
 	defer firstResp.Body.Close()
-	var first staffauth.Roster
-	if err := json.UnmarshalRead(firstResp.Body, &first); err != nil {
-		t.Fatalf("decode first page: %v", err)
-	}
+	first := reqtest.Decode[staffauth.Roster](t, firstResp)
 	if len(first.Invitations.Items) != 30 || !first.Invitations.HasMore || first.Invitations.NextCursor == nil {
 		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
 			len(first.Invitations.Items), first.Invitations.HasMore, first.Invitations.NextCursor)
 	}
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
-		srv.URL+"/api/practices/"+practiceID+"/staff?cursor="+*first.Invitations.NextCursor, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	secondResp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	secondResp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/staff?cursor="+*first.Invitations.NextCursor, reqtest.Session(session))
 	defer secondResp.Body.Close()
-	var second staffauth.Roster
-	if err := json.UnmarshalRead(secondResp.Body, &second); err != nil {
-		t.Fatalf("decode second page: %v", err)
-	}
+	second := reqtest.Decode[staffauth.Roster](t, secondResp)
 	if len(second.Invitations.Items) != 1 || second.Invitations.HasMore || second.Invitations.NextCursor != nil {
 		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
 			len(second.Invitations.Items), second.Invitations.HasMore, second.Invitations.NextCursor)
@@ -326,14 +278,8 @@ func TestListStaffHandler_PaginatesInvitationsNewestFirst(t *testing.T) {
 // the read tests that need one without going through InviteHandler.
 func seedInvitation(t *testing.T, db *testdb.DB, practiceID, invitedBy, address, roles, employmentType string, expiresAt time.Time) string {
 	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO practice_invitations
+	id := testdb.Scalar[string](t, db.Admin, `INSERT INTO practice_invitations
 		     (practice_id, address, roles, employment_type, token_digest, invited_by, expires_at)
-		 VALUES ($1, $2, $3::practice_role[], $4::employment_type, $5, $6, $7) RETURNING id`,
-		practiceID, address, roles, employmentType, staffauth.TokenDigest(address+"-token"), invitedBy, expiresAt,
-	).Scan(&id); err != nil {
-		t.Fatalf("seed invitation for %q: %v", address, err)
-	}
+		 VALUES ($1, $2, $3::practice_role[], $4::employment_type, $5, $6, $7) RETURNING id`, practiceID, address, roles, employmentType, staffauth.TokenDigest(address+"-token"), invitedBy, expiresAt)
 	return id
 }

@@ -1,7 +1,6 @@
 package staffauth_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,6 +9,7 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -58,12 +58,9 @@ func TestListStaffHandler_InvitationExpiredAtExpiresAtOnTheRequestClock(t *testi
 			srv, session := newClockedStaffServer(t, db, ownerUID, c.now)
 			resp := getStaffList(t, srv, session, practiceID)
 			defer resp.Body.Close()
-			assertStatus(t, resp, http.StatusOK)
+			reqtest.RequireStatus(t, resp, http.StatusOK)
 
-			var roster staffauth.Roster
-			if err := json.UnmarshalRead(resp.Body, &roster); err != nil {
-				t.Fatalf("decode response: %v", err)
-			}
+			roster := reqtest.Decode[staffauth.Roster](t, resp)
 			if len(roster.Invitations.Items) != 1 || roster.Invitations.Items[0].InvitationID != invitationID {
 				t.Fatalf("invitations = %+v, want the one seeded", roster.Invitations.Items)
 			}
@@ -151,17 +148,11 @@ func TestMiddleware_ActivityStampStaleAfterADayOnTheRequestClock(t *testing.T) {
 			}
 
 			srv, session := newClockedPingServer(t, db, identityUID, now)
-			resp := get(t, pingURL(srv, practiceID), func(req *http.Request) {
-				authntest.AddSessionCookie(req, session)
-			})
+			resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
 			defer resp.Body.Close()
-			assertStatus(t, resp, http.StatusOK)
+			reqtest.RequireStatus(t, resp, http.StatusOK)
 
-			var lastActiveAt time.Time
-			if err := db.Admin.QueryRowContext(t.Context(),
-				`SELECT last_active_at FROM staff WHERE id = $1`, staffID).Scan(&lastActiveAt); err != nil {
-				t.Fatalf("read last_active_at: %v", err)
-			}
+			lastActiveAt := testdb.Scalar[time.Time](t, db.Admin, `SELECT last_active_at FROM staff WHERE id = $1`, staffID)
 			if !lastActiveAt.Equal(c.want) {
 				t.Fatalf("last_active_at = %v, want %v", lastActiveAt, c.want)
 			}

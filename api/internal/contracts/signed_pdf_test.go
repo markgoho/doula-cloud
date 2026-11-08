@@ -10,6 +10,7 @@ import (
 
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/objectstore"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -44,9 +45,7 @@ func TestGetSignedContractPDFHandler_Success(t *testing.T) {
 	resp := getContractPDF(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	if ct := resp.Header.Get("Content-Type"); ct != "application/pdf" {
 		t.Fatalf("Content-Type = %q, want application/pdf", ct)
 	}
@@ -73,9 +72,7 @@ func TestGetSignedContractPDFHandler_Unauthenticated(t *testing.T) {
 	resp := getContractPDFRaw(t, srv, "", practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 // TestGetSignedContractPDFHandler_CrossPracticeRejected proves an Owner
@@ -96,9 +93,7 @@ func TestGetSignedContractPDFHandler_CrossPracticeRejected(t *testing.T) {
 	resp := getContractPDF(t, srv, session, practiceID, otherEngagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestGetSignedContractPDFHandler_NotYetSigned proves a sent (not yet
@@ -116,9 +111,7 @@ func TestGetSignedContractPDFHandler_NotYetSigned(t *testing.T) {
 	resp := getContractPDF(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 	assertNoSignedContractMessage(t, resp)
 }
 
@@ -141,9 +134,7 @@ func TestGetSignedContractPDFHandler_MissingObjectReturnsNotFound(t *testing.T) 
 	resp := getContractPDF(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestGetSignedContractPDFHandler_StoreGetFailureReturns500 proves a
@@ -162,9 +153,7 @@ func TestGetSignedContractPDFHandler_StoreGetFailureReturns500(t *testing.T) {
 	resp := getContractPDF(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusInternalServerError)
 }
 
 // TestClientGetSignedContractPDFHandler_Success proves the owning Client
@@ -188,9 +177,7 @@ func TestClientGetSignedContractPDFHandler_Success(t *testing.T) {
 	resp := getClientContractPDF(t, srv, session, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	if ct := resp.Header.Get("Content-Type"); ct != "application/pdf" {
 		t.Fatalf("Content-Type = %q, want application/pdf", ct)
 	}
@@ -211,9 +198,7 @@ func TestClientGetSignedContractPDFHandler_Unauthenticated(t *testing.T) {
 	resp := getClientContractPDFRaw(t, srv, "", engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 // TestClientGetSignedContractPDFHandler_OtherClientsEngagementRejected
@@ -235,9 +220,7 @@ func TestClientGetSignedContractPDFHandler_OtherClientsEngagementRejected(t *tes
 	resp := getClientContractPDFRaw(t, srv, session, otherEngagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 // TestClientGetSignedContractPDFHandler_NotYetSigned proves a sent (not
@@ -256,9 +239,7 @@ func TestClientGetSignedContractPDFHandler_NotYetSigned(t *testing.T) {
 	resp := getClientContractPDF(t, srv, session, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 	assertNoSignedContractMessage(t, resp)
 }
 
@@ -279,9 +260,7 @@ func TestClientGetSignedContractPDFHandler_MissingObjectReturnsNotFound(t *testi
 	resp := getClientContractPDF(t, srv, session, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // assertNoSignedContractMessage reads an apierr error body and checks it
@@ -340,12 +319,7 @@ func TestGetSignedContractPDFHandler_VoidedContractStillServes(t *testing.T) {
 		t.Fatalf("body = %q, want %q", body, signedPDFBytes)
 	}
 
-	var storedObjectPath sql.NullString
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT signed_pdf_object_path FROM contracts WHERE id = $1`, contractID,
-	).Scan(&storedObjectPath); err != nil {
-		t.Fatalf("query signed_pdf_object_path: %v", err)
-	}
+	storedObjectPath := testdb.Scalar[sql.NullString](t, db.Admin, `SELECT signed_pdf_object_path FROM contracts WHERE id = $1`, contractID)
 	if !storedObjectPath.Valid || storedObjectPath.String != objectPath {
 		t.Fatalf("signed_pdf_object_path = %+v, want unchanged at %q", storedObjectPath, objectPath)
 	}
@@ -373,9 +347,7 @@ func TestGetSignedContractPDFHandler_VoidedContractStillOpensToEmployedDoula(t *
 	resp := getContractPDF(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 }
 
 // TestGetSignedContractPDFHandler_ContractorForbidden proves the one
@@ -397,9 +369,7 @@ func TestGetSignedContractPDFHandler_ContractorForbidden(t *testing.T) {
 	resp := getContractPDF(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 // TestGetSignedContractPDFHandler_TwoSignedContractsServeTheNewest
@@ -436,9 +406,7 @@ func TestGetSignedContractPDFHandler_TwoSignedContractsServeTheNewest(t *testing
 	resp := getContractPDF(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("read body: %v", err)
@@ -482,9 +450,7 @@ func TestClientGetSignedContractPDFHandler_VoidedContractStillServes(t *testing.
 	resp := getClientContractPDF(t, srv, session, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("read body: %v", err)
@@ -513,9 +479,7 @@ func TestClientGetSignedContractPDFHandler_VoidedStaysThisClientsOnly(t *testing
 	resp := getClientContractPDFRaw(t, srv, session, otherEngagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 // TestSignedContractPDFHandlers_DraftNotFound is the other half of "has
@@ -559,13 +523,8 @@ func TestSignedContractPDFHandlers_DraftNotFound(t *testing.T) {
 // below starts from.
 func decodeContract(t *testing.T, resp *http.Response) contracts.ContractResponse {
 	t.Helper()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out contracts.ContractResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[contracts.ContractResponse](t, resp)
 	return out
 }
 

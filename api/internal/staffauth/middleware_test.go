@@ -3,7 +3,6 @@ package staffauth_test
 import (
 	"context"
 	"database/sql"
-	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +12,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -53,6 +53,17 @@ func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, s
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
+// newPingOKServer mounts the middleware in front of a handler that only
+// answers 200, for the tests whose subject is whether the middleware
+// admits the caller at all.
+func newPingOKServer(db *testdb.DB) *httptest.Server {
+	mux := http.NewServeMux()
+	mux.Handle("/practices/{practiceId}/ping", staffauth.Middleware(db.App)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})))
+	return httptest.NewServer(mux)
+}
+
 // seedOwnerMembership seeds a Practice and a Staff member via
 // testdb.SeedStaffAtNewPractice, then promotes that member to the 'owner'
 // role -- the only role RequireOwner-gated actions accept as
@@ -77,37 +88,14 @@ func pingURL(srv *httptest.Server, practiceID string) string {
 	return srv.URL + "/practices/" + practiceID + "/ping"
 }
 
-// get issues a GET with whatever credential setup applies to req.
-func get(t *testing.T, url string, setup func(*http.Request)) *http.Response {
-	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	setup(req)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
-}
-
-// assertStatus fails the test unless resp carries want.
-func assertStatus(t *testing.T, resp *http.Response, want int) {
-	t.Helper()
-	if resp.StatusCode != want {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, want)
-	}
-}
-
 func TestMiddleware_MissingCredential(t *testing.T) {
 	db := testdb.New(t)
 	srv, _ := newServer(t, db, "no-cookie-sent")
 	defer srv.Close()
 
-	resp := get(t, pingURL(srv, emptyUUID), func(*http.Request) {})
+	resp := reqtest.Get(t, pingURL(srv, emptyUUID))
 	defer resp.Body.Close()
-	assertStatus(t, resp, http.StatusUnauthorized)
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 // TestMiddleware_BearerTokenAloneIsRejected is #151's AC on the Staff
@@ -122,11 +110,9 @@ func TestMiddleware_BearerTokenAloneIsRejected(t *testing.T) {
 	srv, _ := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := get(t, pingURL(srv, practiceID), func(req *http.Request) {
-		req.Header.Set("Authorization", "Bearer would-verify-fine")
-	})
+	resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Header("Authorization", "Bearer would-verify-fine"))
 	defer resp.Body.Close()
-	assertStatus(t, resp, http.StatusUnauthorized)
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 // TestMiddleware_UnknownSession covers a cookie that names no live
@@ -136,11 +122,9 @@ func TestMiddleware_UnknownSession(t *testing.T) {
 	srv, _ := newServer(t, db, "irrelevant")
 	defer srv.Close()
 
-	resp := get(t, pingURL(srv, emptyUUID), func(req *http.Request) {
-		authntest.AddSessionCookie(req, "never-issued")
-	})
+	resp := reqtest.Get(t, pingURL(srv, emptyUUID), reqtest.Session("never-issued"))
 	defer resp.Body.Close()
-	assertStatus(t, resp, http.StatusUnauthorized)
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 func TestMiddleware_InvalidPracticeID(t *testing.T) {
@@ -148,11 +132,9 @@ func TestMiddleware_InvalidPracticeID(t *testing.T) {
 	srv, session := newServer(t, db, someUID)
 	defer srv.Close()
 
-	resp := get(t, pingURL(srv, "not-a-uuid"), func(req *http.Request) {
-		authntest.AddSessionCookie(req, session)
-	})
+	resp := reqtest.Get(t, pingURL(srv, "not-a-uuid"), reqtest.Session(session))
 	defer resp.Body.Close()
-	assertStatus(t, resp, http.StatusBadRequest)
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestMiddleware_PopulationResolutionFailure(t *testing.T) {
@@ -162,11 +144,9 @@ func TestMiddleware_PopulationResolutionFailure(t *testing.T) {
 	srv, session := newServer(t, db, "unknown-uid")
 	defer srv.Close()
 
-	resp := get(t, pingURL(srv, emptyUUID), func(req *http.Request) {
-		authntest.AddSessionCookie(req, session)
-	})
+	resp := reqtest.Get(t, pingURL(srv, emptyUUID), reqtest.Session(session))
 	defer resp.Body.Close()
-	assertStatus(t, resp, http.StatusForbidden)
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 func TestMiddleware_NoPracticeMembership(t *testing.T) {
@@ -176,24 +156,15 @@ func TestMiddleware_NoPracticeMembership(t *testing.T) {
 
 	// A different, unrelated Practice: the caller is a known Staff member,
 	// but not of this Practice.
-	var otherPracticeID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO practices (name, timezone) VALUES ('Other Practice', 'America/New_York') RETURNING id`,
-	).Scan(&otherPracticeID); err != nil {
-		t.Fatalf("seed other practice: %v", err)
-	}
+	otherPracticeID := testdb.Scalar[string](t, db.Admin, `INSERT INTO practices (name, timezone) VALUES ('Other Practice', 'America/New_York') RETURNING id`)
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := get(t, pingURL(srv, otherPracticeID), func(req *http.Request) {
-		authntest.AddSessionCookie(req, session)
-	})
+	resp := reqtest.Get(t, pingURL(srv, otherPracticeID), reqtest.Session(session))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 // TestMiddleware_NoSuchPractice covers a well-formed but nonexistent
@@ -209,11 +180,9 @@ func TestMiddleware_NoSuchPractice(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := get(t, pingURL(srv, emptyUUID), func(req *http.Request) {
-		authntest.AddSessionCookie(req, session)
-	})
+	resp := reqtest.Get(t, pingURL(srv, emptyUUID), reqtest.Session(session))
 	defer resp.Body.Close()
-	assertStatus(t, resp, http.StatusForbidden)
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 func TestMiddleware_Success(t *testing.T) {
@@ -224,14 +193,10 @@ func TestMiddleware_Success(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := get(t, pingURL(srv, practiceID), func(req *http.Request) {
-		authntest.AddSessionCookie(req, session)
-	})
+	resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	if got := resp.Header.Get("X-Staff-Id"); got != staffID {
 		t.Fatalf("X-Staff-Id = %q, want %q", got, staffID)
 	}
@@ -239,10 +204,7 @@ func TestMiddleware_Success(t *testing.T) {
 		t.Fatalf("X-Practice-Id = %q, want %q", got, practiceID)
 	}
 
-	var lastPracticeID string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT last_practice_id FROM staff WHERE id = $1`, staffID).Scan(&lastPracticeID); err != nil {
-		t.Fatalf("query last_practice_id: %v", err)
-	}
+	lastPracticeID := testdb.Scalar[string](t, db.Admin, `SELECT last_practice_id FROM staff WHERE id = $1`, staffID)
 	if lastPracticeID != practiceID {
 		t.Fatalf("last_practice_id = %q, want %q", lastPracticeID, practiceID)
 	}
@@ -267,26 +229,16 @@ func TestMiddleware_ActivityStampSkipsNoOpWrite(t *testing.T) {
 		t.Fatalf("seed prior stamp: %v", err)
 	}
 
-	var xminBefore string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT xmin::text FROM staff WHERE id = $1`, staffID).Scan(&xminBefore); err != nil {
-		t.Fatalf("read xmin before: %v", err)
-	}
+	xminBefore := testdb.Scalar[string](t, db.Admin, `SELECT xmin::text FROM staff WHERE id = $1`, staffID)
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := get(t, pingURL(srv, practiceID), func(req *http.Request) {
-		authntest.AddSessionCookie(req, session)
-	})
+	resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
 	defer resp.Body.Close()
-	assertStatus(t, resp, http.StatusOK)
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
-	var xminAfter string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT xmin::text FROM staff WHERE id = $1`, staffID).Scan(&xminAfter); err != nil {
-		t.Fatalf("read xmin after: %v", err)
-	}
+	xminAfter := testdb.Scalar[string](t, db.Admin, `SELECT xmin::text FROM staff WHERE id = $1`, staffID)
 	if xminAfter != xminBefore {
 		t.Fatalf("staff row was written (xmin %s -> %s), want no write for the already-current case", xminBefore, xminAfter)
 	}
@@ -319,11 +271,9 @@ func TestMiddleware_ActivityStampRefreshesPracticeAcrossDays(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := get(t, pingURL(srv, secondPracticeID), func(req *http.Request) {
-		authntest.AddSessionCookie(req, session)
-	})
+	resp := reqtest.Get(t, pingURL(srv, secondPracticeID), reqtest.Session(session))
 	defer resp.Body.Close()
-	assertStatus(t, resp, http.StatusOK)
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	var lastPracticeID string
 	var lastActiveAt time.Time
@@ -410,7 +360,7 @@ func TestMiddleware_ActivityStampDoesNotSerializeConcurrentRequests(t *testing.T
 			t.Fatalf("second request: %v", r.err)
 		}
 		defer r.resp.Body.Close()
-		assertStatus(t, r.resp, http.StatusOK)
+		reqtest.RequireStatus(t, r.resp, http.StatusOK)
 	case <-time.After(3 * time.Second):
 		t.Fatal("second request serialized behind the first request's still-open transaction")
 	}
@@ -421,7 +371,7 @@ func TestMiddleware_ActivityStampDoesNotSerializeConcurrentRequests(t *testing.T
 		t.Fatalf("first request: %v", r.err)
 	}
 	defer r.resp.Body.Close()
-	assertStatus(t, r.resp, http.StatusOK)
+	reqtest.RequireStatus(t, r.resp, http.StatusOK)
 }
 
 // TestMiddleware_FailClosedWithoutSessionVar proves the RLS backstop
@@ -432,10 +382,7 @@ func TestMiddleware_FailClosedWithoutSessionVar(t *testing.T) {
 	db := testdb.New(t)
 	testdb.SeedStaffAtNewPractice(t, db, "fail-closed-uid", []string{doulaRole}, employeeType)
 
-	var count int
-	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM practice_memberships`).Scan(&count); err != nil {
-		t.Fatalf("query practice_memberships as app role: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM practice_memberships`)
 	if count != 0 {
 		t.Fatalf("expected 0 rows with no session variable set, got %d", count)
 	}
@@ -506,19 +453,13 @@ func TestMiddleware_MFAGate(t *testing.T) {
 		const identityUID = "owner-no-mfa"
 		_, practiceID := seedOwnerMembership(t, db, identityUID)
 
-		mux := http.NewServeMux()
-		mux.Handle("/practices/{practiceId}/ping", staffauth.Middleware(db.App)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		})))
-		srv := httptest.NewServer(mux)
+		srv := newPingOKServer(db)
 		defer srv.Close()
 
 		session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, false)
-		resp := get(t, pingURL(srv, practiceID), func(req *http.Request) {
-			authntest.AddSessionCookie(req, session)
-		})
+		resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
 		defer resp.Body.Close()
-		assertStatus(t, resp, http.StatusOK)
+		reqtest.RequireStatus(t, resp, http.StatusOK)
 	})
 
 	t.Run("the switch bars an un-enrolled owner", func(t *testing.T) {
@@ -527,19 +468,13 @@ func TestMiddleware_MFAGate(t *testing.T) {
 		_, practiceID := seedOwnerMembership(t, db, identityUID)
 		setRequireMFA(t, db, practiceID)
 
-		mux := http.NewServeMux()
-		mux.Handle("/practices/{practiceId}/ping", staffauth.Middleware(db.App)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		})))
-		srv := httptest.NewServer(mux)
+		srv := newPingOKServer(db)
 		defer srv.Close()
 
 		session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, false)
-		resp := get(t, pingURL(srv, practiceID), func(req *http.Request) {
-			authntest.AddSessionCookie(req, session)
-		})
+		resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
 		defer resp.Body.Close()
-		assertStatus(t, resp, http.StatusForbidden)
+		reqtest.RequireStatus(t, resp, http.StatusForbidden)
 
 		body := apierrtest.Decode(t, resp)
 		if body.Code != apierr.CodeMFARequired {
@@ -552,19 +487,13 @@ func TestMiddleware_MFAGate(t *testing.T) {
 		const identityUID = "owner-with-mfa"
 		_, practiceID := seedOwnerMembership(t, db, identityUID)
 
-		mux := http.NewServeMux()
-		mux.Handle("/practices/{practiceId}/ping", staffauth.Middleware(db.App)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		})))
-		srv := httptest.NewServer(mux)
+		srv := newPingOKServer(db)
 		defer srv.Close()
 
 		session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, true)
-		resp := get(t, pingURL(srv, practiceID), func(req *http.Request) {
-			authntest.AddSessionCookie(req, session)
-		})
+		resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
 		defer resp.Body.Close()
-		assertStatus(t, resp, http.StatusOK)
+		reqtest.RequireStatus(t, resp, http.StatusOK)
 	})
 
 	t.Run("doula is never forced while the switch is off", func(t *testing.T) {
@@ -572,19 +501,13 @@ func TestMiddleware_MFAGate(t *testing.T) {
 		const identityUID = "doula-no-mfa"
 		practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
 
-		mux := http.NewServeMux()
-		mux.Handle("/practices/{practiceId}/ping", staffauth.Middleware(db.App)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		})))
-		srv := httptest.NewServer(mux)
+		srv := newPingOKServer(db)
 		defer srv.Close()
 
 		session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, false)
-		resp := get(t, pingURL(srv, practiceID), func(req *http.Request) {
-			authntest.AddSessionCookie(req, session)
-		})
+		resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
 		defer resp.Body.Close()
-		assertStatus(t, resp, http.StatusOK)
+		reqtest.RequireStatus(t, resp, http.StatusOK)
 	})
 
 	t.Run("the switch bars an un-enrolled doula", func(t *testing.T) {
@@ -593,19 +516,13 @@ func TestMiddleware_MFAGate(t *testing.T) {
 		practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
 		setRequireMFA(t, db, practiceID)
 
-		mux := http.NewServeMux()
-		mux.Handle("/practices/{practiceId}/ping", staffauth.Middleware(db.App)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		})))
-		srv := httptest.NewServer(mux)
+		srv := newPingOKServer(db)
 		defer srv.Close()
 
 		session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, false)
-		resp := get(t, pingURL(srv, practiceID), func(req *http.Request) {
-			authntest.AddSessionCookie(req, session)
-		})
+		resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
 		defer resp.Body.Close()
-		assertStatus(t, resp, http.StatusForbidden)
+		reqtest.RequireStatus(t, resp, http.StatusForbidden)
 	})
 
 	t.Run("the switch admits an enrolled doula", func(t *testing.T) {
@@ -614,19 +531,13 @@ func TestMiddleware_MFAGate(t *testing.T) {
 		practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
 		setRequireMFA(t, db, practiceID)
 
-		mux := http.NewServeMux()
-		mux.Handle("/practices/{practiceId}/ping", staffauth.Middleware(db.App)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		})))
-		srv := httptest.NewServer(mux)
+		srv := newPingOKServer(db)
 		defer srv.Close()
 
 		session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, true)
-		resp := get(t, pingURL(srv, practiceID), func(req *http.Request) {
-			authntest.AddSessionCookie(req, session)
-		})
+		resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
 		defer resp.Body.Close()
-		assertStatus(t, resp, http.StatusOK)
+		reqtest.RequireStatus(t, resp, http.StatusOK)
 	})
 
 	// TestMiddleware_MFAGate/split proves #606's own AC: a person whose
@@ -646,30 +557,26 @@ func TestMiddleware_MFAGate(t *testing.T) {
 		// the one that has.
 		setRequireMFA(t, db, doulaPracticeID)
 
-		mux := http.NewServeMux()
-		mux.Handle("/practices/{practiceId}/ping", staffauth.Middleware(db.App)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		})))
-		srv := httptest.NewServer(mux)
+		srv := newPingOKServer(db)
 		defer srv.Close()
 
 		unenrolled := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, false)
-		respA := get(t, pingURL(srv, ownerPracticeID), func(req *http.Request) { authntest.AddSessionCookie(req, unenrolled) })
+		respA := reqtest.Get(t, pingURL(srv, ownerPracticeID), reqtest.Session(unenrolled))
 		defer respA.Body.Close()
-		assertStatus(t, respA, http.StatusOK)
+		reqtest.RequireStatus(t, respA, http.StatusOK)
 
-		respB := get(t, pingURL(srv, doulaPracticeID), func(req *http.Request) { authntest.AddSessionCookie(req, unenrolled) })
+		respB := reqtest.Get(t, pingURL(srv, doulaPracticeID), reqtest.Session(unenrolled))
 		defer respB.Body.Close()
-		assertStatus(t, respB, http.StatusForbidden)
+		reqtest.RequireStatus(t, respB, http.StatusForbidden)
 
 		enrolled := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, true)
-		respA2 := get(t, pingURL(srv, ownerPracticeID), func(req *http.Request) { authntest.AddSessionCookie(req, enrolled) })
+		respA2 := reqtest.Get(t, pingURL(srv, ownerPracticeID), reqtest.Session(enrolled))
 		defer respA2.Body.Close()
-		assertStatus(t, respA2, http.StatusOK)
+		reqtest.RequireStatus(t, respA2, http.StatusOK)
 
-		respB2 := get(t, pingURL(srv, doulaPracticeID), func(req *http.Request) { authntest.AddSessionCookie(req, enrolled) })
+		respB2 := reqtest.Get(t, pingURL(srv, doulaPracticeID), reqtest.Session(enrolled))
 		defer respB2.Body.Close()
-		assertStatus(t, respB2, http.StatusOK)
+		reqtest.RequireStatus(t, respB2, http.StatusOK)
 	})
 }
 
@@ -712,26 +619,18 @@ func TestMiddleware_RecordsThatThePracticeWasHere(t *testing.T) {
 
 	lastActive := func() time.Time {
 		t.Helper()
-		var seen sql.NullTime
-		if err := db.Admin.QueryRowContext(t.Context(),
-			`SELECT last_active_at FROM staff WHERE id = $1`, staffID).Scan(&seen); err != nil {
-			t.Fatalf("query last_active_at: %v", err)
-		}
+		seen := testdb.Scalar[sql.NullTime](t, db.Admin, `SELECT last_active_at FROM staff WHERE id = $1`, staffID)
 		if !seen.Valid {
 			t.Fatal("last_active_at is unset after an authenticated request")
 		}
 		return seen.Time
 	}
 
-	resp := get(t, pingURL(srv, practiceID), func(req *http.Request) {
-		authntest.AddSessionCookie(req, session)
-	})
+	resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
 	defer resp.Body.Close()
 	first := lastActive()
 
-	resp2 := get(t, pingURL(srv, practiceID), func(req *http.Request) {
-		authntest.AddSessionCookie(req, session)
-	})
+	resp2 := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
 	defer resp2.Body.Close()
 	if second := lastActive(); !second.Equal(first) {
 		t.Fatalf("last_active_at moved from %v to %v within the same day", first, second)
@@ -775,11 +674,9 @@ func TestMiddleware_PendingDeletionLockout_BlocksOrdinaryRoutes(t *testing.T) {
 	defer srv.Close()
 
 	session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, true)
-	resp := get(t, pingURL(srv, practiceID), func(req *http.Request) {
-		authntest.AddSessionCookie(req, session)
-	})
+	resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
 	defer resp.Body.Close()
-	assertStatus(t, resp, http.StatusForbidden)
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 
 	body := apierrtest.Decode(t, resp)
 	if body.Code != apierr.CodePracticePendingDeletion {
@@ -797,11 +694,9 @@ func TestMiddleware_PendingDeletionLockout_BlocksNonOwner(t *testing.T) {
 	defer srv.Close()
 
 	session := authntest.SeedSession(t, db.App, identityUID)
-	resp := get(t, pingURL(srv, practiceID), func(req *http.Request) {
-		authntest.AddSessionCookie(req, session)
-	})
+	resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
 	defer resp.Body.Close()
-	assertStatus(t, resp, http.StatusForbidden)
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 
 	body := apierrtest.Decode(t, resp)
 	if body.Code != apierr.CodePracticePendingDeletion {
@@ -819,23 +714,13 @@ func TestMiddleware_PendingDeletionLockout_ExemptsOwnerOnDeletionRoutes(t *testi
 	defer srv.Close()
 	session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, true)
 
-	getResp := get(t, srv.URL+"/api/practices/"+practiceID+"/deletion", func(req *http.Request) {
-		authntest.AddSessionCookie(req, session)
-	})
+	getResp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/deletion", reqtest.Session(session))
 	defer getResp.Body.Close()
-	assertStatus(t, getResp, http.StatusOK)
+	reqtest.RequireStatus(t, getResp, http.StatusOK)
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, srv.URL+"/api/practices/"+practiceID+"/deletion", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	deleteResp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	deleteResp := reqtest.Delete(t, srv.URL+"/api/practices/"+practiceID+"/deletion", reqtest.Session(session))
 	defer deleteResp.Body.Close()
-	assertStatus(t, deleteResp, http.StatusOK)
+	reqtest.RequireStatus(t, deleteResp, http.StatusOK)
 }
 
 // TestMiddleware_PendingDeletionLockout_ExemptsSessionForEveryRole proves
@@ -854,16 +739,11 @@ func TestMiddleware_PendingDeletionLockout_ExemptsSessionForEveryRole(t *testing
 	defer srv.Close()
 	session := authntest.SeedSession(t, db.App, identityUID)
 
-	resp := get(t, srv.URL+"/api/practices/"+practiceID+"/session", func(req *http.Request) {
-		authntest.AddSessionCookie(req, session)
-	})
+	resp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/session", reqtest.Session(session))
 	defer resp.Body.Close()
-	assertStatus(t, resp, http.StatusOK)
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
-	var body staffauth.PracticeSessionResponse
-	if err := json.UnmarshalRead(resp.Body, &body); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
+	body := reqtest.Decode[staffauth.PracticeSessionResponse](t, resp)
 	if !body.PendingDeletion {
 		t.Fatal("PendingDeletion = false, want true")
 	}
@@ -885,17 +765,9 @@ func TestMiddleware_PendingDeletionLockout_RefusesOwnerPOSTOnDeletionRoute(t *te
 	defer srv.Close()
 	session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, true)
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/deletion", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/deletion", reqtest.Session(session))
 	defer resp.Body.Close()
-	assertStatus(t, resp, http.StatusForbidden)
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 
 	body := apierrtest.Decode(t, resp)
 	if body.Code != apierr.CodePracticePendingDeletion {
@@ -917,11 +789,9 @@ func TestMiddleware_DeletedPracticeReadsAsNoMembership(t *testing.T) {
 	defer srv.Close()
 	session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, true)
 
-	resp := get(t, srv.URL+"/api/practices/"+practiceID+"/deletion", func(req *http.Request) {
-		authntest.AddSessionCookie(req, session)
-	})
+	resp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/deletion", reqtest.Session(session))
 	defer resp.Body.Close()
-	assertStatus(t, resp, http.StatusForbidden)
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 
 	body := apierrtest.Decode(t, resp)
 	if body.Code == apierr.CodePracticePendingDeletion {
@@ -956,11 +826,7 @@ func TestMiddleware_ActivityStampOutlivesADisconnectedClient(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
-	var lastPractice sql.NullString
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT last_practice_id::text FROM staff WHERE id = $1`, staffID).Scan(&lastPractice); err != nil {
-		t.Fatalf("read stamp: %v", err)
-	}
+	lastPractice := testdb.Scalar[sql.NullString](t, db.Admin, `SELECT last_practice_id::text FROM staff WHERE id = $1`, staffID)
 	if lastPractice.String != practiceID {
 		t.Fatalf("last_practice_id = %q, want %q: the stamp was lost with the client", lastPractice.String, practiceID)
 	}

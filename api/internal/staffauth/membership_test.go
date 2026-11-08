@@ -1,7 +1,6 @@
 package staffauth_test
 
 import (
-	"bytes"
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +8,7 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -25,18 +25,7 @@ func newMembershipServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest
 
 func deleteMembership(t *testing.T, srv *httptest.Server, session, practiceID, staffID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete,
-		srv.URL+"/api/practices/"+practiceID+"/staff/"+staffID+"/membership", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("X-Confirmed", "true")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Delete(t, srv.URL+"/api/practices/"+practiceID+"/staff/"+staffID+"/membership", reqtest.Session(session), reqtest.Header("X-Confirmed", "true"))
 }
 
 func patchMembership(t *testing.T, srv *httptest.Server, session, practiceID, staffID string, body any) *http.Response {
@@ -50,18 +39,7 @@ func patchMembership(t *testing.T, srv *httptest.Server, session, practiceID, st
 
 func patchMembershipRaw(t *testing.T, srv *httptest.Server, session, practiceID, staffID string, payload []byte) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPatch,
-		srv.URL+"/api/practices/"+practiceID+"/staff/"+staffID+"/membership", bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Do(t, http.MethodPatch, srv.URL+"/api/practices/"+practiceID+"/staff/"+staffID+"/membership", reqtest.Session(session), reqtest.RawJSON(payload))
 }
 
 // membershipEvents reads a Membership's recorded history, newest first.
@@ -113,13 +91,8 @@ func TestUpdateMembershipHandler_EditsBothHalvesAtOnce(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var updated staffauth.UpdateMembershipResponse
-	if err := json.UnmarshalRead(resp.Body, &updated); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	updated := reqtest.Decode[staffauth.UpdateMembershipResponse](t, resp)
 	if updated.EmploymentType != contractorType || len(updated.Roles) != 2 {
 		t.Fatalf("response = %+v", updated)
 	}
@@ -150,12 +123,7 @@ func TestUpdateMembershipHandler_EditsBothHalvesAtOnce(t *testing.T) {
 		}
 	}
 
-	var actor string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT DISTINCT actor_staff_id FROM activity WHERE subject_kind = 'membership' AND subject_id = $1`, targetID,
-	).Scan(&actor); err != nil {
-		t.Fatalf("read actor: %v", err)
-	}
+	actor := testdb.Scalar[string](t, db.Admin, `SELECT DISTINCT actor_staff_id FROM activity WHERE subject_kind = 'membership' AND subject_id = $1`, targetID)
 	if actor != ownerID {
 		t.Fatalf("actor = %q, want the Owner %q", actor, ownerID)
 	}
@@ -178,9 +146,7 @@ func TestUpdateMembershipHandler_NoOpRecordsNothing(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	if events := membershipEvents(t, db, practiceID, targetID); len(events) != 0 {
 		t.Fatalf("events = %v, want none", events)
 	}
@@ -202,9 +168,7 @@ func TestUpdateMembershipHandler_KeepsTheLastOwner(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusConflict)
 
 	// With a second Owner in place, the same demotion is allowed.
 	secondOwner := testdb.SeedStaff(t, db, "second-owner")
@@ -214,9 +178,7 @@ func TestUpdateMembershipHandler_KeepsTheLastOwner(t *testing.T) {
 		Roles: []string{doulaRole}, EmploymentType: employeeType,
 	})
 	defer allowed.Body.Close()
-	if allowed.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", allowed.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, allowed, http.StatusOK)
 }
 
 func TestUpdateMembershipHandler_NonOwnerForbidden(t *testing.T) {
@@ -232,9 +194,7 @@ func TestUpdateMembershipHandler_NonOwnerForbidden(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 func TestUpdateMembershipHandler_NoSuchMembership(t *testing.T) {
@@ -250,9 +210,7 @@ func TestUpdateMembershipHandler_NoSuchMembership(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestUpdateMembershipHandler_Rejects(t *testing.T) {
@@ -275,18 +233,14 @@ func TestUpdateMembershipHandler_Rejects(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			resp := patchMembership(t, srv, session, practiceID, ownerID, tc.body)
 			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusBadRequest {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 		})
 	}
 
 	t.Run("invalid body", func(t *testing.T) {
 		resp := patchMembershipRaw(t, srv, session, practiceID, ownerID, []byte("not json"))
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	})
 
 	t.Run("malformed staff id", func(t *testing.T) {
@@ -294,9 +248,7 @@ func TestUpdateMembershipHandler_Rejects(t *testing.T) {
 			Roles: []string{doulaRole}, EmploymentType: employeeType,
 		})
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	})
 }
 
@@ -316,26 +268,15 @@ func TestRemoveMembershipHandler_Success(t *testing.T) {
 	resp := deleteMembership(t, srv, session, practiceID, targetID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
 
-	var memberships int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`,
-		practiceID, targetID,
-	).Scan(&memberships); err != nil {
-		t.Fatalf("count memberships: %v", err)
-	}
+	memberships := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`, practiceID, targetID)
 	if memberships != 0 {
 		t.Fatalf("memberships = %d, want none", memberships)
 	}
 
 	// The staff row survives: a person is not owned by one Practice.
-	var staffRows int
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM staff WHERE id = $1`, targetID).Scan(&staffRows); err != nil {
-		t.Fatalf("count staff: %v", err)
-	}
+	staffRows := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM staff WHERE id = $1`, targetID)
 	if staffRows != 1 {
 		t.Fatalf("staff rows = %d, want the person to survive her membership", staffRows)
 	}
@@ -344,12 +285,7 @@ func TestRemoveMembershipHandler_Success(t *testing.T) {
 	if len(events) != 1 || events[0] != "removed:doula->/employee->" {
 		t.Fatalf("events = %v, want one removed event naming what she held", events)
 	}
-	var actor string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT actor_staff_id FROM activity WHERE subject_kind = 'membership' AND subject_id = $1`, targetID,
-	).Scan(&actor); err != nil {
-		t.Fatalf("read actor: %v", err)
-	}
+	actor := testdb.Scalar[string](t, db.Admin, `SELECT actor_staff_id FROM activity WHERE subject_kind = 'membership' AND subject_id = $1`, targetID)
 	if actor != ownerID {
 		t.Fatalf("actor = %q, want the Owner %q", actor, ownerID)
 	}
@@ -366,9 +302,7 @@ func TestRemoveMembershipHandler_KeepsTheLastOwner(t *testing.T) {
 	resp := deleteMembership(t, srv, session, practiceID, ownerID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusConflict)
 }
 
 func TestRemoveMembershipHandler_Refuses(t *testing.T) {
@@ -382,17 +316,13 @@ func TestRemoveMembershipHandler_Refuses(t *testing.T) {
 	t.Run("no such membership", func(t *testing.T) {
 		resp := deleteMembership(t, srv, session, practiceID, emptyUUID)
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusNotFound {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusNotFound)
 	})
 
 	t.Run("malformed staff id", func(t *testing.T) {
 		resp := deleteMembership(t, srv, session, practiceID, "not-a-uuid")
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	})
 }
 
@@ -406,29 +336,12 @@ func TestRemoveMembershipHandler_RequiresConfirmation(t *testing.T) {
 	srv, session := newMembershipServer(t, db, ownerUID)
 	defer srv.Close()
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete,
-		srv.URL+"/api/practices/"+practiceID+"/staff/"+targetID+"/membership", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Delete(t, srv.URL+"/api/practices/"+practiceID+"/staff/"+targetID+"/membership", reqtest.Session(session))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 
-	var memberships int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`,
-		practiceID, targetID,
-	).Scan(&memberships); err != nil {
-		t.Fatalf("count memberships: %v", err)
-	}
+	memberships := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`, practiceID, targetID)
 	if memberships != 1 {
 		t.Fatalf("memberships = %d, want the unconfirmed request to have removed nothing", memberships)
 	}
@@ -445,9 +358,7 @@ func TestRemoveMembershipHandler_NonOwnerForbidden(t *testing.T) {
 	resp := deleteMembership(t, srv, session, practiceID, staffID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 // TestUpdateMembershipHandler_ReorderedRolesAreNoChange keeps the history
@@ -468,9 +379,7 @@ func TestUpdateMembershipHandler_ReorderedRolesAreNoChange(t *testing.T) {
 	})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	if events := membershipEvents(t, db, practiceID, targetID); len(events) != 0 {
 		t.Fatalf("events = %v, want none", events)
 	}

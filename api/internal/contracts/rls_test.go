@@ -19,10 +19,7 @@ func TestRLS_ContractTemplatesFailsClosedWithNoSessionVarSet(t *testing.T) {
 	practiceID := testdb.SeedPractice(t, db, "Some Practice")
 	seedContractTemplate(t, db, practiceID, "Some prose")
 
-	var count int
-	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM contract_templates`).Scan(&count); err != nil {
-		t.Fatalf("query contract_templates with no session vars set: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM contract_templates`)
 	if count != 0 {
 		t.Fatalf("expected 0 rows with no session variable set, got %d", count)
 	}
@@ -38,32 +35,9 @@ func TestRLS_ContractTemplatesVisibilityIsScopedToCurrentPractice(t *testing.T) 
 	seedContractTemplate(t, db, practiceA, "Practice A's prose")
 	seedContractTemplate(t, db, practiceB, "Practice B's prose")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Practice(practiceA))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	var visiblePracticeIDs []string
-	rows, err := tx.QueryContext(t.Context(), `SELECT practice_id FROM contract_templates`)
-	if err != nil {
-		t.Fatalf("query contract_templates: %v", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		visiblePracticeIDs = append(visiblePracticeIDs, id)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate rows: %v", err)
-	}
+	visiblePracticeIDs := testdb.Column[string](t, tx, `SELECT practice_id FROM contract_templates`)
 
 	if len(visiblePracticeIDs) != 1 || visiblePracticeIDs[0] != practiceA {
 		t.Fatalf("visible practice_ids = %v, want only %q", visiblePracticeIDs, practiceA)
@@ -81,15 +55,7 @@ func TestRLS_ContractTemplatesUpdateRejectedAcrossPractice(t *testing.T) {
 	practiceB := testdb.SeedPractice(t, db, "Practice B")
 	seedContractTemplate(t, db, practiceB, "Practice B's prose")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Practice(practiceA))
 
 	result, err := tx.ExecContext(t.Context(),
 		`UPDATE contract_templates SET prose = 'hacked' WHERE practice_id = $1`,
@@ -120,10 +86,7 @@ func TestRLS_ContractsFailsClosedWithNoSessionVarSet(t *testing.T) {
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, statusDraft, "Some prose")
 
-	var count int
-	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM contracts`).Scan(&count); err != nil {
-		t.Fatalf("query contracts with no session vars set: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM contracts`)
 	if count != 0 {
 		t.Fatalf("expected 0 rows with no session variable set, got %d", count)
 	}
@@ -141,32 +104,9 @@ func TestRLS_ContractsSelectIsScopedViaEngagementsExistsSubquery(t *testing.T) {
 	seedContract(t, db, engagementA, statusDraft, "Practice A's prose")
 	seedContract(t, db, engagementB, statusDraft, "Practice B's prose")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Practice(practiceA))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	var visibleEngagementIDs []string
-	rows, err := tx.QueryContext(t.Context(), `SELECT engagement_id FROM contracts`)
-	if err != nil {
-		t.Fatalf("query contracts: %v", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		visibleEngagementIDs = append(visibleEngagementIDs, id)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate rows: %v", err)
-	}
+	visibleEngagementIDs := testdb.Column[string](t, tx, `SELECT engagement_id FROM contracts`)
 
 	if len(visibleEngagementIDs) != 1 || visibleEngagementIDs[0] != engagementA {
 		t.Fatalf("visible engagement_ids = %v, want only %q", visibleEngagementIDs, engagementA)
@@ -185,15 +125,7 @@ func TestRLS_ContractsUpdateRejectedAcrossPractice(t *testing.T) {
 	_, engagementB := testdb.SeedEngagement(t, db, practiceB)
 	seedContract(t, db, engagementB, statusDraft, "Practice B's prose")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Practice(practiceA))
 
 	result, err := tx.ExecContext(t.Context(),
 		`UPDATE contracts SET merge_field_values = '{"hacked":"true"}' WHERE engagement_id = $1`,
@@ -224,22 +156,9 @@ func TestRLS_ContractsClientCanReadOwnSentContract(t *testing.T) {
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedContract(t, db, engagementID, "sent", "Agreement prose")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Client(clientID))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	var count int
-	if err := tx.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM contracts WHERE engagement_id = $1`, engagementID,
-	).Scan(&count); err != nil {
-		t.Fatalf("query contracts as Client: %v", err)
-	}
+	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM contracts WHERE engagement_id = $1`, engagementID)
 	if count != 1 {
 		t.Fatalf("expected Client to see their own sent Contract, got count = %d", count)
 	}
@@ -255,22 +174,9 @@ func TestRLS_ContractsClientCannotReadDraft(t *testing.T) {
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedContract(t, db, engagementID, statusDraft, "Agreement prose")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Client(clientID))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	var count int
-	if err := tx.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM contracts WHERE engagement_id = $1`, engagementID,
-	).Scan(&count); err != nil {
-		t.Fatalf("query contracts as Client: %v", err)
-	}
+	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM contracts WHERE engagement_id = $1`, engagementID)
 	if count != 0 {
 		t.Fatalf("expected 0 rows for a Draft Contract from a Client-portal session, got %d", count)
 	}
@@ -286,22 +192,9 @@ func TestRLS_ContractsClientCanReadSignedAndVoided(t *testing.T) {
 			clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 			seedContract(t, db, engagementID, status, "Agreement prose")
 
-			tx, err := db.App.BeginTx(t.Context(), nil)
-			if err != nil {
-				t.Fatalf("begin: %v", err)
-			}
-			defer tx.Rollback()
+			tx := db.BeginAs(t, testdb.Client(clientID))
 
-			if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
-				t.Fatalf("set_config: %v", err)
-			}
-
-			var count int
-			if err := tx.QueryRowContext(t.Context(),
-				`SELECT count(*) FROM contracts WHERE engagement_id = $1`, engagementID,
-			).Scan(&count); err != nil {
-				t.Fatalf("query contracts as Client: %v", err)
-			}
+			count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM contracts WHERE engagement_id = $1`, engagementID)
 			if count != 1 {
 				t.Fatalf("expected Client to see their own %s Contract, got count = %d", status, count)
 			}
@@ -320,22 +213,9 @@ func TestRLS_ContractsClientCannotReadOtherClientsContract(t *testing.T) {
 	_, engagementB := testdb.SeedNamedEngagement(t, db, practiceID, "Client B", "b@example.com")
 	seedContract(t, db, engagementB, "sent", "Agreement prose")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Client(clientA))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	var count int
-	if err := tx.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM contracts WHERE engagement_id = $1`, engagementB,
-	).Scan(&count); err != nil {
-		t.Fatalf("query contracts as Client A: %v", err)
-	}
+	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM contracts WHERE engagement_id = $1`, engagementB)
 	if count != 0 {
 		t.Fatalf("expected Client A to see 0 rows for Client B's Contract, got %d", count)
 	}
@@ -358,17 +238,9 @@ func TestRLS_ContractsClientUpdateRejected(t *testing.T) {
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedContract(t, db, engagementID, "sent", "Agreement prose")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Client(clientID))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	_, err = tx.ExecContext(t.Context(),
+	_, err := tx.ExecContext(t.Context(),
 		`UPDATE contracts SET merge_field_values = '{"hacked":"true"}' WHERE engagement_id = $1`,
 		engagementID,
 	)
@@ -391,15 +263,7 @@ func TestRLS_ContractsClientCanSignOwnSentContract(t *testing.T) {
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedContract(t, db, engagementID, "sent", "Agreement prose")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Client(clientID))
 
 	result, err := tx.ExecContext(t.Context(),
 		`UPDATE contracts SET status = 'signed'::contract_status WHERE engagement_id = $1`,
@@ -428,15 +292,7 @@ func TestRLS_ContractsClientCannotSignOtherClientsContract(t *testing.T) {
 	_, engagementB := testdb.SeedNamedEngagement(t, db, practiceID, "Client B", "b@example.com")
 	seedContract(t, db, engagementB, "sent", "Agreement prose")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Client(clientA))
 
 	result, err := tx.ExecContext(t.Context(),
 		`UPDATE contracts SET status = 'signed'::contract_status WHERE engagement_id = $1`,
@@ -466,15 +322,7 @@ func TestRLS_ContractsClientCannotSignNonSentContract(t *testing.T) {
 			clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 			seedContract(t, db, engagementID, status, "Agreement prose")
 
-			tx, err := db.App.BeginTx(t.Context(), nil)
-			if err != nil {
-				t.Fatalf("begin: %v", err)
-			}
-			defer tx.Rollback()
-
-			if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
-				t.Fatalf("set_config: %v", err)
-			}
+			tx := db.BeginAs(t, testdb.Client(clientID))
 
 			result, err := tx.ExecContext(t.Context(),
 				`UPDATE contracts SET status = 'signed'::contract_status WHERE engagement_id = $1`,
@@ -506,17 +354,9 @@ func TestRLS_ContractsClientCannotTransitionSentToOtherStatus(t *testing.T) {
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedContract(t, db, engagementID, "sent", "Agreement prose")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Client(clientID))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	_, err = tx.ExecContext(t.Context(),
+	_, err := tx.ExecContext(t.Context(),
 		`UPDATE contracts SET status = 'voided'::contract_status WHERE engagement_id = $1`,
 		engagementID,
 	)

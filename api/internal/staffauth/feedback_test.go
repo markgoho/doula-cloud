@@ -2,7 +2,6 @@ package staffauth_test
 
 import (
 	"database/sql"
-	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,8 +9,8 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/feedback"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -21,19 +20,7 @@ import (
 // neighboring pre-Practice route.
 func postFeedback(t *testing.T, srv *httptest.Server, session, body string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/feedback", strings.NewReader(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if session != "" {
-		authntest.AddSessionCookie(req, session)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Post(t, srv.URL+"/api/staff/feedback", reqtest.Session(session), reqtest.RawJSON([]byte(body)))
 }
 
 // readFeedbackRow reads the one column set every test here checks, as
@@ -59,9 +46,7 @@ func TestFeedback_MissingCookie(t *testing.T) {
 
 	resp := postFeedback(t, srv, "", `{"kind":"idea_or_request"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 func TestFeedback_MalformedBody(t *testing.T) {
@@ -72,9 +57,7 @@ func TestFeedback_MalformedBody(t *testing.T) {
 
 	resp := postFeedback(t, srv, session, `not json`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestFeedback_RejectsMissingKind(t *testing.T) {
@@ -85,9 +68,7 @@ func TestFeedback_RejectsMissingKind(t *testing.T) {
 
 	resp := postFeedback(t, srv, session, `{"text":"something"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	out := apierrtest.Decode(t, resp)
 	if out.Details["kind"] != staffauth.MsgFeedbackKindNeeded {
 		t.Fatalf("details[kind] = %q, want %q", out.Details["kind"], staffauth.MsgFeedbackKindNeeded)
@@ -102,9 +83,7 @@ func TestFeedback_RejectsUnknownKind(t *testing.T) {
 
 	resp := postFeedback(t, srv, session, `{"kind":"a_kind_that_does_not_exist"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestFeedback_RejectsTextOverFiveThousandCharacters(t *testing.T) {
@@ -116,9 +95,7 @@ func TestFeedback_RejectsTextOverFiveThousandCharacters(t *testing.T) {
 	overLimit := strings.Repeat("a", feedback.MaxTextRunes+1)
 	resp := postFeedback(t, srv, session, `{"kind":"idea_or_request","text":"`+overLimit+`"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	out := apierrtest.Decode(t, resp)
 	if out.Details["text"] != staffauth.MsgFeedbackTextTooLong {
 		t.Fatalf("details[text] = %q, want %q", out.Details["text"], staffauth.MsgFeedbackTextTooLong)
@@ -132,9 +109,7 @@ func TestFeedback_UnknownStaff(t *testing.T) {
 
 	resp := postFeedback(t, srv, session, `{"kind":"idea_or_request"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestFeedback_EmptyTextFromAccountIsAllowed is #1523's own AC ("Empty
@@ -148,27 +123,11 @@ func TestFeedback_EmptyTextFromAccountIsAllowed(t *testing.T) {
 	srv, session := newWorkStateServer(t, db, "feedback-empty-text")
 	defer srv.Close()
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/feedback",
-		strings.NewReader(`{"kind":"something_else","text":"","page":{"url":"/account","route":{"id":"/account"}},"appBuild":"abc1234","screenWidth":390}`))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15")
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/api/staff/feedback", reqtest.Session(session), reqtest.RawJSON([]byte(`{"kind":"something_else","text":"","page":{"url":"/account","route":{"id":"/account"}},"appBuild":"abc1234","screenWidth":390}`)), reqtest.Header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15"))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var out staffauth.FeedbackResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
+	out := reqtest.Decode[staffauth.FeedbackResponse](t, resp)
 	if out.ID == "" {
 		t.Fatal("response id is empty")
 	}
@@ -199,9 +158,7 @@ func TestFeedback_RejectsMalformedPracticeID(t *testing.T) {
 
 	resp := postFeedback(t, srv, session, `{"kind":"idea_or_request","practiceId":"not-a-uuid"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestFeedback_RefusesAPracticeSheDoesNotHold is #1523's own AC: a
@@ -215,13 +172,8 @@ func TestFeedback_RefusesAPracticeSheDoesNotHold(t *testing.T) {
 
 	resp := postFeedback(t, srv, session, `{"kind":"idea_or_request","practiceId":"`+otherPracticeID+`"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM feedback WHERE practice_id = $1`, otherPracticeID).Scan(&count); err != nil {
-		t.Fatalf("count: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM feedback WHERE practice_id = $1`, otherPracticeID)
 	if count != 0 {
 		t.Fatalf("feedback rows for a Practice she does not hold = %d, want 0", count)
 	}
@@ -240,13 +192,8 @@ func TestFeedback_RecordsPracticeAndHerOwnRoles(t *testing.T) {
 
 	resp := postFeedback(t, srv, session, `{"kind":"not_working","practiceId":"`+practiceID+`"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var out staffauth.FeedbackResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
+	out := reqtest.Decode[staffauth.FeedbackResponse](t, resp)
 
 	_, _, _, gotPracticeID, roles := readFeedbackRow(t, db, out.ID)
 	if !gotPracticeID.Valid || gotPracticeID.String != practiceID {
@@ -276,13 +223,8 @@ func TestFeedback_ZeroRoleMembershipStillRecordsAnEmptyArray(t *testing.T) {
 
 	resp := postFeedback(t, srv, session, `{"kind":"not_working","practiceId":"`+practiceID+`"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var out staffauth.FeedbackResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
+	out := reqtest.Decode[staffauth.FeedbackResponse](t, resp)
 
 	_, _, _, gotPracticeID, roles := readFeedbackRow(t, db, out.ID)
 	if !gotPracticeID.Valid {
@@ -305,20 +247,10 @@ func TestFeedback_QueuesTheIssueOutboxRow(t *testing.T) {
 
 	resp := postFeedback(t, srv, session, `{"kind":"idea_or_request"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var out staffauth.FeedbackResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusCreated)
+	out := reqtest.Decode[staffauth.FeedbackResponse](t, resp)
 
-	var status string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT status::text FROM feedback_issue_outbox WHERE feedback_id = $1`, out.ID,
-	).Scan(&status); err != nil {
-		t.Fatalf("read outbox row: %v", err)
-	}
+	status := testdb.Scalar[string](t, db.Admin, `SELECT status::text FROM feedback_issue_outbox WHERE feedback_id = $1`, out.ID)
 	if status != "pending" {
 		t.Errorf("outbox status = %q, want pending", status)
 	}

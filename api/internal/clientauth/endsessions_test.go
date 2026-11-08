@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/portalaccount"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -46,18 +47,7 @@ func newEndSessionsServer(db *testdb.DB) *httptest.Server {
 
 func deleteWithSession(t *testing.T, srv *httptest.Server, session string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, srv.URL+"/api/portal/sessions", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	if session != "" {
-		authntest.AddSessionCookie(req, session)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Delete(t, srv.URL+"/api/portal/sessions", reqtest.Session(session))
 }
 
 // TestEndAllSessionsHandler_EndsEveryDeviceAndRecordsIt is #618's own
@@ -77,9 +67,7 @@ func TestEndAllSessionsHandler_EndsEveryDeviceAndRecordsIt(t *testing.T) {
 
 	resp := deleteWithSession(t, srv, laptop)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
 
 	if got := authntest.CountFor(t, db.App, identifier); got != 0 {
 		t.Fatalf("session rows for %s after ending everywhere = %d, want 0", identifier, got)
@@ -92,13 +80,7 @@ func TestEndAllSessionsHandler_EndsEveryDeviceAndRecordsIt(t *testing.T) {
 		t.Errorf("MaxAge = %d, want negative (cleared)", cleared.MaxAge)
 	}
 
-	var actorClient string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT actor_client_id FROM activity WHERE subject_kind = 'client' AND subject_id = $1 AND action = 'portal_sessions_ended'`,
-		clientID,
-	).Scan(&actorClient); err != nil {
-		t.Fatalf("read activity row: %v", err)
-	}
+	actorClient := testdb.Scalar[string](t, db.Admin, `SELECT actor_client_id FROM activity WHERE subject_kind = 'client' AND subject_id = $1 AND action = 'portal_sessions_ended'`, clientID)
 	if actorClient != clientID {
 		t.Fatalf("actor_client_id = %q, want %q", actorClient, clientID)
 	}
@@ -122,9 +104,7 @@ func TestEndAllSessionsHandler_ClearsTheCookieEvenWhenRenewedOnTheWayIn(t *testi
 
 	resp := deleteWithSession(t, srv, token)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
 
 	cleared := findSessionCookie(t, resp.Cookies())
 	if cleared.MaxAge >= 0 {
@@ -156,9 +136,7 @@ func TestEndAllSessionsHandler_StaffSessionRefused(t *testing.T) {
 
 	resp := deleteWithSession(t, srv, staffSession)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 
 	// Refused, not acted on: the Staff member's own session must survive.
 	if got := authntest.CountFor(t, db.App, staffUID); got != 1 {
@@ -182,9 +160,7 @@ func TestEndAllSessionsHandler_PortalTierWithoutAnAccountRefused(t *testing.T) {
 
 	resp := deleteWithSession(t, srv, orphanSession)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 
 	if got := authntest.CountFor(t, db.App, orphanUID); got != 1 {
 		t.Fatalf("session rows for %s after refusal = %d, want 1", orphanUID, got)
@@ -201,7 +177,5 @@ func TestEndAllSessionsHandler_NoSessionUnauthorized(t *testing.T) {
 
 	resp := deleteWithSession(t, srv, "")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }

@@ -1,13 +1,13 @@
 package staffauth_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -27,18 +27,7 @@ func newSessionServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Se
 
 func getSession(t *testing.T, srv *httptest.Server, session string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/staff/session", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	if session != "" {
-		authntest.AddSessionCookie(req, session)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Get(t, srv.URL+"/api/staff/session", reqtest.Session(session))
 }
 
 func TestSessionHandler_MissingCookie(t *testing.T) {
@@ -49,9 +38,7 @@ func TestSessionHandler_MissingCookie(t *testing.T) {
 	resp := getSession(t, srv, "")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 // TestSessionHandler_UnknownSession covers a cookie that names no live
@@ -64,9 +51,7 @@ func TestSessionHandler_UnknownSession(t *testing.T) {
 	resp := getSession(t, srv, "never-issued")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 func TestSessionHandler_UnknownStaff(t *testing.T) {
@@ -77,9 +62,7 @@ func TestSessionHandler_UnknownStaff(t *testing.T) {
 	resp := getSession(t, srv, session)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestSessionHandler_SingleMembership(t *testing.T) {
@@ -93,14 +76,9 @@ func TestSessionHandler_SingleMembership(t *testing.T) {
 	resp := getSession(t, srv, session)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
-	var out staffauth.SessionResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[staffauth.SessionResponse](t, resp)
 	if out.StaffID != staffID {
 		t.Fatalf("staffId = %q, want %q", out.StaffID, staffID)
 	}
@@ -140,10 +118,7 @@ func TestSessionHandler_SecondFactor(t *testing.T) {
 	unenrolled := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, false)
 	resp1 := getSession(t, srv, unenrolled)
 	defer resp1.Body.Close()
-	var out1 staffauth.SessionResponse
-	if err := json.UnmarshalRead(resp1.Body, &out1); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out1 := reqtest.Decode[staffauth.SessionResponse](t, resp1)
 	if out1.SecondFactor {
 		t.Fatalf("secondFactor = true, want false")
 	}
@@ -151,10 +126,7 @@ func TestSessionHandler_SecondFactor(t *testing.T) {
 	enrolled := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, true)
 	resp2 := getSession(t, srv, enrolled)
 	defer resp2.Body.Close()
-	var out2 staffauth.SessionResponse
-	if err := json.UnmarshalRead(resp2.Body, &out2); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out2 := reqtest.Decode[staffauth.SessionResponse](t, resp2)
 	if !out2.SecondFactor {
 		t.Fatalf("secondFactor = false, want true")
 	}
@@ -182,10 +154,7 @@ func TestSessionHandler_MultiplePracticesWithLastUsed(t *testing.T) {
 	resp := getSession(t, srv, session)
 	defer resp.Body.Close()
 
-	var out staffauth.SessionResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[staffauth.SessionResponse](t, resp)
 	if len(out.Memberships) != 2 {
 		t.Fatalf("expected 2 memberships, got %d", len(out.Memberships))
 	}
@@ -266,12 +235,7 @@ func decodeSession(t *testing.T, srv *httptest.Server, session string) staffauth
 	t.Helper()
 	resp := getSession(t, srv, session)
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out staffauth.SessionResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	out := reqtest.Decode[staffauth.SessionResponse](t, resp)
 	return out
 }

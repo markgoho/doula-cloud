@@ -52,14 +52,7 @@ func TestReader_CanAccessEngagement(t *testing.T) {
 	seedContractorMembership(t, db, practiceID, grantedContractorID)
 	testdb.SeedAttachment(t, db, engagementID, grantedContractorID, "granted", false)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin tx: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set practice id: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Practice(practiceID))
 
 	cases := []struct {
 		name           string
@@ -97,10 +90,7 @@ func TestReader_CanAccessClient(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Client Access Test Practice")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	var clientID string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT client_id FROM engagements WHERE id = $1`, engagementID).Scan(&clientID); err != nil {
-		t.Fatalf("read client id: %v", err)
-	}
+	clientID := testdb.Scalar[string](t, db.Admin, `SELECT client_id FROM engagements WHERE id = $1`, engagementID)
 
 	ownerID := testdb.SeedStaff(t, db, "client-access-owner")
 	seedMembershipWithRoles(t, db, practiceID, ownerID, "{owner}")
@@ -112,14 +102,7 @@ func TestReader_CanAccessClient(t *testing.T) {
 	seedContractorMembership(t, db, practiceID, attachedContractorID)
 	testdb.SeedAttachment(t, db, engagementID, attachedContractorID, "granted", false)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin tx: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set practice id: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Practice(practiceID))
 
 	cases := []struct {
 		name           string

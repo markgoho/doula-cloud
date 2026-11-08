@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -46,17 +48,7 @@ func postAccept(t *testing.T, srv *httptest.Server, body staffauth.AcceptInviteR
 
 func postAcceptRaw(t *testing.T, srv *httptest.Server, payload []byte) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/accept-invite", bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Authorization", "Bearer any-token")
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Post(t, srv.URL+"/api/staff/accept-invite", reqtest.RawJSON(payload), reqtest.Header("Authorization", "Bearer any-token"))
 }
 
 func newAcceptServer(t *testing.T, db *testdb.DB, uid, email string) *httptest.Server {
@@ -93,21 +85,13 @@ func TestAcceptInviteHandler_CreatesStaffAndMembership(t *testing.T) {
 	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: leaFirstName, LastName: "Vasquez"})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var accepted staffauth.AcceptInviteResponse
-	if err := json.UnmarshalRead(resp.Body, &accepted); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	accepted := reqtest.Decode[staffauth.AcceptInviteResponse](t, resp)
 	if accepted.PracticeID != practiceID {
 		t.Fatalf("practiceId = %q, want %q", accepted.PracticeID, practiceID)
 	}
 	// #2239: what the Membership was written with, for the landing to say.
-	var wantPracticeName string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT name FROM practices WHERE id = $1`, practiceID).Scan(&wantPracticeName); err != nil {
-		t.Fatalf("read practice name: %v", err)
-	}
+	wantPracticeName := testdb.Scalar[string](t, db.Admin, `SELECT name FROM practices WHERE id = $1`, practiceID)
 	if accepted.PracticeName != wantPracticeName || len(accepted.Roles) != 1 || accepted.Roles[0] != doulaRole || accepted.EmploymentType != contractorType {
 		t.Fatalf("accepted = %+v, want %q as doula/contractor", accepted, wantPracticeName)
 	}
@@ -188,23 +172,13 @@ func TestAcceptInviteHandler_ResolvesAnExistingStaffRow(t *testing.T) {
 	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var accepted staffauth.AcceptInviteResponse
-	if err := json.UnmarshalRead(resp.Body, &accepted); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+	accepted := reqtest.Decode[staffauth.AcceptInviteResponse](t, resp)
 	if accepted.StaffID != existingID {
 		t.Fatalf("staffId = %q, want the existing staff row %q", accepted.StaffID, existingID)
 	}
 
-	var staffRows int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM staff WHERE lower(email) = 'known@example.com'`,
-	).Scan(&staffRows); err != nil {
-		t.Fatalf("count staff: %v", err)
-	}
+	staffRows := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM staff WHERE lower(email) = 'known@example.com'`)
 	if staffRows != 1 {
 		t.Fatalf("staff rows on that address = %d, want 1 (#291)", staffRows)
 	}
@@ -226,9 +200,7 @@ func TestAcceptInviteHandler_AlreadyAMemberIs409(t *testing.T) {
 	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusConflict)
 }
 
 // TestAcceptInviteHandler_SecondIdentityOnOneAddressIs409 is the same
@@ -250,17 +222,10 @@ func TestAcceptInviteHandler_SecondIdentityOnOneAddressIs409(t *testing.T) {
 	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Twice", LastName: "Over"})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusConflict)
 
-	var memberships int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM practice_memberships pm JOIN staff s ON s.id = pm.staff_id
-		 WHERE pm.practice_id = $1 AND lower(s.email) = 'twice@example.com'`, practiceID,
-	).Scan(&memberships); err != nil {
-		t.Fatalf("count memberships: %v", err)
-	}
+	memberships := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM practice_memberships pm JOIN staff s ON s.id = pm.staff_id
+		 WHERE pm.practice_id = $1 AND lower(s.email) = 'twice@example.com'`, practiceID)
 	if memberships != 1 {
 		t.Fatalf("memberships on that address = %d, want 1", memberships)
 	}
@@ -277,9 +242,7 @@ func TestAcceptInviteHandler_WrongAddressForbidden(t *testing.T) {
 	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Someone", LastName: "Else"})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 func TestAcceptInviteHandler_NoVerifiedAddressForbidden(t *testing.T) {
@@ -293,9 +256,7 @@ func TestAcceptInviteHandler_NoVerifiedAddressForbidden(t *testing.T) {
 	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "No", LastName: "Address"})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 func TestAcceptInviteHandler_ExpiredIsGoneAndMarked(t *testing.T) {
@@ -309,20 +270,13 @@ func TestAcceptInviteHandler_ExpiredIsGoneAndMarked(t *testing.T) {
 	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Too", LastName: "Late"})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusGone {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusGone)
-	}
-	requireErrorCode(t, resp, apierr.CodeLinkUnusable)
+	reqtest.RequireStatus(t, resp, http.StatusGone)
+	apierrtest.RequireCode(t, resp, apierr.CodeLinkUnusable)
 
 	// The expiry is written down on the way past, so the Owner's Staff
 	// screen stops offering it as pending. It survives the rolled-back
 	// request because nothing else in it succeeded.
-	var status string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT status::text FROM practice_invitations WHERE id = $1`, invitationID,
-	).Scan(&status); err != nil {
-		t.Fatalf("read invitation: %v", err)
-	}
+	status := testdb.Scalar[string](t, db.Admin, `SELECT status::text FROM practice_invitations WHERE id = $1`, invitationID)
 	if status != "expired" {
 		t.Fatalf("status = %q, want expired", status)
 	}
@@ -336,10 +290,8 @@ func TestAcceptInviteHandler_UnknownToken(t *testing.T) {
 	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: "not-a-real-token", FirstName: "Nobody", LastName: placeholderLastName})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
-	requireErrorCode(t, resp, apierr.CodeLinkUnusable)
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
+	apierrtest.RequireCode(t, resp, apierr.CodeLinkUnusable)
 }
 
 func TestAcceptInviteHandler_RevokedTokenIsNotFound(t *testing.T) {
@@ -358,10 +310,8 @@ func TestAcceptInviteHandler_RevokedTokenIsNotFound(t *testing.T) {
 	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Too", LastName: "Late"})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
-	requireErrorCode(t, resp, apierr.CodeLinkUnusable)
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
+	apierrtest.RequireCode(t, resp, apierr.CodeLinkUnusable)
 }
 
 func TestAcceptInviteHandler_BadRequests(t *testing.T) {
@@ -375,17 +325,13 @@ func TestAcceptInviteHandler_BadRequests(t *testing.T) {
 	t.Run("invalid body", func(t *testing.T) {
 		resp := postAcceptRaw(t, srv, []byte("not json"))
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	})
 
 	t.Run("missing token", func(t *testing.T) {
 		resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", FirstName: "Nameless", LastName: placeholderLastName})
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	})
 
 	// A new person must name herself: practice_invitations carries no
@@ -393,9 +339,7 @@ func TestAcceptInviteHandler_BadRequests(t *testing.T) {
 	t.Run("missing name for a new person", func(t *testing.T) {
 		resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token})
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-		}
+		reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	})
 }
 
@@ -418,9 +362,7 @@ func TestAcceptInviteHandler_NoCredential(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 // TestAcceptInviteHandler_BackfillsOfferStaffID is ADR-0008's
@@ -446,17 +388,10 @@ func TestAcceptInviteHandler_BackfillsOfferStaffID(t *testing.T) {
 	).Scan(&engagementID); err != nil {
 		t.Fatalf("seed engagement: %v", err)
 	}
-	var offerID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagement_offers
-		     (engagement_id, invitation_id, employment_type, amount_cents, client_first_initial, client_area,
-		      due_date, offered_by, expires_at)
+	offerID := testdb.Scalar[string](t, db.Admin, `INSERT INTO engagement_offers
+		     (engagement_id, invitation_id, employment_type, amount_cents, client_first_initial, client_area, due_date, offered_by, expires_at)
 		 VALUES ($1, $2, 'contractor', 52000, 'R', 'North side', now() + interval '90 days', $3, now() + interval '7 days')
-		 RETURNING id`,
-		engagementID, invitationID, ownerID,
-	).Scan(&offerID); err != nil {
-		t.Fatalf("seed offer: %v", err)
-	}
+		 RETURNING id`, engagementID, invitationID, ownerID)
 
 	srv := newAcceptServer(t, db, "renata-uid", "renata@example.com")
 	defer srv.Close()
@@ -466,17 +401,9 @@ func TestAcceptInviteHandler_BackfillsOfferStaffID(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	var accepted staffauth.AcceptInviteResponse
-	if err := json.UnmarshalRead(resp.Body, &accepted); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
+	accepted := reqtest.Decode[staffauth.AcceptInviteResponse](t, resp)
 
-	var offerStaffID *string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT staff_id::text FROM engagement_offers WHERE id = $1`, offerID,
-	).Scan(&offerStaffID); err != nil {
-		t.Fatalf("read offer: %v", err)
-	}
+	offerStaffID := testdb.Scalar[*string](t, db.Admin, `SELECT staff_id::text FROM engagement_offers WHERE id = $1`, offerID)
 	if offerStaffID == nil || *offerStaffID != accepted.StaffID {
 		t.Fatalf("offer staff_id = %v, want the just-accepted %q", offerStaffID, accepted.StaffID)
 	}
@@ -499,9 +426,7 @@ func TestAcceptInviteHandler_SetsEmailVerifiedAndQueuesNoMail(t *testing.T) {
 
 	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Verified", LastName: "Person"})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	account, err := accounts.GetAccount(t.Context(), uid)
 	if err != nil {
@@ -511,12 +436,7 @@ func TestAcceptInviteHandler_SetsEmailVerifiedAndQueuesNoMail(t *testing.T) {
 		t.Fatal("EmailVerified = false, want true after accepting an invitation")
 	}
 
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM staff_token_mail_outbox WHERE identity_uid = $1`, uid,
-	).Scan(&count); err != nil {
-		t.Fatalf("count token mail rows: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM staff_token_mail_outbox WHERE identity_uid = $1`, uid)
 	if count != 0 {
 		t.Fatalf("token mail rows = %d, want 0 -- accepting an invitation must queue no verification mail", count)
 	}
@@ -540,14 +460,9 @@ func TestAcceptInviteHandler_SetEmailVerifiedFailureRollsBackTheMembership(t *te
 
 	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Verify", LastName: "Fail Person"})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusInternalServerError)
 
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM staff WHERE identity_uid = $1`, uid).Scan(&count); err != nil {
-		t.Fatalf("count staff rows: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM staff WHERE identity_uid = $1`, uid)
 	if count != 0 {
 		t.Fatal("expected the whole acceptance to roll back, including the new staff row")
 	}

@@ -1,7 +1,6 @@
 package clientauth_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -11,6 +10,7 @@ import (
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/portalaccount"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -29,18 +29,7 @@ func newSessionServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Se
 
 func getSession(t *testing.T, srv *httptest.Server, session string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/portal/session", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	if session != "" {
-		authntest.AddSessionCookie(req, session)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Get(t, srv.URL+"/api/portal/session", reqtest.Session(session))
 }
 
 func TestSessionHandler_MissingCookie(t *testing.T) {
@@ -51,9 +40,7 @@ func TestSessionHandler_MissingCookie(t *testing.T) {
 	resp := getSession(t, srv, "")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 // TestSessionHandler_UnknownSession covers a cookie that names no live
@@ -66,9 +53,7 @@ func TestSessionHandler_UnknownSession(t *testing.T) {
 	resp := getSession(t, srv, "never-issued")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 }
 
 func TestSessionHandler_UnknownClient(t *testing.T) {
@@ -79,9 +64,7 @@ func TestSessionHandler_UnknownClient(t *testing.T) {
 	resp := getSession(t, srv, session)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestSessionHandler_SingleEngagement(t *testing.T) {
@@ -95,14 +78,9 @@ func TestSessionHandler_SingleEngagement(t *testing.T) {
 	resp := getSession(t, srv, session)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
-	var out clientauth.SessionResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[clientauth.SessionResponse](t, resp)
 	if len(out.Engagements) != 1 || out.Engagements[0].EngagementID != engagementID {
 		t.Fatalf("engagements = %+v, want single engagement %q", out.Engagements, engagementID)
 	}
@@ -137,10 +115,7 @@ func TestSessionHandler_MultipleEngagements(t *testing.T) {
 	resp := getSession(t, srv, session)
 	defer resp.Body.Close()
 
-	var out clientauth.SessionResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[clientauth.SessionResponse](t, resp)
 	if len(out.Engagements) != 2 {
 		t.Fatalf("expected 2 engagements, got %d", len(out.Engagements))
 	}
@@ -173,14 +148,9 @@ func TestSessionHandler_MultipleClients(t *testing.T) {
 	resp := getSession(t, srv, session)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
-	var out clientauth.SessionResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[clientauth.SessionResponse](t, resp)
 	if len(out.Engagements) != 2 {
 		t.Fatalf("expected 2 engagements across 2 Practices, got %+v", out.Engagements)
 	}
@@ -218,14 +188,9 @@ func TestSessionHandler_MultipleClients_Isolation(t *testing.T) {
 	resp := getSession(t, srv, session)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
-	var out clientauth.SessionResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[clientauth.SessionResponse](t, resp)
 	if len(out.Engagements) != 1 || out.Engagements[0].EngagementID != engagementA {
 		t.Fatalf("engagements = %+v, want only %q -- Practice B's %q must not leak", out.Engagements, engagementA, engagementB)
 	}
@@ -249,10 +214,7 @@ func TestSessionHandler_NoStaffOnlyFact(t *testing.T) {
 	resp := getSession(t, srv, session)
 	defer resp.Body.Close()
 
-	var out map[string]any
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[map[string]any](t, resp)
 	engagements, ok := out["engagements"].([]any)
 	if !ok || len(engagements) != 1 {
 		t.Fatalf("engagements = %+v, want one entry for %q", out["engagements"], engagementID)

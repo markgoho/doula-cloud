@@ -1,12 +1,12 @@
 package plans_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
 	"testing"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/plans"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -48,23 +48,13 @@ func TestPostInstanceHandler_RefusesBirthPlanItDoesNotOffer(t *testing.T) {
 
 			resp := postInstance(t, srv, session, practiceID, engagementID, birthPlanType)
 			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusConflict {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-			}
-			var body apierr.APIError
-			if err := json.UnmarshalRead(resp.Body, &body); err != nil {
-				t.Fatalf("decode: %v", err)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusConflict)
+			body := reqtest.Decode[apierr.APIError](t, resp)
 			if body.Code != apierr.CodeConflict || body.Message != tc.wantMsg {
 				t.Fatalf("body = %+v, want conflict %q", body, tc.wantMsg)
 			}
 
-			var count int
-			if err := db.Admin.QueryRowContext(t.Context(),
-				`SELECT count(*) FROM plan_instances WHERE engagement_id = $1 AND plan_type = 'birth_plan'`, engagementID,
-			).Scan(&count); err != nil {
-				t.Fatalf("count: %v", err)
-			}
+			count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM plan_instances WHERE engagement_id = $1 AND plan_type = 'birth_plan'`, engagementID)
 			if count != 0 {
 				t.Fatalf("birth plan instances = %d, want 0", count)
 			}

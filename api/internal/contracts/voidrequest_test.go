@@ -1,15 +1,13 @@
 package contracts_test
 
 import (
-	"bytes"
-	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/activity"
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -23,21 +21,7 @@ func voidRequestDeclineURL(srv *httptest.Server, practiceID, engagementID, reque
 
 func postJSONWithSession(t *testing.T, session, url string, body any) *http.Response {
 	t.Helper()
-	payload, err := json.Marshal(body)
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Post(t, url, reqtest.Session(session), reqtest.JSON(body))
 }
 
 func postVoidRequest(t *testing.T, srv *httptest.Server, session, practiceID, engagementID, reason string) *http.Response {
@@ -57,13 +41,8 @@ func postVoidRequestDecline(t *testing.T, srv *httptest.Server, session, practic
 // blocks this package's other test files repeat inline.
 func decodeContractResponse(t *testing.T, resp *http.Response, wantStatus int) contracts.ContractResponse {
 	t.Helper()
-	if resp.StatusCode != wantStatus {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, wantStatus)
-	}
-	var out contracts.ContractResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, wantStatus)
+	out := reqtest.Decode[contracts.ContractResponse](t, resp)
 	return out
 }
 
@@ -86,9 +65,7 @@ func TestPostVoidRequestHandler_RequiresSignedContract(t *testing.T) {
 			resp := postVoidRequest(t, srv, session, practiceID, engagementID, "the client's plan changed")
 			defer resp.Body.Close()
 
-			if resp.StatusCode != http.StatusConflict {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusConflict)
 		})
 	}
 }
@@ -115,9 +92,7 @@ func TestPostVoidRequestHandler_RequiresReason(t *testing.T) {
 			resp := postVoidRequest(t, srv, session, practiceID, engagementID, reason)
 			defer resp.Body.Close()
 
-			if resp.StatusCode != http.StatusBadRequest {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 		})
 	}
 }
@@ -221,9 +196,7 @@ func TestPostVoidRequestHandler_ContractorReach(t *testing.T) {
 			resp := postVoidRequest(t, srv, session, practiceID, engagementID, "asking as a contractor")
 			defer resp.Body.Close()
 
-			if resp.StatusCode != tc.wantStatus {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, tc.wantStatus)
-			}
+			reqtest.RequireStatus(t, resp, tc.wantStatus)
 			if tc.wantStatus == http.StatusCreated {
 				out := decodeContractResponse(t, resp, http.StatusCreated)
 				if _, present := out.Values[priceKey]; present {
@@ -271,9 +244,7 @@ func TestPostVoidRequestDeclineHandler_RefusedByRole(t *testing.T) {
 			resp := postVoidRequestDecline(t, srv, session, practiceID, engagementID, requestID, "declining")
 			defer resp.Body.Close()
 
-			if resp.StatusCode != tc.wantStatus {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, tc.wantStatus)
-			}
+			reqtest.RequireStatus(t, resp, tc.wantStatus)
 		})
 	}
 }
@@ -397,9 +368,7 @@ func TestPostVoidRequestHandler_InvalidEngagementID(t *testing.T) {
 	resp := postVoidRequest(t, srv, session, practiceID, "not-a-uuid", "asking")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestPostVoidRequestHandler_NoContract proves an Engagement with no
@@ -417,9 +386,7 @@ func TestPostVoidRequestHandler_NoContract(t *testing.T) {
 	resp := postVoidRequest(t, srv, session, practiceID, engagementID, "asking")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestPostVoidRequestHandler_MalformedBody proves an undecodable request
@@ -435,21 +402,10 @@ func TestPostVoidRequestHandler_MalformedBody(t *testing.T) {
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, voidRequestURL(srv, practiceID, engagementID), bytes.NewReader([]byte("not json")))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, voidRequestURL(srv, practiceID, engagementID), reqtest.Session(session), reqtest.RawJSON([]byte("not json")))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestPostVoidRequestDeclineHandler_InvalidEngagementID mirrors the
@@ -465,9 +421,7 @@ func TestPostVoidRequestDeclineHandler_InvalidEngagementID(t *testing.T) {
 	resp := postVoidRequestDecline(t, srv, session, practiceID, "not-a-uuid", "00000000-0000-0000-0000-000000000000", "declining")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestPostVoidRequestDeclineHandler_InvalidRequestID proves a malformed
@@ -485,9 +439,7 @@ func TestPostVoidRequestDeclineHandler_InvalidRequestID(t *testing.T) {
 	resp := postVoidRequestDecline(t, srv, session, practiceID, engagementID, "not-a-uuid", "declining")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestPostVoidRequestDeclineHandler_NoContract proves an Engagement with
@@ -504,9 +456,7 @@ func TestPostVoidRequestDeclineHandler_NoContract(t *testing.T) {
 	resp := postVoidRequestDecline(t, srv, session, practiceID, engagementID, "00000000-0000-0000-0000-000000000000", "declining")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestPostVoidRequestDeclineHandler_MalformedBody mirrors the request
@@ -522,21 +472,10 @@ func TestPostVoidRequestDeclineHandler_MalformedBody(t *testing.T) {
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, voidRequestDeclineURL(srv, practiceID, engagementID, requestID), bytes.NewReader([]byte("not json")))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Post(t, voidRequestDeclineURL(srv, practiceID, engagementID, requestID), reqtest.Session(session), reqtest.RawJSON([]byte("not json")))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestPostVoidRequestDeclineHandler_RequiresReason proves an empty
@@ -556,9 +495,7 @@ func TestPostVoidRequestDeclineHandler_RequiresReason(t *testing.T) {
 	resp := postVoidRequestDecline(t, srv, session, practiceID, engagementID, requestID, "")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // seedVoidRequest seeds an open contract_void_requests row directly

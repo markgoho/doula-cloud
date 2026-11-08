@@ -174,12 +174,7 @@ func TestSecondFactorRecommendation_ReturnsOnceAtEachNewAct(t *testing.T) {
 
 	// A repeated close is a no-op, not a second row.
 	s.close(session, practiceID)
-	var rows int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM second_factor_recommendation_closures WHERE practice_id = $1`, practiceID,
-	).Scan(&rows); err != nil {
-		t.Fatalf("count closures: %v", err)
-	}
+	rows := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM second_factor_recommendation_closures WHERE practice_id = $1`, practiceID)
 	if rows != 3 {
 		t.Fatalf("closure rows = %d, want 3 (one per act)", rows)
 	}
@@ -327,10 +322,7 @@ func outboxRowCount(t *testing.T, db *testdb.DB) int {
 	}
 	total := 0
 	for _, table := range tables {
-		var n int
-		if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM `+table).Scan(&n); err != nil {
-			t.Fatalf("count %s: %v", table, err)
-		}
+		n := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM `+table)
 		total += n
 	}
 	return total

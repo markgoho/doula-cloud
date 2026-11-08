@@ -1,7 +1,6 @@
 package contracts_test
 
 import (
-	"bytes"
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +11,7 @@ import (
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/push"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -176,31 +176,12 @@ func newContractServerWithPusherAndStore(t *testing.T, db *testdb.DB, uid string
 
 func getTemplate(t *testing.T, srv *httptest.Server, session string, practiceID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/contract-template", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/contract-template", reqtest.Session(session))
 }
 
 func putTemplateRaw(t *testing.T, srv *httptest.Server, session string, practiceID string, body []byte) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/contract-template", bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Put(t, srv.URL+"/api/practices/"+practiceID+"/contract-template", reqtest.Session(session), reqtest.RawJSON(body))
 }
 
 func putTemplate(t *testing.T, srv *httptest.Server, session string, practiceID string, body contracts.TemplateResponse) *http.Response {
@@ -223,9 +204,7 @@ func TestGetTemplateHandler_NotFound(t *testing.T) {
 	resp := getTemplate(t, srv, session, practiceID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestGetTemplateHandler_AnyMemberAllowed proves a non-Owner member (a
@@ -242,14 +221,9 @@ func TestGetTemplateHandler_AnyMemberAllowed(t *testing.T) {
 	resp := getTemplate(t, srv, session, practiceID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
-	var out contracts.TemplateResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[contracts.TemplateResponse](t, resp)
 	if out.Prose != "Some prose with {{client_name}}" {
 		t.Fatalf("prose = %q, want the seeded prose", out.Prose)
 	}
@@ -273,9 +247,7 @@ func TestPutTemplateHandler_NonOwnerForbidden(t *testing.T) {
 			resp := putTemplate(t, srv, session, practiceID, contracts.TemplateResponse{Prose: "Some prose"})
 			defer resp.Body.Close()
 
-			if resp.StatusCode != http.StatusForbidden {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusForbidden)
 		})
 	}
 }
@@ -291,9 +263,7 @@ func TestPutTemplateHandler_InvalidBody(t *testing.T) {
 	resp := putTemplateRaw(t, srv, session, practiceID, []byte("not json"))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestPutTemplateHandler_BlankProseRejected table-drives an empty and a
@@ -318,9 +288,7 @@ func TestPutTemplateHandler_BlankProseRejected(t *testing.T) {
 			resp := putTemplate(t, srv, session, practiceID, contracts.TemplateResponse{Prose: tc.prose})
 			defer resp.Body.Close()
 
-			if resp.StatusCode != http.StatusBadRequest {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 		})
 	}
 }
@@ -342,10 +310,7 @@ func TestPutTemplateHandler_Success(t *testing.T) {
 		t.Fatalf("PUT status = %d, want %d", putResp.StatusCode, http.StatusOK)
 	}
 
-	var putOut contracts.TemplateResponse
-	if err := json.UnmarshalRead(putResp.Body, &putOut); err != nil {
-		t.Fatalf("decode PUT response: %v", err)
-	}
+	putOut := reqtest.Decode[contracts.TemplateResponse](t, putResp)
 	if putOut.Prose != "Agreement with {{client_name}}" {
 		t.Fatalf("PUT prose = %q, want trimmed", putOut.Prose)
 	}
@@ -355,10 +320,7 @@ func TestPutTemplateHandler_Success(t *testing.T) {
 	if getResp.StatusCode != http.StatusOK {
 		t.Fatalf("GET status = %d, want %d", getResp.StatusCode, http.StatusOK)
 	}
-	var getOut contracts.TemplateResponse
-	if err := json.UnmarshalRead(getResp.Body, &getOut); err != nil {
-		t.Fatalf("decode GET response: %v", err)
-	}
+	getOut := reqtest.Decode[contracts.TemplateResponse](t, getResp)
 	if getOut.Prose != "Agreement with {{client_name}}" {
 		t.Fatalf("GET prose after PUT = %q, want the just-written prose", getOut.Prose)
 	}
@@ -379,16 +341,11 @@ func TestPutTemplateHandler_ReplacesExistingRow(t *testing.T) {
 	resp := putTemplate(t, srv, session, practiceID, contracts.TemplateResponse{Prose: "New prose"})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	getResp := getTemplate(t, srv, session, practiceID)
 	defer getResp.Body.Close()
-	var out contracts.TemplateResponse
-	if err := json.UnmarshalRead(getResp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[contracts.TemplateResponse](t, getResp)
 	if out.Prose != "New prose" {
 		t.Fatalf("prose = %q, want only the replacement prose", out.Prose)
 	}

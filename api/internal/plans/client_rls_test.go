@@ -20,22 +20,9 @@ func TestRLS_PlanInstancesClientCanReadOwnBirthPlan(t *testing.T) {
 	seedInstance(t, db, engagementID, birthPlanType,
 		`[{"id":"location","type":"single_select","label":"Planned birth location","order":0}]`, `{}`)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Client(clientID))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	var count int
-	if err := tx.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM plan_instances WHERE engagement_id = $1 AND plan_type = 'birth_plan'`, engagementID,
-	).Scan(&count); err != nil {
-		t.Fatalf("query plan_instances as Client: %v", err)
-	}
+	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM plan_instances WHERE engagement_id = $1 AND plan_type = 'birth_plan'`, engagementID)
 	if count != 1 {
 		t.Fatalf("expected Client to see their own Birth Plan instance, got count = %d", count)
 	}
@@ -53,22 +40,9 @@ func TestRLS_PlanInstancesClientCannotReadCarePlan(t *testing.T) {
 	seedInstance(t, db, engagementID, carePlanType,
 		`[{"id":"f1","type":"short_text","label":"Name","order":0}]`, `{"f1":"secret"}`)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Client(clientID))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	var count int
-	if err := tx.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM plan_instances WHERE engagement_id = $1 AND plan_type = 'care_plan'`, engagementID,
-	).Scan(&count); err != nil {
-		t.Fatalf("query plan_instances as Client: %v", err)
-	}
+	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM plan_instances WHERE engagement_id = $1 AND plan_type = 'care_plan'`, engagementID)
 	if count != 0 {
 		t.Fatalf("expected 0 rows for a Care Plan instance from a Client-portal session, got %d", count)
 	}
@@ -86,22 +60,9 @@ func TestRLS_PlanInstancesClientCannotReadOtherClientsBirthPlan(t *testing.T) {
 	seedInstance(t, db, engagementB, birthPlanType,
 		`[{"id":"location","type":"single_select","label":"Planned birth location","order":0}]`, `{}`)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Client(clientA))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	var count int
-	if err := tx.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM plan_instances WHERE engagement_id = $1 AND plan_type = 'birth_plan'`, engagementB,
-	).Scan(&count); err != nil {
-		t.Fatalf("query plan_instances as Client A: %v", err)
-	}
+	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM plan_instances WHERE engagement_id = $1 AND plan_type = 'birth_plan'`, engagementB)
 	if count != 0 {
 		t.Fatalf("expected Client A to see 0 rows for Client B's Birth Plan, got %d", count)
 	}
@@ -118,15 +79,7 @@ func TestRLS_PlanInstancesClientUpdateRejected(t *testing.T) {
 	seedInstance(t, db, engagementID, birthPlanType,
 		`[{"id":"location","type":"single_select","label":"Planned birth location","order":0}]`, `{}`)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Client(clientID))
 
 	result, err := tx.ExecContext(t.Context(),
 		`UPDATE plan_instances SET answers = '{"location":"hacked"}' WHERE engagement_id = $1 AND plan_type = 'birth_plan'`,

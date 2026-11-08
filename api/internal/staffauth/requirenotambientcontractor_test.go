@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -48,19 +49,9 @@ func TestRequireNotAmbientContractor(t *testing.T) {
 	}
 	for uid, want := range cases {
 		t.Run(uid, func(t *testing.T) {
-			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/practices/"+practiceID+"/thing", nil)
-			if err != nil {
-				t.Fatalf("build request: %v", err)
-			}
-			authntest.AddSessionCookie(req, authntest.SeedSession(t, db.App, uid))
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				t.Fatalf("request: %v", err)
-			}
+			resp := reqtest.Post(t, srv.URL+"/practices/"+practiceID+"/thing", reqtest.Session(authntest.SeedSession(t, db.App, uid)))
 			defer func() { _ = resp.Body.Close() }()
-			if resp.StatusCode != want {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, want)
-			}
+			reqtest.RequireStatus(t, resp, want)
 		})
 	}
 }

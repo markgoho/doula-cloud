@@ -1,7 +1,6 @@
 package plans_test
 
 import (
-	"bytes"
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +9,7 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/plans"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -84,31 +84,12 @@ func newPlanServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Serve
 
 func getTemplate(t *testing.T, srv *httptest.Server, session string, practiceID, planType string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/plan-templates/"+planType, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/plan-templates/"+planType, reqtest.Session(session))
 }
 
 func putTemplateRaw(t *testing.T, srv *httptest.Server, session string, practiceID, planType string, body []byte) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/plan-templates/"+planType, bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Put(t, srv.URL+"/api/practices/"+practiceID+"/plan-templates/"+planType, reqtest.Session(session), reqtest.RawJSON(body))
 }
 
 func putTemplate(t *testing.T, srv *httptest.Server, session string, practiceID, planType string, body plans.TemplateResponse) *http.Response {
@@ -126,45 +107,17 @@ func instancePath(practiceID, engagementID, planType string) string {
 
 func postInstance(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID, planType string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+instancePath(practiceID, engagementID, planType), nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Post(t, srv.URL+instancePath(practiceID, engagementID, planType), reqtest.Session(session))
 }
 
 func getInstance(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID, planType string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+instancePath(practiceID, engagementID, planType), nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Get(t, srv.URL+instancePath(practiceID, engagementID, planType), reqtest.Session(session))
 }
 
 func putInstanceRaw(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID, planType string, body []byte) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+instancePath(practiceID, engagementID, planType), bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Put(t, srv.URL+instancePath(practiceID, engagementID, planType), reqtest.Session(session), reqtest.RawJSON(body))
 }
 
 func putInstance(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID, planType string, body plans.PutInstanceRequest) *http.Response {
@@ -187,9 +140,7 @@ func TestGetTemplateHandler_UnknownPlanType(t *testing.T) {
 	resp := getTemplate(t, srv, session, practiceID, "not_a_plan_type")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestGetTemplateHandler_NotFound(t *testing.T) {
@@ -203,9 +154,7 @@ func TestGetTemplateHandler_NotFound(t *testing.T) {
 	resp := getTemplate(t, srv, session, practiceID, "care_plan")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestGetTemplateHandler_AnyMemberAllowed proves every Staff role --
@@ -236,14 +185,9 @@ func TestGetTemplateHandler_AnyMemberAllowed(t *testing.T) {
 			resp := getTemplate(t, srv, session, practiceID, "care_plan")
 			defer resp.Body.Close()
 
-			if resp.StatusCode != http.StatusOK {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusOK)
 
-			var out plans.TemplateResponse
-			if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-				t.Fatalf("decode response: %v", err)
-			}
+			out := reqtest.Decode[plans.TemplateResponse](t, resp)
 			if out.PlanType != "care_plan" {
 				t.Fatalf("planType = %q, want care_plan", out.PlanType)
 			}
@@ -275,17 +219,9 @@ func TestPutTemplateHandler_NonOwnerForbidden(t *testing.T) {
 			}})
 			defer resp.Body.Close()
 
-			if resp.StatusCode != http.StatusForbidden {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusForbidden)
 
-			var stored string
-			if err := db.Admin.QueryRowContext(t.Context(),
-				`SELECT fields->0->>'id' FROM plan_templates WHERE practice_id = $1 AND plan_type = $2`,
-				practiceID, carePlanType,
-			).Scan(&stored); err != nil {
-				t.Fatalf("read stored template: %v", err)
-			}
+			stored := testdb.Scalar[string](t, db.Admin, `SELECT fields->0->>'id' FROM plan_templates WHERE practice_id = $1 AND plan_type = $2`, practiceID, carePlanType)
 			if stored != "f1" {
 				t.Fatalf("stored first field id = %q, want f1 (the refused PUT must not write)", stored)
 			}
@@ -306,9 +242,7 @@ func TestPutTemplateHandler_UnknownPlanType(t *testing.T) {
 	}})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestPutTemplateHandler_InvalidBody(t *testing.T) {
@@ -322,9 +256,7 @@ func TestPutTemplateHandler_InvalidBody(t *testing.T) {
 	resp := putTemplateRaw(t, srv, session, practiceID, "care_plan", []byte("not json"))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 // TestPutTemplateHandler_ValidationRejections table-drives every
@@ -359,9 +291,7 @@ func TestPutTemplateHandler_ValidationRejections(t *testing.T) {
 			resp := putTemplate(t, srv, session, practiceID, "care_plan", plans.TemplateResponse{Fields: tc.fields})
 			defer resp.Body.Close()
 
-			if resp.StatusCode != http.StatusBadRequest {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-			}
+			reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 		})
 	}
 }
@@ -391,10 +321,7 @@ func TestPutTemplateHandler_Success(t *testing.T) {
 		t.Fatalf("PUT status = %d, want %d", putResp.StatusCode, http.StatusOK)
 	}
 
-	var putOut plans.TemplateResponse
-	if err := json.UnmarshalRead(putResp.Body, &putOut); err != nil {
-		t.Fatalf("decode PUT response: %v", err)
-	}
+	putOut := reqtest.Decode[plans.TemplateResponse](t, putResp)
 	if len(putOut.Fields) != 2 || putOut.Fields[0].ID != secondFieldID || putOut.Fields[0].Order != 0 || putOut.Fields[1].ID != firstFieldID || putOut.Fields[1].Order != 1 {
 		t.Fatalf("PUT fields = %+v, want order recomputed from array position", putOut.Fields)
 	}
@@ -404,10 +331,7 @@ func TestPutTemplateHandler_Success(t *testing.T) {
 	if getResp.StatusCode != http.StatusOK {
 		t.Fatalf("GET status = %d, want %d", getResp.StatusCode, http.StatusOK)
 	}
-	var getOut plans.TemplateResponse
-	if err := json.UnmarshalRead(getResp.Body, &getOut); err != nil {
-		t.Fatalf("decode GET response: %v", err)
-	}
+	getOut := reqtest.Decode[plans.TemplateResponse](t, getResp)
 	if len(getOut.Fields) != 2 || getOut.Fields[0].ID != secondFieldID || getOut.Fields[1].ID != firstFieldID {
 		t.Fatalf("GET fields after PUT = %+v, want the just-written fields", getOut.Fields)
 	}
@@ -430,16 +354,11 @@ func TestPutTemplateHandler_ReplacesExistingRow(t *testing.T) {
 	}})
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 
 	getResp := getTemplate(t, srv, session, practiceID, "care_plan")
 	defer getResp.Body.Close()
-	var out plans.TemplateResponse
-	if err := json.UnmarshalRead(getResp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Decode[plans.TemplateResponse](t, getResp)
 	if len(out.Fields) != 1 || out.Fields[0].ID != "new" {
 		t.Fatalf("fields = %+v, want only the replacement field", out.Fields)
 	}
@@ -494,10 +413,7 @@ func TestPutTemplateHandler_WritesOneAuditRowPerRealChange(t *testing.T) {
 	const uid = "put-audit-trail"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	seedPlanTemplate(t, db, practiceID, carePlanType, `[{"id":"old","type":"short_text","label":"Old field","order":0}]`)
-	var staffID string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT id FROM staff WHERE identity_uid = $1`, uid).Scan(&staffID); err != nil {
-		t.Fatalf("read seeded staff id: %v", err)
-	}
+	staffID := testdb.Scalar[string](t, db.Admin, `SELECT id FROM staff WHERE identity_uid = $1`, uid)
 
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()

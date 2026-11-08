@@ -7,6 +7,7 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -23,18 +24,7 @@ func newEndSessionsServer(t *testing.T, db *testdb.DB, uid string) (srv *httptes
 
 func deleteSessions(t *testing.T, srv *httptest.Server, session string, practiceID, staffID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete,
-		srv.URL+"/api/practices/"+practiceID+"/staff/"+staffID+"/sessions", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("X-Confirmed", "true")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Delete(t, srv.URL+"/api/practices/"+practiceID+"/staff/"+staffID+"/sessions", reqtest.Session(session), reqtest.Header("X-Confirmed", "true"))
 }
 
 func TestEndSessionsHandler_RequiresConfirmation(t *testing.T) {
@@ -50,21 +40,10 @@ func TestEndSessionsHandler_RequiresConfirmation(t *testing.T) {
 	srv, session := newEndSessionsServer(t, db, ownerUID)
 	defer srv.Close()
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete,
-		srv.URL+"/api/practices/"+practiceID+"/staff/"+targetID+"/sessions", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := reqtest.Delete(t, srv.URL+"/api/practices/"+practiceID+"/staff/"+targetID+"/sessions", reqtest.Session(session))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	if got := authntest.CountFor(t, db.App, targetUID); got != 1 {
 		t.Fatalf("target session rows = %d, want the unconfirmed request to have ended nothing", got)
 	}
@@ -88,9 +67,7 @@ func TestEndSessionsHandler_RecordsActivity(t *testing.T) {
 	resp := deleteSessions(t, srv, session, practiceID, targetID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
 
 	var action, actor string
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -115,9 +92,7 @@ func TestEndSessionsHandler_NonOwnerForbidden(t *testing.T) {
 	resp := deleteSessions(t, srv, session, practiceID, staffID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 // TestEndSessionsHandler_OwnerAtDifferentPracticeForbidden covers the AC
@@ -138,9 +113,7 @@ func TestEndSessionsHandler_OwnerAtDifferentPracticeForbidden(t *testing.T) {
 	resp := deleteSessions(t, srv, session, otherPracticeID, targetID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
 func TestEndSessionsHandler_NoSuchMembership(t *testing.T) {
@@ -154,9 +127,7 @@ func TestEndSessionsHandler_NoSuchMembership(t *testing.T) {
 	resp := deleteSessions(t, srv, session, practiceID, "00000000-0000-0000-0000-000000000000")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestEndSessionsHandler_Success is the ticket's core behavior: every
@@ -179,9 +150,7 @@ func TestEndSessionsHandler_Success(t *testing.T) {
 	resp := deleteSessions(t, srv, session, practiceID, targetID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
 	if got := authntest.CountFor(t, db.App, targetUID); got != 0 {
 		t.Fatalf("target session rows = %d, want 0", got)
 	}
@@ -207,16 +176,9 @@ func TestEndSessionsHandler_QueuesSessionRevokedNotice(t *testing.T) {
 
 	resp := deleteSessions(t, srv, session, practiceID, targetID)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
 
-	var kind string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT kind FROM session_notice_outbox WHERE identity_uid = $1`, targetUID,
-	).Scan(&kind); err != nil {
-		t.Fatalf("query session_notice_outbox: %v", err)
-	}
+	kind := testdb.Scalar[string](t, db.Admin, `SELECT kind FROM session_notice_outbox WHERE identity_uid = $1`, targetUID)
 	if kind != "session_revoked" {
 		t.Fatalf("kind = %q, want session_revoked", kind)
 	}

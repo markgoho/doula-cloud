@@ -9,6 +9,7 @@ import (
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -17,9 +18,7 @@ const operatorTenant = "operators-local"
 
 func assertOperatorRefusal(t *testing.T, resp *http.Response) {
 	t.Helper()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
 	refusal := apierrtest.Decode(t, resp)
 	if refusal.Code != apierr.CodeUnauthorized || refusal.Message != authn.MsgOperatorToken {
 		t.Fatalf("refusal = %+v, want %s %q", refusal, apierr.CodeUnauthorized, authn.MsgOperatorToken)
@@ -69,10 +68,7 @@ func TestSignupHandler_RefusesAVerifiedOperatorToken(t *testing.T) {
 	if c := sessionCookie(resp); c != nil {
 		t.Fatalf("cookie set for an operator token: %+v", c)
 	}
-	var staffRows int
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM staff WHERE identity_uid = $1`, uid).Scan(&staffRows); err != nil {
-		t.Fatalf("count staff: %v", err)
-	}
+	staffRows := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM staff WHERE identity_uid = $1`, uid)
 	if staffRows != 0 {
 		t.Fatalf("staff rows = %d, want 0", staffRows)
 	}

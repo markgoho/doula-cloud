@@ -2,10 +2,10 @@ package contracts_test
 
 import (
 	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"net/http"
 	"testing"
 
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -20,13 +20,8 @@ const noMergeFieldProse = "This agreement has no fields to fill in."
 // null is what the screens cannot read.
 func assertEmptyMergeFields(t *testing.T, resp *http.Response, wantStatus int) {
 	t.Helper()
-	if resp.StatusCode != wantStatus {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, wantStatus)
-	}
-	var raw map[string]jsontext.Value
-	if err := json.UnmarshalRead(resp.Body, &raw); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	reqtest.RequireStatus(t, resp, wantStatus)
+	raw := reqtest.Decode[map[string]jsontext.Value](t, resp)
 	if got := string(raw["mergeFields"]); got != "[]" {
 		t.Fatalf("mergeFields = %s, want [] for prose with no merge fields (#1776)", got)
 	}

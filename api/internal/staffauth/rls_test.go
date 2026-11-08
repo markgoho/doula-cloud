@@ -25,13 +25,7 @@ import (
 // row whose email is independent of her identity_uid.
 func seedStaffWithEmail(t *testing.T, db *testdb.DB, identityUID, email string) string {
 	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, first_name, last_name, email, work_state) VALUES ($1, 'Test', 'Staff', $2, 'NY') RETURNING id`,
-		identityUID, email,
-	).Scan(&id); err != nil {
-		t.Fatalf("seed staff %q: %v", identityUID, err)
-	}
+	id := testdb.Scalar[string](t, db.Admin, `INSERT INTO staff (identity_uid, first_name, last_name, email, work_state) VALUES ($1, 'Test', 'Staff', $2, 'NY') RETURNING id`, identityUID, email)
 	return id
 }
 
@@ -60,10 +54,7 @@ func TestRLS_StaffFailsClosedWithNoSessionVarsSet(t *testing.T) {
 	staffID := testdb.SeedStaff(t, db, "fail-closed-staff-uid")
 	seedMembership(t, db, practiceID, staffID)
 
-	var count int
-	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM staff`).Scan(&count); err != nil {
-		t.Fatalf("query staff with no session vars set: %v", err)
-	}
+	count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM staff`)
 	if count != 0 {
 		t.Fatalf("expected 0 rows with no session variables set, got %d", count)
 	}
@@ -82,32 +73,9 @@ func TestRLS_StaffPracticeVisibilityIsScopedToCurrentPractice(t *testing.T) {
 	seedMembership(t, db, practiceA, staffAtA)
 	seedMembership(t, db, practiceB, staffAtB)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Practice(practiceA))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	var visibleIDs []string
-	rows, err := tx.QueryContext(t.Context(), `SELECT id FROM staff`)
-	if err != nil {
-		t.Fatalf("query staff: %v", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		visibleIDs = append(visibleIDs, id)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate rows: %v", err)
-	}
+	visibleIDs := testdb.Column[string](t, tx, `SELECT id FROM staff`)
 
 	if len(visibleIDs) != 1 || visibleIDs[0] != staffAtA {
 		t.Fatalf("visible staff = %v, want only %q", visibleIDs, staffAtA)
@@ -133,10 +101,7 @@ func TestRLS_StaffSelfVisibilityOnlyAppliesBeforePracticeIsChosen(t *testing.T) 
 		t.Fatalf("set_config identity: %v", err)
 	}
 
-	var count int
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM staff WHERE id = $1`, staffID).Scan(&count); err != nil {
-		t.Fatalf("query staff before practice set: %v", err)
-	}
+	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM staff WHERE id = $1`, staffID)
 	if count != 1 {
 		t.Fatalf("expected caller's own staff row visible before a Practice is chosen, got count = %d", count)
 	}
@@ -165,20 +130,9 @@ func TestRLS_PracticeMembershipsVisibilityIsScopedToCurrentPractice(t *testing.T
 	seedMembership(t, db, practiceA, staffA)
 	seedMembership(t, db, practiceB, staffB)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Practice(practiceA))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	var count int
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM practice_memberships`).Scan(&count); err != nil {
-		t.Fatalf("query practice_memberships: %v", err)
-	}
+	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM practice_memberships`)
 	if count != 1 {
 		t.Fatalf("expected only Practice A's membership visible, got count = %d", count)
 	}
@@ -211,18 +165,8 @@ func TestRLS_MembershipEventsAreScopedToCurrentPractice(t *testing.T) {
 		{"another practice", theirs, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			tx, err := db.App.BeginTx(t.Context(), nil)
-			if err != nil {
-				t.Fatalf("begin: %v", err)
-			}
-			defer func() { _ = tx.Rollback() }()
-			if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, tc.practiceID); err != nil {
-				t.Fatalf("set_config: %v", err)
-			}
-			var count int
-			if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM activity`).Scan(&count); err != nil {
-				t.Fatalf("count membership events: %v", err)
-			}
+			tx := db.BeginAs(t, testdb.Practice(tc.practiceID))
+			count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM activity`)
 			if count != tc.want {
 				t.Fatalf("visible membership events = %d, want %d", count, tc.want)
 			}
@@ -269,10 +213,7 @@ func TestRLS_InvitationAcceptLookupNeedsTheTokenDigest(t *testing.T) {
 					t.Fatalf("set_config: %v", err)
 				}
 			}
-			var count int
-			if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM practice_invitations`).Scan(&count); err != nil {
-				t.Fatalf("count invitations: %v", err)
-			}
+			count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM practice_invitations`)
 			if count != tc.want {
 				t.Fatalf("visible invitations = %d, want %d", count, tc.want)
 			}
@@ -485,18 +426,8 @@ func TestRLS_StaffVisibleToOwnPracticeMembershipHistory(t *testing.T) {
 		{"never a member at this Practice, hidden", neverMemberID, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			tx, err := db.App.BeginTx(t.Context(), nil)
-			if err != nil {
-				t.Fatalf("begin: %v", err)
-			}
-			defer func() { _ = tx.Rollback() }()
-			if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-				t.Fatalf("set_config: %v", err)
-			}
-			var count int
-			if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM staff WHERE id = $1`, tc.staffID).Scan(&count); err != nil {
-				t.Fatalf("query staff: %v", err)
-			}
+			tx := db.BeginAs(t, testdb.Practice(practiceID))
+			count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM staff WHERE id = $1`, tc.staffID)
 			if got := count == 1; got != tc.want {
 				t.Fatalf("visible = %v, want %v", got, tc.want)
 			}
@@ -504,18 +435,8 @@ func TestRLS_StaffVisibleToOwnPracticeMembershipHistory(t *testing.T) {
 	}
 
 	t.Run("scoped to the Practice the event happened at, not any Practice", func(t *testing.T) {
-		tx, err := db.App.BeginTx(t.Context(), nil)
-		if err != nil {
-			t.Fatalf("begin: %v", err)
-		}
-		defer func() { _ = tx.Rollback() }()
-		if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, otherPracticeID); err != nil {
-			t.Fatalf("set_config: %v", err)
-		}
-		var count int
-		if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM staff WHERE id = $1`, departedID).Scan(&count); err != nil {
-			t.Fatalf("query staff: %v", err)
-		}
+		tx := db.BeginAs(t, testdb.Practice(otherPracticeID))
+		count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM staff WHERE id = $1`, departedID)
 		if count != 0 {
 			t.Fatalf("visible from an unrelated Practice = %d, want 0 -- 00116's policy leaked across Practices", count)
 		}
@@ -537,19 +458,9 @@ func TestRLS_StaffVisibleToOwnPracticeMembershipHistoryNeverAppliesToAClientSess
 	departedID := seedStaffWithEmail(t, db, "rls-client-session-departed", "rls-client-session-departed@example.com")
 	seedMembershipRemovedEvent(t, db, practiceID, departedID)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Client(clientID))
 
-	var count int
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM staff WHERE id = $1`, departedID).Scan(&count); err != nil {
-		t.Fatalf("query staff: %v", err)
-	}
+	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM staff WHERE id = $1`, departedID)
 	if count != 0 {
 		t.Fatalf("00116's policy admitted a departed Staff row to a Client session with no app.current_practice_id set; want 0, got %d", count)
 	}
