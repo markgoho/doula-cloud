@@ -33,9 +33,9 @@
  * the build -- and the deploy workflow's build/deploy split means a
  * failed build produces no artifact and the live site stays exactly as
  * it was -- or the variable is absent, in which case this touches
- * nothing at all. The second case is a local `bun run build` and the PR
- * preview workflow, neither of which has a credential, and neither of
- * which should silently publish a stale or empty set of pages.
+ * nothing at all. The second case is a local `bun run build`, which has
+ * no credential and should never silently publish a stale or empty set
+ * of pages.
  */
 
 import { mkdir, rm, writeFile } from 'node:fs/promises';

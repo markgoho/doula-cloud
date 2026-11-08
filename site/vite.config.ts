@@ -32,7 +32,7 @@ export default defineConfig({
 				entries: ['*', '/sitemap.xml'],
 
 				// A build with no Practice pages is a correct build: a local
-				// one and a PR preview have no database credential, and the
+				// one has no database credential, and the
 				// sync script leaves practice-pages/ empty on purpose
 				// (docs/environment.md). So /p/[slug] may go unbuilt. Any
 				// other route that goes unbuilt is still an error.
