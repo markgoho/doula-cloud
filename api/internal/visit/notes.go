@@ -107,5 +107,5 @@ func NotesHandler() http.Handler {
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, NotesResponse{VisitID: visitID, Notes: *req.Notes})
-	}, staffauth.Engagement(), staffauth.PathID("visit", "visitId"))
+	}, staffauth.PathID("visit", "visitId"), staffauth.Engagement())
 }

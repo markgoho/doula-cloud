@@ -123,5 +123,5 @@ func ScheduleHandler() http.Handler {
 			VisitID:     visitID,
 			ScheduledAt: scheduledAt,
 		})
-	}, staffauth.Engagement(), staffauth.PathID("visit", "visitId"))
+	}, staffauth.PathID("visit", "visitId"), staffauth.Engagement())
 }

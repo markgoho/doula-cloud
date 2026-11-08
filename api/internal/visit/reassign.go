@@ -130,7 +130,7 @@ func ReassignHandler(enq tasknudge.Enqueuer) http.Handler {
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, ReassignResponse{VisitID: visitID, StaffID: staffID, NotifiedStaffIDs: notified})
-	}, staffauth.Engagement(), staffauth.PathID("visit", "visitId"))
+	}, staffauth.PathID("visit", "visitId"), staffauth.Engagement())
 }
 
 // queueReassignNotices queues the email to the Doula a Visit moved onto
