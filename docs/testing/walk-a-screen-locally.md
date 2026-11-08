@@ -2,7 +2,7 @@
 
 The recipe for running one spec, the local stack and a seeded Practice from a worktree. Each command is one plain command, in the form the worktree isolation accepts ([`docs/agents/worktree-flow.md`](../agents/worktree-flow.md)): variables go in front of the command they are for, never through `export`.
 
-1. **The Podman socket.** Print its path; `DOCKER_HOST` is `unix://` followed by it:
+1. **The Podman socket.** On WSL or Linux with rootless Podman, the shell already exports `DOCKER_HOST` (`unix:///run/user/<uid>/podman/podman.sock`); use that. On a Mac, print the path; `DOCKER_HOST` is `unix://` followed by it:
 
    ```sh
    podman machine inspect --format '{{.ConnectionInfo.PodmanSocket.Path}}'
@@ -58,4 +58,26 @@ The recipe for running one spec, the local stack and a seeded Practice from a wo
 
    It prints JSON: the `__session` cookie value, the dev origin, and the Practice, Client and Engagement URLs. Without `SEED_CLIENT=1` it seeds the founding Owner and the Practice only. The Owner has no second factor, the same as after a real signup: since [#1531](https://github.com/markgoho/doula-cloud/issues/1531) she enters her Practice without one, and the second-factor recommendation and the notices on the five acts that need one are shown only to her. To walk one of those five acts (`SecondFactorActs` in `api/internal/staffauth/secondfactor.go`) or the Practice's MFA switch, put `SEED_SECOND_FACTOR=1` in front of the command too: the script then enrolls the emulator's phone factor for her and signs her in with it. Put the cookie into a browser with `context.addCookies([{ name: '__session', value: cookieValue, url: origin, httpOnly: true, secure: false, sameSite: 'Lax' }])` and `page.goto` the URL you need. What this path does and does not exercise, and the founder's `/feedback` variant, are in [`e2e.md`](e2e.md), "Logging in as Staff locally".
 
-8. **Stop the stack** by stopping the background command; `dev:full` takes the stack down on exit. A stack a killed session left behind is collected by the `SessionStart` reaper ([`e2e.md`](e2e.md), "Reaping orphaned e2e stacks").
+8. **Sign in and land on a Staff screen, with a browser tool.** With `dev:full` up (about a minute from start to the dev server's "ready" line; the first page load after that compiles and screenshots blank for a few seconds, so `wait` 5 s first):
+
+   1. Open `<dev origin>/login`, fill `renata.alvarez@sim.doula.cloud` and `demo-password-local-only` (the Owner; no second factor), submit. She lands on `/practices/<practiceId>`; read the id from the URL (it changes on every start).
+   2. Navigate to the screen, `/practices/<practiceId>/on-call` or `/schedule`, for example. A signed-in tab keeps its session across navigations, so no cookie step is needed. The cookie route in step 7 is for Playwright, which has no form to fill.
+
+   Walked on 2026-11-08 at offset 1 (`http://localhost:5273`): `on-call` and `schedule` both render the seeded Practice (5 births on call, 22 scheduled visits).
+
+9. **Look at a page at 320px.** In Claude in Chrome, `resize_window` moves the OS window but does not shrink the page: `innerWidth` stayed 1920 after `resize_window` to 320x640, and Chrome will not make a window that narrow. `chrome-devtools`' `emulate` with `viewport: "320x640x2,mobile,touch"` is the real thing where that server is available ([`persona-walk.md`](../agents/persona-walk.md)). Without it, use a same-origin iframe: it is a real 320px CSS viewport, so container and viewport queries, the mobile nav and wrapping all respond as on a phone. The session cookie rides along. From a signed-in tab, `javascript_tool`:
+
+   ```js
+   document.body.innerHTML = '';
+   const base = location.pathname.replace(/\/[^/]+$/, '');
+   for (const [i, p] of ['on-call', 'schedule'].entries()) {
+   	const f = document.createElement('iframe');
+   	f.src = base + '/' + p;
+   	f.style.cssText = `position:fixed;top:8px;left:${8 + i * 342}px;width:320px;height:740px;border:1px solid red`;
+   	document.body.appendChild(f);
+   }
+   ```
+
+   Then `wait` 6 s and `screenshot`. Check overflow with `f.contentDocument.documentElement.scrollWidth <= f.contentWindow.innerWidth`; the iframe's own scrollbar takes about 2px, so `innerWidth` reads 318. Scroll a frame with `f.contentWindow.scrollTo(0, y)`. It does not emulate touch or device pixel ratio; a check that needs them needs `emulate`. Close the tab when done.
+
+10. **Stop the stack** by stopping the background command; `dev:full` takes the stack down on exit. A stack a killed session left behind is collected by the `SessionStart` reaper ([`e2e.md`](e2e.md), "Reaping orphaned e2e stacks").
