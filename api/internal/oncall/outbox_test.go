@@ -1,12 +1,12 @@
 package oncall_test
 
 import (
-	"net/http"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/oncall"
 	"doula-cloud/api/internal/testdb"
@@ -14,58 +14,45 @@ import (
 
 const testAppBaseURL = "https://app.example.test"
 
-// noticeFixture is a live birth whose window holds the next few hours,
-// with one uncovered gap saved through the API. Its dates are relative
-// to now, because the worker's recheck compares a gap's end with the
-// clock.
-type noticeFixture struct {
-	practiceID, ownerUID, doulaID, backupID, engagementID, gapID string
+// noticeEnv is a live birth whose window holds the next few hours, with
+// one uncovered gap saved through the API. Its dates are relative to now,
+// because the worker's recheck compares a gap's end with the clock.
+type noticeEnv struct {
+	*env
+	Admin  fixture.StaffRecord
+	Backup fixture.StaffRecord
+	GapID  string
 }
 
-func newNoticeFixture(t *testing.T, db *testdb.DB, prefix string) noticeFixture {
+func newNoticeEnv(t *testing.T) noticeEnv {
 	t.Helper()
-	f := noticeFixture{ownerUID: prefix + "-owner"}
-	f.practiceID, _ = testdb.SeedStaffAtNewPractice(t, db, f.ownerUID, []string{ownerRole}, employeeType)
-	exec(t, db, `UPDATE practices SET name = 'Willow Birth Collective' WHERE id = $1`, f.practiceID)
-	testdb.SeedStaffAtPractice(t, db, f.practiceID, prefix+"-admin", []string{adminRole}, employeeType)
-	f.doulaID = testdb.SeedNamedStaffAtPractice(t, db, f.practiceID, prefix+"-doula", "Maya Primary", []string{doulaRole}, employeeType)
-	f.backupID = testdb.SeedNamedStaffAtPractice(t, db, f.practiceID, prefix+"-backup", backupName, []string{doulaRole}, employeeType)
-
 	due := time.Now().AddDate(0, 0, 10).Format("2006-01-02")
-	f.engagementID = seedBirth(t, db, f.practiceID, "Ada Whitfield", due)
-	testdb.SeedGrantedAttachment(t, db, f.engagementID, f.doulaID)
-	testdb.SeedGrantedAttachment(t, db, f.engagementID, f.backupID)
+	e := noticeEnv{env: newEnv(t, practiceNamed("Willow Birth Collective"), dueOn(due))}
+	e.Admin = fixture.Staff(t, e.db, e.Practice, fixture.Admin())
+	e.Backup = e.backup()
 
 	starts := time.Now().Add(time.Hour).Truncate(time.Second)
 	ends := starts.Add(4 * time.Hour)
-	srv, session := newServer(t, db, f.ownerUID)
-	defer srv.Close()
-	f.gapID = doJSON[oncall.Gap](t, session, http.MethodPost, gapsURL(srv.URL, f.practiceID, f.engagementID),
-		oncall.GapRequest{StaffID: f.doulaID, StartsAt: &starts, EndsAt: &ends}, http.StatusCreated).ID
-	return f
+	e.GapID = e.recordGap(e.asOwner, oncall.GapRequest{StaffID: e.Doula.ID, StartsAt: &starts, EndsAt: &ends}).ID
+	return e
 }
 
-// runWorker sets the trusted door outbox's own handler would set, runs
-// one pass and commits.
-func runWorker(t *testing.T, db *testdb.DB, sender *mail.FakeSender) {
-	t.Helper()
-	runWorkerWith(t, db, oncall.GapNoticeWorker{Sender: sender, Now: time.Now, AppBaseURL: testAppBaseURL, From: "from@example.test", ReplyTo: "reply@example.test"})
+// runWorker runs one pass of the worker, sending through sender.
+func (e noticeEnv) runWorker(sender *mail.FakeSender) {
+	e.t.Helper()
+	e.runWorkerWith(oncall.GapNoticeWorker{Sender: sender, Now: time.Now, AppBaseURL: testAppBaseURL, From: "from@example.test", ReplyTo: "reply@example.test"})
 }
 
-func noticeStatus(t *testing.T, db *testdb.DB, gapID string) string {
-	t.Helper()
-	var status string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT status FROM coverage_gap_outbox WHERE gap_id = $1`, gapID).Scan(&status); err != nil {
-		t.Fatalf("read notice: %v", err)
-	}
-	return status
+func (e noticeEnv) noticeStatus() string {
+	e.t.Helper()
+	return testdb.Scalar[string](e.t, e.db.Admin, `SELECT status FROM coverage_gap_outbox WHERE gap_id = $1`, e.GapID)
 }
 
 func TestGapNoticeWorker_MailsEveryOwnerAndAdminAndNamesNothing(t *testing.T) {
-	db := testdb.New(t)
-	f := newNoticeFixture(t, db, "notice-mail")
+	e := newNoticeEnv(t)
 	sender := &mail.FakeSender{}
-	runWorker(t, db, sender)
+
+	e.runWorker(sender)
 
 	var to []string
 	for _, msg := range sender.Sent() {
@@ -75,40 +62,45 @@ func TestGapNoticeWorker_MailsEveryOwnerAndAdminAndNamesNothing(t *testing.T) {
 				t.Errorf("the notice carries %q; a Platform Notification is content-free", identifying)
 			}
 		}
-		if !strings.Contains(msg.Text, testAppBaseURL+"/practices/"+f.practiceID+"/on-call") {
+		if !strings.Contains(msg.Text, testAppBaseURL+"/practices/"+e.Practice.ID+"/on-call") {
 			t.Errorf("the notice does not link to the roster: %s", msg.Text)
 		}
 	}
 	slices.Sort(to)
-	want := []string{"notice-mail-admin@example.com", "notice-mail-owner@example.com"}
+	want := []string{emailOf(e.Admin), emailOf(e.Owner)}
+	slices.Sort(want)
 	if !slices.Equal(to, want) {
 		t.Fatalf("mailed %v, want every Owner and Admin %v and no Doula", to, want)
 	}
-	if got := noticeStatus(t, db, f.gapID); got != statusSent {
+	if got := e.noticeStatus(); got != statusSent {
 		t.Fatalf("status = %q, want sent", got)
 	}
-	if n := countRows(t, db, `SELECT count(*) FROM coverage_gap_outbox WHERE gap_id = $1 AND cardinality(notified_staff_ids) = 2`, f.gapID); n != 1 {
+	if n := e.count(`SELECT count(*) FROM coverage_gap_outbox WHERE gap_id = $1 AND cardinality(notified_staff_ids) = 2`, e.GapID); n != 1 {
 		t.Fatal("the row does not record the two people it addressed")
 	}
 }
 
 func TestGapNoticeWorker_SendsNothingForAGapNoLongerOpen(t *testing.T) {
-	for name, fixup := range map[string]string{
-		"covered": `UPDATE engagement_coverage_gaps SET covering_staff_id = (SELECT staff_id FROM engagement_attachments WHERE engagement_id = engagement_coverage_gaps.engagement_id AND staff_id <> engagement_coverage_gaps.staff_id LIMIT 1)`,
-		"cleared": `UPDATE engagement_coverage_gaps SET cleared_at = now(), cleared_by = staff_id`,
-		"ended":   `UPDATE engagement_coverage_gaps SET starts_at = now() - interval '5 hours', ends_at = now() - interval '1 hour'`,
-	} {
-		t.Run(name, func(t *testing.T) {
-			db := testdb.New(t)
-			f := newNoticeFixture(t, db, "notice-"+name)
-			exec(t, db, fixup)
-
+	tests := []struct {
+		name  string
+		fixup string
+	}{
+		{"covered", `UPDATE engagement_coverage_gaps SET covering_staff_id = (SELECT staff_id FROM engagement_attachments WHERE engagement_id = engagement_coverage_gaps.engagement_id AND staff_id <> engagement_coverage_gaps.staff_id LIMIT 1)`},
+		{"cleared", `UPDATE engagement_coverage_gaps SET cleared_at = now(), cleared_by = staff_id`},
+		{"ended", `UPDATE engagement_coverage_gaps SET starts_at = now() - interval '5 hours', ends_at = now() - interval '1 hour'`},
+	}
+	for _, tt := range tests {
+		t.Run("a gap that is "+tt.name, func(t *testing.T) {
+			e := newNoticeEnv(t)
+			e.exec(tt.fixup)
 			sender := &mail.FakeSender{}
-			runWorker(t, db, sender)
+
+			e.runWorker(sender)
+
 			if len(sender.Sent()) != 0 {
-				t.Fatalf("mailed %d messages for a gap that was %s", len(sender.Sent()), name)
+				t.Fatalf("mailed %d messages for a gap that was %s", len(sender.Sent()), tt.name)
 			}
-			if got := noticeStatus(t, db, f.gapID); got != statusSent {
+			if got := e.noticeStatus(); got != statusSent {
 				t.Fatalf("status = %q, want sent with nothing mailed", got)
 			}
 		})

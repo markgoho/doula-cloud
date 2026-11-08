@@ -3,34 +3,21 @@ package engagement_test
 import (
 	"encoding/json/jsontext"
 	"net/http"
+	"slices"
 	"testing"
 
 	"doula-cloud/api/internal/engagement"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
-func authedGet(t *testing.T, session, url string) *http.Response {
-	t.Helper()
-	resp := reqtest.Get(t, url, reqtest.Session(session))
-	return resp
-}
-
 func TestDetailHandler_Success(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-viewing"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Detail Client", "detail@example.com", engagement.StatusActive)
+	e := newEnv(t, withEngagement(fixture.NewClient(fixture.ClientName("Detail Client")), fixture.Status(fixture.StatusActive)))
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
+	d := e.detail()
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	d := reqtest.Decode[engagement.Detail](t, resp)
-	if d.EngagementID != engagementID || d.ClientName != "Detail Client" || d.Status != engagement.StatusActive {
+	if d.EngagementID != e.Engagement.ID || d.ClientName != "Detail Client" || d.Status != engagement.StatusActive {
 		t.Fatalf("unexpected detail: %+v", d)
 	}
 }
@@ -42,23 +29,11 @@ func TestDetailHandler_Success(t *testing.T) {
 // personname.Full, so "Ama" alone never titles a record whose family name
 // is on file.
 func TestDetailHandler_ClientDisplayName(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-viewing-display-name"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	clientID, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Amara", "amara@example.com", engagement.StatusActive)
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE clients SET family_name = 'Okafor', preferred_name = 'Ama' WHERE id = $1`, clientID,
-	); err != nil {
-		t.Fatalf("seed family_name: %v", err)
-	}
+	e := newEnv(t, withEngagement(fixture.NewClient(fixture.ClientName("Amara"))))
+	e.exec(`UPDATE clients SET family_name = 'Okafor', preferred_name = 'Ama' WHERE id = $1`, e.Engagement.Client.ID)
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
+	d := e.detail()
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
-	defer resp.Body.Close()
-
-	d := reqtest.Decode[engagement.Detail](t, resp)
 	if d.ClientDisplayName != "Ama Okafor" || d.ClientName != "Ama" {
 		t.Fatalf("clientDisplayName = %q, clientName = %q, want %q and %q", d.ClientDisplayName, d.ClientName, "Ama Okafor", "Ama")
 	}
@@ -69,24 +44,10 @@ func TestDetailHandler_ClientDisplayName(t *testing.T) {
 // (#505), so a Doula can see when the Engagement she's working is due
 // without leaving the page (#538).
 func TestDetailHandler_DueDate(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-viewing-due-date"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Due Date Client", "due-date@example.com", engagement.StatusActive)
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE engagements SET due_date = '2027-06-15' WHERE id = $1`, engagementID,
-	); err != nil {
-		t.Fatalf("seed due_date: %v", err)
-	}
+	e := newEnv(t, withEngagement(fixture.DueDate("2027-06-15")))
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
+	d := e.detail()
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	d := reqtest.Decode[engagement.Detail](t, resp)
 	if d.DueDate == nil || *d.DueDate != "2027-06-15" {
 		t.Fatalf("dueDate = %v, want %q", d.DueDate, "2027-06-15")
 	}
@@ -96,19 +57,10 @@ func TestDetailHandler_DueDate(t *testing.T) {
 // (#874) -- staff-only, and absent from portal.Detail entirely
 // (api/internal/portal/detail_test.go's own key-absence assertion).
 func TestDetailHandler_Kind(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-viewing-kind"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
-	_, engagementID := testdb.SeedEngagementWithKind(t, db, practiceID, "Kind Client", "kind@example.com", string(engagement.KindPostpartum))
+	e := newEnv(t, withEngagement(fixture.Kind(fixture.KindPostpartum)))
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
+	d := e.detail()
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	d := reqtest.Decode[engagement.Detail](t, resp)
 	if d.Kind != string(engagement.KindPostpartum) {
 		t.Fatalf("kind = %q, want postpartum", d.Kind)
 	}
@@ -119,38 +71,26 @@ func TestDetailHandler_Kind(t *testing.T) {
 // omitted from the JSON entirely -- the page relies on `omitempty` to
 // tell "nothing to show" apart from a fetch that broke.
 func TestDetailHandler_NullDueDate(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-viewing-null-due-date"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "No Due Date Client", "no-due-date@example.com", engagement.StatusActive)
+	e := newEnv(t)
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
+	raw := reqtest.Expect[map[string]jsontext.Value](t, http.MethodGet, e.engagementURL(""), http.StatusOK, e.signedIn)
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	raw := reqtest.Decode[map[string]jsontext.Value](t, resp)
 	if _, present := raw["dueDate"]; present {
 		t.Fatalf("dueDate key present in response, want omitted: %v", raw["dueDate"])
 	}
 }
 
 func TestDetailHandler_NotFoundAtWrongPractice(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-wrong-practice"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	otherPracticeID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-owns-engagement", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, otherPracticeID, "Elsewhere Client", "elsewhere@example.com", engagement.StatusIntake)
+	e := newEnv(t)
+	elsewhere := fixture.Engagement(t, e.db, fixture.Practice(t, e.db))
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
+	reqtest.ExpectStatus(t, http.MethodGet, e.srv.URL+"/api/practices/"+e.Practice.ID+"/engagements/"+elsewhere.ID, http.StatusNotFound, e.signedIn)
+}
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
-	defer resp.Body.Close()
+func TestDetailHandler_InvalidEngagementID(t *testing.T) {
+	e := newEnv(t)
 
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
+	reqtest.ExpectStatus(t, http.MethodGet, e.srv.URL+"/api/practices/"+e.Practice.ID+"/engagements/not-a-uuid", http.StatusBadRequest, e.signedIn)
 }
 
 // TestDetailHandler_ContractorWithoutAttachmentForbidden proves the
@@ -158,39 +98,19 @@ func TestDetailHandler_NotFoundAtWrongPractice(t *testing.T) {
 // response an out-of-practice Engagement gets, so a contractor can't
 // distinguish "doesn't exist" from "not attached" (#230).
 func TestDetailHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
-	db := testdb.New(t)
-	const contractorUID = "contractor-unattached-detail"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-owner-of-practice-2", []string{doulaRole}, "employee")
-	testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Unattached Detail Client", "unattached-detail@example.com", engagement.StatusIntake)
+	e := newEnv(t, signedInAs(fixture.Contractor()))
 
-	srv, session := newServer(t, db, contractorUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
+	reqtest.ExpectStatus(t, http.MethodGet, e.engagementURL(""), http.StatusNotFound, e.signedIn)
 }
 
 // TestDetailHandler_ContractorWithGrantedAttachmentSucceeds proves the
 // other half: an open, granted attachment reaches.
 func TestDetailHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
-	db := testdb.New(t)
-	const contractorUID = "contractor-attached-detail"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-owner-of-practice-3", []string{doulaRole}, "employee")
-	staffID := testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Attached Detail Client", "attached-detail@example.com", engagement.StatusActive)
-	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
+	e := newEnv(t, signedInAs(fixture.Contractor()))
+	testdb.SeedGrantedAttachment(t, e.db, e.Engagement.ID, e.Staff.ID)
 
-	srv, session := newServer(t, db, contractorUID)
-	defer srv.Close()
+	d := e.detail()
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	d := reqtest.Decode[engagement.Detail](t, resp)
 	if len(d.StatusMoves) != 0 {
 		t.Fatalf("statusMoves = %v, want none -- ADR-0015 refuses a contractor Doula every move outright", d.StatusMoves)
 	}
@@ -204,31 +124,23 @@ func TestDetailHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
 func TestDetailHandler_StatusMoves(t *testing.T) {
 	cases := []struct {
 		name   string
-		roles  []string
+		role   roleCase
 		status string
 		want   []string
 	}{
-		{"bare staff, no role, at intake", []string{}, engagement.StatusIntake, []string{}},
-		{"owner at intake sees active and completed", []string{ownerRole}, engagement.StatusIntake, []string{engagement.StatusActive, engagement.StatusCompleted}},
-		{"owner at completed sees reopen", []string{ownerRole}, engagement.StatusCompleted, []string{engagement.StatusActive}},
-		{"employee doula at completed sees no reopen", []string{doulaRole}, engagement.StatusCompleted, []string{}},
+		{"bare staff, no role, at intake", noRoleCase, engagement.StatusIntake, nil},
+		{"owner at intake sees active and completed", ownerCase, engagement.StatusIntake, []string{engagement.StatusActive, engagement.StatusCompleted}},
+		{"owner at completed sees reopen", ownerCase, engagement.StatusCompleted, []string{engagement.StatusActive}},
+		{"employee doula at completed sees no reopen", employeeDoulaCase, engagement.StatusCompleted, nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			db := testdb.New(t)
-			uid := "status-moves-" + tc.name
-			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, tc.roles, "employee")
-			_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", uid+"@example.com", tc.status)
+			e := newEnv(t, signedInAs(tc.role.opts...), withEngagement(fixture.Status(tc.status)))
 
-			srv, session := newServer(t, db, uid)
-			defer srv.Close()
+			got := e.detail().StatusMoves
 
-			resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
-			defer resp.Body.Close()
-			reqtest.RequireStatus(t, resp, http.StatusOK)
-			d := reqtest.Decode[engagement.Detail](t, resp)
-			if len(d.StatusMoves) != len(tc.want) || (len(tc.want) > 0 && d.StatusMoves[0] != tc.want[0]) {
-				t.Fatalf("statusMoves = %v, want %v", d.StatusMoves, tc.want)
+			if !slices.Equal(got, tc.want) && len(got)+len(tc.want) > 0 {
+				t.Fatalf("statusMoves = %v, want %v", got, tc.want)
 			}
 		})
 	}
@@ -240,45 +152,32 @@ func TestDetailHandler_StatusMoves(t *testing.T) {
 // list's own PortalInviteStatus/EmailSuppressed use, reinstated on the
 // Engagement hub as standing information.
 func TestDetailHandler_ClientPortalState(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "staff-client-portal-state"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-
-	_, neverInvitedEngagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Never Invited", "never-invited@example.com", "active")
-
-	pendingClientID, pendingEngagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Pending Client", "pending-client@example.com", "active")
-	testdb.SeedPendingPortalInvite(t, db, pendingClientID)
-
-	acceptedClientID, acceptedEngagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Accepted Client", "accepted-client@example.com", "active")
-	testdb.SeedPortalUser(t, db, "client-portal-state-accepted", acceptedClientID)
-
-	_, noEmailEngagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "No Email Client", "", "active")
-
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	fetchDetail := func(engagementID string) engagement.Detail {
-		t.Helper()
-		resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusOK)
-		d := reqtest.Decode[engagement.Detail](t, resp)
-		return d
+	e := newEnv(t)
+	active := fixture.Status(fixture.StatusActive)
+	engagementFor := func(c fixture.ClientRecord) string {
+		return fixture.Engagement(t, e.db, e.Practice, fixture.ForClient(c), active).ID
+	}
+	detailOf := func(engagementID string) engagement.Detail {
+		return reqtest.Expect[engagement.Detail](t, http.MethodGet,
+			e.srv.URL+"/api/practices/"+e.Practice.ID+"/engagements/"+engagementID, http.StatusOK, e.signedIn)
 	}
 
-	if d := fetchDetail(neverInvitedEngagementID); d.ClientPortalInviteStatus != nil || !d.ClientHasEmail {
+	neverInvited := engagementFor(fixture.Client(t, e.db, e.Practice))
+	pending := fixture.Client(t, e.db, e.Practice)
+	testdb.SeedPendingPortalInvite(t, e.db, pending.ID)
+	accepted := fixture.Client(t, e.db, e.Practice, fixture.WithPortalLogin())
+	noEmail := fixture.Client(t, e.db, e.Practice, fixture.NoEmail())
+
+	if d := detailOf(neverInvited); d.ClientPortalInviteStatus != nil || !d.ClientHasEmail {
 		t.Fatalf("never-invited detail = %+v, want nil status and hasEmail true", d)
 	}
-
-	if d := fetchDetail(pendingEngagementID); d.ClientPortalInviteStatus == nil || *d.ClientPortalInviteStatus != "pending" {
+	if d := detailOf(engagementFor(pending)); d.ClientPortalInviteStatus == nil || *d.ClientPortalInviteStatus != "pending" {
 		t.Fatalf("pending detail status = %v, want \"pending\"", d.ClientPortalInviteStatus)
 	}
-
-	if d := fetchDetail(acceptedEngagementID); d.ClientPortalInviteStatus == nil || *d.ClientPortalInviteStatus != "accepted" {
+	if d := detailOf(engagementFor(accepted)); d.ClientPortalInviteStatus == nil || *d.ClientPortalInviteStatus != "accepted" {
 		t.Fatalf("accepted detail status = %v, want \"accepted\"", d.ClientPortalInviteStatus)
 	}
-
-	if d := fetchDetail(noEmailEngagementID); d.ClientHasEmail {
+	if d := detailOf(engagementFor(noEmail)); d.ClientHasEmail {
 		t.Fatal("no-email detail hasEmail = true, want false")
 	}
 }
@@ -290,44 +189,15 @@ func TestDetailHandler_ClientPortalState(t *testing.T) {
 // column reads 'active', the same webhook-synced state PostInvoiceHandler
 // gates on.
 func TestDetailHandler_ClientsCanPay(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "staff-clients-can-pay"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Pay Client", "pay-client@example.com", "active")
+	e := newEnv(t)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	fetchDetail := func() engagement.Detail {
-		t.Helper()
-		resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusOK)
-		d := reqtest.Decode[engagement.Detail](t, resp)
-		return d
-	}
-
-	if d := fetchDetail(); d.ClientsCanPay {
+	if e.detail().ClientsCanPay {
 		t.Fatal("clientsCanPay = true before Stripe Connect is active, want false")
 	}
 
-	testdb.SeedClientsCanPay(t, db, practiceID)
+	testdb.SeedClientsCanPay(t, e.db, e.Practice.ID)
 
-	if d := fetchDetail(); !d.ClientsCanPay {
+	if !e.detail().ClientsCanPay {
 		t.Fatal("clientsCanPay = false once card_payments is active, want true")
 	}
-}
-
-func TestDetailHandler_InvalidEngagementID(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-bad-id"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }

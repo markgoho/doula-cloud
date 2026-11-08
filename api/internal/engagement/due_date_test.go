@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/engagement"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/oncall"
 	"doula-cloud/api/internal/portal"
@@ -23,17 +23,11 @@ import (
 // dueAfter, the same rule draws 2026-10-30..2026-12-04 (the same
 // arithmetic oncall's own TestRoster_WindowIsDerivedAndMovesWithTheDueDate
 // pins).
+const dueDateField = "dueDate"
+
 const (
 	dueBefore = "2026-10-30"
 	dueAfter  = "2026-11-20"
-)
-
-// Named once for goconst: the kind and outcome tests carry the same
-// literals in their own tables.
-const (
-	noRoleCase          = "no role"
-	notAUUIDCase        = "not a uuid"
-	unknownEngagementID = "00000000-0000-0000-0000-000000000000"
 )
 
 // dueDateResponseBody decodes both shapes this endpoint answers with: the
@@ -45,23 +39,27 @@ type dueDateResponseBody struct {
 	Details      map[string]string `json:"details"`
 }
 
-// putDueDate PUTs raw as the body of a due-date change, as uid.
-func putDueDate(t *testing.T, db *testdb.DB, srvURL, uid, practiceID, engagementID string, raw []byte) (int, dueDateResponseBody) {
-	t.Helper()
-	resp := reqtest.Put(t, srvURL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/due-date", reqtest.Session(authntest.SeedSession(t, db.App, uid)), reqtest.RawJSON(raw))
-	defer func() { _ = resp.Body.Close() }()
-	out := reqtest.Decode[dueDateResponseBody](t, resp)
-	return resp.StatusCode, out
+// putDueDate PUTs raw as the body of a due-date change for engagementID
+// as the Staff member at the screen and requires want.
+func (e *env) putDueDate(engagementID string, raw []byte, want int) dueDateResponseBody {
+	e.t.Helper()
+	return reqtest.Expect[dueDateResponseBody](e.t, http.MethodPut, e.urlOf(engagementID, "/due-date"), want, e.signedIn, reqtest.RawJSON(raw))
 }
 
-// changeDueDateAs is putDueDate with a well-formed body.
-func changeDueDateAs(t *testing.T, db *testdb.DB, srvURL, uid, practiceID, engagementID, dueDate string) (int, dueDateResponseBody) {
-	t.Helper()
-	encoded, err := json.Marshal(map[string]any{"dueDate": dueDate})
+// changeDueDate is putDueDate on the Engagement with a well-formed body.
+func (e *env) changeDueDate(dueDate string, want int) dueDateResponseBody {
+	e.t.Helper()
+	encoded, err := json.Marshal(map[string]any{dueDateField: dueDate})
 	if err != nil {
-		t.Fatalf("marshal body: %v", err)
+		e.t.Fatalf("marshal body: %v", err)
 	}
-	return putDueDate(t, db, srvURL, uid, practiceID, engagementID, encoded)
+	return e.putDueDate(e.Engagement.ID, encoded, want)
+}
+
+// storedDueDate is the Engagement's raw column, "" for null.
+func (e *env) storedDueDate() string {
+	e.t.Helper()
+	return readEngagementDueDate(e.t, e.db, e.Engagement.ID)
 }
 
 // readEngagementDueDate is the raw column, bypassing the API; "" for null.
@@ -79,32 +77,6 @@ func readEngagementDueDate(t *testing.T, db *testdb.DB, engagementID string) str
 	return *due
 }
 
-// setDueDate writes the column directly, "" for null -- the fixture's
-// starting point, not the act under test.
-func setDueDate(t *testing.T, db *testdb.DB, engagementID, dueDate string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE engagements SET due_date = nullif($2, '')::date WHERE id = $1`, engagementID, dueDate,
-	); err != nil {
-		t.Fatalf("set due date: %v", err)
-	}
-}
-
-// newDueDateServer mounts this package's whole surface and seeds a birth
-// Engagement due on dueBefore at a new Practice, with uid holding roles.
-func newDueDateServer(t *testing.T, db *testdb.DB, uid string, roles []string, employmentType string) (srv *httptest.Server, practiceID, engagementID string) {
-	t.Helper()
-	srv, practiceID, engagementID = newKindServer(t, db, uid, roles, employmentType)
-	setDueDate(t, db, engagementID, dueBefore)
-	return srv, practiceID, engagementID
-}
-
-// countDueDateEntries counts this Engagement's due_date_changed rows.
-func countDueDateEntries(t *testing.T, db *testdb.DB, engagementID string) int {
-	t.Helper()
-	return countActivityActions(t, db, engagementID, "due_date_changed")
-}
-
 // TestChangeDueDateHandler_RolesMayChange is ADR-0015's role table for
 // the Engagement's mutable facts, read the same way kind's own test
 // reads it (refuseFactWrite): an Owner, an Admin and an employee Doula
@@ -115,50 +87,40 @@ func countDueDateEntries(t *testing.T, db *testdb.DB, engagementID string) int {
 // created_at is the when).
 func TestChangeDueDateHandler_RolesMayChange(t *testing.T) {
 	cases := []struct {
-		role           string
-		roles          []string
-		employmentType string
-		wantOK         bool
+		role   roleCase
+		wantOK bool
 	}{
-		{ownerRole, []string{ownerRole}, employeeType, true},
-		{adminRole, []string{adminRole}, employeeType, true},
-		{employeeDoulaKind, []string{doulaRole}, employeeType, true},
-		{contractorDoulaKind, []string{doulaRole}, contractorType, false},
-		{noRoleCase, []string{}, employeeType, false},
+		{ownerCase, true},
+		{adminCase, true},
+		{employeeDoulaCase, true},
+		{contractorDoulaCase, false},
+		{noRoleCase, false},
 	}
 	for _, tc := range cases {
-		t.Run(tc.role, func(t *testing.T) {
-			db := testdb.New(t)
-			uid := "change-due-date-" + tc.role
-			srv, practiceID, engagementID := newDueDateServer(t, db, uid, tc.roles, tc.employmentType)
+		t.Run(tc.role.name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(tc.role.opts...), withEngagement(fixture.DueDate(dueBefore)))
 
-			status, body := changeDueDateAs(t, db, srv.URL, uid, practiceID, engagementID, dueAfter)
+			body := e.changeDueDate(dueAfter, okOrForbidden(tc.wantOK))
 
 			if !tc.wantOK {
-				if status != http.StatusForbidden {
-					t.Fatalf("status = %d, want 403", status)
-				}
-				if got := readEngagementDueDate(t, db, engagementID); got != dueBefore {
+				if got := e.storedDueDate(); got != dueBefore {
 					t.Fatalf("due date = %q, want left unchanged at %s", got, dueBefore)
 				}
-				if n := countDueDateEntries(t, db, engagementID); n != 0 {
+				if n := e.countActivity("due_date_changed"); n != 0 {
 					t.Fatalf("due_date_changed entries = %d, want 0", n)
 				}
 				return
 			}
-			if status != http.StatusOK {
-				t.Fatalf("status = %d, want 200", status)
+			if body.DueDate != dueAfter || body.EngagementID != e.Engagement.ID {
+				t.Fatalf("body = %+v, want %s on %s", body, dueAfter, e.Engagement.ID)
 			}
-			if body.DueDate != dueAfter || body.EngagementID != engagementID {
-				t.Fatalf("body = %+v, want %s on %s", body, dueAfter, engagementID)
-			}
-			if got := readEngagementDueDate(t, db, engagementID); got != dueAfter {
+			if got := e.storedDueDate(); got != dueAfter {
 				t.Fatalf("due date = %q, want %s", got, dueAfter)
 			}
-			if n := countDueDateEntries(t, db, engagementID); n != 1 {
+			if n := e.countActivity("due_date_changed"); n != 1 {
 				t.Fatalf("due_date_changed entries = %d, want 1", n)
 			}
-			assertDiff(t, readFactDiff(t, db, engagementID, "due_date_changed"), map[string]any{
+			assertDiff(t, readFactDiff(t, e.db, e.Engagement.ID, "due_date_changed"), map[string]any{
 				"dueDateBefore": dueBefore,
 				"dueDateAfter":  dueAfter,
 			})
@@ -170,15 +132,14 @@ func TestChangeDueDateHandler_RolesMayChange(t *testing.T) {
 // Engagement with no due date yet is given one, and the Activity row
 // records the before side as JSON null rather than leaving it out.
 func TestChangeDueDateHandler_FirstDueDate(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "first-due-date-owner"
-	srv, practiceID, engagementID := newKindServer(t, db, uid, []string{ownerRole}, employeeType)
+	e := newOwnerEnv(t)
 
-	status, body := changeDueDateAs(t, db, srv.URL, uid, practiceID, engagementID, dueAfter)
-	if status != http.StatusOK || body.DueDate != dueAfter {
-		t.Fatalf("status = %d, body = %+v, want 200 with %s", status, body, dueAfter)
+	body := e.changeDueDate(dueAfter, http.StatusOK)
+
+	if body.DueDate != dueAfter {
+		t.Fatalf("body = %+v, want %s", body, dueAfter)
 	}
-	assertDiff(t, readFactDiff(t, db, engagementID, "due_date_changed"), map[string]any{
+	assertDiff(t, readFactDiff(t, e.db, e.Engagement.ID, "due_date_changed"), map[string]any{
 		"dueDateBefore": nil,
 		"dueDateAfter":  dueAfter,
 	})
@@ -188,23 +149,20 @@ func TestChangeDueDateHandler_FirstDueDate(t *testing.T) {
 // re-sending the date the Engagement already holds writes nothing and
 // raises no second Activity row (docs/api-design.md rule 4).
 func TestChangeDueDateHandler_NoOp(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "due-date-no-op-owner"
-	srv, practiceID, engagementID := newDueDateServer(t, db, uid, []string{ownerRole}, employeeType)
+	e := newOwnerEnv(t, withEngagement(fixture.DueDate(dueBefore)))
 
 	for range 2 {
-		if status, body := changeDueDateAs(t, db, srv.URL, uid, practiceID, engagementID, dueAfter); status != http.StatusOK || body.DueDate != dueAfter {
-			t.Fatalf("status = %d, body = %+v", status, body)
+		if body := e.changeDueDate(dueAfter, http.StatusOK); body.DueDate != dueAfter {
+			t.Fatalf("body = %+v", body)
 		}
 	}
-	if n := countDueDateEntries(t, db, engagementID); n != 1 {
+	if n := e.countActivity("due_date_changed"); n != 1 {
 		t.Fatalf("due_date_changed entries = %d, want 1 -- the resend writes nothing", n)
 	}
 
-	if status, _ := changeDueDateAs(t, db, srv.URL, uid, practiceID, engagementID, dueBefore); status != http.StatusOK {
-		t.Fatalf("change back: status = %d, want 200", status)
-	}
-	if n := countDueDateEntries(t, db, engagementID); n != 2 {
+	e.changeDueDate(dueBefore, http.StatusOK)
+
+	if n := e.countActivity("due_date_changed"); n != 2 {
 		t.Fatalf("due_date_changed entries = %d, want 2", n)
 	}
 }
@@ -222,55 +180,29 @@ func TestChangeDueDateHandler_Validation(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			db := testdb.New(t)
-			uid := "due-date-validation-" + tc.name
-			srv, practiceID, engagementID := newDueDateServer(t, db, uid, []string{ownerRole}, employeeType)
+			e := newOwnerEnv(t, withEngagement(fixture.DueDate(dueBefore)))
 
-			status, body := changeDueDateAs(t, db, srv.URL, uid, practiceID, engagementID, tc.dueDate)
-			if status != http.StatusBadRequest {
-				t.Fatalf("status = %d, want 400", status)
-			}
+			body := e.changeDueDate(tc.dueDate, http.StatusBadRequest)
+
 			if body.Code != apierr.CodeInvalidArgument || body.Details["dueDate"] != engagement.MsgDueDateMalformed {
 				t.Fatalf("body = %+v, want %s naming dueDate", body, apierr.CodeInvalidArgument)
 			}
-			if got := readEngagementDueDate(t, db, engagementID); got != dueBefore {
+			if got := e.storedDueDate(); got != dueBefore {
 				t.Fatalf("due date = %q, want left unchanged", got)
 			}
-			if n := countDueDateEntries(t, db, engagementID); n != 0 {
+			if n := e.countActivity("due_date_changed"); n != 0 {
 				t.Fatalf("due_date_changed entries = %d, want 0", n)
 			}
 		})
 	}
 }
 
-// TestChangeDueDateHandler_UnknownEngagement covers both doors an
-// engagement id can fail at, and the decode refusal.
-func TestChangeDueDateHandler_UnknownEngagement(t *testing.T) {
-	cases := []struct {
-		name         string
-		engagementID string
-		body         []byte
-		want         int
-	}{
-		{notAUUIDCase, "due-date-not-an-id", []byte(`{"dueDate":"2026-11-20"}`), http.StatusBadRequest},
-		{"nobody's engagement", unknownEngagementID, []byte(`{"dueDate":"2026-11-20"}`), http.StatusNotFound},
-		{"malformed body", "", []byte("{"), http.StatusBadRequest},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			db := testdb.New(t)
-			uid := "missing-due-date-engagement-" + tc.name
-			srv, practiceID, engagementID := newDueDateServer(t, db, uid, []string{ownerRole}, employeeType)
-			if tc.engagementID != "" {
-				engagementID = tc.engagementID
-			}
+// TestChangeDueDateHandler_RefusesARequestItCannotRead covers the doors a
+// request can fail at before any date is weighed.
+func TestChangeDueDateHandler_RefusesARequestItCannotRead(t *testing.T) {
+	e := newOwnerEnv(t, withEngagement(fixture.DueDate(dueBefore)))
 
-			status, _ := putDueDate(t, db, srv.URL, uid, practiceID, engagementID, tc.body)
-			if status != tc.want {
-				t.Fatalf("status = %d, want %d", status, tc.want)
-			}
-		})
-	}
+	e.refusesAnUnreadableRequest(t, http.MethodPut, "/due-date", reqtest.JSON(map[string]any{dueDateField: dueAfter}))
 }
 
 // newCrossReadServer mounts this package beside the two other readers of
@@ -292,13 +224,7 @@ func newCrossReadServer(t *testing.T, db *testdb.DB) *httptest.Server {
 // getAs reads url as session into T, failing on any status but 200.
 func getAs[T any](t *testing.T, session, url string) T {
 	t.Helper()
-	resp := reqtest.Get(t, url, reqtest.Session(session))
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("GET %s: status = %d, want 200", url, resp.StatusCode)
-	}
-	out := reqtest.Decode[T](t, resp)
-	return out
+	return reqtest.Expect[T](t, http.MethodGet, url, http.StatusOK, reqtest.Session(session))
 }
 
 // TestChangeDueDateHandler_EveryReaderFollows is #2013's third AC: what
@@ -307,37 +233,22 @@ func getAs[T any](t *testing.T, session, url string) T {
 // On-call window (derived, never stored, so it moves with no write of
 // its own), and the Client's portal read of her care.
 func TestChangeDueDateHandler_EveryReaderFollows(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "due-date-readers-owner"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, employeeType)
-	testdb.SetPracticeTimezone(t, db, practiceID, "America/New_York")
-	doulaID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "due-date-readers-doula", "Maya Primary", []string{doulaRole}, employeeType)
-	clientID, engagementID := testdb.SeedEngagementWithKind(t, db, practiceID, "Ada Whitfield", "ada@example.com", string(engagement.KindBirth))
-	setDueDate(t, db, engagementID, dueBefore)
-	testdb.SeedGrantedAttachment(t, db, engagementID, doulaID)
-
-	const portalUID = "due-date-readers-client"
-	clientUID := testdb.PortalUID(portalUID)
-	testdb.SeedPortalAccount(t, db, clientUID, clientUID+"@example.com")
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO client_portal_users (identity_uid, client_id) VALUES ($1, $2)`, clientUID, clientID,
-	); err != nil {
-		t.Fatalf("seed client_portal_users: %v", err)
-	}
-
-	srv := newCrossReadServer(t, db)
-	staffSession := authntest.SeedSession(t, db.App, uid)
-	clientSession := authntest.SeedSession(t, db.App, clientUID)
-	engagementURL := srv.URL + "/api/practices/" + practiceID + "/engagements/" + engagementID
+	e := newOwnerEnv(t)
+	doula := e.staff()
+	client := fixture.Client(t, e.db, e.Practice, fixture.WithPortalLogin())
+	booked := fixture.Engagement(t, e.db, e.Practice, fixture.ForClient(client), fixture.DueDate(dueBefore), fixture.WithDoula(doula))
+	srv := newCrossReadServer(t, e.db)
+	staffSession := fixture.Session(t, e.db, e.Staff)
+	clientSession := fixture.Session(t, e.db, client)
+	engagementURL := srv.URL + "/api/practices/" + e.Practice.ID + "/engagements/" + booked.ID
 
 	before := getAs[oncall.EngagementOnCall](t, staffSession, engagementURL+"/on-call")
 	if before.Window == nil || *before.Window != (oncall.Window{Start: "2026-10-09", End: "2026-11-13"}) {
 		t.Fatalf("window before = %+v, want 2026-10-09..2026-11-13", before.Window)
 	}
 
-	if status, _ := changeDueDateAs(t, db, srv.URL, uid, practiceID, engagementID, dueAfter); status != http.StatusOK {
-		t.Fatalf("change: status = %d, want 200", status)
-	}
+	reqtest.ExpectStatus(t, http.MethodPut, engagementURL+"/due-date", http.StatusOK, reqtest.Session(staffSession),
+		reqtest.JSON(map[string]any{dueDateField: dueAfter}))
 
 	if d := getAs[engagement.Detail](t, staffSession, engagementURL); d.DueDate == nil || *d.DueDate != dueAfter {
 		t.Fatalf("staff detail dueDate = %v, want %s", d.DueDate, dueAfter)
@@ -346,7 +257,7 @@ func TestChangeDueDateHandler_EveryReaderFollows(t *testing.T) {
 	if after.Window == nil || *after.Window != (oncall.Window{Start: "2026-10-30", End: "2026-12-04"}) {
 		t.Fatalf("window after = %+v, want 2026-10-30..2026-12-04", after.Window)
 	}
-	if p := getAs[portal.Detail](t, clientSession, srv.URL+"/api/portal/engagements/"+engagementID); p.DueDate == nil || *p.DueDate != dueAfter {
+	if p := getAs[portal.Detail](t, clientSession, srv.URL+"/api/portal/engagements/"+booked.ID); p.DueDate == nil || *p.DueDate != dueAfter {
 		t.Fatalf("portal dueDate = %v, want %s", p.DueDate, dueAfter)
 	}
 }

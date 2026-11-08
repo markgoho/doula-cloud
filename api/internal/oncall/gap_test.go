@@ -5,7 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/oncall"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
@@ -22,145 +24,98 @@ const (
 	fieldEndsAt   = "endsAt"
 )
 
-func gapsURL(srvURL, practiceID, engagementID string) string {
-	return srvURL + "/api/practices/" + practiceID + "/engagements/" + engagementID + "/coverage-gaps"
-}
-
 func gapBody(staffID string, covering *string) oncall.GapRequest {
 	reason := "  Sister's wedding  "
 	return oncall.GapRequest{StaffID: staffID, StartsAt: &gapStart, EndsAt: &gapEnd, Reason: &reason, CoveringStaffID: covering}
 }
 
-// activityActors lists who performed action on engagementID, oldest first.
-func activityActors(t *testing.T, db *testdb.DB, engagementID, action string) []string {
-	t.Helper()
-	rows, err := db.Admin.QueryContext(t.Context(),
-		`SELECT actor_staff_id FROM activity WHERE subject_id = $1 AND action = $2 ORDER BY created_at, id`,
-		engagementID, action)
-	if err != nil {
-		t.Fatalf("read activity: %v", err)
-	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			t.Fatalf("scan activity: %v", err)
-		}
-		out = append(out, id)
-	}
-	return out
+// recordGap is a POST of body to the birth's gaps as who.
+func (e *env) recordGap(who reqtest.Option, body oncall.GapRequest) oncall.Gap {
+	e.t.Helper()
+	return reqtest.Expect[oncall.Gap](e.t, http.MethodPost, e.gapsURL(), http.StatusCreated, who, reqtest.JSON(body))
 }
 
-func countRows(t *testing.T, db *testdb.DB, query string, args ...any) int {
-	t.Helper()
-	var n int
-	if err := db.Admin.QueryRowContext(t.Context(), query, args...).Scan(&n); err != nil {
-		t.Fatalf("count %q: %v", query, err)
-	}
-	return n
-}
-
-func pendingNotices(t *testing.T, db *testdb.DB, gapID string) int {
-	t.Helper()
-	return countRows(t, db, `SELECT count(*) FROM coverage_gap_outbox WHERE gap_id = $1 AND status = 'pending'`, gapID)
+func (e *env) pendingNotices(gapID string) int {
+	e.t.Helper()
+	return e.count(`SELECT count(*) FROM coverage_gap_outbox WHERE gap_id = $1 AND status = 'pending'`, gapID)
 }
 
 func TestCreateGap_AnUncoveredGapIsRecordedAndQueuesOneNotice(t *testing.T) {
-	db := testdb.New(t)
-	f := newSoloFixture(t, db, "gap-create")
-	ownerID := countOwner(t, db, f)
-	srv, session, enq := newServerWithNudge(t, db, f.ownerUID)
-	defer srv.Close()
+	e := newEnv(t)
 
-	gap := doJSON[oncall.Gap](t, session, http.MethodPost, gapsURL(srv.URL, f.practiceID, f.engagementID), gapBody(f.doulaID, nil), http.StatusCreated)
-	if gap.StaffID != f.doulaID || !gap.StartsAt.Equal(gapStart) || gap.CoveringStaffID != nil {
+	gap := e.recordGap(e.asOwner, gapBody(e.Doula.ID, nil))
+
+	if gap.StaffID != e.Doula.ID || !gap.StartsAt.Equal(gapStart) || gap.CoveringStaffID != nil {
 		t.Fatalf("gap = %+v", gap)
 	}
 	if gap.Reason == nil || *gap.Reason != "Sister's wedding" {
 		t.Errorf("reason = %v, want it trimmed", gap.Reason)
 	}
-	if got := activityActors(t, db, f.engagementID, "coverage_gap_created"); len(got) != 1 || got[0] != ownerID {
-		t.Errorf("created entries = %v, want one naming the Owner %s", got, ownerID)
+	if got := e.activityActors("coverage_gap_created"); len(got) != 1 || got[0] != e.Owner.ID {
+		t.Errorf("created entries = %v, want one naming the Owner %s", got, e.Owner.ID)
 	}
-	if n := pendingNotices(t, db, gap.ID); n != 1 {
+	if n := e.pendingNotices(gap.ID); n != 1 {
 		t.Errorf("pending notices = %d, want 1", n)
 	}
-	if calls := enq.Calls(); len(calls) != 1 || calls[0] != tasknudge.CoverageGap {
+	if calls := e.enq.Calls(); len(calls) != 1 || calls[0] != tasknudge.CoverageGap {
 		t.Errorf("nudges = %v, want one %s", calls, tasknudge.CoverageGap)
 	}
 }
 
-// countOwner is the fixture Owner's staff id.
-func countOwner(t *testing.T, db *testdb.DB, f soloFixture) string {
-	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT id FROM staff WHERE identity_uid = $1`, f.ownerUID).Scan(&id); err != nil {
-		t.Fatalf("owner id: %v", err)
-	}
-	return id
-}
-
 func TestCreateGap_ACoveredGapQueuesNothing(t *testing.T) {
-	db := testdb.New(t)
-	f := newSoloFixture(t, db, "gap-covered")
-	backupID := testdb.SeedNamedStaffAtPractice(t, db, f.practiceID, "gap-covered-backup", backupName, []string{doulaRole}, employeeType)
-	testdb.SeedGrantedAttachment(t, db, f.engagementID, backupID)
-	srv, session, enq := newServerWithNudge(t, db, f.ownerUID)
-	defer srv.Close()
+	e := newEnv(t)
+	backup := e.backup()
 
-	gap := doJSON[oncall.Gap](t, session, http.MethodPost, gapsURL(srv.URL, f.practiceID, f.engagementID), gapBody(f.doulaID, &backupID), http.StatusCreated)
+	gap := e.recordGap(e.asOwner, gapBody(e.Doula.ID, &backup.ID))
+
 	if gap.CoveringStaffName == nil || *gap.CoveringStaffName != backupName {
 		t.Fatalf("covering = %v, want Bo Backup", gap.CoveringStaffName)
 	}
-	if n := pendingNotices(t, db, gap.ID); n != 0 || len(enq.Calls()) != 0 {
-		t.Fatalf("a covered gap queued %d notices and %d nudges, want none", n, len(enq.Calls()))
+	if n := e.pendingNotices(gap.ID); n != 0 || len(e.enq.Calls()) != 0 {
+		t.Fatalf("a covered gap queued %d notices and %d nudges, want none", n, len(e.enq.Calls()))
 	}
 }
 
 func TestCreateGap_RefusesWhatItShould(t *testing.T) {
-	db := testdb.New(t)
-	f := newSoloFixture(t, db, "gap-refuse")
-	strangerID := testdb.SeedNamedStaffAtPractice(t, db, f.practiceID, "gap-refuse-stranger", "Not On It", []string{doulaRole}, employeeType)
-	srv, session := newServer(t, db, f.ownerUID)
-	defer srv.Close()
-
+	e := newEnv(t)
+	stranger := e.stranger()
 	outside := time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)
 	early := gapStart.Add(-time.Hour)
+	doulaID := e.Doula.ID
+
 	tests := []struct {
 		name  string
 		body  oncall.GapRequest
 		field string
 		want  string
 	}{
-		{"the Doula is not on the birth", gapBody(strangerID, nil), "staffId", oncall.MsgNotOnCall},
-		{"the cover is not on the birth, so a gap cannot attach her", gapBody(f.doulaID, &strangerID), "coveringStaffId", oncall.MsgNotOnCall},
-		{"the cover is the same Doula", gapBody(f.doulaID, &f.doulaID), "coveringStaffId", oncall.MsgCoverIsTheSame},
+		{"the Doula is not on the birth", gapBody(stranger.ID, nil), "staffId", oncall.MsgNotOnCall},
+		{"the cover is not on the birth, so a gap cannot attach her", gapBody(doulaID, &stranger.ID), "coveringStaffId", oncall.MsgNotOnCall},
+		{"the cover is the same Doula", gapBody(doulaID, &doulaID), "coveringStaffId", oncall.MsgCoverIsTheSame},
 		// #1969: an empty or reversed range is refused against the field
 		// the page shows it under, in the page's own words.
-		{"it ends before it starts", oncall.GapRequest{StaffID: f.doulaID, StartsAt: &gapStart, EndsAt: &early}, fieldEndsAt, oncall.MsgEndsBeforeStarts},
-		{"it ends the moment it starts", oncall.GapRequest{StaffID: f.doulaID, StartsAt: &gapStart, EndsAt: &gapStart}, fieldEndsAt, oncall.MsgEndsBeforeStarts},
-		{"it runs past the window", oncall.GapRequest{StaffID: f.doulaID, StartsAt: &gapStart, EndsAt: &outside}, fieldStartsAt, oncall.MsgOutsideWindow},
-		{"it has no start", oncall.GapRequest{StaffID: f.doulaID, EndsAt: &gapEnd}, fieldStartsAt, oncall.MsgStartsAtRequired},
-		{"it has no end", oncall.GapRequest{StaffID: f.doulaID, StartsAt: &gapStart}, fieldEndsAt, oncall.MsgEndsAtRequired},
+		{"it ends before it starts", oncall.GapRequest{StaffID: doulaID, StartsAt: &gapStart, EndsAt: &early}, fieldEndsAt, oncall.MsgEndsBeforeStarts},
+		{"it ends the moment it starts", oncall.GapRequest{StaffID: doulaID, StartsAt: &gapStart, EndsAt: &gapStart}, fieldEndsAt, oncall.MsgEndsBeforeStarts},
+		{"it runs past the window", oncall.GapRequest{StaffID: doulaID, StartsAt: &gapStart, EndsAt: &outside}, fieldStartsAt, oncall.MsgOutsideWindow},
+		{"it has no start", oncall.GapRequest{StaffID: doulaID, EndsAt: &gapEnd}, fieldStartsAt, oncall.MsgStartsAtRequired},
+		{"it has no end", oncall.GapRequest{StaffID: doulaID, StartsAt: &gapStart}, fieldEndsAt, oncall.MsgEndsAtRequired},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			body := doJSON[map[string]any](t, session, http.MethodPost, gapsURL(srv.URL, f.practiceID, f.engagementID), tt.body, http.StatusBadRequest)
-			details, _ := body["details"].(map[string]any)
-			if details[tt.field] != tt.want {
-				t.Fatalf("details = %v, want %q under %q", details, tt.want, tt.field)
+			got := reqtest.Expect[refusal](t, http.MethodPost, e.gapsURL(), http.StatusBadRequest, e.asOwner, reqtest.JSON(tt.body))
+			if got.Details[tt.field] != tt.want {
+				t.Fatalf("details = %v, want %q under %q", got.Details, tt.want, tt.field)
 			}
 		})
 	}
 
-	// Neither end: both are refused at once, each against its own field.
-	body := doJSON[map[string]any](t, session, http.MethodPost, gapsURL(srv.URL, f.practiceID, f.engagementID)+"?neither",
-		oncall.GapRequest{StaffID: f.doulaID}, http.StatusBadRequest)
-	if details, _ := body["details"].(map[string]any); details[fieldStartsAt] != oncall.MsgStartsAtRequired || details[fieldEndsAt] != oncall.MsgEndsAtRequired {
-		t.Fatalf("details = %v, want both ends refused", body["details"])
-	}
-	if n := countRows(t, db, `SELECT count(*) FROM engagement_coverage_gaps`); n != 0 {
+	t.Run("neither end is given, so both are refused at once", func(t *testing.T) {
+		got := reqtest.Expect[refusal](t, http.MethodPost, e.gapsURL(), http.StatusBadRequest, e.asOwner, reqtest.JSON(oncall.GapRequest{StaffID: doulaID}))
+		if got.Details[fieldStartsAt] != oncall.MsgStartsAtRequired || got.Details[fieldEndsAt] != oncall.MsgEndsAtRequired {
+			t.Fatalf("details = %v, want both ends refused", got.Details)
+		}
+	})
+	if n := e.count(`SELECT count(*) FROM engagement_coverage_gaps`); n != 0 {
 		t.Fatalf("%d gaps were written by refused requests", n)
 	}
 }
@@ -168,26 +123,10 @@ func TestCreateGap_RefusesWhatItShould(t *testing.T) {
 // TestCreateGap_AnIntakeBirthHasAWindowToRecordAGapIn is #1616: a birth
 // with a Doula on it has a window from intake, so a gap can be recorded.
 func TestCreateGap_AnIntakeBirthHasAWindowToRecordAGapIn(t *testing.T) {
-	db := testdb.New(t)
-	f := newSoloFixture(t, db, "gap-intake")
-	exec(t, db, `UPDATE engagements SET status = 'intake' WHERE id = $1`, f.engagementID)
-	srv, session := newServer(t, db, f.ownerUID)
-	defer srv.Close()
+	e := newEnv(t)
+	e.exec(`UPDATE engagements SET status = 'intake' WHERE id = $1`, e.Birth.ID)
 
-	doJSON[oncall.Gap](t, session, http.MethodPost, gapsURL(srv.URL, f.practiceID, f.engagementID), gapBody(f.doulaID, nil), http.StatusCreated)
-}
-
-func TestCreateGap_NoWindowIsRefused(t *testing.T) {
-	db := testdb.New(t)
-	f := newSoloFixture(t, db, "gap-nowindow")
-	exec(t, db, `UPDATE engagements SET due_date = NULL WHERE id = $1`, f.engagementID)
-	srv, session := newServer(t, db, f.ownerUID)
-	defer srv.Close()
-
-	body := doJSON[map[string]any](t, session, http.MethodPost, gapsURL(srv.URL, f.practiceID, f.engagementID), gapBody(f.doulaID, nil), http.StatusConflict)
-	if body["message"] != oncall.MsgNoWindowNoDueDate {
-		t.Fatalf("message = %v, want %q", body["message"], oncall.MsgNoWindowNoDueDate)
-	}
+	e.recordGap(e.asOwner, gapBody(e.Doula.ID, nil))
 }
 
 // TestCreateGap_SaysWhichReasonThereIsNoWindow: "add a due date" is the
@@ -195,70 +134,45 @@ func TestCreateGap_NoWindowIsRefused(t *testing.T) {
 // each says its own sentence -- the same rule the roster follows when it
 // states why a birth has no window rather than guessing.
 func TestCreateGap_SaysWhichReasonThereIsNoWindow(t *testing.T) {
-	tests := map[string]struct {
-		prefix string
-		fixup  string
-		want   string
+	tests := []struct {
+		name  string
+		fixup string
+		want  string
 	}{
-		"postpartum care is not on-call work": {
-			"pp", `UPDATE engagements SET kind = 'postpartum' WHERE id = $1`, oncall.MsgNoWindowPostpartum,
-		},
-		"care has ended": {
-			"completed", `UPDATE engagements SET status = 'completed', ending_reason = 'care_complete', birth_outcome = 'unknown' WHERE id = $1`, oncall.MsgNoWindowCompleted,
-		},
-		"nobody is on the birth": {
-			"nobody",
-			`UPDATE engagement_attachments SET ended_at = now(), ended_by = staff_id WHERE engagement_id = $1`,
-			oncall.MsgNoWindowNobodyOnIt,
-		},
-		"the baby arrived before on call would have opened": {
-			"early",
-			`UPDATE engagements SET birth_outcome = 'live_birth', pregnancy_ended_on = '2026-09-20' WHERE id = $1`,
-			oncall.MsgNoWindowEnded,
-		},
+		{"there is no due date", `UPDATE engagements SET due_date = NULL WHERE id = $1`, oncall.MsgNoWindowNoDueDate},
+		{"postpartum care is not on-call work", `UPDATE engagements SET kind = 'postpartum' WHERE id = $1`, oncall.MsgNoWindowPostpartum},
+		{"care has ended", `UPDATE engagements SET status = 'completed', ending_reason = 'care_complete', birth_outcome = 'unknown' WHERE id = $1`, oncall.MsgNoWindowCompleted},
+		{"nobody is on the birth", `UPDATE engagement_attachments SET ended_at = now(), ended_by = staff_id WHERE engagement_id = $1`, oncall.MsgNoWindowNobodyOnIt},
+		{"the baby arrived before on call would have opened", `UPDATE engagements SET birth_outcome = 'live_birth', pregnancy_ended_on = '2026-09-20' WHERE id = $1`, oncall.MsgNoWindowEnded},
 	}
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			db := testdb.New(t)
-			f := newSoloFixture(t, db, "gap-why-"+tt.prefix)
-			exec(t, db, tt.fixup, f.engagementID)
-			srv, session := newServer(t, db, f.ownerUID)
-			defer srv.Close()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := newEnv(t)
+			e.exec(tt.fixup, e.Birth.ID)
 
-			body := doJSON[map[string]any](t, session, http.MethodPost,
-				gapsURL(srv.URL, f.practiceID, f.engagementID), gapBody(f.doulaID, nil), http.StatusConflict)
-			if body["message"] != tt.want {
-				t.Fatalf("message = %v, want %q", body["message"], tt.want)
+			got := reqtest.Expect[refusal](t, http.MethodPost, e.gapsURL(), http.StatusConflict, e.asOwner, reqtest.JSON(gapBody(e.Doula.ID, nil)))
+
+			if got.Message != tt.want {
+				t.Fatalf("message = %v, want %q", got.Message, tt.want)
 			}
 		})
 	}
 }
 
 func TestCreateGap_ADoulaRecordsOnlyHerOwn(t *testing.T) {
-	db := testdb.New(t)
-	f := newSoloFixture(t, db, "gap-self")
-	const colleagueUID = "gap-self-colleague"
-	colleagueID := testdb.SeedNamedStaffAtPractice(t, db, f.practiceID, colleagueUID, backupName, []string{doulaRole}, employeeType)
-	testdb.SeedGrantedAttachment(t, db, f.engagementID, colleagueID)
-	srv, session := newServer(t, db, colleagueUID)
-	defer srv.Close()
+	e := newEnv(t)
+	colleague := e.backup()
 
-	url := gapsURL(srv.URL, f.practiceID, f.engagementID)
-	doJSON[map[string]any](t, session, http.MethodPost, url, gapBody(f.doulaID, nil), http.StatusForbidden)
-	doJSON[oncall.Gap](t, session, http.MethodPost, url+"?self", gapBody(colleagueID, nil), http.StatusCreated)
+	reqtest.ExpectStatus(t, http.MethodPost, e.gapsURL(), http.StatusForbidden, e.as(colleague), reqtest.JSON(gapBody(e.Doula.ID, nil)))
+	e.recordGap(e.as(colleague), gapBody(colleague.ID, nil))
 }
 
 func TestCreateGap_AContractorReachesOnlyHerOwnBirth(t *testing.T) {
-	db := testdb.New(t)
-	f := newSoloFixture(t, db, "gap-contractor")
-	const contractorUID = "gap-contractor-contractor"
-	contractorID := testdb.SeedContractorAtPractice(t, db, f.practiceID, contractorUID)
-	srv, session := newServer(t, db, contractorUID)
-	defer srv.Close()
+	e := newEnv(t)
+	contractor := fixture.Staff(t, e.db, e.Practice, fixture.Contractor())
 
-	url := gapsURL(srv.URL, f.practiceID, f.engagementID)
-	doJSON[map[string]any](t, session, http.MethodPost, url, gapBody(contractorID, nil), http.StatusNotFound)
+	reqtest.ExpectStatus(t, http.MethodPost, e.gapsURL(), http.StatusNotFound, e.as(contractor), reqtest.JSON(gapBody(contractor.ID, nil)))
 
-	testdb.SeedGrantedAttachment(t, db, f.engagementID, contractorID)
-	doJSON[oncall.Gap](t, session, http.MethodPost, url+"?attached", gapBody(contractorID, nil), http.StatusCreated)
+	testdb.SeedGrantedAttachment(t, e.db, e.Birth.ID, contractor.ID)
+	e.recordGap(e.as(contractor), gapBody(contractor.ID, nil))
 }

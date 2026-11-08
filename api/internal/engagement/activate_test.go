@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/engagement"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -15,23 +16,6 @@ import (
 // already past 'intake' -- a state TransitionHandler answers for itself
 // before ever calling in. What the two Visit endpoints do with it is
 // package visit's own tests.
-
-// beginPracticeTx opens an app-role transaction scoped to practiceID the
-// same way staffauth.Middleware scopes a request's own, so RLS behaves
-// for these calls exactly as it does behind a route.
-func beginPracticeTx(t *testing.T, db *testdb.DB, practiceID string) *sql.Tx {
-	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	t.Cleanup(func() { _ = tx.Rollback() })
-	if _, err := tx.ExecContext(t.Context(),
-		`SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-	return tx
-}
 
 // activationRows reads back everything the move is supposed to leave
 // behind, in one place: the Engagement's status, and the count and actor
@@ -67,11 +51,12 @@ func readActivationRows(t *testing.T, tx *sql.Tx, engagementID string) activatio
 // scheduled rather than a null system actor.
 func TestActivateFromIntake_MovesIntakeToActive(t *testing.T) {
 	db := testdb.New(t)
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "auto-activating-doula", []string{doulaRole}, employeeType)
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Hannah Sorensen", "hannah@example.com", engagement.StatusIntake)
+	p := fixture.Practice(t, db)
+	doula := fixture.Staff(t, db, p)
+	e := fixture.Engagement(t, db, p, fixture.Status(fixture.StatusIntake))
 
-	tx := beginPracticeTx(t, db, practiceID)
-	moved, err := engagement.ActivateFromIntake(t.Context(), tx, practiceID, engagementID, staffID)
+	tx := db.BeginAs(t, testdb.Practice(p.ID))
+	moved, err := engagement.ActivateFromIntake(t.Context(), tx, p.ID, e.ID, doula.ID)
 	if err != nil {
 		t.Fatalf("activate: %v", err)
 	}
@@ -79,15 +64,15 @@ func TestActivateFromIntake_MovesIntakeToActive(t *testing.T) {
 		t.Fatal("moved = false, want true: this call is the one that made the move")
 	}
 
-	got := readActivationRows(t, tx, engagementID)
+	got := readActivationRows(t, tx, e.ID)
 	if got.status != engagement.StatusActive {
 		t.Fatalf("status = %q, want %q", got.status, engagement.StatusActive)
 	}
 	if got.carePhaseEntries != 1 {
 		t.Fatalf("care_phase_changed entries = %d, want 1", got.carePhaseEntries)
 	}
-	if got.carePhaseActor == nil || *got.carePhaseActor != staffID {
-		t.Fatalf("care_phase_changed actor = %v, want the scheduling Staff member %q", got.carePhaseActor, staffID)
+	if got.carePhaseActor == nil || *got.carePhaseActor != doula.ID {
+		t.Fatalf("care_phase_changed actor = %v, want the scheduling Staff member %q", got.carePhaseActor, doula.ID)
 	}
 }
 
@@ -98,11 +83,12 @@ func TestActivateFromIntake_LeavesAnEngagementPastIntakeAlone(t *testing.T) {
 	for _, status := range []string{engagement.StatusActive, engagement.StatusCompleted} {
 		t.Run(status, func(t *testing.T) {
 			db := testdb.New(t)
-			practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "doula-at-"+status, []string{doulaRole}, employeeType)
-			_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client "+status, status+"-auto@example.com", status)
+			p := fixture.Practice(t, db)
+			doula := fixture.Staff(t, db, p)
+			e := fixture.Engagement(t, db, p, fixture.Status(status))
 
-			tx := beginPracticeTx(t, db, practiceID)
-			moved, err := engagement.ActivateFromIntake(t.Context(), tx, practiceID, engagementID, staffID)
+			tx := db.BeginAs(t, testdb.Practice(p.ID))
+			moved, err := engagement.ActivateFromIntake(t.Context(), tx, p.ID, e.ID, doula.ID)
 			if err != nil {
 				t.Fatalf("activate: %v", err)
 			}
@@ -110,7 +96,7 @@ func TestActivateFromIntake_LeavesAnEngagementPastIntakeAlone(t *testing.T) {
 				t.Fatalf("moved = true on a %q Engagement, want false: the move is one-way and one-time", status)
 			}
 
-			got := readActivationRows(t, tx, engagementID)
+			got := readActivationRows(t, tx, e.ID)
 			if got.status != status {
 				t.Fatalf("status = %q, want it untouched at %q", got.status, status)
 			}

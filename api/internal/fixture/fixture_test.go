@@ -80,6 +80,17 @@ func TestStaff_RolesReplacesWhatEarlierOptionsAdded(t *testing.T) {
 	}
 }
 
+func TestStaff_NoRoleHoldsNoRole(t *testing.T) {
+	db := testdb.New(t)
+	p := fixture.Practice(t, db)
+
+	s := fixture.Staff(t, db, p, fixture.NoRole())
+
+	if got := testdb.Scalar[int](t, db.Admin, `SELECT cardinality(roles) FROM practice_memberships WHERE staff_id = $1`, s.ID); got != 0 {
+		t.Fatalf("roles held = %d, want none", got)
+	}
+}
+
 func TestStaff_FounderHoldsOwnerAdminAndDoula(t *testing.T) {
 	db := testdb.New(t)
 	p := fixture.Practice(t, db)
@@ -146,8 +157,11 @@ func TestEngagement_OptionsShowTheState(t *testing.T) {
 
 	e := fixture.Engagement(t, db, p,
 		fixture.ForClient(c), fixture.Kind(fixture.KindPostpartum), fixture.Status(fixture.StatusCompleted),
-		fixture.WithDoula(d1), fixture.WithDoula(d2))
+		fixture.WithDoula(d1), fixture.WithDoula(d2), fixture.DueDate("2026-10-30"))
 
+	if due := testdb.Scalar[string](t, db.Admin, `SELECT due_date::text FROM engagements WHERE id = $1`, e.ID); due != "2026-10-30" {
+		t.Fatalf("due date = %q, want 2026-10-30", due)
+	}
 	if e.Client.ID != c.ID {
 		t.Fatalf("client = %q, want the one passed in, %q", e.Client.ID, c.ID)
 	}

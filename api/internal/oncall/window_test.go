@@ -15,7 +15,7 @@ func birth() oncall.WindowInput {
 	return oncall.WindowInput{
 		Kind:           "birth",
 		Status:         "active",
-		DueDate:        new("2026-10-30"),
+		DueDate:        new(birthDue),
 		FirstGrantedOn: new(grantedOn),
 		Rule:           oncall.Rule{Start: oncall.StartGestationalWeek, Week: 37, GraceDays: 14},
 	}
@@ -57,7 +57,7 @@ func TestDeriveWindow(t *testing.T) {
 			name:      "zero grace ends on the due date itself",
 			edit:      func(in *oncall.WindowInput) { in.Rule.GraceDays = 0 },
 			wantStart: windowStart,
-			wantEnd:   "2026-10-30",
+			wantEnd:   birthDue,
 		},
 		{
 			name:       "no due date under a gestational rule is no window, never a guessed one",
