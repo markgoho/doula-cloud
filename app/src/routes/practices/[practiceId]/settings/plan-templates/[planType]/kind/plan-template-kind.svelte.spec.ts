@@ -10,16 +10,11 @@ import { FIELD_TYPE_OPTIONS } from '#lib/planTemplate.js';
 import Page from './+page.svelte';
 import { toPageState, type RouteFixture } from '../../../../../../routeFixture.js';
 import { fixture } from './page.fixture.js';
+import { goto, pageState } from '#testing/routePage.js';
 
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 
-const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+vi.mock('$app/navigation', () => import('#testing/routePage.js'));
 
 async function setup(subject: RouteFixture = fixture) {
 	Object.assign(pageState, toPageState(subject));

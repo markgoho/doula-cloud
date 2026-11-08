@@ -5,6 +5,7 @@ import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../routeFixture.js';
 import { fixture } from './page.fixture.js';
+import { pageState } from '#testing/routePage.js';
 
 /*
  * The `page` this route reads comes from its own fixture (#596), so what
@@ -18,12 +19,7 @@ import { fixture } from './page.fixture.js';
  * `respond`: a blank invite form fetches nothing on mount, so there is no
  * happy-path content beyond `params` for this spec to share with it.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());

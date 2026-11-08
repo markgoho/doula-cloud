@@ -13,6 +13,7 @@ import { expectOneFramedHeading } from '#lib/components/templates/pageFrame.test
 import Page from './+page.svelte';
 import { toPageState } from '../../../routeFixture.js';
 import { fixture, requests } from './page.fixture.js';
+import { pageState } from '#testing/routePage.js';
 
 /*
  * The `page` this route reads comes from its own fixture (#596), so the
@@ -21,12 +22,7 @@ import { fixture, requests } from './page.fixture.js';
  * object is declared empty here and filled from the fixture once the
  * imports have run.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 Object.assign(pageState, toPageState(fixture));
 

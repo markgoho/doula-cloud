@@ -10,6 +10,7 @@ import WherePage from './where/+page.svelte';
 import { fixture as youFixture } from './page.fixture.js';
 import { fixture as practiceFixture } from './practice/page.fixture.js';
 import { fixture as whereFixture } from './where/page.fixture.js';
+import { goto, pageState } from '#testing/routePage.js';
 
 /*
  * Setting up a Practice as three question pages (#2049). These are the
@@ -17,15 +18,9 @@ import { fixture as whereFixture } from './where/page.fixture.js';
  * beside its route. The 320px conformance of each page is the continuum
  * sweep's, through the same fixtures.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 
-const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+vi.mock('$app/navigation', () => import('#testing/routePage.js'));
 
 const globalFetch = vi.hoisted(() => vi.fn());
 

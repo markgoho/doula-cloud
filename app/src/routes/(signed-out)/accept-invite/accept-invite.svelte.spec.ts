@@ -5,6 +5,7 @@ import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../routeFixture.js';
 import { fixture, invitation, returningInvitation } from './page.fixture.js';
+import { pageState } from '#testing/routePage.js';
 
 /*
  * The `page` this screen reads comes from the route's own fixture (#596),
@@ -12,12 +13,7 @@ import { fixture, invitation, returningInvitation } from './page.fixture.js';
  * is hoisted above every import, so the object is declared empty here and
  * filled once the imports have run.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 const inviteToken = new URL(fixture.url).searchParams.get('token') ?? '';

@@ -6,6 +6,7 @@ import Page from './+page.svelte';
 import { toApiResponder, toPageState } from '../../../routeFixture.js';
 import type { PortalSessionInfo } from '#lib/portalLanding.js';
 import { afterSessionEnded, fixture } from './page.fixture.js';
+import { goto, pageState } from '#testing/routePage.js';
 
 /*
  * The screen reads its own URL for #757's `sessionEnded` flag, through
@@ -15,12 +16,7 @@ import { afterSessionEnded, fixture } from './page.fixture.js';
  * the fixture. A test that needs the ended-session address installs the
  * fixture's own variant over it, before `render()`.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 // #283: on load, this screen probes for a live Client-portal session of
@@ -30,8 +26,7 @@ Object.assign(pageState, toPageState(fixture));
 // probe; the sign-in form's own submit flow is unchanged and untouched
 // here.
 
-const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+vi.mock('$app/navigation', () => import('#testing/routePage.js'));
 
 /*
  * This screen calls `probeSession` directly rather than

@@ -5,6 +5,7 @@ import { toPageState } from '../../../routeFixture.js';
 import { signupDraft } from '../signupJourney.svelte.js';
 import Page from './+page.svelte';
 import { fixture } from './page.fixture.js';
+import { goto, pageState } from '#testing/routePage.js';
 
 /*
  * #1166: the zone the founder states for her Practice, on the journey's
@@ -15,15 +16,9 @@ import { fixture } from './page.fixture.js';
  * only way the page's own "choose a timezone" refusal is reachable.
  */
 
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 
-const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+vi.mock('$app/navigation', () => import('#testing/routePage.js'));
 
 /* A browser that will not say where it is -- a locked-down profile, or a
    runtime with no zone data. The seven options still render; nothing is

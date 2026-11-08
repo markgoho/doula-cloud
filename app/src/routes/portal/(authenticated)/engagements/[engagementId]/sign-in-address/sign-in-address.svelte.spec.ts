@@ -6,18 +6,14 @@ import { gotoWithOutcome } from '#lib/outcome.js';
 import { jsonResponse } from '#lib/testResponse.js';
 import { toApiResponder, toPageState } from '../../../../../routeFixture.js';
 import { fixture, session } from './page.fixture.js';
+import { pageState } from '#testing/routePage.js';
 
 /*
  * #619's address, and #618's sign out everywhere (#2045). The `page` this route reads and the answer its
  * own fetch gets both come from its fixture (#596), so what this spec
  * renders and what the continuum sweep measures are one description.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 const goto = vi.hoisted(() => vi.fn());

@@ -9,6 +9,7 @@ import { fixture } from './page.fixture.js';
 import { expectOneFramedHeading } from '#lib/components/templates/pageFrame.testing.js';
 import Page from './+page.svelte';
 import type { PageProps as PageProperties } from './$types';
+import { pageState } from '#testing/routePage.js';
 
 /*
  * `page.params`/`page.url` come off the route's own fixture (#596), the
@@ -16,12 +17,7 @@ import type { PageProps as PageProperties } from './$types';
  * here (this route's own `+page.ts`, not an ancestor `+layout.ts`), so
  * it is installed per test from `fixture.props.data` instead.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 const fixtureData = fixture.props?.data as PageProperties['data'];

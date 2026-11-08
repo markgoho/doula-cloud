@@ -20,6 +20,7 @@ import {
 	practiceName,
 	tonightRoster
 } from './page.fixture.js';
+import { pageState } from '#testing/routePage.js';
 
 // Rendering `+page.svelte` directly bypasses `+layout.svelte`, which is the
 // only place that calls this in the real app -- without it every layout
@@ -47,12 +48,7 @@ if (!customElements.get('center-l')) registerLayoutPrimitives();
  * one of those blocks failing or arriving empty -- content that is not
  * the happy path, which svelte-tests.md leaves to the spec (#596).
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 const apiFetch = vi.hoisted(() => vi.fn());

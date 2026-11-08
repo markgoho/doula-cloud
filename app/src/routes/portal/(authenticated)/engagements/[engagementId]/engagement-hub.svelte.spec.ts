@@ -14,6 +14,7 @@ import { createdAt, detail, fixture, practiceName, visits } from './page.fixture
 import { engagementLabel } from '#lib/clientRegister.js';
 import { noVisitsMessage } from '#lib/portalVisits.js';
 import { NEXT_HEADING, NO_NEXT_VISIT_MESSAGE } from '#lib/yourCare.js';
+import { pageState } from '#testing/routePage.js';
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
 /*
@@ -28,12 +29,7 @@ if (!customElements.get('center-l')) registerLayoutPrimitives();
  * installation, through the same `toPageState`, as
  * `route-continuum.svelte.spec.ts`.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());

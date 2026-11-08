@@ -12,6 +12,7 @@ import Layout from './+layout.svelte';
 import { load as doorLoad } from './+page.js';
 import NamePage from './name/+page.svelte';
 import { practiceId, seedIntake } from './intakeFixture.js';
+import { goto, pageState } from '#testing/routePage.js';
 
 /*
  * The layout every intake question sits in (#1609): it puts the
@@ -19,18 +20,12 @@ import { practiceId, seedIntake } from './intakeFixture.js';
  * opened intake so the name question's Back can go there. What the
  * questions themselves do is `intake-sequence.svelte.spec.ts`'s.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
-const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+vi.mock('$app/navigation', () => import('#testing/routePage.js'));
 
 interface SetupOptions {
 	isContractor?: boolean;

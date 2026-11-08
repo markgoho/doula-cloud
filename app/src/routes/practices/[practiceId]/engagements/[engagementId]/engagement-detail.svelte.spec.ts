@@ -26,6 +26,7 @@ import { OUTCOME_KEPT_ON_COMPLETED } from '#lib/engagementDetail.js';
 import type { Rate } from '#lib/rates.js';
 import { CONTRACTOR_WITHOUT_ACCEPTED_OFFER, type VisitAssignee } from '#lib/staff.js';
 import { PREVIOUS_CONTRACT_PDF_NOTICE } from '#lib/components/molecules/ContractStatus.svelte';
+import { pageState } from '#testing/routePage.js';
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
 /*
@@ -35,12 +36,7 @@ if (!customElements.get('center-l')) registerLayoutPrimitives();
  * object is declared empty here and filled from the fixture once the
  * imports have run.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn(), afterNavigate: vi.fn() }));

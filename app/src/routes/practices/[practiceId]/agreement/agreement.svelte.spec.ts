@@ -5,16 +5,11 @@ import Page from './+page.svelte';
 import { toPageState, type RouteFixture } from '../../../routeFixture.js';
 import { captureLanding } from '#lib/testOutcome.js';
 import { bothDue, fixture, privacyOnly, termsDue, withoutSecondFactor } from './page.fixture.js';
+import { goto, pageState } from '#testing/routePage.js';
 
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 
-const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+vi.mock('$app/navigation', () => import('#testing/routePage.js'));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 const apiFetch = vi.hoisted(() => vi.fn());

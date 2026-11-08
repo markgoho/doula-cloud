@@ -12,6 +12,7 @@ import NamePage from './name/+page.svelte';
 import DuplicatePage from './duplicate/+page.svelte';
 import { fixture as nameFixture } from './name/page.fixture.js';
 import { fixture as duplicateFixture } from './duplicate/page.fixture.js';
+import { goto, pageState } from '#testing/routePage.js';
 
 /*
  * Intake's own behavior (#466, #1611) -- the save from the name question
@@ -19,15 +20,9 @@ import { fixture as duplicateFixture } from './duplicate/page.fixture.js';
  * `route-continuum.svelte.spec.ts`'s, through the same fixtures; this
  * spec is only about what the pages DO.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 
-const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+vi.mock('$app/navigation', () => import('#testing/routePage.js'));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));

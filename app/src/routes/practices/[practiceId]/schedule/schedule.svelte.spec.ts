@@ -15,17 +15,13 @@ import Page from './ScheduleScreen.svelte';
 import { practiceSession, toPageState } from '../../../routeFixture.js';
 import { data, fixture, schedulePage } from './page.fixture.js';
 import type { SchedulePageData } from './+page.js';
+import { goto, pageState } from '#testing/routePage.js';
 
 /*
  * The screen's content and the `page` it reads both come from the route's
  * own fixture (#596), the same installation contracts.svelte.spec.ts uses.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 if (!customElements.get('center-l')) registerLayoutPrimitives();
@@ -33,8 +29,7 @@ if (!customElements.get('center-l')) registerLayoutPrimitives();
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
-const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+vi.mock('$app/navigation', () => import('#testing/routePage.js'));
 
 const [earlierVisit, laterVisit] = schedulePage.items;
 const { practiceId } = fixture.params;

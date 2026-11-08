@@ -17,6 +17,7 @@ import Page from './+page.svelte';
 // only exists once the tokens are loaded -- the real app loads them in the
 // root layout. See invoices.svelte.spec.ts's identical import.
 import '#lib/styles/app.css';
+import { pageState } from '#testing/routePage.js';
 
 /*
  * One Client-portal Invoice (#1564, #1020). Each branch is the fixture's
@@ -24,12 +25,7 @@ import '#lib/styles/app.css';
  * screens. Stripe.js is a double: the real one is a third party's script
  * and a cross-origin iframe.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 const replaceState = vi.hoisted(() => vi.fn());

@@ -8,6 +8,7 @@ import { jsonResponse } from '#lib/testResponse.js';
 import { toApiResponder, toPageState } from '../../../../../routeFixture.js';
 import { fixture } from './page.fixture.js';
 import Messages from './+page.svelte';
+import { pageState } from '#testing/routePage.js';
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
 /*
@@ -15,12 +16,7 @@ if (!customElements.get('center-l')) registerLayoutPrimitives();
  * reads come from the route's own fixture, installed the way
  * `route-continuum.svelte.spec.ts` installs them.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));

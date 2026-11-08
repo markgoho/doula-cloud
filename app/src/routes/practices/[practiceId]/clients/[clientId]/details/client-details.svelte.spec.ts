@@ -22,6 +22,7 @@ import { fixture as dateOfBirthFixture } from './date-of-birth/page.fixture.js';
 import { fixture as emailFixture } from './email/page.fixture.js';
 import { fixture as sectionFixture } from './sections/[sectionIndex]/page.fixture.js';
 import { fixture as checkFixture } from './check/page.fixture.js';
+import { goto, pageState } from '#testing/routePage.js';
 
 /*
  * A Client's details journey (#1610): each page starts from the value
@@ -29,15 +30,9 @@ import { fixture as checkFixture } from './check/page.fixture.js';
  * gates. The 320px conformance of each page is the continuum sweep's,
  * through the same fixtures; this spec is only about what the pages DO.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 
-const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+vi.mock('$app/navigation', () => import('#testing/routePage.js'));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));

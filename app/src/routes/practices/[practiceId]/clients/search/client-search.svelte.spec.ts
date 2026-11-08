@@ -8,6 +8,7 @@ import { intakeDraft } from '#lib/intakeDraft.svelte.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../../routeFixture.js';
 import { fixture } from './page.fixture.js';
+import { pageState } from '#testing/routePage.js';
 
 /*
  * The `page` this screen reads comes from the route's own fixture
@@ -16,12 +17,7 @@ import { fixture } from './page.fixture.js';
  * import, so `pageState` is declared empty and filled once the imports
  * have run.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 const { practiceId } = fixture.params;

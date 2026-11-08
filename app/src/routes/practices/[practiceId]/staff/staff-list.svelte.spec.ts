@@ -15,6 +15,7 @@ import '#lib/styles/app.css';
 import Page from './+page.svelte';
 import { toPageState } from '../../../routeFixture.js';
 import { fixture, roster } from './page.fixture.js';
+import { goto, pageState } from '#testing/routePage.js';
 
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
@@ -25,16 +26,10 @@ if (!customElements.get('center-l')) registerLayoutPrimitives();
  * object is declared empty here and filled from the fixture once the
  * imports have run.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
-const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+vi.mock('$app/navigation', () => import('#testing/routePage.js'));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 // The real `apiErrorMessage` reads a refusal's `{code, message}` envelope

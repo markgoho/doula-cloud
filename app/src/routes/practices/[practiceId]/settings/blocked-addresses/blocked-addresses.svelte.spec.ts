@@ -11,6 +11,7 @@ import '#lib/styles/app.css';
 import Page from './+page.svelte';
 import { toPageState } from '../../../../routeFixture.js';
 import { fixture, suppressions } from './page.fixture.js';
+import { pageState } from '#testing/routePage.js';
 
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
@@ -19,12 +20,7 @@ if (!customElements.get('center-l')) registerLayoutPrimitives();
  * fixture beside it (#596), so the screen this spec asserts on and the
  * screen the continuum sweep measures are one description.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());

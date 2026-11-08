@@ -14,13 +14,9 @@ import '#lib/styles/app.css';
 import Page from './EngagementScreen.svelte';
 import { toApiResponder, toPageState } from '../../../../routeFixture.js';
 import { asDoula, detail as fixtureDetail, fixture, onCallPanel, session } from './page.fixture.js';
+import { pageState } from '#testing/routePage.js';
 
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());

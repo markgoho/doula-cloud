@@ -14,6 +14,7 @@ import Page from './InvoicesScreen.svelte';
 import { toPageState } from '../../../routeFixture.js';
 import { PRACTICE_SESSION_DEPENDENCY } from '#lib/practiceSession.js';
 import { clientsCannotPay, data, fixture } from './page.fixture.js';
+import { pageState } from '#testing/routePage.js';
 
 /*
  * The screen's content and the `page` it reads both come from the route's
@@ -26,12 +27,7 @@ import { clientsCannotPay, data, fixture } from './page.fixture.js';
  * `route-continuum.svelte.spec.ts` performs, through the same
  * `toPageState`.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 Object.assign(pageState, toPageState(fixture));
 

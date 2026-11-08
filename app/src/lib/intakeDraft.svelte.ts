@@ -22,6 +22,7 @@
  * that works exactly as it did before, one navigation at a time.
  */
 
+import { blankClientFields } from './client.js';
 import type { ClientCreateFields, ClientMatch, ClientSearchFields } from './client.js';
 import { carriedGivenName, searchedName, type IntakeOrigin } from './intakeJourney.js';
 
@@ -42,20 +43,7 @@ export interface IntakeAnswers extends ClientCreateFields {
 }
 
 export function blankAnswers(): IntakeAnswers {
-	return {
-		givenName: '',
-		familyName: '',
-		preferredName: '',
-		email: '',
-		phone: '',
-		addressLine1: '',
-		addressLine2: '',
-		addressLocality: '',
-		addressRegion: '',
-		addressPostalCode: '',
-		dateOfBirth: '',
-		fieldValues: {}
-	};
+	return blankClientFields() as IntakeAnswers;
 }
 
 /*

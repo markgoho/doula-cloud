@@ -141,6 +141,18 @@ export type RequestEngagementResult =
 	| { noCredits: false; outcome: EngagementRequestOutcome }
 	| { noCredits: true };
 
+async function outcomeOrNoCredits<Outcome>(
+	response: Response
+): Promise<{ noCredits: false; outcome: Outcome } | { noCredits: true }> {
+	if (response.status === 402) {
+		return { noCredits: true };
+	}
+	if (!response.ok) {
+		throw await refusalError(response);
+	}
+	return { noCredits: false, outcome: await response.json() };
+}
+
 function engagementRequestsPath(practiceId: string, clientId: string): string {
 	return `/api/practices/${practiceId}/clients/${clientId}/engagement-requests`;
 }
@@ -157,18 +169,13 @@ export async function requestEngagement(
 	clientId: string,
 	request: NewEngagementRequest
 ): Promise<RequestEngagementResult> {
-	const response = await fetcher(engagementRequestsPath(practiceId, clientId), {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify(request)
-	});
-	if (response.status === 402) {
-		return { noCredits: true };
-	}
-	if (!response.ok) {
-		throw await refusalError(response);
-	}
-	return { noCredits: false, outcome: await response.json() };
+	return outcomeOrNoCredits(
+		await fetcher(engagementRequestsPath(practiceId, clientId), {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(request)
+		})
+	);
 }
 
 /** The approval screen's read (#502), mirroring the Go BFF's
@@ -246,14 +253,7 @@ export async function approveRequest(
 	practiceId: string,
 	requestId: string
 ): Promise<ApproveRequestResult> {
-	const response = await fetcher(`${requestPath(practiceId, requestId)}/approve`, { method: 'POST' });
-	if (response.status === 402) {
-		return { noCredits: true };
-	}
-	if (!response.ok) {
-		throw await refusalError(response);
-	}
-	return { noCredits: false, outcome: await response.json() };
+	return outcomeOrNoCredits(await fetcher(`${requestPath(practiceId, requestId)}/approve`, { method: 'POST' }));
 }
 
 /** Refuses a pending Request (engagementrequest.RefuseHandler). The

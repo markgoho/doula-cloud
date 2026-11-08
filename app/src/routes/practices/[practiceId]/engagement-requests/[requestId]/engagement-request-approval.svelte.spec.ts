@@ -7,6 +7,7 @@ import Page from './+page.svelte';
 import { toPageState } from '../../../../routeFixture.js';
 import { detail as baseDetail, fixture } from './page.fixture.js';
 import { firstName, fullName } from '#lib/personName.js';
+import { goto, pageState } from '#testing/routePage.js';
 
 /*
  * The Request this screen decides on, and the `page` it reads, both come
@@ -18,16 +19,10 @@ import { firstName, fullName } from '#lib/personName.js';
  * module scope, so the later write is seen. Same installation, through
  * the same `toPageState`, as `route-continuum.svelte.spec.ts`.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
-const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+vi.mock('$app/navigation', () => import('#testing/routePage.js'));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
