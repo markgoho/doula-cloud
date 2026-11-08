@@ -178,18 +178,8 @@ type kindRow struct {
 //
 // Must be mounted behind staffauth.Middleware.
 func ChangeKindHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, reader, ok := staffauth.RequireTxReader(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-
-		engagementID := r.PathValue("engagementId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) {
-			return
-		}
-		if refuseFactWrite(w, reader, "a contractor Doula cannot change the kind of this work") {
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		if refuseFactWrite(w, c.Reader, "a contractor Doula cannot change the kind of this work") {
 			return
 		}
 
@@ -205,9 +195,9 @@ func ChangeKindHandler() http.Handler {
 		}
 
 		var current kindRow
-		err := tx.QueryRowContext(r.Context(),
+		err := c.Tx.QueryRowContext(r.Context(),
 			`SELECT kind::text, birth_outcome::text FROM engagements WHERE id = $1 AND practice_id = $2`,
-			engagementID, practiceID,
+			c.EngagementID, c.PracticeID,
 		).Scan(&current.kind, &current.birthOutcome)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
@@ -220,16 +210,16 @@ func ChangeKindHandler() http.Handler {
 		}
 
 		if current.kind == req.Kind {
-			apierr.WriteJSON(w, http.StatusOK, KindChangeResponse{EngagementID: engagementID, Kind: current.kind})
+			apierr.WriteJSON(w, http.StatusOK, KindChangeResponse{EngagementID: c.EngagementID, Kind: current.kind})
 			return
 		}
 		if refuseUpgradeAfterBirth(w, current, req.Kind) {
 			return
 		}
 
-		result, err := tx.ExecContext(r.Context(),
+		result, err := c.Tx.ExecContext(r.Context(),
 			`UPDATE engagements SET kind = $1 WHERE id = $2 AND practice_id = $3 AND kind = $4`,
-			req.Kind, engagementID, practiceID, current.kind,
+			req.Kind, c.EngagementID, c.PracticeID, current.kind,
 		)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -242,16 +232,15 @@ func ChangeKindHandler() http.Handler {
 			return
 		}
 
-		actorStaffID, _ := staffauth.StaffID(r.Context())
-		if err := recordFact(r.Context(), tx, practiceID, engagementID, actorStaffID, activity.ActionKindChanged,
+		if err := recordFact(r.Context(), c.Tx, c.PracticeID, c.EngagementID, c.StaffID, activity.ActionKindChanged,
 			map[string]any{"kindBefore": current.kind, "kindAfter": req.Kind}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		apierr.WriteJSON(w, http.StatusOK, KindChangeResponse{EngagementID: engagementID, Kind: req.Kind})
-	})
+		apierr.WriteJSON(w, http.StatusOK, KindChangeResponse{EngagementID: c.EngagementID, Kind: req.Kind})
+	}, staffauth.EngagementID())
 }
 
 // refuseUpgradeAfterBirth is ADR-0015's own sentence, checked before the

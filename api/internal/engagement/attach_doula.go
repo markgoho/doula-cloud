@@ -5,6 +5,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/attachment"
+	"doula-cloud/api/internal/staffauth"
 )
 
 // The refusals of AttachDoulaHandler. The Engagement hub prints each as
@@ -40,8 +41,8 @@ const (
 // mounted behind staffauth.Middleware, and the mount admits only an
 // Owner or an Admin (staffauth.OwnerAndAdmin).
 func AttachDoulaHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c, ok := beginDoulaChange(w, r)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, call staffauth.Call) {
+		c, ok := beginDoulaChange(w, r, call)
 		if !ok {
 			return
 		}
@@ -80,5 +81,5 @@ func AttachDoulaHandler() http.Handler {
 			Doulas:        doulas,
 			CanAttachSelf: canAttachSelf(c.reader, c.callerID, c.status, doulas),
 		})
-	})
+	}, staffauth.EngagementID(), staffauth.PathID("staff", "staffId"))
 }

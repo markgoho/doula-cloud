@@ -99,18 +99,8 @@ type birthOutcomeRow struct {
 // and carry no Idempotency-Key. Must be mounted behind
 // staffauth.Middleware.
 func RecordBirthOutcomeHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, reader, ok := staffauth.RequireTxReader(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-
-		engagementID := r.PathValue("engagementId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) {
-			return
-		}
-		if refuseFactWrite(w, reader, "a contractor Doula cannot record a birth outcome on this work") {
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		if refuseFactWrite(w, c.Reader, "a contractor Doula cannot record a birth outcome on this work") {
 			return
 		}
 
@@ -124,10 +114,10 @@ func RecordBirthOutcomeHandler() http.Handler {
 		}
 
 		var current birthOutcomeRow
-		err := tx.QueryRowContext(r.Context(),
+		err := c.Tx.QueryRowContext(r.Context(),
 			`SELECT birth_outcome::text, pregnancy_ended_on::text, status
 			   FROM engagements WHERE id = $1 AND practice_id = $2`,
-			engagementID, practiceID,
+			c.EngagementID, c.PracticeID,
 		).Scan(&current.outcome, &current.endedOn, &current.status)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
@@ -141,11 +131,11 @@ func RecordBirthOutcomeHandler() http.Handler {
 
 		if unchanged(current, req.BirthOutcome, endedOn) {
 			apierr.WriteJSON(w, http.StatusOK, BirthOutcomeResponse{
-				EngagementID: engagementID, BirthOutcome: req.BirthOutcome, PregnancyEndedOn: endedOn,
+				EngagementID: c.EngagementID, BirthOutcome: req.BirthOutcome, PregnancyEndedOn: endedOn,
 			})
 			return
 		}
-		if refuseFrozenWrite(w, reader, current.outcome != nil, req.Correction) {
+		if refuseFrozenWrite(w, c.Reader, current.outcome != nil, req.Correction) {
 			return
 		}
 		if refuseClearOnCompleted(w, current, req.BirthOutcome) {
@@ -155,7 +145,7 @@ func RecordBirthOutcomeHandler() http.Handler {
 			// The trigger's door, opened for this transaction only, after
 			// the Owner check above -- 00093's own comment names this
 			// handler as its single caller.
-			if _, err := tx.ExecContext(r.Context(),
+			if _, err := c.Tx.ExecContext(r.Context(),
 				`SELECT set_config('app.allow_outcome_correction', 'on', true)`); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -163,17 +153,16 @@ func RecordBirthOutcomeHandler() http.Handler {
 			}
 		}
 
-		if _, err := tx.ExecContext(r.Context(),
+		if _, err := c.Tx.ExecContext(r.Context(),
 			`UPDATE engagements SET birth_outcome = $1, pregnancy_ended_on = $2::date WHERE id = $3`,
-			req.BirthOutcome, endedOn, engagementID,
+			req.BirthOutcome, endedOn, c.EngagementID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		actorStaffID, _ := staffauth.StaffID(r.Context())
-		if err := recordFact(r.Context(), tx, practiceID, engagementID, actorStaffID, activity.ActionBirthOutcomeRecorded, map[string]any{
+		if err := recordFact(r.Context(), c.Tx, c.PracticeID, c.EngagementID, c.StaffID, activity.ActionBirthOutcomeRecorded, map[string]any{
 			"birthOutcomeBefore":     current.outcome,
 			"birthOutcomeAfter":      req.BirthOutcome,
 			"pregnancyEndedOnBefore": current.endedOn,
@@ -185,9 +174,9 @@ func RecordBirthOutcomeHandler() http.Handler {
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, BirthOutcomeResponse{
-			EngagementID: engagementID, BirthOutcome: req.BirthOutcome, PregnancyEndedOn: endedOn,
+			EngagementID: c.EngagementID, BirthOutcome: req.BirthOutcome, PregnancyEndedOn: endedOn,
 		})
-	})
+	}, staffauth.EngagementID())
 }
 
 // validateOutcome checks req against ADR-0015's vocabulary and its

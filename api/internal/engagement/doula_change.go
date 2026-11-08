@@ -20,22 +20,16 @@ type doulaChange struct {
 	status       string
 }
 
-// beginDoulaChange reads the caller and the two path ids and locks the
-// Engagement, writing the 400, 404 or 500 itself.
-func beginDoulaChange(w http.ResponseWriter, r *http.Request) (c doulaChange, ok bool) {
-	c.tx, c.practiceID, c.reader, ok = staffauth.RequireTxReader(w, r)
-	if !ok {
-		// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-		return doulaChange{}, false
-	}
-	c.callerID, _ = staffauth.StaffID(r.Context())
-	c.engagementID = r.PathValue("engagementId")
-	if !staffauth.ParseUUID(w, "engagement", c.engagementID) {
-		return doulaChange{}, false
-	}
-	c.doulaID = r.PathValue("staffId")
-	if !staffauth.ParseUUID(w, "staff", c.doulaID) {
-		return doulaChange{}, false
+// beginDoulaChange takes the caller and the two path ids staffauth.Handler
+// parsed and locks the Engagement, writing the 404 or 500 itself.
+func beginDoulaChange(w http.ResponseWriter, r *http.Request, call staffauth.Call) (c doulaChange, ok bool) {
+	c = doulaChange{
+		tx:           call.Tx,
+		reader:       call.Reader,
+		practiceID:   call.PracticeID,
+		callerID:     call.StaffID,
+		engagementID: call.EngagementID,
+		doulaID:      call.ID("staffId"),
 	}
 	c.status, ok = lockEngagementStatus(w, r, c.tx, c.engagementID, c.practiceID, msgAttachDoulaNoEngagement)
 	if !ok {

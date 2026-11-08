@@ -48,18 +48,8 @@ type EngagementDoula struct {
 //
 // Must be mounted behind staffauth.Middleware.
 func EngagementHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		engagementID := r.PathValue("engagementId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) {
-			return
-		}
-		reader, _ := staffauth.ReaderFrom(r.Context())
-		canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		canAccess, err := c.Reader.CanAccessEngagement(r.Context(), c.Tx, c.EngagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -68,10 +58,10 @@ func EngagementHandler() http.Handler {
 
 		var kind, status string
 		var overridden bool
-		err = tx.QueryRowContext(r.Context(),
+		err = c.Tx.QueryRowContext(r.Context(),
 			`SELECT kind::text, status::text, on_call_start_rule IS NOT NULL
 			   FROM engagements WHERE id = $1 AND practice_id = $2`,
-			engagementID, practiceID,
+			c.EngagementID, c.PracticeID,
 		).Scan(&kind, &status, &overridden)
 		switch {
 		case errors.Is(err, sql.ErrNoRows) || (err == nil && !canAccess):
@@ -83,7 +73,7 @@ func EngagementHandler() http.Handler {
 			return
 		}
 
-		settings, err := loadPracticeSettings(r.Context(), tx, practiceID)
+		settings, err := loadPracticeSettings(r.Context(), c.Tx, c.PracticeID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -95,7 +85,7 @@ func EngagementHandler() http.Handler {
 			Gaps:   []Gap{},
 		}
 
-		engagements, err := loadEngagements(r.Context(), tx, practiceID, settings, engagementsFilter{engagementID: engagementID})
+		engagements, err := loadEngagements(r.Context(), c.Tx, c.PracticeID, settings, engagementsFilter{engagementID: c.EngagementID})
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -122,7 +112,7 @@ func EngagementHandler() http.Handler {
 		}
 		if e.window != nil {
 			from, to := e.window.Bounds(settings.zone)
-			gaps, err := loadLiveGaps(r.Context(), tx, []string{e.id}, from, to)
+			gaps, err := loadLiveGaps(r.Context(), c.Tx, []string{e.id}, from, to)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -133,5 +123,5 @@ func EngagementHandler() http.Handler {
 			}
 		}
 		apierr.WriteJSON(w, http.StatusOK, resp)
-	})
+	}, staffauth.EngagementID())
 }

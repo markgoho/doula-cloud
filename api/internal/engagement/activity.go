@@ -71,19 +71,8 @@ var moneyActions = activitygate.RestrictedActions(activity.SubjectEngagement)
 // so no row it excludes ever leaves the database. Must be mounted behind
 // staffauth.Middleware.
 func ListActivityHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, reader, ok := staffauth.RequireTxReader(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-
-		engagementID := r.PathValue("engagementId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) {
-			return
-		}
-
-		canAccess, err := activitygate.CanAccessSubject(r.Context(), tx, reader, activity.SubjectEngagement, engagementID)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		canAccess, err := activitygate.CanAccessSubject(r.Context(), c.Tx, c.Reader, activity.SubjectEngagement, c.EngagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -93,14 +82,14 @@ func ListActivityHandler() http.Handler {
 			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
 			return
 		}
-		moneyGate := activitygate.Bypasses(reader)
+		moneyGate := activitygate.Bypasses(c.Reader)
 
 		after, ok := pagecursor.FromQuery(w, r, pagecursor.Decode, "invalid cursor")
 		if !ok {
 			return
 		}
 
-		page, err := listEngagementActivity(r.Context(), tx, practiceID, engagementID, moneyGate, after)
+		page, err := listEngagementActivity(r.Context(), c.Tx, c.PracticeID, c.EngagementID, moneyGate, after)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -112,7 +101,7 @@ func ListActivityHandler() http.Handler {
 			NextCursor: page.NextCursor,
 			HasMore:    page.HasMore,
 		})
-	})
+	}, staffauth.EngagementID())
 }
 
 // activityProjection is this package's own half of a subject-scoped

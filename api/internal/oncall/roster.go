@@ -105,21 +105,8 @@ type RosterDoula struct {
 //
 // A read only. Nothing here changes state.
 func RosterHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		reader, hasReader := staffauth.ReaderFrom(r.Context())
-		staffID, hasStaffID := staffauth.StaffID(r.Context())
-		if !hasReader || !hasStaffID {
-			// coverage:ignore reason: staffauth.Middleware always places a Reader and a staff id on context before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		settings, err := loadPracticeSettings(r.Context(), tx, practiceID)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		settings, err := loadPracticeSettings(r.Context(), c.Tx, c.PracticeID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -132,10 +119,10 @@ func RosterHandler() http.Handler {
 		}
 
 		filter := engagementsFilter{}
-		if reader.IsAmbientContractor() {
-			filter.contractorStaffID = staffID
+		if c.Reader.IsAmbientContractor() {
+			filter.contractorStaffID = c.StaffID
 		}
-		resp, err := buildRoster(r.Context(), tx, practiceID, settings, rng, filter)
+		resp, err := buildRoster(r.Context(), c.Tx, c.PracticeID, settings, rng, filter)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
