@@ -188,6 +188,16 @@ func TestDecodeJSON(t *testing.T) {
 		}
 	})
 
+	t.Run("a key whose case differs from the tag is ignored like any unknown key", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(`{"Name":"x"}`))
+
+		out := reqBody{Name: ""}
+		if ok := apierr.DecodeJSON(rec, req, &out); !ok || out.Name != "" {
+			t.Fatalf("DecodeJSON = %v, %+v, want true and the zero value", ok, out)
+		}
+	})
+
 	t.Run("ignores a key no field names", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(`{"name":"`+testPayloadName+`","extra":"x"}`))
@@ -200,7 +210,6 @@ func TestDecodeJSON(t *testing.T) {
 
 	for name, body := range map[string]string{
 		"a duplicate key":              `{"name":"a","name":"b"}`,
-		"a key whose case differs":     `{"Name":"a"}`,
 		"invalid UTF-8 in a string":    "{\"name\":\"a\xffb\"}",
 		"data after the closing brace": `{"name":"a"}{"name":"b"}`,
 	} {

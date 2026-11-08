@@ -11,10 +11,8 @@ import (
 	"bytes"
 	"encoding/json/v2"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
-	"reflect"
 )
 
 // Code is a machine-readable APIError.Code value, drawn from the
@@ -353,7 +351,7 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any, allowEmpty bool) 
 		return true
 	}
 	if err == nil {
-		err = unmarshalExactCase(body, v)
+		err = json.Unmarshal(body, v)
 	}
 	if err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
@@ -364,25 +362,6 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any, allowEmpty bool) 
 		return false
 	}
 	return true
-}
-
-var errKeyCase = errors.New("apierr: a key differs from its field's name only by case")
-
-// unmarshalExactCase decodes body into v with json v2's case-sensitive
-// matching, then refuses a body that a case-insensitive decode would have
-// read differently: a key such as "Name" for a field tagged "name" is
-// otherwise silently dropped, leaving the field at its zero value.
-func unmarshalExactCase(body []byte, v any) error {
-	if err := json.Unmarshal(body, v); err != nil {
-		return fmt.Errorf("apierr: decode request body: %w", err)
-	}
-	typ := reflect.TypeOf(v).Elem()
-	exact, loose := reflect.New(typ), reflect.New(typ)
-	_ = json.Unmarshal(body, exact.Interface())
-	if err := json.Unmarshal(body, loose.Interface(), json.MatchCaseInsensitiveNames(true)); err != nil || !reflect.DeepEqual(exact.Interface(), loose.Interface()) {
-		return errKeyCase
-	}
-	return nil
 }
 
 // WriteError is Write with its code chosen from status via CodeForStatus,
