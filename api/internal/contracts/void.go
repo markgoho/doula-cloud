@@ -1,8 +1,6 @@
 package contracts
 
 import (
-	"database/sql"
-	"errors"
 	"net/http"
 
 	"doula-cloud/api/internal/activity"
@@ -37,14 +35,8 @@ func PostVoidContractHandler() http.Handler {
 			return
 		}
 
-		id, prose, status, values, amountCents, amountChangedAt, err := fetchContract(r.Context(), tx, engagementID)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		id, prose, status, values, amountCents, amountChangedAt, ok := requireContract(w, r, tx, engagementID)
+		if !ok {
 			return
 		}
 		if ok, refusal := TransitionVoid.Check(Status(status)); !ok {

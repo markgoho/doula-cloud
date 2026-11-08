@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"unicode/utf8"
 
 	"doula-cloud/api/internal/apierr"
@@ -13,6 +12,7 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 )
 
 // minPasswordLength mirrors Identity Platform's own minimum -- rejecting
@@ -60,19 +60,11 @@ func RequestResetHandler(accounts authn.AccountManager, db *sql.DB) http.Handler
 			return
 		}
 
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		tx, ok := dbtx.Begin(w, r, db)
+		if !ok {
 			return
 		}
-		committed := false
-		defer func() {
-			// coverage:ignore reason: every step below this point that can fail without committing is itself a DB failure already marked coverage:ignore, so this defer's rollback body is reached only alongside one of those, never standalone
-			if !committed {
-				_ = tx.Rollback()
-			}
-		}()
+		defer dbtx.Rollback(tx)
 
 		token, err := authtoken.Mint(r.Context(), tx, uid, authtoken.PurposeStaffPasswordReset, authmail.ResetLinkLifetime, clock.Now(r.Context()))
 		if err != nil {
@@ -86,12 +78,9 @@ func RequestResetHandler(accounts authn.AccountManager, db *sql.DB) http.Handler
 			return
 		}
 
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !dbtx.Commit(w, tx) {
 			return
 		}
-		committed = true
 
 		w.WriteHeader(http.StatusAccepted)
 	})
@@ -122,9 +111,7 @@ func SpendResetHandler(accounts authn.AccountManager, db *sql.DB) http.Handler {
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
-		req.Token = strings.TrimSpace(req.Token)
-		if req.Token == "" {
-			apierr.WriteError(w, "token is required", http.StatusBadRequest)
+		if !authtoken.RequireToken(w, &req.Token) {
 			return
 		}
 		if utf8.RuneCountInString(req.NewPassword) < minPasswordLength {
@@ -142,18 +129,11 @@ func SpendResetHandler(accounts authn.AccountManager, db *sql.DB) http.Handler {
 			return
 		}
 
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		tx, ok := dbtx.Begin(w, r, db)
+		if !ok {
 			return
 		}
-		committed := false
-		defer func() {
-			if !committed {
-				_ = tx.Rollback()
-			}
-		}()
+		defer dbtx.Rollback(tx)
 
 		uid, err := authtoken.Spend(r.Context(), tx, req.Token, authtoken.PurposeStaffPasswordReset, clock.Now(r.Context()))
 		if errors.Is(err, authtoken.ErrInvalid) {
@@ -177,12 +157,9 @@ func SpendResetHandler(accounts authn.AccountManager, db *sql.DB) http.Handler {
 			return
 		}
 
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !dbtx.Commit(w, tx) {
 			return
 		}
-		committed = true
 
 		w.WriteHeader(http.StatusNoContent)
 	})

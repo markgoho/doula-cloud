@@ -19,6 +19,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/stripemode"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/webhookarrival"
@@ -188,33 +189,40 @@ func AccountEventTypes() []string {
 	return []string{eventTypeMerchantCapabilityStatusUpdated}
 }
 
-// claimEvent begins a transaction and records eventID in
+// beginEvent begins a transaction and records eventID in
 // stripe_webhook_events, the shared idempotency prologue every event-type
-// branch below runs before doing any type-specific work. alreadyProcessed
-// reports whether this event id was already recorded by an earlier
-// delivery -- the caller must still commit tx (a no-op commit) and
-// acknowledge in that case, rather than re-applying anything.
-func claimEvent(ctx context.Context, db *sql.DB, eventID string) (tx *sql.Tx, alreadyProcessed bool, err error) {
-	tx, err = db.BeginTx(ctx, nil)
-	if err != nil {
-		// coverage:ignore reason: DB connection failure, not exercised by unit tests
-		return nil, false, fmt.Errorf("payments: begin webhook event tx: %w", err)
+// branch below runs before doing any type-specific work. ok=false means
+// the response is already written: a 500, or the 200 that acknowledges a
+// redelivery whose event id an earlier delivery recorded (nothing is
+// re-applied). Callers defer rollbackUnlessCommitted(tx, committed) and
+// pass committed to commitAndAck.
+func beginEvent(w http.ResponseWriter, r *http.Request, db *sql.DB, eventID string) (tx *sql.Tx, committed *bool, ok bool) {
+	tx, ok = dbtx.Begin(w, r, db)
+	if !ok {
+		return nil, nil, false
 	}
-	result, err := tx.ExecContext(ctx,
+	rows, ok := dbtx.ExecRows(r.Context(), w, tx,
 		`INSERT INTO stripe_webhook_events (event_id) VALUES ($1) ON CONFLICT (event_id) DO NOTHING`, eventID,
 	)
-	if err != nil {
+	if !ok {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		_ = tx.Rollback()
-		return nil, false, fmt.Errorf("payments: claim webhook event: %w", err)
+		return nil, nil, false
 	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		// coverage:ignore reason: driver RowsAffected failure, not exercised by unit tests
+	if rows == 0 {
+		commitAndAck(w, tx, new(bool))
 		_ = tx.Rollback()
-		return nil, false, fmt.Errorf("payments: check claimed webhook event rows: %w", err)
+		return nil, nil, false
 	}
-	return tx, rows == 0, nil
+	return tx, new(bool), true
+}
+
+// rollbackUnlessCommitted is the deferred half of beginEvent.
+func rollbackUnlessCommitted(tx *sql.Tx, committed *bool) {
+	if !*committed {
+		// coverage:ignore reason: only reached after a DB failure, not exercised by unit tests
+		_ = tx.Rollback()
+	}
 }
 
 // commitAndAck commits tx and, on success, marks *committed true (so the
@@ -339,25 +347,11 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 		return
 	}
 
-	tx, alreadyProcessed, err := claimEvent(r.Context(), db, event.ID)
-	if err != nil {
-		// coverage:ignore reason: claimEvent's own failures are DB failures, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+	tx, committed, ok := beginEvent(w, r, db, event.ID)
+	if !ok {
 		return
 	}
-	committed := false
-	defer func() {
-		// coverage:ignore reason: only reached after a DB failure; every failure path below is itself coverage:ignore'd, so this rollback is never exercised by unit tests
-		if !committed {
-			_ = tx.Rollback()
-		}
-	}()
-	if alreadyProcessed {
-		// Commit the no-op tx and acknowledge -- a replayed invoice.paid
-		// event must not create a second payments row.
-		commitAndAck(w, tx, &committed)
-		return
-	}
+	defer rollbackUnlessCommitted(tx, committed)
 
 	invoiceID, practiceID, err := resolveInvoiceForEvent(r.Context(), tx, inv.ID, event.Account)
 	if err != nil {
@@ -367,7 +361,7 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 			// error.
 			webhookarrival.Mark(r.Context(), webhookarrival.Dropped)
 			log.Printf("payments: connect webhook: dropping invoice.paid for unresolved invoice %q (account %q, event id %s)", inv.ID, event.Account, event.ID)
-			commitAndAck(w, tx, &committed)
+			commitAndAck(w, tx, committed)
 			return
 		}
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -394,7 +388,7 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 	}
 	if currentStatus == invoiceStatusPaid {
 		log.Printf("payments: connect webhook: invoice.paid for %q already paid, skipping (event id %s)", inv.ID, event.ID)
-		commitAndAck(w, tx, &committed)
+		commitAndAck(w, tx, committed)
 		return
 	}
 
@@ -442,12 +436,12 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 		return
 	}
 
-	commitAndAck(w, tx, &committed)
+	commitAndAck(w, tx, committed)
 	// ADR-0013: fired only on this success path, gated on committed --
 	// unlike the alreadyProcessed/dropped branches above (which also call
 	// commitAndAck but queued no row), and unlike a failed commit, which
 	// leaves the just-queued payment_received_outbox row rolled back too.
-	if committed {
+	if *committed {
 		tasknudge.Fire(enq, tasknudge.PaymentReceived)(r.Context())
 	}
 }
@@ -469,30 +463,18 @@ func handleInvoicePaymentFailed(w http.ResponseWriter, r *http.Request, db *sql.
 		return
 	}
 
-	tx, alreadyProcessed, err := claimEvent(r.Context(), db, event.ID)
-	if err != nil {
-		// coverage:ignore reason: claimEvent's own failures are DB failures, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+	tx, committed, ok := beginEvent(w, r, db, event.ID)
+	if !ok {
 		return
 	}
-	committed := false
-	defer func() {
-		// coverage:ignore reason: only reached after a DB failure; every failure path below is itself coverage:ignore'd, so this rollback is never exercised by unit tests
-		if !committed {
-			_ = tx.Rollback()
-		}
-	}()
-	if alreadyProcessed {
-		commitAndAck(w, tx, &committed)
-		return
-	}
+	defer rollbackUnlessCommitted(tx, committed)
 
 	invoiceID, practiceID, err := resolveInvoiceForEvent(r.Context(), tx, inv.ID, event.Account)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			webhookarrival.Mark(r.Context(), webhookarrival.Dropped)
 			log.Printf("payments: connect webhook: dropping invoice.payment_failed for unresolved invoice %q (account %q, event id %s)", inv.ID, event.Account, event.ID)
-			commitAndAck(w, tx, &committed)
+			commitAndAck(w, tx, committed)
 			return
 		}
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -510,7 +492,7 @@ func handleInvoicePaymentFailed(w http.ResponseWriter, r *http.Request, db *sql.
 	}
 	if attempt.AwaitingAction {
 		log.Printf("payments: connect webhook: invoice.payment_failed for %q is waiting on the Client, not failed (event id %s)", inv.ID, event.ID)
-		commitAndAck(w, tx, &committed)
+		commitAndAck(w, tx, committed)
 		return
 	}
 
@@ -540,7 +522,7 @@ func handleInvoicePaymentFailed(w http.ResponseWriter, r *http.Request, db *sql.
 		return
 	}
 
-	commitAndAck(w, tx, &committed)
+	commitAndAck(w, tx, committed)
 }
 
 // handleInvoiceMarkedUncollectible is the one way a Stripe-backed
@@ -558,30 +540,18 @@ func handleInvoiceMarkedUncollectible(w http.ResponseWriter, r *http.Request, db
 		return
 	}
 
-	tx, alreadyProcessed, err := claimEvent(r.Context(), db, event.ID)
-	if err != nil {
-		// coverage:ignore reason: claimEvent's own failures are DB failures, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+	tx, committed, ok := beginEvent(w, r, db, event.ID)
+	if !ok {
 		return
 	}
-	committed := false
-	defer func() {
-		// coverage:ignore reason: only reached after a DB failure; every failure path below is itself coverage:ignore'd, so this rollback is never exercised by unit tests
-		if !committed {
-			_ = tx.Rollback()
-		}
-	}()
-	if alreadyProcessed {
-		commitAndAck(w, tx, &committed)
-		return
-	}
+	defer rollbackUnlessCommitted(tx, committed)
 
 	invoiceID, practiceID, err := resolveInvoiceForEvent(r.Context(), tx, inv.ID, event.Account)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			webhookarrival.Mark(r.Context(), webhookarrival.Dropped)
 			log.Printf("payments: connect webhook: dropping invoice.marked_uncollectible for unresolved invoice %q (account %q, event id %s)", inv.ID, event.Account, event.ID)
-			commitAndAck(w, tx, &committed)
+			commitAndAck(w, tx, committed)
 			return
 		}
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -599,7 +569,7 @@ func handleInvoiceMarkedUncollectible(w http.ResponseWriter, r *http.Request, db
 	}
 	if currentStatus != invoiceStatusOpen {
 		log.Printf("payments: connect webhook: invoice.marked_uncollectible for %q at status %q, leaving it (event id %s)", inv.ID, currentStatus, event.ID)
-		commitAndAck(w, tx, &committed)
+		commitAndAck(w, tx, committed)
 		return
 	}
 
@@ -622,7 +592,7 @@ func handleInvoiceMarkedUncollectible(w http.ResponseWriter, r *http.Request, db
 		return
 	}
 
-	commitAndAck(w, tx, &committed)
+	commitAndAck(w, tx, committed)
 }
 
 // paymentIntentEventObject is the subset of a payment_intent.* event's
@@ -659,26 +629,14 @@ func handlePaymentIntentProcessing(w http.ResponseWriter, r *http.Request, db *s
 		return
 	}
 
-	tx, alreadyProcessed, err := claimEvent(r.Context(), db, event.ID)
-	if err != nil {
-		// coverage:ignore reason: claimEvent's own failures are DB failures, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+	tx, committed, ok := beginEvent(w, r, db, event.ID)
+	if !ok {
 		return
 	}
-	committed := false
-	defer func() {
-		// coverage:ignore reason: only reached after a DB failure; every failure path below is itself coverage:ignore'd, so this rollback is never exercised by unit tests
-		if !committed {
-			_ = tx.Rollback()
-		}
-	}()
-	if alreadyProcessed {
-		commitAndAck(w, tx, &committed)
-		return
-	}
+	defer rollbackUnlessCommitted(tx, committed)
 	if intent.StripeInvoiceID == "" || intent.Status != paymentIntentStatusProcessing {
 		log.Printf("payments: connect webhook: payment_intent.processing %s pays no invoice or is now %q, leaving it (event id %s)", pi.ID, intent.Status, event.ID)
-		commitAndAck(w, tx, &committed)
+		commitAndAck(w, tx, committed)
 		return
 	}
 
@@ -687,7 +645,7 @@ func handlePaymentIntentProcessing(w http.ResponseWriter, r *http.Request, db *s
 		if errors.Is(err, sql.ErrNoRows) {
 			webhookarrival.Mark(r.Context(), webhookarrival.Dropped)
 			log.Printf("payments: connect webhook: dropping payment_intent.processing for unresolved invoice %q (account %q, event id %s)", intent.StripeInvoiceID, event.Account, event.ID)
-			commitAndAck(w, tx, &committed)
+			commitAndAck(w, tx, committed)
 			return
 		}
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -708,7 +666,7 @@ func handlePaymentIntentProcessing(w http.ResponseWriter, r *http.Request, db *s
 	}
 	if rows, err := result.RowsAffected(); err != nil || rows == 0 {
 		log.Printf("payments: connect webhook: payment_intent.processing for %q on an invoice that is not open, leaving it (event id %s)", intent.StripeInvoiceID, event.ID)
-		commitAndAck(w, tx, &committed)
+		commitAndAck(w, tx, committed)
 		return
 	}
 
@@ -728,7 +686,7 @@ func handlePaymentIntentProcessing(w http.ResponseWriter, r *http.Request, db *s
 		return
 	}
 
-	commitAndAck(w, tx, &committed)
+	commitAndAck(w, tx, committed)
 }
 
 // PostAccountWebhookHandler receives Stripe's v2 *thin* account events on
@@ -810,23 +768,11 @@ func handleCapabilityStatusUpdated(w http.ResponseWriter, r *http.Request, db *s
 		return
 	}
 
-	tx, alreadyProcessed, err := claimEvent(r.Context(), db, event.ID)
-	if err != nil {
-		// coverage:ignore reason: claimEvent's own failures are DB failures, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+	tx, committed, ok := beginEvent(w, r, db, event.ID)
+	if !ok {
 		return
 	}
-	committed := false
-	defer func() {
-		// coverage:ignore reason: only reached after a DB failure; every failure path below is itself coverage:ignore'd, so this rollback is never exercised by unit tests
-		if !committed {
-			_ = tx.Rollback()
-		}
-	}()
-	if alreadyProcessed {
-		commitAndAck(w, tx, &committed)
-		return
-	}
+	defer rollbackUnlessCommitted(tx, committed)
 
 	// Locks the practices row for the rest of this transaction and reads
 	// its pre-update requirements_due, so the empty -> non-empty episode
@@ -849,7 +795,7 @@ func handleCapabilityStatusUpdated(w http.ResponseWriter, r *http.Request, db *s
 			// no-op rather than logging twice.
 			webhookarrival.Mark(r.Context(), webhookarrival.Dropped)
 			log.Printf("payments: account webhook: dropping capability status update for unrecognized account %q (event id %s)", event.AccountID, event.ID)
-			commitAndAck(w, tx, &committed)
+			commitAndAck(w, tx, committed)
 			return
 		}
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -906,12 +852,12 @@ func handleCapabilityStatusUpdated(w http.ResponseWriter, r *http.Request, db *s
 		}
 	}
 
-	commitAndAck(w, tx, &committed)
+	commitAndAck(w, tx, committed)
 	// ADR-0013: fired only when this call actually queued a payout_outbox
 	// row and the commit that persisted it succeeded -- not on the
 	// alreadyProcessed/unrecognized-account branches above, which also
 	// call commitAndAck but queued nothing.
-	if committed && queuedPayoutNotification {
+	if *committed && queuedPayoutNotification {
 		tasknudge.Fire(enq, tasknudge.Payout)(r.Context())
 	}
 }

@@ -15,6 +15,7 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/sessionmint"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
@@ -86,18 +87,11 @@ func RequestMagicLinkHandler(db *sql.DB) http.Handler {
 			return
 		}
 
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		tx, ok := dbtx.Begin(w, r, db)
+		if !ok {
 			return
 		}
-		committed := false
-		defer func() {
-			if !committed {
-				_ = tx.Rollback()
-			}
-		}()
+		defer dbtx.Rollback(tx)
 
 		identifier, found, err := findPortalAccountByAddress(r.Context(), tx, address)
 		if err != nil {
@@ -147,12 +141,9 @@ func RequestMagicLinkHandler(db *sql.DB) http.Handler {
 			return
 		}
 
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !dbtx.Commit(w, tx) {
 			return
 		}
-		committed = true
 
 		w.WriteHeader(http.StatusAccepted)
 	})
@@ -270,9 +261,7 @@ func RedeemMagicLinkHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
-		req.Token = strings.TrimSpace(req.Token)
-		if req.Token == "" {
-			apierr.WriteError(w, "token is required", http.StatusBadRequest)
+		if !authtoken.RequireToken(w, &req.Token) {
 			return
 		}
 

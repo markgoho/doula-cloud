@@ -12,6 +12,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/practicetimezone"
 )
 
@@ -191,14 +192,9 @@ func ClientListInvoicesHandler() http.Handler {
 		}
 		engagementID, _ := clientauth.EngagementID(r.Context())
 
-		var after *invoiceCursor
-		if raw := r.URL.Query().Get("cursor"); raw != "" {
-			c, err := decodeInvoiceCursor(raw)
-			if err != nil {
-				apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
-				return
-			}
-			after = &c
+		after, ok := pagecursor.FromQuery(w, r, decodeInvoiceCursor, "invalid cursor")
+		if !ok {
+			return
 		}
 
 		zone, err := clientPracticeZone(r.Context(), tx, engagementID)

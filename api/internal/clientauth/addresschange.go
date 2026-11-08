@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"doula-cloud/api/internal/activity"
@@ -14,6 +13,7 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -74,12 +74,7 @@ func RequestAddressChangeHandler(db *sql.DB) http.Handler {
 		if !ok {
 			return
 		}
-		committed := false
-		defer func() {
-			if !committed {
-				_ = tx.Rollback()
-			}
-		}()
+		defer dbtx.Rollback(tx)
 
 		// A __session cookie is one cookie for two populations
 		// (ADR-0026), so a signed-in Staff member's session reaches this
@@ -141,12 +136,9 @@ func RequestAddressChangeHandler(db *sql.DB) http.Handler {
 			return
 		}
 
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !dbtx.Commit(w, tx) {
 			return
 		}
-		committed = true
 
 		w.WriteHeader(http.StatusAccepted)
 	})
@@ -205,24 +197,15 @@ func SpendAddressChangeHandler(db *sql.DB) http.Handler {
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
-		req.Token = strings.TrimSpace(req.Token)
-		if req.Token == "" {
-			apierr.WriteError(w, "token is required", http.StatusBadRequest)
+		if !authtoken.RequireToken(w, &req.Token) {
 			return
 		}
 
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		tx, ok := dbtx.Begin(w, r, db)
+		if !ok {
 			return
 		}
-		committed := false
-		defer func() {
-			if !committed {
-				_ = tx.Rollback()
-			}
-		}()
+		defer dbtx.Rollback(tx)
 
 		address, status, code, msg := applyAddressChange(r.Context(), tx, req.Token)
 		if status != http.StatusOK {
@@ -230,12 +213,9 @@ func SpendAddressChangeHandler(db *sql.DB) http.Handler {
 			return
 		}
 
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !dbtx.Commit(w, tx) {
 			return
 		}
-		committed = true
 
 		apierr.WriteJSON(w, http.StatusOK, spendAddressChangeResponse{SignInAddress: address})
 	})

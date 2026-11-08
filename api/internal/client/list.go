@@ -241,18 +241,11 @@ func ListByNameHandler() http.Handler {
 // serveList answers the Clients list for filters already read and checked
 // by either entry point.
 func serveList(w http.ResponseWriter, r *http.Request, req ListRequest) {
-	tx, practiceID, ok := staffauth.RequireTx(w, r)
-	// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
+	tx, practiceID, reader, ok := staffauth.RequireTxReader(w, r)
 	if !ok {
 		return
 	}
 	staffID, _ := staffauth.StaffID(r.Context())
-	reader, has := staffauth.ReaderFrom(r.Context())
-	if !has {
-		// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return
-	}
 
 	if req.Owes && reader.IsAmbientContractor() {
 		apierr.WriteError(w, "You contract for this Practice, so you cannot filter Clients by what they owe. Money is the Practice's to see.", http.StatusForbidden)

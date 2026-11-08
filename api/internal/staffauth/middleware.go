@@ -97,6 +97,34 @@ func RequireTx(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID s
 	return tx, practiceID, true
 }
 
+// RequireReader resolves the Reader Middleware placed on context, writing
+// an internal error response if it is missing.
+func RequireReader(w http.ResponseWriter, r *http.Request) (Reader, bool) {
+	reader, has := ReaderFrom(r.Context())
+	if !has {
+		// coverage:ignore reason: Middleware always places a Reader on context before this handler runs
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return Reader{}, false
+	}
+	return reader, true
+}
+
+// RequireTxReader is RequireTx and RequireReader in one call, for the
+// handler that needs the caller's roles as well as the request-scoped tx.
+func RequireTxReader(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, reader Reader, ok bool) {
+	tx, practiceID, ok = RequireTx(w, r)
+	// coverage:ignore reason: Middleware always sets a tx before this handler runs
+	if !ok {
+		return nil, "", Reader{}, false
+	}
+	reader, ok = RequireReader(w, r)
+	// coverage:ignore reason: Middleware always places a Reader on context before this handler runs
+	if !ok {
+		return nil, "", Reader{}, false
+	}
+	return tx, practiceID, reader, true
+}
+
 // ParseUUID validates that value is a well-formed UUID, writing a 400
 // response itself (naming the field via label) if not. Shared by
 // Middleware and downstream handlers.

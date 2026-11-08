@@ -152,30 +152,8 @@ type DetailResponse struct {
 // mounted behind staffauth.Middleware.
 func DetailHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
+		tx, practiceID, clientID, _, ok := staffauth.RequireClientReach(w, r)
 		if !ok {
-			return
-		}
-		clientID := r.PathValue("clientId")
-		if !staffauth.ParseUUID(w, "client", clientID) {
-			return
-		}
-
-		reader, has := staffauth.ReaderFrom(r.Context())
-		if !has {
-			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		canAccess, err := reader.CanAccessClient(r.Context(), tx, clientID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if !canAccess {
-			apierr.WriteError(w, "client not found", http.StatusNotFound)
 			return
 		}
 

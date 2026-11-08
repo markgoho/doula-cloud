@@ -65,17 +65,8 @@ func refusalMessage(roles []string) string {
 // refuses a new mutating route that declares nothing, so reaching for
 // this call in a fresh write would not pass.
 func RequireOwner(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, ok bool) {
-	tx, has := Tx(r.Context())
-	if !has {
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return nil, "", false
-	}
-	practiceID, _ = PracticeID(r.Context())
-	reader, has := ReaderFrom(r.Context())
-	if !has {
-		// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+	tx, practiceID, reader, ok := RequireTxReader(w, r)
+	if !ok {
 		return nil, "", false
 	}
 	if !reader.Has(roleOwner) {
@@ -101,17 +92,8 @@ const MsgContractorMoneyRefused = "You contract for this Practice, so you cannot
 // through her Engagement attachment, never this route. Zero-query, for
 // the same reason RequireOwnerOrAdmin is.
 func RequireNotAmbientContractor(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, ok bool) {
-	tx, has := Tx(r.Context())
-	if !has {
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return nil, "", false
-	}
-	practiceID, _ = PracticeID(r.Context())
-	reader, has := ReaderFrom(r.Context())
-	if !has {
-		// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+	tx, practiceID, reader, ok := RequireTxReader(w, r)
+	if !ok {
 		return nil, "", false
 	}
 	if reader.IsAmbientContractor() {
@@ -135,17 +117,8 @@ func RequireNotAmbientContractor(w http.ResponseWriter, r *http.Request) (tx *sq
 // row (AnyStaff, narrowed for a contractor inside the handler) rather
 // than an Owner-or-Admin seat.
 func RequireOwnerOrAdmin(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, ok bool) {
-	tx, has := Tx(r.Context())
-	if !has {
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return nil, "", false
-	}
-	practiceID, _ = PracticeID(r.Context())
-	reader, has := ReaderFrom(r.Context())
-	if !has {
-		// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+	tx, practiceID, reader, ok := RequireTxReader(w, r)
+	if !ok {
 		return nil, "", false
 	}
 	if !reader.IsOwnerOrAdmin() {

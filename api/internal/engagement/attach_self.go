@@ -91,6 +91,54 @@ func isOn(doulas []AttachedDoula, staffID string) bool {
 	return slices.ContainsFunc(doulas, func(d AttachedDoula) bool { return d.StaffID == staffID })
 }
 
+// lockEngagementStatus reads the Engagement's status under FOR UPDATE, so
+// two presses at once are one after the other: the second reads the
+// Attachment the first wrote and writes nothing. An Engagement that is not
+// at this Practice is a 404 carrying notFound.
+func lockEngagementStatus(w http.ResponseWriter, r *http.Request, tx *sql.Tx, engagementID, practiceID, notFound string) (status string, ok bool) {
+	err := tx.QueryRowContext(r.Context(),
+		`SELECT status::text FROM engagements WHERE id = $1 AND practice_id = $2 FOR UPDATE`,
+		engagementID, practiceID,
+	).Scan(&status)
+	if errors.Is(err, sql.ErrNoRows) {
+		apierr.WriteError(w, notFound, http.StatusNotFound)
+		return "", false
+	}
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return "", false
+	}
+	return status, true
+}
+
+// attachIfAbsent puts doulaID on the Engagement unless she is already on
+// it (a granted Attachment by grantedBy, with its ledger entry), and
+// returns who is on it afterward.
+func attachIfAbsent(w http.ResponseWriter, r *http.Request, tx *sql.Tx, practiceID, engagementID, doulaID, grantedBy string) (doulas []AttachedDoula, ok bool) {
+	doulas, err := readAttachedDoulas(r.Context(), tx, engagementID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return nil, false
+	}
+	if isOn(doulas, doulaID) {
+		return doulas, true
+	}
+	if err := attachment.Grant(r.Context(), tx, practiceID, engagementID, doulaID, grantedBy); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return nil, false
+	}
+	doulas, err = readAttachedDoulas(r.Context(), tx, engagementID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return nil, false
+	}
+	return doulas, true
+}
+
 // canAttachSelf is whether the caller would be put on this Engagement by
 // AttachSelfHandler now: the rule admits her (attachment.Membership's
 // WhyNotAttachable -- a Member here, with the Doula role, and not a
@@ -179,20 +227,8 @@ func AttachSelfHandler() http.Handler {
 			return
 		}
 
-		// FOR UPDATE, so two presses at once are one after the other: the
-		// second reads the Attachment the first wrote and writes nothing.
-		var status string
-		err := tx.QueryRowContext(r.Context(),
-			`SELECT status::text FROM engagements WHERE id = $1 AND practice_id = $2 FOR UPDATE`,
-			engagementID, practiceID,
-		).Scan(&status)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		status, ok := lockEngagementStatus(w, r, tx, engagementID, practiceID, "engagement not found")
+		if !ok {
 			return
 		}
 		if status == StatusCompleted {
@@ -200,24 +236,9 @@ func AttachSelfHandler() http.Handler {
 			return
 		}
 
-		doulas, err := readAttachedDoulas(r.Context(), tx, engagementID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		doulas, ok := attachIfAbsent(w, r, tx, practiceID, engagementID, staffID, staffID)
+		if !ok {
 			return
-		}
-		if !isOn(doulas, staffID) {
-			if err := attachment.Grant(r.Context(), tx, practiceID, engagementID, staffID, staffID); err != nil {
-				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-				return
-			}
-			doulas, err = readAttachedDoulas(r.Context(), tx, engagementID)
-			if err != nil {
-				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-				return
-			}
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, AttachSelfResponse{

@@ -533,28 +533,15 @@ func createStripeInvoice(ctx context.Context, tx *sql.Tx, client Client, practic
 // staffauth.Middleware.
 func GetInvoicesHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
+		tx, practiceID, reader, ok := staffauth.RequireTxReader(w, r)
 		if !ok {
-			return
-		}
-		reader, has := staffauth.ReaderFrom(r.Context())
-		if !has {
-			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		engagementID := r.PathValue("engagementId")
 		if !staffauth.ParseUUID(w, "engagement", engagementID) {
 			return
 		}
-		if err := requireEngagementAtPractice(r.Context(), tx, engagementID, practiceID); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				apierr.WriteError(w, "engagement not found", http.StatusNotFound)
-				return
-			}
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !staffauth.RequireEngagementAtPractice(w, r, tx, engagementID, practiceID) {
 			return
 		}
 		canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
@@ -568,14 +555,9 @@ func GetInvoicesHandler() http.Handler {
 			return
 		}
 
-		var after *invoiceCursor
-		if raw := r.URL.Query().Get("cursor"); raw != "" {
-			c, err := decodeInvoiceCursor(raw)
-			if err != nil {
-				apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
-				return
-			}
-			after = &c
+		after, ok := pagecursor.FromQuery(w, r, decodeInvoiceCursor, "invalid cursor")
+		if !ok {
+			return
 		}
 
 		// #1965: the paid and due days are the Practice's own.
@@ -630,13 +612,7 @@ func resolveInvoiceEngagement(w http.ResponseWriter, r *http.Request) (tx *sql.T
 	if !staffauth.ParseUUID(w, "engagement", engagementID) {
 		return nil, "", "", "", "", 0, false
 	}
-	if err := requireEngagementAtPractice(r.Context(), tx, engagementID, practiceID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
-			return nil, "", "", "", "", 0, false
-		}
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+	if !staffauth.RequireEngagementAtPractice(w, r, tx, engagementID, practiceID) {
 		return nil, "", "", "", "", 0, false
 	}
 
@@ -652,25 +628,6 @@ func resolveInvoiceEngagement(w http.ResponseWriter, r *http.Request) (tx *sql.T
 	}
 
 	return tx, practiceID, engagementID, contractID, contractStatus, amountCents, true
-}
-
-// requireEngagementAtPractice confirms engagementID exists and belongs to
-// practiceID, returning sql.ErrNoRows if not -- mirrors
-// contracts.requireEngagementAtPractice and message's own copy.
-func requireEngagementAtPractice(ctx context.Context, tx *sql.Tx, engagementID, practiceID string) error {
-	var exists bool
-	err := tx.QueryRowContext(ctx,
-		`SELECT EXISTS(SELECT 1 FROM engagements WHERE id = $1 AND practice_id = $2)`,
-		engagementID, practiceID,
-	).Scan(&exists)
-	// coverage:ignore reason: DB query failure, not exercised by unit tests
-	if err != nil {
-		return fmt.Errorf("payments: check engagement at practice: %w", err)
-	}
-	if !exists {
-		return sql.ErrNoRows
-	}
-	return nil
 }
 
 // fetchCurrentContract returns the id, status and amount of

@@ -14,6 +14,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/staffinvite"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -274,21 +275,13 @@ func RevokeInvitationHandler() http.Handler {
 			return
 		}
 
-		result, err := tx.ExecContext(r.Context(),
+		rows, ok := dbtx.ExecRows(r.Context(), w, tx,
 			`UPDATE practice_invitations
 			    SET status = 'revoked', revoked_by = $1, revoked_at = now()
 			  WHERE id = $2 AND practice_id = $3 AND status = 'pending'`,
 			actorStaffID, invitationID, practiceID,
 		)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		rows, err := result.RowsAffected()
-		if err != nil {
-			// coverage:ignore reason: driver RowsAffected failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !ok {
 			return
 		}
 		if rows == 0 {

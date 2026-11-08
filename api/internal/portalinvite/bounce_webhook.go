@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/webhookarrival"
 )
@@ -125,45 +126,22 @@ func PostBounceWebhookHandler(db *sql.DB, signingKey string) http.Handler {
 			return
 		}
 
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		tx, ok := dbtx.Begin(w, r, db)
+		if !ok {
 			return
 		}
-		committed := false
-		defer func() {
-			if !committed {
-				// coverage:ignore reason: only reached by a DB failure
-				// after BeginTx succeeds -- every branch past this point
-				// that returns without committing is itself a DB-failure
-				// coverage:ignore, so there is no non-DB way to drive
-				// this closed (mirrors outbox_handler.go's identical
-				// defer).
-				_ = tx.Rollback()
-			}
-		}()
+		defer dbtx.Rollback(tx)
 
-		result, err := tx.ExecContext(r.Context(),
+		rows, ok := dbtx.ExecRows(r.Context(), w, tx,
 			`INSERT INTO mailgun_webhook_events (event_id) VALUES ($1) ON CONFLICT (event_id) DO NOTHING`, payload.EventData.ID,
 		)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		rows, err := result.RowsAffected()
-		if err != nil {
-			// coverage:ignore reason: driver RowsAffected failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !ok {
 			return
 		}
 		if rows == 0 {
 			// Already processed this Mailgun event id -- commit the
 			// no-op tx and acknowledge, without recording it twice.
-			if err := tx.Commit(); err == nil {
-				committed = true
-			}
+			_ = tx.Commit()
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -222,12 +200,9 @@ func PostBounceWebhookHandler(db *sql.DB, signingKey string) http.Handler {
 			return
 		}
 
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !dbtx.Commit(w, tx) {
 			return
 		}
-		committed = true
 		w.WriteHeader(http.StatusOK)
 	})
 }

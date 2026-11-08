@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/feedback"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -71,12 +72,7 @@ func FeedbackHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 		if !ok {
 			return
 		}
-		committed := false
-		defer func() {
-			if !committed {
-				_ = tx.Rollback()
-			}
-		}()
+		defer dbtx.Rollback(tx)
 
 		// A __session cookie is one cookie for two populations
 		// (ADR-0026), so a signed-in Staff member's session reaches this
@@ -97,12 +93,7 @@ func FeedbackHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 
-		if !feedback.ValidKind(req.Kind) {
-			apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "kind", MsgFeedbackKindNeeded)
-			return
-		}
-		if !feedback.ValidText(req.Text) {
-			apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "text", MsgFeedbackTextTooLong)
+		if !feedback.RequireValid(w, req.Kind, req.Text, MsgFeedbackKindNeeded, MsgFeedbackTextTooLong) {
 			return
 		}
 
@@ -163,27 +154,13 @@ func FeedbackHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 			ClientID:      clientID,
 			SentAt:        clock.Now(r.Context()),
 		}
-		if err := feedback.Insert(r.Context(), tx, row); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		// #1524: the outbox row that opens a private GitHub issue for this
-		// piece, queued in the same transaction as the insert above so a
-		// crash between the two never leaves a piece of Feedback with no
-		// issue ever queued for it.
-		if err := feedback.EnqueueIssueOutbox(r.Context(), tx, id); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !feedback.Save(r.Context(), w, tx, row) {
 			return
 		}
 
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !dbtx.Commit(w, tx) {
 			return
 		}
-		committed = true
 		// This handler commits its own write rather than running inside
 		// clientauth.Middleware's request-scoped transaction, the same
 		// reasoning staffauth.FeedbackHandler's own nudge carries, so the

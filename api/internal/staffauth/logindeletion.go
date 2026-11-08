@@ -12,6 +12,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 )
 
 // DeletedStaffFirstName and DeletedStaffLastName are what a deleted
@@ -102,12 +103,7 @@ func DeleteLoginHandler(accounts authn.AccountManager, db *sql.DB) http.Handler 
 		if !ok {
 			return
 		}
-		committed := false
-		defer func() {
-			if !committed {
-				_ = tx.Rollback()
-			}
-		}()
+		defer dbtx.Rollback(tx)
 
 		if !RequireConfirmed(w, r) {
 			return
@@ -196,12 +192,9 @@ func DeleteLoginHandler(accounts authn.AccountManager, db *sql.DB) http.Handler 
 			return
 		}
 
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: commit failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !dbtx.Commit(w, tx) {
 			return
 		}
-		committed = true
 
 		// Her session rows are gone, so the cookie in this browser already
 		// names nothing. Clearing it anyway is what stops the frontend

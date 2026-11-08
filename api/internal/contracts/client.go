@@ -60,14 +60,8 @@ func ClientGetContractHandler() http.Handler {
 		}
 		engagementID, _ := clientauth.EngagementID(r.Context())
 
-		_, prose, status, values, amountCents, amountChangedAt, err := fetchContract(r.Context(), tx, engagementID)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		_, prose, status, values, amountCents, amountChangedAt, ok := requireContract(w, r, tx, engagementID)
+		if !ok {
 			return
 		}
 		mergeFields := extractMergeFields(prose)

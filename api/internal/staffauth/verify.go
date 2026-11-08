@@ -4,13 +4,13 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"strings"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authmail"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 )
 
 // RequestVerificationHandler lets a signed-in Staff member ask for a
@@ -44,13 +44,7 @@ func RequestVerificationHandler(db *sql.DB) http.Handler {
 		if !ok {
 			return
 		}
-		committed := false
-		defer func() {
-			// coverage:ignore reason: every step below this point that can fail without committing is itself a DB failure already marked coverage:ignore, so this defer's rollback body is reached only alongside one of those, never standalone
-			if !committed {
-				_ = tx.Rollback()
-			}
-		}()
+		defer dbtx.Rollback(tx)
 
 		// Sets app.current_identity_uid on the way, which is what `staff`'s
 		// own self-visibility RLS policy reads -- the pre-Practice
@@ -72,12 +66,9 @@ func RequestVerificationHandler(db *sql.DB) http.Handler {
 			return
 		}
 
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !dbtx.Commit(w, tx) {
 			return
 		}
-		committed = true
 
 		w.WriteHeader(http.StatusAccepted)
 	})
@@ -102,24 +93,15 @@ func SpendVerificationHandler(accounts authn.AccountManager, db *sql.DB) http.Ha
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
-		req.Token = strings.TrimSpace(req.Token)
-		if req.Token == "" {
-			apierr.WriteError(w, "token is required", http.StatusBadRequest)
+		if !authtoken.RequireToken(w, &req.Token) {
 			return
 		}
 
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		tx, ok := dbtx.Begin(w, r, db)
+		if !ok {
 			return
 		}
-		committed := false
-		defer func() {
-			if !committed {
-				_ = tx.Rollback()
-			}
-		}()
+		defer dbtx.Rollback(tx)
 
 		uid, err := authtoken.Spend(r.Context(), tx, req.Token, authtoken.PurposeStaffEmailVerification, clock.Now(r.Context()))
 		if errors.Is(err, authtoken.ErrInvalid) {
@@ -137,12 +119,9 @@ func SpendVerificationHandler(accounts authn.AccountManager, db *sql.DB) http.Ha
 			return
 		}
 
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !dbtx.Commit(w, tx) {
 			return
 		}
-		committed = true
 
 		w.WriteHeader(http.StatusNoContent)
 	})

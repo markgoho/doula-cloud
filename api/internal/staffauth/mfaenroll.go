@@ -7,6 +7,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/sessionmint"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -35,12 +36,7 @@ func FinishEnrollmentHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.
 		if !ok {
 			return
 		}
-		committed := false
-		defer func() {
-			if !committed {
-				_ = tx.Rollback()
-			}
-		}()
+		defer dbtx.Rollback(tx)
 
 		if !verified.SecondFactor {
 			// The token this call was handed does not show a second
@@ -101,6 +97,6 @@ func FinishEnrollmentHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.
 		// through the same ask-first path every other seam uses.
 		adapter := sessionmint.Staff(verified)
 		adapter.ReplaceSameTier = true
-		committed = sessionmint.Issue(w, r, tx, enq, adapter, step, nil)
+		sessionmint.Issue(w, r, tx, enq, adapter, step, nil)
 	})
 }

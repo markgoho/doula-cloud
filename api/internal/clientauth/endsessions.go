@@ -7,6 +7,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/dbtx"
 )
 
 // EndAllSessionsHandler lets a Client sign herself out of every device
@@ -29,12 +30,7 @@ func EndAllSessionsHandler(db *sql.DB) http.Handler {
 		if !ok {
 			return
 		}
-		committed := false
-		defer func() {
-			if !committed {
-				_ = tx.Rollback()
-			}
-		}()
+		defer dbtx.Rollback(tx)
 
 		// A __session cookie is one cookie for two populations
 		// (ADR-0026), so a signed-in Staff member's session reaches this
@@ -75,12 +71,9 @@ func EndAllSessionsHandler(db *sql.DB) http.Handler {
 			return
 		}
 
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !dbtx.Commit(w, tx) {
 			return
 		}
-		committed = true
 
 		// This request's own session is one of the ones EndAllSessions
 		// just deleted -- it matches every row for uid, this one

@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -29,7 +30,7 @@ func WithdrawHandler() http.Handler {
 			return
 		}
 
-		result, err := tx.ExecContext(r.Context(),
+		rows, ok := dbtx.ExecRows(r.Context(), w, tx,
 			// decided_by records the requester herself -- ADR-0017: "which
 			// is honest -- she decided it -- and keeps the CHECK uniform."
 			`UPDATE engagement_requests
@@ -37,15 +38,7 @@ func WithdrawHandler() http.Handler {
 			  WHERE id = $2 AND requested_by = $1 AND state = 'pending'`,
 			staffID, requestID,
 		)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		rows, err := result.RowsAffected()
-		if err != nil {
-			// coverage:ignore reason: driver RowsAffected failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !ok {
 			return
 		}
 		if rows == 0 {

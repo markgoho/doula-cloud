@@ -10,6 +10,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/dbtx"
 )
 
 // MsgWorkStateRequired is what a caller who omitted a work state, or sent
@@ -142,12 +143,7 @@ func UpdateWorkStateHandler(db *sql.DB) http.Handler {
 		if !ok {
 			return
 		}
-		committed := false
-		defer func() {
-			if !committed {
-				_ = tx.Rollback()
-			}
-		}()
+		defer dbtx.Rollback(tx)
 
 		var req UpdateWorkStateRequest
 		if !apierr.DecodeJSON(w, r, &req) {
@@ -176,12 +172,9 @@ func UpdateWorkStateHandler(db *sql.DB) http.Handler {
 			return
 		}
 
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !dbtx.Commit(w, tx) {
 			return
 		}
-		committed = true
 
 		apierr.WriteJSON(w, http.StatusOK, resp)
 	})

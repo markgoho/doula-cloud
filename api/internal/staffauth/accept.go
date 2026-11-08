@@ -13,6 +13,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/sessionmint"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -73,12 +74,7 @@ func AcceptInviteHandler(verifier authn.Verifier, accounts authn.AccountManager,
 		if !ok {
 			return
 		}
-		committed := false
-		defer func() {
-			if !committed {
-				_ = tx.Rollback()
-			}
-		}()
+		defer dbtx.Rollback(tx)
 
 		var req AcceptInviteRequest
 		if !apierr.DecodeJSON(w, r, &req) {
@@ -117,7 +113,7 @@ func AcceptInviteHandler(verifier authn.Verifier, accounts authn.AccountManager,
 			return sessionmint.Result{IdentityUID: verified.UID, Body: resp}, nil
 		}
 
-		committed = sessionmint.Issue(w, r, tx, enq, sessionmint.Staff(verified), step, nil)
+		sessionmint.Issue(w, r, tx, enq, sessionmint.Staff(verified), step, nil)
 	})
 }
 

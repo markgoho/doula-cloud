@@ -9,6 +9,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/objectstore"
+	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/push"
 )
 
@@ -37,14 +38,9 @@ func ClientListHandler() http.Handler {
 		}
 		engagementID, _ := clientauth.EngagementID(r.Context())
 
-		var after *messageCursor
-		if raw := r.URL.Query().Get("cursor"); raw != "" {
-			c, err := decodeCursor(raw)
-			if err != nil {
-				apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
-				return
-			}
-			after = &c
+		after, ok := pagecursor.FromQuery(w, r, decodeCursor, "invalid cursor")
+		if !ok {
+			return
 		}
 
 		items, hasMore, err := listMessages(r.Context(), tx, engagementID, after, activity.StaffActorDisplayName)

@@ -6,6 +6,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/dbtx"
 )
 
 // RemoveSecondFactorHandler lets a signed-in Staff member remove her own
@@ -27,12 +28,7 @@ func RemoveSecondFactorHandler(verifier authn.Verifier, accounts authn.AccountMa
 		if !ok {
 			return
 		}
-		committed := false
-		defer func() {
-			if !committed {
-				_ = tx.Rollback()
-			}
-		}()
+		defer dbtx.Rollback(tx)
 
 		// #1182: this route used to answer 403 here, alone with
 		// FinishEnrollmentHandler, where the other six pre-Practice
@@ -54,12 +50,9 @@ func RemoveSecondFactorHandler(verifier authn.Verifier, accounts authn.AccountMa
 			return
 		}
 
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !dbtx.Commit(w, tx) {
 			return
 		}
-		committed = true
 		w.WriteHeader(http.StatusNoContent)
 	})
 }
