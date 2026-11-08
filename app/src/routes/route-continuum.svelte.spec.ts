@@ -296,14 +296,7 @@ async function mountRoute(fixture: RouteFixture): Promise<Mounted> {
 		apiFetch.mockImplementation(counted);
 	}
 
-	/*
-	 * The one cast, and it is where a route's props actually arrive:
-	 * `mountInFrame` takes the component tier's propless `Component`,
-	 * and a route's `PageProps` is not assignable to it (see
-	 * `routeFixture.ts`). The props themselves are the fixture's own
-	 * `props`, checked against nothing here for the same reason a
-	 * route's `load` output is checked by its own `+page.ts`.
-	 */
+	// The one cast: a RouteFixture is one registry row for every route, so its component and `props` are type-erased (`routeFixture.ts`).
 	const mounted = await mountInFrame(fixture.component as Component, {
 		...fixture.props,
 	});

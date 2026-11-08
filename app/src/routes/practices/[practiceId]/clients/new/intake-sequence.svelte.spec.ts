@@ -58,19 +58,14 @@ interface SetupOptions {
  * different screens. The component is passed in rather than inferred
  * because three routes share this setup and each renders its own.
  */
-function setupFor(fixture: RouteFixture, Page: Component<never>) {
-	// The same one cast `route-continuum.svelte.spec.ts` makes where it
-	// mounts a route, and for the same reason its comment gives: a
-	// route's props are contravariant, so `Component<never>` is the only
-	// type that accepts every route and the mount is where it is undone.
-	const RoutePage = Page as Component;
+function setupFor(fixture: RouteFixture, Page: Component) {
 	return async ({ search = '', respond, answers, origin }: SetupOptions = {}) => {
 		const state = toPageState(fixture);
 		Object.assign(pageState, { ...state, url: new URL(`${state.url.href}${search}`) });
 		if (answers) intakeDraft.update(answers);
 		intakeDraft.origin = origin;
 		if (respond) apiFetchWithSession.mockResolvedValue(respond);
-		await render(RoutePage);
+		await render(Page);
 		/**
 		The body of the first request the page made, decoded.
 		*/

@@ -43,13 +43,12 @@ interface SetupOptions {
 	isFromCheck?: boolean;
 }
 
-function setupFor(fixture: RouteFixture, Page: Component<never>) {
-	const RoutePage = Page as Component;
+function setupFor(fixture: RouteFixture, Page: Component) {
 	return async ({ isFromCheck = false }: SetupOptions = {}) => {
 		const state = toPageState(fixture);
 		if (isFromCheck) state.url = new URL(`${state.url.href}?from=check`);
 		Object.assign(pageState, state);
-		await render(RoutePage);
+		await render(Page);
 	};
 }
 

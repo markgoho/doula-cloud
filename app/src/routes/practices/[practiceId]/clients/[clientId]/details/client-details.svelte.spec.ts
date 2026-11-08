@@ -68,17 +68,14 @@ interface SetupOptions {
 	search?: string;
 }
 
-function setupFor(fixture: RouteFixture, Page: Component<never>) {
-	// The cast `route-continuum.svelte.spec.ts` makes where it mounts a
-	// route, for the reason its comment gives.
-	const RoutePage = Page as Component;
+function setupFor(fixture: RouteFixture, Page: Component) {
 	return async ({ responses = [], answers, engagementId, search = '' }: SetupOptions = {}) => {
 		const state = toPageState(fixture);
 		Object.assign(pageState, { ...state, url: new URL(`${state.url.href}${search}`) });
 		if (answers) clientDetails.draft.update(answers);
 		clientDetails.engagementId = engagementId;
 		for (const response of responses) apiFetchWithSession.mockResolvedValueOnce(response);
-		await render(RoutePage);
+		await render(Page);
 		// The layout draws the save's one dialog (#2048). Its record and the
 		// Practice's template are already seeded, so it reads nothing.
 		await render(Layout, { children: createRawSnippet(() => ({ render: () => '<span></span>' })) });
