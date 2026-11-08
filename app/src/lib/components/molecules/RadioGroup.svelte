@@ -15,6 +15,7 @@
 
 <script lang="ts" generics="T extends string">
 	import type { Snippet } from 'svelte';
+	import ChoiceGroup from './ChoiceGroup.svelte';
 
 	interface Option<T> {
 		value: T;
@@ -84,17 +85,7 @@
 	const generatedName = $props.id();
 
 	let { legend, hint, name = generatedName, options, value, onChange, error }: Properties<T> = $props();
-
-	const errorId = $derived(`${name}-error`);
-	const hintId = $derived(`${name}-hint`);
-	const describedBy = $derived([hint ? hintId : undefined, error ? errorId : undefined].filter(Boolean).join(' ') || undefined);
 </script>
-
-{#snippet errorMessage()}
-	{#if error}
-		<p id={errorId} class="error" role="alert">{error}</p>
-	{/if}
-{/snippet}
 
 {#snippet radios()}
 	<stack-l space="var(--space-5)">
@@ -153,65 +144,12 @@
 	</stack-l>
 {/snippet}
 
-{#if legend === undefined}
-	{@render errorMessage()}
+<ChoiceGroup {legend} {hint} {error} {name}>
 	{@render radios()}
-{:else}
-	<!-- aria-describedby only: aria-invalid is not supported on role="group",
-	     which <fieldset> carries implicitly. The refusal reaches the reader
-	     through the description and through role="alert". -->
-	<fieldset aria-describedby={describedBy}>
-		<legend>{legend}</legend>
-		{#if hint}
-			<p id={hintId} class="hint">{hint}</p>
-		{/if}
-		{@render errorMessage()}
-		{@render radios()}
-	</fieldset>
-{/if}
+</ChoiceGroup>
 
 <style>
 	@layer components {
-		fieldset {
-			padding: 0;
-			border: none;
-		}
-
-		/* 20px from the group's name to its first option, the same gap
-		   the options keep between themselves -- the brief's Density
-		   section, and what a legend flush against a radio was missing. */
-		legend {
-			padding: 0;
-			margin-block-end: var(--space-5);
-			font-weight: var(--font-weight-medium);
-			color: var(--color-on-surface);
-		}
-
-		/* A fieldset inside a disabled one is disabled too, so the
-		   question dims with its options rather than reading as live. */
-		fieldset:disabled > legend {
-			opacity: var(--opacity-disabled);
-		}
-
-		/* With a hint, the gap sits below the hint instead of the legend. */
-		legend:has(+ .hint) {
-			margin-block-end: var(--space-1);
-		}
-
-		.hint {
-			margin: 0 0 var(--space-5);
-			color: var(--color-on-surface-muted);
-			font-size: var(--text-body-sm-size);
-		}
-
-		/* The same weight and color LabeledField gives a refusal, so one
-		   error reads the same as the next whichever control it belongs to. */
-		.error {
-			margin: 0 0 var(--space-3);
-			color: var(--color-error);
-			font-size: var(--text-body-sm-size);
-		}
-
 		/*
 		 * The control takes its own width and the label takes what it
 		 * needs of the rest, wrapping inside its column. The `0` minimum:

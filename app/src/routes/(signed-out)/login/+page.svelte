@@ -17,16 +17,16 @@
 	import { decideLanding, type Membership, type SessionInfo } from '#lib/landing.js';
 	import { didSessionEnd } from '#lib/sessionEnded.js';
 	import { readReturnTo } from '#lib/returnTo.js';
-	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
-	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import SignOutConfirmation from '#lib/components/molecules/SignOutConfirmation.svelte';
+	import PasswordField from '#lib/components/molecules/PasswordField.svelte';
+	import EmailAddressField from '#lib/components/molecules/EmailAddressField.svelte';
 	import PracticeChooser from '#lib/components/molecules/PracticeChooser.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import TotpCodeField from '#lib/components/molecules/TotpCodeField.svelte';
-	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 	import {
@@ -395,34 +395,8 @@
 		{/if}
 
 		<StackedForm onSubmit={handleSubmit}>
-			<LabeledField id={emailId} label="Email address" error={submission.errorFor(emailId)}>
-				{#snippet children({ id, describedBy, invalid })}
-					<TextInput
-						{id}
-						{describedBy}
-						{invalid}
-						type="email"
-						value={email}
-						onInput={(value) => (email = value)}
-						required
-						autocomplete="username"
-					/>
-				{/snippet}
-			</LabeledField>
-			<LabeledField id={passwordId} label="Password" error={submission.errorFor(passwordId)}>
-				{#snippet children({ id, describedBy, invalid })}
-					<TextInput
-						{id}
-						{describedBy}
-						{invalid}
-						type="password"
-						value={password}
-						onInput={(value) => (password = value)}
-						required
-						autocomplete="current-password"
-					/>
-				{/snippet}
-			</LabeledField>
+			<EmailAddressField id={emailId} value={email} onInput={(value) => (email = value)} error={submission.errorFor(emailId)} />
+			<PasswordField id={passwordId} value={password} onInput={(value) => (password = value)} error={submission.errorFor(passwordId)} />
 			<Button type="submit" label="Sign in" loading={submission.isSubmitting} />
 		</StackedForm>
 
@@ -454,15 +428,12 @@
 			it appears, or she is left on `<body>` (`Heading`'s
 			`focusOnAppearing`, #2018).
 		-->
-		<Heading level={2} text="Before you continue" focusOnAppearing />
-		<WarningText message={signOutWarning ?? ''} />
-		<Button
-			type="button"
-			label="Continue and sign out"
-			loading={submission.isSubmitting}
-			onClick={handleConfirmSignOut}
+		<SignOutConfirmation
+			warning={signOutWarning ?? ''}
+			isSubmitting={submission.isSubmitting}
+			onConfirm={handleConfirmSignOut}
+			onCancel={handleCancelSignOut}
 		/>
-		<Button type="button" label="Cancel" variant="secondary" onClick={handleCancelSignOut} />
 	{:else}
 		<!--
 			#606: Identity Platform accepted the password and is waiting on

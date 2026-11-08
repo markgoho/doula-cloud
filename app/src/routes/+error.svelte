@@ -12,9 +12,7 @@
 	 */
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import Link from '#lib/components/atoms/Link.svelte';
-	import PortalFooter from '#lib/components/organisms/PortalFooter.svelte';
-	import SignedOutTopBar from '#lib/components/organisms/SignedOutTopBar.svelte';
+	import SignedOutShell from './SignedOutShell.svelte';
 	import ErrorPage from '#lib/components/templates/ErrorPage.svelte';
 	import { errorKindForStatus } from '#lib/errorPage.js';
 
@@ -29,15 +27,10 @@
 	);
 </script>
 
-<Link href="#main" label="Skip to main content" variant="skip" />
-<SignedOutTopBar />
-<main id="main" tabindex="-1">
+<SignedOutShell isPortalFooterShown={isPortalPath}>
 	<ErrorPage
 		kind={errorKindForStatus(page.status, page.error?.code)}
 		wayOutHref={resolve('/(signed-out)/login')}
 		wayOutLabel="Sign in"
 	/>
-</main>
-{#if isPortalPath}
-	<PortalFooter />
-{/if}
+</SignedOutShell>

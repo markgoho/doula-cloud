@@ -23,6 +23,7 @@
 	 */
 	import type { HTMLInputAttributes } from 'svelte/elements';
 	import Checkbox from '../atoms/Checkbox.svelte';
+	import ChoiceGroup from './ChoiceGroup.svelte';
 
 	interface Option<T> {
 		value: T;
@@ -63,22 +64,12 @@
 
 	let { legend, hint, name = generatedName, options, value, onChange, error, autocomplete }: Properties<T> = $props();
 
-	const errorId = $derived(`${name}-error`);
-	const hintId = $derived(`${name}-hint`);
-	const describedBy = $derived([hint ? hintId : undefined, error ? errorId : undefined].filter(Boolean).join(' ') || undefined);
-
 	function toggle(option: T, isChosen: boolean) {
 		const offered = options.map((entry) => entry.value);
 		const chosen = offered.filter((entry) => (entry === option ? isChosen : value.includes(entry)));
 		onChange([...chosen, ...value.filter((entry) => !offered.includes(entry))]);
 	}
 </script>
-
-{#snippet errorMessage()}
-	{#if error}
-		<p id={errorId} class="error" role="alert">{error}</p>
-	{/if}
-{/snippet}
 
 {#snippet boxes()}
 	<stack-l space="var(--space-5)">
@@ -114,60 +105,12 @@
 	</stack-l>
 {/snippet}
 
-{#if legend === undefined}
-	{@render errorMessage()}
+<ChoiceGroup {legend} {hint} {error} {name}>
 	{@render boxes()}
-{:else}
-	<!-- aria-describedby only, for the reason RadioGroup gives: aria-invalid
-	     is not supported on role="group". -->
-	<fieldset aria-describedby={describedBy}>
-		<legend>{legend}</legend>
-		{#if hint}
-			<p id={hintId} class="hint">{hint}</p>
-		{/if}
-		{@render errorMessage()}
-		{@render boxes()}
-	</fieldset>
-{/if}
+</ChoiceGroup>
 
 <style>
 	@layer components {
-		/* Every rule below is RadioGroup's, so the two groups keep one
-		   rhythm: the reasons are written there. */
-		fieldset {
-			margin: 0;
-			padding: 0;
-			border: none;
-			min-inline-size: 0;
-		}
-
-		legend {
-			padding: 0;
-			margin-block-end: var(--space-5);
-			font-weight: var(--font-weight-medium);
-			color: var(--color-on-surface);
-		}
-
-		fieldset:disabled > legend {
-			opacity: var(--opacity-disabled);
-		}
-
-		legend:has(+ .hint) {
-			margin-block-end: var(--space-1);
-		}
-
-		.hint {
-			margin: 0 0 var(--space-5);
-			color: var(--color-on-surface-muted);
-			font-size: var(--text-body-sm-size);
-		}
-
-		.error {
-			margin: 0 0 var(--space-3);
-			color: var(--color-error);
-			font-size: var(--text-body-sm-size);
-		}
-
 		.choice {
 			display: grid;
 			grid-template-columns: auto minmax(0, max-content);

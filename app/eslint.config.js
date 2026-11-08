@@ -54,6 +54,7 @@ const fieldOwners = [
 	'src/lib/components/molecules/LabeledField.svelte',
 	'src/lib/components/molecules/DateFields.svelte',
 	'src/lib/components/molecules/CheckboxGroup.svelte',
+	'src/lib/components/molecules/ChoiceGroup.svelte',
 	'src/lib/components/molecules/RadioGroup.svelte',
 	'src/lib/components/molecules/FilterBar.svelte',
 	'src/lib/components/templates/QuestionPage.svelte',
@@ -69,7 +70,7 @@ const fieldRestrictions = [
 	{
 		elements: ['fieldset'],
 		message:
-			'Use a group molecule -- CheckboxGroup, RadioGroup, DateFields, FilterBar -- or a Template (FormPage, QuestionPage) instead of a raw <fieldset>.'
+			'Use a group molecule -- ChoiceGroup, CheckboxGroup, RadioGroup, DateFields, FilterBar -- or a Template (FormPage, QuestionPage) instead of a raw <fieldset>.'
 	}
 ];
 

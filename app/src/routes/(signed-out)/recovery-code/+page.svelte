@@ -32,6 +32,7 @@
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import EmailAddressField from '#lib/components/molecules/EmailAddressField.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 
@@ -87,20 +88,7 @@
 		/>
 	</stack-l>
 	<StackedForm onSubmit={handleSubmit}>
-		<LabeledField id={emailId} label="Email address" error={submission.errorFor(emailId)}>
-			{#snippet children({ id, describedBy, invalid })}
-				<TextInput
-					{id}
-					{describedBy}
-					{invalid}
-					type="email"
-					value={email}
-					onInput={(value) => (email = value)}
-					required
-					autocomplete="username"
-				/>
-			{/snippet}
-		</LabeledField>
+		<EmailAddressField id={emailId} value={email} onInput={(value) => (email = value)} error={submission.errorFor(emailId)} />
 		<!--
 			GOV.UK's 30-character step (#1216): the field takes an Owner-vouched
 			code of eight digits or a saved code of 26 characters

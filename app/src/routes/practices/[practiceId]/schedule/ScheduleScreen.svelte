@@ -36,8 +36,8 @@
 	import Select from '#lib/components/atoms/Select.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
-	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import FilterBar from '#lib/components/molecules/FilterBar.svelte';
+	import DateRangeFields from '#lib/components/molecules/DateRangeFields.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
@@ -163,32 +163,7 @@
 			status={summary}
 			empty={read !== undefined && schedule.items.length === 0}
 		>
-			<LabeledField label="From">
-				{#snippet children({ id, describedBy, invalid })}
-					<TextInput
-						{id}
-						{describedBy}
-						{invalid}
-						type="date"
-						name="from"
-						value={fromValue}
-						onInput={(value) => (fromValue = value)}
-					/>
-				{/snippet}
-			</LabeledField>
-			<LabeledField label="To">
-				{#snippet children({ id, describedBy, invalid })}
-					<TextInput
-						{id}
-						{describedBy}
-						{invalid}
-						type="date"
-						name="to"
-						value={toValue}
-						onInput={(value) => (toValue = value)}
-					/>
-				{/snippet}
-			</LabeledField>
+			<DateRangeFields bind:from={fromValue} bind:to={toValue} />
 			{#if isDoulaPickerOffered}
 				<LabeledField label="Doula" width={20}>
 					{#snippet children({ id, describedBy, invalid, width })}

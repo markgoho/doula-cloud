@@ -54,13 +54,12 @@
 	} from '#lib/formErrors.js';
 	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
 	import type { SessionInfo } from '#lib/landing.js';
-	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
-	import WarningText from '#lib/components/atoms/WarningText.svelte';
-	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import SignOutConfirmation from '#lib/components/molecules/SignOutConfirmation.svelte';
+	import PasswordField from '#lib/components/molecules/PasswordField.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import TotpCodeField from '#lib/components/molecules/TotpCodeField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
@@ -316,20 +315,7 @@
 		<!-- `novalidate`: the page refuses the submit, not the browser (#467). -->
 		<StackedForm onSubmit={handlePasswordSubmit}>
 			<Text text="Confirm your password to set up an authenticator app." />
-			<LabeledField id={passwordId} label="Password" error={submission.errorFor(passwordId)}>
-				{#snippet children({ id, describedBy, invalid })}
-					<TextInput
-						{id}
-						{describedBy}
-						{invalid}
-						type="password"
-						value={password}
-						onInput={(value) => (password = value)}
-						required
-						autocomplete="current-password"
-					/>
-				{/snippet}
-			</LabeledField>
+			<PasswordField id={passwordId} value={password} onInput={(value) => (password = value)} error={submission.errorFor(passwordId)} />
 			<Button type="submit" label="Continue" loading={submission.isSubmitting} />
 		</StackedForm>
 	{:else if step === 'verify-email'}
@@ -361,15 +347,12 @@
 			Her code is already accepted, so there is nothing to re-render
 			here but the consequence and the two ways out of it.
 		-->
-		<Heading level={2} text="Before you continue" focusOnAppearing />
-		<WarningText message={signOutWarning ?? ''} />
-		<Button
-			type="button"
-			label="Continue and sign out"
-			loading={submission.isSubmitting}
-			onClick={handleConfirmSignOut}
+		<SignOutConfirmation
+			warning={signOutWarning ?? ''}
+			isSubmitting={submission.isSubmitting}
+			onConfirm={handleConfirmSignOut}
+			onCancel={handleCancelSignOut}
 		/>
-		<Button type="button" label="Cancel" variant="secondary" onClick={handleCancelSignOut} />
 	{:else}
 		<StackedForm onSubmit={handleCodeSubmit}>
 			<Text

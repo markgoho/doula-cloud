@@ -4,6 +4,7 @@
 	import Select from '#lib/components/atoms/Select.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import DateRangeFields from '#lib/components/molecules/DateRangeFields.svelte';
 	import FilterBar from '#lib/components/molecules/FilterBar.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 
@@ -24,16 +25,7 @@
 </script>
 
 {#snippet dates()}
-	<LabeledField label="From">
-		{#snippet children({ id, describedBy, invalid })}
-			<TextInput {id} {describedBy} {invalid} type="date" name="from" value="2026-10-26" onInput={ignore} />
-		{/snippet}
-	</LabeledField>
-	<LabeledField label="To">
-		{#snippet children({ id, describedBy, invalid })}
-			<TextInput {id} {describedBy} {invalid} type="date" name="to" value="2026-11-25" onInput={ignore} />
-		{/snippet}
-	</LabeledField>
+	<DateRangeFields from="2026-10-26" to="2026-11-25" />
 {/snippet}
 
 <stack-l space="var(--space-6)">

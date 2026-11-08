@@ -1,0 +1,41 @@
+import { page } from 'vitest/browser';
+import { render } from 'vitest-browser-svelte';
+import { describe, expect, it } from 'vitest';
+import DateRangeFields from './DateRangeFields.svelte';
+
+async function setup() {
+	await render(DateRangeFields, { from: '2026-10-26', to: '2026-11-25' });
+}
+
+describe('DateRangeFields', () => {
+	it('asks for the first and last day, labeled From and To', async () => {
+		await setup();
+
+		await expect.element(page.getByLabelText('From')).toHaveValue('2026-10-26');
+		await expect.element(page.getByLabelText('To')).toHaveValue('2026-11-25');
+	});
+
+	it('names the boxes so a GET form sends from and to', async () => {
+		await setup();
+
+		await expect.element(page.getByLabelText('From')).toHaveAttribute('name', 'from');
+		await expect.element(page.getByLabelText('To')).toHaveAttribute('name', 'to');
+	});
+
+	it('takes what the person types into either box', async () => {
+		await setup();
+
+		await page.getByLabelText('To').fill('2026-12-01');
+
+		await expect.element(page.getByLabelText('To')).toHaveValue('2026-12-01');
+		await expect.element(page.getByLabelText('From')).toHaveValue('2026-10-26');
+	});
+
+	it('takes a new From the same way', async () => {
+		await setup();
+
+		await page.getByLabelText('From').fill('2026-10-01');
+
+		await expect.element(page.getByLabelText('From')).toHaveValue('2026-10-01');
+	});
+});

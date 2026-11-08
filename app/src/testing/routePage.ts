@@ -4,10 +4,12 @@ export const pageState: {
 	params: Record<string, string>;
 	url: URL;
 	data: Record<string, unknown>;
+	state: object;
 } = {
 	params: {},
 	url: new URL('https://example.test/'),
-	data: {}
+	data: {},
+	state: {}
 };
 
 export { pageState as page };

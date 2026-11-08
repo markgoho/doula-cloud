@@ -44,10 +44,9 @@
 	import { gotoWithOutcome } from '#lib/outcome.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
-	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
-	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
+	import SignOutConfirmation from '#lib/components/molecules/SignOutConfirmation.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import StaffNameFields from '#lib/components/molecules/StaffNameFields.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
@@ -311,15 +310,12 @@
 			#816: the warning goes on the button that acts, not on a screen
 			of its own -- see the sign-in page's own copy of this pattern.
 		-->
-		<Heading level={2} text="Before you continue" focusOnAppearing />
-		<WarningText message={signOutWarning ?? ''} />
-		<Button
-			type="button"
-			label="Continue and sign out"
-			loading={submission.isSubmitting}
-			onClick={handleConfirmSignOut}
+		<SignOutConfirmation
+			warning={signOutWarning ?? ''}
+			isSubmitting={submission.isSubmitting}
+			onConfirm={handleConfirmSignOut}
+			onCancel={handleCancelSignOut}
 		/>
-		<Button type="button" label="Cancel" variant="secondary" onClick={handleCancelSignOut} />
 	{:else if invitation}
 		<StackedForm onSubmit={handleAccept}>
 			{#if isAskingDetails}
