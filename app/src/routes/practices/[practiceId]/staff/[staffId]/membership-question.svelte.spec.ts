@@ -11,6 +11,7 @@ import { toPageState, type RouteFixture, type RouteVariant } from '../../../../r
 import { asAdmin as rolesAsAdmin, fixture as rolesFixture } from './roles/page.fixture.js';
 import { asAdmin as employmentAsAdmin, fixture as employmentFixture } from './employment-type/page.fixture.js';
 import { roster } from '../page.fixture.js';
+import { goto, pageState } from '#testing/routePage.js';
 
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
@@ -19,15 +20,9 @@ if (!customElements.get('center-l')) registerLayoutPrimitives();
  * both: they are one component, `MembershipQuestion`, asked two ways.
  * The page, the session and the roster are each page's own fixture.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 
-const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+vi.mock('$app/navigation', () => import('#testing/routePage.js'));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', async () => ({

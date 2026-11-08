@@ -4,6 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import Page from './+page.svelte';
 import { toPageState } from '../../routeFixture.js';
 import { fixture } from './page.fixture.js';
+import { pageState } from '#testing/routePage.js';
 
 /*
  * #1539: the common-password list is a chunk of its own, and a chunk can
@@ -11,12 +12,7 @@ import { fixture } from './page.fixture.js';
  * for every test in the file. The same refusal reaches /signup and
  * /accept-invite through their own catch-alls (authRefusal's default).
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 vi.mock('#lib/api.js', () => ({ apiBaseURL: () => '' }));

@@ -16,13 +16,9 @@ import Page from './+page.svelte';
 import { practiceSession, toPageState } from '../../../../routeFixture.js';
 import { fixture, template } from './page.fixture.js';
 import { clientFieldsSavedMessage } from './clientFieldPages.js';
+import { pageState } from '#testing/routePage.js';
 
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 const takeOutcome = vi.hoisted(() => vi.fn());

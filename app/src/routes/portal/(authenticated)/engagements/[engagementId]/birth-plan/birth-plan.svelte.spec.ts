@@ -9,6 +9,7 @@ import Page from './+page.svelte';
 // only exists once the tokens are loaded -- the real app loads them in the
 // root layout. See invoices.svelte.spec.ts's identical import.
 import '#lib/styles/app.css';
+import { pageState } from '#testing/routePage.js';
 
 /*
  * #311: a Birth Plan is offered only where the Engagement's kind calls
@@ -17,12 +18,7 @@ import '#lib/styles/app.css';
  * off the ancestor `+layout.ts` load, so it lives on `page.data`, the
  * same as `practiceName`.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());

@@ -12,6 +12,7 @@ import { knownAsFrom } from '#lib/intakeJourney.js';
 import { gotoWithOutcome } from '#lib/outcome.js';
 import { captureLanding } from '#lib/testOutcome.js';
 import { agencyRoster, detail as baseDetail, fixture, ownDoula, soloRoster, teamRoster } from './page.fixture.js';
+import { goto, pageState } from '#testing/routePage.js';
 
 /*
  * The Client this Request is about, and the `page` it reads, both come
@@ -21,16 +22,10 @@ import { agencyRoster, detail as baseDetail, fixture, ownDoula, soloRoster, team
  * filled from the fixture once the imports have run. Same installation,
  * through the same `toPageState`, as `route-continuum.svelte.spec.ts`.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
-const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+vi.mock('$app/navigation', () => import('#testing/routePage.js'));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));

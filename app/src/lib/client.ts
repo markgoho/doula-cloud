@@ -467,6 +467,23 @@ export async function searchClients(
  * unchanged rather than wiping them (see ClientRecord.fieldValues). */
 export type ClientEditFields = Omit<ClientRecord, 'id'>;
 
+export function blankClientFields(): ClientEditFields {
+	return {
+		givenName: '',
+		familyName: '',
+		preferredName: '',
+		email: '',
+		phone: '',
+		addressLine1: '',
+		addressLine2: '',
+		addressLocality: '',
+		addressRegion: '',
+		addressPostalCode: '',
+		dateOfBirth: '',
+		fieldValues: {}
+	};
+}
+
 /** The outcome of a save attempt: either it went through, or the edit
  * path's two gates (ADR-0017's amendment, #814) refused it. A
  * discriminated union rather than a thrown error, because a conflict is

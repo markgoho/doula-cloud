@@ -6,18 +6,14 @@ import '#lib/styles/app.css';
 import { toApiResponder, toPageState } from '../../../../../routeFixture.js';
 import { data, fixture, openStripe, paidByHandReturned, paidStripe, voided } from './page.fixture.js';
 import Page from './+page.svelte';
+import { pageState } from '#testing/routePage.js';
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
 /*
  * The Client's Invoices (#1564). The fixture holds every state at once;
  * a state it does not hold is a spread of `data`, never a second object.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());

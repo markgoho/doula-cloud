@@ -9,6 +9,7 @@ import type { PracticeWebsite } from '#lib/website.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../../routeFixture.js';
 import { fixture, undeclaredWebsite, website as fixtureWebsite } from './page.fixture.js';
+import { goto, pageState } from '#testing/routePage.js';
 
 /*
  * The `page` this route reads comes from its own fixture (#596), so the
@@ -17,12 +18,7 @@ import { fixture, undeclaredWebsite, website as fixtureWebsite } from './page.fi
  * object is declared empty here and filled from the fixture once the
  * imports have run.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
@@ -30,8 +26,7 @@ vi.mock('#lib/api.js', () => ({
 	apiFetchWithSession
 }));
 
-const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+vi.mock('$app/navigation', () => import('#testing/routePage.js'));
 
 const undeclared = undeclaredWebsite;
 

@@ -5,6 +5,7 @@ import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../routeFixture.js';
 import { fixture, linkNotComplete } from './page.fixture.js';
+import { goto, pageState } from '#testing/routePage.js';
 
 /*
  * #610: a browser holds exactly one DoulaCloud session, so redeeming a
@@ -13,8 +14,7 @@ import { fixture, linkNotComplete } from './page.fixture.js';
  * this page shows it on the button rather than on a screen of its own.
  */
 
-const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+vi.mock('$app/navigation', () => import('#testing/routePage.js'));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiBaseURL: () => '', apiFetchWithSession }));
@@ -24,12 +24,7 @@ vi.mock('#lib/api.js', () => ({ apiBaseURL: () => '', apiFetchWithSession }));
  * installed from the fixture's own URL rather than a second one written
  * here, so the spec and the continuum sweep describe one screen.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 const WARNING = 'Continuing signs you out of your Practice in this browser.';

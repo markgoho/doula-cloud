@@ -13,6 +13,7 @@ import { gotoWithOutcome } from '#lib/outcome.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../../routeFixture.js';
 import { fixture } from './page.fixture.js';
+import { goto, pageState } from '#testing/routePage.js';
 
 /*
  * The `page` this route reads comes from its own fixture (#596), so the
@@ -23,12 +24,7 @@ import { fixture } from './page.fixture.js';
  * outright, same as the old `mockPage.url` was, rather than mutated
  * through `searchParams` the way clients-list.svelte.spec.ts does it.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 const RETURN_PATH_SUFFIX = '/payments/connect/return';
@@ -42,8 +38,7 @@ vi.mock('#lib/api.js', () => ({
 	apiFetchWithSession
 }));
 
-const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+vi.mock('$app/navigation', () => import('#testing/routePage.js'));
 
 interface MockOptions {
 	status?: string;

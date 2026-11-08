@@ -312,6 +312,18 @@ export async function voidContract(
 	return response.json();
 }
 
+async function postReason(fetcher: Fetcher, path: string, reason: string): Promise<Contract> {
+	const response = await fetcher(path, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ reason })
+	});
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	return response.json();
+}
+
 /** Asks for engagementId's Signed Contract to be voided (#971) -- what a
  * Doula does instead of voiding it herself, which #970 refuses her.
  * Only succeeds while the Contract is signed, and only once per
@@ -323,15 +335,7 @@ export async function requestContractVoid(
 	engagementId: string,
 	reason: string
 ): Promise<Contract> {
-	const response = await fetcher(`${contractPath(practiceId, engagementId)}/void-request`, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ reason })
-	});
-	if (!response.ok) {
-		throw new Error(await apiErrorMessage(response));
-	}
-	return response.json();
+	return postReason(fetcher, `${contractPath(practiceId, engagementId)}/void-request`, reason);
 }
 
 /** Declines one open void request against engagementId's Contract (#971)
@@ -346,18 +350,11 @@ export async function declineContractVoidRequest(
 	requestId: string,
 	reason: string
 ): Promise<Contract> {
-	const response = await fetcher(
+	return postReason(
+		fetcher,
 		`${contractPath(practiceId, engagementId)}/void-request/${requestId}/decline`,
-		{
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ reason })
-		}
+		reason
 	);
-	if (!response.ok) {
-		throw new Error(await apiErrorMessage(response));
-	}
-	return response.json();
 }
 
 /** Sets the value for a merge field key within values, returning a new

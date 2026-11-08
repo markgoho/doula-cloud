@@ -6,6 +6,7 @@ import { expectFieldError } from '#lib/components/molecules/LabeledField.testing
 import Page from './+page.svelte';
 import { toPageState } from '../../../routeFixture.js';
 import { fixture } from './page.fixture.js';
+import { goto, pageState } from '#testing/routePage.js';
 
 /*
  * TOTP enrollment (#606): step one re-authenticates and opens an
@@ -15,12 +16,7 @@ import { fixture } from './page.fixture.js';
  * project or emulator this suite never runs against.
  */
 
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 function urlWith(returnTo?: string): URL {
@@ -32,8 +28,7 @@ function urlWith(returnTo?: string): URL {
 const passwordId = 'mfa-enroll-password';
 const codeId = 'mfa-enroll-code';
 
-const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+vi.mock('$app/navigation', () => import('#testing/routePage.js'));
 
 const signInWithEmailAndPassword = vi.hoisted(() => vi.fn());
 const signOut = vi.hoisted(() => vi.fn());

@@ -6,6 +6,7 @@ import { expectFieldError } from '#lib/components/molecules/LabeledField.testing
 import Page from './+page.svelte';
 import { toApiResponder, toPageState } from '../../routeFixture.js';
 import { afterSessionEnded, fixture, session } from './page.fixture.js';
+import { pageState } from '#testing/routePage.js';
 
 /*
  * The screen reads its own URL for #757's `sessionEnded` flag, through
@@ -17,12 +18,7 @@ import { afterSessionEnded, fixture, session } from './page.fixture.js';
  * that needs the ended-session address installs the fixture's own
  * variant over it, before `render()`.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 // #283: on load, this screen probes for a live Staff session of its own

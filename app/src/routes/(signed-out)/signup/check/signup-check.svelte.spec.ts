@@ -8,6 +8,7 @@ import { toPageState } from '../../../routeFixture.js';
 import { signupDraft } from '../signupJourney.svelte.js';
 import Page from './+page.svelte';
 import { answers, data, fixture, seedSignup } from './page.fixture.js';
+import { goto, pageState } from '#testing/routePage.js';
 
 /*
  * The check page that ends setting up a Practice (#2049), and the one
@@ -17,15 +18,9 @@ import { answers, data, fixture, seedSignup } from './page.fixture.js';
  * (#614), the agreement (#1547, #1824), the pilot (#1790) and the portal
  * session (#816).
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 
-const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+vi.mock('$app/navigation', () => import('#testing/routePage.js'));
 
 const createUserWithEmailAndPassword = vi.hoisted(() => vi.fn());
 const signInWithEmailAndPassword = vi.hoisted(() => vi.fn());

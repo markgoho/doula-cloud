@@ -5,15 +5,11 @@ import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../routeFixture.js';
 import { fixture } from './page.fixture.js';
+import { pageState } from '#testing/routePage.js';
 
 // The `page` this screen reads comes from the route's own fixture, through
 // the same `toPageState` the continuum sweep installs (#596).
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 vi.mock('#lib/api.js', () => ({ apiBaseURL: () => '' }));

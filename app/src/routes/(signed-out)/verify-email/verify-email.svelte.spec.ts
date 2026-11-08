@@ -6,18 +6,14 @@ import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../routeFixture.js';
 import { fixture } from './page.fixture.js';
+import { pageState } from '#testing/routePage.js';
 
 /*
  * The screen reads its token off `page.url` once, as it mounts, so each
  * test installs its own address before `render()`. The fixture's has no
  * token, which is the "missing code" branch.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 
 vi.mock('#lib/firebase.js', () => ({ getFirebaseAuth: () => ({ currentUser: undefined }) }));
 const probeSession = vi.hoisted(() => vi.fn());

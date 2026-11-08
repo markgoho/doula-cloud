@@ -9,13 +9,9 @@ import { toApiResponder, toPageState, toSweptFixtures } from '../../routeFixture
 import Page from './+page.svelte';
 import { resetAccountSession } from '../session.svelte.js';
 import { fixture, session, soleOwnerSession } from './page.fixture.js';
+import { goto, pageState } from '#testing/routePage.js';
 
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
@@ -29,8 +25,7 @@ vi.mock('#lib/api.js', () => ({
  * `mfa/enroll`'s and the login screen's own specs do -- it needs a live
  * project or emulator this suite never runs against.
  */
-const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+vi.mock('$app/navigation', () => import('#testing/routePage.js'));
 
 const signInWithEmailAndPassword = vi.hoisted(() => vi.fn());
 const signOut = vi.hoisted(() => vi.fn());

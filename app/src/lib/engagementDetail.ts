@@ -216,6 +216,13 @@ export function ownAttachmentURL(reference: EngagementReference): string {
 	return `${engagementURL(reference)}/attachments/me`;
 }
 
+async function changeWhoIsOn(fetcher: Fetcher, url: string, method: 'PUT' | 'DELETE'): Promise<WhoIsOn> {
+	const response = await fetcher(url, { method });
+	if (!response.ok) throw new Error(await apiErrorMessage(response));
+	const { doulas, canAttachSelf } = (await response.json()) as WhoIsOn;
+	return { doulas, canAttachSelf };
+}
+
 /**
  * Puts the reader on the Engagement (#1598): "Put me on this
  * Engagement". `PUT`, no body and no `Idempotency-Key`: the only person
@@ -224,10 +231,7 @@ export function ownAttachmentURL(reference: EngagementReference): string {
  * (docs/api-design.md rule 4).
  */
 export async function attachSelf(fetcher: Fetcher, reference: EngagementReference): Promise<WhoIsOn> {
-	const response = await fetcher(ownAttachmentURL(reference), { method: 'PUT' });
-	if (!response.ok) throw new Error(await apiErrorMessage(response));
-	const { doulas, canAttachSelf } = (await response.json()) as WhoIsOn;
-	return { doulas, canAttachSelf };
+	return changeWhoIsOn(fetcher, ownAttachmentURL(reference), 'PUT');
 }
 
 /**
@@ -241,10 +245,7 @@ export async function attachDoula(
 	reference: EngagementReference,
 	staffId: string
 ): Promise<WhoIsOn> {
-	const response = await fetcher(`${engagementURL(reference)}/attachments/${encodeURIComponent(staffId)}`, { method: 'PUT' });
-	if (!response.ok) throw new Error(await apiErrorMessage(response));
-	const { doulas, canAttachSelf } = (await response.json()) as WhoIsOn;
-	return { doulas, canAttachSelf };
+	return changeWhoIsOn(fetcher, `${engagementURL(reference)}/attachments/${encodeURIComponent(staffId)}`, 'PUT');
 }
 
 /** Takes a Doula off an Engagement (#2596). An Owner or an Admin only; the
@@ -254,10 +255,7 @@ export async function takeOffDoula(
 	reference: EngagementReference,
 	staffId: string
 ): Promise<WhoIsOn> {
-	const response = await fetcher(`${engagementURL(reference)}/attachments/${encodeURIComponent(staffId)}`, { method: 'DELETE' });
-	if (!response.ok) throw new Error(await apiErrorMessage(response));
-	const { doulas, canAttachSelf } = (await response.json()) as WhoIsOn;
-	return { doulas, canAttachSelf };
+	return changeWhoIsOn(fetcher, `${engagementURL(reference)}/attachments/${encodeURIComponent(staffId)}`, 'DELETE');
 }
 
 /** The confirm dialog's words for taking a Doula off (#2596). Names repeat

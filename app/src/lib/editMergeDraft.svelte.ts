@@ -13,26 +13,7 @@
  * own duplicate page sends a matchless reload back to its summary.
  */
 
-import type { ClientEditFields, CollisionMatch } from './client.js';
-
-/** Every structural column but `id`, blank -- what a fresh draft holds
- * before the edit page's 409 fills it in. */
-export function blankEditFields(): ClientEditFields {
-	return {
-		givenName: '',
-		familyName: '',
-		preferredName: '',
-		email: '',
-		phone: '',
-		addressLine1: '',
-		addressLine2: '',
-		addressLocality: '',
-		addressRegion: '',
-		addressPostalCode: '',
-		dateOfBirth: '',
-		fieldValues: {}
-	};
-}
+import { blankClientFields, type ClientEditFields, type CollisionMatch } from './client.js';
 
 export class EditMergeDraft {
 	/**
@@ -41,7 +22,7 @@ export class EditMergeDraft {
 	clientId = $state('');
 	/** What was typed for `clientId` and not yet saved -- what "This is
 	 * her" or the override would write, had gate two not fired. */
-	fields = $state<ClientEditFields>(blankEditFields());
+	fields = $state<ClientEditFields>(blankClientFields());
 	/**
 	 * The possible duplicates gate two named.
 	 */
@@ -77,7 +58,7 @@ export class EditMergeDraft {
 	 * in either direction, leaves behind. */
 	clear(): void {
 		this.clientId = '';
-		this.fields = blankEditFields();
+		this.fields = blankClientFields();
 		this.matches = [];
 		this.backHref = undefined;
 	}

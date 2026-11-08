@@ -8,6 +8,7 @@ import Page from './+page.svelte';
 // only exists once the tokens are loaded -- the real app loads them in the
 // root layout. See invoices.svelte.spec.ts's identical import.
 import '#lib/styles/app.css';
+import { pageState } from '#testing/routePage.js';
 
 /*
  * NH-G5 (#212): the portal Contract view reads `clientRegister.ts` for its
@@ -16,12 +17,7 @@ import '#lib/styles/app.css';
  * happy path; the voided branch is a departure from it, spread rather than
  * a fresh Contract object that re-states the fields it shares.
  */
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());

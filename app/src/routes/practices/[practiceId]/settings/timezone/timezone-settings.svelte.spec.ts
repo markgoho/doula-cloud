@@ -16,13 +16,9 @@ import { asDoula, fixture } from './page.fixture.js';
 // only exists once the tokens are loaded -- the real app loads them in the
 // root layout. See FormPage.svelte.spec.ts's identical import.
 import '#lib/styles/app.css';
+import { pageState } from '#testing/routePage.js';
 
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
