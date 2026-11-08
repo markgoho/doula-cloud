@@ -47,6 +47,7 @@ function invoke(
 const SHAPES: [keyof typeof MESSAGES, string][] = [
   ['heredoc', "git commit -F - <<'EOF'\nA subject\nEOF"],
   ['heredoc', `git commit -m "$(cat <<'EOF'\nA subject\n\nIt's here.\nEOF\n)"`],
+  ['heredoc', "python3 -I - <<'EOF'\nprint(1)\nEOF"],
   ['export', 'export DOCKER_HOST=$(podman machine inspect) && go test ./...'],
   ['export', 'export TZ=UTC; bun test'],
   ['jq', 'gh pr view 12 --jq \'"\\(.number) \\(.state)"\''],
@@ -103,6 +104,27 @@ describe('gate-worktree-bash-shape', () => {
         expect(exitCode).toBe(0);
         expect(reason).toBeUndefined();
       });
+    }
+  });
+
+  test('a script fed by heredoc is told to run it from a file', async () => {
+    const { reason } = await invoke(
+      "python3 -I - <<'EOF'\nprint(1)\nEOF",
+      WORKTREE
+    );
+    expect(reason).toContain(MESSAGES.heredoc);
+    expect(reason).toContain('python3 -I <file>');
+  });
+
+  test('a shell variable, a command substitution and a non-git chain are not refused', async () => {
+    for (const command of [
+      'ls $S/report.json',
+      'cat $(pwd)/report.json',
+      'ls scripts && echo done',
+      'ls scripts; echo done',
+    ]) {
+      const { reason } = await invoke(command, WORKTREE);
+      expect({ command, reason }).toEqual({ command, reason: undefined });
     }
   });
 

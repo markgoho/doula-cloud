@@ -67,18 +67,18 @@
 // hook does recognize, mislocated. `segments` already yields the stages in
 // order, so a stage whose first token is `cd` now updates a tracked base
 // directory for every later stage, chained `cd a && cd b` included, and a
-// candidate resolves against that base. Two guards keep this from ever
-// weakening the gate. A base is only honored when it lands inside the main
-// checkout root -- the checkout itself or the worktree pool under it -- so
-// a `cd` into a directory this hook knows nothing about (`cd /tmp`) cannot
-// move a relative candidate out of reach; #680's report sketched a
-// pool-only rule, and honoring the whole checkout root is strictly
-// stricter, since a `cd` into main keeps blocking whichever checkout the
-// hook process itself happens to stand in. And a base that cannot be
-// established at all -- a bare `cd`, `cd -`, `cd ~...`, or an argument
-// still holding an unexpanded variable or command substitution -- falls
-// back to today's behavior rather than guessing, with only a later
-// absolute `cd` restoring tracking.
+// candidate resolves against that base. A base that cannot be established
+// at all -- a bare `cd`, `cd -`, `cd ~user`, or an argument still holding
+// an unexpanded variable or command substitution -- falls back to today's
+// behavior rather than guessing, with only a later absolute `cd` restoring
+// tracking.
+//
+// Decision (#2768): a base outside the main checkout is honored too, and a
+// leading `~` in a `cd` argument expands to the home directory. #680 only
+// honored a base inside the checkout, so `cd ~/.claude/projects/<p>/memory
+// && echo x >> MEMORY.md` fell back to the hook's cwd and was refused as a
+// main-checkout write although the file is outside the repo. A `cd` into
+// the main checkout still resolves there, so it still blocks.
 //
 // The separator between two stages decides whether a base survives, and
 // only `&&` does. That is the one separator under which a shell is
@@ -406,7 +406,7 @@ interface Candidate {
 
 // The argument of a `cd` stage: the path string when it can be trusted,
 // `null` when the stage is a `cd` whose destination cannot be established
-// (bare `cd`, `cd -`, `cd ~...`, or an argument still holding a shell
+// (bare `cd`, `cd -`, `cd ~user`, or an argument still holding a shell
 // variable or command substitution), and `undefined` when the stage is not
 // a `cd` at all.
 function cdArgument(segment: string): string | null | undefined {
@@ -417,9 +417,9 @@ function cdArgument(segment: string): string | null | undefined {
   if (!argument) return null;
 
   const stripped = stripQuotes(argument);
-  if (stripped.startsWith('~') || hasUnexpandedVariable(stripped)) return null;
+  if (hasUnexpandedVariable(stripped)) return null;
 
-  return stripped;
+  return expandHome(stripped)[0] ?? null;
 }
 
 // Walks the stages in order, carrying the working directory a real shell is
@@ -453,21 +453,14 @@ function collectCandidates(scannable: string): Candidate[] {
 }
 
 // Where a candidate actually lands. An absolute target ignores the base
-// entirely. A relative one uses the tracked base only when that base is
-// inside the main checkout root; anything else falls back to resolving
-// against the hook process's own cwd, which is what this file did before
-// #680.
-function resolveCandidate(candidate: Candidate, sourceRoot: string): string {
+// entirely. A relative one uses the tracked base; with no base it falls back
+// to resolving against the hook process's own cwd.
+function resolveCandidate(candidate: Candidate): string {
   if (path.isAbsolute(candidate.target)) return path.resolve(candidate.target);
 
-  const base = candidate.base;
-  const insideCheckout =
-    base !== null &&
-    (base === sourceRoot || base.startsWith(sourceRoot + path.sep));
-
-  return insideCheckout
-    ? path.resolve(base, candidate.target)
-    : path.resolve(candidate.target);
+  return candidate.base === null
+    ? path.resolve(candidate.target)
+    : path.resolve(candidate.base, candidate.target);
 }
 
 function block(reason: string): never {
@@ -507,7 +500,7 @@ async function main(): Promise<void> {
   const worktreesRoot = path.join(sourceRoot, '.claude', 'worktrees');
 
   for (const candidate of candidates) {
-    const resolvedFile = resolveCandidate(candidate, sourceRoot);
+    const resolvedFile = resolveCandidate(candidate);
 
     if (!isTrackedInMainCheckout(resolvedFile, sourceRoot, worktreesRoot))
       continue;

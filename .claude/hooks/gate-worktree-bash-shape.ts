@@ -107,7 +107,7 @@ const FILL = /^(--fill(-first|-verbose)?|-f)(=.*)?$/;
 
 export const MESSAGES = {
   heredoc:
-    'A heredoc (`<<EOF`): write the content to a file with the Write tool, then run the command on the file (`git commit -F <file>`, `gh pr create --body-file <file>`).',
+    'A heredoc (`<<EOF`): write the content to a file with the Write tool, then run the command on the file (`git commit -F <file>`, `gh pr create --body-file <file>`, or for a script `python3 -I <file>`).',
   export:
     '`export X=...`: put the variable inline on the command that needs it, `X=value cmd`.',
   jq: 'A `--jq` filter with a `\\(...)` string template or a `{...}` object: join plain paths instead, `--jq \'.a + " " + .b\'` (`(.n | tostring)` for a number).',
