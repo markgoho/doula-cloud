@@ -176,6 +176,20 @@ function fileOf(size: number, name: string, type: string): File {
 	return new File([new Uint8Array(size)], name, { type });
 }
 
+function fileReporting(size: number, name: string, type: string): File {
+	return Object.defineProperty(new File([], name, { type }), 'size', { value: size });
+}
+
+// A locator's upload() sends the file's bytes to the browser, which is the cost this avoids: the component reads only file.size.
+function choose(file: File) {
+	const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+	if (!input) throw new Error('no file input');
+	const transfer = new DataTransfer();
+	transfer.items.add(file);
+	input.files = transfer.files;
+	input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
 describe('MessageThread.svelte compose form', () => {
 	it('labels the attachment and states its types and limit in a separate hint', async () => {
 		await setup();
@@ -223,14 +237,15 @@ describe('MessageThread.svelte compose form', () => {
 	});
 
 	it.each([
-		['a file over 10MB', fileOf(MAX_ATTACHMENT_BYTES + 1, 'scan.jpg', 'image/jpeg'), ATTACHMENT_TOO_LARGE],
-		['an empty file', fileOf(0, 'photo.png', 'image/png'), ATTACHMENT_EMPTY],
-		['a file that is neither an image nor a PDF', fileOf(4, 'notes.txt', 'text/plain'), ATTACHMENT_WRONG_TYPE],
-		['an iPhone HEIC photo', fileOf(4, 'IMG_0001.HEIC', 'image/heic'), ATTACHMENT_WRONG_TYPE]
-	])('refuses %s against the attachment before sending', async (_name, file, words) => {
+		['a file over 10MB', fileReporting(MAX_ATTACHMENT_BYTES + 1, 'scan.jpg', 'image/jpeg'), ATTACHMENT_TOO_LARGE, true],
+		['an empty file', fileOf(0, 'photo.png', 'image/png'), ATTACHMENT_EMPTY, false],
+		['a file that is neither an image nor a PDF', fileOf(4, 'notes.txt', 'text/plain'), ATTACHMENT_WRONG_TYPE, false],
+		['an iPhone HEIC photo', fileOf(4, 'IMG_0001.HEIC', 'image/heic'), ATTACHMENT_WRONG_TYPE, false]
+	])('refuses %s against the attachment before sending', async (_name, file, words, withoutBytes) => {
 		const { onSend } = await setup();
 
-		await attachmentField().upload(file);
+		if (withoutBytes) choose(file);
+		else await attachmentField().upload(file);
 		await send();
 
 		expect(onSend).not.toHaveBeenCalled();
