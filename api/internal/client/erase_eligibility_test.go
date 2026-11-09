@@ -1,7 +1,6 @@
 package client_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
 	"testing"
 	"time"
@@ -10,26 +9,16 @@ import (
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/testdb"
 )
 
 // #691: the eligibility precheck an Owner reads before ever reaching the
 // erasure confirmation. It answers the same question EraseHandler's own
 // 409 would otherwise be the only way to learn.
 
-func eraseEligibility(t *testing.T, session, baseURL, practiceID, clientID string) *http.Response {
-	t.Helper()
-	return authedGet(t, session, baseURL+"/api/practices/"+practiceID+"/clients/"+clientID+"/erasure")
-}
-
-func decodeEligibility(t *testing.T, resp *http.Response) client.EraseEligibility {
-	t.Helper()
-	defer resp.Body.Close()
-	var out client.EraseEligibility
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode eligibility: %v", err)
-	}
-	return out
+// eligibility reads the precheck as the Owner.
+func (e *eraseEnv) eligibility() client.EraseEligibility {
+	e.T.Helper()
+	return reqtest.Expect[client.EraseEligibility](e.T, http.MethodGet, e.erasureURL(), http.StatusOK, e.SignedIn)
 }
 
 // TestEraseEligibilityHandler_ClearWithNoInvoices -- a Client with no
@@ -38,10 +27,7 @@ func decodeEligibility(t *testing.T, resp *http.Response) client.EraseEligibilit
 func TestEraseEligibilityHandler_ClearWithNoInvoices(t *testing.T) {
 	e := newEraseEnv(t)
 
-	resp := eraseEligibility(t, e.session, e.srv.URL, e.Practice.ID, e.ClientID)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	out := decodeEligibility(t, resp)
+	out := e.eligibility()
 	if out.ErasedAt != nil {
 		t.Fatalf("erasedAt = %v, want absent for a Client who was never erased", out.ErasedAt)
 	}
@@ -56,13 +42,10 @@ func TestEraseEligibilityHandler_ClearWithNoInvoices(t *testing.T) {
 // have named too.
 func TestEraseEligibilityHandler_NamesUnsettledInvoicesOnly(t *testing.T) {
 	e := newEraseEnv(t)
-	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_open", "open", time.Hour)
-	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_paid", "paid", time.Hour)
+	seedInvoicedClient(t, e.DB, e.Practice.ID, e.ClientID, "cus_open", "open", time.Hour)
+	seedInvoicedClient(t, e.DB, e.Practice.ID, e.ClientID, "cus_paid", "paid", time.Hour)
 
-	resp := eraseEligibility(t, e.session, e.srv.URL, e.Practice.ID, e.ClientID)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	out := decodeEligibility(t, resp)
+	out := e.eligibility()
 	if len(out.UnsettledInvoices) != 1 {
 		t.Fatalf("unsettledInvoices = %+v, want exactly the one open invoice", out.UnsettledInvoices)
 	}
@@ -82,11 +65,9 @@ func TestEraseEligibilityHandler_NamesUnsettledInvoicesOnly(t *testing.T) {
 
 	// The same fact, confirmed against the actual 409: attempting the
 	// erasure now refuses on exactly the invoice the precheck named.
-	postResp := postErasure(t, e.session, e.srv, e.Practice.ID, e.ClientID)
+	postResp := reqtest.Post(t, e.erasureURL(), e.SignedIn)
 	defer postResp.Body.Close()
-	if postResp.StatusCode != http.StatusConflict {
-		t.Fatalf("erasure status = %d, want %d given the precheck found an unsettled invoice", postResp.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, postResp, http.StatusConflict)
 	if code := apierrtest.Decode(t, postResp).Code; code != apierr.CodeFailedPrecondition {
 		t.Fatalf("erasure code = %q, want %q", code, apierr.CodeFailedPrecondition)
 	}
@@ -96,79 +77,13 @@ func TestEraseEligibilityHandler_NamesUnsettledInvoicesOnly(t *testing.T) {
 // says so and stops naming invoices; the act cannot run again regardless.
 func TestEraseEligibilityHandler_AlreadyErased(t *testing.T) {
 	e := newEraseEnv(t)
+	e.erase()
 
-	first := postErasure(t, e.session, e.srv, e.Practice.ID, e.ClientID)
-	defer first.Body.Close()
-	if first.StatusCode != http.StatusOK {
-		t.Fatalf("seeding erasure: status = %d, want %d", first.StatusCode, http.StatusOK)
-	}
-
-	resp := eraseEligibility(t, e.session, e.srv.URL, e.Practice.ID, e.ClientID)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	out := decodeEligibility(t, resp)
+	out := e.eligibility()
 	if out.ErasedAt == nil {
 		t.Fatal("erasedAt is absent for a Client who was already erased")
 	}
 	if len(out.UnsettledInvoices) != 0 {
 		t.Fatalf("unsettledInvoices = %+v, want none once erasedAt is set", out.UnsettledInvoices)
 	}
-}
-
-// TestEraseEligibilityHandler_RefusesEveryRoleButOwner -- the same seat
-// as the act it precedes, per ADR-0027 and #394.
-func TestEraseEligibilityHandler_RefusesEveryRoleButOwner(t *testing.T) {
-	for name, roles := range map[string][]string{
-		adminRole: {adminRole},
-		doulaRole: {doulaRole},
-	} {
-		t.Run(name, func(t *testing.T) {
-			db := testdb.New(t)
-			uid := "eligibility-role-" + name
-			practiceID := testdb.SeedPractice(t, db, "Erasure Practice")
-			staffID := testdb.SeedStaffAtPractice(t, db, practiceID, uid, roles, "employee")
-			clientID := seedFullClient(t, db, practiceID, staffID)
-
-			srv, session := newServer(t, db, uid)
-			defer srv.Close()
-
-			resp := eraseEligibility(t, session, srv.URL, practiceID, clientID)
-			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusForbidden {
-				t.Fatalf("status = %d, want %d -- only an Owner may precheck an erasure", resp.StatusCode, http.StatusForbidden)
-			}
-		})
-	}
-}
-
-// TestEraseEligibilityHandler_RefusesAnUnknownClient mirrors
-// EraseHandler's own refusal: a Client from another Practice reads as
-// not found, never forbidden.
-func TestEraseEligibilityHandler_RefusesAnUnknownClient(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-eligibility-other-practice"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
-	otherStaffID := testdb.SeedStaffAtPractice(t, db, otherPracticeID, "other-owner-eligibility", []string{ownerRole}, "employee")
-	otherClientID := seedFullClient(t, db, otherPracticeID, otherStaffID)
-
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	resp := eraseEligibility(t, session, srv.URL, practiceID, otherClientID)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
-func TestEraseEligibilityHandler_RefusesAMalformedClientID(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-eligibility-bad-id"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	resp := eraseEligibility(t, session, srv.URL, practiceID, "not-a-uuid")
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }

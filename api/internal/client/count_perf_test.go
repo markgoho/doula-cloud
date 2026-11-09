@@ -1,6 +1,7 @@
 package client
 
 import (
+	"database/sql"
 	"os"
 	"strings"
 	"testing"
@@ -34,22 +35,17 @@ func TestCountClientsQueryPlanAtScale(t *testing.T) {
 
 	tx := db.BeginAs(t, testdb.Practice(practiceID))
 
-	rows, err := tx.QueryContext(t.Context(), "EXPLAIN (ANALYZE, BUFFERS) "+countClientsQuery, practiceID)
-	if err != nil {
-		t.Fatalf("explain: %v", err)
-	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var line string
-		if err := rows.Scan(&line); err != nil {
-			t.Fatalf("scan explain line: %v", err)
-		}
+	requireNoJIT(t, tx, countClientsQuery, "the count", practiceID)
+}
+
+// requireNoJIT logs the plan EXPLAIN ANALYZE gives query and fails if it
+// JITs, which is what the handler's queries must not do at this scale.
+func requireNoJIT(t *testing.T, tx *sql.Tx, query, what string, args ...any) {
+	t.Helper()
+	for _, line := range testdb.Column[string](t, tx, "EXPLAIN (ANALYZE, BUFFERS) "+query, args...) {
 		t.Log(line)
 		if strings.Contains(line, "JIT:") {
-			t.Fatalf("the count JITs at this scale: %s", line)
+			t.Fatalf("%s JITs at this scale: %s", what, line)
 		}
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate explain lines: %v", err)
 	}
 }

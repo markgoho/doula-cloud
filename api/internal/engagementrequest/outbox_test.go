@@ -6,13 +6,13 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -30,14 +30,14 @@ func newWorker(sender mail.Sender, now time.Time) engagementrequest.Worker {
 	})
 }
 
-// runWorker drives one ProcessPending pass through the same endpoint
+// workerURL serves one ProcessPending pass through the same endpoint
 // Cloud Scheduler calls, so the trusted-worker session variable the RLS
 // policies read is set the way production sets it.
-func runWorker(t *testing.T, db *testdb.DB, worker engagementrequest.Worker) *http.Response {
+func workerURL(t *testing.T, db *testdb.DB, worker engagementrequest.Worker) string {
 	t.Helper()
 	srv := httptest.NewServer(outbox.ProcessHandler(db.App, worker, internalauth.FromSecret(outboxWorkerSecret), outbox.NotificationDoor))
 	t.Cleanup(srv.Close)
-	return reqtest.Post(t, srv.URL, reqtest.Header("X-Internal-Secret", outboxWorkerSecret))
+	return srv.URL
 }
 
 // TestWorker_SendsOneMailPerOwnerAndAdminContentFree proves the worker
@@ -45,24 +45,14 @@ func runWorker(t *testing.T, db *testdb.DB, worker engagementrequest.Worker) *ht
 // Client name -- only a link back to the dashboard), and marks every row
 // sent.
 func TestWorker_SendsOneMailPerOwnerAndAdminContentFree(t *testing.T) {
-	db := testdb.New(t)
-	p := fixture.Practice(t, db)
-	doula := fixture.Staff(t, db, p)
-	fixture.Staff(t, db, p, fixture.Owner())
-	fixture.Staff(t, db, p, fixture.Admin())
-	client := fixture.Client(t, db, p)
-
-	srv, session := newServer(t, db, doula, &tasknudge.FakeEnqueuer{})
-	defer srv.Close()
-	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/clients/"+client.ID+"/engagement-requests", reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate}))
-	defer resp.Body.Close()
-	out := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, resp, http.StatusCreated)
+	e := newEnv(t)
+	e.Colleague(fixture.Owner())
+	e.Colleague(fixture.Admin())
+	out := e.ask(birthAsk)
 
 	sender := &mail.FakeSender{}
-	worker := newWorker(sender, time.Now())
-	resp = runWorker(t, db, worker)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
+	reqtest.ExpectStatus(t, http.MethodPost, workerURL(t, e.DB, newWorker(sender, clock.Now(t.Context()))), http.StatusOK,
+		reqtest.Header("X-Internal-Secret", outboxWorkerSecret))
 
 	sent := sender.Sent()
 	if len(sent) != 2 {
@@ -73,7 +63,7 @@ func TestWorker_SendsOneMailPerOwnerAndAdminContentFree(t *testing.T) {
 			t.Fatal("empty mail body/subject")
 		}
 	}
-	if got := outboxCount(t, db, out.RequestID); got != 2 {
+	if got := outboxCount(t, e.DB, out.RequestID); got != 2 {
 		t.Fatalf("outbox rows = %d, want 2", got)
 	}
 }
@@ -82,10 +72,7 @@ func TestWorker_SendsOneMailPerOwnerAndAdminContentFree(t *testing.T) {
 // endpoint refuses a request without the right secret.
 func TestProcessOutboxHandler_WrongSecretUnauthorized(t *testing.T) {
 	db := testdb.New(t)
-	srv := httptest.NewServer(outbox.ProcessHandler(db.App, newWorker(&mail.FakeSender{}, time.Now()), internalauth.FromSecret(outboxWorkerSecret), outbox.NotificationDoor))
-	defer srv.Close()
+	url := workerURL(t, db, newWorker(&mail.FakeSender{}, clock.Now(t.Context())))
 
-	resp := reqtest.Post(t, srv.URL, reqtest.Header("X-Internal-Secret", "wrong"))
-	defer func() { _ = resp.Body.Close() }()
-	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
+	reqtest.ExpectStatus(t, http.MethodPost, url, http.StatusUnauthorized, reqtest.Header("X-Internal-Secret", "wrong"))
 }

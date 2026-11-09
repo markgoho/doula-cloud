@@ -3,13 +3,20 @@ package client_test
 import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
-	"io"
 	"net/http"
 	"testing"
 
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
+)
+
+const (
+	missingID   = "00000000-0000-0000-0000-000000000000"
+	notAUUID    = "not-a-uuid"
+	olderCreate = "2026-01-01T00:00:00Z"
+	youngCreate = "2026-06-01T00:00:00Z"
 )
 
 // mergedIntoOf reads clientID's merged_into column straight off the
@@ -17,11 +24,7 @@ import (
 // anything DetailHandler chooses to report.
 func mergedIntoOf(t *testing.T, db *testdb.DB, clientID string) *string {
 	t.Helper()
-	var mergedInto *string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT merged_into FROM clients WHERE id = $1`, clientID).Scan(&mergedInto); err != nil {
-		t.Fatalf("read merged_into: %v", err)
-	}
-	return mergedInto
+	return testdb.Scalar[*string](t, db.Admin, `SELECT merged_into FROM clients WHERE id = $1`, clientID)
 }
 
 // activityActionsFor reads every activity row's action for clientID,
@@ -29,33 +32,23 @@ func mergedIntoOf(t *testing.T, db *testdb.DB, clientID string) *string {
 // rows" without needing to unseal a diff.
 func activityActionsFor(t *testing.T, db *testdb.DB, clientID string) []string {
 	t.Helper()
-	rows, err := db.Admin.QueryContext(t.Context(),
+	return testdb.Column[string](t, db.Admin,
 		`SELECT action FROM activity WHERE subject_kind = 'client' AND subject_id = $1 ORDER BY created_at`, clientID)
-	if err != nil {
-		t.Fatalf("query activity: %v", err)
-	}
-	defer rows.Close()
-	var actions []string
-	for rows.Next() {
-		var a string
-		if err := rows.Scan(&a); err != nil {
-			t.Fatalf("scan activity: %v", err)
-		}
-		actions = append(actions, a)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate activity: %v", err)
-	}
-	return actions
 }
 
 // setCreatedAt backdates/forwards clientID's created_at, for tests that
 // need a deterministic older/younger ordering between two rows without
 // sleeping between two real inserts.
-func setCreatedAt(t *testing.T, db *testdb.DB, clientID, createdAt string) {
+func (e *env) setCreatedAt(clientID, createdAt string) {
+	e.T.Helper()
+	e.Exec(`UPDATE clients SET created_at = $2 WHERE id = $1`, clientID, createdAt)
+}
+
+// requireMergedInto fails unless clientID was absorbed into survivorID.
+func requireMergedInto(t *testing.T, db *testdb.DB, clientID, survivorID string) {
 	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE clients SET created_at = $2 WHERE id = $1`, clientID, createdAt); err != nil {
-		t.Fatalf("set created_at: %v", err)
+	if got := mergedIntoOf(t, db, clientID); got == nil || *got != survivorID {
+		t.Fatalf("merged_into of %s = %v, want %q", clientID, got, survivorID)
 	}
 }
 
@@ -68,32 +61,12 @@ func setCreatedAt(t *testing.T, db *testdb.DB, clientID, createdAt string) {
 // Clients list, from search and from the collision predicate; its
 // detail read reports where it went instead of rendering.
 func TestMergeHandler_AbsorbsUnattachedIntoAttachedMatch(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-merge-absorb"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	survivorID, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Maya Torres", "old@example.com", "active")
-	stubID := testdb.SeedNamedClient(t, db, practiceID, testMaya, "")
-	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE clients SET phone = '555-0142' WHERE id = $1`, stubID); err != nil {
-		t.Fatalf("seed stub phone: %v", err)
-	}
+	e := newEnv(t)
+	survivorID := e.attachedClient("Maya Torres", "old@example.com")
+	stubID := e.newClient(testMaya)
+	e.Exec(`UPDATE clients SET phone = '555-0142' WHERE id = $1`, stubID)
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+stubID+"/merge",
-		client.MergeRequest{
-			GivenName: testMaya, Phone: "555-0142",
-			OtherClientID: survivorID,
-		})
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status = %d, want %d, body=%s", resp.StatusCode, http.StatusOK, body)
-	}
-	var out client.Record
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := e.mergeOK(stubID, client.MergeRequest{GivenName: testMaya, Phone: "555-0142", OtherClientID: survivorID})
 	if out.ID != survivorID {
 		t.Fatalf("survivor id = %q, want %q -- the attached record must survive", out.ID, survivorID)
 	}
@@ -107,55 +80,36 @@ func TestMergeHandler_AbsorbsUnattachedIntoAttachedMatch(t *testing.T) {
 		t.Fatalf("email = %q, want the survivor's own value kept", out.Email)
 	}
 
-	if got := mergedIntoOf(t, db, stubID); got == nil || *got != survivorID {
-		t.Fatalf("stub merged_into = %v, want %q", got, survivorID)
-	}
-	if got := mergedIntoOf(t, db, survivorID); got != nil {
+	requireMergedInto(t, e.DB, stubID, survivorID)
+	if got := mergedIntoOf(t, e.DB, survivorID); got != nil {
 		t.Fatalf("survivor merged_into = %v, want nil -- the survivor is never itself tombstoned", got)
 	}
 
-	survivorActions := activityActionsFor(t, db, survivorID)
+	survivorActions := activityActionsFor(t, e.DB, survivorID)
 	if len(survivorActions) == 0 || survivorActions[len(survivorActions)-1] != "merged" {
 		t.Fatalf("survivor activity = %v, want a trailing %q row", survivorActions, "merged")
 	}
-	stubActions := activityActionsFor(t, db, stubID)
+	stubActions := activityActionsFor(t, e.DB, stubID)
 	if len(stubActions) == 0 || stubActions[len(stubActions)-1] != "absorbed" {
 		t.Fatalf("stub activity = %v, want a trailing %q row", stubActions, "absorbed")
 	}
 
-	// Excluded from the Clients list.
-	listResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
-	var list client.ListResponse
-	if err := json.UnmarshalRead(listResp.Body, &list); err != nil {
-		t.Fatalf("decode list: %v", err)
-	}
-	_ = listResp.Body.Close()
+	list := reqtest.Expect[client.ListResponse](t, http.MethodGet, e.PracticeURL("/clients?all=true"), http.StatusOK, e.SignedIn)
 	for _, item := range list.Items {
 		if item.ClientID == stubID {
 			t.Fatalf("stub %q appears on the Clients list after being absorbed", stubID)
 		}
 	}
 
-	// Excluded from search.
-	searchResp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/search", client.SearchRequest{Name: "Maya"})
-	var search client.SearchResponse
-	if err := json.UnmarshalRead(searchResp.Body, &search); err != nil {
-		t.Fatalf("decode search: %v", err)
-	}
-	_ = searchResp.Body.Close()
+	search := reqtest.Expect[client.SearchResponse](t, http.MethodPost, e.PracticeURL("/clients/search"), http.StatusOK, e.SignedIn,
+		reqtest.JSON(client.SearchRequest{Name: "Maya"}))
 	for _, m := range search.Matches {
 		if m.ID == stubID {
 			t.Fatalf("stub %q appears in search after being absorbed", stubID)
 		}
 	}
 
-	// Detail redirects rather than renders.
-	detailResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/"+stubID)
-	var detail client.DetailResponse
-	if err := json.UnmarshalRead(detailResp.Body, &detail); err != nil {
-		t.Fatalf("decode detail: %v", err)
-	}
-	_ = detailResp.Body.Close()
+	detail := reqtest.Expect[client.DetailResponse](t, http.MethodGet, e.clientURL(stubID, ""), http.StatusOK, e.SignedIn)
 	if detail.MergedInto == nil || *detail.MergedInto != survivorID {
 		t.Fatalf("stub detail mergedInto = %v, want %q", detail.MergedInto, survivorID)
 	}
@@ -167,55 +121,33 @@ func TestMergeHandler_AbsorbsUnattachedIntoAttachedMatch(t *testing.T) {
 // once editing the older row, once editing the younger -- to prove the
 // outcome depends on age, not on which id is on the path.
 func TestMergeHandler_BothUnattachedOlderSurvives(t *testing.T) {
-	db := testdb.New(t)
+	for _, tc := range []struct {
+		name          string
+		openIsYounger bool
+		givenName     string
+	}{
+		{"editing the younger record", true, "Robin"},
+		{"editing the older record", false, "Robin Ellis"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t)
+			olderID := e.newClient("Robin Ellis")
+			e.setCreatedAt(olderID, olderCreate)
+			youngerID := e.newClient("Robin")
+			e.setCreatedAt(youngerID, youngCreate)
+			open, other := olderID, youngerID
+			if tc.openIsYounger {
+				open, other = youngerID, olderID
+			}
 
-	t.Run("editing the younger record", func(t *testing.T) {
-		practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-merge-younger-open", []string{doulaRole}, "employee")
-		olderID := testdb.SeedNamedClient(t, db, practiceID, "Robin Ellis", "")
-		setCreatedAt(t, db, olderID, "2026-01-01T00:00:00Z")
-		youngerID := testdb.SeedNamedClient(t, db, practiceID, "Robin", "")
-		setCreatedAt(t, db, youngerID, "2026-06-01T00:00:00Z")
+			out := e.mergeOK(open, client.MergeRequest{GivenName: tc.givenName, OtherClientID: other})
 
-		srv, session := newServer(t, db, "staff-merge-younger-open")
-		defer srv.Close()
-
-		resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+youngerID+"/merge",
-			client.MergeRequest{GivenName: "Robin", OtherClientID: olderID})
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusOK)
-		var out client.Record
-		_ = json.UnmarshalRead(resp.Body, &out)
-		if out.ID != olderID {
-			t.Fatalf("survivor = %q, want the older record %q", out.ID, olderID)
-		}
-		if got := mergedIntoOf(t, db, youngerID); got == nil || *got != olderID {
-			t.Fatalf("younger merged_into = %v, want %q", got, olderID)
-		}
-	})
-
-	t.Run("editing the older record", func(t *testing.T) {
-		practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-merge-older-open", []string{doulaRole}, "employee")
-		olderID := testdb.SeedNamedClient(t, db, practiceID, "Robin Ellis", "")
-		setCreatedAt(t, db, olderID, "2026-01-01T00:00:00Z")
-		youngerID := testdb.SeedNamedClient(t, db, practiceID, "Robin", "")
-		setCreatedAt(t, db, youngerID, "2026-06-01T00:00:00Z")
-
-		srv, session := newServer(t, db, "staff-merge-older-open")
-		defer srv.Close()
-
-		resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+olderID+"/merge",
-			client.MergeRequest{GivenName: "Robin Ellis", OtherClientID: youngerID})
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusOK)
-		var out client.Record
-		_ = json.UnmarshalRead(resp.Body, &out)
-		if out.ID != olderID {
-			t.Fatalf("survivor = %q, want the older record %q even though it is the one open for editing", out.ID, olderID)
-		}
-		if got := mergedIntoOf(t, db, youngerID); got == nil || *got != olderID {
-			t.Fatalf("younger merged_into = %v, want %q", got, olderID)
-		}
-	})
+			if out.ID != olderID {
+				t.Fatalf("survivor = %q, want the older record %q", out.ID, olderID)
+			}
+			requireMergedInto(t, e.DB, youngerID, olderID)
+		})
+	}
 }
 
 // TestMergeHandler_AttachedSourceSurvivesAndAbsorbsTheOther proves the
@@ -224,181 +156,86 @@ func TestMergeHandler_BothUnattachedOlderSurvives(t *testing.T) {
 // into it -- attachment decides direction, not whether the question may
 // be asked at all.
 func TestMergeHandler_AttachedSourceSurvivesAndAbsorbsTheOther(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-merge-attached-source"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	attachedID, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Cora James", "cora@example.com", "active")
-	otherID := testdb.SeedNamedClient(t, db, practiceID, "Cora", "")
+	e := newEnv(t)
+	attachedID := e.attachedClient("Cora James", "cora@example.com")
+	otherID := e.newClient("Cora")
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
+	e.merge(attachedID, client.MergeRequest{GivenName: "Cora James", OtherClientID: otherID}, http.StatusOK)
 
-	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+attachedID+"/merge",
-		client.MergeRequest{GivenName: "Cora James", OtherClientID: otherID})
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	if got := mergedIntoOf(t, db, otherID); got == nil || *got != attachedID {
-		t.Fatalf("other merged_into = %v, want %q -- the record carrying history survives", got, attachedID)
-	}
-	if got := mergedIntoOf(t, db, attachedID); got != nil {
+	requireMergedInto(t, e.DB, otherID, attachedID)
+	if got := mergedIntoOf(t, e.DB, attachedID); got != nil {
 		t.Fatalf("attached merged_into = %v, want nil", got)
 	}
 }
 
-// TestMergeHandler_RefusesErasedTarget proves ADR-0027's rule survives
-// into the merge: an erased Client is never a merge target.
-func TestMergeHandler_RefusesErasedTarget(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-merge-erased-target"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	erasedID := testdb.SeedNamedClient(t, db, practiceID, "Erased Client", "")
-	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE clients SET erased_at = now() WHERE id = $1`, erasedID); err != nil {
-		t.Fatalf("seed erased_at: %v", err)
+// TestMergeHandler_Refusals covers what MergeHandler turns away before it
+// writes anything: an erased Client on either side (ADR-0027), a Client
+// merged into herself, the four request-shape failures, and -- for a
+// contractor Doula, whose CanAccessClient is attachment-narrowed -- a record
+// that does not exist or that she cannot reach.
+func TestMergeHandler_Refusals(t *testing.T) {
+	erase := func(e *env, name string) string {
+		id := e.newClient(name)
+		e.Exec(`UPDATE clients SET erased_at = now() WHERE id = $1`, id)
+		return id
 	}
-	stubID := testdb.SeedNamedClient(t, db, practiceID, testMaya, "")
+	for _, tc := range []struct {
+		name       string
+		contractor bool
+		want       int
+		// setup returns the Client open for editing and the request sent.
+		setup func(e *env) (sourceID string, body reqtest.Option)
+	}{
+		{"an erased target", false, http.StatusConflict, func(e *env) (string, reqtest.Option) {
+			erasedID := erase(e, "Erased Client")
+			return e.newClient(testMaya), reqtest.JSON(client.MergeRequest{GivenName: testMaya, OtherClientID: erasedID})
+		}},
+		{"an erased source", false, http.StatusConflict, func(e *env) (string, reqtest.Option) {
+			erasedID := erase(e, "Erased Client")
+			return erasedID, reqtest.JSON(client.MergeRequest{GivenName: "Erased Client", OtherClientID: e.newClient("Other")})
+		}},
+		{"a Client merged into herself", false, http.StatusConflict, func(e *env) (string, reqtest.Option) {
+			soloID := e.newClient("Solo Client")
+			return soloID, reqtest.JSON(client.MergeRequest{GivenName: "Solo Client", OtherClientID: soloID})
+		}},
+		{"an invalid client id", false, http.StatusBadRequest, func(e *env) (string, reqtest.Option) {
+			return notAUUID, reqtest.JSON(client.MergeRequest{GivenName: testStub, OtherClientID: e.newClient("Other")})
+		}},
+		{"an invalid body", false, http.StatusBadRequest, func(e *env) (string, reqtest.Option) {
+			return e.newClient(testStub), reqtest.RawJSON([]byte("{not json"))
+		}},
+		{"a blank given name", false, http.StatusBadRequest, func(e *env) (string, reqtest.Option) {
+			return e.newClient(testStub), reqtest.JSON(client.MergeRequest{GivenName: "  ", OtherClientID: e.newClient("Other")})
+		}},
+		{"an invalid other client id", false, http.StatusBadRequest, func(e *env) (string, reqtest.Option) {
+			return e.newClient(testStub), reqtest.JSON(client.MergeRequest{GivenName: testStub, OtherClientID: notAUUID})
+		}},
+		{"a nonexistent source", false, http.StatusNotFound, func(e *env) (string, reqtest.Option) {
+			return missingID, reqtest.JSON(client.MergeRequest{GivenName: "Nobody", OtherClientID: e.newClient("Other")})
+		}},
+		{"a nonexistent target", false, http.StatusNotFound, func(e *env) (string, reqtest.Option) {
+			return e.newClient(testStub), reqtest.JSON(client.MergeRequest{GivenName: testStub, OtherClientID: missingID})
+		}},
+		{"a source the contractor cannot reach", true, http.StatusNotFound, func(e *env) (string, reqtest.Option) {
+			return e.newClient(testStub), reqtest.JSON(client.MergeRequest{GivenName: testStub, OtherClientID: e.newClient("Other")})
+		}},
+		{"a target the contractor cannot reach", true, http.StatusNotFound, func(e *env) (string, reqtest.Option) {
+			attachedID, engagementID := testdb.SeedEngagementInStatus(e.T, e.DB, e.Practice.ID, "Attached To Contractor", "", "active")
+			testdb.SeedGrantedAttachment(e.T, e.DB, engagementID, e.Staff.ID)
+			return attachedID, reqtest.JSON(client.MergeRequest{GivenName: "Attached To Contractor", OtherClientID: e.newClient("Other")})
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var opts []envOption
+			if tc.contractor {
+				opts = append(opts, signedInAs(fixture.Contractor()))
+			}
+			e := newEnv(t, opts...)
+			sourceID, body := tc.setup(e)
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+stubID+"/merge",
-		client.MergeRequest{GivenName: testMaya, OtherClientID: erasedID})
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusConflict)
-}
-
-// TestMergeHandler_RefusesSelfMerge proves a Client cannot be merged into
-// herself.
-func TestMergeHandler_RefusesSelfMerge(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-merge-self"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	soloID := testdb.SeedNamedClient(t, db, practiceID, "Solo Client", "")
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+soloID+"/merge",
-		client.MergeRequest{GivenName: "Solo Client", OtherClientID: soloID})
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusConflict)
-}
-
-// TestMergeHandler_RefusesErasedSource proves ADR-0027's edit refusal
-// extends to the merge endpoint: an erased Client's own record cannot be
-// the one absorbed either.
-func TestMergeHandler_RefusesErasedSource(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-merge-erased-source"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	erasedID := testdb.SeedNamedClient(t, db, practiceID, "Erased Client", "")
-	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE clients SET erased_at = now() WHERE id = $1`, erasedID); err != nil {
-		t.Fatalf("seed erased_at: %v", err)
+			reqtest.ExpectStatus(t, http.MethodPost, e.clientURL(sourceID, "/merge"), tc.want, e.SignedIn, body)
+		})
 	}
-	otherID := testdb.SeedNamedClient(t, db, practiceID, "Other", "")
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+erasedID+"/merge",
-		client.MergeRequest{GivenName: "Erased Client", OtherClientID: otherID})
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusConflict)
-}
-
-// TestMergeHandler_InvalidInput covers MergeHandler's own request-shape
-// refusals: a malformed path id, an unparseable body, a blank given name,
-// and a malformed OtherClientID -- four independent 400s before any
-// database write is attempted.
-func TestMergeHandler_InvalidInput(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-merge-invalid-input"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	stubID := testdb.SeedNamedClient(t, db, practiceID, testStub, "")
-	otherID := testdb.SeedNamedClient(t, db, practiceID, "Other", "")
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	t.Run("invalid client id", func(t *testing.T) {
-		resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/not-a-uuid/merge",
-			client.MergeRequest{GivenName: testStub, OtherClientID: otherID})
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-	})
-
-	t.Run("invalid body", func(t *testing.T) {
-		resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/clients/"+stubID+"/merge", reqtest.Session(session), reqtest.RawJSON([]byte("{not json")))
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-	})
-
-	t.Run("blank given name", func(t *testing.T) {
-		resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+stubID+"/merge",
-			client.MergeRequest{GivenName: "  ", OtherClientID: otherID})
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-	})
-
-	t.Run("invalid other client id", func(t *testing.T) {
-		resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+stubID+"/merge",
-			client.MergeRequest{GivenName: testStub, OtherClientID: "not-a-uuid"})
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-	})
-}
-
-// TestMergeHandler_NotFound covers the four independent 404s: a
-// nonexistent source, a nonexistent target, and -- for a contractor
-// Doula, whose CanAccessClient is attachment-narrowed -- an
-// otherwise-valid source or target she simply cannot reach.
-func TestMergeHandler_NotFound(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-merge-not-found", []string{doulaRole}, "employee")
-	stubID := testdb.SeedNamedClient(t, db, practiceID, testStub, "")
-	otherID := testdb.SeedNamedClient(t, db, practiceID, "Other", "")
-	const missingID = "00000000-0000-0000-0000-000000000000"
-
-	srv, session := newServer(t, db, "staff-merge-not-found")
-	defer srv.Close()
-
-	t.Run("nonexistent source", func(t *testing.T) {
-		resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+missingID+"/merge",
-			client.MergeRequest{GivenName: "Nobody", OtherClientID: otherID})
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusNotFound)
-	})
-
-	t.Run("nonexistent target", func(t *testing.T) {
-		resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+stubID+"/merge",
-			client.MergeRequest{GivenName: testStub, OtherClientID: missingID})
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusNotFound)
-	})
-
-	const contractorUID = "contractor-merge-not-found"
-	testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
-	contractorSrv, contractorSession := newServer(t, db, contractorUID)
-	defer contractorSrv.Close()
-
-	t.Run("contractor cannot reach the source", func(t *testing.T) {
-		resp := authedJSON(t, contractorSession, http.MethodPost, contractorSrv.URL+"/api/practices/"+practiceID+"/clients/"+stubID+"/merge",
-			client.MergeRequest{GivenName: testStub, OtherClientID: otherID})
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusNotFound)
-	})
-
-	t.Run("contractor cannot reach the target", func(t *testing.T) {
-		attachedID, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Attached To Contractor", "", "active")
-		contractorStaffID := testdb.SeedContractorAtPractice(t, db, practiceID, "contractor-merge-target-not-found")
-		testdb.SeedGrantedAttachment(t, db, engagementID, contractorStaffID)
-		reachingSrv, reachingSession := newServer(t, db, "contractor-merge-target-not-found")
-		defer reachingSrv.Close()
-
-		resp := authedJSON(t, reachingSession, http.MethodPost, reachingSrv.URL+"/api/practices/"+practiceID+"/clients/"+attachedID+"/merge",
-			client.MergeRequest{GivenName: "Attached To Contractor", OtherClientID: otherID})
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusNotFound)
-	})
 }
 
 // TestMergeHandler_ChangedEmailRevokesPendingInviteAndOverlaysFieldValues
@@ -407,38 +244,19 @@ func TestMergeHandler_NotFound(t *testing.T) {
 // record to carry a real, non-blank value the plain zero-value fixtures
 // used elsewhere in this file never exercise.
 func TestMergeHandler_ChangedEmailRevokesPendingInviteAndOverlaysFieldValues(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-merge-email-fields"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	survivorID, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Nia Okafor", "old@example.com", "active")
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE clients SET field_values = '{"insuranceProvider":"Old Co"}'::jsonb WHERE id = $1`, survivorID,
-	); err != nil {
-		t.Fatalf("seed survivor field_values: %v", err)
-	}
-	outboxID := seedPendingOutboxRow(t, db, survivorID)
-	stubID := testdb.SeedNamedClient(t, db, practiceID, "Nia", "")
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
+	e := newEnv(t)
+	survivorID := e.attachedClient("Nia Okafor", "old@example.com")
+	e.Exec(`UPDATE clients SET field_values = '{"insuranceProvider":"Old Co"}'::jsonb WHERE id = $1`, survivorID)
+	outboxID := seedPendingOutboxRow(t, e.DB, survivorID)
+	stubID := e.newClient("Nia")
 
 	// The absorbed side is what MergeHandler was sent in this request --
 	// the stub's freshly typed, not-yet-saved values -- not whatever
 	// happens to already be on the stub's own row.
-	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+stubID+"/merge",
-		client.MergeRequest{
-			GivenName: "Nia", Email: testNewEmail, FieldValues: jsontext.Value(`{"referralSource":"Hospital"}`),
-			OtherClientID: survivorID,
-		})
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status = %d, want %d, body=%s", resp.StatusCode, http.StatusOK, body)
-	}
-	var out client.Record
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := e.mergeOK(stubID, client.MergeRequest{
+		GivenName: "Nia", Email: testNewEmail, FieldValues: jsontext.Value(`{"referralSource":"Hospital"}`),
+		OtherClientID: survivorID,
+	})
 	if out.Email != testNewEmail {
 		t.Fatalf("email = %q, want the absorbed record's non-blank value to win", out.Email)
 	}
@@ -453,7 +271,7 @@ func TestMergeHandler_ChangedEmailRevokesPendingInviteAndOverlaysFieldValues(t *
 		t.Fatalf("fieldValues[referralSource] = %q, want the absorbed record's key layered in", fieldValues["referralSource"])
 	}
 
-	status, lastErr := outboxStatus(t, db, outboxID)
+	status, lastErr := outboxStatus(t, e.DB, outboxID)
 	if status != deadLetteredStatus || lastErr == "" {
 		t.Fatalf("outbox row status = %q lastError = %q, want dead_lettered with a reason -- the email change must revoke it", status, lastErr)
 	}
@@ -464,36 +282,14 @@ func TestMergeHandler_ChangedEmailRevokesPendingInviteAndOverlaysFieldValues(t *
 // route's idempotency exemption promises: merging the same source twice
 // 409s the second time rather than absorbing it again.
 func TestMergeHandler_RefusesChainedAndRepeatedMerge(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-merge-chain"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	survivorID, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Root Survivor", "root@example.com", "active")
-	firstStubID := testdb.SeedNamedClient(t, db, practiceID, "First Stub", "")
-	secondStubID := testdb.SeedNamedClient(t, db, practiceID, "Second Stub", "")
+	e := newEnv(t)
+	survivorID := e.attachedClient("Root Survivor", "root@example.com")
+	firstStubID := e.newClient("First Stub")
+	secondStubID := e.newClient("Second Stub")
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	first := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+firstStubID+"/merge",
-		client.MergeRequest{GivenName: "First Stub", OtherClientID: survivorID})
-	defer first.Body.Close()
-	if first.StatusCode != http.StatusOK {
-		t.Fatalf("first merge status = %d, want %d", first.StatusCode, http.StatusOK)
-	}
-
+	e.merge(firstStubID, client.MergeRequest{GivenName: "First Stub", OtherClientID: survivorID}, http.StatusOK)
 	// Chained: firstStubID is now a tombstone, refused as a target.
-	chained := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+secondStubID+"/merge",
-		client.MergeRequest{GivenName: "Second Stub", OtherClientID: firstStubID})
-	defer chained.Body.Close()
-	if chained.StatusCode != http.StatusConflict {
-		t.Fatalf("chained merge status = %d, want %d", chained.StatusCode, http.StatusConflict)
-	}
-
+	e.merge(secondStubID, client.MergeRequest{GivenName: "Second Stub", OtherClientID: firstStubID}, http.StatusConflict)
 	// Repeated: firstStubID (now a tombstone) cannot be merged again.
-	repeated := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+firstStubID+"/merge",
-		client.MergeRequest{GivenName: "First Stub", OtherClientID: survivorID})
-	defer repeated.Body.Close()
-	if repeated.StatusCode != http.StatusConflict {
-		t.Fatalf("repeated merge status = %d, want %d", repeated.StatusCode, http.StatusConflict)
-	}
+	e.merge(firstStubID, client.MergeRequest{GivenName: "First Stub", OtherClientID: survivorID}, http.StatusConflict)
 }

@@ -1,14 +1,42 @@
 package message_test
 
 import (
+	"database/sql"
 	"testing"
 
+	"doula-cloud/api/internal/fixture"
+	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/message"
+	"doula-cloud/api/internal/objectstore"
+	"doula-cloud/api/internal/push"
+	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
 const doulaRole = "doula"
 const ownerRole = "owner"
 const adminRole = "admin"
+
+// env is what a Staff-side test in this package starts from: a Practice
+// with this package's routes mounted on a server, backed by a fresh
+// in-memory ObjectStore and Pusher (no real GCS bucket or push service is
+// reachable from api/ tests, per docs/testing/api.md), and one Staff member
+// at the screen, an employee Doula unless signedInAs says otherwise.
+type env struct {
+	*fixture.Scene
+}
+
+type envOption = fixture.SceneOption
+
+var signedInAs = fixture.SignedInAs
+
+func newEnv(t *testing.T, opts ...envOption) *env {
+	t.Helper()
+	mount := func(g *staffauth.GatedRouter, ir *idempotency.Router, app *sql.DB) {
+		message.Mount(g, ir, app, objectstore.NewMemoryStore(), push.NewFakePusher())
+	}
+	return &env{fixture.NewScene(t, mount, opts...)}
+}
 
 // seedMessage inserts a Message on engagementID from senderType/senderID,
 // using the superuser Admin connection so fixture setup isn't gated by

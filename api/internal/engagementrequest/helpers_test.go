@@ -1,13 +1,14 @@
 package engagementrequest_test
 
 import (
+	"database/sql"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -25,34 +26,97 @@ const (
 	testKindPostpartum = "postpartum"
 	testStatePending   = "pending"
 	testStateApproved  = "approved"
+
+	testStateRefused   = "refused"
+	testStateWithdrawn = "withdrawn"
+
+	notAUUID = "not-a-uuid"
+	zeroUUID = "00000000-0000-0000-0000-000000000000"
 )
 
-// newServer mounts this package's whole surface through
-// engagementrequest.Mount, the same call main.go makes on the real
-// GatedRouter and idempotency.Router, and seeds a live session for who.
-func newServer(t *testing.T, db *testdb.DB, who fixture.StaffRecord, enq tasknudge.Enqueuer) (srv *httptest.Server, session string) {
-	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	engagementrequest.Mount(g, ir, db.App, enq)
-	return httptest.NewServer(mux), fixture.Session(t, db, who)
+// env is what a test in this package starts from: a Practice with this
+// package's whole surface mounted on a server, one Staff member at the
+// screen and a Client with no history. With no option she is an employee
+// Doula and the Practice holds no Credits; a test says only what it changes,
+// with signedInAs and withCredits.
+type env struct {
+	*fixture.Scene
+	// Client is a Client at the Practice.
+	Client fixture.ClientRecord
 }
 
-// pendingRequest inserts a pending engagement_requests row directly,
-// bypassing the endpoint, for tests exercising approve/refuse/withdraw in
-// isolation.
-func pendingRequest(t *testing.T, db *testdb.DB, p fixture.PracticeRecord, c fixture.ClientRecord, kind string, requestedBy fixture.StaffRecord) (requestID string) {
+type envOption = fixture.SceneOption
+
+var signedInAs = fixture.SignedInAs
+
+// funded gives the Practice three Credits to approve with.
+var funded = fixture.InPractice(fixture.Credits(3))
+
+// newEnv mounts this package's whole surface through
+// engagementrequest.Mount, the same call main.go makes on the real
+// GatedRouter and idempotency.Router.
+func newEnv(t *testing.T, opts ...envOption) *env {
 	t.Helper()
-	if err := db.Admin.QueryRowContext(t.Context(),
+	mount := func(g *staffauth.GatedRouter, ir *idempotency.Router, app *sql.DB) {
+		engagementrequest.Mount(g, ir, app, &tasknudge.FakeEnqueuer{})
+	}
+	s := fixture.NewScene(t, mount, opts...)
+	return &env{Scene: s, Client: fixture.Client(t, s.DB, s.Practice)}
+}
+
+// requestURL is a Request's route plus tail, addressed the way the
+// approval screen addresses it: a Request id and nothing else.
+func (e *env) requestURL(requestID, tail string) string {
+	return e.PracticeURL("/engagement-requests/" + requestID + tail)
+}
+
+func (e *env) listURL() string { return e.PracticeURL("/engagement-requests") }
+
+func (e *env) askURL(clientID string) string {
+	return e.PracticeURL("/clients/" + clientID + "/engagement-requests")
+}
+
+// pending inserts a pending birth Request for the env's Client, asked by
+// requester, bypassing the endpoint, for tests exercising
+// approve/refuse/withdraw in isolation.
+func (e *env) pending(requester fixture.StaffRecord) (requestID string) {
+	return e.pendingFor(e.Client, testKindBirth, requester)
+}
+
+func (e *env) pendingFor(c fixture.ClientRecord, kind string, requester fixture.StaffRecord) (requestID string) {
+	e.T.Helper()
+	return testdb.Scalar[string](e.T, e.DB.Admin,
 		`INSERT INTO engagement_requests (practice_id, client_id, kind, due_date, requested_by)
 		 VALUES ($1, $2, $3::engagement_kind, $4, $5) RETURNING id`,
-		p.ID, c.ID, kind, testDueDate, requestedBy.ID,
-	).Scan(&requestID); err != nil {
-		t.Fatalf("seed pending request: %v", err)
-	}
-	return requestID
+		e.Practice.ID, c.ID, kind, testDueDate, requester.ID)
 }
+
+// approve approves a Request as the person at the screen.
+func (e *env) approve(requestID string) engagementrequest.ApproveResponse {
+	e.T.Helper()
+	return reqtest.Expect[engagementrequest.ApproveResponse](e.T, http.MethodPost, e.requestURL(requestID, "/approve"), http.StatusOK, e.SignedIn)
+}
+
+// ask files the birth Request body for the env's Client as the person at the
+// screen and returns the 201 answer.
+func (e *env) ask(body engagementrequest.RequestBody) engagementrequest.RequestResponse {
+	e.T.Helper()
+	return reqtest.Expect[engagementrequest.RequestResponse](e.T, http.MethodPost, e.askURL(e.Client.ID), http.StatusCreated, e.SignedIn, reqtest.JSON(body))
+}
+
+// askRefused files the ask and requires the refusal want, without reading
+// the answer.
+func (e *env) askRefused(want int, body any) {
+	e.T.Helper()
+	e.askClientRefused(e.Client.ID, want, body)
+}
+
+func (e *env) askClientRefused(clientID string, want int, body any) {
+	e.T.Helper()
+	reqtest.ExpectStatus(e.T, http.MethodPost, e.askURL(clientID), want, e.SignedIn, reqtest.JSON(body))
+}
+
+var birthAsk = engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate}
 
 // requestRow reads a Request's decision facts straight from the
 // database, bypassing RLS.
@@ -87,63 +151,42 @@ func engagementRow(t *testing.T, db *testdb.DB, engagementID string) (kind strin
 	return kind, dueDate
 }
 
-// creditLedgerCount counts credit_ledger rows for practiceID.
+// countRows counts table's rows at practiceID. table is a literal this
+// package passes, never input.
+func countRows(t *testing.T, db *testdb.DB, table, practiceID string) int {
+	t.Helper()
+	return testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM `+table+` WHERE practice_id = $1`, practiceID)
+}
+
 func creditLedgerCount(t *testing.T, db *testdb.DB, practiceID string) int {
 	t.Helper()
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM credit_ledger WHERE practice_id = $1`, practiceID,
-	).Scan(&count); err != nil {
-		t.Fatalf("count credit_ledger: %v", err)
-	}
-	return count
+	return countRows(t, db, "credit_ledger", practiceID)
+}
+
+func lowCreditOutboxCount(t *testing.T, db *testdb.DB, practiceID string) int {
+	t.Helper()
+	return countRows(t, db, "low_credit_outbox", practiceID)
 }
 
 // outboxCount counts engagement_request_outbox rows for requestID.
 func outboxCount(t *testing.T, db *testdb.DB, requestID string) int {
 	t.Helper()
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM engagement_request_outbox WHERE request_id = $1`, requestID,
-	).Scan(&count); err != nil {
-		t.Fatalf("count outbox rows: %v", err)
-	}
-	return count
-}
-
-// lowCreditOutboxCount counts low_credit_outbox rows for practiceID.
-func lowCreditOutboxCount(t *testing.T, db *testdb.DB, practiceID string) int {
-	t.Helper()
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM low_credit_outbox WHERE practice_id = $1`, practiceID,
-	).Scan(&count); err != nil {
-		t.Fatalf("count low_credit_outbox rows: %v", err)
-	}
-	return count
+	return testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM engagement_request_outbox WHERE request_id = $1`, requestID)
 }
 
 // setRequestNote writes a note onto an already-seeded Request, so a test
-// can prove the note reaches the approver without pendingRequest growing
-// a parameter every one of its other callers would have to pass.
-func setRequestNote(t *testing.T, db *testdb.DB, requestID, note string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE engagement_requests SET note = $1 WHERE id = $2`, note, requestID,
-	); err != nil {
-		t.Fatalf("set request note: %v", err)
-	}
+// can prove the note reaches the approver without pending growing a
+// parameter every one of its other callers would have to pass.
+func (e *env) setRequestNote(requestID, note string) {
+	e.T.Helper()
+	e.Exec(`UPDATE engagement_requests SET note = $1 WHERE id = $2`, note, requestID)
 }
 
 // clearDueDate removes a Request's due date after it is seeded, so a test
 // can prove a postpartum-only ask travels without one -- ADR-0017's
-// nullable due_date -- without pendingRequest growing a parameter every
-// one of its other callers would have to pass.
-func clearDueDate(t *testing.T, db *testdb.DB, requestID string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE engagement_requests SET due_date = NULL WHERE id = $1`, requestID,
-	); err != nil {
-		t.Fatalf("clear due date: %v", err)
-	}
+// nullable due_date -- without pending growing a parameter every one of its
+// other callers would have to pass.
+func (e *env) clearDueDate(requestID string) {
+	e.T.Helper()
+	e.Exec(`UPDATE engagement_requests SET due_date = NULL WHERE id = $1`, requestID)
 }

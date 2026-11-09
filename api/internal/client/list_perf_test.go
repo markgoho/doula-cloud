@@ -68,24 +68,7 @@ func TestOpenEngagementRollupQueryPlanAtScale(t *testing.T) {
 	args = append(args, "00000000-0000-0000-0000-000000000000", false)
 	query := fmt.Sprintf(openEngagementRollupQueryTemplate, staffIdx, strings.Join(placeholders, ", "), attachedOnlyIdx)
 
-	rows, err := tx.QueryContext(t.Context(), "EXPLAIN (ANALYZE, BUFFERS) "+query, args...)
-	if err != nil {
-		t.Fatalf("explain: %v", err)
-	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var line string
-		if err := rows.Scan(&line); err != nil {
-			t.Fatalf("scan explain line: %v", err)
-		}
-		t.Log(line)
-		if strings.Contains(line, "JIT:") {
-			t.Fatalf("the rollup JITs at this scale: %s", line)
-		}
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate explain lines: %v", err)
-	}
+	requireNoJIT(t, tx, query, "the rollup", args...)
 }
 
 // TestListQueryPlanAtScale prices the Clients list's own query

@@ -1,91 +1,43 @@
 package engagementrequest_test
 
 import (
-	"database/sql"
 	"testing"
 
 	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/testdb"
 )
 
-// beginAs opens a tx on db.App and sets app.current_practice_id and
-// app.current_staff_id on it, mirroring staffauth.Middleware's own
-// set_config calls -- the pattern billing/rls_test.go and
-// staffauth/rls_test.go already use, since a *sql.DB connection pool
-// gives no guarantee that two separate ExecContext calls land on the
-// same backend connection, but everything run on one *sql.Tx does.
-func beginAs(t *testing.T, db *testdb.DB, practiceID, staffID string) *sql.Tx {
-	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	t.Cleanup(func() { _ = tx.Rollback() })
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set current_practice_id: %v", err)
-	}
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_staff_id', $1, true)`, staffID); err != nil {
-		t.Fatalf("set current_staff_id: %v", err)
-	}
-	return tx
-}
+// TestRLS_InsertPolicyGatesOnRole proves engagement_requests_insert (00047)
+// refuses a contractor Doula's INSERT independent of RequestHandler's own
+// Go-level check, and admits an employee Doula, so the refusal is the
+// policy's role gate working and not a blanket refusal. A contractor
+// employment type does not refuse an Owner or Admin membership: ADR-0017's
+// solo-Practice carve-out.
+func TestRLS_InsertPolicyGatesOnRole(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		staff   []fixture.StaffOption
+		refused bool
+	}{
+		{"a contractor Doula is refused", []fixture.StaffOption{fixture.Contractor()}, true},
+		{"an employee Doula is admitted", nil, false},
+		{"a contractor Owner is admitted", []fixture.StaffOption{fixture.Owner(), fixture.Contractor()}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(tc.staff...))
+			tx := e.DB.BeginAs(t, testdb.Practice(e.Practice.ID), testdb.Staff(e.Staff.ID))
 
-// TestRLS_ContractorInsertRefused proves engagement_requests_insert
-// (00047) refuses a contractor Doula's INSERT independent of
-// RequestHandler's own Go-level check.
-func TestRLS_ContractorInsertRefused(t *testing.T) {
-	db := testdb.New(t)
-	p := fixture.Practice(t, db)
-	contractor := fixture.Staff(t, db, p, fixture.Contractor())
-	client := fixture.Client(t, db, p)
-	tx := beginAs(t, db, p.ID, contractor.ID)
-
-	_, err := tx.ExecContext(t.Context(),
-		`INSERT INTO engagement_requests (practice_id, client_id, kind, due_date, requested_by)
-		 VALUES ($1, $2, 'birth', $3, $4)`,
-		p.ID, client.ID, testDueDate, contractor.ID,
-	)
-	if err == nil {
-		t.Fatal("expected engagement_requests_insert to refuse a contractor Doula's INSERT, got no error")
-	}
-}
-
-// TestRLS_EmployeeDoulaInsertAllowed proves the same policy admits an
-// employee Doula, so the contractor refusal above is the policy's role
-// gate working, not a blanket refusal.
-func TestRLS_EmployeeDoulaInsertAllowed(t *testing.T) {
-	db := testdb.New(t)
-	p := fixture.Practice(t, db)
-	doula := fixture.Staff(t, db, p)
-	client := fixture.Client(t, db, p)
-	tx := beginAs(t, db, p.ID, doula.ID)
-
-	_, err := tx.ExecContext(t.Context(),
-		`INSERT INTO engagement_requests (practice_id, client_id, kind, due_date, requested_by)
-		 VALUES ($1, $2, 'birth', $3, $4)`,
-		p.ID, client.ID, testDueDate, doula.ID,
-	)
-	if err != nil {
-		t.Fatalf("expected an employee Doula's INSERT to be admitted, got: %v", err)
-	}
-}
-
-// TestRLS_ContractorOwnerInsertAllowed proves ADR-0017's solo-Practice
-// carve-out: a contractor employment type does not refuse an Owner or
-// Admin membership.
-func TestRLS_ContractorOwnerInsertAllowed(t *testing.T) {
-	db := testdb.New(t)
-	p := fixture.Practice(t, db)
-	owner := fixture.Staff(t, db, p, fixture.Owner(), fixture.Contractor())
-	client := fixture.Client(t, db, p)
-	tx := beginAs(t, db, p.ID, owner.ID)
-
-	_, err := tx.ExecContext(t.Context(),
-		`INSERT INTO engagement_requests (practice_id, client_id, kind, due_date, requested_by)
-		 VALUES ($1, $2, 'birth', $3, $4)`,
-		p.ID, client.ID, testDueDate, owner.ID,
-	)
-	if err != nil {
-		t.Fatalf("expected a contractor Owner's INSERT to be admitted, got: %v", err)
+			_, err := tx.ExecContext(t.Context(),
+				`INSERT INTO engagement_requests (practice_id, client_id, kind, due_date, requested_by)
+				 VALUES ($1, $2, 'birth', $3, $4)`,
+				e.Practice.ID, e.Client.ID, testDueDate, e.Staff.ID,
+			)
+			if tc.refused && err == nil {
+				t.Fatal("expected engagement_requests_insert to refuse the INSERT, got no error")
+			}
+			if !tc.refused && err != nil {
+				t.Fatalf("expected the INSERT to be admitted, got: %v", err)
+			}
+		})
 	}
 }

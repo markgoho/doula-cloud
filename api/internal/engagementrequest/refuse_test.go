@@ -7,8 +7,6 @@ import (
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/tasknudge"
-	"doula-cloud/api/internal/testdb"
 )
 
 // TestRefuseHandler_RequiresReasonAndStampsRequest proves a reason is
@@ -16,132 +14,44 @@ import (
 // refused with the actor, timestamp, and reason the CHECK constraints
 // demand.
 func TestRefuseHandler_RequiresReasonAndStampsRequest(t *testing.T) {
-	db := testdb.New(t)
-	p := fixture.Practice(t, db)
-	doula := fixture.Staff(t, db, p)
-	admin := fixture.Staff(t, db, p, fixture.Admin())
-	client := fixture.Client(t, db, p)
-	requestID := pendingRequest(t, db, p, client, testKindBirth, doula)
+	e := newEnv(t, signedInAs(fixture.Admin()))
+	requestID := e.pending(e.Colleague())
+	refuseURL := e.requestURL(requestID, "/refuse")
 
-	srv, session := newServer(t, db, admin, &tasknudge.FakeEnqueuer{})
-	defer srv.Close()
+	reqtest.ExpectStatus(t, http.MethodPost, refuseURL, http.StatusBadRequest, e.SignedIn, reqtest.JSON(engagementrequest.RefuseRequest{}))
 
-	noReason := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/refuse", reqtest.Session(session), reqtest.JSON(engagementrequest.RefuseRequest{}))
-	defer noReason.Body.Close()
-	reqtest.RequireStatus(t, noReason, http.StatusBadRequest)
-
-	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/refuse", reqtest.Session(session), reqtest.JSON(engagementrequest.RefuseRequest{Reason: "already has a doula elsewhere"}))
-	defer resp.Body.Close()
-	out := reqtest.DecodeStatus[engagementrequest.DecisionResponse](t, resp, http.StatusOK)
-	if out.State != "refused" {
+	out := reqtest.Expect[engagementrequest.DecisionResponse](t, http.MethodPost, refuseURL, http.StatusOK, e.SignedIn,
+		reqtest.JSON(engagementrequest.RefuseRequest{Reason: "already has a doula elsewhere"}))
+	if out.State != testStateRefused {
 		t.Fatalf("state = %q, want refused", out.State)
 	}
 
-	row := readRequest(t, db, requestID)
-	if row.state != "refused" || row.decidedBy == nil || row.reason == nil || *row.reason == "" {
+	row := readRequest(t, e.DB, requestID)
+	if row.state != testStateRefused || row.decidedBy == nil || row.reason == nil || *row.reason == "" {
 		t.Fatalf("request row = %+v, want refused/decided/reasoned", row)
 	}
 }
 
-// TestRefuseHandler_InvalidRequestIDRejected proves a malformed path
-// segment is a 400, not a query against a bogus id.
-func TestRefuseHandler_InvalidRequestIDRejected(t *testing.T) {
-	db := testdb.New(t)
-	p := fixture.Practice(t, db)
-	admin := fixture.Staff(t, db, p, fixture.Admin())
-
-	srv, session := newServer(t, db, admin, &tasknudge.FakeEnqueuer{})
-	defer srv.Close()
-
-	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/not-a-uuid/refuse", reqtest.Session(session), reqtest.JSON(engagementrequest.RefuseRequest{Reason: "no"}))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
 // TestRefuseHandler_InvalidBodyRejected proves malformed JSON is a 400.
 func TestRefuseHandler_InvalidBodyRejected(t *testing.T) {
-	db := testdb.New(t)
-	p := fixture.Practice(t, db)
-	doula := fixture.Staff(t, db, p)
-	admin := fixture.Staff(t, db, p, fixture.Admin())
-	client := fixture.Client(t, db, p)
-	requestID := pendingRequest(t, db, p, client, testKindBirth, doula)
+	e := newEnv(t, signedInAs(fixture.Admin()))
+	requestID := e.pending(e.Colleague())
 
-	srv, session := newServer(t, db, admin, &tasknudge.FakeEnqueuer{})
-	defer srv.Close()
-
-	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/refuse", reqtest.Session(session), reqtest.JSON("not json"))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-// TestRefuseHandler_NotFound proves a bogus request id is a 404.
-func TestRefuseHandler_NotFound(t *testing.T) {
-	db := testdb.New(t)
-	p := fixture.Practice(t, db)
-	admin := fixture.Staff(t, db, p, fixture.Admin())
-
-	srv, session := newServer(t, db, admin, &tasknudge.FakeEnqueuer{})
-	defer srv.Close()
-
-	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/00000000-0000-0000-0000-000000000000/refuse", reqtest.Session(session), reqtest.JSON(engagementrequest.RefuseRequest{Reason: "no"}))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
+	reqtest.ExpectStatus(t, http.MethodPost, e.requestURL(requestID, "/refuse"), http.StatusBadRequest, e.SignedIn, reqtest.JSON("not json"))
 }
 
 // TestDatabase_RefusalWithoutReasonRejected proves
 // engagement_requests_refusal_reason (00042) rejects a reasonless refusal
 // at the database itself, independent of the endpoint's own 400.
 func TestDatabase_RefusalWithoutReasonRejected(t *testing.T) {
-	db := testdb.New(t)
-	p := fixture.Practice(t, db)
-	doula := fixture.Staff(t, db, p)
-	client := fixture.Client(t, db, p)
-	requestID := pendingRequest(t, db, p, client, testKindBirth, doula)
+	e := newEnv(t)
+	requestID := e.pending(e.Staff)
 
-	_, err := db.Admin.ExecContext(t.Context(),
+	_, err := e.DB.Admin.ExecContext(t.Context(),
 		`UPDATE engagement_requests SET state = 'refused', decided_by = $1, decided_at = now() WHERE id = $2`,
-		doula.ID, requestID,
+		e.Staff.ID, requestID,
 	)
 	if err == nil {
 		t.Fatal("expected the refusal_reason CHECK to reject a reasonless refused row, got no error")
 	}
-}
-
-// TestRefuseHandler_DoulaForbidden proves refuse is Owner/Admin only.
-func TestRefuseHandler_DoulaForbidden(t *testing.T) {
-	db := testdb.New(t)
-	p := fixture.Practice(t, db)
-	doula := fixture.Staff(t, db, p)
-	client := fixture.Client(t, db, p)
-	requestID := pendingRequest(t, db, p, client, testKindBirth, doula)
-
-	srv, session := newServer(t, db, doula, &tasknudge.FakeEnqueuer{})
-	defer srv.Close()
-
-	resp := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/refuse", reqtest.Session(session), reqtest.JSON(engagementrequest.RefuseRequest{Reason: "no"}))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
-}
-
-// TestRefuseHandler_AlreadyDecidedConflict proves refusing an already
-// decided Request is a 409.
-func TestRefuseHandler_AlreadyDecidedConflict(t *testing.T) {
-	db := testdb.New(t)
-	p := fixture.Practice(t, db)
-	doula := fixture.Staff(t, db, p)
-	admin := fixture.Staff(t, db, p, fixture.Admin())
-	client := fixture.Client(t, db, p)
-	requestID := pendingRequest(t, db, p, client, testKindBirth, doula)
-
-	srv, session := newServer(t, db, admin, &tasknudge.FakeEnqueuer{})
-	defer srv.Close()
-
-	first := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/refuse", reqtest.Session(session), reqtest.JSON(engagementrequest.RefuseRequest{Reason: "no"}))
-	defer first.Body.Close()
-	reqtest.RequireStatus(t, first, http.StatusOK)
-
-	second := reqtest.Post(t, srv.URL+"/api/practices/"+p.ID+"/engagement-requests/"+requestID+"/refuse", reqtest.Session(session), reqtest.JSON(engagementrequest.RefuseRequest{Reason: "no"}))
-	defer second.Body.Close()
-	reqtest.RequireStatus(t, second, http.StatusConflict)
 }

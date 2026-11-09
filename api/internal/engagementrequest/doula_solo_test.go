@@ -1,8 +1,8 @@
 package engagementrequest_test
 
 import (
+	"database/sql"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/engagementrequest"
@@ -12,113 +12,51 @@ import (
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
-	"doula-cloud/api/internal/testdb"
 )
 
-// newServerWithOnCall mounts this package's surface and oncall's beside
-// it, so a test can start an Engagement and then read its On-call window
-// the way the Engagement page does.
-func newServerWithOnCall(t *testing.T, db *testdb.DB, who fixture.StaffRecord) (srv *httptest.Server, session string) {
-	t.Helper()
-	enq := &tasknudge.FakeEnqueuer{}
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	engagementrequest.Mount(g, ir, db.App, enq)
-	oncall.Mount(g, ir, enq)
-	return httptest.NewServer(mux), fixture.Session(t, db, who)
-}
+// alsoMountingOnCall mounts oncall's surface beside this package's, so a
+// test can start an Engagement and then read its On-call window the way the
+// Engagement page does.
+var alsoMountingOnCall = fixture.AlsoMounting(func(g *staffauth.GatedRouter, ir *idempotency.Router, _ *sql.DB) {
+	oncall.Mount(g, ir, &tasknudge.FakeEnqueuer{})
+})
 
-// TestRequestHandler_ASoloOwnerIsOnHerOwnEngagementInOneAct is the case
-// #1515 was decided for. A solo Owner starts work and names herself: the
-// ask and its approval are one act (ADR-0017), and the same act attaches
-// her, granted, with herself recorded as the person who attached. Nobody
-// offers herself work.
-func TestRequestHandler_ASoloOwnerIsOnHerOwnEngagementInOneAct(t *testing.T) {
-	db := testdb.New(t)
-	p := fixture.Practice(t, db, fixture.Credits(3))
-	owner := fixture.Staff(t, db, p, fixture.Founder())
-	client := fixture.Client(t, db, p)
-	enq := &tasknudge.FakeEnqueuer{}
+// TestRequestHandler_ASoloOwnerStartsWorkInOneAct is the case #1515 was
+// decided for. A solo Owner starts work: the ask and its approval are one
+// act (ADR-0017), and when she names herself the same act attaches her,
+// granted, with herself recorded as the person who attached. Nobody offers
+// herself work. #1625 holds it for an Owner who is a contractor Doula,
+// whom nobody can send an Offer. An agency Owner who names nobody reaches
+// First Value (ADR-0048) with nobody on the Engagement.
+func TestRequestHandler_ASoloOwnerStartsWorkInOneAct(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		owner     []fixture.StaffOption
+		namesSelf bool
+		attached  bool
+	}{
+		{"an Owner names herself", []fixture.StaffOption{fixture.Founder()}, true, true},
+		{"a contractor Owner names herself", []fixture.StaffOption{fixture.Founder(), fixture.Contractor()}, true, true},
+		{"an agency Owner names nobody", []fixture.StaffOption{fixture.Founder()}, false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(tc.owner...), funded)
+			body := birthAsk
+			if tc.namesSelf {
+				body.DoulaStaffID = &e.Staff.ID
+			}
 
-	srv, session := newServer(t, db, owner, enq)
-	defer srv.Close()
+			out := e.ask(body)
 
-	outResp := reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate, DoulaStaffID: &owner.ID}))
-	defer outResp.Body.Close()
-	out := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, outResp, http.StatusCreated)
-	if out.State != testStateApproved || out.EngagementID == "" {
-		t.Fatalf("response = %+v, want approved with an engagementId", out)
-	}
-
-	got := attachmentsOn(t, db, out.EngagementID)
-	if len(got) != 1 || got[0].staffID != owner.ID || got[0].origin != grantedOrigin || got[0].attachedBy != owner.ID || !got[0].open {
-		t.Fatalf("attachments = %+v, want one open granted one for the Owner, attached by herself", got)
-	}
-	if got[0].feeAmountCents != nil || got[0].feeTerms != nil {
-		t.Fatalf("attachment fee = %v / %v, want none", got[0].feeAmountCents, got[0].feeTerms)
-	}
-	actors, doulas := doulaAttachedRows(t, db, out.EngagementID)
-	if len(actors) != 1 || actors[0] != owner.ID || doulas[0] != owner.ID {
-		t.Fatalf("doula_attached rows = actors %v doulas %v, want one where she attached herself", actors, doulas)
-	}
-}
-
-// TestRequestHandler_ASoloOwnerWhoIsAContractorIsOnHerOwnEngagement is
-// #1625. The only Owner of a Practice is a contractor Doula, so nobody
-// can send her an Offer and she cannot send one to herself. She starts
-// work and names herself, and the one act attaches her: granted, with no
-// fee, attached by herself, and one doula_attached entry that names her
-// as the actor.
-func TestRequestHandler_ASoloOwnerWhoIsAContractorIsOnHerOwnEngagement(t *testing.T) {
-	db := testdb.New(t)
-	p := fixture.Practice(t, db, fixture.Credits(3))
-	owner := fixture.Staff(t, db, p, fixture.Founder(), fixture.Contractor())
-	client := fixture.Client(t, db, p)
-
-	srv, session := newServer(t, db, owner, &tasknudge.FakeEnqueuer{})
-	defer srv.Close()
-
-	outResp := reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate, DoulaStaffID: &owner.ID}))
-	defer outResp.Body.Close()
-	out := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, outResp, http.StatusCreated)
-	if out.State != testStateApproved || out.EngagementID == "" {
-		t.Fatalf("response = %+v, want approved with an engagementId", out)
-	}
-
-	got := attachmentsOn(t, db, out.EngagementID)
-	if len(got) != 1 || got[0].staffID != owner.ID || got[0].origin != grantedOrigin || got[0].attachedBy != owner.ID || !got[0].open {
-		t.Fatalf("attachments = %+v, want one open granted one for the Owner, attached by herself", got)
-	}
-	if got[0].feeAmountCents != nil || got[0].feeTerms != nil {
-		t.Fatalf("attachment fee = %v / %v, want none", got[0].feeAmountCents, got[0].feeTerms)
-	}
-	actors, doulas := doulaAttachedRows(t, db, out.EngagementID)
-	if len(actors) != 1 || actors[0] != owner.ID || doulas[0] != owner.ID {
-		t.Fatalf("doula_attached rows = actors %v doulas %v, want one where she attached herself", actors, doulas)
-	}
-}
-
-// TestRequestHandler_ASoloOwnerWithNoDoulaYetIsNotAttached proves an
-// agency Owner's answer on the same collapsed path: the Engagement
-// exists, First Value is reached (ADR-0048), and nobody is on it.
-func TestRequestHandler_ASoloOwnerWithNoDoulaYetIsNotAttached(t *testing.T) {
-	db := testdb.New(t)
-	p := fixture.Practice(t, db, fixture.Credits(3))
-	agencyOwner := fixture.Staff(t, db, p, fixture.Founder())
-	client := fixture.Client(t, db, p)
-
-	srv, session := newServer(t, db, agencyOwner, &tasknudge.FakeEnqueuer{})
-	defer srv.Close()
-
-	outResp := reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate}))
-	defer outResp.Body.Close()
-	out := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, outResp, http.StatusCreated)
-	if out.State != testStateApproved || out.EngagementID == "" {
-		t.Fatalf("response = %+v, want approved with an engagementId", out)
-	}
-	if got := attachmentsOn(t, db, out.EngagementID); len(got) != 0 {
-		t.Fatalf("attachments = %+v, want none", got)
+			if out.State != testStateApproved || out.EngagementID == "" {
+				t.Fatalf("response = %+v, want approved with an engagementId", out)
+			}
+			if tc.attached {
+				e.requireAttached(out.EngagementID, e.Staff.ID, e.Staff.ID)
+			} else if got := attachmentsOn(t, e.DB, out.EngagementID); len(got) != 0 {
+				t.Fatalf("attachments = %+v, want none", got)
+			}
+		})
 	}
 }
 
@@ -135,44 +73,21 @@ func TestRequestHandler_ASoloOwnerWithNoDoulaYetIsNotAttached(t *testing.T) {
 // whether care has started, so moving to `active` changes nothing about
 // the window, and `completed` is what takes it away.
 func TestSoloOwnersFirstBirthNeedsNoFurtherActToBeOnCall(t *testing.T) {
-	db := testdb.New(t)
-	p := fixture.Practice(t, db, fixture.Credits(3))
-	owner := fixture.Staff(t, db, p, fixture.Founder())
-	client := fixture.Client(t, db, p)
-
-	srv, session := newServerWithOnCall(t, db, owner)
-	defer srv.Close()
-
-	startedResp := reqtest.Post(t, requestsURL(srv.URL, p.ID, client.ID), reqtest.Session(session), reqtest.JSON(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate, DoulaStaffID: &owner.ID}))
-	defer startedResp.Body.Close()
-	started := reqtest.DecodeStatus[engagementrequest.RequestResponse](t, startedResp, http.StatusCreated)
-	onCallURL := srv.URL + "/api/practices/" + p.ID + "/engagements/" + started.EngagementID + "/on-call"
-
-	atIntakeResp := reqtest.Get(t, onCallURL, reqtest.Session(session))
-	defer atIntakeResp.Body.Close()
-	atIntake := reqtest.DecodeStatus[oncall.EngagementOnCall](t, atIntakeResp, http.StatusOK)
-	assertSoloOwnerOnCall(t, atIntake, owner.ID, "intake")
-
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE engagements SET status = 'active' WHERE id = $1`, started.EngagementID,
-	); err != nil {
-		t.Fatalf("move engagement to active: %v", err)
+	e := newEnv(t, signedInAs(fixture.Founder()), funded, alsoMountingOnCall)
+	started := e.ask(engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate, DoulaStaffID: &e.Staff.ID})
+	onCall := func() oncall.EngagementOnCall {
+		return reqtest.Expect[oncall.EngagementOnCall](t, http.MethodGet, e.PracticeURL("/engagements/"+started.EngagementID+"/on-call"), http.StatusOK, e.SignedIn)
 	}
 
-	activeResp := reqtest.Get(t, onCallURL, reqtest.Session(session))
-	defer activeResp.Body.Close()
-	active := reqtest.DecodeStatus[oncall.EngagementOnCall](t, activeResp, http.StatusOK)
-	assertSoloOwnerOnCall(t, active, owner.ID, "active")
+	assertSoloOwnerOnCall(t, onCall(), e.Staff.ID, "intake")
 
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE engagements SET status = 'completed', ending_reason = 'care_complete', birth_outcome = 'unknown' WHERE id = $1`, started.EngagementID,
-	); err != nil {
-		t.Fatalf("move engagement to completed: %v", err)
-	}
+	e.Exec(`UPDATE engagements SET status = 'active' WHERE id = $1`, started.EngagementID)
 
-	completedResp := reqtest.Get(t, onCallURL, reqtest.Session(session))
-	defer completedResp.Body.Close()
-	completed := reqtest.DecodeStatus[oncall.EngagementOnCall](t, completedResp, http.StatusOK)
+	assertSoloOwnerOnCall(t, onCall(), e.Staff.ID, "active")
+
+	e.Exec(`UPDATE engagements SET status = 'completed', ending_reason = 'care_complete', birth_outcome = 'unknown' WHERE id = $1`, started.EngagementID)
+
+	completed := onCall()
 	if completed.Window != nil || completed.NoWindowReason != oncall.NoWindowCompleted {
 		t.Fatalf("completed: window = %+v, reason = %q, want no window and %q",
 			completed.Window, completed.NoWindowReason, oncall.NoWindowCompleted)

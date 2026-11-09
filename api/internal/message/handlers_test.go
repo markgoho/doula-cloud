@@ -86,6 +86,12 @@ func authedPost(t *testing.T, session, url string, body []byte) *http.Response {
 // file field holding content.
 func authedMultipartPost(t *testing.T, session, url, body, filename string, content []byte) *http.Response {
 	t.Helper()
+	return multipartPost(t, url, body, filename, content, reqtest.Session(session))
+}
+
+// multipartPost is authedMultipartPost signed in by opts.
+func multipartPost(t *testing.T, url, body, filename string, content []byte, opts ...reqtest.Option) *http.Response {
+	t.Helper()
 
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
@@ -105,7 +111,7 @@ func authedMultipartPost(t *testing.T, session, url, body, filename string, cont
 		t.Fatalf("close multipart writer: %v", err)
 	}
 
-	return reqtest.Post(t, url, reqtest.Session(session), reqtest.Body(writer.FormDataContentType(), buf.Bytes()))
+	return reqtest.Post(t, url, append(opts, reqtest.Body(writer.FormDataContentType(), buf.Bytes()))...)
 }
 
 // pngContentType is what http.DetectContentType reports for pngBytes.

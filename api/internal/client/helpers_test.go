@@ -276,73 +276,115 @@ func outboxStatus(t *testing.T, db *testdb.DB, outboxID string) (status, lastErr
 	return status, lastError
 }
 
-// eraseEnv is what an erasure test starts from: a Practice with this
-// package's whole surface mounted on a server, its Owner signed in, and one
-// Client with every identifying column filled in -- the state an erasure
-// has something to do to.
-type eraseEnv struct {
-	t   *testing.T
-	db  *testdb.DB
-	srv *httptest.Server
-
-	Practice fixture.PracticeRecord
-	Owner    fixture.StaffRecord
-	ClientID string
-
-	session  string
-	signedIn reqtest.Option
+// env is what a handler test in this package starts from: a Practice with
+// this package's whole surface mounted on a server and one Staff member at
+// the screen, an employee Doula unless signedInAs says otherwise. Each test
+// seeds the Clients and Engagements it is about.
+type env struct {
+	*fixture.Scene
 }
 
-func newEraseEnv(t *testing.T) *eraseEnv {
+type envOption = fixture.SceneOption
+
+var signedInAs = fixture.SignedInAs
+
+// newEnv mounts this package's whole surface through client.Mount -- the
+// same call main.go makes on the real GatedRouter and idempotency.Router.
+// tasknudge.NoOpEnqueuer{} stands in for EraseHandler's nudge: no test in
+// this package asserts on a tasknudge enqueue, only on the erasure outbox
+// rows EraseHandler writes directly.
+func newEnv(t *testing.T, opts ...envOption) *env {
 	t.Helper()
-	db := testdb.New(t)
-	e := &eraseEnv{t: t, db: db, Practice: fixture.Practice(t, db)}
-	e.Owner = fixture.Staff(t, db, e.Practice, fixture.Owner())
-	e.ClientID = seedFullClient(t, db, e.Practice.ID, e.Owner.ID)
-	srv, session := newServer(t, db, e.Owner.UID)
-	t.Cleanup(srv.Close)
-	e.srv = srv
-	e.session = session
-	e.signedIn = reqtest.Session(session)
-	return e
+	mount := fixture.Routes(func(g *staffauth.GatedRouter, ir *idempotency.Router) {
+		client.Mount(g, ir, tasknudge.NoOpEnqueuer{})
+	})
+	return &env{fixture.NewScene(t, mount, opts...)}
+}
+
+// clientURL is a Client's route plus tail.
+func (e *env) clientURL(clientID, tail string) string {
+	return e.PracticeURL("/clients/" + clientID + tail)
+}
+
+// newClient is a Client at the Practice with only a given name, and no
+// Engagement.
+func (e *env) newClient(givenName string) (clientID string) {
+	e.T.Helper()
+	return testdb.SeedNamedClient(e.T, e.DB, e.Practice.ID, givenName, "")
+}
+
+// attachedClient is a Client at the Practice with an active Engagement, the
+// shape the merge treats as carrying history.
+func (e *env) attachedClient(name, email string) (clientID string) {
+	e.T.Helper()
+	clientID, _ = testdb.SeedEngagementInStatus(e.T, e.DB, e.Practice.ID, name, email, "active")
+	return clientID
+}
+
+// merge folds the Client open for editing into otherID and requires want.
+// A request naming no given name takes the open Client's own.
+func (e *env) merge(sourceID string, req client.MergeRequest, want int) {
+	e.T.Helper()
+	reqtest.ExpectStatus(e.T, http.MethodPost, e.clientURL(sourceID, "/merge"), want, e.SignedIn, reqtest.JSON(req))
+}
+
+// mergeOK is merge answered with 200, returning the survivor's folded
+// record and what moved.
+func (e *env) mergeOK(sourceID string, req client.MergeRequest) client.MergeResponse {
+	e.T.Helper()
+	return reqtest.Expect[client.MergeResponse](e.T, http.MethodPost, e.clientURL(sourceID, "/merge"), http.StatusOK, e.SignedIn, reqtest.JSON(req))
+}
+
+// eraseEnv is what an erasure test starts from: an env whose Owner is
+// signed in, and one Client with every identifying column filled in -- the
+// state an erasure has something to do to.
+type eraseEnv struct {
+	*env
+	ClientID string
+}
+
+func newEraseEnv(t *testing.T, opts ...envOption) *eraseEnv {
+	t.Helper()
+	e := newEnv(t, append([]envOption{signedInAs(fixture.Owner())}, opts...)...)
+	return &eraseEnv{env: e, ClientID: seedFullClient(t, e.DB, e.Practice.ID, e.Staff.ID)}
 }
 
 // erasureURL is the route that erases the Client.
-func (e *eraseEnv) erasureURL() string {
-	return e.srv.URL + "/api/practices/" + e.Practice.ID + "/clients/" + e.ClientID + "/erasure"
+func (e *eraseEnv) erasureURL() string { return e.clientURL(e.ClientID, "/erasure") }
+
+// erase erases the Client as the person at the screen.
+func (e *eraseEnv) erase() {
+	e.T.Helper()
+	reqtest.ExpectStatus(e.T, http.MethodPost, e.erasureURL(), http.StatusOK, e.SignedIn)
 }
 
 // activeEngagement is an active birth for the Client.
 func (e *eraseEnv) activeEngagement() (engagementID string) {
-	e.t.Helper()
-	return seedEngagementForClient(e.t, e.db, e.ClientID, e.Practice.ID, "active", "birth")
+	e.T.Helper()
+	return seedEngagementForClient(e.T, e.DB, e.ClientID, e.Practice.ID, "active", "birth")
 }
 
 // paidInvoice is a paid Invoice on a signed Contract on an active birth for
 // the Client.
 func (e *eraseEnv) paidInvoice() (invoiceID string) {
-	e.t.Helper()
-	contractID := seedClientContract(e.t, e.db, e.activeEngagement(), "signed")
-	return seedClientInvoice(e.t, e.db, e.Practice.ID, contractID, "paid", 15000)
+	e.T.Helper()
+	contractID := seedClientContract(e.T, e.DB, e.activeEngagement(), "signed")
+	return seedClientInvoice(e.T, e.DB, e.Practice.ID, contractID, "paid", 15000)
 }
 
 // readErasureScope decodes what the erasure's activity row says it swept
 // into scope.
 func (e *eraseEnv) readErasureScope(scope any) {
-	e.t.Helper()
-	var diff []byte
-	if err := e.db.Admin.QueryRowContext(e.t.Context(),
-		`SELECT diff FROM activity WHERE subject_kind = 'client' AND subject_id = $1 AND action = 'erased'`, e.ClientID,
-	).Scan(&diff); err != nil {
-		e.t.Fatalf("query erased activity row: %v", err)
-	}
+	e.T.Helper()
+	diff := testdb.Scalar[[]byte](e.T, e.DB.Admin,
+		`SELECT diff FROM activity WHERE subject_kind = 'client' AND subject_id = $1 AND action = 'erased'`, e.ClientID)
 	if err := json.Unmarshal(diff, scope); err != nil {
-		e.t.Fatalf("decode erasure scope: %v", err)
+		e.T.Fatalf("decode erasure scope: %v", err)
 	}
 }
 
 // detail reads the Client as the Owner.
 func (e *eraseEnv) detail() client.DetailResponse {
-	e.t.Helper()
-	return reqtest.Expect[client.DetailResponse](e.t, http.MethodGet, e.srv.URL+"/api/practices/"+e.Practice.ID+"/clients/"+e.ClientID, http.StatusOK, e.signedIn)
+	e.T.Helper()
+	return reqtest.Expect[client.DetailResponse](e.T, http.MethodGet, e.clientURL(e.ClientID, ""), http.StatusOK, e.SignedIn)
 }

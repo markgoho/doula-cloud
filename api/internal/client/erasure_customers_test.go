@@ -1,11 +1,9 @@
 package client_test
 
 import (
-	"net/http"
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -35,17 +33,15 @@ func TestEraseHandler_ReachesEveryCustomerSheEverHad(t *testing.T) {
 	e := newEraseEnv(t)
 
 	// Historical: one Invoice, from before the mapping existed.
-	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_historical", "paid", 100*24*time.Hour)
+	seedInvoicedClient(t, e.DB, e.Practice.ID, e.ClientID, "cus_historical", "paid", 100*24*time.Hour)
 	// Mapped and billed: recorded in both places, so it must not be
 	// deleted twice.
-	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_mapped_and_billed", "paid", 100*24*time.Hour)
-	seedMappedCustomer(t, e.db, e.Practice.ID, e.ClientID, testConnectAccount, "cus_mapped_and_billed", 120*24*time.Hour)
+	seedInvoicedClient(t, e.DB, e.Practice.ID, e.ClientID, "cus_mapped_and_billed", "paid", 100*24*time.Hour)
+	seedMappedCustomer(t, e.DB, e.Practice.ID, e.ClientID, testConnectAccount, "cus_mapped_and_billed", 120*24*time.Hour)
 
-	resp := postErasure(t, e.session, e.srv, e.Practice.ID, e.ClientID)
-	defer func() { _ = resp.Body.Close() }()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
+	e.erase()
 
-	acts := readOutbox(t, e.db, e.ClientID)
+	acts := readOutbox(t, e.DB, e.ClientID)
 	for _, customerID := range []string{"cus_historical", "cus_mapped_and_billed"} {
 		if _, ok := acts["stripe_customer_delete|"+customerID]; !ok {
 			t.Fatalf("no customer-delete row queued for %s: %+v", customerID, acts)
@@ -68,18 +64,12 @@ func TestEraseHandler_ReachesEveryCustomerSheEverHad(t *testing.T) {
 // redactable on a schedule rather than never.
 func TestEraseHandler_MappedCustomerWithNoInvoiceAgesFromItsOwnCreation(t *testing.T) {
 	e := newEraseEnv(t)
-	if _, err := e.db.Admin.ExecContext(t.Context(),
-		`UPDATE practices SET stripe_connect_account_id = $2 WHERE id = $1`, e.Practice.ID, testConnectAccount,
-	); err != nil {
-		t.Fatalf("seed connect account: %v", err)
-	}
-	seedMappedCustomer(t, e.db, e.Practice.ID, e.ClientID, testConnectAccount, "cus_never_billed", 10*24*time.Hour)
+	e.Exec(`UPDATE practices SET stripe_connect_account_id = $2 WHERE id = $1`, e.Practice.ID, testConnectAccount)
+	seedMappedCustomer(t, e.DB, e.Practice.ID, e.ClientID, testConnectAccount, "cus_never_billed", 10*24*time.Hour)
 
-	resp := postErasure(t, e.session, e.srv, e.Practice.ID, e.ClientID)
-	defer func() { _ = resp.Body.Close() }()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
+	e.erase()
 
-	acts := readOutbox(t, e.db, e.ClientID)
+	acts := readOutbox(t, e.DB, e.ClientID)
 	redact, ok := acts["stripe_redaction_job|cus_never_billed"]
 	if !ok {
 		t.Fatalf("no redaction row queued: %+v", acts)
