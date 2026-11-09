@@ -1,12 +1,12 @@
 package practicedeletion_test
 
 import (
-	"database/sql"
 	"encoding/json/v2"
 	"testing"
 	"time"
 
 	"doula-cloud/api/internal/mail"
+	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/practicedeletion"
 	"doula-cloud/api/internal/testdb"
 )
@@ -56,29 +56,13 @@ func markPendingDeletion(t *testing.T, db *testdb.DB, practiceID string, finaliz
 
 func runWorker(t *testing.T, db *testdb.DB, w practicedeletion.Worker) {
 	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
-		t.Fatalf("set trusted session var: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.SessionVar{Name: outbox.NotificationDoor, Value: "true"})
 	if err := w.ProcessPending(t.Context(), tx); err != nil {
 		t.Fatalf("ProcessPending: %v", err)
 	}
 	if err := tx.Commit(); err != nil {
 		t.Fatalf("commit: %v", err)
 	}
-}
-
-func outboxRowStatus(t *testing.T, db *testdb.DB, id string) string {
-	t.Helper()
-	var status string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT status FROM practice_deletion_outbox WHERE id = $1`, id).Scan(&status); err != nil {
-		t.Fatalf("query outbox row: %v", err)
-	}
-	return status
 }
 
 func seedOwnerEmail(t *testing.T, db *testdb.DB, staffID, email string) {
@@ -88,20 +72,50 @@ func seedOwnerEmail(t *testing.T, db *testdb.DB, staffID, email string) {
 	}
 }
 
-func TestWorker_ReminderMailsCurrentOwners(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "owner-reminder-mails", []string{ownerRole}, "employee")
-	seedOwnerEmail(t, db, staffID, "owner@example.test")
-	finalizeAt := time.Now().Add(7 * 24 * time.Hour)
-	markPendingDeletion(t, db, practiceID, finalizeAt)
-	rowID := seedOutboxRow(t, db, practiceID, "reminder", time.Now().Add(-time.Minute))
-
-	sender := &mail.FakeSender{}
+// runAct seeds a due act row for practiceID, runs the worker once and
+// requires the row to be settled as sent, whether or not it acted.
+func runAct(t *testing.T, db *testdb.DB, practiceID, act string, sender mail.Sender) {
+	t.Helper()
+	rowID := seedOutboxRow(t, db, practiceID, act, time.Now().Add(-time.Minute))
 	runWorker(t, db, newTestWorker(sender))
-
-	if status := outboxRowStatus(t, db, rowID); status != statusSent {
+	if status := testdb.Scalar[string](t, db.Admin, `SELECT status FROM practice_deletion_outbox WHERE id = $1`, rowID); status != statusSent {
 		t.Fatalf("status = %s, want sent", status)
 	}
+}
+
+// newOwnedPractice is a Practice with one Owner at the given identity.
+func newOwnedPractice(t *testing.T, db *testdb.DB, uid string) (practiceID, staffID string) {
+	t.Helper()
+	return testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+}
+
+func seedClient(t *testing.T, db *testdb.DB, practiceID string) string {
+	t.Helper()
+	return testdb.Scalar[string](t, db.Admin,
+		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, 'Ada', 'ada@example.test') RETURNING id`, practiceID)
+}
+
+func practiceDeletedAt(t *testing.T, db *testdb.DB, practiceID string) *time.Time {
+	t.Helper()
+	return testdb.Scalar[*time.Time](t, db.Admin, `SELECT deleted_at FROM practices WHERE id = $1`, practiceID)
+}
+
+func finalizedActivity(t *testing.T, db *testdb.DB, column, practiceID string) string {
+	t.Helper()
+	return testdb.Scalar[string](t, db.Admin,
+		`SELECT `+column+` FROM activity WHERE subject_kind = 'practice' AND subject_id = $1 AND action = 'practice_deletion_finalized'`,
+		practiceID)
+}
+
+func TestWorker_ReminderMailsCurrentOwners(t *testing.T) {
+	db := testdb.New(t)
+	practiceID, staffID := newOwnedPractice(t, db, "owner-reminder-mails")
+	seedOwnerEmail(t, db, staffID, "owner@example.test")
+	markPendingDeletion(t, db, practiceID, time.Now().Add(7*24*time.Hour))
+
+	sender := &mail.FakeSender{}
+	runAct(t, db, practiceID, "reminder", sender)
+
 	sent := sender.Sent()
 	if len(sent) != 1 {
 		t.Fatalf("mails sent = %d, want 1", len(sent))
@@ -113,19 +127,14 @@ func TestWorker_ReminderMailsCurrentOwners(t *testing.T) {
 
 func TestWorker_ReminderSkipsWhenNoLongerPending(t *testing.T) {
 	db := testdb.New(t)
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "owner-reminder-restored", []string{ownerRole}, "employee")
+	practiceID, staffID := newOwnedPractice(t, db, "owner-reminder-restored")
 	seedOwnerEmail(t, db, staffID, "owner@example.test")
 	// No markPendingDeletion call: the Practice was restored (or never
 	// pending), so deletion_requested_at is null -- the skip-at-send
 	// recheck's own condition.
-	rowID := seedOutboxRow(t, db, practiceID, "reminder", time.Now().Add(-time.Minute))
-
 	sender := &mail.FakeSender{}
-	runWorker(t, db, newTestWorker(sender))
+	runAct(t, db, practiceID, "reminder", sender)
 
-	if status := outboxRowStatus(t, db, rowID); status != statusSent {
-		t.Fatalf("status = %s, want sent", status)
-	}
 	if len(sender.Sent()) != 0 {
 		t.Fatalf("mails sent = %d, want 0", len(sender.Sent()))
 	}
@@ -133,66 +142,33 @@ func TestWorker_ReminderSkipsWhenNoLongerPending(t *testing.T) {
 
 func TestWorker_FinalizeErasesClientsForfeitsCreditsAndStampsDeletedAt(t *testing.T) {
 	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "owner-finalize-happy", []string{ownerRole}, "employee")
+	practiceID, _ := newOwnedPractice(t, db, "owner-finalize-happy")
 	markPendingDeletion(t, db, practiceID, time.Now())
-
-	var clientID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, 'Ada', 'ada@example.test') RETURNING id`,
-		practiceID,
-	).Scan(&clientID); err != nil {
-		t.Fatalf("seed client: %v", err)
-	}
+	clientID := seedClient(t, db, practiceID)
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO credit_ledger (practice_id, origin, quantity) VALUES ($1, 'signup_bonus', 3)`, practiceID,
 	); err != nil {
 		t.Fatalf("seed ledger: %v", err)
 	}
 
-	rowID := seedOutboxRow(t, db, practiceID, "finalize", time.Now().Add(-time.Minute))
-	runWorker(t, db, newTestWorker(&mail.FakeSender{}))
+	runAct(t, db, practiceID, "finalize", &mail.FakeSender{})
 
-	if status := outboxRowStatus(t, db, rowID); status != statusSent {
-		t.Fatalf("status = %s, want sent", status)
-	}
-
-	var erasedAt sql.NullTime
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT erased_at FROM clients WHERE id = $1`, clientID).Scan(&erasedAt); err != nil {
-		t.Fatalf("query client: %v", err)
-	}
-	if !erasedAt.Valid {
+	if erasedAt := testdb.Scalar[*time.Time](t, db.Admin, `SELECT erased_at FROM clients WHERE id = $1`, clientID); erasedAt == nil {
 		t.Fatal("client not erased by finalization")
 	}
-
-	var deletedAt sql.NullTime
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT deleted_at FROM practices WHERE id = $1`, practiceID).Scan(&deletedAt); err != nil {
-		t.Fatalf("query practice: %v", err)
-	}
-	if !deletedAt.Valid {
+	if practiceDeletedAt(t, db, practiceID) == nil {
 		t.Fatal("practice not stamped deleted_at")
 	}
-
-	var balance int
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT COALESCE(SUM(quantity), 0) FROM credit_ledger WHERE practice_id = $1`, practiceID).Scan(&balance); err != nil {
-		t.Fatalf("sum ledger: %v", err)
-	}
-	if balance != 0 {
+	if balance := testdb.Scalar[int](t, db.Admin, `SELECT COALESCE(SUM(quantity), 0) FROM credit_ledger WHERE practice_id = $1`, practiceID); balance != 0 {
 		t.Fatalf("balance after forfeiture = %d, want 0", balance)
 	}
-
-	var action, actorKind string
-	var actorStaffID sql.NullString
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT action, actor_kind::text, actor_staff_id FROM activity WHERE subject_kind = 'practice' AND subject_id = $1 AND action = 'practice_deletion_finalized'`,
-		practiceID,
-	).Scan(&action, &actorKind, &actorStaffID); err != nil {
-		t.Fatalf("query activity: %v", err)
-	}
-	if actorKind != "system" {
+	if actorKind := finalizedActivity(t, db, "actor_kind::text", practiceID); actorKind != "system" {
 		t.Fatalf("actor_kind = %s, want system", actorKind)
 	}
-	if actorStaffID.Valid {
-		t.Fatalf("actor_staff_id = %v, want null for a system actor", actorStaffID.String)
+	if actorStaffID := testdb.Scalar[*string](t, db.Admin,
+		`SELECT actor_staff_id FROM activity WHERE subject_kind = 'practice' AND subject_id = $1 AND action = 'practice_deletion_finalized'`,
+		practiceID); actorStaffID != nil {
+		t.Fatalf("actor_staff_id = %v, want null for a system actor", *actorStaffID)
 	}
 }
 
@@ -205,16 +181,9 @@ func TestWorker_FinalizeErasesClientsForfeitsCreditsAndStampsDeletedAt(t *testin
 func TestWorker_FinalizeDestroysClientFeedbackAndLeavesStaffFeedback(t *testing.T) {
 	db := testdb.New(t)
 	const portalUID = "portal-finalize-feedback"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "owner-finalize-feedback", []string{ownerRole}, "employee")
+	practiceID, staffID := newOwnedPractice(t, db, "owner-finalize-feedback")
 	markPendingDeletion(t, db, practiceID, time.Now())
-
-	var clientID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, 'Ada', 'ada@example.test') RETURNING id`,
-		practiceID,
-	).Scan(&clientID); err != nil {
-		t.Fatalf("seed client: %v", err)
-	}
+	clientID := seedClient(t, db, practiceID)
 	testdb.SeedPortalAccount(t, db, portalUID, portalUID+"@example.test")
 	testdb.AttachPortalUser(t, db, portalUID, clientID)
 
@@ -236,44 +205,16 @@ func TestWorker_FinalizeDestroysClientFeedbackAndLeavesStaffFeedback(t *testing.
 		t.Fatalf("seed staff feedback: %v", err)
 	}
 
-	rowID := seedOutboxRow(t, db, practiceID, "finalize", time.Now().Add(-time.Minute))
-	runWorker(t, db, newTestWorker(&mail.FakeSender{}))
+	runAct(t, db, practiceID, "finalize", &mail.FakeSender{})
 
-	if status := outboxRowStatus(t, db, rowID); status != statusSent {
-		t.Fatalf("status = %s, want sent", status)
+	if n := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM feedback WHERE portal_account IS NOT NULL`); n != 0 {
+		t.Fatalf("the Client's pieces of Feedback = %d, want 0 -- the Deletion reaches them through her Erasure", n)
 	}
-
-	var clientPieces, staffPieces int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FILTER (WHERE portal_account IS NOT NULL), count(*) FILTER (WHERE staff_id = $1 AND issue_number = 63)
-		   FROM feedback`, staffID,
-	).Scan(&clientPieces, &staffPieces); err != nil {
-		t.Fatalf("count feedback: %v", err)
+	if n := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM feedback WHERE staff_id = $1 AND issue_number = 63`, staffID); n != 1 {
+		t.Fatalf("the Staff member's pieces of Feedback = %d, want 1 -- a Practice's Deletion leaves Staff Feedback in place", n)
 	}
-	if clientPieces != 0 {
-		t.Fatalf("the Client's pieces of Feedback = %d, want 0 -- the Deletion reaches them through her Erasure", clientPieces)
-	}
-	if staffPieces != 1 {
-		t.Fatalf("the Staff member's pieces of Feedback = %d, want 1 -- a Practice's Deletion leaves Staff Feedback in place", staffPieces)
-	}
-
-	var closes []int64
-	rows, err := db.Admin.QueryContext(t.Context(),
+	closes := testdb.Column[int64](t, db.Admin,
 		`SELECT issue_number FROM feedback_issue_outbox WHERE act = 'close_erased' AND status = 'pending' ORDER BY issue_number`)
-	if err != nil {
-		t.Fatalf("read close jobs: %v", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var n int64
-		if err := rows.Scan(&n); err != nil {
-			t.Fatalf("scan close job: %v", err)
-		}
-		closes = append(closes, n)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate close jobs: %v", err)
-	}
 	if len(closes) != 2 || closes[0] != 61 || closes[1] != 62 {
 		t.Fatalf("close jobs = %v, want [61 62] -- one per Client piece, none for the Staff piece", closes)
 	}
@@ -281,56 +222,32 @@ func TestWorker_FinalizeDestroysClientFeedbackAndLeavesStaffFeedback(t *testing.
 
 func TestWorker_FinalizeSkipsWhenNoLongerPending(t *testing.T) {
 	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "owner-finalize-restored", []string{ownerRole}, "employee")
+	practiceID, _ := newOwnedPractice(t, db, "owner-finalize-restored")
 	// No markPendingDeletion call: restored before finalization ran.
-	rowID := seedOutboxRow(t, db, practiceID, "finalize", time.Now().Add(-time.Minute))
+	runAct(t, db, practiceID, "finalize", &mail.FakeSender{})
 
-	runWorker(t, db, newTestWorker(&mail.FakeSender{}))
-
-	if status := outboxRowStatus(t, db, rowID); status != statusSent {
-		t.Fatalf("status = %s, want sent", status)
-	}
-	var deletedAt sql.NullTime
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT deleted_at FROM practices WHERE id = $1`, practiceID).Scan(&deletedAt); err != nil {
-		t.Fatalf("query practice: %v", err)
-	}
-	if deletedAt.Valid {
+	if practiceDeletedAt(t, db, practiceID) != nil {
 		t.Fatal("deleted_at set despite the Practice no longer being pending")
 	}
 }
 
 func TestWorker_FinalizeDoesNotDoubleEraseAnAlreadyErasedClient(t *testing.T) {
 	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "owner-finalize-already-erased", []string{ownerRole}, "employee")
+	practiceID, _ := newOwnedPractice(t, db, "owner-finalize-already-erased")
 	markPendingDeletion(t, db, practiceID, time.Now())
-
-	var clientID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (practice_id, given_name, erased_at) VALUES ($1, 'Erased Client', now()) RETURNING id`,
-		practiceID,
-	).Scan(&clientID); err != nil {
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO clients (practice_id, given_name, erased_at) VALUES ($1, 'Erased Client', now())`, practiceID,
+	); err != nil {
 		t.Fatalf("seed already-erased client: %v", err)
 	}
 
-	rowID := seedOutboxRow(t, db, practiceID, "finalize", time.Now().Add(-time.Minute))
-	runWorker(t, db, newTestWorker(&mail.FakeSender{}))
+	runAct(t, db, practiceID, "finalize", &mail.FakeSender{})
 
-	if status := outboxRowStatus(t, db, rowID); status != statusSent {
-		t.Fatalf("status = %s, want sent", status)
-	}
-
-	var diff []byte
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT diff FROM activity WHERE subject_kind = 'practice' AND subject_id = $1 AND action = 'practice_deletion_finalized'`,
-		practiceID,
-	).Scan(&diff); err != nil {
-		t.Fatalf("query activity: %v", err)
-	}
 	var scope struct {
 		ClientsErased    int `json:"clientsErased"`
 		CreditsForfeited int `json:"creditsForfeited"`
 	}
-	if err := json.Unmarshal(diff, &scope); err != nil {
+	if err := json.Unmarshal([]byte(finalizedActivity(t, db, "diff::text", practiceID)), &scope); err != nil {
 		t.Fatalf("unmarshal diff: %v", err)
 	}
 	if scope.ClientsErased != 0 {

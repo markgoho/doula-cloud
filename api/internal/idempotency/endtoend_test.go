@@ -2,7 +2,6 @@ package idempotency_test
 
 import (
 	"bytes"
-	"encoding/json/v2"
 	"errors"
 	"mime/multipart"
 	"net/http"
@@ -16,80 +15,113 @@ import (
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/push"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
-// TestEndToEnd_PortalInviteReplaysOnRetry wires portalinvite.InviteHandler
-// behind staffauth.Middleware(...)(idempotency.Wrap(...)) exactly as
-// main.go does, proving the helper is genuinely usable against a real
-// mutating endpoint (#126's AC), not just the synthetic handler in
-// wrap_test.go.
-func TestEndToEnd_PortalInviteReplaysOnRetry(t *testing.T) {
+// endToEnd is a Practice with one Doula signed in and a mutating handler
+// mounted behind staffauth.Middleware(...)(idempotency.Wrap(...)) exactly
+// as main.go does, so a test proves the helper is usable against a real
+// endpoint and not only the synthetic handler in wrap_test.go.
+type endToEnd struct {
+	DB           *testdb.DB
+	PracticeID   string
+	EngagementID string
+	ClientID     string
+	Session      string
+	base         string
+}
+
+// newEndToEnd mounts handler at pattern, which may name {practiceId} and
+// {engagementId}. withEngagement seeds a Client and an Engagement for the
+// Practice.
+func newEndToEnd(t *testing.T, uid, pattern string, handler http.Handler, withEngagement bool) *endToEnd {
+	t.Helper()
 	db := testdb.New(t)
-	const identityUID = "e2e-portal-invite-staff"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "E2E Client", "e2e@example.com")
-
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	e := &endToEnd{DB: db, PracticeID: practiceID, Session: authntest.SeedSession(t, db.App, uid)}
+	if withEngagement {
+		e.ClientID, e.EngagementID = testdb.SeedNamedEngagement(t, db, practiceID, "E2E Client", uid+"@example.com")
+	}
 	mux := http.NewServeMux()
-	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/portal-invite",
-		staffauth.Middleware(db.App)(idempotency.Wrap(portalinvite.InviteHandler(&tasknudge.FakeEnqueuer{}))))
+	mux.Handle("POST "+pattern, staffauth.Middleware(db.App)(idempotency.Wrap(handler)))
 	srv := httptest.NewServer(mux)
-	defer srv.Close()
-	session := authntest.SeedSession(t, db.App, identityUID)
+	t.Cleanup(srv.Close)
+	e.base = srv.URL + "/practices/" + practiceID
+	return e
+}
 
-	postInvite := func(key string) *http.Response {
+// post answers 201 or fails, so a test reads only what the response held.
+func post[T any](t *testing.T, e *endToEnd, path, key string, opts ...reqtest.Option) T {
+	t.Helper()
+	return postExpecting[T](t, e, path, key, http.StatusCreated, opts...)
+}
+
+func postExpecting[T any](t *testing.T, e *endToEnd, path, key string, want int, opts ...reqtest.Option) T {
+	t.Helper()
+	opts = append(opts, reqtest.Session(e.Session), reqtest.HeaderIf(key != "", "Idempotency-Key", key))
+	return reqtest.Expect[T](t, http.MethodPost, e.base+path, want, opts...)
+}
+
+// requireRetryReplays calls post with a key, again with the same key and
+// once with none. The retry must answer what the first call did and run
+// nothing a second time; the call with no key must run the handler again,
+// which is what tells a real replay from a handler that happens to run
+// once. Each counter reads one side effect: 1 after the first call, 1
+// after the retry, 2 after the call with no key. It returns the first
+// response for any further assertion on it.
+func requireRetryReplays[T any](t *testing.T, post func(key string) T, id func(T) string, counters ...func() int) T {
+	t.Helper()
+	requireCounts := func(stage string, want int) {
 		t.Helper()
-		url := srv.URL + "/practices/" + practiceID + "/engagements/" + engagementID + "/portal-invite"
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, nil)
-		if err != nil {
-			t.Fatalf("build request: %v", err)
+		for _, count := range counters {
+			if got := count(); got != want {
+				t.Fatalf("side effects %s = %d, want %d", stage, got, want)
+			}
 		}
-		authntest.AddSessionCookie(req, session)
-		if key != "" {
-			req.Header.Set("Idempotency-Key", key)
-		}
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("request: %v", err)
-		}
-		return resp
-	}
-	decode := func(resp *http.Response) portalinvite.InviteResponse {
-		t.Helper()
-		var out portalinvite.InviteResponse
-		if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-			t.Fatalf("decode response: %v", err)
-		}
-		return out
 	}
 
-	first := postInvite("portal-invite-retry-key")
-	defer first.Body.Close()
-	if first.StatusCode != http.StatusCreated {
-		t.Fatalf("first call status = %d, want %d", first.StatusCode, http.StatusCreated)
+	first := post("retry-key")
+	requireCounts("after the first call", 1)
+	retried := post("retry-key")
+	if id(retried) != id(first) {
+		t.Fatalf("retried response = %+v, want identical stored response %+v -- business logic must not re-run on replay", retried, first)
 	}
-	firstOut := decode(first)
+	requireCounts("after the retry", 1)
+	noKey := post("")
+	if id(noKey) == id(first) {
+		t.Fatalf("call with no Idempotency-Key returned the same response as the earlier call -- expected the handler to re-run")
+	}
+	requireCounts("after the call with no key", 2)
+	return first
+}
 
-	retried := postInvite("portal-invite-retry-key")
-	defer retried.Body.Close()
-	if retried.StatusCode != http.StatusCreated {
-		t.Fatalf("retried call status = %d, want %d", retried.StatusCode, http.StatusCreated)
-	}
-	retriedOut := decode(retried)
+var errCloudTasksDown = errors.New("cloud tasks unavailable")
 
-	if retriedOut.InviteToken != firstOut.InviteToken {
-		t.Fatalf("retried inviteToken = %q, want identical stored token %q -- business logic must not re-run on replay",
-			retriedOut.InviteToken, firstOut.InviteToken)
+// postInvite posts the Engagement's portal-invite. A call with no key
+// re-runs the handler against the invite that call already made, which
+// answers 200 and rotates the token, where the first call answers 201.
+func postInvite(t *testing.T, e *endToEnd) func(key string) portalinvite.InviteResponse {
+	return func(key string) portalinvite.InviteResponse {
+		want := http.StatusCreated
+		if key == "" {
+			want = http.StatusOK
+		}
+		return postExpecting[portalinvite.InviteResponse](t, e, "/engagements/"+e.EngagementID+"/portal-invite", key, want)
 	}
+}
 
-	noKey := postInvite("")
-	defer noKey.Body.Close()
-	noKeyOut := decode(noKey)
-	if noKeyOut.InviteToken == firstOut.InviteToken {
-		t.Fatalf("call with no Idempotency-Key returned the same token as the earlier call -- expected the handler to re-run and rotate it")
-	}
+func tokenOf(r portalinvite.InviteResponse) string { return r.InviteToken }
+
+// TestEndToEnd_PortalInviteReplaysOnRetry proves a retried portal-invite
+// with the same Idempotency-Key returns the stored token (#126's AC),
+// and that a call with no key rotates it.
+func TestEndToEnd_PortalInviteReplaysOnRetry(t *testing.T) {
+	e := newEndToEnd(t, "e2e-portal-invite-staff", "/practices/{practiceId}/engagements/{engagementId}/portal-invite",
+		portalinvite.InviteHandler(&tasknudge.FakeEnqueuer{}), true)
+	requireRetryReplays(t, postInvite(t, e), tokenOf)
 }
 
 // TestEndToEnd_PortalInviteReplaysOnRetryEvenWhenNudgeEnqueueFails is
@@ -101,274 +133,53 @@ func TestEndToEnd_PortalInviteReplaysOnRetry(t *testing.T) {
 // idempotency.Wrap has already cached the 201 this test asserts survives
 // unchanged.
 func TestEndToEnd_PortalInviteReplaysOnRetryEvenWhenNudgeEnqueueFails(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "e2e-portal-invite-nudge-fail-staff"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "E2E Client", "e2e-nudge-fail@example.com")
-
-	failingEnq := &tasknudge.FakeEnqueuer{Err: errors.New("cloud tasks unavailable")}
-	mux := http.NewServeMux()
-	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/portal-invite",
-		staffauth.Middleware(db.App)(idempotency.Wrap(portalinvite.InviteHandler(failingEnq))))
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-	session := authntest.SeedSession(t, db.App, identityUID)
-
-	postInvite := func(key string) *http.Response {
-		t.Helper()
-		url := srv.URL + "/practices/" + practiceID + "/engagements/" + engagementID + "/portal-invite"
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, nil)
-		if err != nil {
-			t.Fatalf("build request: %v", err)
-		}
-		authntest.AddSessionCookie(req, session)
-		if key != "" {
-			req.Header.Set("Idempotency-Key", key)
-		}
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("request: %v", err)
-		}
-		return resp
-	}
-	decode := func(resp *http.Response) portalinvite.InviteResponse {
-		t.Helper()
-		var out portalinvite.InviteResponse
-		if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-			t.Fatalf("decode response: %v", err)
-		}
-		return out
-	}
-
-	first := postInvite("portal-invite-nudge-fail-retry-key")
-	defer first.Body.Close()
-	if first.StatusCode != http.StatusCreated {
-		t.Fatalf("first call status = %d, want %d -- an enqueue failure must never surface as a non-2xx", first.StatusCode, http.StatusCreated)
-	}
-	firstOut := decode(first)
-
-	retried := postInvite("portal-invite-nudge-fail-retry-key")
-	defer retried.Body.Close()
-	if retried.StatusCode != http.StatusCreated {
-		t.Fatalf("retried call status = %d, want %d", retried.StatusCode, http.StatusCreated)
-	}
-	retriedOut := decode(retried)
-	if retriedOut.InviteToken != firstOut.InviteToken {
-		t.Fatalf("retried inviteToken = %q, want identical cached token %q -- an enqueue failure must not have produced a 500 that skipped caching",
-			retriedOut.InviteToken, firstOut.InviteToken)
-	}
+	e := newEndToEnd(t, "e2e-portal-invite-nudge-fail-staff", "/practices/{practiceId}/engagements/{engagementId}/portal-invite",
+		portalinvite.InviteHandler(&tasknudge.FakeEnqueuer{Err: errCloudTasksDown}), true)
+	requireRetryReplays(t, postInvite(t, e), tokenOf)
 }
 
 // TestEndToEnd_CreateClientNoDuplicateRowOnRetry wires client.CreateHandler
-// behind staffauth.Middleware(...)(idempotency.Wrap(...)) exactly as main.go
-// does, proving a retried create-Client request with the same
-// Idempotency-Key returns the identical Client rather than a second row.
-// #397 split the old combined create-Client-and-Engagement handler (#128) --
-// saving a Client is free now, so there is no credit to double-spend here;
-// that risk moves to the Engagement Request approval endpoint.
+// behind the same composition, proving a retried create-Client request
+// with the same Idempotency-Key returns the identical Client rather than
+// a second row. #397 split the old combined create-Client-and-Engagement
+// handler (#128) -- saving a Client is free now, so there is no credit to
+// double-spend here; that risk moves to the Engagement Request approval
+// endpoint.
 func TestEndToEnd_CreateClientNoDuplicateRowOnRetry(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "e2e-create-client-staff"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-
-	mux := http.NewServeMux()
-	mux.Handle("POST /practices/{practiceId}/clients",
-		staffauth.Middleware(db.App)(idempotency.Wrap(client.CreateHandler())))
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-	session := authntest.SeedSession(t, db.App, identityUID)
-
-	postClient := func(key string) *http.Response {
-		t.Helper()
+	e := newEndToEnd(t, "e2e-create-client-staff", "/practices/{practiceId}/clients", client.CreateHandler(), false)
+	requireRetryReplays(t, func(key string) client.Record {
 		// Override: true -- this test is about idempotency replay, not the
 		// match-refusal path (covered in the client package's own tests), and
-		// without it the no-key retry below would collide with the first
-		// call's identical GivenName and 409 instead of creating its own row.
-		body, err := json.Marshal(client.CreateRequest{GivenName: "E2E Client", Override: true})
-		if err != nil {
-			t.Fatalf("marshal body: %v", err)
-		}
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/practices/"+practiceID+"/clients", bytes.NewReader(body))
-		if err != nil {
-			t.Fatalf("build request: %v", err)
-		}
-		authntest.AddSessionCookie(req, session)
-		if key != "" {
-			req.Header.Set("Idempotency-Key", key)
-		}
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("request: %v", err)
-		}
-		return resp
-	}
-	decode := func(resp *http.Response) client.Record {
-		t.Helper()
-		var out client.Record
-		if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-			t.Fatalf("decode response: %v", err)
-		}
-		return out
-	}
-	clientCount := func() int {
-		t.Helper()
-		var n int
-		if err := db.Admin.QueryRowContext(t.Context(),
-			`SELECT count(*) FROM clients WHERE practice_id = $1`,
-			practiceID,
-		).Scan(&n); err != nil {
-			t.Fatalf("count client rows: %v", err)
-		}
-		return n
-	}
-
-	first := postClient("create-client-retry-key")
-	defer first.Body.Close()
-	if first.StatusCode != http.StatusCreated {
-		t.Fatalf("first call status = %d, want %d", first.StatusCode, http.StatusCreated)
-	}
-	firstOut := decode(first)
-	if clientCount() != 1 {
-		t.Fatalf("client count after first call = %d, want 1", clientCount())
-	}
-
-	retried := postClient("create-client-retry-key")
-	defer retried.Body.Close()
-	if retried.StatusCode != http.StatusCreated {
-		t.Fatalf("retried call status = %d, want %d", retried.StatusCode, http.StatusCreated)
-	}
-	retriedOut := decode(retried)
-	if retriedOut.ID != firstOut.ID {
-		t.Fatalf("retried response = %+v, want identical stored response %+v -- business logic must not re-run on replay", retriedOut, firstOut)
-	}
-	if n := clientCount(); n != 1 {
-		t.Fatalf("client count after retry = %d, want 1 (no second row inserted)", n)
-	}
-
-	noKey := postClient("")
-	defer noKey.Body.Close()
-	if noKey.StatusCode != http.StatusCreated {
-		t.Fatalf("no-key call status = %d, want %d", noKey.StatusCode, http.StatusCreated)
-	}
-	noKeyOut := decode(noKey)
-	if noKeyOut.ID == firstOut.ID {
-		t.Fatalf("call with no Idempotency-Key returned the same Client as the earlier call -- expected the handler to re-run")
-	}
-	if n := clientCount(); n != 2 {
-		t.Fatalf("client count after no-key call = %d, want 2 (second call inserts its own row)", n)
-	}
+		// without it the no-key retry would collide with the first call's
+		// identical GivenName and 409 instead of creating its own row.
+		return post[client.Record](t, e, "/clients", key, reqtest.JSON(client.CreateRequest{GivenName: "E2E Client", Override: true}))
+	}, func(r client.Record) string { return r.ID },
+		func() int {
+			return testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM clients WHERE practice_id = $1`, e.PracticeID)
+		})
 }
 
 // TestEndToEnd_MessageCreateNoDuplicateRowOnRetry wires message.CreateHandler
-// behind staffauth.Middleware(...)(idempotency.Wrap(...)) exactly as main.go
-// does, proving a retried create-Message request with the same
-// Idempotency-Key returns the identical stored Message and inserts exactly
-// one messages row -- the concrete duplicate-post risk #129 exists to
-// close.
+// behind the same composition, proving a retried create-Message request with
+// the same Idempotency-Key returns the identical stored Message, inserts
+// exactly one messages row and notifies the Client once -- the concrete
+// duplicate-post risk #129 exists to close.
 func TestEndToEnd_MessageCreateNoDuplicateRowOnRetry(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "e2e-message-create-staff"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "E2E Client", "e2e-message@example.com")
-	testdb.SeedPushSubscription(t, db, "client", clientID, "https://push.example.com/message-create-retry")
-
 	pusher := push.NewFakePusher()
-	mux := http.NewServeMux()
-	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/messages",
-		staffauth.Middleware(db.App)(
-			idempotency.Wrap(message.CreateHandler(objectstore.NewMemoryStore(), pusher))))
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-	session := authntest.SeedSession(t, db.App, identityUID)
+	e := newEndToEnd(t, "e2e-message-create-staff", "/practices/{practiceId}/engagements/{engagementId}/messages",
+		message.CreateHandler(objectstore.NewMemoryStore(), pusher), true)
+	testdb.SeedPushSubscription(t, e.DB, "client", e.ClientID, "https://push.example.com/message-create-retry")
 
-	postMessage := func(key string) *http.Response {
-		t.Helper()
-		body, err := json.Marshal(message.CreateRequest{Body: "hello from e2e"})
-		if err != nil {
-			t.Fatalf("marshal body: %v", err)
-		}
-		url := srv.URL + "/practices/" + practiceID + "/engagements/" + engagementID + "/messages"
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, bytes.NewReader(body))
-		if err != nil {
-			t.Fatalf("build request: %v", err)
-		}
-		authntest.AddSessionCookie(req, session)
-		req.Header.Set("Content-Type", "application/json")
-		if key != "" {
-			req.Header.Set("Idempotency-Key", key)
-		}
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("request: %v", err)
-		}
-		return resp
-	}
-	decode := func(resp *http.Response) message.Message {
-		t.Helper()
-		var out message.Message
-		if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-			t.Fatalf("decode response: %v", err)
-		}
-		return out
-	}
-	messageCount := func() int {
-		t.Helper()
-		var n int
-		if err := db.Admin.QueryRowContext(t.Context(),
-			`SELECT count(*) FROM messages WHERE engagement_id = $1`,
-			engagementID,
-		).Scan(&n); err != nil {
-			t.Fatalf("count messages rows: %v", err)
-		}
-		return n
-	}
-
-	first := postMessage("message-create-retry-key")
-	defer first.Body.Close()
-	if first.StatusCode != http.StatusCreated {
-		t.Fatalf("first call status = %d, want %d", first.StatusCode, http.StatusCreated)
-	}
-	firstOut := decode(first)
-	if firstOut.SenderID == clientID {
-		t.Fatalf("firstOut.SenderID = %q, want the calling Staff's id, not the seeded Client's -- staff-side create must not stamp the Client identity", firstOut.SenderID)
-	}
-	if messageCount() != 1 {
-		t.Fatalf("message count after first call = %d, want 1", messageCount())
-	}
-	if n := len(pusher.Calls()); n != 1 {
-		t.Fatalf("push calls after first call = %d, want 1", n)
-	}
-
-	retried := postMessage("message-create-retry-key")
-	defer retried.Body.Close()
-	if retried.StatusCode != http.StatusCreated {
-		t.Fatalf("retried call status = %d, want %d", retried.StatusCode, http.StatusCreated)
-	}
-	retriedOut := decode(retried)
-	if retriedOut.MessageID != firstOut.MessageID {
-		t.Fatalf("retried response = %+v, want identical stored response %+v -- business logic must not re-run on replay", retriedOut, firstOut)
-	}
-	if n := messageCount(); n != 1 {
-		t.Fatalf("message count after retry = %d, want 1 (no second row inserted)", n)
-	}
-	if n := len(pusher.Calls()); n != 1 {
-		t.Fatalf("push calls after retry = %d, want 1 (replay must not re-notify)", n)
-	}
-
-	noKey := postMessage("")
-	defer noKey.Body.Close()
-	if noKey.StatusCode != http.StatusCreated {
-		t.Fatalf("no-key call status = %d, want %d", noKey.StatusCode, http.StatusCreated)
-	}
-	noKeyOut := decode(noKey)
-	if noKeyOut.MessageID == firstOut.MessageID {
-		t.Fatalf("call with no Idempotency-Key returned the same Message as the earlier call -- expected the handler to re-run")
-	}
-	if n := messageCount(); n != 2 {
-		t.Fatalf("message count after no-key call = %d, want 2 (second call inserts its own row)", n)
-	}
-	if n := len(pusher.Calls()); n != 2 {
-		t.Fatalf("push calls after no-key call = %d, want 2", n)
+	first := requireRetryReplays(t, func(key string) message.Message {
+		return post[message.Message](t, e, "/engagements/"+e.EngagementID+"/messages", key,
+			reqtest.JSON(message.CreateRequest{Body: "hello from e2e"}))
+	}, func(m message.Message) string { return m.MessageID },
+		func() int {
+			return testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM messages WHERE engagement_id = $1`, e.EngagementID)
+		},
+		func() int { return len(pusher.Calls()) })
+	if first.SenderID == e.ClientID {
+		t.Fatalf("first.SenderID = %q, want the calling Staff's id, not the seeded Client's -- staff-side create must not stamp the Client identity", first.SenderID)
 	}
 }
 
@@ -379,99 +190,32 @@ func TestEndToEnd_MessageCreateNoDuplicateRowOnRetry(t *testing.T) {
 // Idempotency-Key must replay the stored response without a second
 // ObjectStore.Put, not just without a second messages row.
 func TestEndToEnd_MessageCreateMultipartNoDuplicateUploadOnRetry(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "e2e-message-multipart-staff"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "E2E Multipart Client", "e2e-multipart@example.com")
-
 	store := newCountingPutStore()
-	mux := http.NewServeMux()
-	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/messages",
-		staffauth.Middleware(db.App)(
-			idempotency.Wrap(message.CreateHandler(store, push.NewFakePusher()))))
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-	session := authntest.SeedSession(t, db.App, identityUID)
+	e := newEndToEnd(t, "e2e-message-multipart-staff", "/practices/{practiceId}/engagements/{engagementId}/messages",
+		message.CreateHandler(store, push.NewFakePusher()), true)
 
-	postMultipart := func(key string) *http.Response {
-		t.Helper()
-		var buf bytes.Buffer
-		writer := multipart.NewWriter(&buf)
-		if err := writer.WriteField("body", "photo attached"); err != nil {
-			t.Fatalf("write body field: %v", err)
-		}
-		part, err := writer.CreateFormFile("attachment", "photo.png")
-		if err != nil {
-			t.Fatalf("create form file: %v", err)
-		}
-		if _, err := part.Write(pngBytes); err != nil {
-			t.Fatalf("write attachment content: %v", err)
-		}
-		if err := writer.Close(); err != nil {
-			t.Fatalf("close multipart writer: %v", err)
-		}
-
-		url := srv.URL + "/practices/" + practiceID + "/engagements/" + engagementID + "/messages"
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, &buf)
-		if err != nil {
-			t.Fatalf("build request: %v", err)
-		}
-		authntest.AddSessionCookie(req, session)
-		req.Header.Set("Content-Type", writer.FormDataContentType())
-		if key != "" {
-			req.Header.Set("Idempotency-Key", key)
-		}
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("request: %v", err)
-		}
-		return resp
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	if err := writer.WriteField("body", "photo attached"); err != nil {
+		t.Fatalf("write body field: %v", err)
 	}
-	decode := func(resp *http.Response) message.Message {
-		t.Helper()
-		var out message.Message
-		if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-			t.Fatalf("decode response: %v", err)
-		}
-		return out
+	part, err := writer.CreateFormFile("attachment", "photo.png")
+	if err != nil {
+		t.Fatalf("create form file: %v", err)
+	}
+	if _, err := part.Write(pngBytes); err != nil {
+		t.Fatalf("write attachment content: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close multipart writer: %v", err)
 	}
 
-	first := postMultipart("message-multipart-retry-key")
-	defer first.Body.Close()
-	if first.StatusCode != http.StatusCreated {
-		t.Fatalf("first call status = %d, want %d", first.StatusCode, http.StatusCreated)
-	}
-	firstOut := decode(first)
-	if firstOut.AttachmentFilename != "photo.png" {
-		t.Fatalf("first response AttachmentFilename = %q, want %q", firstOut.AttachmentFilename, "photo.png")
-	}
-	if n := store.puts.Load(); n != 1 {
-		t.Fatalf("store Put calls after first call = %d, want 1", n)
-	}
-
-	retried := postMultipart("message-multipart-retry-key")
-	defer retried.Body.Close()
-	if retried.StatusCode != http.StatusCreated {
-		t.Fatalf("retried call status = %d, want %d", retried.StatusCode, http.StatusCreated)
-	}
-	retriedOut := decode(retried)
-	if retriedOut.MessageID != firstOut.MessageID {
-		t.Fatalf("retried response = %+v, want identical stored response %+v -- business logic must not re-run on replay", retriedOut, firstOut)
-	}
-	if n := store.puts.Load(); n != 1 {
-		t.Fatalf("store Put calls after retry = %d, want 1 (no second upload)", n)
-	}
-
-	noKey := postMultipart("")
-	defer noKey.Body.Close()
-	if noKey.StatusCode != http.StatusCreated {
-		t.Fatalf("no-key call status = %d, want %d", noKey.StatusCode, http.StatusCreated)
-	}
-	noKeyOut := decode(noKey)
-	if noKeyOut.MessageID == firstOut.MessageID {
-		t.Fatalf("call with no Idempotency-Key returned the same Message as the earlier call -- expected the handler to re-run")
-	}
-	if n := store.puts.Load(); n != 2 {
-		t.Fatalf("store Put calls after no-key call = %d, want 2 (second call uploads its own attachment) -- without this control, the retry assertion above can't distinguish a real replay from the handler simply running once for an unrelated reason", n)
+	first := requireRetryReplays(t, func(key string) message.Message {
+		return post[message.Message](t, e, "/engagements/"+e.EngagementID+"/messages", key,
+			reqtest.Body(writer.FormDataContentType(), buf.Bytes()))
+	}, func(m message.Message) string { return m.MessageID },
+		func() int { return int(store.puts.Load()) })
+	if first.AttachmentFilename != "photo.png" {
+		t.Fatalf("first response AttachmentFilename = %q, want %q", first.AttachmentFilename, "photo.png")
 	}
 }

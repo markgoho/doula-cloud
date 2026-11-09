@@ -78,137 +78,74 @@ func TestBuildRolesLiteral(t *testing.T) {
 
 // --- Insert (00118_feedback.sql) ---------------------------------------
 
-// TestInsert_StaffSenderSucceeds proves the happy path Insert exists for:
-// a Staff sender whose own identity_uid resolves to staff_id, admitted by
-// feedback_sender_insert's current_staff_id() half.
-func TestInsert_StaffSenderSucceeds(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "feedback-insert-staff-uid"
-	staffID := testdb.SeedStaff(t, db, identityUID)
+// TestInsert_AdmitsTheCallersOwnSenderAndRefusesAnotherSender holds
+// feedback_sender_insert to both its branches: a Staff sender whose own
+// identity_uid resolves to staff_id (the current_staff_id() half) and a
+// Portal sender whose portal_account matches app.current_identity_uid
+// directly are admitted, and a row naming a different Staff member or
+// Portal Account than the caller's own is refused.
+func TestInsert_AdmitsTheCallersOwnSenderAndRefusesAnotherSender(t *testing.T) {
+	cases := []struct {
+		name string
+		// seed returns the caller's identity and the sender the row names.
+		seed   func(*testing.T, *testdb.DB) (identity, sender string)
+		portal bool
+		want   bool
+	}{
+		{"own Staff member", func(t *testing.T, db *testdb.DB) (string, string) {
+			return "feedback-insert-staff-uid", testdb.SeedStaff(t, db, "feedback-insert-staff-uid")
+		}, false, true},
+		{"own Portal Account", func(t *testing.T, db *testdb.DB) (string, string) {
+			identifier := portalaccount.NewIdentifier()
+			testdb.SeedPortalAccount(t, db, identifier, identifier+"@example.com")
+			return identifier, identifier
+		}, true, true},
+		{"another Staff member", func(t *testing.T, db *testdb.DB) (string, string) {
+			testdb.SeedStaff(t, db, "feedback-caller-uid")
+			return "feedback-caller-uid", testdb.SeedStaff(t, db, "feedback-foreign-uid")
+		}, false, false},
+		{"another Portal Account", func(t *testing.T, db *testdb.DB) (string, string) {
+			caller, foreign := portalaccount.NewIdentifier(), portalaccount.NewIdentifier()
+			testdb.SeedPortalAccount(t, db, caller, caller+"@example.com")
+			testdb.SeedPortalAccount(t, db, foreign, foreign+"@example.com")
+			return caller, foreign
+		}, true, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := testdb.New(t)
+			identity, sender := tc.seed(t, db)
+			tx := db.BeginAs(t, testdb.Identity(identity))
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_identity_uid', $1, true)`, identityUID); err != nil {
-		t.Fatalf("set identity: %v", err)
-	}
-
-	id := uuid.NewString()
-	row := feedback.Row{
-		ID: id, Kind: feedback.KindIdeaOrRequest, Text: "it would help if",
-		PageURL: testAccountPage, RouteID: testAccountPage, AppBuild: testAppBuild, ScreenWidth: 390,
-		Browser: "Safari 18", StaffID: &staffID, SentAt: time.Now(),
-	}
-	if err := feedback.Insert(t.Context(), tx, row); err != nil {
-		t.Fatalf("Insert: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM feedback WHERE id = $1 AND staff_id = $2`, id, staffID).Scan(&count); err != nil {
-		t.Fatalf("read back: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("rows for the inserted id = %d, want 1", count)
-	}
-}
-
-// TestInsert_PortalSenderSucceeds is the Portal half: portal_account
-// matching app.current_identity_uid directly, feedback_sender_insert's
-// other branch.
-func TestInsert_PortalSenderSucceeds(t *testing.T) {
-	db := testdb.New(t)
-	identifier := portalaccount.NewIdentifier()
-	testdb.SeedPortalAccount(t, db, identifier, identifier+"@example.com")
-
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_identity_uid', $1, true)`, identifier); err != nil {
-		t.Fatalf("set identity: %v", err)
-	}
-
-	id := uuid.NewString()
-	row := feedback.Row{
-		ID: id, Kind: feedback.KindSomethingElse, Text: "",
-		PageURL: testPortalPage, RouteID: testPortalPage, AppBuild: testAppBuild, ScreenWidth: 320,
-		Browser: feedback.UnknownBrowser, PortalAccount: &identifier, SentAt: time.Now(),
-	}
-	if err := feedback.Insert(t.Context(), tx, row); err != nil {
-		t.Fatalf("Insert: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM feedback WHERE id = $1 AND portal_account = $2`, id, identifier).Scan(&count); err != nil {
-		t.Fatalf("read back: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("rows for the inserted id = %d, want 1", count)
-	}
-}
-
-// TestRLS_FeedbackRefusesAForeignStaffSender is feedback_sender_insert's
-// own boundary: a row naming a staff_id other than the caller's own is
-// refused, the same shape TestRLS_WorkStateEventRefusesAForeignActor
-// proves for staff_work_state_events.
-func TestRLS_FeedbackRefusesAForeignStaffSender(t *testing.T) {
-	db := testdb.New(t)
-	testdb.SeedStaff(t, db, "feedback-caller-uid")
-	foreignID := testdb.SeedStaff(t, db, "feedback-foreign-uid")
-
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_identity_uid', $1, true)`, "feedback-caller-uid"); err != nil {
-		t.Fatalf("set identity: %v", err)
-	}
-
-	row := feedback.Row{
-		ID: uuid.NewString(), Kind: feedback.KindNotWorking, Text: "",
-		PageURL: testAccountPage, RouteID: testAccountPage, AppBuild: testAppBuild, ScreenWidth: 390,
-		Browser: feedback.UnknownBrowser, StaffID: &foreignID, SentAt: time.Now(),
-	}
-	if err := feedback.Insert(t.Context(), tx, row); err == nil {
-		t.Fatal("Insert succeeded -- a caller may not send a piece of Feedback naming a different Staff member as sender")
-	}
-}
-
-// TestRLS_FeedbackRefusesAForeignPortalSender is the Portal half of the
-// same proof.
-func TestRLS_FeedbackRefusesAForeignPortalSender(t *testing.T) {
-	db := testdb.New(t)
-	caller := portalaccount.NewIdentifier()
-	foreign := portalaccount.NewIdentifier()
-	testdb.SeedPortalAccount(t, db, caller, caller+"@example.com")
-	testdb.SeedPortalAccount(t, db, foreign, foreign+"@example.com")
-
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_identity_uid', $1, true)`, caller); err != nil {
-		t.Fatalf("set identity: %v", err)
-	}
-
-	row := feedback.Row{
-		ID: uuid.NewString(), Kind: feedback.KindNotWorking, Text: "",
-		PageURL: testPortalPage, RouteID: testPortalPage, AppBuild: testAppBuild, ScreenWidth: 390,
-		Browser: feedback.UnknownBrowser, PortalAccount: &foreign, SentAt: time.Now(),
-	}
-	if err := feedback.Insert(t.Context(), tx, row); err == nil {
-		t.Fatal("Insert succeeded -- a Portal Account may not send a piece of Feedback naming a different one as sender")
+			id := uuid.NewString()
+			row := feedback.Row{
+				ID: id, Kind: feedback.KindIdeaOrRequest, Text: "",
+				PageURL: testAccountPage, RouteID: testAccountPage, AppBuild: testAppBuild, ScreenWidth: 390,
+				Browser: feedback.UnknownBrowser, SentAt: time.Now(),
+			}
+			column := "staff_id"
+			if tc.portal {
+				row.PortalAccount, column = &sender, "portal_account"
+			} else {
+				row.StaffID = &sender
+			}
+			err := feedback.Insert(t.Context(), tx, row)
+			if !tc.want {
+				if err == nil {
+					t.Fatal("Insert succeeded -- a caller may not send a piece of Feedback naming a different sender")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Insert: %v", err)
+			}
+			if err := tx.Commit(); err != nil {
+				t.Fatalf("commit: %v", err)
+			}
+			if count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM feedback WHERE id = $1 AND `+column+`::text = $2`, id, sender); count != 1 {
+				t.Fatalf("rows for the inserted id = %d, want 1", count)
+			}
+		})
 	}
 }
 

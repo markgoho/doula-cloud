@@ -45,14 +45,7 @@ func TestSave_InsertsTheRowAndQueuesItsIssue(t *testing.T) {
 	const identityUID = "feedback-save-staff-uid"
 	staffID := testdb.SeedStaff(t, db, identityUID)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_identity_uid', $1, true)`, identityUID); err != nil {
-		t.Fatalf("set identity: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Identity(identityUID))
 
 	id := uuid.NewString()
 	row := feedback.Row{
@@ -68,11 +61,7 @@ func TestSave_InsertsTheRowAndQueuesItsIssue(t *testing.T) {
 		t.Fatalf("commit: %v", err)
 	}
 
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM feedback WHERE id = $1`, id).Scan(&count); err != nil {
-		t.Fatalf("read back: %v", err)
-	}
-	if count != 1 {
+	if count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM feedback WHERE id = $1`, id); count != 1 {
 		t.Fatalf("feedback rows = %d, want 1", count)
 	}
 }

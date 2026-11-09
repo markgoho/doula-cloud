@@ -18,41 +18,30 @@ import (
 // staffauth.Middleware) and returns its id.
 func seedStaffMember(t *testing.T, db *testdb.DB, identityUID string) (staffID string) {
 	t.Helper()
-	if err := db.Admin.QueryRowContext(t.Context(),
+	return testdb.Scalar[string](t, db.Admin,
 		`INSERT INTO staff (identity_uid, first_name, last_name, email, work_state) VALUES ($1, 'RLS', 'Test Staff', 'rls-staff@example.com', 'NY') RETURNING id`,
-		identityUID,
-	).Scan(&staffID); err != nil {
-		t.Fatalf("seed staff: %v", err)
+		identityUID)
+}
+
+// seedStoredKey inserts one 200 key for a Practice and Staff member
+// through the superuser.
+func seedStoredKey(t *testing.T, db *testdb.DB, key, practiceID, staffID string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO idempotency_keys (key, practice_id, staff_id, status_code, response_body) VALUES ($1, $2, $3, 200, '{}')`,
+		key, practiceID, staffID,
+	); err != nil {
+		t.Fatalf("seed idempotency key %s: %v", key, err)
 	}
-	return staffID
 }
 
 // TestRLS_IdempotencyKeysFailsClosedWithNoSessionSet proves a row is
 // invisible with no app.current_practice_id/app.current_staff_id set.
 func TestRLS_IdempotencyKeysFailsClosedWithNoSessionSet(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "No Session Practice")
-	staffID := seedStaffMember(t, db, "no-session-staff")
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO idempotency_keys (key, practice_id, staff_id, status_code, response_body) VALUES ('k', $1, $2, 200, '{}')`,
-		practiceID, staffID,
-	); err != nil {
-		t.Fatalf("seed idempotency key: %v", err)
-	}
+	seedStoredKey(t, db, "k", testdb.SeedPractice(t, db, "No Session Practice"), seedStaffMember(t, db, "no-session-staff"))
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	var count int
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM idempotency_keys`).Scan(&count); err != nil {
-		t.Fatalf("query idempotency_keys: %v", err)
-	}
-	if count != 0 {
-		t.Fatalf("expected 0 visible rows with no session vars set, got %d", count)
-	}
+	testdb.RequireFailsClosed(t, db, "idempotency_keys")
 }
 
 // TestRLS_IdempotencyKeysDeniesOtherPracticeAndStaff proves the policy
@@ -64,44 +53,15 @@ func TestRLS_IdempotencyKeysDeniesOtherPracticeAndStaff(t *testing.T) {
 	practiceB := testdb.SeedPractice(t, db, "Practice B")
 	staffA := seedStaffMember(t, db, "staff-a")
 	staffB := seedStaffMember(t, db, "staff-b")
+	seedStoredKey(t, db, "k-a-a", practiceA, staffA)
+	seedStoredKey(t, db, "k-a-b", practiceA, staffB)
+	seedStoredKey(t, db, "k-b-a", practiceB, staffA)
 
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO idempotency_keys (key, practice_id, staff_id, status_code, response_body) VALUES
-		 ('k-a-a', $1, $2, 200, '{}'),
-		 ('k-a-b', $1, $3, 200, '{}'),
-		 ('k-b-a', $4, $2, 200, '{}')`,
-		practiceA, staffA, staffB, practiceB,
-	); err != nil {
-		t.Fatalf("seed idempotency keys: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Practice(practiceA), testdb.Staff(staffA))
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config practice: %v", err)
-	}
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_staff_id', $1, true)`, staffA); err != nil {
-		t.Fatalf("set_config staff: %v", err)
-	}
-
-	var count int
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM idempotency_keys`).Scan(&count); err != nil {
-		t.Fatalf("query idempotency_keys: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("expected exactly 1 visible row (own practice+staff), got %d", count)
-	}
-
-	var visibleKey string
-	if err := tx.QueryRowContext(t.Context(), `SELECT key FROM idempotency_keys`).Scan(&visibleKey); err != nil {
-		t.Fatalf("query key: %v", err)
-	}
-	if visibleKey != "k-a-a" {
-		t.Fatalf("visible key = %q, want %q", visibleKey, "k-a-a")
+	keys := testdb.Column[string](t, tx, `SELECT key FROM idempotency_keys`)
+	if len(keys) != 1 || keys[0] != "k-a-a" {
+		t.Fatalf("visible keys = %v, want exactly [k-a-a] (own practice+staff)", keys)
 	}
 }
 
@@ -111,32 +71,12 @@ func TestRLS_IdempotencyKeysAllowsOwnPracticeAndStaff(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Own Practice")
 	staffID := seedStaffMember(t, db, "own-staff")
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO idempotency_keys (key, practice_id, staff_id, status_code, response_body) VALUES ('own-key', $1, $2, 201, '{"ok":true}')`,
-		practiceID, staffID,
-	); err != nil {
-		t.Fatalf("seed idempotency key: %v", err)
-	}
+	seedStoredKey(t, db, "own-key", practiceID, staffID)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Practice(practiceID), testdb.Staff(staffID))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set_config practice: %v", err)
-	}
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_staff_id', $1, true)`, staffID); err != nil {
-		t.Fatalf("set_config staff: %v", err)
-	}
-
-	var statusCode int
-	if err := tx.QueryRowContext(t.Context(), `SELECT status_code FROM idempotency_keys WHERE key = 'own-key'`).Scan(&statusCode); err != nil {
-		t.Fatalf("expected own-key to be visible: %v", err)
-	}
-	if statusCode != 201 {
-		t.Fatalf("status_code = %d, want 201", statusCode)
+	if statusCode := testdb.Scalar[int](t, tx, `SELECT status_code FROM idempotency_keys WHERE key = 'own-key'`); statusCode != 200 {
+		t.Fatalf("status_code = %d, want 200", statusCode)
 	}
 }
 
@@ -177,20 +117,9 @@ func TestRLS_IdempotencyKeysInsertRejectedForOtherStaff(t *testing.T) {
 	staffID := seedStaffMember(t, db, "insert-staff")
 	otherStaffID := seedStaffMember(t, db, "other-insert-staff")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Practice(practiceID), testdb.Staff(staffID))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set_config practice: %v", err)
-	}
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_staff_id', $1, true)`, staffID); err != nil {
-		t.Fatalf("set_config staff: %v", err)
-	}
-
-	_, err = tx.ExecContext(t.Context(),
+	_, err := tx.ExecContext(t.Context(),
 		`INSERT INTO idempotency_keys (key, practice_id, staff_id, status_code, response_body) VALUES ('hijack', $1, $2, 200, '{}')`,
 		practiceID, otherStaffID,
 	)

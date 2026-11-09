@@ -1,9 +1,7 @@
 package offer_test
 
 import (
-	"bytes"
 	"encoding/json/v2"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,6 +12,7 @@ import (
 	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/offer"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -80,32 +79,17 @@ type response struct {
 // whole response, and closes it.
 func do(t *testing.T, method, url, session string, body any) response {
 	t.Helper()
-	var payload []byte
+	opts := []reqtest.Option{reqtest.Session(session), reqtest.Header("X-Confirmed", "true")}
 	if body != nil {
-		encoded, err := json.Marshal(body)
-		if err != nil {
-			t.Fatalf("marshal body: %v", err)
-		}
-		payload = encoded
+		opts = append(opts, reqtest.JSON(body))
 	}
-	req, err := http.NewRequestWithContext(t.Context(), method, url, bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	if session != "" {
-		authntest.AddSessionCookie(req, session)
-	}
-	req.Header.Set("X-Confirmed", "true")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	read, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read body: %v", err)
-	}
-	return response{status: resp.StatusCode, body: read}
+	return finish(t, reqtest.Do(t, method, url, opts...))
+}
+
+// finish reads resp's whole body and closes it.
+func finish(t *testing.T, resp *http.Response) response {
+	t.Helper()
+	return response{status: resp.StatusCode, body: reqtest.ReadBody(t, resp)}
 }
 
 // decode unmarshals a response body into out, failing the test if the
