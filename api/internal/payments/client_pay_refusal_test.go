@@ -83,7 +83,7 @@ func TestClientGetPayment_NeverReachesAnInvoiceThatIsNotHers(t *testing.T) {
 	theirs := seedInvoice(t, w.db, other.practiceID, other.contractID, "in_nm_theirs", invoiceStatusOpen, 100, time.Now())
 	elsewhere := seedInvoice(t, w.db, w.me.practiceID, seedSignedContract(t, w.db, second), "in_nm_second", invoiceStatusOpen, 100, time.Now())
 
-	for name, id := range map[string]string{invoiceStatusDraft: draft, "another Client's": theirs, "another Engagement's": elsewhere, "malformed": "not-a-uuid"} {
+	for name, id := range map[string]string{invoiceStatusDraft: draft, "another Client's": theirs, "another Engagement's": elsewhere, "malformed": notAUUID} {
 		if status, body := w.get(t, id); status != http.StatusNotFound {
 			t.Errorf("%s: status = %d, want 404; body %s", name, status, body)
 		}

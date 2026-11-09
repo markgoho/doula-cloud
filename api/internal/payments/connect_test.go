@@ -1,20 +1,14 @@
 package payments_test
 
 import (
-	"encoding/json/v2"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/apierrtest"
-	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -28,8 +22,8 @@ var errStripeFake = errors.New("stripe: fake failure")
 const (
 	fixturePracticeName = "Fixture Practice"
 	fixtureOwnSiteURL   = "https://rochesterdoulas.com"
-	// The Practice seedOwner creates, and so the descriptor its name
-	// makes.
+	// The Practice the fixture package creates, and so the descriptor its
+	// name makes.
 	seededPracticeName = "Test Practice"
 	// ownerRole and doulaRole are named once so golangci-lint's goconst
 	// check doesn't see repeated "owner"/"doula" literals across this
@@ -37,6 +31,8 @@ const (
 	ownerRole = "owner"
 	adminRole = "admin"
 	doulaRole = "doula"
+
+	connectPath = "/payments/connect"
 )
 
 // seedDeclaredWebsite records the website answer #440 collects, which
@@ -81,68 +77,56 @@ func stripeConnectAccountID(t *testing.T, db *testdb.DB, practiceID string) *str
 	return id
 }
 
-// newConnectServer mounts this package's whole surface through
-// payments.Mount, the same call main.go makes on the real GatedRouter and
-// idempotency.Router -- GetConnectStatusHandler's "owner" declaration
-// mirrors PostConnectHandler's own Owner-only gate (#315; ADR-0008 has no
-// read-table row for Stripe Connect state yet, see #267).
-func newConnectServer(t *testing.T, db *testdb.DB, uid string, client payments.Client) (srv *httptest.Server, session string) {
-	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	payments.Mount(g, ir, client, tasknudge.NoOpEnqueuer{}, db.App, testPublishableKey)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+// connectAccount gives the Practice a Stripe Connect account directly
+// (bypassing HTTP, since the Staff member at the screen may not hold the
+// owner role PostConnectHandler needs) and returns the account id, so
+// RetrieveAccount tests can control what FakeClient.Statuses reports for
+// it.
+func (e *env) connectAccount() string {
+	e.t.Helper()
+	accountID, err := e.Stripe.CreateAccount(e.t.Context(), payments.AccountProfile{
+		PracticeID:   e.Practice.ID,
+		PracticeName: fixturePracticeName,
+		BusinessURL:  fixtureOwnSiteURL,
+	})
+	if err != nil {
+		e.t.Fatalf("CreateAccount fixture: %v", err)
+	}
+	if _, err := e.db.Admin.ExecContext(e.t.Context(),
+		`UPDATE practices SET stripe_connect_account_id = $1 WHERE id = $2`, accountID, e.Practice.ID,
+	); err != nil {
+		e.t.Fatalf("seed stripe_connect_account_id: %v", err)
+	}
+	return accountID
 }
 
-func postConnect(t *testing.T, srv *httptest.Server, session string, practiceID string) *http.Response {
-	t.Helper()
-	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/payments/connect", reqtest.Session(session))
-	return resp
-}
-
-func getConnectStatus(t *testing.T, srv *httptest.Server, session string, practiceID string) *http.Response {
-	t.Helper()
-	resp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/payments/connect", reqtest.Session(session))
-	return resp
+// connectStatus reads the Practice's Connect status as the Staff member
+// at the screen.
+func (e *env) connectStatus() payments.ConnectStatusResponse {
+	e.t.Helper()
+	return reqtest.Expect[payments.ConnectStatusResponse](e.t, http.MethodGet, e.url(connectPath), http.StatusOK, e.signedIn)
 }
 
 // TestPostConnectHandler_OwnerCreatesAccountAndAccountLink proves an
 // Owner's first connect attempt lazily creates a Stripe Connect account,
 // persists its id on the Practice, and returns an onboarding URL.
 func TestPostConnectHandler_OwnerCreatesAccountAndAccountLink(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "connect-owner"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	seedDeclaredWebsite(t, db, practiceID, fixtureOwnSiteURL)
-	client := payments.NewFakeClient()
+	e := newEnv(t, withDeclaredWebsite(fixtureOwnSiteURL))
 
-	srv, session := newConnectServer(t, db, uid, client)
-	defer srv.Close()
-
-	resp := postConnect(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out payments.ConnectResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := reqtest.Expect[payments.ConnectResponse](t, http.MethodPost, e.url(connectPath), http.StatusOK, e.signedIn)
 	if out.OnboardingURL == "" {
 		t.Fatal("onboardingUrl is empty")
 	}
 
-	if got := client.AccountLinkCallCount(); got != 1 {
+	if got := e.Stripe.AccountLinkCallCount(); got != 1 {
 		t.Fatalf("CreateAccountLink calls = %d, want 1", got)
 	}
-	link := client.AccountLinkCalls[0]
-	if link.PracticeID != practiceID {
-		t.Fatalf("account link call practiceID = %q, want %q", link.PracticeID, practiceID)
+	link := e.Stripe.AccountLinkCalls[0]
+	if link.PracticeID != e.Practice.ID {
+		t.Fatalf("account link call practiceID = %q, want %q", link.PracticeID, e.Practice.ID)
 	}
 
-	id := stripeConnectAccountID(t, db, practiceID)
+	id := stripeConnectAccountID(t, e.db, e.Practice.ID)
 	if id == nil || *id == "" {
 		t.Fatal("stripe_connect_account_id was not persisted")
 	}
@@ -155,104 +139,71 @@ func TestPostConnectHandler_OwnerCreatesAccountAndAccountLink(t *testing.T) {
 // Practice's second connect attempt does not create a second Stripe
 // Connect account.
 func TestPostConnectHandler_SecondAttemptReusesExistingAccount(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "connect-owner-repeat"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	seedDeclaredWebsite(t, db, practiceID, fixtureOwnSiteURL)
-	client := payments.NewFakeClient()
+	e := newEnv(t, withDeclaredWebsite(fixtureOwnSiteURL))
 
-	srv, session := newConnectServer(t, db, uid, client)
-	defer srv.Close()
+	e.expect(http.MethodPost, connectPath, http.StatusOK)
+	firstAccountID := stripeConnectAccountID(t, e.db, e.Practice.ID)
+	e.expect(http.MethodPost, connectPath, http.StatusOK)
 
-	first := postConnect(t, srv, session, practiceID)
-	_ = first.Body.Close()
-	if first.StatusCode != http.StatusOK {
-		t.Fatalf("first connect status = %d, want %d", first.StatusCode, http.StatusOK)
-	}
-	firstAccountID := stripeConnectAccountID(t, db, practiceID)
-
-	second := postConnect(t, srv, session, practiceID)
-	_ = second.Body.Close()
-	if second.StatusCode != http.StatusOK {
-		t.Fatalf("second connect status = %d, want %d", second.StatusCode, http.StatusOK)
-	}
-
-	if got := client.AccountCallCount(); got != 1 {
+	if got := e.Stripe.AccountCallCount(); got != 1 {
 		t.Fatalf("CreateAccount call count = %d, want 1", got)
 	}
-	if got := stripeConnectAccountID(t, db, practiceID); got == nil || *got != *firstAccountID {
+	if got := stripeConnectAccountID(t, e.db, e.Practice.ID); got == nil || *got != *firstAccountID {
 		t.Fatalf("stripe_connect_account_id changed across attempts: first %v, second %v", firstAccountID, got)
 	}
-	if got := client.AccountLinkCallCount(); got != 2 {
+	if got := e.Stripe.AccountLinkCallCount(); got != 2 {
 		t.Fatalf("CreateAccountLink calls = %d, want 2", got)
 	}
 }
 
-// TestPostConnectHandler_NonOwnerForbidden proves a non-Owner Staff member
-// cannot initiate a Stripe Connect connection.
-func TestPostConnectHandler_NonOwnerForbidden(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "connect-non-owner"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee") // doula role, not owner
-	client := payments.NewFakeClient()
+// TestPostConnectHandler_OnlyTheOwnerMayConnect proves the write gate: an
+// Admin may read Connect state but may not start or resume hosted
+// onboarding, which stays the Owner's alone (#267), and a Doula may not
+// either.
+func TestPostConnectHandler_OnlyTheOwnerMayConnect(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		staff fixture.StaffOption
+	}{
+		{doulaRole, fixture.Doula()},
+		{adminRole, fixture.Admin()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(tc.staff))
 
-	srv, session := newConnectServer(t, db, uid, client)
-	defer srv.Close()
+			e.expect(http.MethodPost, connectPath, http.StatusForbidden)
 
-	resp := postConnect(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
-	if got := client.AccountLinkCallCount(); got != 0 {
-		t.Fatalf("CreateAccountLink calls = %d, want 0", got)
-	}
-}
-
-// TestPostConnectHandler_CreateAccountFailureReturns500 proves a Stripe
-// account-creation failure surfaces as an internal error and never
-// persists an account id.
-func TestPostConnectHandler_CreateAccountFailureReturns500(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "connect-account-fail"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	seedDeclaredWebsite(t, db, practiceID, fixtureOwnSiteURL)
-	client := payments.NewFakeClient()
-	client.CreateAccountErr = errStripeFake
-
-	srv, session := newConnectServer(t, db, uid, client)
-	defer srv.Close()
-
-	resp := postConnect(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
-	}
-	if got := stripeConnectAccountID(t, db, practiceID); got != nil {
-		t.Fatalf("stripe_connect_account_id = %v, want nil (never persisted)", got)
+			if got := e.Stripe.AccountLinkCallCount(); got != 0 {
+				t.Fatalf("CreateAccountLink calls = %d, want 0", got)
+			}
+		})
 	}
 }
 
-// TestPostConnectHandler_CreateAccountLinkFailureReturns500 proves an
-// Account Link-creation failure surfaces as an internal error.
-func TestPostConnectHandler_CreateAccountLinkFailureReturns500(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "connect-link-fail"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	seedDeclaredWebsite(t, db, practiceID, fixtureOwnSiteURL)
-	client := payments.NewFakeClient()
-	client.CreateAccountLinkErr = errStripeFake
+// TestPostConnectHandler_StripeFailureReturns500 proves a Stripe failure
+// surfaces as an internal error, and that an account-creation failure
+// never persists an account id.
+func TestPostConnectHandler_StripeFailureReturns500(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		breakIt func(*payments.FakeClient)
+	}{
+		{"CreateAccount", func(c *payments.FakeClient) { c.CreateAccountErr = errStripeFake }},
+		{"CreateAccountLink", func(c *payments.FakeClient) { c.CreateAccountLinkErr = errStripeFake }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stripe := payments.NewFakeClient()
+			tc.breakIt(stripe)
+			e := newEnv(t, withStripe(stripe), withDeclaredWebsite(fixtureOwnSiteURL))
 
-	srv, session := newConnectServer(t, db, uid, client)
-	defer srv.Close()
+			e.expect(http.MethodPost, connectPath, http.StatusInternalServerError)
 
-	resp := postConnect(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
+			if tc.name == "CreateAccount" {
+				if got := stripeConnectAccountID(t, e.db, e.Practice.ID); got != nil {
+					t.Fatalf("stripe_connect_account_id = %v, want nil (never persisted)", got)
+				}
+			}
+		})
 	}
 }
 
@@ -260,29 +211,15 @@ func TestPostConnectHandler_CreateAccountLinkFailureReturns500(t *testing.T) {
 // stored Stripe Connect account id reports not_connected without calling
 // Stripe.
 func TestGetConnectStatusHandler_NotConnected(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "status-not-connected"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	client := payments.NewFakeClient()
+	e := newEnv(t)
 
-	srv, session := newConnectServer(t, db, uid, client)
-	defer srv.Close()
+	out := e.connectStatus()
 
-	resp := getConnectStatus(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out payments.ConnectStatusResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
 	if out.Status != payments.StatusNotConnected {
 		t.Fatalf("status = %q, want %q", out.Status, payments.StatusNotConnected)
 	}
-	if len(client.RetrieveCalls) != 0 {
-		t.Fatalf("RetrieveAccount calls = %d, want 0", len(client.RetrieveCalls))
+	if len(e.Stripe.RetrieveCalls) != 0 {
+		t.Fatalf("RetrieveAccount calls = %d, want 0", len(e.Stripe.RetrieveCalls))
 	}
 }
 
@@ -292,77 +229,31 @@ func TestGetConnectStatusHandler_NotConnected(t *testing.T) {
 // yes, Admin yes (#267), the same pair the Invoice-history row already
 // carries.
 func TestGetConnectStatusHandler_AdminReadsStatus(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "status-admin-reads"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{adminRole}, "employee")
-	client := payments.NewFakeClient()
+	e := newEnv(t, signedInAs(fixture.Admin()))
 
-	srv, session := newConnectServer(t, db, uid, client)
-	defer srv.Close()
-
-	resp := getConnectStatus(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out payments.ConnectStatusResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if out.Status != payments.StatusNotConnected {
+	if out := e.connectStatus(); out.Status != payments.StatusNotConnected {
 		t.Fatalf("status = %q, want %q", out.Status, payments.StatusNotConnected)
-	}
-}
-
-// TestPostConnectHandler_AdminForbidden proves the write gate did not
-// widen with the read one: an Admin may read Connect state but may not
-// start or resume hosted onboarding, which stays the Owner's alone
-// (#267).
-func TestPostConnectHandler_AdminForbidden(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "connect-admin-forbidden"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{adminRole}, "employee")
-	client := payments.NewFakeClient()
-
-	srv, session := newConnectServer(t, db, uid, client)
-	defer srv.Close()
-
-	resp := postConnect(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
-	if got := client.AccountLinkCallCount(); got != 0 {
-		t.Fatalf("CreateAccountLink calls = %d, want 0", got)
 	}
 }
 
 // TestGetConnectStatusHandler_DoulaForbidden proves a Doula cannot read
 // the Practice's Stripe Connect status through the real GatedRouter
 // mount: ADR-0008's Stripe Connect state row is a no for a Doula of
-// either employment type (#267).
+// either employment type (#267). Both employment types, because the row
+// says both: a contractor is confined to what she is attached to, and an
+// employee Doula has no stake in the payment rail either.
 func TestGetConnectStatusHandler_DoulaForbidden(t *testing.T) {
-	// Both employment types, because the row says both: a contractor is
-	// confined to what she is attached to, and an employee Doula has no
-	// stake in the payment rail either.
-	for _, employmentType := range []string{"employee", "contractor"} {
-		t.Run(employmentType, func(t *testing.T) {
-			db := testdb.New(t)
-			uid := "status-doula-forbidden-" + employmentType
-			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, employmentType)
-			client := payments.NewFakeClient()
+	for _, tc := range []struct {
+		name  string
+		staff []fixture.StaffOption
+	}{
+		{"employee", []fixture.StaffOption{fixture.Doula()}},
+		{"contractor", []fixture.StaffOption{fixture.Doula(), fixture.Contractor()}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(tc.staff...))
 
-			srv, session := newConnectServer(t, db, uid, client)
-			defer srv.Close()
-
-			resp := getConnectStatus(t, srv, session, practiceID)
-			defer resp.Body.Close()
-
-			if resp.StatusCode != http.StatusForbidden {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-			}
+			e.expect(http.MethodGet, connectPath, http.StatusForbidden)
 		})
 	}
 }
@@ -371,31 +262,15 @@ func TestGetConnectStatusHandler_DoulaForbidden(t *testing.T) {
 // account that still owes Stripe information reports
 // onboarding_incomplete and carries the outstanding requirement paths.
 func TestGetConnectStatusHandler_OnboardingIncomplete(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "status-incomplete"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	client := payments.NewFakeClient()
-
-	srv, session := newConnectServer(t, db, uid, client)
-	defer srv.Close()
-
-	connectResp := postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
-	client.Statuses[connectResp] = payments.AccountStatus{
+	e := newEnv(t)
+	e.Stripe.Statuses[e.connectAccount()] = payments.AccountStatus{
 		CardPayments:    payments.CapabilityRestricted,
 		Payouts:         payments.CapabilityRestricted,
 		RequirementsDue: []string{requirementMCC},
 	}
 
-	resp := getConnectStatus(t, srv, session, practiceID)
-	defer resp.Body.Close()
+	out := e.connectStatus()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out payments.ConnectStatusResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
 	if out.Status != payments.StatusOnboardingIncomplete {
 		t.Fatalf("status = %q, want %q", out.Status, payments.StatusOnboardingIncomplete)
 	}
@@ -412,27 +287,14 @@ func TestGetConnectStatusHandler_OnboardingIncomplete(t *testing.T) {
 // supplied, so nothing is outstanding and nothing works yet. It must not
 // read as onboarding_incomplete -- there is nothing left to fill in.
 func TestGetConnectStatusHandler_Pending(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "status-pending"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	client := payments.NewFakeClient()
-
-	accountID := postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
-	client.Statuses[accountID] = payments.AccountStatus{
+	e := newEnv(t)
+	e.Stripe.Statuses[e.connectAccount()] = payments.AccountStatus{
 		CardPayments: payments.CapabilityPending,
 		Payouts:      payments.CapabilityPending,
 	}
 
-	srv, session := newConnectServer(t, db, uid, client)
-	defer srv.Close()
+	out := e.connectStatus()
 
-	resp := getConnectStatus(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	var out payments.ConnectStatusResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
 	if out.Status != payments.StatusPending {
 		t.Fatalf("status = %q, want %q", out.Status, payments.StatusPending)
 	}
@@ -441,176 +303,76 @@ func TestGetConnectStatusHandler_Pending(t *testing.T) {
 	}
 }
 
-// TestGetConnectStatusHandler_FreshAccountReportsOnboardingIncomplete
-// covers the state a just-created account is in: Stripe has granted
-// nothing and reported no requirements yet. The Owner has everything
-// still to do, so this must not read as `pending` -- the screen would
-// hide the button and tell them to wait for a review that has not been
-// asked for.
-func TestGetConnectStatusHandler_FreshAccountReportsOnboardingIncomplete(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "status-fresh"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	client := payments.NewFakeClient()
+// TestGetConnectStatusHandler_DerivesTheStatusFromTheCapabilities pins the
+// order in deriveStatus. The two capabilities move independently, so each
+// row is a combination Stripe can report and the one status the screen
+// must show for it.
+func TestGetConnectStatusHandler_DerivesTheStatusFromTheCapabilities(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		stripe payments.AccountStatus
+		want   payments.ConnectStatus
+	}{
+		{
+			// A just-created account: Stripe has granted nothing and reported
+			// no requirements yet. The Owner has everything still to do, so
+			// this must not read as pending -- the screen would hide the
+			// button and tell her to wait for a review that has not been
+			// asked for.
+			name:   "a fresh account reports onboarding_incomplete",
+			stripe: payments.AccountStatus{CardPayments: payments.CapabilityUnsupported, Payouts: payments.CapabilityUnsupported},
+			want:   payments.StatusOnboardingIncomplete,
+		},
+		{
+			// card_payments restricted while payouts is pending. Reading that
+			// as pending would hide the onboarding button while the screen
+			// still listed what Stripe was waiting on -- the Owner would see
+			// the ask and have no way to answer it.
+			name: "a mixed state with requirements is not pending",
+			stripe: payments.AccountStatus{
+				CardPayments:    payments.CapabilityRestricted,
+				Payouts:         payments.CapabilityPending,
+				RequirementsDue: []string{requirementMCC},
+			},
+			want: payments.StatusOnboardingIncomplete,
+		},
+		{
+			// Clients can pay, but the money cannot reach the Practice's bank
+			// yet. onboarding_incomplete would read as if invoicing were
+			// broken, which it is not.
+			name: "restricted payouts with card payments active",
+			stripe: payments.AccountStatus{
+				CardPayments:    payments.CapabilityActive,
+				Payouts:         payments.CapabilityRestricted,
+				RequirementsDue: []string{"configuration.merchant.bank_account"},
+			},
+			want: payments.StatusPayoutsRestricted,
+		},
+		{
+			name:   "a fully onboarded account is active",
+			stripe: payments.AccountStatus{CardPayments: payments.CapabilityActive, Payouts: payments.CapabilityActive},
+			want:   payments.StatusActive,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t)
+			e.Stripe.Statuses[e.connectAccount()] = tc.stripe
 
-	accountID := postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
-	client.Statuses[accountID] = payments.AccountStatus{
-		CardPayments: payments.CapabilityUnsupported,
-		Payouts:      payments.CapabilityUnsupported,
-	}
-
-	srv, session := newConnectServer(t, db, uid, client)
-	defer srv.Close()
-
-	resp := getConnectStatus(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	var out payments.ConnectStatusResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if out.Status != payments.StatusOnboardingIncomplete {
-		t.Fatalf("status = %q, want %q", out.Status, payments.StatusOnboardingIncomplete)
-	}
-}
-
-// TestGetConnectStatusHandler_MixedStateWithRequirementsIsNotPending
-// pins the order in deriveStatus. The two capabilities move
-// independently, so card_payments can be restricted while payouts is
-// pending. Reading that as `pending` would hide the onboarding button
-// while the screen still listed what Stripe was waiting on -- the Owner
-// would see the ask and have no way to answer it.
-func TestGetConnectStatusHandler_MixedStateWithRequirementsIsNotPending(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "status-mixed"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	client := payments.NewFakeClient()
-
-	accountID := postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
-	client.Statuses[accountID] = payments.AccountStatus{
-		CardPayments:    payments.CapabilityRestricted,
-		Payouts:         payments.CapabilityPending,
-		RequirementsDue: []string{requirementMCC},
-	}
-
-	srv, session := newConnectServer(t, db, uid, client)
-	defer srv.Close()
-
-	resp := getConnectStatus(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	var out payments.ConnectStatusResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if out.Status != payments.StatusOnboardingIncomplete {
-		t.Fatalf("status = %q, want %q -- the Owner still has something to supply", out.Status, payments.StatusOnboardingIncomplete)
-	}
-}
-
-// TestGetConnectStatusHandler_PayoutsRestricted proves the other state a
-// single boolean pair collapsed: Clients can pay, but the money cannot
-// reach the Practice's bank yet. Reporting this as onboarding_incomplete
-// would read as if invoicing were broken, which it is not.
-func TestGetConnectStatusHandler_PayoutsRestricted(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "status-payouts-restricted"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	client := payments.NewFakeClient()
-
-	accountID := postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
-	client.Statuses[accountID] = payments.AccountStatus{
-		CardPayments:    payments.CapabilityActive,
-		Payouts:         payments.CapabilityRestricted,
-		RequirementsDue: []string{"configuration.merchant.bank_account"},
-	}
-
-	srv, session := newConnectServer(t, db, uid, client)
-	defer srv.Close()
-
-	resp := getConnectStatus(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	var out payments.ConnectStatusResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if out.Status != payments.StatusPayoutsRestricted {
-		t.Fatalf("status = %q, want %q", out.Status, payments.StatusPayoutsRestricted)
-	}
-}
-
-// TestGetConnectStatusHandler_Active proves a fully-onboarded account
-// reports active.
-func TestGetConnectStatusHandler_Active(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "status-active"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	client := payments.NewFakeClient()
-
-	accountID := postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
-	client.Statuses[accountID] = payments.AccountStatus{
-		CardPayments: payments.CapabilityActive,
-		Payouts:      payments.CapabilityActive,
-	}
-
-	srv, session := newConnectServer(t, db, uid, client)
-	defer srv.Close()
-
-	resp := getConnectStatus(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	var out payments.ConnectStatusResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if out.Status != payments.StatusActive {
-		t.Fatalf("status = %q, want %q", out.Status, payments.StatusActive)
+			if out := e.connectStatus(); out.Status != tc.want {
+				t.Fatalf("status = %q, want %q", out.Status, tc.want)
+			}
+		})
 	}
 }
 
 // TestGetConnectStatusHandler_RetrieveFailureReturns500 proves a Stripe
 // Account-retrieve failure surfaces as an internal error.
 func TestGetConnectStatusHandler_RetrieveFailureReturns500(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "status-retrieve-fail"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	client := payments.NewFakeClient()
-	postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
-	client.RetrieveAccountErr = errStripeFake
+	e := newEnv(t)
+	e.connectAccount()
+	e.Stripe.RetrieveAccountErr = errStripeFake
 
-	srv, session := newConnectServer(t, db, uid, client)
-	defer srv.Close()
-
-	resp := getConnectStatus(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
-	}
-}
-
-// postConnectAsOwnerForStatusFixture seeds a stripe_connect_account_id on
-// practiceID directly (bypassing HTTP, since the caller for a status test
-// may not hold the owner role needed to call PostConnectHandler) and
-// returns the account id, so RetrieveAccount tests can control what
-// FakeClient.Statuses reports for it.
-func postConnectAsOwnerForStatusFixture(t *testing.T, db *testdb.DB, client *payments.FakeClient, practiceID string) string {
-	t.Helper()
-	accountID, err := client.CreateAccount(t.Context(), payments.AccountProfile{
-		PracticeID:   practiceID,
-		PracticeName: fixturePracticeName,
-		BusinessURL:  fixtureOwnSiteURL,
-	})
-	if err != nil {
-		t.Fatalf("CreateAccount fixture: %v", err)
-	}
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE practices SET stripe_connect_account_id = $1 WHERE id = $2`, accountID, practiceID,
-	); err != nil {
-		t.Fatalf("seed stripe_connect_account_id: %v", err)
-	}
-	return accountID
+	e.expect(http.MethodGet, connectPath, http.StatusInternalServerError)
 }
 
 // TestPostConnectHandler_PassesPracticeNameToStripe pins what #247's walk
@@ -619,27 +381,16 @@ func postConnectAsOwnerForStatusFixture(t *testing.T, db *testdb.DB, client *pay
 // said it was "From DOULA.CLOU" rather than from the Practice they hired.
 // The Practice's own name has to reach CreateAccount.
 func TestPostConnectHandler_PassesPracticeNameToStripe(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "connect-display-name"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	seedDeclaredWebsite(t, db, practiceID, fixtureOwnSiteURL)
-	client := payments.NewFakeClient()
+	e := newEnv(t, withDeclaredWebsite(fixtureOwnSiteURL))
 
-	srv, session := newConnectServer(t, db, uid, client)
-	defer srv.Close()
+	e.expect(http.MethodPost, connectPath, http.StatusOK)
 
-	resp := postConnect(t, srv, session, practiceID)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	if len(e.Stripe.AccountProfiles) != 1 {
+		t.Fatalf("AccountProfiles = %v, want exactly one CreateAccount call", e.Stripe.AccountProfiles)
 	}
-
-	if len(client.AccountProfiles) != 1 {
-		t.Fatalf("AccountProfiles = %v, want exactly one CreateAccount call", client.AccountProfiles)
-	}
-	want := testdb.Scalar[string](t, db.Admin, `SELECT name FROM practices WHERE id = $1`, practiceID)
-	if client.AccountProfiles[0].PracticeName != want {
-		t.Fatalf("display name sent to Stripe = %q, want the Practice's own name %q", client.AccountProfiles[0].PracticeName, want)
+	want := testdb.Scalar[string](t, e.db.Admin, `SELECT name FROM practices WHERE id = $1`, e.Practice.ID)
+	if e.Stripe.AccountProfiles[0].PracticeName != want {
+		t.Fatalf("display name sent to Stripe = %q, want the Practice's own name %q", e.Stripe.AccountProfiles[0].PracticeName, want)
 	}
 }
 
@@ -651,21 +402,10 @@ func TestPostConnectHandler_PassesPracticeNameToStripe(t *testing.T) {
 // restricted and nothing saying why. So no account is created and no
 // Account Link is minted for a Practice who has not answered.
 func TestPostConnectHandler_RefusesWithoutDeclaredWebsite(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "connect-no-website"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	client := payments.NewFakeClient()
+	e := newEnv(t)
 
-	srv, session := newConnectServer(t, db, uid, client)
-	defer srv.Close()
+	out := e.postRefused(connectPath, http.StatusConflict)
 
-	resp := postConnect(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
-	out := apierrtest.Decode(t, resp)
 	if out.Code != apierr.CodeFailedPrecondition {
 		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeFailedPrecondition)
 	}
@@ -676,13 +416,13 @@ func TestPostConnectHandler_RefusesWithoutDeclaredWebsite(t *testing.T) {
 	// before the link is minted: a Stripe account made without a website
 	// is one whose Owner is asked for it by hand, which is the failure
 	// this ticket exists to remove.
-	if got := client.AccountCallCount(); got != 0 {
+	if got := e.Stripe.AccountCallCount(); got != 0 {
 		t.Fatalf("CreateAccount calls = %d, want 0", got)
 	}
-	if got := client.AccountLinkCallCount(); got != 0 {
+	if got := e.Stripe.AccountLinkCallCount(); got != 0 {
 		t.Fatalf("CreateAccountLink calls = %d, want 0", got)
 	}
-	if got := stripeConnectAccountID(t, db, practiceID); got != nil {
+	if got := stripeConnectAccountID(t, e.db, e.Practice.ID); got != nil {
 		t.Fatalf("stripe_connect_account_id = %v, want nil", got)
 	}
 }
@@ -693,22 +433,12 @@ func TestPostConnectHandler_RefusesWithoutDeclaredWebsite(t *testing.T) {
 // no declaration, and re-opening the hosted flow for her would walk her
 // into the same empty-website trap.
 func TestPostConnectHandler_RefusesAnAlreadyConnectedPracticeWithoutAWebsite(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "connect-legacy-account"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	client := payments.NewFakeClient()
-	postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
+	e := newEnv(t)
+	e.connectAccount()
 
-	srv, session := newConnectServer(t, db, uid, client)
-	defer srv.Close()
+	e.expect(http.MethodPost, connectPath, http.StatusConflict)
 
-	resp := postConnect(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
-	if got := client.AccountLinkCallCount(); got != 0 {
+	if got := e.Stripe.AccountLinkCallCount(); got != 0 {
 		t.Fatalf("CreateAccountLink calls = %d, want 0", got)
 	}
 }
@@ -718,25 +448,14 @@ func TestPostConnectHandler_RefusesAnAlreadyConnectedPracticeWithoutAWebsite(t *
 // never asks her for it -- the four requirements #442's Sandbox walk
 // showed disappear when the account carries them at create.
 func TestPostConnectHandler_SendsHerOwnWebsiteToStripe(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "connect-own-website"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	seedDeclaredWebsite(t, db, practiceID, "https://facebook.com/rochester-doulas")
-	client := payments.NewFakeClient()
+	e := newEnv(t, withDeclaredWebsite("https://facebook.com/rochester-doulas"))
 
-	srv, session := newConnectServer(t, db, uid, client)
-	defer srv.Close()
+	e.expect(http.MethodPost, connectPath, http.StatusOK)
 
-	resp := postConnect(t, srv, session, practiceID)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	if len(e.Stripe.AccountProfiles) != 1 {
+		t.Fatalf("AccountProfiles = %v, want exactly one CreateAccount call", e.Stripe.AccountProfiles)
 	}
-
-	if len(client.AccountProfiles) != 1 {
-		t.Fatalf("AccountProfiles = %v, want exactly one CreateAccount call", client.AccountProfiles)
-	}
-	got := client.AccountProfiles[0]
+	got := e.Stripe.AccountProfiles[0]
 	if got.BusinessURL != "https://facebook.com/rochester-doulas" {
 		t.Fatalf("BusinessURL = %q, want the URL she declared", got.BusinessURL)
 	}
@@ -760,22 +479,12 @@ func TestPostConnectHandler_SendsHerOwnWebsiteToStripe(t *testing.T) {
 // answer resolves to the address the page is actually published at, and
 // carries the words she wrote as Stripe's product description.
 func TestPostConnectHandler_SendsHerHostedPageToStripe(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "connect-hosted-page"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	seedPaymentsHostedPage(t, db, practiceID, "rochester-doulas", "Birth and postpartum doula support across Monroe County.")
-	client := payments.NewFakeClient()
+	e := newEnv(t)
+	seedPaymentsHostedPage(t, e.db, e.Practice.ID, "rochester-doulas", "Birth and postpartum doula support across Monroe County.")
 
-	srv, session := newConnectServer(t, db, uid, client)
-	defer srv.Close()
+	e.expect(http.MethodPost, connectPath, http.StatusOK)
 
-	resp := postConnect(t, srv, session, practiceID)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-
-	got := client.AccountProfiles[0]
+	got := e.Stripe.AccountProfiles[0]
 	if got.BusinessURL != "https://doula.cloud/p/rochester-doulas" {
 		t.Fatalf("BusinessURL = %q, want her published page's address", got.BusinessURL)
 	}
@@ -791,26 +500,15 @@ func TestPostConnectHandler_SendsHerHostedPageToStripe(t *testing.T) {
 // with no published SLA, which makes the rejection arrive weeks later
 // with no visible cause.
 func TestPostConnectHandler_RefusesWhenHerPublishedPageDoesNotLoad(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "connect-page-failed"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	seedHostedPageInState(t, db, practiceID, "test-practice", "Birth support.", "failed")
-	client := payments.NewFakeClient()
+	e := newEnv(t)
+	seedHostedPageInState(t, e.db, e.Practice.ID, "test-practice", "Birth support.", "failed")
 
-	srv, session := newConnectServer(t, db, uid, client)
-	defer srv.Close()
+	out := e.postRefused(connectPath, http.StatusConflict)
 
-	resp := postConnect(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
-	out := apierrtest.Decode(t, resp)
 	if out.Message != payments.MsgPageNotLive {
 		t.Fatalf("message = %q, want %q", out.Message, payments.MsgPageNotLive)
 	}
-	if got := client.AccountCallCount(); got != 0 {
+	if got := e.Stripe.AccountCallCount(); got != 0 {
 		t.Fatalf("CreateAccount calls = %d, want 0", got)
 	}
 }
@@ -819,19 +517,8 @@ func TestPostConnectHandler_RefusesWhenHerPublishedPageDoesNotLoad(t *testing.T)
 // Practice passes through "pending" on the way to "live", and blocking
 // there would block the happy path.
 func TestPostConnectHandler_AllowsAPageStillWaitingForItsDeploy(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "connect-page-pending"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	seedHostedPageInState(t, db, practiceID, "test-practice", "Birth support.", "pending")
-	client := payments.NewFakeClient()
+	e := newEnv(t)
+	seedHostedPageInState(t, e.db, e.Practice.ID, "test-practice", "Birth support.", "pending")
 
-	srv, session := newConnectServer(t, db, uid, client)
-	defer srv.Close()
-
-	resp := postConnect(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
-	}
+	e.expect(http.MethodPost, connectPath, http.StatusOK)
 }

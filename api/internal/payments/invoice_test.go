@@ -517,7 +517,7 @@ func TestPostInvoiceHandler_MalformedEngagementIDReturns400(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, client)
 	defer srv.Close()
 
-	resp := postInvoice(t, srv, session, practiceID, "not-a-uuid")
+	resp := postInvoice(t, srv, session, practiceID, notAUUID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -894,7 +894,7 @@ func TestGetInvoicesHandler_MalformedEngagementIDReturns400(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, client)
 	defer srv.Close()
 
-	resp := getInvoices(t, srv, session, practiceID, "not-a-uuid", "")
+	resp := getInvoices(t, srv, session, practiceID, notAUUID, "")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {

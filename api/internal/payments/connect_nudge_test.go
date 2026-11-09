@@ -1,19 +1,17 @@
 package payments_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
@@ -25,65 +23,14 @@ const (
 	testConnectNudgeAccountID = "acct_already_connected"
 )
 
-// newConnectNudgeServer mounts this package's whole surface with a
-// recording Enqueuer, so a test can assert on ADR-0013's nudge as well as
-// on the outbox row -- the one thing newConnectServer's NoOpEnqueuer
-// cannot show.
-func newConnectNudgeServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string, enq *tasknudge.FakeEnqueuer) {
-	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	enq = &tasknudge.FakeEnqueuer{}
-	// The nudge never calls Stripe -- not_connected is a null column, not
-	// a retrieve -- so the fake client is here only because Mount asks
-	// for one.
-	payments.Mount(g, ir, payments.NewFakeClient(), enq, db.App, testPublishableKey)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid), enq
-}
-
 func postConnectNudge(t *testing.T, srv *httptest.Server, session, practiceID string) *http.Response {
 	t.Helper()
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+connectNudgePath, reqtest.Session(session))
 	return resp
 }
 
-// nudgeRefusalMessage reads docs/api-design.md section 7's structured
-// body back as the sentence a person actually meets on the screen.
-func nudgeRefusalMessage(t *testing.T, resp *http.Response) string {
-	t.Helper()
-	var body struct {
-		Message string `json:"message"`
-	}
-	if err := json.UnmarshalRead(resp.Body, &body); err != nil {
-		t.Fatalf("decode refusal: %v", err)
-	}
-	return body.Message
-}
-
 func newTestConnectNudgeWorker(sender mail.Sender) payments.ConnectNudgeWorker {
 	return payments.ConnectNudgeWorker{Sender: sender, Now: time.Now, AppBaseURL: testPayoutAppBaseURL, From: testOutboxFrom, ReplyTo: testOutboxReplyTo}
-}
-
-// runConnectNudgeWorker mirrors runPayoutWorker: it sets the trusted
-// session var outbox.ProcessHandler would otherwise set after its own
-// secret check, and commits.
-func runConnectNudgeWorker(t *testing.T, db *testdb.DB, w payments.ConnectNudgeWorker) {
-	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
-		t.Fatalf("set trusted session var: %v", err)
-	}
-	if err := w.ProcessPending(t.Context(), tx); err != nil {
-		t.Fatalf("ProcessPending: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
 }
 
 func connectNudgeRowCount(t *testing.T, db *testdb.DB, practiceID string) int {
@@ -114,44 +61,49 @@ func setConnectAccountID(t *testing.T, db *testdb.DB, practiceID, accountID stri
 	}
 }
 
+// nudge asks the Practice's Owners to connect Stripe as the Staff member at
+// the screen, and requires that the ask is accepted.
+func (e *env) nudge() {
+	e.t.Helper()
+	e.expect(http.MethodPost, connectNudgePath, http.StatusAccepted)
+}
+
+// nudgeEnv is an Admin at a Practice with a recording Enqueuer, so a test
+// can assert on ADR-0013's nudge as well as on the outbox row -- the one
+// thing the no-op Enqueuer cannot show.
+func nudgeEnv(t *testing.T) (*env, *tasknudge.FakeEnqueuer) {
+	t.Helper()
+	enq := &tasknudge.FakeEnqueuer{}
+	return newEnv(t, signedInAs(fixture.Admin()), withEnqueuer(enq)), enq
+}
+
 // TestPostConnectNudgeHandler_QueuesRecordsAndNudges is #917's happy
 // path in one place, because the three things it asserts are one act:
 // the Notification is queued, the Activity log says who asked, and
 // ADR-0013's nudge fires so the mail does not wait on Cloud Scheduler's
 // cadence.
 func TestPostConnectNudgeHandler_QueuesRecordsAndNudges(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "connect-nudge-admin"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{adminRole}, "employee")
+	e, enq := nudgeEnv(t)
 
-	srv, session, enq := newConnectNudgeServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postConnectNudge(t, srv, session, practiceID)
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusAccepted {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusAccepted)
-	}
+	e.nudge()
 
 	var requestedBy, rowStatus string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT requested_by_staff_id, status FROM connect_nudge_outbox WHERE practice_id = $1`, practiceID,
+	if err := e.db.Admin.QueryRowContext(t.Context(),
+		`SELECT requested_by_staff_id, status FROM connect_nudge_outbox WHERE practice_id = $1`, e.Practice.ID,
 	).Scan(&requestedBy, &rowStatus); err != nil {
 		t.Fatalf("query connect_nudge_outbox: %v", err)
 	}
-	if requestedBy != staffID {
-		t.Fatalf("requested_by_staff_id = %q, want the Admin who asked (%q)", requestedBy, staffID)
+	if requestedBy != e.Staff.ID {
+		t.Fatalf("requested_by_staff_id = %q, want the Admin who asked (%q)", requestedBy, e.Staff.ID)
 	}
 	if rowStatus != testPayoutStatusPending {
 		t.Fatalf("status = %q, want %s", rowStatus, testPayoutStatusPending)
 	}
-
-	actor := testdb.Scalar[string](t, db.Admin, `SELECT actor_staff_id FROM activity WHERE practice_id = $1 AND action = $2`,
-		practiceID, connectNudgeActionName)
-	if actor != staffID {
-		t.Fatalf("activity actor = %q, want %q", actor, staffID)
+	actor := testdb.Scalar[string](t, e.db.Admin, `SELECT actor_staff_id FROM activity WHERE practice_id = $1 AND action = $2`,
+		e.Practice.ID, connectNudgeActionName)
+	if actor != e.Staff.ID {
+		t.Fatalf("activity actor = %q, want %q", actor, e.Staff.ID)
 	}
-
 	if got := enq.Calls(); len(got) != 1 || got[0] != tasknudge.ConnectNudge {
 		t.Fatalf("nudge calls = %v, want one %s", got, tasknudge.ConnectNudge)
 	}
@@ -163,31 +115,15 @@ func TestPostConnectNudgeHandler_QueuesRecordsAndNudges(t *testing.T) {
 // across senders, not per sender, so a second Admin pressing it an hour
 // later mails nobody a second time.
 func TestPostConnectNudgeHandler_RefusesASecondAskInsideTheCooldown(t *testing.T) {
-	db := testdb.New(t)
-	const firstUID = "connect-nudge-first"
-	const secondUID = "connect-nudge-second"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, firstUID, []string{adminRole}, "employee")
-	testdb.SeedStaffAtPractice(t, db, practiceID, secondUID, []string{adminRole}, "employee")
+	e, _ := nudgeEnv(t)
+	e.nudge()
 
-	srv, session, _ := newConnectNudgeServer(t, db, firstUID)
-	defer srv.Close()
+	out := reqtest.Expect[apierr.APIError](t, http.MethodPost, e.url(connectNudgePath), http.StatusConflict, e.as(e.staff(fixture.Admin())))
 
-	first := postConnectNudge(t, srv, session, practiceID)
-	_ = first.Body.Close()
-	if first.StatusCode != http.StatusAccepted {
-		t.Fatalf("first status = %d, want %d", first.StatusCode, http.StatusAccepted)
+	if out.Message != payments.MsgConnectNudgeTooSoon {
+		t.Fatalf("refusal = %q, want %q", out.Message, payments.MsgConnectNudgeTooSoon)
 	}
-
-	secondSession := authntest.SeedSession(t, db.App, secondUID)
-	second := postConnectNudge(t, srv, secondSession, practiceID)
-	defer func() { _ = second.Body.Close() }()
-	if second.StatusCode != http.StatusConflict {
-		t.Fatalf("second status = %d, want %d", second.StatusCode, http.StatusConflict)
-	}
-	if got := nudgeRefusalMessage(t, second); got != payments.MsgConnectNudgeTooSoon {
-		t.Fatalf("refusal = %q, want %q", got, payments.MsgConnectNudgeTooSoon)
-	}
-	if got := connectNudgeRowCount(t, db, practiceID); got != 1 {
+	if got := connectNudgeRowCount(t, e.db, e.Practice.ID); got != 1 {
 		t.Fatalf("rows = %d, want 1 -- the cooldown must not queue a second Notification", got)
 	}
 }
@@ -198,71 +134,49 @@ func TestPostConnectNudgeHandler_RefusesASecondAskInsideTheCooldown(t *testing.T
 // later is a reasonable thing to want, and "once, ever" would refuse it
 // forever.
 func TestPostConnectNudgeHandler_AllowsAnotherAskOnceTheCooldownHasPassed(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "connect-nudge-cooldown-passed"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{adminRole}, "employee")
+	e, _ := nudgeEnv(t)
+	e.nudge()
+	backdateConnectNudge(t, e.db, e.Practice.ID, payments.ConnectNudgeCooldownDays+1)
 
-	srv, session, _ := newConnectNudgeServer(t, db, uid)
-	defer srv.Close()
+	e.nudge()
 
-	first := postConnectNudge(t, srv, session, practiceID)
-	_ = first.Body.Close()
-	backdateConnectNudge(t, db, practiceID, payments.ConnectNudgeCooldownDays+1)
-
-	second := postConnectNudge(t, srv, session, practiceID)
-	defer func() { _ = second.Body.Close() }()
-	if second.StatusCode != http.StatusAccepted {
-		t.Fatalf("second status = %d, want %d once the cooldown has passed", second.StatusCode, http.StatusAccepted)
-	}
-	if got := connectNudgeRowCount(t, db, practiceID); got != 2 {
+	if got := connectNudgeRowCount(t, e.db, e.Practice.ID); got != 2 {
 		t.Fatalf("rows = %d, want 2", got)
 	}
 }
 
-// TestPostConnectNudgeHandler_RefusesAPracticeThatAlreadyConnected pins
-// the boundary ADR-0035 says actually matters: the condition, not the
-// role. The ordinary way to meet this is an Owner finishing onboarding
-// in another tab while this screen still shows the older answer.
-func TestPostConnectNudgeHandler_RefusesAPracticeThatAlreadyConnected(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "connect-nudge-already-connected"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{adminRole}, "employee")
-	setConnectAccountID(t, db, practiceID, testConnectNudgeAccountID)
+// TestPostConnectNudgeHandler_Refusals pins ADR-0035's boundary: the
+// condition, not the role, for a Practice that already connected (the
+// ordinary way to meet this is an Owner finishing onboarding in another
+// tab while this screen still shows the older answer), and ADR-0008's
+// read table for a Doula, who cannot read Stripe Connect state and so
+// cannot tell an Owner about it either. Neither queues a Notification.
+func TestPostConnectNudgeHandler_Refusals(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		staff       fixture.StaffOption
+		connected   bool
+		want        int
+		wantMessage string
+	}{
+		{"a Practice that already connected", fixture.Admin(), true, http.StatusConflict, payments.MsgConnectNudgeAlreadyConnected},
+		{caseDoula, fixture.Doula(), false, http.StatusForbidden, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(tc.staff))
+			if tc.connected {
+				setConnectAccountID(t, e.db, e.Practice.ID, testConnectNudgeAccountID)
+			}
 
-	srv, session, _ := newConnectNudgeServer(t, db, uid)
-	defer srv.Close()
+			out := e.postRefused(connectNudgePath, tc.want)
 
-	resp := postConnectNudge(t, srv, session, practiceID)
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
-	if got := nudgeRefusalMessage(t, resp); got != payments.MsgConnectNudgeAlreadyConnected {
-		t.Fatalf("refusal = %q, want %q", got, payments.MsgConnectNudgeAlreadyConnected)
-	}
-	if got := connectNudgeRowCount(t, db, practiceID); got != 0 {
-		t.Fatalf("rows = %d, want 0", got)
-	}
-}
-
-// TestPostConnectNudgeHandler_RefusesADoula holds ADR-0008's read table
-// at the boundary: a Doula cannot read Stripe Connect state, so she
-// cannot tell an Owner about it either.
-func TestPostConnectNudgeHandler_RefusesADoula(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "connect-nudge-doula"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-
-	srv, session, _ := newConnectNudgeServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postConnectNudge(t, srv, session, practiceID)
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
-	if got := connectNudgeRowCount(t, db, practiceID); got != 0 {
-		t.Fatalf("rows = %d, want 0", got)
+			if tc.wantMessage != "" && out.Message != tc.wantMessage {
+				t.Fatalf("refusal = %q, want %q", out.Message, tc.wantMessage)
+			}
+			if got := connectNudgeRowCount(t, e.db, e.Practice.ID); got != 0 {
+				t.Fatalf("rows = %d, want 0", got)
+			}
+		})
 	}
 }
 
@@ -271,32 +185,26 @@ func TestPostConnectNudgeHandler_RefusesADoula(t *testing.T) {
 // every current Owner is mailed, no non-Owner is, and the body carries
 // no Practice name and no sender name.
 func TestConnectNudgeWorker_MailsEveryOwnerAndNamesNobody(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "connect-nudge-worker-admin"
 	const practiceName = "Willow Birth Collective"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{adminRole}, "employee")
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE practices SET name = $2 WHERE id = $1`, practiceID, practiceName,
+	e, _ := nudgeEnv(t)
+	if _, err := e.db.Admin.ExecContext(t.Context(),
+		`UPDATE practices SET name = $2 WHERE id = $1`, e.Practice.ID, practiceName,
 	); err != nil {
 		t.Fatalf("name the practice: %v", err)
 	}
-	testdb.SeedStaffAtPractice(t, db, practiceID, "connect-nudge-owner-one", []string{ownerRole}, "employee")
-	testdb.SeedStaffAtPractice(t, db, practiceID, "connect-nudge-owner-two", []string{ownerRole}, "employee")
-	testdb.SeedStaffAtPractice(t, db, practiceID, "connect-nudge-bystander", []string{doulaRole}, "employee")
-
-	srv, session, _ := newConnectNudgeServer(t, db, uid)
-	defer srv.Close()
-	resp := postConnectNudge(t, srv, session, practiceID)
-	_ = resp.Body.Close()
+	e.staff(fixture.Owner(), fixture.StaffUID("connect-nudge-owner-one"))
+	e.staff(fixture.Owner(), fixture.StaffUID("connect-nudge-owner-two"))
+	e.staff(fixture.Doula(), fixture.StaffUID("connect-nudge-bystander"))
+	e.nudge()
 
 	sender := &mail.FakeSender{}
-	runConnectNudgeWorker(t, db, newTestConnectNudgeWorker(sender))
+	runWorker(t, e.db, newTestConnectNudgeWorker(sender))
 
 	sent := sender.Sent()
 	if len(sent) != 2 {
 		t.Fatalf("sent %d messages, want 2 (one per Owner, and no Admin or Doula)", len(sent))
 	}
-	wantLink := testPayoutAppBaseURL + "/practices/" + practiceID + "/settings/payments"
+	wantLink := testPayoutAppBaseURL + "/practices/" + e.Practice.ID + "/settings/payments"
 	wantRecipients := map[string]bool{
 		"connect-nudge-owner-one@example.com": false,
 		"connect-nudge-owner-two@example.com": false,
@@ -317,7 +225,7 @@ func TestConnectNudgeWorker_MailsEveryOwnerAndNamesNobody(t *testing.T) {
 		if strings.Contains(msg.Text, practiceName) || strings.Contains(msg.Subject, practiceName) {
 			t.Fatalf("Notification names the Practice: %q / %q", msg.Subject, msg.Text)
 		}
-		if strings.Contains(msg.Text, uid) {
+		if strings.Contains(msg.Text, e.Staff.UID) {
 			t.Fatalf("Notification names the sender: %q", msg.Text)
 		}
 	}
@@ -329,79 +237,72 @@ func TestConnectNudgeWorker_MailsEveryOwnerAndNamesNobody(t *testing.T) {
 
 	// #917's "to whom": the roster this attempt resolved, written onto the
 	// row so it is still answerable after the roster moves.
-	notified := testdb.Scalar[int](t, db.Admin, `SELECT cardinality(notified_owner_staff_ids) FROM connect_nudge_outbox WHERE practice_id = $1`,
-		practiceID)
+	notified := testdb.Scalar[int](t, e.db.Admin, `SELECT cardinality(notified_owner_staff_ids) FROM connect_nudge_outbox WHERE practice_id = $1`,
+		e.Practice.ID)
 	if notified != 2 {
 		t.Fatalf("notified_owner_staff_ids holds %d ids, want 2 (the two Owners mailed)", notified)
 	}
-	everyIDIsAnOwner := testdb.Scalar[bool](t, db.Admin, `SELECT NOT EXISTS (
+	everyIDIsAnOwner := testdb.Scalar[bool](t, e.db.Admin, `SELECT NOT EXISTS (
 			SELECT 1 FROM connect_nudge_outbox o, unnest(o.notified_owner_staff_ids) AS notified_id
 			WHERE o.practice_id = $1
 			  AND NOT EXISTS (
 				SELECT 1 FROM practice_memberships pm
 				WHERE pm.practice_id = $1 AND pm.staff_id = notified_id AND 'owner' = ANY(pm.roles)
 			  )
-		 )`, practiceID)
+		 )`, e.Practice.ID)
 	if !everyIDIsAnOwner {
 		t.Fatal("notified_owner_staff_ids names somebody who is not an Owner of this Practice")
 	}
 }
 
-// TestConnectNudgeWorker_SkipsAPracticeThatConnectedBeforeTheSend is the
-// send-time recheck: a retry can be a day after the press (ADR-0010's
-// backoff), and no Owner should be told to do something already done.
-func TestConnectNudgeWorker_SkipsAPracticeThatConnectedBeforeTheSend(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "connect-nudge-raced"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{adminRole}, "employee")
-	testdb.SeedStaffAtPractice(t, db, practiceID, "connect-nudge-raced-owner", []string{ownerRole}, "employee")
+// TestConnectNudgeWorker_SendsNothingWhenThereIsNobodyToTell proves a row
+// is marked sent with nothing mailed in the two cases the send finds
+// nothing to do. The first is the send-time recheck: a retry can be a day
+// after the press (ADR-0010's backoff), and no Owner should be told to do
+// something already done. The second mirrors the payout worker's own case:
+// SendAll marks a row sent when there is nobody left to notify, rather
+// than retrying an empty recipient list five times.
+func TestConnectNudgeWorker_SendsNothingWhenThereIsNobodyToTell(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		setup func(*env)
+	}{
+		{"the Practice connected before the send", func(e *env) {
+			e.staff(fixture.Owner())
+			e.nudge()
+			setConnectAccountID(e.t, e.db, e.Practice.ID, testConnectNudgeAccountID)
+		}},
+		{"the Practice has no Owner", func(e *env) { e.nudge() }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e, _ := nudgeEnv(t)
+			tc.setup(e)
 
-	srv, session, _ := newConnectNudgeServer(t, db, uid)
-	defer srv.Close()
-	resp := postConnectNudge(t, srv, session, practiceID)
-	_ = resp.Body.Close()
+			sender := &mail.FakeSender{}
+			runWorker(t, e.db, newTestConnectNudgeWorker(sender))
 
-	setConnectAccountID(t, db, practiceID, testConnectNudgeAccountID)
-
-	sender := &mail.FakeSender{}
-	runConnectNudgeWorker(t, db, newTestConnectNudgeWorker(sender))
-
-	if len(sender.Sent()) != 0 {
-		t.Fatalf("sent %d messages, want 0 -- the Practice connected before the send", len(sender.Sent()))
-	}
-	status := testdb.Scalar[string](t, db.Admin, `SELECT status FROM connect_nudge_outbox WHERE practice_id = $1`, practiceID)
-	if status != testPayoutStatusSent {
-		t.Fatalf("status = %q, want %s (marked sent with nothing to mail)", status, testPayoutStatusSent)
+			if len(sender.Sent()) != 0 {
+				t.Fatalf("sent %d messages, want 0", len(sender.Sent()))
+			}
+			status := testdb.Scalar[string](t, e.db.Admin, `SELECT status FROM connect_nudge_outbox WHERE practice_id = $1`, e.Practice.ID)
+			if status != testPayoutStatusSent {
+				t.Fatalf("status = %q, want %s (marked sent with nothing to mail)", status, testPayoutStatusSent)
+			}
+		})
 	}
 }
 
-// TestConnectNudgeWorker_ZeroOwnersMarksSentWithNoMail mirrors the payout
-// worker's own case: SendAll marks a row sent when there is nobody left
-// to notify, rather than retrying an empty recipient list five times.
-func TestConnectNudgeWorker_ZeroOwnersMarksSentWithNoMail(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "connect-nudge-ownerless"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{adminRole}, "employee")
+// TestConnectNudgeWorker_ZeroOwnersRecordsAnEmptyRoster proves nobody
+// addressed is an empty array rather than NULL: a different fact from a
+// row no attempt has reached yet.
+func TestConnectNudgeWorker_ZeroOwnersRecordsAnEmptyRoster(t *testing.T) {
+	e, _ := nudgeEnv(t)
+	e.nudge()
 
-	srv, session, _ := newConnectNudgeServer(t, db, uid)
-	defer srv.Close()
-	resp := postConnectNudge(t, srv, session, practiceID)
-	_ = resp.Body.Close()
+	runWorker(t, e.db, newTestConnectNudgeWorker(&mail.FakeSender{}))
 
-	sender := &mail.FakeSender{}
-	runConnectNudgeWorker(t, db, newTestConnectNudgeWorker(sender))
-
-	if len(sender.Sent()) != 0 {
-		t.Fatalf("sent %d messages, want 0", len(sender.Sent()))
-	}
-	status := testdb.Scalar[string](t, db.Admin, `SELECT status FROM connect_nudge_outbox WHERE practice_id = $1`, practiceID)
-	if status != testPayoutStatusSent {
-		t.Fatalf("status = %q, want %s", status, testPayoutStatusSent)
-	}
-	// An empty array rather than NULL: nobody was addressed, which is a
-	// different fact from a row no attempt has reached yet.
-	notified := testdb.Scalar[int](t, db.Admin, `SELECT cardinality(notified_owner_staff_ids) FROM connect_nudge_outbox WHERE practice_id = $1`,
-		practiceID)
+	notified := testdb.Scalar[int](t, e.db.Admin, `SELECT cardinality(notified_owner_staff_ids) FROM connect_nudge_outbox WHERE practice_id = $1`,
+		e.Practice.ID)
 	if notified != 0 {
 		t.Fatalf("notified_owner_staff_ids holds %d ids, want an empty array", notified)
 	}
