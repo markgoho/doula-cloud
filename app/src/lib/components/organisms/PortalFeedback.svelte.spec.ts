@@ -2,7 +2,7 @@ import type { ComponentProps } from 'svelte';
 import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { RefusalError } from '#lib/formErrors.js';
+import { expectRefusalKeepsDrawerOpen, sendNotWorkingFeedback } from '#testing/feedbackDrawer.js';
 import PortalFeedback from './PortalFeedback.svelte';
 
 const CONTROL = 'Tell us what is not working or what you need.';
@@ -96,9 +96,7 @@ describe('PortalFeedback', () => {
 		const onSend = vi.fn().mockResolvedValue(undefined);
 		const { container } = await setup({ email: 'alex.rivera@example.com', onSend });
 
-		await openDrawer();
-		await page.getByLabelText('Something is not working').click();
-		await page.getByRole('button', { name: 'Send feedback' }).click();
+		await sendNotWorkingFeedback(openDrawer);
 
 		await expect.poll(() => onSend.mock.calls.length).toBe(1);
 		expect(onSend.mock.calls[0][0]).toMatchObject({ kind: 'not_working', text: '' });
@@ -123,28 +121,12 @@ describe('PortalFeedback', () => {
 		const onSend = vi.fn().mockResolvedValue(undefined);
 		await setup({ email: '', onSend });
 
-		await openDrawer();
-		await page.getByLabelText('Something is not working').click();
-		await page.getByRole('button', { name: 'Send feedback' }).click();
+		await sendNotWorkingFeedback(openDrawer);
 
 		await expect.element(page.getByText('Feedback sent. Thank you.', { exact: true })).toBeVisible();
 	});
 
 	it('keeps the drawer open and shows the refusal when the send fails', async () => {
-		const onSend = vi
-			.fn()
-			.mockRejectedValue(new RefusalError('There is a problem with the service. Try again in a few minutes.'));
-		await setup({ onSend });
-
-		await openDrawer();
-		await page.getByLabelText('An idea or a request').click();
-		await page.getByLabelText('Tell us more').fill('Kept on a refusal.');
-		await page.getByRole('button', { name: 'Send feedback' }).click();
-
-		await expect
-			.element(page.getByText('There is a problem with the service. Try again in a few minutes.'))
-			.toBeVisible();
-		await expect.element(page.getByRole('dialog', { name: 'Send feedback about this portal' })).toBeVisible();
-		await expect.element(page.getByLabelText('Tell us more')).toHaveValue('Kept on a refusal.');
+		await expectRefusalKeepsDrawerOpen(setup, openDrawer, 'Send feedback about this portal');
 	});
 });

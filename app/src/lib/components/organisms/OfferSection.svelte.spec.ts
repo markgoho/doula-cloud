@@ -121,6 +121,19 @@ async function fillFacts() {
 	await page.getByLabelText('Due date').fill('2027-01-04');
 }
 
+/**
+ * Answers "Offer this work to" with the contractor on the roster.
+ */
+async function chooseContractor() {
+	await chooseSomeoneHere();
+	await page.getByLabelText('Renata Alvarez').click();
+}
+
+async function fillFactsAndSend() {
+	await fillFacts();
+	await page.getByRole('button', { name: 'Send Offer' }).click();
+}
+
 describe('OfferSection.svelte', () => {
 	it('says so when nobody has been offered the work yet, and offers the work from there', async () => {
 		await setup({ isFormOpened: false });
@@ -178,8 +191,7 @@ describe('OfferSection.svelte', () => {
 
 		await chooseSomeoneHere();
 		await page.getByLabelText('Dana Okafor').click();
-		await fillFacts();
-		await page.getByRole('button', { name: 'Send Offer' }).click();
+		await fillFactsAndSend();
 
 		await expect.element(page.getByRole('status')).toHaveTextContent('Offer sent to Dana Okafor.');
 		await expect.element(page.getByRole('status')).toHaveFocus();
@@ -268,8 +280,7 @@ describe('OfferSection.svelte', () => {
 	it('asks for a fee once a contractor is chosen, and sends it in cents', async () => {
 		const { onCreate } = await setup();
 
-		await chooseSomeoneHere();
-		await page.getByLabelText('Renata Alvarez').click();
+		await chooseContractor();
 		await page.getByLabelText('Fee (USD)').fill('450');
 		await fillFacts();
 		await page.getByLabelText('Terms').fill('Two prenatal visits.');
@@ -292,8 +303,7 @@ describe('OfferSection.svelte', () => {
 		await page.getByLabelText('Dana Okafor').click();
 		expect(page.getByLabelText('Fee (USD)').elements()).toHaveLength(0);
 
-		await fillFacts();
-		await page.getByRole('button', { name: 'Send Offer' }).click();
+		await fillFactsAndSend();
 
 		expect(onCreate).toHaveBeenCalledWith({
 			staffId: 'staff-2',
@@ -310,8 +320,7 @@ describe('OfferSection.svelte', () => {
 		await page.getByLabelText('Someone new, by email').click();
 		await page.getByLabelText('Email address').fill('new@example.test');
 		await page.getByLabelText('Fee (USD)').fill('520');
-		await fillFacts();
-		await page.getByRole('button', { name: 'Send Offer' }).click();
+		await fillFactsAndSend();
 
 		expect(onCreate).toHaveBeenCalledWith({
 			email: 'new@example.test',
@@ -337,11 +346,9 @@ describe('OfferSection.svelte', () => {
 	it('refuses a zero fee without calling onCreate', async () => {
 		const { onCreate } = await setup();
 
-		await chooseSomeoneHere();
-		await page.getByLabelText('Renata Alvarez').click();
+		await chooseContractor();
 		await page.getByLabelText('Fee (USD)').fill('0');
-		await fillFacts();
-		await page.getByRole('button', { name: 'Send Offer' }).click();
+		await fillFactsAndSend();
 
 		expect(onCreate).not.toHaveBeenCalled();
 		// .first() -- #1228's ErrorSummary repeats the message as a link,
@@ -357,8 +364,7 @@ describe('OfferSection.svelte', () => {
 
 		await page.getByLabelText('Email address').fill('new@example.test');
 		await page.getByLabelText('Fee (USD)').fill('520');
-		await fillFacts();
-		await page.getByRole('button', { name: 'Send Offer' }).click();
+		await fillFactsAndSend();
 		await openForm();
 
 		await expect.element(page.getByLabelText('Email address')).toHaveValue('');
@@ -369,11 +375,9 @@ describe('OfferSection.svelte', () => {
 		const onCreate = vi.fn().mockRejectedValue(new Error('that address already holds a membership'));
 		await setup({ onCreate });
 
-		await chooseSomeoneHere();
-		await page.getByLabelText('Renata Alvarez').click();
+		await chooseContractor();
 		await page.getByLabelText('Fee (USD)').fill('450');
-		await fillFacts();
-		await page.getByRole('button', { name: 'Send Offer' }).click();
+		await fillFactsAndSend();
 
 		await expect.element(page.getByText('that address already holds a membership')).toBeVisible();
 	});
@@ -382,11 +386,9 @@ describe('OfferSection.svelte', () => {
 		const onCreate = vi.fn().mockRejectedValue('boom');
 		await setup({ onCreate });
 
-		await chooseSomeoneHere();
-		await page.getByLabelText('Renata Alvarez').click();
+		await chooseContractor();
 		await page.getByLabelText('Fee (USD)').fill('450');
-		await fillFacts();
-		await page.getByRole('button', { name: 'Send Offer' }).click();
+		await fillFactsAndSend();
 
 		await expect.element(page.getByText(SERVICE_PROBLEM)).toBeVisible();
 	});
@@ -413,8 +415,7 @@ describe('OfferSection.svelte', () => {
 		await page.getByLabelText("Client's first initial").fill('');
 		await page.getByLabelText('General area').fill('North side');
 		await page.getByLabelText('Due date').fill('2027-01-04');
-		await chooseSomeoneHere();
-		await page.getByLabelText('Renata Alvarez').click();
+		await chooseContractor();
 		await page.getByLabelText('Fee (USD)').fill('450');
 		await page.getByRole('button', { name: 'Send Offer' }).click();
 
@@ -426,8 +427,7 @@ describe('OfferSection.svelte', () => {
 		const { onCreate } = await setup();
 
 		await chooseSomeoneHere();
-		await fillFacts();
-		await page.getByRole('button', { name: 'Send Offer' }).click();
+		await fillFactsAndSend();
 
 		expect(onCreate).not.toHaveBeenCalled();
 		await expect.element(page.getByText('Select a Doula').first()).toBeVisible();
@@ -438,8 +438,7 @@ describe('OfferSection.svelte', () => {
 
 		await page.getByLabelText('Someone new, by email').click();
 		await page.getByLabelText('Fee (USD)').fill('450');
-		await fillFacts();
-		await page.getByRole('button', { name: 'Send Offer' }).click();
+		await fillFactsAndSend();
 
 		expect(onCreate).not.toHaveBeenCalled();
 		await expect.element(page.getByText('Enter an email address').first()).toBeVisible();
@@ -451,8 +450,7 @@ describe('OfferSection.svelte', () => {
 		await page.getByLabelText('Someone new, by email').click();
 		await page.getByLabelText('Email address').fill('not-an-email');
 		await page.getByLabelText('Fee (USD)').fill('450');
-		await fillFacts();
-		await page.getByRole('button', { name: 'Send Offer' }).click();
+		await fillFactsAndSend();
 
 		expect(onCreate).not.toHaveBeenCalled();
 		await expect
@@ -463,10 +461,8 @@ describe('OfferSection.svelte', () => {
 	it('refuses an empty fee for a contractor Doula', async () => {
 		const { onCreate } = await setup();
 
-		await chooseSomeoneHere();
-		await page.getByLabelText('Renata Alvarez').click();
-		await fillFacts();
-		await page.getByRole('button', { name: 'Send Offer' }).click();
+		await chooseContractor();
+		await fillFactsAndSend();
 
 		expect(onCreate).not.toHaveBeenCalled();
 		await expect.element(page.getByText('Enter a fee').first()).toBeVisible();
@@ -517,8 +513,7 @@ describe('OfferSection.svelte', () => {
 
 			await page.getByLabelText('Email address').fill('new@example.test');
 			await page.getByLabelText('Fee (USD)').fill('520');
-			await fillFacts();
-			await page.getByRole('button', { name: 'Send Offer' }).click();
+			await fillFactsAndSend();
 
 			expect(onCreate).toHaveBeenCalledWith({
 				email: 'new@example.test',
@@ -595,8 +590,7 @@ describe('OfferSection.svelte', () => {
 
 			expect(page.getByRole('radio', { name: /Doula Number/ }).elements()).toHaveLength(0);
 			await expect.element(page.getByLabelText('Doula', { exact: true })).toBeVisible();
-			await fillFacts();
-			await page.getByRole('button', { name: 'Send Offer' }).click();
+			await fillFactsAndSend();
 
 			expect(onCreate).not.toHaveBeenCalled();
 			await expect.element(page.getByRole('link', { name: 'Select a Doula' })).toHaveAttribute('href', '#offer-doula');
@@ -619,8 +613,7 @@ describe('OfferSection.svelte', () => {
 		it('refuses a send with no answer, against the question and linked to its first option', async () => {
 			const { container, onCreate } = await setup();
 
-			await fillFacts();
-			await page.getByRole('button', { name: 'Send Offer' }).click();
+			await fillFactsAndSend();
 
 			expect(onCreate).not.toHaveBeenCalled();
 			await expect
@@ -637,8 +630,7 @@ describe('OfferSection.svelte', () => {
 
 			await chooseSomeoneHere();
 			await page.getByLabelText('Dana Okafor').click();
-			await fillFacts();
-			await page.getByRole('button', { name: 'Send Offer' }).click();
+			await fillFactsAndSend();
 			await openForm();
 
 			await expect.element(page.getByLabelText('General area')).toHaveValue('');

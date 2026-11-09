@@ -125,14 +125,8 @@ describe('ContractStatus.svelte', () => {
 		await expect.element(page.getByRole('button', { name: 'Void this Contract' })).not.toBeInTheDocument();
 	});
 
-	it('offers no Void action on a voided Contract (no actions implying it is active)', async () => {
-		await setup({ status: 'voided', onVoid: vi.fn() });
-
-		await expect.element(page.getByRole('button', { name: 'Void this Contract' })).not.toBeInTheDocument();
-	});
-
-	it('offers no Void action on a draft or sent Contract', async () => {
-		await setup({ status: 'sent', onVoid: vi.fn() });
+	it.each(['voided', 'sent'])('offers no Void action on a %s Contract', async (status) => {
+		await setup({ status, onVoid: vi.fn() });
 
 		await expect.element(page.getByRole('button', { name: 'Void this Contract' })).not.toBeInTheDocument();
 	});
@@ -168,22 +162,16 @@ describe('ContractStatus.svelte', () => {
 		expect(onVoid).toHaveBeenCalledOnce();
 	});
 
-	it('shows the refusal in the confirmation if onVoid rejects', async () => {
-		const onVoid = vi.fn().mockRejectedValue(new Error('contract is not signed'));
+	it.each([
+		['an Error', new Error('contract is not signed'), 'contract is not signed'],
+		['a non-Error value', 'boom', 'Failed to void contract']
+	])('shows the refusal in the confirmation if onVoid rejects with %s', async (_kind, rejection, shown) => {
+		const onVoid = vi.fn().mockRejectedValue(rejection);
 		await setup({ status: 'signed', onVoid });
 
 		await confirmVoid();
 
-		await expect.element(page.getByRole('dialog').getByText('contract is not signed')).toBeVisible();
-	});
-
-	it('shows a fallback refusal if onVoid rejects with a non-Error value', async () => {
-		const onVoid = vi.fn().mockRejectedValue('boom');
-		await setup({ status: 'signed', onVoid });
-
-		await confirmVoid();
-
-		await expect.element(page.getByRole('dialog').getByText('Failed to void contract')).toBeVisible();
+		await expect.element(page.getByRole('dialog').getByText(shown)).toBeVisible();
 	});
 
 	it('clears a refusal when the confirmation is canceled', async () => {
@@ -205,8 +193,8 @@ describe('ContractStatus.svelte', () => {
 			.not.toBeInTheDocument();
 	});
 
-	it('offers no PDF download on a draft or sent Contract, which has no signed PDF', async () => {
-		await setup({ status: 'sent', hasSignedPdf: false, onDownloadPdf: vi.fn() });
+	it.each(['draft', 'sent'])('offers no PDF download on a %s Contract, which has no signed PDF', async (status) => {
+		await setup({ status, hasSignedPdf: false, onDownloadPdf: vi.fn() });
 
 		await expect
 			.element(page.getByRole('button', { name: 'Download signed Contract (PDF)' }))
@@ -237,36 +225,19 @@ describe('ContractStatus.svelte', () => {
 	// of its own -- #72's partial unique index requires the prior row to
 	// be voided before this one could exist -- so hasSignedPdf true here
 	// can only be that earlier, voided Contract's file.
-	it('names the PDF as an earlier Contract\'s on a draft Contract that has a signed PDF', async () => {
-		await setup({ status: 'draft', hasSignedPdf: true, onDownloadPdf: vi.fn() });
+	it.each(['draft', 'sent'])(
+		'names the PDF as an earlier Contract\'s on a %s Contract that has a signed PDF',
+		async (status) => {
+			await setup({ status, hasSignedPdf: true, onDownloadPdf: vi.fn() });
 
-		await expect
-			.element(page.getByText(PREVIOUS_CONTRACT_PDF_NOTICE))
-			.toBeVisible();
-	});
+			await expect.element(page.getByText(PREVIOUS_CONTRACT_PDF_NOTICE)).toBeVisible();
+		}
+	);
 
-	it('names the PDF as an earlier Contract\'s on a sent Contract that has a signed PDF', async () => {
-		await setup({ status: 'sent', hasSignedPdf: true, onDownloadPdf: vi.fn() });
+	it.each(['signed', 'voided'])('adds no notice on a %s Contract, whose PDF is always its own', async (status) => {
+		await setup({ status, hasSignedPdf: true, onDownloadPdf: vi.fn() });
 
-		await expect
-			.element(page.getByText(PREVIOUS_CONTRACT_PDF_NOTICE))
-			.toBeVisible();
-	});
-
-	it('adds no notice on a signed Contract, whose PDF is always its own', async () => {
-		await setup({ status: 'signed', hasSignedPdf: true, onDownloadPdf: vi.fn() });
-
-		await expect
-			.element(page.getByText(PREVIOUS_CONTRACT_PDF_NOTICE))
-			.not.toBeInTheDocument();
-	});
-
-	it('adds no notice on a voided Contract, whose PDF is always its own', async () => {
-		await setup({ status: 'voided', hasSignedPdf: true, onDownloadPdf: vi.fn() });
-
-		await expect
-			.element(page.getByText(PREVIOUS_CONTRACT_PDF_NOTICE))
-			.not.toBeInTheDocument();
+		await expect.element(page.getByText(PREVIOUS_CONTRACT_PDF_NOTICE)).not.toBeInTheDocument();
 	});
 
 	it('offers the PDF download on a signed Contract when onDownloadPdf is provided', async () => {
@@ -286,22 +257,16 @@ describe('ContractStatus.svelte', () => {
 		expect(onDownloadPdf).toHaveBeenCalledOnce();
 	});
 
-	it('shows an error message if onDownloadPdf rejects', async () => {
-		const onDownloadPdf = vi.fn().mockRejectedValue(new Error('signed PDF not found'));
+	it.each([
+		['an Error', new Error('signed PDF not found'), 'signed PDF not found'],
+		['a non-Error value', 'boom', 'Failed to download signed Contract']
+	])('shows an error message if onDownloadPdf rejects with %s', async (_kind, rejection, shown) => {
+		const onDownloadPdf = vi.fn().mockRejectedValue(rejection);
 		await setup({ status: 'signed', hasSignedPdf: true, onDownloadPdf });
 
 		await page.getByRole('button', { name: 'Download signed Contract (PDF)' }).click();
 
-		await expect.element(page.getByRole('alert')).toHaveTextContent('signed PDF not found');
-	});
-
-	it('shows a fallback error message if onDownloadPdf rejects with a non-Error value', async () => {
-		const onDownloadPdf = vi.fn().mockRejectedValue('boom');
-		await setup({ status: 'signed', hasSignedPdf: true, onDownloadPdf });
-
-		await page.getByRole('button', { name: 'Download signed Contract (PDF)' }).click();
-
-		await expect.element(page.getByRole('alert')).toHaveTextContent('Failed to download signed Contract');
+		await expect.element(page.getByRole('alert')).toHaveTextContent(shown);
 	});
 
 	describe('Request void (#971, a Doula asking instead of voiding herself)', () => {
@@ -369,28 +334,22 @@ describe('ContractStatus.svelte', () => {
 			await expect.element(page.getByRole('button', { name: 'Request void' })).toHaveFocus();
 		});
 
-		it('shows an error message if onRequestVoid rejects', async () => {
-			const onRequestVoid = vi.fn().mockRejectedValue(new Error('a void may only be requested for a signed contract'));
+		it.each([
+			[
+				'an Error',
+				new Error('a void may only be requested for a signed contract'),
+				'a void may only be requested for a signed contract'
+			],
+			['a non-Error value', 'boom', 'Failed to request a void']
+		])('shows an error message if onRequestVoid rejects with %s', async (_kind, rejection, shown) => {
+			const onRequestVoid = vi.fn().mockRejectedValue(rejection);
 			await setup({ status: 'signed', onRequestVoid });
 
 			await page.getByRole('button', { name: 'Request void' }).click();
 			await page.getByLabelText('Reason').fill('asking');
 			await page.getByRole('button', { name: 'Send request' }).click();
 
-			await expect
-				.element(page.getByRole('alert'))
-				.toHaveTextContent('a void may only be requested for a signed contract');
-		});
-
-		it('shows a fallback error message if onRequestVoid rejects with a non-Error value', async () => {
-			const onRequestVoid = vi.fn().mockRejectedValue('boom');
-			await setup({ status: 'signed', onRequestVoid });
-
-			await page.getByRole('button', { name: 'Request void' }).click();
-			await page.getByLabelText('Reason').fill('asking');
-			await page.getByRole('button', { name: 'Send request' }).click();
-
-			await expect.element(page.getByRole('alert')).toHaveTextContent('Failed to request a void');
+			await expect.element(page.getByRole('alert')).toHaveTextContent(shown);
 		});
 
 		it('shows a waiting notice instead of the control once a request is open', async () => {
@@ -495,10 +454,15 @@ describe('ContractStatus.svelte', () => {
 			await expect.element(page.getByRole('button', { name: 'Decline' })).toHaveFocus();
 		});
 
-		it('shows an error message if onDeclineVoidRequest rejects', async () => {
-			const onDeclineVoidRequest = vi
-				.fn()
-				.mockRejectedValue(new Error('no open void request found with this id for this contract'));
+		it.each([
+			[
+				'an Error',
+				new Error('no open void request found with this id for this contract'),
+				'no open void request found with this id for this contract'
+			],
+			['a non-Error value', 'boom', 'Failed to decline this request']
+		])('shows an error message if onDeclineVoidRequest rejects with %s', async (_kind, rejection, shown) => {
+			const onDeclineVoidRequest = vi.fn().mockRejectedValue(rejection);
 			await setup({
 				status: 'signed',
 				onDeclineVoidRequest,
@@ -509,24 +473,7 @@ describe('ContractStatus.svelte', () => {
 			await page.getByLabelText('Reason for declining').fill('not yet');
 			await page.getByRole('button', { name: 'Decline' }).click();
 
-			await expect
-				.element(page.getByRole('alert'))
-				.toHaveTextContent('no open void request found with this id for this contract');
-		});
-
-		it('shows a fallback error message if onDeclineVoidRequest rejects with a non-Error value', async () => {
-			const onDeclineVoidRequest = vi.fn().mockRejectedValue('boom');
-			await setup({
-				status: 'signed',
-				onDeclineVoidRequest,
-				voidRequests: [openVoidRequest()]
-			});
-
-			await page.getByRole('button', { name: 'Decline' }).click();
-			await page.getByLabelText('Reason for declining').fill('not yet');
-			await page.getByRole('button', { name: 'Decline' }).click();
-
-			await expect.element(page.getByRole('alert')).toHaveTextContent('Failed to decline this request');
+			await expect.element(page.getByRole('alert')).toHaveTextContent(shown);
 		});
 	});
 });
