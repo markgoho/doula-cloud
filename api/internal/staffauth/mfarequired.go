@@ -33,12 +33,8 @@ type mfaRequiredRequest struct {
 // before it runs. Widening or narrowing this route means editing its
 // role list in mount.go.
 func PutMFARequiredHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
+	return Handler(func(w http.ResponseWriter, r *http.Request, c Call) {
+		tx, practiceID := c.Tx, c.PracticeID
 		if !RequireConfirmed(w, r) {
 			return
 		}
@@ -71,7 +67,7 @@ func PutMFARequiredHandler() http.Handler {
 			if req.Required {
 				action = string(activity.ActionMFARequiredEnabled)
 			}
-			actorStaffID, _ := StaffID(r.Context())
+			actorStaffID := c.StaffID
 			if err := activity.Record(r.Context(), tx, activity.Entry{
 				PracticeID:  practiceID,
 				SubjectKind: activity.SubjectPractice,
@@ -106,12 +102,8 @@ type mfaImpactResponse struct {
 // Mounted Owner-only (staffauth.GatedRouter.Get's role declaration), so
 // no further role check is needed here.
 func GetMFAImpactHandler(accounts authn.AccountManager) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := RequireTx(w, r)
-		if !ok {
-			// coverage:ignore reason: Middleware always sets a tx before this handler runs
-			return
-		}
+	return Handler(func(w http.ResponseWriter, r *http.Request, c Call) {
+		tx, practiceID := c.Tx, c.PracticeID
 
 		var required bool
 		if err := tx.QueryRowContext(r.Context(),

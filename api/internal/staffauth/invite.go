@@ -76,13 +76,9 @@ var validEmploymentTypes = map[string]bool{"employee": true, "contractor": true}
 // before it runs. Widening or narrowing this route means editing its
 // role list in mount.go.
 func InviteHandler(enq tasknudge.Enqueuer, suppressed SuppressionChecker) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		actorStaffID, _ := StaffID(r.Context())
+	return Handler(func(w http.ResponseWriter, r *http.Request, c Call) {
+		tx, practiceID := c.Tx, c.PracticeID
+		actorStaffID := c.StaffID
 
 		var req InviteRequest
 		if !apierr.DecodeJSON(w, r, &req) {
@@ -259,21 +255,14 @@ func AddressHoldsMembership(ctx context.Context, tx *sql.Tx, practiceID, address
 // before it runs. Widening or narrowing this route means editing its
 // role list in mount.go.
 func RevokeInvitationHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
+	return Handler(func(w http.ResponseWriter, r *http.Request, c Call) {
+		tx, practiceID := c.Tx, c.PracticeID
 		if !RequireConfirmed(w, r) {
 			return
 		}
-		actorStaffID, _ := StaffID(r.Context())
+		actorStaffID := c.StaffID
 
-		invitationID := r.PathValue("invitationId")
-		if !ParseUUID(w, "invitation", invitationID) {
-			return
-		}
+		invitationID := c.ID("invitationId")
 
 		rows, ok := dbtx.ExecRows(r.Context(), w, tx,
 			`UPDATE practice_invitations
@@ -291,7 +280,7 @@ func RevokeInvitationHandler() http.Handler {
 		}
 
 		w.WriteHeader(http.StatusNoContent)
-	})
+	}, PathID("invitation", "invitationId"))
 }
 
 // NormalizeAddress is the one spelling of an email address this package

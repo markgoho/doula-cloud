@@ -8,15 +8,6 @@ import (
 
 const noPlanInstanceFound = "no plan instance found for this engagement and plan type"
 
-// planTypeGate refuses a :planType that is not a known plan_type enum
-// member, so a handler behind it reads the wildcard off the request as is.
-func planTypeGate() staffauth.Option {
-	return func(w http.ResponseWriter, r *http.Request, _ *staffauth.Call) bool {
-		_, ok := planTypeFromPath(w, r)
-		return ok
-	}
-}
-
 // instanceHandler is the common prologue shared by PostInstanceHandler,
 // GetInstanceHandler, PutInstanceHandler and GetBirthPlanPDFHandler: the
 // :engagementId and :planType path segments, validated, and the Engagement
@@ -29,6 +20,6 @@ func instanceHandler(fn func(w http.ResponseWriter, r *http.Request, c staffauth
 		access = staffauth.EngagementReach(noPlanInstanceFound)
 	}
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
-		fn(w, r, c, r.PathValue("planType"))
+		fn(w, r, c, c.ID("planType"))
 	}, staffauth.EngagementID(), planTypeGate(), access)
 }

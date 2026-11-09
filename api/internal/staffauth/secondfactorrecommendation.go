@@ -90,17 +90,13 @@ func isClosedFor(ctx context.Context, tx *sql.Tx, practiceID, staffID, act strin
 // Owner-only is declared at the mount. An Admin or a Doula is refused
 // there, and the app asks only for an Owner.
 func GetSecondFactorRecommendationHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
+	return Handler(func(w http.ResponseWriter, r *http.Request, c Call) {
+		tx, practiceID := c.Tx, c.PracticeID
 		if SecondFactor(r.Context()) {
 			apierr.WriteJSON(w, http.StatusOK, SecondFactorRecommendationResponse{})
 			return
 		}
-		staffID, _ := StaffID(r.Context())
+		staffID := c.StaffID
 
 		acts, err := reachedRecommendationActs(r.Context(), tx, practiceID, staffID)
 		if err != nil {
@@ -131,13 +127,9 @@ func GetSecondFactorRecommendationHandler() http.Handler {
 // each. A row per act says who closed it and when; a repeated close
 // finds its rows already there and writes nothing.
 func CloseSecondFactorRecommendationHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		staffID, _ := StaffID(r.Context())
+	return Handler(func(w http.ResponseWriter, r *http.Request, c Call) {
+		tx, practiceID := c.Tx, c.PracticeID
+		staffID := c.StaffID
 
 		acts, err := reachedRecommendationActs(r.Context(), tx, practiceID, staffID)
 		if err != nil {

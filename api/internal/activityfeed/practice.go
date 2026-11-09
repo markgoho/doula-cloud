@@ -41,19 +41,13 @@ const practiceBatchSize = practicePageSize * 4
 // doc comment) rather than engagement.ListActivityHandler's single-subject
 // SQL exclusion. Must be mounted behind staffauth.Middleware.
 func PracticeHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, reader, ok := staffauth.RequireTxReader(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		after, ok := pagecursor.FromQuery(w, r, pagecursor.Decode, "invalid cursor")
 		if !ok {
 			return
 		}
 
-		resp, err := fetchPage(r.Context(), tx, reader, practiceID, after)
+		resp, err := fetchPage(r.Context(), c.Tx, c.Reader, c.PracticeID, after)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)

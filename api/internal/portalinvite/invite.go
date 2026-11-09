@@ -64,17 +64,8 @@ type InviteResponse struct {
 // whether the queued outbox row actually survives -- runs after this
 // handler (and idempotency.Wrap's response cache) has already returned.
 func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-
-		engagementID := r.PathValue("engagementId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, practiceID, engagementID := c.Tx, c.PracticeID, c.EngagementID
 
 		clientID, email, err := resolveEngagementClient(r.Context(), tx, engagementID, practiceID)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -112,13 +103,12 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 			apierr.Write(w, status, code, msg, nil)
 			return
 		}
-		staffID, _ := staffauth.StaffID(r.Context())
 		if err := activity.Record(r.Context(), tx, activity.Entry{
 			PracticeID:  practiceID,
 			SubjectKind: activity.SubjectEngagement,
 			SubjectID:   engagementID,
 			Action:      string(activity.ActionPortalInviteSent),
-			Actor:       activity.StaffActor(staffID),
+			Actor:       activity.StaffActor(c.StaffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -127,7 +117,7 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 		tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.PortalInvite))
 
 		apierr.WriteJSON(w, status, resp)
-	})
+	}, staffauth.EngagementID())
 }
 
 // resolveEngagementClient confirms engagementID belongs to practiceID and

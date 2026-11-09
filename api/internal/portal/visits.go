@@ -94,14 +94,8 @@ type VisitsResponse struct {
 // second fence behind that, the same shape her Birth Plan and Contract
 // reads already sit behind.
 func VisitsHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, ok := clientauth.Tx(r.Context())
-		if !ok {
-			// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		engagementID, _ := clientauth.EngagementID(r.Context())
+	return clientauth.Handler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call) {
+		tx, engagementID := c.Tx, c.EngagementID
 
 		after, ok := pagecursor.FromQuery(w, r, pagecursor.Decode, "invalid cursor")
 		if !ok {

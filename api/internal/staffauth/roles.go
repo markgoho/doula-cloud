@@ -1,11 +1,7 @@
 package staffauth
 
 import (
-	"database/sql"
-	"net/http"
 	"slices"
-
-	"doula-cloud/api/internal/apierr"
 )
 
 // validRoles is the practice_role enum from 00002_practice_staff_tenancy.sql,
@@ -46,87 +42,8 @@ func refusalMessage(roles []string) string {
 	}
 }
 
-// RequireOwner resolves the caller's Reader and request-scoped tx from
-// context (both set by staffauth.Middleware) and confirms the caller
-// holds the 'owner' role at that Practice, writing the appropriate error
-// response itself if not. Zero-query: the Reader already carries the
-// roles Middleware resolved for this request. Shared by Owner-only
-// handlers across packages -- the same way RequireTx is, exported so no
-// package needs its own copy of the owner check.
-//
-// Since #1028 every caller left is a GET whose Owner-only seat the mount
-// already declares through GatedRouter.Get (the pending-deletion read,
-// the export, client.EraseEligibilityHandler): each is the redundant
-// half of a pair, not the gate. No write calls this any more. A write
-// whose Owner-only rule is the whole rule declares it at the mount, through
-// idempotency.Router.ExemptGated or ReplayableGated (#970, #990, #1016,
-// #1028), where GatedWrite's startup panic and
-// api/write_role_guardrail_test.go can both see it -- and that test now
-// refuses a new mutating route that declares nothing, so reaching for
-// this call in a fresh write would not pass.
-func RequireOwner(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, ok bool) {
-	tx, practiceID, reader, ok := RequireTxReader(w, r)
-	if !ok {
-		// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-		return nil, "", false
-	}
-	if !reader.Has(roleOwner) {
-		apierr.WriteError(w, msgOwnerOnlyRefused, http.StatusForbidden)
-		return nil, "", false
-	}
-	return tx, practiceID, true
-}
-
 // MsgContractorMoneyRefused is the 403 body every route ADR-0008's money
 // row (as amended by #282) refuses a contractor Doula with -- named once
-// so RequireNotAmbientContractor and a route that needs the reader-only
-// check without a tx (contracts.GetSignedContractPDFHandler) can never
-// drift onto two different wordings for the same refusal.
+// so NotAmbientContractor and any route that checks the Reader itself can
+// never drift onto two different wordings for the same refusal.
 const MsgContractorMoneyRefused = "You contract for this Practice, so you cannot see its money. You can see your own agreed fee on work you are attached to."
-
-// RequireNotAmbientContractor resolves the caller's Reader and
-// request-scoped tx from context and confirms the caller is not a plain
-// contractor Doula -- ADR-0008's money row as amended by #282: a
-// Contract's amount, its Invoice and payment history, and the ledger's
-// money entries open to an Owner, an Admin, and an employed Doula alike;
-// only a contractor is refused, and her own agreed fee reaches her
-// through her Engagement attachment, never this route. Zero-query, for
-// the same reason RequireOwnerOrAdmin is.
-func RequireNotAmbientContractor(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, ok bool) {
-	tx, practiceID, reader, ok := RequireTxReader(w, r)
-	if !ok {
-		// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-		return nil, "", false
-	}
-	if reader.IsAmbientContractor() {
-		apierr.WriteError(w, MsgContractorMoneyRefused, http.StatusForbidden)
-		return nil, "", false
-	}
-	return tx, practiceID, true
-}
-
-// RequireOwnerOrAdmin is RequireOwner widened by one role, for what
-// ADR-0008 puts in an Admin's hands as well as an Owner's: running the
-// work, rather than deciding who is at the Practice at all (inviting,
-// editing a Membership), which stays Owner-only. Zero-query, for the
-// same reason RequireOwner is. Every caller left is a GET whose seat the
-// mount already declares through GatedRouter.Get -- the
-// awaiting-void-decision read, and the Engagement Request list and
-// detail -- because a write whose Owner-or-Admin rule is the whole rule
-// declares it at the mount instead (#970, #990, #1016), not here. The
-// Contracts awaiting-signature roll-up moved off this call on #973: it
-// carries no money, so it follows ADR-0008's Engagements/Visits/Messages
-// row (AnyStaff, narrowed for a contractor inside the handler) rather
-// than an Owner-or-Admin seat.
-func RequireOwnerOrAdmin(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, ok bool) {
-	tx, practiceID, reader, ok := RequireTxReader(w, r)
-	if !ok {
-		// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-		return nil, "", false
-	}
-	if !reader.IsOwnerOrAdmin() {
-		apierr.WriteError(w, msgOwnerOrAdminRefused, http.StatusForbidden)
-		return nil, "", false
-	}
-	return tx, practiceID, true
-}

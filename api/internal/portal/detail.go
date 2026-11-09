@@ -109,13 +109,8 @@ type Detail struct {
 // DetailHandler views the caller's Engagement's basic detail. Must be
 // mounted behind clientauth.Middleware.
 func DetailHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, clientID, ok := clientauth.RequireClientTx(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-		engagementID, _ := clientauth.EngagementID(r.Context())
+	return clientauth.Handler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call) {
+		tx, clientID, engagementID := c.Tx, c.ClientID, c.EngagementID
 
 		var d Detail
 		var dueDate sql.NullString

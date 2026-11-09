@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/outbox"
+	"doula-cloud/api/internal/staffauth"
 )
 
 // act names one row practice_deletion_outbox carries -- the Go side of
@@ -145,10 +146,10 @@ func (w Worker) performReminder(ctx context.Context, tx *sql.Tx, inner outbox.Wo
 		return markErr(inner.MarkSent(ctx, tx, r.id, now))
 	}
 
-	emails, err := ownerEmails(ctx, tx, r.practiceID)
+	emails, err := staffauth.OwnerEmails(ctx, tx, r.practiceID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return err
+		return fmt.Errorf("practicedeletion: %w", err)
 	}
 	link := w.AppBaseURL + "/practices/" + r.practiceID + "/settings/delete"
 	return markErr(inner.SendAll(ctx, tx, r.id, r.attemptCount, now, emails, reminderSubject, reminderText(link, state.finalizeAt.Time)))
@@ -296,40 +297,6 @@ func forfeitBalance(ctx context.Context, tx *sql.Tx, practiceID string) (int, er
 		return 0, fmt.Errorf("practicedeletion: forfeit balance: %w", err)
 	}
 	return balance, nil
-}
-
-// ownerEmails returns the email of every Staff member holding the owner
-// role at practiceID -- the same query billing.ownerEmails and
-// payments.ownerEmails each already hold as their own copy, one per
-// outbox kind rather than shared, the established pattern for this
-// three-line query.
-func ownerEmails(ctx context.Context, tx *sql.Tx, practiceID string) ([]string, error) {
-	rows, err := tx.QueryContext(ctx,
-		`SELECT s.email FROM staff s
-		 JOIN practice_memberships pm ON pm.staff_id = s.id
-		 WHERE pm.practice_id = $1 AND 'owner' = ANY(pm.roles)`,
-		practiceID,
-	)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return nil, fmt.Errorf("practicedeletion: resolve owner emails: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var emails []string
-	for rows.Next() {
-		var email string
-		if err := rows.Scan(&email); err != nil {
-			// coverage:ignore reason: DB scan failure, not exercised by unit tests
-			return nil, fmt.Errorf("practicedeletion: scan owner email: %w", err)
-		}
-		emails = append(emails, email)
-	}
-	if err := rows.Err(); err != nil {
-		// coverage:ignore reason: DB row iteration failure, not exercised by unit tests
-		return nil, fmt.Errorf("practicedeletion: iterate owner emails: %w", err)
-	}
-	return emails, nil
 }
 
 // markErr gives an error from the outbox package -- a sibling package,

@@ -71,15 +71,11 @@ type TemplateResponse struct {
 	Fields   []Field `json:"fields"`
 }
 
-// planTypeFromPath validates the :planType path segment, writing a 400
-// response itself if it isn't a known plan_type enum member.
-func planTypeFromPath(w http.ResponseWriter, r *http.Request) (string, bool) {
-	planType := r.PathValue("planType")
-	if !validPlanTypes[planType] {
-		apierr.WriteError(w, "unknown plan type: "+planType, http.StatusBadRequest)
-		return "", false
-	}
-	return planType, true
+// planTypeGate refuses a :planType that is not a known plan_type enum
+// member with a 400, so a handler behind it reads Call.ID("planType").
+func planTypeGate() staffauth.Option {
+	return staffauth.PathValue("planType", func(v string) bool { return validPlanTypes[v] },
+		func(v string) string { return "unknown plan type: " + v })
 }
 
 // GetTemplateHandler lets any Staff member at the current Practice read
@@ -87,7 +83,7 @@ func planTypeFromPath(w http.ResponseWriter, r *http.Request) (string, bool) {
 // staffauth.Middleware.
 func GetTemplateHandler() http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
-		planType := r.PathValue("planType")
+		planType := c.ID("planType")
 		fields, ok := requireTemplateFields(w, r, c.Tx, c.PracticeID, planType)
 		if !ok {
 			return
@@ -106,7 +102,7 @@ func GetTemplateHandler() http.Handler {
 // idempotency.Router.ExemptGated.
 func PutTemplateHandler() http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
-		planType := r.PathValue("planType")
+		planType := c.ID("planType")
 
 		var req TemplateResponse
 		if !apierr.DecodeJSON(w, r, &req) {

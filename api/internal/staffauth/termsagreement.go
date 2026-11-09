@@ -180,14 +180,10 @@ func writeTermsAgreementRequired(w http.ResponseWriter) {
 // press repeated -- it writes nothing and answers the same 204, so the
 // first Owner who agrees settles it for the Practice.
 func AgreeToTermsHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := RequireTx(w, r)
-		if !ok {
-			// coverage:ignore reason: Middleware always sets a tx before this handler runs
-			return
-		}
+	return Handler(func(w http.ResponseWriter, r *http.Request, c Call) {
+		tx, practiceID := c.Tx, c.PracticeID
 		if len(agreementDueFrom(r.Context())) > 0 {
-			staffID, _ := StaffID(r.Context())
+			staffID := c.StaffID
 			if err := recordTermsAccepted(r.Context(), tx, r, practiceID, staffID); err != nil {
 				// coverage:ignore reason: DB failure inside recordTermsAccepted, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)

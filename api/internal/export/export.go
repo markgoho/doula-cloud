@@ -24,8 +24,8 @@ type exportScope struct {
 }
 
 // Handler streams a ZIP of one UTF-8 CSV per entity() row back to the
-// calling Owner. Mounted with staffauth.OwnerOnly, and RequireOwner is
-// called again here anyway -- belt-and-braces, the same shape
+// calling Owner. Mounted with staffauth.OwnerOnly, and staffauth.Owner is
+// declared again here anyway -- belt-and-braces, the same shape
 // client.EraseEligibilityHandler follows, since a route's mount-level
 // gate and its handler's own gate are two different lines of defense.
 //
@@ -45,14 +45,8 @@ type exportScope struct {
 //
 // Must be mounted behind staffauth.Middleware.
 func Handler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireOwner(w, r)
-		if !ok {
-			// coverage:ignore reason: belt-and-braces -- Mount's own
-			// OwnerOnly declaration (g.Get) already refuses a non-owner
-			// caller before this handler runs.
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, practiceID, staffID := c.Tx, c.PracticeID, c.StaffID
 
 		var practiceName string
 		if err := tx.QueryRowContext(r.Context(),
@@ -63,7 +57,6 @@ func Handler() http.Handler {
 			return
 		}
 
-		staffID, _ := staffauth.StaffID(r.Context())
 		entities := entities()
 		names := make([]string, len(entities))
 		for i, e := range entities {
@@ -111,7 +104,7 @@ func Handler() http.Handler {
 			// coverage:ignore reason: response streaming failure, not exercised by unit tests
 			log.Printf("export: close: %v", err)
 		}
-	})
+	}, staffauth.Owner())
 }
 
 // writeEntity streams one entity's rows as a CSV file inside zw. e.query

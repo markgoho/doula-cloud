@@ -30,13 +30,9 @@ import (
 // before it runs. Widening or narrowing this route means editing its
 // role list in mount.go.
 func VouchHandler(verifier authn.Verifier, enq tasknudge.Enqueuer) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		ownerStaffID, _ := StaffID(r.Context())
+	return Handler(func(w http.ResponseWriter, r *http.Request, c Call) {
+		tx, practiceID := c.Tx, c.PracticeID
+		ownerStaffID := c.StaffID
 		if !RequireRecentAuth(w, r, verifier, tx, ownerStaffID) {
 			return
 		}
@@ -44,10 +40,7 @@ func VouchHandler(verifier authn.Verifier, enq tasknudge.Enqueuer) http.Handler 
 			return
 		}
 
-		targetStaffID := r.PathValue("staffId")
-		if !ParseUUID(w, "staff", targetStaffID) {
-			return
-		}
+		targetStaffID := c.ID("staffId")
 
 		var targetIdentityUID string
 		err := tx.QueryRowContext(r.Context(),
@@ -96,5 +89,5 @@ func VouchHandler(verifier authn.Verifier, enq tasknudge.Enqueuer) http.Handler 
 		tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.MFARecoveryCode))
 
 		w.WriteHeader(http.StatusNoContent)
-	})
+	}, PathID("staff", "staffId"))
 }

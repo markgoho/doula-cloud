@@ -94,7 +94,7 @@ func PutRuleHandler() http.Handler {
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
-			if err := recordEngagement(r.Context(), c.Tx, c.PracticeID, c.EngagementID, activity.ActionOnCallRuleChanged,
+			if err := recordEngagement(r.Context(), c.Tx, c.PracticeID, c.StaffID, c.EngagementID, activity.ActionOnCallRuleChanged,
 				map[string]RuleRequest{diffBefore: before, diffAfter: req}); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -176,7 +176,7 @@ func PutNarrowingHandler() http.Handler {
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
-			if err := recordEngagement(r.Context(), c.Tx, c.PracticeID, c.EngagementID, activity.ActionOnCallNarrowingChanged,
+			if err := recordEngagement(r.Context(), c.Tx, c.PracticeID, c.StaffID, c.EngagementID, activity.ActionOnCallNarrowingChanged,
 				map[string]any{"staffId": staffID, diffBefore: before, diffAfter: req}); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -189,8 +189,7 @@ func PutNarrowingHandler() http.Handler {
 
 // recordEngagement writes one on-call action to an Engagement's ledger,
 // naming the acting Staff member.
-func recordEngagement(ctx context.Context, tx *sql.Tx, practiceID, engagementID string, action activity.EngagementAction, diff any) error {
-	actor, _ := staffauth.StaffID(ctx)
+func recordEngagement(ctx context.Context, tx *sql.Tx, practiceID, actor, engagementID string, action activity.EngagementAction, diff any) error {
 	return record(ctx, tx, activity.SubjectEngagement, practiceID, engagementID, actor, string(action), diff)
 }
 

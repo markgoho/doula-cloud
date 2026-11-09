@@ -246,8 +246,7 @@ const (
 // the work ended and when (#2270), and nothing else about the
 // Engagement: the 410 carries her own record only. Everyone else, a
 // contractor never on it included, gets the plain 404.
-func refuseUnreachable(w http.ResponseWriter, r *http.Request, tx *sql.Tx, practiceID, engagementID string) {
-	staffID, _ := staffauth.StaffID(r.Context())
+func refuseUnreachable(w http.ResponseWriter, r *http.Request, tx *sql.Tx, practiceID, staffID, engagementID string) {
 	var kind string
 	var dueDate sql.NullTime
 	var endedOn time.Time
@@ -300,7 +299,7 @@ func DetailHandler() http.Handler {
 			return
 		}
 		if !canAccess {
-			refuseUnreachable(w, r, c.Tx, c.PracticeID, c.EngagementID)
+			refuseUnreachable(w, r, c.Tx, c.PracticeID, c.StaffID, c.EngagementID)
 			return
 		}
 

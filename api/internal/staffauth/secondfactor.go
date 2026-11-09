@@ -73,25 +73,19 @@ func SecondFactor(ctx context.Context) bool {
 // The record is written in Middleware's own transaction, which commits
 // once the handler returns whatever it answered.
 func requireSecondFactor(act string, h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return Handler(func(w http.ResponseWriter, r *http.Request, c Call) {
 		if SecondFactor(r.Context()) {
 			h.ServeHTTP(w, r)
 			return
 		}
-		tx, practiceID, ok := RequireTx(w, r)
-		if !ok {
-			// coverage:ignore reason: Middleware always sets a tx before this seam runs
-			return
-		}
-		staffID, _ := StaffID(r.Context())
 		diff, _ := json.Marshal(secondFactorRefusal{Act: act})
-		if err := activity.Record(r.Context(), tx, activity.Entry{
-			PracticeID:  practiceID,
+		if err := activity.Record(r.Context(), c.Tx, activity.Entry{
+			PracticeID:  c.PracticeID,
 			SubjectKind: activity.SubjectPractice,
-			SubjectID:   practiceID,
+			SubjectID:   c.PracticeID,
 			Action:      ActionSecondFactorRefused,
 			Diff:        diff,
-			Actor:       activity.StaffActor(staffID),
+			Actor:       activity.StaffActor(c.StaffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)

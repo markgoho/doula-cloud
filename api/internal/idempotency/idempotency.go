@@ -73,21 +73,14 @@ type scope struct {
 // error) for the next request carrying the same key. Must be mounted
 // inside staffauth.Middleware.
 func Wrap(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		key, ok := usableKey(r)
 		if !ok {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		staffID, _ := staffauth.StaffID(r.Context())
-
-		serve(w, r, next, tx, key, scope{practiceID: practiceID, staffID: sql.NullString{String: staffID, Valid: true}})
+		serve(w, r, next, c.Tx, key, scope{practiceID: c.PracticeID, staffID: sql.NullString{String: c.StaffID, Valid: true}})
 	})
 }
 
@@ -100,21 +93,14 @@ func Wrap(next http.Handler) http.Handler {
 // idempotency_keys_own_scope checks the same pairing again on every read
 // and write.
 func WrapClient(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return clientauth.Handler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call) {
 		key, ok := usableKey(r)
 		if !ok {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		tx, hasTx := clientauth.Tx(r.Context())
-		clientID, hasClient := clientauth.ClientID(r.Context())
-		// coverage:ignore reason: clientauth.Middleware always sets a tx and a Client id before this handler runs
-		if !hasTx || !hasClient {
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
+		tx, clientID := c.Tx, c.ClientID
 		var practiceID string
 		if err := tx.QueryRowContext(r.Context(), `SELECT practice_id FROM clients WHERE id = $1`, clientID).Scan(&practiceID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
