@@ -37,7 +37,7 @@ func TestPostContractHandler_NoRateSet(t *testing.T) {
 	e := newEnv(t)
 	e.seedTemplate(mergeFieldProse)
 
-	out := apierrtest.Expect(t, http.MethodPost, e.contractURL(""), http.StatusConflict, e.signedIn)
+	out := apierrtest.Expect(t, http.MethodPost, e.contractURL(""), http.StatusConflict, e.SignedIn)
 
 	if out.Code != apierr.CodeFailedPrecondition {
 		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeFailedPrecondition)
@@ -56,9 +56,9 @@ func TestPostContractHandler_RemovedRateRefusedLikeNoRate(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()), alsoMounting(practicerate.Mount))
 	e.readyToDraft(mergeFieldProse)
 
-	reqtest.ExpectStatus(t, http.MethodDelete, e.srv.URL+"/api/practices/"+e.Practice.ID+"/rates/birth", http.StatusOK, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodDelete, e.Srv.URL+"/api/practices/"+e.Practice.ID+"/rates/birth", http.StatusOK, e.SignedIn)
 
-	out := apierrtest.Expect(t, http.MethodPost, e.contractURL(""), http.StatusConflict, e.signedIn)
+	out := apierrtest.Expect(t, http.MethodPost, e.contractURL(""), http.StatusConflict, e.SignedIn)
 	if out.Message != noBirthRate {
 		t.Fatalf("message = %q, want %q", out.Message, noBirthRate)
 	}
@@ -82,7 +82,7 @@ func TestPutContractAmountHandler_RefusedByRole(t *testing.T) {
 			e := newEnv(t, signedInAs(tc.staff...))
 			e.seedDraft()
 
-			reqtest.ExpectStatus(t, http.MethodPut, e.amountURL(), tc.wantStatus, e.signedIn, amounting(20000))
+			reqtest.ExpectStatus(t, http.MethodPut, e.amountURL(), tc.wantStatus, e.SignedIn, amounting(20000))
 		})
 	}
 }
@@ -95,7 +95,7 @@ func TestPutContractAmountHandler_Success(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
 	e.seedDraft()
 
-	out := reqtest.Expect[contracts.ContractAmountResponse](t, http.MethodPut, e.amountURL(), http.StatusOK, e.signedIn, amounting(30000))
+	out := reqtest.Expect[contracts.ContractAmountResponse](t, http.MethodPut, e.amountURL(), http.StatusOK, e.SignedIn, amounting(30000))
 
 	if out.AmountCents != 30000 {
 		t.Fatalf("amountCents = %d, want 30000", out.AmountCents)
@@ -105,7 +105,7 @@ func TestPutContractAmountHandler_Success(t *testing.T) {
 		t.Fatalf("values[price] after override = %q, want %q", got.Values[priceKey], "$300.00")
 	}
 
-	diff := assertActivityActor(t, e.db, e.Engagement.ID, activity.ActionContractAmountOverridden, e.Staff.ID)
+	diff := assertActivityActor(t, e.DB, e.Engagement.ID, activity.ActionContractAmountOverridden, e.Staff.ID)
 	var parsedDiff activity.AmountDiff
 	if err := json.Unmarshal(diff, &parsedDiff); err != nil {
 		t.Fatalf("unmarshal diff: %v", err)
@@ -117,7 +117,7 @@ func TestPutContractAmountHandler_Success(t *testing.T) {
 	// #968's AC: an overridden Contract keeps the override and never
 	// re-derives when a later rate change comes through -- amount_overridden
 	// is the column practicerate.PutRateHandler's reprice pass excludes on.
-	overridden := testdb.Scalar[bool](t, e.db.Admin, `SELECT amount_overridden FROM contracts WHERE engagement_id = $1`, e.Engagement.ID)
+	overridden := testdb.Scalar[bool](t, e.DB.Admin, `SELECT amount_overridden FROM contracts WHERE engagement_id = $1`, e.Engagement.ID)
 	if !overridden {
 		t.Fatalf("amount_overridden = false, want true after an Owner/Admin override")
 	}
@@ -133,10 +133,10 @@ func TestPutContractAmountHandler_RepeatedIdenticalValueRecordsNoNewActivity(t *
 	e := newEnv(t, signedInAs(fixture.Owner()))
 	e.seedDraft()
 
-	reqtest.ExpectStatus(t, http.MethodPut, e.amountURL(), http.StatusOK, e.signedIn, amounting(15000))
-	reqtest.ExpectStatus(t, http.MethodPut, e.amountURL(), http.StatusOK, e.signedIn, amounting(15000))
+	reqtest.ExpectStatus(t, http.MethodPut, e.amountURL(), http.StatusOK, e.SignedIn, amounting(15000))
+	reqtest.ExpectStatus(t, http.MethodPut, e.amountURL(), http.StatusOK, e.SignedIn, amounting(15000))
 
-	count := testdb.Scalar[int](t, e.db.Admin, `SELECT count(*) FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = 'contract_amount_overridden'`, e.Engagement.ID)
+	count := testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = 'contract_amount_overridden'`, e.Engagement.ID)
 	if count != 0 {
 		t.Fatalf("activity rows = %d, want 0 (the amount never actually changed, 15000 == 15000)", count)
 	}
@@ -170,7 +170,7 @@ func TestPutContractAmountHandler_Refusals(t *testing.T) {
 				e.seedContract(tc.status)
 			}
 
-			reqtest.ExpectStatus(t, http.MethodPut, e.amountURL(), tc.want, e.signedIn, tc.body)
+			reqtest.ExpectStatus(t, http.MethodPut, e.amountURL(), tc.want, e.SignedIn, tc.body)
 		})
 	}
 }

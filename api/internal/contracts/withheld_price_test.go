@@ -40,7 +40,7 @@ func assertNoPrice(t *testing.T, out contracts.ContractResponse) {
 
 func TestGetContractHandler_ContractorReadsNoPriceLine(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Contractor()), attachedToEngagement())
-	seedContract(t, e.db, e.Engagement.ID, statusDraft, pricedProse)
+	seedContract(t, e.DB, e.Engagement.ID, statusDraft, pricedProse)
 
 	assertNoPrice(t, e.contract())
 }
@@ -49,9 +49,9 @@ func TestGetContractHandler_ContractorReadsNoPriceLine(t *testing.T) {
 // draft's merge fields must not read the price in what comes back.
 func TestPutContractHandler_ContractorReadsNoPriceLine(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Contractor()), attachedToEngagement())
-	seedContract(t, e.db, e.Engagement.ID, statusDraft, pricedProse)
+	seedContract(t, e.DB, e.Engagement.ID, statusDraft, pricedProse)
 
-	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPut, e.contractURL(""), http.StatusOK, e.signedIn,
+	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPut, e.contractURL(""), http.StatusOK, e.SignedIn,
 		putting(contracts.MergeFieldValues{clientNameKey: jamieName}))
 
 	assertNoPrice(t, out)
@@ -64,7 +64,7 @@ func TestPutContractHandler_ContractorReadsNoPriceLine(t *testing.T) {
 // line, filled.
 func TestGetContractHandler_EmployeeReadsThePriceLine(t *testing.T) {
 	e := newEnv(t)
-	seedContract(t, e.db, e.Engagement.ID, statusDraft, pricedProse)
+	seedContract(t, e.DB, e.Engagement.ID, statusDraft, pricedProse)
 
 	out := e.contract()
 

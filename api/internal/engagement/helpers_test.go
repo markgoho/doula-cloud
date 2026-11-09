@@ -2,15 +2,11 @@ package engagement_test
 
 import (
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/fixture"
-	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/testdb"
 )
 
 // env is what a test in this package starts from: a Practice with this
@@ -19,83 +15,28 @@ import (
 // the Engagement is an intake birth for a new Client; a test says only
 // what it changes, with signedInAs and withEngagement.
 type env struct {
-	t   *testing.T
-	db  *testdb.DB
-	srv *httptest.Server
-
-	Practice   fixture.PracticeRecord
-	Staff      fixture.StaffRecord
-	Engagement fixture.EngagementRecord
-
-	signedIn reqtest.Option
+	*fixture.Scene
 }
 
-type envSpec struct {
-	staff      []fixture.StaffOption
-	engagement []fixture.EngagementOption
-}
+type envOption = fixture.SceneOption
 
-type envOption func(*envSpec)
+// The option names this package's tests read as; each is the Scene's own.
+var (
+	signedInAs     = fixture.SignedInAs
+	withEngagement = fixture.WithEngagement
+)
 
-// signedInAs shapes the Staff member who is at the screen.
-func signedInAs(opts ...fixture.StaffOption) envOption {
-	return func(s *envSpec) { s.staff = append(s.staff, opts...) }
-}
-
-// withEngagement shapes the Engagement the test is about.
-func withEngagement(opts ...fixture.EngagementOption) envOption {
-	return func(s *envSpec) { s.engagement = append(s.engagement, opts...) }
-}
-
-func newEnv(t *testing.T, opts ...envOption) *env {
-	t.Helper()
-	var spec envSpec
-	for _, opt := range opts {
-		opt(&spec)
-	}
-	db := testdb.New(t)
-	e := &env{t: t, db: db, Practice: fixture.Practice(t, db)}
-	e.Staff = fixture.Staff(t, db, e.Practice, spec.staff...)
-	e.Engagement = fixture.Engagement(t, db, e.Practice, spec.engagement...)
-	e.srv = e.mount()
-	e.signedIn = e.as(e.Staff)
-	return e
-}
-
-// mount mounts this package's whole surface through engagement.Mount,
+// newEnv mounts this package's whole surface through engagement.Mount,
 // the same call main.go makes on the real GatedRouter and
 // idempotency.Router.
-func (e *env) mount() *httptest.Server {
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, e.db.App)
-	ir := idempotency.NewRouter(g, e.db.App)
-	engagement.Mount(g, ir)
-	srv := httptest.NewServer(mux)
-	e.t.Cleanup(srv.Close)
-	return srv
-}
-
-// as signs a request in as who.
-func (e *env) as(who fixture.StaffRecord) reqtest.Option {
-	e.t.Helper()
-	return reqtest.Session(fixture.Session(e.t, e.db, who))
-}
-
-// staff is another Staff member at the Practice.
-func (e *env) staff(opts ...fixture.StaffOption) fixture.StaffRecord {
-	e.t.Helper()
-	return fixture.Staff(e.t, e.db, e.Practice, opts...)
-}
-
-// anotherEngagement is a second Engagement at the Practice.
-func (e *env) anotherEngagement(opts ...fixture.EngagementOption) fixture.EngagementRecord {
-	e.t.Helper()
-	return fixture.Engagement(e.t, e.db, e.Practice, opts...)
+func newEnv(t *testing.T, opts ...fixture.SceneOption) *env {
+	t.Helper()
+	return &env{fixture.NewScene(t, fixture.Routes(engagement.Mount), append([]fixture.SceneOption{withEngagement()}, opts...)...)}
 }
 
 // urlOf is the route of engagementID plus path.
 func (e *env) urlOf(engagementID, path string) string {
-	return e.srv.URL + "/api/practices/" + e.Practice.ID + "/engagements/" + engagementID + path
+	return e.PracticeURL("/engagements/" + engagementID + path)
 }
 
 // engagementURL is the Engagement's route plus path.
@@ -105,28 +46,20 @@ func (e *env) engagementURL(path string) string {
 
 // detail reads the Engagement as the Staff member at the screen.
 func (e *env) detail() engagement.Detail {
-	e.t.Helper()
+	e.T.Helper()
 	return e.detailAs(e.Staff)
 }
 
 // detailAs reads the Engagement as who.
 func (e *env) detailAs(who fixture.StaffRecord) engagement.Detail {
-	e.t.Helper()
+	e.T.Helper()
 	return e.detailOf(e.Engagement.ID, who)
 }
 
 // detailOf reads engagementID as who.
 func (e *env) detailOf(engagementID string, who fixture.StaffRecord) engagement.Detail {
-	e.t.Helper()
-	return reqtest.Expect[engagement.Detail](e.t, http.MethodGet, e.urlOf(engagementID, ""), http.StatusOK, e.as(who))
-}
-
-// exec runs one fixture statement on the superuser connection.
-func (e *env) exec(query string, args ...any) {
-	e.t.Helper()
-	if _, err := e.db.Admin.ExecContext(e.t.Context(), query, args...); err != nil {
-		e.t.Fatalf("fixture %q: %v", query, err)
-	}
+	e.T.Helper()
+	return reqtest.Expect[engagement.Detail](e.T, http.MethodGet, e.urlOf(engagementID, ""), http.StatusOK, e.As(who))
 }
 
 // roleCase is one row of ADR-0015's role table, for a test that ranges
@@ -171,7 +104,7 @@ func (e *env) refusesAnUnreadableRequest(t *testing.T, method, path string, vali
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			reqtest.ExpectStatus(t, method, e.urlOf(tc.engagementID, path), tc.want, e.signedIn, tc.body)
+			reqtest.ExpectStatus(t, method, e.urlOf(tc.engagementID, path), tc.want, e.SignedIn, tc.body)
 		})
 	}
 }

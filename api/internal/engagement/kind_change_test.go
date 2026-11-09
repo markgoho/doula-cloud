@@ -24,16 +24,16 @@ type kindChangeResponseBody struct {
 // changeKind PUTs a kind change for the Engagement as the Staff member at
 // the screen and requires want.
 func (e *env) changeKind(kind engagement.Kind, want int) kindChangeResponseBody {
-	e.t.Helper()
-	return reqtest.Expect[kindChangeResponseBody](e.t, http.MethodPut, e.engagementURL("/kind"), want, e.signedIn,
+	e.T.Helper()
+	return reqtest.Expect[kindChangeResponseBody](e.T, http.MethodPut, e.engagementURL("/kind"), want, e.SignedIn,
 		reqtest.JSON(map[string]any{"kind": string(kind)}))
 }
 
 // kind is the Engagement's stored kind, read past the API to prove the
 // database itself agrees.
 func (e *env) kind() string {
-	e.t.Helper()
-	return testdb.Scalar[string](e.t, e.db.Admin, `SELECT kind::text FROM engagements WHERE id = $1`, e.Engagement.ID)
+	e.T.Helper()
+	return testdb.Scalar[string](e.T, e.DB.Admin, `SELECT kind::text FROM engagements WHERE id = $1`, e.Engagement.ID)
 }
 
 // assertKindEvent reads the most recent kind_changed activity entry
@@ -86,10 +86,10 @@ func TestChangeKindHandler_RolesMayChange(t *testing.T) {
 			if got := e.kind(); got != postpartumKind {
 				t.Fatalf("kind = %q, want postpartum", got)
 			}
-			if n := countFactEntries(t, e.db, e.Engagement.ID); n != 1 {
+			if n := countFactEntries(t, e.DB, e.Engagement.ID); n != 1 {
 				t.Fatalf("fact entries = %d, want 1", n)
 			}
-			assertKindEvent(t, e.db, e.Engagement.ID, birthKind, postpartumKind)
+			assertKindEvent(t, e.DB, e.Engagement.ID, birthKind, postpartumKind)
 		})
 	}
 }
@@ -105,7 +105,7 @@ func TestChangeKindHandler_Validation(t *testing.T) {
 	if got := e.kind(); got != birthKind {
 		t.Fatalf("kind = %q, want left unchanged", got)
 	}
-	if n := countFactEntries(t, e.db, e.Engagement.ID); n != 0 {
+	if n := countFactEntries(t, e.DB, e.Engagement.ID); n != 0 {
 		t.Fatalf("fact entries = %d, want 0 -- a refused write leaves no audit row", n)
 	}
 }
@@ -128,17 +128,17 @@ func TestChangeKindHandler_BothDirectionsAndNoOp(t *testing.T) {
 	if body := e.changeKind(engagement.KindPostpartum, http.StatusOK); body.Kind != postpartumKind {
 		t.Fatalf("resend: body = %+v", body)
 	}
-	if n := countFactEntries(t, e.db, e.Engagement.ID); n != 1 {
+	if n := countFactEntries(t, e.DB, e.Engagement.ID); n != 1 {
 		t.Fatalf("fact entries = %d, want 1 -- the resend writes nothing", n)
 	}
 
 	if body := e.changeKind(engagement.KindBirth, http.StatusOK); body.Kind != birthKind {
 		t.Fatalf("postpartum -> birth: body = %+v", body)
 	}
-	if n := countFactEntries(t, e.db, e.Engagement.ID); n != 2 {
+	if n := countFactEntries(t, e.DB, e.Engagement.ID); n != 2 {
 		t.Fatalf("fact entries = %d, want 2", n)
 	}
-	assertKindEvent(t, e.db, e.Engagement.ID, postpartumKind, birthKind)
+	assertKindEvent(t, e.DB, e.Engagement.ID, postpartumKind, birthKind)
 }
 
 // TestChangeKindHandler_AfterABirthOutcome is ADR-0015's own sentence:
@@ -166,7 +166,7 @@ func TestChangeKindHandler_AfterABirthOutcome(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newOwnerEnv(t, withEngagement(fixture.Kind(tc.from)))
-			testdb.SeedBirthOutcome(t, e.db, e.Engagement.ID)
+			testdb.SeedBirthOutcome(t, e.DB, e.Engagement.ID)
 
 			body := e.changeKind(tc.to, tc.wantStatus)
 
@@ -176,7 +176,7 @@ func TestChangeKindHandler_AfterABirthOutcome(t *testing.T) {
 			if got := e.kind(); got != tc.wantKind {
 				t.Fatalf("kind = %q, want %q", got, tc.wantKind)
 			}
-			if n := countFactEntries(t, e.db, e.Engagement.ID); n != tc.wantFacts {
+			if n := countFactEntries(t, e.DB, e.Engagement.ID); n != tc.wantFacts {
 				t.Fatalf("fact entries = %d, want %d", n, tc.wantFacts)
 			}
 		})
@@ -202,7 +202,7 @@ func TestChangeKindHandler_RefusesARequestItCannotRead(t *testing.T) {
 // proves the portal read leaves it out.
 func TestChangeKindHandler_MovesNothingElse(t *testing.T) {
 	e := newOwnerEnv(t)
-	admin := e.db.Admin
+	admin := e.DB.Admin
 	engagementID := e.Engagement.ID
 
 	var visitID string
@@ -248,7 +248,7 @@ func TestChangeKindHandler_MovesNothingElse(t *testing.T) {
 	if got := testdb.Scalar[int](t, admin, `SELECT count(*) FROM credit_ledger WHERE consumed_engagement_id = $1`, engagementID); got != 1 {
 		t.Fatalf("credit_ledger rows for this Engagement = %d, want 1 -- no second Credit spent", got)
 	}
-	if n := countFactEntries(t, e.db, engagementID); n != 1 {
+	if n := countFactEntries(t, e.DB, engagementID); n != 1 {
 		t.Fatalf("fact entries = %d, want 1", n)
 	}
 	if n := e.countActivity("kind_changed"); n != 1 {

@@ -16,7 +16,7 @@ import (
 // no handler answers 500 for something a typo can produce.
 func TestWrites_RefuseAMalformedPathOrBody(t *testing.T) {
 	e := newEnv(t)
-	bad := e.practiceURL("/engagements/not-a-uuid")
+	bad := e.PracticeURL("/engagements/not-a-uuid")
 
 	tests := []struct {
 		name   string
@@ -39,7 +39,7 @@ func TestWrites_RefuseAMalformedPathOrBody(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			opts := []reqtest.Option{e.asOwner}
+			opts := []reqtest.Option{e.SignedIn}
 			if tt.body != "" {
 				opts = append(opts, reqtest.RawJSON([]byte(tt.body)))
 			}
@@ -50,18 +50,18 @@ func TestWrites_RefuseAMalformedPathOrBody(t *testing.T) {
 
 func TestWrites_RefuseWhatHasNoWindowOrNoEngagement(t *testing.T) {
 	e := newEnv(t)
-	e.exec(`UPDATE engagements SET due_date = NULL WHERE id = $1`, e.Birth.ID)
+	e.Exec(`UPDATE engagements SET due_date = NULL WHERE id = $1`, e.Birth.ID)
 	gapURL := e.gapsURL() + "/" + e.Birth.ID
 
 	for _, method := range []string{http.MethodPut, http.MethodDelete} {
 		t.Run(method+" on a birth with no window", func(t *testing.T) {
-			reqtest.ExpectStatus(t, method, gapURL, http.StatusConflict, e.asOwner, reqtest.JSON(gapBody(e.Doula.ID, nil)))
+			reqtest.ExpectStatus(t, method, gapURL, http.StatusConflict, e.SignedIn, reqtest.JSON(gapBody(e.Doula.ID, nil)))
 		})
 	}
 
 	granted := oncall.StartAttachmentGranted
-	unknown := e.practiceURL("/engagements/00000000-0000-0000-0000-000000000000/on-call-rule")
-	reqtest.ExpectStatus(t, http.MethodPut, unknown, http.StatusNotFound, e.asOwner, reqtest.JSON(oncall.RuleRequest{StartRule: &granted}))
+	unknown := e.PracticeURL("/engagements/00000000-0000-0000-0000-000000000000/on-call-rule")
+	reqtest.ExpectStatus(t, http.MethodPut, unknown, http.StatusNotFound, e.SignedIn, reqtest.JSON(oncall.RuleRequest{StartRule: &granted}))
 }
 
 func TestEngagementRule_AWeekChangeUnderTheSameRuleIsRecorded(t *testing.T) {
@@ -94,7 +94,7 @@ func TestEngagementRule_RefusesEveryMalformedOverride(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := reqtest.Expect[refusal](t, http.MethodPut, e.ruleURL(), http.StatusBadRequest, e.asOwner, reqtest.JSON(tt.req))
+			got := reqtest.Expect[refusal](t, http.MethodPut, e.ruleURL(), http.StatusBadRequest, e.SignedIn, reqtest.JSON(tt.req))
 			if got.Details[tt.field] == nil {
 				t.Fatalf("details = %v, want a refusal under %q", got.Details, tt.field)
 			}
@@ -109,13 +109,13 @@ func TestUpdateGap_RefusesTheSameThingsACreateDoes(t *testing.T) {
 	noEnd := gapBody(e.Doula.ID, nil)
 	noEnd.EndsAt = nil
 
-	got := reqtest.Expect[refusal](t, http.MethodPut, e.gapURL(), http.StatusBadRequest, e.asOwner, reqtest.JSON(noEnd))
+	got := reqtest.Expect[refusal](t, http.MethodPut, e.gapURL(), http.StatusBadRequest, e.SignedIn, reqtest.JSON(noEnd))
 	if got.Details[fieldEndsAt] != oncall.MsgEndsAtRequired {
 		t.Fatalf("details = %v, want the missing end refused", got.Details)
 	}
 
 	// The gap's own Doula may edit it, and may not hand it to a colleague.
-	asDoula := e.as(e.Doula)
+	asDoula := e.As(e.Doula)
 	e.save(asDoula, gapBody(e.Doula.ID, &e.Backup.ID))
 	reqtest.ExpectStatus(t, http.MethodPut, e.gapURL(), http.StatusForbidden, asDoula, reqtest.JSON(gapBody(e.Backup.ID, nil)))
 }
@@ -136,12 +136,12 @@ func TestCreateGap_RefusesALongReasonAndTakesABlankCover(t *testing.T) {
 	long := strings.Repeat("a", 501)
 	tooLong := gapBody(e.Doula.ID, nil)
 	tooLong.Reason = &long
-	reqtest.ExpectStatus(t, http.MethodPost, e.gapsURL(), http.StatusBadRequest, e.asOwner, reqtest.JSON(tooLong))
+	reqtest.ExpectStatus(t, http.MethodPost, e.gapsURL(), http.StatusBadRequest, e.SignedIn, reqtest.JSON(tooLong))
 
 	blank := ""
 	blankCover := gapBody(e.Doula.ID, &blank)
 	blankCover.Reason = nil
-	gap := e.recordGap(e.asOwner, blankCover)
+	gap := e.recordGap(e.SignedIn, blankCover)
 	if gap.CoveringStaffID != nil || gap.Reason != nil {
 		t.Fatalf("gap = %+v, want a blank cover and reason read as none", gap)
 	}
@@ -154,7 +154,7 @@ func newDepartedCoverEnv(t *testing.T) (*env, string) {
 	t.Helper()
 	e := newEnv(t)
 	backup := e.backup()
-	e.exec(`INSERT INTO engagement_coverage_gaps (engagement_id, staff_id, covering_staff_id, starts_at, ends_at, created_by)
+	e.Exec(`INSERT INTO engagement_coverage_gaps (engagement_id, staff_id, covering_staff_id, starts_at, ends_at, created_by)
 		VALUES ($1, $2, $3, '2026-10-17T22:00:00Z', '2026-10-18T10:00:00Z', $2)`, e.Birth.ID, e.Doula.ID, backup.ID)
 	return e, backup.ID
 }
@@ -165,7 +165,7 @@ func newDepartedCoverEnv(t *testing.T) (*env, string) {
 // keeps her name.
 func TestRoster_ACoveringColleagueWhoLeftIsStillNamed(t *testing.T) {
 	e, backupID := newDepartedCoverEnv(t)
-	testdb.EndMembership(t, e.db, e.Practice.ID, backupID, e.Owner.ID)
+	testdb.EndMembership(t, e.DB, e.Practice.ID, backupID, e.Staff.ID)
 
 	w := e.roster("2026-10-17", "2026-10-17").Windows[0]
 
@@ -180,8 +180,8 @@ func TestRoster_ACoveringColleagueWhoLeftIsStillNamed(t *testing.T) {
 // than printing a bare id.
 func TestRoster_ADepartedCoveringColleagueIsNamedAsOne(t *testing.T) {
 	e, backupID := newDepartedCoverEnv(t)
-	testdb.EndMembership(t, e.db, e.Practice.ID, backupID, backupID)
-	testdb.RedactDeletedLogin(t, e.db, backupID)
+	testdb.EndMembership(t, e.DB, e.Practice.ID, backupID, backupID)
+	testdb.RedactDeletedLogin(t, e.DB, backupID)
 
 	w := e.roster("2026-10-17", "2026-10-17").Windows[0]
 
@@ -198,7 +198,7 @@ func TestRoster_SortsAndSkipsWhatItShould(t *testing.T) {
 	e.attachNewBirth("Ada Second", e.Doula)
 	// A narrowing that misses the window: she is attached and on call for
 	// none of it, so the whole window reads as unstaffed.
-	e.exec(`UPDATE engagement_attachments SET on_call_from = '2027-01-01' WHERE engagement_id = $1`, e.Birth.ID)
+	e.Exec(`UPDATE engagement_attachments SET on_call_from = '2027-01-01' WHERE engagement_id = $1`, e.Birth.ID)
 
 	got := e.roster(windowStart, octLast)
 
@@ -216,7 +216,7 @@ func TestRoster_SortsAndSkipsWhatItShould(t *testing.T) {
 // rather than a row that never resolves.
 func TestGapNoticeWorker_NoOwnerOrAdminLeftMailsNobody(t *testing.T) {
 	e := newNoticeEnv(t)
-	e.exec(`DELETE FROM practice_memberships WHERE practice_id = $1 AND (roles && ARRAY['owner','admin']::practice_role[])`, e.Practice.ID)
+	e.Exec(`DELETE FROM practice_memberships WHERE practice_id = $1 AND (roles && ARRAY['owner','admin']::practice_role[])`, e.Practice.ID)
 
 	e.runWorker(&mail.FakeSender{})
 

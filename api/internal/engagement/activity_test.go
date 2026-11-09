@@ -16,25 +16,25 @@ import (
 
 // seedActivity writes one entry on the Engagement's ledger.
 func (e *env) seedActivity(action activity.EngagementAction, actor activity.Actor) {
-	e.t.Helper()
-	testdb.SeedActivity(e.t, e.db, e.Practice.ID, activity.SubjectEngagement, e.Engagement.ID, string(action), actor)
+	e.T.Helper()
+	testdb.SeedActivity(e.T, e.DB, e.Practice.ID, activity.SubjectEngagement, e.Engagement.ID, string(action), actor)
 }
 
 // seedActivityWithDiff is seedActivity carrying diff.
 func (e *env) seedActivityWithDiff(action activity.EngagementAction, actor activity.Actor, diff jsontext.Value) {
-	e.t.Helper()
-	testdb.SeedActivityWithDiff(e.t, e.db, e.Practice.ID, activity.SubjectEngagement, e.Engagement.ID, string(action), actor, diff)
+	e.T.Helper()
+	testdb.SeedActivityWithDiff(e.T, e.DB, e.Practice.ID, activity.SubjectEngagement, e.Engagement.ID, string(action), actor, diff)
 }
 
 // activityAs reads the Engagement's ledger as who.
 func (e *env) activityAs(who fixture.StaffRecord) engagement.ActivityListResponse {
-	e.t.Helper()
-	return reqtest.Expect[engagement.ActivityListResponse](e.t, http.MethodGet, e.engagementURL("/activity"), http.StatusOK, e.as(who))
+	e.T.Helper()
+	return reqtest.Expect[engagement.ActivityListResponse](e.T, http.MethodGet, e.engagementURL("/activity"), http.StatusOK, e.As(who))
 }
 
 // actionsSeen is the set of actions the ledger shows who.
 func (e *env) actionsSeen(who fixture.StaffRecord) map[string]bool {
-	e.t.Helper()
+	e.T.Helper()
 	seen := map[string]bool{}
 	for _, item := range e.activityAs(who).Items {
 		seen[item.Action] = true
@@ -118,10 +118,10 @@ func TestListActivityHandler_WhoSeesWhichEntries(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t, signedInAs(tc.viewer...), withEngagement(fixture.Status(fixture.StatusActive)))
 			if tc.attached {
-				testdb.SeedGrantedAttachment(t, e.db, e.Engagement.ID, e.Staff.ID)
+				testdb.SeedGrantedAttachment(t, e.DB, e.Engagement.ID, e.Staff.ID)
 			}
 			if tc.afterLoss {
-				e.exec(`UPDATE engagements SET birth_outcome = 'loss', pregnancy_ended_on = '2027-03-04'::date WHERE id = $1`, e.Engagement.ID)
+				e.Exec(`UPDATE engagements SET birth_outcome = 'loss', pregnancy_ended_on = '2027-03-04'::date WHERE id = $1`, e.Engagement.ID)
 			}
 			for _, s := range tc.seeded {
 				actor := activity.StaffActor(e.Staff.ID)
@@ -185,7 +185,7 @@ func TestListActivityHandler_RefusesWhatItCannotServe(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t, signedInAs(tc.viewer...), withEngagement(fixture.Status(fixture.StatusActive)))
 
-			reqtest.ExpectStatus(t, http.MethodGet, tc.path(e), tc.want, e.signedIn)
+			reqtest.ExpectStatus(t, http.MethodGet, tc.path(e), tc.want, e.SignedIn)
 		})
 	}
 }
@@ -205,7 +205,7 @@ func TestListActivityHandler_PaginatesNewestFirst(t *testing.T) {
 			len(first.Items), first.HasMore, first.NextCursor)
 	}
 
-	second := reqtest.Expect[engagement.ActivityListResponse](t, http.MethodGet, e.engagementURL("/activity?cursor="+*first.NextCursor), http.StatusOK, e.signedIn)
+	second := reqtest.Expect[engagement.ActivityListResponse](t, http.MethodGet, e.engagementURL("/activity?cursor="+*first.NextCursor), http.StatusOK, e.SignedIn)
 	if len(second.Items) != 1 || second.HasMore || second.NextCursor != nil {
 		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
 			len(second.Items), second.HasMore, second.NextCursor)
@@ -278,8 +278,8 @@ func TestListActivityHandler_DetailNamesPeopleOutOfTheDiff(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newOwnerEnv(t, signedInAs(fixture.StaffName("Renata Alvarez")), withEngagement(fixture.Status(fixture.StatusActive)))
-			from := e.staff(fixture.StaffName("Hana Kim"))
-			to := e.staff(fixture.StaffName("Mei Tan"))
+			from := e.Colleague(fixture.StaffName("Hana Kim"))
+			to := e.Colleague(fixture.StaffName("Mei Tan"))
 			e.seedActivityWithDiff(tc.action, activity.StaffActor(e.Staff.ID), tc.diff(t, from, to))
 
 			got := e.activityAs(e.Staff)
@@ -312,7 +312,7 @@ func TestListActivityHandler_OtherActionsCarryNoDetail(t *testing.T) {
 	// asserted is the key's absence, which the struct cannot show.
 	raw := reqtest.Expect[struct {
 		Items []map[string]jsontext.Value `json:"items"`
-	}](t, http.MethodGet, e.engagementURL("/activity"), http.StatusOK, e.signedIn)
+	}](t, http.MethodGet, e.engagementURL("/activity"), http.StatusOK, e.SignedIn)
 
 	if len(raw.Items) != 1 {
 		t.Fatalf("got %d items, want 1", len(raw.Items))

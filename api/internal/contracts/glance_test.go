@@ -14,7 +14,7 @@ import (
 func TestClientContractGlance(t *testing.T) {
 	e := newEnv(t)
 	read := func() (contracts.ClientGlance, bool) {
-		return testdb.ReadAs(t, e.db, testdb.Client(e.Engagement.Client.ID), e.Engagement.ID, contracts.ClientContractGlance)
+		return testdb.ReadAs(t, e.DB, testdb.Client(e.Engagement.Client.ID), e.Engagement.ID, contracts.ClientContractGlance)
 	}
 
 	if _, found := read(); found {
@@ -26,7 +26,7 @@ func TestClientContractGlance(t *testing.T) {
 		t.Fatalf("found a Draft, want it hidden from her")
 	}
 
-	e.exec(`UPDATE contracts SET status = 'signed', signed_at = '2026-08-14T15:00:00Z' WHERE engagement_id = $1`, e.Engagement.ID)
+	e.Exec(`UPDATE contracts SET status = 'signed', signed_at = '2026-08-14T15:00:00Z' WHERE engagement_id = $1`, e.Engagement.ID)
 	glance, found := read()
 	if !found || glance.Status != statusSigned {
 		t.Fatalf("glance = %+v, found = %v, want a signed Contract", glance, found)

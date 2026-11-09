@@ -22,7 +22,7 @@ import (
 func TestGetHandler_UndeclaredIsAnAnswerNotAnError(t *testing.T) {
 	e := newEnv(t)
 
-	got := e.get(e.signedIn)
+	got := e.get(e.SignedIn)
 
 	if got.Mode != website.ModeUndeclared {
 		t.Fatalf("mode = %q, want %q", got.Mode, website.ModeUndeclared)
@@ -104,7 +104,7 @@ func TestPutHandler_RecordsWhoChangedItAndWhen(t *testing.T) {
 	e.put(hostedBody)
 	e.put(ownBody)
 
-	rows, err := e.db.Admin.QueryContext(t.Context(),
+	rows, err := e.DB.Admin.QueryContext(t.Context(),
 		`SELECT previous_mode, mode, own_url, service_description, actor_staff_id
 		   FROM practice_website_events WHERE practice_id = $1 ORDER BY created_at`, e.Practice.ID)
 	if err != nil {
@@ -154,7 +154,7 @@ func TestPutHandler_RepublishingTheSameWordsIsAnAct(t *testing.T) {
 	e.put(hostedBody)
 	e.put(hostedBody)
 
-	count := testdb.Scalar[int](t, e.db.Admin, `SELECT count(*) FROM practice_website_events WHERE practice_id = $1`, e.Practice.ID)
+	count := testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM practice_website_events WHERE practice_id = $1`, e.Practice.ID)
 	if count != 2 {
 		t.Fatalf("got %d events, want 2 -- a re-assertion is a real act", count)
 	}
@@ -173,9 +173,9 @@ func TestPutHandler_RefusesANonOwner(t *testing.T) {
 			t.Run(role+"/"+mode, func(t *testing.T) {
 				e := newEnv(t, signedInAs(option, fixture.StaffName("Ana Reyes")))
 
-				reqtest.ExpectStatus(t, http.MethodPut, e.websiteURL(), http.StatusForbidden, e.signedIn, rawBody(body))
+				reqtest.ExpectStatus(t, http.MethodPut, e.websiteURL(), http.StatusForbidden, e.SignedIn, rawBody(body))
 
-				count := testdb.Scalar[int](t, e.db.Admin, `SELECT count(*) FROM practice_websites WHERE practice_id = $1`, e.Practice.ID)
+				count := testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM practice_websites WHERE practice_id = $1`, e.Practice.ID)
 				if count != 0 {
 					t.Fatalf("got %d rows, want none written by a non-Owner", count)
 				}
@@ -190,9 +190,9 @@ func TestPutHandler_RefusesANonOwner(t *testing.T) {
 func TestGetHandler_ADoulaMayRead(t *testing.T) {
 	e := newEnv(t)
 	e.put(hostedBody)
-	doula := e.staff(fixture.StaffName("Ana Reyes"))
+	doula := e.Colleague(fixture.StaffName("Ana Reyes"))
 
-	got := e.get(e.as(doula))
+	got := e.get(e.As(doula))
 
 	if got.Mode != website.ModeHosted {
 		t.Fatalf("mode = %q, want %q", got.Mode, website.ModeHosted)
@@ -207,7 +207,7 @@ func TestGetHandler_ADoulaMayRead(t *testing.T) {
 func TestPutHandler_RefusesAMalformedBody(t *testing.T) {
 	e := newEnv(t)
 
-	got := apierrtest.Expect(t, http.MethodPut, e.websiteURL(), http.StatusBadRequest, e.signedIn, rawBody(`not json`))
+	got := apierrtest.Expect(t, http.MethodPut, e.websiteURL(), http.StatusBadRequest, e.SignedIn, rawBody(`not json`))
 
 	if got.Code != apierr.CodeInvalidArgument || got.Message != website.MsgInvalidBody {
 		t.Fatalf("error = %+v, want INVALID_ARGUMENT/%q", got, website.MsgInvalidBody)
@@ -240,7 +240,7 @@ func TestPutHandler_NamesTheFieldThatFailed(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			e := newEnv(t)
 
-			got := apierrtest.Expect(t, http.MethodPut, e.websiteURL(), http.StatusBadRequest, e.signedIn, rawBody(c.body))
+			got := apierrtest.Expect(t, http.MethodPut, e.websiteURL(), http.StatusBadRequest, e.SignedIn, rawBody(c.body))
 
 			if got.Details[c.field] != c.want {
 				t.Fatalf("details = %v, want %s named", got.Details, c.field)
@@ -267,15 +267,15 @@ func TestPutHandler_MintsTheSlugOnceAndNeverAgain(t *testing.T) {
 	e := newEnv(t)
 	e.put(hostedBody)
 
-	if got := slugOf(t, e.db, e.Practice.ID); got != firstSlug {
+	if got := slugOf(t, e.DB, e.Practice.ID); got != firstSlug {
 		t.Fatalf("slug = %q, want %q", got, firstSlug)
 	}
 
 	// She renames the Practice, then republishes.
-	e.exec(`UPDATE practices SET name = 'Genesee Birth Collective' WHERE id = $1`, e.Practice.ID)
+	e.Exec(`UPDATE practices SET name = 'Genesee Birth Collective' WHERE id = $1`, e.Practice.ID)
 	e.put(hostedBody)
 
-	if got := slugOf(t, e.db, e.Practice.ID); got != firstSlug {
+	if got := slugOf(t, e.DB, e.Practice.ID); got != firstSlug {
 		t.Fatalf("slug after a rename = %q, want it unmoved", got)
 	}
 
@@ -283,12 +283,12 @@ func TestPutHandler_MintsTheSlugOnceAndNeverAgain(t *testing.T) {
 	// too, so switching back republishes the address Stripe already has
 	// rather than minting a second one.
 	e.put(ownBody)
-	if got := slugOf(t, e.db, e.Practice.ID); got != firstSlug {
+	if got := slugOf(t, e.DB, e.Practice.ID); got != firstSlug {
 		t.Fatalf("slug after switching to her own site = %q, want it kept", got)
 	}
 
 	e.put(hostedBody)
-	if got := slugOf(t, e.db, e.Practice.ID); got != firstSlug {
+	if got := slugOf(t, e.DB, e.Practice.ID); got != firstSlug {
 		t.Fatalf("slug after switching back = %q, want it kept", got)
 	}
 }
@@ -303,20 +303,20 @@ func TestPutHandler_TwoPracticesOfTheSameNameGetDifferentAddresses(t *testing.T)
 	first.put(hostedBody)
 
 	// A second Practice of the same name is exactly the collision under test.
-	secondPractice := fixture.Practice(t, first.db, fixture.PracticeName(practiceName))
-	secondOwner := fixture.Staff(t, first.db, secondPractice, fixture.Owner(), fixture.StaffName(ownerName))
-	reqtest.ExpectStatus(t, http.MethodPut, first.srv.URL+"/api/practices/"+secondPractice.ID+"/website", http.StatusOK, first.as(secondOwner), rawBody(hostedBody))
+	secondPractice := fixture.Practice(t, first.DB, fixture.PracticeName(practiceName))
+	secondOwner := fixture.Staff(t, first.DB, secondPractice, fixture.Owner(), fixture.StaffName(ownerName))
+	reqtest.ExpectStatus(t, http.MethodPut, first.Srv.URL+"/api/practices/"+secondPractice.ID+"/website", http.StatusOK, first.As(secondOwner), rawBody(hostedBody))
 
-	if got := slugOf(t, first.db, first.Practice.ID); got != firstSlug {
+	if got := slugOf(t, first.DB, first.Practice.ID); got != firstSlug {
 		t.Fatalf("first slug = %q", got)
 	}
-	if got := slugOf(t, first.db, secondPractice.ID); got != "rochester-doulas-2" {
+	if got := slugOf(t, first.DB, secondPractice.ID); got != "rochester-doulas-2" {
 		t.Fatalf("second slug = %q, want %q", got, "rochester-doulas-2")
 	}
 
 	// The audit row still landed: the retry is a savepoint, not a lost
 	// transaction, so the record of who published survives the collision.
-	events := testdb.Scalar[int](t, first.db.Admin, `SELECT count(*) FROM practice_website_events WHERE practice_id = $1`, secondPractice.ID)
+	events := testdb.Scalar[int](t, first.DB.Admin, `SELECT count(*) FROM practice_website_events WHERE practice_id = $1`, secondPractice.ID)
 	if events != 1 {
 		t.Fatalf("got %d events for the second Practice, want 1", events)
 	}
@@ -329,7 +329,7 @@ func TestPutHandler_PublishingQueuesARebuild(t *testing.T) {
 
 	body := e.put(hostedBody)
 
-	if got := queuedRebuilds(t, e.db, e.Practice.ID); got != 1 {
+	if got := queuedRebuilds(t, e.DB, e.Practice.ID); got != 1 {
 		t.Fatalf("queued %d rebuilds, want 1", got)
 	}
 	// And the page reads as unproven until something has actually
@@ -348,11 +348,11 @@ func TestPutHandler_PublishingQueuesARebuild(t *testing.T) {
 func TestPutHandler_EditingQueuesAnotherRebuildAndResetsTheState(t *testing.T) {
 	e := newEnv(t)
 	e.put(hostedBody)
-	markPageLive(t, e.db, e.Practice.ID)
+	markPageLive(t, e.DB, e.Practice.ID)
 
 	body := e.put(`{"mode":"hosted","serviceDescription":"Birth and postpartum support.","cancellationPolicy":"` + policyText + `"}`)
 
-	if got := queuedRebuilds(t, e.db, e.Practice.ID); got != 2 {
+	if got := queuedRebuilds(t, e.DB, e.Practice.ID); got != 2 {
 		t.Fatalf("queued %d rebuilds, want one per write", got)
 	}
 	if body.PageState != website.PageStatePending {
@@ -371,7 +371,7 @@ func TestPutHandler_SwitchingAwayQueuesARebuildAndDropsTheState(t *testing.T) {
 
 	body := e.put(`{"mode":"own","ownUrl":"` + ownSiteURL + `"}`)
 
-	if got := queuedRebuilds(t, e.db, e.Practice.ID); got != 2 {
+	if got := queuedRebuilds(t, e.DB, e.Practice.ID); got != 2 {
 		t.Fatalf("queued %d rebuilds, want the prune queued too", got)
 	}
 	if body.PageState != "" {
@@ -389,7 +389,7 @@ func TestPutHandler_OwnSiteOnlyQueuesNothing(t *testing.T) {
 
 	e.put(ownBody)
 
-	if got := queuedRebuilds(t, e.db, e.Practice.ID); got != 0 {
+	if got := queuedRebuilds(t, e.DB, e.Practice.ID); got != 0 {
 		t.Fatalf("queued %d rebuilds, want none", got)
 	}
 }

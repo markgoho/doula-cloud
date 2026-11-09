@@ -1,8 +1,8 @@
 package oncall_test
 
 import (
+	"database/sql"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/fixture"
@@ -45,22 +45,17 @@ const (
 )
 
 // env is what almost every test in this package starts from: a Practice
-// with this package's whole surface mounted on a server, its Owner, a
-// primary Doula and one active birth due 2026-10-30 that the Doula is
-// attached to. A test reads as what it changes from that, and signs each
-// request in with asOwner or as(someone).
+// with this package's whole surface mounted on a server, its Owner at the
+// screen (the Scene's Staff), a primary Doula and one active birth due
+// 2026-10-30 that the Doula is attached to. A test reads as what it
+// changes from that, and signs each request in with SignedIn or
+// As(someone).
 type env struct {
-	t   *testing.T
-	db  *testdb.DB
-	srv *httptest.Server
+	*fixture.Scene
 	enq *tasknudge.FakeEnqueuer
 
-	Practice fixture.PracticeRecord
-	Owner    fixture.StaffRecord
-	Doula    fixture.StaffRecord
-	Birth    fixture.EngagementRecord
-
-	asOwner reqtest.Option
+	Doula fixture.StaffRecord
+	Birth fixture.EngagementRecord
 
 	nudgesBefore int
 }
@@ -81,16 +76,13 @@ func practiceNamed(name string) envOption {
 }
 
 // newBareEnv is a Practice and a server with nobody working there yet.
-func newBareEnv(t *testing.T, practiceOpts ...fixture.PracticeOption) *env {
+func newBareEnv(t *testing.T, opts ...fixture.SceneOption) *env {
 	t.Helper()
-	db := testdb.New(t)
-	e := &env{t: t, db: db, enq: &tasknudge.FakeEnqueuer{}, Practice: fixture.Practice(t, db, practiceOpts...)}
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	oncall.Mount(g, ir, e.enq)
-	e.srv = httptest.NewServer(mux)
-	t.Cleanup(e.srv.Close)
+	e := &env{enq: &tasknudge.FakeEnqueuer{}}
+	mount := func(g *staffauth.GatedRouter, ir *idempotency.Router, _ *sql.DB) {
+		oncall.Mount(g, ir, e.enq)
+	}
+	e.Scene = fixture.NewScene(t, mount, opts...)
 	return e
 }
 
@@ -100,57 +92,45 @@ func newEnv(t *testing.T, opts ...envOption) *env {
 	for _, opt := range opts {
 		opt(&spec)
 	}
-	e := newBareEnv(t, fixture.PracticeName(spec.practiceName))
-	e.Owner = fixture.Staff(t, e.db, e.Practice, fixture.Owner())
-	e.Doula = fixture.Staff(t, e.db, e.Practice, fixture.StaffName("Maya Primary"))
-	e.Birth = fixture.Engagement(t, e.db, e.Practice,
+	e := newBareEnv(t, fixture.InPractice(fixture.PracticeName(spec.practiceName)), fixture.SignedInAs(fixture.Owner()))
+	e.Doula = e.Colleague(fixture.StaffName("Maya Primary"))
+	e.Birth = e.AnotherEngagement(
 		fixture.NewClient(fixture.ClientName("Ada Whitfield")),
 		fixture.Status(fixture.StatusActive), fixture.DueDate(spec.dueDate), fixture.WithDoula(e.Doula))
-	e.asOwner = e.as(e.Owner)
 	return e
-}
-
-// as signs a request in as who.
-func (e *env) as(who fixture.StaffRecord) reqtest.Option {
-	e.t.Helper()
-	return reqtest.Session(fixture.Session(e.t, e.db, who))
 }
 
 // backup is a colleague on the birth beside the primary.
 func (e *env) backup() fixture.StaffRecord {
-	e.t.Helper()
-	b := fixture.Staff(e.t, e.db, e.Practice, fixture.StaffName(backupName))
-	testdb.SeedGrantedAttachment(e.t, e.db, e.Birth.ID, b.ID)
+	e.T.Helper()
+	b := fixture.Staff(e.T, e.DB, e.Practice, fixture.StaffName(backupName))
+	testdb.SeedGrantedAttachment(e.T, e.DB, e.Birth.ID, b.ID)
 	return b
 }
 
 // attachNewBirth is another active birth with no due date, for a Client
 // named name, that who is attached to.
 func (e *env) attachNewBirth(name string, who fixture.StaffRecord) {
-	e.t.Helper()
-	fixture.Engagement(e.t, e.db, e.Practice,
+	e.T.Helper()
+	fixture.Engagement(e.T, e.DB, e.Practice,
 		fixture.NewClient(fixture.ClientName(name)), fixture.Status(fixture.StatusActive), fixture.WithDoula(who))
 }
 
 // stranger is a Doula at the Practice who is not on the birth.
 func (e *env) stranger() fixture.StaffRecord {
-	e.t.Helper()
-	return fixture.Staff(e.t, e.db, e.Practice, fixture.StaffName("Not On It"))
-}
-
-func (e *env) practiceURL(path string) string {
-	return e.srv.URL + "/api/practices/" + e.Practice.ID + path
+	e.T.Helper()
+	return fixture.Staff(e.T, e.DB, e.Practice, fixture.StaffName("Not On It"))
 }
 
 func (e *env) birthURL(path string) string {
-	return e.practiceURL("/engagements/" + e.Birth.ID + path)
+	return e.PracticeURL("/engagements/" + e.Birth.ID + path)
 }
 
 func (e *env) rosterURL(from, to string) string {
-	return e.practiceURL("/on-call?from=" + from + "&to=" + to)
+	return e.PracticeURL("/on-call?from=" + from + "&to=" + to)
 }
 
-func (e *env) settingsURL() string { return e.practiceURL("/on-call-settings") }
+func (e *env) settingsURL() string { return e.PracticeURL("/on-call-settings") }
 
 func (e *env) panelURL() string { return e.birthURL("/on-call") }
 
@@ -162,14 +142,6 @@ func (e *env) narrowURL(staffID string) string {
 	return e.birthURL("/attachments/" + staffID + "/on-call")
 }
 
-// exec runs one fixture statement on the superuser connection.
-func (e *env) exec(query string, args ...any) {
-	e.t.Helper()
-	if _, err := e.db.Admin.ExecContext(e.t.Context(), query, args...); err != nil {
-		e.t.Fatalf("fixture %q: %v", query, err)
-	}
-}
-
 // nudges is how many times a write has nudged the worker since the test
 // last called forgetNudges.
 func (e *env) nudges() int { return len(e.enq.Calls()) - e.nudgesBefore }
@@ -177,26 +149,26 @@ func (e *env) nudges() int { return len(e.enq.Calls()) - e.nudgesBefore }
 func (e *env) forgetNudges() { e.nudgesBefore = len(e.enq.Calls()) }
 
 func (e *env) count(query string, args ...any) int {
-	e.t.Helper()
-	return testdb.Scalar[int](e.t, e.db.Admin, query, args...)
+	e.T.Helper()
+	return testdb.Scalar[int](e.T, e.DB.Admin, query, args...)
 }
 
 // roster is the Owner's read of the roster over from..to.
 func (e *env) roster(from, to string) oncall.RosterResponse {
-	e.t.Helper()
-	return reqtest.Expect[oncall.RosterResponse](e.t, http.MethodGet, e.rosterURL(from, to), http.StatusOK, e.asOwner)
+	e.T.Helper()
+	return reqtest.Expect[oncall.RosterResponse](e.T, http.MethodGet, e.rosterURL(from, to), http.StatusOK, e.SignedIn)
 }
 
 // panel is the Owner's read of the birth's on-call panel.
 func (e *env) panel() oncall.EngagementOnCall {
-	e.t.Helper()
-	return reqtest.Expect[oncall.EngagementOnCall](e.t, http.MethodGet, e.panelURL(), http.StatusOK, e.asOwner)
+	e.T.Helper()
+	return reqtest.Expect[oncall.EngagementOnCall](e.T, http.MethodGet, e.panelURL(), http.StatusOK, e.SignedIn)
 }
 
 // activityActors lists who performed action on the birth, oldest first.
 func (e *env) activityActors(action string) []string {
-	e.t.Helper()
-	return testdb.Column[string](e.t, e.db.Admin,
+	e.T.Helper()
+	return testdb.Column[string](e.T, e.DB.Admin,
 		`SELECT actor_staff_id FROM activity WHERE subject_id = $1 AND action = $2 ORDER BY created_at, id`,
 		e.Birth.ID, action)
 }

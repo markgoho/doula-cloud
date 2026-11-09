@@ -42,24 +42,24 @@ type dueDateResponseBody struct {
 // putDueDate PUTs raw as the body of a due-date change for engagementID
 // as the Staff member at the screen and requires want.
 func (e *env) putDueDate(engagementID string, raw []byte, want int) dueDateResponseBody {
-	e.t.Helper()
-	return reqtest.Expect[dueDateResponseBody](e.t, http.MethodPut, e.urlOf(engagementID, "/due-date"), want, e.signedIn, reqtest.RawJSON(raw))
+	e.T.Helper()
+	return reqtest.Expect[dueDateResponseBody](e.T, http.MethodPut, e.urlOf(engagementID, "/due-date"), want, e.SignedIn, reqtest.RawJSON(raw))
 }
 
 // changeDueDate is putDueDate on the Engagement with a well-formed body.
 func (e *env) changeDueDate(dueDate string, want int) dueDateResponseBody {
-	e.t.Helper()
+	e.T.Helper()
 	encoded, err := json.Marshal(map[string]any{dueDateField: dueDate})
 	if err != nil {
-		e.t.Fatalf("marshal body: %v", err)
+		e.T.Fatalf("marshal body: %v", err)
 	}
 	return e.putDueDate(e.Engagement.ID, encoded, want)
 }
 
 // storedDueDate is the Engagement's raw column, "" for null.
 func (e *env) storedDueDate() string {
-	e.t.Helper()
-	return readEngagementDueDate(e.t, e.db, e.Engagement.ID)
+	e.T.Helper()
+	return readEngagementDueDate(e.T, e.DB, e.Engagement.ID)
 }
 
 // readEngagementDueDate is the raw column, bypassing the API; "" for null.
@@ -120,7 +120,7 @@ func TestChangeDueDateHandler_RolesMayChange(t *testing.T) {
 			if n := e.countActivity("due_date_changed"); n != 1 {
 				t.Fatalf("due_date_changed entries = %d, want 1", n)
 			}
-			assertDiff(t, readFactDiff(t, e.db, e.Engagement.ID, "due_date_changed"), map[string]any{
+			assertDiff(t, readFactDiff(t, e.DB, e.Engagement.ID, "due_date_changed"), map[string]any{
 				"dueDateBefore": dueBefore,
 				"dueDateAfter":  dueAfter,
 			})
@@ -139,7 +139,7 @@ func TestChangeDueDateHandler_FirstDueDate(t *testing.T) {
 	if body.DueDate != dueAfter {
 		t.Fatalf("body = %+v, want %s", body, dueAfter)
 	}
-	assertDiff(t, readFactDiff(t, e.db, e.Engagement.ID, "due_date_changed"), map[string]any{
+	assertDiff(t, readFactDiff(t, e.DB, e.Engagement.ID, "due_date_changed"), map[string]any{
 		"dueDateBefore": nil,
 		"dueDateAfter":  dueAfter,
 	})
@@ -234,12 +234,12 @@ func getAs[T any](t *testing.T, session, url string) T {
 // its own), and the Client's portal read of her care.
 func TestChangeDueDateHandler_EveryReaderFollows(t *testing.T) {
 	e := newOwnerEnv(t)
-	doula := e.staff()
-	client := fixture.Client(t, e.db, e.Practice, fixture.WithPortalLogin())
-	booked := fixture.Engagement(t, e.db, e.Practice, fixture.ForClient(client), fixture.DueDate(dueBefore), fixture.WithDoula(doula))
-	srv := newCrossReadServer(t, e.db)
-	staffSession := fixture.Session(t, e.db, e.Staff)
-	clientSession := fixture.Session(t, e.db, client)
+	doula := e.Colleague()
+	client := fixture.Client(t, e.DB, e.Practice, fixture.WithPortalLogin())
+	booked := fixture.Engagement(t, e.DB, e.Practice, fixture.ForClient(client), fixture.DueDate(dueBefore), fixture.WithDoula(doula))
+	srv := newCrossReadServer(t, e.DB)
+	staffSession := fixture.Session(t, e.DB, e.Staff)
+	clientSession := fixture.Session(t, e.DB, client)
 	engagementURL := srv.URL + "/api/practices/" + e.Practice.ID + "/engagements/" + booked.ID
 
 	before := getAs[oncall.EngagementOnCall](t, staffSession, engagementURL+"/on-call")

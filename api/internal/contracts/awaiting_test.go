@@ -36,26 +36,26 @@ func seedNamedEngagement(t *testing.T, db *testdb.DB, practiceID, givenName, pre
 }
 
 func (e *env) awaitingURL() string {
-	return e.srv.URL + "/api/practices/" + e.Practice.ID + "/contracts/awaiting-signature"
+	return e.Srv.URL + "/api/practices/" + e.Practice.ID + "/contracts/awaiting-signature"
 }
 
 // awaiting fetches one page of the roll-up, with query appended to its
 // route, and decodes it, failing the test unless the status is 200.
 func (e *env) awaiting(query string) contracts.AwaitingResponse {
-	e.t.Helper()
-	return reqtest.Expect[contracts.AwaitingResponse](e.t, http.MethodGet, e.awaitingURL()+query, http.StatusOK, e.signedIn)
+	e.T.Helper()
+	return reqtest.Expect[contracts.AwaitingResponse](e.T, http.MethodGet, e.awaitingURL()+query, http.StatusOK, e.SignedIn)
 }
 
 // seedOutstanding seeds n Engagements each with a sent Contract, attached
 // to the Staff member at the screen when attach is set.
 func (e *env) seedOutstanding(n int, attach bool) {
-	e.t.Helper()
+	e.T.Helper()
 	for range n {
-		engagement := e.anotherEngagement()
+		engagement := e.AnotherEngagement()
 		if attach {
-			testdb.SeedGrantedAttachment(e.t, e.db, engagement.ID, e.Staff.ID)
+			testdb.SeedGrantedAttachment(e.T, e.DB, engagement.ID, e.Staff.ID)
 		}
-		seedContract(e.t, e.db, engagement.ID, statusSent, mergeFieldProse)
+		seedContract(e.T, e.DB, engagement.ID, statusSent, mergeFieldProse)
 	}
 }
 
@@ -76,7 +76,7 @@ func itemIDs(out contracts.AwaitingResponse) map[string]bool {
 func TestAwaitingSignatureHandler_EmptyPracticeAnswersWithAnEmptyList(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
 
-	body := reqtest.ExpectBody(t, http.MethodGet, e.awaitingURL(), http.StatusOK, e.signedIn)
+	body := reqtest.ExpectBody(t, http.MethodGet, e.awaitingURL(), http.StatusOK, e.SignedIn)
 
 	if !strings.Contains(string(body), `"items":[]`) {
 		t.Fatalf("body = %s, want an empty items array", body)
@@ -93,15 +93,15 @@ func TestAwaitingSignatureHandler_EmptyPracticeAnswersWithAnEmptyList(t *testing
 func TestAwaitingSignatureHandler_ListsOnlyOutstandingContractsOldestFirst(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
 
-	draftEngagement, draftClient := seedNamedEngagement(t, e.db, e.Practice.ID, "Jamesina", jamieName)
+	draftEngagement, draftClient := seedNamedEngagement(t, e.DB, e.Practice.ID, "Jamesina", jamieName)
 	// #2114: the list names each Client in full, her preferred name
 	// followed by the family name.
-	testdb.NameClient(t, e.db, draftClient, jamieName, "Okafor")
-	seedContract(t, e.db, draftEngagement, statusDraft, mergeFieldProse)
-	sentEngagement, _ := seedNamedEngagement(t, e.db, e.Practice.ID, "Renata", "")
-	seedContract(t, e.db, sentEngagement, statusSent, mergeFieldProse)
-	seedContract(t, e.db, e.anotherEngagement().ID, statusSigned, mergeFieldProse)
-	seedContract(t, e.db, e.anotherEngagement().ID, statusVoided, mergeFieldProse)
+	testdb.NameClient(t, e.DB, draftClient, jamieName, "Okafor")
+	seedContract(t, e.DB, draftEngagement, statusDraft, mergeFieldProse)
+	sentEngagement, _ := seedNamedEngagement(t, e.DB, e.Practice.ID, "Renata", "")
+	seedContract(t, e.DB, sentEngagement, statusSent, mergeFieldProse)
+	seedContract(t, e.DB, e.AnotherEngagement().ID, statusSigned, mergeFieldProse)
+	seedContract(t, e.DB, e.AnotherEngagement().ID, statusVoided, mergeFieldProse)
 
 	out := e.awaiting("")
 
@@ -133,9 +133,9 @@ func TestAwaitingSignatureHandler_ListsOnlyOutstandingContractsOldestFirst(t *te
 // somewhere else is not this Practice's work to chase.
 func TestAwaitingSignatureHandler_IgnoresAnotherPracticesContracts(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
-	otherPracticeID := testdb.SeedPractice(t, e.db, "Other Practice")
-	_, otherEngagement := testdb.SeedEngagement(t, e.db, otherPracticeID)
-	seedContract(t, e.db, otherEngagement, statusSent, mergeFieldProse)
+	otherPracticeID := testdb.SeedPractice(t, e.DB, "Other Practice")
+	_, otherEngagement := testdb.SeedEngagement(t, e.DB, otherPracticeID)
+	seedContract(t, e.DB, otherEngagement, statusSent, mergeFieldProse)
 	e.seedContract(statusSent)
 
 	out := e.awaiting("")
@@ -185,7 +185,7 @@ func TestAwaitingSignatureHandler_ContractorSeesOnlyHerAttachedEngagements(t *te
 	t.Run("attached to one of two", func(t *testing.T) {
 		e := newEnv(t, signedInAs(fixture.Contractor()), attachedToEngagement())
 		e.seedContract(statusSent)
-		seedContract(t, e.db, e.anotherEngagement().ID, statusSent, mergeFieldProse)
+		seedContract(t, e.DB, e.AnotherEngagement().ID, statusSent, mergeFieldProse)
 
 		out := e.awaiting("")
 
@@ -229,10 +229,10 @@ func TestAwaitingSignatureHandler_OwnerOrAdminContractorSeesTheWholePractice(t *
 			e := newEnv(t, signedInAs(append(tc.staff, fixture.Contractor())...))
 			e.seedContract(statusSent)
 			if tc.attached {
-				testdb.SeedGrantedAttachment(t, e.db, e.Engagement.ID, e.Staff.ID)
+				testdb.SeedGrantedAttachment(t, e.DB, e.Engagement.ID, e.Staff.ID)
 			}
-			second := e.anotherEngagement()
-			seedContract(t, e.db, second.ID, statusDraft, mergeFieldProse)
+			second := e.AnotherEngagement()
+			seedContract(t, e.DB, second.ID, statusDraft, mergeFieldProse)
 
 			out := e.awaiting("")
 
@@ -251,7 +251,7 @@ func TestAwaitingSignatureHandler_RejectsAMalformedCursor(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
 
 	for _, cursor := range []string{"not!valid!base64!", "YmFkdGltZXxzb21lLWlk"} {
-		out := apierrtest.Expect(t, http.MethodGet, e.awaitingURL()+"?cursor="+cursor, http.StatusBadRequest, e.signedIn)
+		out := apierrtest.Expect(t, http.MethodGet, e.awaitingURL()+"?cursor="+cursor, http.StatusBadRequest, e.SignedIn)
 
 		if out.Code != apierr.CodeInvalidArgument || out.Message != contracts.MsgInvalidCursor {
 			t.Fatalf("cursor %q: error = %+v, want the structured refusal", cursor, out)

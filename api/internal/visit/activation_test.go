@@ -75,23 +75,23 @@ func carePhaseActor(t *testing.T, db *testdb.DB, engagementID string) string {
 // schedule PATCHes a Visit's scheduled instant and requires 200. at == ""
 // sends an explicit null, which is the clearing shape.
 func (e *env) schedule(visitID, at string) {
-	e.t.Helper()
+	e.T.Helper()
 	req := visit.ScheduleRequest{}
 	if at != "" {
 		req.ScheduledAt = &at
 	}
-	reqtest.ExpectStatus(e.t, http.MethodPatch, e.visitsURL("/"+visitID+"/schedule"), http.StatusOK, e.signedIn, reqtest.JSON(req))
+	reqtest.ExpectStatus(e.T, http.MethodPatch, e.visitsURL("/"+visitID+"/schedule"), http.StatusOK, e.SignedIn, reqtest.JSON(req))
 }
 
 // requireEngagementAt proves the Engagement is at status with entries
 // care_phase_changed rows behind it.
 func (e *env) requireEngagementAt(status string, entries int) {
-	e.t.Helper()
-	if got := engagementStatus(e.t, e.db, e.Engagement.ID); got != status {
-		e.t.Fatalf("engagement status = %q, want %q", got, status)
+	e.T.Helper()
+	if got := engagementStatus(e.T, e.DB, e.Engagement.ID); got != status {
+		e.T.Fatalf("engagement status = %q, want %q", got, status)
 	}
-	if n := countCarePhaseEntries(e.t, e.db, e.Engagement.ID); n != entries {
-		e.t.Fatalf("care_phase_changed entries = %d, want %d", n, entries)
+	if n := countCarePhaseEntries(e.T, e.DB, e.Engagement.ID); n != entries {
+		e.T.Fatalf("care_phase_changed entries = %d, want %d", n, entries)
 	}
 }
 
@@ -115,7 +115,7 @@ func TestCreateHandler_ActivatesOnlyOnAScheduledVisit(t *testing.T) {
 			return visit.CreateRequest{ScheduledAt: new(firstScheduledAt)}
 		}, engagement.StatusActive, 1},
 		{"a scheduled Visit an Owner books for a colleague", []fixture.StaffOption{fixture.Owner(), fixture.Doula()}, func(e *env) visit.CreateRequest {
-			return visit.CreateRequest{StaffID: new(e.staff().ID), ScheduledAt: new(firstScheduledAt)}
+			return visit.CreateRequest{StaffID: new(e.Colleague().ID), ScheduledAt: new(firstScheduledAt)}
 		}, engagement.StatusActive, 1},
 		{"a Visit with no date", []fixture.StaffOption{fixture.Doula()}, func(*env) visit.CreateRequest {
 			return visit.CreateRequest{}
@@ -129,7 +129,7 @@ func TestCreateHandler_ActivatesOnlyOnAScheduledVisit(t *testing.T) {
 
 			e.requireEngagementAt(tc.wantStatus, tc.wantEntries)
 			if tc.wantEntries > 0 {
-				if got := carePhaseActor(t, e.db, e.Engagement.ID); got != e.Staff.ID {
+				if got := carePhaseActor(t, e.DB, e.Engagement.ID); got != e.Staff.ID {
 					t.Fatalf("care phase actor = %q, want the booker %q", got, e.Staff.ID)
 				}
 			}
@@ -141,13 +141,13 @@ func TestCreateHandler_ActivatesOnlyOnAScheduledVisit(t *testing.T) {
 // with no date and given one later activates on that later write.
 func TestScheduleHandler_ActivatesOnTheLaterSchedule(t *testing.T) {
 	e := newEnv(t)
-	visitID := seedVisit(t, e.db, e.Engagement.ID, e.Staff.ID)
+	visitID := seedVisit(t, e.DB, e.Engagement.ID, e.Staff.ID)
 	e.requireEngagementAt(engagement.StatusIntake, 0)
 
 	e.schedule(visitID, firstScheduledAt)
 
 	e.requireEngagementAt(engagement.StatusActive, 1)
-	if got := carePhaseActor(t, e.db, e.Engagement.ID); got != e.Staff.ID {
+	if got := carePhaseActor(t, e.DB, e.Engagement.ID); got != e.Staff.ID {
 		t.Fatalf("care phase actor = %q, want the scheduling Staff member %q", got, e.Staff.ID)
 	}
 }
@@ -157,7 +157,7 @@ func TestScheduleHandler_ActivatesOnTheLaterSchedule(t *testing.T) {
 // nothing on the calendar.
 func TestScheduleHandler_ClearingAnInstantActivatesNothing(t *testing.T) {
 	e := newEnv(t)
-	visitID := seedScheduledVisit(t, e.db, e.Engagement.ID, e.Staff.ID, parseRFC3339(t, firstScheduledAt))
+	visitID := seedScheduledVisit(t, e.DB, e.Engagement.ID, e.Staff.ID, parseRFC3339(t, firstScheduledAt))
 
 	e.schedule(visitID, "")
 
@@ -169,8 +169,8 @@ func TestScheduleHandler_ClearingAnInstantActivatesNothing(t *testing.T) {
 // behind, not one per booking.
 func TestScheduleHandler_SecondScheduleWritesNoSecondMove(t *testing.T) {
 	e := newEnv(t)
-	firstVisitID := seedVisit(t, e.db, e.Engagement.ID, e.Staff.ID)
-	secondVisitID := seedVisit(t, e.db, e.Engagement.ID, e.Staff.ID)
+	firstVisitID := seedVisit(t, e.DB, e.Engagement.ID, e.Staff.ID)
+	secondVisitID := seedVisit(t, e.DB, e.Engagement.ID, e.Staff.ID)
 
 	e.schedule(firstVisitID, firstScheduledAt)
 	e.schedule(secondVisitID, "2027-06-01T09:00:00Z")
@@ -203,7 +203,7 @@ func TestVisitWrites_LeaveAnEngagementPastIntakeAlone(t *testing.T) {
 			if tc.isCreated {
 				e.create(visit.CreateRequest{ScheduledAt: new(firstScheduledAt)})
 			} else {
-				e.schedule(seedVisit(t, e.db, e.Engagement.ID, e.Staff.ID), firstScheduledAt)
+				e.schedule(seedVisit(t, e.DB, e.Engagement.ID, e.Staff.ID), firstScheduledAt)
 			}
 
 			e.requireEngagementAt(tc.status, 0)

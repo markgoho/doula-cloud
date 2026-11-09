@@ -77,8 +77,8 @@ func signing(fullLegalName string, attestation bool) reqtest.Option {
 
 // signRow reads back what Sign persisted on the Engagement's Contract.
 func (e *env) signRow() signedRow {
-	e.t.Helper()
-	return fetchSignedRow(e.t, e.db, e.Engagement.ID)
+	e.T.Helper()
+	return fetchSignedRow(e.T, e.DB, e.Engagement.ID)
 }
 
 // TestClientPostSignContractHandler_Success proves the sent -> signed
@@ -90,7 +90,7 @@ func TestClientPostSignContractHandler_Success(t *testing.T) {
 	e.seedContract(statusSent)
 
 	before := time.Now().Add(-time.Minute)
-	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.portalURL("/sign"), http.StatusOK, e.asClient, signing("Jordan Client", true))
+	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.portalURL("/sign"), http.StatusOK, e.AsClient, signing("Jordan Client", true))
 
 	if out.Status != statusSigned {
 		t.Fatalf("status = %q, want signed", out.Status)
@@ -130,7 +130,7 @@ func TestClientPostSignContractHandler_ClientSuppliedSignedAtAndIPIgnored(t *tes
 
 	spoofed := `{"fullLegalName":"Jordan Client","attestation":true,"signedAt":"1999-01-01T00:00:00Z","signerIp":"10.0.0.1","ip":"10.0.0.1"}`
 	before := time.Now().Add(-time.Minute)
-	reqtest.ExpectStatus(t, http.MethodPost, e.portalURL("/sign"), http.StatusOK, e.asClient,
+	reqtest.ExpectStatus(t, http.MethodPost, e.portalURL("/sign"), http.StatusOK, e.AsClient,
 		reqtest.RawJSON([]byte(spoofed)), reqtest.Header("X-Forwarded-For", "10.0.0.2, 203.0.113.7, 74.125.210.71"))
 
 	row := e.signRow()
@@ -150,7 +150,7 @@ func TestClientPostSignContractHandler_NoXFFFallsBackToRemoteAddr(t *testing.T) 
 	e := newEnv(t, withPortalLogin())
 	e.seedContract(statusSent)
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.portalURL("/sign"), http.StatusOK, e.asClient, signing("Jordan Client", true))
+	reqtest.ExpectStatus(t, http.MethodPost, e.portalURL("/sign"), http.StatusOK, e.AsClient, signing("Jordan Client", true))
 
 	row := e.signRow()
 	if !row.signerIP.Valid || row.signerIP.String != "127.0.0.1" {
@@ -164,12 +164,12 @@ func TestClientPostSignContractHandler_NoXFFFallsBackToRemoteAddr(t *testing.T) 
 // before this handler ever runs.
 func TestClientPostSignContractHandler_OtherClientsEngagementRejected(t *testing.T) {
 	e := newEnv(t, withPortalLogin())
-	other := e.anotherEngagement()
-	seedContract(t, e.db, other.ID, statusSent, mergeFieldProse)
+	other := e.AnotherEngagement()
+	seedContract(t, e.DB, other.ID, statusSent, mergeFieldProse)
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.portalURLOf(other.ID, "/sign"), http.StatusForbidden, e.asClient, signing("Jordan Client", true))
+	reqtest.ExpectStatus(t, http.MethodPost, e.portalURLOf(other.ID, "/sign"), http.StatusForbidden, e.AsClient, signing("Jordan Client", true))
 
-	if row := fetchSignedRow(t, e.db, other.ID); row.status != statusSent {
+	if row := fetchSignedRow(t, e.DB, other.ID); row.status != statusSent {
 		t.Fatalf("other client's contract status = %q, want unchanged sent", row.status)
 	}
 }
@@ -191,7 +191,7 @@ func TestClientPostSignContractHandler_NonSentRejected(t *testing.T) {
 			e := newEnv(t, withPortalLogin())
 			e.seedContract(testCase.status)
 
-			reqtest.ExpectStatus(t, http.MethodPost, e.portalURL("/sign"), testCase.want, e.asClient, signing("Jordan Client", true))
+			reqtest.ExpectStatus(t, http.MethodPost, e.portalURL("/sign"), testCase.want, e.AsClient, signing("Jordan Client", true))
 		})
 	}
 }
@@ -201,7 +201,7 @@ func TestClientPostSignContractHandler_NonSentRejected(t *testing.T) {
 func TestClientPostSignContractHandler_NoContractYet404(t *testing.T) {
 	e := newEnv(t, withPortalLogin())
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.portalURL("/sign"), http.StatusNotFound, e.asClient, signing("Jordan Client", true))
+	reqtest.ExpectStatus(t, http.MethodPost, e.portalURL("/sign"), http.StatusNotFound, e.AsClient, signing("Jordan Client", true))
 }
 
 // TestClientPostSignContractHandler_RefusesAnUnsignableRequest proves what
@@ -223,7 +223,7 @@ func TestClientPostSignContractHandler_RefusesAnUnsignableRequest(t *testing.T) 
 			e := newEnv(t, withPortalLogin())
 			e.seedContract(statusSent)
 
-			reqtest.ExpectStatus(t, http.MethodPost, e.portalURL("/sign"), http.StatusBadRequest, e.asClient, testCase.body)
+			reqtest.ExpectStatus(t, http.MethodPost, e.portalURL("/sign"), http.StatusBadRequest, e.AsClient, testCase.body)
 
 			if row := e.signRow(); row.status != statusSent {
 				t.Fatalf("contract status = %q, want unchanged sent", row.status)
@@ -243,7 +243,7 @@ func TestClientPostSignContractHandler_RendersAndStoresSignedPDF(t *testing.T) {
 	e := newEnv(t, withPortalLogin())
 	e.seedContract(statusSent)
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.portalURL("/sign"), http.StatusOK, e.asClient, signing("Jordan Client", true))
+	reqtest.ExpectStatus(t, http.MethodPost, e.portalURL("/sign"), http.StatusOK, e.AsClient, signing("Jordan Client", true))
 
 	row := e.signRow()
 	wantKey := contracts.SignedPDFObjectPath(e.Engagement.ID, row.id)
@@ -274,7 +274,7 @@ func TestClientPostSignContractHandler_PDFStoreFailureRejected(t *testing.T) {
 	e := newEnv(t, withPortalLogin(), withStore(failingStore{}))
 	e.seedContract(statusSent)
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.portalURL("/sign"), http.StatusInternalServerError, e.asClient, signing("Jordan Client", true))
+	reqtest.ExpectStatus(t, http.MethodPost, e.portalURL("/sign"), http.StatusInternalServerError, e.AsClient, signing("Jordan Client", true))
 
 	if row := e.signRow(); row.status != statusSent {
 		t.Fatalf("contract status = %q, want unchanged sent after a store failure", row.status)

@@ -28,24 +28,24 @@ func newNoticeEnv(t *testing.T) noticeEnv {
 	t.Helper()
 	due := time.Now().AddDate(0, 0, 10).Format("2006-01-02")
 	e := noticeEnv{env: newEnv(t, practiceNamed("Willow Birth Collective"), dueOn(due))}
-	e.Admin = fixture.Staff(t, e.db, e.Practice, fixture.Admin())
+	e.Admin = fixture.Staff(t, e.DB, e.Practice, fixture.Admin())
 	e.Backup = e.backup()
 
 	starts := time.Now().Add(time.Hour).Truncate(time.Second)
 	ends := starts.Add(4 * time.Hour)
-	e.GapID = e.recordGap(e.asOwner, oncall.GapRequest{StaffID: e.Doula.ID, StartsAt: &starts, EndsAt: &ends}).ID
+	e.GapID = e.recordGap(e.SignedIn, oncall.GapRequest{StaffID: e.Doula.ID, StartsAt: &starts, EndsAt: &ends}).ID
 	return e
 }
 
 // runWorker runs one pass of the worker, sending through sender.
 func (e noticeEnv) runWorker(sender *mail.FakeSender) {
-	e.t.Helper()
+	e.T.Helper()
 	e.runWorkerWith(oncall.GapNoticeWorker{Sender: sender, Now: time.Now, AppBaseURL: testAppBaseURL, From: "from@example.test", ReplyTo: "reply@example.test"})
 }
 
 func (e noticeEnv) noticeStatus() string {
-	e.t.Helper()
-	return testdb.Scalar[string](e.t, e.db.Admin, `SELECT status FROM coverage_gap_outbox WHERE gap_id = $1`, e.GapID)
+	e.T.Helper()
+	return testdb.Scalar[string](e.T, e.DB.Admin, `SELECT status FROM coverage_gap_outbox WHERE gap_id = $1`, e.GapID)
 }
 
 func TestGapNoticeWorker_MailsEveryOwnerAndAdminAndNamesNothing(t *testing.T) {
@@ -67,7 +67,7 @@ func TestGapNoticeWorker_MailsEveryOwnerAndAdminAndNamesNothing(t *testing.T) {
 		}
 	}
 	slices.Sort(to)
-	want := []string{emailOf(e.Admin), emailOf(e.Owner)}
+	want := []string{emailOf(e.Admin), emailOf(e.Staff)}
 	slices.Sort(want)
 	if !slices.Equal(to, want) {
 		t.Fatalf("mailed %v, want every Owner and Admin %v and no Doula", to, want)
@@ -92,7 +92,7 @@ func TestGapNoticeWorker_SendsNothingForAGapNoLongerOpen(t *testing.T) {
 	for _, tt := range tests {
 		t.Run("a gap that is "+tt.name, func(t *testing.T) {
 			e := newNoticeEnv(t)
-			e.exec(tt.fixup)
+			e.Exec(tt.fixup)
 			sender := &mail.FakeSender{}
 
 			e.runWorker(sender)

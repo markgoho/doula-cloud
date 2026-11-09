@@ -14,9 +14,9 @@ import (
 
 func TestRLS_VisitsFailsClosedWithNoPracticeSet(t *testing.T) {
 	e := newEnv(t)
-	seedVisit(t, e.db, e.Engagement.ID, e.Staff.ID)
+	seedVisit(t, e.DB, e.Engagement.ID, e.Staff.ID)
 
-	testdb.RequireFailsClosed(t, e.db, "visits")
+	testdb.RequireFailsClosed(t, e.DB, "visits")
 }
 
 // TestRLS_VisitsSelectIsScopedViaEngagementsExistsSubquery proves the
@@ -24,11 +24,11 @@ func TestRLS_VisitsFailsClosedWithNoPracticeSet(t *testing.T) {
 // belongs to app.current_practice_id, not to every Visit row globally.
 func TestRLS_VisitsSelectIsScopedViaEngagementsExistsSubquery(t *testing.T) {
 	a := newEnv(t)
-	practiceB := fixture.Practice(t, a.db)
-	visitAtA := seedVisit(t, a.db, a.Engagement.ID, a.Staff.ID)
-	seedVisit(t, a.db, fixture.Engagement(t, a.db, practiceB).ID, fixture.Staff(t, a.db, practiceB).ID)
+	practiceB := fixture.Practice(t, a.DB)
+	visitAtA := seedVisit(t, a.DB, a.Engagement.ID, a.Staff.ID)
+	seedVisit(t, a.DB, fixture.Engagement(t, a.DB, practiceB).ID, fixture.Staff(t, a.DB, practiceB).ID)
 
-	tx := a.db.BeginAs(t, testdb.Practice(a.Practice.ID))
+	tx := a.DB.BeginAs(t, testdb.Practice(a.Practice.ID))
 
 	if visibleIDs := testdb.Column[string](t, tx, `SELECT id FROM visits`); len(visibleIDs) != 1 || visibleIDs[0] != visitAtA {
 		t.Fatalf("visible visits = %v, want only %q", visibleIDs, visitAtA)
@@ -41,10 +41,10 @@ func TestRLS_VisitsSelectIsScopedViaEngagementsExistsSubquery(t *testing.T) {
 // visit id, because the row isn't visible to update in the first place.
 func TestRLS_VisitsUpdateRejectedAcrossPractice(t *testing.T) {
 	a := newEnv(t)
-	practiceB := fixture.Practice(t, a.db)
-	visitAtB := seedVisit(t, a.db, fixture.Engagement(t, a.db, practiceB).ID, fixture.Staff(t, a.db, practiceB).ID)
+	practiceB := fixture.Practice(t, a.DB)
+	visitAtB := seedVisit(t, a.DB, fixture.Engagement(t, a.DB, practiceB).ID, fixture.Staff(t, a.DB, practiceB).ID)
 
-	tx := a.db.BeginAs(t, testdb.Practice(a.Practice.ID))
+	tx := a.DB.BeginAs(t, testdb.Practice(a.Practice.ID))
 
 	rows := testdb.RowsAffected(t, tx, `UPDATE visits SET staff_id = $1 WHERE id = $2`, a.Staff.ID, visitAtB)
 	if rows != 0 {

@@ -12,12 +12,12 @@ import (
 // or Admin, the readers of those fees (#2271), is told.
 func TestDetailHandler_HasDoulaFeesForTheFeesReadersOnly(t *testing.T) {
 	e := newEnv(t, withEngagement(fixture.Status(fixture.StatusActive)))
-	owner := e.staff(fixture.Owner())
-	admin := e.staff(fixture.Admin())
-	employee := e.staff()
-	lena := e.staff(fixture.Contractor())
-	seedFeeAttachment(t, e.db, e.Engagement.ID, lena.ID, lena.ID, 45000, "2026-07-01T12:00:00Z")
-	testdb.SeedAttachment(t, e.db, e.Engagement.ID, employee.ID, "granted", false)
+	owner := e.Colleague(fixture.Owner())
+	admin := e.Colleague(fixture.Admin())
+	employee := e.Colleague()
+	lena := e.Colleague(fixture.Contractor())
+	seedFeeAttachment(t, e.DB, e.Engagement.ID, lena.ID, lena.ID, 45000, "2026-07-01T12:00:00Z")
+	testdb.SeedAttachment(t, e.DB, e.Engagement.ID, employee.ID, "granted", false)
 
 	for _, tc := range []struct {
 		name   string
@@ -41,9 +41,9 @@ func TestDetailHandler_HasDoulaFeesForTheFeesReadersOnly(t *testing.T) {
 // the birth, and feepayment.listFees lists it.
 func TestDetailHandler_HasDoulaFeesAfterTheAttachmentEnded(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()), withEngagement(fixture.Status(fixture.StatusActive)))
-	lena := e.staff(fixture.Contractor())
-	seedFeeAttachment(t, e.db, e.Engagement.ID, lena.ID, lena.ID, 45000, "2026-07-01T12:00:00Z")
-	e.exec(`UPDATE engagement_attachments SET ended_at = now(), ended_by = staff_id WHERE engagement_id = $1`, e.Engagement.ID)
+	lena := e.Colleague(fixture.Contractor())
+	seedFeeAttachment(t, e.DB, e.Engagement.ID, lena.ID, lena.ID, 45000, "2026-07-01T12:00:00Z")
+	e.Exec(`UPDATE engagement_attachments SET ended_at = now(), ended_by = staff_id WHERE engagement_id = $1`, e.Engagement.ID)
 
 	if !e.detail().HasDoulaFees {
 		t.Error("hasDoulaFees = false, want true for a fee on an ended Attachment")

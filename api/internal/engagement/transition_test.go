@@ -52,13 +52,13 @@ type transitionResponseBody struct {
 // transition sends a status transition for the Engagement as the Staff
 // member at the screen and requires want.
 func (e *env) transition(body map[string]any, want int) transitionResponseBody {
-	e.t.Helper()
+	e.T.Helper()
 	return e.transitionOf(e.Engagement.ID, body, want)
 }
 
 func (e *env) transitionOf(engagementID string, body map[string]any, want int) transitionResponseBody {
-	e.t.Helper()
-	return reqtest.Expect[transitionResponseBody](e.t, http.MethodPatch, e.urlOf(engagementID, "/status"), want, e.signedIn, reqtest.JSON(body))
+	e.T.Helper()
+	return reqtest.Expect[transitionResponseBody](e.T, http.MethodPatch, e.urlOf(engagementID, "/status"), want, e.SignedIn, reqtest.JSON(body))
 }
 
 // countOutcomeEvents counts the 'birth_outcome_recorded' rows on
@@ -208,7 +208,7 @@ func TestTransitionHandler_LegalMovesByRole(t *testing.T) {
 			t.Run(move.name+"/"+role.name, func(t *testing.T) {
 				e := newEnv(t, signedInAs(role.opts...), withEngagement(fixture.Status(move.from)))
 				if move.to == engagement.StatusCompleted {
-					testdb.SeedBirthOutcome(t, e.db, e.Engagement.ID)
+					testdb.SeedBirthOutcome(t, e.DB, e.Engagement.ID)
 				}
 				isReopen := move.from == engagement.StatusCompleted && move.to == engagement.StatusActive
 				wantOK := role.mayMove && (!isReopen || role.name != employeeDoulaKind)
@@ -221,7 +221,7 @@ func TestTransitionHandler_LegalMovesByRole(t *testing.T) {
 				if body.Status != move.to {
 					t.Fatalf("status in body = %q, want %q", body.Status, move.to)
 				}
-				if got, _, _ := readEngagementStatus(t, e.db, e.Engagement.ID); got != move.to {
+				if got, _, _ := readEngagementStatus(t, e.DB, e.Engagement.ID); got != move.to {
 					t.Fatalf("engagements.status = %q, want %q", got, move.to)
 				}
 			})
@@ -234,11 +234,11 @@ func TestTransitionHandler_LegalMovesByRole(t *testing.T) {
 // are demanded again at the next completion (ADR-0015).
 func TestTransitionHandler_ReopenClearsReasonAndNote(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()), withEngagement(fixture.Status(fixture.StatusCompleted)))
-	e.exec(`UPDATE engagements SET ending_note = 'left the area' WHERE id = $1`, e.Engagement.ID)
+	e.Exec(`UPDATE engagements SET ending_note = 'left the area' WHERE id = $1`, e.Engagement.ID)
 
 	e.transition(transitionBody(engagement.StatusActive, "", ""), http.StatusOK)
 
-	gotStatus, endingReason, endingNote := readEngagementStatus(t, e.db, e.Engagement.ID)
+	gotStatus, endingReason, endingNote := readEngagementStatus(t, e.DB, e.Engagement.ID)
 	if gotStatus != engagement.StatusActive || endingReason != nil || endingNote != nil {
 		t.Fatalf("status=%q endingReason=%v endingNote=%v, want active with both cleared", gotStatus, endingReason, endingNote)
 	}
@@ -246,13 +246,13 @@ func TestTransitionHandler_ReopenClearsReasonAndNote(t *testing.T) {
 	// carries are cleared and asked for again; the birth outcome is not
 	// one of them, and #940 must not have turned reopening into a way to
 	// shed it.
-	if outcome, _ := readEngagementOutcome(t, e.db, e.Engagement.ID); outcome == nil {
+	if outcome, _ := readEngagementOutcome(t, e.DB, e.Engagement.ID); outcome == nil {
 		t.Fatal("reopening cleared the birth outcome, which the freeze rule says it never does")
 	}
 	// #1423: the reopen is one engagement_reopened entry carrying both
 	// sides of every fact it moved, the ending it cleared included, and
 	// never a completion entry.
-	assertDiff(t, readFactDiff(t, e.db, e.Engagement.ID, "engagement_reopened"), map[string]any{
+	assertDiff(t, readFactDiff(t, e.DB, e.Engagement.ID, "engagement_reopened"), map[string]any{
 		diffStatusBefore:     engagement.StatusCompleted,
 		diffStatusAfter:      engagement.StatusActive,
 		"endingReasonBefore": careCompleteReason,
@@ -260,7 +260,7 @@ func TestTransitionHandler_ReopenClearsReasonAndNote(t *testing.T) {
 		"endingNoteBefore":   "left the area",
 		"endingNoteAfter":    nil,
 	})
-	if n := countFactEntries(t, e.db, e.Engagement.ID); n != 1 {
+	if n := countFactEntries(t, e.DB, e.Engagement.ID); n != 1 {
 		t.Fatalf("fact entries = %d, want 1", n)
 	}
 }
@@ -274,7 +274,7 @@ func TestTransitionHandler_ReopenClearsReasonAndNote(t *testing.T) {
 // attachment close.
 func TestTransitionHandler_CompletingRefusesWithNoBirthOutcome(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()), withEngagement(fixture.Status(fixture.StatusActive)))
-	testdb.SeedAttachment(t, e.db, e.Engagement.ID, e.Staff.ID, "granted", false)
+	testdb.SeedAttachment(t, e.DB, e.Engagement.ID, e.Staff.ID, "granted", false)
 
 	body := e.transition(transitionBody(engagement.StatusCompleted, careCompleteReason, ""), http.StatusConflict)
 
@@ -286,17 +286,17 @@ func TestTransitionHandler_CompletingRefusesWithNoBirthOutcome(t *testing.T) {
 	if body.Message != engagement.MsgBirthOutcomeFirst {
 		t.Fatalf("message = %q, want %q", body.Message, engagement.MsgBirthOutcomeFirst)
 	}
-	gotStatus, endingReason, _ := readEngagementStatus(t, e.db, e.Engagement.ID)
+	gotStatus, endingReason, _ := readEngagementStatus(t, e.DB, e.Engagement.ID)
 	if gotStatus != engagement.StatusActive || endingReason != nil {
 		t.Fatalf("status=%q endingReason=%v, want the row untouched", gotStatus, endingReason)
 	}
-	if n := countFactEntries(t, e.db, e.Engagement.ID); n != 0 {
+	if n := countFactEntries(t, e.DB, e.Engagement.ID); n != 0 {
 		t.Fatalf("fact entries = %d, want 0 on a refusal", n)
 	}
 	if n := e.countActivity("engagement_completed"); n != 0 {
 		t.Fatalf("engagement_completed activity rows = %d, want 0 on a refusal", n)
 	}
-	open := testdb.Scalar[int](t, e.db.Admin, `SELECT count(*) FROM engagement_attachments WHERE engagement_id = $1 AND ended_at IS NULL`, e.Engagement.ID)
+	open := testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM engagement_attachments WHERE engagement_id = $1 AND ended_at IS NULL`, e.Engagement.ID)
 	if open != 1 {
 		t.Fatalf("open attachments = %d, want 1: the completion cascade must not run on a refusal", open)
 	}
@@ -315,14 +315,14 @@ func TestTransitionHandler_CompletingWithUnknownOutcomeAndNoDate(t *testing.T) {
 
 	e.transition(transitionBody(engagement.StatusCompleted, "no_response", ""), http.StatusOK)
 
-	if gotStatus, _, _ := readEngagementStatus(t, e.db, e.Engagement.ID); gotStatus != engagement.StatusCompleted {
+	if gotStatus, _, _ := readEngagementStatus(t, e.DB, e.Engagement.ID); gotStatus != engagement.StatusCompleted {
 		t.Fatalf("status = %q, want completed", gotStatus)
 	}
-	outcome, endedOn := readEngagementOutcome(t, e.db, e.Engagement.ID)
+	outcome, endedOn := readEngagementOutcome(t, e.DB, e.Engagement.ID)
 	if outcome == nil || *outcome != engagement.OutcomeUnknown || endedOn != nil {
 		t.Fatalf("outcome=%v endedOn=%v, want unknown with no date", outcome, endedOn)
 	}
-	if n := countOutcomeEvents(t, e.db, e.Engagement.ID); n != 1 {
+	if n := countOutcomeEvents(t, e.DB, e.Engagement.ID); n != 1 {
 		t.Fatalf("birth_outcome_recorded events = %d, want 1: completing writes none of its own", n)
 	}
 }
@@ -340,14 +340,14 @@ func TestTransitionHandler_CompletingLeavesARecordedOutcomeAlone(t *testing.T) {
 
 	e.transition(transitionBody(engagement.StatusCompleted, careCompleteReason, ""), http.StatusOK)
 
-	outcome, endedOn := readEngagementOutcome(t, e.db, e.Engagement.ID)
+	outcome, endedOn := readEngagementOutcome(t, e.DB, e.Engagement.ID)
 	if outcome == nil || *outcome != engagement.OutcomeLiveBirth {
 		t.Fatalf("birth_outcome = %v, want live_birth", outcome)
 	}
 	if endedOn == nil || *endedOn != endedOnDate {
 		t.Fatalf("pregnancy_ended_on = %v, want %s", endedOn, endedOnDate)
 	}
-	if n := countOutcomeEvents(t, e.db, e.Engagement.ID); n != 1 {
+	if n := countOutcomeEvents(t, e.DB, e.Engagement.ID); n != 1 {
 		t.Fatalf("birth_outcome_recorded events = %d, want still 1", n)
 	}
 }
@@ -357,11 +357,11 @@ func TestTransitionHandler_CompletingLeavesARecordedOutcomeAlone(t *testing.T) {
 // reason enum itself.
 func TestTransitionHandler_CompletingPersistsEndingNote(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()), withEngagement(fixture.Status(fixture.StatusActive)))
-	testdb.SeedBirthOutcome(t, e.db, e.Engagement.ID)
+	testdb.SeedBirthOutcome(t, e.DB, e.Engagement.ID)
 
 	e.transition(transitionBody(engagement.StatusCompleted, careCompleteReason, "Baby arrived safely"), http.StatusOK)
 
-	_, endingReason, endingNote := readEngagementStatus(t, e.db, e.Engagement.ID)
+	_, endingReason, endingNote := readEngagementStatus(t, e.DB, e.Engagement.ID)
 	if endingReason == nil || *endingReason != careCompleteReason {
 		t.Fatalf("ending_reason = %v, want care_complete", endingReason)
 	}
@@ -370,7 +370,7 @@ func TestTransitionHandler_CompletingPersistsEndingNote(t *testing.T) {
 	}
 	// #1423: the completion entry carries both sides of the status and of
 	// the ending it set -- what engagement_events' columns used to hold.
-	assertDiff(t, readFactDiff(t, e.db, e.Engagement.ID, "engagement_completed"), map[string]any{
+	assertDiff(t, readFactDiff(t, e.DB, e.Engagement.ID, "engagement_completed"), map[string]any{
 		diffStatusBefore:     engagement.StatusActive,
 		diffStatusAfter:      engagement.StatusCompleted,
 		"endingReasonBefore": nil,
@@ -411,12 +411,12 @@ func TestTransitionHandler_RefusesAMalformedRequest(t *testing.T) {
 // closes.
 func TestTransitionHandler_ReRequestSameStatusIsNoOp(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()), withEngagement(fixture.Status(fixture.StatusActive)))
-	testdb.SeedBirthOutcome(t, e.db, e.Engagement.ID)
+	testdb.SeedBirthOutcome(t, e.DB, e.Engagement.ID)
 	complete := transitionBody(engagement.StatusCompleted, careCompleteReason, "")
 
 	e.transition(complete, http.StatusOK)
 
-	if n := countFactEntries(t, e.db, e.Engagement.ID); n != 1 {
+	if n := countFactEntries(t, e.DB, e.Engagement.ID); n != 1 {
 		t.Fatalf("fact entries after first completion = %d, want 1", n)
 	}
 	if n := e.countActivity("engagement_completed"); n != 1 {
@@ -426,20 +426,20 @@ func TestTransitionHandler_ReRequestSameStatusIsNoOp(t *testing.T) {
 	// A leftover open attachment the first run's own cascade should have
 	// closed but a caller re-sends the identical request for anyway --
 	// proving the cascade still runs on the no-op path.
-	testdb.SeedAttachment(t, e.db, e.Engagement.ID, e.Staff.ID, "granted", false)
+	testdb.SeedAttachment(t, e.DB, e.Engagement.ID, e.Staff.ID, "granted", false)
 
 	body := e.transition(complete, http.StatusOK)
 
 	if body.Status != engagement.StatusCompleted {
 		t.Fatalf("re-request body status = %q, want completed", body.Status)
 	}
-	if n := countFactEntries(t, e.db, e.Engagement.ID); n != 1 {
+	if n := countFactEntries(t, e.DB, e.Engagement.ID); n != 1 {
 		t.Fatalf("fact entries after re-request = %d, want still 1 (no duplicate)", n)
 	}
 	if n := e.countActivity("engagement_completed"); n != 1 {
 		t.Fatalf("engagement_completed activity rows after re-request = %d, want still 1", n)
 	}
-	ended := testdb.Scalar[bool](t, e.db.Admin,
+	ended := testdb.Scalar[bool](t, e.DB.Admin,
 		`SELECT ended_at IS NOT NULL FROM engagement_attachments WHERE engagement_id = $1 AND staff_id = $2`, e.Engagement.ID, e.Staff.ID)
 	if !ended {
 		t.Fatal("attachment seeded after first completion was not closed by the re-request's cascade")
@@ -458,13 +458,13 @@ func TestTransitionHandler_IntakeToActiveWritesCarePhaseChanged(t *testing.T) {
 	if n := e.countActivity("care_phase_changed"); n != 1 {
 		t.Fatalf("care_phase_changed activity rows = %d, want 1", n)
 	}
-	actorName := testdb.Scalar[string](t, e.db.Admin,
+	actorName := testdb.Scalar[string](t, e.DB.Admin,
 		`SELECT s.name FROM activity a JOIN staff s ON s.id = a.actor_staff_id
 		  WHERE a.subject_id = $1 AND a.action = 'care_phase_changed'`, e.Engagement.ID)
 	if actorName != e.Staff.Name {
 		t.Fatalf("actor name = %q, want the acting Staff member %q", actorName, e.Staff.Name)
 	}
-	assertDiff(t, readFactDiff(t, e.db, e.Engagement.ID, "care_phase_changed"), map[string]any{
+	assertDiff(t, readFactDiff(t, e.DB, e.Engagement.ID, "care_phase_changed"), map[string]any{
 		diffStatusBefore: engagement.StatusIntake,
 		diffStatusAfter:  engagement.StatusActive,
 	})

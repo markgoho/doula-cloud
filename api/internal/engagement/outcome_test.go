@@ -54,19 +54,19 @@ type outcomeResponseBody struct {
 // recordOutcome PUTs a birth outcome for the Engagement as the Staff
 // member at the screen and requires want.
 func (e *env) recordOutcome(body map[string]any, want int) outcomeResponseBody {
-	e.t.Helper()
+	e.T.Helper()
 	return e.recordOutcomeOf(e.Engagement.ID, body, want)
 }
 
 func (e *env) recordOutcomeOf(engagementID string, body map[string]any, want int) outcomeResponseBody {
-	e.t.Helper()
-	return reqtest.Expect[outcomeResponseBody](e.t, http.MethodPut, e.urlOf(engagementID, "/birth-outcome"), want, e.signedIn, reqtest.JSON(body))
+	e.T.Helper()
+	return reqtest.Expect[outcomeResponseBody](e.T, http.MethodPut, e.urlOf(engagementID, "/birth-outcome"), want, e.SignedIn, reqtest.JSON(body))
 }
 
 // outcome is the recorded outcome and date, read past the API.
 func (e *env) outcome() (outcome, endedOn *string) {
-	e.t.Helper()
-	return readEngagementOutcome(e.t, e.db, e.Engagement.ID)
+	e.T.Helper()
+	return readEngagementOutcome(e.T, e.DB, e.Engagement.ID)
 }
 
 // readEngagementOutcome is the raw row every assertion here checks
@@ -126,7 +126,7 @@ func TestRecordBirthOutcomeHandler_RolesMayRecord(t *testing.T) {
 			if gotEndedOn == nil || *gotEndedOn != lossOn {
 				t.Fatalf("pregnancy_ended_on = %v, want %s", gotEndedOn, lossOn)
 			}
-			if n := countFactEntries(t, e.db, e.Engagement.ID); n != 1 {
+			if n := countFactEntries(t, e.DB, e.Engagement.ID); n != 1 {
 				t.Fatalf("fact entries = %d, want 1", n)
 			}
 		})
@@ -182,7 +182,7 @@ func TestRecordBirthOutcomeHandler_FrozenValueRefusesAPlainRecord(t *testing.T) 
 	if gotOutcome, _ := e.outcome(); gotOutcome == nil || *gotOutcome != engagement.OutcomeLoss {
 		t.Fatalf("birth_outcome = %v, want the frozen loss", gotOutcome)
 	}
-	if n := countFactEntries(t, e.db, e.Engagement.ID); n != 1 {
+	if n := countFactEntries(t, e.DB, e.Engagement.ID); n != 1 {
 		t.Fatalf("fact entries = %d, want 1 -- the refusal writes nothing", n)
 	}
 }
@@ -203,7 +203,7 @@ func TestRecordBirthOutcomeHandler_OnlyAnOwnerCorrects(t *testing.T) {
 	for _, tc := range correctors {
 		t.Run(tc.role.name, func(t *testing.T) {
 			e := newEnv(t, signedInAs(tc.role.opts...))
-			e.exec(`UPDATE engagements SET birth_outcome = 'loss', pregnancy_ended_on = $2::date WHERE id = $1`, e.Engagement.ID, lossOn)
+			e.Exec(`UPDATE engagements SET birth_outcome = 'loss', pregnancy_ended_on = $2::date WHERE id = $1`, e.Engagement.ID, lossOn)
 
 			e.recordOutcome(outcomeBody(engagement.OutcomeLiveBirth, "2027-03-05", true), okOrForbidden(tc.wantOK))
 
@@ -220,7 +220,7 @@ func TestRecordBirthOutcomeHandler_OnlyAnOwnerCorrects(t *testing.T) {
 			if gotEndedOn == nil || *gotEndedOn != "2027-03-05" {
 				t.Fatalf("pregnancy_ended_on = %v, want the corrected date", gotEndedOn)
 			}
-			assertOutcomeEvent(t, e.db, e.Engagement.ID, engagement.OutcomeLoss, engagement.OutcomeLiveBirth, lossOn, "2027-03-05")
+			assertOutcomeEvent(t, e.DB, e.Engagement.ID, engagement.OutcomeLoss, engagement.OutcomeLiveBirth, lossOn, "2027-03-05")
 		})
 	}
 }
@@ -264,7 +264,7 @@ func TestRecordBirthOutcomeHandler_ResendingIsANoOp(t *testing.T) {
 				}
 			}
 
-			if n := countFactEntries(t, e.db, e.Engagement.ID); n != 1 {
+			if n := countFactEntries(t, e.DB, e.Engagement.ID); n != 1 {
 				t.Fatalf("fact entries = %d, want 1 -- the resend writes nothing", n)
 			}
 		})
@@ -299,7 +299,7 @@ func TestRecordBirthOutcomeHandler_RefusesARequestItCannotRead(t *testing.T) {
 func TestDetailHandler_BirthOutcome(t *testing.T) {
 	e := newOwnerEnv(t)
 
-	raw := reqtest.Expect[map[string]jsontext.Value](t, http.MethodGet, e.engagementURL(""), http.StatusOK, e.signedIn)
+	raw := reqtest.Expect[map[string]jsontext.Value](t, http.MethodGet, e.engagementURL(""), http.StatusOK, e.SignedIn)
 	for _, key := range []string{"birthOutcome", "pregnancyEndedOn"} {
 		if _, present := raw[key]; present {
 			t.Fatalf("%q present before anything was recorded, want omitted", key)
@@ -335,10 +335,10 @@ func TestRecordBirthOutcomeHandler_AnOwnerCanUnrecord(t *testing.T) {
 	if gotOutcome != nil || gotEndedOn != nil {
 		t.Fatalf("row = (%v, %v), want both cleared", gotOutcome, gotEndedOn)
 	}
-	if n := countFactEntries(t, e.db, e.Engagement.ID); n != 2 {
+	if n := countFactEntries(t, e.DB, e.Engagement.ID); n != 2 {
 		t.Fatalf("fact entries = %d, want 2 -- the record and the un-recording", n)
 	}
-	assertDiff(t, readFactDiff(t, e.db, e.Engagement.ID, "birth_outcome_recorded"), map[string]any{
+	assertDiff(t, readFactDiff(t, e.DB, e.Engagement.ID, "birth_outcome_recorded"), map[string]any{
 		"birthOutcomeBefore":     engagement.OutcomeLoss,
 		"birthOutcomeAfter":      nil,
 		"pregnancyEndedOnBefore": lossOn,
@@ -356,7 +356,7 @@ func TestRecordBirthOutcomeHandler_AnOwnerCanUnrecord(t *testing.T) {
 func TestRecordBirthOutcomeHandler_ClearingIsRefusedOnACompletedEngagement(t *testing.T) {
 	e := newOwnerEnv(t)
 	e.recordOutcome(outcomeBody(engagement.OutcomeLoss, lossOn, false), http.StatusOK)
-	e.exec(`UPDATE engagements SET status = 'completed', ending_reason = 'care_complete' WHERE id = $1`, e.Engagement.ID)
+	e.Exec(`UPDATE engagements SET status = 'completed', ending_reason = 'care_complete' WHERE id = $1`, e.Engagement.ID)
 
 	body := e.recordOutcome(outcomeBody("", "", true), http.StatusConflict)
 

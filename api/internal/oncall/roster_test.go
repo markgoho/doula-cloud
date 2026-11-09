@@ -26,26 +26,26 @@ type rosterEnv struct {
 
 func newRosterEnv(t *testing.T) rosterEnv {
 	t.Helper()
-	e := rosterEnv{env: newBareEnv(t)}
-	e.Employee = fixture.Staff(t, e.db, e.Practice)
-	e.Contractor = fixture.Staff(t, e.db, e.Practice, fixture.Contractor())
+	e := rosterEnv{env: newBareEnv(t, fixture.NobodySignedIn())}
+	e.Employee = fixture.Staff(t, e.DB, e.Practice)
+	e.Contractor = fixture.Staff(t, e.DB, e.Practice, fixture.Contractor())
 	birth := func(name, due string, doula fixture.StaffRecord) fixture.EngagementRecord {
 		opts := []fixture.EngagementOption{fixture.NewClient(fixture.ClientName(name)), fixture.Status(fixture.StatusActive), fixture.WithDoula(doula)}
 		if due != "" {
 			opts = append(opts, fixture.DueDate(due))
 		}
-		return fixture.Engagement(t, e.db, e.Practice, opts...)
+		return fixture.Engagement(t, e.DB, e.Practice, opts...)
 	}
 	e.Ada = birth("Ada Whitfield", birthDue, e.Contractor)
 	e.Bea = birth("Bea Okafor", "2026-10-28", e.Employee)
 	e.Cleo = birth("Cleo Marsh", "2026-11-02", e.Employee)
 	e.Dot = birth("Dot Nakamura", "", e.Employee)
 
-	e.BeaVisit = testdb.Scalar[string](t, e.db.Admin,
+	e.BeaVisit = testdb.Scalar[string](t, e.DB.Admin,
 		`INSERT INTO visits (engagement_id, staff_id) VALUES ($1, $2) RETURNING id`, e.Bea.ID, e.Employee.ID)
 
 	// The employee cannot be reached one evening on Bea's birth.
-	e.exec(`INSERT INTO engagement_coverage_gaps (engagement_id, staff_id, starts_at, ends_at, reason, created_by)
+	e.Exec(`INSERT INTO engagement_coverage_gaps (engagement_id, staff_id, starts_at, ends_at, reason, created_by)
 		VALUES ($1, $2, '2026-10-17T22:00:00Z', '2026-10-18T10:00:00Z', 'Sister''s wedding', $2)`,
 		e.Bea.ID, e.Employee.ID)
 	return e
@@ -74,9 +74,9 @@ func TestRoster_ContractorReadsOnlyHerOwnEngagements(t *testing.T) {
 	e := newRosterEnv(t)
 	// #2114: the roster names each Client in full, her preferred name
 	// followed by the family name.
-	e.exec(`UPDATE clients SET preferred_name = 'Addie', family_name = 'Brennan' WHERE id = $1`, e.Ada.Client.ID)
+	e.Exec(`UPDATE clients SET preferred_name = 'Addie', family_name = 'Brennan' WHERE id = $1`, e.Ada.Client.ID)
 	url := e.rosterURL(octFirst, octLast)
-	asContractor := e.as(e.Contractor)
+	asContractor := e.As(e.Contractor)
 
 	body := string(reqtest.ExpectBody(t, http.MethodGet, url, http.StatusOK, asContractor))
 
@@ -108,7 +108,7 @@ func TestRoster_ContractorReadsOnlyHerOwnEngagements(t *testing.T) {
 func TestRoster_ContractorSeesAColleagueByNameAndAvailabilityOnly(t *testing.T) {
 	e := newRosterEnv(t)
 
-	roster := reqtest.Expect[oncall.RosterResponse](t, http.MethodGet, e.rosterURL("2026-10-17", "2026-10-17"), http.StatusOK, e.as(e.Contractor))
+	roster := reqtest.Expect[oncall.RosterResponse](t, http.MethodGet, e.rosterURL("2026-10-17", "2026-10-17"), http.StatusOK, e.As(e.Contractor))
 
 	byID := map[string]oncall.RosterDoula{}
 	for _, d := range roster.Doulas {
@@ -138,14 +138,14 @@ func TestRoster_ContractorSeesAColleagueByNameAndAvailabilityOnly(t *testing.T) 
 func TestRoster_AmbientReadersReadTheWholePractice(t *testing.T) {
 	e := newRosterEnv(t)
 	readers := map[string]fixture.StaffRecord{
-		"an Owner":          fixture.Staff(t, e.db, e.Practice, fixture.Owner()),
-		"an Admin":          fixture.Staff(t, e.db, e.Practice, fixture.Admin()),
+		"an Owner":          fixture.Staff(t, e.DB, e.Practice, fixture.Owner()),
+		"an Admin":          fixture.Staff(t, e.DB, e.Practice, fixture.Admin()),
 		"an employee Doula": e.Employee,
 	}
 
 	for name, reader := range readers {
 		t.Run(name, func(t *testing.T) {
-			roster := reqtest.Expect[oncall.RosterResponse](t, http.MethodGet, e.rosterURL(octFirst, octLast), http.StatusOK, e.as(reader))
+			roster := reqtest.Expect[oncall.RosterResponse](t, http.MethodGet, e.rosterURL(octFirst, octLast), http.StatusOK, e.As(reader))
 
 			want := sorted(e.Ada.ID, e.Bea.ID, e.Cleo.ID)
 			if got := windowIDs(roster); !slices.Equal(got, want) {

@@ -26,7 +26,7 @@ func TestGetTemplateHandler_Refusals(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t)
 
-			reqtest.ExpectStatus(t, http.MethodGet, e.templateURL(tc.planType), tc.want, e.signedIn)
+			reqtest.ExpectStatus(t, http.MethodGet, e.templateURL(tc.planType), tc.want, e.SignedIn)
 		})
 	}
 }
@@ -65,7 +65,7 @@ func TestPutTemplateHandler_NonOwnerForbidden(t *testing.T) {
 
 			e.putTemplate(carePlanType, []plans.Field{{ID: "f2", Type: shortTextType, Label: testFieldLabel}}, http.StatusForbidden)
 
-			stored := testdb.Scalar[string](t, e.db.Admin, `SELECT fields->0->>'id' FROM plan_templates WHERE practice_id = $1 AND plan_type = $2`, e.Practice.ID, carePlanType)
+			stored := testdb.Scalar[string](t, e.DB.Admin, `SELECT fields->0->>'id' FROM plan_templates WHERE practice_id = $1 AND plan_type = $2`, e.Practice.ID, carePlanType)
 			if stored != "f1" {
 				t.Fatalf("stored first field id = %q, want f1 (the refused PUT must not write)", stored)
 			}
@@ -104,7 +104,7 @@ func TestPutTemplateHandler_Refusals(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			reqtest.ExpectStatus(t, http.MethodPut, e.templateURL(tc.planType), http.StatusBadRequest, e.signedIn, tc.body)
+			reqtest.ExpectStatus(t, http.MethodPut, e.templateURL(tc.planType), http.StatusBadRequest, e.SignedIn, tc.body)
 		})
 	}
 }
@@ -204,7 +204,7 @@ func TestPutTemplateHandler_WritesOneAuditRowPerRealChange(t *testing.T) {
 		e.putTemplate(carePlanType, changed, http.StatusOK)
 	}
 
-	audit := planTemplateAudit(t, e.db, e.Practice.ID)
+	audit := planTemplateAudit(t, e.DB, e.Practice.ID)
 	if len(audit) != 1 {
 		t.Fatalf("audit rows = %d, want 1 (the second PUT changed nothing)", len(audit))
 	}
@@ -224,7 +224,7 @@ func TestPutTemplateHandler_AuditsAFirstSaveAgainstAnEmptyList(t *testing.T) {
 
 	e.putTemplate(birthPlanType, []plans.Field{{ID: "first", Type: shortTextType, Label: "First"}}, http.StatusOK)
 
-	audit := planTemplateAudit(t, e.db, e.Practice.ID)
+	audit := planTemplateAudit(t, e.DB, e.Practice.ID)
 	if len(audit) != 1 || len(audit[0].diff["before"]) != 0 || len(audit[0].diff["after"]) != 1 {
 		t.Fatalf("audit = %+v, want one row from an empty list to one field", audit)
 	}

@@ -27,18 +27,18 @@ func TestClientPostSignContractHandler_SignedPDFCarriesTheSignature(t *testing.T
 		signedInAs(fixture.Owner()),
 		withClient(fixture.ClientName(typedName), fixture.WithPortalLogin()),
 		atInstant(signedAt))
-	testdb.SetPracticeTimezone(t, e.db, e.Practice.ID, "America/Los_Angeles")
-	seedContract(t, e.db, e.Engagement.ID, statusSent, "By signing below, both parties agree to the terms described above.")
+	testdb.SetPracticeTimezone(t, e.DB, e.Practice.ID, "America/Los_Angeles")
+	seedContract(t, e.DB, e.Engagement.ID, statusSent, "By signing below, both parties agree to the terms described above.")
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.portalURL("/sign"), http.StatusOK, e.asClient, signing("  "+typedName+"  ", true))
+	reqtest.ExpectStatus(t, http.MethodPost, e.portalURL("/sign"), http.StatusOK, e.AsClient, signing("  "+typedName+"  ", true))
 
 	row := e.signRow()
 	if row.signedAt == nil || !row.signedAt.Equal(signedAt) {
 		t.Fatalf("persisted signed_at = %v, want the request clock's %v", row.signedAt, signedAt)
 	}
 
-	portalPDF := reqtest.ExpectBody(t, http.MethodGet, e.portalURL("/pdf"), http.StatusOK, e.asClient)
-	staffPDF := reqtest.ExpectBody(t, http.MethodGet, e.contractURL("/pdf"), http.StatusOK, e.signedIn)
+	portalPDF := reqtest.ExpectBody(t, http.MethodGet, e.portalURL("/pdf"), http.StatusOK, e.AsClient)
+	staffPDF := reqtest.ExpectBody(t, http.MethodGet, e.contractURL("/pdf"), http.StatusOK, e.SignedIn)
 	if string(portalPDF) != string(staffPDF) {
 		t.Fatal("the portal and Practice-side downloads served different files")
 	}

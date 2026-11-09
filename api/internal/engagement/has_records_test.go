@@ -12,17 +12,17 @@ import (
 func TestDetailHandler_SaysWhichRecordsExist(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
 	active := fixture.Status(fixture.StatusActive)
-	care := e.anotherEngagement(active)
-	full := e.anotherEngagement(active)
+	care := e.AnotherEngagement(active)
+	full := e.AnotherEngagement(active)
 	for _, plan := range []struct{ engagementID, planType string }{
 		{care.ID, "care_plan"},
 		{full.ID, "care_plan"},
 		{full.ID, "birth_plan"},
 	} {
-		e.exec(`INSERT INTO plan_instances (engagement_id, plan_type, fields, changed_at) VALUES ($1, $2::plan_type, '[]'::jsonb, now())`,
+		e.Exec(`INSERT INTO plan_instances (engagement_id, plan_type, fields, changed_at) VALUES ($1, $2::plan_type, '[]'::jsonb, now())`,
 			plan.engagementID, plan.planType)
 	}
-	e.exec(`INSERT INTO contracts (engagement_id, status, prose, amount_cents) VALUES ($1, 'draft', '', 15000)`, full.ID)
+	e.Exec(`INSERT INTO contracts (engagement_id, status, prose, amount_cents) VALUES ($1, 'draft', '', 15000)`, full.ID)
 
 	for _, tc := range []struct {
 		name                        string

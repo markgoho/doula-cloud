@@ -24,8 +24,8 @@ func countContractEdited(t *testing.T, db *testdb.DB, engagementID string) int {
 }
 
 func (e *env) countContractEdited() int {
-	e.t.Helper()
-	return countContractEdited(e.t, e.db, e.Engagement.ID)
+	e.T.Helper()
+	return countContractEdited(e.T, e.DB, e.Engagement.ID)
 }
 
 // TestPutContractHandler_RecordsWhoChangedTheDraft proves #2520: a save
@@ -33,13 +33,13 @@ func (e *env) countContractEdited() int {
 // with the Staff actor, naming the fields it moved and never their values.
 func TestPutContractHandler_RecordsWhoChangedTheDraft(t *testing.T) {
 	e := newEnv(t)
-	seedContract(t, e.db, e.Engagement.ID, statusDraft, scopeProse)
+	seedContract(t, e.DB, e.Engagement.ID, statusDraft, scopeProse)
 
 	const scope = "Two prenatal Visits, the birth, one postpartum Visit"
-	reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), http.StatusOK, e.signedIn,
+	reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), http.StatusOK, e.SignedIn,
 		putting(contracts.MergeFieldValues{clientNameKey: testClientName, scopeKey: scope}))
 
-	diff := assertActivityActor(t, e.db, e.Engagement.ID, activity.ActionContractEdited, e.Staff.ID)
+	diff := assertActivityActor(t, e.DB, e.Engagement.ID, activity.ActionContractEdited, e.Staff.ID)
 	var parsed struct {
 		Fields []string `json:"fields"`
 	}
@@ -59,9 +59,9 @@ func TestPutContractHandler_RecordsWhoChangedTheDraft(t *testing.T) {
 // a field cleared that was already empty, leaves no Activity row.
 func TestPutContractHandler_UnchangedSaveRecordsNothing(t *testing.T) {
 	e := newEnv(t)
-	seedContractWithValues(t, e.db, e.Engagement.ID, contracts.MergeFieldValues{clientNameKey: testClientName, scopeKey: ""})
+	seedContractWithValues(t, e.DB, e.Engagement.ID, contracts.MergeFieldValues{clientNameKey: testClientName, scopeKey: ""})
 
-	reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), http.StatusOK, e.signedIn,
+	reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), http.StatusOK, e.SignedIn,
 		putting(contracts.MergeFieldValues{clientNameKey: testClientName}))
 
 	if got := e.countContractEdited(); got != 0 {
@@ -73,9 +73,9 @@ func TestPutContractHandler_UnchangedSaveRecordsNothing(t *testing.T) {
 // from the save counts as a change to that field.
 func TestPutContractHandler_ClearingAFieldIsAChange(t *testing.T) {
 	e := newEnv(t)
-	seedContractWithValues(t, e.db, e.Engagement.ID, contracts.MergeFieldValues{clientNameKey: testClientName})
+	seedContractWithValues(t, e.DB, e.Engagement.ID, contracts.MergeFieldValues{clientNameKey: testClientName})
 
-	reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), http.StatusOK, e.signedIn, putting(contracts.MergeFieldValues{}))
+	reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), http.StatusOK, e.SignedIn, putting(contracts.MergeFieldValues{}))
 
 	if got := e.countContractEdited(); got != 1 {
 		t.Fatalf("contract_edited rows = %d, want 1", got)

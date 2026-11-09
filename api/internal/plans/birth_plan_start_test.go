@@ -37,12 +37,12 @@ func TestPostInstanceHandler_RefusesBirthPlanItDoesNotOffer(t *testing.T) {
 			e.seedTemplate(birthPlanType, f1Fields)
 			e.seedTemplate(carePlanType, f1Fields)
 
-			body := apierrtest.Expect(t, http.MethodPost, e.instanceURL(birthPlanType, ""), http.StatusConflict, e.signedIn)
+			body := apierrtest.Expect(t, http.MethodPost, e.instanceURL(birthPlanType, ""), http.StatusConflict, e.SignedIn)
 			if body.Code != apierr.CodeConflict || body.Message != tc.wantMsg {
 				t.Fatalf("body = %+v, want conflict %q", body, tc.wantMsg)
 			}
 
-			count := testdb.Scalar[int](t, e.db.Admin, `SELECT count(*) FROM plan_instances WHERE engagement_id = $1 AND plan_type = 'birth_plan'`, e.Engagement.ID)
+			count := testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM plan_instances WHERE engagement_id = $1 AND plan_type = 'birth_plan'`, e.Engagement.ID)
 			if count != 0 {
 				t.Fatalf("birth plan instances = %d, want 0", count)
 			}

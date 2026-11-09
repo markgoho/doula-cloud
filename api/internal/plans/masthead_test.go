@@ -36,7 +36,7 @@ func newUnstaffedMastheadEnv(t *testing.T, opts ...envOption) *env {
 	t.Helper()
 	opts = append([]envOption{withPractice(fixture.PracticeName(mastheadPractice)), withClient(fixture.ClientName("Johanna"), fixture.WithPortalLogin())}, opts...)
 	e := newEnv(t, opts...)
-	testdb.NameClient(t, e.db, e.Engagement.Client.ID, "Hannah", "Sorensen")
+	testdb.NameClient(t, e.DB, e.Engagement.Client.ID, "Hannah", "Sorensen")
 	return e
 }
 
@@ -52,32 +52,26 @@ func newMastheadEnv(t *testing.T, opts ...envOption) *env {
 // attachDoula seeds a Doula named name at the Practice and puts her on the
 // Engagement with an open, granted Attachment.
 func (e *env) attachDoula(name string) {
-	e.t.Helper()
-	testdb.SeedGrantedAttachment(e.t, e.db, e.Engagement.ID, e.staff(fixture.StaffName(name)).ID)
-}
-
-// staff is another Staff member at the Practice.
-func (e *env) staff(opts ...fixture.StaffOption) fixture.StaffRecord {
-	e.t.Helper()
-	return fixture.Staff(e.t, e.db, e.Practice, opts...)
+	e.T.Helper()
+	testdb.SeedGrantedAttachment(e.T, e.DB, e.Engagement.ID, e.Colleague(fixture.StaffName(name)).ID)
 }
 
 // setChangedAt pins the Engagement's seeded Plan Instance's changed_at,
 // standing in for the save that last changed it.
 func (e *env) setChangedAt(planType string, at time.Time) {
-	e.t.Helper()
-	e.exec(`UPDATE plan_instances SET changed_at = $3 WHERE engagement_id = $1 AND plan_type = $2`, e.Engagement.ID, planType, at)
+	e.T.Helper()
+	e.Exec(`UPDATE plan_instances SET changed_at = $3 WHERE engagement_id = $1 AND plan_type = $2`, e.Engagement.ID, planType, at)
 }
 
 func (e *env) changedAt(planType string) time.Time {
-	e.t.Helper()
-	return testdb.Scalar[time.Time](e.t, e.db.Admin, `SELECT changed_at FROM plan_instances WHERE engagement_id = $1 AND plan_type = $2`, e.Engagement.ID, planType)
+	e.T.Helper()
+	return testdb.Scalar[time.Time](e.T, e.DB.Admin, `SELECT changed_at FROM plan_instances WHERE engagement_id = $1 AND plan_type = $2`, e.Engagement.ID, planType)
 }
 
 // seedMastheadInstance starts the Engagement's planType Plan, last changed
 // at mastheadNow.
 func (e *env) seedMastheadInstance(planType string) {
-	e.t.Helper()
+	e.T.Helper()
 	e.seedInstance(planType,
 		`[{"id":"place","type":"single_select","label":"Planned birth location","options":["Home","Hospital"],"order":0}]`,
 		`{"place":"Hospital"}`,
@@ -131,9 +125,9 @@ func TestBirthPlanReads_CarryTheirMasthead(t *testing.T) {
 		url    func(*env) string
 		as     func(*env) reqtest.Option
 	}{
-		{"Staff read", http.MethodGet, func(e *env) string { return e.instanceURL(birthPlanType, "") }, func(e *env) reqtest.Option { return e.signedIn }},
-		{"portal read", http.MethodGet, func(e *env) string { return e.portalURL("") }, func(e *env) reqtest.Option { return e.asClient }},
-		{"acknowledgment", http.MethodPost, func(e *env) string { return e.portalURL("/acknowledge") }, func(e *env) reqtest.Option { return e.asClient }},
+		{"Staff read", http.MethodGet, func(e *env) string { return e.instanceURL(birthPlanType, "") }, func(e *env) reqtest.Option { return e.SignedIn }},
+		{"portal read", http.MethodGet, func(e *env) string { return e.portalURL("") }, func(e *env) reqtest.Option { return e.AsClient }},
+		{"acknowledgment", http.MethodPost, func(e *env) string { return e.portalURL("/acknowledge") }, func(e *env) reqtest.Option { return e.AsClient }},
 	}
 	for _, read := range reads {
 		t.Run(read.name, func(t *testing.T) {
@@ -165,9 +159,9 @@ func TestBirthPlanPDF_NamesThePlan(t *testing.T) {
 		t.Run(who, func(t *testing.T) {
 			e := newMastheadEnv(t)
 			e.seedMastheadInstance(birthPlanType)
-			url, session := e.instanceURL(birthPlanType, "/pdf"), e.signedIn
+			url, session := e.instanceURL(birthPlanType, "/pdf"), e.SignedIn
 			if who == "Client" {
-				url, session = e.portalURL("/pdf"), e.asClient
+				url, session = e.portalURL("/pdf"), e.AsClient
 			}
 
 			wantPDFMasthead(t, reqtest.ExpectPDF(t, http.MethodGet, url, session), "Doula: "+mastheadDoula)
@@ -221,7 +215,7 @@ func TestMasthead_WithNoDoulaNamesOnlyThePractice(t *testing.T) {
 	e.seedMastheadInstance(birthPlanType)
 
 	wantMastheadDoulas(t, e.instance(birthPlanType).Masthead)
-	wantPDFMasthead(t, reqtest.ExpectPDF(t, http.MethodGet, e.portalURL("/pdf"), e.asClient))
+	wantPDFMasthead(t, reqtest.ExpectPDF(t, http.MethodGet, e.portalURL("/pdf"), e.AsClient))
 }
 
 // TestMasthead_NamesEveryDoulaOnTheEngagement proves the portal names who
@@ -233,10 +227,10 @@ func TestMasthead_WithNoDoulaNamesOnlyThePractice(t *testing.T) {
 func TestMasthead_NamesEveryDoulaOnTheEngagement(t *testing.T) {
 	e := newMastheadEnv(t)
 	e.attachDoula("Lena Vasquez")
-	testdb.SeedAttachment(e.t, e.db, e.Engagement.ID, e.staff(fixture.StaffName("Ended Doula")).ID, "granted", true)
-	testdb.SeedAttachment(e.t, e.db, e.Engagement.ID, e.staff(fixture.StaffName("Accrued Doula")).ID, "accrued", false)
+	testdb.SeedAttachment(e.T, e.DB, e.Engagement.ID, e.Colleague(fixture.StaffName("Ended Doula")).ID, "granted", true)
+	testdb.SeedAttachment(e.T, e.DB, e.Engagement.ID, e.Colleague(fixture.StaffName("Accrued Doula")).ID, "accrued", false)
 	e.seedMastheadInstance(birthPlanType)
 
 	wantMastheadDoulas(t, e.birthPlan().Masthead, mastheadDoula, "Lena Vasquez")
-	wantPDFMasthead(t, reqtest.ExpectPDF(t, http.MethodGet, e.instanceURL(birthPlanType, "/pdf"), e.signedIn), "Doulas: "+mastheadDoula+", Lena Vasquez")
+	wantPDFMasthead(t, reqtest.ExpectPDF(t, http.MethodGet, e.instanceURL(birthPlanType, "/pdf"), e.SignedIn), "Doulas: "+mastheadDoula+", Lena Vasquez")
 }

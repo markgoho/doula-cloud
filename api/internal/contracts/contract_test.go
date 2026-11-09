@@ -47,7 +47,7 @@ func TestPostContractHandler_RefusesAnEngagementItCannotReach(t *testing.T) {
 func TestPostContractHandler_NoTemplate(t *testing.T) {
 	e := newEnv(t)
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.contractURL(""), http.StatusNotFound, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodPost, e.contractURL(""), http.StatusNotFound, e.SignedIn)
 }
 
 // TestPostContractHandler_Success proves a Contract is created as a
@@ -59,7 +59,7 @@ func TestPostContractHandler_Success(t *testing.T) {
 	e := newEnv(t)
 	e.readyToDraft(mergeFieldProse)
 
-	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.contractURL(""), http.StatusCreated, e.signedIn)
+	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.contractURL(""), http.StatusCreated, e.SignedIn)
 
 	if out.EngagementID != e.Engagement.ID {
 		t.Fatalf("engagementId = %q, want %q", out.EngagementID, e.Engagement.ID)
@@ -92,14 +92,14 @@ func TestPostContractHandler_RecordsCreatedAndPricedSeparately(t *testing.T) {
 	e := newEnv(t)
 	e.readyToDraft(mergeFieldProse)
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.contractURL(""), http.StatusCreated, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodPost, e.contractURL(""), http.StatusCreated, e.SignedIn)
 
-	createdDiff := assertActivityActor(t, e.db, e.Engagement.ID, activity.ActionContractCreated, e.Staff.ID)
+	createdDiff := assertActivityActor(t, e.DB, e.Engagement.ID, activity.ActionContractCreated, e.Staff.ID)
 	if string(createdDiff) != "{}" {
 		t.Fatalf("contract_created diff = %q, want no price carried -- it left the money set (#972)", createdDiff)
 	}
 
-	pricedDiff := assertActivityActor(t, e.db, e.Engagement.ID, activity.ActionContractPriced, e.Staff.ID)
+	pricedDiff := assertActivityActor(t, e.DB, e.Engagement.ID, activity.ActionContractPriced, e.Staff.ID)
 	var parsedDiff activity.AmountDiff
 	if err := json.Unmarshal(pricedDiff, &parsedDiff); err != nil {
 		t.Fatalf("unmarshal contract_priced diff: %v", err)
@@ -136,7 +136,7 @@ func TestPostContractHandler_ResolvesMergeFields(t *testing.T) {
 			e := newEnv(t)
 			e.readyToDraft(c.prose)
 
-			out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.contractURL(""), http.StatusCreated, e.signedIn)
+			out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.contractURL(""), http.StatusCreated, e.SignedIn)
 
 			if len(out.Values) != len(c.want) {
 				t.Fatalf("values = %+v, want %+v", out.Values, c.want)
@@ -157,10 +157,10 @@ func TestPostContractHandler_ResolvesMergeFields(t *testing.T) {
 func TestPutContractHandler_OverwrittenResolvedValueSurvivesReload(t *testing.T) {
 	e := newEnv(t)
 	e.readyToDraft("This agreement is between {{practice_name}} and {{client_name}} for doula services.")
-	reqtest.ExpectStatus(t, http.MethodPost, e.contractURL(""), http.StatusCreated, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodPost, e.contractURL(""), http.StatusCreated, e.SignedIn)
 
 	const overwrittenPracticeName = "Overwritten Practice Name"
-	reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), http.StatusOK, e.signedIn,
+	reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), http.StatusOK, e.SignedIn,
 		putting(contracts.MergeFieldValues{"practice_name": overwrittenPracticeName, clientNameKey: testClientName}))
 
 	if got := e.contract().Values["practice_name"]; got != overwrittenPracticeName {
@@ -175,7 +175,7 @@ func TestPostContractHandler_DedupesRepeatedMergeField(t *testing.T) {
 	e := newEnv(t)
 	e.readyToDraft("Hello {{client_name}}, this agreement is for {{client_name}}.")
 
-	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.contractURL(""), http.StatusCreated, e.signedIn)
+	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.contractURL(""), http.StatusCreated, e.SignedIn)
 
 	if len(out.MergeFields) != 1 || out.MergeFields[0] != clientNameKey {
 		t.Fatalf("mergeFields = %v, want [client_name] deduped", out.MergeFields)
@@ -188,8 +188,8 @@ func TestPostContractHandler_Duplicate(t *testing.T) {
 	e := newEnv(t)
 	e.readyToDraft(mergeFieldProse)
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.contractURL(""), http.StatusCreated, e.signedIn)
-	reqtest.ExpectStatus(t, http.MethodPost, e.contractURL(""), http.StatusConflict, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodPost, e.contractURL(""), http.StatusCreated, e.SignedIn)
+	reqtest.ExpectStatus(t, http.MethodPost, e.contractURL(""), http.StatusConflict, e.SignedIn)
 }
 
 // TestPostContractHandler_ContractorWithoutAttachmentNotFound proves #970's
@@ -202,7 +202,7 @@ func TestPostContractHandler_ContractorWithoutAttachmentNotFound(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Contractor()))
 	e.seedTemplate(mergeFieldProse)
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.contractURL(""), http.StatusNotFound, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodPost, e.contractURL(""), http.StatusNotFound, e.SignedIn)
 }
 
 func TestGetContractHandler_RefusesAnEngagementItCannotReach(t *testing.T) {
@@ -213,7 +213,7 @@ func TestGetContractHandler_RefusesAnEngagementItCannotReach(t *testing.T) {
 func TestGetContractHandler_NotFound(t *testing.T) {
 	e := newEnv(t)
 
-	reqtest.ExpectStatus(t, http.MethodGet, e.contractURL(""), http.StatusNotFound, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodGet, e.contractURL(""), http.StatusNotFound, e.SignedIn)
 }
 
 // TestGetContractHandler_ContractorWithoutAttachmentForbidden proves
@@ -224,7 +224,7 @@ func TestGetContractHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Contractor()))
 	e.seedDraft()
 
-	reqtest.ExpectStatus(t, http.MethodGet, e.contractURL(""), http.StatusNotFound, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodGet, e.contractURL(""), http.StatusNotFound, e.SignedIn)
 }
 
 // TestGetContractHandler_ContractorWithGrantedAttachmentSeesScope proves
@@ -239,7 +239,7 @@ func TestGetContractHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 // one".
 func TestGetContractHandler_ContractorWithGrantedAttachmentSeesScope(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Contractor()), attachedToEngagement())
-	seedContractWithValues(t, e.db, e.Engagement.ID, contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: testPriceValue})
+	seedContractWithValues(t, e.DB, e.Engagement.ID, contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: testPriceValue})
 
 	out := e.contract()
 
@@ -277,7 +277,7 @@ func TestGetContractHandler_AmountChangedAt(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			e := newEnv(t, signedInAs(c.staff), attachedToEngagement())
 			e.seedDraft()
-			e.exec(`UPDATE contracts SET amount_changed_at = now() WHERE engagement_id = $1`, e.Engagement.ID)
+			e.Exec(`UPDATE contracts SET amount_changed_at = now() WHERE engagement_id = $1`, e.Engagement.ID)
 
 			if got := e.contract().AmountChangedAt != nil; got != c.wantVisible {
 				t.Fatalf("amountChangedAt visible = %v, want %v (#968, #282, ADR-0008)", got, c.wantVisible)
@@ -292,7 +292,7 @@ func TestGetContractHandler_AmountChangedAt(t *testing.T) {
 // previously withheld entirely.
 func TestGetContractHandler_EmployedDoulaSeesMoney(t *testing.T) {
 	e := newEnv(t)
-	seedContractWithValues(t, e.db, e.Engagement.ID, contracts.MergeFieldValues{clientNameKey: jamieName})
+	seedContractWithValues(t, e.DB, e.Engagement.ID, contracts.MergeFieldValues{clientNameKey: jamieName})
 
 	out := e.contract()
 
@@ -327,7 +327,7 @@ func TestPutContractHandler_RefusesAnEngagementItCannotReach(t *testing.T) {
 func TestPutContractHandler_NotFound(t *testing.T) {
 	e := newEnv(t)
 
-	reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), http.StatusNotFound, e.signedIn,
+	reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), http.StatusNotFound, e.SignedIn,
 		putting(contracts.MergeFieldValues{clientNameKey: jamieName}))
 }
 
@@ -341,7 +341,7 @@ func TestPutContractHandler_ContractorWithoutAttachmentNotFound(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Contractor()))
 	e.seedDraft()
 
-	reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), http.StatusNotFound, e.signedIn,
+	reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), http.StatusNotFound, e.SignedIn,
 		putting(contracts.MergeFieldValues{clientNameKey: jamieName}))
 }
 
@@ -370,7 +370,7 @@ func TestPutContractHandler_Refusals(t *testing.T) {
 			e := newEnv(t)
 			e.seedContract(c.status)
 
-			reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), c.want, e.signedIn, c.body)
+			reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), c.want, e.SignedIn, c.body)
 		})
 	}
 }
@@ -382,7 +382,7 @@ func TestPutContractHandler_StatusFieldIgnored(t *testing.T) {
 	e := newEnv(t)
 	e.seedDraft()
 
-	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPut, e.contractURL(""), http.StatusOK, e.signedIn,
+	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPut, e.contractURL(""), http.StatusOK, e.SignedIn,
 		reqtest.RawJSON([]byte(`{"status":"signed","values":{"client_name":"Jamie"}}`)))
 
 	if out.Status != statusDraft {
@@ -398,7 +398,7 @@ func TestPutContractHandler_EmptyBodyDefaultsToEmptyValues(t *testing.T) {
 	e := newEnv(t)
 	e.seedDraft()
 
-	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPut, e.contractURL(""), http.StatusOK, e.signedIn,
+	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPut, e.contractURL(""), http.StatusOK, e.SignedIn,
 		reqtest.RawJSON([]byte(`{}`)))
 
 	// price still resolves even against an otherwise-empty Values map --
@@ -414,7 +414,7 @@ func TestPutContractHandler_Success(t *testing.T) {
 	e := newEnv(t)
 	e.seedDraft()
 
-	reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), http.StatusOK, e.signedIn,
+	reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), http.StatusOK, e.SignedIn,
 		putting(contracts.MergeFieldValues{clientNameKey: jamieName}))
 
 	out := e.contract()
@@ -433,9 +433,9 @@ func TestPutContractHandler_Success(t *testing.T) {
 func TestContract_TemplateEditDoesNotAlterExistingSnapshot(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
 	e.readyToDraft(mergeFieldProse)
-	reqtest.ExpectStatus(t, http.MethodPost, e.contractURL(""), http.StatusCreated, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodPost, e.contractURL(""), http.StatusCreated, e.SignedIn)
 
-	reqtest.ExpectStatus(t, http.MethodPut, e.templateURL(), http.StatusOK, e.signedIn,
+	reqtest.ExpectStatus(t, http.MethodPut, e.templateURL(), http.StatusOK, e.SignedIn,
 		reqtest.JSON(contracts.TemplateResponse{Prose: "Totally different agreement for {{scope_of_service}}."}))
 
 	out := e.contract()
