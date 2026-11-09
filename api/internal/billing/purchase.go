@@ -2,11 +2,9 @@ package billing
 
 import (
 	"database/sql"
-	"log"
 	"net/http"
 
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/legal"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -44,13 +42,7 @@ type PurchaseResponse struct {
 // terms is the version history the price of a Credit is read from:
 // legal.Terms in production, a fixture in a test.
 func PostPurchaseHandler(stripeClient StripeClient, terms legal.Document) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		var req PurchaseRequest
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
@@ -64,15 +56,15 @@ func PostPurchaseHandler(stripeClient StripeClient, terms legal.Document) http.H
 		// concurrent purchase-initiation requests can't both see a null
 		// stripe_customer_id and both create a Stripe Customer -- the same
 		// race-prevention shape as ConsumeCredit's practice lock.
-		if _, err := tx.ExecContext(r.Context(), `SELECT id FROM practices WHERE id = $1 FOR UPDATE`, practiceID); err != nil {
+		if _, err := c.Tx.ExecContext(r.Context(), `SELECT id FROM practices WHERE id = $1 FOR UPDATE`, c.PracticeID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		var customerID sql.NullString
-		if err := tx.QueryRowContext(r.Context(),
-			`SELECT stripe_customer_id FROM practices WHERE id = $1`, practiceID,
+		if err := c.Tx.QueryRowContext(r.Context(),
+			`SELECT stripe_customer_id FROM practices WHERE id = $1`, c.PracticeID,
 		).Scan(&customerID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -80,13 +72,13 @@ func PostPurchaseHandler(stripeClient StripeClient, terms legal.Document) http.H
 		}
 
 		if !customerID.Valid {
-			id, err := stripeClient.CreateCustomer(r.Context(), practiceID)
+			id, err := stripeClient.CreateCustomer(r.Context(), c.PracticeID)
 			if err != nil {
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
-			if _, err := tx.ExecContext(r.Context(),
-				`UPDATE practices SET stripe_customer_id = $1 WHERE id = $2`, id, practiceID,
+			if _, err := c.Tx.ExecContext(r.Context(),
+				`UPDATE practices SET stripe_customer_id = $1 WHERE id = $2`, id, c.PracticeID,
 			); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -101,11 +93,11 @@ func PostPurchaseHandler(stripeClient StripeClient, terms legal.Document) http.H
 		// because row-level security is what scopes staff to this
 		// Practice -- the Stripe client has no database.
 		var newYorkStaff, totalStaff int
-		if err := tx.QueryRowContext(r.Context(),
+		if err := c.Tx.QueryRowContext(r.Context(),
 			`SELECT count(*) FILTER (WHERE s.work_state = 'NY'), count(*)
 			 FROM staff s
 			 JOIN practice_memberships pm ON pm.staff_id = s.id
-			 WHERE pm.practice_id = $1`, practiceID,
+			 WHERE pm.practice_id = $1`, c.PracticeID,
 		).Scan(&newYorkStaff, &totalStaff); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -116,16 +108,14 @@ func PostPurchaseHandler(stripeClient StripeClient, terms legal.Document) http.H
 		// read at this instant (#1834): a published rise starts on its
 		// date, and nothing a Stripe Price or an environment variable
 		// does can charge more than the Terms allow.
-		pricing, err := creditPriceNow(r.Context(), tx, terms, clock.Now(r.Context()))
-		if err != nil {
-			log.Printf("billing: read credit price: %v", err)
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		pricing, ok := requireCreditPrice(w, r, c.Tx, terms)
+		if !ok {
 			return
 		}
 
 		checkoutURL, err := stripeClient.CreateCheckoutSession(r.Context(), CheckoutSessionRequest{
 			CustomerID:      customerID.String,
-			PracticeID:      practiceID,
+			PracticeID:      c.PracticeID,
 			Quantity:        req.Quantity,
 			NewYorkStaff:    newYorkStaff,
 			TotalStaff:      totalStaff,

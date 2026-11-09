@@ -57,14 +57,7 @@ type AwaitingReplyResponse struct {
 // subject kinds, which this roll-up is not). Must be mounted behind
 // staffauth.Middleware.
 func AwaitingReplyHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, reader, ok := staffauth.RequireTxReader(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-		staffID, _ := staffauth.StaffID(r.Context())
-
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		after, ok := pagecursor.FromQuery(w, r, pagecursor.Decode, "invalid cursor")
 		if !ok {
 			return
@@ -72,10 +65,10 @@ func AwaitingReplyHandler() http.Handler {
 
 		var items []AwaitingReplyItem
 		var err error
-		if reader.IsAmbientContractor() {
-			items, err = listAttachedAwaitingReply(r.Context(), tx, practiceID, staffID, after)
+		if c.Reader.IsAmbientContractor() {
+			items, err = listAttachedAwaitingReply(r.Context(), c.Tx, c.PracticeID, c.StaffID, after)
 		} else {
-			items, err = listAwaitingReply(r.Context(), tx, practiceID, after)
+			items, err = listAwaitingReply(r.Context(), c.Tx, c.PracticeID, after)
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests

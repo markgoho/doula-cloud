@@ -68,38 +68,30 @@ type attachmentInfo struct {
 // notifies the Client's registered push subscription(s) (#61) before
 // responding. Must be mounted behind staffauth.Middleware.
 func CreateHandler(store objectstore.ObjectStore, pusher push.Pusher) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		staffID, _ := staffauth.StaffID(r.Context())
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		postMessage(w, r, c.Tx, store, pusher, c.EngagementID, senderTypeStaff, c.StaffID)
+	}, staffauth.Engagement())
+}
 
-		engagementID := r.PathValue("engagementId")
-		if !staffauth.ParseUUID(w, "engagement", engagementID) {
-			return
-		}
-		if !staffauth.RequireEngagementAtPractice(w, r, tx, engagementID, practiceID) {
-			return
-		}
+// postMessage decodes a create-Message request, stores the Message on
+// engagementID's thread as senderID, notifies the recipient and answers
+// 201. Shared by CreateHandler and ClientCreateHandler.
+func postMessage(w http.ResponseWriter, r *http.Request, tx *sql.Tx, store objectstore.ObjectStore, pusher push.Pusher, engagementID, senderType, senderID string) {
+	messageID := uuid.NewString()
+	body, attachment, ok := decodeCreate(w, r, store, engagementID, messageID, apierr.MsgInternalError)
+	if !ok {
+		return
+	}
 
-		messageID := uuid.NewString()
-		body, attachment, ok := decodeCreate(w, r, store, engagementID, messageID, apierr.MsgInternalError)
-		if !ok {
-			return
-		}
+	item, err := insertMessage(r.Context(), tx, messageID, engagementID, senderType, senderID, body, attachment)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
 
-		item, err := insertMessage(r.Context(), tx, messageID, engagementID, senderTypeStaff, staffID, body, attachment)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		notifyRecipient(r.Context(), tx, pusher, engagementID, senderTypeStaff)
-		writeCreated(w, item)
-	})
+	notifyRecipient(r.Context(), tx, pusher, engagementID, senderType)
+	writeCreated(w, item)
 }
 
 // decodeCreate reads a create-Message request, branching on Content-Type:

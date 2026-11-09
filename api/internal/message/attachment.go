@@ -18,14 +18,9 @@ import (
 // contractor Doula, same as ListHandler. Must be mounted behind
 // staffauth.Middleware.
 func AttachmentHandler(store objectstore.ObjectStore) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, _, engagementID, ok := staffauth.RequireEngagementReach(w, r, "engagement not found")
-		if !ok {
-			return
-		}
-
-		serveAttachment(w, r, tx, store, engagementID)
-	})
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		serveAttachment(w, r, c.Tx, store, c.EngagementID, c.ID("messageId"))
+	}, staffauth.EngagementReach("engagement not found"), staffauth.PathID("message", "messageId"))
 }
 
 // ClientAttachmentHandler mirrors AttachmentHandler for the Client-portal
@@ -34,14 +29,12 @@ func AttachmentHandler(store objectstore.ObjectStore) http.Handler {
 // ownership check is needed here. Must be mounted behind
 // clientauth.Middleware.
 func ClientAttachmentHandler(store objectstore.ObjectStore) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, engagementID, ok := clientauth.RequireEngagementTx(w, r)
-		if !ok {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
+	return clientauth.Handler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call) {
+		messageID := r.PathValue("messageId")
+		if !staffauth.ParseUUID(w, "message", messageID) {
 			return
 		}
-
-		serveAttachment(w, r, tx, store, engagementID)
+		serveAttachment(w, r, c.Tx, store, c.EngagementID, messageID)
 	})
 }
 
@@ -50,12 +43,7 @@ func ClientAttachmentHandler(store objectstore.ObjectStore) http.Handler {
 // filter runs on top of messages' own RLS, the same posture listMessages
 // takes -- then streams the object's bytes from store. Shared by
 // AttachmentHandler and ClientAttachmentHandler.
-func serveAttachment(w http.ResponseWriter, r *http.Request, tx *sql.Tx, store objectstore.ObjectStore, engagementID string) {
-	messageID := r.PathValue("messageId")
-	if !staffauth.ParseUUID(w, "message", messageID) {
-		return
-	}
-
+func serveAttachment(w http.ResponseWriter, r *http.Request, tx *sql.Tx, store objectstore.ObjectStore, engagementID, messageID string) {
 	var objectPath, contentType, filename sql.NullString
 	err := tx.QueryRowContext(r.Context(),
 		`SELECT attachment_object_path, attachment_content_type, attachment_filename

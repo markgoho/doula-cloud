@@ -1,36 +1,34 @@
 package plans
 
 import (
-	"database/sql"
 	"net/http"
 
 	"doula-cloud/api/internal/staffauth"
 )
 
-// resolveInstanceRequest resolves the request-scoped tx (set by
-// staffauth.Middleware), the :engagementId and :planType path segments,
-// and confirms the Engagement belongs to the current Practice -- the
-// common prologue shared by PostInstanceHandler, GetInstanceHandler, and
-// PutInstanceHandler. Writes the appropriate error response itself and
-// returns ok=false on any failure; callers just return in that case.
-func resolveInstanceRequest(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, engagementID, planType string, ok bool) {
-	tx, practiceID, ok := staffauth.RequireTx(w, r)
-	// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-	if !ok {
-		return nil, "", "", false
-	}
+const noPlanInstanceFound = "no plan instance found for this engagement and plan type"
 
-	engagementID = r.PathValue("engagementId")
-	if !staffauth.ParseUUID(w, "engagement", engagementID) {
-		return nil, "", "", false
+// planTypeGate refuses a :planType that is not a known plan_type enum
+// member, so a handler behind it reads the wildcard off the request as is.
+func planTypeGate() staffauth.Option {
+	return func(w http.ResponseWriter, r *http.Request, _ *staffauth.Call) bool {
+		_, ok := planTypeFromPath(w, r)
+		return ok
 	}
-	if !staffauth.RequireEngagementAtPractice(w, r, tx, engagementID, practiceID) {
-		return nil, "", "", false
-	}
+}
 
-	planType, ok = planTypeFromPath(w, r)
-	if !ok {
-		return nil, "", "", false
+// instanceHandler is the common prologue shared by PostInstanceHandler,
+// GetInstanceHandler, PutInstanceHandler and GetBirthPlanPDFHandler: the
+// :engagementId and :planType path segments, validated, and the Engagement
+// confirmed to belong to the current Practice. With reach, it is also
+// narrowed by ADR-0008's attachment rule, a 404 for a contractor Doula who
+// is not attached. fn receives the validated plan type.
+func instanceHandler(fn func(w http.ResponseWriter, r *http.Request, c staffauth.Call, planType string), reach bool) http.Handler {
+	access := staffauth.Engagement()
+	if reach {
+		access = staffauth.EngagementReach(noPlanInstanceFound)
 	}
-	return tx, engagementID, planType, true
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		fn(w, r, c, r.PathValue("planType"))
+	}, staffauth.EngagementID(), planTypeGate(), access)
 }

@@ -11,6 +11,7 @@
 package practicerate
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json/v2"
 	"errors"
@@ -68,14 +69,8 @@ type RatesResponse struct {
 // GetRatesHandler lets any Staff member at the current Practice read its
 // rate card. Must be mounted behind staffauth.Middleware.
 func GetRatesHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-
-		set, err := fetchRates(r, tx, practiceID)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		set, err := fetchRates(r, c.Tx, c.PracticeID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -141,15 +136,14 @@ type rateDiff struct {
 }
 
 // recordRateChanged writes one practice_rate_changed activity row for
-// diff, attributed to the Staff member making the request.
-func recordRateChanged(r *http.Request, tx *sql.Tx, practiceID string, diff rateDiff) error {
+// diff, attributed to actorStaffID, the Staff member making the request.
+func recordRateChanged(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID string, diff rateDiff) error {
 	diffJSON, err := json.Marshal(diff)
 	// coverage:ignore reason: marshal of a fixed, always-serializable struct never fails
 	if err != nil {
 		return fmt.Errorf("practicerate: marshal rate diff: %w", err)
 	}
-	actorStaffID, _ := staffauth.StaffID(r.Context())
-	if err := activity.Record(r.Context(), tx, activity.Entry{
+	if err := activity.Record(ctx, tx, activity.Entry{
 		PracticeID:  practiceID,
 		SubjectKind: activity.SubjectPractice,
 		SubjectID:   practiceID,
@@ -193,13 +187,7 @@ func readRate(r *http.Request, tx *sql.Tx, practiceID, kind string) (sql.NullInt
 // gate before this runs. Widening or narrowing this route means editing
 // its ir.ExemptGated role list in mount.go.
 func PutRateHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		kind := r.PathValue("kind")
 		if !validKind(kind) {
 			apierr.WriteError(w, "kind must be birth or postpartum", http.StatusBadRequest)
@@ -215,7 +203,7 @@ func PutRateHandler() http.Handler {
 			return
 		}
 
-		before, err := readRate(r, tx, practiceID, kind)
+		before, err := readRate(r, c.Tx, c.PracticeID, kind)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -223,10 +211,10 @@ func PutRateHandler() http.Handler {
 		}
 
 		if !before.Valid || before.Int64 != req.AmountCents {
-			if _, err := tx.ExecContext(r.Context(),
+			if _, err := c.Tx.ExecContext(r.Context(),
 				`INSERT INTO practice_rates (practice_id, kind, amount_cents) VALUES ($1, $2::engagement_kind, $3)
 				 ON CONFLICT (practice_id, kind) DO UPDATE SET amount_cents = EXCLUDED.amount_cents`,
-				practiceID, kind, req.AmountCents,
+				c.PracticeID, kind, req.AmountCents,
 			); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -238,7 +226,7 @@ func PutRateHandler() http.Handler {
 			if before.Valid {
 				diff.AmountCentsBefore = &before.Int64
 			}
-			if err := recordRateChanged(r, tx, practiceID, diff); err != nil {
+			if err := recordRateChanged(r.Context(), c.Tx, c.PracticeID, c.StaffID, diff); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
@@ -249,7 +237,7 @@ func PutRateHandler() http.Handler {
 			// voided one, and one whose amount an Owner/Admin
 			// overrode are all left alone (see
 			// repriceUnsignedContracts's own doc comment).
-			if err := repriceUnsignedContracts(r.Context(), tx, practiceID, kind, req.AmountCents); err != nil {
+			if err := repriceUnsignedContracts(r.Context(), c.Tx, c.PracticeID, kind, req.AmountCents); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
@@ -279,20 +267,14 @@ func PutRateHandler() http.Handler {
 // is refused the way it is for a Practice that never set one
 // (contracts.noRateSetMsg, #967, #1885).
 func DeleteRateHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		kind := r.PathValue("kind")
 		if !validKind(kind) {
 			apierr.WriteError(w, "Choose the birth rate or the postpartum rate.", http.StatusBadRequest)
 			return
 		}
 
-		before, err := readRate(r, tx, practiceID, kind)
+		before, err := readRate(r, c.Tx, c.PracticeID, kind)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -300,15 +282,15 @@ func DeleteRateHandler() http.Handler {
 		}
 
 		if before.Valid {
-			if _, err := tx.ExecContext(r.Context(),
+			if _, err := c.Tx.ExecContext(r.Context(),
 				`DELETE FROM practice_rates WHERE practice_id = $1 AND kind = $2::engagement_kind`,
-				practiceID, kind,
+				c.PracticeID, kind,
 			); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
-			if err := recordRateChanged(r, tx, practiceID, rateDiff{Kind: kind, AmountCentsBefore: &before.Int64}); err != nil {
+			if err := recordRateChanged(r.Context(), c.Tx, c.PracticeID, c.StaffID, rateDiff{Kind: kind, AmountCentsBefore: &before.Int64}); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return

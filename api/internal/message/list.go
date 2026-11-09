@@ -55,20 +55,15 @@ type ListResponse struct {
 // attachment rule for a contractor Doula, same as engagement.ListHandler.
 // Must be mounted behind staffauth.Middleware.
 func ListHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, _, engagementID, ok := staffauth.RequireEngagementReach(w, r, "engagement not found")
-		if !ok {
-			return
-		}
-
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		// activity.DepartedStaffName is the Staff-side reader's own
 		// fallback (#1322): a Staff reader who sees "a former colleague"
 		// elsewhere (activitypage, oncall, the Engagement's own Activity
 		// ledger) now sees the same word here, instead of an empty
 		// senderName, for a sender whose Membership has ended (see
 		// listMessages' own doc comment).
-		writeThreadPage(w, r, tx, engagementID, activity.DepartedStaffName)
-	})
+		writeThreadPage(w, r, c.Tx, c.EngagementID, activity.DepartedStaffName)
+	}, staffauth.EngagementReach("engagement not found"))
 }
 
 // writeThreadPage answers one page of an Engagement's thread, newest

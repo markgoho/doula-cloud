@@ -4,9 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
+	"net/http"
 	"strings"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/legal"
 )
 
@@ -124,6 +128,18 @@ func publishedVersions(ctx context.Context, tx *sql.Tx, terms legal.Document) (m
 
 // creditPriceNow is the price of a Credit at now, read in the request's
 // transaction.
+// requireCreditPrice is creditPriceNow at the request's instant, a 500
+// written here when it fails.
+func requireCreditPrice(w http.ResponseWriter, r *http.Request, tx *sql.Tx, terms legal.Document) (priceInForce, bool) {
+	pricing, err := creditPriceNow(r.Context(), tx, terms, clock.Now(r.Context()))
+	if err != nil {
+		log.Printf("billing: read credit price: %v", err)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return priceInForce{}, false
+	}
+	return pricing, true
+}
+
 func creditPriceNow(ctx context.Context, tx *sql.Tx, terms legal.Document, now time.Time) (priceInForce, error) {
 	published, err := publishedVersions(ctx, tx, terms)
 	if err != nil {
