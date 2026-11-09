@@ -4,88 +4,15 @@ import (
 	"database/sql"
 	"strings"
 	"testing"
-	"time"
 
 	"doula-cloud/api/internal/mail"
-	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/staffinvite"
 	"doula-cloud/api/internal/testdb"
 )
 
-const (
-	testOutboxStatusPending = "pending"
-	testOutboxStatusSent    = "sent"
-	testAppBaseURL          = "https://app.example.test"
-	testSenderAddr          = "a@b.test"
-	testInvitedAddress      = "invited-staff@example.com"
-)
-
-// newTestWorker builds a Worker around sender with this file's stand-in
-// AppBaseURL/From/ReplyTo -- the one end-to-end test below needs it to
-// prove claimQuery's columns still match scanRow; every other case
-// belongs to compose_test.go (pure Compose) or outbox.MailWorker's own
-// suite (skip/retry/dead-letter/suppression/terminal-clear).
-func newTestWorker(sender mail.Sender) staffinvite.Worker {
-	return staffinvite.NewWorker(outbox.Mailer{Sender: sender, Now: time.Now, AppBaseURL: testAppBaseURL, From: testSenderAddr, ReplyTo: "support@b.test"})
-}
-
-// seedStaffInviteOutboxRow inserts a pending staff_invite_outbox row for
-// invitationID with the given attempt_count/next_attempt_at/token, using
-// the superuser Admin connection -- the table carries no RLS (00038), so
-// db.App would work too, but Admin matches this package's seeding
-// convention.
-func seedStaffInviteOutboxRow(t *testing.T, db *testdb.DB, invitationID, token string, attemptCount int, nextAttemptAt time.Time) string {
-	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff_invite_outbox (invitation_id, invite_token, attempt_count, next_attempt_at)
-		 VALUES ($1, $2, $3, $4) RETURNING id`,
-		invitationID, token, attemptCount, nextAttemptAt,
-	).Scan(&id); err != nil {
-		t.Fatalf("seed outbox row: %v", err)
-	}
-	return id
-}
-
-// runWorker begins a tx on db.App, sets the trusted session var
-// outbox.ProcessHandler would otherwise set after its secret check, runs
-// ProcessPending, and commits -- exercising the worker exactly as the
-// handler drives it, without going through HTTP.
-func runWorker(t *testing.T, db *testdb.DB, w staffinvite.Worker) {
-	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
-		t.Fatalf("set trusted session var: %v", err)
-	}
-	if err := w.ProcessPending(t.Context(), tx); err != nil {
-		t.Fatalf("ProcessPending: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-}
-
-func outboxRowState(t *testing.T, db *testdb.DB, id string) (status string, inviteToken sql.NullString) {
-	t.Helper()
-	var attemptCount int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT status, attempt_count, invite_token::text FROM staff_invite_outbox WHERE id = $1`, id,
-	).Scan(&status, &attemptCount, &inviteToken); err != nil {
-		t.Fatalf("query outbox row: %v", err)
-	}
-	return status, inviteToken
-}
-
 func TestWorker_ProcessPending_SendsDueRowAndMarksSent(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Staff Invite Test Practice")
-	invitationID := seedPracticeInvitation(t, db, practiceID, testInvitedAddress)
 	const token = "11111111-1111-1111-1111-111111111111"
-	outboxID := seedStaffInviteOutboxRow(t, db, invitationID, token, 0, time.Now().Add(-time.Minute))
+	db, outboxID := queuedInvite(t, "Staff Invite Test Practice", token)
 
 	sender := &mail.FakeSender{}
 	runWorker(t, db, newTestWorker(sender))
@@ -121,24 +48,12 @@ func TestQueue_InsertsPendingRowThenRotationRefreshesToken(t *testing.T) {
 	practiceID := testdb.SeedPractice(t, db, "Queue Practice")
 	invitationID := seedPracticeInvitation(t, db, practiceID, testInvitedAddress)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := staffinvite.Queue(t.Context(), tx, invitationID, "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"); err != nil {
-		t.Fatalf("Queue: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+	queue(t, db, invitationID, "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
 	var id, token, status string
-	var attemptCount int
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT id, invite_token::text, status, attempt_count FROM staff_invite_outbox WHERE invitation_id = $1`, invitationID,
-	).Scan(&id, &token, &status, &attemptCount); err != nil {
+		`SELECT id, invite_token::text, status FROM staff_invite_outbox WHERE invitation_id = $1`, invitationID,
+	).Scan(&id, &token, &status); err != nil {
 		t.Fatalf("query queued row: %v", err)
 	}
 	if token != "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" || status != testOutboxStatusPending {
@@ -153,18 +68,7 @@ func TestQueue_InsertsPendingRowThenRotationRefreshesToken(t *testing.T) {
 	); err != nil {
 		t.Fatalf("bump attempt_count: %v", err)
 	}
-
-	tx2, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx2.Rollback() }()
-	if err := staffinvite.Queue(t.Context(), tx2, invitationID, "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"); err != nil {
-		t.Fatalf("Queue (rotation): %v", err)
-	}
-	if err := tx2.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+	queue(t, db, invitationID, "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
 
 	var rowCount int
 	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM staff_invite_outbox WHERE invitation_id = $1`, invitationID).Scan(&rowCount); err != nil {
@@ -201,11 +105,7 @@ func TestRefresh_ReplacesAPendingRowsTokenOnly(t *testing.T) {
 	pendingInvitation := seedPracticeInvitation(t, db, practiceID, testInvitedAddress)
 	sentInvitation := seedPracticeInvitation(t, db, practiceID, "sent@example.com")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
+	tx := db.BeginAs(t)
 	for _, invitationID := range []string{pendingInvitation, sentInvitation} {
 		if err := staffinvite.Queue(t.Context(), tx, invitationID, "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"); err != nil {
 			t.Fatalf("Queue: %v", err)
@@ -227,21 +127,19 @@ func TestRefresh_ReplacesAPendingRowsTokenOnly(t *testing.T) {
 		t.Fatalf("commit: %v", err)
 	}
 
-	var pendingToken, sentToken sql.NullString
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT invite_token::text FROM staff_invite_outbox WHERE invitation_id = $1`, pendingInvitation,
-	).Scan(&pendingToken); err != nil {
-		t.Fatalf("read pending row: %v", err)
+	tokenOf := func(invitationID string) (token sql.NullString) {
+		t.Helper()
+		if err := db.Admin.QueryRowContext(t.Context(),
+			`SELECT invite_token::text FROM staff_invite_outbox WHERE invitation_id = $1`, invitationID,
+		).Scan(&token); err != nil {
+			t.Fatalf("read row: %v", err)
+		}
+		return token
 	}
-	if pendingToken.String != rotated {
+	if pendingToken := tokenOf(pendingInvitation); pendingToken.String != rotated {
 		t.Fatalf("pending token = %q, want the rotated one", pendingToken.String)
 	}
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT invite_token::text FROM staff_invite_outbox WHERE invitation_id = $1`, sentInvitation,
-	).Scan(&sentToken); err != nil {
-		t.Fatalf("read sent row: %v", err)
-	}
-	if sentToken.Valid {
+	if sentToken := tokenOf(sentInvitation); sentToken.Valid {
 		t.Fatalf("sent row token = %q, want it left cleared", sentToken.String)
 	}
 }

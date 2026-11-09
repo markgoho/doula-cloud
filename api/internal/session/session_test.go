@@ -167,39 +167,37 @@ func TestCreateHandler_Success(t *testing.T) {
 	}
 }
 
-// TestCreateHandler_QueuesNewSignInNoticeForStaff covers #345: a Staff
-// member signing in queues a new-sign-in notice.
-func TestCreateHandler_QueuesNewSignInNoticeForStaff(t *testing.T) {
-	srv, db := newServer(t, authntest.Verifier{UID: staffUID})
-	defer srv.Close()
-	testdb.SeedStaff(t, db, staffUID)
-
-	resp := postCreate(t, srv, "good-token")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+// TestCreateHandler_NewSignInNotice covers #345: a Staff member signing in
+// queues a new-sign-in notice, and a Client Portal sign-in (no Staff row
+// behind the identity) never queues this Platform-voice notice.
+func TestCreateHandler_NewSignInNotice(t *testing.T) {
+	tests := []struct {
+		name  string
+		uid   string
+		staff bool
+		want  int
+	}{
+		{"a signing-in Staff member", staffUID, true, 1},
+		{"a Client sign-in", "client-uid", false, 0},
 	}
-	if got := countNewSignInNotices(t, db, staffUID); got != 1 {
-		t.Errorf("new-sign-in notices for a signing-in Staff member = %d, want 1", got)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv, db := newServer(t, authntest.Verifier{UID: tt.uid})
+			defer srv.Close()
+			if tt.staff {
+				testdb.SeedStaff(t, db, tt.uid)
+			}
 
-// TestCreateHandler_NoNewSignInNoticeForClient covers #345's scope: a
-// Client Portal sign-in (no Staff row behind the identity) never queues
-// this Platform-voice notice.
-func TestCreateHandler_NoNewSignInNoticeForClient(t *testing.T) {
-	srv, db := newServer(t, authntest.Verifier{UID: "client-uid"})
-	defer srv.Close()
+			resp := postCreate(t, srv, "good-token")
+			defer resp.Body.Close()
 
-	resp := postCreate(t, srv, "good-token")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	if got := countNewSignInNotices(t, db, "client-uid"); got != 0 {
-		t.Errorf("new-sign-in notices for a Client sign-in = %d, want 0", got)
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+			}
+			if got := countNewSignInNotices(t, db, tt.uid); got != tt.want {
+				t.Errorf("new-sign-in notices = %d, want %d", got, tt.want)
+			}
+		})
 	}
 }
 

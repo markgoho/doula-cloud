@@ -2,7 +2,6 @@ package portal_test
 
 import (
 	"net/http"
-	"net/http/httptest"
 	"slices"
 	"testing"
 
@@ -12,78 +11,81 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-// activityServer is newServer under another name: portal.Mount already
-// registers ActivityHandler alongside DetailHandler, so both test files
-// share one mount.
-func activityServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
-	t.Helper()
-	return newServer(t, db, uid)
-}
-
-// ownerRole avoids goconst flagging the literal at every seed call below.
-const ownerRole = "owner"
-
-// seedEngagementForActivity mirrors seedClientWithEngagement but also
-// returns practiceID, which activity seeding needs and the existing
-// helper has no caller that does.
-func seedEngagementForActivity(t *testing.T, db *testdb.DB, identityUID, practiceName string) (practiceID, engagementID string) {
-	t.Helper()
-
-	var clientID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO practices (name, timezone) VALUES ($1, 'America/New_York') RETURNING id`, practiceName,
-	).Scan(&practiceID); err != nil {
-		t.Fatalf("seed practice: %v", err)
+// TestActivityHandler_ReadsOnlyWhatSheMaySee proves GLOSSARY.md's Activity
+// entry at the reader, one case per rule:
+//
+//   - her own Engagement's rows reach her (#486 AC4/AC5);
+//   - her money stays: a Client keeps every Contract and Invoice entry,
+//     since this reader applies no money filter (unlike a contractor
+//     Doula under ADR-0008's money tier);
+//   - "never who inside the Practice did what": an Offer is which Doula
+//     was asked, accepted or bumped, a Practice-roster fact;
+//   - a Care Plan is "never shown in the Client portal" (#2066, and #2133
+//     for each Plan's start), while a Birth Plan save, her own document,
+//     stays;
+//   - the Practice deliberating with itself (#1096) stays out, while
+//     contract_voided, the outcome she reads, stays in;
+//   - the three facts that lived in engagement_events (#1423, ADR-0015)
+//     stay out, beside engagement_completed, which she already reads.
+func TestActivityHandler_ReadsOnlyWhatSheMaySee(t *testing.T) {
+	tests := []struct {
+		name   string
+		seeded []activity.EngagementAction
+		want   []activity.EngagementAction
+	}{
+		{
+			"her own Engagement's activity",
+			[]activity.EngagementAction{activity.ActionContractSent},
+			[]activity.EngagementAction{activity.ActionContractSent},
+		},
+		{
+			"every money entry",
+			[]activity.EngagementAction{activity.ActionInvoiceRaised},
+			[]activity.EngagementAction{activity.ActionInvoiceRaised},
+		},
+		{
+			"offer and reassignment hidden",
+			[]activity.EngagementAction{activity.ActionVisitLogged, activity.ActionOfferSent, activity.ActionVisitReassigned},
+			[]activity.EngagementAction{activity.ActionVisitLogged},
+		},
+		{
+			"the Care Plan's start and save hidden",
+			[]activity.EngagementAction{
+				activity.ActionCarePlanStarted, activity.ActionCarePlanEdited,
+				activity.ActionBirthPlanStarted, activity.ActionBirthPlanEdited,
+			},
+			[]activity.EngagementAction{activity.ActionBirthPlanEdited, activity.ActionBirthPlanStarted},
+		},
+		{
+			"the void deliberation hidden",
+			[]activity.EngagementAction{
+				activity.ActionContractVoidRequested, activity.ActionContractVoidDeclined, activity.ActionContractVoided,
+			},
+			[]activity.EngagementAction{activity.ActionContractVoided},
+		},
+		{
+			"the Engagement audit hidden",
+			[]activity.EngagementAction{
+				activity.ActionEngagementCompleted, activity.ActionEngagementReopened,
+				activity.ActionKindChanged, activity.ActionBirthOutcomeRecorded,
+			},
+			[]activity.EngagementAction{activity.ActionEngagementCompleted},
+		},
 	}
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, 'Test Client', 'activity-client@example.com') RETURNING id`,
-		practiceID,
-	).Scan(&clientID); err != nil {
-		t.Fatalf("seed client: %v", err)
-	}
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, status, kind) VALUES ($1, $2, 'active', 'birth') RETURNING id`,
-		clientID, practiceID,
-	).Scan(&engagementID); err != nil {
-		t.Fatalf("seed engagement: %v", err)
-	}
-	portalUID := testdb.PortalUID(identityUID)
-	testdb.SeedPortalAccount(t, db, portalUID, portalUID+"@example.com")
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO client_portal_users (identity_uid, client_id) VALUES ($1, $2)`,
-		portalUID, clientID,
-	); err != nil {
-		t.Fatalf("seed client_portal_users: %v", err)
-	}
-	return practiceID, engagementID
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := newEnv(t)
+			e.seedActivity(tt.seeded...)
 
-func authedActivityGet(t *testing.T, session, url string) *http.Response {
-	t.Helper()
-	resp := reqtest.Get(t, url, reqtest.Session(session))
-	return resp
-}
-
-// TestActivityHandler_ReturnsOwnEngagementActivity proves #486 AC4/AC5's
-// record-scoped read reaches the Client portal at all: her own
-// Engagement's activity, not a bare id.
-func TestActivityHandler_ReturnsOwnEngagementActivity(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "portal-activity-owner"
-	practiceID, engagementID := seedEngagementForActivity(t, db, identityUID, "Activity Practice")
-	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "portal-activity-staff", []string{ownerRole}, "employee")
-
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractSent), activity.StaffActor(staffID))
-
-	srv, session := activityServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	got := reqtest.Decode[activityfeed.ListResponse](t, resp)
-	if len(got.Items) != 1 || got.Items[0].Action != string(activity.ActionContractSent) {
-		t.Fatalf("Items = %+v, want exactly the one contract_sent row", got.Items)
+			want := make([]string, 0, len(tt.want))
+			for _, action := range tt.want {
+				want = append(want, string(action))
+			}
+			slices.Sort(want)
+			if got := e.activityActions(); !slices.Equal(got, want) {
+				t.Fatalf("actions = %v, want %v", got, want)
+			}
+		})
 	}
 }
 
@@ -96,22 +98,12 @@ func TestActivityHandler_ReturnsOwnEngagementActivity(t *testing.T) {
 // name are both left exactly as resolved -- only a Staff actor's own name
 // is replaced.
 func TestActivityHandler_RedactsStaffActorNames(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "portal-activity-redact"
-	practiceID, engagementID := seedEngagementForActivity(t, db, identityUID, "Activity Redact Practice")
-	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "portal-activity-redact-staff", []string{ownerRole}, "employee")
+	e := newEnv(t)
+	e.seedActivity(activity.ActionContractSent)
+	testdb.SeedActivity(t, e.DB, e.Practice.ID, activity.SubjectEngagement, e.Engagement.ID, string(activity.ActionPortalInviteSent), activity.SystemActor())
 
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractSent), activity.StaffActor(staffID))
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionPortalInviteSent), activity.SystemActor())
-
-	srv, session := activityServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
-	defer resp.Body.Close()
-	got := reqtest.Decode[activityfeed.ListResponse](t, resp)
 	byAction := map[string]activityfeed.Entry{}
-	for _, entry := range got.Items {
+	for _, entry := range e.activityPage("").Items {
 		byAction[entry.Action] = entry
 	}
 	if got := byAction[string(activity.ActionContractSent)]; got.ActorName != "Your practice" {
@@ -122,186 +114,25 @@ func TestActivityHandler_RedactsStaffActorNames(t *testing.T) {
 	}
 }
 
-// TestActivityHandler_KeepsMoneyEntries proves GLOSSARY.md's "her money"
-// half: unlike a contractor Doula under ADR-0008's money tier, a Client
-// keeps every Contract and Invoice entry on her own Engagement -- this
-// reader applies no money filter at all.
-func TestActivityHandler_KeepsMoneyEntries(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "portal-activity-money"
-	practiceID, engagementID := seedEngagementForActivity(t, db, identityUID, "Activity Money Practice")
-	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "portal-activity-money-staff", []string{ownerRole}, "employee")
-
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionInvoiceRaised), activity.StaffActor(staffID))
-
-	srv, session := activityServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
-	defer resp.Body.Close()
-	got := reqtest.Decode[activityfeed.ListResponse](t, resp)
-	if len(got.Items) != 1 || got.Items[0].Action != string(activity.ActionInvoiceRaised) {
-		t.Fatalf("Items = %+v, want the invoice_raised row kept", got.Items)
-	}
-}
-
-// TestActivityHandler_HidesStaffingEntries proves GLOSSARY.md's Activity
-// entry: "never who inside the Practice did what" -- an Offer is which
-// Doula was asked, accepted or bumped, a Practice-roster fact rather than
-// a fact about her.
-func TestActivityHandler_HidesStaffingEntries(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "portal-activity-staffing"
-	practiceID, engagementID := seedEngagementForActivity(t, db, identityUID, "Activity Staffing Practice")
-	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "portal-activity-staffing-staff", []string{ownerRole}, "employee")
-
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionVisitLogged), activity.StaffActor(staffID))
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionOfferSent), activity.StaffActor(staffID))
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionVisitReassigned), activity.StaffActor(staffID))
-
-	srv, session := activityServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
-	defer resp.Body.Close()
-	got := reqtest.Decode[activityfeed.ListResponse](t, resp)
-	if len(got.Items) != 1 || got.Items[0].Action != string(activity.ActionVisitLogged) {
-		t.Fatalf("Items = %+v, want only the visit_logged row (offer/reassignment hidden)", got.Items)
-	}
-}
-
-// TestActivityHandler_HidesTheCarePlan proves #2066 at the reader: a Care
-// Plan is "never shown in the Client portal" (GLOSSARY.md), so its save is
-// left out of her ledger, while a Birth Plan save, her own document, stays.
-// #2133: the same holds for each Plan's start.
-func TestActivityHandler_HidesTheCarePlan(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "portal-activity-care-plan"
-	practiceID, engagementID := seedEngagementForActivity(t, db, identityUID, "Activity Care Plan Practice")
-	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "portal-activity-care-plan-staff", []string{ownerRole}, "employee")
-
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionCarePlanStarted), activity.StaffActor(staffID))
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionCarePlanEdited), activity.StaffActor(staffID))
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionBirthPlanStarted), activity.StaffActor(staffID))
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionBirthPlanEdited), activity.StaffActor(staffID))
-
-	srv, session := activityServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
-	defer resp.Body.Close()
-	got := reqtest.Decode[activityfeed.ListResponse](t, resp)
-	actions := make([]string, 0, len(got.Items))
-	for _, item := range got.Items {
-		actions = append(actions, item.Action)
-	}
-	slices.Sort(actions)
-	want := []string{string(activity.ActionBirthPlanEdited), string(activity.ActionBirthPlanStarted)}
-	if !slices.Equal(actions, want) {
-		t.Fatalf("actions = %v, want only %v (the Care Plan's start and save hidden)", actions, want)
-	}
-}
-
-// TestActivityHandler_HidesVoidDeliberation proves #1096 at the reader
-// rather than only at the set -- the SQL clause staffingActionsNotIn
-// builds, for the two actions GLOSSARY.md's Activity entry now names as
-// the Practice deliberating with itself. contract_voided is seeded beside
-// them because it is the half that does not change: it is the outcome she
-// reads, so a granted ask still reaches her and her record stays complete.
-func TestActivityHandler_HidesVoidDeliberation(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "portal-activity-void-deliberation"
-	practiceID, engagementID := seedEngagementForActivity(t, db, identityUID, "Activity Void Deliberation Practice")
-	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "portal-activity-void-staff", []string{ownerRole}, "employee")
-
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractVoidRequested), activity.StaffActor(staffID))
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractVoidDeclined), activity.StaffActor(staffID))
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractVoided), activity.StaffActor(staffID))
-
-	srv, session := activityServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
-	defer resp.Body.Close()
-	got := reqtest.Decode[activityfeed.ListResponse](t, resp)
-	if len(got.Items) != 1 || got.Items[0].Action != string(activity.ActionContractVoided) {
-		t.Fatalf("Items = %+v, want only the contract_voided row (the deliberation hidden)", got.Items)
-	}
-}
-
-// TestActivityHandler_HidesTheEngagementAudit proves #1423 at the reader:
-// the three facts that lived in engagement_events -- a table no portal
-// session could read (ADR-0015) -- stay out of a Client's ledger now that
-// they live in activity. engagement_completed is seeded beside them
-// because it is the half she already reads: her care ended, and the
-// ending reason its diff now carries never leaves the database on this
-// read, since the portal's projection selects no diff.
-func TestActivityHandler_HidesTheEngagementAudit(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "portal-activity-engagement-audit"
-	practiceID, engagementID := seedEngagementForActivity(t, db, identityUID, "Activity Engagement Audit Practice")
-	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "portal-activity-audit-staff", []string{ownerRole}, "employee")
-
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionEngagementCompleted), activity.StaffActor(staffID))
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionEngagementReopened), activity.StaffActor(staffID))
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionKindChanged), activity.StaffActor(staffID))
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionBirthOutcomeRecorded), activity.StaffActor(staffID))
-
-	srv, session := activityServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
-	defer resp.Body.Close()
-	got := reqtest.Decode[activityfeed.ListResponse](t, resp)
-	if len(got.Items) != 1 || got.Items[0].Action != string(activity.ActionEngagementCompleted) {
-		t.Fatalf("Items = %+v, want only the engagement_completed row (the audit hidden)", got.Items)
-	}
-}
-
 // TestActivityHandler_PaginatesNewestFirst mirrors
 // engagement.TestListActivityHandler_PaginatesNewestFirst.
 func TestActivityHandler_PaginatesNewestFirst(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "portal-activity-paginate"
-	practiceID, engagementID := seedEngagementForActivity(t, db, identityUID, "Activity Paginate Practice")
-	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "portal-activity-paginate-staff", []string{ownerRole}, "employee")
-
+	e := newEnv(t)
 	const total = 31 // activityPageSize (30) + 1, to force a second page
 	for range total {
-		testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionVisitLogged), activity.StaffActor(staffID))
+		e.seedActivity(activity.ActionVisitLogged)
 	}
 
-	srv, session := activityServer(t, db, identityUID)
-	defer srv.Close()
-
-	firstResp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
-	defer firstResp.Body.Close()
-	first := reqtest.Decode[activityfeed.ListResponse](t, firstResp)
-	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
-		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
-			len(first.Items), first.HasMore, first.NextCursor)
-	}
-
-	secondResp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity?cursor="+*first.NextCursor)
-	defer secondResp.Body.Close()
-	second := reqtest.Decode[activityfeed.ListResponse](t, secondResp)
-	if len(second.Items) != 1 || second.HasMore || second.NextCursor != nil {
-		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
-			len(second.Items), second.HasMore, second.NextCursor)
-	}
+	requireFullPageThenLast(t, func(query string) pageInfo {
+		page := e.activityPage(query)
+		return pageInfo{len(page.Items), page.HasMore, page.NextCursor}
+	})
 }
 
 // TestActivityHandler_InvalidCursorRejected mirrors
 // engagement.TestListActivityHandler_InvalidCursorRejected.
 func TestActivityHandler_InvalidCursorRejected(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "portal-activity-bad-cursor"
-	_, engagementID := seedEngagementForActivity(t, db, identityUID, "Activity Bad Cursor Practice")
+	e := newEnv(t)
 
-	srv, session := activityServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity?cursor=not!valid!base64!")
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+	reqtest.ExpectStatus(t, http.MethodGet, e.engagementURL("/activity?cursor=not!valid!base64!"), http.StatusBadRequest, e.AsClient)
 }

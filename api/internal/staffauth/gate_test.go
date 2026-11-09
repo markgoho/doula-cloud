@@ -1,27 +1,18 @@
 package staffauth_test
 
 import (
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/billing"
+	"doula-cloud/api/internal/fixture"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/legal"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/testdb"
 )
-
-func seedMembershipWithRoles(t *testing.T, db *testdb.DB, practiceID, staffID, roles string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, $3::practice_role[], 'employee')`,
-		practiceID, staffID, roles,
-	); err != nil {
-		t.Fatalf("seed membership with roles %q: %v", roles, err)
-	}
-}
 
 // TestGatedRouter_PanicsOnUndeclaredRoute is the guardrail-shaped test #315
 // asks for: a route mounted without a role declaration fails at startup,
@@ -159,38 +150,26 @@ func TestGatedRouter_WriteRefusesAPatternWithNoMethod(t *testing.T) {
 	g.Write("/api/session", http.NotFoundHandler())
 }
 
+// gatedScene mounts mount's routes on a GatedRouter, with a Doula signed
+// in and an Owner at the same Practice, and returns the Owner's session as
+// a request option beside the Scene.
+func gatedScene(t *testing.T, mount func(*staffauth.GatedRouter)) (s *fixture.Scene, owner reqtest.Option) {
+	t.Helper()
+	s = fixture.NewScene(t, func(g *staffauth.GatedRouter, _ *idempotency.Router, _ *sql.DB) { mount(g) })
+	return s, s.As(s.Colleague(fixture.Owner()))
+}
+
 // TestGatedRouter_BillingBalance_DoulaForbidden runs the real
 // billing.GetBalanceHandler behind the gate and confirms ADR-0008's
 // "Credit balance and ledger: Doula ✗" cell holds.
 func TestGatedRouter_BillingBalance_DoulaForbidden(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Gate Test Practice")
+	s, owner := gatedScene(t, func(g *staffauth.GatedRouter) {
+		g.Get("/practices/{practiceId}/billing", []string{ownerRole, adminRole}, billing.GetBalanceHandler(legal.Terms))
+	})
+	url := s.URL("/practices/" + s.Practice.ID + "/billing")
 
-	ownerUID, doulaUID := "gate-owner", "gate-doula"
-	ownerID := testdb.SeedStaff(t, db, ownerUID)
-	doulaID := testdb.SeedStaff(t, db, doulaUID)
-	seedMembershipWithRoles(t, db, practiceID, ownerID, "{owner}")
-	seedMembershipWithRoles(t, db, practiceID, doulaID, "{doula}")
-
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	g.Get("/practices/{practiceId}/billing", []string{ownerRole, adminRole}, billing.GetBalanceHandler(legal.Terms))
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-
-	ownerSession := authntest.SeedSession(t, db.App, ownerUID)
-	doulaSession := authntest.SeedSession(t, db.App, doulaUID)
-
-	ownerResp := getWithSession(t, srv.URL+"/practices/"+practiceID+"/billing", ownerSession)
-	defer ownerResp.Body.Close()
-	if ownerResp.StatusCode != http.StatusOK {
-		t.Fatalf("owner: status = %d, want 200", ownerResp.StatusCode)
-	}
-	doulaResp := getWithSession(t, srv.URL+"/practices/"+practiceID+"/billing", doulaSession)
-	defer doulaResp.Body.Close()
-	if doulaResp.StatusCode != http.StatusForbidden {
-		t.Fatalf("doula: status = %d, want 403", doulaResp.StatusCode)
-	}
+	reqtest.ExpectStatus(t, http.MethodGet, url, http.StatusOK, owner)
+	reqtest.ExpectStatus(t, http.MethodGet, url, http.StatusForbidden, s.SignedIn)
 }
 
 // TestGatedRouter_AnyStaff_OpensToEveryRole proves the AnyStaff sentinel's
@@ -198,37 +177,13 @@ func TestGatedRouter_BillingBalance_DoulaForbidden(t *testing.T) {
 // proves is refused a bare-role-declared route, reaches one declared
 // staffauth.AnyStaff.
 func TestGatedRouter_AnyStaff_OpensToEveryRole(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "AnyStaff Test Practice")
+	s, _ := gatedScene(t, func(g *staffauth.GatedRouter) {
+		g.Get("/practices/{practiceId}/clients", staffauth.AnyStaff, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+	})
 
-	doulaUID := "any-staff-doula"
-	doulaID := testdb.SeedStaff(t, db, doulaUID)
-	seedMembershipWithRoles(t, db, practiceID, doulaID, "{doula}")
-
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	g.Get("/practices/{practiceId}/clients", staffauth.AnyStaff, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-
-	doulaSession := authntest.SeedSession(t, db.App, doulaUID)
-	resp := getWithSession(t, srv.URL+"/practices/"+practiceID+"/clients", doulaSession)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("doula through AnyStaff: status = %d, want 200", resp.StatusCode)
-	}
-}
-
-func getWithSession(t *testing.T, url, session string) *http.Response {
-	t.Helper()
-	return reqtest.Get(t, url, reqtest.Session(session))
-}
-
-func postWithSession(t *testing.T, url, session string) *http.Response {
-	t.Helper()
-	return reqtest.Post(t, url, reqtest.Session(session))
+	reqtest.ExpectStatus(t, http.MethodGet, s.URL("/practices/"+s.Practice.ID+"/clients"), http.StatusOK, s.SignedIn)
 }
 
 // GatedWrite is Get's role check, applied to a write. #970 needed it for
@@ -290,34 +245,13 @@ func TestGatedRouter_GatedWriteRefusesAPatternWithNoMethod(t *testing.T) {
 // reaches it, a Doula is refused -- the write-side mirror of
 // TestGatedRouter_BillingBalance_DoulaForbidden.
 func TestGatedRouter_GatedWrite_RefusesByRole(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "GatedWrite Test Practice")
+	s, owner := gatedScene(t, func(g *staffauth.GatedRouter) {
+		g.GatedWrite("POST /practices/{practiceId}/thing", staffauth.OwnerOnly, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		}))
+	})
+	url := s.URL("/practices/" + s.Practice.ID + "/thing")
 
-	ownerUID, doulaUID := "gated-write-owner", "gated-write-doula"
-	ownerID := testdb.SeedStaff(t, db, ownerUID)
-	doulaID := testdb.SeedStaff(t, db, doulaUID)
-	seedMembershipWithRoles(t, db, practiceID, ownerID, "{owner}")
-	seedMembershipWithRoles(t, db, practiceID, doulaID, "{doula}")
-
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	g.GatedWrite("POST /practices/{practiceId}/thing", staffauth.OwnerOnly, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-
-	ownerSession := authntest.SeedSession(t, db.App, ownerUID)
-	doulaSession := authntest.SeedSession(t, db.App, doulaUID)
-
-	ownerResp := postWithSession(t, srv.URL+"/practices/"+practiceID+"/thing", ownerSession)
-	defer ownerResp.Body.Close()
-	if ownerResp.StatusCode != http.StatusNoContent {
-		t.Fatalf("owner: status = %d, want %d", ownerResp.StatusCode, http.StatusNoContent)
-	}
-	doulaResp := postWithSession(t, srv.URL+"/practices/"+practiceID+"/thing", doulaSession)
-	defer doulaResp.Body.Close()
-	if doulaResp.StatusCode != http.StatusForbidden {
-		t.Fatalf("doula: status = %d, want %d", doulaResp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.ExpectStatus(t, http.MethodPost, url, http.StatusNoContent, owner)
+	reqtest.ExpectStatus(t, http.MethodPost, url, http.StatusForbidden, s.SignedIn)
 }

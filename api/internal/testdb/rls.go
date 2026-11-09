@@ -21,6 +21,13 @@ func Staff(id string) SessionVar { return SessionVar{"app.current_staff_id", id}
 // Identity names the signed-in identity.
 func Identity(uid string) SessionVar { return SessionVar{"app.current_identity_uid", uid} }
 
+// NotificationWorker opens a transaction the way outbox.ProcessHandler does
+// for a worker, once its secret check has passed: the trust 00033 reads to
+// let a worker see rows across Practices.
+func NotificationWorker() SessionVar {
+	return SessionVar{"app.notification_worker_trusted", "true"}
+}
+
 // Querier is what *sql.DB and *sql.Tx share.
 type Querier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
@@ -53,7 +60,7 @@ func (d *DB) BeginAs(t *testing.T, vars ...SessionVar) *sql.Tx {
 // outbox.ProcessHandler sets it after its own secret check, and commits.
 func (d *DB) RunAsWorker(t *testing.T, process func(context.Context, *sql.Tx) error) {
 	t.Helper()
-	tx := d.BeginAs(t, SessionVar{"app.notification_worker_trusted", "true"})
+	tx := d.BeginAs(t, NotificationWorker())
 	if err := process(t.Context(), tx); err != nil {
 		// coverage:ignore reason: the failure branch ends the calling test by design; exercising it would need a testing.T substitute this repo has no precedent for
 		t.Fatalf("testdb: worker pass: %v", err)
@@ -61,6 +68,32 @@ func (d *DB) RunAsWorker(t *testing.T, process func(context.Context, *sql.Tx) er
 	if err := tx.Commit(); err != nil {
 		// coverage:ignore reason: a test helper's own failure path, only reached when the fixture itself is broken
 		t.Fatalf("testdb: commit worker pass: %v", err)
+	}
+}
+
+// ExecCorrectingOutcome runs query on the superuser connection with 00093's
+// correction door open for its transaction: moving a recorded birth outcome
+// back, or to another kind, is exactly the correction the Engagement
+// freeze trigger otherwise refuses.
+func (d *DB) ExecCorrectingOutcome(t *testing.T, query string, args ...any) {
+	t.Helper()
+	tx, err := d.Admin.BeginTx(t.Context(), nil)
+	if err != nil {
+		// coverage:ignore reason: a test helper's own failure path, only reached when the fixture itself is broken
+		t.Fatalf("testdb: begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.allow_outcome_correction', 'on', true)`); err != nil {
+		// coverage:ignore reason: a test helper's own failure path, only reached when the fixture itself is broken
+		t.Fatalf("testdb: open the correction door: %v", err)
+	}
+	if _, err := tx.ExecContext(t.Context(), query, args...); err != nil {
+		// coverage:ignore reason: a test helper's own failure path, only reached when the fixture itself is broken
+		t.Fatalf("testdb: exec %q: %v", query, err)
+	}
+	if err := tx.Commit(); err != nil {
+		// coverage:ignore reason: a test helper's own failure path, only reached when the fixture itself is broken
+		t.Fatalf("testdb: commit: %v", err)
 	}
 }
 

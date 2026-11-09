@@ -1,19 +1,8 @@
 package portal_test
 
 import (
-	"encoding/json/jsontext"
 	"encoding/json/v2"
-	"net/http"
 	"testing"
-
-	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/testdb"
-)
-
-// The birth outcomes these tests seed, as the birth_outcome enum spells them.
-const (
-	outcomeLoss      = "loss"
-	outcomeLiveBirth = "live_birth"
 )
 
 // TestDetailHandler_SaysWhenCareHasEnded is #2217: once the Practice
@@ -26,40 +15,23 @@ const (
 func TestDetailHandler_SaysWhenCareHasEnded(t *testing.T) {
 	tests := []struct {
 		name    string
-		uid     string
 		status  string
 		outcome string
 		want    bool
 	}{
-		{"care still going", "portal-care-going-uid", "active", "", false},
-		{"care ended after a loss", "portal-care-ended-loss-uid", "completed", outcomeLoss, true},
-		{"care ended after a live birth", "portal-care-ended-live-uid", "completed", outcomeLiveBirth, true},
+		{"care still going", "active", "", false},
+		{"care ended after a loss", "completed", outcomeLoss, true},
+		{"care ended after a live birth", "completed", outcomeLiveBirth, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db := testdb.New(t)
-			engagementID, _ := seedClientAtPracticeWithDueDate(t, db, tt.uid, "Riverside Doulas", "2027-06-15")
-			if tt.outcome != "" {
-				if _, err := db.Admin.ExecContext(t.Context(),
-					`UPDATE engagements SET birth_outcome = $2::birth_outcome, pregnancy_ended_on = '2027-03-04'::date WHERE id = $1`,
-					engagementID, tt.outcome); err != nil {
-					t.Fatalf("record the birth outcome: %v", err)
-				}
-			}
-			if _, err := db.Admin.ExecContext(t.Context(),
-				`UPDATE engagements SET status = $2::engagement_status,
+			e := newEnvWithOutcome(t, tt.outcome, "2027-03-04")
+			e.Exec(`UPDATE engagements SET status = $2::engagement_status,
 				        ending_reason = CASE WHEN $2 = 'completed' THEN 'care_complete'::engagement_ending_reason END
 				 WHERE id = $1`,
-				engagementID, tt.status); err != nil {
-				t.Fatalf("move the status: %v", err)
-			}
+				e.Engagement.ID, tt.status)
 
-			srv, session := newServer(t, db, tt.uid)
-			defer srv.Close()
-			resp := reqtest.Get(t, srv.URL+"/api/portal/engagements/"+engagementID, reqtest.Session(session))
-			defer resp.Body.Close()
-			reqtest.RequireStatus(t, resp, http.StatusOK)
-			fields := reqtest.Decode[map[string]jsontext.Value](t, resp)
+			fields := e.detailFields()
 			var careEnded bool
 			if err := json.Unmarshal(fields["careEnded"], &careEnded); err != nil {
 				t.Fatalf("careEnded = %s, want a boolean: %v", fields["careEnded"], err)

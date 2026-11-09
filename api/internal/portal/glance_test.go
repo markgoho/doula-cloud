@@ -1,50 +1,19 @@
 package portal_test
 
 import (
-	"encoding/json/jsontext"
-	"encoding/json/v2"
-	"io"
-	"net/http"
 	"testing"
 
-	"doula-cloud/api/internal/portal"
-	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/testdb"
+	"doula-cloud/api/internal/fixture"
 )
-
-// getDetail reads the portal Detail of engagementID as identityUID.
-func getDetail(t *testing.T, db *testdb.DB, identityUID, engagementID string) (portal.Detail, map[string]jsontext.Value) {
-	t.Helper()
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-	resp := reqtest.Get(t, srv.URL+"/api/portal/engagements/"+engagementID, reqtest.Session(session))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read response: %v", err)
-	}
-	var raw map[string]jsontext.Value
-	if err := json.Unmarshal(body, &raw); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	var out portal.Detail
-	if err := json.Unmarshal(body, &out); err != nil {
-		t.Fatalf("decode detail: %v", err)
-	}
-	return out, raw
-}
 
 // TestDetailHandler_GlancesAbsentWhenNothingExistsYet is #2007's empty
 // side: a new Engagement has no Contract, no Birth Plan and no Message,
 // and the hub is told nothing rather than an empty object it would have
 // to tell apart from a real one.
 func TestDetailHandler_GlancesAbsentWhenNothingExistsYet(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "portal-glance-empty"
-	engagementID, _ := seedClientAtPracticeWithDueDate(t, db, identityUID, "Riverside Doulas", "2027-06-15")
+	e := newEnv(t, fixture.WithEngagement(fixture.DueDate("2027-06-15")))
 
-	_, raw := getDetail(t, db, identityUID, engagementID)
+	raw := e.detailFields()
 
 	for _, key := range []string{"contract", "birthPlan", "lastMessage"} {
 		if _, present := raw[key]; present {
@@ -58,31 +27,19 @@ func TestDetailHandler_GlancesAbsentWhenNothingExistsYet(t *testing.T) {
 // Birth Plan's acknowledgment, and the newest Message with its sender's
 // name -- the same name the thread itself gives.
 func TestDetailHandler_GlancesCarryHerDocumentsAndThread(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "portal-glance-full"
-	engagementID, doulaID := seedEngagementForVisits(t, db, identityUID, "Riverside Doulas", "Priya Raman")
-
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO contracts (engagement_id, status, prose, amount_cents, signed_at, created_at)
+	e := newEnv(t, fixture.WithEngagement(fixture.DueDate("2027-06-15")))
+	e.Exec(`INSERT INTO contracts (engagement_id, status, prose, amount_cents, signed_at, created_at)
 		 VALUES ($1, 'signed', 'Test prose', 15000, '2026-08-14T15:00:00Z', now() - interval '1 day')`,
-		engagementID); err != nil {
-		t.Fatalf("seed signed contract: %v", err)
-	}
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO plan_instances (engagement_id, plan_type, fields, client_acknowledged_at, changed_at)
+		e.Engagement.ID)
+	e.Exec(`INSERT INTO plan_instances (engagement_id, plan_type, fields, client_acknowledged_at, changed_at)
 		 VALUES ($1, 'birth_plan', '[]'::jsonb, '2026-08-20T12:00:00Z', now())`,
-		engagementID); err != nil {
-		t.Fatalf("seed birth plan: %v", err)
-	}
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO messages (engagement_id, sender_type, sender_id, body, created_at)
+		e.Engagement.ID)
+	e.Exec(`INSERT INTO messages (engagement_id, sender_type, sender_id, body, created_at)
 		 VALUES ($1, 'staff', $2, 'An older note.', now() - interval '2 days'),
 		        ($1, 'staff', $2, 'Thursday works. See you at 2.', now() - interval '1 hour')`,
-		engagementID, doulaID); err != nil {
-		t.Fatalf("seed messages: %v", err)
-	}
+		e.Engagement.ID, e.Staff.ID)
 
-	out, _ := getDetail(t, db, identityUID, engagementID)
+	out := e.detail()
 
 	if out.Contract == nil || out.Contract.Status != "signed" {
 		t.Fatalf("contract = %+v, want a signed Contract", out.Contract)
@@ -96,47 +53,42 @@ func TestDetailHandler_GlancesCarryHerDocumentsAndThread(t *testing.T) {
 	if out.LastMessage == nil || out.LastMessage.Body != "Thursday works. See you at 2." {
 		t.Fatalf("lastMessage = %+v, want the newest Message", out.LastMessage)
 	}
-	if out.LastMessage.SenderName != "Priya Raman" {
-		t.Fatalf("lastMessage.senderName = %q, want %q", out.LastMessage.SenderName, "Priya Raman")
+	if out.LastMessage.SenderName != doulaName {
+		t.Fatalf("lastMessage.senderName = %q, want %q", out.LastMessage.SenderName, doulaName)
 	}
 }
 
-// TestDetailHandler_ContractGlanceNeverShowsADraft holds the Contract
-// read's own rule on the hub: a Draft is the Practice's, not hers, so a
-// Contract still being written reads as no Contract at all.
-func TestDetailHandler_ContractGlanceNeverShowsADraft(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "portal-glance-draft"
-	engagementID, _ := seedClientAtPracticeWithDueDate(t, db, identityUID, "Riverside Doulas", "2027-06-15")
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO contracts (engagement_id, status, prose, amount_cents) VALUES ($1, 'draft', 'Test prose', 15000)`,
-		engagementID); err != nil {
-		t.Fatalf("seed draft contract: %v", err)
+// TestDetailHandler_GlancesHideWhatIsNotHers holds the two reads the hub
+// must not widen: a Contract still a Draft is the Practice's, not hers, so
+// it reads as no Contract at all; and a postpartum-only Engagement with a
+// stray Plan Instance still reads no birthPlan, so the hub never mentions
+// a Birth Plan she cannot have.
+func TestDetailHandler_GlancesHideWhatIsNotHers(t *testing.T) {
+	tests := []struct {
+		name   string
+		kind   string
+		insert string
+		key    string
+	}{
+		{
+			"a Contract that is still a Draft", fixture.KindBirth,
+			`INSERT INTO contracts (engagement_id, status, prose, amount_cents) VALUES ($1, 'draft', 'Test prose', 15000)`,
+			"contract",
+		},
+		{
+			"a Birth Plan on a postpartum-only Engagement", fixture.KindPostpartum,
+			`INSERT INTO plan_instances (engagement_id, plan_type, fields, changed_at) VALUES ($1, 'birth_plan', '[]'::jsonb, now())`,
+			"birthPlan",
+		},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := newEnv(t, fixture.WithEngagement(fixture.Kind(tt.kind)))
+			e.Exec(tt.insert, e.Engagement.ID)
 
-	_, raw := getDetail(t, db, identityUID, engagementID)
-
-	if _, present := raw["contract"]; present {
-		t.Fatalf("contract present for a Draft, want it absent")
-	}
-}
-
-// TestDetailHandler_BirthPlanGlanceOnlyWhereOffered keeps the hub from
-// mentioning a Birth Plan she cannot have: a postpartum-only Engagement
-// with a stray Plan Instance still reads no birthPlan.
-func TestDetailHandler_BirthPlanGlanceOnlyWhereOffered(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "portal-glance-postpartum"
-	engagementID, _ := seedClientAtPracticeWithDueDateAndKind(t, db, identityUID, "Riverside Doulas", "", "postpartum")
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO plan_instances (engagement_id, plan_type, fields, changed_at) VALUES ($1, 'birth_plan', '[]'::jsonb, now())`,
-		engagementID); err != nil {
-		t.Fatalf("seed birth plan: %v", err)
-	}
-
-	_, raw := getDetail(t, db, identityUID, engagementID)
-
-	if _, present := raw["birthPlan"]; present {
-		t.Fatalf("birthPlan present where none is offered, want it absent")
+			if _, present := e.detailFields()[tt.key]; present {
+				t.Fatalf("%q present for %s, want it absent", tt.key, tt.name)
+			}
+		})
 	}
 }
