@@ -6,6 +6,7 @@
   "scripts": {
     "build": "bun scripts/sync-practice-pages.ts && bun run --cwd site build",
     "dupes": "bun scripts/dupes.ts",
+    "dupes:check": "bun scripts/dupes-check.ts",
     "dev":"bun run --cwd app dev:full",
     "format": "prettier --write \".claude/hooks/**/*.ts\" \"scripts/**/*.ts\"",
     "format:check": "prettier --check \".claude/hooks/**/*.ts\" \"scripts/**/*.ts\"",

@@ -170,6 +170,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - uses: oven-sh/setup-bun@v2
 
@@ -181,6 +183,13 @@ jobs:
 
       - name: Typecheck
         run: bun run typecheck
+
+      # Rides along here for the same reason Typecheck does: it needs this
+      # job's root install (jscpd), and this job is already a required check.
+      # Pull requests only -- a trunk push has no PR diff to hold clones to.
+      - name: Check for new duplicated code
+        if: github.event_name == 'pull_request'
+        run: bun run dupes:check
 
   actionlint:
     runs-on: ubuntu-26.04
