@@ -373,11 +373,8 @@ func TestErasureWorker_PerformsEveryQueuedAct(t *testing.T) {
 func TestErasureWorker_RetriesAFailedAct(t *testing.T) {
 	e := newEraseEnv(t)
 	seedInvoicedClient(t, e.DB, e.Practice.ID, e.ClientID, "cus_retry", "paid", 200*24*time.Hour)
-	e.erase()
-
 	stripe := &fakeStripeEraser{deleteErr: errors.New("stripe is down"), redactErr: errors.New("stripe is down")}
-	forceOutboxDueNow(t, e.DB, e.ClientID)
-	runWorker(t, e.DB, client.ErasureWorker{Stripe: stripe, Now: time.Now})
+	e.eraseAndRunWorker(stripe)
 
 	for act, status := range readOutboxStatus(t, e.DB, e.ClientID) {
 		if status != pendingStatus {
@@ -393,11 +390,8 @@ func TestErasureWorker_DeadLettersWhenThePracticeHasNoConnectedAccount(t *testin
 	e := newEraseEnv(t)
 	seedInvoicedClient(t, e.DB, e.Practice.ID, e.ClientID, "cus_orphan", "paid", 200*24*time.Hour)
 	e.Exec(`UPDATE practices SET stripe_connect_account_id = NULL WHERE id = $1`, e.Practice.ID)
-	e.erase()
-
 	stripe := &fakeStripeEraser{}
-	forceOutboxDueNow(t, e.DB, e.ClientID)
-	runWorker(t, e.DB, client.ErasureWorker{Stripe: stripe, Now: time.Now})
+	e.eraseAndRunWorker(stripe)
 
 	for act, status := range readOutboxStatus(t, e.DB, e.ClientID) {
 		if status != deadLetteredStatus {
@@ -672,4 +666,13 @@ func (e *eraseEnv) seedPortalLogin(portalUID string) {
 	e.T.Helper()
 	testdb.SeedPortalAccount(e.T, e.DB, portalUID, portalUID+"@example.com")
 	e.Exec(`INSERT INTO client_portal_users (client_id, identity_uid) VALUES ($1, $2)`, e.ClientID, portalUID)
+}
+
+// eraseAndRunWorker erases the Client, brings every queued act due, and
+// runs one pass of the worker with stripe standing in for Stripe.
+func (e *eraseEnv) eraseAndRunWorker(stripe *fakeStripeEraser) {
+	e.T.Helper()
+	e.erase()
+	forceOutboxDueNow(e.T, e.DB, e.ClientID)
+	runWorker(e.T, e.DB, client.ErasureWorker{Stripe: stripe, Now: time.Now})
 }

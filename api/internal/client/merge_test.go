@@ -180,57 +180,53 @@ func TestMergeHandler_Refusals(t *testing.T) {
 		return id
 	}
 	for _, tc := range []struct {
-		name       string
-		contractor bool
-		want       int
+		name  string
+		staff []fixture.StaffOption
+		want  int
 		// setup returns the Client open for editing and the request sent.
 		setup func(e *env) (sourceID string, body reqtest.Option)
 	}{
-		{"an erased target", false, http.StatusConflict, func(e *env) (string, reqtest.Option) {
+		{"an erased target", nil, http.StatusConflict, func(e *env) (string, reqtest.Option) {
 			erasedID := erase(e, "Erased Client")
 			return e.newClient(testMaya), reqtest.JSON(client.MergeRequest{GivenName: testMaya, OtherClientID: erasedID})
 		}},
-		{"an erased source", false, http.StatusConflict, func(e *env) (string, reqtest.Option) {
+		{"an erased source", nil, http.StatusConflict, func(e *env) (string, reqtest.Option) {
 			erasedID := erase(e, "Erased Client")
 			return erasedID, reqtest.JSON(client.MergeRequest{GivenName: "Erased Client", OtherClientID: e.newClient("Other")})
 		}},
-		{"a Client merged into herself", false, http.StatusConflict, func(e *env) (string, reqtest.Option) {
+		{"a Client merged into herself", nil, http.StatusConflict, func(e *env) (string, reqtest.Option) {
 			soloID := e.newClient("Solo Client")
 			return soloID, reqtest.JSON(client.MergeRequest{GivenName: "Solo Client", OtherClientID: soloID})
 		}},
-		{"an invalid client id", false, http.StatusBadRequest, func(e *env) (string, reqtest.Option) {
+		{"an invalid client id", nil, http.StatusBadRequest, func(e *env) (string, reqtest.Option) {
 			return notAUUID, reqtest.JSON(client.MergeRequest{GivenName: testStub, OtherClientID: e.newClient("Other")})
 		}},
-		{"an invalid body", false, http.StatusBadRequest, func(e *env) (string, reqtest.Option) {
+		{"an invalid body", nil, http.StatusBadRequest, func(e *env) (string, reqtest.Option) {
 			return e.newClient(testStub), reqtest.RawJSON([]byte("{not json"))
 		}},
-		{"a blank given name", false, http.StatusBadRequest, func(e *env) (string, reqtest.Option) {
+		{"a blank given name", nil, http.StatusBadRequest, func(e *env) (string, reqtest.Option) {
 			return e.newClient(testStub), reqtest.JSON(client.MergeRequest{GivenName: "  ", OtherClientID: e.newClient("Other")})
 		}},
-		{"an invalid other client id", false, http.StatusBadRequest, func(e *env) (string, reqtest.Option) {
+		{"an invalid other client id", nil, http.StatusBadRequest, func(e *env) (string, reqtest.Option) {
 			return e.newClient(testStub), reqtest.JSON(client.MergeRequest{GivenName: testStub, OtherClientID: notAUUID})
 		}},
-		{"a nonexistent source", false, http.StatusNotFound, func(e *env) (string, reqtest.Option) {
+		{"a nonexistent source", nil, http.StatusNotFound, func(e *env) (string, reqtest.Option) {
 			return missingID, reqtest.JSON(client.MergeRequest{GivenName: "Nobody", OtherClientID: e.newClient("Other")})
 		}},
-		{"a nonexistent target", false, http.StatusNotFound, func(e *env) (string, reqtest.Option) {
+		{"a nonexistent target", nil, http.StatusNotFound, func(e *env) (string, reqtest.Option) {
 			return e.newClient(testStub), reqtest.JSON(client.MergeRequest{GivenName: testStub, OtherClientID: missingID})
 		}},
-		{"a source the contractor cannot reach", true, http.StatusNotFound, func(e *env) (string, reqtest.Option) {
+		{"a source the contractor cannot reach", []fixture.StaffOption{fixture.Contractor()}, http.StatusNotFound, func(e *env) (string, reqtest.Option) {
 			return e.newClient(testStub), reqtest.JSON(client.MergeRequest{GivenName: testStub, OtherClientID: e.newClient("Other")})
 		}},
-		{"a target the contractor cannot reach", true, http.StatusNotFound, func(e *env) (string, reqtest.Option) {
+		{"a target the contractor cannot reach", []fixture.StaffOption{fixture.Contractor()}, http.StatusNotFound, func(e *env) (string, reqtest.Option) {
 			attachedID, engagementID := testdb.SeedEngagementInStatus(e.T, e.DB, e.Practice.ID, "Attached To Contractor", "", "active")
 			testdb.SeedGrantedAttachment(e.T, e.DB, engagementID, e.Staff.ID)
 			return attachedID, reqtest.JSON(client.MergeRequest{GivenName: "Attached To Contractor", OtherClientID: e.newClient("Other")})
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			var opts []envOption
-			if tc.contractor {
-				opts = append(opts, signedInAs(fixture.Contractor()))
-			}
-			e := newEnv(t, opts...)
+			e := newEnv(t, signedInAs(tc.staff...))
 			sourceID, body := tc.setup(e)
 
 			reqtest.ExpectStatus(t, http.MethodPost, e.clientURL(sourceID, "/merge"), tc.want, e.SignedIn, body)

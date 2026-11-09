@@ -200,3 +200,9 @@ func TestExpectPDF_ReturnsTheDispositionAndTheBytes(t *testing.T) {
 		t.Fatalf("pdf = %+v, want the plan.pdf download and its bytes", got)
 	}
 }
+
+func TestRequirePage_PassesOnAFullAndOnALastPage(t *testing.T) {
+	cursor := "next"
+	reqtest.RequirePage(t, "first", 30, true, &cursor, 30, true)
+	reqtest.RequirePage(t, "last", 1, false, nil, 1, false)
+}

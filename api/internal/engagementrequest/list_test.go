@@ -100,16 +100,10 @@ func TestListHandler_WalksTheCursor(t *testing.T) {
 	}
 
 	first := e.list("")
-	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
-		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
-			len(first.Items), first.HasMore, first.NextCursor)
-	}
+	reqtest.RequirePage(t, "first", len(first.Items), first.HasMore, first.NextCursor, 30, true)
 
 	second := e.list("?cursor=" + *first.NextCursor)
-	if len(second.Items) != 1 || second.HasMore || second.NextCursor != nil {
-		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
-			len(second.Items), second.HasMore, second.NextCursor)
-	}
+	reqtest.RequirePage(t, "second", len(second.Items), second.HasMore, second.NextCursor, 1, false)
 	if second.Items[0].RequestID == first.Items[29].RequestID {
 		t.Fatal("the second page repeated the first page's last row")
 	}

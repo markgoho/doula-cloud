@@ -144,17 +144,14 @@ func TestAwaitingReplyHandler_InvalidCursorRejected(t *testing.T) {
 func TestAwaitingReplyHandler_PaginatesAcrossPages(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
+		staff      []fixture.StaffOption
 		contractor bool
 	}{
-		{"every Engagement at the Practice", false},
-		{"a contractor's attached Engagements", true},
+		{"every Engagement at the Practice", nil, false},
+		{"a contractor's attached Engagements", []fixture.StaffOption{fixture.Contractor()}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			var opts []envOption
-			if tc.contractor {
-				opts = append(opts, signedInAs(fixture.Contractor()))
-			}
-			e := newEnv(t, opts...)
+			e := newEnv(t, signedInAs(tc.staff...))
 
 			const total = 35 // awaitingPageSize (30) + 5, to force a second page
 			engagementIDs := make([]string, total)
@@ -167,15 +164,9 @@ func TestAwaitingReplyHandler_PaginatesAcrossPages(t *testing.T) {
 			}
 
 			first := e.awaiting("")
-			if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
-				t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
-					len(first.Items), first.HasMore, first.NextCursor)
-			}
+			reqtest.RequirePage(t, "first", len(first.Items), first.HasMore, first.NextCursor, 30, true)
 			second := e.awaiting("?cursor=" + *first.NextCursor)
-			if len(second.Items) != 5 || second.HasMore || second.NextCursor != nil {
-				t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 5/false/nil",
-					len(second.Items), second.HasMore, second.NextCursor)
-			}
+			reqtest.RequirePage(t, "second", len(second.Items), second.HasMore, second.NextCursor, 5, false)
 
 			seen := map[string]bool{}
 			for _, item := range append(first.Items, second.Items...) {

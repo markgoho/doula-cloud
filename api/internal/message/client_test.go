@@ -109,15 +109,9 @@ func TestClientListHandler_PaginatesNewestFirst(t *testing.T) {
 	}
 
 	first := e.portalThread("")
-	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
-		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
-			len(first.Items), first.HasMore, first.NextCursor)
-	}
+	reqtest.RequirePage(t, "first", len(first.Items), first.HasMore, first.NextCursor, 30, true)
 	second := e.portalThread("?cursor=" + *first.NextCursor)
-	if len(second.Items) != 5 || second.HasMore || second.NextCursor != nil {
-		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 5/false/nil",
-			len(second.Items), second.HasMore, second.NextCursor)
-	}
+	reqtest.RequirePage(t, "second", len(second.Items), second.HasMore, second.NextCursor, 5, false)
 }
 
 // TestClientRoutes_NotLinkedToClientForbidden proves the ticket's
