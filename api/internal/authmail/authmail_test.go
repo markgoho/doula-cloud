@@ -80,29 +80,6 @@ func emailChangeRowState(t *testing.T, db *testdb.DB, id string) (status string,
 	return status, attemptCount
 }
 
-// runTx mirrors outbox.ProcessHandler's own transaction setup, including
-// the app.notification_worker_trusted flag it sets after its secret
-// check: staff_notification_worker (00033) is what lets the token-mail
-// worker's #892 recheck read `staff` at all, so a test calling
-// ProcessPending directly has to open the same door.
-func runTx(t *testing.T, db *testdb.DB, fn func(ctx context.Context, tx *sql.Tx) error) {
-	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
-		t.Fatalf("set trusted flag: %v", err)
-	}
-	if err := fn(t.Context(), tx); err != nil {
-		t.Fatalf("tx func: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-}
-
 func TestTokenMailWorker_ProcessPending_SendsVerificationAndMarksSent(t *testing.T) {
 	db := testdb.New(t)
 	testdb.SeedStaff(t, db, "uid-1")
@@ -111,7 +88,7 @@ func TestTokenMailWorker_ProcessPending_SendsVerificationAndMarksSent(t *testing
 	rowID := seedTokenMailRow(t, db, "uid-1", authmail.KindEmailVerification, "verify-token", 0, time.Now().Add(-time.Minute))
 
 	sender := &mail.FakeSender{}
-	runTx(t, db, newTokenMailWorker(sender, accounts).ProcessPending)
+	db.RunAsWorker(t, newTokenMailWorker(sender, accounts).ProcessPending)
 
 	status, token := tokenMailRowState(t, db, rowID)
 	if status != statusSent {
@@ -141,7 +118,7 @@ func TestTokenMailWorker_ProcessPending_DeletedLoginMarksSentWithNoMail(t *testi
 	testdb.RedactDeletedLogin(t, db, staffID)
 
 	sender := &mail.FakeSender{}
-	runTx(t, db, newTokenMailWorker(sender, accounts).ProcessPending)
+	db.RunAsWorker(t, newTokenMailWorker(sender, accounts).ProcessPending)
 
 	status, _ := tokenMailRowState(t, db, rowID)
 	if status != statusSent {
@@ -155,7 +132,7 @@ func TestTokenMailWorker_ProcessPending_DeletedLoginMarksSentWithNoMail(t *testi
 func TestQueueTokenMail_InsertsPendingRowThenReRequestResetsToken(t *testing.T) {
 	db := testdb.New(t)
 
-	runTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+	db.RunAsWorker(t, func(ctx context.Context, tx *sql.Tx) error {
 		return authmail.QueueTokenMail(ctx, tx, "uid-8", authmail.KindPasswordReset, "first-token")
 	})
 	var firstID string
@@ -167,7 +144,7 @@ func TestQueueTokenMail_InsertsPendingRowThenReRequestResetsToken(t *testing.T) 
 
 	// A re-request resets the same row rather than inserting a second
 	// one -- staff_token_mail_outbox_one_pending (00061) enforces this.
-	runTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+	db.RunAsWorker(t, func(ctx context.Context, tx *sql.Tx) error {
 		return authmail.QueueTokenMail(ctx, tx, "uid-8", authmail.KindPasswordReset, "second-token")
 	})
 
@@ -197,7 +174,7 @@ func TestEmailChangeWorker_ProcessPending_SendsAndMarksSent(t *testing.T) {
 	rowID := seedEmailChangeRow(t, db, "uid-9", "old@example.com", 0, time.Now().Add(-time.Minute))
 
 	sender := &mail.FakeSender{}
-	runTx(t, db, newEmailChangeWorker(sender).ProcessPending)
+	db.RunAsWorker(t, newEmailChangeWorker(sender).ProcessPending)
 
 	status, _ := emailChangeRowState(t, db, rowID)
 	if status != statusSent {
@@ -212,7 +189,7 @@ func TestEmailChangeWorker_ProcessPending_SendsAndMarksSent(t *testing.T) {
 func TestQueueEmailChangeNotice_InsertsRow(t *testing.T) {
 	db := testdb.New(t)
 
-	runTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+	db.RunAsWorker(t, func(ctx context.Context, tx *sql.Tx) error {
 		return authmail.QueueEmailChangeNotice(ctx, tx, "uid-11", "old@example.com")
 	})
 

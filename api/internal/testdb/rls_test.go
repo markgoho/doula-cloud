@@ -27,6 +27,16 @@ func TestBeginAs_ScopesTheTransactionToTheVars(t *testing.T) {
 	}
 }
 
+func TestBeginAdmin_ReadsPastRowLevelSecurity(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Admin Begin Practice")
+
+	tx := db.BeginAdmin(t)
+	if got := testdb.Scalar[int](t, tx, `SELECT count(*) FROM practices WHERE id = $1`, practiceID); got != 1 {
+		t.Fatalf("practices visible to the admin transaction = %d, want 1 with no session variable set", got)
+	}
+}
+
 func TestRunAsWorker_OpensTheTrustedDoorForThePass(t *testing.T) {
 	db := testdb.New(t)
 	var door string

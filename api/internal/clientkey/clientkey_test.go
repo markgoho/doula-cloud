@@ -1,7 +1,6 @@
 package clientkey_test
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json/jsontext"
 	"errors"
@@ -12,34 +11,50 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-// begin opens a transaction on the admin connection -- these tests
-// exercise the package's own SQL, not the RLS policy, which
+const aJSONBody = `{"a":1}`
+
+// keyScene is a Client with an open transaction on the admin connection --
+// these tests exercise the package's own SQL, not the RLS policy, which
 // TestPolicy_KeyIsConfinedToItsPractice covers separately on db.App.
-func begin(t *testing.T, db *testdb.DB) *sql.Tx {
-	t.Helper()
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	t.Cleanup(func() { _ = tx.Rollback() })
-	return tx
+type keyScene struct {
+	t          *testing.T
+	tx         *sql.Tx
+	practiceID string
+	clientID   string
 }
 
-func TestSealAndOpen_RoundTrips(t *testing.T) {
+func newKeyScene(t *testing.T) keyScene {
+	t.Helper()
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Test Practice")
 	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "")
-	tx := begin(t, db)
+	return keyScene{t: t, tx: db.BeginAdmin(t), practiceID: practiceID, clientID: clientID}
+}
 
-	if err := clientkey.Ensure(t.Context(), tx, practiceID, clientID); err != nil {
+// newKeyedScene is a keyScene whose Client already has a key.
+func newKeyedScene(t *testing.T) keyScene {
+	t.Helper()
+	s := newKeyScene(t)
+	if err := clientkey.Ensure(t.Context(), s.tx, s.practiceID, s.clientID); err != nil {
 		t.Fatalf("ensure: %v", err)
 	}
+	return s
+}
+
+func (s keyScene) seal(plaintext string) jsontext.Value {
+	s.t.Helper()
+	envelope, err := clientkey.Seal(s.t.Context(), s.tx, s.clientID, []byte(plaintext))
+	if err != nil {
+		s.t.Fatalf("seal: %v", err)
+	}
+	return envelope
+}
+
+func TestSealAndOpen_RoundTrips(t *testing.T) {
+	s := newKeyedScene(t)
 
 	plaintext := []byte(`{"email":{"from":"","to":"ada@example.com"}}`)
-	envelope, err := clientkey.Seal(t.Context(), tx, clientID, plaintext)
-	if err != nil {
-		t.Fatalf("seal: %v", err)
-	}
+	envelope := s.seal(string(plaintext))
 	if strings.Contains(string(envelope), "ada@example.com") {
 		t.Fatalf("envelope = %s, want the address not to appear in it", envelope)
 	}
@@ -47,7 +62,7 @@ func TestSealAndOpen_RoundTrips(t *testing.T) {
 		t.Fatalf("IsSealed(%s) = false, want true", envelope)
 	}
 
-	opened, err := clientkey.Open(t.Context(), tx, clientID, envelope)
+	opened, err := clientkey.Open(t.Context(), s.tx, s.clientID, envelope)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -57,23 +72,9 @@ func TestSealAndOpen_RoundTrips(t *testing.T) {
 }
 
 func TestSeal_IsNotDeterministic(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "")
-	tx := begin(t, db)
+	s := newKeyedScene(t)
 
-	if err := clientkey.Ensure(t.Context(), tx, practiceID, clientID); err != nil {
-		t.Fatalf("ensure: %v", err)
-	}
-	first, err := clientkey.Seal(t.Context(), tx, clientID, []byte(`{"a":1}`))
-	if err != nil {
-		t.Fatalf("seal first: %v", err)
-	}
-	second, err := clientkey.Seal(t.Context(), tx, clientID, []byte(`{"a":1}`))
-	if err != nil {
-		t.Fatalf("seal second: %v", err)
-	}
-	if string(first) == string(second) {
+	if first, second := s.seal(aJSONBody), s.seal(aJSONBody); string(first) == string(second) {
 		t.Fatal("two seals of the same plaintext produced identical envelopes, want a fresh nonce each time")
 	}
 }
@@ -82,44 +83,28 @@ func TestSeal_IsNotDeterministic(t *testing.T) {
 // a diff sealed before erasure is unreadable after it, and nothing was
 // updated or deleted in activity to make that so.
 func TestOpen_AfterDestroy(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "")
-	tx := begin(t, db)
+	s := newKeyedScene(t)
+	envelope := s.seal(`{"phone":"585-555-0100"}`)
 
-	if err := clientkey.Ensure(t.Context(), tx, practiceID, clientID); err != nil {
-		t.Fatalf("ensure: %v", err)
-	}
-	envelope, err := clientkey.Seal(t.Context(), tx, clientID, []byte(`{"phone":"585-555-0100"}`))
-	if err != nil {
-		t.Fatalf("seal: %v", err)
-	}
-
-	if err := clientkey.Destroy(t.Context(), tx, clientID); err != nil {
+	if err := clientkey.Destroy(t.Context(), s.tx, s.clientID); err != nil {
 		t.Fatalf("destroy: %v", err)
 	}
 
-	if _, err := clientkey.Open(t.Context(), tx, clientID, envelope); !errors.Is(err, clientkey.ErrNoKey) {
+	if _, err := clientkey.Open(t.Context(), s.tx, s.clientID, envelope); !errors.Is(err, clientkey.ErrNoKey) {
 		t.Fatalf("open after destroy = %v, want ErrNoKey", err)
 	}
-	if _, err := clientkey.Seal(t.Context(), tx, clientID, []byte(`{"a":1}`)); !errors.Is(err, clientkey.ErrNoKey) {
+	if _, err := clientkey.Seal(t.Context(), s.tx, s.clientID, []byte(aJSONBody)); !errors.Is(err, clientkey.ErrNoKey) {
 		t.Fatalf("seal after destroy = %v, want ErrNoKey", err)
 	}
 }
 
 func TestDestroy_IsIdempotent(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "")
-	tx := begin(t, db)
+	s := newKeyedScene(t)
 
-	if err := clientkey.Ensure(t.Context(), tx, practiceID, clientID); err != nil {
-		t.Fatalf("ensure: %v", err)
-	}
-	if err := clientkey.Destroy(t.Context(), tx, clientID); err != nil {
+	if err := clientkey.Destroy(t.Context(), s.tx, s.clientID); err != nil {
 		t.Fatalf("first destroy: %v", err)
 	}
-	if err := clientkey.Destroy(t.Context(), tx, clientID); err != nil {
+	if err := clientkey.Destroy(t.Context(), s.tx, s.clientID); err != nil {
 		t.Fatalf("second destroy: %v", err)
 	}
 }
@@ -128,33 +113,21 @@ func TestDestroy_IsIdempotent(t *testing.T) {
 // replaces the key -- if it rotated, every diff sealed before it would
 // already be unreadable, which is erasure by accident.
 func TestEnsure_IsIdempotent(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "")
-	tx := begin(t, db)
+	s := newKeyedScene(t)
+	envelope := s.seal(aJSONBody)
 
-	if err := clientkey.Ensure(t.Context(), tx, practiceID, clientID); err != nil {
-		t.Fatalf("first ensure: %v", err)
-	}
-	envelope, err := clientkey.Seal(t.Context(), tx, clientID, []byte(`{"a":1}`))
-	if err != nil {
-		t.Fatalf("seal: %v", err)
-	}
-	if err := clientkey.Ensure(t.Context(), tx, practiceID, clientID); err != nil {
+	if err := clientkey.Ensure(t.Context(), s.tx, s.practiceID, s.clientID); err != nil {
 		t.Fatalf("second ensure: %v", err)
 	}
-	if _, err := clientkey.Open(t.Context(), tx, clientID, envelope); err != nil {
+	if _, err := clientkey.Open(t.Context(), s.tx, s.clientID, envelope); err != nil {
 		t.Fatalf("open after a second ensure: %v, want the original key still in place", err)
 	}
 }
 
 func TestSeal_WithoutAKeyRefuses(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "")
-	tx := begin(t, db)
+	s := newKeyScene(t)
 
-	if _, err := clientkey.Seal(t.Context(), tx, clientID, []byte(`{"a":1}`)); !errors.Is(err, clientkey.ErrNoKey) {
+	if _, err := clientkey.Seal(t.Context(), s.tx, s.clientID, []byte(aJSONBody)); !errors.Is(err, clientkey.ErrNoKey) {
 		t.Fatalf("seal without a key = %v, want ErrNoKey", err)
 	}
 }
@@ -172,14 +145,7 @@ func TestIsSealed_RejectsAPlaintextDiff(t *testing.T) {
 }
 
 func TestOpen_RejectsATamperedEnvelope(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "")
-	tx := begin(t, db)
-
-	if err := clientkey.Ensure(t.Context(), tx, practiceID, clientID); err != nil {
-		t.Fatalf("ensure: %v", err)
-	}
+	s := newKeyedScene(t)
 
 	for name, envelope := range map[string]string{
 		"not an envelope":      `{"givenName":"Ada"}`,
@@ -188,7 +154,7 @@ func TestOpen_RejectsATamperedEnvelope(t *testing.T) {
 		"flipped ciphertext":   `{"v":1,"enc":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := clientkey.Open(t.Context(), tx, clientID, jsontext.Value(envelope)); err == nil {
+			if _, err := clientkey.Open(t.Context(), s.tx, s.clientID, jsontext.Value(envelope)); err == nil {
 				t.Fatalf("open(%s) = nil error, want a refusal", envelope)
 			}
 		})
@@ -204,32 +170,19 @@ func TestPolicy_KeyIsConfinedToItsPractice(t *testing.T) {
 	otherPracticeID := testdb.SeedPractice(t, db, "Test Practice")
 	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "")
 
-	mine := beginScoped(t, db, practiceID)
+	mine := db.BeginAs(t, testdb.Practice(practiceID))
 	if err := clientkey.Ensure(t.Context(), mine, practiceID, clientID); err != nil {
 		t.Fatalf("ensure: %v", err)
 	}
-	if _, err := clientkey.Seal(t.Context(), mine, clientID, []byte(`{"a":1}`)); err != nil {
+	if _, err := clientkey.Seal(t.Context(), mine, clientID, []byte(aJSONBody)); err != nil {
 		t.Fatalf("seal in her own practice: %v", err)
 	}
 	if err := mine.Commit(); err != nil {
 		t.Fatalf("commit: %v", err)
 	}
 
-	theirs := beginScoped(t, db, otherPracticeID)
-	if _, err := clientkey.Seal(t.Context(), theirs, clientID, []byte(`{"a":1}`)); !errors.Is(err, clientkey.ErrNoKey) {
+	theirs := db.BeginAs(t, testdb.Practice(otherPracticeID))
+	if _, err := clientkey.Seal(t.Context(), theirs, clientID, []byte(aJSONBody)); !errors.Is(err, clientkey.ErrNoKey) {
 		t.Fatalf("seal from another practice = %v, want ErrNoKey -- the key must not be readable across a tenancy boundary", err)
 	}
-}
-
-func beginScoped(t *testing.T, db *testdb.DB, practiceID string) *sql.Tx {
-	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	t.Cleanup(func() { _ = tx.Rollback() })
-	if _, err := tx.ExecContext(context.Background(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("scope tx: %v", err)
-	}
-	return tx
 }

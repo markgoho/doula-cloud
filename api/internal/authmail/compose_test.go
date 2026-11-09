@@ -26,15 +26,7 @@ const (
 // row before the Admin SDK is reached.
 func composeTx(t *testing.T, db *testdb.DB) *sql.Tx {
 	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	t.Cleanup(func() { _ = tx.Rollback() })
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
-		t.Fatalf("set trusted flag: %v", err)
-	}
-	return tx
+	return db.BeginAs(t, testdb.NotificationWorker())
 }
 
 func runComposeTokenMail(ctx context.Context, tx *sql.Tx, accounts *authntest.FakeAccountManager, r tokenMailRow) (to, subject, text string, err error) {
@@ -89,6 +81,17 @@ func TestComposeTokenMail_PasswordResetSendsResetLink(t *testing.T) {
 	}
 }
 
+// requireVerificationAlreadyDone composes uid's verification row and
+// requires outbox.ErrAlreadyDone: there is nothing left to deliver.
+func requireVerificationAlreadyDone(t *testing.T, db *testdb.DB, accounts *authntest.FakeAccountManager, uid string) {
+	t.Helper()
+	r := tokenMailRow{identityUID: uid, kind: KindEmailVerification, token: sql.NullString{String: testVerifyToken, Valid: true}}
+	_, _, _, err := runComposeTokenMail(t.Context(), composeTx(t, db), accounts, r)
+	if !errors.Is(err, outbox.ErrAlreadyDone) {
+		t.Fatalf("err = %v, want outbox.ErrAlreadyDone", err)
+	}
+}
+
 // Verified through some other path -- a fresher re-request, or a
 // provider that reports addresses pre-verified -- before this row got
 // sent: nothing to deliver.
@@ -97,12 +100,8 @@ func TestComposeTokenMail_AlreadyVerifiedSkipsSend(t *testing.T) {
 	testdb.SeedStaff(t, db, "uid-3")
 	accounts := authntest.NewFakeAccountManager()
 	accounts.Seed("uid-3", "person@example.com", true)
-	r := tokenMailRow{identityUID: "uid-3", kind: KindEmailVerification, token: sql.NullString{String: testVerifyToken, Valid: true}}
 
-	_, _, _, err := runComposeTokenMail(t.Context(), composeTx(t, db), accounts, r)
-	if !errors.Is(err, outbox.ErrAlreadyDone) {
-		t.Fatalf("err = %v, want outbox.ErrAlreadyDone", err)
-	}
+	requireVerificationAlreadyDone(t, db, accounts, "uid-3")
 }
 
 // A reset row for an identity Identity Platform no longer knows: this is
@@ -147,10 +146,6 @@ func TestComposeTokenMail_DeletedLoginSkipsVerification(t *testing.T) {
 	accounts := authntest.NewFakeAccountManager()
 	accounts.Seed("uid-deleted-login", "person@example.com", false)
 	testdb.RedactDeletedLogin(t, db, staffID)
-	r := tokenMailRow{identityUID: "uid-deleted-login", kind: KindEmailVerification, token: sql.NullString{String: testVerifyToken, Valid: true}}
 
-	_, _, _, err := runComposeTokenMail(t.Context(), composeTx(t, db), accounts, r)
-	if !errors.Is(err, outbox.ErrAlreadyDone) {
-		t.Fatalf("err = %v, want outbox.ErrAlreadyDone", err)
-	}
+	requireVerificationAlreadyDone(t, db, accounts, "uid-deleted-login")
 }

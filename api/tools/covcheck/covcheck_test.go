@@ -44,10 +44,7 @@ func TestFindViolations_FlagsUncoveredBlock(t *testing.T) {
 		testFile: lines(`package foo`, `func bar() {}`, ``),
 	}
 
-	violations, err := findViolations(blocks, nil, fakeReader(src))
-	if err != nil {
-		t.Fatalf("findViolations: %v", err)
-	}
+	violations := mustFindViolations(t, blocks, src)
 	if len(violations) != 1 {
 		t.Fatalf("expected 1 violation, got %d: %+v", len(violations), violations)
 	}
@@ -65,13 +62,7 @@ func TestFindViolations_ExcusesBlockWithPrecedingIgnoreComment(t *testing.T) {
 		),
 	}
 
-	violations, err := findViolations(blocks, nil, fakeReader(src))
-	if err != nil {
-		t.Fatalf("findViolations: %v", err)
-	}
-	if len(violations) != 0 {
-		t.Fatalf("expected 0 violations, got %d: %+v", len(violations), violations)
-	}
+	requireNoViolations(t, blocks, src)
 }
 
 func TestFindViolations_ExcusesBlockWithInlineIgnoreComment(t *testing.T) {
@@ -82,13 +73,7 @@ func TestFindViolations_ExcusesBlockWithInlineIgnoreComment(t *testing.T) {
 		testFile: lines(`log.Fatal(err) // coverage:ignore reason: unreachable`),
 	}
 
-	violations, err := findViolations(blocks, nil, fakeReader(src))
-	if err != nil {
-		t.Fatalf("findViolations: %v", err)
-	}
-	if len(violations) != 0 {
-		t.Fatalf("expected 0 violations, got %d: %+v", len(violations), violations)
-	}
+	requireNoViolations(t, blocks, src)
 }
 
 // Go 1.27 starts an if/for body's coverage block at the body's first
@@ -111,13 +96,7 @@ func TestFindViolations_ExcusesGo127BodyBlockWithMarkerAboveItsIf(t *testing.T) 
 		"go1.27 shape: block starts at the first statement": {File: testFile, StartLine: 4, EndLine: 5, Count: 0},
 	} {
 		t.Run(name, func(t *testing.T) {
-			violations, err := findViolations([]Block{block}, nil, fakeReader(src))
-			if err != nil {
-				t.Fatalf("findViolations: %v", err)
-			}
-			if len(violations) != 0 {
-				t.Fatalf("expected 0 violations, got %+v", violations)
-			}
+			requireNoViolations(t, []Block{block}, src)
 		})
 	}
 }
@@ -138,13 +117,7 @@ func TestFindViolations_ExcusesGo127BodyBlockAfterALeadingComment(t *testing.T) 
 		),
 	}
 
-	violations, err := findViolations(blocks, nil, fakeReader(src))
-	if err != nil {
-		t.Fatalf("findViolations: %v", err)
-	}
-	if len(violations) != 0 {
-		t.Fatalf("expected 0 violations, got %+v", violations)
-	}
+	requireNoViolations(t, blocks, src)
 }
 
 // Go 1.27 also cuts one straight-line block into several ranges at each
@@ -175,13 +148,7 @@ func TestFindViolations_ExcusesEveryFragmentOfAGo127SplitBlock(t *testing.T) {
 		{File: testFile, StartLine: 9, StartCol: 2, EndLine: 10, EndCol: 1, Count: 0},
 	}
 
-	violations, err := findViolations(blocks, nil, fakeReader(src))
-	if err != nil {
-		t.Fatalf("findViolations: %v", err)
-	}
-	if len(violations) != 0 {
-		t.Fatalf("expected 0 violations, got %+v", violations)
-	}
+	requireNoViolations(t, blocks, src)
 }
 
 // Go 1.27.3 also ends a piece after a statement that spans lines, with
@@ -206,13 +173,7 @@ func TestFindViolations_ExcusesAGo1273BlockCutAfterAMultiLineStatement(t *testin
 		{File: testFile, StartLine: 7, StartCol: 2, EndLine: 8, EndCol: 1, Count: 0},
 	}
 
-	violations, err := findViolations(blocks, nil, fakeReader(src))
-	if err != nil {
-		t.Fatalf("findViolations: %v", err)
-	}
-	if len(violations) != 0 {
-		t.Fatalf("expected 0 violations, got %+v", violations)
-	}
+	requireNoViolations(t, blocks, src)
 }
 
 // An if-body, a comment, and the next statement are two 1.26 blocks, and
@@ -234,10 +195,7 @@ func TestFindViolations_DoesNotMergeAnIfBodyWithTheStatementAfterIt(t *testing.T
 		),
 	}
 
-	violations, err := findViolations(blocks, nil, fakeReader(src))
-	if err != nil {
-		t.Fatalf("findViolations: %v", err)
-	}
+	violations := mustFindViolations(t, blocks, src)
 	if len(violations) != 1 || violations[0].StartLine != 2 {
 		t.Fatalf("expected only the if-body flagged, got %+v", violations)
 	}
@@ -259,10 +217,7 @@ func TestFindViolations_DoesNotMergeAcrossCode(t *testing.T) {
 		),
 	}
 
-	violations, err := findViolations(blocks, nil, fakeReader(src))
-	if err != nil {
-		t.Fatalf("findViolations: %v", err)
-	}
+	violations := mustFindViolations(t, blocks, src)
 	if len(violations) != 1 || violations[0].StartLine != 5 {
 		t.Fatalf("expected only the second range flagged, got %+v", violations)
 	}
@@ -317,10 +272,7 @@ func TestFindViolations_DoesNotMergeABodyWithTheBodyAfterIt(t *testing.T) {
 				second = Block{File: testFile, StartLine: 6, StartCol: 3, EndLine: 7, EndCol: 1, Count: 0}
 			}
 
-			violations, err := findViolations([]Block{first, second}, nil, fakeReader(map[string][]string{testFile: src}))
-			if err != nil {
-				t.Fatalf("findViolations: %v", err)
-			}
+			violations := mustFindViolations(t, []Block{first, second}, map[string][]string{testFile: src})
 			if len(violations) != 1 || violations[0].StartLine != second.StartLine {
 				t.Fatalf("expected only the second body flagged, got %+v", violations)
 			}
@@ -346,10 +298,7 @@ func TestFindViolations_DoesNotMergeAcrossALabelWithAComment(t *testing.T) {
 		{File: testFile, StartLine: 4, StartCol: 2, EndLine: 4, EndCol: 9, Count: 0},
 	}
 
-	violations, err := findViolations(blocks, nil, fakeReader(src))
-	if err != nil {
-		t.Fatalf("findViolations: %v", err)
-	}
+	violations := mustFindViolations(t, blocks, src)
 	if len(violations) != 1 || violations[0].StartLine != 4 {
 		t.Fatalf("expected only sink(2) flagged, got %+v", violations)
 	}
@@ -385,13 +334,7 @@ func TestFindViolations_JoinsAcrossACommentThatEndsLikeAnOpener(t *testing.T) {
 		{File: testFile, StartLine: 10, StartCol: 2, EndLine: 13, EndCol: 1, Count: 0},
 	}
 
-	violations, err := findViolations(blocks, nil, fakeReader(src))
-	if err != nil {
-		t.Fatalf("findViolations: %v", err)
-	}
-	if len(violations) != 0 {
-		t.Fatalf("expected 0 violations, got %+v", violations)
-	}
+	requireNoViolations(t, blocks, src)
 }
 
 // A block 1.26 also ended -- on the `{` of the `if` that closes it, not
@@ -412,10 +355,7 @@ func TestFindViolations_DoesNotMergeABlockThatEndsOnItsIf(t *testing.T) {
 		),
 	}
 
-	violations, err := findViolations(blocks, nil, fakeReader(src))
-	if err != nil {
-		t.Fatalf("findViolations: %v", err)
-	}
+	violations := mustFindViolations(t, blocks, src)
 	if len(violations) != 1 || violations[0].StartLine != 5 {
 		t.Fatalf("expected only bar() flagged, got %+v", violations)
 	}
@@ -437,13 +377,7 @@ func TestFindViolations_ExcusesABodyWhoseOpenerHasATrailingComment(t *testing.T)
 		{File: testFile, StartLine: 3, StartCol: 3, EndLine: 4, EndCol: 1, Count: 0},
 	}
 
-	violations, err := findViolations(blocks, nil, fakeReader(src))
-	if err != nil {
-		t.Fatalf("findViolations: %v", err)
-	}
-	if len(violations) != 0 {
-		t.Fatalf("expected 0 violations, got %+v", violations)
-	}
+	requireNoViolations(t, blocks, src)
 }
 
 // The walk back stops at the brace: a marker two lines above a block
@@ -459,10 +393,7 @@ func TestFindViolations_DoesNotReachPastOrdinaryCode(t *testing.T) {
 		),
 	}
 
-	violations, err := findViolations(blocks, nil, fakeReader(src))
-	if err != nil {
-		t.Fatalf("findViolations: %v", err)
-	}
+	violations := mustFindViolations(t, blocks, src)
 	if len(violations) != 1 {
 		t.Fatalf("expected 1 violation, got %+v", violations)
 	}
@@ -476,13 +407,7 @@ func TestFindViolations_IgnoresCoveredBlocks(t *testing.T) {
 		testFile: lines(`func bar() {}`),
 	}
 
-	violations, err := findViolations(blocks, nil, fakeReader(src))
-	if err != nil {
-		t.Fatalf("findViolations: %v", err)
-	}
-	if len(violations) != 0 {
-		t.Fatalf("expected 0 violations, got %d", len(violations))
-	}
+	requireNoViolations(t, blocks, src)
 }
 
 func TestFindViolations_SkipsMatchingPrefix(t *testing.T) {
@@ -499,6 +424,22 @@ func TestFindViolations_SkipsMatchingPrefix(t *testing.T) {
 	}
 	if len(violations) != 0 {
 		t.Fatalf("expected 0 violations, got %d: %+v", len(violations), violations)
+	}
+}
+
+func mustFindViolations(t *testing.T, blocks []Block, src map[string][]string) []Violation {
+	t.Helper()
+	violations, err := findViolations(blocks, nil, fakeReader(src))
+	if err != nil {
+		t.Fatalf("findViolations: %v", err)
+	}
+	return violations
+}
+
+func requireNoViolations(t *testing.T, blocks []Block, src map[string][]string) {
+	t.Helper()
+	if violations := mustFindViolations(t, blocks, src); len(violations) != 0 {
+		t.Fatalf("expected 0 violations, got %+v", violations)
 	}
 }
 

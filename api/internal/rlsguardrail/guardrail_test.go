@@ -34,47 +34,30 @@ import (
 // by the RLS policies under test.
 func seedEngagementAt(t *testing.T, db *testdb.DB, label string) (practiceID, clientID, engagementID string) {
 	t.Helper()
-
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO practices (name, timezone) VALUES ($1, 'America/New_York') RETURNING id`, label,
-	).Scan(&practiceID); err != nil {
-		t.Fatalf("seed practice: %v", err)
-	}
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, $2, $2 || '@example.com') RETURNING id`, practiceID, label,
-	).Scan(&clientID); err != nil {
-		t.Fatalf("seed client: %v", err)
-	}
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, kind) VALUES ($1, $2, 'birth') RETURNING id`,
-		clientID, practiceID,
-	).Scan(&engagementID); err != nil {
-		t.Fatalf("seed engagement: %v", err)
-	}
+	practiceID = testdb.Scalar[string](t, db.Admin,
+		`INSERT INTO practices (name, timezone) VALUES ($1, 'America/New_York') RETURNING id`, label)
+	clientID = testdb.Scalar[string](t, db.Admin,
+		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, $2, $2 || '@example.com') RETURNING id`, practiceID, label)
+	engagementID = testdb.Scalar[string](t, db.Admin,
+		`INSERT INTO engagements (client_id, practice_id, kind) VALUES ($1, $2, 'birth') RETURNING id`, clientID, practiceID)
 	return practiceID, clientID, engagementID
 }
 
-// engagementVisible sets sessionVar to sessionValue for a single
-// transaction on db.App (the low-privilege, RLS-subject connection) and
-// reports whether engagementID is visible under that session context.
+// visibleAs sets one session variable for a single transaction on db.App
+// (the low-privilege, RLS-subject connection) and reports whether the row
+// of table with that id is visible under that session context.
+func visibleAs(t *testing.T, db *testdb.DB, table string, session testdb.SessionVar, id string) bool {
+	t.Helper()
+	tx := db.BeginAs(t, session)
+	defer func() { _ = tx.Rollback() }()
+	return testdb.Scalar[int](t, tx, `SELECT count(*) FROM `+table+` WHERE id = $1`, id) == 1
+}
+
+// engagementVisible reports whether engagementID is visible with
+// sessionVar set to sessionValue.
 func engagementVisible(t *testing.T, db *testdb.DB, sessionVar, sessionValue, engagementID string) bool {
 	t.Helper()
-
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config($1, $2, true)`, sessionVar, sessionValue); err != nil {
-		t.Fatalf("set_config %s: %v", sessionVar, err)
-	}
-
-	var count int
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM engagements WHERE id = $1`, engagementID).Scan(&count); err != nil {
-		t.Fatalf("query engagements: %v", err)
-	}
-	return count == 1
+	return visibleAs(t, db, "engagements", testdb.SessionVar{Name: sessionVar, Value: sessionValue}, engagementID)
 }
 
 // TestRLS_GuardrailPracticeTierIsolation exercises
@@ -132,11 +115,7 @@ func TestRLS_GuardrailFailsClosedWithNoSessionVariableSet(t *testing.T) {
 	db := testdb.New(t)
 	seedEngagementAt(t, db, "Guardrail Fail Closed")
 
-	var count int
-	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM engagements`).Scan(&count); err != nil {
-		t.Fatalf("query engagements with no session variables set: %v", err)
-	}
-	if count != 0 {
+	if count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM engagements`); count != 0 {
 		t.Fatalf("expected 0 rows with no session variables set (fail closed), got %d", count)
 	}
 }
@@ -172,37 +151,17 @@ func TestRLS_GuardrailActivityPracticeTierIsolation(t *testing.T) {
 // connection, subject_kind 'engagement' (ADR-0022, #476).
 func seedActivityRow(t *testing.T, db *testdb.DB, practiceID, engagementID string) (activityID string) {
 	t.Helper()
-	if err := db.Admin.QueryRowContext(t.Context(),
+	return testdb.Scalar[string](t, db.Admin,
 		`INSERT INTO activity (practice_id, subject_kind, subject_id, action, diff, actor_kind)
 		 VALUES ($1, 'engagement', $2, 'engagement_created', '{}'::jsonb, 'system') RETURNING id`,
-		practiceID, engagementID,
-	).Scan(&activityID); err != nil {
-		t.Fatalf("seed activity row: %v", err)
-	}
-	return activityID
+		practiceID, engagementID)
 }
 
-// activityVisible sets app.current_practice_id to practiceID for a
-// single transaction on db.App and reports whether activityID is
-// visible under that session context.
+// activityVisible reports whether activityID is visible with
+// app.current_practice_id set to practiceID.
 func activityVisible(t *testing.T, db *testdb.DB, practiceID, activityID string) bool {
 	t.Helper()
-
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set_config app.current_practice_id: %v", err)
-	}
-
-	var count int
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM activity WHERE id = $1`, activityID).Scan(&count); err != nil {
-		t.Fatalf("query activity: %v", err)
-	}
-	return count == 1
+	return visibleAs(t, db, "activity", testdb.Practice(practiceID), activityID)
 }
 
 // TestRLS_GuardrailVisitsClientTierIsolation exercises
@@ -247,11 +206,7 @@ func TestRLS_GuardrailVisitsFailClosedWithNoSessionVariableSet(t *testing.T) {
 	practiceID, _, engagementID := seedEngagementAt(t, db, "Guardrail Visits Fail Closed")
 	seedGuardrailVisit(t, db, practiceID, engagementID, "guardrail-visits-doula-closed")
 
-	var count int
-	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM visits`).Scan(&count); err != nil {
-		t.Fatalf("query visits with no session variables set: %v", err)
-	}
-	if count != 0 {
+	if count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM visits`); count != 0 {
 		t.Fatalf("expected 0 rows with no session variables set (fail closed), got %d", count)
 	}
 }
@@ -261,34 +216,14 @@ func TestRLS_GuardrailVisitsFailClosedWithNoSessionVariableSet(t *testing.T) {
 func seedGuardrailVisit(t *testing.T, db *testdb.DB, practiceID, engagementID, identityUID string) (visitID string) {
 	t.Helper()
 	staffID := seedGrantStaffAt(t, db, practiceID, identityUID)
-	if err := db.Admin.QueryRowContext(t.Context(),
+	return testdb.Scalar[string](t, db.Admin,
 		`INSERT INTO visits (engagement_id, staff_id, scheduled_at) VALUES ($1, $2, now()) RETURNING id`,
-		engagementID, staffID,
-	).Scan(&visitID); err != nil {
-		t.Fatalf("seed visit: %v", err)
-	}
-	return visitID
+		engagementID, staffID)
 }
 
-// visitVisible sets app.current_client_id to clientID for a single
-// transaction on db.App and reports whether visitID is visible under
-// that session context.
+// visitVisible reports whether visitID is visible with
+// app.current_client_id set to clientID.
 func visitVisible(t *testing.T, db *testdb.DB, clientID, visitID string) bool {
 	t.Helper()
-
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
-		t.Fatalf("set_config app.current_client_id: %v", err)
-	}
-
-	var count int
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM visits WHERE id = $1`, visitID).Scan(&count); err != nil {
-		t.Fatalf("query visits: %v", err)
-	}
-	return count == 1
+	return visibleAs(t, db, "visits", testdb.Client(clientID), visitID)
 }

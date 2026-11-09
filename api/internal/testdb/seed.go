@@ -1,6 +1,7 @@
 package testdb
 
 import (
+	"database/sql"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"strings"
@@ -399,20 +400,27 @@ func SeedActivity(t *testing.T, db *DB, practiceID, subjectKind, subjectID, acti
 // what SeedActivity passes.
 func SeedActivityWithDiff(t *testing.T, db *DB, practiceID, subjectKind, subjectID, action string, actor activity.Actor, diff jsontext.Value) {
 	t.Helper()
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		// coverage:ignore reason: fixture transaction failure, not exercised by the happy-path test
-		t.Fatalf("testdb: seed activity begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := activity.Record(t.Context(), tx, activity.Entry{
+	recordActivityOn(t, db.Admin, activity.Entry{
 		PracticeID:  practiceID,
 		SubjectKind: subjectKind,
 		SubjectID:   subjectID,
 		Action:      action,
 		Diff:        diff,
 		Actor:       actor,
-	}); err != nil {
+	})
+}
+
+// recordActivityOn writes entry through activity.Record in a transaction
+// of its own on conn, so a seeded row takes the same path a real one does.
+func recordActivityOn(t *testing.T, conn *sql.DB, entry activity.Entry) {
+	t.Helper()
+	tx, err := conn.BeginTx(t.Context(), nil)
+	if err != nil {
+		// coverage:ignore reason: fixture transaction failure, not exercised by the happy-path test
+		t.Fatalf("testdb: seed activity begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := activity.Record(t.Context(), tx, entry); err != nil {
 		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
 		t.Fatalf("testdb: seed activity: %v", err)
 	}

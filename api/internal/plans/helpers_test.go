@@ -210,23 +210,9 @@ func (e *env) activityActions() []string {
 // motivating typo needs and the freeze trigger would otherwise refuse it.
 func (e *env) recordOutcome(outcome string, endedOn *string) {
 	e.T.Helper()
-	tx, err := e.DB.Admin.BeginTx(e.T.Context(), nil)
-	if err != nil {
-		e.T.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(e.T.Context(),
-		`SELECT set_config('app.allow_outcome_correction', 'on', true)`); err != nil {
-		e.T.Fatalf("open the correction door: %v", err)
-	}
-	if _, err := tx.ExecContext(e.T.Context(),
+	e.DB.ExecCorrectingOutcome(e.T,
 		`UPDATE engagements SET birth_outcome = $2::birth_outcome, pregnancy_ended_on = $3::date WHERE id = $1`,
-		e.Engagement.ID, outcome, endedOn); err != nil {
-		e.T.Fatalf("record the birth outcome %q: %v", outcome, err)
-	}
-	if err := tx.Commit(); err != nil {
-		e.T.Fatalf("commit the birth outcome %q: %v", outcome, err)
-	}
+		e.Engagement.ID, outcome, endedOn)
 }
 
 // refusesEngagementsItCannotReach proves a Staff route refuses an id that

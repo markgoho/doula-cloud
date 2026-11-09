@@ -46,24 +46,6 @@ func seedDueRow(t *testing.T, db *testdb.DB, practiceID string) string {
 	return id
 }
 
-func runWorker(t *testing.T, db *testdb.DB, w welcomecredits.Worker) {
-	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
-		t.Fatalf("open door: %v", err)
-	}
-	if err := w.ProcessPending(t.Context(), tx); err != nil {
-		t.Fatalf("ProcessPending: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-}
-
 type rowState struct {
 	status    string
 	sentAt    sql.NullTime
@@ -112,7 +94,7 @@ func TestWorker_MailsEveryCurrentOwnerAndRecordsTheSend(t *testing.T) {
 	id := seedDueRow(t, db, practiceID)
 
 	sender := &mail.FakeSender{}
-	runWorker(t, db, newWorker(sender))
+	db.RunAsWorker(t, newWorker(sender).ProcessPending)
 
 	sent := sender.Sent()
 	if len(sent) != 2 {
@@ -154,7 +136,7 @@ func TestWorker_MailsEveryCurrentOwnerAndRecordsTheSend(t *testing.T) {
 		t.Errorf("activity rows = %d actor %q, want 1 by system", n, actor)
 	}
 
-	runWorker(t, db, newWorker(sender))
+	db.RunAsWorker(t, newWorker(sender).ProcessPending)
 	if len(sender.Sent()) != 2 {
 		t.Errorf("a second drain mailed again: %d mails", len(sender.Sent()))
 	}
@@ -168,7 +150,7 @@ func TestWorker_MailsTheOwnerWhoseAddressIsNotSuppressed(t *testing.T) {
 	id := seedDueRow(t, db, practiceID)
 
 	sender := &mail.FakeSender{}
-	runWorker(t, db, newWorker(sender))
+	db.RunAsWorker(t, newWorker(sender).ProcessPending)
 
 	if row := readRow(t, db, id); row.status != statusSent || row.skip.Valid {
 		t.Errorf("row = %+v, want sent and not skipped while one Owner is reachable", row)
@@ -241,7 +223,7 @@ func TestWorker_SkipsWithNothingMailed(t *testing.T) {
 			id := seedDueRow(t, db, practiceID)
 
 			sender := &mail.FakeSender{}
-			runWorker(t, db, newWorker(sender))
+			db.RunAsWorker(t, newWorker(sender).ProcessPending)
 
 			if len(sender.Sent()) != 0 {
 				t.Errorf("mails sent = %d, want 0", len(sender.Sent()))
@@ -265,7 +247,7 @@ func TestWorker_AFailedSendRetriesAndRecordsNothing(t *testing.T) {
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "wc-fail-owner", []string{ownerRole}, employee)
 	id := seedDueRow(t, db, practiceID)
 
-	runWorker(t, db, newWorker(&mail.FakeSender{Err: errors.New("mailgun down")}))
+	db.RunAsWorker(t, newWorker(&mail.FakeSender{Err: errors.New("mailgun down")}).ProcessPending)
 
 	row := readRow(t, db, id)
 	if row.status != "pending" || row.attempts != 1 || !row.lastError.Valid {
@@ -315,7 +297,7 @@ func TestWorker_LeavesARowThatIsNotDueYet(t *testing.T) {
 	}
 
 	sender := &mail.FakeSender{}
-	runWorker(t, db, newWorker(sender))
+	db.RunAsWorker(t, newWorker(sender).ProcessPending)
 
 	if len(sender.Sent()) != 0 || readRow(t, db, id).status != "pending" {
 		t.Errorf("a row not yet due was acted on")
