@@ -30,12 +30,8 @@ func AttachmentHandler(store objectstore.ObjectStore) http.Handler {
 // clientauth.Middleware.
 func ClientAttachmentHandler(store objectstore.ObjectStore) http.Handler {
 	return clientauth.Handler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call) {
-		messageID := r.PathValue("messageId")
-		if !staffauth.ParseUUID(w, "message", messageID) {
-			return
-		}
-		serveAttachment(w, r, c.Tx, store, c.EngagementID, messageID)
-	})
+		serveAttachment(w, r, c.Tx, store, c.EngagementID, c.ID("messageId"))
+	}, clientauth.PathID("message", "messageId"))
 }
 
 // serveAttachment looks up messageID's attachment metadata, filtered by

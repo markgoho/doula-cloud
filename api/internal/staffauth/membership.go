@@ -187,17 +187,10 @@ type UpdateMembershipResponse struct {
 // before it runs. Widening or narrowing this route means editing its
 // role list in mount.go.
 func UpdateMembershipHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		actorStaffID, _ := StaffID(r.Context())
-		targetStaffID := r.PathValue("staffId")
-		if !ParseUUID(w, "staff", targetStaffID) {
-			return
-		}
+	return Handler(func(w http.ResponseWriter, r *http.Request, c Call) {
+		tx, practiceID := c.Tx, c.PracticeID
+		actorStaffID := c.StaffID
+		targetStaffID := c.ID("staffId")
 
 		var req UpdateMembershipRequest
 		if !apierr.DecodeJSON(w, r, &req) {
@@ -289,7 +282,7 @@ func UpdateMembershipHandler() http.Handler {
 
 		updated := UpdateMembershipResponse{StaffID: targetStaffID, Roles: next.roles, EmploymentType: next.employmentType}
 		apierr.WriteJSON(w, http.StatusOK, updated)
-	})
+	}, PathID("staff", "staffId"))
 }
 
 // removesLastOwner reports whether applying nextRoles to targetStaffID's
@@ -334,20 +327,13 @@ func removesLastOwner(ctx context.Context, tx *sql.Tx, practiceID, targetStaffID
 // before it runs. Widening or narrowing this route means editing its
 // role list in mount.go.
 func RemoveMembershipHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
+	return Handler(func(w http.ResponseWriter, r *http.Request, c Call) {
+		tx, practiceID := c.Tx, c.PracticeID
 		if !RequireConfirmed(w, r) {
 			return
 		}
-		actorStaffID, _ := StaffID(r.Context())
-		targetStaffID := r.PathValue("staffId")
-		if !ParseUUID(w, "staff", targetStaffID) {
-			return
-		}
+		actorStaffID := c.StaffID
+		targetStaffID := c.ID("staffId")
 
 		var roles, employmentType string
 		err := tx.QueryRowContext(r.Context(),
@@ -412,7 +398,7 @@ func RemoveMembershipHandler() http.Handler {
 		}
 
 		w.WriteHeader(http.StatusNoContent)
-	})
+	}, PathID("staff", "staffId"))
 }
 
 // isSoleOwnerAnywhere reports whether staffID currently holds the

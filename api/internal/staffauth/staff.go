@@ -103,12 +103,8 @@ type Roster struct {
 // route's GatedRouter mount in main.go, not inside this handler. Must be
 // mounted behind staffauth.Middleware.
 func ListStaffHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := RequireTx(w, r)
-		// coverage:ignore reason: Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
+	return Handler(func(w http.ResponseWriter, r *http.Request, c Call) {
+		tx, practiceID := c.Tx, c.PracticeID
 
 		after, ok := pagecursor.FromQuery(w, r, pagecursor.Decode, "invalid cursor")
 		if !ok {

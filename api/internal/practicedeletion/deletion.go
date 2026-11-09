@@ -149,12 +149,8 @@ func hasUnsettledInvoices(ctx context.Context, tx *sql.Tx, practiceID string) (b
 // refused right now. Owner-only, the same seat as every other act here.
 // Must be mounted behind staffauth.Middleware.
 func StatusHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireOwner(w, r)
-		if !ok {
-			// coverage:ignore reason: belt-and-braces -- Mount's own OwnerOnly declaration (g.Get) already refuses a non-owner caller before this handler runs
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, practiceID := c.Tx, c.PracticeID
 
 		state, err := readDeletionState(r.Context(), tx, practiceID, false)
 		if err != nil {
@@ -180,7 +176,7 @@ func StatusHandler() http.Handler {
 			out.FinalizeAt = &t
 		}
 		apierr.WriteJSON(w, http.StatusOK, out)
-	})
+	}, staffauth.Owner())
 }
 
 // InitiateHandler starts the 30-day window: locks the Practice against
@@ -204,12 +200,8 @@ func StatusHandler() http.Handler {
 // gate before it runs. Widening or narrowing this route means editing
 // its role list in mount.go.
 func InitiateHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, practiceID, staffID := c.Tx, c.PracticeID, c.StaffID
 		if !staffauth.RequireConfirmed(w, r) {
 			return
 		}
@@ -245,7 +237,6 @@ func InitiateHandler() http.Handler {
 			return
 		}
 
-		staffID, _ := staffauth.StaffID(r.Context())
 		now := clock.Now(r.Context()).UTC()
 		finalizeAt := now.Add(RestoreWindow)
 		reminderAt := now.Add(ReminderLeadTime)
@@ -309,12 +300,8 @@ func InitiateHandler() http.Handler {
 // gate before it runs. Widening or narrowing this route means editing
 // its role list in mount.go.
 func RestoreHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, practiceID, staffID := c.Tx, c.PracticeID, c.StaffID
 
 		res, err := tx.ExecContext(r.Context(),
 			`UPDATE practices SET deletion_requested_at = NULL, deletion_requested_by = NULL, deletion_finalize_at = NULL
@@ -338,7 +325,6 @@ func RestoreHandler() http.Handler {
 			return
 		}
 
-		staffID, _ := staffauth.StaffID(r.Context())
 		if err := activity.Record(r.Context(), tx, activity.Entry{
 			PracticeID:  practiceID,
 			SubjectKind: activity.SubjectPractice,

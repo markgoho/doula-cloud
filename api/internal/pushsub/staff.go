@@ -18,20 +18,13 @@ const ownerTypeStaff = "staff"
 // as every other Staff-side endpoint. Must be mounted behind
 // staffauth.Middleware.
 func RegisterHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, _, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		staffID, _ := staffauth.StaffID(r.Context())
-
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		req, ok := decodeSubscribeRequest(w, r)
 		if !ok {
 			return
 		}
 
-		if err := upsertSubscription(r, tx, ownerTypeStaff, staffID, req); err != nil {
+		if err := upsertSubscription(r, c.Tx, ownerTypeStaff, c.StaffID, req); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -44,20 +37,13 @@ func RegisterHandler() http.Handler {
 // UnregisterHandler removes the calling Staff member's push subscription
 // for a given endpoint. Must be mounted behind staffauth.Middleware.
 func UnregisterHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, _, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		staffID, _ := staffauth.StaffID(r.Context())
-
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		endpoint, ok := requireEndpointQueryParam(w, r)
 		if !ok {
 			return
 		}
 
-		if err := deleteSubscription(r, tx, ownerTypeStaff, staffID, endpoint); err != nil {
+		if err := deleteSubscription(r, c.Tx, ownerTypeStaff, c.StaffID, endpoint); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return

@@ -33,16 +33,12 @@ import (
 // before it runs. Widening or narrowing this route means editing its
 // role list in mount.go.
 func EndSessionsHandler(enq tasknudge.Enqueuer) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
+	return Handler(func(w http.ResponseWriter, r *http.Request, c Call) {
+		tx, practiceID := c.Tx, c.PracticeID
 		if !RequireConfirmed(w, r) {
 			return
 		}
-		actorStaffID, _ := StaffID(r.Context())
+		actorStaffID := c.StaffID
 		targetStaffID := r.PathValue("staffId")
 
 		var identityUID string

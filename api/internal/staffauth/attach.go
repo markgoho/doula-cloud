@@ -52,21 +52,9 @@ import (
 // staffauth.Middleware opened, before that Middleware commits, so an
 // attachment and the write that caused it land together or not at all.
 func AttachingWrite(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, has := Tx(r.Context())
-		if !has {
-			// coverage:ignore reason: Middleware always sets a tx before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		staffID, _ := StaffID(r.Context())
+	return Handler(func(w http.ResponseWriter, r *http.Request, c Call) {
+		tx, staffID, reader := c.Tx, c.StaffID, c.Reader
 		engagementID := r.PathValue("engagementId")
-		reader, has := ReaderFrom(r.Context())
-		if !has {
-			// coverage:ignore reason: Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
 
 		// A malformed engagementId is left for the handler's own
 		// staffauth.ParseUUID to reject with its usual 400 -- querying an

@@ -140,10 +140,6 @@ type PracticeInvoicesResponse struct {
 // Must be mounted behind staffauth.Middleware.
 func GetPracticeInvoicesHandler() http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
-		if c.Reader.IsAmbientContractor() {
-			apierr.WriteError(w, staffauth.MsgContractorMoneyRefused, http.StatusForbidden)
-			return
-		}
 		tx, practiceID := c.Tx, c.PracticeID
 
 		after, ok := pagecursor.FromQuery(w, r, decodeInvoiceCursor, "invalid cursor")
@@ -190,7 +186,7 @@ func GetPracticeInvoicesHandler() http.Handler {
 			resp.NextCursor = &next
 		}
 		apierr.WriteJSON(w, http.StatusOK, resp)
-	})
+	}, staffauth.NotAmbientContractor())
 }
 
 // practiceInvoiceColumns and practiceInvoiceJoins are shared by the first-

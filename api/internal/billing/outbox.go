@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/outbox"
+	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 )
 
@@ -140,42 +141,11 @@ func (w Worker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
 }
 
 func (w Worker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r pendingRow, now time.Time) error {
-	emails, err := ownerEmails(ctx, tx, r.practiceID)
+	emails, err := staffauth.OwnerEmails(ctx, tx, r.practiceID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return err
+		return fmt.Errorf("billing: %w", err)
 	}
 	link := w.AppBaseURL + "/practices/" + r.practiceID + "/billing"
 	return wrapOutboxErr(inner.SendAll(ctx, tx, r.id, r.attemptCount, now, emails, lowCreditSubject, lowCreditText(link)))
-}
-
-// ownerEmails returns the email of every Staff member holding the owner
-// role at practiceID.
-func ownerEmails(ctx context.Context, tx *sql.Tx, practiceID string) ([]string, error) {
-	rows, err := tx.QueryContext(ctx,
-		`SELECT s.email FROM staff s
-		 JOIN practice_memberships pm ON pm.staff_id = s.id
-		 WHERE pm.practice_id = $1 AND 'owner' = ANY(pm.roles)`,
-		practiceID,
-	)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return nil, fmt.Errorf("billing: resolve owner emails: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var emails []string
-	for rows.Next() {
-		var email string
-		if err := rows.Scan(&email); err != nil {
-			// coverage:ignore reason: DB scan failure, not exercised by unit tests
-			return nil, fmt.Errorf("billing: scan owner email: %w", err)
-		}
-		emails = append(emails, email)
-	}
-	if err := rows.Err(); err != nil {
-		// coverage:ignore reason: DB row iteration failure, not exercised by unit tests
-		return nil, fmt.Errorf("billing: iterate owner emails: %w", err)
-	}
-	return emails, nil
 }

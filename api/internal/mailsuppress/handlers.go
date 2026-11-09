@@ -33,11 +33,8 @@ type listResponse struct {
 // address-keyed list matches how a suppression is actually keyed, and
 // covers the ten kinds whose failures were invisible.
 func ListHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, _ := staffauth.Tx(r.Context())
-		practiceID, _ := staffauth.PracticeID(r.Context())
-
-		items, err := List(r.Context(), tx, practiceID)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		items, err := List(r.Context(), c.Tx, c.PracticeID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -77,13 +74,8 @@ type clearRequest struct {
 // the handler no longer calls staffauth.RequireOwnerOrAdmin, because a
 // Doula is refused by the gate before this runs.
 func ClearHandler(clearer BounceClearer) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		staffID, _ := staffauth.StaffID(r.Context())
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, practiceID, staffID := c.Tx, c.PracticeID, c.StaffID
 
 		var req clearRequest
 		if !apierr.DecodeJSON(w, r, &req) {

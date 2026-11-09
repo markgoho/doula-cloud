@@ -54,14 +54,8 @@ type TemplateResponse struct {
 // gets an empty list rather than an error. Must be mounted behind
 // staffauth.Middleware.
 func GetHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-
-		fields, err := FetchFields(r.Context(), tx, practiceID)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		fields, err := FetchFields(r.Context(), c.Tx, c.PracticeID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -85,13 +79,8 @@ func GetHandler() http.Handler {
 // before this runs. Widening or narrowing this route means editing its
 // role list in mount.go.
 func PutHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		staffID, _ := staffauth.StaffID(r.Context())
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, practiceID, staffID := c.Tx, c.PracticeID, c.StaffID
 
 		var req TemplateResponse
 		if !apierr.DecodeJSON(w, r, &req) {

@@ -2,7 +2,6 @@ package staffauth
 
 import (
 	"database/sql"
-	"errors"
 	"net/http"
 
 	"doula-cloud/api/internal/apierr"
@@ -97,14 +96,8 @@ func SpendVerificationHandler(accounts authn.AccountManager, db *sql.DB) http.Ha
 		}
 		defer dbtx.Rollback(tx)
 
-		uid, err := authtoken.Spend(r.Context(), tx, req.Token, authtoken.PurposeStaffEmailVerification, clock.Now(r.Context()))
-		if errors.Is(err, authtoken.ErrInvalid) {
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeLinkUnusable, "this link is invalid or has expired -- ask for a new one", nil)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		uid, ok := authtoken.SpendOrRefuse(w, r, tx, req.Token, authtoken.PurposeStaffEmailVerification, clock.Now(r.Context()))
+		if !ok {
 			return
 		}
 

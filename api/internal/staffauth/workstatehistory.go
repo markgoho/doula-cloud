@@ -74,17 +74,10 @@ type WorkStateHistory struct {
 // row whose subject holds a Membership at the current Practice, which is
 // exactly this Practice's roster. Must be mounted behind Middleware.
 func ListWorkStateHistoryHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := RequireTx(w, r)
-		// coverage:ignore reason: Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
+	return Handler(func(w http.ResponseWriter, r *http.Request, c Call) {
+		tx, practiceID := c.Tx, c.PracticeID
 
-		staffID := r.PathValue("staffId")
-		if !ParseUUID(w, "staff", staffID) {
-			return
-		}
+		staffID := c.ID("staffId")
 
 		// The Membership read is also the existence check: RLS scopes it
 		// to the current Practice, so a staff id belonging to somebody
@@ -114,7 +107,7 @@ func ListWorkStateHistoryHandler() http.Handler {
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, resp)
-	})
+	}, PathID("staff", "staffId"))
 }
 
 // requireMembershipCreatedAt is membershipCreatedAt for a handler: a staff

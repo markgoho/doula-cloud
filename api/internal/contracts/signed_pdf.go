@@ -57,12 +57,8 @@ func SignedPDFObjectPath(engagementID, contractID string) string {
 // mounted behind staffauth.Middleware.
 func GetSignedContractPDFHandler(store objectstore.ObjectStore) http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
-		if c.Reader.IsAmbientContractor() {
-			apierr.WriteError(w, staffauth.MsgContractorMoneyRefused, http.StatusForbidden)
-			return
-		}
 		serveSignedPDF(w, r, c.Tx, store, c.EngagementID, apierr.MsgInternalError)
-	}, staffauth.Engagement())
+	}, staffauth.Engagement(), staffauth.NotAmbientContractor())
 }
 
 // ClientGetSignedContractPDFHandler mirrors GetSignedContractPDFHandler

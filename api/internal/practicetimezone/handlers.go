@@ -58,13 +58,8 @@ type timezoneDiff struct {
 //
 // Must be mounted behind staffauth.Middleware.
 func GetHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		name, err := readName(r.Context(), tx, practiceID)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		name, err := readName(r.Context(), c.Tx, c.PracticeID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -94,12 +89,8 @@ func GetHandler() http.Handler {
 //
 // Must be mounted behind staffauth.Middleware.
 func PutHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, practiceID := c.Tx, c.PracticeID
 
 		var req PutRequest
 		if !apierr.DecodeJSON(w, r, &req) {
@@ -121,7 +112,7 @@ func PutHandler() http.Handler {
 		}
 
 		if before != after {
-			if err := write(r.Context(), tx, practiceID, before, after); err != nil {
+			if err := write(r.Context(), tx, practiceID, c.StaffID, before, after); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
@@ -135,7 +126,7 @@ func PutHandler() http.Handler {
 // write persists the zone and records who changed it and when -- one
 // write path, so the row and its Activity entry can never disagree about
 // what happened.
-func write(ctx context.Context, tx *sql.Tx, practiceID, before, after string) error {
+func write(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID, before, after string) error {
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE practices SET timezone = $1 WHERE id = $2`, after, practiceID,
 	); err != nil {
@@ -149,7 +140,6 @@ func write(ctx context.Context, tx *sql.Tx, practiceID, before, after string) er
 		return fmt.Errorf("practicetimezone: marshal timezone diff: %w", err)
 	}
 
-	actorStaffID, _ := staffauth.StaffID(ctx)
 	if err := activity.Record(ctx, tx, activity.Entry{
 		PracticeID:  practiceID,
 		SubjectKind: activity.SubjectPractice,

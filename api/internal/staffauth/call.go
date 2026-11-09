@@ -76,12 +76,43 @@ func PathID(label, wildcard string) Option {
 		if !ParseUUID(w, label, id) {
 			return false
 		}
-		if c.ids == nil {
-			c.ids = map[string]string{}
-		}
-		c.ids[wildcard] = id
+		c.setID(wildcard, id)
 		return true
 	}
+}
+
+// PathValue declares the path wildcard as a value that is not a UUID, such
+// as an enum member. When validate refuses it, a 400 carrying refusal(value)
+// is written; otherwise it is exposed as Call.ID(wildcard).
+func PathValue(wildcard string, validate func(string) bool, refusal func(string) string) Option {
+	return func(w http.ResponseWriter, r *http.Request, c *Call) bool {
+		value := r.PathValue(wildcard)
+		if !validate(value) {
+			apierr.WriteError(w, refusal(value), http.StatusBadRequest)
+			return false
+		}
+		c.setID(wildcard, value)
+		return true
+	}
+}
+
+// NotAmbientContractor refuses a plain contractor Doula with the 403
+// MsgContractorMoneyRefused: ADR-0008's money row as amended by #282.
+func NotAmbientContractor() Option {
+	return func(w http.ResponseWriter, _ *http.Request, c *Call) bool {
+		if c.Reader.IsAmbientContractor() {
+			apierr.WriteError(w, MsgContractorMoneyRefused, http.StatusForbidden)
+			return false
+		}
+		return true
+	}
+}
+
+func (c *Call) setID(wildcard, id string) {
+	if c.ids == nil {
+		c.ids = map[string]string{}
+	}
+	c.ids[wildcard] = id
 }
 
 // EngagementID declares the {engagementId} wildcard as a UUID and sets
@@ -99,28 +130,27 @@ func EngagementID() Option {
 	}
 }
 
-// Engagement is EngagementID plus RequireEngagementAtPractice: a 404 when
-// the Engagement is not at the caller's Practice.
+// Engagement is EngagementID plus a 404 when the Engagement is not at the
+// caller's Practice.
 func Engagement() Option {
 	return func(w http.ResponseWriter, r *http.Request, c *Call) bool {
 		return EngagementID()(w, r, c) &&
-			RequireEngagementAtPractice(w, r, c.Tx, c.EngagementID, c.PracticeID)
+			requireEngagementAtPractice(w, r, c.Tx, c.EngagementID, c.PracticeID)
 	}
 }
 
-// EngagementReach is Engagement narrowed by ADR-0008's attachment rule,
-// as RequireEngagementReach is: a contractor Doula who is not attached
-// gets a 404 carrying notFound.
+// EngagementReach is Engagement narrowed by ADR-0008's attachment rule: a
+// contractor Doula who is not attached gets a 404 carrying notFound.
 func EngagementReach(notFound string) Option {
 	return func(w http.ResponseWriter, r *http.Request, c *Call) bool {
 		return Engagement()(w, r, c) &&
-			RequireEngagementAccess(w, r, c.Tx, c.EngagementID, notFound)
+			requireEngagementAccess(w, r, c.Tx, c.Reader, c.EngagementID, notFound)
 	}
 }
 
-// Client declares the {clientId} wildcard as a UUID and gates it as
-// RequireClientReach does: a 404 MsgClientNotFound when the caller's
-// Reader may not reach that Client. It sets Call.ClientID.
+// Client declares the {clientId} wildcard as a UUID and gates it: a 404
+// MsgClientNotFound when the caller's Reader may not reach that Client. It
+// sets Call.ClientID.
 func Client() Option {
 	return func(w http.ResponseWriter, r *http.Request, c *Call) bool {
 		id := r.PathValue("clientId")
@@ -131,6 +161,19 @@ func Client() Option {
 			return false
 		}
 		c.ClientID = id
+		return true
+	}
+}
+
+// Owner refuses anyone who does not hold the owner role with the 403
+// the mount-level OwnerOnly declaration writes, for a GET that keeps the
+// check in the handler as well as at the mount.
+func Owner() Option {
+	return func(w http.ResponseWriter, _ *http.Request, c *Call) bool {
+		if !c.Reader.Has(roleOwner) {
+			apierr.WriteError(w, msgOwnerOnlyRefused, http.StatusForbidden)
+			return false
+		}
 		return true
 	}
 }

@@ -90,7 +90,7 @@ func PutSettingsHandler() http.Handler {
 			return
 		}
 		if before := settingsOf(current.rule); before != req {
-			if err := writeSettings(r.Context(), c.Tx, c.PracticeID, before, req); err != nil {
+			if err := writeSettings(r.Context(), c.Tx, c.PracticeID, c.StaffID, before, req); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
@@ -106,7 +106,7 @@ func settingsOf(r Rule) Settings {
 
 // writeSettings persists the rule and records who changed it and when,
 // on one path so the row and its Activity entry cannot disagree.
-func writeSettings(ctx context.Context, tx *sql.Tx, practiceID string, before, after Settings) error {
+func writeSettings(ctx context.Context, tx *sql.Tx, practiceID, actor string, before, after Settings) error {
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE practices SET on_call_start_rule = $2, on_call_start_week = $3, on_call_grace_days = $4 WHERE id = $1`,
 		practiceID, string(after.StartRule), after.StartWeek, after.GraceDays,
@@ -114,7 +114,6 @@ func writeSettings(ctx context.Context, tx *sql.Tx, practiceID string, before, a
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("oncall: write practice on-call rule: %w", err)
 	}
-	actor, _ := staffauth.StaffID(ctx)
 	return record(ctx, tx, activity.SubjectPractice, practiceID, practiceID, actor,
 		actionPracticeOnCallChanged, map[string]Settings{diffBefore: before, diffAfter: after})
 }

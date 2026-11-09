@@ -103,14 +103,8 @@ func redactStaffActorNames(items []activityfeed.Entry) {
 // next person to widen this call knows it was a decision and not an
 // omission.
 func ActivityHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, ok := clientauth.Tx(r.Context())
-		if !ok {
-			// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		engagementID, _ := clientauth.EngagementID(r.Context())
+	return clientauth.Handler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call) {
+		tx, engagementID := c.Tx, c.EngagementID
 
 		practiceID, birthPlan, err := engagementPracticeID(r.Context(), tx, engagementID)
 		if err != nil {

@@ -388,47 +388,6 @@ func TestMiddleware_FailClosedWithoutSessionVar(t *testing.T) {
 	}
 }
 
-func TestRequireTx(t *testing.T) {
-	t.Run("tx present", func(t *testing.T) {
-		db := testdb.New(t)
-		rec := httptest.NewRecorder()
-		var gotTx *sql.Tx
-		var gotPracticeID string
-		var gotOK bool
-		h := staffauth.Middleware(db.App)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			gotTx, gotPracticeID, gotOK = staffauth.RequireTx(w, r)
-		}))
-
-		practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, someUID, []string{doulaRole}, employeeType)
-		testReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/practices/"+practiceID+"/ping", nil)
-		testReq.SetPathValue("practiceId", practiceID)
-		authntest.AddSessionCookie(testReq, authntest.SeedSession(t, db.App, someUID))
-		h.ServeHTTP(rec, testReq)
-
-		if !gotOK {
-			t.Fatalf("expected ok=true, got false")
-		}
-		if gotTx == nil {
-			t.Fatalf("expected non-nil tx")
-		}
-		if gotPracticeID != practiceID {
-			t.Fatalf("practiceID = %q, want %q", gotPracticeID, practiceID)
-		}
-	})
-
-	t.Run("tx missing", func(t *testing.T) {
-		rec := httptest.NewRecorder()
-		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
-		tx, practiceID, ok := staffauth.RequireTx(rec, req)
-		if ok {
-			t.Fatalf("expected ok=false, got true (tx=%v, practiceID=%q)", tx, practiceID)
-		}
-		if rec.Code != http.StatusInternalServerError {
-			t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
-		}
-	})
-}
-
 // setRequireMFA throws practiceID's switch (#606) directly via the Admin
 // connection, bypassing the PUT handler under test elsewhere. Every test
 // that needs the switch on seeds a Practice off (the migration's own

@@ -112,9 +112,8 @@ const practiceQuery = `SELECT name, ` + cardpayments.ClientsCanPayExpr + `, COAL
 // the handler already used nothing but this package's own exports
 // (Tx, PracticeID, ReaderFrom), so it belongs here rather than in main.
 func PracticeSessionHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, _ := Tx(r.Context())
-		practiceID, _ := PracticeID(r.Context())
+	return Handler(func(w http.ResponseWriter, r *http.Request, c Call) {
+		tx, practiceID, staffID, reader := c.Tx, c.PracticeID, c.StaffID, c.Reader
 
 		var name string
 		var clientsCanPay bool
@@ -131,15 +130,6 @@ func PracticeSessionHandler() http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-
-		reader, has := ReaderFrom(r.Context())
-		if !has {
-			// coverage:ignore reason: Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		staffID, _ := StaffID(r.Context())
 
 		var hasOtherDoulas bool
 		if err := tx.QueryRowContext(r.Context(), hasOtherDoulasQuery, practiceID, staffID).Scan(&hasOtherDoulas); err != nil {

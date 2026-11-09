@@ -85,17 +85,10 @@ type MembershipHistory struct {
 // this Practice again in the app layer, so a bug in either alone cannot
 // reach another Practice's rows. Must be mounted behind Middleware.
 func ListMembershipHistoryHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := RequireTx(w, r)
-		// coverage:ignore reason: Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
+	return Handler(func(w http.ResponseWriter, r *http.Request, c Call) {
+		tx, practiceID := c.Tx, c.PracticeID
 
-		staffID := r.PathValue("staffId")
-		if !ParseUUID(w, "staff", staffID) {
-			return
-		}
+		staffID := c.ID("staffId")
 
 		// The Membership read is the existence check, exactly as it is
 		// for the work state history: RLS scopes it to the current
@@ -123,7 +116,7 @@ func ListMembershipHistoryHandler() http.Handler {
 			NextCursor: page.NextCursor,
 			HasMore:    page.HasMore,
 		})
-	})
+	}, PathID("staff", "staffId"))
 }
 
 // membershipProjection is this package's own half of a subject-scoped

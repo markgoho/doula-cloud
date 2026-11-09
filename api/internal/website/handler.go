@@ -25,16 +25,8 @@ import (
 // Mounted behind staffauth.Middleware, and behind GatedRouter like every
 // other GET.
 func GetHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, ok := staffauth.Tx(r.Context())
-		if !ok {
-			// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		practiceID, _ := staffauth.PracticeID(r.Context())
-
-		resp, err := read(r.Context(), tx, practiceID)
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		resp, err := read(r.Context(), c.Tx, c.PracticeID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -60,13 +52,8 @@ func GetHandler() http.Handler {
 // PUT, not POST: one answer per Practice, replaced whole, so re-sending
 // the same body is safe and needs no Idempotency-Key.
 func PutHandler(nudge tasknudge.Enqueuer) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		if !ok {
-			return
-		}
-		staffID, _ := staffauth.StaffID(r.Context())
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		tx, practiceID, staffID := c.Tx, c.PracticeID, c.StaffID
 
 		var req Request
 		if !apierr.DecodeJSON(w, r, &req) {
