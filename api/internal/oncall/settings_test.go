@@ -9,18 +9,18 @@ import (
 )
 
 func (e *env) putSettings(s oncall.Settings) {
-	e.t.Helper()
-	reqtest.ExpectStatus(e.t, http.MethodPut, e.settingsURL(), http.StatusOK, e.asOwner, reqtest.JSON(s))
+	e.T.Helper()
+	reqtest.ExpectStatus(e.T, http.MethodPut, e.settingsURL(), http.StatusOK, e.SignedIn, reqtest.JSON(s))
 }
 
 func (e *env) settings() oncall.Settings {
-	e.t.Helper()
-	return reqtest.Expect[oncall.Settings](e.t, http.MethodGet, e.settingsURL(), http.StatusOK, e.asOwner)
+	e.T.Helper()
+	return reqtest.Expect[oncall.Settings](e.T, http.MethodGet, e.settingsURL(), http.StatusOK, e.SignedIn)
 }
 
 func (e *env) putRule(r oncall.RuleRequest, want int) {
-	e.t.Helper()
-	reqtest.ExpectStatus(e.t, http.MethodPut, e.ruleURL(), want, e.asOwner, reqtest.JSON(r))
+	e.T.Helper()
+	reqtest.ExpectStatus(e.T, http.MethodPut, e.ruleURL(), want, e.SignedIn, reqtest.JSON(r))
 }
 
 func TestSettings_AnOwnerReadsAndStatesTheRule(t *testing.T) {
@@ -45,7 +45,7 @@ func TestSettings_AnOwnerReadsAndStatesTheRule(t *testing.T) {
 func TestSettings_RefusesOutOfRangeValuesAndADoula(t *testing.T) {
 	e := newEnv(t)
 
-	got := reqtest.Expect[refusal](t, http.MethodPut, e.settingsURL(), http.StatusBadRequest, e.asOwner,
+	got := reqtest.Expect[refusal](t, http.MethodPut, e.settingsURL(), http.StatusBadRequest, e.SignedIn,
 		reqtest.JSON(oncall.Settings{StartRule: "whenever", StartWeek: 12, GraceDays: 60}))
 	for _, field := range []string{"startRule", fieldWeek, "graceDays"} {
 		if _, ok := got.Details[field]; !ok {
@@ -53,7 +53,7 @@ func TestSettings_RefusesOutOfRangeValuesAndADoula(t *testing.T) {
 		}
 	}
 
-	reqtest.ExpectStatus(t, http.MethodGet, e.settingsURL(), http.StatusForbidden, e.as(e.Doula))
+	reqtest.ExpectStatus(t, http.MethodGet, e.settingsURL(), http.StatusForbidden, e.As(e.Doula))
 }
 
 func TestEngagementRule_OverridesAndClears(t *testing.T) {
@@ -74,7 +74,7 @@ func TestEngagementRule_OverridesAndClears(t *testing.T) {
 	}
 
 	granted := oncall.StartAttachmentGranted
-	got := reqtest.Expect[refusal](t, http.MethodPut, e.ruleURL(), http.StatusBadRequest, e.asOwner,
+	got := reqtest.Expect[refusal](t, http.MethodPut, e.ruleURL(), http.StatusBadRequest, e.SignedIn,
 		reqtest.JSON(oncall.RuleRequest{StartRule: &granted, StartWeek: &week}))
 	if got.Details[fieldWeek] != oncall.MsgWeekWithoutRule {
 		t.Fatalf("details = %v, want a week refused beside the grant-date rule", got.Details)
@@ -83,7 +83,7 @@ func TestEngagementRule_OverridesAndClears(t *testing.T) {
 
 func TestEngagementRule_RefusesAPostpartumEngagement(t *testing.T) {
 	e := newEnv(t)
-	e.exec(`UPDATE engagements SET kind = 'postpartum' WHERE id = $1`, e.Birth.ID)
+	e.Exec(`UPDATE engagements SET kind = 'postpartum' WHERE id = $1`, e.Birth.ID)
 
 	granted := oncall.StartAttachmentGranted
 	e.putRule(oncall.RuleRequest{StartRule: &granted}, http.StatusConflict)

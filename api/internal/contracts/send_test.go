@@ -32,24 +32,24 @@ func (e *env) send() string {
 // requireNothingSent proves a refused Send wrote nothing: the Contract is
 // still a draft, no contract_sent activity row exists, and no push fired.
 func (e *env) requireNothingSent() {
-	e.t.Helper()
+	e.T.Helper()
 	if got := e.contract().Status; got != statusDraft {
-		e.t.Fatalf("status after refused Send = %q, want draft (unchanged)", got)
+		e.T.Fatalf("status after refused Send = %q, want draft (unchanged)", got)
 	}
 	if calls := e.pusher.Calls(); len(calls) != 0 {
-		e.t.Fatalf("Pusher.Send call count = %d, want 0 (refused before any write)", len(calls))
+		e.T.Fatalf("Pusher.Send call count = %d, want 0 (refused before any write)", len(calls))
 	}
-	activityCount := testdb.Scalar[int](e.t, e.db.Admin, `SELECT count(*) FROM activity WHERE subject_id = $1 AND action = 'contract_sent'`, e.Engagement.ID)
+	activityCount := testdb.Scalar[int](e.T, e.DB.Admin, `SELECT count(*) FROM activity WHERE subject_id = $1 AND action = 'contract_sent'`, e.Engagement.ID)
 	if activityCount != 0 {
-		e.t.Fatalf("contract_sent activity rows = %d, want 0 (refused before any write)", activityCount)
+		e.T.Fatalf("contract_sent activity rows = %d, want 0 (refused before any write)", activityCount)
 	}
 }
 
 // seedFilledDraft seeds a draft whose merge fields are all filled in, so
 // Send's completeness check passes.
 func (e *env) seedFilledDraft() {
-	e.t.Helper()
-	seedContractWithValues(e.t, e.db, e.Engagement.ID,
+	e.T.Helper()
+	seedContractWithValues(e.T, e.DB, e.Engagement.ID,
 		contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: testPriceValue})
 }
 
@@ -61,7 +61,7 @@ func TestPostSendContractHandler_RefusesAnEngagementItCannotReach(t *testing.T) 
 func TestPostSendContractHandler_NoContract(t *testing.T) {
 	e := newEnv(t)
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.send(), http.StatusNotFound, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodPost, e.send(), http.StatusNotFound, e.SignedIn)
 }
 
 // TestPostSendContractHandler_ContractorWithoutAttachmentNotFound is
@@ -71,7 +71,7 @@ func TestPostSendContractHandler_NoContract(t *testing.T) {
 func TestPostSendContractHandler_ContractorWithoutAttachmentNotFound(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Contractor()))
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.send(), http.StatusNotFound, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodPost, e.send(), http.StatusNotFound, e.SignedIn)
 }
 
 // TestPostSendContractHandler_NonDraftRejected proves Send 409s once a
@@ -82,7 +82,7 @@ func TestPostSendContractHandler_NonDraftRejected(t *testing.T) {
 			e := newEnv(t)
 			e.seedContract(status)
 
-			reqtest.ExpectStatus(t, http.MethodPost, e.send(), http.StatusConflict, e.signedIn)
+			reqtest.ExpectStatus(t, http.MethodPost, e.send(), http.StatusConflict, e.SignedIn)
 		})
 	}
 }
@@ -93,10 +93,10 @@ func TestPostSendContractHandler_NonDraftRejected(t *testing.T) {
 func TestPostSendContractHandler_RefusedInviteHoldsTheSendBack(t *testing.T) {
 	e := newEnv(t)
 	e.seedDraft()
-	testdb.SeedPendingPortalInvite(t, e.db, e.Engagement.Client.ID)
-	e.exec(`UPDATE client_portal_users SET access_refused_at = now() WHERE client_id = $1`, e.Engagement.Client.ID)
+	testdb.SeedPendingPortalInvite(t, e.DB, e.Engagement.Client.ID)
+	e.Exec(`UPDATE client_portal_users SET access_refused_at = now() WHERE client_id = $1`, e.Engagement.Client.ID)
 
-	out := apierrtest.Expect(t, http.MethodPost, e.send(), http.StatusConflict, e.signedIn)
+	out := apierrtest.Expect(t, http.MethodPost, e.send(), http.StatusConflict, e.SignedIn)
 
 	if out.Code != apierr.CodeFailedPrecondition || !strings.Contains(out.Message, "signs in through another record") {
 		t.Fatalf("refusal = %+v, want FAILED_PRECONDITION naming the other record's sign-in", out)
@@ -112,9 +112,9 @@ func TestPostSendContractHandler_RefusedInviteHoldsTheSendBack(t *testing.T) {
 func TestPostSendContractHandler_NoPortalInvite(t *testing.T) {
 	e := newEnv(t)
 	e.seedDraft()
-	testdb.SeedPushSubscription(t, e.db, "client", e.Engagement.Client.ID, "https://push.example.com/no-invite-recipient")
+	testdb.SeedPushSubscription(t, e.DB, "client", e.Engagement.Client.ID, "https://push.example.com/no-invite-recipient")
 
-	out := apierrtest.Expect(t, http.MethodPost, e.send(), http.StatusConflict, e.signedIn)
+	out := apierrtest.Expect(t, http.MethodPost, e.send(), http.StatusConflict, e.SignedIn)
 
 	if out.Code != apierr.CodeFailedPrecondition {
 		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeFailedPrecondition)
@@ -135,10 +135,10 @@ func TestPostSendContractHandler_NoPortalInvite(t *testing.T) {
 func TestPostSendContractHandler_Success(t *testing.T) {
 	e := newEnv(t)
 	e.seedFilledDraft()
-	testdb.SeedPushSubscription(t, e.db, "client", e.Engagement.Client.ID, "https://push.example.com/client-recipient")
-	testdb.SeedPendingPortalInvite(t, e.db, e.Engagement.Client.ID)
+	testdb.SeedPushSubscription(t, e.DB, "client", e.Engagement.Client.ID, "https://push.example.com/client-recipient")
+	testdb.SeedPendingPortalInvite(t, e.DB, e.Engagement.Client.ID)
 
-	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.send(), http.StatusOK, e.signedIn)
+	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.send(), http.StatusOK, e.SignedIn)
 
 	if out.Status != statusSent {
 		t.Fatalf("status = %q, want sent", out.Status)
@@ -183,7 +183,7 @@ func TestPostSendContractHandler_NoSubscriptionNoPush(t *testing.T) {
 	e := newEnv(t, withPortalLogin())
 	e.seedFilledDraft()
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.send(), http.StatusOK, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodPost, e.send(), http.StatusOK, e.SignedIn)
 
 	if calls := e.pusher.Calls(); len(calls) != 0 {
 		t.Fatalf("Pusher.Send call count = %d, want 0 (no subscription registered)", len(calls))
@@ -199,11 +199,11 @@ func TestPostSendContractHandler_NoSubscriptionNoPush(t *testing.T) {
 func TestPostSendContractHandler_PushFailureDoesNotBlockSend(t *testing.T) {
 	e := newEnv(t)
 	e.seedFilledDraft()
-	testdb.SeedPushSubscription(t, e.db, "client", e.Engagement.Client.ID, "https://push.example.com/gone")
-	testdb.SeedPendingPortalInvite(t, e.db, e.Engagement.Client.ID)
+	testdb.SeedPushSubscription(t, e.DB, "client", e.Engagement.Client.ID, "https://push.example.com/gone")
+	testdb.SeedPendingPortalInvite(t, e.DB, e.Engagement.Client.ID)
 	e.pusher.Err = errors.New("simulated push service failure")
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.send(), http.StatusOK, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodPost, e.send(), http.StatusOK, e.SignedIn)
 
 	if calls := e.pusher.Calls(); len(calls) != 1 {
 		t.Fatalf("Pusher.Send call count = %d, want 1 (still attempted): %+v", len(calls), calls)
@@ -221,9 +221,9 @@ func TestPostSendContractHandler_PushFailureDoesNotBlockSend(t *testing.T) {
 func TestPostSendContractHandler_BlankMergeFieldRejected(t *testing.T) {
 	e := newEnv(t)
 	e.seedDraft()
-	testdb.SeedPendingPortalInvite(t, e.db, e.Engagement.Client.ID)
+	testdb.SeedPendingPortalInvite(t, e.DB, e.Engagement.Client.ID)
 
-	out := apierrtest.Expect(t, http.MethodPost, e.send(), http.StatusConflict, e.signedIn)
+	out := apierrtest.Expect(t, http.MethodPost, e.send(), http.StatusConflict, e.SignedIn)
 
 	if out.Code != apierr.CodeFailedPrecondition {
 		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeFailedPrecondition)
@@ -247,10 +247,10 @@ func TestPostSendContractHandler_BlankMergeFieldRejected(t *testing.T) {
 // "filled" side of this proof rather than a candidate for it.
 func TestPostSendContractHandler_WhitespaceOnlyMergeFieldRejected(t *testing.T) {
 	e := newEnv(t)
-	seedContractWithValues(t, e.db, e.Engagement.ID, contracts.MergeFieldValues{clientNameKey: "   "})
-	testdb.SeedPendingPortalInvite(t, e.db, e.Engagement.Client.ID)
+	seedContractWithValues(t, e.DB, e.Engagement.ID, contracts.MergeFieldValues{clientNameKey: "   "})
+	testdb.SeedPendingPortalInvite(t, e.DB, e.Engagement.Client.ID)
 
-	out := apierrtest.Expect(t, http.MethodPost, e.send(), http.StatusConflict, e.signedIn)
+	out := apierrtest.Expect(t, http.MethodPost, e.send(), http.StatusConflict, e.SignedIn)
 
 	if _, ok := out.Details[clientNameKey]; !ok {
 		t.Fatalf("details = %+v, want an entry for %q", out.Details, clientNameKey)

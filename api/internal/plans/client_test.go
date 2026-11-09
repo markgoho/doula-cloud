@@ -62,7 +62,7 @@ func TestClientBirthPlanRoutes_RefuseABirthPlanThatIsNotOffered(t *testing.T) {
 				e := newEnv(t, append(c.opts, withPortalLogin())...)
 				c.seed(e)
 
-				reqtest.ExpectStatus(t, route.method, e.portalURL(route.path), http.StatusNotFound, e.asClient)
+				reqtest.ExpectStatus(t, route.method, e.portalURL(route.path), http.StatusNotFound, e.AsClient)
 			})
 		}
 	}
@@ -75,10 +75,10 @@ func TestClientBirthPlanRoutes_OtherClientsEngagementRejected(t *testing.T) {
 	for _, route := range portalRoutes {
 		t.Run(route.name, func(t *testing.T) {
 			e := newEnv(t, withPortalLogin())
-			other := e.anotherEngagement()
-			seedInstance(t, e.db, other.ID, birthPlanType, locationNoOptions, `{}`)
+			other := e.AnotherEngagement()
+			seedInstance(t, e.DB, other.ID, birthPlanType, locationNoOptions, `{}`)
 
-			reqtest.ExpectStatus(t, route.method, e.portalURLOf(other.ID, route.path), http.StatusForbidden, e.asClient)
+			reqtest.ExpectStatus(t, route.method, e.portalURLOf(other.ID, route.path), http.StatusForbidden, e.AsClient)
 		})
 	}
 }
@@ -90,7 +90,7 @@ func TestClientAcknowledgeBirthPlanHandler_Success(t *testing.T) {
 	e := newEnv(t, withPortalLogin())
 	e.seedBirthPlan()
 
-	out := reqtest.Expect[plans.InstanceResponse](t, http.MethodPost, e.portalURL("/acknowledge"), http.StatusOK, e.asClient)
+	out := reqtest.Expect[plans.InstanceResponse](t, http.MethodPost, e.portalURL("/acknowledge"), http.StatusOK, e.AsClient)
 	if out.ClientAcknowledgedAt == nil {
 		t.Fatalf("clientAcknowledgedAt = nil, want it set by the acknowledge write")
 	}
@@ -100,7 +100,7 @@ func TestClientAcknowledgeBirthPlanHandler_Success(t *testing.T) {
 	}
 
 	var action, actorKind, actorClientID string
-	if err := e.db.Admin.QueryRowContext(t.Context(),
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
 		`SELECT action, actor_kind::text, actor_client_id FROM activity
 		 WHERE subject_kind = 'engagement' AND subject_id = $1 ORDER BY created_at DESC LIMIT 1`,
 		e.Engagement.ID,

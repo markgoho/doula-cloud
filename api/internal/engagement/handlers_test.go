@@ -30,7 +30,7 @@ func TestDetailHandler_Success(t *testing.T) {
 // is on file.
 func TestDetailHandler_ClientDisplayName(t *testing.T) {
 	e := newEnv(t, withEngagement(fixture.NewClient(fixture.ClientName("Amara"))))
-	e.exec(`UPDATE clients SET family_name = 'Okafor', preferred_name = 'Ama' WHERE id = $1`, e.Engagement.Client.ID)
+	e.Exec(`UPDATE clients SET family_name = 'Okafor', preferred_name = 'Ama' WHERE id = $1`, e.Engagement.Client.ID)
 
 	d := e.detail()
 
@@ -73,7 +73,7 @@ func TestDetailHandler_Kind(t *testing.T) {
 func TestDetailHandler_NullDueDate(t *testing.T) {
 	e := newEnv(t)
 
-	raw := reqtest.Expect[map[string]jsontext.Value](t, http.MethodGet, e.engagementURL(""), http.StatusOK, e.signedIn)
+	raw := reqtest.Expect[map[string]jsontext.Value](t, http.MethodGet, e.engagementURL(""), http.StatusOK, e.SignedIn)
 
 	if _, present := raw["dueDate"]; present {
 		t.Fatalf("dueDate key present in response, want omitted: %v", raw["dueDate"])
@@ -82,15 +82,15 @@ func TestDetailHandler_NullDueDate(t *testing.T) {
 
 func TestDetailHandler_NotFoundAtWrongPractice(t *testing.T) {
 	e := newEnv(t)
-	elsewhere := fixture.Engagement(t, e.db, fixture.Practice(t, e.db))
+	elsewhere := fixture.Engagement(t, e.DB, fixture.Practice(t, e.DB))
 
-	reqtest.ExpectStatus(t, http.MethodGet, e.srv.URL+"/api/practices/"+e.Practice.ID+"/engagements/"+elsewhere.ID, http.StatusNotFound, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodGet, e.Srv.URL+"/api/practices/"+e.Practice.ID+"/engagements/"+elsewhere.ID, http.StatusNotFound, e.SignedIn)
 }
 
 func TestDetailHandler_InvalidEngagementID(t *testing.T) {
 	e := newEnv(t)
 
-	reqtest.ExpectStatus(t, http.MethodGet, e.srv.URL+"/api/practices/"+e.Practice.ID+"/engagements/not-a-uuid", http.StatusBadRequest, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodGet, e.Srv.URL+"/api/practices/"+e.Practice.ID+"/engagements/not-a-uuid", http.StatusBadRequest, e.SignedIn)
 }
 
 // TestDetailHandler_ContractorWithoutAttachmentForbidden proves the
@@ -100,14 +100,14 @@ func TestDetailHandler_InvalidEngagementID(t *testing.T) {
 func TestDetailHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Contractor()))
 
-	reqtest.ExpectStatus(t, http.MethodGet, e.engagementURL(""), http.StatusNotFound, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodGet, e.engagementURL(""), http.StatusNotFound, e.SignedIn)
 }
 
 // TestDetailHandler_ContractorWithGrantedAttachmentSucceeds proves the
 // other half: an open, granted attachment reaches.
 func TestDetailHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Contractor()))
-	testdb.SeedGrantedAttachment(t, e.db, e.Engagement.ID, e.Staff.ID)
+	testdb.SeedGrantedAttachment(t, e.DB, e.Engagement.ID, e.Staff.ID)
 
 	d := e.detail()
 
@@ -155,18 +155,18 @@ func TestDetailHandler_ClientPortalState(t *testing.T) {
 	e := newEnv(t)
 	active := fixture.Status(fixture.StatusActive)
 	engagementFor := func(c fixture.ClientRecord) string {
-		return fixture.Engagement(t, e.db, e.Practice, fixture.ForClient(c), active).ID
+		return fixture.Engagement(t, e.DB, e.Practice, fixture.ForClient(c), active).ID
 	}
 	detailOf := func(engagementID string) engagement.Detail {
 		return reqtest.Expect[engagement.Detail](t, http.MethodGet,
-			e.srv.URL+"/api/practices/"+e.Practice.ID+"/engagements/"+engagementID, http.StatusOK, e.signedIn)
+			e.Srv.URL+"/api/practices/"+e.Practice.ID+"/engagements/"+engagementID, http.StatusOK, e.SignedIn)
 	}
 
-	neverInvited := engagementFor(fixture.Client(t, e.db, e.Practice))
-	pending := fixture.Client(t, e.db, e.Practice)
-	testdb.SeedPendingPortalInvite(t, e.db, pending.ID)
-	accepted := fixture.Client(t, e.db, e.Practice, fixture.WithPortalLogin())
-	noEmail := fixture.Client(t, e.db, e.Practice, fixture.NoEmail())
+	neverInvited := engagementFor(fixture.Client(t, e.DB, e.Practice))
+	pending := fixture.Client(t, e.DB, e.Practice)
+	testdb.SeedPendingPortalInvite(t, e.DB, pending.ID)
+	accepted := fixture.Client(t, e.DB, e.Practice, fixture.WithPortalLogin())
+	noEmail := fixture.Client(t, e.DB, e.Practice, fixture.NoEmail())
 
 	if d := detailOf(neverInvited); d.ClientPortalInviteStatus != nil || !d.ClientHasEmail {
 		t.Fatalf("never-invited detail = %+v, want nil status and hasEmail true", d)
@@ -195,7 +195,7 @@ func TestDetailHandler_ClientsCanPay(t *testing.T) {
 		t.Fatal("clientsCanPay = true before Stripe Connect is active, want false")
 	}
 
-	testdb.SeedClientsCanPay(t, e.db, e.Practice.ID)
+	testdb.SeedClientsCanPay(t, e.DB, e.Practice.ID)
 
 	if !e.detail().ClientsCanPay {
 		t.Fatal("clientsCanPay = false once card_payments is active, want true")

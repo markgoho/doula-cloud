@@ -7,20 +7,13 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
 func newMFARequiredServer(t *testing.T, db *testdb.DB, accounts *authntest.FakeAccountManager) (srv *httptest.Server, seedSession func(uid string) string) {
 	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, accounts, tasknudge.NoOpEnqueuer{}, neverSuppressed)
-	return httptest.NewServer(mux), func(uid string) string { return authntest.SeedSession(t, db.App, uid) }
+	return serveStaffauth(db, authntest.Verifier{}, accounts), func(uid string) string { return authntest.SeedSession(t, db.App, uid) }
 }
 
 func putMFARequired(t *testing.T, srv *httptest.Server, session, practiceID string, required bool, confirmed bool) *http.Response {
@@ -141,9 +134,7 @@ func TestPutMFARequiredHandler_MalformedBody(t *testing.T) {
 	srv, seedSession := newMFARequiredServer(t, db, authntest.NewFakeAccountManager())
 	defer srv.Close()
 
-	resp := reqtest.Put(t, srv.URL+"/api/practices/"+practiceID+"/mfa-required", reqtest.Body("application/json", []byte("not json")), reqtest.Session(seedSession(ownerUID)), reqtest.Header("X-Confirmed", "true"))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+	reqtest.ExpectStatus(t, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/mfa-required", http.StatusBadRequest, reqtest.Body("application/json", []byte("not json")), reqtest.Session(seedSession(ownerUID)), reqtest.Header("X-Confirmed", "true"))
 }
 
 func TestGetMFAImpactHandler_DoulaForbidden(t *testing.T) {
@@ -154,9 +145,7 @@ func TestGetMFAImpactHandler_DoulaForbidden(t *testing.T) {
 	srv, seedSession := newMFARequiredServer(t, db, authntest.NewFakeAccountManager())
 	defer srv.Close()
 
-	resp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/mfa-required/impact", reqtest.Session(seedSession(doulaUID)))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
+	reqtest.ExpectStatus(t, http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/mfa-required/impact", http.StatusForbidden, reqtest.Session(seedSession(doulaUID)))
 }
 
 // TestGetMFAImpactHandler_CountsEveryoneWithoutAFactor proves the count

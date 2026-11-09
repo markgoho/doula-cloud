@@ -1,6 +1,7 @@
 package staffauth_test
 
 import (
+	"database/sql"
 	"encoding/json/v2"
 	"errors"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
@@ -73,10 +75,19 @@ func sessionCookie(resp *http.Response) *http.Cookie {
 }
 
 func newSignupServer(verifier authntest.Verifier, db *testdb.DB) *httptest.Server {
+	return newSignupServerWith(verifier, db)
+}
+
+// newSignupServerWith mounts other packages' routes beside this one's, for
+// a test whose subject is how the two agree.
+func newSignupServerWith(verifier authntest.Verifier, db *testdb.DB, others ...func(*staffauth.GatedRouter, *idempotency.Router, *sql.DB)) *httptest.Server {
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
 	staffauth.Mount(g, ir, db.App, verifier, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{}, neverSuppressed)
+	for _, mount := range others {
+		mount(g, ir, db.App)
+	}
 	return httptest.NewServer(mux)
 }
 
@@ -101,31 +112,80 @@ func postSignup(t *testing.T, srv *httptest.Server, token string, body any) *htt
 	return resp
 }
 
-func TestSignupHandler_MissingToken(t *testing.T) {
-	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{}, db)
-	defer srv.Close()
-
-	resp := postSignup(t, srv, "", staffauth.SignupRequest{WorkState: "NY", PracticeName: "P", FirstName: "S", LastName: placeholderLastName})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
-	if c := sessionCookie(resp); c != nil {
-		t.Fatalf("cookie set on missing token: %+v", c)
-	}
+// signupEnv is what a signup test starts from: a database and a server
+// mounting this package's whole surface for a Verifier that vouches for
+// one identity. Nobody is signed in and no Practice exists yet -- signup
+// is what makes both -- so it takes the Bearer ID token every bootstrap
+// endpoint still reads, not a Scene's session.
+type signupEnv struct {
+	T   *testing.T
+	DB  *testdb.DB
+	Srv *httptest.Server
 }
 
-func TestSignupHandler_TokenVerificationFailure(t *testing.T) {
+func newSignupEnv(t *testing.T, verifier authntest.Verifier) *signupEnv {
+	t.Helper()
 	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{Err: errBadToken}, db)
-	defer srv.Close()
+	srv := newSignupServer(verifier, db)
+	t.Cleanup(srv.Close)
+	return &signupEnv{T: t, DB: db, Srv: srv}
+}
 
-	resp := postSignup(t, srv, "bad-token", staffauth.SignupRequest{WorkState: "NY", PracticeName: "P", FirstName: "S", LastName: placeholderLastName})
-	defer resp.Body.Close()
+// post signs up with token and leaves the response to the caller, for a
+// test that reads its cookie or headers.
+func (e *signupEnv) post(token string, body any) *http.Response {
+	e.T.Helper()
+	return postSignup(e.T, e.Srv, token, body)
+}
 
-	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
-	if c := sessionCookie(resp); c != nil {
-		t.Fatalf("cookie set on invalid token: %+v", c)
+// signUp founds a Practice and requires the 201.
+func (e *signupEnv) signUp(body staffauth.SignupRequest) staffauth.SignupResponse {
+	e.T.Helper()
+	resp := e.post("tok", body)
+	defer func() { _ = resp.Body.Close() }()
+	reqtest.RequireStatus(e.T, resp, http.StatusCreated)
+	return reqtest.Decode[staffauth.SignupResponse](e.T, resp)
+}
+
+// refused signs up and requires want, returning the refusal's envelope.
+func (e *signupEnv) refused(body any, want int) apierr.APIError {
+	e.T.Helper()
+	resp := e.post("tok", body)
+	defer func() { _ = resp.Body.Close() }()
+	reqtest.RequireStatus(e.T, resp, want)
+	return apierrtest.Decode(e.T, resp)
+}
+
+// founder is a signup body that is about something other than the person:
+// the Practice's name is the only thing that varies.
+func founder(practiceName string) staffauth.SignupRequest {
+	return staffauth.SignupRequest{WorkState: "NY", PracticeName: practiceName, FirstName: jamieName, LastName: ownerLastName}
+}
+
+// TestSignupHandler_RefusesTheToken covers a request with no Bearer token
+// and one whose token Identity Platform rejects: either way a 401 and no
+// session cookie.
+func TestSignupHandler_RefusesTheToken(t *testing.T) {
+	cases := []struct {
+		name     string
+		verifier authntest.Verifier
+		token    string
+	}{
+		{"no token", authntest.Verifier{}, ""},
+		{"a token that does not verify", authntest.Verifier{Err: errBadToken}, "bad-token"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newSignupEnv(t, tc.verifier)
+
+			resp := e.post(tc.token, staffauth.SignupRequest{WorkState: "NY", PracticeName: "P", FirstName: "S", LastName: placeholderLastName})
+			defer resp.Body.Close()
+
+			reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
+			if c := sessionCookie(resp); c != nil {
+				t.Fatalf("cookie set on a refused token: %+v", c)
+			}
+		})
 	}
 }
 
@@ -134,33 +194,53 @@ func TestSignupHandler_TokenVerificationFailure(t *testing.T) {
 const newOwnerUID = "new-owner"
 
 func TestSignupHandler_InvalidBody(t *testing.T) {
-	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: "bad-body-uid"}, db)
-	defer srv.Close()
+	e := newSignupEnv(t, authntest.Verifier{UID: "bad-body-uid"})
 
-	resp := reqtest.Post(t, srv.URL+"/api/staff/signup", reqtest.RawJSON([]byte("not json")), reqtest.Header("Authorization", "Bearer tok"))
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+	reqtest.ExpectStatus(t, http.MethodPost, e.Srv.URL+"/api/staff/signup", http.StatusBadRequest, reqtest.RawJSON([]byte("not json")), reqtest.Header("Authorization", "Bearer tok"))
 }
 
-func TestSignupHandler_MissingFields(t *testing.T) {
-	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: newOwnerUID}, db)
-	defer srv.Close()
-
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY", PracticeName: "P", FirstName: "", LastName: placeholderLastName})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-	// #488: the refusal names the field at fault, keyed by the DTO's own
-	// json tag, and names only that one -- the last name was sent.
-	details := decodeDetails(t, resp)
-	if details["firstName"] != staffauth.MsgFirstNameNeeded {
-		t.Fatalf("details = %v, want firstName entry", details)
+// TestSignupHandler_RefusesAnIncompleteForm covers the fields the signup
+// screen asks for. #488: the refusal names the field at fault, keyed by
+// the DTO's own json tag, and names only the ones at fault -- the two
+// names are asked for on one screen and can be missing together, so
+// answering only the first would send her back twice. An empty Practice
+// name is no refusal (#1536): it takes her name. The work state's Details
+// sentence differs from the Message beside it: the message names the JSON
+// field and the format for a caller reading the API, the detail is for
+// the person looking at the control.
+func TestSignupHandler_RefusesAnIncompleteForm(t *testing.T) {
+	cases := []struct {
+		name    string
+		body    staffauth.SignupRequest
+		present map[string]string
+		absent  []string
+	}{
+		{"no first name",
+			staffauth.SignupRequest{WorkState: "NY", PracticeName: "P", FirstName: "", LastName: placeholderLastName},
+			map[string]string{firstNameKey: staffauth.MsgFirstNameNeeded}, []string{lastNameKey}},
+		{"neither name",
+			staffauth.SignupRequest{WorkState: "NY"},
+			map[string]string{firstNameKey: staffauth.MsgFirstNameNeeded, lastNameKey: staffauth.MsgLastNameNeeded}, []string{"practiceName"}},
+		{"a work state that is not one",
+			staffauth.SignupRequest{PracticeName: "P", FirstName: "S", LastName: placeholderLastName, WorkState: "ZZ"},
+			map[string]string{workStateKey: staffauth.MsgWorkStateNeeded}, nil},
 	}
-	if _, ok := details["lastName"]; ok {
-		t.Fatalf("details = %v, want no lastName entry", details)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newSignupEnv(t, authntest.Verifier{UID: newOwnerUID})
+
+			details := e.refused(tc.body, http.StatusBadRequest).Details
+			for field, want := range tc.present {
+				if details[field] != want {
+					t.Fatalf("details = %v, want %s entry %q", details, field, want)
+				}
+			}
+			for _, field := range tc.absent {
+				if _, ok := details[field]; ok {
+					t.Fatalf("details = %v, want no %s entry", details, field)
+				}
+			}
+		})
 	}
 }
 
@@ -176,21 +256,19 @@ func TestSignupHandler_EmptyPracticeNameTakesHerName(t *testing.T) {
 		"empty":       staffauth.SignupRequest{WorkState: "NY", PracticeName: "", FirstName: " " + maryAnne + " ", LastName: smith},
 		"white space": staffauth.SignupRequest{WorkState: "NY", PracticeName: "   ", FirstName: maryAnne, LastName: smith},
 		"no key": map[string]string{
-			"firstName": maryAnne, "lastName": smith, "workState": "NY", "timezone": signupZone,
+			firstNameKey: maryAnne, lastNameKey: smith, workStateKey: "NY", "timezone": signupZone,
 		},
 	}
 	for label, body := range bodies {
 		t.Run(label, func(t *testing.T) {
-			db := testdb.New(t)
-			srv := newSignupServer(authntest.Verifier{UID: newOwnerUID, Email: jamieEmail}, db)
-			defer srv.Close()
+			e := newSignupEnv(t, authntest.Verifier{UID: newOwnerUID, Email: jamieEmail})
 
-			resp := postSignup(t, srv, "tok", body)
+			resp := e.post("tok", body)
 			defer resp.Body.Close()
 
 			reqtest.RequireStatus(t, resp, http.StatusCreated)
 			out := reqtest.Decode[staffauth.SignupResponse](t, resp)
-			if got, want := storedPracticeName(t, db, out.PracticeID), maryAnne+" "+smith; got != want {
+			if got, want := storedPracticeName(t, e.DB, out.PracticeID), maryAnne+" "+smith; got != want {
 				t.Fatalf("practices.name = %q, want her own name %q", got, want)
 			}
 		})
@@ -205,65 +283,19 @@ func storedPracticeName(t *testing.T, db *testdb.DB, practiceID string) string {
 	return stored
 }
 
-// TestSignupHandler_MissingBothNames is the other half of the same
-// refusal: the two names are asked for on one screen and can be missing
-// together, so answering only the first would send her back twice.
-func TestSignupHandler_MissingBothNames(t *testing.T) {
-	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: newOwnerUID}, db)
-	defer srv.Close()
-
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY"})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-	details := decodeDetails(t, resp)
-	if details["firstName"] != staffauth.MsgFirstNameNeeded || details["lastName"] != staffauth.MsgLastNameNeeded {
-		t.Fatalf("details = %v, want both name entries", details)
-	}
-	// An empty Practice name is no refusal (#1536): it takes her name.
-	if _, ok := details["practiceName"]; ok {
-		t.Fatalf("details = %v, want no practiceName entry", details)
-	}
-}
-
-// TestSignupHandler_MissingWorkState is the third field the same screen
-// asks for, and the one whose Details sentence differs from the Message
-// beside it: the message names the JSON field and the format for a caller
-// reading the API, the detail is for the person looking at the control.
-func TestSignupHandler_MissingWorkState(t *testing.T) {
-	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: newOwnerUID}, db)
-	defer srv.Close()
-
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{PracticeName: "P", FirstName: "S", LastName: placeholderLastName, WorkState: "ZZ"})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-	if details := decodeDetails(t, resp); details["workState"] != staffauth.MsgWorkStateNeeded {
-		t.Fatalf("details = %v, want workState entry", details)
-	}
-}
-
 // TestSignupHandler_ZoneIsStatedNotInherited is #1166's own criterion at
 // the signup end: a Practice's zone comes off the body the founder sent,
 // not off a column default, and the row proves it by holding a zone
 // nobody would have picked for her.
 func TestSignupHandler_ZoneIsStatedNotInherited(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "signup-states-a-zone"
-	srv := newSignupServer(authntest.Verifier{UID: uid, Email: "denver@example.com"}, db)
-	defer srv.Close()
+	e := newSignupEnv(t, authntest.Verifier{UID: "signup-states-a-zone", Email: "denver@example.com"})
 
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
+	out := e.signUp(staffauth.SignupRequest{
 		PracticeName: "Mile High Doulas", FirstName: "Robin", LastName: placeholderLastName, WorkState: "CO",
 		Timezone: "America/Denver",
 	})
-	defer resp.Body.Close()
 
-	reqtest.RequireStatus(t, resp, http.StatusCreated)
-	out := reqtest.Decode[staffauth.SignupResponse](t, resp)
-	stored := testdb.Scalar[string](t, db.Admin, `SELECT timezone FROM practices WHERE id = $1`, out.PracticeID)
+	stored := testdb.Scalar[string](t, e.DB.Admin, `SELECT timezone FROM practices WHERE id = $1`, out.PracticeID)
 	if stored != "America/Denver" {
 		t.Fatalf("stored zone = %q, want the one she stated", stored)
 	}
@@ -277,18 +309,12 @@ func TestSignupHandler_ZoneIsStatedNotInherited(t *testing.T) {
 func TestSignupHandler_RefusesAZoneTheDatabaseDoesNotName(t *testing.T) {
 	for _, zone := range []string{"Nowhere/Atlantis", ""} {
 		t.Run("zone "+zone, func(t *testing.T) {
-			db := testdb.New(t)
-			srv := newSignupServer(authntest.Verifier{UID: newOwnerUID, Email: jamieEmail}, db)
-			defer srv.Close()
+			e := newSignupEnv(t, authntest.Verifier{UID: newOwnerUID, Email: jamieEmail})
 
-			resp := postSignup(t, srv, "tok", map[string]string{
-				"practiceName": "P", "firstName": "S", "lastName": "Last", "workState": "NY", "timezone": zone,
-			})
-			defer resp.Body.Close()
+			details := e.refused(map[string]string{
+				"practiceName": "P", firstNameKey: "S", lastNameKey: "Last", workStateKey: "NY", "timezone": zone,
+			}, http.StatusBadRequest).Details
 
-			if resp.StatusCode != http.StatusBadRequest {
-				t.Fatalf("status = %d, want %d for zone %q", resp.StatusCode, http.StatusBadRequest, zone)
-			}
 			// Two sentences for two different mistakes: nothing chosen
 			// reads "choose one", and a name the database does not carry
 			// says what is wrong with the name -- "choose one" beside an
@@ -298,7 +324,7 @@ func TestSignupHandler_RefusesAZoneTheDatabaseDoesNotName(t *testing.T) {
 			if zone != "" {
 				want = ianazone.MsgNotRecognized
 			}
-			if details := decodeDetails(t, resp); details["timezone"] != want {
+			if details["timezone"] != want {
 				t.Fatalf("details = %v, want %q for zone %q", details, want, zone)
 			}
 		})
@@ -313,14 +339,9 @@ func decodeDetails(t *testing.T, resp *http.Response) map[string]string {
 }
 
 func TestSignupHandler_Success(t *testing.T) {
-	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: "new-owner", Email: jamieEmail}, db)
-	defer srv.Close()
+	e := newSignupEnv(t, authntest.Verifier{UID: "new-owner", Email: jamieEmail})
 
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY",
-		PracticeName: "Solo Doula Co",
-		FirstName:    jamieName, LastName: ownerLastName,
-	})
+	resp := e.post("tok", founder("Solo Doula Co"))
 	defer resp.Body.Close()
 
 	reqtest.RequireStatus(t, resp, http.StatusCreated)
@@ -330,7 +351,7 @@ func TestSignupHandler_Success(t *testing.T) {
 		t.Fatalf("expected non-empty ids, got %+v", out)
 	}
 
-	roleCount := testdb.Scalar[int](t, db.Admin, `SELECT array_length(roles, 1) FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`, out.PracticeID, out.StaffID)
+	roleCount := testdb.Scalar[int](t, e.DB.Admin, `SELECT array_length(roles, 1) FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`, out.PracticeID, out.StaffID)
 	if roleCount != 3 {
 		t.Fatalf("expected 3 roles (owner, admin, doula), got %d", roleCount)
 	}
@@ -356,18 +377,13 @@ func TestSignupHandler_Success(t *testing.T) {
 // the last thing the handler does before committing, which is what
 // makes that ordering hold.
 func TestSignupHandler_SessionStoreFailure(t *testing.T) {
-	db := testdb.New(t)
 	const practiceName = "Mint Fail Practice"
-	srv := newSignupServer(authntest.Verifier{UID: "mint-fail-owner", Email: jamieEmail}, db)
-	defer srv.Close()
-	if _, err := db.Admin.ExecContext(t.Context(), `DROP TABLE sessions`); err != nil {
+	e := newSignupEnv(t, authntest.Verifier{UID: "mint-fail-owner", Email: jamieEmail})
+	if _, err := e.DB.Admin.ExecContext(t.Context(), `DROP TABLE sessions`); err != nil {
 		t.Fatalf("drop sessions: %v", err)
 	}
 
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY",
-		PracticeName: practiceName,
-		FirstName:    jamieName, LastName: ownerLastName,
-	})
+	resp := e.post("tok", founder(practiceName))
 	defer resp.Body.Close()
 
 	reqtest.RequireStatus(t, resp, http.StatusInternalServerError)
@@ -375,50 +391,30 @@ func TestSignupHandler_SessionStoreFailure(t *testing.T) {
 		t.Fatalf("cookie set on session store failure: %+v", c)
 	}
 
-	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM practices WHERE name = $1`, practiceName)
+	count := testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM practices WHERE name = $1`, practiceName)
 	if count != 0 {
 		t.Fatalf("expected no Practice committed after mint failure, found %d", count)
 	}
 }
 
 func TestSignupHandler_DuplicateSignup(t *testing.T) {
-	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: "repeat-owner", Email: jamieEmail}, db)
-	defer srv.Close()
+	e := newSignupEnv(t, authntest.Verifier{UID: "repeat-owner", Email: jamieEmail})
 
-	body := staffauth.SignupRequest{WorkState: "NY", PracticeName: "First Practice", FirstName: jamieName, LastName: ownerLastName}
-	first := postSignup(t, srv, "tok", body)
-	_ = first.Body.Close()
-	if first.StatusCode != http.StatusCreated {
-		t.Fatalf("first signup status = %d, want %d", first.StatusCode, http.StatusCreated)
-	}
+	e.signUp(founder("First Practice"))
 
-	second := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY", PracticeName: "Second Practice", FirstName: jamieName, LastName: ownerLastName})
-	defer second.Body.Close()
-	if second.StatusCode != http.StatusConflict {
-		t.Fatalf("second signup status = %d, want %d", second.StatusCode, http.StatusConflict)
-	}
+	e.refused(founder("Second Practice"), http.StatusConflict)
 }
 
 // TestSignupHandler_GrantsSignupBonus proves signup inserts exactly one
 // +3 signup_bonus credit_ledger row for the new Practice, in the same
 // transaction as the Practice/Staff/membership rows.
 func TestSignupHandler_GrantsSignupBonus(t *testing.T) {
-	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: "bonus-owner", Email: jamieEmail}, db)
-	defer srv.Close()
-
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY",
-		PracticeName: "Bonus Practice",
-		FirstName:    jamieName, LastName: ownerLastName,
-	})
-	defer resp.Body.Close()
-
-	out := reqtest.Decode[staffauth.SignupResponse](t, resp)
+	e := newSignupEnv(t, authntest.Verifier{UID: "bonus-owner", Email: jamieEmail})
+	out := e.signUp(founder("Bonus Practice"))
 
 	var origin string
 	var quantity, rowCount int
-	if err := db.Admin.QueryRowContext(t.Context(),
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
 		`SELECT origin::text, quantity, count(*) OVER () FROM credit_ledger WHERE practice_id = $1`,
 		out.PracticeID,
 	).Scan(&origin, &quantity, &rowCount); err != nil {
@@ -436,22 +432,24 @@ func TestSignupHandler_GrantsSignupBonus(t *testing.T) {
 // plan_templates row per plan type (care_plan, birth_plan) in the same
 // transaction as the Practice/Staff/membership rows.
 func TestSignupHandler_SeedsDefaultPlanTemplates(t *testing.T) {
-	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: "seed-owner", Email: jamieEmail}, db)
-	defer srv.Close()
+	e := newSignupEnv(t, authntest.Verifier{UID: "seed-owner", Email: jamieEmail})
+	out := e.signUp(founder("Seeded Practice"))
 
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY",
-		PracticeName: "Seeded Practice",
-		FirstName:    jamieName, LastName: ownerLastName,
-	})
-	defer resp.Body.Close()
-
-	out := reqtest.Decode[staffauth.SignupResponse](t, resp)
-
-	planTypes := testdb.Column[string](t, db.Admin, `SELECT plan_type::text FROM plan_templates WHERE practice_id = $1 ORDER BY plan_type`, out.PracticeID)
+	planTypes := testdb.Column[string](t, e.DB.Admin, `SELECT plan_type::text FROM plan_templates WHERE practice_id = $1 ORDER BY plan_type`, out.PracticeID)
 	if len(planTypes) != 2 || planTypes[0] != birthPlanType || planTypes[1] != carePlanType {
 		t.Fatalf("seeded plan_types = %v, want [birth_plan care_plan]", planTypes)
 	}
+}
+
+// seededPlanFields reads the field list signup seeded for planType.
+func seededPlanFields[T any](t *testing.T, e *signupEnv, practiceID, planType string) []T {
+	t.Helper()
+	raw := testdb.Scalar[[]byte](t, e.DB.Admin, `SELECT fields FROM plan_templates WHERE practice_id = $1 AND plan_type = $2`, practiceID, planType)
+	var fields []T
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		t.Fatalf("decode %s fields: %v", planType, err)
+	}
+	return fields
 }
 
 // TestSignupHandler_SeededPlansShowNoGroupOverSeven proves each seeded
@@ -461,33 +459,20 @@ func TestSignupHandler_SeedsDefaultPlanTemplates(t *testing.T) {
 // question one decision per box, and the form's Save and Cancel with the
 // last group, which they sit directly under.
 func TestSignupHandler_SeededPlansShowNoGroupOverSeven(t *testing.T) {
-	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: "chunk-owner", Email: jamieEmail}, db)
-	defer srv.Close()
-
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY",
-		PracticeName: "Chunked Practice",
-		FirstName:    jamieName, LastName: ownerLastName,
-	})
-	defer resp.Body.Close()
-	out := reqtest.Decode[staffauth.SignupResponse](t, resp)
+	e := newSignupEnv(t, authntest.Verifier{UID: "chunk-owner", Email: jamieEmail})
+	out := e.signUp(founder("Chunked Practice"))
 
 	const budget = 7
 	const formButtons = 2 // Save and Cancel
+	type planField struct {
+		Type    string   `json:"type"`
+		Label   string   `json:"label"`
+		Options []string `json:"options"`
+	}
 	for _, planType := range []string{carePlanType, birthPlanType} {
-		raw := testdb.Scalar[[]byte](t, db.Admin, `SELECT fields FROM plan_templates WHERE practice_id = $1 AND plan_type = $2`, out.PracticeID, planType)
-		var fields []struct {
-			Type    string   `json:"type"`
-			Label   string   `json:"label"`
-			Options []string `json:"options"`
-		}
-		if err := json.Unmarshal(raw, &fields); err != nil {
-			t.Fatalf("decode %s fields: %v", planType, err)
-		}
-
 		var groups []int
 		var headings []string
-		for _, field := range fields {
+		for _, field := range seededPlanFields[planField](t, e, out.PracticeID, planType) {
 			if field.Type == "section_header" {
 				groups = append(groups, 0)
 				headings = append(headings, field.Label)
@@ -516,26 +501,15 @@ func TestSignupHandler_SeededPlansShowNoGroupOverSeven(t *testing.T) {
 // pain relief question sits on the Birth Plan, which the Client reads and
 // the hospital is handed, and not also on the staff-only Care Plan (#2580).
 func TestSignupHandler_PainReliefIsAskedOnTheBirthPlanOnly(t *testing.T) {
-	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: "pain-owner", Email: jamieEmail}, db)
-	defer srv.Close()
+	e := newSignupEnv(t, authntest.Verifier{UID: "pain-owner", Email: jamieEmail})
+	out := e.signUp(founder("Pain Practice"))
 
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY",
-		PracticeName: "Pain Practice", FirstName: jamieName, LastName: ownerLastName,
-	})
-	defer resp.Body.Close()
-	out := reqtest.Decode[staffauth.SignupResponse](t, resp)
-
+	type planField struct {
+		Label string `json:"label"`
+	}
 	for planType, wantAsked := range map[string]bool{birthPlanType: true, carePlanType: false} {
-		raw := testdb.Scalar[[]byte](t, db.Admin, `SELECT fields FROM plan_templates WHERE practice_id = $1 AND plan_type = $2`, out.PracticeID, planType)
-		var fields []struct {
-			Label string `json:"label"`
-		}
-		if err := json.Unmarshal(raw, &fields); err != nil {
-			t.Fatalf("decode %s fields: %v", planType, err)
-		}
 		asked := false
-		for _, field := range fields {
+		for _, field := range seededPlanFields[planField](t, e, out.PracticeID, planType) {
 			if field.Label == "Preferred pain relief" {
 				asked = true
 			}
@@ -546,52 +520,38 @@ func TestSignupHandler_PainReliefIsAskedOnTheBirthPlanOnly(t *testing.T) {
 	}
 }
 
+// signupThenReadBack signs up with a Verifier for uid, with another
+// package's routes mounted beside this one's, and returns the new Practice
+// and a session for the Owner it made -- signup itself still takes a
+// Bearer ID token (it runs before a session exists); everything behind the
+// middleware takes the cookie.
+func signupThenReadBack(t *testing.T, uid string, practiceName string, mount func(*staffauth.GatedRouter, *idempotency.Router, *sql.DB)) (srv *httptest.Server, practiceID string, session reqtest.Option) {
+	t.Helper()
+	db := testdb.New(t)
+	srv = newSignupServerWith(authntest.Verifier{UID: uid, Email: jamieEmail}, db, mount)
+	t.Cleanup(srv.Close)
+
+	sessionToken := authntest.SeedSession(t, db.App, uid)
+	e := &signupEnv{T: t, DB: db, Srv: srv}
+	return srv, e.signUp(founder(practiceName)).PracticeID, reqtest.Session(sessionToken)
+}
+
 // TestSignupHandler_SeededTemplatesRoundTripThroughPlansAPI proves the
 // hardcoded default field JSON in signup.go matches the palette the plans
 // package validates: GET the seeded template, then PUT that exact payload
 // back. If signup's literal drifts from plans' validation rules, this test
 // goes red instead of shipping a seeded template the API would reject.
 func TestSignupHandler_SeededTemplatesRoundTripThroughPlansAPI(t *testing.T) {
-	db := testdb.New(t)
-	verifier := authntest.Verifier{UID: roundtripOwnerUID, Email: jamieEmail}
-
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, verifier, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{}, neverSuppressed)
-	plans.Mount(g, ir, db.App)
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-
-	// Signup itself still takes a Bearer ID token (it runs before a
-	// session exists); everything behind the middleware takes the cookie.
-	session := authntest.SeedSession(t, db.App, roundtripOwnerUID)
-
-	signupResp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY",
-		PracticeName: "Roundtrip Practice", FirstName: jamieName, LastName: ownerLastName,
-	})
-	defer signupResp.Body.Close()
-	signedUp := reqtest.Decode[staffauth.SignupResponse](t, signupResp)
+	srv, practiceID, session := signupThenReadBack(t, roundtripOwnerUID, "Roundtrip Practice", plans.Mount)
 
 	for _, planType := range []string{carePlanType, birthPlanType} {
-		getResp := reqtest.Get(t, srv.URL+"/api/practices/"+signedUp.PracticeID+"/plan-templates/"+planType, reqtest.Session(session))
-		defer getResp.Body.Close()
-		if getResp.StatusCode != http.StatusOK {
-			t.Fatalf("GET %s status = %d, want %d", planType, getResp.StatusCode, http.StatusOK)
-		}
-		var seeded plans.TemplateResponse
-		if err := json.UnmarshalRead(getResp.Body, &seeded); err != nil {
-			t.Fatalf("decode GET %s response: %v", planType, err)
-		}
+		url := srv.URL + "/api/practices/" + practiceID + "/plan-templates/" + planType
+		seeded := reqtest.Expect[plans.TemplateResponse](t, http.MethodGet, url, http.StatusOK, session)
 		if len(seeded.Fields) == 0 {
 			t.Fatalf("expected seeded %s fields to be non-empty", planType)
 		}
 
-		putResp := reqtest.Put(t, srv.URL+"/api/practices/"+signedUp.PracticeID+"/plan-templates/"+planType, reqtest.JSON(seeded), reqtest.Session(session))
-		defer putResp.Body.Close()
-		if putResp.StatusCode != http.StatusOK {
-			t.Fatalf("PUT %s status = %d, want %d", planType, putResp.StatusCode, http.StatusOK)
-		}
+		reqtest.ExpectStatus(t, http.MethodPut, url, http.StatusOK, reqtest.JSON(seeded), session)
 	}
 }
 
@@ -599,19 +559,10 @@ func TestSignupHandler_SeededTemplatesRoundTripThroughPlansAPI(t *testing.T) {
 // contract_templates row in the same transaction as the
 // Practice/Staff/membership rows.
 func TestSignupHandler_SeedsDefaultContractTemplate(t *testing.T) {
-	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: "seed-contract-owner", Email: jamieEmail}, db)
-	defer srv.Close()
+	e := newSignupEnv(t, authntest.Verifier{UID: "seed-contract-owner", Email: jamieEmail})
+	out := e.signUp(founder("Seeded Contract Practice"))
 
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY",
-		PracticeName: "Seeded Contract Practice",
-		FirstName:    jamieName, LastName: ownerLastName,
-	})
-	defer resp.Body.Close()
-
-	out := reqtest.Decode[staffauth.SignupResponse](t, resp)
-
-	prose := testdb.Scalar[string](t, db.Admin, `SELECT prose FROM contract_templates WHERE practice_id = $1`, out.PracticeID)
+	prose := testdb.Scalar[string](t, e.DB.Admin, `SELECT prose FROM contract_templates WHERE practice_id = $1`, out.PracticeID)
 	if prose == "" {
 		t.Fatal("expected a non-empty seeded contract template prose")
 	}
@@ -631,43 +582,18 @@ func TestSignupHandler_SeedsDefaultContractTemplate(t *testing.T) {
 // payload back. If signup's literal ever normalizes to blank, this test
 // goes red instead of shipping a seeded template the API would reject.
 func TestSignupHandler_SeededContractTemplateRoundTripsThroughContractsAPI(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "roundtrip-contract-owner"
-	verifier := authntest.Verifier{UID: ownerUID, Email: jamieEmail}
-
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, verifier, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{}, neverSuppressed)
-	contracts.Mount(g, ir, db.App, objectstore.NewMemoryStore(), push.NewFakePusher())
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-
-	// Signup itself still takes a Bearer ID token (it runs before a
-	// session exists); everything behind the middleware takes the cookie.
-	session := authntest.SeedSession(t, db.App, ownerUID)
-
-	signupResp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY",
-		PracticeName: "Roundtrip Contract Practice", FirstName: jamieName, LastName: ownerLastName,
-	})
-	defer signupResp.Body.Close()
-	signedUp := reqtest.Decode[staffauth.SignupResponse](t, signupResp)
-
-	getResp := reqtest.Get(t, srv.URL+"/api/practices/"+signedUp.PracticeID+"/contract-template", reqtest.Session(session))
-	defer getResp.Body.Close()
-	if getResp.StatusCode != http.StatusOK {
-		t.Fatalf("GET status = %d, want %d", getResp.StatusCode, http.StatusOK)
+	mount := func(g *staffauth.GatedRouter, ir *idempotency.Router, app *sql.DB) {
+		contracts.Mount(g, ir, app, objectstore.NewMemoryStore(), push.NewFakePusher())
 	}
-	seeded := reqtest.Decode[contracts.TemplateResponse](t, getResp)
+	srv, practiceID, session := signupThenReadBack(t, "roundtrip-contract-owner", "Roundtrip Contract Practice", mount)
+
+	url := srv.URL + "/api/practices/" + practiceID + "/contract-template"
+	seeded := reqtest.Expect[contracts.TemplateResponse](t, http.MethodGet, url, http.StatusOK, session)
 	if seeded.Prose == "" {
 		t.Fatal("expected seeded prose to be non-empty")
 	}
 
-	putResp := reqtest.Put(t, srv.URL+"/api/practices/"+signedUp.PracticeID+"/contract-template", reqtest.JSON(seeded), reqtest.Session(session))
-	defer putResp.Body.Close()
-	if putResp.StatusCode != http.StatusOK {
-		t.Fatalf("PUT status = %d, want %d", putResp.StatusCode, http.StatusOK)
-	}
+	reqtest.ExpectStatus(t, http.MethodPut, url, http.StatusOK, reqtest.JSON(seeded), session)
 }
 
 // TestSignupHandler_RefusesTokenWithNoAddress covers #614: staff.email is
@@ -677,13 +603,9 @@ func TestSignupHandler_SeededContractTemplateRoundTripsThroughContractsAPI(t *te
 // later invitation to this Practice is matched against, so it may not be
 // self-asserted -- and it leaves nothing behind: no Practice, no session.
 func TestSignupHandler_RefusesTokenWithNoAddress(t *testing.T) {
-	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: "addressless-owner"}, db)
-	defer srv.Close()
+	e := newSignupEnv(t, authntest.Verifier{UID: "addressless-owner"})
 
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
-		WorkState: "NY", PracticeName: addresslessPractice, FirstName: jamieName, LastName: ownerLastName,
-	})
+	resp := e.post("tok", founder(addresslessPractice))
 	defer resp.Body.Close()
 
 	reqtest.RequireStatus(t, resp, http.StatusForbidden)
@@ -695,7 +617,7 @@ func TestSignupHandler_RefusesTokenWithNoAddress(t *testing.T) {
 		t.Fatalf("cookie set on refused signup: %+v", c)
 	}
 
-	practices := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM practices WHERE name = $1`, addresslessPractice)
+	practices := testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM practices WHERE name = $1`, addresslessPractice)
 	if practices != 0 {
 		t.Fatalf("practices = %d, want 0 -- the refusal must roll back", practices)
 	}
@@ -707,19 +629,11 @@ func TestSignupHandler_RefusesTokenWithNoAddress(t *testing.T) {
 // The token's address is deliberately mixed-case and padded, so a column
 // that matched by accident could not.
 func TestSignupHandler_TakesEmailFromVerifiedToken(t *testing.T) {
-	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: "token-address-owner", Email: "  Jamie@Example.COM "}, db)
-	defer srv.Close()
+	e := newSignupEnv(t, authntest.Verifier{UID: "token-address-owner", Email: "  Jamie@Example.COM "})
 
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
-		WorkState: "NY", PracticeName: "Token Address Practice", FirstName: jamieName, LastName: ownerLastName,
-	})
-	defer resp.Body.Close()
+	out := e.signUp(founder("Token Address Practice"))
 
-	reqtest.RequireStatus(t, resp, http.StatusCreated)
-	out := reqtest.Decode[staffauth.SignupResponse](t, resp)
-
-	email := testdb.Scalar[string](t, db.Admin, `SELECT email FROM staff WHERE id = $1`, out.StaffID)
+	email := testdb.Scalar[string](t, e.DB.Admin, `SELECT email FROM staff WHERE id = $1`, out.StaffID)
 	if email != jamieEmail {
 		t.Fatalf("staff.email = %q, want %q", email, jamieEmail)
 	}

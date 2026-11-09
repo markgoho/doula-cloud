@@ -29,8 +29,8 @@ func TestInstanceRoutes_RefuseWhatTheyCannotReach(t *testing.T) {
 			e := newEnv(t)
 
 			e.refusesEngagementsItCannotReach(route.method, carePlanType, "", route.opts...)
-			reqtest.ExpectStatus(t, route.method, e.instanceURL(notAPlanType, ""), http.StatusBadRequest, append([]reqtest.Option{e.signedIn}, route.opts...)...)
-			reqtest.ExpectStatus(t, route.method, e.instanceURL(carePlanType, ""), http.StatusNotFound, append([]reqtest.Option{e.signedIn}, route.opts...)...)
+			reqtest.ExpectStatus(t, route.method, e.instanceURL(notAPlanType, ""), http.StatusBadRequest, append([]reqtest.Option{e.SignedIn}, route.opts...)...)
+			reqtest.ExpectStatus(t, route.method, e.instanceURL(carePlanType, ""), http.StatusNotFound, append([]reqtest.Option{e.SignedIn}, route.opts...)...)
 		})
 	}
 }
@@ -84,7 +84,7 @@ func TestGetInstanceHandler_ContractorNeedsAnAttachment(t *testing.T) {
 			e := newEnv(t, append(tc.opts, signedInAs(fixture.Contractor()))...)
 			e.seedInstance(birthPlanType, f1Fields, `{"f1":"Jamie"}`)
 
-			reqtest.ExpectStatus(t, http.MethodGet, e.instanceURL(birthPlanType, ""), tc.want, e.signedIn)
+			reqtest.ExpectStatus(t, http.MethodGet, e.instanceURL(birthPlanType, ""), tc.want, e.SignedIn)
 		})
 	}
 }
@@ -107,7 +107,7 @@ func TestPutInstanceHandler_InvalidBody(t *testing.T) {
 	e := newEnv(t)
 	e.seedInstance(carePlanType, f1Fields, `{}`)
 
-	reqtest.ExpectStatus(t, http.MethodPut, e.instanceURL(carePlanType, ""), http.StatusBadRequest, e.signedIn, reqtest.RawJSON([]byte("not json")))
+	reqtest.ExpectStatus(t, http.MethodPut, e.instanceURL(carePlanType, ""), http.StatusBadRequest, e.SignedIn, reqtest.RawJSON([]byte("not json")))
 }
 
 // TestPutInstanceHandler_ValidationRejections table-drives validateAnswers's
@@ -142,7 +142,7 @@ func TestPutInstanceHandler_ValidationRejections(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			reqtest.ExpectStatus(t, http.MethodPut, e.instanceURL(carePlanType, ""), http.StatusBadRequest, e.signedIn,
+			reqtest.ExpectStatus(t, http.MethodPut, e.instanceURL(carePlanType, ""), http.StatusBadRequest, e.SignedIn,
 				reqtest.JSON(plans.PutInstanceRequest{Answers: tc.answers}))
 		})
 	}
@@ -156,7 +156,7 @@ func TestPutInstanceHandler_OmittedAnswersNormalizesToEmptyObject(t *testing.T) 
 	e := newEnv(t)
 	e.seedInstance(carePlanType, f1Fields, `{}`)
 
-	out := reqtest.Expect[plans.InstanceResponse](t, http.MethodPut, e.instanceURL(carePlanType, ""), http.StatusOK, e.signedIn, reqtest.RawJSON([]byte(`{}`)))
+	out := reqtest.Expect[plans.InstanceResponse](t, http.MethodPut, e.instanceURL(carePlanType, ""), http.StatusOK, e.SignedIn, reqtest.RawJSON([]byte(`{}`)))
 
 	if out.Answers == nil || len(out.Answers) != 0 {
 		t.Fatalf("answers = %+v, want a non-nil empty object", out.Answers)
@@ -228,7 +228,7 @@ func TestPutInstanceHandler_ASaveThatChangesNothingRecordsNothing(t *testing.T) 
 			e := newEnv(t)
 			e.seedInstance(planType, nameFields, `{}`)
 			edits := func() int {
-				return testdb.Scalar[int](t, e.db.Admin, `SELECT count(*) FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 AND action LIKE '%plan_edited'`, e.Engagement.ID)
+				return testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 AND action LIKE '%plan_edited'`, e.Engagement.ID)
 			}
 
 			e.putAnswers(planType, plans.Answers{})
@@ -302,7 +302,7 @@ func TestPostInstanceHandler_RecordsWhoStartedIt(t *testing.T) {
 
 			var action, actorID string
 			var rows int
-			if err := e.db.Admin.QueryRowContext(t.Context(),
+			if err := e.DB.Admin.QueryRowContext(t.Context(),
 				`SELECT action, actor_staff_id::text, count(*) OVER () FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1`,
 				e.Engagement.ID,
 			).Scan(&action, &actorID, &rows); err != nil {

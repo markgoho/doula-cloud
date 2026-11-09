@@ -1,56 +1,32 @@
 package visit_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
 	"testing"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/visit"
 )
 
-// assigneesURL is the one place the endpoint's path is spelled, so a
-// case reads as "this Practice, this Engagement" rather than as string
-// concatenation.
-func assigneesURL(baseURL, practiceID, engagementID string) string {
-	return baseURL + "/api/practices/" + practiceID + "/engagements/" + engagementID + "/visit-assignees"
+// assigneesURL is the one place the endpoint's path is spelled, so a case
+// reads as "this Engagement" rather than as string concatenation.
+func (e *env) assigneesURL(engagementID string) string {
+	return e.PracticeURL("/engagements/" + engagementID + "/visit-assignees")
 }
 
-// getAssignees calls the read under session and reports the status, with
-// the list decoded when there was one. Both halves live in one function
-// because the body has to be closed either way.
-func getAssignees(t *testing.T, session, url string) (int, map[string]visit.Assignee) {
-	t.Helper()
-	resp := reqtest.Get(t, url, reqtest.Session(session))
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return resp.StatusCode, nil
-	}
-	var out visit.AssigneesResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		// coverage:ignore reason: decode failure of a response this handler always writes as JSON
-		t.Fatalf("decode response: %v", err)
-	}
-	// Keyed by staff id so a case can name the one row it is about rather
-	// than counting positions.
+// assignees reads who may be named on this Engagement as the Staff member
+// at the screen, keyed by staff id so a case can name the one row it is
+// about rather than counting positions.
+func (e *env) assignees() map[string]visit.Assignee {
+	e.T.Helper()
+	out := reqtest.Expect[visit.AssigneesResponse](e.T, http.MethodGet, e.assigneesURL(e.Engagement.ID), http.StatusOK, e.SignedIn)
 	byID := map[string]visit.Assignee{}
 	for _, row := range out.Items {
 		byID[row.StaffID] = row
 	}
-	return resp.StatusCode, byID
-}
-
-// decodeAssignees is getAssignees where the case expects a 200 and cares
-// only about the rows.
-func decodeAssignees(t *testing.T, session, url string) map[string]visit.Assignee {
-	t.Helper()
-	status, rows := getAssignees(t, session, url)
-	if status != http.StatusOK {
-		t.Fatalf("status = %d, want %d", status, http.StatusOK)
-	}
-	return rows
+	return byID
 }
 
 // TestVisitAssignees_MarksWhoMayBeNamedOnThisEngagement is #911's whole
@@ -62,23 +38,18 @@ func decodeAssignees(t *testing.T, session, url string) map[string]visit.Assigne
 // completion does -- is not, which is exactly the row a screen deriving
 // eligibility from the Offers list would have got wrong.
 func TestVisitAssignees_MarksWhoMayBeNamedOnThisEngagement(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, ownerID := testdb.SeedStaffAtNewPractice(t, db, "assignees-owner", []string{ownerRole}, "employee")
-	employeeID := testdb.SeedStaffAtPractice(t, db, practiceID, "assignees-employee", []string{doulaRole}, "employee")
-	unattachedID := testdb.SeedContractorAtPractice(t, db, practiceID, "assignees-unattached")
-	attachedID := testdb.SeedContractorAtPractice(t, db, practiceID, "assignees-attached")
-	endedID := testdb.SeedContractorAtPractice(t, db, practiceID, "assignees-ended")
-	accruedID := testdb.SeedContractorAtPractice(t, db, practiceID, "assignees-accrued")
-	bookkeeperID := testdb.SeedStaffAtPractice(t, db, practiceID, "assignees-bookkeeper", []string{adminRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	testdb.SeedGrantedAttachment(t, db, engagementID, attachedID)
-	testdb.SeedAttachment(t, db, engagementID, endedID, grantedOrigin, true)
-	testdb.SeedAttachment(t, db, engagementID, accruedID, "accrued", false)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	employee := e.Colleague()
+	unattached := e.Colleague(fixture.Contractor())
+	attached := e.Colleague(fixture.Contractor())
+	ended := e.Colleague(fixture.Contractor())
+	accrued := e.Colleague(fixture.Contractor())
+	bookkeeper := e.Colleague(fixture.Roles(adminRole))
+	testdb.SeedGrantedAttachment(t, e.DB, e.Engagement.ID, attached.ID)
+	testdb.SeedAttachment(t, e.DB, e.Engagement.ID, ended.ID, grantedOrigin, true)
+	testdb.SeedAttachment(t, e.DB, e.Engagement.ID, accrued.ID, "accrued", false)
 
-	srv, session := newServer(t, db, "assignees-owner")
-	defer srv.Close()
-
-	rows := decodeAssignees(t, session, assigneesURL(srv.URL, practiceID, engagementID))
+	rows := e.assignees()
 
 	for _, want := range []struct {
 		label    string
@@ -86,11 +57,11 @@ func TestVisitAssignees_MarksWhoMayBeNamedOnThisEngagement(t *testing.T) {
 		nameable bool
 		reason   string
 	}{
-		{"an employee Doula", employeeID, true, ""},
-		{"a contractor with no attachment", unattachedID, false, visit.ReasonContractorWithoutAcceptedOffer},
-		{"a contractor with an open granted attachment", attachedID, true, ""},
-		{"a contractor whose granted attachment was ended", endedID, false, visit.ReasonContractorWithoutAcceptedOffer},
-		{"a contractor with only an accrued attachment", accruedID, false, visit.ReasonContractorWithoutAcceptedOffer},
+		{"an employee Doula", employee.ID, true, ""},
+		{"a contractor with no attachment", unattached.ID, false, visit.ReasonContractorWithoutAcceptedOffer},
+		{"a contractor with an open granted attachment", attached.ID, true, ""},
+		{"a contractor whose granted attachment was ended", ended.ID, false, visit.ReasonContractorWithoutAcceptedOffer},
+		{"a contractor with only an accrued attachment", accrued.ID, false, visit.ReasonContractorWithoutAcceptedOffer},
 	} {
 		row, listed := rows[want.staffID]
 		if !listed {
@@ -107,7 +78,7 @@ func TestVisitAssignees_MarksWhoMayBeNamedOnThisEngagement(t *testing.T) {
 
 	// The Owner here holds no Doula role, so she is not somebody a Visit
 	// can be put on, and neither is the bookkeeper.
-	for label, staffID := range map[string]string{"the Owner, who is not a Doula": ownerID, "the bookkeeper": bookkeeperID} {
+	for label, staffID := range map[string]string{"the Owner, who is not a Doula": e.Staff.ID, "the bookkeeper": bookkeeper.ID} {
 		if _, listed := rows[staffID]; listed {
 			t.Errorf("%s is in the picker; only Doula-role Memberships belong there", label)
 		}
@@ -121,24 +92,18 @@ func TestVisitAssignees_MarksWhoMayBeNamedOnThisEngagement(t *testing.T) {
 // she names herself with no attachment at all -- and the read has to say
 // so, or the screen would block a write the BFF allows.
 func TestVisitAssignees_CallerIsNameableAsHerself(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, callerID := testdb.SeedStaffAtNewPractice(t, db, "assignees-self",
-		[]string{ownerRole, doulaRole}, "contractor")
-	otherID := testdb.SeedContractorAtPractice(t, db, practiceID, "assignees-self-other")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	e := newEnv(t, signedInAs(fixture.Owner(), fixture.Doula(), fixture.Contractor()))
+	other := e.Colleague(fixture.Contractor())
 
-	srv, session := newServer(t, db, "assignees-self")
-	defer srv.Close()
+	rows := e.assignees()
 
-	rows := decodeAssignees(t, session, assigneesURL(srv.URL, practiceID, engagementID))
-
-	if self := rows[callerID]; !self.Nameable || self.Reason != "" {
+	if self := rows[e.Staff.ID]; !self.Nameable || self.Reason != "" {
 		t.Errorf("the caller's own row: nameable = %v, reason = %q; want true, \"\" -- she needs no attachment to log her own Visit",
 			self.Nameable, self.Reason)
 	}
 	// The same employment type, the same absent attachment, a different
 	// person: the rule that applies to her is the stricter one.
-	if other := rows[otherID]; other.Nameable {
+	if row := rows[other.ID]; row.Nameable {
 		t.Error("another unattached contractor is nameable; only the caller's own row takes the self rule")
 	}
 }
@@ -149,19 +114,14 @@ func TestVisitAssignees_CallerIsNameableAsHerself(t *testing.T) {
 // accepts her name and attaches her. The contractor Doula who holds
 // neither role is beside her and is still marked with the reason.
 func TestVisitAssignees_AnOwnerOrAdminWhoIsAContractorDoulaIsNameable(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "assignees-1625-caller", []string{ownerRole}, "employee")
-	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "assignees-1625-owner", []string{ownerRole, doulaRole}, "contractor")
-	adminID := testdb.SeedStaffAtPractice(t, db, practiceID, "assignees-1625-admin", []string{adminRole, doulaRole}, "contractor")
-	plainID := testdb.SeedContractorAtPractice(t, db, practiceID, "assignees-1625-plain")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	owner := e.Colleague(fixture.Owner(), fixture.Doula(), fixture.Contractor())
+	admin := e.Colleague(fixture.Admin(), fixture.Doula(), fixture.Contractor())
+	plain := e.Colleague(fixture.Contractor())
 
-	srv, session := newServer(t, db, "assignees-1625-caller")
-	defer srv.Close()
+	rows := e.assignees()
 
-	rows := decodeAssignees(t, session, assigneesURL(srv.URL, practiceID, engagementID))
-
-	for label, staffID := range map[string]string{"an Owner who is a contractor Doula": ownerID, "an Admin who is a contractor Doula": adminID} {
+	for label, staffID := range map[string]string{"an Owner who is a contractor Doula": owner.ID, "an Admin who is a contractor Doula": admin.ID} {
 		row, listed := rows[staffID]
 		if !listed {
 			t.Fatalf("%s: not listed", label)
@@ -173,46 +133,42 @@ func TestVisitAssignees_AnOwnerOrAdminWhoIsAContractorDoulaIsNameable(t *testing
 			t.Errorf("%s: employmentType = %q, want contractor -- the row still says what she is to the business", label, row.EmploymentType)
 		}
 	}
-	if plain := rows[plainID]; plain.Nameable || plain.Reason != visit.ReasonContractorWithoutAcceptedOffer {
+	if row := rows[plain.ID]; row.Nameable || row.Reason != visit.ReasonContractorWithoutAcceptedOffer {
 		t.Errorf("a contractor Doula who holds neither role: nameable = %v, reason = %q; want false, %q",
-			plain.Nameable, plain.Reason, visit.ReasonContractorWithoutAcceptedOffer)
+			row.Nameable, row.Reason, visit.ReasonContractorWithoutAcceptedOffer)
 	}
 }
 
-// TestVisitAssignees_RefusesAnEngagementAtAnotherPractice proves the
-// Engagement is confirmed to be this Practice's before any roster is
-// answered -- otherwise a guessed id would answer 200 with a whole
-// Practice's Doulas and their attachment state.
-func TestVisitAssignees_RefusesAnEngagementAtAnotherPractice(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "assignees-outsider", []string{ownerRole, doulaRole}, "employee")
-	otherPracticeID := testdb.SeedPractice(t, db, "Another Practice")
-	_, foreignEngagementID := testdb.SeedEngagement(t, db, otherPracticeID)
-
-	srv, session := newServer(t, db, "assignees-outsider")
-	defer srv.Close()
-
-	if status, _ := getAssignees(t, session, assigneesURL(srv.URL, practiceID, foreignEngagementID)); status != http.StatusNotFound {
-		t.Errorf("another Practice's Engagement: status = %d, want %d", status, http.StatusNotFound)
+// TestVisitAssignees_Refuses covers who and what the roster read turns
+// away: an Engagement at another Practice, confirmed to be this
+// Practice's before any roster is answered (otherwise a guessed id would
+// answer 200 with a whole Practice's Doulas and their attachment state);
+// an Engagement id that is not a uuid; and a plain Doula, to hold the
+// endpoint to the audience of the roster read the pickers used before it
+// -- naming a colleague is scheduling (ADR-0006, ADR-0008), and a plain
+// Doula has no roster to pick one from.
+func TestVisitAssignees_Refuses(t *testing.T) {
+	cases := []struct {
+		name  string
+		staff []fixture.StaffOption
+		// engagementID returns the Engagement the request names.
+		engagementID func(e *env) string
+		want         int
+	}{
+		{"an Engagement at another Practice", []fixture.StaffOption{fixture.Owner(), fixture.Doula()},
+			func(e *env) string {
+				return fixture.Engagement(e.T, e.DB, fixture.Practice(e.T, e.DB, fixture.PracticeName("Another Practice"))).ID
+			}, http.StatusNotFound},
+		{"an Engagement id that is not a uuid", []fixture.StaffOption{fixture.Owner(), fixture.Doula()},
+			func(*env) string { return notAUUID }, http.StatusBadRequest},
+		{"a plain Doula", []fixture.StaffOption{fixture.Doula()},
+			func(e *env) string { return e.Engagement.ID }, http.StatusForbidden},
 	}
-	if status, _ := getAssignees(t, session, assigneesURL(srv.URL, practiceID, notAUUID)); status != http.StatusBadRequest {
-		t.Errorf("a malformed engagement id: status = %d, want %d", status, http.StatusBadRequest)
-	}
-}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(tc.staff...))
 
-// TestVisitAssignees_RefusesAPlainDoula holds the endpoint to the
-// audience of the roster read the pickers used before it: naming a
-// colleague is scheduling (ADR-0006, ADR-0008), and a plain Doula has no
-// roster to pick one from.
-func TestVisitAssignees_RefusesAPlainDoula(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "assignees-doula", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	srv, session := newServer(t, db, "assignees-doula")
-	defer srv.Close()
-
-	if status, _ := getAssignees(t, session, assigneesURL(srv.URL, practiceID, engagementID)); status != http.StatusForbidden {
-		t.Errorf("a plain Doula: status = %d, want %d", status, http.StatusForbidden)
+			reqtest.ExpectStatus(t, http.MethodGet, e.assigneesURL(tc.engagementID(e)), tc.want, e.SignedIn)
+		})
 	}
 }

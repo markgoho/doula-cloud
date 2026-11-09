@@ -124,7 +124,5 @@ func TestLookupInvitation_BadJSON(t *testing.T) {
 	db := testdb.New(t)
 	srv := newAcceptServerWithAccounts(t, db, "", "", authntest.NewFakeAccountManager())
 	defer srv.Close()
-	resp := reqtest.Post(t, srv.URL+"/api/staff/accept-invite/lookup", reqtest.Body("application/json", []byte("{")))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+	reqtest.ExpectStatus(t, http.MethodPost, srv.URL+"/api/staff/accept-invite/lookup", http.StatusBadRequest, reqtest.Body("application/json", []byte("{")))
 }

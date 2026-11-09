@@ -21,7 +21,7 @@ func TestClientGetContractHandler_Success(t *testing.T) {
 	e := newEnv(t, withPortalLogin())
 	e.seedContract(statusSent)
 
-	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodGet, e.portalURL(""), http.StatusOK, e.asClient)
+	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodGet, e.portalURL(""), http.StatusOK, e.AsClient)
 
 	if out.EngagementID != e.Engagement.ID || out.Status != statusSent || out.Prose != mergeFieldProse {
 		t.Fatalf("unexpected response: %+v", out)
@@ -36,7 +36,7 @@ func TestClientGetContractHandler_SignedAndVoidedAllowed(t *testing.T) {
 			e := newEnv(t, withPortalLogin())
 			e.seedContract(status)
 
-			reqtest.ExpectStatus(t, http.MethodGet, e.portalURL(""), http.StatusOK, e.asClient)
+			reqtest.ExpectStatus(t, http.MethodGet, e.portalURL(""), http.StatusOK, e.AsClient)
 		})
 	}
 }
@@ -59,7 +59,7 @@ func TestClientGetContractHandler_NotReadable404s(t *testing.T) {
 			e := newEnv(t, withPortalLogin())
 			c.seed(e)
 
-			reqtest.ExpectStatus(t, http.MethodGet, e.portalURL(""), http.StatusNotFound, e.asClient)
+			reqtest.ExpectStatus(t, http.MethodGet, e.portalURL(""), http.StatusNotFound, e.AsClient)
 		})
 	}
 }
@@ -69,8 +69,8 @@ func TestClientGetContractHandler_NotReadable404s(t *testing.T) {
 // own logic, is what rejects a foreign Engagement id.
 func TestClientGetContractHandler_OtherClientsEngagementRejected(t *testing.T) {
 	e := newEnv(t, withPortalLogin())
-	other := e.anotherEngagement()
-	seedContract(t, e.db, other.ID, statusSent, mergeFieldProse)
+	other := e.AnotherEngagement()
+	seedContract(t, e.DB, other.ID, statusSent, mergeFieldProse)
 
-	reqtest.ExpectStatus(t, http.MethodGet, e.portalURLOf(other.ID, ""), http.StatusForbidden, e.asClient)
+	reqtest.ExpectStatus(t, http.MethodGet, e.portalURLOf(other.ID, ""), http.StatusForbidden, e.AsClient)
 }

@@ -2,49 +2,30 @@ package staffauth_test
 
 import (
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
-func newEndSessionsServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
-	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, authntest.NewFakeAccountManager(), &tasknudge.FakeEnqueuer{}, neverSuppressed)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
-}
-
-func deleteSessions(t *testing.T, srv *httptest.Server, session string, practiceID, staffID string) *http.Response {
-	t.Helper()
-	return reqtest.Delete(t, srv.URL+"/api/practices/"+practiceID+"/staff/"+staffID+"/sessions", reqtest.Session(session), reqtest.Header("X-Confirmed", "true"))
+// endSessions ends every session staffID holds at practiceID and requires
+// want. confirm controls the X-Confirmed backstop.
+func (e *env) endSessions(practiceID, staffID string, want int, confirm bool) {
+	e.T.Helper()
+	url := e.URL("/api/practices/" + practiceID + "/staff/" + staffID + "/sessions")
+	reqtest.ExpectStatus(e.T, http.MethodDelete, url, want, e.SignedIn, reqtest.HeaderIf(confirm, "X-Confirmed", "true"))
 }
 
 func TestEndSessionsHandler_RequiresConfirmation(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-forgets-to-confirm-sessions"
-	_, practiceID := seedOwnerMembership(t, db, ownerUID)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	target := e.Colleague()
+	authntest.SeedSession(t, e.DB.App, target.UID)
 
-	const targetUID = "target-unconfirmed-end-sessions"
-	targetID := testdb.SeedStaff(t, db, targetUID)
-	seedMembership(t, db, practiceID, targetID)
-	authntest.SeedSession(t, db.App, targetUID)
+	e.endSessions(e.Practice.ID, target.ID, http.StatusBadRequest, false)
 
-	srv, session := newEndSessionsServer(t, db, ownerUID)
-	defer srv.Close()
-
-	resp := reqtest.Delete(t, srv.URL+"/api/practices/"+practiceID+"/staff/"+targetID+"/sessions", reqtest.Session(session))
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-	if got := authntest.CountFor(t, db.App, targetUID); got != 1 {
+	if got := authntest.CountFor(t, e.DB.App, target.UID); got != 1 {
 		t.Fatalf("target session rows = %d, want the unconfirmed request to have ended nothing", got)
 	}
 }
@@ -52,109 +33,72 @@ func TestEndSessionsHandler_RequiresConfirmation(t *testing.T) {
 // TestEndSessionsHandler_RecordsActivity is #473's fix: ending a Staff
 // member's sessions used to leave no record of who did it or when.
 func TestEndSessionsHandler_RecordsActivity(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-records-end-sessions"
-	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	target := e.Colleague()
+	authntest.SeedSession(t, e.DB.App, target.UID)
 
-	const targetUID = "target-end-sessions-audited"
-	targetID := testdb.SeedStaff(t, db, targetUID)
-	seedMembership(t, db, practiceID, targetID)
-	authntest.SeedSession(t, db.App, targetUID)
-
-	srv, session := newEndSessionsServer(t, db, ownerUID)
-	defer srv.Close()
-
-	resp := deleteSessions(t, srv, session, practiceID, targetID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNoContent)
+	e.endSessions(e.Practice.ID, target.ID, http.StatusNoContent, true)
 
 	var action, actor string
-	if err := db.Admin.QueryRowContext(t.Context(),
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
 		`SELECT action, actor_staff_id FROM activity WHERE subject_kind = 'membership' AND subject_id = $1 AND action = 'sessions_ended'`,
-		targetID,
+		target.ID,
 	).Scan(&action, &actor); err != nil {
 		t.Fatalf("read activity row: %v", err)
 	}
-	if actor != ownerID {
-		t.Fatalf("actor = %q, want the Owner %q", actor, ownerID)
+	if actor != e.Staff.ID {
+		t.Fatalf("actor = %q, want the Owner %q", actor, e.Staff.ID)
 	}
 }
 
-func TestEndSessionsHandler_NonOwnerForbidden(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-ending-sessions"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType) // '{doula}', not owner
+// TestEndSessionsHandler_Refuses covers who and what is turned away: a
+// non-Owner; an Owner elsewhere, refused by staffauth.Middleware itself
+// before RequireOwner ever runs, since she holds no membership at the
+// Practice named in the URL; and a Staff member nobody has.
+func TestEndSessionsHandler_Refuses(t *testing.T) {
+	cases := []struct {
+		name  string
+		owner bool
+		// target returns the Practice and Staff ids the request names.
+		target func(e *env) (practiceID, staffID string)
+		want   int
+	}{
+		{"a non-Owner", false, func(e *env) (string, string) { return e.Practice.ID, e.Staff.ID }, http.StatusForbidden},
+		{"an Owner at a different Practice", true, func(e *env) (string, string) {
+			other := fixture.Practice(e.T, e.DB)
+			return other.ID, fixture.Staff(e.T, e.DB, other).ID
+		}, http.StatusForbidden},
+		{"no such membership", true, func(e *env) (string, string) { return e.Practice.ID, emptyUUID }, http.StatusNotFound},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var opts []envOption
+			if tc.owner {
+				opts = append(opts, signedInAs(fixture.Owner()))
+			}
+			e := newEnv(t, opts...)
+			practiceID, staffID := tc.target(e)
 
-	srv, session := newEndSessionsServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := deleteSessions(t, srv, session, practiceID, staffID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
-}
-
-// TestEndSessionsHandler_OwnerAtDifferentPracticeForbidden covers the AC
-// that an Owner elsewhere is refused: staffauth.Middleware itself rejects
-// them before RequireOwner ever runs, since they hold no membership at
-// the Practice named in the URL.
-func TestEndSessionsHandler_OwnerAtDifferentPracticeForbidden(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-elsewhere"
-	seedOwnerMembership(t, db, ownerUID) // owns a different Practice
-
-	const targetUID = "target-at-other-practice"
-	otherPracticeID, targetID := testdb.SeedStaffAtNewPractice(t, db, targetUID, []string{doulaRole}, employeeType)
-
-	srv, session := newEndSessionsServer(t, db, ownerUID)
-	defer srv.Close()
-
-	resp := deleteSessions(t, srv, session, otherPracticeID, targetID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
-}
-
-func TestEndSessionsHandler_NoSuchMembership(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-no-such-target"
-	_, practiceID := seedOwnerMembership(t, db, ownerUID)
-
-	srv, session := newEndSessionsServer(t, db, ownerUID)
-	defer srv.Close()
-
-	resp := deleteSessions(t, srv, session, practiceID, "00000000-0000-0000-0000-000000000000")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
+			e.endSessions(practiceID, staffID, tc.want, true)
+		})
+	}
 }
 
 // TestEndSessionsHandler_Success is the ticket's core behavior: every
 // session the target holds, across devices, is gone, while the acting
 // Owner's own session is untouched.
 func TestEndSessionsHandler_Success(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-ends-sessions"
-	_, practiceID := seedOwnerMembership(t, db, ownerUID)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	target := e.Colleague()
+	authntest.SeedSession(t, e.DB.App, target.UID) // laptop
+	authntest.SeedSession(t, e.DB.App, target.UID) // phone
 
-	const targetUID = "staff-offboarded"
-	targetID := testdb.SeedStaff(t, db, targetUID)
-	seedMembership(t, db, practiceID, targetID)
-	authntest.SeedSession(t, db.App, targetUID) // laptop
-	authntest.SeedSession(t, db.App, targetUID) // phone
+	e.endSessions(e.Practice.ID, target.ID, http.StatusNoContent, true)
 
-	srv, session := newEndSessionsServer(t, db, ownerUID)
-	defer srv.Close()
-
-	resp := deleteSessions(t, srv, session, practiceID, targetID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNoContent)
-	if got := authntest.CountFor(t, db.App, targetUID); got != 0 {
+	if got := authntest.CountFor(t, e.DB.App, target.UID); got != 0 {
 		t.Fatalf("target session rows = %d, want 0", got)
 	}
-	if got := authntest.CountFor(t, db.App, ownerUID); got != 1 {
+	if got := authntest.CountFor(t, e.DB.App, e.Staff.UID); got != 1 {
 		t.Fatalf("acting owner's own session rows = %d, want 1 (unaffected)", got)
 	}
 }
@@ -163,22 +107,12 @@ func TestEndSessionsHandler_Success(t *testing.T) {
 // Staff member's sessions everywhere queues a session-revoked notice for
 // that Staff member, not the acting Owner.
 func TestEndSessionsHandler_QueuesSessionRevokedNotice(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-queues-notice"
-	_, practiceID := seedOwnerMembership(t, db, ownerUID)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	target := e.Colleague()
 
-	const targetUID = "staff-notice-target"
-	targetID := testdb.SeedStaff(t, db, targetUID)
-	seedMembership(t, db, practiceID, targetID)
+	e.endSessions(e.Practice.ID, target.ID, http.StatusNoContent, true)
 
-	srv, session := newEndSessionsServer(t, db, ownerUID)
-	defer srv.Close()
-
-	resp := deleteSessions(t, srv, session, practiceID, targetID)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusNoContent)
-
-	kind := testdb.Scalar[string](t, db.Admin, `SELECT kind FROM session_notice_outbox WHERE identity_uid = $1`, targetUID)
+	kind := testdb.Scalar[string](t, e.DB.Admin, `SELECT kind FROM session_notice_outbox WHERE identity_uid = $1`, target.UID)
 	if kind != "session_revoked" {
 		t.Fatalf("kind = %q, want session_revoked", kind)
 	}

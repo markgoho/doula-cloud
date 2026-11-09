@@ -2,31 +2,25 @@ package staffauth_test
 
 import (
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
-// newPracticeSessionServer mounts this package's whole surface through
-// staffauth.Mount, the same call main.go makes on the real GatedRouter.
-func newPracticeSessionServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
-	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{}, neverSuppressed)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+// practiceSessionAs reads GET /api/practices/{practiceId}/session with
+// credential and requires the 200.
+func (e *env) practiceSessionAs(credential reqtest.Option) staffauth.PracticeSessionResponse {
+	e.T.Helper()
+	return reqtest.Expect[staffauth.PracticeSessionResponse](e.T, http.MethodGet, e.PracticeURL("/session"), http.StatusOK, credential)
 }
 
-func getPracticeSession(t *testing.T, srv *httptest.Server, session, practiceID string) *http.Response {
-	t.Helper()
-	return reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/session", reqtest.Session(session))
+// practiceSession reads it as the Staff member at the screen.
+func (e *env) practiceSession() staffauth.PracticeSessionResponse {
+	e.T.Helper()
+	return e.practiceSessionAs(e.SignedIn)
 }
 
 // TestPracticeSessionHandler_ReportsPracticeAndRoles proves the moved
@@ -35,21 +29,14 @@ func getPracticeSession(t *testing.T, srv *httptest.Server, session, practiceID 
 // axis -- exercised here through staffauth.Mount, the production
 // interface, rather than through api's own route table.
 func TestPracticeSessionHandler_ReportsPracticeAndRoles(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "practice-session-owner"
-	practiceID := testdb.SeedPractice(t, db, "Practice Session Test Practice")
-	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, uid, []string{ownerRole, doulaRole}, contractorType)
+	e := newEnv(t,
+		viaScene(fixture.InPractice(fixture.PracticeName("Practice Session Test Practice"))),
+		signedInAs(fixture.Owner(), fixture.Doula(), fixture.Contractor()))
 
-	srv, session := newPracticeSessionServer(t, db, uid)
-	defer srv.Close()
+	out := e.practiceSession()
 
-	resp := getPracticeSession(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	out := reqtest.Decode[staffauth.PracticeSessionResponse](t, resp)
-	if out.PracticeID != practiceID {
-		t.Fatalf("practiceId = %q, want %q", out.PracticeID, practiceID)
+	if out.PracticeID != e.Practice.ID {
+		t.Fatalf("practiceId = %q, want %q", out.PracticeID, e.Practice.ID)
 	}
 	if out.PracticeName != "Practice Session Test Practice" {
 		t.Fatalf("practiceName = %q, want %q", out.PracticeName, "Practice Session Test Practice")
@@ -62,13 +49,13 @@ func TestPracticeSessionHandler_ReportsPracticeAndRoles(t *testing.T) {
 	}
 	// #909: the caller's own Staff id rides along, so a route under this
 	// Practice knows which roster entry is her without a second call.
-	if out.StaffID != staffID {
-		t.Fatalf("staffId = %q, want %q", out.StaffID, staffID)
+	if out.StaffID != e.Staff.ID {
+		t.Fatalf("staffId = %q, want %q", out.StaffID, e.Staff.ID)
 	}
 
-	lastPracticeID := testdb.Scalar[string](t, db.Admin, `SELECT last_practice_id FROM staff WHERE identity_uid = $1`, uid)
-	if lastPracticeID != practiceID {
-		t.Fatalf("last_practice_id = %q, want %q", lastPracticeID, practiceID)
+	lastPracticeID := testdb.Scalar[string](t, e.DB.Admin, `SELECT last_practice_id FROM staff WHERE identity_uid = $1`, e.Staff.UID)
+	if lastPracticeID != e.Practice.ID {
+		t.Fatalf("last_practice_id = %q, want %q", lastPracticeID, e.Practice.ID)
 	}
 }
 
@@ -77,35 +64,19 @@ func TestPracticeSessionHandler_ReportsPracticeAndRoles(t *testing.T) {
 // asks: a contractor Doula with no attachment reads the Practice's
 // answer, not her own reach, so the bar still offers her Offers.
 func TestPracticeSessionHandler_HasClients(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "practice-session-has-clients-owner"
-	const contractorUID = "practice-session-has-clients-contractor"
-	practiceID := testdb.SeedPractice(t, db, "Has Clients Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, ownerUID, []string{ownerRole, doulaRole}, employeeType)
-	testdb.SeedStaffAtPractice(t, db, practiceID, contractorUID, []string{doulaRole}, contractorType)
+	e := newEnv(t, signedInAs(fixture.Owner(), fixture.Doula()))
+	contractor := e.As(e.Colleague(fixture.Doula(), fixture.Contractor()))
 
-	srv, ownerSession := newPracticeSessionServer(t, db, ownerUID)
-	defer srv.Close()
-	contractorSession := authntest.SeedSession(t, db.App, contractorUID)
-
-	read := func(session string) staffauth.PracticeSessionResponse {
-		t.Helper()
-		resp := getPracticeSession(t, srv, session, practiceID)
-		defer resp.Body.Close()
-		out := reqtest.Decode[staffauth.PracticeSessionResponse](t, resp)
-		return out
-	}
-
-	if read(ownerSession).HasClients {
+	if e.practiceSession().HasClients {
 		t.Fatal("hasClients = true, want false before any Client exists")
 	}
 
-	testdb.SeedNamedClient(t, db, practiceID, "First Client", "")
+	testdb.SeedNamedClient(t, e.DB, e.Practice.ID, "First Client", "")
 
-	if !read(ownerSession).HasClients {
+	if !e.practiceSession().HasClients {
 		t.Fatal("hasClients = false, want true once the Practice has a Client")
 	}
-	if !read(contractorSession).HasClients {
+	if !e.practiceSessionAs(contractor).HasClients {
 		t.Fatal("hasClients = false for a contractor with no attachment, want the Practice's answer")
 	}
 }
@@ -114,36 +85,19 @@ func TestPracticeSessionHandler_HasClients(t *testing.T) {
 // is false for the Practice's only Doula, and true for an Admin beside her
 // and for her once a second Doula joins.
 func TestPracticeSessionHandler_HasOtherDoulas(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "practice-session-other-doulas-owner"
-	const adminUID = "practice-session-other-doulas-admin"
-	const secondUID = "practice-session-other-doulas-second"
-	practiceID := testdb.SeedPractice(t, db, "Other Doulas Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, ownerUID, []string{ownerRole, doulaRole}, employeeType)
-	testdb.SeedStaffAtPractice(t, db, practiceID, adminUID, []string{adminRole}, employeeType)
+	e := newEnv(t, signedInAs(fixture.Owner(), fixture.Doula()))
+	admin := e.As(e.Colleague(fixture.Roles(adminRole)))
 
-	srv, ownerSession := newPracticeSessionServer(t, db, ownerUID)
-	defer srv.Close()
-	adminSession := authntest.SeedSession(t, db.App, adminUID)
-
-	read := func(session string) staffauth.PracticeSessionResponse {
-		t.Helper()
-		resp := getPracticeSession(t, srv, session, practiceID)
-		defer resp.Body.Close()
-		out := reqtest.Decode[staffauth.PracticeSessionResponse](t, resp)
-		return out
-	}
-
-	if read(ownerSession).HasOtherDoulas {
+	if e.practiceSession().HasOtherDoulas {
 		t.Fatal("hasOtherDoulas = true for the only Doula, want false")
 	}
-	if !read(adminSession).HasOtherDoulas {
+	if !e.practiceSessionAs(admin).HasOtherDoulas {
 		t.Fatal("hasOtherDoulas = false for an Admin beside a Doula, want true")
 	}
 
-	testdb.SeedStaffAtPractice(t, db, practiceID, secondUID, []string{doulaRole}, contractorType)
+	e.Colleague(fixture.Doula(), fixture.Contractor())
 
-	if !read(ownerSession).HasOtherDoulas {
+	if !e.practiceSession().HasOtherDoulas {
 		t.Fatal("hasOtherDoulas = false once a second Doula joins, want true")
 	}
 }
@@ -152,29 +106,15 @@ func TestPracticeSessionHandler_HasOtherDoulas(t *testing.T) {
 // is cardpayments.ClientsCanPay's fact: false until the Practice's card
 // payments capability is active, then true.
 func TestPracticeSessionHandler_ClientsCanPay(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "practice-session-clients-can-pay"
-	practiceID := testdb.SeedPractice(t, db, "Clients Can Pay Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, uid, []string{ownerRole}, employeeType)
+	e := newEnv(t, signedInAs(fixture.Owner()))
 
-	srv, session := newPracticeSessionServer(t, db, uid)
-	defer srv.Close()
-
-	read := func() staffauth.PracticeSessionResponse {
-		t.Helper()
-		resp := getPracticeSession(t, srv, session, practiceID)
-		defer resp.Body.Close()
-		out := reqtest.Decode[staffauth.PracticeSessionResponse](t, resp)
-		return out
-	}
-
-	if read().ClientsCanPay {
+	if e.practiceSession().ClientsCanPay {
 		t.Fatal("clientsCanPay = true before card payments are active, want false")
 	}
 
-	testdb.SeedClientsCanPay(t, db, practiceID)
+	testdb.SeedClientsCanPay(t, e.DB, e.Practice.ID)
 
-	if !read().ClientsCanPay {
+	if !e.practiceSession().ClientsCanPay {
 		t.Fatal("clientsCanPay = false once card payments are active, want true")
 	}
 }
@@ -183,29 +123,15 @@ func TestPracticeSessionHandler_ClientsCanPay(t *testing.T) {
 // practices.billing_mode as stored: empty until the Practice has chosen
 // one, then the word it chose.
 func TestPracticeSessionHandler_BillingMode(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "practice-session-billing-mode"
-	practiceID := testdb.SeedPractice(t, db, "Billing Mode Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, uid, []string{ownerRole}, employeeType)
+	e := newEnv(t, signedInAs(fixture.Owner()))
 
-	srv, session := newPracticeSessionServer(t, db, uid)
-	defer srv.Close()
-
-	read := func() staffauth.PracticeSessionResponse {
-		t.Helper()
-		resp := getPracticeSession(t, srv, session, practiceID)
-		defer resp.Body.Close()
-		out := reqtest.Decode[staffauth.PracticeSessionResponse](t, resp)
-		return out
-	}
-
-	if got := read().BillingMode; got != "" {
+	if got := e.practiceSession().BillingMode; got != "" {
 		t.Fatalf("billingMode = %q before one is chosen, want empty", got)
 	}
 
-	testdb.SeedBillingMode(t, db, practiceID, "by_hand")
+	testdb.SeedBillingMode(t, e.DB, e.Practice.ID, "by_hand")
 
-	if got := read().BillingMode; got != "by_hand" {
+	if got := e.practiceSession().BillingMode; got != "by_hand" {
 		t.Fatalf("billingMode = %q, want by_hand", got)
 	}
 }
@@ -214,19 +140,9 @@ func TestPracticeSessionHandler_BillingMode(t *testing.T) {
 // reads false for an employee Membership, not just true for a
 // contractor.
 func TestPracticeSessionHandler_EmployeeNotContractor(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "practice-session-employee"
-	practiceID := testdb.SeedPractice(t, db, "Employee Session Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, uid, []string{doulaRole}, employeeType)
+	e := newEnv(t)
 
-	srv, session := newPracticeSessionServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getPracticeSession(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	out := reqtest.Decode[staffauth.PracticeSessionResponse](t, resp)
-	if out.IsContractor {
+	if e.practiceSession().IsContractor {
 		t.Fatal("isContractor = true, want false for an employee")
 	}
 }

@@ -35,7 +35,7 @@ func TestClientBirthPlan_SuppressionIsDerivedNotStored(t *testing.T) {
 	e.recordOutcome("loss", &endedOn)
 
 	for _, route := range portalRoutes {
-		reqtest.ExpectStatus(t, route.method, e.portalURL(route.path), http.StatusNotFound, e.asClient)
+		reqtest.ExpectStatus(t, route.method, e.portalURL(route.path), http.StatusNotFound, e.AsClient)
 	}
 
 	born := "2027-06-10"

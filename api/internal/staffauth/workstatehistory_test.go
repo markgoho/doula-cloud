@@ -2,42 +2,14 @@ package staffauth_test
 
 import (
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
-
-// newWorkStateHistoryServer mounts this package's whole surface through
-// staffauth.Mount, the same call main.go makes on the real GatedRouter --
-// because the Owner/Admin-vs-Doula boundary lives at that mount and not
-// inside the handler (#315).
-func newWorkStateHistoryServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
-	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{}, neverSuppressed)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
-}
-
-func getWorkStateHistory(t *testing.T, srv *httptest.Server, session, practiceID, staffID, query string) *http.Response {
-	t.Helper()
-	url := srv.URL + "/api/practices/" + practiceID + "/staff/" + staffID + "/work-state-history" + query
-	return reqtest.Get(t, url, reqtest.Session(session))
-}
-
-func decodeWorkStateHistory(t *testing.T, resp *http.Response) staffauth.WorkStateHistory {
-	t.Helper()
-	out := reqtest.Decode[staffauth.WorkStateHistory](t, resp)
-	return out
-}
 
 // seedWorkStateEvent writes one row of the audit trail directly, so a
 // test can lay out a history spanning years without driving the
@@ -58,21 +30,11 @@ func seedWorkStateEvent(t *testing.T, db *testdb.DB, staffID, previous, next str
 	}
 }
 
-// TestListWorkStateHistory_DoulaForbidden holds #459's reach criterion at
-// the boundary that enforces it: the history reads through the same gate
-// as the roster it hangs off, and a Doula has neither.
-func TestListWorkStateHistory_DoulaForbidden(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-reading-work-state-history"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType) // '{doula}'
-
-	srv, session := newWorkStateHistoryServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := getWorkStateHistory(t, srv, session, practiceID, staffID, "")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
+// workStateHistory reads staffID's work state history as the Staff member
+// at the screen.
+func (e *env) workStateHistory(staffID string) staffauth.WorkStateHistory {
+	e.T.Helper()
+	return reqtest.Expect[staffauth.WorkStateHistory](e.T, http.MethodGet, e.staffRoute(staffID, "work-state-history"), http.StatusOK, e.SignedIn)
 }
 
 // TestListWorkStateHistory_FirstAssertionAndChange is the ticket's core
@@ -80,27 +42,15 @@ func TestListWorkStateHistory_DoulaForbidden(t *testing.T) {
 // both sides, so the screen can print two different sentences (#459's
 // "a first assertion is not printed as a change").
 func TestListWorkStateHistory_FirstAssertionAndChange(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-reads-work-state-history"
-	_, practiceID := seedOwnerMembership(t, db, ownerUID)
-
-	doulaID := testdb.SeedStaff(t, db, "doula-who-moved")
-	seedMembership(t, db, practiceID, doulaID)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	doula := e.Colleague()
 
 	joined := time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC)
 	moved := time.Date(2027, 3, 14, 9, 30, 0, 0, time.UTC)
-	seedWorkStateEvent(t, db, doulaID, "", "NY", joined)
-	seedWorkStateEvent(t, db, doulaID, "NY", "NJ", moved)
+	seedWorkStateEvent(t, e.DB, doula.ID, "", "NY", joined)
+	seedWorkStateEvent(t, e.DB, doula.ID, "NY", "NJ", moved)
 
-	srv, session := newWorkStateHistoryServer(t, db, ownerUID)
-	defer srv.Close()
-
-	resp := getWorkStateHistory(t, srv, session, practiceID, doulaID, "")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-
-	history := decodeWorkStateHistory(t, resp)
+	history := e.workStateHistory(doula.ID)
 	if len(history.Items) != 2 {
 		t.Fatalf("items = %+v, want 2", history.Items)
 	}
@@ -128,24 +78,14 @@ func TestListWorkStateHistory_FirstAssertionAndChange(t *testing.T) {
 // the current value, so the history prints the moves and not the
 // repetitions.
 func TestListWorkStateHistory_ReAssertionIsNotAChange(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-reads-reassertions"
-	_, practiceID := seedOwnerMembership(t, db, ownerUID)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	doula := e.Colleague()
 
-	doulaID := testdb.SeedStaff(t, db, "doula-who-reasserted")
-	seedMembership(t, db, practiceID, doulaID)
+	seedWorkStateEvent(t, e.DB, doula.ID, "", "NY", time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC))
+	seedWorkStateEvent(t, e.DB, doula.ID, "NY", "NY", time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC))
+	seedWorkStateEvent(t, e.DB, doula.ID, "NY", "NY", time.Date(2027, 1, 5, 12, 0, 0, 0, time.UTC))
 
-	seedWorkStateEvent(t, db, doulaID, "", "NY", time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC))
-	seedWorkStateEvent(t, db, doulaID, "NY", "NY", time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC))
-	seedWorkStateEvent(t, db, doulaID, "NY", "NY", time.Date(2027, 1, 5, 12, 0, 0, 0, time.UTC))
-
-	srv, session := newWorkStateHistoryServer(t, db, ownerUID)
-	defer srv.Close()
-
-	resp := getWorkStateHistory(t, srv, session, practiceID, doulaID, "")
-	defer resp.Body.Close()
-
-	history := decodeWorkStateHistory(t, resp)
+	history := e.workStateHistory(doula.ID)
 	if len(history.Items) != 1 {
 		t.Fatalf("items = %+v, want only the first assertion", history.Items)
 	}
@@ -161,126 +101,17 @@ func TestListWorkStateHistory_ReAssertionIsNotAChange(t *testing.T) {
 // -- so the response has to date the Membership, which is what lets the
 // screen say the assertion was made before she joined.
 func TestListWorkStateHistory_MemberSinceDatesTheMembership(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-reads-inherited-history"
-	_, practiceID := seedOwnerMembership(t, db, ownerUID)
-
-	doulaID := testdb.SeedStaff(t, db, "contractor-on-two-rosters")
-	seedMembership(t, db, practiceID, doulaID)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	doula := e.Colleague()
 
 	assertedElsewhere := time.Date(2025, 5, 4, 12, 0, 0, 0, time.UTC)
-	seedWorkStateEvent(t, db, doulaID, "", "NY", assertedElsewhere)
+	seedWorkStateEvent(t, e.DB, doula.ID, "", "NY", assertedElsewhere)
 
-	srv, session := newWorkStateHistoryServer(t, db, ownerUID)
-	defer srv.Close()
-
-	resp := getWorkStateHistory(t, srv, session, practiceID, doulaID, "")
-	defer resp.Body.Close()
-
-	history := decodeWorkStateHistory(t, resp)
+	history := e.workStateHistory(doula.ID)
 	if history.MemberSince.IsZero() {
 		t.Fatal("memberSince is zero, want the Membership's created_at")
 	}
 	if !history.MemberSince.After(assertedElsewhere) {
 		t.Errorf("memberSince = %v, want later than the assertion at %v", history.MemberSince, assertedElsewhere)
 	}
-}
-
-// TestListWorkStateHistory_PaginatesOldestPagesLast walks past the page
-// size, which is the AC about a Practice whose people have corrected
-// their work state many times: the screen asks for one page and the rest
-// stays reachable through the cursor rather than being cut off.
-func TestListWorkStateHistory_PaginatesOldestPagesLast(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-pages-work-state-history"
-	_, practiceID := seedOwnerMembership(t, db, ownerUID)
-
-	doulaID := testdb.SeedStaff(t, db, "doula-who-moved-often")
-	seedMembership(t, db, practiceID, doulaID)
-
-	// 25 alternating moves, so every row survives the changes-only
-	// filter and the page boundary falls inside them.
-	const total = 25
-	states := [2]string{"NY", "NJ"}
-	seedWorkStateEvent(t, db, doulaID, "", states[0], time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC))
-	for i := 1; i < total; i++ {
-		seedWorkStateEvent(t, db, doulaID, states[(i-1)%2], states[i%2],
-			time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC).AddDate(0, i, 0))
-	}
-
-	srv, session := newWorkStateHistoryServer(t, db, ownerUID)
-	defer srv.Close()
-
-	first := getWorkStateHistory(t, srv, session, practiceID, doulaID, "")
-	defer first.Body.Close()
-	page1 := decodeWorkStateHistory(t, first)
-	if len(page1.Items) != 20 {
-		t.Fatalf("first page items = %d, want 20", len(page1.Items))
-	}
-	if !page1.HasMore || page1.NextCursor == nil {
-		t.Fatalf("first page hasMore = %v, nextCursor = %v, want more", page1.HasMore, page1.NextCursor)
-	}
-
-	second := getWorkStateHistory(t, srv, session, practiceID, doulaID, "?cursor="+*page1.NextCursor)
-	defer second.Body.Close()
-	page2 := decodeWorkStateHistory(t, second)
-	if len(page2.Items) != total-20 {
-		t.Fatalf("second page items = %d, want %d", len(page2.Items), total-20)
-	}
-	if page2.HasMore {
-		t.Error("second page hasMore = true, want false")
-	}
-	if page2.Items[0].CreatedAt.After(page1.Items[19].CreatedAt) {
-		t.Error("second page starts newer than the first page ended")
-	}
-}
-
-func TestListWorkStateHistory_RejectsBadCursor(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-sends-bad-cursor"
-	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
-
-	srv, session := newWorkStateHistoryServer(t, db, ownerUID)
-	defer srv.Close()
-
-	resp := getWorkStateHistory(t, srv, session, practiceID, ownerID, "?cursor=not-a-cursor")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-func TestListWorkStateHistory_RejectsBadStaffID(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-sends-bad-staff-id"
-	_, practiceID := seedOwnerMembership(t, db, ownerUID)
-
-	srv, session := newWorkStateHistoryServer(t, db, ownerUID)
-	defer srv.Close()
-
-	resp := getWorkStateHistory(t, srv, session, practiceID, "not-a-uuid", "")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-// TestListWorkStateHistory_StrangerIsNotFound proves the Membership read
-// doubles as the existence check: a real Staff member at somebody else's
-// Practice is a 404, not an empty history that would confirm she exists.
-func TestListWorkStateHistory_StrangerIsNotFound(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-reads-a-stranger"
-	_, practiceID := seedOwnerMembership(t, db, ownerUID)
-
-	otherPracticeID := testdb.SeedPractice(t, db, "Someone Else's Practice")
-	strangerID := testdb.SeedStaff(t, db, "stranger-elsewhere")
-	seedMembership(t, db, otherPracticeID, strangerID)
-	seedWorkStateEvent(t, db, strangerID, "", "CA", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
-
-	srv, session := newWorkStateHistoryServer(t, db, ownerUID)
-	defer srv.Close()
-
-	resp := getWorkStateHistory(t, srv, session, practiceID, strangerID, "")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }

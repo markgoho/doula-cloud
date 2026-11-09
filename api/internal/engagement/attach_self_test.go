@@ -30,13 +30,13 @@ const doulaName = "Hana Kim"
 // attachSelf presses the control as the Staff member at the screen and
 // requires want.
 func (e *env) attachSelf(want int) attachSelfBody {
-	e.t.Helper()
+	e.T.Helper()
 	return e.attachSelfTo(e.Engagement.ID, want)
 }
 
 func (e *env) attachSelfTo(engagementID string, want int) attachSelfBody {
-	e.t.Helper()
-	return reqtest.Expect[attachSelfBody](e.t, http.MethodPut, e.urlOf(engagementID, "/attachments/me"), want, e.signedIn)
+	e.T.Helper()
+	return reqtest.Expect[attachSelfBody](e.T, http.MethodPut, e.urlOf(engagementID, "/attachments/me"), want, e.SignedIn)
 }
 
 // attachmentRow is one engagement_attachments row, read past RLS.
@@ -76,14 +76,14 @@ func readOpenAttachments(t *testing.T, db *testdb.DB, engagementID, staffID stri
 
 // attachments is what the Staff member at the screen holds on the Engagement.
 func (e *env) attachments() []attachmentRow {
-	e.t.Helper()
-	return readOpenAttachments(e.t, e.db, e.Engagement.ID, e.Staff.ID)
+	e.T.Helper()
+	return readOpenAttachments(e.T, e.DB, e.Engagement.ID, e.Staff.ID)
 }
 
 // countActivity counts the Engagement's activity rows carrying action.
 func (e *env) countActivity(action string) int {
-	e.t.Helper()
-	return countActivityActions(e.t, e.db, e.Engagement.ID, action)
+	e.T.Helper()
+	return countActivityActions(e.T, e.DB, e.Engagement.ID, action)
 }
 
 // TestAttachSelfHandler_RoleTable is the whole rule, at the boundary
@@ -164,7 +164,7 @@ func TestAttachSelfHandler_RoleTable(t *testing.T) {
 			if n := e.countActivity("doula_attached"); n != 1 {
 				t.Fatalf("doula_attached entries = %d, want 1", n)
 			}
-			assertDiff(t, readFactDiff(t, e.db, e.Engagement.ID, "doula_attached"), map[string]any{"attachedStaffId": e.Staff.ID})
+			assertDiff(t, readFactDiff(t, e.DB, e.Engagement.ID, "doula_attached"), map[string]any{"attachedStaffId": e.Staff.ID})
 			ledger := e.activityAs(e.Staff)
 			if len(ledger.Items) != 1 {
 				t.Fatalf("ledger items = %d, want 1", len(ledger.Items))
@@ -206,7 +206,7 @@ func TestAttachSelfHandler_ContractorDoula(t *testing.T) {
 		t.Fatalf("a refused press wrote an attachment: %+v", got)
 	}
 
-	testdb.SeedGrantedAttachment(t, e.db, e.Engagement.ID, e.Staff.ID)
+	testdb.SeedGrantedAttachment(t, e.DB, e.Engagement.ID, e.Staff.ID)
 	if e.detail().CanAttachSelf {
 		t.Fatal("detail canAttachSelf = true for a contractor, want false")
 	}
@@ -238,8 +238,8 @@ func TestAttachSelfHandler_SafeToRepeat(t *testing.T) {
 // her, and the read draws no control.
 func TestAttachSelfHandler_AlreadyGrantedByAnotherWriter(t *testing.T) {
 	e := newEnv(t)
-	admin := e.staff(fixture.Admin())
-	e.exec(`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by) VALUES ($1, $2, 'granted', $3)`,
+	admin := e.Colleague(fixture.Admin())
+	e.Exec(`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by) VALUES ($1, $2, 'granted', $3)`,
 		e.Engagement.ID, e.Staff.ID, admin.ID)
 
 	if e.detail().CanAttachSelf {
@@ -263,7 +263,7 @@ func TestAttachSelfHandler_AlreadyGrantedByAnotherWriter(t *testing.T) {
 // upgrades the row in place.
 func TestAttachSelfHandler_UpgradesAnAccruedAttachment(t *testing.T) {
 	e := newEnv(t, withEngagement(fixture.Status(fixture.StatusActive)))
-	testdb.SeedAttachment(t, e.db, e.Engagement.ID, e.Staff.ID, "accrued", false)
+	testdb.SeedAttachment(t, e.DB, e.Engagement.ID, e.Staff.ID, "accrued", false)
 
 	if d := e.detail(); !d.CanAttachSelf || len(d.Doulas) != 0 {
 		t.Fatalf("detail = canAttachSelf %v, doulas %v; want the control and nobody named", d.CanAttachSelf, d.Doulas)
@@ -304,7 +304,7 @@ func TestAttachSelfHandler_RefusesACompletedEngagement(t *testing.T) {
 // malformed id is a 400.
 func TestAttachSelfHandler_UnknownEngagement(t *testing.T) {
 	e := newEnv(t)
-	elsewhere := fixture.Engagement(t, e.db, fixture.Practice(t, e.db))
+	elsewhere := fixture.Engagement(t, e.DB, fixture.Practice(t, e.DB))
 
 	tests := []struct {
 		name         string
@@ -328,12 +328,12 @@ func TestAttachSelfHandler_UnknownEngagement(t *testing.T) {
 // the reader's own control away.
 func TestDetailHandler_DoulasNamesEveryGrantedAttachment(t *testing.T) {
 	e := newEnv(t)
-	granted := e.staff(fixture.StaffName("Renata Alvarez"))
-	accrued := e.staff(fixture.StaffName("Priya Shah"))
-	ended := e.staff(fixture.StaffName("Mei Tan"))
-	testdb.SeedGrantedAttachment(t, e.db, e.Engagement.ID, granted.ID)
-	testdb.SeedAttachment(t, e.db, e.Engagement.ID, accrued.ID, "accrued", false)
-	testdb.SeedAttachment(t, e.db, e.Engagement.ID, ended.ID, "granted", true)
+	granted := e.Colleague(fixture.StaffName("Renata Alvarez"))
+	accrued := e.Colleague(fixture.StaffName("Priya Shah"))
+	ended := e.Colleague(fixture.StaffName("Mei Tan"))
+	testdb.SeedGrantedAttachment(t, e.DB, e.Engagement.ID, granted.ID)
+	testdb.SeedAttachment(t, e.DB, e.Engagement.ID, accrued.ID, "accrued", false)
+	testdb.SeedAttachment(t, e.DB, e.Engagement.ID, ended.ID, "granted", true)
 
 	d := e.detail()
 

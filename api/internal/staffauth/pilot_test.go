@@ -9,10 +9,8 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -27,11 +25,7 @@ const (
 // against one database.
 func newPilotServer(t *testing.T, db *testdb.DB, uid, email string) *httptest.Server {
 	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, authntest.Verifier{UID: uid, Email: email}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{}, neverSuppressed)
-	return httptest.NewServer(mux)
+	return serveStaffauth(db, authntest.Verifier{UID: uid, Email: email}, authntest.NewFakeAccountManager())
 }
 
 func pilotSignup(t *testing.T, srv *httptest.Server) *http.Response {

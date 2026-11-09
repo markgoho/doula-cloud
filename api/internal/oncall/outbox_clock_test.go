@@ -26,7 +26,7 @@ func TestGapNoticeWorker_GapStillOpenUntilEndsAtOnTheWorkerClock(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			e := newNoticeEnv(t)
-			endsAt := testdb.Scalar[time.Time](t, e.db.Admin, `SELECT ends_at FROM engagement_coverage_gaps WHERE id = $1`, e.GapID)
+			endsAt := testdb.Scalar[time.Time](t, e.DB.Admin, `SELECT ends_at FROM engagement_coverage_gaps WHERE id = $1`, e.GapID)
 			sender := &mail.FakeSender{}
 			now := endsAt.Add(-c.beforeEnd)
 
@@ -48,19 +48,19 @@ func TestGapNoticeWorker_GapStillOpenUntilEndsAtOnTheWorkerClock(t *testing.T) {
 // runWorkerWith runs one pass of a worker the caller built, so a test can
 // fix its clock.
 func (e noticeEnv) runWorkerWith(w oncall.GapNoticeWorker) {
-	e.t.Helper()
-	tx, err := e.db.App.BeginTx(e.t.Context(), nil)
+	e.T.Helper()
+	tx, err := e.DB.App.BeginTx(e.T.Context(), nil)
 	if err != nil {
-		e.t.Fatalf("begin: %v", err)
+		e.T.Fatalf("begin: %v", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(e.t.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
-		e.t.Fatalf("set trusted door: %v", err)
+	if _, err := tx.ExecContext(e.T.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
+		e.T.Fatalf("set trusted door: %v", err)
 	}
-	if err := w.ProcessPending(e.t.Context(), tx); err != nil {
-		e.t.Fatalf("ProcessPending: %v", err)
+	if err := w.ProcessPending(e.T.Context(), tx); err != nil {
+		e.T.Fatalf("ProcessPending: %v", err)
 	}
 	if err := tx.Commit(); err != nil {
-		e.t.Fatalf("commit: %v", err)
+		e.T.Fatalf("commit: %v", err)
 	}
 }

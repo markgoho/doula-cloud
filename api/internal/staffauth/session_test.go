@@ -2,94 +2,60 @@ package staffauth_test
 
 import (
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/tasknudge"
-	"doula-cloud/api/internal/testdb"
 )
 
-// newSessionServer mounts this package's whole surface through
-// staffauth.Mount, and seeds a live session for uid, returning the token
-// its __session cookie carries.
-func newSessionServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
-	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{}, neverSuppressed)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+// sessionAs reads GET /api/staff/session with credential and requires
+// the 200.
+func (e *env) sessionAs(credential reqtest.Option) staffauth.SessionResponse {
+	e.T.Helper()
+	return reqtest.Expect[staffauth.SessionResponse](e.T, http.MethodGet, e.URL("/api/staff/session"), http.StatusOK, credential)
 }
 
-func getSession(t *testing.T, srv *httptest.Server, session string) *http.Response {
-	t.Helper()
-	return reqtest.Get(t, srv.URL+"/api/staff/session", reqtest.Session(session))
-}
+func TestSessionHandler_Refuses(t *testing.T) {
+	cases := []struct {
+		name    string
+		want    int
+		session func(e *env) reqtest.Option
+	}{
+		{"no cookie", http.StatusUnauthorized, func(*env) reqtest.Option { return reqtest.Session("") }},
+		// A cookie that names no live session -- the shape a stale or
+		// forged cookie arrives in.
+		{"a session that was never issued", http.StatusUnauthorized, func(*env) reqtest.Option { return reqtest.Session("never-issued") }},
+		{noStaffRow, http.StatusNotFound, func(e *env) reqtest.Option {
+			return reqtest.Session(authntest.SeedSession(e.T, e.DB.App, "no-such-staff"))
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t)
 
-func TestSessionHandler_MissingCookie(t *testing.T) {
-	db := testdb.New(t)
-	srv, _ := newSessionServer(t, db, "no-cookie-sent")
-	defer srv.Close()
-
-	resp := getSession(t, srv, "")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
-}
-
-// TestSessionHandler_UnknownSession covers a cookie that names no live
-// session -- the shape a stale or forged cookie arrives in.
-func TestSessionHandler_UnknownSession(t *testing.T) {
-	db := testdb.New(t)
-	srv, _ := newSessionServer(t, db, "irrelevant")
-	defer srv.Close()
-
-	resp := getSession(t, srv, "never-issued")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
-}
-
-func TestSessionHandler_UnknownStaff(t *testing.T) {
-	db := testdb.New(t)
-	srv, session := newSessionServer(t, db, "no-such-staff")
-	defer srv.Close()
-
-	resp := getSession(t, srv, session)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
+			reqtest.ExpectStatus(t, http.MethodGet, e.URL("/api/staff/session"), tc.want, tc.session(e))
+		})
+	}
 }
 
 func TestSessionHandler_SingleMembership(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "single-practice-staff"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
+	e := newEnv(t)
 
-	srv, session := newSessionServer(t, db, identityUID)
-	defer srv.Close()
+	out := e.sessionAs(e.SignedIn)
 
-	resp := getSession(t, srv, session)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-
-	out := reqtest.Decode[staffauth.SessionResponse](t, resp)
-	if out.StaffID != staffID {
-		t.Fatalf("staffId = %q, want %q", out.StaffID, staffID)
+	if out.StaffID != e.Staff.ID {
+		t.Fatalf("staffId = %q, want %q", out.StaffID, e.Staff.ID)
 	}
 	// The shell's avatar menu shows which account a person is signed in as
 	// (#452), which matters because one account holds Memberships at
 	// several Practices.
-	if wantEmail := identityUID + "@example.com"; out.Email != wantEmail {
+	if wantEmail := e.Staff.UID + "@example.com"; out.Email != wantEmail {
 		t.Fatalf("email = %q, want %q", out.Email, wantEmail)
 	}
-	if len(out.Memberships) != 1 || out.Memberships[0].PracticeID != practiceID {
-		t.Fatalf("memberships = %+v, want single membership at %q", out.Memberships, practiceID)
+	if len(out.Memberships) != 1 || out.Memberships[0].PracticeID != e.Practice.ID {
+		t.Fatalf("memberships = %+v, want single membership at %q", out.Memberships, e.Practice.ID)
 	}
 	if len(out.Memberships[0].Roles) != 1 || out.Memberships[0].Roles[0] != doulaRole {
 		t.Fatalf("roles = %v, want [doula]", out.Memberships[0].Roles)
@@ -104,66 +70,37 @@ func TestSessionHandler_SingleMembership(t *testing.T) {
 // "Enroll" vs "Remove" branch reads it straight from here, not from a
 // fresh Identity Platform lookup.
 func TestSessionHandler_SecondFactor(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "session-second-factor"
-	testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
+	e := newEnv(t)
 
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{}, neverSuppressed)
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-
-	unenrolled := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, false)
-	resp1 := getSession(t, srv, unenrolled)
-	defer resp1.Body.Close()
-	out1 := reqtest.Decode[staffauth.SessionResponse](t, resp1)
-	if out1.SecondFactor {
+	unenrolled := reqtest.Session(authntest.SeedSessionWithSecondFactor(t, e.DB.App, e.Staff.UID, false))
+	if e.sessionAs(unenrolled).SecondFactor {
 		t.Fatalf("secondFactor = true, want false")
 	}
 
-	enrolled := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, true)
-	resp2 := getSession(t, srv, enrolled)
-	defer resp2.Body.Close()
-	out2 := reqtest.Decode[staffauth.SessionResponse](t, resp2)
-	if !out2.SecondFactor {
+	enrolled := reqtest.Session(authntest.SeedSessionWithSecondFactor(t, e.DB.App, e.Staff.UID, true))
+	if !e.sessionAs(enrolled).SecondFactor {
 		t.Fatalf("secondFactor = false, want true")
 	}
 }
 
 func TestSessionHandler_MultiplePracticesWithLastUsed(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "multi-practice-staff"
-	staffID := testdb.SeedStaff(t, db, identityUID)
-	practiceA := testdb.SeedPractice(t, db, "Practice A")
-	practiceB := testdb.SeedPractice(t, db, "Practice B")
-	seedMembership(t, db, practiceA, staffID)
-	seedMembership(t, db, practiceB, staffID)
-	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE staff SET last_practice_id = $1 WHERE id = $2`, practiceB, staffID); err != nil {
-		t.Fatalf("seed last_practice_id: %v", err)
-	}
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE practice_memberships SET employment_type = 'contractor' WHERE practice_id = $1 AND staff_id = $2`, practiceB, staffID); err != nil {
-		t.Fatalf("seed contractor membership: %v", err)
-	}
+	e := newEnv(t)
+	practiceB := fixture.Practice(t, e.DB, fixture.PracticeName("Practice B"))
+	seedMembership(t, e.DB, practiceB.ID, e.Staff.ID)
+	e.Exec(`UPDATE staff SET last_practice_id = $1 WHERE id = $2`, practiceB.ID, e.Staff.ID)
+	e.Exec(`UPDATE practice_memberships SET employment_type = 'contractor' WHERE practice_id = $1 AND staff_id = $2`, practiceB.ID, e.Staff.ID)
 
-	srv, session := newSessionServer(t, db, identityUID)
-	defer srv.Close()
+	out := e.sessionAs(e.SignedIn)
 
-	resp := getSession(t, srv, session)
-	defer resp.Body.Close()
-
-	out := reqtest.Decode[staffauth.SessionResponse](t, resp)
 	if len(out.Memberships) != 2 {
 		t.Fatalf("expected 2 memberships, got %d", len(out.Memberships))
 	}
-	if out.LastPracticeID == nil || *out.LastPracticeID != practiceB {
-		t.Fatalf("lastPracticeId = %v, want %q", out.LastPracticeID, practiceB)
+	if out.LastPracticeID == nil || *out.LastPracticeID != practiceB.ID {
+		t.Fatalf("lastPracticeId = %v, want %q", out.LastPracticeID, practiceB.ID)
 	}
 	// #2266: the switcher says what she is at each Practice, so each
 	// Membership carries its own employment type.
-	want := map[string]string{practiceA: employeeType, practiceB: contractorType}
+	want := map[string]string{e.Practice.ID: employeeType, practiceB.ID: contractorType}
 	for _, m := range out.Memberships {
 		if m.EmploymentType != want[m.PracticeID] {
 			t.Fatalf("employmentType at %q = %q, want %q", m.PracticeID, m.EmploymentType, want[m.PracticeID])
@@ -185,30 +122,21 @@ func TestSessionHandler_MultiplePracticesWithLastUsed(t *testing.T) {
 // then 403s. The second half of this test, with a second Owner seeded at
 // the same Practice, is the assertion that catches it.
 func TestSessionHandler_SoleOwner(t *testing.T) {
-	db := testdb.New(t)
-	const soleUID = "session-sole-owner"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, soleUID, []string{ownerRole}, employeeType)
+	e := newEnv(t, signedInAs(fixture.Owner()))
 
-	srv, soleSession := newSessionServer(t, db, soleUID)
-	defer srv.Close()
-
-	if got := decodeSession(t, srv, soleSession); !got.SoleOwner {
+	if got := e.sessionAs(e.SignedIn); !got.SoleOwner {
 		t.Fatalf("soleOwner = false for the only Owner of a practice, want true")
 	}
 
 	// A second Owner at the same Practice. Neither of them is sole now,
 	// and neither can see the other's Membership row through RLS -- which
 	// is the whole point of the assertions below.
-	const secondUID = "session-second-owner"
-	secondStaffID := testdb.SeedStaff(t, db, secondUID)
-	seedMembershipWithRoles(t, db, practiceID, secondStaffID, "{owner}")
+	second := e.Colleague(fixture.Owner())
 
-	if got := decodeSession(t, srv, soleSession); got.SoleOwner {
+	if got := e.sessionAs(e.SignedIn); got.SoleOwner {
 		t.Fatalf("soleOwner = true once a second Owner holds a membership at the same practice, want false")
 	}
-
-	secondSession := authntest.SeedSession(t, db.App, secondUID)
-	if got := decodeSession(t, srv, secondSession); got.SoleOwner {
+	if got := e.sessionAs(e.As(second)); got.SoleOwner {
 		t.Fatalf("soleOwner = true for the second Owner, want false")
 	}
 }
@@ -217,25 +145,9 @@ func TestSessionHandler_SoleOwner(t *testing.T) {
 // #615's AC names last: somebody who is not an Owner anywhere holds no
 // saved codes, and the account screen must not imply she does.
 func TestSessionHandler_SoleOwnerFalseForNonOwner(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "session-doula-not-owner"
-	testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
+	e := newEnv(t)
 
-	srv, session := newSessionServer(t, db, identityUID)
-	defer srv.Close()
-
-	if got := decodeSession(t, srv, session); got.SoleOwner {
+	if got := e.sessionAs(e.SignedIn); got.SoleOwner {
 		t.Fatalf("soleOwner = true for a Doula, want false")
 	}
-}
-
-// decodeSession reads one GET /api/staff/session into its DTO, failing
-// the test on any status but 200.
-func decodeSession(t *testing.T, srv *httptest.Server, session string) staffauth.SessionResponse {
-	t.Helper()
-	resp := getSession(t, srv, session)
-	defer func() { _ = resp.Body.Close() }()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	out := reqtest.Decode[staffauth.SessionResponse](t, resp)
-	return out
 }

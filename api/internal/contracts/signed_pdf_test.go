@@ -23,17 +23,17 @@ const priorSignedPDFBytes = "%PDF-1.4 fake superseded contract pdf"
 
 // storePDF puts content in the object store at path, as a stored Signed PDF.
 func (e *env) storePDF(path, content string) {
-	e.t.Helper()
-	if err := e.store.Put(e.t.Context(), path, "application/pdf", strings.NewReader(content)); err != nil {
-		e.t.Fatalf("seed stored pdf: %v", err)
+	e.T.Helper()
+	if err := e.store.Put(e.T.Context(), path, "application/pdf", strings.NewReader(content)); err != nil {
+		e.T.Fatalf("seed stored pdf: %v", err)
 	}
 }
 
 // seedSignedAndStored seeds the Engagement's signed Contract and the bytes
 // of its Signed PDF in the store, and returns the row's id and object path.
 func (e *env) seedSignedAndStored() (contractID, objectPath string) {
-	e.t.Helper()
-	contractID, objectPath = seedSignedContract(e.t, e.db, e.Engagement.ID)
+	e.T.Helper()
+	contractID, objectPath = seedSignedContract(e.T, e.DB, e.Engagement.ID)
 	e.storePDF(objectPath, signedPDFBytes)
 	return contractID, objectPath
 }
@@ -68,7 +68,7 @@ func TestGetSignedContractPDFHandler_Success(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
 	e.seedSignedAndStored()
 
-	if pdf := reqtest.ExpectPDF(t, http.MethodGet, e.contractURL("/pdf"), e.signedIn); string(pdf.Body) != signedPDFBytes {
+	if pdf := reqtest.ExpectPDF(t, http.MethodGet, e.contractURL("/pdf"), e.SignedIn); string(pdf.Body) != signedPDFBytes {
 		t.Fatalf("body = %q, want %q", pdf.Body, signedPDFBytes)
 	}
 }
@@ -87,11 +87,11 @@ func TestGetSignedContractPDFHandler_Unauthenticated(t *testing.T) {
 // check rejects it before the PDF lookup runs.
 func TestGetSignedContractPDFHandler_CrossPracticeRejected(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
-	otherPracticeID := testdb.SeedPractice(t, e.db, "Other Practice")
-	_, otherEngagementID := testdb.SeedEngagement(t, e.db, otherPracticeID)
-	seedSignedContract(t, e.db, otherEngagementID)
+	otherPracticeID := testdb.SeedPractice(t, e.DB, "Other Practice")
+	_, otherEngagementID := testdb.SeedEngagement(t, e.DB, otherPracticeID)
+	seedSignedContract(t, e.DB, otherEngagementID)
 
-	reqtest.ExpectStatus(t, http.MethodGet, e.contractURLOf(otherEngagementID, "/pdf"), http.StatusNotFound, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodGet, e.contractURLOf(otherEngagementID, "/pdf"), http.StatusNotFound, e.SignedIn)
 }
 
 // TestGetSignedContractPDFHandler_NotYetSigned proves a sent (not yet
@@ -100,7 +100,7 @@ func TestGetSignedContractPDFHandler_NotYetSigned(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
 	e.seedContract(statusSent)
 
-	requireNoSignedContract(t, e.contractURL("/pdf"), e.signedIn)
+	requireNoSignedContract(t, e.contractURL("/pdf"), e.SignedIn)
 }
 
 // TestGetSignedContractPDFHandler_MissingObjectReturnsNotFound proves a
@@ -111,9 +111,9 @@ func TestGetSignedContractPDFHandler_NotYetSigned(t *testing.T) {
 // TestGetSignedContractPDFHandler_StoreGetFailureReturns500).
 func TestGetSignedContractPDFHandler_MissingObjectReturnsNotFound(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
-	seedSignedContract(t, e.db, e.Engagement.ID)
+	seedSignedContract(t, e.DB, e.Engagement.ID)
 
-	reqtest.ExpectStatus(t, http.MethodGet, e.contractURL("/pdf"), http.StatusNotFound, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodGet, e.contractURL("/pdf"), http.StatusNotFound, e.SignedIn)
 }
 
 // TestGetSignedContractPDFHandler_StoreGetFailureReturns500 proves a
@@ -121,9 +121,9 @@ func TestGetSignedContractPDFHandler_MissingObjectReturnsNotFound(t *testing.T) 
 // 500s.
 func TestGetSignedContractPDFHandler_StoreGetFailureReturns500(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()), withStore(failingStore{}))
-	seedSignedContract(t, e.db, e.Engagement.ID)
+	seedSignedContract(t, e.DB, e.Engagement.ID)
 
-	reqtest.ExpectStatus(t, http.MethodGet, e.contractURL("/pdf"), http.StatusInternalServerError, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodGet, e.contractURL("/pdf"), http.StatusInternalServerError, e.SignedIn)
 }
 
 // TestClientGetSignedContractPDFHandler_Success proves the owning Client
@@ -132,7 +132,7 @@ func TestClientGetSignedContractPDFHandler_Success(t *testing.T) {
 	e := newEnv(t, withPortalLogin())
 	e.seedSignedAndStored()
 
-	reqtest.ExpectPDF(t, http.MethodGet, e.portalURL("/pdf"), e.asClient)
+	reqtest.ExpectPDF(t, http.MethodGet, e.portalURL("/pdf"), e.AsClient)
 }
 
 // TestClientGetSignedContractPDFHandler_Unauthenticated proves a request
@@ -160,13 +160,13 @@ func TestClientGetSignedContractPDFHandler_OtherClientsEngagementRejected(t *tes
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			e := newEnv(t, withPortalLogin())
-			other := e.anotherEngagement()
-			otherContractID, _ := seedSignedContract(t, e.db, other.ID)
+			other := e.AnotherEngagement()
+			otherContractID, _ := seedSignedContract(t, e.DB, other.ID)
 			if c.voided {
-				voidContractRow(t, e.db, otherContractID)
+				voidContractRow(t, e.DB, otherContractID)
 			}
 
-			reqtest.ExpectStatus(t, http.MethodGet, e.portalURLOf(other.ID, "/pdf"), http.StatusForbidden, e.asClient)
+			reqtest.ExpectStatus(t, http.MethodGet, e.portalURLOf(other.ID, "/pdf"), http.StatusForbidden, e.AsClient)
 		})
 	}
 }
@@ -177,7 +177,7 @@ func TestClientGetSignedContractPDFHandler_NotYetSigned(t *testing.T) {
 	e := newEnv(t, withPortalLogin())
 	e.seedContract(statusSent)
 
-	requireNoSignedContract(t, e.portalURL("/pdf"), e.asClient)
+	requireNoSignedContract(t, e.portalURL("/pdf"), e.AsClient)
 }
 
 // TestClientGetSignedContractPDFHandler_MissingObjectReturnsNotFound
@@ -185,9 +185,9 @@ func TestClientGetSignedContractPDFHandler_NotYetSigned(t *testing.T) {
 // path resolves to nothing in the ObjectStore.
 func TestClientGetSignedContractPDFHandler_MissingObjectReturnsNotFound(t *testing.T) {
 	e := newEnv(t, withPortalLogin())
-	seedSignedContract(t, e.db, e.Engagement.ID)
+	seedSignedContract(t, e.DB, e.Engagement.ID)
 
-	reqtest.ExpectStatus(t, http.MethodGet, e.portalURL("/pdf"), http.StatusNotFound, e.asClient)
+	reqtest.ExpectStatus(t, http.MethodGet, e.portalURL("/pdf"), http.StatusNotFound, e.AsClient)
 }
 
 // TestGetSignedContractPDFHandler_VoidedContractStillServes is #299's
@@ -209,11 +209,11 @@ func TestGetSignedContractPDFHandler_VoidedContractStillServes(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			e := newEnv(t, signedInAs(c.staff))
 			contractID, objectPath := e.seedSignedAndStored()
-			voidContractRow(t, e.db, contractID)
+			voidContractRow(t, e.DB, contractID)
 
-			requirePDF(t, e.contractURL("/pdf"), e.signedIn, signedPDFBytes)
+			requirePDF(t, e.contractURL("/pdf"), e.SignedIn, signedPDFBytes)
 
-			storedObjectPath := testdb.Scalar[sql.NullString](t, e.db.Admin, `SELECT signed_pdf_object_path FROM contracts WHERE id = $1`, contractID)
+			storedObjectPath := testdb.Scalar[sql.NullString](t, e.DB.Admin, `SELECT signed_pdf_object_path FROM contracts WHERE id = $1`, contractID)
 			if !storedObjectPath.Valid || storedObjectPath.String != objectPath {
 				t.Fatalf("signed_pdf_object_path = %+v, want unchanged at %q (a voided Contract's Signed PDF is preserved evidence, not a withdrawn document)", storedObjectPath, objectPath)
 			}
@@ -228,9 +228,9 @@ func TestGetSignedContractPDFHandler_VoidedContractStillServes(t *testing.T) {
 // she is refused outright rather than given a partial view.
 func TestGetSignedContractPDFHandler_ContractorForbidden(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Contractor()), attachedToEngagement())
-	seedSignedContract(t, e.db, e.Engagement.ID)
+	seedSignedContract(t, e.DB, e.Engagement.ID)
 
-	reqtest.ExpectStatus(t, http.MethodGet, e.contractURL("/pdf"), http.StatusForbidden, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodGet, e.contractURL("/pdf"), http.StatusForbidden, e.SignedIn)
 }
 
 // TestGetSignedContractPDFHandler_TwoSignedContractsServeTheNewest
@@ -243,8 +243,8 @@ func TestGetSignedContractPDFHandler_ContractorForbidden(t *testing.T) {
 // which the old Engagement-only object key made unavoidable.
 func TestGetSignedContractPDFHandler_TwoSignedContractsServeTheNewest(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
-	_, priorObjectPath := seedPriorSignedContract(t, e.db, e.Engagement.ID)
-	_, currentObjectPath := seedSignedContract(t, e.db, e.Engagement.ID)
+	_, priorObjectPath := seedPriorSignedContract(t, e.DB, e.Engagement.ID)
+	_, currentObjectPath := seedSignedContract(t, e.DB, e.Engagement.ID)
 
 	if priorObjectPath == currentObjectPath {
 		t.Fatalf("both Contracts stored their Signed PDF at %q -- the second signing overwrote the first", currentObjectPath)
@@ -252,7 +252,7 @@ func TestGetSignedContractPDFHandler_TwoSignedContractsServeTheNewest(t *testing
 	e.storePDF(priorObjectPath, priorSignedPDFBytes)
 	e.storePDF(currentObjectPath, signedPDFBytes)
 
-	requirePDF(t, e.contractURL("/pdf"), e.signedIn, signedPDFBytes)
+	requirePDF(t, e.contractURL("/pdf"), e.SignedIn, signedPDFBytes)
 
 	// The superseded PDF is still in the store, addressable by its own
 	// key -- preserved, just not what the Engagement-addressed route
@@ -272,9 +272,9 @@ func TestGetSignedContractPDFHandler_TwoSignedContractsServeTheNewest(t *testing
 func TestClientGetSignedContractPDFHandler_VoidedContractStillServes(t *testing.T) {
 	e := newEnv(t, withPortalLogin())
 	contractID, _ := e.seedSignedAndStored()
-	voidContractRow(t, e.db, contractID)
+	voidContractRow(t, e.DB, contractID)
 
-	requirePDF(t, e.portalURL("/pdf"), e.asClient, signedPDFBytes)
+	requirePDF(t, e.portalURL("/pdf"), e.AsClient, signedPDFBytes)
 }
 
 // TestSignedContractPDFHandlers_DraftNotFound is the other half of "has
@@ -287,8 +287,8 @@ func TestSignedContractPDFHandlers_DraftNotFound(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()), withPortalLogin())
 	e.seedDraft()
 
-	requireNoSignedContract(t, e.contractURL("/pdf"), e.signedIn)
-	requireNoSignedContract(t, e.portalURL("/pdf"), e.asClient)
+	requireNoSignedContract(t, e.contractURL("/pdf"), e.SignedIn)
+	requireNoSignedContract(t, e.portalURL("/pdf"), e.AsClient)
 }
 
 // TestContractReads_VoidedContractReportsSignedPDF is #1119's root: the
@@ -300,8 +300,8 @@ func TestSignedContractPDFHandlers_DraftNotFound(t *testing.T) {
 // fact for the Practice's copy.
 func TestContractReads_VoidedContractReportsSignedPDF(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()), withPortalLogin())
-	contractID, _ := seedSignedContract(t, e.db, e.Engagement.ID)
-	voidContractRow(t, e.db, contractID)
+	contractID, _ := seedSignedContract(t, e.DB, e.Engagement.ID)
+	voidContractRow(t, e.DB, contractID)
 
 	staffOut := e.contract()
 	if staffOut.Status != statusVoided {
@@ -311,7 +311,7 @@ func TestContractReads_VoidedContractReportsSignedPDF(t *testing.T) {
 		t.Fatalf("staff hasSignedPdf = false on a voided Contract whose Signed PDF the route still serves (#1119)")
 	}
 
-	clientOut := reqtest.Expect[contracts.ContractResponse](t, http.MethodGet, e.portalURL(""), http.StatusOK, e.asClient)
+	clientOut := reqtest.Expect[contracts.ContractResponse](t, http.MethodGet, e.portalURL(""), http.StatusOK, e.AsClient)
 	if clientOut.Status != statusVoided {
 		t.Fatalf("client status = %q, want %q", clientOut.Status, statusVoided)
 	}
@@ -336,14 +336,14 @@ func TestContractReads_UnsignedContractReportsNoSignedPDF(t *testing.T) {
 
 			// The PDF route is the fact the field claims to mirror, so
 			// the refusal is asserted beside it rather than assumed.
-			reqtest.ExpectStatus(t, http.MethodGet, e.contractURL("/pdf"), http.StatusNotFound, e.signedIn)
+			reqtest.ExpectStatus(t, http.MethodGet, e.contractURL("/pdf"), http.StatusNotFound, e.SignedIn)
 
 			if status == statusDraft {
 				// A Draft is unreachable from the portal at all (RLS),
 				// so there is no Client-side read to make here.
 				return
 			}
-			clientOut := reqtest.Expect[contracts.ContractResponse](t, http.MethodGet, e.portalURL(""), http.StatusOK, e.asClient)
+			clientOut := reqtest.Expect[contracts.ContractResponse](t, http.MethodGet, e.portalURL(""), http.StatusOK, e.AsClient)
 			if clientOut.HasSignedPDF {
 				t.Fatalf("client hasSignedPdf = true on a %s Contract, which has no Signed PDF at all", status)
 			}
@@ -360,7 +360,7 @@ func TestContractReads_UnsignedContractReportsNoSignedPDF(t *testing.T) {
 // the route streamed one.
 func TestGetContractHandler_DraftBesideVoidedSignedReportsSignedPDF(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
-	_, priorObjectPath := seedPriorSignedContract(t, e.db, e.Engagement.ID)
+	_, priorObjectPath := seedPriorSignedContract(t, e.DB, e.Engagement.ID)
 	e.seedDraft()
 	e.storePDF(priorObjectPath, priorSignedPDFBytes)
 
@@ -372,7 +372,7 @@ func TestGetContractHandler_DraftBesideVoidedSignedReportsSignedPDF(t *testing.T
 	if !out.HasSignedPDF {
 		t.Fatalf("hasSignedPdf = false while the route still serves the voided Contract's PDF for this Engagement")
 	}
-	reqtest.ExpectStatus(t, http.MethodGet, e.contractURL("/pdf"), http.StatusOK, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodGet, e.contractURL("/pdf"), http.StatusOK, e.SignedIn)
 }
 
 // TestSignContractHandler_ResponseReportsSignedPDF proves the Sign
@@ -383,7 +383,7 @@ func TestSignContractHandler_ResponseReportsSignedPDF(t *testing.T) {
 	e := newEnv(t, withPortalLogin())
 	e.seedContract(statusSent)
 
-	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.portalURL("/sign"), http.StatusOK, e.asClient,
+	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.portalURL("/sign"), http.StatusOK, e.AsClient,
 		reqtest.JSON(contracts.SignContractRequest{FullLegalName: "Jordan Client", Attestation: true}))
 
 	if out.Status != statusSigned {
@@ -404,11 +404,11 @@ func TestSignContractHandler_ResponseReportsSignedPDF(t *testing.T) {
 // assertion.
 func TestClientGetContractHandler_DraftBesideVoidedSignedReportsSignedPDF(t *testing.T) {
 	e := newEnv(t, withPortalLogin())
-	_, priorObjectPath := seedPriorSignedContract(t, e.db, e.Engagement.ID)
+	_, priorObjectPath := seedPriorSignedContract(t, e.DB, e.Engagement.ID)
 	e.seedDraft()
 	e.storePDF(priorObjectPath, priorSignedPDFBytes)
 
-	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodGet, e.portalURL(""), http.StatusOK, e.asClient)
+	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodGet, e.portalURL(""), http.StatusOK, e.AsClient)
 
 	if out.Status != statusVoided {
 		t.Fatalf("status = %q, want %q -- the fresh Draft is hidden from her by RLS", out.Status, statusVoided)
@@ -416,5 +416,5 @@ func TestClientGetContractHandler_DraftBesideVoidedSignedReportsSignedPDF(t *tes
 	if !out.HasSignedPDF {
 		t.Fatalf("hasSignedPdf = false while the route still serves her the Contract she signed")
 	}
-	reqtest.ExpectStatus(t, http.MethodGet, e.portalURL("/pdf"), http.StatusOK, e.asClient)
+	reqtest.ExpectStatus(t, http.MethodGet, e.portalURL("/pdf"), http.StatusOK, e.AsClient)
 }

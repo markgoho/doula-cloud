@@ -24,7 +24,7 @@ func TestPostVoidContractHandler_RefusesAnEngagementItCannotReach(t *testing.T) 
 func TestPostVoidContractHandler_NoContract(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.voidURL(), http.StatusNotFound, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodPost, e.voidURL(), http.StatusNotFound, e.SignedIn)
 }
 
 // TestPostVoidContractHandler_NonSignedRejected proves Void 409s from
@@ -36,7 +36,7 @@ func TestPostVoidContractHandler_NonSignedRejected(t *testing.T) {
 			e := newEnv(t, signedInAs(fixture.Owner()))
 			e.seedContract(status)
 
-			reqtest.ExpectStatus(t, http.MethodPost, e.voidURL(), http.StatusConflict, e.signedIn)
+			reqtest.ExpectStatus(t, http.MethodPost, e.voidURL(), http.StatusConflict, e.SignedIn)
 		})
 	}
 }
@@ -49,9 +49,9 @@ func TestPostVoidContractHandler_NonSignedRejected(t *testing.T) {
 // historical record.
 func TestPostVoidContractHandler_Success(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
-	_, objectPath := seedSignedContract(t, e.db, e.Engagement.ID)
+	_, objectPath := seedSignedContract(t, e.DB, e.Engagement.ID)
 
-	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.voidURL(), http.StatusOK, e.signedIn)
+	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.voidURL(), http.StatusOK, e.SignedIn)
 
 	if out.Status != statusVoided {
 		t.Fatalf("status = %q, want voided", out.Status)
@@ -63,7 +63,7 @@ func TestPostVoidContractHandler_Success(t *testing.T) {
 		t.Fatalf("GET status after Void = %q, want voided (the transition persisted)", got)
 	}
 
-	storedObjectPath := testdb.Scalar[sql.NullString](t, e.db.Admin, `SELECT signed_pdf_object_path FROM contracts WHERE engagement_id = $1`, e.Engagement.ID)
+	storedObjectPath := testdb.Scalar[sql.NullString](t, e.DB.Admin, `SELECT signed_pdf_object_path FROM contracts WHERE engagement_id = $1`, e.Engagement.ID)
 	if !storedObjectPath.Valid || storedObjectPath.String != objectPath {
 		t.Fatalf("signed_pdf_object_path = %+v, want unchanged at %q", storedObjectPath, objectPath)
 	}
@@ -82,13 +82,13 @@ func TestPostVoidContractHandler_Success(t *testing.T) {
 // engagement_id) in every UPDATE is for.
 func TestPostContractHandler_AllowedAfterVoid(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
-	testdb.SeedPendingPortalInvite(t, e.db, e.Engagement.Client.ID)
+	testdb.SeedPendingPortalInvite(t, e.DB, e.Engagement.Client.ID)
 	e.readyToDraft(mergeFieldProse)
-	_, oldObjectPath := seedSignedContract(t, e.db, e.Engagement.ID)
+	_, oldObjectPath := seedSignedContract(t, e.DB, e.Engagement.ID)
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.voidURL(), http.StatusOK, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodPost, e.voidURL(), http.StatusOK, e.SignedIn)
 
-	created := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.contractURL(""), http.StatusCreated, e.signedIn)
+	created := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.contractURL(""), http.StatusCreated, e.SignedIn)
 	if created.Status != statusDraft {
 		t.Fatalf("new contract status = %q, want draft", created.Status)
 	}
@@ -98,12 +98,12 @@ func TestPostContractHandler_AllowedAfterVoid(t *testing.T) {
 	// mergeFieldProse's other field, price, resolves automatically from
 	// amount_cents (#967) -- neither needs a PUT to reach the assertions
 	// below, so this just round-trips client_name unchanged.
-	reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), http.StatusOK, e.signedIn,
+	reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), http.StatusOK, e.SignedIn,
 		putting(contracts.MergeFieldValues{clientNameKey: created.Values[clientNameKey]}))
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.send(), http.StatusOK, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodPost, e.send(), http.StatusOK, e.SignedIn)
 
-	rows, err := e.db.Admin.QueryContext(t.Context(),
+	rows, err := e.DB.Admin.QueryContext(t.Context(),
 		`SELECT status, signed_pdf_object_path FROM contracts WHERE engagement_id = $1 ORDER BY created_at`,
 		e.Engagement.ID,
 	)
@@ -159,9 +159,9 @@ func TestPostVoidContractHandler_RefusedByRole(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t, signedInAs(tc.staff...))
-			seedSignedContract(t, e.db, e.Engagement.ID)
+			seedSignedContract(t, e.DB, e.Engagement.ID)
 
-			reqtest.ExpectStatus(t, http.MethodPost, e.voidURL(), tc.wantStatus, e.signedIn)
+			reqtest.ExpectStatus(t, http.MethodPost, e.voidURL(), tc.wantStatus, e.SignedIn)
 		})
 	}
 }

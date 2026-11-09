@@ -11,20 +11,15 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
 func newRotateSavedCodesServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{}, neverSuppressed)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+	return serveStaffauth(db, authntest.Verifier{}, authntest.NewFakeAccountManager()), authntest.SeedSession(t, db.App, uid)
 }
 
 func postRotate(t *testing.T, srv *httptest.Server, session string) *http.Response {
@@ -174,33 +169,20 @@ func TestRemoveMembership_RestoresSoleOwnerSavedCodes(t *testing.T) {
 
 func removeSecondOwner(t *testing.T, enrolled bool, want int) {
 	t.Helper()
-	db := testdb.New(t)
-	ownerAID, practiceID := seedOwnerMembership(t, db, "owner-a-restore")
+	e := newEnv(t, signedInAs(fixture.Owner()))
 	if enrolled {
-		seedEnrolled(t, db, ownerAID)
+		seedEnrolled(t, e.DB, e.Staff.ID)
 	}
-	ownerBID := testdb.SeedStaff(t, db, "owner-b-restore")
-	seedMembership(t, db, practiceID, ownerBID)
-	membershipSrv, session := newMembershipServer(t, db, "owner-a-restore")
-	defer membershipSrv.Close()
+	second := e.Colleague()
 
 	// Promote B to owner too -- reconcileOwnersAtPractice fires on this
 	// edit and should revoke A's codes (if any) and mint none for B.
-	promote := patchMembership(t, membershipSrv, session, practiceID, ownerBID,
-		staffauth.UpdateMembershipRequest{Roles: []string{ownerRole}, EmploymentType: employeeType})
-	_ = promote.Body.Close()
-	if promote.StatusCode != http.StatusOK {
-		t.Fatalf("promote status = %d, want 200", promote.StatusCode)
-	}
+	e.patch(second.ID, staffauth.UpdateMembershipRequest{Roles: []string{ownerRole}, EmploymentType: employeeType}, http.StatusOK)
 
 	// Now remove B -- A becomes sole Owner again.
-	remove := deleteMembership(t, membershipSrv, session, practiceID, ownerBID)
-	defer remove.Body.Close()
-	if remove.StatusCode != http.StatusNoContent {
-		t.Fatalf("remove status = %d, want 204", remove.StatusCode)
-	}
+	e.remove(second.ID, http.StatusNoContent)
 
-	if got := liveSavedCodesFor(t, db, ownerAID); got != want {
+	if got := liveSavedCodesFor(t, e.DB, e.Staff.ID); got != want {
 		t.Fatalf("owner A live codes after becoming sole again = %d, want %d", got, want)
 	}
 }

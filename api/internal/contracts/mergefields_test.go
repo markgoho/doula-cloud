@@ -19,7 +19,7 @@ const noMergeFieldProse = "This agreement has no fields to fill in."
 // noFields seeds the Engagement's Contract at status with prose that
 // holds no merge field.
 func noFields(status string) func(*env) {
-	return func(e *env) { seedContract(e.t, e.db, e.Engagement.ID, status, noMergeFieldProse) }
+	return func(e *env) { seedContract(e.T, e.DB, e.Engagement.ID, status, noMergeFieldProse) }
 }
 
 // TestContractResponses_NoMergeFieldsMarshalAsEmptyList proves #1776's
@@ -66,7 +66,7 @@ func TestContractResponses_NoMergeFieldsMarshalAsEmptyList(t *testing.T) {
 			name: "send",
 			seed: func(e *env) {
 				noFields(statusDraft)(e)
-				testdb.SeedPendingPortalInvite(e.t, e.db, e.Engagement.Client.ID)
+				testdb.SeedPendingPortalInvite(e.T, e.DB, e.Engagement.Client.ID)
 			},
 			method: http.MethodPost, url: staffURL("/send"), want: http.StatusOK,
 		},
@@ -82,11 +82,11 @@ func TestContractResponses_NoMergeFieldsMarshalAsEmptyList(t *testing.T) {
 			name: "void request decline", opts: []envOption{signedInAs(fixture.Admin())},
 			seed: func(e *env) {
 				noFields(statusSigned)(e)
-				seedVoidRequest(e.t, e.db, e.Engagement.ID, e.Staff.ID, "asking")
+				seedVoidRequest(e.T, e.DB, e.Engagement.ID, e.Staff.ID, "asking")
 			},
 			method: http.MethodPost, request: reason("not yet"), want: http.StatusOK,
 			url: func(e *env) string {
-				requestID := testdb.Scalar[string](e.t, e.db.Admin, `SELECT id FROM contract_void_requests WHERE engagement_id = $1`, e.Engagement.ID)
+				requestID := testdb.Scalar[string](e.T, e.DB.Admin, `SELECT id FROM contract_void_requests WHERE engagement_id = $1`, e.Engagement.ID)
 				return e.contractURL("/void-request/" + requestID + "/decline")
 			},
 		},
@@ -104,9 +104,9 @@ func TestContractResponses_NoMergeFieldsMarshalAsEmptyList(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			e := newEnv(t, c.opts...)
 			c.seed(e)
-			session := e.signedIn
-			if e.asClient != nil {
-				session = e.asClient
+			session := e.SignedIn
+			if e.AsClient != nil {
+				session = e.AsClient
 			}
 			opts := []reqtest.Option{session}
 			if c.request != nil {

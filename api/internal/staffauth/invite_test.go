@@ -399,10 +399,7 @@ func TestRevokeInvitationHandler_RequiresConfirmation(t *testing.T) {
 	srv, session, _ := newInviteServer(t, db, ownerUID)
 	defer srv.Close()
 
-	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/staff/invitations/"+invitationID+"/revoke", reqtest.Session(session))
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+	reqtest.ExpectStatus(t, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/staff/invitations/"+invitationID+"/revoke", http.StatusBadRequest, reqtest.Session(session))
 
 	status := testdb.Scalar[string](t, db.Admin, `SELECT status::text FROM practice_invitations WHERE id = $1`, invitationID)
 	if status != statusPending {

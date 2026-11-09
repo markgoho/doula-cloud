@@ -29,8 +29,8 @@ const (
 // attachDoula puts staffID on engagementID as the Staff member at the
 // screen and requires want.
 func (e *env) attachDoula(engagementID, staffID string, want int) attachSelfBody {
-	e.t.Helper()
-	return reqtest.Expect[attachSelfBody](e.t, http.MethodPut, e.urlOf(engagementID, "/attachments/"+staffID), want, e.signedIn)
+	e.T.Helper()
+	return reqtest.Expect[attachSelfBody](e.T, http.MethodPut, e.urlOf(engagementID, "/attachments/"+staffID), want, e.SignedIn)
 }
 
 // attachingEnv is the env with the Doula to put on, named
@@ -44,12 +44,12 @@ func newAttachingEnv(t *testing.T, caller roleCase, doula []fixture.StaffOption,
 	t.Helper()
 	opts = append([]envOption{signedInAs(append(caller.opts, fixture.StaffName(attachingOwnerName))...)}, opts...)
 	e := attachingEnv{env: newEnv(t, opts...)}
-	e.Doula = e.staff(append(doula, fixture.StaffName(attachedDoulaName))...)
+	e.Doula = e.Colleague(append(doula, fixture.StaffName(attachedDoulaName))...)
 	return e
 }
 
 func (e attachingEnv) put(want int) attachSelfBody {
-	e.t.Helper()
+	e.T.Helper()
 	return e.attachDoula(e.Engagement.ID, e.Doula.ID, want)
 }
 
@@ -84,7 +84,7 @@ func TestAttachDoulaHandler_RoleTable(t *testing.T) {
 				if body.Message == "" {
 					t.Fatal("refusal carries no message, want the reason")
 				}
-				if got := readOpenAttachments(t, e.db, e.Engagement.ID, e.Doula.ID); len(got) != 0 {
+				if got := readOpenAttachments(t, e.DB, e.Engagement.ID, e.Doula.ID); len(got) != 0 {
 					t.Fatalf("a refused press wrote an attachment: %+v", got)
 				}
 				if n := e.countActivity("doula_attached"); n != 0 {
@@ -96,7 +96,7 @@ func TestAttachDoulaHandler_RoleTable(t *testing.T) {
 			if len(body.Doulas) != 1 || body.Doulas[0].StaffID != e.Doula.ID || body.Doulas[0].Name != attachedDoulaName {
 				t.Fatalf("response doulas = %+v, want the Doula alone", body.Doulas)
 			}
-			rows := readOpenAttachments(t, e.db, e.Engagement.ID, e.Doula.ID)
+			rows := readOpenAttachments(t, e.DB, e.Engagement.ID, e.Doula.ID)
 			if len(rows) != 1 || rows[0].origin != grantedOrigin || rows[0].attachedBy != e.Staff.ID {
 				t.Fatalf("attachment = %+v, want one granted row attached by the caller", rows)
 			}
@@ -106,7 +106,7 @@ func TestAttachDoulaHandler_RoleTable(t *testing.T) {
 
 			// The audit trail: the caller is the actor, the diff and the
 			// ledger's sentence name the Doula, and the entry has a time.
-			assertDiff(t, readFactDiff(t, e.db, e.Engagement.ID, "doula_attached"), map[string]any{"attachedStaffId": e.Doula.ID})
+			assertDiff(t, readFactDiff(t, e.DB, e.Engagement.ID, "doula_attached"), map[string]any{"attachedStaffId": e.Doula.ID})
 			ledger := e.activityAs(e.Staff)
 			if len(ledger.Items) != 1 {
 				t.Fatalf("ledger items = %d, want 1", len(ledger.Items))
@@ -164,10 +164,10 @@ func TestAttachDoulaHandler_ACallerWhoIsADoulaKeepsHerOwnControl(t *testing.T) {
 // malformed ids.
 func TestAttachDoulaHandler_Refusals(t *testing.T) {
 	e := newAttachingEnv(t, ownerCase, nil)
-	completed := e.anotherEngagement(fixture.Status(fixture.StatusCompleted))
-	otherPractice := fixture.Practice(t, e.db)
-	otherEngagement := fixture.Engagement(t, e.db, otherPractice)
-	stranger := fixture.Staff(t, e.db, otherPractice)
+	completed := e.AnotherEngagement(fixture.Status(fixture.StatusCompleted))
+	otherPractice := fixture.Practice(t, e.DB)
+	otherEngagement := fixture.Engagement(t, e.DB, otherPractice)
+	stranger := fixture.Staff(t, e.DB, otherPractice)
 	const missing = "11111111-1111-1111-1111-111111111111"
 
 	cases := []struct {
@@ -188,7 +188,7 @@ func TestAttachDoulaHandler_Refusals(t *testing.T) {
 			e.attachDoula(tc.engagementID, tc.staffID, tc.wantStatus)
 		})
 	}
-	if got := readOpenAttachments(t, e.db, e.Engagement.ID, stranger.ID); len(got) != 0 {
+	if got := readOpenAttachments(t, e.DB, e.Engagement.ID, stranger.ID); len(got) != 0 {
 		t.Fatalf("a refused press wrote an attachment: %+v", got)
 	}
 }

@@ -29,22 +29,22 @@ func (e *env) declineURL(requestID string) string {
 // seedVoidRequestBy seeds an open void request on the Engagement's
 // Contract, asked for by who.
 func (e *env) seedVoidRequestBy(who fixture.StaffRecord, reason string) (requestID string) {
-	e.t.Helper()
-	return seedVoidRequest(e.t, e.db, e.Engagement.ID, who.ID, reason)
+	e.T.Helper()
+	return seedVoidRequest(e.T, e.DB, e.Engagement.ID, who.ID, reason)
 }
 
 // requestVoid sends a void request for a reason and returns the Contract
 // it answers with.
 func (e *env) requestVoid(reason string, want int) contracts.ContractResponse {
-	e.t.Helper()
-	return reqtest.Expect[contracts.ContractResponse](e.t, http.MethodPost, e.voidRequestURL(), want, e.signedIn, reasoned(reason))
+	e.T.Helper()
+	return reqtest.Expect[contracts.ContractResponse](e.T, http.MethodPost, e.voidRequestURL(), want, e.SignedIn, reasoned(reason))
 }
 
 // decline declines the request with a reason and returns the Contract it
 // answers with.
 func (e *env) decline(requestID, reason string, want int) contracts.ContractResponse {
-	e.t.Helper()
-	return reqtest.Expect[contracts.ContractResponse](e.t, http.MethodPost, e.declineURL(requestID), want, e.signedIn, reasoned(reason))
+	e.T.Helper()
+	return reqtest.Expect[contracts.ContractResponse](e.T, http.MethodPost, e.declineURL(requestID), want, e.SignedIn, reasoned(reason))
 }
 
 // TestPostVoidRequestHandler_RequiresSignedContract proves a void may
@@ -57,7 +57,7 @@ func TestPostVoidRequestHandler_RequiresSignedContract(t *testing.T) {
 			e := newEnv(t, signedInAs(fixture.Owner()))
 			e.seedContract(status)
 
-			reqtest.ExpectStatus(t, http.MethodPost, e.voidRequestURL(), http.StatusConflict, e.signedIn, reasoned("the client's plan changed"))
+			reqtest.ExpectStatus(t, http.MethodPost, e.voidRequestURL(), http.StatusConflict, e.SignedIn, reasoned("the client's plan changed"))
 		})
 	}
 }
@@ -88,7 +88,7 @@ func TestPostVoidRequestHandler_Refusals(t *testing.T) {
 				e.seedContract(statusSigned)
 			}
 
-			reqtest.ExpectStatus(t, http.MethodPost, e.voidRequestURL(), c.want, e.signedIn, c.body)
+			reqtest.ExpectStatus(t, http.MethodPost, e.voidRequestURL(), c.want, e.SignedIn, c.body)
 		})
 	}
 }
@@ -124,7 +124,7 @@ func TestPostVoidRequestHandler_Success(t *testing.T) {
 	// independent of #972's read-side money filter, which dropped this
 	// action from the money set without changing what row is written.
 	// The actor must be the requester.
-	assertActivityActor(t, e.db, e.Engagement.ID, activity.ActionContractVoidRequested, e.Staff.ID)
+	assertActivityActor(t, e.DB, e.Engagement.ID, activity.ActionContractVoidRequested, e.Staff.ID)
 }
 
 // TestPostVoidRequestHandler_DuplicateOpenRefused proves the same person
@@ -136,7 +136,7 @@ func TestPostVoidRequestHandler_DuplicateOpenRefused(t *testing.T) {
 	e.seedContract(statusSigned)
 
 	e.requestVoid("first ask", http.StatusCreated)
-	reqtest.ExpectStatus(t, http.MethodPost, e.voidRequestURL(), http.StatusConflict, e.signedIn, reasoned("second ask"))
+	reqtest.ExpectStatus(t, http.MethodPost, e.voidRequestURL(), http.StatusConflict, e.SignedIn, reasoned("second ask"))
 }
 
 // TestPostVoidRequestHandler_ContractorReach proves #971's own AC5: a
@@ -152,8 +152,8 @@ func TestPostVoidRequestHandler_ContractorReach(t *testing.T) {
 		wantStatus int
 	}{
 		{"unattached", func(*env) {}, http.StatusNotFound},
-		{"accrued only", func(e *env) { testdb.SeedAttachment(e.t, e.db, e.Engagement.ID, e.Staff.ID, "accrued", false) }, http.StatusNotFound},
-		{"granted", func(e *env) { testdb.SeedGrantedAttachment(e.t, e.db, e.Engagement.ID, e.Staff.ID) }, http.StatusCreated},
+		{"accrued only", func(e *env) { testdb.SeedAttachment(e.T, e.DB, e.Engagement.ID, e.Staff.ID, "accrued", false) }, http.StatusNotFound},
+		{"granted", func(e *env) { testdb.SeedGrantedAttachment(e.T, e.DB, e.Engagement.ID, e.Staff.ID) }, http.StatusCreated},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -162,7 +162,7 @@ func TestPostVoidRequestHandler_ContractorReach(t *testing.T) {
 			tc.attach(e)
 
 			if tc.wantStatus != http.StatusCreated {
-				reqtest.ExpectStatus(t, http.MethodPost, e.voidRequestURL(), tc.wantStatus, e.signedIn, reasoned("asking as a contractor"))
+				reqtest.ExpectStatus(t, http.MethodPost, e.voidRequestURL(), tc.wantStatus, e.SignedIn, reasoned("asking as a contractor"))
 				return
 			}
 			out := e.requestVoid("asking as a contractor", tc.wantStatus)
@@ -192,9 +192,9 @@ func TestPostVoidRequestDeclineHandler_RefusedByRole(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t, signedInAs(tc.staff...))
 			e.seedContract(statusSigned)
-			requestID := e.seedVoidRequestBy(e.staff(fixture.Owner()), "asking")
+			requestID := e.seedVoidRequestBy(e.Colleague(fixture.Owner()), "asking")
 
-			reqtest.ExpectStatus(t, http.MethodPost, e.declineURL(requestID), tc.wantStatus, e.signedIn, reasoned("declining"))
+			reqtest.ExpectStatus(t, http.MethodPost, e.declineURL(requestID), tc.wantStatus, e.SignedIn, reasoned("declining"))
 		})
 	}
 }
@@ -209,7 +209,7 @@ func TestPostVoidRequestDeclineHandler_Success(t *testing.T) {
 	// A distinct requester from the decliner: #1012's own activity
 	// assertion below needs actor_staff_id to name the decliner and
 	// nobody else, which a single-person fixture can't discriminate.
-	requestID := e.seedVoidRequestBy(e.staff(fixture.Doula()), "asking")
+	requestID := e.seedVoidRequestBy(e.Colleague(fixture.Doula()), "asking")
 
 	out := e.decline(requestID, "not yet", http.StatusOK)
 
@@ -226,7 +226,7 @@ func TestPostVoidRequestDeclineHandler_Success(t *testing.T) {
 
 	// #1012's own AC: the decline lands in the activity ledger too, actor
 	// the decliner rather than the original requester.
-	assertActivityActor(t, e.db, e.Engagement.ID, activity.ActionContractVoidDeclined, e.Staff.ID)
+	assertActivityActor(t, e.DB, e.Engagement.ID, activity.ActionContractVoidDeclined, e.Staff.ID)
 }
 
 // TestPostVoidRequestDeclineHandler_AlreadyResolved proves a second
@@ -238,7 +238,7 @@ func TestPostVoidRequestDeclineHandler_AlreadyResolved(t *testing.T) {
 	requestID := e.seedVoidRequestBy(e.Staff, "asking")
 
 	e.decline(requestID, "not yet", http.StatusOK)
-	reqtest.ExpectStatus(t, http.MethodPost, e.declineURL(requestID), http.StatusNotFound, e.signedIn, reasoned("still not yet"))
+	reqtest.ExpectStatus(t, http.MethodPost, e.declineURL(requestID), http.StatusNotFound, e.SignedIn, reasoned("still not yet"))
 }
 
 // TestPostVoidContractHandler_ClosesOpenRequestsAsVoided proves #971's
@@ -249,9 +249,9 @@ func TestPostVoidRequestDeclineHandler_AlreadyResolved(t *testing.T) {
 func TestPostVoidContractHandler_ClosesOpenRequestsAsVoided(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
 	e.seedContract(statusSigned)
-	requestID := e.seedVoidRequestBy(e.staff(fixture.Doula()), "please void this")
+	requestID := e.seedVoidRequestBy(e.Colleague(fixture.Doula()), "please void this")
 
-	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.voidURL(), http.StatusOK, e.signedIn)
+	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.voidURL(), http.StatusOK, e.SignedIn)
 
 	if out.Status != statusVoided {
 		t.Fatalf("contract status = %q, want %q", out.Status, statusVoided)
@@ -302,7 +302,7 @@ func TestPostVoidRequestDeclineHandler_Refusals(t *testing.T) {
 				e.seedContract(statusSigned)
 			}
 
-			reqtest.ExpectStatus(t, http.MethodPost, e.declineURL(c.requestID(e)), c.want, e.signedIn, c.body)
+			reqtest.ExpectStatus(t, http.MethodPost, e.declineURL(c.requestID(e)), c.want, e.SignedIn, c.body)
 		})
 	}
 }
@@ -310,7 +310,7 @@ func TestPostVoidRequestDeclineHandler_Refusals(t *testing.T) {
 // openRequest seeds an open void request asked for by the Staff member
 // at the screen and returns its id.
 func (e *env) openRequest() string {
-	e.t.Helper()
+	e.T.Helper()
 	return e.seedVoidRequestBy(e.Staff, "asking")
 }
 

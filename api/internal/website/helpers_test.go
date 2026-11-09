@@ -1,8 +1,8 @@
 package website_test
 
 import (
+	"database/sql"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/fixture"
@@ -10,7 +10,6 @@ import (
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
-	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/website"
 )
 
@@ -38,14 +37,7 @@ const (
 // a website declaration. A test says only what it changes, with
 // signedInAs.
 type env struct {
-	t   *testing.T
-	db  *testdb.DB
-	srv *httptest.Server
-
-	Practice fixture.PracticeRecord
-	Staff    fixture.StaffRecord
-
-	signedIn reqtest.Option
+	*fixture.Scene
 }
 
 type envOption func(*[]fixture.StaffOption)
@@ -62,43 +54,21 @@ func newEnv(t *testing.T, opts ...envOption) *env {
 	for _, opt := range opts {
 		opt(&staff)
 	}
-	db := testdb.New(t)
-	e := &env{t: t, db: db, Practice: fixture.Practice(t, db, fixture.PracticeName(practiceName))}
-	e.Staff = fixture.Staff(t, db, e.Practice, staff...)
-	e.srv = e.mount()
-	e.signedIn = e.as(e.Staff)
-	return e
+	return &env{fixture.NewScene(t, mount,
+		fixture.InPractice(fixture.PracticeName(practiceName)), fixture.SignedInAs(staff...))}
 }
 
 // mount mounts this package's whole surface through website.Mount, the
 // same call main.go makes on the real GatedRouter and
 // idempotency.Router -- so the Owner gate and the role gate are the real
 // ones and not a test's approximation.
-func (e *env) mount() *httptest.Server {
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, e.db.App)
-	ir := idempotency.NewRouter(g, e.db.App)
+func mount(g *staffauth.GatedRouter, ir *idempotency.Router, _ *sql.DB) {
 	website.Mount(g, ir, &tasknudge.FakeEnqueuer{})
-	srv := httptest.NewServer(mux)
-	e.t.Cleanup(srv.Close)
-	return srv
-}
-
-// as signs a request in as who.
-func (e *env) as(who fixture.StaffRecord) reqtest.Option {
-	e.t.Helper()
-	return reqtest.Session(fixture.Session(e.t, e.db, who))
-}
-
-// staff is another Staff member at the Practice.
-func (e *env) staff(opts ...fixture.StaffOption) fixture.StaffRecord {
-	e.t.Helper()
-	return fixture.Staff(e.t, e.db, e.Practice, opts...)
 }
 
 // websiteURL is the Practice's website route.
 func (e *env) websiteURL() string {
-	return e.srv.URL + "/api/practices/" + e.Practice.ID + "/website"
+	return e.PracticeURL("/website")
 }
 
 // rawBody sends body as it is written, with no content type, the way the
@@ -109,20 +79,12 @@ func rawBody(body string) reqtest.Option {
 
 // put saves body as the Staff member at the screen.
 func (e *env) put(body string) website.Response {
-	e.t.Helper()
-	return reqtest.Expect[website.Response](e.t, http.MethodPut, e.websiteURL(), http.StatusOK, e.signedIn, rawBody(body))
+	e.T.Helper()
+	return reqtest.Expect[website.Response](e.T, http.MethodPut, e.websiteURL(), http.StatusOK, e.SignedIn, rawBody(body))
 }
 
 // get reads the declaration as who.
 func (e *env) get(who reqtest.Option) website.Response {
-	e.t.Helper()
-	return reqtest.Expect[website.Response](e.t, http.MethodGet, e.websiteURL(), http.StatusOK, who)
-}
-
-// exec runs one fixture statement on the superuser connection.
-func (e *env) exec(query string, args ...any) {
-	e.t.Helper()
-	if _, err := e.db.Admin.ExecContext(e.t.Context(), query, args...); err != nil {
-		e.t.Fatalf("fixture %q: %v", query, err)
-	}
+	e.T.Helper()
+	return reqtest.Expect[website.Response](e.T, http.MethodGet, e.websiteURL(), http.StatusOK, who)
 }

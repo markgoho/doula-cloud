@@ -24,15 +24,6 @@ func createVisit(t *testing.T, session, url, key string, body visit.CreateReques
 	return resp
 }
 
-// decodeCreate reads a CreateResponse off a 201, failing the test on any
-// other status -- the shape most of the success cases below want.
-func decodeCreate(t *testing.T, resp *http.Response) visit.CreateResponse {
-	t.Helper()
-	reqtest.RequireStatus(t, resp, http.StatusCreated)
-	out := reqtest.Decode[visit.CreateResponse](t, resp)
-	return out
-}
-
 // countVisits is how the refusal cases prove no row was written.
 func countVisits(t *testing.T, db *testdb.DB, engagementID string) int {
 	t.Helper()
@@ -101,36 +92,36 @@ func visitsURL(srvURL, practiceID, engagementID string) string {
 // create books a Visit on the Engagement as the Staff member at the
 // screen.
 func (e *env) create(request visit.CreateRequest, opts ...reqtest.Option) visit.CreateResponse {
-	e.t.Helper()
-	return reqtest.Expect[visit.CreateResponse](e.t, http.MethodPost, e.visitsURL(""), http.StatusCreated, append([]reqtest.Option{e.signedIn, reqtest.JSON(request)}, opts...)...)
+	e.T.Helper()
+	return reqtest.Expect[visit.CreateResponse](e.T, http.MethodPost, e.visitsURL(""), http.StatusCreated, append([]reqtest.Option{e.SignedIn, reqtest.JSON(request)}, opts...)...)
 }
 
 // refuseCreate proves a create is refused with want and writes no row.
 func (e *env) refuseCreate(request visit.CreateRequest, want int) {
-	e.t.Helper()
-	reqtest.ExpectStatus(e.t, http.MethodPost, e.visitsURL(""), want, e.signedIn, reqtest.JSON(request))
-	if got := countVisits(e.t, e.db, e.Engagement.ID); got != 0 {
-		e.t.Fatalf("visits = %d, want 0 -- a refused create must write no row", got)
+	e.T.Helper()
+	reqtest.ExpectStatus(e.T, http.MethodPost, e.visitsURL(""), want, e.SignedIn, reqtest.JSON(request))
+	if got := countVisits(e.T, e.DB, e.Engagement.ID); got != 0 {
+		e.T.Fatalf("visits = %d, want 0 -- a refused create must write no row", got)
 	}
 }
 
 // reassign hands a Visit to staffID as the Staff member at the screen and
 // requires want.
 func (e *env) reassign(visitID, staffID string, want int) {
-	e.t.Helper()
-	reqtest.ExpectStatus(e.t, http.MethodPatch, e.visitsURL("/"+visitID), want, e.signedIn, reqtest.JSON(visit.ReassignRequest{StaffID: staffID}))
+	e.T.Helper()
+	reqtest.ExpectStatus(e.T, http.MethodPatch, e.visitsURL("/"+visitID), want, e.SignedIn, reqtest.JSON(visit.ReassignRequest{StaffID: staffID}))
 }
 
 // requireAttachment proves staffID holds an open granted Attachment on the
 // Engagement, attached by attachedBy.
 func (e *env) requireAttachment(staffID, attachedBy, who string) {
-	e.t.Helper()
-	origin, got, exists := attachment(e.t, e.db, e.Engagement.ID, staffID)
+	e.T.Helper()
+	origin, got, exists := attachment(e.T, e.DB, e.Engagement.ID, staffID)
 	if !exists {
-		e.t.Fatalf("no attachment for %s", who)
+		e.T.Fatalf("no attachment for %s", who)
 	}
 	if origin != grantedOrigin || got != attachedBy {
-		e.t.Fatalf("attachment = %s by %s, want granted by %s", origin, got, attachedBy)
+		e.T.Fatalf("attachment = %s by %s, want granted by %s", origin, got, attachedBy)
 	}
 }
 
@@ -152,7 +143,7 @@ func TestCreateHandler_AssignsTheVisit(t *testing.T) {
 		request func(e *env) (visit.CreateRequest, string)
 	}{
 		{"the named colleague", []fixture.StaffOption{fixture.Owner(), fixture.Doula()}, func(e *env) (visit.CreateRequest, string) {
-			colleague := e.staff().ID
+			colleague := e.Colleague().ID
 			return visit.CreateRequest{StaffID: &colleague}, colleague
 		}},
 		{"the caller when nobody is named", []fixture.StaffOption{fixture.Owner(), fixture.Doula()}, func(e *env) (visit.CreateRequest, string) {
@@ -178,7 +169,7 @@ func TestCreateHandler_AssignsTheVisit(t *testing.T) {
 // the Staff roster at all (ADR-0008), so she has no colleague to pick.
 func TestCreateHandler_RefusesAColleagueNamedByAPlainDoula(t *testing.T) {
 	e := newEnv(t)
-	colleague := e.staff().ID
+	colleague := e.Colleague().ID
 
 	e.refuseCreate(visit.CreateRequest{StaffID: &colleague}, http.StatusForbidden)
 }
@@ -188,7 +179,7 @@ func TestCreateHandler_RefusesAColleagueNamedByAPlainDoula(t *testing.T) {
 // than quietly putting her on a birth she is not attending.
 func TestCreateHandler_AdminWhoIsNotADoulaNamesAColleague(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Roles(fixture.RoleAdmin)))
-	first, second := e.staff().ID, e.staff().ID
+	first, second := e.Colleague().ID, e.Colleague().ID
 
 	out := e.create(visit.CreateRequest{StaffID: &first})
 	if out.StaffID != first {
@@ -197,8 +188,8 @@ func TestCreateHandler_AdminWhoIsNotADoulaNamesAColleague(t *testing.T) {
 
 	e.reassign(out.VisitID, second, http.StatusOK)
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.visitsURL(""), http.StatusForbidden, e.signedIn, reqtest.JSON(visit.CreateRequest{}))
-	if _, _, exists := attachment(t, e.db, e.Engagement.ID, e.Staff.ID); exists {
+	reqtest.ExpectStatus(t, http.MethodPost, e.visitsURL(""), http.StatusForbidden, e.SignedIn, reqtest.JSON(visit.CreateRequest{}))
+	if _, _, exists := attachment(t, e.DB, e.Engagement.ID, e.Staff.ID); exists {
 		t.Fatal("the Admin was attached to the Engagement; an Owner or Admin acting is never attached by it (ADR-0008)")
 	}
 }
@@ -217,18 +208,18 @@ func TestCreateHandler_RefusesAnIneligibleAssignee(t *testing.T) {
 		{
 			name: "not a staff member at this practice",
 			target: func(e *env) string {
-				return fixture.Staff(e.t, e.db, fixture.Practice(e.t, e.db, fixture.PracticeName("Another Practice"))).ID
+				return fixture.Staff(e.T, e.DB, fixture.Practice(e.T, e.DB, fixture.PracticeName("Another Practice"))).ID
 			},
 			wantMsg: "staff member not found at this practice",
 		},
 		{
 			name:    "membership carries no Doula role",
-			target:  func(e *env) string { return e.staff(fixture.Roles(fixture.RoleAdmin)).ID },
+			target:  func(e *env) string { return e.Colleague(fixture.Roles(fixture.RoleAdmin)).ID },
 			wantMsg: "staff member does not hold the Doula role at this practice",
 		},
 		{
 			name:    "contractor who has accepted no offer",
-			target:  func(e *env) string { return e.staff(fixture.Contractor()).ID },
+			target:  func(e *env) string { return e.Colleague(fixture.Contractor()).ID },
 			wantMsg: "that contractor has not accepted an offer on this work",
 		},
 	}
@@ -238,12 +229,12 @@ func TestCreateHandler_RefusesAnIneligibleAssignee(t *testing.T) {
 			e := newEnv(t, signedInAs(fixture.Owner()))
 			target := testCase.target(e)
 
-			got := apierrtest.Expect(t, http.MethodPost, e.visitsURL(""), http.StatusBadRequest, e.signedIn, reqtest.JSON(visit.CreateRequest{StaffID: &target}))
+			got := apierrtest.Expect(t, http.MethodPost, e.visitsURL(""), http.StatusBadRequest, e.SignedIn, reqtest.JSON(visit.CreateRequest{StaffID: &target}))
 
 			if got.Message != testCase.wantMsg {
 				t.Fatalf("message = %q, want %q", got.Message, testCase.wantMsg)
 			}
-			if got := countVisits(t, e.db, e.Engagement.ID); got != 0 {
+			if got := countVisits(t, e.DB, e.Engagement.ID); got != 0 {
 				t.Fatalf("visits = %d, want 0 -- a refused create must write no row", got)
 			}
 		})
@@ -264,14 +255,14 @@ func TestCreateHandler_InvalidAssignee(t *testing.T) {
 // it, because the one she agreed to is already open.
 func TestCreateHandler_AllowsAnAttachedContractorAndGrantsHerNothing(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
-	target := e.staff(fixture.Contractor()).ID
-	testdb.SeedGrantedAttachment(t, e.db, e.Engagement.ID, target)
+	target := e.Colleague(fixture.Contractor()).ID
+	testdb.SeedGrantedAttachment(t, e.DB, e.Engagement.ID, target)
 
 	if out := e.create(visit.CreateRequest{StaffID: &target}); out.StaffID != target {
 		t.Fatalf("staffId = %q, want %q", out.StaffID, target)
 	}
 
-	count := testdb.Scalar[int](t, e.db.Admin, `SELECT count(*) FROM engagement_attachments WHERE engagement_id = $1 AND staff_id = $2`, e.Engagement.ID, target)
+	count := testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM engagement_attachments WHERE engagement_id = $1 AND staff_id = $2`, e.Engagement.ID, target)
 	if count != 1 {
 		t.Fatalf("attachments = %d, want the one her acceptance opened and no more", count)
 	}
@@ -285,7 +276,7 @@ func TestCreateHandler_AllowsAnAttachedContractorAndGrantsHerNothing(t *testing.
 func TestVisitWrites_GrantTheNamedEmployee(t *testing.T) {
 	t.Run("create", func(t *testing.T) {
 		e := newEnv(t, signedInAs(fixture.Roles(fixture.RoleAdmin)))
-		target := e.staff().ID
+		target := e.Colleague().ID
 
 		e.create(visit.CreateRequest{StaffID: &target})
 
@@ -293,8 +284,8 @@ func TestVisitWrites_GrantTheNamedEmployee(t *testing.T) {
 	})
 	t.Run("reassign", func(t *testing.T) {
 		e := newEnv(t, signedInAs(fixture.Roles(fixture.RoleAdmin)))
-		visitID := seedVisit(t, e.db, e.Engagement.ID, e.staff().ID)
-		target := e.staff().ID
+		visitID := seedVisit(t, e.DB, e.Engagement.ID, e.Colleague().ID)
+		target := e.Colleague().ID
 
 		e.reassign(visitID, target, http.StatusOK)
 
@@ -330,7 +321,7 @@ func TestCreateHandler_GrantsAnOwnerOrAdminWhoIsAContractorDoula(t *testing.T) {
 
 		t.Run(roleName+" is named by an Owner", func(t *testing.T) {
 			e := newEnv(t, signedInAs(fixture.Owner()))
-			target := e.staff(role, fixture.Doula(), fixture.Contractor()).ID
+			target := e.Colleague(role, fixture.Doula(), fixture.Contractor()).ID
 
 			if out := e.create(visit.CreateRequest{StaffID: &target}); out.StaffID != target {
 				t.Fatalf("staffId = %q, want %q", out.StaffID, target)
@@ -346,7 +337,7 @@ func TestCreateHandler_GrantsAnOwnerOrAdminWhoIsAContractorDoula(t *testing.T) {
 // no Offer, and is attached by the person who handed it to her.
 func TestReassignHandler_GrantsAnAdminWhoIsAContractorDoula(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner(), fixture.Doula()))
-	target := e.staff(fixture.Admin(), fixture.Doula(), fixture.Contractor()).ID
+	target := e.Colleague(fixture.Admin(), fixture.Doula(), fixture.Contractor()).ID
 	out := e.create(visit.CreateRequest{})
 
 	e.reassign(out.VisitID, target, http.StatusOK)
@@ -357,18 +348,18 @@ func TestReassignHandler_GrantsAnAdminWhoIsAContractorDoula(t *testing.T) {
 // Both halves of the audit trail: who acted, who it went to, and when.
 func TestVisitWrites_RecordTheAssignee(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
-	first, second := e.staff().ID, e.staff().ID
+	first, second := e.Colleague().ID, e.Colleague().ID
 
 	out := e.create(visit.CreateRequest{StaffID: &first})
-	if got := assignedStaffID(t, e.db, e.Engagement.ID, "visit_logged", "assignedStaffId"); got != first {
+	if got := assignedStaffID(t, e.DB, e.Engagement.ID, "visit_logged", "assignedStaffId"); got != first {
 		t.Fatalf("visit_logged assignee = %q, want %q", got, first)
 	}
 
 	e.reassign(out.VisitID, second, http.StatusOK)
-	if got := assignedStaffID(t, e.db, e.Engagement.ID, "visit_reassigned", activity.DiffKeyAssignedStaffIDAfter); got != second {
+	if got := assignedStaffID(t, e.DB, e.Engagement.ID, "visit_reassigned", activity.DiffKeyAssignedStaffIDAfter); got != second {
 		t.Fatalf("visit_reassigned assignee = %q, want %q", got, second)
 	}
-	if got := assignedStaffID(t, e.db, e.Engagement.ID, "visit_reassigned", activity.DiffKeyAssignedStaffIDBefore); got != first {
+	if got := assignedStaffID(t, e.DB, e.Engagement.ID, "visit_reassigned", activity.DiffKeyAssignedStaffIDBefore); got != first {
 		t.Fatalf("visit_reassigned previous assignee = %q, want %q", got, first)
 	}
 }
@@ -378,7 +369,7 @@ func TestVisitWrites_RecordTheAssignee(t *testing.T) {
 // and the same assignee, and must not book a second one.
 func TestCreateHandler_ReplayReturnsTheSameAssignee(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
-	target := e.staff().ID
+	target := e.Colleague().ID
 	key := reqtest.Header("Idempotency-Key", "book-once")
 
 	firstOut := e.create(visit.CreateRequest{StaffID: &target}, key)
@@ -387,7 +378,7 @@ func TestCreateHandler_ReplayReturnsTheSameAssignee(t *testing.T) {
 	if !reflect.DeepEqual(secondOut, firstOut) {
 		t.Fatalf("replay = %+v, want the stored %+v", secondOut, firstOut)
 	}
-	if got := countVisits(t, e.db, e.Engagement.ID); got != 1 {
+	if got := countVisits(t, e.DB, e.Engagement.ID); got != 1 {
 		t.Fatalf("visits = %d, want 1 -- a replay must not book a second", got)
 	}
 }
@@ -399,15 +390,15 @@ func TestCreateHandler_ReplayReturnsTheSameAssignee(t *testing.T) {
 // path, the same one create takes with no assignee.
 func TestReassignHandler_APlainDoulaMayNameOnlyHerself(t *testing.T) {
 	e := newEnv(t)
-	peer := e.staff().ID
-	visitID := seedVisit(t, e.db, e.Engagement.ID, e.Staff.ID)
+	peer := e.Colleague().ID
+	visitID := seedVisit(t, e.DB, e.Engagement.ID, e.Staff.ID)
 
 	e.reassign(visitID, peer, http.StatusForbidden)
-	assignedTo := testdb.Scalar[string](t, e.db.Admin, `SELECT staff_id::text FROM visits WHERE id = $1`, visitID)
+	assignedTo := testdb.Scalar[string](t, e.DB.Admin, `SELECT staff_id::text FROM visits WHERE id = $1`, visitID)
 	if assignedTo != e.Staff.ID {
 		t.Fatalf("visit is assigned to %q, want the refusal to have left it on %q", assignedTo, e.Staff.ID)
 	}
 
-	peerVisit := seedVisit(t, e.db, e.Engagement.ID, peer)
+	peerVisit := seedVisit(t, e.DB, e.Engagement.ID, peer)
 	e.reassign(peerVisit, e.Staff.ID, http.StatusOK)
 }

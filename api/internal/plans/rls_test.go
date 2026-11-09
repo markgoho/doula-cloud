@@ -20,8 +20,8 @@ func TestRLS_PlanTablesFailClosedWithNoSessionVarSet(t *testing.T) {
 	e.seedTemplate(carePlanType, f1Fields)
 	e.seedInstance(carePlanType, f1Fields, `{}`)
 
-	testdb.RequireFailsClosed(t, e.db, "plan_templates")
-	testdb.RequireFailsClosed(t, e.db, "plan_instances")
+	testdb.RequireFailsClosed(t, e.DB, "plan_templates")
+	testdb.RequireFailsClosed(t, e.DB, "plan_instances")
 }
 
 // TestRLS_PlanTemplatesVisibilityIsScopedToCurrentPractice proves the

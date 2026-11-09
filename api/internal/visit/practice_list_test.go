@@ -1,14 +1,13 @@
 package visit_test
 
 import (
-	"encoding/json/v2"
-	"fmt"
 	"net/http"
 	"net/url"
 	"slices"
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/visit"
@@ -24,28 +23,20 @@ const (
 	staffParameter = "staffId"
 )
 
-// schedulePath builds the Practice-wide schedule URL with whatever
-// narrowing a test wants, so no test has to hand-assemble a query string.
-func schedulePath(srvURL, practiceID string, params url.Values) string {
-	path := srvURL + "/api/practices/" + practiceID + "/visits"
+// scheduleURL is the Practice-wide schedule route with whatever narrowing
+// a test wants, so no test has to hand-assemble a query string.
+func (e *env) scheduleURL(params url.Values) string {
 	if len(params) == 0 {
-		return path
+		return e.PracticeURL("/visits")
 	}
-	return path + "?" + params.Encode()
+	return e.PracticeURL("/visits?" + params.Encode())
 }
 
-// getSchedule performs the read and decodes the envelope, failing the
-// test on any status other than 200.
-func getSchedule(t *testing.T, session, requestURL string) visit.PracticeScheduleResponse {
-	t.Helper()
-	resp := authedGet(t, session, requestURL)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	var page visit.PracticeScheduleResponse
-	if err := json.UnmarshalRead(resp.Body, &page); err != nil {
-		t.Fatalf("decode schedule: %v", err)
-	}
-	return page
+// readSchedule reads the Practice-wide schedule as the Staff member at the
+// screen and requires the 200.
+func (e *env) readSchedule(params url.Values) visit.PracticeScheduleResponse {
+	e.T.Helper()
+	return reqtest.Expect[visit.PracticeScheduleResponse](e.T, http.MethodGet, e.scheduleURL(params), http.StatusOK, e.SignedIn)
 }
 
 // visitIDs pulls the identities out of a page, so an assertion compares
@@ -58,68 +49,58 @@ func visitIDs(page visit.PracticeScheduleResponse) []string {
 	return ids
 }
 
-// scheduleFixture is one Practice with two Clients, three Staff and four
-// Visits -- the smallest shape that can tell every acceptance criterion
-// apart: a Visit with no scheduled instant, a Visit outside the window,
-// two Doulas to filter between, and one Engagement a contractor is
-// attached to.
-type scheduleFixture struct {
-	practiceID string
+// scheduleEnv is one Practice with two Clients, two Doulas and four
+// Visits, read by the Staff member at the screen -- the smallest shape
+// that can tell every acceptance criterion apart: a Visit with no
+// scheduled instant, a Visit outside the window, two Doulas to filter
+// between, and one Engagement a contractor is attached to.
+type scheduleEnv struct {
+	*env
 	// engagementA is the Engagement the contractor holds an open, granted
 	// attachment on; engagementB is the one she does not.
 	engagementA, engagementB string
 	// clientA is engagementA's Client, named in full by a test (#2114).
-	clientA         string
-	employeeDoulaID string
-	otherDoulaID    string
+	clientA                   string
+	employeeDoula, otherDoula fixture.StaffRecord
 	// soon and later are both inside the default window; unscheduledVisit
 	// has no instant at all and past is behind it.
 	soonVisit, laterVisit, unscheduledVisit, pastVisit string
 	base                                               time.Time
 }
 
-func newScheduleFixture(t *testing.T, db *testdb.DB, prefix string) scheduleFixture {
+func newScheduleEnv(t *testing.T, staff ...fixture.StaffOption) *scheduleEnv {
 	t.Helper()
-	practiceID, employeeDoulaID := testdb.SeedStaffAtNewPractice(
-		t, db, prefix+"-employee-doula", []string{doulaRole}, employeeType)
-	otherDoulaID := testdb.SeedNamedStaffAtPractice(
-		t, db, practiceID, prefix+"-other-doula", "Other Doula", []string{doulaRole}, employeeType)
-
-	clientA, engagementA := testdb.SeedNamedEngagement(t, db, practiceID, "Ada Client", prefix+"-ada@example.com")
-	_, engagementB := testdb.SeedNamedEngagement(t, db, practiceID, "Bea Client", prefix+"-bea@example.com")
-
-	base := time.Now().UTC().Add(time.Hour).Truncate(time.Second)
-	f := scheduleFixture{
-		practiceID:      practiceID,
-		engagementA:     engagementA,
-		clientA:         clientA,
-		engagementB:     engagementB,
-		employeeDoulaID: employeeDoulaID,
-		otherDoulaID:    otherDoulaID,
-		base:            base,
+	e := newEnv(t, signedInAs(staff...), withEngagement(fixture.NewClient(fixture.ClientName("Ada Client"))))
+	f := &scheduleEnv{
+		env:           e,
+		engagementA:   e.Engagement.ID,
+		clientA:       e.Engagement.Client.ID,
+		engagementB:   e.AnotherEngagement(fixture.NewClient(fixture.ClientName("Bea Client"))).ID,
+		employeeDoula: e.Colleague(),
+		otherDoula:    e.Colleague(fixture.StaffName("Other Doula")),
+		base:          time.Now().UTC().Add(time.Hour).Truncate(time.Second),
 	}
-	f.soonVisit = seedScheduledVisit(t, db, engagementA, employeeDoulaID, base)
-	f.laterVisit = seedScheduledVisit(t, db, engagementB, otherDoulaID, base.Add(48*time.Hour))
-	f.unscheduledVisit = seedVisit(t, db, engagementA, employeeDoulaID)
-	f.pastVisit = seedScheduledVisit(t, db, engagementA, employeeDoulaID, base.Add(-72*time.Hour))
+	f.soonVisit = seedScheduledVisit(t, e.DB, f.engagementA, f.employeeDoula.ID, f.base)
+	f.laterVisit = seedScheduledVisit(t, e.DB, f.engagementB, f.otherDoula.ID, f.base.Add(48*time.Hour))
+	f.unscheduledVisit = seedVisit(t, e.DB, f.engagementA, f.employeeDoula.ID)
+	f.pastVisit = seedScheduledVisit(t, e.DB, f.engagementA, f.employeeDoula.ID, f.base.Add(-72*time.Hour))
 	return f
+}
+
+// window is the from and to query for a window of the given bounds.
+func window(from, to time.Time) url.Values {
+	return url.Values{fromParameter: {from.Format(time.RFC3339)}, toParameter: {to.Format(time.RFC3339)}}
 }
 
 // TestPracticeSchedule_ListsEveryScheduledVisitSoonestFirst is the first
 // acceptance criterion: one view, across every Client and every Doula,
 // ordered by when the Visit happens.
 func TestPracticeSchedule_ListsEveryScheduledVisitSoonestFirst(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "schedule-owner"
-	f := newScheduleFixture(t, db, "listing")
-	testdb.SeedStaffAtPractice(t, db, f.practiceID, identityUID, []string{ownerRole}, employeeType)
+	f := newScheduleEnv(t, fixture.Owner())
 	// #2114: the schedule names each Client in full.
-	testdb.NameClient(t, db, f.clientA, "Ada", "Okafor")
+	testdb.NameClient(t, f.DB, f.clientA, "Ada", "Okafor")
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	page := getSchedule(t, session, schedulePath(srv.URL, f.practiceID, nil))
+	page := f.readSchedule(nil)
 	if got := visitIDs(page); !slices.Equal(got, []string{f.soonVisit, f.laterVisit}) {
 		t.Fatalf("schedule = %v, want [%s %s]", got, f.soonVisit, f.laterVisit)
 	}
@@ -131,8 +112,8 @@ func TestPracticeSchedule_ListsEveryScheduledVisitSoonestFirst(t *testing.T) {
 	if first.ClientName != "Ada Okafor" {
 		t.Errorf("clientName = %q, want %q", first.ClientName, "Ada Okafor")
 	}
-	if first.StaffID != f.employeeDoulaID {
-		t.Errorf("staffId = %q, want %q", first.StaffID, f.employeeDoulaID)
+	if first.StaffID != f.employeeDoula.ID {
+		t.Errorf("staffId = %q, want %q", first.StaffID, f.employeeDoula.ID)
 	}
 	if first.StaffName == "" {
 		t.Error("staffName is empty; the row has to name the assigned Doula")
@@ -149,18 +130,10 @@ func TestPracticeSchedule_ListsEveryScheduledVisitSoonestFirst(t *testing.T) {
 // every Visit at the Practice, so "absent" is the predicate rather than
 // an artifact of the range.
 func TestPracticeSchedule_OmitsAVisitWithNoScheduledInstant(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "schedule-omits-unscheduled"
-	f := newScheduleFixture(t, db, "unscheduled")
-	testdb.SeedStaffAtPractice(t, db, f.practiceID, identityUID, []string{ownerRole}, employeeType)
+	f := newScheduleEnv(t, fixture.Owner())
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
+	page := f.readSchedule(window(f.base.Add(-365*24*time.Hour), f.base.Add(365*24*time.Hour)))
 
-	page := getSchedule(t, session, schedulePath(srv.URL, f.practiceID, url.Values{
-		fromParameter: {f.base.Add(-365 * 24 * time.Hour).Format(time.RFC3339)},
-		toParameter:   {f.base.Add(365 * 24 * time.Hour).Format(time.RFC3339)},
-	}))
 	for _, item := range page.Items {
 		if item.VisitID == f.unscheduledVisit {
 			t.Fatalf("unscheduled Visit %q appeared on the schedule", f.unscheduledVisit)
@@ -175,30 +148,18 @@ func TestPracticeSchedule_OmitsAVisitWithNoScheduledInstant(t *testing.T) {
 // criterion: the caller's own window replaces the default one, in both
 // directions.
 func TestPracticeSchedule_NarrowsToADateRange(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "schedule-range"
-	f := newScheduleFixture(t, db, "range")
-	testdb.SeedStaffAtPractice(t, db, f.practiceID, identityUID, []string{ownerRole}, employeeType)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
+	f := newScheduleEnv(t, fixture.Owner())
 
 	// A window that starts before the past Visit reaches it; the default
 	// one, which starts at "now", never does.
-	past := getSchedule(t, session, schedulePath(srv.URL, f.practiceID, url.Values{
-		fromParameter: {f.base.Add(-96 * time.Hour).Format(time.RFC3339)},
-		toParameter:   {f.base.Format(time.RFC3339)},
-	}))
+	past := f.readSchedule(window(f.base.Add(-96*time.Hour), f.base))
 	if got := visitIDs(past); !slices.Equal(got, []string{f.pastVisit}) {
 		t.Fatalf("backward window = %v, want [%s]", got, f.pastVisit)
 	}
 
 	// `to` is exclusive: a window ending exactly on the later Visit's
 	// instant holds the soon one and not the later one.
-	upToLater := getSchedule(t, session, schedulePath(srv.URL, f.practiceID, url.Values{
-		fromParameter: {f.base.Format(time.RFC3339)},
-		toParameter:   {f.base.Add(48 * time.Hour).Format(time.RFC3339)},
-	}))
+	upToLater := f.readSchedule(window(f.base, f.base.Add(48*time.Hour)))
 	if got := visitIDs(upToLater); !slices.Equal(got, []string{f.soonVisit}) {
 		t.Fatalf("exclusive upper bound = %v, want [%s]", got, f.soonVisit)
 	}
@@ -207,17 +168,10 @@ func TestPracticeSchedule_NarrowsToADateRange(t *testing.T) {
 // TestPracticeSchedule_NarrowsToOneDoula is the other half of the fourth
 // criterion.
 func TestPracticeSchedule_NarrowsToOneDoula(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "schedule-one-doula"
-	f := newScheduleFixture(t, db, "one-doula")
-	testdb.SeedStaffAtPractice(t, db, f.practiceID, identityUID, []string{ownerRole}, employeeType)
+	f := newScheduleEnv(t, fixture.Owner())
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
+	page := f.readSchedule(url.Values{staffParameter: {f.otherDoula.ID}})
 
-	page := getSchedule(t, session, schedulePath(srv.URL, f.practiceID, url.Values{
-		staffParameter: {f.otherDoulaID},
-	}))
 	if got := visitIDs(page); !slices.Equal(got, []string{f.laterVisit}) {
 		t.Fatalf("narrowed to one Doula = %v, want [%s]", got, f.laterVisit)
 	}
@@ -228,13 +182,7 @@ func TestPracticeSchedule_NarrowsToOneDoula(t *testing.T) {
 // that quietly returned the default window would be a lie about what the
 // screen is showing.
 func TestPracticeSchedule_RefusesMalformedNarrowing(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "schedule-bad-input"
-	f := newScheduleFixture(t, db, "bad-input")
-	testdb.SeedStaffAtPractice(t, db, f.practiceID, identityUID, []string{ownerRole}, employeeType)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
+	f := newScheduleEnv(t, fixture.Owner())
 
 	cases := []struct {
 		name   string
@@ -242,22 +190,14 @@ func TestPracticeSchedule_RefusesMalformedNarrowing(t *testing.T) {
 	}{
 		{"unparseable from", url.Values{fromParameter: {"yesterday"}}},
 		{"unparseable to", url.Values{toParameter: {"soon"}}},
-		{"empty range", url.Values{
-			fromParameter: {f.base.Format(time.RFC3339)},
-			toParameter:   {f.base.Format(time.RFC3339)},
-		}},
-		{"inverted range", url.Values{
-			fromParameter: {f.base.Format(time.RFC3339)},
-			toParameter:   {f.base.Add(-time.Hour).Format(time.RFC3339)},
-		}},
+		{"empty range", window(f.base, f.base)},
+		{"inverted range", window(f.base, f.base.Add(-time.Hour))},
 		{"non-uuid staffId", url.Values{staffParameter: {notAUUID}}},
 		{"undecodable cursor", url.Values{"cursor": {"not!valid!base64!"}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			resp := authedGet(t, session, schedulePath(srv.URL, f.practiceID, tc.params))
-			defer resp.Body.Close()
-			reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+			reqtest.ExpectStatus(t, http.MethodGet, f.scheduleURL(tc.params), http.StatusBadRequest, f.SignedIn)
 		})
 	}
 }
@@ -271,37 +211,29 @@ func TestPracticeSchedule_RefusesMalformedNarrowing(t *testing.T) {
 // makes it more than a hidden control.
 func TestPracticeSchedule_ReadFollowsTheRole(t *testing.T) {
 	cases := []struct {
-		name           string
-		roles          []string
-		employmentType string
-		attached       bool
-		wantAll        bool
+		name     string
+		staff    []fixture.StaffOption
+		attached bool
+		wantAll  bool
 	}{
-		{"owner reads every Visit", []string{ownerRole}, employeeType, false, true},
-		{"admin reads every Visit", []string{adminRole}, employeeType, false, true},
-		{"employee doula reads every Visit", []string{doulaRole}, employeeType, false, true},
-		{"contractor doula reads only what she is attached to", []string{doulaRole}, "contractor", true, false},
+		{"owner reads every Visit", []fixture.StaffOption{fixture.Owner()}, false, true},
+		{"admin reads every Visit", []fixture.StaffOption{fixture.Admin()}, false, true},
+		{"employee doula reads every Visit", []fixture.StaffOption{fixture.Doula()}, false, true},
+		{"contractor doula reads only what she is attached to", []fixture.StaffOption{fixture.Doula(), fixture.Contractor()}, true, false},
 	}
-	for i, tc := range cases {
+	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			db := testdb.New(t)
-			identityUID := fmt.Sprintf("schedule-role-%d", i)
-			f := newScheduleFixture(t, db, fmt.Sprintf("role-%d", i))
-			readerID := testdb.SeedStaffAtPractice(t, db, f.practiceID, identityUID, tc.roles, tc.employmentType)
+			f := newScheduleEnv(t, tc.staff...)
 			if tc.attached {
-				testdb.SeedGrantedAttachment(t, db, f.engagementA, readerID)
+				testdb.SeedGrantedAttachment(t, f.DB, f.engagementA, f.Staff.ID)
 			}
 
-			srv, session := newServer(t, db, identityUID)
-			defer srv.Close()
-
-			page := getSchedule(t, session, schedulePath(srv.URL, f.practiceID, nil))
 			want := []string{f.soonVisit, f.laterVisit}
 			if !tc.wantAll {
 				// engagementA only: the Engagement she is attached to.
 				want = []string{f.soonVisit}
 			}
-			if got := visitIDs(page); !slices.Equal(got, want) {
+			if got := visitIDs(f.readSchedule(nil)); !slices.Equal(got, want) {
 				t.Fatalf("schedule = %v, want %v", got, want)
 			}
 		})
@@ -312,16 +244,9 @@ func TestPracticeSchedule_ReadFollowsTheRole(t *testing.T) {
 // contractor rule at its sharpest: with no attachment at all she reads an
 // empty schedule rather than the Practice's book.
 func TestPracticeSchedule_RefusesAnUnattachedContractorEveryRow(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "schedule-unattached-contractor"
-	f := newScheduleFixture(t, db, "unattached")
-	testdb.SeedContractorAtPractice(t, db, f.practiceID, identityUID)
+	f := newScheduleEnv(t, fixture.Doula(), fixture.Contractor())
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	page := getSchedule(t, session, schedulePath(srv.URL, f.practiceID, nil))
-	if len(page.Items) != 0 {
+	if page := f.readSchedule(nil); len(page.Items) != 0 {
 		t.Fatalf("unattached contractor read %d Visits, want 0", len(page.Items))
 	}
 }
@@ -329,21 +254,11 @@ func TestPracticeSchedule_RefusesAnUnattachedContractorEveryRow(t *testing.T) {
 // TestPracticeSchedule_ExcludesAnotherPracticesVisits proves the join to
 // engagements really is the Practice filter, on top of RLS.
 func TestPracticeSchedule_ExcludesAnotherPracticesVisits(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "schedule-cross-practice"
-	f := newScheduleFixture(t, db, "cross")
-	testdb.SeedStaffAtPractice(t, db, f.practiceID, identityUID, []string{ownerRole}, employeeType)
+	f := newScheduleEnv(t, fixture.Owner())
+	other := fixture.Practice(t, f.DB)
+	foreignVisit := seedScheduledVisit(t, f.DB, fixture.Engagement(t, f.DB, other).ID, fixture.Staff(t, f.DB, other).ID, f.base)
 
-	otherPractice, otherStaff := testdb.SeedStaffAtNewPractice(
-		t, db, "cross-other-owner", []string{ownerRole}, employeeType)
-	_, otherEngagement := testdb.SeedEngagement(t, db, otherPractice)
-	foreignVisit := seedScheduledVisit(t, db, otherEngagement, otherStaff, f.base)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	page := getSchedule(t, session, schedulePath(srv.URL, f.practiceID, nil))
-	for _, item := range page.Items {
+	for _, item := range f.readSchedule(nil).Items {
 		if item.VisitID == foreignVisit {
 			t.Fatalf("another Practice's Visit %q appeared on the schedule", foreignVisit)
 		}
@@ -354,24 +269,17 @@ func TestPracticeSchedule_ExcludesAnotherPracticesVisits(t *testing.T) {
 // page boundary, proving the ascending cursor comparison and that a page
 // is bounded rather than unlimited.
 func TestPracticeSchedule_PagesSoonestFirst(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "schedule-paging"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(
-		t, db, identityUID, []string{ownerRole}, employeeType)
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	e := newEnv(t, signedInAs(fixture.Owner()))
 
 	base := time.Now().UTC().Add(time.Hour).Truncate(time.Second)
 	const total = 31 // schedulePageSize (30) + 1, to force a second page
 	seeded := make([]string, 0, total)
 	for i := range total {
-		seeded = append(seeded, seedScheduledVisit(t, db, engagementID, staffID,
+		seeded = append(seeded, seedScheduledVisit(t, e.DB, e.Engagement.ID, e.Staff.ID,
 			base.Add(time.Duration(i)*time.Minute)))
 	}
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	first := getSchedule(t, session, schedulePath(srv.URL, practiceID, nil))
+	first := e.readSchedule(nil)
 	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
 		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
 			len(first.Items), first.HasMore, first.NextCursor)
@@ -380,9 +288,7 @@ func TestPracticeSchedule_PagesSoonestFirst(t *testing.T) {
 		t.Fatalf("first page order = %v, want %v", visitIDs(first), seeded[:30])
 	}
 
-	second := getSchedule(t, session, schedulePath(srv.URL, practiceID, url.Values{
-		"cursor": {*first.NextCursor},
-	}))
+	second := e.readSchedule(url.Values{"cursor": {*first.NextCursor}})
 	if len(second.Items) != 1 || second.HasMore || second.NextCursor != nil {
 		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
 			len(second.Items), second.HasMore, second.NextCursor)

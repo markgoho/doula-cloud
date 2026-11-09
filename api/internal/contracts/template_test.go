@@ -135,21 +135,21 @@ func voidContractRow(t *testing.T, db *testdb.DB, contractID string) {
 
 // putTemplate sends a PUT of prose to the Practice's Contract Template.
 func (e *env) putTemplate(prose string, want int) contracts.TemplateResponse {
-	e.t.Helper()
-	return reqtest.Expect[contracts.TemplateResponse](e.t, http.MethodPut, e.templateURL(), want, e.signedIn,
+	e.T.Helper()
+	return reqtest.Expect[contracts.TemplateResponse](e.T, http.MethodPut, e.templateURL(), want, e.SignedIn,
 		reqtest.JSON(contracts.TemplateResponse{Prose: prose}))
 }
 
 // template reads the Practice's Contract Template.
 func (e *env) template() contracts.TemplateResponse {
-	e.t.Helper()
-	return reqtest.Expect[contracts.TemplateResponse](e.t, http.MethodGet, e.templateURL(), http.StatusOK, e.signedIn)
+	e.T.Helper()
+	return reqtest.Expect[contracts.TemplateResponse](e.T, http.MethodGet, e.templateURL(), http.StatusOK, e.SignedIn)
 }
 
 func TestGetTemplateHandler_NotFound(t *testing.T) {
 	e := newEnv(t)
 
-	reqtest.ExpectStatus(t, http.MethodGet, e.templateURL(), http.StatusNotFound, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodGet, e.templateURL(), http.StatusNotFound, e.SignedIn)
 }
 
 // TestGetTemplateHandler_AnyMemberAllowed proves a non-Owner member (a
@@ -195,7 +195,7 @@ func TestPutTemplateHandler_Refusals(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			reqtest.ExpectStatus(t, http.MethodPut, e.templateURL(), http.StatusBadRequest, e.signedIn, tc.body)
+			reqtest.ExpectStatus(t, http.MethodPut, e.templateURL(), http.StatusBadRequest, e.SignedIn, tc.body)
 		})
 	}
 }

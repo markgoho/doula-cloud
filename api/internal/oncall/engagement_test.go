@@ -11,8 +11,8 @@ import (
 )
 
 func (e *env) narrow(staffID string, body oncall.NarrowingRequest, want int) {
-	e.t.Helper()
-	reqtest.ExpectStatus(e.t, http.MethodPut, e.narrowURL(staffID), want, e.asOwner, reqtest.JSON(body))
+	e.T.Helper()
+	reqtest.ExpectStatus(e.T, http.MethodPut, e.narrowURL(staffID), want, e.SignedIn, reqtest.JSON(body))
 }
 
 func TestNarrowing_APrimaryAndABackupEachCarryTheirOwnDays(t *testing.T) {
@@ -57,10 +57,10 @@ func TestNarrowing_RefusesWhatItShould(t *testing.T) {
 		field  string
 		want   string
 	}{
-		{"it ends before it starts", e.asOwner, e.Doula.ID, oncall.NarrowingRequest{From: &from, To: &to}, http.StatusBadRequest, "to", oncall.MsgNarrowOrder},
-		{"it is not a date", e.asOwner, e.Doula.ID, oncall.NarrowingRequest{From: &junk}, http.StatusBadRequest, "from", oncall.MsgNarrowDate},
-		{"the Doula is not on the birth", e.asOwner, stranger.ID, oncall.NarrowingRequest{}, http.StatusNotFound, "", ""},
-		{"a Doula may not narrow anyone", e.as(e.Doula), e.Doula.ID, oncall.NarrowingRequest{}, http.StatusForbidden, "", ""},
+		{"it ends before it starts", e.SignedIn, e.Doula.ID, oncall.NarrowingRequest{From: &from, To: &to}, http.StatusBadRequest, "to", oncall.MsgNarrowOrder},
+		{"it is not a date", e.SignedIn, e.Doula.ID, oncall.NarrowingRequest{From: &junk}, http.StatusBadRequest, "from", oncall.MsgNarrowDate},
+		{"the Doula is not on the birth", e.SignedIn, stranger.ID, oncall.NarrowingRequest{}, http.StatusNotFound, "", ""},
+		{"a Doula may not narrow anyone", e.As(e.Doula), e.Doula.ID, oncall.NarrowingRequest{}, http.StatusForbidden, "", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -74,12 +74,12 @@ func TestNarrowing_RefusesWhatItShould(t *testing.T) {
 
 func TestPanel_AContractorReadsOnlyABirthSheIsOn(t *testing.T) {
 	e := newEnv(t)
-	contractor := fixture.Staff(t, e.db, e.Practice, fixture.Contractor())
-	asContractor := e.as(contractor)
+	contractor := fixture.Staff(t, e.DB, e.Practice, fixture.Contractor())
+	asContractor := e.As(contractor)
 
 	reqtest.ExpectStatus(t, http.MethodGet, e.panelURL(), http.StatusNotFound, asContractor)
 
-	testdb.SeedGrantedAttachment(t, e.db, e.Birth.ID, contractor.ID)
+	testdb.SeedGrantedAttachment(t, e.DB, e.Birth.ID, contractor.ID)
 	panel := reqtest.Expect[oncall.EngagementOnCall](t, http.MethodGet, e.panelURL(), http.StatusOK, asContractor)
 	if panel.Window == nil || len(panel.Doulas) != 2 {
 		t.Fatalf("panel = %+v, want the window and both Doulas on her own birth", panel)
@@ -89,16 +89,16 @@ func TestPanel_AContractorReadsOnlyABirthSheIsOn(t *testing.T) {
 func TestPanel_StatesWhyThereIsNoWindow(t *testing.T) {
 	e := newEnv(t)
 
-	e.exec(`UPDATE engagements SET due_date = NULL WHERE id = $1`, e.Birth.ID)
+	e.Exec(`UPDATE engagements SET due_date = NULL WHERE id = $1`, e.Birth.ID)
 	if panel := e.panel(); panel.NoWindowReason != oncall.NoWindowNoDueDate || panel.Window != nil {
 		t.Fatalf("panel = %+v, want no window for want of a due date", panel)
 	}
 
-	e.exec(`UPDATE engagement_attachments SET ended_at = now(), ended_by = staff_id WHERE engagement_id = $1`, e.Birth.ID)
+	e.Exec(`UPDATE engagement_attachments SET ended_at = now(), ended_by = staff_id WHERE engagement_id = $1`, e.Birth.ID)
 	if panel := e.panel(); panel.NoWindowReason != oncall.NoWindowNobodyAttached {
 		t.Fatalf("panel = %+v, want no window because nobody is on it", panel)
 	}
 
-	unknown := e.practiceURL("/engagements/00000000-0000-0000-0000-000000000000/on-call")
-	reqtest.ExpectStatus(t, http.MethodGet, unknown, http.StatusNotFound, e.asOwner)
+	unknown := e.PracticeURL("/engagements/00000000-0000-0000-0000-000000000000/on-call")
+	reqtest.ExpectStatus(t, http.MethodGet, unknown, http.StatusNotFound, e.SignedIn)
 }

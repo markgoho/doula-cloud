@@ -27,7 +27,7 @@ func TestGetBirthPlanPDFHandler_Success(t *testing.T) {
 	e := newEnv(t)
 	e.seedBirthPlan()
 
-	requirePDF(t, reqtest.ExpectPDF(t, http.MethodGet, e.instanceURL(birthPlanType, "/pdf"), e.signedIn))
+	requirePDF(t, reqtest.ExpectPDF(t, http.MethodGet, e.instanceURL(birthPlanType, "/pdf"), e.SignedIn))
 }
 
 // TestGetBirthPlanPDFHandler_Refusals proves the Staff route 404s, 401s or
@@ -57,7 +57,7 @@ func TestGetBirthPlanPDFHandler_Refusals(t *testing.T) {
 			e := newEnv(t, c.opts...)
 			c.seed(e)
 
-			session := e.signedIn
+			session := e.SignedIn
 			if c.signedOut {
 				session = reqtest.Session("")
 			}
@@ -71,10 +71,10 @@ func TestGetBirthPlanPDFHandler_Refusals(t *testing.T) {
 // at Practice A can't download the PDF for an Engagement at Practice B.
 func TestGetBirthPlanPDFHandler_CrossPracticeRejected(t *testing.T) {
 	e := newEnv(t)
-	other := fixture.Engagement(t, e.db, fixture.Practice(t, e.db, fixture.PracticeName("Other Practice")))
-	seedInstance(t, e.db, other.ID, birthPlanType, locationNoOptions, `{}`)
+	other := fixture.Engagement(t, e.DB, fixture.Practice(t, e.DB, fixture.PracticeName("Other Practice")))
+	seedInstance(t, e.DB, other.ID, birthPlanType, locationNoOptions, `{}`)
 
-	reqtest.ExpectStatus(t, http.MethodGet, e.instanceURLOf(other.ID, birthPlanType, "/pdf"), http.StatusNotFound, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodGet, e.instanceURLOf(other.ID, birthPlanType, "/pdf"), http.StatusNotFound, e.SignedIn)
 }
 
 // TestClientGetBirthPlanPDFHandler_Success proves a Client can download a
@@ -83,5 +83,5 @@ func TestClientGetBirthPlanPDFHandler_Success(t *testing.T) {
 	e := newEnv(t, withPortalLogin())
 	e.seedBirthPlan()
 
-	requirePDF(t, reqtest.ExpectPDF(t, http.MethodGet, e.portalURL("/pdf"), e.asClient))
+	requirePDF(t, reqtest.ExpectPDF(t, http.MethodGet, e.portalURL("/pdf"), e.AsClient))
 }

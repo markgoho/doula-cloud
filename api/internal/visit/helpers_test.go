@@ -1,6 +1,7 @@
 package visit_test
 
 import (
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -9,7 +10,6 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/idempotency"
-	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -134,6 +134,38 @@ func setPregnancyEnded(t *testing.T, db *testdb.DB, engagementID, outcome, ended
 	}
 }
 
+// env is what a test in this package starts from: a Practice with this
+// package's whole surface mounted on a server, one Staff member at the
+// screen and one Engagement. With no option she is an employee Doula and
+// the Engagement is an intake birth for a new Client; a test says only
+// what it changes, with signedInAs and withEngagement.
+type env struct {
+	*fixture.Scene
+}
+
+type envOption = fixture.SceneOption
+
+// The option names this package's tests read as; each is the Scene's own.
+var (
+	signedInAs     = fixture.SignedInAs
+	withEngagement = fixture.WithEngagement
+)
+
+// newEnv mounts this package's whole surface through visit.Mount, the same
+// call main.go makes on the real GatedRouter and idempotency.Router.
+func newEnv(t *testing.T, opts ...envOption) *env {
+	t.Helper()
+	mount := func(g *staffauth.GatedRouter, ir *idempotency.Router, _ *sql.DB) {
+		visit.Mount(g, ir, &tasknudge.FakeEnqueuer{})
+	}
+	return &env{fixture.NewScene(t, mount, append([]envOption{withEngagement()}, opts...)...)}
+}
+
+// visitsURL is the Engagement's Visits route plus path.
+func (e *env) visitsURL(path string) string {
+	return e.PracticeURL("/engagements/" + e.Engagement.ID + "/visits" + path)
+}
+
 // seededPracticeZone loads the zone a freshly seeded Practice holds --
 // the one testdb.SeedPractice states. Named here rather than repeated as
 // a literal so the day these tests type Visits against follows the
@@ -146,82 +178,4 @@ func seededPracticeZone(t *testing.T) *time.Location {
 		t.Fatalf("load the seeded Practice's zone %q: %v", testdb.SeededPracticeZoneName, err)
 	}
 	return loc
-}
-
-// env is what a test in this package starts from: a Practice with this
-// package's whole surface mounted on a server, one Staff member at the
-// screen and one Engagement. With no option she is an employee Doula and
-// the Engagement is an intake birth for a new Client; a test says only
-// what it changes, with signedInAs and withEngagement.
-type env struct {
-	t   *testing.T
-	db  *testdb.DB
-	srv *httptest.Server
-
-	Practice   fixture.PracticeRecord
-	Staff      fixture.StaffRecord
-	Engagement fixture.EngagementRecord
-
-	signedIn reqtest.Option
-}
-
-type envSpec struct {
-	staff      []fixture.StaffOption
-	engagement []fixture.EngagementOption
-}
-
-type envOption func(*envSpec)
-
-// signedInAs shapes the Staff member who is at the screen.
-func signedInAs(opts ...fixture.StaffOption) envOption {
-	return func(s *envSpec) { s.staff = append(s.staff, opts...) }
-}
-
-// withEngagement shapes the Engagement the test is about.
-func withEngagement(opts ...fixture.EngagementOption) envOption {
-	return func(s *envSpec) { s.engagement = append(s.engagement, opts...) }
-}
-
-func newEnv(t *testing.T, opts ...envOption) *env {
-	t.Helper()
-	var spec envSpec
-	for _, opt := range opts {
-		opt(&spec)
-	}
-	db := testdb.New(t)
-	e := &env{t: t, db: db, Practice: fixture.Practice(t, db)}
-	e.Staff = fixture.Staff(t, db, e.Practice, spec.staff...)
-	e.Engagement = fixture.Engagement(t, db, e.Practice, spec.engagement...)
-	e.srv = e.mount()
-	e.signedIn = e.as(e.Staff)
-	return e
-}
-
-// mount mounts this package's whole surface through visit.Mount, the same
-// call main.go makes on the real GatedRouter and idempotency.Router.
-func (e *env) mount() *httptest.Server {
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, e.db.App)
-	ir := idempotency.NewRouter(g, e.db.App)
-	visit.Mount(g, ir, &tasknudge.FakeEnqueuer{})
-	srv := httptest.NewServer(mux)
-	e.t.Cleanup(srv.Close)
-	return srv
-}
-
-// as signs a request in as who.
-func (e *env) as(who fixture.StaffRecord) reqtest.Option {
-	e.t.Helper()
-	return reqtest.Session(fixture.Session(e.t, e.db, who))
-}
-
-// staff is another Staff member at the Practice.
-func (e *env) staff(opts ...fixture.StaffOption) fixture.StaffRecord {
-	e.t.Helper()
-	return fixture.Staff(e.t, e.db, e.Practice, opts...)
-}
-
-// visitsURL is the Engagement's Visits route plus path.
-func (e *env) visitsURL(path string) string {
-	return e.srv.URL + "/api/practices/" + e.Practice.ID + "/engagements/" + e.Engagement.ID + "/visits" + path
 }

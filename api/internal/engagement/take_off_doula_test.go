@@ -18,21 +18,21 @@ import (
 // takeOff takes staffID off engagementID as the Staff member at the
 // screen and requires want.
 func (e *env) takeOff(engagementID, staffID string, want int) attachSelfBody {
-	e.t.Helper()
-	return reqtest.Expect[attachSelfBody](e.t, http.MethodDelete, e.urlOf(engagementID, "/attachments/"+staffID), want, e.signedIn)
+	e.T.Helper()
+	return reqtest.Expect[attachSelfBody](e.T, http.MethodDelete, e.urlOf(engagementID, "/attachments/"+staffID), want, e.SignedIn)
 }
 
 func (e *env) countTakenOffNotices(staffID string) int {
-	e.t.Helper()
-	return testdb.Scalar[int](e.t, e.db.Admin,
+	e.T.Helper()
+	return testdb.Scalar[int](e.T, e.DB.Admin,
 		`SELECT count(*) FROM staff_notice_outbox
 		  WHERE kind = 'taken_off_engagement' AND subject_id = $1 AND recipient_staff_id = $2`,
 		e.Engagement.ID, staffID)
 }
 
 func (e *env) seedVisitAt(staffID, when string) {
-	e.t.Helper()
-	e.exec(`INSERT INTO visits (engagement_id, staff_id, scheduled_at) VALUES ($1, $2, $3::timestamptz)`, e.Engagement.ID, staffID, when)
+	e.T.Helper()
+	e.Exec(`INSERT INTO visits (engagement_id, staff_id, scheduled_at) VALUES ($1, $2, $3::timestamptz)`, e.Engagement.ID, staffID, when)
 }
 
 // ownerWithDoulaOnIt is the Owner at the screen and a Doula she has put
@@ -48,7 +48,7 @@ func TestTakeOffDoulaHandler_EndsTheAttachmentAndRecordsIt(t *testing.T) {
 	e := ownerWithDoulaOnIt(t)
 	e.seedVisitAt(e.Doula.ID, "2999-01-01T12:00:00Z")
 	e.seedVisitAt(e.Doula.ID, "2001-01-01T12:00:00Z")
-	e.exec(`INSERT INTO visits (engagement_id, staff_id) VALUES ($1, $2)`, e.Engagement.ID, e.Doula.ID)
+	e.Exec(`INSERT INTO visits (engagement_id, staff_id) VALUES ($1, $2)`, e.Engagement.ID, e.Doula.ID)
 
 	on := e.put(http.StatusOK)
 	if len(on.Doulas) != 1 || on.Doulas[0].OpenVisits != 2 {
@@ -62,7 +62,7 @@ func TestTakeOffDoulaHandler_EndsTheAttachmentAndRecordsIt(t *testing.T) {
 	}
 	var endedBy string
 	var rows int
-	if err := e.db.Admin.QueryRowContext(t.Context(),
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
 		`SELECT count(*), max(ended_by::text) FROM engagement_attachments
 		  WHERE engagement_id = $1 AND staff_id = $2 AND ended_at IS NOT NULL`,
 		e.Engagement.ID, e.Doula.ID).Scan(&rows, &endedBy); err != nil {
@@ -71,7 +71,7 @@ func TestTakeOffDoulaHandler_EndsTheAttachmentAndRecordsIt(t *testing.T) {
 	if rows != 1 || endedBy != e.Staff.ID {
 		t.Fatalf("ended rows = %d by %q, want one ended by the caller", rows, endedBy)
 	}
-	assertDiff(t, readFactDiff(t, e.db, e.Engagement.ID, "doula_taken_off"), map[string]any{activity.DiffKeyAttachedStaffID: e.Doula.ID})
+	assertDiff(t, readFactDiff(t, e.DB, e.Engagement.ID, "doula_taken_off"), map[string]any{activity.DiffKeyAttachedStaffID: e.Doula.ID})
 	ledger := e.activityAs(e.Staff)
 	var found bool
 	for _, entry := range ledger.Items {
@@ -88,7 +88,7 @@ func TestTakeOffDoulaHandler_EndsTheAttachmentAndRecordsIt(t *testing.T) {
 	if n := e.countTakenOffNotices(e.Doula.ID); n != 1 {
 		t.Fatalf("notices = %d, want 1", n)
 	}
-	if visits := testdb.Scalar[int](t, e.db.Admin, `SELECT count(*) FROM visits WHERE engagement_id = $1 AND staff_id = $2`, e.Engagement.ID, e.Doula.ID); visits != 3 {
+	if visits := testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM visits WHERE engagement_id = $1 AND staff_id = $2`, e.Engagement.ID, e.Doula.ID); visits != 3 {
 		t.Fatalf("visits = %d, want all three still hers", visits)
 	}
 }
@@ -143,9 +143,9 @@ func TestTakeOffDoulaHandler_RefusalsAndRoles(t *testing.T) {
 	}
 
 	t.Run("a doula cannot take a colleague off", func(t *testing.T) {
-		reqtest.ExpectStatus(t, http.MethodDelete, e.urlOf(e.Engagement.ID, "/attachments/"+e.Doula.ID), http.StatusForbidden, e.as(e.Doula))
+		reqtest.ExpectStatus(t, http.MethodDelete, e.urlOf(e.Engagement.ID, "/attachments/"+e.Doula.ID), http.StatusForbidden, e.As(e.Doula))
 
-		if got := readOpenAttachments(t, e.db, e.Engagement.ID, e.Doula.ID); len(got) != 1 {
+		if got := readOpenAttachments(t, e.DB, e.Engagement.ID, e.Doula.ID); len(got) != 1 {
 			t.Fatalf("attachment = %+v, want it still open", got)
 		}
 	})

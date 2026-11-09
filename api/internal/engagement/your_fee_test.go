@@ -31,8 +31,8 @@ func seedFeeAttachment(t *testing.T, db *testdb.DB, engagementID, staffID, attac
 // Jul 22 in America/New_York.
 func TestDetailHandler_ContractorReadsHerOwnFee(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Contractor()), withEngagement(fixture.Status(fixture.StatusActive)))
-	owner := e.staff(fixture.Owner())
-	seedFeeAttachment(t, e.db, e.Engagement.ID, e.Staff.ID, e.Staff.ID, 62000, "2026-07-23T03:30:00Z")
+	owner := e.Colleague(fixture.Owner())
+	seedFeeAttachment(t, e.DB, e.Engagement.ID, e.Staff.ID, e.Staff.ID, 62000, "2026-07-23T03:30:00Z")
 
 	d := e.detail()
 
@@ -63,7 +63,7 @@ func TestDetailHandler_ContractorReadsHerOwnFee(t *testing.T) {
 // the field is absent rather than $0.00.
 func TestDetailHandler_NoFeeWithoutAnAcceptedOffer(t *testing.T) {
 	e := newEnv(t, withEngagement(fixture.Status(fixture.StatusActive)))
-	testdb.SeedGrantedAttachment(t, e.db, e.Engagement.ID, e.Staff.ID)
+	testdb.SeedGrantedAttachment(t, e.DB, e.Engagement.ID, e.Staff.ID)
 
 	if d := e.detail(); d.YourFee != nil {
 		t.Fatalf("yourFee = %+v, want absent for an Attachment with no fee", d.YourFee)
@@ -75,8 +75,8 @@ func TestDetailHandler_NoFeeWithoutAnAcceptedOffer(t *testing.T) {
 // a fee she is still owed on this Engagement.
 func TestDetailHandler_AnEndedAttachmentCarriesNoFee(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner(), fixture.Doula(), fixture.Contractor()), withEngagement(fixture.Status(fixture.StatusActive)))
-	seedFeeAttachment(t, e.db, e.Engagement.ID, e.Staff.ID, e.Staff.ID, 50000, "2026-07-01T12:00:00Z")
-	e.exec(`UPDATE engagement_attachments SET ended_at = now(), ended_by = staff_id WHERE engagement_id = $1`, e.Engagement.ID)
+	seedFeeAttachment(t, e.DB, e.Engagement.ID, e.Staff.ID, e.Staff.ID, 50000, "2026-07-01T12:00:00Z")
+	e.Exec(`UPDATE engagement_attachments SET ended_at = now(), ended_by = staff_id WHERE engagement_id = $1`, e.Engagement.ID)
 
 	if d := e.detail(); d.YourFee != nil {
 		t.Fatalf("yourFee = %+v, want absent once the Attachment ended", d.YourFee)

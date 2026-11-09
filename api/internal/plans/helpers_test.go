@@ -2,16 +2,11 @@ package plans_test
 
 import (
 	"net/http"
-	"net/http/httptest"
 	"testing"
-	"time"
 
-	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/fixture"
-	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/plans"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -81,121 +76,34 @@ func seedInstance(t *testing.T, db *testdb.DB, engagementID, planType, fieldsJSO
 // atInstant. The same server answers Staff and the Client's portal, so
 // asClient signs a Client in when she was seeded with a portal login.
 type env struct {
-	t   *testing.T
-	db  *testdb.DB
-	srv *httptest.Server
-
-	Practice   fixture.PracticeRecord
-	Staff      fixture.StaffRecord
-	Engagement fixture.EngagementRecord
-
-	signedIn reqtest.Option
-	asClient reqtest.Option
+	*fixture.Scene
 }
 
-type envSpec struct {
-	practice   []fixture.PracticeOption
-	staff      []fixture.StaffOption
-	engagement []fixture.EngagementOption
-	client     []fixture.ClientOption
-	at         time.Time
-	attached   bool
-}
-
-type envOption func(*envSpec)
-
-// signedInAs shapes the Staff member who is at the screen.
-func signedInAs(opts ...fixture.StaffOption) envOption {
-	return func(s *envSpec) { s.staff = append(s.staff, opts...) }
-}
-
-// withEngagement shapes the Engagement the test is about.
-func withEngagement(opts ...fixture.EngagementOption) envOption {
-	return func(s *envSpec) { s.engagement = append(s.engagement, opts...) }
-}
-
-// withClient shapes the Engagement's Client.
-func withClient(opts ...fixture.ClientOption) envOption {
-	return func(s *envSpec) { s.client = append(s.client, opts...) }
-}
+// The option names this package's tests read as; each is the Scene's own.
+var (
+	signedInAs           = fixture.SignedInAs
+	withEngagement       = fixture.WithEngagement
+	withClient           = fixture.WithClient
+	withPractice         = fixture.InPractice
+	atInstant            = fixture.At
+	attachedToEngagement = fixture.Attached
+)
 
 // withPortalLogin lets the Engagement's Client sign in to the portal.
-func withPortalLogin() envOption {
+func withPortalLogin() fixture.SceneOption {
 	return withClient(fixture.WithPortalLogin())
 }
 
-// withPractice shapes the Practice.
-func withPractice(opts ...fixture.PracticeOption) envOption {
-	return func(s *envSpec) { s.practice = append(s.practice, opts...) }
-}
-
-// atInstant fixes the instant every request is served at.
-func atInstant(at time.Time) envOption {
-	return func(s *envSpec) { s.at = at }
-}
-
-// attachedToEngagement grants the Staff member at the screen an open
-// Attachment on the Engagement.
-func attachedToEngagement() envOption {
-	return func(s *envSpec) { s.attached = true }
-}
+type envOption = fixture.SceneOption
 
 func newEnv(t *testing.T, opts ...envOption) *env {
 	t.Helper()
-	var spec envSpec
-	for _, opt := range opts {
-		opt(&spec)
-	}
-	db := testdb.New(t)
-	e := &env{t: t, db: db, Practice: fixture.Practice(t, db, spec.practice...)}
-	e.Staff = fixture.Staff(t, db, e.Practice, spec.staff...)
-	engagementOpts := spec.engagement
-	if len(spec.client) > 0 {
-		engagementOpts = append(engagementOpts, fixture.NewClient(spec.client...))
-	}
-	e.Engagement = fixture.Engagement(t, db, e.Practice, engagementOpts...)
-	if spec.attached {
-		testdb.SeedGrantedAttachment(t, db, e.Engagement.ID, e.Staff.ID)
-	}
-	e.srv = e.mount(spec.at)
-	e.signedIn = e.as(e.Staff)
-	if e.Engagement.Client.PortalUID != "" {
-		e.asClient = e.as(e.Engagement.Client)
-	}
-	return e
-}
-
-// mount mounts this package's whole surface through plans.Mount, the same
-// call main.go makes on the real GatedRouter and idempotency.Router.
-func (e *env) mount(at time.Time) *httptest.Server {
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, e.db.App)
-	ir := idempotency.NewRouter(g, e.db.App)
-	plans.Mount(g, ir, e.db.App)
-	var handler http.Handler = mux
-	if !at.IsZero() {
-		handler = clock.Middleware(func() time.Time { return at })(mux)
-	}
-	srv := httptest.NewServer(handler)
-	e.t.Cleanup(srv.Close)
-	return srv
-}
-
-// as signs a request in as who.
-func (e *env) as(who fixture.Signer) reqtest.Option {
-	e.t.Helper()
-	return reqtest.Session(fixture.Session(e.t, e.db, who))
-}
-
-// anotherEngagement is a second Engagement at the Practice.
-func (e *env) anotherEngagement() fixture.EngagementRecord {
-	e.t.Helper()
-	return fixture.Engagement(e.t, e.db, e.Practice)
+	return &env{fixture.NewScene(t, plans.Mount, append([]envOption{withEngagement()}, opts...)...)}
 }
 
 // templateURL is the Practice's Plan Template route for planType.
 func (e *env) templateURL(planType string) string {
-	return e.srv.URL + "/api/practices/" + e.Practice.ID + "/plan-templates/" + planType
+	return e.PracticeURL("/plan-templates/" + planType)
 }
 
 // instanceURL is the Staff route of the Engagement's planType Plan plus path.
@@ -205,7 +113,7 @@ func (e *env) instanceURL(planType, path string) string {
 
 // instanceURLOf is the Staff route of engagementID's planType Plan plus path.
 func (e *env) instanceURLOf(engagementID, planType, path string) string {
-	return e.srv.URL + "/api/practices/" + e.Practice.ID + "/engagements/" + engagementID + "/plans/" + planType + path
+	return e.PracticeURL("/engagements/" + engagementID + "/plans/" + planType + path)
 }
 
 // portalURL is the portal route of the Engagement's Birth Plan plus path.
@@ -215,34 +123,26 @@ func (e *env) portalURL(path string) string {
 
 // portalURLOf is the portal route of engagementID's Birth Plan plus path.
 func (e *env) portalURLOf(engagementID, path string) string {
-	return e.srv.URL + "/api/portal/engagements/" + engagementID + "/birth-plan" + path
-}
-
-// exec runs one fixture statement on the superuser connection.
-func (e *env) exec(query string, args ...any) {
-	e.t.Helper()
-	if _, err := e.db.Admin.ExecContext(e.t.Context(), query, args...); err != nil {
-		e.t.Fatalf("fixture %q: %v", query, err)
-	}
+	return e.URL("/api/portal/engagements/" + engagementID + "/birth-plan" + path)
 }
 
 // seedTemplate gives the Practice a planType template with these fields.
 func (e *env) seedTemplate(planType, fieldsJSON string) {
-	e.t.Helper()
-	seedPlanTemplate(e.t, e.db, e.Practice.ID, planType, fieldsJSON)
+	e.T.Helper()
+	seedPlanTemplate(e.T, e.DB, e.Practice.ID, planType, fieldsJSON)
 }
 
 // seedInstance starts the Engagement's planType Plan with these fields and
 // answers.
 func (e *env) seedInstance(planType, fieldsJSON, answersJSON string) {
-	e.t.Helper()
-	seedInstance(e.t, e.db, e.Engagement.ID, planType, fieldsJSON, answersJSON)
+	e.T.Helper()
+	seedInstance(e.T, e.DB, e.Engagement.ID, planType, fieldsJSON, answersJSON)
 }
 
 // seedBirthPlan starts the Engagement's Birth Plan with the planned
 // location answered at the hospital.
 func (e *env) seedBirthPlan() {
-	e.t.Helper()
+	e.T.Helper()
 	e.seedInstance(birthPlanType, locationFields, locationInHospital)
 }
 
@@ -251,54 +151,54 @@ func (e *env) seedBirthPlan() {
 // set up the "already acknowledged" state a test needs before exercising
 // some other behavior (e.g. PutInstanceHandler's reset-on-edit).
 func (e *env) setAcknowledged(planType string) {
-	e.t.Helper()
-	e.exec(`UPDATE plan_instances SET client_acknowledged_at = now() WHERE engagement_id = $1 AND plan_type = $2`, e.Engagement.ID, planType)
+	e.T.Helper()
+	e.Exec(`UPDATE plan_instances SET client_acknowledged_at = now() WHERE engagement_id = $1 AND plan_type = $2`, e.Engagement.ID, planType)
 }
 
 // instance reads the Engagement's planType Plan as the Staff member at the
 // screen.
 func (e *env) instance(planType string) plans.InstanceResponse {
-	e.t.Helper()
-	return reqtest.Expect[plans.InstanceResponse](e.t, http.MethodGet, e.instanceURL(planType, ""), http.StatusOK, e.signedIn)
+	e.T.Helper()
+	return reqtest.Expect[plans.InstanceResponse](e.T, http.MethodGet, e.instanceURL(planType, ""), http.StatusOK, e.SignedIn)
 }
 
 // putAnswers saves answers to the Engagement's planType Plan.
 func (e *env) putAnswers(planType string, answers plans.Answers) plans.InstanceResponse {
-	e.t.Helper()
-	return reqtest.Expect[plans.InstanceResponse](e.t, http.MethodPut, e.instanceURL(planType, ""), http.StatusOK, e.signedIn,
+	e.T.Helper()
+	return reqtest.Expect[plans.InstanceResponse](e.T, http.MethodPut, e.instanceURL(planType, ""), http.StatusOK, e.SignedIn,
 		reqtest.JSON(plans.PutInstanceRequest{Answers: answers}))
 }
 
 // start POSTs the Engagement's planType Plan and requires want.
 func (e *env) start(planType string, want int) plans.InstanceResponse {
-	e.t.Helper()
-	return reqtest.Expect[plans.InstanceResponse](e.t, http.MethodPost, e.instanceURL(planType, ""), want, e.signedIn)
+	e.T.Helper()
+	return reqtest.Expect[plans.InstanceResponse](e.T, http.MethodPost, e.instanceURL(planType, ""), want, e.SignedIn)
 }
 
 // putTemplate sends a PUT of fields to the Practice's planType template.
 func (e *env) putTemplate(planType string, fields []plans.Field, want int) plans.TemplateResponse {
-	e.t.Helper()
-	return reqtest.Expect[plans.TemplateResponse](e.t, http.MethodPut, e.templateURL(planType), want, e.signedIn,
+	e.T.Helper()
+	return reqtest.Expect[plans.TemplateResponse](e.T, http.MethodPut, e.templateURL(planType), want, e.SignedIn,
 		reqtest.JSON(plans.TemplateResponse{Fields: fields}))
 }
 
 // template reads the Practice's planType template.
 func (e *env) template(planType string) plans.TemplateResponse {
-	e.t.Helper()
-	return reqtest.Expect[plans.TemplateResponse](e.t, http.MethodGet, e.templateURL(planType), http.StatusOK, e.signedIn)
+	e.T.Helper()
+	return reqtest.Expect[plans.TemplateResponse](e.T, http.MethodGet, e.templateURL(planType), http.StatusOK, e.SignedIn)
 }
 
 // birthPlan reads the Birth Plan as the Client at the screen.
 func (e *env) birthPlan() plans.InstanceResponse {
-	e.t.Helper()
-	return reqtest.Expect[plans.InstanceResponse](e.t, http.MethodGet, e.portalURL(""), http.StatusOK, e.asClient)
+	e.T.Helper()
+	return reqtest.Expect[plans.InstanceResponse](e.T, http.MethodGet, e.portalURL(""), http.StatusOK, e.AsClient)
 }
 
 // activityActions lists the actions recorded against the Engagement,
 // oldest first.
 func (e *env) activityActions() []string {
-	e.t.Helper()
-	return testdb.Column[string](e.t, e.db.Admin,
+	e.T.Helper()
+	return testdb.Column[string](e.T, e.DB.Admin,
 		`SELECT action FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 ORDER BY created_at, id`, e.Engagement.ID)
 }
 
@@ -309,23 +209,23 @@ func (e *env) activityActions() []string {
 // against the same Engagement is exactly the correction ADR-0015's
 // motivating typo needs and the freeze trigger would otherwise refuse it.
 func (e *env) recordOutcome(outcome string, endedOn *string) {
-	e.t.Helper()
-	tx, err := e.db.Admin.BeginTx(e.t.Context(), nil)
+	e.T.Helper()
+	tx, err := e.DB.Admin.BeginTx(e.T.Context(), nil)
 	if err != nil {
-		e.t.Fatalf("begin: %v", err)
+		e.T.Fatalf("begin: %v", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(e.t.Context(),
+	if _, err := tx.ExecContext(e.T.Context(),
 		`SELECT set_config('app.allow_outcome_correction', 'on', true)`); err != nil {
-		e.t.Fatalf("open the correction door: %v", err)
+		e.T.Fatalf("open the correction door: %v", err)
 	}
-	if _, err := tx.ExecContext(e.t.Context(),
+	if _, err := tx.ExecContext(e.T.Context(),
 		`UPDATE engagements SET birth_outcome = $2::birth_outcome, pregnancy_ended_on = $3::date WHERE id = $1`,
 		e.Engagement.ID, outcome, endedOn); err != nil {
-		e.t.Fatalf("record the birth outcome %q: %v", outcome, err)
+		e.T.Fatalf("record the birth outcome %q: %v", outcome, err)
 	}
 	if err := tx.Commit(); err != nil {
-		e.t.Fatalf("commit the birth outcome %q: %v", outcome, err)
+		e.T.Fatalf("commit the birth outcome %q: %v", outcome, err)
 	}
 }
 
@@ -334,10 +234,10 @@ func (e *env) recordOutcome(outcome string, endedOn *string) {
 // path is what follows the plan type, and opts carry the body the route
 // reads.
 func (e *env) refusesEngagementsItCannotReach(method, planType, path string, opts ...reqtest.Option) {
-	e.t.Helper()
-	fixture.RefusesEngagementsItCannotReach(e.t, e.db, method, func(engagementID string) string {
+	e.T.Helper()
+	fixture.RefusesEngagementsItCannotReach(e.T, e.DB, method, func(engagementID string) string {
 		return e.instanceURLOf(engagementID, planType, path)
-	}, append([]reqtest.Option{e.signedIn}, opts...)...)
+	}, append([]reqtest.Option{e.SignedIn}, opts...)...)
 }
 
 // roleCase is one Staff member who may read a Plan Template, for a test

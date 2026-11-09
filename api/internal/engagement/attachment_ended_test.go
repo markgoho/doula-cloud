@@ -16,18 +16,18 @@ import (
 // detailRefusal reads the Engagement as the contractor at the screen and
 // requires want.
 func (e *env) detailRefusal(want int) apierr.APIError {
-	e.t.Helper()
-	return reqtest.Expect[apierr.APIError](e.t, http.MethodGet, e.engagementURL(""), want, e.signedIn)
+	e.T.Helper()
+	return reqtest.Expect[apierr.APIError](e.T, http.MethodGet, e.engagementURL(""), want, e.SignedIn)
 }
 
 func (e *env) endAttachments(endedAt string) {
-	e.t.Helper()
-	e.exec(`UPDATE engagement_attachments SET ended_at = $2::timestamptz, ended_by = staff_id WHERE engagement_id = $1`, e.Engagement.ID, endedAt)
+	e.T.Helper()
+	e.Exec(`UPDATE engagement_attachments SET ended_at = $2::timestamptz, ended_by = staff_id WHERE engagement_id = $1`, e.Engagement.ID, endedAt)
 }
 
 func (e *env) seedAcceptedOffer(dueDate string) {
-	e.t.Helper()
-	e.exec(`INSERT INTO engagement_offers
+	e.T.Helper()
+	e.Exec(`INSERT INTO engagement_offers
 		     (engagement_id, staff_id, employment_type, amount_cents, terms, client_first_initial, client_area,
 		      due_date, state, offered_by, expires_at, decided_at, decided_by)
 		 VALUES ($1, $2, 'contractor', 55000, 'Primary doula', 'A', 'Rochester', $3::date, 'accepted', $2,
@@ -40,7 +40,7 @@ func (e *env) seedAcceptedOffer(dueDate string) {
 func contractorWhoWasPaid(t *testing.T) *env {
 	t.Helper()
 	e := newEnv(t, signedInAs(fixture.Contractor()), withEngagement(fixture.Status(fixture.StatusActive)))
-	seedFeeAttachment(t, e.db, e.Engagement.ID, e.Staff.ID, e.Staff.ID, 55000, "2026-10-01T12:00:00Z")
+	seedFeeAttachment(t, e.DB, e.Engagement.ID, e.Staff.ID, e.Staff.ID, 55000, "2026-10-01T12:00:00Z")
 	return e
 }
 
@@ -71,7 +71,7 @@ func TestDetailHandler_EndedAttachmentWithoutADueMonth(t *testing.T) {
 		t.Fatalf("message = %q, want the birth sentence", body.Message)
 	}
 
-	e.exec(`UPDATE engagements SET kind = 'postpartum', due_date = NULL WHERE id = $1`, e.Engagement.ID)
+	e.Exec(`UPDATE engagements SET kind = 'postpartum', due_date = NULL WHERE id = $1`, e.Engagement.ID)
 
 	if body := e.detailRefusal(http.StatusGone); body.Message != "Your postpartum work with this Client ended on Oct 31, 2026." {
 		t.Fatalf("message = %q, want the postpartum sentence", body.Message)
