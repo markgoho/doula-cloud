@@ -66,60 +66,34 @@ func TestRLS_CreditLedgerCannotInsertForAnotherPractice(t *testing.T) {
 	}
 }
 
-// TestRLS_NotificationWorkerCannotReadStaffOrMembershipsWithoutTrustedFlag
-// proves 00033's two new policies stay closed by default: with no
-// session context at all -- the shape outbox.ProcessHandler runs under
-// before it sets app.notification_worker_trusted -- neither table admits
-// a row.
-func TestRLS_NotificationWorkerCannotReadStaffOrMembershipsWithoutTrustedFlag(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "worker-untrusted", []string{ownerRole}, "employee")
+// TestRLS_NotificationWorkerDoor proves 00033's two policies on staff and
+// practice_memberships, the door billing.Worker's ownerEmails query relies
+// on. They stay closed by default -- with no session context at all, the
+// shape outbox.ProcessHandler runs under before it sets
+// app.notification_worker_trusted, neither table admits a row -- and open,
+// regardless of Practice, once the trusted flag is set.
+func TestRLS_NotificationWorkerDoor(t *testing.T) {
+	cases := []struct {
+		name string
+		vars []testdb.SessionVar
+		want int
+	}{
+		{name: "closed without the trusted flag", want: 0},
+		{name: "open with the trusted flag", vars: []testdb.SessionVar{testdb.NotificationWorker()}, want: 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			db := testdb.New(t)
+			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "worker-door", []string{ownerRole}, "employee")
+			tx := db.BeginAs(t, c.vars...)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+			staffCount := testdb.Scalar[int](t, tx, `SELECT count(*) FROM staff`)
+			membershipCount := testdb.Scalar[int](t, tx, `SELECT count(*) FROM practice_memberships WHERE practice_id = $1`, practiceID)
 
-	var staffCount, membershipCount int
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM staff`).Scan(&staffCount); err != nil {
-		t.Fatalf("query staff: %v", err)
-	}
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM practice_memberships WHERE practice_id = $1`, practiceID).Scan(&membershipCount); err != nil {
-		t.Fatalf("query practice_memberships: %v", err)
-	}
-	if staffCount != 0 || membershipCount != 0 {
-		t.Fatalf("staffCount/membershipCount = %d/%d, want 0/0 with no session context set", staffCount, membershipCount)
-	}
-}
-
-// TestRLS_NotificationWorkerTrustedFlagOpensStaffAndMemberships proves the
-// door billing.Worker's ownerEmails query relies on actually opens: with
-// app.notification_worker_trusted set, both tables' rows are visible,
-// regardless of Practice.
-func TestRLS_NotificationWorkerTrustedFlagOpensStaffAndMemberships(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "worker-trusted", []string{ownerRole}, "employee")
-
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	var staffCount, membershipCount int
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM staff`).Scan(&staffCount); err != nil {
-		t.Fatalf("query staff: %v", err)
-	}
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM practice_memberships WHERE practice_id = $1`, practiceID).Scan(&membershipCount); err != nil {
-		t.Fatalf("query practice_memberships: %v", err)
-	}
-	if staffCount != 1 || membershipCount != 1 {
-		t.Fatalf("staffCount/membershipCount = %d/%d, want 1/1", staffCount, membershipCount)
+			if staffCount != c.want || membershipCount != c.want {
+				t.Fatalf("staffCount/membershipCount = %d/%d, want %d/%d", staffCount, membershipCount, c.want, c.want)
+			}
+		})
 	}
 }
 
