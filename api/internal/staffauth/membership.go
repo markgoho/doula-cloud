@@ -328,20 +328,15 @@ func removesLastOwner(ctx context.Context, tx *sql.Tx, practiceID, targetStaffID
 // role list in mount.go.
 func RemoveMembershipHandler() http.Handler {
 	return Handler(func(w http.ResponseWriter, r *http.Request, c Call) {
-		tx, practiceID := c.Tx, c.PracticeID
-		if !RequireConfirmed(w, r) {
-			return
-		}
-		actorStaffID := c.StaffID
 		targetStaffID := c.ID("staffId")
 
 		var roles, employmentType string
-		err := tx.QueryRowContext(r.Context(),
+		err := c.Tx.QueryRowContext(r.Context(),
 			`SELECT array_to_string(roles, ','), employment_type::text
 			   FROM practice_memberships
 			  WHERE practice_id = $1 AND staff_id = $2
 			  FOR UPDATE`,
-			practiceID, targetStaffID,
+			c.PracticeID, targetStaffID,
 		).Scan(&roles, &employmentType)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "no membership found for that staff member at this practice", http.StatusNotFound)
@@ -355,7 +350,7 @@ func RemoveMembershipHandler() http.Handler {
 
 		// Removing a Membership removes every role on it, so the last-Owner
 		// rule applies here for the same reason it applies to an edit.
-		lastOwner, err := removesLastOwner(r.Context(), tx, practiceID, targetStaffID, roles, nil)
+		lastOwner, err := removesLastOwner(r.Context(), c.Tx, c.PracticeID, targetStaffID, roles, nil)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -368,19 +363,19 @@ func RemoveMembershipHandler() http.Handler {
 
 		// The event goes first: it names the roles and employment type the
 		// Membership held, which the next statement destroys.
-		if err := RecordMembershipEvent(r.Context(), tx, MembershipEvent{
-			PracticeID: practiceID, StaffID: targetStaffID, Type: activity.ActionMembershipRemoved,
+		if err := RecordMembershipEvent(r.Context(), c.Tx, MembershipEvent{
+			PracticeID: c.PracticeID, StaffID: targetStaffID, Type: activity.ActionMembershipRemoved,
 			PreviousRoles: "{" + roles + "}", PreviousEmploymentType: employmentType,
-			ActorStaffID: actorStaffID,
+			ActorStaffID: c.StaffID,
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		if _, err := tx.ExecContext(r.Context(),
+		if _, err := c.Tx.ExecContext(r.Context(),
 			`DELETE FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`,
-			practiceID, targetStaffID,
+			c.PracticeID, targetStaffID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -391,14 +386,14 @@ func RemoveMembershipHandler() http.Handler {
 		// newly sole, and can leave the removed person (an Owner
 		// elsewhere) needing reconciliation herself -- run after the
 		// DELETE so isSoleOwnerAnywhere no longer sees this Membership.
-		if err := reconcileOwnersAtPractice(r.Context(), tx, practiceID, targetStaffID); err != nil {
+		if err := reconcileOwnersAtPractice(r.Context(), c.Tx, c.PracticeID, targetStaffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		w.WriteHeader(http.StatusNoContent)
-	}, PathID("staff", "staffId"))
+	}, PathID("staff", "staffId"), Confirmed())
 }
 
 // isSoleOwnerAnywhere reports whether staffID currently holds the

@@ -69,12 +69,8 @@ type sendPushPayload struct {
 // Doula, or a contractor on a granted attachment -- may send. Must be
 // mounted through idempotency.Router.ExemptGated.
 func PostSendContractHandler(pusher push.Pusher) http.Handler {
-	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
-		id, prose, status, values, amountCents, amountChangedAt, ok := requireContract(w, r, c.Tx, c.EngagementID)
-		if !ok {
-			return
-		}
-		if ok, refusal := TransitionSend.Check(Status(status)); !ok {
+	return contractHandler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call, ct contractRow) {
+		if ok, refusal := TransitionSend.Check(Status(ct.Status)); !ok {
 			apierr.WriteError(w, refusal, http.StatusConflict)
 			return
 		}
@@ -94,8 +90,8 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 			return
 		}
 
-		mergeFields := extractMergeFields(prose)
-		values = withResolvedPrice(mergeFields, values, amountCents)
+		mergeFields := extractMergeFields(ct.Prose)
+		values := withResolvedPrice(mergeFields, ct.Values, ct.AmountCents)
 		if missing := missingMergeFieldKeys(mergeFields, values); len(missing) > 0 {
 			details := make(map[string]string, len(missing))
 			for _, key := range missing {
@@ -107,7 +103,7 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 
 		if _, err := c.Tx.ExecContext(r.Context(),
 			`UPDATE contracts SET status = $1::contract_status WHERE id = $2`,
-			string(StatusSent), id,
+			string(StatusSent), ct.ID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -124,10 +120,10 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 		out := ContractResponse{
 			EngagementID:    c.EngagementID,
 			Status:          string(StatusSent),
-			Prose:           prose,
+			Prose:           ct.Prose,
 			MergeFields:     mergeFields,
 			Values:          values.nonEmpty(),
-			AmountChangedAt: amountChangedAt,
+			AmountChangedAt: ct.AmountChangedAt,
 		}
 		writeContract(w, r, c, http.StatusOK, out)
 	}, staffauth.Engagement())

@@ -1,8 +1,6 @@
 package engagement
 
 import (
-	"database/sql"
-	"errors"
 	"net/http"
 	"time"
 
@@ -119,13 +117,7 @@ func RecordBirthOutcomeHandler() http.Handler {
 			   FROM engagements WHERE id = $1 AND practice_id = $2`,
 			c.EngagementID, c.PracticeID,
 		).Scan(&current.outcome, &current.endedOn, &current.status)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !engagementRead(w, err) {
 			return
 		}
 

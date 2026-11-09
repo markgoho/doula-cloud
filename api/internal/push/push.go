@@ -4,9 +4,11 @@
 // directly. VAPIDPusher is the real, Web-Push-backed implementation;
 // FakePusher is the in-memory fake injected by tests, per #56's "no real
 // VAPID/push service reachable from api/ tests" testing decision.
-// Deliberately generic (a bare endpoint + keys + opaque payload) so a
-// future non-Message notification type can reuse it without a new
-// interface, mirroring internal/objectstore's shape for attachments.
+// Pusher is deliberately generic (a bare endpoint + keys + opaque payload),
+// mirroring internal/objectstore's shape for attachments.
+// NotifyMessageRecipient is the one lookup-and-send over it: the other
+// party's subscriptions on an Engagement, a marshaled payload, and a
+// best-effort send to each, for every notification that reaches them.
 package push
 
 import "context"

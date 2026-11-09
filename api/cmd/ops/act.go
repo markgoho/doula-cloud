@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/dbtx"
 )
 
@@ -47,6 +48,17 @@ func requestKeyOf(w http.ResponseWriter, r *http.Request, what string) (string, 
 		return "", false
 	}
 	return key, true
+}
+
+// recordRead records the signed-in operator's read of Platform data as an
+// act, answering 500 itself when it cannot, and reports whether it did.
+func recordRead(w http.ResponseWriter, r *http.Request, tx *sql.Tx, action string, subject *actSubject, details any) bool {
+	if _, err := recordAct(r.Context(), tx, signedIn(r), action, subject, details, nil, clock.Now(r.Context())); err != nil {
+		// coverage:ignore reason: DB failure, not exercised by unit tests
+		writeInternal(w)
+		return false
+	}
+	return true
 }
 
 func writeInternal(w http.ResponseWriter) {

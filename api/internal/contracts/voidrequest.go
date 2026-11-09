@@ -98,40 +98,44 @@ func listVoidRequests(ctx context.Context, tx *sql.Tx, contractID string) ([]Voi
 }
 
 // respondWithContract re-reads engagementID's current Contract row and
-// every void request against it, and writes the whole ContractResponse
-// under status -- the shape every Contract write handler returns.
-// priceForReader gates Values the same way GetContractHandler does
-// (never withResolvedPrice unconditionally): unlike void/amount, the
-// request endpoint is reachable by a contractor on a granted attachment,
-// so this must never hand her the Practice's price the way a caller
-// blindly copying void.go's own response-building would.
+// writes it under status, as viewContract does.
 func respondWithContract(w http.ResponseWriter, r *http.Request, c staffauth.Call, status int) {
-	id, prose, contractStatus, values, amountCents, amountChangedAt, err := fetchContract(r.Context(), c.Tx, c.EngagementID)
+	ct, err := fetchContract(r.Context(), c.Tx, c.EngagementID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests -- the caller just wrote this row
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
-	mergeFields := extractMergeFields(prose)
-	voidRequests, err := listVoidRequests(r.Context(), c.Tx, id)
+	viewContract(w, r, c, status, ct)
+}
+
+// viewContract writes ct and every void request against it as the whole
+// ContractResponse under status -- the shape the Contract read and every
+// void-request write return. priceForReader gates Values (never
+// withResolvedPrice unconditionally): the request endpoint is reachable by
+// a contractor on a granted attachment, so this must never hand her the
+// Practice's price the way a caller blindly copying void.go's own
+// response-building would. An ambient contractor never reads
+// amount_changed_at either (#968): it would otherwise leak "the price
+// changed" with the value itself removed.
+func viewContract(w http.ResponseWriter, r *http.Request, c staffauth.Call, status int, ct contractRow) {
+	mergeFields := extractMergeFields(ct.Prose)
+	voidRequests, err := listVoidRequests(r.Context(), c.Tx, ct.ID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
-	// #968: an ambient contractor never reads amount_changed_at either,
-	// the same withholding GetContractHandler applies -- it would
-	// otherwise leak "the price changed" with the value itself removed.
 	if c.Reader.IsAmbientContractor() {
-		amountChangedAt = nil
+		ct.AmountChangedAt = nil
 	}
 	writeContract(w, r, c, status, ContractResponse{
 		EngagementID:    c.EngagementID,
-		Status:          contractStatus,
-		Prose:           prose,
+		Status:          ct.Status,
+		Prose:           ct.Prose,
 		MergeFields:     mergeFields,
-		Values:          priceForReader(c.Reader, mergeFields, values.nonEmpty(), amountCents),
-		AmountChangedAt: amountChangedAt,
+		Values:          priceForReader(c.Reader, mergeFields, ct.Values.nonEmpty(), ct.AmountCents),
+		AmountChangedAt: ct.AmountChangedAt,
 		VoidRequests:    voidRequests,
 	})
 }
@@ -157,14 +161,10 @@ func respondWithContract(w http.ResponseWriter, r *http.Request, c staffauth.Cal
 // so a contractor's reach is checked before the handler runs at all.
 // Must be mounted through idempotency.Router.ExemptGated.
 func PostVoidRequestHandler() http.Handler {
-	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
-		id, _, status, _, _, _, ok := requireContract(w, r, c.Tx, c.EngagementID)
-		if !ok {
-			return
-		}
-		if Status(status) != StatusSigned {
+	return contractHandler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call, ct contractRow) {
+		if Status(ct.Status) != StatusSigned {
 			apierr.WriteError(w,
-				statusClause(Status(status))+", so you cannot ask for it to be voided. Only a signed Contract can be voided.",
+				statusClause(Status(ct.Status))+", so you cannot ask for it to be voided. Only a signed Contract can be voided.",
 				http.StatusConflict)
 			return
 		}
@@ -182,7 +182,7 @@ func PostVoidRequestHandler() http.Handler {
 		if _, err := c.Tx.ExecContext(r.Context(),
 			`INSERT INTO contract_void_requests (contract_id, engagement_id, practice_id, requested_by, reason)
 			 VALUES ($1, $2, $3, $4, $5)`,
-			id, c.EngagementID, c.PracticeID, c.StaffID, reason,
+			ct.ID, c.EngagementID, c.PracticeID, c.StaffID, reason,
 		); err != nil {
 			if pgerr.IsUniqueViolation(err) {
 				apierr.WriteError(w, msgVoidRequestAlreadyOpen, http.StatusConflict)
@@ -221,12 +221,7 @@ func PostVoidRequestHandler() http.Handler {
 // Contract's request entirely. Must be mounted through
 // idempotency.Router.ExemptGated.
 func PostVoidRequestDeclineHandler() http.Handler {
-	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
-		id, _, _, _, _, _, ok := requireContract(w, r, c.Tx, c.EngagementID)
-		if !ok {
-			return
-		}
-
+	return contractHandler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call, ct contractRow) {
 		var body postVoidRequestDeclineBody
 		if !apierr.DecodeJSON(w, r, &body) {
 			return
@@ -241,7 +236,7 @@ func PostVoidRequestDeclineHandler() http.Handler {
 			`UPDATE contract_void_requests
 			    SET status = 'declined', decided_by = $1, decided_at = now(), decline_reason = $2
 			  WHERE id = $3 AND contract_id = $4 AND status = 'open'`,
-			c.StaffID, reason, c.ID("requestId"), id,
+			c.StaffID, reason, c.ID("requestId"), ct.ID,
 		)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests

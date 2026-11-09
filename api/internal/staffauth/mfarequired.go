@@ -35,9 +35,6 @@ type mfaRequiredRequest struct {
 func PutMFARequiredHandler() http.Handler {
 	return Handler(func(w http.ResponseWriter, r *http.Request, c Call) {
 		tx, practiceID := c.Tx, c.PracticeID
-		if !RequireConfirmed(w, r) {
-			return
-		}
 
 		var req mfaRequiredRequest
 		if !apierr.DecodeJSON(w, r, &req) {
@@ -83,7 +80,7 @@ func PutMFARequiredHandler() http.Handler {
 		}
 
 		w.WriteHeader(http.StatusNoContent)
-	})
+	}, Confirmed())
 }
 
 // mfaImpactResponse is GetMFAImpactHandler's body. Required carries the

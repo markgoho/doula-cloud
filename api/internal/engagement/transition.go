@@ -1,8 +1,6 @@
 package engagement
 
 import (
-	"database/sql"
-	"errors"
 	"net/http"
 
 	"doula-cloud/api/internal/activity"
@@ -234,13 +232,7 @@ func TransitionHandler() http.Handler {
 			`SELECT status, ending_reason, ending_note, birth_outcome::text
 			   FROM engagements WHERE id = $1`, c.EngagementID,
 		).Scan(&current.status, &current.endingReason, &current.endingNote, &current.birthOutcome)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !engagementRead(w, err) {
 			return
 		}
 

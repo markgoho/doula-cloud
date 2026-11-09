@@ -326,39 +326,8 @@ func PostContractHandler() http.Handler {
 // price key reachable at all" guarantee the deleted split used to give.
 // Must be mounted behind staffauth.Middleware.
 func GetContractHandler() http.Handler {
-	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
-		id, prose, status, values, amountCents, amountChangedAt, ok := requireContract(w, r, c.Tx, c.EngagementID)
-		if !ok {
-			return
-		}
-		mergeFields := extractMergeFields(prose)
-
-		// An ambient contractor never reads the Contract's price
-		// (priceForReader), so amountChangedAt is withheld from her the
-		// same way -- it would otherwise leak "the price changed" even
-		// with the value itself removed.
-		if c.Reader.IsAmbientContractor() {
-			amountChangedAt = nil
-		}
-
-		voidRequests, err := listVoidRequests(r.Context(), c.Tx, id)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		full := ContractResponse{
-			EngagementID:    c.EngagementID,
-			Status:          status,
-			Prose:           prose,
-			MergeFields:     mergeFields,
-			Values:          priceForReader(c.Reader, mergeFields, values.nonEmpty(), amountCents),
-			AmountChangedAt: amountChangedAt,
-			VoidRequests:    voidRequests,
-		}
-
-		writeContract(w, r, c, http.StatusOK, full)
+	return contractHandler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call, ct contractRow) {
+		viewContract(w, r, c, http.StatusOK, ct)
 	}, staffauth.EngagementReach("no contract found for this engagement"))
 }
 
@@ -373,12 +342,8 @@ func GetContractHandler() http.Handler {
 // Template prose names. Must be mounted through
 // idempotency.Router.ExemptGated.
 func PutContractHandler() http.Handler {
-	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
-		id, prose, status, storedValues, amountCents, amountChangedAt, ok := requireContract(w, r, c.Tx, c.EngagementID)
-		if !ok {
-			return
-		}
-		if ok, refusal := TransitionEdit.Check(Status(status)); !ok {
+	return contractHandler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call, ct contractRow) {
+		if ok, refusal := TransitionEdit.Check(Status(ct.Status)); !ok {
 			apierr.WriteError(w, refusal, http.StatusConflict)
 			return
 		}
@@ -394,7 +359,7 @@ func PutContractHandler() http.Handler {
 			return
 		}
 
-		mergeFields := extractMergeFields(prose)
+		mergeFields := extractMergeFields(ct.Prose)
 		if errMsg := validateMergeFieldValues(mergeFields, req.Values); errMsg != "" {
 			apierr.WriteError(w, errMsg, http.StatusBadRequest)
 			return
@@ -409,13 +374,13 @@ func PutContractHandler() http.Handler {
 
 		if _, err := c.Tx.ExecContext(r.Context(),
 			`UPDATE contracts SET merge_field_values = $1 WHERE id = $2`,
-			valuesJSON, id,
+			valuesJSON, ct.ID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if changed := changedMergeFields(storedValues.nonEmpty(), req.Values); len(changed) > 0 {
+		if changed := changedMergeFields(ct.Values.nonEmpty(), req.Values); len(changed) > 0 {
 			diff, err := json.Marshal(map[string][]string{"fields": changed})
 			if err != nil {
 				// coverage:ignore reason: a map of string slices always marshals cleanly, not exercised by unit tests
@@ -431,11 +396,11 @@ func PutContractHandler() http.Handler {
 
 		out := ContractResponse{
 			EngagementID:    c.EngagementID,
-			Status:          status,
-			Prose:           prose,
+			Status:          ct.Status,
+			Prose:           ct.Prose,
 			MergeFields:     mergeFields,
-			Values:          withResolvedPrice(mergeFields, req.Values, amountCents),
-			AmountChangedAt: amountChangedAt,
+			Values:          withResolvedPrice(mergeFields, req.Values, ct.AmountCents),
+			AmountChangedAt: ct.AmountChangedAt,
 		}
 		writeContract(w, r, c, http.StatusOK, out)
 	}, staffauth.Engagement())
@@ -486,42 +451,66 @@ func changedMergeFields(before, after MergeFieldValues) []string {
 // was created with, and set the moment amount_cents last moved for any
 // reason after creation -- an Owner/Admin override (amount.go) or a
 // rate-driven reprice (#968, practicerate.PutRateHandler).
-func fetchContract(ctx context.Context, tx *sql.Tx, engagementID string) (id, prose, status string, values MergeFieldValues, amountCents int64, amountChangedAt *time.Time, err error) {
+func fetchContract(ctx context.Context, tx *sql.Tx, engagementID string) (contractRow, error) {
+	var ct contractRow
 	var rawValues []byte
-	err = tx.QueryRowContext(ctx,
+	err := tx.QueryRowContext(ctx,
 		`SELECT id, prose, status, merge_field_values, amount_cents, amount_changed_at FROM contracts
 		 WHERE engagement_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
 		engagementID,
-	).Scan(&id, &prose, &status, &rawValues, &amountCents, &amountChangedAt)
+	).Scan(&ct.ID, &ct.Prose, &ct.Status, &rawValues, &ct.AmountCents, &ct.AmountChangedAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", "", "", nil, 0, nil, fmt.Errorf("contracts: fetch contract: %w", err)
+		return contractRow{}, fmt.Errorf("contracts: fetch contract: %w", err)
 	}
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
-		return "", "", "", nil, 0, nil, fmt.Errorf("contracts: fetch contract: %w", err)
+		return contractRow{}, fmt.Errorf("contracts: fetch contract: %w", err)
 	}
 
-	if err := json.Unmarshal(rawValues, &values); err != nil {
+	if err := json.Unmarshal(rawValues, &ct.Values); err != nil {
 		// coverage:ignore reason: stored JSON is always written by PostContractHandler/PutContractHandler, not exercised by unit tests
-		return "", "", "", nil, 0, nil, fmt.Errorf("contracts: unmarshal merge field values: %w", err)
+		return contractRow{}, fmt.Errorf("contracts: unmarshal merge field values: %w", err)
 	}
-	return id, prose, status, values, amountCents, amountChangedAt, nil
+	return ct, nil
+}
+
+// contractHandler is staffauth.Handler for a route that acts on the
+// Engagement's current Contract: fn receives it already read, and an
+// Engagement with no Contract yet never reaches fn.
+func contractHandler(fn func(w http.ResponseWriter, r *http.Request, c staffauth.Call, ct contractRow), opts ...staffauth.Option) http.Handler {
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		ct, ok := requireContract(w, r, c.Tx, c.EngagementID)
+		if !ok {
+			return
+		}
+		fn(w, r, c, ct)
+	}, opts...)
 }
 
 // requireContract is fetchContract for a handler: an Engagement with no
 // Contract yet is a 404 and any other failure a 500, written here.
-func requireContract(w http.ResponseWriter, r *http.Request, tx *sql.Tx, engagementID string) (id, prose, status string, values MergeFieldValues, amountCents int64, amountChangedAt *time.Time, ok bool) {
-	id, prose, status, values, amountCents, amountChangedAt, err := fetchContract(r.Context(), tx, engagementID)
+func requireContract(w http.ResponseWriter, r *http.Request, tx *sql.Tx, engagementID string) (contractRow, bool) {
+	ct, err := fetchContract(r.Context(), tx, engagementID)
 	if errors.Is(err, sql.ErrNoRows) {
 		apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
-		return "", "", "", nil, 0, nil, false
+		return contractRow{}, false
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return "", "", "", nil, 0, nil, false
+		return contractRow{}, false
 	}
-	return id, prose, status, values, amountCents, amountChangedAt, true
+	return ct, true
+}
+
+// contractRow is the columns of a Contract that fetchContract reads.
+type contractRow struct {
+	ID              string
+	Prose           string
+	Status          string
+	Values          MergeFieldValues
+	AmountCents     int64
+	AmountChangedAt *time.Time
 }
 
 // clientNameMergeKey and PracticeNameMergeKey are the merge fields this

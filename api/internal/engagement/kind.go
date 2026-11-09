@@ -199,13 +199,7 @@ func ChangeKindHandler() http.Handler {
 			`SELECT kind::text, birth_outcome::text FROM engagements WHERE id = $1 AND practice_id = $2`,
 			c.EngagementID, c.PracticeID,
 		).Scan(&current.kind, &current.birthOutcome)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !engagementRead(w, err) {
 			return
 		}
 
@@ -241,6 +235,22 @@ func ChangeKindHandler() http.Handler {
 
 		apierr.WriteJSON(w, http.StatusOK, KindChangeResponse{EngagementID: c.EngagementID, Kind: req.Kind})
 	}, staffauth.EngagementID())
+}
+
+// engagementRead answers the error from reading an Engagement's row: a
+// 404 when it is not there, a 500 for any other failure. It reports
+// whether the read succeeded.
+func engagementRead(w http.ResponseWriter, err error) bool {
+	if errors.Is(err, sql.ErrNoRows) {
+		apierr.WriteError(w, "engagement not found", http.StatusNotFound)
+		return false
+	}
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return false
+	}
+	return true
 }
 
 // refuseUpgradeAfterBirth is ADR-0015's own sentence, checked before the

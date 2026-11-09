@@ -58,15 +58,15 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 			return
 		}
 
-		id, prose, status, values, amountCents, amountChangedAt, ok := requireContract(w, r, c.Tx, c.EngagementID)
+		ct, ok := requireContract(w, r, c.Tx, c.EngagementID)
 		if !ok {
 			return
 		}
-		if ok, refusal := TransitionSign.Check(Status(status)); !ok {
+		if ok, refusal := TransitionSign.Check(Status(ct.Status)); !ok {
 			apierr.WriteError(w, refusal, http.StatusConflict)
 			return
 		}
-		values = withResolvedPrice(extractMergeFields(prose), values, amountCents)
+		values := withResolvedPrice(extractMergeFields(ct.Prose), ct.Values, ct.AmountCents)
 
 		signer, err := loadSigningEngagement(r.Context(), c.Tx, c.EngagementID)
 		if err != nil {
@@ -80,7 +80,7 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 		// before either use.
 		signedAt := clock.Now(r.Context()).Truncate(time.Microsecond)
 
-		pdfBytes, err := renderContractPDF(fillProse(prose, values), signature{
+		pdfBytes, err := renderContractPDF(fillProse(ct.Prose, values), signature{
 			fullLegalName: req.FullLegalName,
 			signedAt:      signedAt.In(signer.zone),
 		})
@@ -89,7 +89,7 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		objectPath := SignedPDFObjectPath(c.EngagementID, id)
+		objectPath := SignedPDFObjectPath(c.EngagementID, ct.ID)
 		if err := store.Put(r.Context(), objectPath, contentTypePDF, bytes.NewReader(pdfBytes)); err != nil {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -100,7 +100,7 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 			 SET status = $1::contract_status, signer_full_name = $2, signer_attestation = $3,
 			     signed_at = $4, signer_ip = $5, signed_pdf_object_path = $6
 			 WHERE id = $7`,
-			string(StatusSigned), req.FullLegalName, req.Attestation, signedAt, clientip.From(r), objectPath, id,
+			string(StatusSigned), req.FullLegalName, req.Attestation, signedAt, clientip.From(r), objectPath, ct.ID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -115,10 +115,10 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 		out := ContractResponse{
 			EngagementID:    c.EngagementID,
 			Status:          string(StatusSigned),
-			Prose:           prose,
-			MergeFields:     extractMergeFields(prose),
+			Prose:           ct.Prose,
+			MergeFields:     extractMergeFields(ct.Prose),
 			Values:          values.nonEmpty(),
-			AmountChangedAt: amountChangedAt,
+			AmountChangedAt: ct.AmountChangedAt,
 		}
 		writeClientContract(w, r, c.Tx, http.StatusOK, out)
 	})

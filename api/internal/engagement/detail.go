@@ -265,13 +265,7 @@ func refuseUnreachable(w http.ResponseWriter, r *http.Request, tx *sql.Tx, pract
 		  LIMIT 1`,
 		engagementID, staffID, practiceID,
 	).Scan(&kind, &dueDate, &endedOn)
-	if errors.Is(err, sql.ErrNoRows) {
-		apierr.WriteError(w, "engagement not found", http.StatusNotFound)
-		return
-	}
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+	if !engagementRead(w, err) {
 		return
 	}
 	ended := endedOn.Format("Jan 2, 2006")
@@ -316,13 +310,7 @@ func DetailHandler() http.Handler {
 			c.EngagementID, c.PracticeID,
 		).Scan(&d.EngagementID, &d.ClientID, &givenName, &familyName, &preferredName, &d.Status, &d.CreatedAt, &dueDate,
 			&d.Kind, &d.BirthOutcome, &d.PregnancyEndedOn)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !engagementRead(w, err) {
 			return
 		}
 		d.ClientName = personname.Preferred(givenName, preferredName.String)
