@@ -34,14 +34,8 @@ const (
 
 func newRefundStack(t *testing.T) *refundStack {
 	t.Helper()
-	s := &refundStack{opsStack: &opsStack{t: t, db: newOpsDB(t), now: opsStart}, stripe: billing.NewFakeStripeClient()}
-	s.handler, _ = routes(Deps{
-		DB:       s.db.Ops,
-		Now:      func() time.Time { return s.now },
-		Verifier: tokens,
-		Origins:  []string{testOrigin},
-		Stripe:   s.stripe,
-	})
+	stripe := billing.NewFakeStripeClient()
+	s := &refundStack{opsStack: stackWith(t, Deps{Stripe: stripe}), stripe: stripe}
 	s.practiceID = testdb.SeedPractice(t, s.db, refundPracticeName)
 	s.ownerID = testdb.SeedNamedStaffAtPractice(t, s.db, s.practiceID, "refund-owner", refundOwnerName, []string{ownerRole}, "employee")
 	if err := s.db.Admin.QueryRowContext(t.Context(),
@@ -79,11 +73,7 @@ func (s *refundStack) check(cookie, query string) *httptest.ResponseRecorder {
 
 func (s *refundStack) refund(cookie, key string, body any) *httptest.ResponseRecorder {
 	s.t.Helper()
-	header := http.Header{}
-	if key != "" {
-		header.Set(headerIdempotencyKey, key)
-	}
-	return s.send(http.MethodPost, "/api/practices/"+s.practiceID+"/refunds", cookie, header, body)
+	return s.postKeyed("/api/practices/"+s.practiceID+"/refunds", cookie, key, body)
 }
 
 func (s *refundStack) order(credits int) refundRequest {
@@ -196,25 +186,13 @@ func TestRefund_GivesTheMoneyBackAndRecordsWhoAndWhy(t *testing.T) {
 		t.Fatalf("stripe calls = %+v, want one of 4274 cents on pi_lakeside under the request's key", calls)
 	}
 
-	var actID, subjectKind, subjectID string
-	var details []byte
-	var stepUpAt, createdAt time.Time
-	if err := s.db.Admin.QueryRowContext(t.Context(),
-		`SELECT a.id, a.subject_kind, a.subject_id, a.details, a.step_up_at, a.created_at
-		   FROM operator_acts a JOIN operators o ON o.id = a.operator_id
-		  WHERE o.identity_uid = $1 AND a.action = 'refund'`, opUID,
-	).Scan(&actID, &subjectKind, &subjectID, &details, &stepUpAt, &createdAt); err != nil {
-		t.Fatalf("read the refund act: %v", err)
-	}
-	if subjectKind != "practice" || subjectID != s.practiceID || !stepUpAt.Equal(steppedUp) || !createdAt.Equal(s.now) {
-		t.Errorf("act = (%s/%s, step_up_at %s, created_at %s), want practice/%s stepped up at %s, taken at %s",
-			subjectKind, subjectID, stepUpAt, createdAt, s.practiceID, steppedUp, s.now)
-	}
+	act := s.requireAct("refund", wantAct{subjectKind: "practice", subjectID: s.practiceID, steppedUp: steppedUp, at: s.now})
+	actID := act.ID
 	var gotDetails map[string]any
-	_ = json.Unmarshal(details, &gotDetails)
+	_ = json.Unmarshal([]byte(act.Details), &gotDetails)
 	if gotDetails["requestedByStaffId"] != s.ownerID || gotDetails["requestedOn"] != refundRequestedOn ||
 		gotDetails["credits"] != float64(2) || gotDetails["amountCents"] != float64(4274) {
-		t.Errorf("act details = %s, want the requesting Owner, the request date, 2 Credits and 4274 cents", details)
+		t.Errorf("act details = %s, want the requesting Owner, the request date, 2 Credits and 4274 cents", act.Details)
 	}
 
 	if n := s.count(`SELECT count(*) FROM credit_ledger

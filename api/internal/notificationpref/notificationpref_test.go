@@ -1,83 +1,24 @@
 package notificationpref_test
 
 import (
-	"bytes"
-	"encoding/json/v2"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/notificationpref"
-	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
-
-// newPortalServer mounts this package's whole surface through
-// notificationpref.Mount, the same call main.go makes on the real
-// GatedRouter.
-func newPortalServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
-	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	notificationpref.Mount(g, idempotency.NewRouter(g, db.App), db.App)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, testdb.PortalUID(uid))
-}
-
-func authedRequest(t *testing.T, session, method, url string, body []byte) *http.Response {
-	t.Helper()
-	var reader *bytes.Reader
-	if body != nil {
-		reader = bytes.NewReader(body)
-	} else {
-		reader = bytes.NewReader(nil)
-	}
-	req, err := http.NewRequestWithContext(t.Context(), method, url, reader)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
-}
-
-func decodePreference(t *testing.T, resp *http.Response) notificationpref.PreferenceResponse {
-	t.Helper()
-	defer resp.Body.Close()
-	var out notificationpref.PreferenceResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode preference response: %v", err)
-	}
-	return out
-}
 
 // TestGetHandler_NeverDecidedReportsDisabled proves #303 AC1's gate: a
 // Client who has never visited the notification settings screen reads
 // enabled=false, so the client-side register helper never fires the
 // browser's permission prompt before she has seen the explanation.
 func TestGetHandler_NeverDecidedReportsDisabled(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "client-never-decided"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
+	e := newEnv(t)
 
-	srv, session := newPortalServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedRequest(t, session, http.MethodGet, srv.URL+"/api/portal/engagements/"+engagementID+"/notification-preference", nil)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	if got := decodePreference(t, resp); got.Enabled {
-		t.Fatalf("Enabled = %v, want false (never decided)", got.Enabled)
+	if e.enabled(e.Engagement.ID) {
+		t.Fatalf("Enabled = true, want false (never decided)")
 	}
 }
 
@@ -85,29 +26,17 @@ func TestGetHandler_NeverDecidedReportsDisabled(t *testing.T) {
 // turning push on durably persists the choice and records who did it, as
 // her own act.
 func TestSetHandler_TurnsOnRecordsChoiceAndActivity(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "client-turns-on"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
+	e := newEnv(t)
 
-	srv, session := newPortalServer(t, db, identityUID)
-	defer srv.Close()
-
-	body, _ := json.Marshal(notificationpref.SetRequest{Enabled: true})
-	resp := authedRequest(t, session, http.MethodPut, srv.URL+"/api/portal/engagements/"+engagementID+"/notification-preference", body)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	if got := decodePreference(t, resp); !got.Enabled {
-		t.Fatalf("Enabled = %v, want true", got.Enabled)
+	if !e.set(e.Engagement.ID, true) {
+		t.Fatalf("Enabled = false, want true")
 	}
 
-	if muted, found := readPreferenceRow(t, db, testdb.PortalUID(identityUID), engagementID); !found || muted {
+	if muted, found := readPreferenceRow(t, e.DB, e.Engagement.Client.PortalUID, e.Engagement.ID); !found || muted {
 		t.Fatalf("notification_preferences row = (muted=%v, found=%v), want (false, true)", muted, found)
 	}
 
-	action, actorKind := latestActivityAction(t, db, engagementID)
+	action, actorKind := latestActivityAction(t, e.DB, e.Engagement.ID)
 	if action != "push_notifications_enabled" || actorKind != "client" {
 		t.Fatalf("latest activity = (%q, %q), want (push_notifications_enabled, client)", action, actorKind)
 	}
@@ -116,39 +45,21 @@ func TestSetHandler_TurnsOnRecordsChoiceAndActivity(t *testing.T) {
 // TestSetHandler_TurnsOffAfterOnRecordsChoiceAndActivity proves the round
 // trip #303 AC3 asks for: on, then off, both durable and both recorded.
 func TestSetHandler_TurnsOffAfterOnRecordsChoiceAndActivity(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "client-turns-off"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
+	e := newEnv(t)
 
-	srv, session := newPortalServer(t, db, identityUID)
-	defer srv.Close()
-
-	onBody, _ := json.Marshal(notificationpref.SetRequest{Enabled: true})
-	onResp := authedRequest(t, session, http.MethodPut, srv.URL+"/api/portal/engagements/"+engagementID+"/notification-preference", onBody)
-	_ = onResp.Body.Close()
-
-	offBody, _ := json.Marshal(notificationpref.SetRequest{Enabled: false})
-	offResp := authedRequest(t, session, http.MethodPut, srv.URL+"/api/portal/engagements/"+engagementID+"/notification-preference", offBody)
-	if offResp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", offResp.StatusCode, http.StatusOK)
-	}
-	if got := decodePreference(t, offResp); got.Enabled {
-		t.Fatalf("Enabled = %v, want false", got.Enabled)
+	e.set(e.Engagement.ID, true)
+	if e.set(e.Engagement.ID, false) {
+		t.Fatalf("Enabled = true, want false")
 	}
 
-	if muted, found := readPreferenceRow(t, db, testdb.PortalUID(identityUID), engagementID); !found || !muted {
+	if muted, found := readPreferenceRow(t, e.DB, e.Engagement.Client.PortalUID, e.Engagement.ID); !found || !muted {
 		t.Fatalf("notification_preferences row = (muted=%v, found=%v), want (true, true)", muted, found)
 	}
-
-	getResp := authedRequest(t, session, http.MethodGet, srv.URL+"/api/portal/engagements/"+engagementID+"/notification-preference", nil)
-	defer getResp.Body.Close()
-	if got := decodePreference(t, getResp); got.Enabled {
-		t.Fatalf("GET after turning off: Enabled = %v, want false", got.Enabled)
+	if e.enabled(e.Engagement.ID) {
+		t.Fatalf("GET after turning off: Enabled = true, want false")
 	}
 
-	action, actorKind := latestActivityAction(t, db, engagementID)
+	action, actorKind := latestActivityAction(t, e.DB, e.Engagement.ID)
 	if action != "push_notifications_disabled" || actorKind != "client" {
 		t.Fatalf("latest activity = (%q, %q), want (push_notifications_disabled, client)", action, actorKind)
 	}
@@ -157,20 +68,9 @@ func TestSetHandler_TurnsOffAfterOnRecordsChoiceAndActivity(t *testing.T) {
 // TestSetHandler_InvalidJSONBody proves malformed input is refused rather
 // than silently defaulted.
 func TestSetHandler_InvalidJSONBody(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "client-bad-json"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
+	e := newEnv(t)
 
-	srv, session := newPortalServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedRequest(t, session, http.MethodPut, srv.URL+"/api/portal/engagements/"+engagementID+"/notification-preference", []byte("not json"))
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.ExpectStatus(t, http.MethodPut, e.preferenceURL(e.Engagement.ID), http.StatusBadRequest, e.AsClient, reqtest.RawJSON([]byte("not json")))
 }
 
 // TestSetHandler_CannotWriteAnotherClientsEngagementPreference proves the
@@ -186,27 +86,13 @@ func TestSetHandler_InvalidJSONBody(t *testing.T) {
 // on notification_preferences (00067) is the layer underneath if that
 // middleware check were ever bypassed.
 func TestSetHandler_CannotWriteAnotherClientsEngagementPreference(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	const identityA = "client-a-owns-the-engagement"
-	clientA, engagementA := testdb.SeedEngagement(t, db, practiceID)
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityA), clientA)
+	e := newEnv(t)
+	attacker := e.AnotherEngagement(fixture.NewClient(fixture.WithPortalLogin())).Client
 
-	const identityB = "client-b-attacker"
-	clientB, _ := testdb.SeedEngagement(t, db, practiceID)
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityB), clientB)
+	reqtest.ExpectStatus(t, http.MethodPut, e.preferenceURL(e.Engagement.ID), http.StatusForbidden, e.As(attacker),
+		reqtest.JSON(notificationpref.SetRequest{Enabled: false}))
 
-	srvB, sessionB := newPortalServer(t, db, identityB)
-	defer srvB.Close()
-
-	body, _ := json.Marshal(notificationpref.SetRequest{Enabled: false})
-	resp := authedRequest(t, sessionB, http.MethodPut, srvB.URL+"/api/portal/engagements/"+engagementA+"/notification-preference", body)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d (Client B does not own Engagement A)", resp.StatusCode, http.StatusForbidden)
-	}
-
-	if _, found := readPreferenceRow(t, db, testdb.PortalUID(identityA), engagementA); found {
+	if _, found := readPreferenceRow(t, e.DB, e.Engagement.Client.PortalUID, e.Engagement.ID); found {
 		t.Fatalf("notification_preferences row for Client A's Engagement was written by Client B's request")
 	}
 }
@@ -222,32 +108,18 @@ func TestSetHandler_CannotWriteAnotherClientsEngagementPreference(t *testing.T) 
 // TestPushSubscriptionsForMessageRecipient_CrossPracticePortalAccount
 // below.
 func TestSetHandler_MutingOneEngagementLeavesSiblingEngagementUnaffected(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "client-two-engagements"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, mutedEngagementID := testdb.SeedEngagement(t, db, practiceID)
-	otherEngagementID := seedSecondEngagement(t, db, practiceID, clientID)
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
-
-	srv, session := newPortalServer(t, db, identityUID)
-	defer srv.Close()
+	e := newEnv(t)
+	muted := e.Engagement.ID
+	other := e.AnotherEngagement(fixture.ForClient(e.Engagement.Client)).ID
 
 	// Both start on, an explicit choice on each -- otherwise "still off
 	// after muting one" would be indistinguishable from "never decided".
-	onBody, _ := json.Marshal(notificationpref.SetRequest{Enabled: true})
-	for _, id := range []string{mutedEngagementID, otherEngagementID} {
-		resp := authedRequest(t, session, http.MethodPut, srv.URL+"/api/portal/engagements/"+id+"/notification-preference", onBody)
-		_ = resp.Body.Close()
-	}
+	e.set(muted, true)
+	e.set(other, true)
+	e.set(muted, false)
 
-	offBody, _ := json.Marshal(notificationpref.SetRequest{Enabled: false})
-	offResp := authedRequest(t, session, http.MethodPut, srv.URL+"/api/portal/engagements/"+mutedEngagementID+"/notification-preference", offBody)
-	_ = offResp.Body.Close()
-
-	otherResp := authedRequest(t, session, http.MethodGet, srv.URL+"/api/portal/engagements/"+otherEngagementID+"/notification-preference", nil)
-	defer otherResp.Body.Close()
-	if got := decodePreference(t, otherResp); !got.Enabled {
-		t.Fatalf("sibling Engagement's Enabled = %v, want true (explicitly on, unaffected by the other Engagement's mute)", got.Enabled)
+	if !e.enabled(other) {
+		t.Fatalf("sibling Engagement's Enabled = false, want true (explicitly on, unaffected by the other Engagement's mute)")
 	}
 }
 
@@ -261,43 +133,23 @@ func TestSetHandler_MutingOneEngagementLeavesSiblingEngagementUnaffected(t *test
 // push_subscriptions_for_message_recipient (00067) already scopes its
 // mute check to one engagement_id.
 func TestPushSubscriptionsForMessageRecipient_CrossPracticePortalAccount(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "client-two-practices"
-
-	practiceA := testdb.SeedPractice(t, db, "Practice A")
-	clientA, engagementA := testdb.SeedEngagement(t, db, practiceA)
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientA)
-
-	practiceB := testdb.SeedPractice(t, db, "Practice B")
-	clientB, engagementB := testdb.SeedEngagement(t, db, practiceB)
+	e := newEnv(t)
+	engagementA := e.Engagement
+	otherPractice := fixture.Practice(t, e.DB)
+	engagementB := fixture.Engagement(t, e.DB, otherPractice)
 	// The same Portal Account reaching a second Practice: a second
-	// client_portal_users row, not a second SeedPortalAccount call (the
-	// Portal Account itself already exists from clientA's seedPortalUser
-	// above).
-	testdb.AttachPortalUser(t, db, testdb.PortalUID(identityUID), clientB)
+	// client_portal_users row, not a second Portal Account.
+	testdb.AttachPortalUser(t, e.DB, engagementA.Client.PortalUID, engagementB.Client.ID)
 
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO push_subscriptions (owner_type, owner_id, endpoint, p256dh_key, auth_key) VALUES ('client', $1, 'https://push.example.com/a', 'p256dh-key', 'auth-key')`,
-		clientA,
-	); err != nil {
-		t.Fatalf("seed push subscription for Practice A: %v", err)
-	}
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO push_subscriptions (owner_type, owner_id, endpoint, p256dh_key, auth_key) VALUES ('client', $1, 'https://push.example.com/b', 'p256dh-key', 'auth-key')`,
-		clientB,
-	); err != nil {
-		t.Fatalf("seed push subscription for Practice B: %v", err)
-	}
+	const seed = `INSERT INTO push_subscriptions (owner_type, owner_id, endpoint, p256dh_key, auth_key) VALUES ('client', $1, $2, 'p256dh-key', 'auth-key')`
+	e.Exec(seed, engagementA.Client.ID, "https://push.example.com/a")
+	e.Exec(seed, engagementB.Client.ID, "https://push.example.com/b")
 
-	srv, session := newPortalServer(t, db, identityUID)
-	defer srv.Close()
-	muteBody, _ := json.Marshal(notificationpref.SetRequest{Enabled: false})
-	muteResp := authedRequest(t, session, http.MethodPut, srv.URL+"/api/portal/engagements/"+engagementA+"/notification-preference", muteBody)
-	_ = muteResp.Body.Close()
+	e.set(engagementA.ID, false)
 
 	var endpointB string
-	if err := db.App.QueryRowContext(t.Context(),
-		`SELECT endpoint FROM push_subscriptions_for_message_recipient($1, 'client')`, engagementB,
+	if err := e.DB.App.QueryRowContext(t.Context(),
+		`SELECT endpoint FROM push_subscriptions_for_message_recipient($1, 'client')`, engagementB.ID,
 	).Scan(&endpointB); err != nil {
 		t.Fatalf("query recipient subscriptions for Practice B's Engagement: %v", err)
 	}
@@ -306,8 +158,8 @@ func TestPushSubscriptionsForMessageRecipient_CrossPracticePortalAccount(t *test
 	}
 
 	var countA int
-	if err := db.App.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM push_subscriptions_for_message_recipient($1, 'client')`, engagementA,
+	if err := e.DB.App.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM push_subscriptions_for_message_recipient($1, 'client')`, engagementA.ID,
 	).Scan(&countA); err != nil {
 		t.Fatalf("query recipient subscriptions for Practice A's Engagement: %v", err)
 	}

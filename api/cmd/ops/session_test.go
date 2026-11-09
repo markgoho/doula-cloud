@@ -77,18 +77,78 @@ func newOpsDB(t *testing.T) *testdb.DB {
 	return db
 }
 
-func newOpsStack(t *testing.T, acceptEmulatorFactor bool) *opsStack {
+// stackWith serves deps over a fresh stack's database, clock, verifier and
+// origin, so a test names only the dependencies its route needs.
+func stackWith(t *testing.T, deps Deps) *opsStack {
 	t.Helper()
 	s := &opsStack{t: t, db: newOpsDB(t), now: opsStart}
-	s.handler, _ = routes(Deps{
-		DB:                   s.db.Ops,
-		Now:                  func() time.Time { return s.now },
-		Verifier:             tokens,
-		AcceptEmulatorFactor: acceptEmulatorFactor,
-		Origins:              []string{testOrigin},
-		FeedbackRepo:         "acme/feedback",
-	})
+	deps.DB = s.db.Ops
+	deps.Now = func() time.Time { return s.now }
+	deps.Verifier = tokens
+	deps.Origins = []string{testOrigin}
+	s.handler, _ = routes(deps)
 	return s
+}
+
+func newOpsStack(t *testing.T, acceptEmulatorFactor bool) *opsStack {
+	t.Helper()
+	return stackWith(t, Deps{AcceptEmulatorFactor: acceptEmulatorFactor, FeedbackRepo: "acme/feedback"})
+}
+
+// postKeyed POSTs body to path, carrying key as the Idempotency-Key when
+// there is one.
+func (s *opsStack) postKeyed(path, cookie, key string, body any) *httptest.ResponseRecorder {
+	s.t.Helper()
+	header := http.Header{}
+	if key != "" {
+		header.Set(headerIdempotencyKey, key)
+	}
+	return s.send(http.MethodPost, path, cookie, header, body)
+}
+
+// operatorAct is a row of operator_acts, the record of what an operator did.
+type operatorAct struct {
+	ID          string
+	SubjectKind string
+	SubjectID   string
+	Details     string
+	StepUpAt    *time.Time
+	CreatedAt   time.Time
+}
+
+// wantAct is what an operator act must say. An empty subject means the act
+// names none; a zero steppedUp means it was taken without a step-up; an
+// empty details is left unchecked.
+type wantAct struct {
+	subjectKind, subjectID string
+	steppedUp, at          time.Time
+	details                string
+}
+
+// requireAct reads the act the signed-in operator took under action, fails
+// the test unless it says want, and returns it for the rows it keys.
+func (s *opsStack) requireAct(action string, want wantAct) operatorAct {
+	s.t.Helper()
+	var a operatorAct
+	if err := s.db.Admin.QueryRowContext(s.t.Context(),
+		`SELECT a.id, coalesce(a.subject_kind, ''), coalesce(a.subject_id::text, ''), a.details::text, a.step_up_at, a.created_at
+		   FROM operator_acts a JOIN operators o ON o.id = a.operator_id
+		  WHERE o.identity_uid = $1 AND a.action = $2`, opUID, action,
+	).Scan(&a.ID, &a.SubjectKind, &a.SubjectID, &a.Details, &a.StepUpAt, &a.CreatedAt); err != nil {
+		s.t.Fatalf("read the %s act: %v", action, err)
+	}
+	steppedUp := a.StepUpAt != nil && a.StepUpAt.Equal(want.steppedUp)
+	if want.steppedUp.IsZero() {
+		steppedUp = a.StepUpAt == nil
+	}
+	if a.SubjectKind != want.subjectKind || a.SubjectID != want.subjectID || !steppedUp || !a.CreatedAt.Equal(want.at) {
+		s.t.Errorf("act = (%s/%s, step_up_at %v, created_at %s), want (%s/%s, stepped up at %v, taken at %s)",
+			a.SubjectKind, a.SubjectID, a.StepUpAt, a.CreatedAt, want.subjectKind, want.subjectID, want.steppedUp, want.at)
+	}
+	if want.details != "" && a.Details != want.details {
+		s.t.Errorf("act details = %s\nwant %s", a.Details, want.details)
+	}
+	return a
 }
 
 // call sends method to /api/session, the route every test here drives.

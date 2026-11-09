@@ -43,11 +43,7 @@ func (s *grantStack) check(cookie string) *httptest.ResponseRecorder {
 
 func (s *grantStack) grant(cookie, key string, body any) *httptest.ResponseRecorder {
 	s.t.Helper()
-	header := http.Header{}
-	if key != "" {
-		header.Set(headerIdempotencyKey, key)
-	}
-	return s.send(http.MethodPost, "/api/practices/"+s.practiceID+"/founding-grants", cookie, header, body)
+	return s.postKeyed("/api/practices/"+s.practiceID+"/founding-grants", cookie, key, body)
 }
 
 func TestFoundingGrantCheck_StatesThePracticeAndTheGrantItsRosterSizes(t *testing.T) {
@@ -101,24 +97,11 @@ func TestFoundingGrant_GivesTheRosterSizedGrantAndRecordsWhoGaveIt(t *testing.T)
 		t.Errorf("body = %s\nwant %s", got, want)
 	}
 
-	var actID, subjectKind, subjectID string
-	var details []byte
-	var stepUpAt *time.Time
-	var createdAt time.Time
-	if err := s.db.Admin.QueryRowContext(t.Context(),
-		`SELECT a.id, a.subject_kind, a.subject_id, a.details, a.step_up_at, a.created_at
-		   FROM operator_acts a JOIN operators o ON o.id = a.operator_id
-		  WHERE o.identity_uid = $1 AND a.action = 'founding_grant'`, opUID,
-	).Scan(&actID, &subjectKind, &subjectID, &details, &stepUpAt, &createdAt); err != nil {
-		t.Fatalf("read the founding grant act: %v", err)
-	}
-	if subjectKind != "practice" || subjectID != s.practiceID || stepUpAt != nil || !createdAt.Equal(s.now) {
-		t.Errorf("act = (%s/%s, step_up_at %v, created_at %s), want practice/%s with no step-up, taken at %s",
-			subjectKind, subjectID, stepUpAt, createdAt, s.practiceID, s.now)
-	}
-	if string(details) != `{"credits": 12, "requestKey": "grant-key-1", "staffCount": 4}` {
-		t.Errorf("act details = %s", details)
-	}
+	act := s.requireAct("founding_grant", wantAct{
+		subjectKind: "practice", subjectID: s.practiceID, at: s.now,
+		details: `{"credits": 12, "requestKey": "grant-key-1", "staffCount": 4}`,
+	})
+	actID := act.ID
 
 	if n := s.count(`SELECT count(*) FROM credit_ledger
 		WHERE origin = 'founding_grant' AND practice_id = $1 AND quantity = 12 AND operator_act_id = $2 AND created_at = $3`,

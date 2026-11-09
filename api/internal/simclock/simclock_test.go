@@ -114,6 +114,43 @@ func freshDB(t *testing.T) (*sql.DB, string) {
 	return db, dsn
 }
 
+// openDSN opens a connection to dsn that closes with the test.
+func openDSN(t *testing.T, dsn string) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatalf("simclock: open db: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return db
+}
+
+// openAs opens a connection to the database dsn names, logged in as role
+// (whose password is its name).
+func openAs(t *testing.T, dsn, role string) *sql.DB {
+	t.Helper()
+	u, err := url.Parse(dsn)
+	if err != nil {
+		t.Fatalf("simclock: parse dsn: %v", err)
+	}
+	u.User = url.UserPassword(role, role)
+	return openDSN(t, u.String())
+}
+
+// migrate applies the product's own migrations to the database dsn names.
+func migrate(t *testing.T, dsn string) {
+	t.Helper()
+	migrating := openDSN(t, dsn)
+	goose.SetBaseFS(migrations.FS)
+	defer goose.SetBaseFS(nil)
+	if err := goose.SetDialect("postgres"); err != nil {
+		t.Fatalf("set dialect: %v", err)
+	}
+	if err := goose.Up(migrating, "."); err != nil {
+		t.Fatalf("apply migrations: %v", err)
+	}
+}
+
 func TestInstall_PristineDatabaseAdvancesWithTheOffset(t *testing.T) {
 	ctx := context.Background()
 	db, dsn := freshDB(t)
@@ -125,11 +162,7 @@ func TestInstall_PristineDatabaseAdvancesWithTheOffset(t *testing.T) {
 	// A fresh connection, so the ALTER ROLE ... SET search_path Install
 	// just ran is actually in effect for it -- database/sql may still be
 	// holding db's own connection open from before that statement ran.
-	fresh, err := sql.Open("pgx", dsn)
-	if err != nil {
-		t.Fatalf("open fresh connection: %v", err)
-	}
-	defer func() { _ = fresh.Close() }()
+	fresh := openDSN(t, dsn)
 
 	if _, err := fresh.ExecContext(ctx, "CREATE TABLE t (at timestamptz DEFAULT now())"); err != nil {
 		t.Fatalf("create table with DEFAULT now(): %v", err)
@@ -181,23 +214,9 @@ func TestInstall_RefusesADatabaseMigratedWithoutTheShim(t *testing.T) {
 	ctx := context.Background()
 	db, dsn := freshDB(t)
 
-	tmpl, err := sql.Open("pgx", dsn)
-	if err != nil {
-		t.Fatalf("open db for migrating: %v", err)
-	}
-	goose.SetBaseFS(migrations.FS)
-	defer goose.SetBaseFS(nil)
-	if err := goose.SetDialect("postgres"); err != nil {
-		t.Fatalf("set dialect: %v", err)
-	}
-	if err := goose.Up(tmpl, "."); err != nil {
-		t.Fatalf("apply migrations: %v", err)
-	}
-	if err := tmpl.Close(); err != nil {
-		t.Fatalf("close migrating connection: %v", err)
-	}
+	migrate(t, dsn)
 
-	err = simclock.Install(ctx, db, superuserRole)
+	err := simclock.Install(ctx, db, superuserRole)
 	if !errors.Is(err, simclock.ErrAlreadyMigrated) {
 		t.Fatalf("Install on an already-migrated database: got %v, want ErrAlreadyMigrated", err)
 	}
@@ -219,21 +238,10 @@ func TestInstall_ReportsAnInstallFailure(t *testing.T) {
 		t.Fatalf("create low-privilege role: %v", err)
 	}
 
-	u, err := url.Parse(dsn)
-	if err != nil {
-		t.Fatalf("parse dsn: %v", err)
-	}
-	u.User = url.UserPassword(lowPrivRole, lowPrivRole)
-	lowPriv, err := sql.Open("pgx", u.String())
-	if err != nil {
-		t.Fatalf("open low-privilege connection: %v", err)
-	}
-	defer func() { _ = lowPriv.Close() }()
-
 	// A login role with no CREATE privilege on this database (Postgres
 	// 15+'s default, since it isn't the owner) can't run CREATE SCHEMA --
 	// exactly the failure this exercises.
-	err = simclock.Install(ctx, lowPriv, lowPrivRole)
+	err := simclock.Install(ctx, openAs(t, dsn, lowPrivRole), lowPrivRole)
 	if err == nil || errors.Is(err, simclock.ErrAlreadyMigrated) {
 		t.Fatalf("Install without CREATE privilege should fail with a plain error, got %v", err)
 	}
@@ -267,19 +275,8 @@ func TestGrant_LetsANonSuperuserRoleReadSimulatedTime(t *testing.T) {
 		t.Fatalf("advance offset: %v", err)
 	}
 
-	u, err := url.Parse(dsn)
-	if err != nil {
-		t.Fatalf("parse dsn: %v", err)
-	}
-	u.User = url.UserPassword(runtimeRole, runtimeRole)
-	runtime, err := sql.Open("pgx", u.String())
-	if err != nil {
-		t.Fatalf("open runtime connection: %v", err)
-	}
-	defer func() { _ = runtime.Close() }()
-
 	var readsSimulatedTime bool
-	err = runtime.QueryRowContext(ctx, "SELECT now() > pg_catalog.now() + interval '29 days'").Scan(&readsSimulatedTime)
+	err := openAs(t, dsn, runtimeRole).QueryRowContext(ctx, "SELECT now() > pg_catalog.now() + interval '29 days'").Scan(&readsSimulatedTime)
 	if err != nil {
 		t.Fatalf("select now() as %s: %v", runtimeRole, err)
 	}

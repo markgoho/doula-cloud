@@ -10,9 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pressly/goose/v3"
-
-	"doula-cloud/api/db/migrations"
 	"doula-cloud/api/internal/simclock"
 )
 
@@ -159,22 +156,7 @@ func migratedDB(t *testing.T) *sql.DB {
 	if err := simclock.Install(t.Context(), db, superuserRole); err != nil {
 		t.Fatalf("Install: %v", err)
 	}
-
-	migrating, err := sql.Open("pgx", dsn)
-	if err != nil {
-		t.Fatalf("open db for migrating: %v", err)
-	}
-	goose.SetBaseFS(migrations.FS)
-	defer goose.SetBaseFS(nil)
-	if err := goose.SetDialect("postgres"); err != nil {
-		t.Fatalf("set dialect: %v", err)
-	}
-	if err := goose.Up(migrating, "."); err != nil {
-		t.Fatalf("apply migrations: %v", err)
-	}
-	if err := migrating.Close(); err != nil {
-		t.Fatalf("close migrating connection: %v", err)
-	}
+	migrate(t, dsn)
 	return db
 }
 
@@ -218,43 +200,139 @@ func seedClient(t *testing.T, db *sql.DB, practiceID, name string) string {
 	return clientID
 }
 
+// env is what a test in this package starts from: a migrated database with
+// the shim installed, one connected Practice with one Client, a fake Stripe,
+// and a Runner over them that polls every millisecond. A test says only what
+// it changes, with withDefaultPolling, withPollTimeout and withClockLife.
+type env struct {
+	T          *testing.T
+	Ctx        context.Context
+	DB         *sql.DB
+	PracticeID string
+	ClientID   string
+	Stripe     *fakeStripe
+	Runner     simclock.Runner
+}
+
+type envOption func(*env)
+
+// withDefaultPolling leaves the Runner's poll interval unset.
+func withDefaultPolling() envOption {
+	return func(e *env) { e.Runner.PollInterval = 0 }
+}
+
+func withPollTimeout(d time.Duration) envOption {
+	return func(e *env) { e.Runner.PollTimeout = d }
+}
+
+// withClockLife sets how long the clocks Stripe makes last.
+func withClockLife(d time.Duration) envOption {
+	return func(e *env) { e.Stripe.ClockLife = d }
+}
+
+func newEnv(t *testing.T, opts ...envOption) *env {
+	t.Helper()
+	db := migratedDB(t)
+	practiceID, clientID := seedPracticeAndClient(t, db)
+	stripe := newFakeStripe()
+	e := &env{
+		T: t, Ctx: t.Context(), DB: db, PracticeID: practiceID, ClientID: clientID, Stripe: stripe,
+		Runner: simclock.Runner{DB: db, Stripe: stripe, PollInterval: time.Millisecond},
+	}
+	for _, opt := range opts {
+		opt(e)
+	}
+	return e
+}
+
+// allocate gives the Client a Customer on a clock and returns its id.
+func (e *env) allocate(clientID string) (customerID string) {
+	e.T.Helper()
+	customerID, _, err := e.Runner.Allocate(e.Ctx, clientID, testAccount)
+	if err != nil {
+		e.T.Fatalf("Allocate: %v", err)
+	}
+	return customerID
+}
+
+// allocateFourClients is the Practice's Client and three more, enough to
+// fill one clock and start a second.
+func (e *env) allocateFourClients() {
+	e.T.Helper()
+	e.allocate(e.ClientID)
+	for _, name := range []string{"bea", "cleo", "dot"} {
+		e.allocate(seedClient(e.T, e.DB, e.PracticeID, name))
+	}
+}
+
+// offset reads the run's simulated delta and the database's simulated now.
+func (e *env) offset() (delta time.Duration, simNow time.Time) {
+	e.T.Helper()
+	var deltaSeconds int64
+	if err := e.DB.QueryRowContext(e.Ctx,
+		`SELECT extract(epoch FROM delta)::bigint, pg_catalog.now() + delta FROM sim.offset_row`,
+	).Scan(&deltaSeconds, &simNow); err != nil {
+		e.T.Fatalf("read offset row: %v", err)
+	}
+	return time.Duration(deltaSeconds) * time.Second, simNow
+}
+
+func (e *env) requireOffsetUntouched(why string) {
+	e.T.Helper()
+	if delta, _ := e.offset(); delta != 0 {
+		e.T.Fatalf("offset row delta = %s, want it untouched by %s", delta, why)
+	}
+}
+
+func (e *env) advance(d time.Duration) {
+	e.T.Helper()
+	if err := e.Runner.Advance(e.Ctx, d); err != nil {
+		e.T.Fatalf("Advance: %v", err)
+	}
+}
+
+// statusReads counts the status reads the Stripe double saw.
+func (e *env) statusReads() (reads int) {
+	for _, step := range e.Stripe.Order {
+		if strings.HasPrefix(step, "status:") {
+			reads++
+		}
+	}
+	return reads
+}
+
 // TestAllocate_MakesACustomerOnAClockAndRecordsTheMapping covers the
 // first allocation on a fresh run: no clock exists, so one is created at
 // the run's simulated now, the Customer is made on it, and the mapping
 // the product reads is written.
 func TestAllocate_MakesACustomerOnAClockAndRecordsTheMapping(t *testing.T) {
-	ctx := t.Context()
-	db := migratedDB(t)
-	practiceID, clientID := seedPracticeAndClient(t, db)
+	e := newEnv(t)
 
-	stripe := newFakeStripe()
-	runner := simclock.Runner{DB: db, Stripe: stripe}
-
-	customerID, created, err := runner.Allocate(ctx, clientID, testAccount)
+	customerID, created, err := e.Runner.Allocate(e.Ctx, e.ClientID, testAccount)
 	if err != nil {
 		t.Fatalf("Allocate: %v", err)
 	}
 	if !created {
 		t.Fatal("created = false, want true on a first allocation")
 	}
-	if len(stripe.Created) != 1 {
-		t.Fatalf("clocks created = %d, want 1", len(stripe.Created))
+	if len(e.Stripe.Created) != 1 {
+		t.Fatalf("clocks created = %d, want 1", len(e.Stripe.Created))
 	}
 
 	var mappedPractice, mapped string
 	var createdBy sql.NullString
-	if err := db.QueryRowContext(ctx,
+	if err := e.DB.QueryRowContext(e.Ctx,
 		`SELECT practice_id, stripe_customer_id, created_by_staff_id FROM client_stripe_customers
 		  WHERE client_id = $1 AND stripe_account_id = $2`,
-		clientID, testAccount,
+		e.ClientID, testAccount,
 	).Scan(&mappedPractice, &mapped, &createdBy); err != nil {
 		t.Fatalf("read mapping: %v", err)
 	}
 	if mapped != customerID {
 		t.Fatalf("mapped customer = %q, want %q", mapped, customerID)
 	}
-	if mappedPractice != practiceID {
-		t.Fatalf("mapped practice = %q, want %q", mappedPractice, practiceID)
+	if mappedPractice != e.PracticeID {
+		t.Fatalf("mapped practice = %q, want %q", mappedPractice, e.PracticeID)
 	}
 	// No Staff caused this Customer to exist, so the audit column says so
 	// rather than borrowing someone's id.
@@ -268,18 +346,10 @@ func TestAllocate_MakesACustomerOnAClockAndRecordsTheMapping(t *testing.T) {
 // creation, so calling it twice for the same Client and account must
 // create nothing the second time.
 func TestAllocate_IsANoOpTheSecondTime(t *testing.T) {
-	ctx := t.Context()
-	db := migratedDB(t)
-	_, clientID := seedPracticeAndClient(t, db)
+	e := newEnv(t)
 
-	stripe := newFakeStripe()
-	runner := simclock.Runner{DB: db, Stripe: stripe}
-
-	first, _, err := runner.Allocate(ctx, clientID, testAccount)
-	if err != nil {
-		t.Fatalf("first Allocate: %v", err)
-	}
-	second, created, err := runner.Allocate(ctx, clientID, testAccount)
+	first := e.allocate(e.ClientID)
+	second, created, err := e.Runner.Allocate(e.Ctx, e.ClientID, testAccount)
 	if err != nil {
 		t.Fatalf("second Allocate: %v", err)
 	}
@@ -289,8 +359,8 @@ func TestAllocate_IsANoOpTheSecondTime(t *testing.T) {
 	if second != first {
 		t.Fatalf("second Allocate returned %q, want the first's %q", second, first)
 	}
-	if len(stripe.Created) != 1 {
-		t.Fatalf("clocks created = %d, want 1", len(stripe.Created))
+	if len(e.Stripe.Created) != 1 {
+		t.Fatalf("clocks created = %d, want 1", len(e.Stripe.Created))
 	}
 }
 
@@ -298,79 +368,69 @@ func TestAllocate_IsANoOpTheSecondTime(t *testing.T) {
 // measured ceiling: a test clock holds three Customers and refuses a
 // fourth, so the fourth Client gets a second clock.
 func TestAllocate_FillsAClockToCapacityBeforeMakingAnother(t *testing.T) {
-	ctx := t.Context()
-	db := migratedDB(t)
-	practiceID, first := seedPracticeAndClient(t, db)
+	e := newEnv(t)
 
-	stripe := newFakeStripe()
-	runner := simclock.Runner{DB: db, Stripe: stripe}
+	e.allocateFourClients()
 
-	clients := []string{first}
-	for _, name := range []string{"bea", "cleo", "dot"} {
-		clients = append(clients, seedClient(t, db, practiceID, name))
+	if len(e.Stripe.Created) != 2 {
+		t.Fatalf("clocks created = %d, want 2 for 4 Customers at a capacity of %d",
+			len(e.Stripe.Created), simclock.ClockCapacity)
 	}
-	for _, id := range clients {
-		if _, _, err := runner.Allocate(ctx, id, testAccount); err != nil {
-			t.Fatalf("Allocate: %v", err)
-		}
-	}
-
-	if len(stripe.Created) != 2 {
-		t.Fatalf("clocks created = %d, want 2 for %d Customers at a capacity of %d",
-			len(stripe.Created), len(clients), simclock.ClockCapacity)
-	}
-	if got := len(stripe.Customers["clock_1"]); got != simclock.ClockCapacity {
+	if got := len(e.Stripe.Customers["clock_1"]); got != simclock.ClockCapacity {
 		t.Fatalf("customers on the first clock = %d, want %d", got, simclock.ClockCapacity)
 	}
-	if got := len(stripe.Customers["clock_2"]); got != 1 {
+	if got := len(e.Stripe.Customers["clock_2"]); got != 1 {
 		t.Fatalf("customers on the second clock = %d, want 1", got)
 	}
 }
 
-// TestAllocate_RefusesAnAccountNoPracticeIsConnectedTo proves a run that
-// names an account this database knows nothing about is told so, rather
-// than writing a mapping row with no Practice behind it.
-func TestAllocate_RefusesAnAccountNoPracticeIsConnectedTo(t *testing.T) {
-	db := migratedDB(t)
-	_, clientID := seedPracticeAndClient(t, db)
-
-	runner := simclock.Runner{DB: db, Stripe: newFakeStripe()}
-	_, _, err := runner.Allocate(t.Context(), clientID, "acct_nobody")
-	if !errors.Is(err, simclock.ErrNoPractice) {
-		t.Fatalf("Allocate against an unknown account: got %v, want ErrNoPractice", err)
-	}
-}
-
-// TestAllocate_RefusesAClientWithNoEmail proves the same refusal the
-// invoice path makes: an empty string is never sent to Stripe as an email.
-func TestAllocate_RefusesAClientWithNoEmail(t *testing.T) {
-	db := migratedDB(t)
-	practiceID, _ := seedPracticeAndClient(t, db)
-
-	var clientID string
-	if err := db.QueryRowContext(t.Context(),
-		`INSERT INTO clients (practice_id, given_name) VALUES ($1, 'Noemail') RETURNING id`, practiceID,
-	).Scan(&clientID); err != nil {
-		t.Fatalf("seed client: %v", err)
-	}
-
-	runner := simclock.Runner{DB: db, Stripe: newFakeStripe()}
-	_, _, err := runner.Allocate(t.Context(), clientID, testAccount)
-	if err == nil || !strings.Contains(err.Error(), "has no email") {
-		t.Fatalf("Allocate for a Client with no email: got %v, want a no-email refusal", err)
-	}
-}
-
-// TestAllocate_ReportsAnUnknownClient proves a client id that is not in
-// this database is named rather than silently allocated against.
-func TestAllocate_ReportsAnUnknownClient(t *testing.T) {
-	db := migratedDB(t)
-	seedPracticeAndClient(t, db)
-
-	runner := simclock.Runner{DB: db, Stripe: newFakeStripe()}
-	_, _, err := runner.Allocate(t.Context(), "00000000-0000-0000-0000-000000000000", testAccount)
-	if err == nil || !strings.Contains(err.Error(), "no client") {
-		t.Fatalf("Allocate for an unknown Client: got %v, want a no-such-client refusal", err)
+// TestAllocate_Refuses proves what a run is told when the Client or the
+// account it names cannot be allocated against: an account no Practice is
+// connected to rather than a mapping row with no Practice behind it; the
+// same refusal the invoice path makes for a Client with no email, since an
+// empty string is never sent to Stripe as one; and a client id that is not
+// in this database, named rather than silently allocated against.
+func TestAllocate_Refuses(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		account string
+		client  func(e *env) string
+		refused func(err error) bool
+	}{
+		{
+			name:    "an account no Practice is connected to",
+			account: "acct_nobody",
+			client:  func(e *env) string { return e.ClientID },
+			refused: func(err error) bool { return errors.Is(err, simclock.ErrNoPractice) },
+		},
+		{
+			name:    "a Client with no email",
+			account: testAccount,
+			client: func(e *env) string {
+				var clientID string
+				if err := e.DB.QueryRowContext(e.Ctx,
+					`INSERT INTO clients (practice_id, given_name) VALUES ($1, 'Noemail') RETURNING id`, e.PracticeID,
+				).Scan(&clientID); err != nil {
+					e.T.Fatalf("seed client: %v", err)
+				}
+				return clientID
+			},
+			refused: func(err error) bool { return err != nil && strings.Contains(err.Error(), "has no email") },
+		},
+		{
+			name:    "an unknown Client",
+			account: testAccount,
+			client:  func(*env) string { return "00000000-0000-0000-0000-000000000000" },
+			refused: func(err error) bool { return err != nil && strings.Contains(err.Error(), "no client") },
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t)
+			_, _, err := e.Runner.Allocate(e.Ctx, tc.client(e), tc.account)
+			if !tc.refused(err) {
+				t.Fatalf("Allocate: got %v, want a refusal", err)
+			}
+		})
 	}
 }
 
@@ -380,29 +440,18 @@ func TestAllocate_ReportsAnUnknownClient(t *testing.T) {
 func TestAllocate_ReportsAStripeFailure(t *testing.T) {
 	failing := errors.New("stripe: fake failure")
 
-	t.Run("creating the clock", func(t *testing.T) {
-		ctx := t.Context()
-		db := migratedDB(t)
-		_, clientID := seedPracticeAndClient(t, db)
-		stripe := newFakeStripe()
-		stripe.CreateClockErr = failing
-		runner := simclock.Runner{DB: db, Stripe: stripe}
-		if _, _, err := runner.Allocate(ctx, clientID, testAccount); !errors.Is(err, failing) {
-			t.Fatalf("Allocate: got %v, want the Stripe failure", err)
-		}
-	})
-
-	t.Run("creating the customer", func(t *testing.T) {
-		ctx := t.Context()
-		db := migratedDB(t)
-		_, clientID := seedPracticeAndClient(t, db)
-		stripe := newFakeStripe()
-		stripe.CreateCustomerErr = failing
-		runner := simclock.Runner{DB: db, Stripe: stripe}
-		if _, _, err := runner.Allocate(ctx, clientID, testAccount); !errors.Is(err, failing) {
-			t.Fatalf("Allocate: got %v, want the Stripe failure", err)
-		}
-	})
+	for name, set := range map[string]func(*fakeStripe){
+		"creating the clock":    func(f *fakeStripe) { f.CreateClockErr = failing },
+		"creating the customer": func(f *fakeStripe) { f.CreateCustomerErr = failing },
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := newEnv(t)
+			set(e.Stripe)
+			if _, _, err := e.Runner.Allocate(e.Ctx, e.ClientID, testAccount); !errors.Is(err, failing) {
+				t.Fatalf("Allocate: got %v, want the Stripe failure", err)
+			}
+		})
+	}
 }
 
 // TestAdvance_MovesTheOffsetRowAndEveryClockTogether is the whole point
@@ -412,40 +461,22 @@ func TestAllocate_ReportsAStripeFailure(t *testing.T) {
 // the real one, which is what keeps a Practice that arrives mid-run in
 // step with the rest.
 func TestAdvance_MovesTheOffsetRowAndEveryClockTogether(t *testing.T) {
-	ctx := t.Context()
-	db := migratedDB(t)
-	practiceID, first := seedPracticeAndClient(t, db)
-
-	stripe := newFakeStripe()
-	runner := simclock.Runner{DB: db, Stripe: stripe, PollInterval: time.Millisecond}
-
-	for _, id := range []string{first, seedClient(t, db, practiceID, "bea"), seedClient(t, db, practiceID, "cleo"), seedClient(t, db, practiceID, "dot")} {
-		if _, _, err := runner.Allocate(ctx, id, testAccount); err != nil {
-			t.Fatalf("Allocate: %v", err)
-		}
-	}
+	e := newEnv(t)
+	e.allocateFourClients()
 
 	const week = 7 * 24 * time.Hour
-	if err := runner.Advance(ctx, week); err != nil {
-		t.Fatalf("Advance: %v", err)
-	}
+	e.advance(week)
 
-	var deltaSeconds int64
-	var simNow time.Time
-	if err := db.QueryRowContext(ctx,
-		`SELECT extract(epoch FROM delta)::bigint, pg_catalog.now() + delta FROM sim.offset_row`,
-	).Scan(&deltaSeconds, &simNow); err != nil {
-		t.Fatalf("read offset row: %v", err)
-	}
-	if delta := time.Duration(deltaSeconds) * time.Second; delta != week {
+	delta, simNow := e.offset()
+	if delta != week {
 		t.Fatalf("offset row delta = %s, want %s", delta, week)
 	}
 
-	if len(stripe.Advances) != 2 {
-		t.Fatalf("advances = %d, want one per held clock", len(stripe.Advances))
+	if len(e.Stripe.Advances) != 2 {
+		t.Fatalf("advances = %d, want one per held clock", len(e.Stripe.Advances))
 	}
-	target := stripe.Advances[0].To
-	for _, a := range stripe.Advances {
+	target := e.Stripe.Advances[0].To
+	for _, a := range e.Stripe.Advances {
 		if !a.To.Equal(target) {
 			t.Fatalf("clock %s advanced to %v, want every clock on %v", a.ClockID, a.To, target)
 		}
@@ -462,32 +493,21 @@ func TestAdvance_MovesTheOffsetRowAndEveryClockTogether(t *testing.T) {
 // asynchronous at Stripe, so all are issued and only then are they waited
 // on.
 func TestAdvance_IssuesEveryAdvanceBeforeWaitingOnAny(t *testing.T) {
-	ctx := t.Context()
-	db := migratedDB(t)
-	practiceID, first := seedPracticeAndClient(t, db)
-
-	stripe := newFakeStripe()
-	runner := simclock.Runner{DB: db, Stripe: stripe, PollInterval: time.Millisecond}
-	for _, id := range []string{first, seedClient(t, db, practiceID, "bea"), seedClient(t, db, practiceID, "cleo"), seedClient(t, db, practiceID, "dot")} {
-		if _, _, err := runner.Allocate(ctx, id, testAccount); err != nil {
-			t.Fatalf("Allocate: %v", err)
-		}
-	}
+	e := newEnv(t)
+	e.allocateFourClients()
 	// The first clock takes two polls to land, so a wait that came before
 	// the second advance would be visible in the order below.
-	stripe.StatusScript["clock_1"] = []simclock.ClockStatus{simclock.ClockAdvancing, simclock.ClockReady}
+	e.Stripe.StatusScript["clock_1"] = []simclock.ClockStatus{simclock.ClockAdvancing, simclock.ClockReady}
 
-	if err := runner.Advance(ctx, time.Hour); err != nil {
-		t.Fatalf("Advance: %v", err)
-	}
+	e.advance(time.Hour)
 
 	var advances, firstStatus int
-	for i, step := range stripe.Order {
+	for i, step := range e.Stripe.Order {
 		switch {
 		case strings.HasPrefix(step, "advance:"):
 			advances++
 			if firstStatus > 0 {
-				t.Fatalf("advance issued at step %d, after a status read at step %d: %v", i, firstStatus, stripe.Order)
+				t.Fatalf("advance issued at step %d, after a status read at step %d: %v", i, firstStatus, e.Stripe.Order)
 			}
 		case strings.HasPrefix(step, "status:") && firstStatus == 0:
 			firstStatus = i
@@ -502,71 +522,88 @@ func TestAdvance_IssuesEveryAdvanceBeforeWaitingOnAny(t *testing.T) {
 // a clock is still advancing -- reading a date off Stripe mid-advance is
 // the drift case in its most direct form.
 func TestAdvance_WaitsUntilEveryClockIsReady(t *testing.T) {
-	ctx := t.Context()
-	db := migratedDB(t)
-	_, clientID := seedPracticeAndClient(t, db)
-
-	stripe := newFakeStripe()
-	runner := simclock.Runner{DB: db, Stripe: stripe, PollInterval: time.Millisecond}
-	if _, _, err := runner.Allocate(ctx, clientID, testAccount); err != nil {
-		t.Fatalf("Allocate: %v", err)
-	}
-	stripe.StatusScript["clock_1"] = []simclock.ClockStatus{
+	e := newEnv(t)
+	e.allocate(e.ClientID)
+	e.Stripe.StatusScript["clock_1"] = []simclock.ClockStatus{
 		simclock.ClockAdvancing, simclock.ClockAdvancing, simclock.ClockReady,
 	}
 
-	if err := runner.Advance(ctx, time.Hour); err != nil {
-		t.Fatalf("Advance: %v", err)
-	}
-	var reads int
-	for _, step := range stripe.Order {
-		if strings.HasPrefix(step, "status:") {
-			reads++
-		}
-	}
-	if reads != 3 {
+	e.advance(time.Hour)
+
+	if reads := e.statusReads(); reads != 3 {
 		t.Fatalf("status reads = %d, want 3 -- it must poll until ready", reads)
 	}
 }
 
-// TestAdvance_StopsOnAClockThatFailed proves a clock Stripe reports as
-// having failed internally stops the run rather than being polled until
-// the timeout.
-func TestAdvance_StopsOnAClockThatFailed(t *testing.T) {
-	ctx := t.Context()
-	db := migratedDB(t)
-	_, clientID := seedPracticeAndClient(t, db)
+// TestAdvance_StopsTheRun proves each way a run is told to stop rather
+// than carry on with its clocks and its database on different times: a
+// clock Stripe reports as failed internally is not polled until the
+// timeout; a clock that stays advancing is named rather than hanging the
+// run; and a Customer is named when it is dated by real time while the
+// rest of the run is dated by its own. A Customer with a null test_clock
+// reads every date wrong in a way that looks like a product defect, and
+// the product makes one when a Client is invoiced before she is allocated
+// a clock.
+func TestAdvance_StopsTheRun(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		opts []envOption
+		// arrange sets up the refusal and returns what the error names.
+		arrange func(e *env) (named string)
+	}{
+		{
+			name: "a clock that failed internally",
+			arrange: func(e *env) string {
+				e.allocate(e.ClientID)
+				e.Stripe.StatusScript["clock_1"] = []simclock.ClockStatus{simclock.ClockInternalFailure}
+				return string(simclock.ClockInternalFailure)
+			},
+		},
+		{
+			name: "a clock that never lands",
+			opts: []envOption{withPollTimeout(10 * time.Millisecond)},
+			arrange: func(e *env) string {
+				e.allocate(e.ClientID)
+				e.Stripe.StatusScript["clock_1"] = []simclock.ClockStatus{simclock.ClockAdvancing}
+				return "still advancing"
+			},
+		},
+		{
+			name: "a Customer that has lost its clock",
+			arrange: func(e *env) string {
+				customerID := e.allocate(e.ClientID)
+				// Stripe no longer reports the Customer as being on the clock.
+				e.Stripe.Customers["clock_1"] = nil
+				return customerID
+			},
+		},
+		{
+			name: "a Customer the product made with no clock",
+			arrange: func(e *env) string {
+				e.allocate(e.ClientID)
+				// A second Client, whose mapping the product wrote when it raised her
+				// first Invoice -- so there is no clock behind it.
+				unallocated := seedClient(e.T, e.DB, e.PracticeID, "bea")
+				if _, err := e.DB.ExecContext(e.Ctx,
+					`INSERT INTO client_stripe_customers (practice_id, client_id, stripe_account_id, stripe_customer_id)
+					 VALUES ($1, $2, $3, $4)`,
+					e.PracticeID, unallocated, testAccount, "cus_made_by_the_product",
+				); err != nil {
+					e.T.Fatalf("seed product-made customer: %v", err)
+				}
+				return "cus_made_by_the_product"
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, tc.opts...)
+			named := tc.arrange(e)
 
-	stripe := newFakeStripe()
-	runner := simclock.Runner{DB: db, Stripe: stripe, PollInterval: time.Millisecond}
-	if _, _, err := runner.Allocate(ctx, clientID, testAccount); err != nil {
-		t.Fatalf("Allocate: %v", err)
-	}
-	stripe.StatusScript["clock_1"] = []simclock.ClockStatus{simclock.ClockInternalFailure}
-
-	err := runner.Advance(ctx, time.Hour)
-	if err == nil || !strings.Contains(err.Error(), string(simclock.ClockInternalFailure)) {
-		t.Fatalf("Advance: got %v, want the failed status reported", err)
-	}
-}
-
-// TestAdvance_GivesUpOnAClockThatNeverLands proves the wait is bounded:
-// a clock that stays advancing is named rather than hanging the run.
-func TestAdvance_GivesUpOnAClockThatNeverLands(t *testing.T) {
-	ctx := t.Context()
-	db := migratedDB(t)
-	_, clientID := seedPracticeAndClient(t, db)
-
-	stripe := newFakeStripe()
-	runner := simclock.Runner{DB: db, Stripe: stripe, PollInterval: time.Millisecond, PollTimeout: 10 * time.Millisecond}
-	if _, _, err := runner.Allocate(ctx, clientID, testAccount); err != nil {
-		t.Fatalf("Allocate: %v", err)
-	}
-	stripe.StatusScript["clock_1"] = []simclock.ClockStatus{simclock.ClockAdvancing}
-
-	err := runner.Advance(ctx, time.Hour)
-	if err == nil || !strings.Contains(err.Error(), "still advancing") {
-		t.Fatalf("Advance: got %v, want a timeout naming the clock", err)
+			err := e.Runner.Advance(e.Ctx, time.Hour)
+			if err == nil || !strings.Contains(err.Error(), named) {
+				t.Fatalf("Advance: got %v, want it to name %q", err, named)
+			}
+		})
 	}
 }
 
@@ -574,10 +611,9 @@ func TestAdvance_GivesUpOnAClockThatNeverLands(t *testing.T) {
 // one thing Stripe itself refuses: an advance target that is not after a
 // clock's current frozen time.
 func TestAdvance_RefusesADeltaThatDoesNotMoveForward(t *testing.T) {
-	db := migratedDB(t)
-	runner := simclock.Runner{DB: db, Stripe: newFakeStripe()}
+	e := newEnv(t)
 	for _, delta := range []time.Duration{0, -time.Hour} {
-		if err := runner.Advance(t.Context(), delta); err == nil {
+		if err := e.Runner.Advance(e.Ctx, delta); err == nil {
 			t.Fatalf("Advance(%s) was accepted, want a refusal", delta)
 		}
 	}
@@ -589,57 +625,18 @@ func TestAdvance_RefusesADeltaThatDoesNotMoveForward(t *testing.T) {
 // the two halves of the run on different times. It names the clocks, and
 // it refuses *before* the offset row moves.
 func TestAdvance_RefusesToRunWhenAClockHasExpired(t *testing.T) {
-	ctx := t.Context()
-	db := migratedDB(t)
-	_, clientID := seedPracticeAndClient(t, db)
+	// Already past its deletes_after.
+	e := newEnv(t, withClockLife(-time.Minute))
+	e.allocate(e.ClientID)
 
-	stripe := newFakeStripe()
-	stripe.ClockLife = -time.Minute // already past its deletes_after
-	runner := simclock.Runner{DB: db, Stripe: stripe, PollInterval: time.Millisecond}
-	if _, _, err := runner.Allocate(ctx, clientID, testAccount); err != nil {
-		t.Fatalf("Allocate: %v", err)
-	}
-
-	err := runner.Advance(ctx, time.Hour)
+	err := e.Runner.Advance(e.Ctx, time.Hour)
 	if err == nil || !strings.Contains(err.Error(), "clock_1") {
 		t.Fatalf("Advance: got %v, want a refusal naming the expired clock", err)
 	}
 
-	var deltaSeconds int64
-	if err := db.QueryRowContext(ctx,
-		`SELECT extract(epoch FROM delta)::bigint FROM sim.offset_row`).Scan(&deltaSeconds); err != nil {
-		t.Fatalf("read offset row: %v", err)
-	}
-	if deltaSeconds != 0 {
-		t.Fatalf("offset row delta = %ds, want it untouched by a refused advance", deltaSeconds)
-	}
-	if len(stripe.Advances) != 0 {
-		t.Fatalf("advances issued = %d, want 0", len(stripe.Advances))
-	}
-}
-
-// TestAdvance_StopsTheRunWhenACustomerHasLostItsClock is the drift guard.
-// A Customer with a null test_clock is dated by real time while
-// everything around it is dated by the run's, so every date read off it
-// afterwards is wrong in a way that reads as a product defect. The
-// Customer is named.
-func TestAdvance_StopsTheRunWhenACustomerHasLostItsClock(t *testing.T) {
-	ctx := t.Context()
-	db := migratedDB(t)
-	_, clientID := seedPracticeAndClient(t, db)
-
-	stripe := newFakeStripe()
-	runner := simclock.Runner{DB: db, Stripe: stripe, PollInterval: time.Millisecond}
-	customerID, _, err := runner.Allocate(ctx, clientID, testAccount)
-	if err != nil {
-		t.Fatalf("Allocate: %v", err)
-	}
-	// Stripe no longer reports the Customer as being on the clock.
-	stripe.Customers["clock_1"] = nil
-
-	err = runner.Advance(ctx, time.Hour)
-	if err == nil || !strings.Contains(err.Error(), customerID) {
-		t.Fatalf("Advance: got %v, want the adrift Customer named", err)
+	e.requireOffsetUntouched("a refused advance")
+	if len(e.Stripe.Advances) != 0 {
+		t.Fatalf("advances issued = %d, want 0", len(e.Stripe.Advances))
 	}
 }
 
@@ -661,16 +658,10 @@ func TestAdvance_ReportsAStripeFailure(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			ctx := t.Context()
-			db := migratedDB(t)
-			_, clientID := seedPracticeAndClient(t, db)
-			stripe := newFakeStripe()
-			runner := simclock.Runner{DB: db, Stripe: stripe, PollInterval: time.Millisecond}
-			if _, _, err := runner.Allocate(ctx, clientID, testAccount); err != nil {
-				t.Fatalf("Allocate: %v", err)
-			}
-			set(stripe)
-			if err := runner.Advance(ctx, time.Hour); !errors.Is(err, failing) {
+			e := newEnv(t)
+			e.allocate(e.ClientID)
+			set(e.Stripe)
+			if err := e.Runner.Advance(e.Ctx, time.Hour); !errors.Is(err, failing) {
 				t.Fatalf("Advance: got %v, want the Stripe failure", err)
 			}
 		})
@@ -682,15 +673,8 @@ func TestAdvance_ReportsAStripeFailure(t *testing.T) {
 // and walking into an expired or full one. A second Runner over the same
 // database is exactly what a restarted process is.
 func TestAdvance_HeldClocksSurviveAStopAndRestart(t *testing.T) {
-	ctx := t.Context()
-	db := migratedDB(t)
-	practiceID, first := seedPracticeAndClient(t, db)
-
-	before := simclock.Runner{DB: db, Stripe: newFakeStripe(), PollInterval: time.Millisecond}
-	firstCustomer, _, err := before.Allocate(ctx, first, testAccount)
-	if err != nil {
-		t.Fatalf("Allocate: %v", err)
-	}
+	e := newEnv(t)
+	firstCustomer := e.allocate(e.ClientID)
 
 	// A second Runner, over a Stripe double that has never seen a clock --
 	// everything it knows about the run's clocks comes off the database.
@@ -699,16 +683,16 @@ func TestAdvance_HeldClocksSurviveAStopAndRestart(t *testing.T) {
 	// Past the ids the first run's double handed out, so the two doubles
 	// do not both name their first Customer the same thing.
 	fake.custSeq = 10
-	resumed := simclock.Runner{DB: db, Stripe: fake, PollInterval: time.Millisecond}
-	second := seedClient(t, db, practiceID, "bea")
-	if _, _, err := resumed.Allocate(ctx, second, testAccount); err != nil {
+	resumed := simclock.Runner{DB: e.DB, Stripe: fake, PollInterval: time.Millisecond}
+	second := seedClient(t, e.DB, e.PracticeID, "bea")
+	if _, _, err := resumed.Allocate(e.Ctx, second, testAccount); err != nil {
 		t.Fatalf("Allocate after restart: %v", err)
 	}
 	if len(fake.Created) != 0 {
 		t.Fatalf("clocks created after restart = %d, want 0 -- the held clock has room", len(fake.Created))
 	}
 
-	if err := resumed.Advance(ctx, time.Hour); err != nil {
+	if err := resumed.Advance(e.Ctx, time.Hour); err != nil {
 		t.Fatalf("Advance after restart: %v", err)
 	}
 	if len(fake.Advances) != 1 || fake.Advances[0].ClockID != "clock_1" {
@@ -720,21 +704,13 @@ func TestAdvance_HeldClocksSurviveAStopAndRestart(t *testing.T) {
 // caller with no opinion about polling gets: a clock that is ready at
 // once never waits, so the defaults cost nothing.
 func TestAdvance_UsesTheDefaultWaitWhenNoneIsSet(t *testing.T) {
-	ctx := t.Context()
-	db := migratedDB(t)
-	_, clientID := seedPracticeAndClient(t, db)
+	e := newEnv(t, withDefaultPolling())
+	e.allocate(e.ClientID)
 
-	stripe := newFakeStripe()
-	runner := simclock.Runner{DB: db, Stripe: stripe}
-	if _, _, err := runner.Allocate(ctx, clientID, testAccount); err != nil {
-		t.Fatalf("Allocate: %v", err)
-	}
+	e.advance(time.Hour)
 
-	if err := runner.Advance(ctx, time.Hour); err != nil {
-		t.Fatalf("Advance: %v", err)
-	}
-	if len(stripe.Advances) != 1 {
-		t.Fatalf("advances = %d, want 1", len(stripe.Advances))
+	if len(e.Stripe.Advances) != 1 {
+		t.Fatalf("advances = %d, want 1", len(e.Stripe.Advances))
 	}
 }
 
@@ -754,29 +730,15 @@ func TestNewStripeAPI_SatisfiesTheClockSurface(t *testing.T) {
 // prevent: the offset row moves only once every clock has landed, so a
 // Stripe refusal leaves both halves of the run where they were.
 func TestAdvance_LeavesNothingMovedWhenStripeRefuses(t *testing.T) {
-	ctx := t.Context()
-	db := migratedDB(t)
-	_, clientID := seedPracticeAndClient(t, db)
+	e := newEnv(t)
+	e.allocate(e.ClientID)
+	e.Stripe.AdvanceErr = errors.New("stripe: fake failure")
 
-	stripe := newFakeStripe()
-	runner := simclock.Runner{DB: db, Stripe: stripe, PollInterval: time.Millisecond}
-	if _, _, err := runner.Allocate(ctx, clientID, testAccount); err != nil {
-		t.Fatalf("Allocate: %v", err)
-	}
-	stripe.AdvanceErr = errors.New("stripe: fake failure")
-
-	if err := runner.Advance(ctx, time.Hour); err == nil {
+	if err := e.Runner.Advance(e.Ctx, time.Hour); err == nil {
 		t.Fatal("Advance: got nil, want the Stripe failure")
 	}
 
-	var deltaSeconds int64
-	if err := db.QueryRowContext(ctx,
-		`SELECT extract(epoch FROM delta)::bigint FROM sim.offset_row`).Scan(&deltaSeconds); err != nil {
-		t.Fatalf("read offset row: %v", err)
-	}
-	if deltaSeconds != 0 {
-		t.Fatalf("offset row delta = %ds, want it untouched by a failed advance", deltaSeconds)
-	}
+	e.requireOffsetUntouched("a failed advance")
 }
 
 // TestAdvance_AnErasedCustomerIsNotDrift proves the distinction the drift
@@ -785,53 +747,11 @@ func TestAdvance_LeavesNothingMovedWhenStripeRefuses(t *testing.T) {
 // Customers -- so without this an erased Client would stop every jump
 // after her.
 func TestAdvance_AnErasedCustomerIsNotDrift(t *testing.T) {
-	ctx := t.Context()
-	db := migratedDB(t)
-	_, clientID := seedPracticeAndClient(t, db)
-
-	stripe := newFakeStripe()
-	runner := simclock.Runner{DB: db, Stripe: stripe, PollInterval: time.Millisecond}
-	customerID, _, err := runner.Allocate(ctx, clientID, testAccount)
-	if err != nil {
-		t.Fatalf("Allocate: %v", err)
-	}
+	e := newEnv(t)
+	customerID := e.allocate(e.ClientID)
 	// Erased: gone from the clock's list, and gone from Stripe.
-	stripe.Customers["clock_1"] = nil
-	stripe.Deleted[customerID] = true
+	e.Stripe.Customers["clock_1"] = nil
+	e.Stripe.Deleted[customerID] = true
 
-	if err := runner.Advance(ctx, time.Hour); err != nil {
-		t.Fatalf("Advance: %v", err)
-	}
-}
-
-// TestAdvance_StopsTheRunWhenTheProductMadeACustomerWithNoClock covers
-// the other half of the drift guard: a Customer the product made, because
-// a Client was invoiced before she was allocated one, has no clock at all
-// and is dated by real time from the first jump onwards.
-func TestAdvance_StopsTheRunWhenTheProductMadeACustomerWithNoClock(t *testing.T) {
-	ctx := t.Context()
-	db := migratedDB(t)
-	practiceID, clientID := seedPracticeAndClient(t, db)
-
-	stripe := newFakeStripe()
-	runner := simclock.Runner{DB: db, Stripe: stripe, PollInterval: time.Millisecond}
-	if _, _, err := runner.Allocate(ctx, clientID, testAccount); err != nil {
-		t.Fatalf("Allocate: %v", err)
-	}
-
-	// A second Client, whose mapping the product wrote when it raised her
-	// first Invoice -- so there is no clock behind it.
-	unallocated := seedClient(t, db, practiceID, "bea")
-	if _, err := db.ExecContext(ctx,
-		`INSERT INTO client_stripe_customers (practice_id, client_id, stripe_account_id, stripe_customer_id)
-		 VALUES ($1, $2, $3, $4)`,
-		practiceID, unallocated, testAccount, "cus_made_by_the_product",
-	); err != nil {
-		t.Fatalf("seed product-made customer: %v", err)
-	}
-
-	err := runner.Advance(ctx, time.Hour)
-	if err == nil || !strings.Contains(err.Error(), "cus_made_by_the_product") {
-		t.Fatalf("Advance: got %v, want the unclocked Customer named", err)
-	}
+	e.advance(time.Hour)
 }
