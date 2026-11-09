@@ -12,6 +12,8 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/fixture"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
@@ -53,17 +55,6 @@ func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, s
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
-// newPingOKServer mounts the middleware in front of a handler that only
-// answers 200, for the tests whose subject is whether the middleware
-// admits the caller at all.
-func newPingOKServer(db *testdb.DB) *httptest.Server {
-	mux := http.NewServeMux()
-	mux.Handle("/practices/{practiceId}/ping", staffauth.Middleware(db.App)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})))
-	return httptest.NewServer(mux)
-}
-
 // seedOwnerMembership seeds a Practice and a Staff member via
 // testdb.SeedStaffAtNewPractice, then promotes that member to the 'owner'
 // role -- the only role RequireOwner-gated actions accept as
@@ -88,125 +79,127 @@ func pingURL(srv *httptest.Server, practiceID string) string {
 	return srv.URL + "/practices/" + practiceID + "/ping"
 }
 
-func TestMiddleware_MissingCredential(t *testing.T) {
-	db := testdb.New(t)
-	srv, _ := newServer(t, db, "no-cookie-sent")
-	defer srv.Close()
-
-	resp := reqtest.Get(t, pingURL(srv, emptyUUID))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
+// pingEnv is a Practice with the middleware in front of the routes these
+// tests hit, and one Staff member at the screen (an employee Doula unless a
+// test says otherwise). ping echoes the resolved Staff and Practice ids
+// and confirms a usable *sql.Tx reached the handler; the deletion routes
+// and the session read are #871's lockout tests' stand-ins for
+// practicedeletion's and PracticeSessionHandler's own routes.
+type pingEnv struct {
+	*fixture.Scene
 }
 
-// TestMiddleware_BearerTokenAloneIsRejected is #151's AC on the Staff
-// app: a request carrying only a Bearer ID token gets a 401. The Staff
-// member behind the token exists and is a member of the Practice, so a
-// 401 can only mean the header was never read.
-func TestMiddleware_BearerTokenAloneIsRejected(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-holding-only-a-bearer-token"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
-
-	srv, _ := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Header("Authorization", "Bearer would-verify-fine"))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
+func newPingEnv(t *testing.T, opts ...fixture.SceneOption) *pingEnv {
+	t.Helper()
+	return &pingEnv{fixture.NewScene(t, pingRoutes, opts...)}
 }
 
-// TestMiddleware_UnknownSession covers a cookie that names no live
-// session -- the shape a stale or forged cookie arrives in.
-func TestMiddleware_UnknownSession(t *testing.T) {
-	db := testdb.New(t)
-	srv, _ := newServer(t, db, "irrelevant")
-	defer srv.Close()
-
-	resp := reqtest.Get(t, pingURL(srv, emptyUUID), reqtest.Session("never-issued"))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
+func pingRoutes(g *staffauth.GatedRouter, _ *idempotency.Router, app *sql.DB) {
+	echo := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		staffID, _ := staffauth.StaffID(r.Context())
+		practiceID, _ := staffauth.PracticeID(r.Context())
+		tx, ok := staffauth.Tx(r.Context())
+		if !ok || tx == nil {
+			http.Error(w, "no tx on context", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("X-Staff-Id", staffID)
+		w.Header().Set("X-Practice-Id", practiceID)
+		w.WriteHeader(http.StatusOK)
+	})
+	g.Get("/api/practices/{practiceId}/ping", staffauth.AnyStaff, echo)
+	g.Get("/api/practices/{practiceId}/deletion", staffauth.AnyStaff, echo)
+	g.Get("/api/practices/{practiceId}/session", staffauth.AnyStaff, staffauth.PracticeSessionHandler())
+	g.Write("DELETE /api/practices/{practiceId}/deletion", staffauth.Middleware(app)(echo))
+	g.Write("POST /api/practices/{practiceId}/deletion", staffauth.Middleware(app)(echo))
 }
 
-func TestMiddleware_InvalidPracticeID(t *testing.T) {
-	db := testdb.New(t)
-	srv, session := newServer(t, db, someUID)
-	defer srv.Close()
-
-	resp := reqtest.Get(t, pingURL(srv, "not-a-uuid"), reqtest.Session(session))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+// at is the route plus path of practiceID, which need not be the
+// Practice the Staff member works at.
+func (e *pingEnv) at(practiceID, path string) string {
+	return e.URL("/api/practices/" + practiceID + path)
 }
 
-func TestMiddleware_PopulationResolutionFailure(t *testing.T) {
-	db := testdb.New(t)
-	// A verified uid with no matching staff row: population resolution
-	// fails even though the token itself is valid.
-	srv, session := newServer(t, db, "unknown-uid")
-	defer srv.Close()
+// pingURL is the ping route of the Practice the Staff member works at.
+func (e *pingEnv) pingURL() string { return e.at(e.Practice.ID, "/ping") }
 
-	resp := reqtest.Get(t, pingURL(srv, emptyUUID), reqtest.Session(session))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
+// withoutSecondFactor signs the Staff member in on a session that shows no
+// second factor.
+func (e *pingEnv) withoutSecondFactor() reqtest.Option {
+	return reqtest.Session(authntest.SeedSessionWithSecondFactor(e.T, e.DB.App, e.Staff.UID, false))
 }
 
-func TestMiddleware_NoPracticeMembership(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-without-membership"
-	_, _ = testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
-
-	// A different, unrelated Practice: the caller is a known Staff member,
-	// but not of this Practice.
-	otherPracticeID := testdb.Scalar[string](t, db.Admin, `INSERT INTO practices (name, timezone) VALUES ('Other Practice', 'America/New_York') RETURNING id`)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := reqtest.Get(t, pingURL(srv, otherPracticeID), reqtest.Session(session))
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
+// refusalCode requires a 403 and returns the code of its error envelope.
+func refusalCode(t *testing.T, method, url string, opts ...reqtest.Option) apierr.Code {
+	t.Helper()
+	return apierrtest.Expect(t, method, url, http.StatusForbidden, opts...).Code
 }
 
-// TestMiddleware_NoSuchPractice covers a well-formed but nonexistent
-// Practice id -- setPracticeAndCheckMembership's LEFT JOIN against
-// practices finds no row at all, distinct from finding the Practice but
-// no membership (TestMiddleware_NoPracticeMembership above), though both
-// answer the same outward 403.
-func TestMiddleware_NoSuchPractice(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-with-no-such-practice"
-	testdb.SeedStaff(t, db, identityUID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := reqtest.Get(t, pingURL(srv, emptyUUID), reqtest.Session(session))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
+// TestMiddleware_Refuses covers each way a request is turned away before
+// it reaches the handler: no cookie, a Bearer token alone (#151: the
+// header is never read, so a 401 is all it can mean when the Staff member
+// behind it exists), a cookie naming no live session, a Practice id that
+// is not a uuid, a verified uid with no staff row, a known Staff member
+// who is not of this Practice, and a well-formed Practice id that does not
+// exist -- setPracticeAndCheckMembership's LEFT JOIN against practices
+// finds no row at all, distinct from finding the Practice but no
+// membership, though both answer the same outward 403.
+func TestMiddleware_Refuses(t *testing.T) {
+	cases := []struct {
+		name string
+		want int
+		// request returns the route and credentials the request carries.
+		request func(e *pingEnv) (url string, opts []reqtest.Option)
+	}{
+		{"no credential", http.StatusUnauthorized, func(e *pingEnv) (string, []reqtest.Option) {
+			return e.at(emptyUUID, "/ping"), nil
+		}},
+		{"a Bearer token alone", http.StatusUnauthorized, func(e *pingEnv) (string, []reqtest.Option) {
+			return e.pingURL(), []reqtest.Option{reqtest.Header("Authorization", "Bearer would-verify-fine")}
+		}},
+		{"a session that was never issued", http.StatusUnauthorized, func(e *pingEnv) (string, []reqtest.Option) {
+			return e.at(emptyUUID, "/ping"), []reqtest.Option{reqtest.Session("never-issued")}
+		}},
+		{"a Practice id that is not a uuid", http.StatusBadRequest, func(e *pingEnv) (string, []reqtest.Option) {
+			return e.at("not-a-uuid", "/ping"), []reqtest.Option{e.SignedIn}
+		}},
+		{"a verified uid with no staff row", http.StatusForbidden, func(e *pingEnv) (string, []reqtest.Option) {
+			session := authntest.SeedSession(e.T, e.DB.App, "unknown-uid")
+			return e.at(emptyUUID, "/ping"), []reqtest.Option{reqtest.Session(session)}
+		}},
+		{"a Practice she is not a member of", http.StatusForbidden, func(e *pingEnv) (string, []reqtest.Option) {
+			return e.at(fixture.Practice(e.T, e.DB, fixture.PracticeName("Other Practice")).ID, "/ping"), []reqtest.Option{e.SignedIn}
+		}},
+		{"a Practice that does not exist", http.StatusForbidden, func(e *pingEnv) (string, []reqtest.Option) {
+			return e.at(emptyUUID, "/ping"), []reqtest.Option{e.SignedIn}
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newPingEnv(t)
+			url, opts := tc.request(e)
+			reqtest.ExpectStatus(t, http.MethodGet, url, tc.want, opts...)
+		})
+	}
 }
 
 func TestMiddleware_Success(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-with-membership"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
+	e := newPingEnv(t)
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
-	defer resp.Body.Close()
+	resp := reqtest.Do(t, http.MethodGet, e.pingURL(), e.SignedIn)
+	defer func() { _ = resp.Body.Close() }()
 
 	reqtest.RequireStatus(t, resp, http.StatusOK)
-	if got := resp.Header.Get("X-Staff-Id"); got != staffID {
-		t.Fatalf("X-Staff-Id = %q, want %q", got, staffID)
+	if got := resp.Header.Get("X-Staff-Id"); got != e.Staff.ID {
+		t.Fatalf("X-Staff-Id = %q, want %q", got, e.Staff.ID)
 	}
-	if got := resp.Header.Get("X-Practice-Id"); got != practiceID {
-		t.Fatalf("X-Practice-Id = %q, want %q", got, practiceID)
+	if got := resp.Header.Get("X-Practice-Id"); got != e.Practice.ID {
+		t.Fatalf("X-Practice-Id = %q, want %q", got, e.Practice.ID)
 	}
 
-	lastPracticeID := testdb.Scalar[string](t, db.Admin, `SELECT last_practice_id FROM staff WHERE id = $1`, staffID)
-	if lastPracticeID != practiceID {
-		t.Fatalf("last_practice_id = %q, want %q", lastPracticeID, practiceID)
+	lastPracticeID := testdb.Scalar[string](t, e.DB.Admin, `SELECT last_practice_id FROM staff WHERE id = $1`, e.Staff.ID)
+	if lastPracticeID != e.Practice.ID {
+		t.Fatalf("last_practice_id = %q, want %q", lastPracticeID, e.Practice.ID)
 	}
 }
 
@@ -219,26 +212,13 @@ func TestMiddleware_Success(t *testing.T) {
 // unchanged xmin is direct proof no write happened, not just that the
 // visible columns look the same.
 func TestMiddleware_ActivityStampSkipsNoOpWrite(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-already-stamped-today"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
+	e := newPingEnv(t)
+	e.Exec(`UPDATE staff SET last_practice_id = $1, last_active_at = now() WHERE id = $2`, e.Practice.ID, e.Staff.ID)
+	xminBefore := testdb.Scalar[string](t, e.DB.Admin, `SELECT xmin::text FROM staff WHERE id = $1`, e.Staff.ID)
 
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE staff SET last_practice_id = $1, last_active_at = now() WHERE id = $2`,
-		practiceID, staffID); err != nil {
-		t.Fatalf("seed prior stamp: %v", err)
-	}
+	reqtest.ExpectStatus(t, http.MethodGet, e.pingURL(), http.StatusOK, e.SignedIn)
 
-	xminBefore := testdb.Scalar[string](t, db.Admin, `SELECT xmin::text FROM staff WHERE id = $1`, staffID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-
-	xminAfter := testdb.Scalar[string](t, db.Admin, `SELECT xmin::text FROM staff WHERE id = $1`, staffID)
+	xminAfter := testdb.Scalar[string](t, e.DB.Admin, `SELECT xmin::text FROM staff WHERE id = $1`, e.Staff.ID)
 	if xminAfter != xminBefore {
 		t.Fatalf("staff row was written (xmin %s -> %s), want no write for the already-current case", xminBefore, xminAfter)
 	}
@@ -251,39 +231,24 @@ func TestMiddleware_ActivityStampSkipsNoOpWrite(t *testing.T) {
 // covers), and a stale last_active_at still gets refreshed rather than
 // left at yesterday's stamp.
 func TestMiddleware_ActivityStampRefreshesPracticeAcrossDays(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-switches-practice"
-	firstPracticeID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
-	secondPracticeID := testdb.SeedPractice(t, db, "Second Practice")
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, '{doula}'::practice_role[], $3)`,
-		secondPracticeID, staffID, employeeType); err != nil {
-		t.Fatalf("seed second membership: %v", err)
-	}
+	e := newPingEnv(t)
+	second := fixture.Practice(t, e.DB, fixture.PracticeName("Second Practice"))
+	seedMembership(t, e.DB, second.ID, e.Staff.ID)
 
 	yesterday := time.Now().Add(-25 * time.Hour)
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE staff SET last_practice_id = $1, last_active_at = $2 WHERE id = $3`,
-		firstPracticeID, yesterday, staffID); err != nil {
-		t.Fatalf("seed prior stamp: %v", err)
-	}
+	e.Exec(`UPDATE staff SET last_practice_id = $1, last_active_at = $2 WHERE id = $3`, e.Practice.ID, yesterday, e.Staff.ID)
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := reqtest.Get(t, pingURL(srv, secondPracticeID), reqtest.Session(session))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
+	reqtest.ExpectStatus(t, http.MethodGet, e.at(second.ID, "/ping"), http.StatusOK, e.SignedIn)
 
 	var lastPracticeID string
 	var lastActiveAt time.Time
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT last_practice_id, last_active_at FROM staff WHERE id = $1`, staffID,
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
+		`SELECT last_practice_id, last_active_at FROM staff WHERE id = $1`, e.Staff.ID,
 	).Scan(&lastPracticeID, &lastActiveAt); err != nil {
 		t.Fatalf("read stamp: %v", err)
 	}
-	if lastPracticeID != secondPracticeID {
-		t.Fatalf("last_practice_id = %q, want %q", lastPracticeID, secondPracticeID)
+	if lastPracticeID != second.ID {
+		t.Fatalf("last_practice_id = %q, want %q", lastPracticeID, second.ID)
 	}
 	if !lastActiveAt.After(yesterday.Add(time.Hour)) {
 		t.Fatalf("last_active_at = %v, want refreshed to roughly now, not left at yesterday's stamp", lastActiveAt)
@@ -407,97 +372,37 @@ func setRequireMFA(t *testing.T, db *testdb.DB, practiceID string) {
 // Practice's switch is on and the caller's session shows no second
 // factor. A Membership that is Owner is not a reason.
 func TestMiddleware_MFAGate(t *testing.T) {
-	t.Run("owner without second factor is admitted while the switch is off", func(t *testing.T) {
-		db := testdb.New(t)
-		const identityUID = "owner-no-mfa"
-		_, practiceID := seedOwnerMembership(t, db, identityUID)
+	cases := []struct {
+		name     string
+		staff    fixture.StaffOption
+		switchOn bool
+		enrolled bool
+		want     int
+	}{
+		{"owner without second factor is admitted while the switch is off", fixture.Owner(), false, false, http.StatusOK},
+		{"the switch bars an un-enrolled owner", fixture.Owner(), true, false, http.StatusForbidden},
+		{"owner with second factor is admitted", fixture.Owner(), false, true, http.StatusOK},
+		{"doula is never forced while the switch is off", fixture.Doula(), false, false, http.StatusOK},
+		{"the switch bars an un-enrolled doula", fixture.Doula(), true, false, http.StatusForbidden},
+		{"the switch admits an enrolled doula", fixture.Doula(), true, true, http.StatusOK},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newPingEnv(t, fixture.SignedInAs(tc.staff))
+			if tc.switchOn {
+				setRequireMFA(t, e.DB, e.Practice.ID)
+			}
+			session := authntest.SeedSessionWithSecondFactor(t, e.DB.App, e.Staff.UID, tc.enrolled)
 
-		srv := newPingOKServer(db)
-		defer srv.Close()
-
-		session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, false)
-		resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusOK)
-	})
-
-	t.Run("the switch bars an un-enrolled owner", func(t *testing.T) {
-		db := testdb.New(t)
-		const identityUID = "owner-switch-on"
-		_, practiceID := seedOwnerMembership(t, db, identityUID)
-		setRequireMFA(t, db, practiceID)
-
-		srv := newPingOKServer(db)
-		defer srv.Close()
-
-		session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, false)
-		resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusForbidden)
-
-		body := apierrtest.Decode(t, resp)
-		if body.Code != apierr.CodeMFARequired {
-			t.Fatalf("code = %q, want MFA_REQUIRED", body.Code)
-		}
-	})
-
-	t.Run("owner with second factor is admitted", func(t *testing.T) {
-		db := testdb.New(t)
-		const identityUID = "owner-with-mfa"
-		_, practiceID := seedOwnerMembership(t, db, identityUID)
-
-		srv := newPingOKServer(db)
-		defer srv.Close()
-
-		session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, true)
-		resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusOK)
-	})
-
-	t.Run("doula is never forced while the switch is off", func(t *testing.T) {
-		db := testdb.New(t)
-		const identityUID = "doula-no-mfa"
-		practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
-
-		srv := newPingOKServer(db)
-		defer srv.Close()
-
-		session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, false)
-		resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusOK)
-	})
-
-	t.Run("the switch bars an un-enrolled doula", func(t *testing.T) {
-		db := testdb.New(t)
-		const identityUID = "doula-switch-on"
-		practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
-		setRequireMFA(t, db, practiceID)
-
-		srv := newPingOKServer(db)
-		defer srv.Close()
-
-		session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, false)
-		resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusForbidden)
-	})
-
-	t.Run("the switch admits an enrolled doula", func(t *testing.T) {
-		db := testdb.New(t)
-		const identityUID = "doula-switch-on-enrolled"
-		practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
-		setRequireMFA(t, db, practiceID)
-
-		srv := newPingOKServer(db)
-		defer srv.Close()
-
-		session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, true)
-		resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusOK)
-	})
+			if tc.want == http.StatusOK {
+				reqtest.ExpectStatus(t, http.MethodGet, e.pingURL(), tc.want, reqtest.Session(session))
+				return
+			}
+			if got := refusalCode(t, http.MethodGet, e.pingURL(), reqtest.Session(session)); got != apierr.CodeMFARequired {
+				t.Fatalf("code = %q, want MFA_REQUIRED", got)
+			}
+		})
+	}
 
 	// TestMiddleware_MFAGate/split proves #606's own AC: a person whose
 	// Membership at one Practice requires MFA and at the other does not is
@@ -506,36 +411,21 @@ func TestMiddleware_MFAGate(t *testing.T) {
 	// role model is what forced the gate off session.CreateHandler in the
 	// first place (#167's amendment).
 	t.Run("split across two practices", func(t *testing.T) {
-		db := testdb.New(t)
-		const identityUID = "contractor-split"
-		staffID, ownerPracticeID := seedOwnerMembership(t, db, identityUID)
-		doulaPracticeID := testdb.SeedPractice(t, db, "Second Practice")
-		seedMembership(t, db, doulaPracticeID, staffID)
+		e := newPingEnv(t, fixture.SignedInAs(fixture.Owner()))
+		doulaPractice := fixture.Practice(t, e.DB, fixture.PracticeName("Second Practice"))
+		seedMembership(t, e.DB, doulaPractice.ID, e.Staff.ID)
 		// #1531: the split is the switch, never the role. She is Owner
 		// at the Practice that has not thrown it, and only a Doula at
 		// the one that has.
-		setRequireMFA(t, db, doulaPracticeID)
+		setRequireMFA(t, e.DB, doulaPractice.ID)
 
-		srv := newPingOKServer(db)
-		defer srv.Close()
+		unenrolled := reqtest.Session(authntest.SeedSessionWithSecondFactor(t, e.DB.App, e.Staff.UID, false))
+		reqtest.ExpectStatus(t, http.MethodGet, e.pingURL(), http.StatusOK, unenrolled)
+		reqtest.ExpectStatus(t, http.MethodGet, e.at(doulaPractice.ID, "/ping"), http.StatusForbidden, unenrolled)
 
-		unenrolled := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, false)
-		respA := reqtest.Get(t, pingURL(srv, ownerPracticeID), reqtest.Session(unenrolled))
-		defer respA.Body.Close()
-		reqtest.RequireStatus(t, respA, http.StatusOK)
-
-		respB := reqtest.Get(t, pingURL(srv, doulaPracticeID), reqtest.Session(unenrolled))
-		defer respB.Body.Close()
-		reqtest.RequireStatus(t, respB, http.StatusForbidden)
-
-		enrolled := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, true)
-		respA2 := reqtest.Get(t, pingURL(srv, ownerPracticeID), reqtest.Session(enrolled))
-		defer respA2.Body.Close()
-		reqtest.RequireStatus(t, respA2, http.StatusOK)
-
-		respB2 := reqtest.Get(t, pingURL(srv, doulaPracticeID), reqtest.Session(enrolled))
-		defer respB2.Body.Close()
-		reqtest.RequireStatus(t, respB2, http.StatusOK)
+		enrolled := reqtest.Session(authntest.SeedSessionWithSecondFactor(t, e.DB.App, e.Staff.UID, true))
+		reqtest.ExpectStatus(t, http.MethodGet, e.pingURL(), http.StatusOK, enrolled)
+		reqtest.ExpectStatus(t, http.MethodGet, e.at(doulaPractice.ID, "/ping"), http.StatusOK, enrolled)
 	})
 }
 
@@ -569,48 +459,24 @@ func TestParseUUID(t *testing.T) {
 // a verifiable login as the contact that stops the clock -- a request log
 // would have rotated away long before then.
 func TestMiddleware_RecordsThatThePracticeWasHere(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-recording-contact"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
+	e := newPingEnv(t)
 
 	lastActive := func() time.Time {
 		t.Helper()
-		seen := testdb.Scalar[sql.NullTime](t, db.Admin, `SELECT last_active_at FROM staff WHERE id = $1`, staffID)
+		seen := testdb.Scalar[sql.NullTime](t, e.DB.Admin, `SELECT last_active_at FROM staff WHERE id = $1`, e.Staff.ID)
 		if !seen.Valid {
 			t.Fatal("last_active_at is unset after an authenticated request")
 		}
 		return seen.Time
 	}
 
-	resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
-	defer resp.Body.Close()
+	reqtest.ExpectStatus(t, http.MethodGet, e.pingURL(), http.StatusOK, e.SignedIn)
 	first := lastActive()
 
-	resp2 := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
-	defer resp2.Body.Close()
+	reqtest.ExpectStatus(t, http.MethodGet, e.pingURL(), http.StatusOK, e.SignedIn)
 	if second := lastActive(); !second.Equal(first) {
 		t.Fatalf("last_active_at moved from %v to %v within the same day", first, second)
 	}
-}
-
-// deletionServer wires the middleware in front of both an ordinary ping
-// route and a stand-in for practicedeletion's own
-// GET/DELETE /api/practices/{practiceId}/deletion -- the one path
-// isPracticeDeletionRoute names -- so #871's lockout tests can tell an
-// Owner's exempted reach into that one route apart from every other
-// route, which stays refused.
-func deletionServer(db *testdb.DB) *httptest.Server {
-	mux := http.NewServeMux()
-	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
-	mux.Handle("/practices/{practiceId}/ping", staffauth.Middleware(db.App)(ok))
-	mux.Handle("GET /api/practices/{practiceId}/deletion", staffauth.Middleware(db.App)(ok))
-	mux.Handle("DELETE /api/practices/{practiceId}/deletion", staffauth.Middleware(db.App)(ok))
-	mux.Handle("POST /api/practices/{practiceId}/deletion", staffauth.Middleware(db.App)(ok))
-	mux.Handle("GET /api/practices/{practiceId}/session", staffauth.Middleware(db.App)(staffauth.PracticeSessionHandler()))
-	return httptest.NewServer(mux)
 }
 
 func markPracticePendingDeletion(t *testing.T, db *testdb.DB, practiceID string) {
@@ -623,63 +489,43 @@ func markPracticePendingDeletion(t *testing.T, db *testdb.DB, practiceID string)
 	}
 }
 
-func TestMiddleware_PendingDeletionLockout_BlocksOrdinaryRoutes(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "owner-pending-blocked"
-	_, practiceID := seedOwnerMembership(t, db, identityUID)
-	markPracticePendingDeletion(t, db, practiceID)
-
-	srv := deletionServer(db)
-	defer srv.Close()
-
-	session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, true)
-	resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
-
-	body := apierrtest.Decode(t, resp)
-	if body.Code != apierr.CodePracticePendingDeletion {
-		t.Fatalf("code = %q, want %s", body.Code, apierr.CodePracticePendingDeletion)
+// TestMiddleware_PendingDeletionLockout_Refuses covers what a Practice
+// that has asked to be deleted turns away: every ordinary route, for an
+// Owner and a non-Owner alike, and a POST to the one path the lockout
+// otherwise leaves open. POST is not one of decision 3's sanctioned acts,
+// even for an Owner on the exact .../deletion path -- unlike GET/DELETE,
+// it stays refused here rather than reaching InitiateHandler's own
+// (friendlier, but not this ticket's word) 409 for an already-pending
+// Practice (isPracticeDeletionRoute's own stated exclusion).
+func TestMiddleware_PendingDeletionLockout_Refuses(t *testing.T) {
+	cases := []struct {
+		name   string
+		staff  fixture.StaffOption
+		method string
+		path   string
+	}{
+		{"an ordinary route, for the Owner", fixture.Owner(), http.MethodGet, "/ping"},
+		{"an ordinary route, for a non-Owner", fixture.Doula(), http.MethodGet, "/ping"},
+		{"a POST on the deletion route, for the Owner", fixture.Owner(), http.MethodPost, "/deletion"},
 	}
-}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newPingEnv(t, fixture.SignedInAs(tc.staff))
+			markPracticePendingDeletion(t, e.DB, e.Practice.ID)
 
-func TestMiddleware_PendingDeletionLockout_BlocksNonOwner(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-pending-blocked"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
-	markPracticePendingDeletion(t, db, practiceID)
-
-	srv := deletionServer(db)
-	defer srv.Close()
-
-	session := authntest.SeedSession(t, db.App, identityUID)
-	resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
-
-	body := apierrtest.Decode(t, resp)
-	if body.Code != apierr.CodePracticePendingDeletion {
-		t.Fatalf("code = %q, want %s", body.Code, apierr.CodePracticePendingDeletion)
+			if got := refusalCode(t, tc.method, e.at(e.Practice.ID, tc.path), e.SignedIn); got != apierr.CodePracticePendingDeletion {
+				t.Fatalf("code = %q, want %s", got, apierr.CodePracticePendingDeletion)
+			}
+		})
 	}
 }
 
 func TestMiddleware_PendingDeletionLockout_ExemptsOwnerOnDeletionRoutes(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "owner-pending-exempt"
-	_, practiceID := seedOwnerMembership(t, db, identityUID)
-	markPracticePendingDeletion(t, db, practiceID)
+	e := newPingEnv(t, fixture.SignedInAs(fixture.Owner()))
+	markPracticePendingDeletion(t, e.DB, e.Practice.ID)
 
-	srv := deletionServer(db)
-	defer srv.Close()
-	session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, true)
-
-	getResp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/deletion", reqtest.Session(session))
-	defer getResp.Body.Close()
-	reqtest.RequireStatus(t, getResp, http.StatusOK)
-
-	deleteResp := reqtest.Delete(t, srv.URL+"/api/practices/"+practiceID+"/deletion", reqtest.Session(session))
-	defer deleteResp.Body.Close()
-	reqtest.RequireStatus(t, deleteResp, http.StatusOK)
+	reqtest.ExpectStatus(t, http.MethodGet, e.at(e.Practice.ID, "/deletion"), http.StatusOK, e.SignedIn)
+	reqtest.ExpectStatus(t, http.MethodDelete, e.at(e.Practice.ID, "/deletion"), http.StatusOK, e.SignedIn)
 }
 
 // TestMiddleware_PendingDeletionLockout_ExemptsSessionForEveryRole proves
@@ -689,71 +535,20 @@ func TestMiddleware_PendingDeletionLockout_ExemptsOwnerOnDeletionRoutes(t *testi
 // accurate locked message) alike, carrying PendingDeletion: true either
 // way -- unlike GET/DELETE .../deletion, which stays Owner-only.
 func TestMiddleware_PendingDeletionLockout_ExemptsSessionForEveryRole(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-pending-session-read"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
-	markPracticePendingDeletion(t, db, practiceID)
+	e := newPingEnv(t)
+	markPracticePendingDeletion(t, e.DB, e.Practice.ID)
 
-	srv := deletionServer(db)
-	defer srv.Close()
-	session := authntest.SeedSession(t, db.App, identityUID)
-
-	resp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/session", reqtest.Session(session))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-
-	body := reqtest.Decode[staffauth.PracticeSessionResponse](t, resp)
+	body := reqtest.Expect[staffauth.PracticeSessionResponse](t, http.MethodGet, e.at(e.Practice.ID, "/session"), http.StatusOK, e.SignedIn)
 	if !body.PendingDeletion {
 		t.Fatal("PendingDeletion = false, want true")
 	}
 }
 
-// TestMiddleware_PendingDeletionLockout_RefusesOwnerPOSTOnDeletionRoute
-// pins isPracticeDeletionRoute's own stated exclusion: POST is not one
-// of decision 3's sanctioned actions, even for an Owner on the exact
-// .../deletion path -- unlike GET/DELETE, it stays refused here rather
-// than reaching InitiateHandler's own (friendlier, but not this
-// ticket's word) 409 for an already-pending Practice.
-func TestMiddleware_PendingDeletionLockout_RefusesOwnerPOSTOnDeletionRoute(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "owner-pending-post-refused"
-	_, practiceID := seedOwnerMembership(t, db, identityUID)
-	markPracticePendingDeletion(t, db, practiceID)
-
-	srv := deletionServer(db)
-	defer srv.Close()
-	session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, true)
-
-	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/deletion", reqtest.Session(session))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
-
-	body := apierrtest.Decode(t, resp)
-	if body.Code != apierr.CodePracticePendingDeletion {
-		t.Fatalf("code = %q, want %s", body.Code, apierr.CodePracticePendingDeletion)
-	}
-}
-
 func TestMiddleware_DeletedPracticeReadsAsNoMembership(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "owner-finalized-blocked"
-	_, practiceID := seedOwnerMembership(t, db, identityUID)
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE practices SET deletion_requested_at = now(), deleted_at = now() WHERE id = $1`, practiceID,
-	); err != nil {
-		t.Fatalf("mark deleted: %v", err)
-	}
+	e := newPingEnv(t, fixture.SignedInAs(fixture.Owner()))
+	e.Exec(`UPDATE practices SET deletion_requested_at = now(), deleted_at = now() WHERE id = $1`, e.Practice.ID)
 
-	srv := deletionServer(db)
-	defer srv.Close()
-	session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, true)
-
-	resp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/deletion", reqtest.Session(session))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
-
-	body := apierrtest.Decode(t, resp)
-	if body.Code == apierr.CodePracticePendingDeletion {
+	if got := refusalCode(t, http.MethodGet, e.at(e.Practice.ID, "/deletion"), e.SignedIn); got == apierr.CodePracticePendingDeletion {
 		t.Fatal("a finalized Practice must read as no membership, not as pending-deletion")
 	}
 }

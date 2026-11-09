@@ -347,9 +347,7 @@ func TestDeleteLoginHandler_RefusesWithoutASession(t *testing.T) {
 	srv := newDeleteLoginServer(t, db, authntest.NewFakeAccountManager())
 	defer srv.Close()
 
-	resp := reqtest.Delete(t, srv.URL+"/api/staff/account", reqtest.Header("X-Confirmed", "true"))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
+	reqtest.ExpectStatus(t, http.MethodDelete, srv.URL+"/api/staff/account", http.StatusUnauthorized, reqtest.Header("X-Confirmed", "true"))
 }
 
 // TestDeleteLoginHandler_RefusesASessionWithNoStaffRow covers the person

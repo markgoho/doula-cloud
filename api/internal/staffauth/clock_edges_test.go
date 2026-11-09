@@ -148,9 +148,7 @@ func TestMiddleware_ActivityStampStaleAfterADayOnTheRequestClock(t *testing.T) {
 			}
 
 			srv, session := newClockedPingServer(t, db, identityUID, now)
-			resp := reqtest.Get(t, pingURL(srv, practiceID), reqtest.Session(session))
-			defer resp.Body.Close()
-			reqtest.RequireStatus(t, resp, http.StatusOK)
+			reqtest.ExpectStatus(t, http.MethodGet, pingURL(srv, practiceID), http.StatusOK, reqtest.Session(session))
 
 			lastActiveAt := testdb.Scalar[time.Time](t, db.Admin, `SELECT last_active_at FROM staff WHERE id = $1`, staffID)
 			if !lastActiveAt.Equal(c.want) {

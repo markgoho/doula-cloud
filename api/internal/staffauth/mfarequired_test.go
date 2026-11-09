@@ -141,9 +141,7 @@ func TestPutMFARequiredHandler_MalformedBody(t *testing.T) {
 	srv, seedSession := newMFARequiredServer(t, db, authntest.NewFakeAccountManager())
 	defer srv.Close()
 
-	resp := reqtest.Put(t, srv.URL+"/api/practices/"+practiceID+"/mfa-required", reqtest.Body("application/json", []byte("not json")), reqtest.Session(seedSession(ownerUID)), reqtest.Header("X-Confirmed", "true"))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+	reqtest.ExpectStatus(t, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/mfa-required", http.StatusBadRequest, reqtest.Body("application/json", []byte("not json")), reqtest.Session(seedSession(ownerUID)), reqtest.Header("X-Confirmed", "true"))
 }
 
 func TestGetMFAImpactHandler_DoulaForbidden(t *testing.T) {
@@ -154,9 +152,7 @@ func TestGetMFAImpactHandler_DoulaForbidden(t *testing.T) {
 	srv, seedSession := newMFARequiredServer(t, db, authntest.NewFakeAccountManager())
 	defer srv.Close()
 
-	resp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/mfa-required/impact", reqtest.Session(seedSession(doulaUID)))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
+	reqtest.ExpectStatus(t, http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/mfa-required/impact", http.StatusForbidden, reqtest.Session(seedSession(doulaUID)))
 }
 
 // TestGetMFAImpactHandler_CountsEveryoneWithoutAFactor proves the count

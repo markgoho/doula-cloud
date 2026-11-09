@@ -40,10 +40,7 @@ func TestEndSessionsHandler_RequiresConfirmation(t *testing.T) {
 	srv, session := newEndSessionsServer(t, db, ownerUID)
 	defer srv.Close()
 
-	resp := reqtest.Delete(t, srv.URL+"/api/practices/"+practiceID+"/staff/"+targetID+"/sessions", reqtest.Session(session))
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+	reqtest.ExpectStatus(t, http.MethodDelete, srv.URL+"/api/practices/"+practiceID+"/staff/"+targetID+"/sessions", http.StatusBadRequest, reqtest.Session(session))
 	if got := authntest.CountFor(t, db.App, targetUID); got != 1 {
 		t.Fatalf("target session rows = %d, want the unconfirmed request to have ended nothing", got)
 	}

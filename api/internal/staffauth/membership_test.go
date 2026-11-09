@@ -1,45 +1,25 @@
 package staffauth_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
-func newMembershipServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
-	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{}, neverSuppressed)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+// patch edits staffID's Membership and requires want.
+func (e *env) patch(staffID string, body staffauth.UpdateMembershipRequest, want int) staffauth.UpdateMembershipResponse {
+	e.T.Helper()
+	return reqtest.Expect[staffauth.UpdateMembershipResponse](e.T, http.MethodPatch, e.membershipURL(staffID), want, e.SignedIn, reqtest.JSON(body))
 }
 
-func deleteMembership(t *testing.T, srv *httptest.Server, session, practiceID, staffID string) *http.Response {
-	t.Helper()
-	return reqtest.Delete(t, srv.URL+"/api/practices/"+practiceID+"/staff/"+staffID+"/membership", reqtest.Session(session), reqtest.Header("X-Confirmed", "true"))
-}
-
-func patchMembership(t *testing.T, srv *httptest.Server, session, practiceID, staffID string, body any) *http.Response {
-	t.Helper()
-	payload, err := json.Marshal(body)
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	return patchMembershipRaw(t, srv, session, practiceID, staffID, payload)
-}
-
-func patchMembershipRaw(t *testing.T, srv *httptest.Server, session, practiceID, staffID string, payload []byte) *http.Response {
-	t.Helper()
-	return reqtest.Do(t, http.MethodPatch, srv.URL+"/api/practices/"+practiceID+"/staff/"+staffID+"/membership", reqtest.Session(session), reqtest.RawJSON(payload))
+// remove takes staffID's Membership off the Practice and requires want.
+func (e *env) remove(staffID string, want int) {
+	e.T.Helper()
+	reqtest.ExpectStatus(e.T, http.MethodDelete, e.membershipURL(staffID), want, e.SignedIn, confirmed)
 }
 
 // membershipEvents reads a Membership's recorded history, newest first.
@@ -56,34 +36,28 @@ func membershipEvents(t *testing.T, db *testdb.DB, practiceID, staffID string) [
 	return out
 }
 
+func asDoula() staffauth.UpdateMembershipRequest {
+	return staffauth.UpdateMembershipRequest{Roles: []string{doulaRole}, EmploymentType: employeeType}
+}
+
 // TestUpdateMembershipHandler_EditsBothHalvesAtOnce is RA-G2 (#261): the
 // roles and the employment type move on one request, because they are
 // edited on one form.
 func TestUpdateMembershipHandler_EditsBothHalvesAtOnce(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-edits-membership"
-	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
-	targetID := testdb.SeedStaff(t, db, "target-membership")
-	seedMembership(t, db, practiceID, targetID) // '{doula}', employee
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	target := e.Colleague()
 
-	srv, session := newMembershipServer(t, db, ownerUID)
-	defer srv.Close()
-
-	resp := patchMembership(t, srv, session, practiceID, targetID, staffauth.UpdateMembershipRequest{
+	updated := e.patch(target.ID, staffauth.UpdateMembershipRequest{
 		Roles: []string{adminRole, doulaRole}, EmploymentType: contractorType,
-	})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	updated := reqtest.Decode[staffauth.UpdateMembershipResponse](t, resp)
+	}, http.StatusOK)
 	if updated.EmploymentType != contractorType || len(updated.Roles) != 2 {
 		t.Fatalf("response = %+v", updated)
 	}
 
 	var roles, employmentType string
-	if err := db.Admin.QueryRowContext(t.Context(),
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
 		`SELECT array_to_string(roles, ','), employment_type::text FROM practice_memberships
-		 WHERE practice_id = $1 AND staff_id = $2`, practiceID, targetID,
+		 WHERE practice_id = $1 AND staff_id = $2`, e.Practice.ID, target.ID,
 	).Scan(&roles, &employmentType); err != nil {
 		t.Fatalf("read membership: %v", err)
 	}
@@ -93,7 +67,7 @@ func TestUpdateMembershipHandler_EditsBothHalvesAtOnce(t *testing.T) {
 		t.Fatalf("membership = %q/%q", roles, employmentType)
 	}
 
-	events := membershipEvents(t, db, practiceID, targetID)
+	events := membershipEvents(t, e.DB, e.Practice.ID, target.ID)
 	// Both events share one created_at (one transaction), so the tie
 	// breaks on action, alphabetically.
 	want := []string{"employment_type_changed:->/employee->contractor", "roles_changed:doula->admin,doula/->"}
@@ -106,32 +80,38 @@ func TestUpdateMembershipHandler_EditsBothHalvesAtOnce(t *testing.T) {
 		}
 	}
 
-	actor := testdb.Scalar[string](t, db.Admin, `SELECT DISTINCT actor_staff_id FROM activity WHERE subject_kind = 'membership' AND subject_id = $1`, targetID)
-	if actor != ownerID {
-		t.Fatalf("actor = %q, want the Owner %q", actor, ownerID)
+	actor := testdb.Scalar[string](t, e.DB.Admin, `SELECT DISTINCT actor_staff_id FROM activity WHERE subject_kind = 'membership' AND subject_id = $1`, target.ID)
+	if actor != e.Staff.ID {
+		t.Fatalf("actor = %q, want the Owner %q", actor, e.Staff.ID)
 	}
 }
 
-// TestUpdateMembershipHandler_NoOpRecordsNothing keeps the history a list
-// of changes rather than a list of times someone opened the form.
-func TestUpdateMembershipHandler_NoOpRecordsNothing(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-edits-nothing"
-	_, practiceID := seedOwnerMembership(t, db, ownerUID)
-	targetID := testdb.SeedStaff(t, db, "unchanged-membership")
-	seedMembership(t, db, practiceID, targetID) // '{doula}', employee
+// TestUpdateMembershipHandler_NoChangeRecordsNothing keeps the history a
+// list of changes rather than a list of times someone opened the form --
+// and a record of changes: the order roles arrive in is the caller's, not
+// a fact about the Membership.
+func TestUpdateMembershipHandler_NoChangeRecordsNothing(t *testing.T) {
+	cases := []struct {
+		name   string
+		target fixture.StaffOption
+		body   staffauth.UpdateMembershipRequest
+	}{
+		{"the same answer", fixture.Doula(), asDoula()},
+		{"the same roles in another order", fixture.Roles(adminRole, doulaRole), staffauth.UpdateMembershipRequest{
+			Roles: []string{doulaRole, adminRole}, EmploymentType: employeeType,
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(fixture.Owner()))
+			target := e.Colleague(tc.target)
 
-	srv, session := newMembershipServer(t, db, ownerUID)
-	defer srv.Close()
+			e.patch(target.ID, tc.body, http.StatusOK)
 
-	resp := patchMembership(t, srv, session, practiceID, targetID, staffauth.UpdateMembershipRequest{
-		Roles: []string{doulaRole}, EmploymentType: employeeType,
-	})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	if events := membershipEvents(t, db, practiceID, targetID); len(events) != 0 {
-		t.Fatalf("events = %v, want none", events)
+			if events := membershipEvents(t, e.DB, e.Practice.ID, target.ID); len(events) != 0 {
+				t.Fatalf("events = %v, want none", events)
+			}
+		})
 	}
 }
 
@@ -139,231 +119,113 @@ func TestUpdateMembershipHandler_NoOpRecordsNothing(t *testing.T) {
 // Owner may not make: nothing else in the API grants the role back, so a
 // Practice with no Owner can never be invited to or edited again.
 func TestUpdateMembershipHandler_KeepsTheLastOwner(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "sole-owner-demotes-herself"
-	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
+	e := newEnv(t, signedInAs(fixture.Owner()))
 
-	srv, session := newMembershipServer(t, db, ownerUID)
-	defer srv.Close()
-
-	resp := patchMembership(t, srv, session, practiceID, ownerID, staffauth.UpdateMembershipRequest{
-		Roles: []string{doulaRole}, EmploymentType: employeeType,
-	})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusConflict)
+	e.patch(e.Staff.ID, asDoula(), http.StatusConflict)
 
 	// With a second Owner in place, the same demotion is allowed.
-	secondOwner := testdb.SeedStaff(t, db, "second-owner")
-	seedMembershipWithRoles(t, db, practiceID, secondOwner, "{owner}")
-
-	allowed := patchMembership(t, srv, session, practiceID, ownerID, staffauth.UpdateMembershipRequest{
-		Roles: []string{doulaRole}, EmploymentType: employeeType,
-	})
-	defer allowed.Body.Close()
-	reqtest.RequireStatus(t, allowed, http.StatusOK)
+	e.Colleague(fixture.Owner())
+	e.patch(e.Staff.ID, asDoula(), http.StatusOK)
 }
 
 func TestUpdateMembershipHandler_NonOwnerForbidden(t *testing.T) {
-	db := testdb.New(t)
-	const doulaUID = "doula-edits-membership"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, doulaUID, []string{doulaRole}, employeeType) // '{doula}'
+	e := newEnv(t)
 
-	srv, session := newMembershipServer(t, db, doulaUID)
-	defer srv.Close()
-
-	resp := patchMembership(t, srv, session, practiceID, staffID, staffauth.UpdateMembershipRequest{
-		Roles: []string{ownerRole}, EmploymentType: employeeType,
-	})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
-}
-
-func TestUpdateMembershipHandler_NoSuchMembership(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-edits-a-stranger"
-	_, practiceID := seedOwnerMembership(t, db, ownerUID)
-
-	srv, session := newMembershipServer(t, db, ownerUID)
-	defer srv.Close()
-
-	resp := patchMembership(t, srv, session, practiceID, emptyUUID, staffauth.UpdateMembershipRequest{
-		Roles: []string{doulaRole}, EmploymentType: employeeType,
-	})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
+	e.patch(e.Staff.ID, staffauth.UpdateMembershipRequest{Roles: []string{ownerRole}, EmploymentType: employeeType}, http.StatusForbidden)
 }
 
 func TestUpdateMembershipHandler_Rejects(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-membership-validation"
-	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
-
-	srv, session := newMembershipServer(t, db, ownerUID)
-	defer srv.Close()
+	e := newEnv(t, signedInAs(fixture.Owner()))
 
 	cases := []struct {
-		name string
-		body staffauth.UpdateMembershipRequest
+		name    string
+		staffID string
+		body    staffauth.UpdateMembershipRequest
 	}{
-		{"no roles", staffauth.UpdateMembershipRequest{EmploymentType: employeeType}},
-		{"unknown role", staffauth.UpdateMembershipRequest{Roles: []string{"superuser"}, EmploymentType: employeeType}},
-		{"unknown employment type", staffauth.UpdateMembershipRequest{Roles: []string{doulaRole}, EmploymentType: "volunteer"}},
+		{"no roles", e.Staff.ID, staffauth.UpdateMembershipRequest{EmploymentType: employeeType}},
+		{"unknown role", e.Staff.ID, staffauth.UpdateMembershipRequest{Roles: []string{"superuser"}, EmploymentType: employeeType}},
+		{"unknown employment type", e.Staff.ID, staffauth.UpdateMembershipRequest{Roles: []string{doulaRole}, EmploymentType: "volunteer"}},
+		{"malformed staff id", "not-a-uuid", asDoula()},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			resp := patchMembership(t, srv, session, practiceID, ownerID, tc.body)
-			defer resp.Body.Close()
-			reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+			e.patch(tc.staffID, tc.body, http.StatusBadRequest)
 		})
 	}
 
 	t.Run("invalid body", func(t *testing.T) {
-		resp := patchMembershipRaw(t, srv, session, practiceID, ownerID, []byte("not json"))
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+		reqtest.ExpectStatus(t, http.MethodPatch, e.membershipURL(e.Staff.ID), http.StatusBadRequest, e.SignedIn, reqtest.RawJSON([]byte("not json")))
 	})
+}
 
-	t.Run("malformed staff id", func(t *testing.T) {
-		resp := patchMembership(t, srv, session, practiceID, "not-a-uuid", staffauth.UpdateMembershipRequest{
-			Roles: []string{doulaRole}, EmploymentType: employeeType,
-		})
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-	})
+func TestUpdateMembershipHandler_NoSuchMembership(t *testing.T) {
+	e := newEnv(t, signedInAs(fixture.Owner()))
+
+	e.patch(emptyUUID, asDoula(), http.StatusNotFound)
 }
 
 // TestRemoveMembershipHandler_Success is #291's second criterion: a
 // membership can be taken off a Practice by a route in the product, and
 // who took it off is recorded.
 func TestRemoveMembershipHandler_Success(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-removes-a-membership"
-	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
-	targetID := testdb.SeedStaff(t, db, "removable-membership")
-	seedMembership(t, db, practiceID, targetID) // '{doula}', employee
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	target := e.Colleague()
 
-	srv, session := newMembershipServer(t, db, ownerUID)
-	defer srv.Close()
+	e.remove(target.ID, http.StatusNoContent)
 
-	resp := deleteMembership(t, srv, session, practiceID, targetID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNoContent)
-
-	memberships := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`, practiceID, targetID)
+	memberships := testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`, e.Practice.ID, target.ID)
 	if memberships != 0 {
 		t.Fatalf("memberships = %d, want none", memberships)
 	}
 
 	// The staff row survives: a person is not owned by one Practice.
-	staffRows := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM staff WHERE id = $1`, targetID)
+	staffRows := testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM staff WHERE id = $1`, target.ID)
 	if staffRows != 1 {
 		t.Fatalf("staff rows = %d, want the person to survive her membership", staffRows)
 	}
 
-	events := membershipEvents(t, db, practiceID, targetID)
+	events := membershipEvents(t, e.DB, e.Practice.ID, target.ID)
 	if len(events) != 1 || events[0] != "removed:doula->/employee->" {
 		t.Fatalf("events = %v, want one removed event naming what she held", events)
 	}
-	actor := testdb.Scalar[string](t, db.Admin, `SELECT actor_staff_id FROM activity WHERE subject_kind = 'membership' AND subject_id = $1`, targetID)
-	if actor != ownerID {
-		t.Fatalf("actor = %q, want the Owner %q", actor, ownerID)
+	actor := testdb.Scalar[string](t, e.DB.Admin, `SELECT actor_staff_id FROM activity WHERE subject_kind = 'membership' AND subject_id = $1`, target.ID)
+	if actor != e.Staff.ID {
+		t.Fatalf("actor = %q, want the Owner %q", actor, e.Staff.ID)
 	}
 }
 
 func TestRemoveMembershipHandler_KeepsTheLastOwner(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "sole-owner-removes-herself"
-	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
+	e := newEnv(t, signedInAs(fixture.Owner()))
 
-	srv, session := newMembershipServer(t, db, ownerUID)
-	defer srv.Close()
-
-	resp := deleteMembership(t, srv, session, practiceID, ownerID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusConflict)
+	e.remove(e.Staff.ID, http.StatusConflict)
 }
 
 func TestRemoveMembershipHandler_Refuses(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-removes-a-stranger"
-	_, practiceID := seedOwnerMembership(t, db, ownerUID)
-
-	srv, session := newMembershipServer(t, db, ownerUID)
-	defer srv.Close()
+	e := newEnv(t, signedInAs(fixture.Owner()))
 
 	t.Run("no such membership", func(t *testing.T) {
-		resp := deleteMembership(t, srv, session, practiceID, emptyUUID)
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusNotFound)
+		e.remove(emptyUUID, http.StatusNotFound)
 	})
 
 	t.Run("malformed staff id", func(t *testing.T) {
-		resp := deleteMembership(t, srv, session, practiceID, "not-a-uuid")
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+		e.remove("not-a-uuid", http.StatusBadRequest)
 	})
 }
 
 func TestRemoveMembershipHandler_RequiresConfirmation(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-forgets-to-confirm"
-	_, practiceID := seedOwnerMembership(t, db, ownerUID)
-	targetID := testdb.SeedStaff(t, db, "unconfirmed-removal")
-	seedMembership(t, db, practiceID, targetID)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	target := e.Colleague()
 
-	srv, session := newMembershipServer(t, db, ownerUID)
-	defer srv.Close()
+	reqtest.ExpectStatus(t, http.MethodDelete, e.membershipURL(target.ID), http.StatusBadRequest, e.SignedIn)
 
-	resp := reqtest.Delete(t, srv.URL+"/api/practices/"+practiceID+"/staff/"+targetID+"/membership", reqtest.Session(session))
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-
-	memberships := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`, practiceID, targetID)
+	memberships := testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`, e.Practice.ID, target.ID)
 	if memberships != 1 {
 		t.Fatalf("memberships = %d, want the unconfirmed request to have removed nothing", memberships)
 	}
 }
 
 func TestRemoveMembershipHandler_NonOwnerForbidden(t *testing.T) {
-	db := testdb.New(t)
-	const doulaUID = "doula-removes-a-membership"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, doulaUID, []string{doulaRole}, employeeType) // '{doula}'
+	e := newEnv(t)
 
-	srv, session := newMembershipServer(t, db, doulaUID)
-	defer srv.Close()
-
-	resp := deleteMembership(t, srv, session, practiceID, staffID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
-}
-
-// TestUpdateMembershipHandler_ReorderedRolesAreNoChange keeps the history
-// a record of changes: the order roles arrive in is the caller's, not a
-// fact about the Membership.
-func TestUpdateMembershipHandler_ReorderedRolesAreNoChange(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-reorders-roles"
-	_, practiceID := seedOwnerMembership(t, db, ownerUID)
-	targetID := testdb.SeedStaff(t, db, "reordered-membership")
-	seedMembershipWithRoles(t, db, practiceID, targetID, "{admin,doula}")
-
-	srv, session := newMembershipServer(t, db, ownerUID)
-	defer srv.Close()
-
-	resp := patchMembership(t, srv, session, practiceID, targetID, staffauth.UpdateMembershipRequest{
-		Roles: []string{doulaRole, adminRole}, EmploymentType: employeeType,
-	})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	if events := membershipEvents(t, db, practiceID, targetID); len(events) != 0 {
-		t.Fatalf("events = %v, want none", events)
-	}
+	e.remove(e.Staff.ID, http.StatusForbidden)
 }

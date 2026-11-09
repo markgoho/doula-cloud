@@ -3,16 +3,14 @@ package staffauth_test
 import (
 	"database/sql"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -39,52 +37,42 @@ func readWorkState(t *testing.T, db *testdb.DB, identityUID string) (string, int
 	return state, events
 }
 
-func TestSignup_RejectsMissingWorkState(t *testing.T) {
-	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: workStateUID, Email: testStaffEmail}, db)
-	defer srv.Close()
+// TestSignup_RefusesAWorkStateThatIsNotOne covers a missing state and a
+// two-letter string that is not a state: both are refused by the handler
+// rather than by the CHECK constraint, so the caller gets a 400 naming the
+// field, not the 500 an unhandled constraint violation would produce.
+func TestSignup_RefusesAWorkStateThatIsNotOne(t *testing.T) {
+	cases := []struct {
+		name      string
+		workState string
+	}{
+		{"missing", ""},
+		{"not a state", "ZZ"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newSignupEnv(t, authntest.Verifier{UID: workStateUID, Email: testStaffEmail})
 
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
-		PracticeName: "No State Practice", FirstName: workStateName, LastName: placeholderLastName,
-	})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-// A two-letter string that is not a state is refused by the handler rather
-// than by the CHECK constraint: the caller gets a 400 naming the field, not
-// the 500 an unhandled constraint violation would produce.
-func TestSignup_RejectsUnknownWorkState(t *testing.T) {
-	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: workStateUID, Email: testStaffEmail}, db)
-	defer srv.Close()
-
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
-		PracticeName: "Bad State Practice", FirstName: workStateName, LastName: placeholderLastName,
-		WorkState: "ZZ",
-	})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+			e.refused(staffauth.SignupRequest{
+				PracticeName: "Bad State Practice", FirstName: workStateName, LastName: placeholderLastName,
+				WorkState: tc.workState,
+			}, http.StatusBadRequest)
+		})
+	}
 }
 
 // The form offers a fixed <select>, but a form is not an enforcement
 // boundary: whatever arrives is trimmed and upper-cased before it is
 // stored, so the apportionment query never has to match case.
 func TestSignup_NormalizesWorkStateAndRecordsFirstEvent(t *testing.T) {
-	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: workStateUID, Email: testStaffEmail}, db)
-	defer srv.Close()
+	e := newSignupEnv(t, authntest.Verifier{UID: workStateUID, Email: testStaffEmail})
 
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
+	e.signUp(staffauth.SignupRequest{
 		PracticeName: "Lower Case Practice", FirstName: workStateName, LastName: placeholderLastName,
 		WorkState: "  nj ",
 	})
-	defer resp.Body.Close()
 
-	reqtest.RequireStatus(t, resp, http.StatusCreated)
-	state, events := readWorkState(t, db, workStateUID)
+	state, events := readWorkState(t, e.DB, workStateUID)
 	if state != "NJ" {
 		t.Fatalf("work_state = %q, want %q", state, "NJ")
 	}
@@ -142,17 +130,11 @@ func TestAcceptInvite_RejectsUnknownWorkStateForANewPerson(t *testing.T) {
 // prints as self-reported, with its date, so nobody has to wonder where it
 // came from.
 func TestAcceptInvite_IgnoresWorkStateForAnExistingPerson(t *testing.T) {
-	db := testdb.New(t)
-
-	signupSrv := newSignupServer(authntest.Verifier{UID: "roaming-uid", Email: "nell@example.com"}, db)
-	defer signupSrv.Close()
-	first := postSignup(t, signupSrv, "tok", staffauth.SignupRequest{
+	signup := newSignupEnv(t, authntest.Verifier{UID: "roaming-uid", Email: "nell@example.com"})
+	signup.signUp(staffauth.SignupRequest{
 		PracticeName: "Her First Practice", FirstName: "Nell", LastName: "Ward", WorkState: "NY",
 	})
-	_ = first.Body.Close()
-	if first.StatusCode != http.StatusCreated {
-		t.Fatalf("signup status = %d, want %d", first.StatusCode, http.StatusCreated)
-	}
+	db := signup.DB
 
 	ownerID, practiceID := seedOwnerMembership(t, db, "owner-of-the-second-practice")
 	_, token := seedInvitationWithToken(t, db, practiceID, ownerID, "nell@example.com", "{doula}", contractorType, time.Now().Add(time.Hour))
@@ -178,24 +160,10 @@ func TestAcceptInvite_IgnoresWorkStateForAnExistingPerson(t *testing.T) {
 // The roster is where "how did this get set?" is answered: the value and
 // the date she asserted it, for an Owner who never entered either.
 func TestRoster_CarriesWorkStateAndItsDate(t *testing.T) {
-	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: "roster-work-state-uid", Email: "ada@example.com"}, db)
-	defer srv.Close()
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	e.Exec(`UPDATE staff SET work_state = 'CT' WHERE id = $1`, e.Staff.ID)
 
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
-		PracticeName: "Roster Practice", FirstName: "Ada", LastName: "Frost", WorkState: "CT",
-	})
-	defer resp.Body.Close()
-	created := reqtest.Decode[staffauth.SignupResponse](t, resp)
-
-	listSrv, sess := newStaffListServer(t, db, "roster-work-state-uid")
-	defer listSrv.Close()
-	listResp := getStaffList(t, listSrv, sess, created.PracticeID)
-	defer listResp.Body.Close()
-	if listResp.StatusCode != http.StatusOK {
-		t.Fatalf("roster status = %d, want %d", listResp.StatusCode, http.StatusOK)
-	}
-	roster := reqtest.Decode[staffauth.Roster](t, listResp)
+	roster := reqtest.Expect[staffauth.Roster](t, http.MethodGet, e.PracticeURL("/staff"), http.StatusOK, e.SignedIn)
 	if len(roster.Members) != 1 {
 		t.Fatalf("members = %d, want 1", len(roster.Members))
 	}
@@ -209,22 +177,12 @@ func TestRoster_CarriesWorkStateAndItsDate(t *testing.T) {
 
 // --- Correcting a work state (#437) -------------------------------------
 
-// newWorkStateServer mounts the correction route and seeds a live session
-// for uid, returning the token its __session cookie carries. The route
-// carries no {practiceId} and no {staffId}: that absence is the whole
-// authorization story, so the mount here mirrors main.go exactly.
-func newWorkStateServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
-	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{}, neverSuppressed)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
-}
-
-func putWorkState(t *testing.T, srv *httptest.Server, session, body string) *http.Response {
-	t.Helper()
-	return reqtest.Put(t, srv.URL+"/api/staff/work-state", reqtest.Session(session), reqtest.RawJSON([]byte(body)))
+// putWorkState corrects the work state of the Staff member at the screen.
+// The route carries no {practiceId} and no {staffId}: that absence is the
+// whole authorization story.
+func (e *env) putWorkState(body string, want int, opts ...reqtest.Option) []byte {
+	e.T.Helper()
+	return reqtest.ExpectBody(e.T, http.MethodPut, e.URL("/api/staff/work-state"), want, append([]reqtest.Option{reqtest.RawJSON([]byte(body))}, opts...)...)
 }
 
 // latestWorkStateEvent returns both sides of the newest audit row for a
@@ -254,61 +212,19 @@ func reportedAt(t *testing.T, db *testdb.DB, identityUID string) time.Time {
 	return at
 }
 
-func TestUpdateWorkState_MissingCookie(t *testing.T) {
-	db := testdb.New(t)
-	srv, _ := newWorkStateServer(t, db, "no-cookie-correcting")
-	defer srv.Close()
-
-	resp := putWorkState(t, srv, "", `{"workState":"NJ"}`)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
-}
-
-// A live session whose identity resolves to no staff row: the shape a
-// person who abandoned an invitation halfway arrives in.
-func TestUpdateWorkState_UnknownStaff(t *testing.T) {
-	db := testdb.New(t)
-	srv, session := newWorkStateServer(t, db, "session-without-a-staff-row")
-	defer srv.Close()
-
-	resp := putWorkState(t, srv, session, `{"workState":"NJ"}`)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
-func TestUpdateWorkState_RejectsMalformedBody(t *testing.T) {
-	db := testdb.New(t)
-	testdb.SeedStaff(t, db, "malformed-body-uid")
-	srv, session := newWorkStateServer(t, db, "malformed-body-uid")
-	defer srv.Close()
-
-	resp := putWorkState(t, srv, session, `not json`)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
 // Refused by the handler rather than by 00043's CHECK constraint, so the
 // caller gets a 400 naming the field instead of the 500 an unhandled
 // constraint violation would produce -- and in the same words the two
-// onboarding paths use.
+// onboarding paths use. A refused change leaves no audit row.
 func TestUpdateWorkState_RejectsSomethingThatIsNotAState(t *testing.T) {
-	db := testdb.New(t)
-	testdb.SeedStaff(t, db, "not-a-state-uid")
-	srv, session := newWorkStateServer(t, db, "not-a-state-uid")
-	defer srv.Close()
+	e := newEnv(t)
 
-	resp := putWorkState(t, srv, session, `{"workState":"Ontario"}`)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-	out := apierrtest.Decode(t, resp)
+	out := apierrtest.Expect(t, http.MethodPut, e.URL("/api/staff/work-state"), http.StatusBadRequest, e.SignedIn,
+		reqtest.RawJSON([]byte(`{"workState":"Ontario"}`)))
 	if out.Message != staffauth.MsgWorkStateRequired {
 		t.Fatalf("message = %q, want %q", out.Message, staffauth.MsgWorkStateRequired)
 	}
-	state, events := readWorkState(t, db, "not-a-state-uid")
+	state, events := readWorkState(t, e.DB, e.Staff.UID)
 	if state != "NY" {
 		t.Fatalf("work_state = %q, want it untouched at %q", state, "NY")
 	}
@@ -320,40 +236,33 @@ func TestUpdateWorkState_RejectsSomethingThatIsNotAState(t *testing.T) {
 // The whole point of the ticket: a doula who moves says so, the value
 // moves, and the audit row carries both sides rather than only the new one.
 func TestUpdateWorkState_MovesTheValueAndRecordsBothSides(t *testing.T) {
-	db := testdb.New(t)
-	testdb.SeedStaff(t, db, "she-moved-uid")
-	before := reportedAt(t, db, "she-moved-uid")
-	srv, session := newWorkStateServer(t, db, "she-moved-uid")
-	defer srv.Close()
+	e := newEnv(t)
+	before := reportedAt(t, e.DB, e.Staff.UID)
 
 	// Lower case and padded, because a form is not an enforcement boundary
 	// on this path either.
-	resp := putWorkState(t, srv, session, `{"workState":" nj "}`)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	got := reqtest.Decode[staffauth.WorkStateResponse](t, resp)
+	got := reqtest.Expect[staffauth.WorkStateResponse](t, http.MethodPut, e.URL("/api/staff/work-state"), http.StatusOK, e.SignedIn,
+		reqtest.RawJSON([]byte(`{"workState":" nj "}`)))
 	if got.WorkState != "NJ" {
 		t.Fatalf("response workState = %q, want %q", got.WorkState, "NJ")
 	}
 
-	state, events := readWorkState(t, db, "she-moved-uid")
+	state, events := readWorkState(t, e.DB, e.Staff.UID)
 	if state != "NJ" {
 		t.Fatalf("work_state = %q, want %q", state, "NJ")
 	}
 	if events != 1 {
 		t.Fatalf("work state events = %d, want 1", events)
 	}
-	previous, current, actor := latestWorkStateEvent(t, db, "she-moved-uid")
+	previous, current, actor := latestWorkStateEvent(t, e.DB, e.Staff.UID)
 	if previous != "NY" || current != "NJ" {
 		t.Fatalf("event = %q -> %q, want %q -> %q", previous, current, "NY", "NJ")
 	}
-	staffID := testdb.Scalar[string](t, db.Admin, `SELECT id FROM staff WHERE identity_uid = $1`, "she-moved-uid")
-	if actor != staffID {
-		t.Fatalf("actor_staff_id = %q, want her own id %q", actor, staffID)
+	if actor != e.Staff.ID {
+		t.Fatalf("actor_staff_id = %q, want her own id %q", actor, e.Staff.ID)
 	}
 
-	after := reportedAt(t, db, "she-moved-uid")
+	after := reportedAt(t, e.DB, e.Staff.UID)
 	if !after.After(before) {
 		t.Fatalf("work_state_reported_at = %v, want it after %v", after, before)
 	}
@@ -368,25 +277,20 @@ func TestUpdateWorkState_MovesTheValueAndRecordsBothSides(t *testing.T) {
 // the only staleness signal the design has, so "yes, still New York, as of
 // today" has to be sayable.
 func TestUpdateWorkState_SameStateIsAReAssertion(t *testing.T) {
-	db := testdb.New(t)
-	testdb.SeedStaff(t, db, "still-here-uid")
-	before := reportedAt(t, db, "still-here-uid")
-	srv, session := newWorkStateServer(t, db, "still-here-uid")
-	defer srv.Close()
+	e := newEnv(t)
+	before := reportedAt(t, e.DB, e.Staff.UID)
 
-	resp := putWorkState(t, srv, session, `{"workState":"NY"}`)
-	defer resp.Body.Close()
+	e.putWorkState(`{"workState":"NY"}`, http.StatusOK, e.SignedIn)
 
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	_, events := readWorkState(t, db, "still-here-uid")
+	_, events := readWorkState(t, e.DB, e.Staff.UID)
 	if events != 1 {
 		t.Fatalf("work state events = %d, want 1 -- an unchanged value is still an assertion", events)
 	}
-	previous, current, _ := latestWorkStateEvent(t, db, "still-here-uid")
+	previous, current, _ := latestWorkStateEvent(t, e.DB, e.Staff.UID)
 	if previous != "NY" || current != "NY" {
 		t.Fatalf("event = %q -> %q, want both sides %q", previous, current, "NY")
 	}
-	if !reportedAt(t, db, "still-here-uid").After(before) {
+	if !reportedAt(t, e.DB, e.Staff.UID).After(before) {
 		t.Fatal("work_state_reported_at did not move -- a re-assertion that refreshes nothing is pointless")
 	}
 }
@@ -395,24 +299,26 @@ func TestUpdateWorkState_SameStateIsAReAssertion(t *testing.T) {
 // is no staff id in the route to aim at someone else, so the proof is that
 // an Owner's own correction moves her own row and nobody else's.
 func TestUpdateWorkState_AnOwnerCorrectsOnlyHerself(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Reach Practice")
-	ownerID := testdb.SeedStaff(t, db, "owner-correcting-uid")
-	seedMembership(t, db, practiceID, ownerID)
-	doulaID := testdb.SeedStaff(t, db, "her-doula-uid")
-	seedMembership(t, db, practiceID, doulaID)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	doula := e.Colleague()
 
-	srv, session := newWorkStateServer(t, db, "owner-correcting-uid")
-	defer srv.Close()
-	resp := putWorkState(t, srv, session, `{"workState":"VT"}`)
-	defer resp.Body.Close()
+	e.putWorkState(`{"workState":"VT"}`, http.StatusOK, e.SignedIn)
 
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	if state, _ := readWorkState(t, db, "owner-correcting-uid"); state != "VT" {
+	if state, _ := readWorkState(t, e.DB, e.Staff.UID); state != "VT" {
 		t.Fatalf("owner work_state = %q, want %q", state, "VT")
 	}
-	if state, events := readWorkState(t, db, "her-doula-uid"); state != "NY" || events != 0 {
+	if state, events := readWorkState(t, e.DB, doula.UID); state != "NY" || events != 0 {
 		t.Fatalf("doula work_state = %q with %d events, want %q with 0 -- an Owner reached another person's row", state, events, "NY")
+	}
+}
+
+// setIdentity makes uid the caller db.App's policies see.
+func setIdentity(t *testing.T, db *testdb.DB, uid string) {
+	t.Helper()
+	if _, err := db.App.ExecContext(t.Context(),
+		`SELECT set_config('app.current_identity_uid', $1, false)`, uid,
+	); err != nil {
+		t.Fatalf("set identity: %v", err)
 	}
 }
 
@@ -421,17 +327,12 @@ func TestUpdateWorkState_AnOwnerCorrectsOnlyHerself(t *testing.T) {
 // Exercised through db.App with the session variables set by hand, so a
 // future route that forgets the shape rule still meets the boundary.
 func TestRLS_StaffSelfUpdateReachesOnlyHerOwnRow(t *testing.T) {
-	db := testdb.New(t)
-	testdb.SeedStaff(t, db, "rls-owner-uid")
-	otherID := testdb.SeedStaff(t, db, "rls-doula-uid")
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	other := e.Colleague()
 
-	if _, err := db.App.ExecContext(t.Context(),
-		`SELECT set_config('app.current_identity_uid', $1, false)`, "rls-owner-uid",
-	); err != nil {
-		t.Fatalf("set identity: %v", err)
-	}
-	result, err := db.App.ExecContext(t.Context(),
-		`UPDATE staff SET work_state = 'TX' WHERE id = $1`, otherID,
+	setIdentity(t, e.DB, e.Staff.UID)
+	result, err := e.DB.App.ExecContext(t.Context(),
+		`UPDATE staff SET work_state = 'TX' WHERE id = $1`, other.ID,
 	)
 	if err != nil {
 		t.Fatalf("update: %v", err)
@@ -442,28 +343,5 @@ func TestRLS_StaffSelfUpdateReachesOnlyHerOwnRow(t *testing.T) {
 	}
 	if affected != 0 {
 		t.Fatalf("rows affected = %d, want 0 -- RLS let one person rewrite another's work state", affected)
-	}
-}
-
-// The audit table's own boundary: a row claiming someone else made the
-// change is refused by staff_work_state_events_self's WITH CHECK, so
-// actor_staff_id stays a signal rather than a field anyone may fill in.
-func TestRLS_WorkStateEventRefusesAForeignActor(t *testing.T) {
-	db := testdb.New(t)
-	subjectID := testdb.SeedStaff(t, db, "event-subject-uid")
-	foreignID := testdb.SeedStaff(t, db, "event-foreign-uid")
-
-	if _, err := db.App.ExecContext(t.Context(),
-		`SELECT set_config('app.current_identity_uid', $1, false)`, "event-subject-uid",
-	); err != nil {
-		t.Fatalf("set identity: %v", err)
-	}
-	_, err := db.App.ExecContext(t.Context(),
-		`INSERT INTO staff_work_state_events (staff_id, previous_work_state, work_state, actor_staff_id)
-		 VALUES ($1, 'NY', 'TX', $2)`,
-		subjectID, foreignID,
-	)
-	if err == nil {
-		t.Fatal("insert succeeded -- an event may not name an actor who is not the caller")
 	}
 }

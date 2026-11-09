@@ -347,10 +347,7 @@ func TestAcceptInviteHandler_NoCredential(t *testing.T) {
 	srv := newAcceptServer(t, db, "unused-uid", "unused@example.com")
 	defer srv.Close()
 
-	resp := reqtest.Post(t, srv.URL+"/api/staff/accept-invite", reqtest.JSON(staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: "whatever"}))
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusUnauthorized)
+	reqtest.ExpectStatus(t, http.MethodPost, srv.URL+"/api/staff/accept-invite", http.StatusUnauthorized, reqtest.JSON(staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: "whatever"}))
 }
 
 // TestAcceptInviteHandler_BackfillsOfferStaffID is ADR-0008's
