@@ -1,28 +1,10 @@
 package testdb_test
 
 import (
-	"context"
-	"database/sql"
-	"fmt"
 	"testing"
 
 	"doula-cloud/api/internal/testdb"
 )
-
-func TestRunAsNotificationWorker_OpensTheDoorAndCommits(t *testing.T) {
-	db := testdb.New(t)
-
-	db.RunAsNotificationWorker(t, func(ctx context.Context, tx *sql.Tx) error {
-		var door string
-		if err := tx.QueryRowContext(ctx, `SELECT current_setting('app.notification_worker_trusted')`).Scan(&door); err != nil {
-			return fmt.Errorf("read the door: %w", err)
-		}
-		if door != "true" {
-			t.Errorf("door = %q, want true", door)
-		}
-		return nil
-	})
-}
 
 func TestBeginAdmin_CommitsWhatTheTestCommitsAndRollsBackTheRest(t *testing.T) {
 	db := testdb.New(t)

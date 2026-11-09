@@ -43,7 +43,7 @@ func seedLowCreditOutboxRow(t *testing.T, db *testdb.DB, practiceID string, atte
 // drives it, behind its trusted session var and without HTTP.
 func runLowCreditWorker(t *testing.T, db *testdb.DB, w billing.Worker) {
 	t.Helper()
-	db.RunAsNotificationWorker(t, w.ProcessPending)
+	db.RunAsWorker(t, w.ProcessPending)
 }
 
 func lowCreditOutboxRowState(t *testing.T, db *testdb.DB, id string) (status string, attemptCount int) {
