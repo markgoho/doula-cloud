@@ -4,78 +4,35 @@ import (
 	"net/http"
 	"testing"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/plans"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
-const nameFieldID = "name"
-const jamieAnswer = "Jamie"
+// TestInstanceRoutes_RefuseWhatTheyCannotReach proves each of the three
+// Plan Instance routes refuses an Engagement id that is not a uuid, an
+// Engagement of another Practice, an unknown plan type, and a Plan that
+// has nothing to act on yet: no template to snapshot for a POST, no
+// instance to read or save for a GET and a PUT.
+func TestInstanceRoutes_RefuseWhatTheyCannotReach(t *testing.T) {
+	routes := []struct {
+		method string
+		opts   []reqtest.Option
+	}{
+		{http.MethodPost, nil},
+		{http.MethodGet, nil},
+		{http.MethodPut, []reqtest.Option{reqtest.JSON(plans.PutInstanceRequest{})}},
+	}
+	for _, route := range routes {
+		t.Run(route.method, func(t *testing.T) {
+			e := newEnv(t)
 
-func TestPostInstanceHandler_InvalidEngagementID(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "post-invalid-engagement-id"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postInstance(t, srv, session, practiceID, "not-a-uuid", carePlanType)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-func TestPostInstanceHandler_UnknownPlanType(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "post-unknown-plan-type"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postInstance(t, srv, session, practiceID, engagementID, "not_a_plan_type")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-// TestPostInstanceHandler_EngagementNotFound proves an Engagement id from a
-// different Practice (or one that doesn't exist) 404s rather than creating
-// a Plan Instance under it.
-func TestPostInstanceHandler_EngagementNotFound(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "post-no-engagement"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
-	_, otherEngagementID := testdb.SeedEngagement(t, db, otherPracticeID)
-
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postInstance(t, srv, session, practiceID, otherEngagementID, carePlanType)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
-// TestPostInstanceHandler_NoTemplate proves the "should not happen post-#63"
-// missing-template case fails predictably with 404, not a crash or a
-// silently-empty snapshot.
-func TestPostInstanceHandler_NoTemplate(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "post-no-template"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postInstance(t, srv, session, practiceID, engagementID, carePlanType)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
+			e.refusesEngagementsItCannotReach(route.method, carePlanType, "", route.opts...)
+			reqtest.ExpectStatus(t, route.method, e.instanceURL(notAPlanType, ""), http.StatusBadRequest, append([]reqtest.Option{e.signedIn}, route.opts...)...)
+			reqtest.ExpectStatus(t, route.method, e.instanceURL(carePlanType, ""), http.StatusNotFound, append([]reqtest.Option{e.signedIn}, route.opts...)...)
+		})
+	}
 }
 
 // TestPostInstanceHandler_Success proves a Plan Instance is created with a
@@ -83,23 +40,13 @@ func TestPostInstanceHandler_NoTemplate(t *testing.T) {
 // and that any Staff member (not just an Owner) can create one, unlike
 // PutTemplateHandler.
 func TestPostInstanceHandler_Success(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "post-success"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedPlanTemplate(t, db, practiceID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
+	e := newEnv(t)
+	e.seedTemplate(carePlanType, f1Fields)
 
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
+	out := e.start(carePlanType, http.StatusCreated)
 
-	resp := postInstance(t, srv, session, practiceID, engagementID, carePlanType)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusCreated)
-
-	out := reqtest.Decode[plans.InstanceResponse](t, resp)
-	if out.EngagementID != engagementID || out.PlanType != carePlanType {
-		t.Fatalf("out = %+v, want engagementId %q planType %q", out, engagementID, carePlanType)
+	if out.EngagementID != e.Engagement.ID || out.PlanType != carePlanType {
+		t.Fatalf("out = %+v, want engagementId %q planType %q", out, e.Engagement.ID, carePlanType)
 	}
 	if len(out.Fields) != 1 || out.Fields[0].ID != "f1" {
 		t.Fatalf("fields = %+v, want the template's one field", out.Fields)
@@ -112,152 +59,42 @@ func TestPostInstanceHandler_Success(t *testing.T) {
 // TestPostInstanceHandler_Duplicate proves a second POST for the same
 // Engagement + plan type 409s -- POST creates, PUT edits.
 func TestPostInstanceHandler_Duplicate(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "post-duplicate"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedPlanTemplate(t, db, practiceID, birthPlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
+	e := newEnv(t)
+	e.seedTemplate(birthPlanType, f1Fields)
 
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
+	e.start(birthPlanType, http.StatusCreated)
+	e.start(birthPlanType, http.StatusConflict)
+}
 
-	first := postInstance(t, srv, session, practiceID, engagementID, birthPlanType)
-	defer first.Body.Close()
-	if first.StatusCode != http.StatusCreated {
-		t.Fatalf("first POST status = %d, want %d", first.StatusCode, http.StatusCreated)
+// TestGetInstanceHandler_ContractorNeedsAnAttachment proves ADR-0008's
+// attachment rule for Plan Instances: a contractor Doula with no
+// engagement_attachments row gets the same "not found" response an
+// out-of-practice Engagement gets, and an open, granted attachment reaches.
+func TestGetInstanceHandler_ContractorNeedsAnAttachment(t *testing.T) {
+	cases := []struct {
+		name string
+		opts []envOption
+		want int
+	}{
+		{"without an attachment", nil, http.StatusNotFound},
+		{"with a granted attachment", []envOption{attachedToEngagement()}, http.StatusOK},
 	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, append(tc.opts, signedInAs(fixture.Contractor()))...)
+			e.seedInstance(birthPlanType, f1Fields, `{"f1":"Jamie"}`)
 
-	second := postInstance(t, srv, session, practiceID, engagementID, birthPlanType)
-	defer second.Body.Close()
-	if second.StatusCode != http.StatusConflict {
-		t.Fatalf("second POST status = %d, want %d", second.StatusCode, http.StatusConflict)
+			reqtest.ExpectStatus(t, http.MethodGet, e.instanceURL(birthPlanType, ""), tc.want, e.signedIn)
+		})
 	}
-}
-
-func TestGetInstanceHandler_InvalidEngagementID(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-instance-invalid-engagement-id"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getInstance(t, srv, session, practiceID, "not-a-uuid", carePlanType)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-func TestGetInstanceHandler_UnknownPlanType(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-instance-unknown-plan-type"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getInstance(t, srv, session, practiceID, engagementID, "not_a_plan_type")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-func TestGetInstanceHandler_EngagementNotFound(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-instance-no-engagement"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
-	_, otherEngagementID := testdb.SeedEngagement(t, db, otherPracticeID)
-
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getInstance(t, srv, session, practiceID, otherEngagementID, carePlanType)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
-func TestGetInstanceHandler_NotFound(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-instance-not-found"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getInstance(t, srv, session, practiceID, engagementID, carePlanType)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
-// TestGetInstanceHandler_ContractorWithoutAttachmentForbidden proves
-// ADR-0008's attachment rule for Plan Instances: a contractor Doula with
-// no engagement_attachments row gets the same "not found" response an
-// out-of-practice Engagement gets.
-func TestGetInstanceHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-instance-contractor-unattached"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedInstance(t, db, engagementID, birthPlanType,
-		`[{"id":"f1","type":"short_text","label":"Name","order":0}]`,
-		`{"f1":"Jamie"}`,
-	)
-
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getInstance(t, srv, session, practiceID, engagementID, birthPlanType)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
-// TestGetInstanceHandler_ContractorWithGrantedAttachmentSucceeds proves
-// the other half: an open, granted attachment reaches.
-func TestGetInstanceHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-instance-contractor-attached"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedInstance(t, db, engagementID, birthPlanType,
-		`[{"id":"f1","type":"short_text","label":"Name","order":0}]`,
-		`{"f1":"Jamie"}`,
-	)
-	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
-
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getInstance(t, srv, session, practiceID, engagementID, birthPlanType)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
 }
 
 func TestGetInstanceHandler_Success(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-instance-success"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedInstance(t, db, engagementID, birthPlanType,
-		`[{"id":"f1","type":"short_text","label":"Name","order":0}]`,
-		`{"f1":"Jamie"}`,
-	)
+	e := newEnv(t)
+	e.seedInstance(birthPlanType, f1Fields, `{"f1":"Jamie"}`)
 
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
+	out := e.instance(birthPlanType)
 
-	resp := getInstance(t, srv, session, practiceID, engagementID, birthPlanType)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-
-	out := reqtest.Decode[plans.InstanceResponse](t, resp)
 	if len(out.Fields) != 1 || out.Fields[0].ID != "f1" {
 		t.Fatalf("fields = %+v, want the stored snapshot", out.Fields)
 	}
@@ -266,80 +103,11 @@ func TestGetInstanceHandler_Success(t *testing.T) {
 	}
 }
 
-func TestPutInstanceHandler_InvalidEngagementID(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-instance-invalid-engagement-id"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := putInstance(t, srv, session, practiceID, "not-a-uuid", carePlanType, plans.PutInstanceRequest{})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-func TestPutInstanceHandler_UnknownPlanType(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-instance-unknown-plan-type"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := putInstance(t, srv, session, practiceID, engagementID, "not_a_plan_type", plans.PutInstanceRequest{})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-func TestPutInstanceHandler_EngagementNotFound(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-instance-no-engagement"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
-	_, otherEngagementID := testdb.SeedEngagement(t, db, otherPracticeID)
-
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := putInstance(t, srv, session, practiceID, otherEngagementID, carePlanType, plans.PutInstanceRequest{})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
-func TestPutInstanceHandler_NotFound(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-instance-not-found"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := putInstance(t, srv, session, practiceID, engagementID, carePlanType, plans.PutInstanceRequest{})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
 func TestPutInstanceHandler_InvalidBody(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-instance-invalid-body"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedInstance(t, db, engagementID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`, `{}`)
+	e := newEnv(t)
+	e.seedInstance(carePlanType, f1Fields, `{}`)
 
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := putInstanceRaw(t, srv, session, practiceID, engagementID, carePlanType, []byte("not json"))
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+	reqtest.ExpectStatus(t, http.MethodPut, e.instanceURL(carePlanType, ""), http.StatusBadRequest, e.signedIn, reqtest.RawJSON([]byte("not json")))
 }
 
 // TestPutInstanceHandler_ValidationRejections table-drives validateAnswers's
@@ -369,21 +137,13 @@ func TestPutInstanceHandler_ValidationRejections(t *testing.T) {
 		{"non-string short_text", plans.Answers{nameFieldID: 5}},
 	}
 
-	db := testdb.New(t)
-	const uid = "put-instance-validation"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
+	e := newEnv(t)
+	e.seedInstance(carePlanType, fieldsJSON, `{}`)
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-			seedInstance(t, db, engagementID, carePlanType, fieldsJSON, `{}`)
-
-			resp := putInstance(t, srv, session, practiceID, engagementID, carePlanType, plans.PutInstanceRequest{Answers: tc.answers})
-			defer resp.Body.Close()
-
-			reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+			reqtest.ExpectStatus(t, http.MethodPut, e.instanceURL(carePlanType, ""), http.StatusBadRequest, e.signedIn,
+				reqtest.JSON(plans.PutInstanceRequest{Answers: tc.answers}))
 		})
 	}
 }
@@ -393,20 +153,11 @@ func TestPutInstanceHandler_ValidationRejections(t *testing.T) {
 // `{}`, not JSON null, into both the stored column and the response --
 // nonEmpty's nil-normalization path.
 func TestPutInstanceHandler_OmittedAnswersNormalizesToEmptyObject(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-instance-omitted-answers"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedInstance(t, db, engagementID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`, `{}`)
+	e := newEnv(t)
+	e.seedInstance(carePlanType, f1Fields, `{}`)
 
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
+	out := reqtest.Expect[plans.InstanceResponse](t, http.MethodPut, e.instanceURL(carePlanType, ""), http.StatusOK, e.signedIn, reqtest.RawJSON([]byte(`{}`)))
 
-	resp := putInstanceRaw(t, srv, session, practiceID, engagementID, carePlanType, []byte(`{}`))
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	out := reqtest.Decode[plans.InstanceResponse](t, resp)
 	if out.Answers == nil || len(out.Answers) != 0 {
 		t.Fatalf("answers = %+v, want a non-nil empty object", out.Answers)
 	}
@@ -417,26 +168,13 @@ func TestPutInstanceHandler_OmittedAnswersNormalizesToEmptyObject(t *testing.T) 
 // PUT, and that a second PUT with a smaller Answers map wipes the answer
 // left out of it -- PUT is a full replacement, not a merge.
 func TestPutInstanceHandler_Success(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-instance-success"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedInstance(t, db, engagementID, carePlanType,
+	e := newEnv(t)
+	e.seedInstance(carePlanType,
 		`[{"id":"name","type":"short_text","label":"Name","order":0},{"id":"consent","type":"checkbox","label":"Consent","order":1}]`,
 		`{}`,
 	)
 
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	firstResp := putInstance(t, srv, session, practiceID, engagementID, carePlanType, plans.PutInstanceRequest{
-		Answers: plans.Answers{nameFieldID: jamieAnswer, "consent": true},
-	})
-	defer firstResp.Body.Close()
-	if firstResp.StatusCode != http.StatusOK {
-		t.Fatalf("first PUT status = %d, want %d", firstResp.StatusCode, http.StatusOK)
-	}
-	firstOut := reqtest.Decode[plans.InstanceResponse](t, firstResp)
+	firstOut := e.putAnswers(carePlanType, plans.Answers{nameFieldID: jamieAnswer, "consent": true})
 	if len(firstOut.Fields) != 2 {
 		t.Fatalf("fields = %+v, want the unchanged 2-field snapshot", firstOut.Fields)
 	}
@@ -444,18 +182,12 @@ func TestPutInstanceHandler_Success(t *testing.T) {
 		t.Fatalf("answers = %+v, want name=Jamie consent=true", firstOut.Answers)
 	}
 
-	getResp := getInstance(t, srv, session, practiceID, engagementID, carePlanType)
-	defer getResp.Body.Close()
-	getOut := reqtest.Decode[plans.InstanceResponse](t, getResp)
+	getOut := e.instance(carePlanType)
 	if getOut.Answers[nameFieldID] != jamieAnswer || getOut.Answers["consent"] != true {
 		t.Fatalf("GET answers after PUT = %+v, want the just-written answers", getOut.Answers)
 	}
 
-	secondResp := putInstance(t, srv, session, practiceID, engagementID, carePlanType, plans.PutInstanceRequest{
-		Answers: plans.Answers{nameFieldID: jamieAnswer},
-	})
-	defer secondResp.Body.Close()
-	secondOut := reqtest.Decode[plans.InstanceResponse](t, secondResp)
+	secondOut := e.putAnswers(carePlanType, plans.Answers{nameFieldID: jamieAnswer})
 	if _, stillPresent := secondOut.Answers["consent"]; stillPresent {
 		t.Fatalf("answers = %+v, want consent dropped by the full-replacement PUT", secondOut.Answers)
 	}
@@ -474,27 +206,13 @@ func TestPutInstanceHandler_RecordsWhichPlanChanged(t *testing.T) {
 		{birthPlanType, "birth_plan_edited"},
 	} {
 		t.Run(tc.planType, func(t *testing.T) {
-			db := testdb.New(t)
-			uid := "put-instance-action-" + tc.planType
-			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-			_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-			seedInstance(t, db, engagementID, tc.planType,
-				`[{"id":"name","type":"short_text","label":"Name","order":0}]`, `{}`)
+			e := newEnv(t)
+			e.seedInstance(tc.planType, nameFields, `{}`)
 
-			srv, session := newPlanServer(t, db, uid)
-			defer srv.Close()
+			e.putAnswers(tc.planType, plans.Answers{nameFieldID: jamieAnswer})
 
-			resp := putInstance(t, srv, session, practiceID, engagementID, tc.planType, plans.PutInstanceRequest{
-				Answers: plans.Answers{nameFieldID: jamieAnswer},
-			})
-			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusOK {
-				t.Fatalf("PUT status = %d, want %d", resp.StatusCode, http.StatusOK)
-			}
-
-			action := testdb.Scalar[string](t, db.Admin, `SELECT action FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1`, engagementID)
-			if action != tc.want {
-				t.Fatalf("activity action = %q, want %q", action, tc.want)
+			if actions := e.activityActions(); len(actions) != 1 || actions[0] != tc.want {
+				t.Fatalf("activity actions = %q, want only %q", actions, tc.want)
 			}
 		})
 	}
@@ -507,37 +225,21 @@ func TestPutInstanceHandler_RecordsWhichPlanChanged(t *testing.T) {
 func TestPutInstanceHandler_ASaveThatChangesNothingRecordsNothing(t *testing.T) {
 	for _, planType := range []string{carePlanType, birthPlanType} {
 		t.Run(planType, func(t *testing.T) {
-			db := testdb.New(t)
-			uid := "put-instance-noop-" + planType
-			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-			_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-			seedInstance(t, db, engagementID, planType,
-				`[{"id":"name","type":"short_text","label":"Name","order":0}]`, `{}`)
-
-			srv, session := newPlanServer(t, db, uid)
-			defer srv.Close()
-
+			e := newEnv(t)
+			e.seedInstance(planType, nameFields, `{}`)
 			edits := func() int {
-				n := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 AND action LIKE '%plan_edited'`, engagementID)
-				return n
-			}
-			save := func(answers plans.Answers) {
-				resp := putInstance(t, srv, session, practiceID, engagementID, planType, plans.PutInstanceRequest{Answers: answers})
-				defer resp.Body.Close()
-				if resp.StatusCode != http.StatusOK {
-					t.Fatalf("PUT status = %d, want %d", resp.StatusCode, http.StatusOK)
-				}
+				return testdb.Scalar[int](t, e.db.Admin, `SELECT count(*) FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 AND action LIKE '%plan_edited'`, e.Engagement.ID)
 			}
 
-			save(plans.Answers{})
+			e.putAnswers(planType, plans.Answers{})
 			if got := edits(); got != 0 {
 				t.Fatalf("a first save of the same empty answers recorded %d edits, want 0", got)
 			}
-			save(plans.Answers{nameFieldID: jamieAnswer})
+			e.putAnswers(planType, plans.Answers{nameFieldID: jamieAnswer})
 			if got := edits(); got != 1 {
 				t.Fatalf("a save that changed an answer recorded %d edits, want 1", got)
 			}
-			save(plans.Answers{nameFieldID: jamieAnswer})
+			e.putAnswers(planType, plans.Answers{nameFieldID: jamieAnswer})
 			if got := edits(); got != 1 {
 				t.Fatalf("a repeat save of the same answers left %d edits, want still 1", got)
 			}
@@ -549,40 +251,23 @@ func TestPutInstanceHandler_ASaveThatChangesNothingRecordsNothing(t *testing.T) 
 // no edit, a save's own response names when and by whom, and a read of
 // the other Plan does not borrow this one's edit.
 func TestInstance_LastEdited(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "instance-last-edited"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	const fields = `[{"id":"name","type":"short_text","label":"Name","order":0}]`
-	seedInstance(t, db, engagementID, carePlanType, fields, `{}`)
-	seedInstance(t, db, engagementID, birthPlanType, fields, `{}`)
+	e := newEnv(t)
+	e.seedInstance(carePlanType, nameFields, `{}`)
+	e.seedInstance(birthPlanType, nameFields, `{}`)
 
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	startedResp := getInstance(t, srv, session, practiceID, engagementID, carePlanType)
-	defer startedResp.Body.Close()
-	if started := decodeInstance(t, startedResp); started.LastEdited != nil {
+	if started := e.instance(carePlanType); started.LastEdited != nil {
 		t.Fatalf("a Plan never saved: lastEdited = %+v, want none", started.LastEdited)
 	}
 
-	savedResp := putInstance(t, srv, session, practiceID, engagementID, carePlanType, plans.PutInstanceRequest{
-		Answers: plans.Answers{nameFieldID: jamieAnswer},
-	})
-	defer savedResp.Body.Close()
-	saved := decodeInstance(t, savedResp)
-	if saved.LastEdited == nil || saved.LastEdited.By != "Test Staff "+uid || saved.LastEdited.At.IsZero() {
+	saved := e.putAnswers(carePlanType, plans.Answers{nameFieldID: jamieAnswer})
+	if saved.LastEdited == nil || saved.LastEdited.By != e.Staff.Name || saved.LastEdited.At.IsZero() {
 		t.Fatalf("the save's response: lastEdited = %+v, want its instant, by the Staff member who saved", saved.LastEdited)
 	}
 
-	againResp := getInstance(t, srv, session, practiceID, engagementID, carePlanType)
-	defer againResp.Body.Close()
-	if again := decodeInstance(t, againResp); again.LastEdited == nil || !again.LastEdited.At.Equal(saved.LastEdited.At) {
+	if again := e.instance(carePlanType); again.LastEdited == nil || !again.LastEdited.At.Equal(saved.LastEdited.At) {
 		t.Errorf("GET after the save: lastEdited = %+v, want the save's", again.LastEdited)
 	}
-	otherResp := getInstance(t, srv, session, practiceID, engagementID, birthPlanType)
-	defer otherResp.Body.Close()
-	if other := decodeInstance(t, otherResp); other.LastEdited != nil {
+	if other := e.instance(birthPlanType); other.LastEdited != nil {
 		t.Errorf("the Birth Plan: lastEdited = %+v, want none -- only the Care Plan was saved", other.LastEdited)
 	}
 }
@@ -601,170 +286,93 @@ func TestPostInstanceHandler_RecordsWhoStartedIt(t *testing.T) {
 		{birthPlanType, carePlanType, "birth_plan_started"},
 	} {
 		t.Run(tc.planType, func(t *testing.T) {
-			db := testdb.New(t)
-			uid := "post-instance-started-" + tc.planType
-			practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-			_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-			const fields = `[{"id":"name","type":"short_text","label":"Name","order":0}]`
-			seedPlanTemplate(t, db, practiceID, tc.planType, fields)
-			seedInstance(t, db, engagementID, tc.other, fields, `{}`)
+			e := newEnv(t)
+			e.seedTemplate(tc.planType, nameFields)
+			e.seedInstance(tc.other, nameFields, `{}`)
 
-			srv, session := newPlanServer(t, db, uid)
-			defer srv.Close()
-
-			postResp := postInstance(t, srv, session, practiceID, engagementID, tc.planType)
-			defer postResp.Body.Close()
-			if postResp.StatusCode != http.StatusCreated {
-				t.Fatalf("POST status = %d, want %d", postResp.StatusCode, http.StatusCreated)
-			}
-			posted := reqtest.Decode[plans.InstanceResponse](t, postResp)
-			wantBy := "Test Staff " + uid
-			if posted.Started == nil || posted.Started.By != wantBy || posted.Started.At.IsZero() {
-				t.Fatalf("POST response: started = %+v, want its instant, by %q", posted.Started, wantBy)
+			posted := e.start(tc.planType, http.StatusCreated)
+			if posted.Started == nil || posted.Started.By != e.Staff.Name || posted.Started.At.IsZero() {
+				t.Fatalf("POST response: started = %+v, want its instant, by %q", posted.Started, e.Staff.Name)
 			}
 			if posted.LastEdited != nil {
 				t.Errorf("POST response: lastEdited = %+v, want none -- starting is not a save", posted.LastEdited)
 			}
 
-			again := postInstance(t, srv, session, practiceID, engagementID, tc.planType)
-			defer again.Body.Close()
-			if again.StatusCode != http.StatusConflict {
-				t.Fatalf("second POST status = %d, want %d", again.StatusCode, http.StatusConflict)
-			}
+			e.start(tc.planType, http.StatusConflict)
 
 			var action, actorID string
 			var rows int
-			if err := db.Admin.QueryRowContext(t.Context(),
+			if err := e.db.Admin.QueryRowContext(t.Context(),
 				`SELECT action, actor_staff_id::text, count(*) OVER () FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1`,
-				engagementID,
+				e.Engagement.ID,
 			).Scan(&action, &actorID, &rows); err != nil {
 				t.Fatalf("query activity: %v", err)
 			}
-			if action != tc.want || actorID != staffID || rows != 1 {
-				t.Fatalf("activity = %q by %q (%d rows), want one %q by %q", action, actorID, rows, tc.want, staffID)
+			if action != tc.want || actorID != e.Staff.ID || rows != 1 {
+				t.Fatalf("activity = %q by %q (%d rows), want one %q by %q", action, actorID, rows, tc.want, e.Staff.ID)
 			}
 
-			savedResp := putInstance(t, srv, session, practiceID, engagementID, tc.planType, plans.PutInstanceRequest{
-				Answers: plans.Answers{nameFieldID: jamieAnswer},
-			})
-			defer savedResp.Body.Close()
-			if saved := decodeInstance(t, savedResp); saved.Started == nil || !saved.Started.At.Equal(posted.Started.At) || saved.LastEdited == nil {
+			if saved := e.putAnswers(tc.planType, plans.Answers{nameFieldID: jamieAnswer}); saved.Started == nil || !saved.Started.At.Equal(posted.Started.At) || saved.LastEdited == nil {
 				t.Errorf("the save's response: started = %+v, lastEdited = %+v, want the start kept beside the save", saved.Started, saved.LastEdited)
 			}
 
-			getResp := getInstance(t, srv, session, practiceID, engagementID, tc.planType)
-			defer getResp.Body.Close()
-			if got := decodeInstance(t, getResp); got.Started == nil || !got.Started.At.Equal(posted.Started.At) {
+			if got := e.instance(tc.planType); got.Started == nil || !got.Started.At.Equal(posted.Started.At) {
 				t.Errorf("GET: started = %+v, want the POST's", got.Started)
 			}
-			otherResp := getInstance(t, srv, session, practiceID, engagementID, tc.other)
-			defer otherResp.Body.Close()
-			if other := decodeInstance(t, otherResp); other.Started != nil {
+			if other := e.instance(tc.other); other.Started != nil {
 				t.Errorf("the %s: started = %+v, want none -- only the %s was started here", tc.other, other.Started, tc.planType)
 			}
 		})
 	}
 }
 
-// decodeInstance reads an InstanceResponse off a 200 body; the caller
-// closes it.
-func decodeInstance(t *testing.T, resp *http.Response) plans.InstanceResponse {
-	t.Helper()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	out := reqtest.Decode[plans.InstanceResponse](t, resp)
-	return out
-}
-
 // TestPlanTemplateEditDoesNotMutateExistingInstance is the AC's centerpiece:
 // editing a Practice's Plan Template after a Plan Instance already exists
 // must never change that instance's stored field snapshot.
 func TestPlanTemplateEditDoesNotMutateExistingInstance(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "snapshot-owner"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedPlanTemplate(t, db, practiceID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	e.seedTemplate(carePlanType, f1Fields)
+	e.start(carePlanType, http.StatusCreated)
 
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	postResp := postInstance(t, srv, session, practiceID, engagementID, carePlanType)
-	defer postResp.Body.Close()
-	if postResp.StatusCode != http.StatusCreated {
-		t.Fatalf("POST instance status = %d, want %d", postResp.StatusCode, http.StatusCreated)
-	}
-
-	putResp := putTemplate(t, srv, session, practiceID, carePlanType, plans.TemplateResponse{Fields: []plans.Field{
+	e.putTemplate(carePlanType, []plans.Field{
 		{ID: "f1", Type: shortTextType, Label: testFieldLabel},
 		{ID: "f2", Type: "long_text", Label: "Notes added after the plan was created"},
-	}})
-	defer putResp.Body.Close()
-	if putResp.StatusCode != http.StatusOK {
-		t.Fatalf("PUT template status = %d, want %d", putResp.StatusCode, http.StatusOK)
-	}
+	}, http.StatusOK)
 
-	getResp := getInstance(t, srv, session, practiceID, engagementID, carePlanType)
-	defer getResp.Body.Close()
-	out := reqtest.Decode[plans.InstanceResponse](t, getResp)
+	out := e.instance(carePlanType)
 	if len(out.Fields) != 1 || out.Fields[0].ID != "f1" {
 		t.Fatalf("instance fields = %+v, want the original 1-field snapshot untouched by the later template edit", out.Fields)
 	}
 }
 
-// TestPutInstanceHandler_AnswersChangeClearsClientAcknowledgment is
-// #301's decision for the build: a Staff edit that actually changes the
-// stored answers resets the Client's acknowledgment, so Staff see
-// "not reviewed since last edit" until she confirms again.
-func TestPutInstanceHandler_AnswersChangeClearsClientAcknowledgment(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-instance-clears-ack"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedInstance(t, db, engagementID, birthPlanType,
-		`[{"id":"name","type":"short_text","label":"Name","order":0}]`, `{"name":"Jamie"}`,
-	)
-	setAcknowledged(t, db, engagementID, birthPlanType)
-
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := putInstance(t, srv, session, practiceID, engagementID, birthPlanType, plans.PutInstanceRequest{
-		Answers: plans.Answers{nameFieldID: "Alex"},
-	})
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	out := reqtest.Decode[plans.InstanceResponse](t, resp)
-	if out.ClientAcknowledgedAt != nil {
-		t.Fatalf("clientAcknowledgedAt = %v, want nil after an answers-changing edit", out.ClientAcknowledgedAt)
+// TestPutInstanceHandler_ClientAcknowledgmentFollowsTheAnswers is #301's
+// decision for the build: a Staff edit that actually changes the stored
+// answers resets the Client's acknowledgment, so Staff see "not reviewed
+// since last edit" until she confirms again. The reset is conditioned on
+// the answers actually differing, not on the PUT event itself --
+// re-sending the same answers (a retry, or Staff saving without changing
+// anything) leaves an existing acknowledgment in place.
+func TestPutInstanceHandler_ClientAcknowledgmentFollowsTheAnswers(t *testing.T) {
+	cases := []struct {
+		name        string
+		answer      string
+		wantCleared bool
+	}{
+		{"answers change", "Alex", true},
+		{"answers unchanged", jamieAnswer, false},
 	}
-}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t)
+			e.seedInstance(birthPlanType, nameFields, `{"name":"Jamie"}`)
+			e.setAcknowledged(birthPlanType)
 
-// TestPutInstanceHandler_UnchangedAnswersKeepsClientAcknowledgment
-// proves the reset is conditioned on the answers actually differing, not
-// on the PUT event itself -- re-sending the same answers (a retry, or
-// Staff saving without changing anything) leaves an existing
-// acknowledgment in place.
-func TestPutInstanceHandler_UnchangedAnswersKeepsClientAcknowledgment(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-instance-keeps-ack"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedInstance(t, db, engagementID, birthPlanType,
-		`[{"id":"name","type":"short_text","label":"Name","order":0}]`, `{"name":"Jamie"}`,
-	)
-	setAcknowledged(t, db, engagementID, birthPlanType)
+			out := e.putAnswers(birthPlanType, plans.Answers{nameFieldID: tc.answer})
 
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := putInstance(t, srv, session, practiceID, engagementID, birthPlanType, plans.PutInstanceRequest{
-		Answers: plans.Answers{nameFieldID: jamieAnswer},
-	})
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	out := reqtest.Decode[plans.InstanceResponse](t, resp)
-	if out.ClientAcknowledgedAt == nil {
-		t.Fatalf("clientAcknowledgedAt = nil, want the pre-existing acknowledgment kept since answers didn't change")
+			if cleared := out.ClientAcknowledgedAt == nil; cleared != tc.wantCleared {
+				t.Fatalf("clientAcknowledgedAt = %v, want it cleared = %v", out.ClientAcknowledgedAt, tc.wantCleared)
+			}
+		})
 	}
 }
 
@@ -772,20 +380,11 @@ func TestPutInstanceHandler_UnchangedAnswersKeepsClientAcknowledgment(t *testing
 // visibility half of #301's AC4: Staff can see, on their own read, that
 // the Client has reviewed her Birth Plan.
 func TestGetInstanceHandler_ReflectsClientAcknowledgment(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-instance-shows-ack"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedInstance(t, db, engagementID, birthPlanType, `[]`, `{}`)
-	setAcknowledged(t, db, engagementID, birthPlanType)
+	e := newEnv(t)
+	e.seedInstance(birthPlanType, `[]`, `{}`)
+	e.setAcknowledged(birthPlanType)
 
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getInstance(t, srv, session, practiceID, engagementID, birthPlanType)
-	defer resp.Body.Close()
-	out := reqtest.Decode[plans.InstanceResponse](t, resp)
-	if out.ClientAcknowledgedAt == nil {
+	if out := e.instance(birthPlanType); out.ClientAcknowledgedAt == nil {
 		t.Fatalf("clientAcknowledgedAt = nil, want Staff's own read to show the Client's acknowledgment")
 	}
 }

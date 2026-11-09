@@ -68,16 +68,8 @@ func TestGetSignedContractPDFHandler_Success(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
 	e.seedSignedAndStored()
 
-	resp := reqtest.Do(t, http.MethodGet, e.contractURL("/pdf"), e.signedIn)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	if ct := resp.Header.Get("Content-Type"); ct != "application/pdf" {
-		t.Fatalf("Content-Type = %q, want application/pdf", ct)
-	}
-	body := reqtest.ReadBody(t, resp)
-	if string(body) != signedPDFBytes {
-		t.Fatalf("body = %q, want %q", body, signedPDFBytes)
+	if pdf := reqtest.ExpectPDF(t, http.MethodGet, e.contractURL("/pdf"), e.signedIn); string(pdf.Body) != signedPDFBytes {
+		t.Fatalf("body = %q, want %q", pdf.Body, signedPDFBytes)
 	}
 }
 
@@ -140,13 +132,7 @@ func TestClientGetSignedContractPDFHandler_Success(t *testing.T) {
 	e := newEnv(t, withPortalLogin())
 	e.seedSignedAndStored()
 
-	resp := reqtest.Do(t, http.MethodGet, e.portalURL("/pdf"), e.asClient)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	if ct := resp.Header.Get("Content-Type"); ct != "application/pdf" {
-		t.Fatalf("Content-Type = %q, want application/pdf", ct)
-	}
+	reqtest.ExpectPDF(t, http.MethodGet, e.portalURL("/pdf"), e.asClient)
 }
 
 // TestClientGetSignedContractPDFHandler_Unauthenticated proves a request

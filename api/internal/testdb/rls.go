@@ -84,3 +84,46 @@ func Column[T any](t *testing.T, q Querier, query string, args ...any) []T {
 	}
 	return out
 }
+
+// RowsAffected runs a write on tx and returns how many rows it touched,
+// for a test that proves Row-Level Security hid the rows from it.
+func RowsAffected(t *testing.T, tx *sql.Tx, query string, args ...any) int64 {
+	t.Helper()
+	result, err := tx.ExecContext(t.Context(), query, args...)
+	if err != nil {
+		// coverage:ignore reason: a test helper's own failure path, only reached when the fixture itself is broken
+		t.Fatalf("testdb: exec %q: %v", query, err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		// coverage:ignore reason: a test helper's own failure path, only reached when the fixture itself is broken
+		t.Fatalf("testdb: rows affected by %q: %v", query, err)
+	}
+	return rows
+}
+
+// RequireFailsClosed proves table's policy shows App no row while no
+// session variable is set.
+func RequireFailsClosed(t *testing.T, db *DB, table string) {
+	t.Helper()
+	if count := Scalar[int](t, db.App, `SELECT count(*) FROM `+table); count != 0 {
+		// coverage:ignore reason: the failure branch ends the calling test by design; exercising it would need a testing.T substitute this repo has no precedent for
+		t.Fatalf("%s: %d rows visible with no session variable set, want 0", table, count)
+	}
+}
+
+// ReadAs runs a reader that answers (value, found, err) for subjectID in a
+// transaction scoped by who, and returns what it read. It rolls the
+// transaction back when it returns, so a test can read again after each
+// change it makes, as a different state of the same Client.
+func ReadAs[T any](t *testing.T, db *DB, who SessionVar, subjectID string, read func(context.Context, *sql.Tx, string) (T, bool, error)) (T, bool) {
+	t.Helper()
+	tx := db.BeginAs(t, who)
+	defer func() { _ = tx.Rollback() }()
+	value, found, err := read(t.Context(), tx, subjectID)
+	if err != nil {
+		// coverage:ignore reason: a test helper's own failure path, only reached when the fixture itself is broken
+		t.Fatalf("testdb: read as %s: %v", who.Name, err)
+	}
+	return value, found
+}

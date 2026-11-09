@@ -1,21 +1,16 @@
 package plans_test
 
 import (
-	"io"
 	"net/http"
-	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/clock"
-	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/pdftext"
 	"doula-cloud/api/internal/plans"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -30,71 +25,64 @@ var mastheadNow = time.Date(2026, time.October, 28, 2, 30, 0, 0, time.UTC)
 
 const mastheadDay = "2026-10-27"
 
-// mastheadDoula is the Doula seedMastheadClient puts on every masthead
-// test's Engagement, so the Doula row has a person to name (#2355).
+// mastheadDoula is the Doula newMastheadEnv puts on every masthead test's
+// Engagement, so the Doula row has a person to name (#2355).
 const mastheadDoula = "Priya Raman"
 
-// newClockedServer mounts the plans routes behind clock.Middleware fixed at
-// now, so a write's changed_at is the request clock's instant, not the
-// database's.
-func newClockedServer(t *testing.T, db *testdb.DB, uid string, now time.Time) (srv *httptest.Server, session string) {
+// newUnstaffedMastheadEnv is an Engagement at mastheadPractice whose Client
+// can sign in and whose legal name (given and family), first name
+// (preferred) and full name all differ, with no Doula on it yet.
+func newUnstaffedMastheadEnv(t *testing.T, opts ...envOption) *env {
 	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	plans.Mount(g, ir, db.App)
-	return httptest.NewServer(clock.Middleware(func() time.Time { return now })(mux)), authntest.SeedSession(t, db.App, uid)
+	opts = append([]envOption{withPractice(fixture.PracticeName(mastheadPractice)), withClient(fixture.ClientName("Johanna"), fixture.WithPortalLogin())}, opts...)
+	e := newEnv(t, opts...)
+	testdb.NameClient(t, e.db, e.Engagement.Client.ID, "Hannah", "Sorensen")
+	return e
 }
 
-// seedMastheadClient seeds a Client whose legal name (given and family),
-// first name (preferred) and full name all differ, at mastheadPractice,
-// with mastheadDoula on her Engagement.
-func seedMastheadClient(t *testing.T, db *testdb.DB, practiceID string) (clientID, engagementID string) {
+// newMastheadEnv is newUnstaffedMastheadEnv with mastheadDoula on the
+// Engagement.
+func newMastheadEnv(t *testing.T, opts ...envOption) *env {
 	t.Helper()
-	clientID, engagementID = seedUnstaffedMastheadClient(t, db, practiceID)
-	attachMastheadDoula(t, db, practiceID, engagementID, "masthead-doula-priya", mastheadDoula)
-	return clientID, engagementID
+	e := newUnstaffedMastheadEnv(t, opts...)
+	e.attachDoula(mastheadDoula)
+	return e
 }
 
-// seedUnstaffedMastheadClient is seedMastheadClient with no Doula on the
-// Engagement yet.
-func seedUnstaffedMastheadClient(t *testing.T, db *testdb.DB, practiceID string) (clientID, engagementID string) {
-	t.Helper()
-	clientID, engagementID = testdb.SeedNamedEngagement(t, db, practiceID, "Johanna", "hannah@example.com")
-	testdb.NameClient(t, db, clientID, "Hannah", "Sorensen")
-	return clientID, engagementID
+// attachDoula seeds a Doula named name at the Practice and puts her on the
+// Engagement with an open, granted Attachment.
+func (e *env) attachDoula(name string) {
+	e.t.Helper()
+	testdb.SeedGrantedAttachment(e.t, e.db, e.Engagement.ID, e.staff(fixture.StaffName(name)).ID)
 }
 
-// attachMastheadDoula seeds a Doula named name at practiceID and puts her
-// on engagementID with an open, granted Attachment.
-func attachMastheadDoula(t *testing.T, db *testdb.DB, practiceID, engagementID, uid, name string) {
-	t.Helper()
-	staffID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, uid, name, []string{doulaRole}, "employee")
-	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
+// staff is another Staff member at the Practice.
+func (e *env) staff(opts ...fixture.StaffOption) fixture.StaffRecord {
+	e.t.Helper()
+	return fixture.Staff(e.t, e.db, e.Practice, opts...)
 }
 
-// setChangedAt pins a seeded Plan Instance's changed_at, standing in for
-// the save that last changed it.
-func setChangedAt(t *testing.T, db *testdb.DB, engagementID, planType string, at time.Time) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE plan_instances SET changed_at = $3 WHERE engagement_id = $1 AND plan_type = $2`,
-		engagementID, planType, at,
-	); err != nil {
-		t.Fatalf("set changed_at: %v", err)
-	}
+// setChangedAt pins the Engagement's seeded Plan Instance's changed_at,
+// standing in for the save that last changed it.
+func (e *env) setChangedAt(planType string, at time.Time) {
+	e.t.Helper()
+	e.exec(`UPDATE plan_instances SET changed_at = $3 WHERE engagement_id = $1 AND plan_type = $2`, e.Engagement.ID, planType, at)
 }
 
-func changedAt(t *testing.T, db *testdb.DB, engagementID, planType string) time.Time {
-	t.Helper()
-	at := testdb.Scalar[time.Time](t, db.Admin, `SELECT changed_at FROM plan_instances WHERE engagement_id = $1 AND plan_type = $2`, engagementID, planType)
-	return at
+func (e *env) changedAt(planType string) time.Time {
+	e.t.Helper()
+	return testdb.Scalar[time.Time](e.t, e.db.Admin, `SELECT changed_at FROM plan_instances WHERE engagement_id = $1 AND plan_type = $2`, e.Engagement.ID, planType)
 }
 
-func decodeMastheadBody(t *testing.T, resp *http.Response) plans.InstanceResponse {
-	t.Helper()
-	out := reqtest.Decode[plans.InstanceResponse](t, resp)
-	return out
+// seedMastheadInstance starts the Engagement's planType Plan, last changed
+// at mastheadNow.
+func (e *env) seedMastheadInstance(planType string) {
+	e.t.Helper()
+	e.seedInstance(planType,
+		`[{"id":"place","type":"single_select","label":"Planned birth location","options":["Home","Hospital"],"order":0}]`,
+		`{"place":"Hospital"}`,
+	)
+	e.setChangedAt(planType, mastheadNow)
 }
 
 func wantMasthead(t *testing.T, got *plans.Masthead) {
@@ -115,25 +103,15 @@ func wantMastheadDoulas(t *testing.T, got *plans.Masthead, doulas ...string) {
 	}
 }
 
-// wantPDFNamesThePlan reads a Birth Plan PDF's text back and asserts the
-// facts a stranger in scrubs needs (#2209, #2355): whose it is (her legal
-// name, the document name ADR-0017 keeps), who her Doula is, whose
-// Practice, and when it last changed, as a day in the Practice's zone.
-func wantPDFNamesThePlan(t *testing.T, resp *http.Response) {
-	t.Helper()
-	wantPDFMasthead(t, resp, "Doula: "+mastheadDoula)
-}
-
 // wantPDFMasthead asserts a Birth Plan PDF opens with exactly these
 // lines: her name, then doulaLines, then the Practice and the day, and
-// then its first question.
-func wantPDFMasthead(t *testing.T, resp *http.Response, doulaLines ...string) {
+// then its first question. It reads the PDF's text back for the facts a
+// stranger in scrubs needs (#2209, #2355): whose it is (her legal name,
+// the document name ADR-0017 keeps), who her Doula is, whose Practice,
+// and when it last changed, as a day in the Practice's zone.
+func wantPDFMasthead(t *testing.T, pdf reqtest.PDF, doulaLines ...string) {
 	t.Helper()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read body: %v", err)
-	}
-	lines := strings.Split(pdftext.Text(body), "\n")
+	lines := strings.Split(pdftext.Text(pdf.Body), "\n")
 	want := append(append([]string{"Birth Plan", "Name: Johanna Sorensen"}, doulaLines...),
 		"Practice: "+mastheadPractice, "Last changed: Oct 27, 2026", "Planned birth location")
 	if len(lines) < len(want) || !reflect.DeepEqual(lines[:len(want)], want) {
@@ -141,154 +119,75 @@ func wantPDFMasthead(t *testing.T, resp *http.Response, doulaLines ...string) {
 	}
 }
 
-func seedMastheadInstance(t *testing.T, db *testdb.DB, engagementID, planType string) {
-	t.Helper()
-	seedInstance(t, db, engagementID, planType,
-		`[{"id":"place","type":"single_select","label":"Planned birth location","options":["Home","Hospital"],"order":0}]`,
-		`{"place":"Hospital"}`,
-	)
-	setChangedAt(t, db, engagementID, planType, mastheadNow)
-}
+// TestBirthPlanReads_CarryTheirMasthead proves every read of the Birth Plan
+// names the plan the way its PDF does: the Staff read the Practice-side
+// print page renders, the portal read from the Client's own transaction,
+// and the acknowledgment's response, which replaces the page's plan in
+// place and so keeps the masthead the page is showing.
+func TestBirthPlanReads_CarryTheirMasthead(t *testing.T) {
+	reads := []struct {
+		name   string
+		method string
+		url    func(*env) string
+		as     func(*env) reqtest.Option
+	}{
+		{"Staff read", http.MethodGet, func(e *env) string { return e.instanceURL(birthPlanType, "") }, func(e *env) reqtest.Option { return e.signedIn }},
+		{"portal read", http.MethodGet, func(e *env) string { return e.portalURL("") }, func(e *env) reqtest.Option { return e.asClient }},
+		{"acknowledgment", http.MethodPost, func(e *env) string { return e.portalURL("/acknowledge") }, func(e *env) reqtest.Option { return e.asClient }},
+	}
+	for _, read := range reads {
+		t.Run(read.name, func(t *testing.T) {
+			e := newMastheadEnv(t)
+			e.seedMastheadInstance(birthPlanType)
 
-// TestGetInstanceHandler_BirthPlanCarriesItsMasthead proves the Staff read
-// the Practice-side print page renders names the plan the way its PDF does.
-func TestGetInstanceHandler_BirthPlanCarriesItsMasthead(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "masthead-staff-get"
-	practiceID := testdb.SeedPractice(t, db, mastheadPractice)
-	testdb.SeedStaffAtPractice(t, db, practiceID, uid, []string{doulaRole}, "employee")
-	_, engagementID := seedMastheadClient(t, db, practiceID)
-	seedMastheadInstance(t, db, engagementID, birthPlanType)
+			out := reqtest.Expect[plans.InstanceResponse](t, read.method, read.url(e), http.StatusOK, read.as(e))
 
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getInstance(t, srv, session, practiceID, engagementID, birthPlanType)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	wantMasthead(t, decodeMastheadBody(t, resp).Masthead)
+			wantMasthead(t, out.Masthead)
+		})
+	}
 }
 
 // TestGetInstanceHandler_CarePlanHasNoMasthead proves the masthead stays a
 // Birth Plan fact (#306's scope): the Care Plan is never printed for anyone.
 func TestGetInstanceHandler_CarePlanHasNoMasthead(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "masthead-staff-care-plan"
-	practiceID := testdb.SeedPractice(t, db, mastheadPractice)
-	testdb.SeedStaffAtPractice(t, db, practiceID, uid, []string{doulaRole}, "employee")
-	_, engagementID := seedMastheadClient(t, db, practiceID)
-	seedMastheadInstance(t, db, engagementID, carePlanType)
+	e := newMastheadEnv(t)
+	e.seedMastheadInstance(carePlanType)
 
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getInstance(t, srv, session, practiceID, engagementID, carePlanType)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	if got := decodeMastheadBody(t, resp).Masthead; got != nil {
+	if got := e.instance(carePlanType).Masthead; got != nil {
 		t.Fatalf("masthead = %+v, want none on a Care Plan", got)
 	}
 }
 
-// TestClientGetBirthPlanHandler_CarriesItsMasthead proves the portal read
-// names the plan the same way, from the Client's own transaction.
-func TestClientGetBirthPlanHandler_CarriesItsMasthead(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "masthead-client-get"
-	practiceID := testdb.SeedPractice(t, db, mastheadPractice)
-	clientID, engagementID := seedMastheadClient(t, db, practiceID)
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
-	seedMastheadInstance(t, db, engagementID, birthPlanType)
+// TestBirthPlanPDF_NamesThePlan is the PDF half of #2209, from the
+// Practice side and from the portal.
+func TestBirthPlanPDF_NamesThePlan(t *testing.T) {
+	for _, who := range []string{"Staff", "Client"} {
+		t.Run(who, func(t *testing.T) {
+			e := newMastheadEnv(t)
+			e.seedMastheadInstance(birthPlanType)
+			url, session := e.instanceURL(birthPlanType, "/pdf"), e.signedIn
+			if who == "Client" {
+				url, session = e.portalURL("/pdf"), e.asClient
+			}
 
-	srv, session := newPortalServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := getClientBirthPlan(t, srv, session, engagementID)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	wantMasthead(t, decodeMastheadBody(t, resp).Masthead)
-}
-
-// TestClientAcknowledgeBirthPlanHandler_CarriesItsMasthead proves the
-// acknowledgment's response, which replaces the page's plan in place, keeps
-// the masthead the page is showing.
-func TestClientAcknowledgeBirthPlanHandler_CarriesItsMasthead(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "masthead-client-ack"
-	practiceID := testdb.SeedPractice(t, db, mastheadPractice)
-	clientID, engagementID := seedMastheadClient(t, db, practiceID)
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
-	seedMastheadInstance(t, db, engagementID, birthPlanType)
-
-	srv, session := newPortalServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := postAcknowledgeBirthPlan(t, srv, session, engagementID)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	wantMasthead(t, decodeMastheadBody(t, resp).Masthead)
-}
-
-// TestGetBirthPlanPDFHandler_NamesThePlan is the PDF half of #2209 from the
-// Practice side.
-func TestGetBirthPlanPDFHandler_NamesThePlan(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "masthead-staff-pdf"
-	practiceID := testdb.SeedPractice(t, db, mastheadPractice)
-	testdb.SeedStaffAtPractice(t, db, practiceID, uid, []string{doulaRole}, "employee")
-	_, engagementID := seedMastheadClient(t, db, practiceID)
-	seedMastheadInstance(t, db, engagementID, birthPlanType)
-
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getInstancePDF(t, srv.Client(), srv.URL+instancePath(practiceID, engagementID, birthPlanType)+"/pdf", session)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	wantPDFNamesThePlan(t, resp)
-}
-
-// TestClientGetBirthPlanPDFHandler_NamesThePlan is the PDF half of #2209
-// from the portal.
-func TestClientGetBirthPlanPDFHandler_NamesThePlan(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "masthead-client-pdf"
-	practiceID := testdb.SeedPractice(t, db, mastheadPractice)
-	clientID, engagementID := seedMastheadClient(t, db, practiceID)
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
-	seedMastheadInstance(t, db, engagementID, birthPlanType)
-
-	srv, session := newPortalServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := getInstancePDF(t, http.DefaultClient, srv.URL+"/api/portal/engagements/"+engagementID+"/birth-plan/pdf", session)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	wantPDFNamesThePlan(t, resp)
+			wantPDFMasthead(t, reqtest.ExpectPDF(t, http.MethodGet, url, session), "Doula: "+mastheadDoula)
+		})
+	}
 }
 
 // TestPostInstanceHandler_ChangedAtIsTheRequestClock proves a new plan's
 // "last changed" is the instant it was started, read through clock (#773),
 // not the database's now().
 func TestPostInstanceHandler_ChangedAtIsTheRequestClock(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "masthead-post-clock"
-	practiceID := testdb.SeedPractice(t, db, mastheadPractice)
-	testdb.SeedStaffAtPractice(t, db, practiceID, uid, []string{doulaRole}, "employee")
-	_, engagementID := seedMastheadClient(t, db, practiceID)
-	seedPlanTemplate(t, db, practiceID, birthPlanType,
-		`[{"id":"place","type":"short_text","label":"Planned birth location","order":0}]`)
+	e := newMastheadEnv(t, atInstant(mastheadNow))
+	e.seedTemplate(birthPlanType, `[{"id":"place","type":"short_text","label":"Planned birth location","order":0}]`)
 
-	srv, session := newClockedServer(t, db, uid, mastheadNow)
-	defer srv.Close()
+	out := e.start(birthPlanType, http.StatusCreated)
 
-	resp := postInstance(t, srv, session, practiceID, engagementID, birthPlanType)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusCreated)
-	if got := changedAt(t, db, engagementID, birthPlanType); !got.Equal(mastheadNow) {
+	if got := e.changedAt(birthPlanType); !got.Equal(mastheadNow) {
 		t.Fatalf("changed_at = %v, want %v", got, mastheadNow)
 	}
-	wantMasthead(t, decodeMastheadBody(t, resp).Masthead)
+	wantMasthead(t, out.Masthead)
 }
 
 // TestPutInstanceHandler_ChangedAtMovesOnlyWhenAnAnswerChanges proves the
@@ -296,123 +195,48 @@ func TestPostInstanceHandler_ChangedAtIsTheRequestClock(t *testing.T) {
 // Client's acknowledgment (#301): a real change moves it to the request
 // clock, and a save that changes nothing leaves it where it was.
 func TestPutInstanceHandler_ChangedAtMovesOnlyWhenAnAnswerChanges(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "masthead-put-clock"
-	practiceID := testdb.SeedPractice(t, db, mastheadPractice)
-	testdb.SeedStaffAtPractice(t, db, practiceID, uid, []string{doulaRole}, "employee")
-	_, engagementID := seedMastheadClient(t, db, practiceID)
-	seedMastheadInstance(t, db, engagementID, birthPlanType)
+	e := newMastheadEnv(t, atInstant(mastheadNow))
+	e.seedMastheadInstance(birthPlanType)
 	earlier := mastheadNow.Add(-72 * time.Hour)
-	setChangedAt(t, db, engagementID, birthPlanType, earlier)
+	e.setChangedAt(birthPlanType, earlier)
 
-	srv, session := newClockedServer(t, db, uid, mastheadNow)
-	defer srv.Close()
-
-	unchanged := putInstance(t, srv, session, practiceID, engagementID, birthPlanType,
-		plans.PutInstanceRequest{Answers: plans.Answers{"place": "Hospital"}})
-	defer unchanged.Body.Close()
-	if unchanged.StatusCode != http.StatusOK {
-		t.Fatalf("unchanged save status = %d, want %d", unchanged.StatusCode, http.StatusOK)
-	}
-	if got := changedAt(t, db, engagementID, birthPlanType); !got.Equal(earlier) {
+	e.putAnswers(birthPlanType, plans.Answers{"place": hospital})
+	if got := e.changedAt(birthPlanType); !got.Equal(earlier) {
 		t.Fatalf("after a save that changed nothing, changed_at = %v, want %v", got, earlier)
 	}
 
-	changed := putInstance(t, srv, session, practiceID, engagementID, birthPlanType,
-		plans.PutInstanceRequest{Answers: plans.Answers{"place": "Home"}})
-	defer changed.Body.Close()
-	if changed.StatusCode != http.StatusOK {
-		t.Fatalf("changed save status = %d, want %d", changed.StatusCode, http.StatusOK)
-	}
-	if got := changedAt(t, db, engagementID, birthPlanType); !got.Equal(mastheadNow) {
+	changed := e.putAnswers(birthPlanType, plans.Answers{"place": "Home"})
+	if got := e.changedAt(birthPlanType); !got.Equal(mastheadNow) {
 		t.Fatalf("after a real change, changed_at = %v, want %v", got, mastheadNow)
 	}
-	wantMasthead(t, decodeMastheadBody(t, changed).Masthead)
+	wantMasthead(t, changed.Masthead)
 }
 
-// TestGetInstanceHandler_MastheadWithNoDoulaNamesOnlyThePractice proves an
-// Engagement nobody is on yet names no Doula (#2355): the Practice row is
-// the masthead's only answer to "whose plan is this, from where".
-func TestGetInstanceHandler_MastheadWithNoDoulaNamesOnlyThePractice(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "masthead-staff-no-doula"
-	practiceID := testdb.SeedPractice(t, db, mastheadPractice)
-	testdb.SeedStaffAtPractice(t, db, practiceID, uid, []string{doulaRole}, "employee")
-	_, engagementID := seedUnstaffedMastheadClient(t, db, practiceID)
-	seedMastheadInstance(t, db, engagementID, birthPlanType)
+// TestMasthead_WithNoDoulaNamesOnlyThePractice proves an Engagement nobody
+// is on yet names no Doula (#2355): the Practice row is the masthead's only
+// answer to "whose plan is this, from where", on the Staff read and, with
+// no Doula line at all, on the portal PDF.
+func TestMasthead_WithNoDoulaNamesOnlyThePractice(t *testing.T) {
+	e := newUnstaffedMastheadEnv(t)
+	e.seedMastheadInstance(birthPlanType)
 
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getInstance(t, srv, session, practiceID, engagementID, birthPlanType)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	wantMastheadDoulas(t, decodeMastheadBody(t, resp).Masthead)
+	wantMastheadDoulas(t, e.instance(birthPlanType).Masthead)
+	wantPDFMasthead(t, reqtest.ExpectPDF(t, http.MethodGet, e.portalURL("/pdf"), e.asClient))
 }
 
-// TestClientGetBirthPlanPDFHandler_MastheadWithNoDoulaNamesOnlyThePractice
-// is the portal PDF with nobody on the Engagement: no Doula line at all.
-func TestClientGetBirthPlanPDFHandler_MastheadWithNoDoulaNamesOnlyThePractice(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "masthead-client-pdf-no-doula"
-	practiceID := testdb.SeedPractice(t, db, mastheadPractice)
-	clientID, engagementID := seedUnstaffedMastheadClient(t, db, practiceID)
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
-	seedMastheadInstance(t, db, engagementID, birthPlanType)
+// TestMasthead_NamesEveryDoulaOnTheEngagement proves the portal names who
+// the Engagement hub names (#2355): every Doula holding an open, granted
+// Attachment, in the order she was put on it. One whose Attachment ended,
+// or whose only Attachment is accrued, is not on it. The Practice-side PDF
+// carries them as one "Doulas" line, the way the Engagement hub labels
+// them.
+func TestMasthead_NamesEveryDoulaOnTheEngagement(t *testing.T) {
+	e := newMastheadEnv(t)
+	e.attachDoula("Lena Vasquez")
+	testdb.SeedAttachment(e.t, e.db, e.Engagement.ID, e.staff(fixture.StaffName("Ended Doula")).ID, "granted", true)
+	testdb.SeedAttachment(e.t, e.db, e.Engagement.ID, e.staff(fixture.StaffName("Accrued Doula")).ID, "accrued", false)
+	e.seedMastheadInstance(birthPlanType)
 
-	srv, session := newPortalServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := getInstancePDF(t, http.DefaultClient, srv.URL+"/api/portal/engagements/"+engagementID+"/birth-plan/pdf", session)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	wantPDFMasthead(t, resp)
-}
-
-// TestClientGetBirthPlanHandler_MastheadNamesEveryDoulaOnTheEngagement
-// proves the portal names who the Engagement hub names (#2355): every Doula
-// holding an open, granted Attachment, in the order she was put on it. One
-// whose Attachment ended, or whose only Attachment is accrued, is not on
-// it.
-func TestClientGetBirthPlanHandler_MastheadNamesEveryDoulaOnTheEngagement(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "masthead-client-two-doulas"
-	practiceID := testdb.SeedPractice(t, db, mastheadPractice)
-	clientID, engagementID := seedMastheadClient(t, db, practiceID)
-	attachMastheadDoula(t, db, practiceID, engagementID, "masthead-doula-lena", "Lena Vasquez")
-	ended := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "masthead-doula-ended", "Ended Doula", []string{doulaRole}, "employee")
-	testdb.SeedAttachment(t, db, engagementID, ended, "granted", true)
-	accrued := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "masthead-doula-accrued", "Accrued Doula", []string{doulaRole}, "employee")
-	testdb.SeedAttachment(t, db, engagementID, accrued, "accrued", false)
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
-	seedMastheadInstance(t, db, engagementID, birthPlanType)
-
-	srv, session := newPortalServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := getClientBirthPlan(t, srv, session, engagementID)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	wantMastheadDoulas(t, decodeMastheadBody(t, resp).Masthead, mastheadDoula, "Lena Vasquez")
-}
-
-// TestGetBirthPlanPDFHandler_MastheadNamesEveryDoulaOnTheEngagement is the
-// Practice-side PDF with two Doulas on the Engagement: one "Doulas" line,
-// the way the Engagement hub labels them.
-func TestGetBirthPlanPDFHandler_MastheadNamesEveryDoulaOnTheEngagement(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "masthead-staff-pdf-two-doulas"
-	practiceID := testdb.SeedPractice(t, db, mastheadPractice)
-	testdb.SeedStaffAtPractice(t, db, practiceID, uid, []string{doulaRole}, "employee")
-	_, engagementID := seedMastheadClient(t, db, practiceID)
-	attachMastheadDoula(t, db, practiceID, engagementID, "masthead-doula-lena", "Lena Vasquez")
-	seedMastheadInstance(t, db, engagementID, birthPlanType)
-
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getInstancePDF(t, srv.Client(), srv.URL+instancePath(practiceID, engagementID, birthPlanType)+"/pdf", session)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	wantPDFMasthead(t, resp, "Doulas: "+mastheadDoula+", Lena Vasquez")
+	wantMastheadDoulas(t, e.birthPlan().Masthead, mastheadDoula, "Lena Vasquez")
+	wantPDFMasthead(t, reqtest.ExpectPDF(t, http.MethodGet, e.instanceURL(birthPlanType, "/pdf"), e.signedIn), "Doulas: "+mastheadDoula+", Lena Vasquez")
 }

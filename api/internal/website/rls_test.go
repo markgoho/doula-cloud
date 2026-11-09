@@ -3,6 +3,7 @@ package website_test
 import (
 	"testing"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -38,17 +39,12 @@ func seedWebsiteEvent(t *testing.T, db *testdb.DB, practiceID, actorStaffID stri
 // row when app.current_practice_id is unset -- fail closed, not open.
 func TestRLS_FailsClosedWithNoSessionVarSet(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Rochester Doulas")
-	staffID := testdb.SeedStaff(t, db, "rls-closed")
-	seedWebsite(t, db, practiceID, "own", ownSiteURL)
-	seedWebsiteEvent(t, db, practiceID, staffID)
+	practice := fixture.Practice(t, db)
+	seedWebsite(t, db, practice.ID, "own", ownSiteURL)
+	seedWebsiteEvent(t, db, practice.ID, fixture.Staff(t, db, practice).ID)
 
-	for _, table := range []string{"practice_websites", "practice_website_events"} {
-		count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM `+table) //nolint:gosec // table name is a test literal, not input
-		if count != 0 {
-			t.Fatalf("%s: expected 0 rows with no session variables set, got %d", table, count)
-		}
-	}
+	testdb.RequireFailsClosed(t, db, "practice_websites")
+	testdb.RequireFailsClosed(t, db, "practice_website_events")
 }
 
 // TestRLS_VisibilityIsScopedToCurrentPractice proves Practice A's
@@ -57,25 +53,14 @@ func TestRLS_FailsClosedWithNoSessionVarSet(t *testing.T) {
 // Practice's own record.
 func TestRLS_VisibilityIsScopedToCurrentPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := testdb.SeedPractice(t, db, "Practice A")
-	practiceB := testdb.SeedPractice(t, db, "Practice B")
-	staffA := testdb.SeedStaff(t, db, "rls-a")
-	staffB := testdb.SeedStaff(t, db, "rls-b")
-	seedWebsite(t, db, practiceA, "own", "https://a.example.com")
-	seedWebsite(t, db, practiceB, "own", "https://b.example.com")
-	seedWebsiteEvent(t, db, practiceA, staffA)
-	seedWebsiteEvent(t, db, practiceB, staffB)
+	practiceA := fixture.Practice(t, db)
+	practiceB := fixture.Practice(t, db)
+	seedWebsite(t, db, practiceA.ID, "own", "https://a.example.com")
+	seedWebsite(t, db, practiceB.ID, "own", "https://b.example.com")
+	seedWebsiteEvent(t, db, practiceA.ID, fixture.Staff(t, db, practiceA).ID)
+	seedWebsiteEvent(t, db, practiceB.ID, fixture.Staff(t, db, practiceB).ID)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if _, err := tx.ExecContext(t.Context(),
-		`SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Practice(practiceA.ID))
 
 	url := testdb.Scalar[string](t, tx, `SELECT own_url FROM practice_websites`)
 	if url != "https://a.example.com" {
@@ -93,22 +78,13 @@ func TestRLS_VisibilityIsScopedToCurrentPractice(t *testing.T) {
 // insert a row naming Practice B.
 func TestRLS_RefusesAWriteForAnotherPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := testdb.SeedPractice(t, db, "Practice A")
-	practiceB := testdb.SeedPractice(t, db, "Practice B")
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if _, err := tx.ExecContext(t.Context(),
-		`SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	practiceA := fixture.Practice(t, db)
+	practiceB := fixture.Practice(t, db)
+	tx := db.BeginAs(t, testdb.Practice(practiceA.ID))
 
 	if _, err := tx.ExecContext(t.Context(),
 		`INSERT INTO practice_websites (practice_id, mode, own_url) VALUES ($1, 'own', 'https://b.example.com')`,
-		practiceB,
+		practiceB.ID,
 	); err == nil {
 		t.Fatal("insert for another Practice succeeded, want it refused")
 	}
@@ -119,20 +95,10 @@ func TestRLS_RefusesAWriteForAnotherPractice(t *testing.T) {
 // else, so an UPDATE fails however the policies read.
 func TestRLS_EventsCannotBeRewritten(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Rochester Doulas")
-	staffID := testdb.SeedStaff(t, db, "rls-append-only")
-	seedWebsiteEvent(t, db, practiceID, staffID)
+	practice := fixture.Practice(t, db)
+	seedWebsiteEvent(t, db, practice.ID, fixture.Staff(t, db, practice).ID)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if _, err := tx.ExecContext(t.Context(),
-		`SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Practice(practice.ID))
 
 	if _, err := tx.ExecContext(t.Context(),
 		`UPDATE practice_website_events SET mode = 'hosted'`); err == nil {

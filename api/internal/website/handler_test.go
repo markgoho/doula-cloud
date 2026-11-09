@@ -4,101 +4,26 @@ import (
 	"database/sql"
 	"encoding/json/v2"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
-	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/website"
 )
-
-// ownerName is the Owner every handler test seeds, named once because
-// the response echoes it back and several tests assert on it.
-const ownerName = "Maya Chen"
-
-// Two fixture answers, shared because goconst counts repeats and because
-// a test reading "the same words as last time" should be looking at the
-// same literal.
-const (
-	policyText = "Two weeks' notice."
-	// The slug seedOwner's Practice name mints (00046).
-	firstSlug  = "rochester-doulas"
-	ownSiteURL = "https://rochesterdoulas.com"
-)
-
-// newServer mounts this package's whole surface through website.Mount,
-// the same call main.go makes on the real GatedRouter and
-// idempotency.Router -- so the Owner gate and the role gate are the real
-// ones and not a test's approximation.
-func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
-	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	website.Mount(g, ir, &tasknudge.FakeEnqueuer{})
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
-}
-
-func putWebsite(t *testing.T, srv *httptest.Server, session, practiceID, body string) *http.Response {
-	t.Helper()
-	resp := reqtest.Put(t, srv.URL+"/api/practices/"+practiceID+"/website", reqtest.Body("", []byte(body)), reqtest.Session(session))
-	return resp
-}
-
-func getWebsite(t *testing.T, srv *httptest.Server, session, practiceID string) *http.Response {
-	t.Helper()
-	resp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/website", reqtest.Session(session))
-	return resp
-}
-
-func decodeWebsite(t *testing.T, resp *http.Response) website.Response {
-	t.Helper()
-	var out website.Response
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	return out
-}
-
-// seedOwner seeds a Practice and an Owner at it -- the only role that
-// may write a website declaration. Stays local under this name rather
-// than testdb: ownerName is a fixed persona this package's own tests
-// assert the response echoes back, which testdb's generic
-// "Test Staff "+identityUID convention doesn't give a caller a way to
-// pin down.
-func seedOwner(t *testing.T, db *testdb.DB, uid string) (practiceID, staffID string) {
-	t.Helper()
-	practiceID = testdb.SeedPractice(t, db, "Rochester Doulas")
-	staffID = testdb.SeedNamedStaffAtPractice(t, db, practiceID, uid, ownerName, []string{"owner"}, "employee")
-	return practiceID, staffID
-}
 
 // TestGetHandler_UndeclaredIsAnAnswerNotAnError proves a Practice that
 // has never answered reads as "undeclared" with a 200. #442's payments
 // screen asks this endpoint whether the Stripe button may be offered,
 // and a 404 there would be a state to special-case rather than an answer.
 func TestGetHandler_UndeclaredIsAnAnswerNotAnError(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "website-undeclared"
-	practiceID, _ := seedOwner(t, db, uid)
+	e := newEnv(t)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	got := e.get(e.signedIn)
 
-	resp := getWebsite(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	got := decodeWebsite(t, resp)
 	if got.Mode != website.ModeUndeclared {
 		t.Fatalf("mode = %q, want %q", got.Mode, website.ModeUndeclared)
 	}
@@ -110,21 +35,10 @@ func TestGetHandler_UndeclaredIsAnAnswerNotAnError(t *testing.T) {
 // TestPutHandler_OwnerDeclaresHerOwnWebsite proves the "own" answer is
 // stored normalized, and read back with who declared it and when.
 func TestPutHandler_OwnerDeclaresHerOwnWebsite(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "website-own"
-	practiceID, _ := seedOwner(t, db, uid)
+	e := newEnv(t)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	got := e.put(`{"mode":"own","ownUrl":"facebook.com/RochesterDoulas"}`)
 
-	resp := putWebsite(t, srv, session, practiceID,
-		`{"mode":"own","ownUrl":"facebook.com/RochesterDoulas"}`)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	got := decodeWebsite(t, resp)
 	if got.Mode != website.ModeOwn {
 		t.Fatalf("mode = %q, want %q", got.Mode, website.ModeOwn)
 	}
@@ -142,21 +56,10 @@ func TestPutHandler_OwnerDeclaresHerOwnWebsite(t *testing.T) {
 // TestPutHandler_OwnerPublishesAHostedPage proves the hosted answer
 // stores exactly the two facts only she has.
 func TestPutHandler_OwnerPublishesAHostedPage(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "website-hosted"
-	practiceID, _ := seedOwner(t, db, uid)
+	e := newEnv(t)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	got := e.put(`{"mode":"hosted","serviceDescription":"Birth and postpartum doula support in Monroe County.","cancellationPolicy":"Two weeks' notice for a full refund."}`)
 
-	resp := putWebsite(t, srv, session, practiceID,
-		`{"mode":"hosted","serviceDescription":"Birth and postpartum doula support in Monroe County.","cancellationPolicy":"Two weeks' notice for a full refund."}`)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	got := decodeWebsite(t, resp)
 	if got.Mode != website.ModeHosted {
 		t.Fatalf("mode = %q, want %q", got.Mode, website.ModeHosted)
 	}
@@ -173,21 +76,10 @@ func TestPutHandler_OwnerPublishesAHostedPage(t *testing.T) {
 // her own site, and switching back leaves her cancellation policy where
 // she left it.
 func TestPutHandler_ChangingHerMindKeepsWhatSheAlreadyWrote(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "website-switch"
-	practiceID, _ := seedOwner(t, db, uid)
+	e := newEnv(t)
+	e.put(hostedBody)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	published := putWebsite(t, srv, session, practiceID,
-		`{"mode":"hosted","serviceDescription":"Birth support.","cancellationPolicy":"Two weeks' notice."}`)
-	_ = published.Body.Close()
-
-	switched := putWebsite(t, srv, session, practiceID,
-		`{"mode":"own","ownUrl":"https://rochesterdoulas.com"}`)
-	defer switched.Body.Close()
-	afterSwitch := decodeWebsite(t, switched)
+	afterSwitch := e.put(ownBody)
 	if afterSwitch.Mode != website.ModeOwn {
 		t.Fatalf("mode = %q, want %q", afterSwitch.Mode, website.ModeOwn)
 	}
@@ -195,10 +87,7 @@ func TestPutHandler_ChangingHerMindKeepsWhatSheAlreadyWrote(t *testing.T) {
 		t.Fatalf("cancellationPolicy = %q, want it carried forward", afterSwitch.CancellationPolicy)
 	}
 
-	back := putWebsite(t, srv, session, practiceID,
-		`{"mode":"hosted","serviceDescription":"Birth support.","cancellationPolicy":"Two weeks' notice."}`)
-	defer back.Body.Close()
-	afterBack := decodeWebsite(t, back)
+	afterBack := e.put(hostedBody)
 	if afterBack.Mode != website.ModeHosted {
 		t.Fatalf("mode = %q, want %q", afterBack.Mode, website.ModeHosted)
 	}
@@ -211,23 +100,13 @@ func TestPutHandler_ChangingHerMindKeepsWhatSheAlreadyWrote(t *testing.T) {
 // row per act, the first with no previous mode, each snapshotting what
 // the page said at the time.
 func TestPutHandler_RecordsWhoChangedItAndWhen(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "website-audit"
-	practiceID, staffID := seedOwner(t, db, uid)
+	e := newEnv(t)
+	e.put(hostedBody)
+	e.put(ownBody)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	first := putWebsite(t, srv, session, practiceID,
-		`{"mode":"hosted","serviceDescription":"Birth support.","cancellationPolicy":"Two weeks' notice."}`)
-	_ = first.Body.Close()
-	second := putWebsite(t, srv, session, practiceID,
-		`{"mode":"own","ownUrl":"https://rochesterdoulas.com"}`)
-	_ = second.Body.Close()
-
-	rows, err := db.Admin.QueryContext(t.Context(),
+	rows, err := e.db.Admin.QueryContext(t.Context(),
 		`SELECT previous_mode, mode, own_url, service_description, actor_staff_id
-		   FROM practice_website_events WHERE practice_id = $1 ORDER BY created_at`, practiceID)
+		   FROM practice_website_events WHERE practice_id = $1 ORDER BY created_at`, e.Practice.ID)
 	if err != nil {
 		t.Fatalf("query events: %v", err)
 	}
@@ -238,11 +117,11 @@ func TestPutHandler_RecordsWhoChangedItAndWhen(t *testing.T) {
 	}
 	var events []event
 	for rows.Next() {
-		var e event
-		if err := rows.Scan(&e.previousMode, &e.mode, &e.ownURL, &e.description, &e.actor); err != nil {
+		var ev event
+		if err := rows.Scan(&ev.previousMode, &ev.mode, &ev.ownURL, &ev.description, &ev.actor); err != nil {
 			t.Fatalf("scan event: %v", err)
 		}
-		events = append(events, e)
+		events = append(events, ev)
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatalf("iterate events: %v", err)
@@ -260,8 +139,8 @@ func TestPutHandler_RecordsWhoChangedItAndWhen(t *testing.T) {
 	if events[1].previousMode == nil || *events[1].previousMode != website.ModeHosted {
 		t.Fatalf("second event previous_mode = %v, want %q", events[1].previousMode, website.ModeHosted)
 	}
-	if *events[1].actor != staffID {
-		t.Fatalf("second event actor = %q, want the Owner %q", *events[1].actor, staffID)
+	if *events[1].actor != e.Staff.ID {
+		t.Fatalf("second event actor = %q, want the Owner %q", *events[1].actor, e.Staff.ID)
 	}
 }
 
@@ -270,20 +149,12 @@ func TestPutHandler_RecordsWhoChangedItAndWhen(t *testing.T) {
 // no-op would leave her looking at an old one after an act she just
 // performed.
 func TestPutHandler_RepublishingTheSameWordsIsAnAct(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "website-republish"
-	practiceID, _ := seedOwner(t, db, uid)
+	e := newEnv(t)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	e.put(hostedBody)
+	e.put(hostedBody)
 
-	const body = `{"mode":"hosted","serviceDescription":"Birth support.","cancellationPolicy":"Two weeks' notice."}`
-	first := putWebsite(t, srv, session, practiceID, body)
-	_ = first.Body.Close()
-	second := putWebsite(t, srv, session, practiceID, body)
-	_ = second.Body.Close()
-
-	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM practice_website_events WHERE practice_id = $1`, practiceID)
+	count := testdb.Scalar[int](t, e.db.Admin, `SELECT count(*) FROM practice_website_events WHERE practice_id = $1`, e.Practice.ID)
 	if count != 2 {
 		t.Fatalf("got %d events, want 2 -- a re-assertion is a real act", count)
 	}
@@ -295,29 +166,16 @@ func TestPutHandler_RepublishingTheSameWordsIsAnAct(t *testing.T) {
 // the Website screen no longer draws either button for her, so this is
 // the only thing that refuses).
 func TestPutHandler_RefusesANonOwner(t *testing.T) {
-	bodies := map[string]string{
-		"own":    `{"mode":"own","ownUrl":"https://rochesterdoulas.com"}`,
-		"hosted": `{"mode":"hosted","serviceDescription":"Birth support.","cancellationPolicy":"Two weeks' notice."}`,
-	}
-	for _, role := range []string{"admin", "doula"} {
+	bodies := map[string]string{"own": ownBody, "hosted": hostedBody}
+	roles := map[string]fixture.StaffOption{"admin": fixture.Admin(), "doula": fixture.Doula()}
+	for role, option := range roles {
 		for mode, body := range bodies {
 			t.Run(role+"/"+mode, func(t *testing.T) {
-				db := testdb.New(t)
-				uid := "website-" + role + "-" + mode
-				practiceID := testdb.SeedPractice(t, db, "Rochester Doulas")
-				testdb.SeedNamedStaffAtPractice(t, db, practiceID, uid, "Ana Reyes", []string{role}, "employee")
+				e := newEnv(t, signedInAs(option, fixture.StaffName("Ana Reyes")))
 
-				srv, session := newServer(t, db, uid)
-				defer srv.Close()
+				reqtest.ExpectStatus(t, http.MethodPut, e.websiteURL(), http.StatusForbidden, e.signedIn, rawBody(body))
 
-				resp := putWebsite(t, srv, session, practiceID, body)
-				defer resp.Body.Close()
-
-				if resp.StatusCode != http.StatusForbidden {
-					t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-				}
-
-				count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM practice_websites WHERE practice_id = $1`, practiceID)
+				count := testdb.Scalar[int](t, e.db.Admin, `SELECT count(*) FROM practice_websites WHERE practice_id = $1`, e.Practice.ID)
 				if count != 0 {
 					t.Fatalf("got %d rows, want none written by a non-Owner", count)
 				}
@@ -330,26 +188,12 @@ func TestPutHandler_RefusesANonOwner(t *testing.T) {
 // member: #442's payments screen has to tell whoever opens it what is
 // outstanding rather than show an empty panel.
 func TestGetHandler_ADoulaMayRead(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Rochester Doulas")
-	testdb.SeedNamedStaffAtPractice(t, db, practiceID, "website-read-owner", ownerName, []string{"owner"}, "employee")
-	testdb.SeedNamedStaffAtPractice(t, db, practiceID, "website-read-doula", "Ana Reyes", []string{"doula"}, "employee")
+	e := newEnv(t)
+	e.put(hostedBody)
+	doula := e.staff(fixture.StaffName("Ana Reyes"))
 
-	ownerSrv, ownerSession := newServer(t, db, "website-read-owner")
-	defer ownerSrv.Close()
-	published := putWebsite(t, ownerSrv, ownerSession, practiceID,
-		`{"mode":"hosted","serviceDescription":"Birth support.","cancellationPolicy":"Two weeks' notice."}`)
-	_ = published.Body.Close()
+	got := e.get(e.as(doula))
 
-	doulaSrv, doulaSession := newServer(t, db, "website-read-doula")
-	defer doulaSrv.Close()
-	resp := getWebsite(t, doulaSrv, doulaSession, practiceID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	got := decodeWebsite(t, resp)
 	if got.Mode != website.ModeHosted {
 		t.Fatalf("mode = %q, want %q", got.Mode, website.ModeHosted)
 	}
@@ -361,20 +205,10 @@ func TestGetHandler_ADoulaMayRead(t *testing.T) {
 // TestPutHandler_RefusesAMalformedBody proves a body that is not JSON is
 // a 400 with the structured shape docs/api-design.md section 7 asks for.
 func TestPutHandler_RefusesAMalformedBody(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "website-bad-body"
-	practiceID, _ := seedOwner(t, db, uid)
+	e := newEnv(t)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	got := apierrtest.Expect(t, http.MethodPut, e.websiteURL(), http.StatusBadRequest, e.signedIn, rawBody(`not json`))
 
-	resp := putWebsite(t, srv, session, practiceID, `not json`)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-	got := apierrtest.Decode(t, resp)
 	if got.Code != apierr.CodeInvalidArgument || got.Message != website.MsgInvalidBody {
 		t.Fatalf("error = %+v, want INVALID_ARGUMENT/%q", got, website.MsgInvalidBody)
 	}
@@ -382,39 +216,10 @@ func TestPutHandler_RefusesAMalformedBody(t *testing.T) {
 
 // TestPutHandler_NamesTheFieldThatFailed proves the field-level details
 // reach the client, so the screen can put each message beside the input
-// it is about rather than in one heap at the top.
-func TestPutHandler_NamesTheFieldThatFailed(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "website-field-errors"
-	practiceID, _ := seedOwner(t, db, uid)
-
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	resp := putWebsite(t, srv, session, practiceID,
-		`{"mode":"own","ownUrl":"coming soon"}`)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-	got := apierrtest.Decode(t, resp)
-	if got.Details["ownUrl"] != website.MsgURLMalformed {
-		t.Fatalf("details = %v, want ownUrl named", got.Details)
-	}
-}
-
-// TestPutHandler_RefusesPastTheBudget proves the character budget is
+// it is about rather than in one heap at the top. The character budget is
 // enforced server-side and not only counted down in the browser.
-func TestPutHandler_RefusesPastTheBudget(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "website-budget"
-	practiceID, _ := seedOwner(t, db, uid)
-
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	body, err := json.Marshal(website.Request{
+func TestPutHandler_NamesTheFieldThatFailed(t *testing.T) {
+	overBudget, err := json.Marshal(website.Request{
 		Mode:               website.ModeHosted,
 		ServiceDescription: strings.Repeat("a", website.MaxFactLength+1),
 		CancellationPolicy: policyText,
@@ -422,15 +227,25 @@ func TestPutHandler_RefusesPastTheBudget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal request: %v", err)
 	}
-
-	resp := putWebsite(t, srv, session, practiceID, string(body))
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	cases := []struct {
+		name  string
+		body  string
+		field string
+		want  string
+	}{
+		{"a malformed URL", `{"mode":"own","ownUrl":"coming soon"}`, "ownUrl", website.MsgURLMalformed},
+		{"past the budget", string(overBudget), "serviceDescription", website.MsgTooLong},
 	}
-	if got := apierrtest.Decode(t, resp); got.Details["serviceDescription"] != website.MsgTooLong {
-		t.Fatalf("details = %v, want serviceDescription over budget", got.Details)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e := newEnv(t)
+
+			got := apierrtest.Expect(t, http.MethodPut, e.websiteURL(), http.StatusBadRequest, e.signedIn, rawBody(c.body))
+
+			if got.Details[c.field] != c.want {
+				t.Fatalf("details = %v, want %s named", got.Details, c.field)
+			}
+		})
 	}
 }
 
@@ -449,49 +264,31 @@ func slugOf(t *testing.T, db *testdb.DB, practiceID string) string {
 // account and #382 established its review of that URL is ongoing, so a
 // slug that followed a rename would point a live review at a 404.
 func TestPutHandler_MintsTheSlugOnceAndNeverAgain(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "website-slug-stable"
-	practiceID, _ := seedOwner(t, db, uid)
+	e := newEnv(t)
+	e.put(hostedBody)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	published := putWebsite(t, srv, session, practiceID,
-		`{"mode":"hosted","serviceDescription":"Birth support.","cancellationPolicy":"Two weeks' notice."}`)
-	_ = published.Body.Close()
-
-	if got := slugOf(t, db, practiceID); got != firstSlug {
+	if got := slugOf(t, e.db, e.Practice.ID); got != firstSlug {
 		t.Fatalf("slug = %q, want %q", got, firstSlug)
 	}
 
 	// She renames the Practice, then republishes.
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE practices SET name = 'Genesee Birth Collective' WHERE id = $1`, practiceID,
-	); err != nil {
-		t.Fatalf("rename practice: %v", err)
-	}
-	republished := putWebsite(t, srv, session, practiceID,
-		`{"mode":"hosted","serviceDescription":"Birth support.","cancellationPolicy":"Two weeks' notice."}`)
-	_ = republished.Body.Close()
+	e.exec(`UPDATE practices SET name = 'Genesee Birth Collective' WHERE id = $1`, e.Practice.ID)
+	e.put(hostedBody)
 
-	if got := slugOf(t, db, practiceID); got != firstSlug {
+	if got := slugOf(t, e.db, e.Practice.ID); got != firstSlug {
 		t.Fatalf("slug after a rename = %q, want it unmoved", got)
 	}
 
 	// She switches to her own website and back. The slug survives that
 	// too, so switching back republishes the address Stripe already has
 	// rather than minting a second one.
-	switched := putWebsite(t, srv, session, practiceID,
-		`{"mode":"own","ownUrl":"https://rochesterdoulas.com"}`)
-	_ = switched.Body.Close()
-	if got := slugOf(t, db, practiceID); got != firstSlug {
+	e.put(ownBody)
+	if got := slugOf(t, e.db, e.Practice.ID); got != firstSlug {
 		t.Fatalf("slug after switching to her own site = %q, want it kept", got)
 	}
 
-	back := putWebsite(t, srv, session, practiceID,
-		`{"mode":"hosted","serviceDescription":"Birth support.","cancellationPolicy":"Two weeks' notice."}`)
-	_ = back.Body.Close()
-	if got := slugOf(t, db, practiceID); got != firstSlug {
+	e.put(hostedBody)
+	if got := slugOf(t, e.db, e.Practice.ID); got != firstSlug {
 		t.Fatalf("slug after switching back = %q, want it kept", got)
 	}
 }
@@ -502,39 +299,24 @@ func TestPutHandler_MintsTheSlugOnceAndNeverAgain(t *testing.T) {
 // unique index is the only thing in the system that knows a slug is
 // taken, so the write asks it by trying.
 func TestPutHandler_TwoPracticesOfTheSameNameGetDifferentAddresses(t *testing.T) {
-	db := testdb.New(t)
+	first := newEnv(t)
+	first.put(hostedBody)
 
-	const firstUID, secondUID = "website-slug-first", "website-slug-second"
-	// seedOwner names every Practice "Rochester Doulas", which is
-	// exactly the collision under test.
-	firstPractice, _ := seedOwner(t, db, firstUID)
-	secondPractice, _ := seedOwner(t, db, secondUID)
+	// A second Practice of the same name is exactly the collision under test.
+	secondPractice := fixture.Practice(t, first.db, fixture.PracticeName(practiceName))
+	secondOwner := fixture.Staff(t, first.db, secondPractice, fixture.Owner(), fixture.StaffName(ownerName))
+	reqtest.ExpectStatus(t, http.MethodPut, first.srv.URL+"/api/practices/"+secondPractice.ID+"/website", http.StatusOK, first.as(secondOwner), rawBody(hostedBody))
 
-	const body = `{"mode":"hosted","serviceDescription":"Birth support.","cancellationPolicy":"Two weeks' notice."}`
-
-	firstSrv, firstSession := newServer(t, db, firstUID)
-	defer firstSrv.Close()
-	first := putWebsite(t, firstSrv, firstSession, firstPractice, body)
-	_ = first.Body.Close()
-
-	secondSrv, secondSession := newServer(t, db, secondUID)
-	defer secondSrv.Close()
-	second := putWebsite(t, secondSrv, secondSession, secondPractice, body)
-	defer second.Body.Close()
-	if second.StatusCode != http.StatusOK {
-		t.Fatalf("second publish: status = %d, want 200", second.StatusCode)
-	}
-
-	if got := slugOf(t, db, firstPractice); got != firstSlug {
+	if got := slugOf(t, first.db, first.Practice.ID); got != firstSlug {
 		t.Fatalf("first slug = %q", got)
 	}
-	if got := slugOf(t, db, secondPractice); got != "rochester-doulas-2" {
+	if got := slugOf(t, first.db, secondPractice.ID); got != "rochester-doulas-2" {
 		t.Fatalf("second slug = %q, want %q", got, "rochester-doulas-2")
 	}
 
 	// The audit row still landed: the retry is a savepoint, not a lost
 	// transaction, so the record of who published survives the collision.
-	events := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM practice_website_events WHERE practice_id = $1`, secondPractice)
+	events := testdb.Scalar[int](t, first.db.Admin, `SELECT count(*) FROM practice_website_events WHERE practice_id = $1`, secondPractice.ID)
 	if events != 1 {
 		t.Fatalf("got %d events for the second Practice, want 1", events)
 	}
@@ -543,26 +325,15 @@ func TestPutHandler_TwoPracticesOfTheSameNameGetDifferentAddresses(t *testing.T)
 // #443: publishing a page queues a rebuild, because the deploy workflow
 // fires on a push touching site/** and this produces no commit at all.
 func TestPutHandler_PublishingQueuesARebuild(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "website-queues-rebuild"
-	practiceID, _ := seedOwner(t, db, uid)
+	e := newEnv(t)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	body := e.put(hostedBody)
 
-	resp := putWebsite(t, srv, session, practiceID,
-		`{"mode":"hosted","serviceDescription":"Birth support.","cancellationPolicy":"`+policyText+`"}`)
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("got %d, want 200", resp.StatusCode)
-	}
-
-	if got := queuedRebuilds(t, db, practiceID); got != 1 {
+	if got := queuedRebuilds(t, e.db, e.Practice.ID); got != 1 {
 		t.Fatalf("queued %d rebuilds, want 1", got)
 	}
 	// And the page reads as unproven until something has actually
 	// fetched it: absence of a report is never a pass.
-	body := decodeWebsite(t, resp)
 	if body.PageState != website.PageStatePending {
 		t.Fatalf("pageState = %q, want %q", body.PageState, website.PageStatePending)
 	}
@@ -575,26 +346,15 @@ func TestPutHandler_PublishingQueuesARebuild(t *testing.T) {
 // puts the page back to unproven -- whatever a probe found before is
 // about words she has just changed.
 func TestPutHandler_EditingQueuesAnotherRebuildAndResetsTheState(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "website-edit-rebuild"
-	practiceID, _ := seedOwner(t, db, uid)
+	e := newEnv(t)
+	e.put(hostedBody)
+	markPageLive(t, e.db, e.Practice.ID)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	body := e.put(`{"mode":"hosted","serviceDescription":"Birth and postpartum support.","cancellationPolicy":"` + policyText + `"}`)
 
-	first := putWebsite(t, srv, session, practiceID,
-		`{"mode":"hosted","serviceDescription":"Birth support.","cancellationPolicy":"`+policyText+`"}`)
-	_ = first.Body.Close()
-	markPageLive(t, db, practiceID)
-
-	second := putWebsite(t, srv, session, practiceID,
-		`{"mode":"hosted","serviceDescription":"Birth and postpartum support.","cancellationPolicy":"`+policyText+`"}`)
-	defer func() { _ = second.Body.Close() }()
-
-	if got := queuedRebuilds(t, db, practiceID); got != 2 {
+	if got := queuedRebuilds(t, e.db, e.Practice.ID); got != 2 {
 		t.Fatalf("queued %d rebuilds, want one per write", got)
 	}
-	body := decodeWebsite(t, second)
 	if body.PageState != website.PageStatePending {
 		t.Fatalf("pageState = %q, want the earlier probe result cleared", body.PageState)
 	}
@@ -606,24 +366,14 @@ func TestPutHandler_EditingQueuesAnotherRebuildAndResetsTheState(t *testing.T) {
 // Switching away has to prune her page, which is as much a rebuild as
 // publishing was.
 func TestPutHandler_SwitchingAwayQueuesARebuildAndDropsTheState(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "website-switch-away"
-	practiceID, _ := seedOwner(t, db, uid)
+	e := newEnv(t)
+	e.put(hostedBody)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	body := e.put(`{"mode":"own","ownUrl":"` + ownSiteURL + `"}`)
 
-	first := putWebsite(t, srv, session, practiceID,
-		`{"mode":"hosted","serviceDescription":"Birth support.","cancellationPolicy":"`+policyText+`"}`)
-	_ = first.Body.Close()
-
-	second := putWebsite(t, srv, session, practiceID, `{"mode":"own","ownUrl":"`+ownSiteURL+`"}`)
-	defer func() { _ = second.Body.Close() }()
-
-	if got := queuedRebuilds(t, db, practiceID); got != 2 {
+	if got := queuedRebuilds(t, e.db, e.Practice.ID); got != 2 {
 		t.Fatalf("queued %d rebuilds, want the prune queued too", got)
 	}
-	body := decodeWebsite(t, second)
 	if body.PageState != "" {
 		t.Fatalf("pageState = %q, want no state for a Practice with no page here", body.PageState)
 	}
@@ -635,17 +385,11 @@ func TestPutHandler_SwitchingAwayQueuesARebuildAndDropsTheState(t *testing.T) {
 // A Practice moving between her own websites has never had a page here,
 // so there is nothing to build and nothing to prune.
 func TestPutHandler_OwnSiteOnlyQueuesNothing(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "website-own-only"
-	practiceID, _ := seedOwner(t, db, uid)
+	e := newEnv(t)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	e.put(ownBody)
 
-	resp := putWebsite(t, srv, session, practiceID, `{"mode":"own","ownUrl":"`+ownSiteURL+`"}`)
-	defer func() { _ = resp.Body.Close() }()
-
-	if got := queuedRebuilds(t, db, practiceID); got != 0 {
+	if got := queuedRebuilds(t, e.db, e.Practice.ID); got != 0 {
 		t.Fatalf("queued %d rebuilds, want none", got)
 	}
 }
@@ -653,8 +397,7 @@ func TestPutHandler_OwnSiteOnlyQueuesNothing(t *testing.T) {
 // queuedRebuilds counts what #443's outbox holds for one Practice.
 func queuedRebuilds(t *testing.T, db *testdb.DB, practiceID string) int {
 	t.Helper()
-	n := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM site_build_outbox WHERE practice_id = $1`, practiceID)
-	return n
+	return testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM site_build_outbox WHERE practice_id = $1`, practiceID)
 }
 
 // markPageLive stands in for a probe having run, so a test can prove the

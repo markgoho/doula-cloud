@@ -185,3 +185,18 @@ func TestExpectStatus_PassesOnTheExpectedStatus(t *testing.T) {
 	srv := echoServer(t)
 	reqtest.ExpectStatus(t, http.MethodDelete, srv.URL, http.StatusOK)
 }
+
+func TestExpectPDF_ReturnsTheDispositionAndTheBytes(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", `attachment; filename="plan.pdf"`)
+		_, _ = w.Write([]byte("%PDF-1.4"))
+	}))
+	t.Cleanup(srv.Close)
+
+	got := reqtest.ExpectPDF(t, http.MethodGet, srv.URL)
+
+	if got.Disposition != `attachment; filename="plan.pdf"` || string(got.Body) != "%PDF-1.4" {
+		t.Fatalf("pdf = %+v, want the plan.pdf download and its bytes", got)
+	}
+}

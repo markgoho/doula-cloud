@@ -3,192 +3,46 @@ package plans_test
 import (
 	"encoding/json/v2"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/plans"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
-// testFieldLabel is a placeholder Label used across many test cases that
-// don't care about its value, just that it's non-empty.
-const testFieldLabel = "Name"
+const notAPlanType = "not_a_plan_type"
 
-const shortTextType = "short_text"
-
-const carePlanType = "care_plan"
-const birthPlanType = "birth_plan"
-
-// ownerRole, adminRole and doulaRole are named once so golangci-lint's
-// goconst check doesn't see repeated "owner"/"admin"/"doula" literals
-// across this package's whole test surface.
-const (
-	ownerRole = "owner"
-	adminRole = "admin"
-	doulaRole = "doula"
-)
-
-// seedPlanTemplate seeds a Plan Template row directly (bypassing the
-// handlers under test). Stays local under this name rather than testdb:
-// contracts/template_test.go's own seedTemplate writes contract_templates
-// (prose), and clientfieldtemplate's writes client_field_templates -- three
-// different tables sharing one generic old name.
-func seedPlanTemplate(t *testing.T, db *testdb.DB, practiceID, planType, fieldsJSON string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO plan_templates (practice_id, plan_type, fields) VALUES ($1, $2, $3)`,
-		practiceID, planType, fieldsJSON,
-	); err != nil {
-		t.Fatalf("seed template: %v", err)
+func TestGetTemplateHandler_Refusals(t *testing.T) {
+	cases := []struct {
+		name     string
+		planType string
+		want     int
+	}{
+		{"unknown plan type", notAPlanType, http.StatusBadRequest},
+		{"no template yet", carePlanType, http.StatusNotFound},
 	}
-}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t)
 
-// seedInstance seeds a Plan Instance row directly (bypassing the handlers
-// under test).
-func seedInstance(t *testing.T, db *testdb.DB, engagementID, planType, fieldsJSON, answersJSON string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO plan_instances (engagement_id, plan_type, fields, answers, changed_at) VALUES ($1, $2, $3, $4, now())`,
-		engagementID, planType, fieldsJSON, answersJSON,
-	); err != nil {
-		t.Fatalf("seed instance: %v", err)
+			reqtest.ExpectStatus(t, http.MethodGet, e.templateURL(tc.planType), tc.want, e.signedIn)
+		})
 	}
-}
-
-// setAcknowledged directly sets client_acknowledged_at on a seeded Plan
-// Instance, bypassing ClientAcknowledgeBirthPlanHandler -- used to set up
-// the "already acknowledged" state a test needs before exercising some
-// other behavior (e.g. PutInstanceHandler's reset-on-edit).
-func setAcknowledged(t *testing.T, db *testdb.DB, engagementID, planType string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE plan_instances SET client_acknowledged_at = now() WHERE engagement_id = $1 AND plan_type = $2`,
-		engagementID, planType,
-	); err != nil {
-		t.Fatalf("set acknowledged: %v", err)
-	}
-}
-
-func newPlanServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
-	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	plans.Mount(g, ir, db.App)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
-}
-
-func getTemplate(t *testing.T, srv *httptest.Server, session string, practiceID, planType string) *http.Response {
-	t.Helper()
-	return reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/plan-templates/"+planType, reqtest.Session(session))
-}
-
-func putTemplateRaw(t *testing.T, srv *httptest.Server, session string, practiceID, planType string, body []byte) *http.Response {
-	t.Helper()
-	return reqtest.Put(t, srv.URL+"/api/practices/"+practiceID+"/plan-templates/"+planType, reqtest.Session(session), reqtest.RawJSON(body))
-}
-
-func putTemplate(t *testing.T, srv *httptest.Server, session string, practiceID, planType string, body plans.TemplateResponse) *http.Response {
-	t.Helper()
-	payload, err := json.Marshal(body)
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	return putTemplateRaw(t, srv, session, practiceID, planType, payload)
-}
-
-func instancePath(practiceID, engagementID, planType string) string {
-	return "/api/practices/" + practiceID + "/engagements/" + engagementID + "/plans/" + planType
-}
-
-func postInstance(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID, planType string) *http.Response {
-	t.Helper()
-	return reqtest.Post(t, srv.URL+instancePath(practiceID, engagementID, planType), reqtest.Session(session))
-}
-
-func getInstance(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID, planType string) *http.Response {
-	t.Helper()
-	return reqtest.Get(t, srv.URL+instancePath(practiceID, engagementID, planType), reqtest.Session(session))
-}
-
-func putInstanceRaw(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID, planType string, body []byte) *http.Response {
-	t.Helper()
-	return reqtest.Put(t, srv.URL+instancePath(practiceID, engagementID, planType), reqtest.Session(session), reqtest.RawJSON(body))
-}
-
-func putInstance(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID, planType string, body plans.PutInstanceRequest) *http.Response {
-	t.Helper()
-	payload, err := json.Marshal(body)
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	return putInstanceRaw(t, srv, session, practiceID, engagementID, planType, payload)
-}
-
-func TestGetTemplateHandler_UnknownPlanType(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-unknown-plan-type"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getTemplate(t, srv, session, practiceID, "not_a_plan_type")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-func TestGetTemplateHandler_NotFound(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-not-found"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getTemplate(t, srv, session, practiceID, "care_plan")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestGetTemplateHandler_AnyMemberAllowed proves every Staff role --
 // Owner, Admin, an employed Doula and a contractor Doula -- can read the
 // template (ADR-0008's read table): only the PUT is Owner-gated (#1407).
 func TestGetTemplateHandler_AnyMemberAllowed(t *testing.T) {
-	const employee = "employee"
-	cases := []struct {
-		name           string
-		roles          []string
-		employmentType string
-	}{
-		{ownerRole, []string{ownerRole}, employee},
-		{adminRole, []string{adminRole}, employee},
-		{doulaRole, []string{doulaRole}, employee},
-		{"contractor doula", []string{doulaRole}, "contractor"},
-	}
-	for _, tc := range cases {
+	for _, tc := range []roleCase{ownerCase, adminCase, employeeDoulaCase, contractorDoulaCase} {
 		t.Run(tc.name, func(t *testing.T) {
-			db := testdb.New(t)
-			uid := "get-any-member-" + tc.roles[0] + "-" + tc.employmentType
-			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, tc.roles, tc.employmentType)
-			seedPlanTemplate(t, db, practiceID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
+			e := newEnv(t, signedInAs(tc.opts...))
+			e.seedTemplate(carePlanType, f1Fields)
 
-			srv, session := newPlanServer(t, db, uid)
-			defer srv.Close()
+			out := e.template(carePlanType)
 
-			resp := getTemplate(t, srv, session, practiceID, "care_plan")
-			defer resp.Body.Close()
-
-			reqtest.RequireStatus(t, resp, http.StatusOK)
-
-			out := reqtest.Decode[plans.TemplateResponse](t, resp)
-			if out.PlanType != "care_plan" {
+			if out.PlanType != carePlanType {
 				t.Fatalf("planType = %q, want care_plan", out.PlanType)
 			}
 			if len(out.Fields) != 1 || out.Fields[0].ID != "f1" {
@@ -204,24 +58,14 @@ func TestGetTemplateHandler_AnyMemberAllowed(t *testing.T) {
 // mount declaration must keep exactly that population, not widen it to
 // Owner and Admin. The refusal also leaves the stored template untouched.
 func TestPutTemplateHandler_NonOwnerForbidden(t *testing.T) {
-	for _, roles := range [][]string{{doulaRole}, {adminRole}} {
-		t.Run(roles[0], func(t *testing.T) {
-			db := testdb.New(t)
-			uid := "put-non-owner-" + roles[0]
-			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, roles, "employee")
-			seedPlanTemplate(t, db, practiceID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
+	for _, tc := range []roleCase{employeeDoulaCase, adminCase} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(tc.opts...))
+			e.seedTemplate(carePlanType, f1Fields)
 
-			srv, session := newPlanServer(t, db, uid)
-			defer srv.Close()
+			e.putTemplate(carePlanType, []plans.Field{{ID: "f2", Type: shortTextType, Label: testFieldLabel}}, http.StatusForbidden)
 
-			resp := putTemplate(t, srv, session, practiceID, "care_plan", plans.TemplateResponse{Fields: []plans.Field{
-				{ID: "f2", Type: shortTextType, Label: testFieldLabel},
-			}})
-			defer resp.Body.Close()
-
-			reqtest.RequireStatus(t, resp, http.StatusForbidden)
-
-			stored := testdb.Scalar[string](t, db.Admin, `SELECT fields->0->>'id' FROM plan_templates WHERE practice_id = $1 AND plan_type = $2`, practiceID, carePlanType)
+			stored := testdb.Scalar[string](t, e.db.Admin, `SELECT fields->0->>'id' FROM plan_templates WHERE practice_id = $1 AND plan_type = $2`, e.Practice.ID, carePlanType)
 			if stored != "f1" {
 				t.Fatalf("stored first field id = %q, want f1 (the refused PUT must not write)", stored)
 			}
@@ -229,69 +73,38 @@ func TestPutTemplateHandler_NonOwnerForbidden(t *testing.T) {
 	}
 }
 
-func TestPutTemplateHandler_UnknownPlanType(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-unknown-plan-type"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := putTemplate(t, srv, session, practiceID, "not_a_plan_type", plans.TemplateResponse{Fields: []plans.Field{
-		{ID: "f1", Type: shortTextType, Label: testFieldLabel},
-	}})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-func TestPutTemplateHandler_InvalidBody(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-invalid-body"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	resp := putTemplateRaw(t, srv, session, practiceID, "care_plan", []byte("not json"))
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-// TestPutTemplateHandler_ValidationRejections table-drives every
-// normalizeFields error branch: unknown field type, missing id, duplicate
-// id, missing label, a select field with no options, a select field with a
-// blank option, and a non-select field carrying options.
-func TestPutTemplateHandler_ValidationRejections(t *testing.T) {
-	cases := []struct {
-		name   string
-		fields []plans.Field
-	}{
-		{"unknown field type", []plans.Field{{ID: "f1", Type: "essay", Label: testFieldLabel}}},
-		{"missing id", []plans.Field{{ID: "", Type: shortTextType, Label: testFieldLabel}}},
-		{"duplicate id", []plans.Field{
-			{ID: "f1", Type: shortTextType, Label: testFieldLabel},
-			{ID: "f1", Type: shortTextType, Label: "Name again"},
-		}},
-		{"missing label", []plans.Field{{ID: "f1", Type: shortTextType, Label: ""}}},
-		{"select with no options", []plans.Field{{ID: "f1", Type: "single_select", Label: "Pick one"}}},
-		{"select with blank option", []plans.Field{{ID: "f1", Type: "multi_select", Label: "Pick some", Options: []string{"A", ""}}}},
-		{"non-select with options", []plans.Field{{ID: "f1", Type: "checkbox", Label: "Agree", Options: []string{"yes"}}}},
+// TestPutTemplateHandler_Refusals table-drives an unknown plan type, a
+// body that is not JSON and every normalizeFields error branch: unknown
+// field type, missing id, duplicate id, missing label, a select field with
+// no options, a select field with a blank option, and a non-select field
+// carrying options.
+func TestPutTemplateHandler_Refusals(t *testing.T) {
+	fields := func(fields ...plans.Field) reqtest.Option {
+		return reqtest.JSON(plans.TemplateResponse{Fields: fields})
 	}
-
-	db := testdb.New(t)
-	const uid = "put-validation"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
+	cases := []struct {
+		name     string
+		planType string
+		body     reqtest.Option
+	}{
+		{"unknown plan type", notAPlanType, fields(plans.Field{ID: "f1", Type: shortTextType, Label: testFieldLabel})},
+		{"body is not JSON", carePlanType, reqtest.RawJSON([]byte("not json"))},
+		{"unknown field type", carePlanType, fields(plans.Field{ID: "f1", Type: "essay", Label: testFieldLabel})},
+		{"missing id", carePlanType, fields(plans.Field{ID: "", Type: shortTextType, Label: testFieldLabel})},
+		{"duplicate id", carePlanType, fields(
+			plans.Field{ID: "f1", Type: shortTextType, Label: testFieldLabel},
+			plans.Field{ID: "f1", Type: shortTextType, Label: "Name again"},
+		)},
+		{"missing label", carePlanType, fields(plans.Field{ID: "f1", Type: shortTextType, Label: ""})},
+		{"select with no options", carePlanType, fields(plans.Field{ID: "f1", Type: "single_select", Label: "Pick one"})},
+		{"select with blank option", carePlanType, fields(plans.Field{ID: "f1", Type: "multi_select", Label: "Pick some", Options: []string{"A", ""}})},
+		{"non-select with options", carePlanType, fields(plans.Field{ID: "f1", Type: "checkbox", Label: "Agree", Options: []string{"yes"}})},
+	}
+	e := newEnv(t, signedInAs(fixture.Owner()))
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			resp := putTemplate(t, srv, session, practiceID, "care_plan", plans.TemplateResponse{Fields: tc.fields})
-			defer resp.Body.Close()
-
-			reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+			reqtest.ExpectStatus(t, http.MethodPut, e.templateURL(tc.planType), http.StatusBadRequest, e.signedIn, tc.body)
 		})
 	}
 }
@@ -303,35 +116,18 @@ func TestPutTemplateHandler_ValidationRejections(t *testing.T) {
 func TestPutTemplateHandler_Success(t *testing.T) {
 	const secondFieldID = "second"
 	const firstFieldID = "first"
+	e := newEnv(t, signedInAs(fixture.Owner()))
 
-	db := testdb.New(t)
-	const uid = "put-success"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	putResp := putTemplate(t, srv, session, practiceID, birthPlanType, plans.TemplateResponse{Fields: []plans.Field{
+	putOut := e.putTemplate(birthPlanType, []plans.Field{
 		{ID: secondFieldID, Type: "checkbox", Label: "Consent", Order: 99},
 		{ID: firstFieldID, Type: "single_select", Label: "Location", Options: []string{"Home", hospital}, Order: 1},
-	}})
-	defer putResp.Body.Close()
+	}, http.StatusOK)
 
-	if putResp.StatusCode != http.StatusOK {
-		t.Fatalf("PUT status = %d, want %d", putResp.StatusCode, http.StatusOK)
-	}
-
-	putOut := reqtest.Decode[plans.TemplateResponse](t, putResp)
 	if len(putOut.Fields) != 2 || putOut.Fields[0].ID != secondFieldID || putOut.Fields[0].Order != 0 || putOut.Fields[1].ID != firstFieldID || putOut.Fields[1].Order != 1 {
 		t.Fatalf("PUT fields = %+v, want order recomputed from array position", putOut.Fields)
 	}
 
-	getResp := getTemplate(t, srv, session, practiceID, birthPlanType)
-	defer getResp.Body.Close()
-	if getResp.StatusCode != http.StatusOK {
-		t.Fatalf("GET status = %d, want %d", getResp.StatusCode, http.StatusOK)
-	}
-	getOut := reqtest.Decode[plans.TemplateResponse](t, getResp)
+	getOut := e.template(birthPlanType)
 	if len(getOut.Fields) != 2 || getOut.Fields[0].ID != secondFieldID || getOut.Fields[1].ID != firstFieldID {
 		t.Fatalf("GET fields after PUT = %+v, want the just-written fields", getOut.Fields)
 	}
@@ -341,24 +137,12 @@ func TestPutTemplateHandler_Success(t *testing.T) {
 // seeded by signup (or a prior PUT) rather than conflicting with it -- the
 // ON CONFLICT DO UPDATE path.
 func TestPutTemplateHandler_ReplacesExistingRow(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-replace"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	seedPlanTemplate(t, db, practiceID, carePlanType, `[{"id":"old","type":"short_text","label":"Old field","order":0}]`)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	e.seedTemplate(carePlanType, `[{"id":"old","type":"short_text","label":"Old field","order":0}]`)
 
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
+	e.putTemplate(carePlanType, []plans.Field{{ID: "new", Type: shortTextType, Label: "New field"}}, http.StatusOK)
 
-	resp := putTemplate(t, srv, session, practiceID, "care_plan", plans.TemplateResponse{Fields: []plans.Field{
-		{ID: "new", Type: shortTextType, Label: "New field"},
-	}})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-
-	getResp := getTemplate(t, srv, session, practiceID, "care_plan")
-	defer getResp.Body.Close()
-	out := reqtest.Decode[plans.TemplateResponse](t, getResp)
+	out := e.template(carePlanType)
 	if len(out.Fields) != 1 || out.Fields[0].ID != "new" {
 		t.Fatalf("fields = %+v, want only the replacement field", out.Fields)
 	}
@@ -409,33 +193,23 @@ func planTemplateAudit(t *testing.T, db *testdb.DB, practiceID string) []struct 
 // (#2193: each question page saves one question's change), and that
 // re-saving an unchanged list records nothing.
 func TestPutTemplateHandler_WritesOneAuditRowPerRealChange(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-audit-trail"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	seedPlanTemplate(t, db, practiceID, carePlanType, `[{"id":"old","type":"short_text","label":"Old field","order":0}]`)
-	staffID := testdb.Scalar[string](t, db.Admin, `SELECT id FROM staff WHERE identity_uid = $1`, uid)
-
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
-
-	changed := plans.TemplateResponse{Fields: []plans.Field{
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	e.seedTemplate(carePlanType, `[{"id":"old","type":"short_text","label":"Old field","order":0}]`)
+	changed := []plans.Field{
 		{ID: "old", Type: shortTextType, Label: "Old field"},
 		{ID: "added", Type: shortTextType, Label: "Hospital transfer"},
-	}}
-	for range 2 {
-		resp := putTemplate(t, srv, session, practiceID, carePlanType, changed)
-		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("PUT status = %d, want %d", resp.StatusCode, http.StatusOK)
-		}
 	}
 
-	audit := planTemplateAudit(t, db, practiceID)
+	for range 2 {
+		e.putTemplate(carePlanType, changed, http.StatusOK)
+	}
+
+	audit := planTemplateAudit(t, e.db, e.Practice.ID)
 	if len(audit) != 1 {
 		t.Fatalf("audit rows = %d, want 1 (the second PUT changed nothing)", len(audit))
 	}
-	if audit[0].actor != staffID {
-		t.Errorf("audit actor = %q, want %q", audit[0].actor, staffID)
+	if audit[0].actor != e.Staff.ID {
+		t.Errorf("audit actor = %q, want %q", audit[0].actor, e.Staff.ID)
 	}
 	if before, after := audit[0].diff["before"], audit[0].diff["after"]; len(before) != 1 || len(after) != 2 || after[1].ID != "added" {
 		t.Errorf("audit diff = %+v, want one field before and the added one after", audit[0].diff)
@@ -446,19 +220,11 @@ func TestPutTemplateHandler_WritesOneAuditRowPerRealChange(t *testing.T) {
 // Practice with no row for a plan type yet records its first save, with
 // an empty list before it.
 func TestPutTemplateHandler_AuditsAFirstSaveAgainstAnEmptyList(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-audit-first"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	e := newEnv(t, signedInAs(fixture.Owner()))
 
-	srv, session := newPlanServer(t, db, uid)
-	defer srv.Close()
+	e.putTemplate(birthPlanType, []plans.Field{{ID: "first", Type: shortTextType, Label: "First"}}, http.StatusOK)
 
-	resp := putTemplate(t, srv, session, practiceID, birthPlanType, plans.TemplateResponse{Fields: []plans.Field{
-		{ID: "first", Type: shortTextType, Label: "First"},
-	}})
-	_ = resp.Body.Close()
-
-	audit := planTemplateAudit(t, db, practiceID)
+	audit := planTemplateAudit(t, e.db, e.Practice.ID)
 	if len(audit) != 1 || len(audit[0].diff["before"]) != 0 || len(audit[0].diff["after"]) != 1 {
 		t.Fatalf("audit = %+v, want one row from an empty list to one field", audit)
 	}

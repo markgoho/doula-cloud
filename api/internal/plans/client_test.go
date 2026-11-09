@@ -2,218 +2,112 @@ package plans_test
 
 import (
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/plans"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/testdb"
 )
 
-// hospital is the one planned-birth-location answer these tests seed and
-// read back, named once so the three files that assert on it agree.
-const hospital = "Hospital"
-
-// newPortalServer mounts the same route main.go wires up for the
-// Client-portal Birth Plan view, behind clientauth.Middleware.
-func newPortalServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
-	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	plans.Mount(g, ir, db.App)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, testdb.PortalUID(uid))
-}
-
-func getClientBirthPlan(t *testing.T, srv *httptest.Server, session string, engagementID string) *http.Response {
-	t.Helper()
-	return reqtest.Get(t, srv.URL+"/api/portal/engagements/"+engagementID+"/birth-plan", reqtest.Session(session))
-}
-
-func postAcknowledgeBirthPlan(t *testing.T, srv *httptest.Server, session string, engagementID string) *http.Response {
-	t.Helper()
-	return reqtest.Post(t, srv.URL+"/api/portal/engagements/"+engagementID+"/birth-plan/acknowledge", reqtest.Session(session))
+// portalRoutes are the three routes of the Client-portal Birth Plan view,
+// mounted behind clientauth.Middleware: read it, download its PDF, and
+// confirm she has read it.
+var portalRoutes = []struct {
+	name   string
+	method string
+	path   string
+}{
+	{"read", http.MethodGet, ""},
+	{"pdf", http.MethodGet, "/pdf"},
+	{"acknowledge", http.MethodPost, "/acknowledge"},
 }
 
 func TestClientGetBirthPlanHandler_Success(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "client-viewing-birth-plan"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
-	seedInstance(t, db, engagementID, birthPlanType,
-		`[{"id":"location","type":"single_select","label":"Planned birth location","options":["Home","Hospital"],"order":0}]`,
-		`{"location":"Hospital"}`,
-	)
+	e := newEnv(t, withPortalLogin())
+	e.seedBirthPlan()
 
-	srv, session := newPortalServer(t, db, identityUID)
-	defer srv.Close()
+	out := e.birthPlan()
 
-	resp := getClientBirthPlan(t, srv, session, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	out := reqtest.Decode[plans.InstanceResponse](t, resp)
-	if out.EngagementID != engagementID || out.PlanType != birthPlanType || out.Answers["location"] != hospital {
+	if out.EngagementID != e.Engagement.ID || out.PlanType != birthPlanType || out.Answers["location"] != hospital {
 		t.Fatalf("unexpected response: %+v", out)
 	}
 }
 
-func TestClientGetBirthPlanHandler_NoInstanceYet404(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "client-no-birth-plan-yet"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
+// TestClientBirthPlanRoutes_RefuseABirthPlanThatIsNotOffered proves each
+// portal route 404s when the Client is not offered a Birth Plan: none was
+// started, only a Care Plan exists (so the Care Plan stays completely
+// unreachable from the client-portal role, with no fallback to whatever
+// plan_instances row it can find), the Engagement is postpartum-only (#311:
+// independently of the portal's own nav/hub gating, even when reached
+// straight by URL, and on the write side so a stale tab cannot stamp
+// client_acknowledged_at), or the birth outcome is unknown (ADR-0015's
+// presume-nothing value: no baby is presumed).
+func TestClientBirthPlanRoutes_RefuseABirthPlanThatIsNotOffered(t *testing.T) {
+	conditions := []struct {
+		name string
+		opts []envOption
+		seed func(*env)
+	}{
+		{"none started", nil, func(*env) {}},
+		{"only a Care Plan", nil, func(e *env) { e.seedInstance(carePlanType, f1Fields, `{"f1":"secret"}`) }},
+		{"postpartum engagement", []envOption{withEngagement(fixture.Kind(fixture.KindPostpartum))}, (*env).seedBirthPlan},
+		{"birth outcome unknown", nil, func(e *env) {
+			e.seedBirthPlan()
+			e.recordOutcome("unknown", nil)
+		}},
+	}
+	for _, route := range portalRoutes {
+		for _, c := range conditions {
+			t.Run(route.name+"/"+c.name, func(t *testing.T) {
+				e := newEnv(t, append(c.opts, withPortalLogin())...)
+				c.seed(e)
 
-	srv, session := newPortalServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := getClientBirthPlan(t, srv, session, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
+				reqtest.ExpectStatus(t, route.method, e.portalURL(route.path), http.StatusNotFound, e.asClient)
+			})
+		}
+	}
 }
 
-// TestClientGetBirthPlanHandler_CarePlanNeverReturned proves the
-// HTTP-level half of "Care Plan stays completely unreachable from the
-// client-portal role": a Care Plan instance exists on the Engagement, but
-// with no Birth Plan instance, the endpoint 404s rather than falling back
-// to whatever plan_instances row it can find.
-func TestClientGetBirthPlanHandler_CarePlanNeverReturned(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "client-only-care-plan"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
-	seedInstance(t, db, engagementID, carePlanType,
-		`[{"id":"f1","type":"short_text","label":"Name","order":0}]`, `{"f1":"secret"}`,
-	)
+// TestClientBirthPlanRoutes_OtherClientsEngagementRejected proves
+// clientauth.Middleware itself rejects a foreign Engagement id with 403
+// before any portal handler runs.
+func TestClientBirthPlanRoutes_OtherClientsEngagementRejected(t *testing.T) {
+	for _, route := range portalRoutes {
+		t.Run(route.name, func(t *testing.T) {
+			e := newEnv(t, withPortalLogin())
+			other := e.anotherEngagement()
+			seedInstance(t, e.db, other.ID, birthPlanType, locationNoOptions, `{}`)
 
-	srv, session := newPortalServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := getClientBirthPlan(t, srv, session, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
-// TestClientGetBirthPlanHandler_PostpartumEngagementRefused proves #311's
-// AC directly: the endpoint refuses a postpartum-only Engagement
-// independently of the portal's own nav/hub gating -- kind = postpartum
-// never offers a Birth Plan, even when reached straight by URL.
-func TestClientGetBirthPlanHandler_PostpartumEngagementRefused(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "client-postpartum-only"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedEngagementWithKind(t, db, practiceID, "Jordan Client", "jordan@example.com", "postpartum")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
-
-	srv, session := newPortalServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := getClientBirthPlan(t, srv, session, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
-func TestClientGetBirthPlanHandler_OtherClientsEngagementRejected(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "client-not-linked"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	_, otherEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Other Client", "other@example.com")
-	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
-
-	srv, session := newPortalServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := getClientBirthPlan(t, srv, session, otherEngagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
+			reqtest.ExpectStatus(t, route.method, e.portalURLOf(other.ID, route.path), http.StatusForbidden, e.asClient)
+		})
+	}
 }
 
 // TestClientAcknowledgeBirthPlanHandler_Success is #301's central AC: a
 // Client can confirm she has read her Birth Plan, the write lands on the
 // row, and it is attributed to her in the audit trail (ADR-0022).
 func TestClientAcknowledgeBirthPlanHandler_Success(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "client-acknowledging-birth-plan"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
-	seedInstance(t, db, engagementID, birthPlanType,
-		`[{"id":"location","type":"single_select","label":"Planned birth location","options":["Home","Hospital"],"order":0}]`,
-		`{"location":"Hospital"}`,
-	)
+	e := newEnv(t, withPortalLogin())
+	e.seedBirthPlan()
 
-	srv, session := newPortalServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := postAcknowledgeBirthPlan(t, srv, session, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	out := reqtest.Decode[plans.InstanceResponse](t, resp)
+	out := reqtest.Expect[plans.InstanceResponse](t, http.MethodPost, e.portalURL("/acknowledge"), http.StatusOK, e.asClient)
 	if out.ClientAcknowledgedAt == nil {
 		t.Fatalf("clientAcknowledgedAt = nil, want it set by the acknowledge write")
 	}
 
-	getResp := getClientBirthPlan(t, srv, session, engagementID)
-	defer getResp.Body.Close()
-	getOut := reqtest.Decode[plans.InstanceResponse](t, getResp)
-	if getOut.ClientAcknowledgedAt == nil {
+	if got := e.birthPlan(); got.ClientAcknowledgedAt == nil {
 		t.Fatalf("a subsequent GET clientAcknowledgedAt = nil, want the acknowledgment to persist")
 	}
 
 	var action, actorKind, actorClientID string
-	if err := db.Admin.QueryRowContext(t.Context(),
+	if err := e.db.Admin.QueryRowContext(t.Context(),
 		`SELECT action, actor_kind::text, actor_client_id FROM activity
 		 WHERE subject_kind = 'engagement' AND subject_id = $1 ORDER BY created_at DESC LIMIT 1`,
-		engagementID,
+		e.Engagement.ID,
 	).Scan(&action, &actorKind, &actorClientID); err != nil {
 		t.Fatalf("query activity: %v", err)
 	}
-	if action != "birth_plan_acknowledged" || actorKind != "client" || actorClientID != clientID {
-		t.Fatalf("activity row = (action=%q, actorKind=%q, actorClientID=%q), want (birth_plan_acknowledged, client, %q)", action, actorKind, actorClientID, clientID)
+	if action != "birth_plan_acknowledged" || actorKind != "client" || actorClientID != e.Engagement.Client.ID {
+		t.Fatalf("activity row = (action=%q, actorKind=%q, actorClientID=%q), want (birth_plan_acknowledged, client, %q)", action, actorKind, actorClientID, e.Engagement.Client.ID)
 	}
-}
-
-func TestClientAcknowledgeBirthPlanHandler_NoInstanceYet404(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "client-acknowledging-no-birth-plan"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
-
-	srv, session := newPortalServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := postAcknowledgeBirthPlan(t, srv, session, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
-func TestClientAcknowledgeBirthPlanHandler_OtherClientsEngagementRejected(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "client-acknowledging-not-linked"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	_, otherEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Other Client", "other@example.com")
-	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
-
-	srv, session := newPortalServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := postAcknowledgeBirthPlan(t, srv, session, otherEngagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }

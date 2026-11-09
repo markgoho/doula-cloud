@@ -1,12 +1,11 @@
 package visit_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
-	"strings"
 	"testing"
 
 	"doula-cloud/api/internal/engagement"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/visit"
@@ -73,128 +72,83 @@ func carePhaseActor(t *testing.T, db *testdb.DB, engagementID string) string {
 	return *actor
 }
 
-// scheduleVisit PATCHes a Visit's scheduled instant. at == "" sends an
-// explicit null, which is the clearing shape.
-func scheduleVisit(t *testing.T, session, srvURL, practiceID, engagementID, visitID, at string) *http.Response {
-	t.Helper()
+// schedule PATCHes a Visit's scheduled instant and requires 200. at == ""
+// sends an explicit null, which is the clearing shape.
+func (e *env) schedule(visitID, at string) {
+	e.t.Helper()
 	req := visit.ScheduleRequest{}
 	if at != "" {
 		req.ScheduledAt = &at
 	}
-	body, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("marshal schedule body: %v", err)
-	}
-	return authedPatch(t, session,
-		srvURL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/schedule", body)
+	reqtest.ExpectStatus(e.t, http.MethodPatch, e.visitsURL("/"+visitID+"/schedule"), http.StatusOK, e.signedIn, reqtest.JSON(req))
 }
 
-// The headline of #895 on the creation path: booking a Visit for a date
-// leaves the Engagement 'active', with no separate status request.
-func TestCreateHandler_ScheduledVisitActivatesTheEngagement(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-activating-on-create"
-	practiceID, actorStaffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "",
-		visit.CreateRequest{ScheduledAt: new(firstScheduledAt)})
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusCreated)
-
-	if got := engagementStatus(t, db, engagementID); got != engagement.StatusActive {
-		t.Fatalf("engagement status = %q, want %q", got, engagement.StatusActive)
+// requireEngagementAt proves the Engagement is at status with entries
+// care_phase_changed rows behind it.
+func (e *env) requireEngagementAt(status string, entries int) {
+	e.t.Helper()
+	if got := engagementStatus(e.t, e.db, e.Engagement.ID); got != status {
+		e.t.Fatalf("engagement status = %q, want %q", got, status)
 	}
-	if n := countCarePhaseEntries(t, db, engagementID); n != 1 {
-		t.Fatalf("care_phase_changed entries = %d, want 1", n)
-	}
-	if got := carePhaseActor(t, db, engagementID); got != actorStaffID {
-		t.Fatalf("care phase actor = %q, want the scheduling Staff member %q", got, actorStaffID)
+	if n := countCarePhaseEntries(e.t, e.db, e.Engagement.ID); n != entries {
+		e.t.Fatalf("care_phase_changed entries = %d, want %d", n, entries)
 	}
 }
 
-// ADR-0015 records "the person who scheduled". When an Owner books a
-// colleague onto a birth, two Staff ids are in play and they are not
-// interchangeable: the assignee is who the Visit is for, and the actor is
-// who did the booking.
-func TestCreateHandler_ActivationActorIsTheBookerNotTheAssignee(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "owner-booking-a-colleague"
-	practiceID, bookerStaffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole, doulaRole}, "employee")
-	assigneeStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-booked-onto-birth", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "",
-		visit.CreateRequest{StaffID: &assigneeStaffID, ScheduledAt: new(firstScheduledAt)})
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusCreated)
-
-	if got := engagementStatus(t, db, engagementID); got != engagement.StatusActive {
-		t.Fatalf("engagement status = %q, want %q", got, engagement.StatusActive)
-	}
-	if got := carePhaseActor(t, db, engagementID); got != bookerStaffID {
-		t.Fatalf("care phase actor = %q, want the booker %q (assignee is %q)", got, bookerStaffID, assigneeStaffID)
-	}
-}
-
-// The trigger is "first scheduled", not "first created": logging a past
+// #895's headline on the creation path: booking a Visit for a date leaves
+// the Engagement 'active', with no separate status request, and records
+// the person who scheduled. When an Owner books a colleague onto a birth,
+// two Staff ids are in play and they are not interchangeable: the assignee
+// is who the Visit is for, and the actor is who did the booking. The
+// trigger is "first scheduled", not "first created": logging a past
 // meeting -- a Visit with no scheduledAt -- says nothing about the
 // calendar, so the Engagement stays where the Practice put it.
-func TestCreateHandler_UnscheduledVisitLeavesTheEngagementAtIntake(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-logging-a-past-visit"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "", visit.CreateRequest{})
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusCreated)
-
-	if got := engagementStatus(t, db, engagementID); got != engagement.StatusIntake {
-		t.Fatalf("engagement status = %q, want %q", got, engagement.StatusIntake)
+func TestCreateHandler_ActivatesOnlyOnAScheduledVisit(t *testing.T) {
+	cases := []struct {
+		name        string
+		caller      []fixture.StaffOption
+		request     func(e *env) visit.CreateRequest
+		wantStatus  string
+		wantEntries int
+	}{
+		{"a scheduled Visit for herself", []fixture.StaffOption{fixture.Doula()}, func(*env) visit.CreateRequest {
+			return visit.CreateRequest{ScheduledAt: new(firstScheduledAt)}
+		}, engagement.StatusActive, 1},
+		{"a scheduled Visit an Owner books for a colleague", []fixture.StaffOption{fixture.Owner(), fixture.Doula()}, func(e *env) visit.CreateRequest {
+			return visit.CreateRequest{StaffID: new(e.staff().ID), ScheduledAt: new(firstScheduledAt)}
+		}, engagement.StatusActive, 1},
+		{"a Visit with no date", []fixture.StaffOption{fixture.Doula()}, func(*env) visit.CreateRequest {
+			return visit.CreateRequest{}
+		}, engagement.StatusIntake, 0},
 	}
-	if n := countCarePhaseEntries(t, db, engagementID); n != 0 {
-		t.Fatalf("care_phase_changed entries = %d, want 0", n)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(tc.caller...))
+
+			e.create(tc.request(e))
+
+			e.requireEngagementAt(tc.wantStatus, tc.wantEntries)
+			if tc.wantEntries > 0 {
+				if got := carePhaseActor(t, e.db, e.Engagement.ID); got != e.Staff.ID {
+					t.Fatalf("care phase actor = %q, want the booker %q", got, e.Staff.ID)
+				}
+			}
+		})
 	}
 }
 
 // The other half of "first scheduled, not first created": a Visit logged
 // with no date and given one later activates on that later write.
 func TestScheduleHandler_ActivatesOnTheLaterSchedule(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-scheduling-later"
-	practiceID, actorStaffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	visitID := seedVisit(t, db, engagementID, actorStaffID)
+	e := newEnv(t)
+	visitID := seedVisit(t, e.db, e.Engagement.ID, e.Staff.ID)
+	e.requireEngagementAt(engagement.StatusIntake, 0)
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
+	e.schedule(visitID, firstScheduledAt)
 
-	if got := engagementStatus(t, db, engagementID); got != engagement.StatusIntake {
-		t.Fatalf("engagement status before scheduling = %q, want %q", got, engagement.StatusIntake)
-	}
-
-	resp := scheduleVisit(t, session, srv.URL, practiceID, engagementID, visitID, firstScheduledAt)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-
-	if got := engagementStatus(t, db, engagementID); got != engagement.StatusActive {
-		t.Fatalf("engagement status = %q, want %q", got, engagement.StatusActive)
-	}
-	if n := countCarePhaseEntries(t, db, engagementID); n != 1 {
-		t.Fatalf("care_phase_changed entries = %d, want 1", n)
-	}
-	if got := carePhaseActor(t, db, engagementID); got != actorStaffID {
-		t.Fatalf("care phase actor = %q, want the scheduling Staff member %q", got, actorStaffID)
+	e.requireEngagementAt(engagement.StatusActive, 1)
+	if got := carePhaseActor(t, e.db, e.Engagement.ID); got != e.Staff.ID {
+		t.Fatalf("care phase actor = %q, want the scheduling Staff member %q", got, e.Staff.ID)
 	}
 }
 
@@ -202,54 +156,27 @@ func TestScheduleHandler_ActivatesOnTheLaterSchedule(t *testing.T) {
 // one-way: an Engagement is never activated by a write that leaves
 // nothing on the calendar.
 func TestScheduleHandler_ClearingAnInstantActivatesNothing(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-clearing-a-schedule"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	visitID := seedScheduledVisit(t, db, engagementID, staffID, parseRFC3339(t, firstScheduledAt))
+	e := newEnv(t)
+	visitID := seedScheduledVisit(t, e.db, e.Engagement.ID, e.Staff.ID, parseRFC3339(t, firstScheduledAt))
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
+	e.schedule(visitID, "")
 
-	resp := scheduleVisit(t, session, srv.URL, practiceID, engagementID, visitID, "")
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-
-	if got := engagementStatus(t, db, engagementID); got != engagement.StatusIntake {
-		t.Fatalf("engagement status = %q, want %q", got, engagement.StatusIntake)
-	}
-	if n := countCarePhaseEntries(t, db, engagementID); n != 0 {
-		t.Fatalf("care_phase_changed entries = %d, want 0", n)
-	}
+	e.requireEngagementAt(engagement.StatusIntake, 0)
 }
 
 // "One-way, one-time, never a repeated write": a Practice that books a
 // second Visit, and reschedules the first, leaves exactly one status move
 // behind, not one per booking.
 func TestScheduleHandler_SecondScheduleWritesNoSecondMove(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-booking-twice"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	firstVisitID := seedVisit(t, db, engagementID, staffID)
-	secondVisitID := seedVisit(t, db, engagementID, staffID)
+	e := newEnv(t)
+	firstVisitID := seedVisit(t, e.db, e.Engagement.ID, e.Staff.ID)
+	secondVisitID := seedVisit(t, e.db, e.Engagement.ID, e.Staff.ID)
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
+	e.schedule(firstVisitID, firstScheduledAt)
+	e.schedule(secondVisitID, "2027-06-01T09:00:00Z")
+	e.schedule(firstVisitID, "2027-05-05T10:00:00Z")
 
-	first := scheduleVisit(t, session, srv.URL, practiceID, engagementID, firstVisitID, firstScheduledAt)
-	_ = first.Body.Close()
-	second := scheduleVisit(t, session, srv.URL, practiceID, engagementID, secondVisitID, "2027-06-01T09:00:00Z")
-	_ = second.Body.Close()
-	reschedule := scheduleVisit(t, session, srv.URL, practiceID, engagementID, firstVisitID, "2027-05-05T10:00:00Z")
-	_ = reschedule.Body.Close()
-
-	if got := engagementStatus(t, db, engagementID); got != engagement.StatusActive {
-		t.Fatalf("engagement status = %q, want %q", got, engagement.StatusActive)
-	}
-	if n := countCarePhaseEntries(t, db, engagementID); n != 1 {
-		t.Fatalf("care_phase_changed entries = %d, want 1 (the move happens once)", n)
-	}
+	e.requireEngagementAt(engagement.StatusActive, 1)
 }
 
 // An Engagement past 'intake' is untouched, by either write path.
@@ -271,34 +198,15 @@ func TestVisitWrites_LeaveAnEngagementPastIntakeAlone(t *testing.T) {
 		{"creating a scheduled Visit on an already completed Engagement", engagement.StatusCompleted, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			db := testdb.New(t)
-			identityUID := strings.ReplaceAll(tc.name, " ", "-")
-			practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-			_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID,
-				"Client "+tc.name, identityUID+"@example.com", tc.status)
+			e := newEnv(t, withEngagement(fixture.Status(tc.status)))
 
-			srv, session := newServer(t, db, identityUID)
-			defer srv.Close()
-
-			var resp *http.Response
-			wantStatus := http.StatusOK
 			if tc.isCreated {
-				wantStatus = http.StatusCreated
-				resp = createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "",
-					visit.CreateRequest{ScheduledAt: new(firstScheduledAt)})
+				e.create(visit.CreateRequest{ScheduledAt: new(firstScheduledAt)})
 			} else {
-				visitID := seedVisit(t, db, engagementID, staffID)
-				resp = scheduleVisit(t, session, srv.URL, practiceID, engagementID, visitID, firstScheduledAt)
+				e.schedule(seedVisit(t, e.db, e.Engagement.ID, e.Staff.ID), firstScheduledAt)
 			}
-			defer resp.Body.Close()
-			reqtest.RequireStatus(t, resp, wantStatus)
 
-			if got := engagementStatus(t, db, engagementID); got != tc.status {
-				t.Fatalf("engagement status = %q, want it untouched at %q", got, tc.status)
-			}
-			if n := countCarePhaseEntries(t, db, engagementID); n != 0 {
-				t.Fatalf("care_phase_changed entries = %d, want 0", n)
-			}
+			e.requireEngagementAt(tc.status, 0)
 		})
 	}
 }
