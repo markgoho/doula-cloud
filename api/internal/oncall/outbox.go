@@ -93,10 +93,10 @@ func (w GapNoticeWorker) send(ctx context.Context, tx *sql.Tx, inner outbox.Work
 		return wrap(inner.MarkSent(ctx, tx, r.id, now))
 	}
 
-	staffIDs, emails, err := ownerAndAdminRecipients(ctx, tx, r.practiceID)
+	staffIDs, emails, err := outbox.OwnerAndAdminRecipients(ctx, tx, r.practiceID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return err
+		return err //nolint:wrapcheck // OwnerAndAdminRecipients names its own failures
 	}
 	// Written before the send for connect_nudge's reason: SendAll marks
 	// the row terminal itself, and a retry overwrites this with what that
@@ -112,40 +112,6 @@ func (w GapNoticeWorker) send(ctx context.Context, tx *sql.Tx, inner outbox.Work
 	}
 	link := w.AppBaseURL + "/practices/" + r.practiceID + "/on-call"
 	return wrap(inner.SendAll(ctx, tx, r.id, r.attemptCount, now, emails, gapNoticeSubject, gapNoticeText(link)))
-}
-
-// ownerAndAdminRecipients resolves every current Owner and Admin at send
-// time, as payments' ownerEmails does for #343, with the staff ids
-// beside the addresses so the row can say whom it addressed. Relies on
-// 00033's app.notification_worker_trusted policies on staff and
-// practice_memberships.
-func ownerAndAdminRecipients(ctx context.Context, tx *sql.Tx, practiceID string) (staffIDs, emails []string, err error) {
-	rows, err := tx.QueryContext(ctx,
-		`SELECT s.id, s.email FROM staff s
-		 JOIN practice_memberships pm ON pm.staff_id = s.id
-		 WHERE pm.practice_id = $1 AND (pm.roles && ARRAY['owner', 'admin']::practice_role[])
-		 ORDER BY s.id`,
-		practiceID,
-	)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return nil, nil, fmt.Errorf("oncall: resolve owner and admin recipients: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var id, email string
-		if err := rows.Scan(&id, &email); err != nil {
-			// coverage:ignore reason: row scan failure, not exercised by unit tests
-			return nil, nil, fmt.Errorf("oncall: scan recipient: %w", err)
-		}
-		staffIDs = append(staffIDs, id)
-		emails = append(emails, email)
-	}
-	if err := rows.Err(); err != nil {
-		// coverage:ignore reason: cursor failure, not exercised by unit tests
-		return nil, nil, fmt.Errorf("oncall: read recipients: %w", err)
-	}
-	return staffIDs, emails, nil
 }
 
 func wrap(err error) error {

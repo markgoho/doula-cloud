@@ -23,13 +23,7 @@ import (
 // self-caused (actor_staff_id = staff_id) rather than one of the three
 // recovery paths.
 func RemoveSecondFactorHandler(verifier authn.Verifier, accounts authn.AccountManager, db *sql.DB) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, _, ok := authn.Begin(w, r, db, authn.TierStaff)
-		if !ok {
-			return
-		}
-		defer dbtx.Rollback(tx)
-
+	return authn.Handler(db, authn.TierStaff, func(w http.ResponseWriter, r *http.Request, tx *sql.Tx, uid string) {
 		// #1182: this route used to answer 403 here, alone with
 		// FinishEnrollmentHandler, where the other six pre-Practice
 		// routes answered 404. It answers the family's 404 now -- see

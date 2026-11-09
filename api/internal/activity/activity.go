@@ -10,6 +10,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"time"
 )
@@ -104,6 +105,24 @@ type recordConfig struct {
 // more than one statement on that webhook path.
 func ScopedTo(practiceID string) RecordOption {
 	return func(c *recordConfig) { c.widenToPractice = practiceID }
+}
+
+// RecordPracticeChange writes the row for a Staff member changing a fact
+// about practiceID itself, with diff marshaled as the row's Diff.
+func RecordPracticeChange(ctx context.Context, tx *sql.Tx, practiceID, staffID, action string, diff any) error {
+	diffJSON, err := json.Marshal(diff)
+	if err != nil {
+		// coverage:ignore reason: a diff struct callers pass always marshals cleanly, not exercised by unit tests
+		return fmt.Errorf("activity: marshal %s diff: %w", action, err)
+	}
+	return Record(ctx, tx, Entry{
+		PracticeID:  practiceID,
+		SubjectKind: SubjectPractice,
+		SubjectID:   practiceID,
+		Action:      action,
+		Diff:        diffJSON,
+		Actor:       StaffActor(staffID),
+	})
 }
 
 // Record writes one row of e's history, in the caller's own transaction

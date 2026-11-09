@@ -98,13 +98,7 @@ type ownMembership struct {
 // -- the window 00044's and 00101's policies are both scoped to. The
 // per-Practice writes below set and unset it around themselves.
 func DeleteLoginHandler(accounts authn.AccountManager, db *sql.DB) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, _, ok := authn.Begin(w, r, db, authn.TierStaff)
-		if !ok {
-			return
-		}
-		defer dbtx.Rollback(tx)
-
+	return authn.Handler(db, authn.TierStaff, func(w http.ResponseWriter, r *http.Request, tx *sql.Tx, uid string) {
 		if !RequireConfirmed(w, r) {
 			return
 		}
@@ -202,15 +196,7 @@ func DeleteLoginHandler(accounts authn.AccountManager, db *sql.DB) http.Handler 
 		// sending a dead credential on the next request and reading the
 		// 401 as a fault -- the same clearing session.EndHandler does on
 		// ordinary sign-out.
-		http.SetCookie(w, &http.Cookie{
-			Name:     authn.SessionCookieName,
-			Value:    "",
-			Path:     "/",
-			MaxAge:   -1,
-			HttpOnly: true,
-			Secure:   true,
-			SameSite: http.SameSiteLaxMode,
-		})
+		http.SetCookie(w, authn.ExpiredSessionCookie())
 		w.WriteHeader(http.StatusNoContent)
 	})
 }

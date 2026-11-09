@@ -5,7 +5,6 @@ package practicename
 import (
 	"context"
 	"database/sql"
-	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"strings"
@@ -129,20 +128,7 @@ func applyRename(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID, befo
 		return fmt.Errorf("practicename: move draft contracts to the new name: %w", err)
 	}
 
-	diffJSON, err := json.Marshal(nameDiff{NameBefore: before, NameAfter: after})
-	if err != nil {
-		// coverage:ignore reason: marshal of a fixed, always-serializable struct never fails
-		return fmt.Errorf("practicename: marshal name diff: %w", err)
-	}
-
-	if err := activity.Record(ctx, tx, activity.Entry{
-		PracticeID:  practiceID,
-		SubjectKind: activity.SubjectPractice,
-		SubjectID:   practiceID,
-		Action:      actionNameChanged,
-		Diff:        diffJSON,
-		Actor:       activity.StaffActor(actorStaffID),
-	}); err != nil {
+	if err := activity.RecordPracticeChange(ctx, tx, practiceID, actorStaffID, actionNameChanged, nameDiff{NameBefore: before, NameAfter: after}); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("practicename: record name change: %w", err)
 	}

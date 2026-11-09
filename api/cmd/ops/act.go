@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/dbtx"
 )
 
 const headerIdempotencyKey = "Idempotency-Key"
@@ -128,6 +129,25 @@ func isReplay(ctx context.Context, q rowQuerier, op operator, action, key string
 }
 
 // A replay answers what the first request did and needs no code of its own.
+// beginSpentAct opens the transaction of a step-up-gated act and spends the
+// operator's step-up for it unless this request key already did, answering
+// the refusal itself. The caller defers dbtx.Rollback once it has the
+// transaction.
+func beginSpentAct(w http.ResponseWriter, r *http.Request, db *sql.DB, op operator, action, requestKey string) (*sql.Tx, bool) {
+	tx, ok := dbtx.Begin(w, r, db)
+	if !ok {
+		// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
+		return nil, false
+	}
+	if err := spendUnlessReplay(r.Context(), tx, op, action, requestKey); err != nil {
+		// coverage:ignore reason: a DB failure, or a second act spending the stamp between requireStepUp's read and this one; stepup_test.go covers spendStepUp's refusal
+		dbtx.Rollback(tx)
+		writeStepUpRequired(w)
+		return nil, false
+	}
+	return tx, true
+}
+
 func spendUnlessReplay(ctx context.Context, tx *sql.Tx, op operator, action, key string) error {
 	replay, err := isReplay(ctx, tx, op, action, key)
 	if err != nil || replay {

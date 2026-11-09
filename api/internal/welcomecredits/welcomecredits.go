@@ -124,10 +124,10 @@ func (w Worker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r pen
 
 	var staffIDs, emails []string
 	if reason == "" {
-		staffIDs, emails, err = ownerRecipients(ctx, tx, r.practiceID)
+		staffIDs, emails, err = outbox.OwnerRecipients(ctx, tx, r.practiceID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return err
+			return err //nolint:wrapcheck // OwnerRecipients names its own failures
 		}
 		reason, err = recipientSkip(ctx, tx, emails)
 		if err != nil {
@@ -237,33 +237,4 @@ func recipientSkip(ctx context.Context, tx *sql.Tx, emails []string) (skipReason
 		return skipOwnersSuppressed, nil
 	}
 	return "", nil
-}
-
-func ownerRecipients(ctx context.Context, tx *sql.Tx, practiceID string) (staffIDs, emails []string, err error) {
-	rows, err := tx.QueryContext(ctx,
-		`SELECT s.id, s.email FROM staff s
-		 JOIN practice_memberships pm ON pm.staff_id = s.id
-		 WHERE pm.practice_id = $1 AND 'owner' = ANY(pm.roles)
-		 ORDER BY s.id`,
-		practiceID,
-	)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return nil, nil, fmt.Errorf("welcomecredits: resolve owners: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var id, email string
-		if err := rows.Scan(&id, &email); err != nil {
-			// coverage:ignore reason: DB scan failure, not exercised by unit tests
-			return nil, nil, fmt.Errorf("welcomecredits: scan owner: %w", err)
-		}
-		staffIDs = append(staffIDs, id)
-		emails = append(emails, email)
-	}
-	if err := rows.Err(); err != nil {
-		// coverage:ignore reason: DB row iteration failure, not exercised by unit tests
-		return nil, nil, fmt.Errorf("welcomecredits: iterate owners: %w", err)
-	}
-	return staffIDs, emails, nil
 }

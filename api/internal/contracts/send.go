@@ -3,9 +3,7 @@ package contracts
 import (
 	"context"
 	"database/sql"
-	"encoding/json/v2"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 
@@ -175,49 +173,7 @@ func clientHasPortalInvite(ctx context.Context, tx *sql.Tx, engagementID string)
 // the time this runs, and push delivery is a best-effort notification
 // layer on top of it, not part of Send's own success criteria.
 func notifyClient(ctx context.Context, tx *sql.Tx, pusher push.Pusher, engagementID string) {
-	body, err := json.Marshal(sendPushPayload{EngagementID: engagementID})
-	// coverage:ignore reason: sendPushPayload always marshals cleanly, not exercised by unit tests
-	if err != nil {
-		// coverage:ignore reason: sendPushPayload always marshals cleanly, not exercised by unit tests
-		log.Printf("contracts: notify client: marshal payload: %v", err)
-		// coverage:ignore reason: sendPushPayload always marshals cleanly, not exercised by unit tests
-		return
-	}
-
-	rows, err := tx.QueryContext(ctx,
-		`SELECT endpoint, p256dh_key, auth_key FROM push_subscriptions_for_message_recipient($1, 'client')`,
-		engagementID,
-	)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		log.Printf("contracts: notify client: query subscriptions: %v", err)
-		return
-	}
-	defer func() { _ = rows.Close() }()
-
-	var subs []push.Subscription
-	for rows.Next() {
-		var s push.Subscription
-		if err := rows.Scan(&s.Endpoint, &s.P256dhKey, &s.AuthKey); err != nil {
-			// coverage:ignore reason: row scan failure, not exercised by unit tests
-			log.Printf("contracts: notify client: scan subscription row: %v", err)
-			return
-		}
-		subs = append(subs, s)
-	}
-	// coverage:ignore reason: row iteration failure, not exercised by unit tests
-	if err := rows.Err(); err != nil {
-		// coverage:ignore reason: row iteration failure, not exercised by unit tests
-		log.Printf("contracts: notify client: iterate subscription rows: %v", err)
-		// coverage:ignore reason: row iteration failure, not exercised by unit tests
-		return
-	}
-
-	for _, sub := range subs {
-		if err := pusher.Send(ctx, sub, body); err != nil {
-			log.Printf("contracts: notify client: send push: %v", err)
-		}
-	}
+	push.NotifyMessageRecipient(ctx, tx, pusher, "contracts: notify client", engagementID, "client", sendPushPayload{EngagementID: engagementID})
 }
 
 // missingMergeFieldKeys reports every key in mergeFields whose entry in

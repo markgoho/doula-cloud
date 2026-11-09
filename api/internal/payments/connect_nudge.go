@@ -263,10 +263,10 @@ func (w ConnectNudgeWorker) send(ctx context.Context, tx *sql.Tx, inner outbox.W
 		return wrapOutboxErr(inner.MarkSent(ctx, tx, r.id, now))
 	}
 
-	staffIDs, emails, err := ownerRecipients(ctx, tx, r.practiceID)
+	staffIDs, emails, err := outbox.OwnerRecipients(ctx, tx, r.practiceID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return err
+		return err //nolint:wrapcheck // OwnerRecipients names its own failures
 	}
 	// Written before the send rather than after it, because SendAll marks
 	// the row terminal itself and there is no "afterwards" left to write
@@ -279,39 +279,6 @@ func (w ConnectNudgeWorker) send(ctx context.Context, tx *sql.Tx, inner outbox.W
 	}
 	link := w.AppBaseURL + "/practices/" + r.practiceID + "/settings/payments"
 	return wrapOutboxErr(inner.SendAll(ctx, tx, r.id, r.attemptCount, now, emails, connectNudgeSubject, connectNudgeText(link)))
-}
-
-// ownerRecipients is ownerEmails with the Staff ids beside the addresses
-// -- the same join, the same 00033 trusted policies, one extra column.
-// Kept here rather than widening ownerEmails: #343's worker has no use
-// for the ids, and #917 is the only send that has to say afterwards whom
-// it addressed.
-func ownerRecipients(ctx context.Context, tx *sql.Tx, practiceID string) (staffIDs, emails []string, err error) {
-	rows, err := tx.QueryContext(ctx,
-		`SELECT s.id, s.email FROM staff s
-		 JOIN practice_memberships pm ON pm.staff_id = s.id
-		 WHERE pm.practice_id = $1 AND 'owner' = ANY(pm.roles)`,
-		practiceID,
-	)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return nil, nil, fmt.Errorf("payments: resolve owner recipients: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var id, email string
-		if err := rows.Scan(&id, &email); err != nil {
-			// coverage:ignore reason: row scan failure, not exercised by unit tests
-			return nil, nil, fmt.Errorf("payments: scan owner recipient: %w", err)
-		}
-		staffIDs = append(staffIDs, id)
-		emails = append(emails, email)
-	}
-	if err := rows.Err(); err != nil {
-		// coverage:ignore reason: cursor failure, not exercised by unit tests
-		return nil, nil, fmt.Errorf("payments: read owner recipients: %w", err)
-	}
-	return staffIDs, emails, nil
 }
 
 // recordConnectNudgeRecipients writes whom this attempt addressed onto

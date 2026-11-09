@@ -23,11 +23,22 @@ type exportScope struct {
 	Entities []string `json:"entities"`
 }
 
+// flushZip sends what zw has buffered to the caller, so the ZIP reaches her
+// as it is written rather than when the response ends.
+func flushZip(w http.ResponseWriter, zw *zip.Writer) error {
+	if err := zw.Flush(); err != nil {
+		// coverage:ignore reason: response streaming failure, not exercised by unit tests
+		return fmt.Errorf("flush zip: %w", err)
+	}
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	return nil
+}
+
 // Handler streams a ZIP of one UTF-8 CSV per entity() row back to the
-// calling Owner. Mounted with staffauth.OwnerOnly, and staffauth.Owner is
-// declared again here anyway -- belt-and-braces, the same shape
-// client.EraseEligibilityHandler follows, since a route's mount-level
-// gate and its handler's own gate are two different lines of defense.
+// calling Owner. Mounted with staffauth.OwnerOnly, the one place the role
+// is enforced.
 //
 // The Activity row is written first, in the same transaction as every
 // read that follows. A DB failure partway through (any entity's own
@@ -104,7 +115,7 @@ func Handler() http.Handler {
 			// coverage:ignore reason: response streaming failure, not exercised by unit tests
 			log.Printf("export: close: %v", err)
 		}
-	}, staffauth.Owner())
+	})
 }
 
 // writeEntity streams one entity's rows as a CSV file inside zw. e.query
@@ -168,12 +179,5 @@ func writeEntity(r *http.Request, w http.ResponseWriter, tx *sql.Tx, zw *zip.Wri
 		// coverage:ignore reason: response streaming failure, not exercised by unit tests
 		return fmt.Errorf("flush csv: %w", err)
 	}
-	if err := zw.Flush(); err != nil {
-		// coverage:ignore reason: response streaming failure, not exercised by unit tests
-		return fmt.Errorf("flush zip: %w", err)
-	}
-	if flusher, ok := w.(http.Flusher); ok {
-		flusher.Flush()
-	}
-	return nil
+	return flushZip(w, zw)
 }

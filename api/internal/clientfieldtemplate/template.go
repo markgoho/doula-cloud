@@ -14,7 +14,6 @@ package clientfieldtemplate
 import (
 	"context"
 	"database/sql"
-	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
@@ -23,6 +22,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/templatefield"
 )
 
 // Field is one entry in a Client Field Template's field list. Order is
@@ -161,30 +161,5 @@ func saveFields(ctx context.Context, tx *sql.Tx, practiceID, staffID string, pre
 		return fmt.Errorf("clientfieldtemplate: save fields: %w", err)
 	}
 
-	previousJSON, err := json.Marshal(previous)
-	if err != nil {
-		// coverage:ignore reason: Field always marshals cleanly, not exercised by unit tests
-		return fmt.Errorf("clientfieldtemplate: marshal previous fields: %w", err)
-	}
-	if string(previousJSON) == string(fieldsJSON) {
-		return nil
-	}
-
-	diff, err := json.Marshal(map[string]jsontext.Value{"before": previousJSON, "after": fieldsJSON})
-	if err != nil {
-		// coverage:ignore reason: both sides always marshal cleanly, not exercised by unit tests
-		return fmt.Errorf("clientfieldtemplate: marshal diff: %w", err)
-	}
-	if err := activity.Record(ctx, tx, activity.Entry{
-		PracticeID:  practiceID,
-		SubjectKind: "client_field_template",
-		SubjectID:   templateID,
-		Action:      "updated",
-		Diff:        diff,
-		Actor:       activity.StaffActor(staffID),
-	}); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("clientfieldtemplate: record audit event: %w", err)
-	}
-	return nil
+	return templatefield.RecordChange(ctx, tx, practiceID, staffID, activity.SubjectClientFieldTemplate, templateID, previous, fieldsJSON) //nolint:wrapcheck // RecordChange names its own failures
 }

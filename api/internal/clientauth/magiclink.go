@@ -201,13 +201,7 @@ type priorLinkResponse struct {
 // her own session's account only, so a link from another account names
 // nothing.
 func PriorLinkReturnHandler(db *sql.DB) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, _, ok := authn.Begin(w, r, db, authn.TierPortal)
-		if !ok {
-			return
-		}
-		defer func() { _ = tx.Rollback() }()
-
+	return authn.Handler(db, authn.TierPortal, func(w http.ResponseWriter, r *http.Request, tx *sql.Tx, uid string) {
 		var req PriorLinkRequest
 		if !apierr.DecodeJSON(w, r, &req) {
 			return

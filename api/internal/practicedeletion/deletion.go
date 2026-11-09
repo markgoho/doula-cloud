@@ -176,7 +176,7 @@ func StatusHandler() http.Handler {
 			out.FinalizeAt = &t
 		}
 		apierr.WriteJSON(w, http.StatusOK, out)
-	}, staffauth.Owner())
+	})
 }
 
 // InitiateHandler starts the 30-day window: locks the Practice against

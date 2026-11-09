@@ -13,6 +13,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/legal"
 	"doula-cloud/api/internal/legalnotice"
 	"doula-cloud/api/internal/money"
@@ -225,19 +226,12 @@ func legalPublishAct(d Deps) http.HandlerFunc {
 			}
 		}
 
-		tx, err := d.DB.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		tx, ok := beginSpentAct(w, r, d.DB, op, actLegalVersionPublished, requestKey)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
-		defer func() { _ = tx.Rollback() }()
-
-		if err := spendUnlessReplay(r.Context(), tx, op, actLegalVersionPublished, requestKey); err != nil {
-			// coverage:ignore reason: a DB failure, or a second act spending the stamp between requireStepUp's read and this one; stepup_test.go covers spendStepUp's refusal
-			writeStepUpRequired(w)
-			return
-		}
+		defer dbtx.Rollback(tx)
 
 		var priorActID string
 		err = tx.QueryRowContext(r.Context(),
@@ -249,9 +243,8 @@ func legalPublishAct(d Deps) http.HandlerFunc {
 				apierr.Write(w, http.StatusUnprocessableEntity, apierr.CodeInvalidArgument, msgLegalKeyReused, nil)
 				return
 			}
-			if err := tx.Commit(); err != nil {
-				// coverage:ignore reason: DB failure, not exercised by unit tests
-				writeInternal(w)
+			if !dbtx.Commit(w, tx) {
+				// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 				return
 			}
 			answer(prior)
@@ -287,9 +280,8 @@ func legalPublishAct(d Deps) http.HandlerFunc {
 			apierr.Write(w, http.StatusConflict, apierr.CodeConflict, msgPublishRaced, nil)
 			return
 		}
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		if !dbtx.Commit(w, tx) {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
 		answer(publicationRow{material: version.Material, publishedAt: now, queued: *queued})

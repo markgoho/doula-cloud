@@ -11,6 +11,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 )
 
 const monthLayout = "2006-01"
@@ -57,13 +58,12 @@ func monthlyCredits(db *sql.DB) http.HandlerFunc {
 			month = parsed
 		}
 
-		tx, err := db.BeginTx(r.Context(), &sql.TxOptions{ReadOnly: true})
-		if err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		tx, ok := dbtx.BeginReadOnly(w, r, db)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
-		defer func() { _ = tx.Rollback() }()
+		defer dbtx.Rollback(tx)
 
 		read, err := readMonthlyCredits(r, tx, month, lastClosed)
 		if err != nil {

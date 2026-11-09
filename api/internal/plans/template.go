@@ -11,16 +11,15 @@ package plans
 import (
 	"context"
 	"database/sql"
-	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/templatefield"
 )
 
 // validPlanTypes is the plan_type enum from 00011_plan_templates.sql,
@@ -39,19 +38,6 @@ const (
 	fieldTypeCheckbox      = "checkbox"
 	fieldTypeSectionHeader = "section_header"
 )
-
-// validFieldTypes is the field-type palette from ADR-0001: the only kinds
-// of field a Plan Template may contain.
-var validFieldTypes = map[string]bool{
-	fieldTypeShortText:     true,
-	"long_text":            true,
-	fieldTypeSingleSelect:  true,
-	fieldTypeMultiSelect:   true,
-	fieldTypeCheckbox:      true,
-	fieldTypeSectionHeader: true,
-}
-
-var selectFieldTypes = map[string]bool{fieldTypeSingleSelect: true, fieldTypeMultiSelect: true}
 
 // Field is one entry in a Plan Template's field list. Order is not read
 // from request bodies -- see normalizeFields -- but is always present on
@@ -161,32 +147,7 @@ func saveTemplateFields(ctx context.Context, tx *sql.Tx, practiceID, staffID, pl
 	if previous == nil {
 		previous = []Field{}
 	}
-	previousJSON, err := json.Marshal(previous)
-	if err != nil {
-		// coverage:ignore reason: Field always marshals cleanly, not exercised by unit tests
-		return fmt.Errorf("plans: marshal previous fields: %w", err)
-	}
-	if string(previousJSON) == string(fieldsJSON) {
-		return nil
-	}
-
-	diff, err := json.Marshal(map[string]jsontext.Value{"before": previousJSON, "after": fieldsJSON})
-	if err != nil {
-		// coverage:ignore reason: both sides always marshal cleanly, not exercised by unit tests
-		return fmt.Errorf("plans: marshal diff: %w", err)
-	}
-	if err := activity.Record(ctx, tx, activity.Entry{
-		PracticeID:  practiceID,
-		SubjectKind: "plan_template",
-		SubjectID:   templateID,
-		Action:      "updated",
-		Diff:        diff,
-		Actor:       activity.StaffActor(staffID),
-	}); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("plans: record audit event: %w", err)
-	}
-	return nil
+	return templatefield.RecordChange(ctx, tx, practiceID, staffID, activity.SubjectPlanTemplate, templateID, previous, fieldsJSON) //nolint:wrapcheck // RecordChange names its own failures
 }
 
 // normalizeFields validates fields against the ADR-0001 palette and
@@ -198,30 +159,11 @@ func normalizeFields(fields []Field) ([]Field, string) {
 	seenIDs := make(map[string]bool, len(fields))
 	out := make([]Field, len(fields))
 	for i, f := range fields {
-		if f.ID == "" {
-			return nil, "field id is required"
+		if msg := templatefield.CheckIdentity(seenIDs, f.ID, f.Type, f.Label); msg != "" {
+			return nil, msg
 		}
-		if seenIDs[f.ID] {
-			return nil, "duplicate field id: " + f.ID
-		}
-		seenIDs[f.ID] = true
-
-		if !validFieldTypes[f.Type] {
-			return nil, "unknown field type: " + f.Type
-		}
-		if f.Label == "" {
-			return nil, "field label is required"
-		}
-
-		if selectFieldTypes[f.Type] {
-			if len(f.Options) == 0 {
-				return nil, "field " + f.ID + " requires at least one option"
-			}
-			if slices.Contains(f.Options, "") {
-				return nil, "field " + f.ID + " has a blank option"
-			}
-		} else if len(f.Options) > 0 {
-			return nil, "field " + f.ID + " of type " + f.Type + " may not have options"
+		if msg := templatefield.CheckOptions(f.ID, f.Type, f.Options); msg != "" {
+			return nil, msg
 		}
 
 		out[i] = Field{ID: f.ID, Type: f.Type, Label: f.Label, Options: f.Options, Order: i}

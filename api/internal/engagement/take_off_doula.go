@@ -46,10 +46,6 @@ func TakeOffDoulaHandler() http.Handler {
 			return
 		}
 
-		apierr.WriteJSON(w, http.StatusOK, AttachSelfResponse{
-			EngagementID:  c.engagementID,
-			Doulas:        doulas,
-			CanAttachSelf: canAttachSelf(c.reader, c.callerID, c.status, doulas),
-		})
+		writeAttachState(w, c.engagementID, c.reader, c.callerID, c.status, doulas)
 	}, staffauth.EngagementID(), staffauth.PathID("staff", "staffId"))
 }

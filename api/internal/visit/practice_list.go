@@ -111,34 +111,21 @@ type scheduleFilter struct {
 // the Engagement page, and record themselves there.
 func PracticeScheduleHandler() http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
-		tx, practiceID := c.Tx, c.PracticeID
-
 		filter, ok := parseScheduleFilter(w, r, c)
 		if !ok {
 			return
 		}
 
-		after, ok := pagecursor.FromQuery(w, r, pagecursor.Decode, MsgInvalidCursor)
+		page, ok := pagecursor.Fetch(w, r, MsgInvalidCursor, schedulePageSize,
+			func(after *pagecursor.Cursor) ([]ScheduledVisit, error) {
+				return listScheduledVisits(r.Context(), c.Tx, c.PracticeID, filter, after)
+			},
+			func(v ScheduledVisit) (time.Time, string) { return v.ScheduledAt, v.VisitID })
 		if !ok {
 			return
 		}
 
-		list, err := listScheduledVisits(r.Context(), tx, practiceID, filter, after)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		list, hasMore := pagecursor.Trim(list, schedulePageSize)
-		resp := PracticeScheduleResponse{Items: list, HasMore: hasMore}
-		if hasMore {
-			last := list[len(list)-1]
-			next := pagecursor.Encode(last.ScheduledAt, last.VisitID)
-			resp.NextCursor = &next
-		}
-
-		apierr.WriteJSON(w, http.StatusOK, resp)
+		apierr.WriteJSON(w, http.StatusOK, PracticeScheduleResponse{Items: page.Items, HasMore: page.HasMore, NextCursor: page.Next})
 	})
 }
 

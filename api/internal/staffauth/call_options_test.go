@@ -14,20 +14,17 @@ import (
 
 const (
 	gateNotFound = "gate: engagement not found"
-	ownerPath    = "/owner"
 	moneyPath    = "/money"
 )
-
-const wantOwnerRefusal = "You need to be an owner of this Practice to do that."
 
 func noContent(w http.ResponseWriter, _ *http.Request, _ staffauth.Call) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// TestHandler_RoleOptionsRefuseWithTheMountsWording covers Owner and
-// NotAmbientContractor through the real Middleware: the seat each one admits,
-// and the 403 sentence each writes.
-func TestHandler_RoleOptionsRefuseWithTheMountsWording(t *testing.T) {
+// TestHandler_NotAmbientContractorRefusesWithTheMountsWording covers
+// NotAmbientContractor through the real Middleware: the seat it admits, and the
+// 403 sentence it writes.
+func TestHandler_NotAmbientContractorRefusesWithTheMountsWording(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Call Options Practice")
 
@@ -44,7 +41,6 @@ func TestHandler_RoleOptionsRefuseWithTheMountsWording(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mw := staffauth.Middleware(db.App)
-	mux.Handle("GET /practices/{practiceId}"+ownerPath, mw(staffauth.Handler(noContent, staffauth.Owner())))
 	mux.Handle("GET /practices/{practiceId}"+moneyPath, mw(staffauth.Handler(noContent, staffauth.NotAmbientContractor())))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -54,9 +50,6 @@ func TestHandler_RoleOptionsRefuseWithTheMountsWording(t *testing.T) {
 		want            int
 		wantMessage     string
 	}{
-		{"owner admits the owner", ownerUID, ownerPath, http.StatusNoContent, ""},
-		{"owner refuses an admin", adminUID, ownerPath, http.StatusForbidden, wantOwnerRefusal},
-		{"owner refuses a doula", employeeUID, ownerPath, http.StatusForbidden, wantOwnerRefusal},
 		{"money admits the owner", ownerUID, moneyPath, http.StatusNoContent, ""},
 		{"money admits an admin", adminUID, moneyPath, http.StatusNoContent, ""},
 		{"money admits an employed doula", employeeUID, moneyPath, http.StatusNoContent, ""},

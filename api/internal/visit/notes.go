@@ -2,7 +2,6 @@ package visit
 
 import (
 	"database/sql"
-	"errors"
 	"net/http"
 
 	"doula-cloud/api/internal/activity"
@@ -66,16 +65,8 @@ func NotesHandler() http.Handler {
 		// Visit scans no row at all), so there is no separate
 		// RowsAffected check.
 		var previous sql.NullString
-		if err := tx.QueryRowContext(r.Context(),
-			`SELECT notes FROM visits WHERE id = $1 AND engagement_id = $2 FOR UPDATE`,
-			visitID, engagementID,
-		).Scan(&previous); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				apierr.WriteError(w, "visit not found", http.StatusNotFound)
-				return
-			}
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !lockVisit(w, r, tx, `SELECT notes FROM visits WHERE id = $1 AND engagement_id = $2 FOR UPDATE`,
+			visitID, engagementID, &previous) {
 			return
 		}
 

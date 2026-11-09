@@ -45,12 +45,5 @@ func writeReadme(ctx context.Context, tx *sql.Tx, w http.ResponseWriter, zw *zip
 		// coverage:ignore reason: response streaming failure, not exercised by unit tests
 		return fmt.Errorf("write readme: %w", err)
 	}
-	if err := zw.Flush(); err != nil {
-		// coverage:ignore reason: response streaming failure, not exercised by unit tests
-		return fmt.Errorf("flush zip: %w", err)
-	}
-	if flusher, ok := w.(http.Flusher); ok {
-		flusher.Flush()
-	}
-	return nil
+	return flushZip(w, zw)
 }

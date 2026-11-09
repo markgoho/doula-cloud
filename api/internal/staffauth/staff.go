@@ -124,13 +124,10 @@ func ListStaffHandler() http.Handler {
 			return
 		}
 
-		invitations, hasMore := pagecursor.Trim(invitations, invitationPageSize)
-		invitationPage := InvitationPage{Items: invitations, HasMore: hasMore}
-		if hasMore {
-			last := invitations[len(invitations)-1]
-			next := pagecursor.Encode(last.createdAt, last.InvitationID)
-			invitationPage.NextCursor = &next
-		}
+		invitations, next, hasMore := pagecursor.Cut(invitations, invitationPageSize, func(v InvitationSummary) (time.Time, string) {
+			return v.createdAt, v.InvitationID
+		})
+		invitationPage := InvitationPage{Items: invitations, HasMore: hasMore, NextCursor: next}
 
 		apierr.WriteJSON(w, http.StatusOK, Roster{Members: members, Invitations: invitationPage})
 	})

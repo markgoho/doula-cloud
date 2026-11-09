@@ -3,6 +3,7 @@ package staffauth
 import (
 	"database/sql"
 	"net/http"
+	"time"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authmail"
@@ -38,13 +39,7 @@ import (
 // still being written on every call. Refusing here is the difference
 // between not writing the row and writing one nothing will send.
 func RequestVerificationHandler(db *sql.DB) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, _, ok := authn.Begin(w, r, db, authn.TierStaff)
-		if !ok {
-			return
-		}
-		defer dbtx.Rollback(tx)
-
+	return authn.Handler(db, authn.TierStaff, func(w http.ResponseWriter, r *http.Request, tx *sql.Tx, uid string) {
 		// Sets app.current_identity_uid on the way, which is what `staff`'s
 		// own self-visibility RLS policy reads -- the pre-Practice
 		// preamble every route in this family now reaches for rather
@@ -53,20 +48,28 @@ func RequestVerificationHandler(db *sql.DB) http.Handler {
 			return
 		}
 
-		token, err := authtoken.Mint(r.Context(), tx, uid, authtoken.PurposeStaffEmailVerification, authmail.VerificationLinkLifetime, clock.Now(r.Context()))
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if err := authmail.QueueTokenMail(r.Context(), tx, uid, authmail.KindEmailVerification, token); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		dbtx.CommitWith(w, tx, http.StatusAccepted)
+		queueLinkAndAccept(w, r, tx, uid, authtoken.PurposeStaffEmailVerification, authmail.VerificationLinkLifetime, authmail.KindEmailVerification)
 	})
+}
+
+// queueLinkAndAccept mints a fresh single-use link token for uid, queues
+// the mail that carries it, and commits tx with a 202 -- the whole of a
+// request-a-link route once its caller is known. A failure writes the 500
+// itself.
+func queueLinkAndAccept(w http.ResponseWriter, r *http.Request, tx *sql.Tx, uid string, purpose authtoken.Purpose, lifetime time.Duration, kind authmail.TokenMailKind) {
+	token, err := authtoken.Mint(r.Context(), tx, uid, purpose, lifetime, clock.Now(r.Context()))
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+	if err := authmail.QueueTokenMail(r.Context(), tx, uid, kind, token); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+
+	dbtx.CommitWith(w, tx, http.StatusAccepted)
 }
 
 // SpendVerificationRequest is the body of a verification-link spend: the

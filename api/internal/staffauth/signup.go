@@ -12,7 +12,6 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/clock"
-	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/ianazone"
 	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/sessionmint"
@@ -104,13 +103,7 @@ type SignupResponse struct {
 // app.current_practice_id until the new Practice's id exists to set it
 // to.
 func SignupHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, verified, ok := authn.BeginBootstrap(w, r, verifier, db)
-		if !ok {
-			return
-		}
-		defer dbtx.Rollback(tx)
-
+	return authn.BootstrapHandler(verifier, db, func(w http.ResponseWriter, r *http.Request, tx *sql.Tx, verified authn.VerifiedToken) {
 		var req SignupRequest
 		if !apierr.DecodeJSON(w, r, &req) {
 			return

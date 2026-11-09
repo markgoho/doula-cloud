@@ -79,33 +79,19 @@ type AwaitingResponse struct {
 // cost the most, and it belongs at the top.
 func AwaitingSignatureHandler() http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
-		after, ok := pagecursor.FromQuery(w, r, pagecursor.Decode, MsgInvalidCursor)
+		page, ok := pagecursor.Fetch(w, r, MsgInvalidCursor, awaitingPageSize,
+			func(after *pagecursor.Cursor) ([]AwaitingItem, error) {
+				if c.Reader.IsAmbientContractor() {
+					return listAttachedAwaiting(r.Context(), c.Tx, c.PracticeID, c.StaffID, after)
+				}
+				return listAwaiting(r.Context(), c.Tx, c.PracticeID, after)
+			},
+			func(v AwaitingItem) (time.Time, string) { return v.CreatedAt, v.ContractID })
 		if !ok {
 			return
 		}
 
-		var list []AwaitingItem
-		var err error
-		if c.Reader.IsAmbientContractor() {
-			list, err = listAttachedAwaiting(r.Context(), c.Tx, c.PracticeID, c.StaffID, after)
-		} else {
-			list, err = listAwaiting(r.Context(), c.Tx, c.PracticeID, after)
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		list, hasMore := pagecursor.Trim(list, awaitingPageSize)
-		resp := AwaitingResponse{Items: list, HasMore: hasMore}
-		if hasMore {
-			last := list[len(list)-1]
-			next := pagecursor.Encode(last.CreatedAt, last.ContractID)
-			resp.NextCursor = &next
-		}
-
-		apierr.WriteJSON(w, http.StatusOK, resp)
+		apierr.WriteJSON(w, http.StatusOK, AwaitingResponse{Items: page.Items, HasMore: page.HasMore, NextCursor: page.Next})
 	})
 }
 

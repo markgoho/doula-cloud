@@ -8,7 +8,6 @@ import (
 
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/outbox"
-	"doula-cloud/api/internal/staffauth"
 )
 
 // payoutSubject and payoutText are the payout-account-incomplete Platform
@@ -133,7 +132,7 @@ func (w Worker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r pay
 		return wrapOutboxErr(inner.MarkSent(ctx, tx, r.id, now))
 	}
 
-	emails, err := staffauth.OwnerEmails(ctx, tx, r.practiceID)
+	_, emails, err := outbox.OwnerRecipients(ctx, tx, r.practiceID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("payments: %w", err)

@@ -11,6 +11,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/pagecursor"
 )
 
@@ -130,13 +131,12 @@ func practiceList(db *sql.DB, deleted bool) http.HandlerFunc {
 			return
 		}
 
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		tx, ok := dbtx.Begin(w, r, db)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
-		defer func() { _ = tx.Rollback() }()
+		defer dbtx.Rollback(tx)
 
 		page, err := readPracticePage(r, tx, deleted, afterAt, afterID)
 		if err != nil {
@@ -154,9 +154,8 @@ func practiceList(db *sql.DB, deleted bool) http.HandlerFunc {
 			writeInternal(w)
 			return
 		}
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		if !dbtx.Commit(w, tx) {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
 		apierr.WriteJSON(w, http.StatusOK, page)
@@ -187,12 +186,6 @@ func readPracticePage(r *http.Request, tx *sql.Tx, deleted bool, afterAt, afterI
 		// coverage:ignore reason: DB failure, not exercised by unit tests
 		return practicePage{}, fmt.Errorf("read practice list: %w", err)
 	}
-	if len(page.Items) > practicePageSize {
-		page.Items = page.Items[:practicePageSize]
-		page.HasMore = true
-		last := page.Items[practicePageSize-1]
-		next := pagecursor.Encode(last.SignedUpAt, last.ID)
-		page.NextCursor = &next
-	}
+	page.Items, page.NextCursor, page.HasMore = pagecursor.Cut(page.Items, practicePageSize, func(v practiceRow) (time.Time, string) { return v.SignedUpAt, v.ID })
 	return page, nil
 }

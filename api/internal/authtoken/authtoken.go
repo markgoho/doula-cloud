@@ -70,6 +70,16 @@ type Querier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
+// invalidateUnspent deletes every unspent token identityUID holds for
+// purpose, so a re-request kills the previous link or code outright.
+func invalidateUnspent(ctx context.Context, q Querier, identityUID string, purpose Purpose) error {
+	_, err := q.ExecContext(ctx,
+		`DELETE FROM auth_tokens WHERE identity_uid = $1 AND purpose = $2 AND used_at IS NULL`,
+		identityUID, purpose,
+	)
+	return err //nolint:wrapcheck // both callers name what they were invalidating
+}
+
 // Mint issues a fresh token for identityUID under purpose, expiring
 // ttl after now, and returns its plaintext value -- only its digest is
 // stored, so this is the one moment that value exists.
@@ -79,10 +89,7 @@ type Querier interface {
 // re-request AC: a link delivered on a late outbox retry must not
 // coexist with a fresher one).
 func Mint(ctx context.Context, q Querier, identityUID string, purpose Purpose, ttl time.Duration, now time.Time) (string, error) {
-	if _, err := q.ExecContext(ctx,
-		`DELETE FROM auth_tokens WHERE identity_uid = $1 AND purpose = $2 AND used_at IS NULL`,
-		identityUID, purpose,
-	); err != nil {
+	if err := invalidateUnspent(ctx, q, identityUID, purpose); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return "", fmt.Errorf("authtoken: invalidate prior tokens: %w", err)
 	}
@@ -123,10 +130,7 @@ var mfaCodeSpace = new(big.Int).Exp(big.NewInt(10), big.NewInt(mfaCodeDigits), n
 // rather than just trying again, so this retries a fresh draw a few
 // times instead.
 func MintCode(ctx context.Context, q Querier, identityUID string, purpose Purpose, ttl time.Duration, now time.Time) (string, error) {
-	if _, err := q.ExecContext(ctx,
-		`DELETE FROM auth_tokens WHERE identity_uid = $1 AND purpose = $2 AND used_at IS NULL`,
-		identityUID, purpose,
-	); err != nil {
+	if err := invalidateUnspent(ctx, q, identityUID, purpose); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return "", fmt.Errorf("authtoken: invalidate prior codes: %w", err)
 	}

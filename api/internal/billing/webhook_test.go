@@ -266,7 +266,7 @@ func TestPostPurchaseWebhookHandler_InvalidPracticeIDMetadataRejected(t *testing
 }
 
 // TestPostPurchaseWebhookHandler_OversizedBodyRejected proves a request
-// body over maxWebhookBodyBytes is rejected rather than read without
+// body over webhookarrival.MaxBodyBytes is rejected rather than read without
 // bound.
 func TestPostPurchaseWebhookHandler_OversizedBodyRejected(t *testing.T) {
 	db := testdb.New(t)

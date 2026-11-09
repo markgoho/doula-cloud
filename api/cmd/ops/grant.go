@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 )
 
 const (
@@ -194,9 +195,8 @@ func foundingGrantAct(db *sql.DB) http.HandlerFunc {
 			writeInternal(w)
 			return
 		}
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		if !dbtx.Commit(w, tx) {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
 		apierr.WriteJSON(w, http.StatusOK, foundingGrantResult{PracticeName: p.PracticeName, StaffCount: p.StaffCount, Credits: p.Credits})

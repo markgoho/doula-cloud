@@ -132,15 +132,7 @@ func EndHandler(db *sql.DB) http.Handler {
 			_ = authn.EndSession(r.Context(), db, cookie.Value)
 		}
 
-		http.SetCookie(w, &http.Cookie{
-			Name:     CookieName,
-			Value:    "",
-			Path:     "/",
-			MaxAge:   -1,
-			HttpOnly: true,
-			Secure:   true,
-			SameSite: http.SameSiteLaxMode,
-		})
+		http.SetCookie(w, authn.ExpiredSessionCookie())
 		writeStatus(w)
 	})
 }

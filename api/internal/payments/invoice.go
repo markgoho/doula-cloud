@@ -530,27 +530,23 @@ func GetInvoicesHandler() http.Handler {
 		}
 
 		days := bookDays{zone: zone, now: clock.Now(r.Context())}
-		items, hasMore, err := listInvoices(r.Context(), c.Tx, c.EngagementID, after, days)
+		items, next, err := listInvoices(r.Context(), c.Tx, c.EngagementID, after, days)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		var nextCursor *string
-		if hasMore {
-			next := encodeInvoiceCursor(items[len(items)-1].CreatedAt, items[len(items)-1].ID)
-			nextCursor = &next
-		}
+		hasMore := next != nil
 		if c.Reader.IsAmbientContractor() {
 			apierr.WriteJSON(w, http.StatusOK, ContractorInvoicesResponse{
 				Items:      contractorInvoiceRows(items),
-				NextCursor: nextCursor,
+				NextCursor: next,
 				HasMore:    hasMore,
 			})
 			return
 		}
-		apierr.WriteJSON(w, http.StatusOK, ListInvoicesResponse{Items: items, NextCursor: nextCursor, HasMore: hasMore})
+		apierr.WriteJSON(w, http.StatusOK, ListInvoicesResponse{Items: items, NextCursor: next, HasMore: hasMore})
 	}, staffauth.EngagementReach("Engagement not found"))
 }
 
@@ -798,7 +794,7 @@ const listInvoicesAfterQuery = `SELECT i.id, i.contract_id, i.status, i.amount_c
 // explicitly on top of the RLS scoping staffauth.Middleware already set
 // up on tx -- the app layer's own filter, so a bug in either one alone
 // can't leak rows.
-func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *invoiceCursor, days bookDays) ([]InvoiceView, bool, error) {
+func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *invoiceCursor, days bookDays) ([]InvoiceView, *string, error) {
 	var rows *sql.Rows
 	var err error
 	if after != nil {
@@ -808,7 +804,7 @@ func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *i
 	}
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
-		return nil, false, fmt.Errorf("payments: list invoices: %w", err)
+		return nil, nil, fmt.Errorf("payments: list invoices: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -821,7 +817,7 @@ func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *i
 		var activePaymentID, activePaymentKind, activePaymentMethod, activePaymentNote sql.NullString
 		if err := rows.Scan(&it.ID, &it.ContractID, &it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &dueAt, &it.Reference, &stripeInvoiceID, &activePaymentID, &activePaymentKind, &activePaymentMethod, &activePaymentNote, &it.RefundedCents, &it.PaymentProcessing); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
-			return nil, false, fmt.Errorf("payments: scan invoice row: %w", err)
+			return nil, nil, fmt.Errorf("payments: scan invoice row: %w", err)
 		}
 		it.PaidOn = invoicePaidOn(paidAt, activePaymentKind.String == paymentKindManual, days.zone)
 		it.DueOn = practiceDay(dueAt, days.zone)
@@ -840,11 +836,13 @@ func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *i
 	}
 	if err := rows.Err(); err != nil {
 		// coverage:ignore reason: row iteration failure, not exercised by unit tests
-		return nil, false, fmt.Errorf("payments: iterate invoice rows: %w", err)
+		return nil, nil, fmt.Errorf("payments: iterate invoice rows: %w", err)
 	}
 
-	items, hasMore := pagecursor.Trim(items, invoicePageSize)
-	return items, hasMore, nil
+	items, next, _ := pagecursor.Cut(items, invoicePageSize, func(v InvoiceView) (time.Time, string) {
+		return v.CreatedAt, v.ID
+	})
+	return items, next, nil
 }
 
 // invoiceCursor is a page boundary: the (created_at, id) tuple of the
@@ -855,14 +853,7 @@ type invoiceCursor struct {
 	invoiceID string
 }
 
-// encodeInvoiceCursor packs a cursor as opaque base64 so callers never
-// construct one by hand. The packing is pagecursor's, shared with offer
-// and message.
-func encodeInvoiceCursor(createdAt time.Time, invoiceID string) string {
-	return pagecursor.Encode(createdAt, invoiceID)
-}
-
-// decodeInvoiceCursor reverses encodeInvoiceCursor, rejecting anything
+// decodeInvoiceCursor reverses pagecursor.Encode, rejecting anything
 // malformed rather than letting a bad cursor silently return the wrong
 // page.
 func decodeInvoiceCursor(s string) (invoiceCursor, error) {

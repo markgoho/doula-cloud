@@ -11,6 +11,18 @@ import (
 	"doula-cloud/api/internal/staffauth"
 )
 
+// columnValues is every column insertClient and updateClient write from
+// rec, in the order both statements number them after the row's keys.
+func (rec Record) columnValues() []any {
+	return []any{
+		rec.GivenName, nullIfEmpty(rec.FamilyName), nullIfEmpty(rec.PreferredName),
+		nullIfEmpty(rec.Email), nullIfEmpty(rec.Phone),
+		nullIfEmpty(rec.AddressLine1), nullIfEmpty(rec.AddressLine2), nullIfEmpty(rec.AddressLocality),
+		nullIfEmpty(rec.AddressRegion), nullIfEmpty(rec.AddressPostalCode),
+		rec.DateOfBirth, []byte(rec.FieldValues),
+	}
+}
+
 // insertClient writes rec as a new clients row under practiceID. rec.ID
 // must already be set (the handler generates it in Go, not via
 // RETURNING id, matching this repo's existing convention).
@@ -21,11 +33,7 @@ func insertClient(ctx context.Context, tx *sql.Tx, practiceID string, rec Record
 			address_line1, address_line2, address_locality, address_region, address_postal_code,
 			date_of_birth, field_values
 		 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NULLIF($13, '')::date, $14)`,
-		rec.ID, practiceID, rec.GivenName, nullIfEmpty(rec.FamilyName), nullIfEmpty(rec.PreferredName),
-		nullIfEmpty(rec.Email), nullIfEmpty(rec.Phone),
-		nullIfEmpty(rec.AddressLine1), nullIfEmpty(rec.AddressLine2), nullIfEmpty(rec.AddressLocality),
-		nullIfEmpty(rec.AddressRegion), nullIfEmpty(rec.AddressPostalCode),
-		rec.DateOfBirth, []byte(rec.FieldValues),
+		append([]any{rec.ID, practiceID}, rec.columnValues()...)...,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("client: insert client: %w", err)
@@ -43,11 +51,7 @@ func updateClient(ctx context.Context, tx *sql.Tx, clientID string, rec Record) 
 			address_line1 = $7, address_line2 = $8, address_locality = $9, address_region = $10,
 			address_postal_code = $11, date_of_birth = NULLIF($12, '')::date, field_values = $13
 		 WHERE id = $1`,
-		clientID, rec.GivenName, nullIfEmpty(rec.FamilyName), nullIfEmpty(rec.PreferredName),
-		nullIfEmpty(rec.Email), nullIfEmpty(rec.Phone),
-		nullIfEmpty(rec.AddressLine1), nullIfEmpty(rec.AddressLine2), nullIfEmpty(rec.AddressLocality),
-		nullIfEmpty(rec.AddressRegion), nullIfEmpty(rec.AddressPostalCode),
-		rec.DateOfBirth, []byte(rec.FieldValues),
+		append([]any{clientID}, rec.columnValues()...)...,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("client: update client: %w", err)

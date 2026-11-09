@@ -164,16 +164,3 @@ func Client() Option {
 		return true
 	}
 }
-
-// Owner refuses anyone who does not hold the owner role with the 403
-// the mount-level OwnerOnly declaration writes, for a GET that keeps the
-// check in the handler as well as at the mount.
-func Owner() Option {
-	return func(w http.ResponseWriter, _ *http.Request, c *Call) bool {
-		if !c.Reader.Has(roleOwner) {
-			apierr.WriteError(w, msgOwnerOnlyRefused, http.StatusForbidden)
-			return false
-		}
-		return true
-	}
-}

@@ -129,50 +129,37 @@ func (f *FakeAccountManager) GetAccountByEmail(_ context.Context, email string) 
 
 // SetEmailVerified implements authn.AccountManager.
 func (f *FakeAccountManager) SetEmailVerified(_ context.Context, uid string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.Err != nil {
-		return f.Err
-	}
-	a, ok := f.accounts[uid]
-	if !ok {
-		return authn.ErrAccountNotFound
-	}
-	a.emailVerified = true
-	return nil
+	return f.update(uid, func(a *account) { a.emailVerified = true })
 }
 
 // SetPassword implements authn.AccountManager.
 func (f *FakeAccountManager) SetPassword(_ context.Context, uid, password string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.Err != nil {
-		return f.Err
-	}
-	a, ok := f.accounts[uid]
-	if !ok {
-		return authn.ErrAccountNotFound
-	}
-	a.password = password
-	return nil
+	return f.update(uid, func(a *account) { a.password = password })
 }
 
 // SetEmail implements authn.AccountManager.
 func (f *FakeAccountManager) SetEmail(_ context.Context, uid, email string) error {
+	return f.update(uid, func(a *account) {
+		a.email = email
+		a.emailVerified = false
+	}, f.SetEmailErr)
+}
+
+// update applies set to uid's account under the lock, after refusing with
+// the first of failures, then Err, that is set.
+func (f *FakeAccountManager) update(uid string, set func(*account), failures ...error) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.SetEmailErr != nil {
-		return f.SetEmailErr
-	}
-	if f.Err != nil {
-		return f.Err
+	for _, err := range append(failures, f.Err) {
+		if err != nil {
+			return err
+		}
 	}
 	a, ok := f.accounts[uid]
 	if !ok {
 		return authn.ErrAccountNotFound
 	}
-	a.email = email
-	a.emailVerified = false
+	set(a)
 	return nil
 }
 

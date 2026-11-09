@@ -6,7 +6,9 @@
 package visit
 
 import (
+	"database/sql"
 	"encoding/json/v2"
+	"errors"
 	"net/http"
 	"time"
 
@@ -60,6 +62,23 @@ func activateOnScheduled(w http.ResponseWriter, r *http.Request, c staffauth.Cal
 	}
 	if _, err := engagement.ActivateFromIntake(r.Context(), c.Tx, c.PracticeID, engagementID, c.StaffID); err != nil {
 		// coverage:ignore reason: DB write failure inside the activation, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return false
+	}
+	return true
+}
+
+// lockVisit runs query, a locking read of one Visit by (id, engagement_id)
+// in that placeholder order, and scans it into dest. A Visit that is not
+// under that Engagement is this route's 404. It writes the failure
+// response itself and reports whether the request may continue.
+func lockVisit(w http.ResponseWriter, r *http.Request, tx *sql.Tx, query, visitID, engagementID string, dest ...any) bool {
+	if err := tx.QueryRowContext(r.Context(), query, visitID, engagementID).Scan(dest...); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			apierr.WriteError(w, "visit not found", http.StatusNotFound)
+			return false
+		}
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return false
 	}

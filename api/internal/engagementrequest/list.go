@@ -58,29 +58,16 @@ type ListResponse struct {
 // Request is history, and its history lives on the Client's record.
 func ListHandler() http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
-		tx, practiceID := c.Tx, c.PracticeID
-
-		after, ok := pagecursor.FromQuery(w, r, pagecursor.Decode, "invalid cursor")
+		page, ok := pagecursor.Fetch(w, r, "invalid cursor", pageSize,
+			func(after *pagecursor.Cursor) ([]ListItem, error) {
+				return listPending(r.Context(), c.Tx, c.PracticeID, after)
+			},
+			func(v ListItem) (time.Time, string) { return v.RequestedAt, v.RequestID })
 		if !ok {
 			return
 		}
 
-		list, err := listPending(r.Context(), tx, practiceID, after)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		list, hasMore := pagecursor.Trim(list, pageSize)
-		resp := ListResponse{Items: list, HasMore: hasMore}
-		if hasMore {
-			last := list[len(list)-1]
-			next := pagecursor.Encode(last.RequestedAt, last.RequestID)
-			resp.NextCursor = &next
-		}
-
-		apierr.WriteJSON(w, http.StatusOK, resp)
+		apierr.WriteJSON(w, http.StatusOK, ListResponse{Items: page.Items, HasMore: page.HasMore, NextCursor: page.Next})
 	})
 }
 

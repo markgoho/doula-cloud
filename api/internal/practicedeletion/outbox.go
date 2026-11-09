@@ -11,7 +11,6 @@ import (
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/outbox"
-	"doula-cloud/api/internal/staffauth"
 )
 
 // act names one row practice_deletion_outbox carries -- the Go side of
@@ -146,7 +145,7 @@ func (w Worker) performReminder(ctx context.Context, tx *sql.Tx, inner outbox.Wo
 		return markErr(inner.MarkSent(ctx, tx, r.id, now))
 	}
 
-	emails, err := staffauth.OwnerEmails(ctx, tx, r.practiceID)
+	_, emails, err := outbox.OwnerRecipients(ctx, tx, r.practiceID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("practicedeletion: %w", err)
