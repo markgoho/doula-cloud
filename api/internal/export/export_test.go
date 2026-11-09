@@ -1,33 +1,31 @@
 package export_test
 
 import (
-	"encoding/csv"
 	"net/http"
 	"strings"
 	"testing"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
-	"doula-cloud/api/internal/testdb"
+	"doula-cloud/api/internal/fixture"
+	"doula-cloud/api/internal/reqtest"
+)
+
+const (
+	doulaRole = fixture.RoleDoula
+	adminRole = fixture.RoleAdmin
 )
 
 // TestHandler_OwnerGetsHerWholeArchive is the central acceptance
 // criterion: an Owner downloads a ZIP of UTF-8 CSVs whose rows carry the
 // ids needed to join them back together.
 func TestHandler_OwnerGetsHerWholeArchive(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-export"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Ada Lovelace", "ada@example.com")
+	e := newEnv(t, fixture.WithClient(fixture.ClientName("Ada Lovelace"), fixture.ClientEmail("ada@example.com")))
+	clientID := e.Engagement.Client.ID
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/export")
+	resp := reqtest.Do(t, http.MethodGet, e.exportURL(), e.SignedIn)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusOK)
 	if got := resp.Header.Get("Content-Type"); got != "application/zip" {
 		t.Fatalf("Content-Type = %q, want application/zip", got)
 	}
@@ -35,42 +33,30 @@ func TestHandler_OwnerGetsHerWholeArchive(t *testing.T) {
 		t.Fatalf("Content-Disposition = %q, want a .zip filename", resp.Header.Get("Content-Disposition"))
 	}
 
-	files := readZIP(t, resp)
+	files := readZIP(t, reqtest.ReadBody(t, resp))
 	for _, want := range []string{"README.txt", "practice.csv", "client.csv", "engagement.csv", "activity.csv"} {
 		if _, ok := files[want]; !ok {
 			t.Fatalf("archive missing %s; have %v", want, keys(files))
 		}
 	}
 
-	clientRows := parseCSV(t, files["client.csv"])
-	if len(clientRows) != 2 { // header + one Client
-		t.Fatalf("client.csv rows = %d, want 2", len(clientRows))
-	}
-	idCol := indexOf(t, clientRows[0], "id")
-	if clientRows[1][idCol] != clientID {
-		t.Fatalf("client.csv id = %q, want %q", clientRows[1][idCol], clientID)
+	client := onlyRow(t, "client.csv", parseCSV(t, files["client.csv"]))
+	if got := client.get("id"); got != clientID {
+		t.Fatalf("client.csv id = %q, want %q", got, clientID)
 	}
 
-	engagementRows := parseCSV(t, files["engagement.csv"])
-	clientIDCol := indexOf(t, engagementRows[0], "client_id")
-	if engagementRows[1][clientIDCol] != clientID {
-		t.Fatalf("engagement.csv client_id = %q, want %q (the join key back to client.csv)", engagementRows[1][clientIDCol], clientID)
+	engagement := onlyRow(t, "engagement.csv", parseCSV(t, files["engagement.csv"]))
+	if got := engagement.get("client_id"); got != clientID {
+		t.Fatalf("engagement.csv client_id = %q, want %q (the join key back to client.csv)", got, clientID)
 	}
-	_ = engagementID
 
 	// Exactly one Activity row, subject the Practice, actor the Owner.
-	activityRows := parseCSV(t, files["activity.csv"])
-	if len(activityRows) != 2 {
-		t.Fatalf("activity.csv rows = %d, want 2 (header + one export row)", len(activityRows))
+	activity := onlyRow(t, "activity.csv", parseCSV(t, files["activity.csv"]))
+	if activity.get("subject_kind") != "practice" || activity.get("subject_id") != e.Practice.ID {
+		t.Fatalf("activity row = %v, want subject practice/%s", activity.cells, e.Practice.ID)
 	}
-	subjectKindCol := indexOf(t, activityRows[0], "subject_kind")
-	subjectIDCol := indexOf(t, activityRows[0], "subject_id")
-	actionCol := indexOf(t, activityRows[0], "action")
-	if activityRows[1][subjectKindCol] != "practice" || activityRows[1][subjectIDCol] != practiceID {
-		t.Fatalf("activity row = %v, want subject practice/%s", activityRows[1], practiceID)
-	}
-	if activityRows[1][actionCol] != "practice_data_exported" {
-		t.Fatalf("activity action = %q, want practice_data_exported", activityRows[1][actionCol])
+	if got := activity.get("action"); got != "practice_data_exported" {
+		t.Fatalf("activity action = %q, want practice_data_exported", got)
 	}
 }
 
@@ -84,20 +70,12 @@ func TestHandler_OwnerGetsHerWholeArchive(t *testing.T) {
 func TestHandler_RefusesEveryRoleButOwner(t *testing.T) {
 	for _, role := range []string{doulaRole, adminRole} {
 		t.Run(role, func(t *testing.T) {
-			db := testdb.New(t)
-			const uid = "staff-export-refused"
-			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{role}, "employee")
+			e := newEnv(t, fixture.SignedInAs(fixture.Roles(role)))
 
-			srv, session := newServer(t, db, uid)
-			defer srv.Close()
-
-			resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/export")
+			resp := reqtest.Do(t, http.MethodGet, e.exportURL(), e.SignedIn)
 			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusForbidden {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-			}
-			apiErr := apierrtest.Decode(t, resp)
-			if apiErr.Code != apierr.CodeForbidden {
+			reqtest.RequireStatus(t, resp, http.StatusForbidden)
+			if apiErr := apierrtest.Decode(t, resp); apiErr.Code != apierr.CodeForbidden {
 				t.Fatalf("code = %q, want %q", apiErr.Code, apierr.CodeForbidden)
 			}
 		})
@@ -108,61 +86,18 @@ func TestHandler_RefusesEveryRoleButOwner(t *testing.T) {
 // criterion: a Staff member of a different Practice is refused, and no
 // row belonging to another Practice appears in any file.
 func TestHandler_NeverCrossesIntoAnotherPractice(t *testing.T) {
-	db := testdb.New(t)
-	const otherUID = "owner-other-practice"
-	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
-	testdb.SeedNamedClient(t, db, otherPracticeID, "Someone Else", "else@example.com")
-
-	const uid = "owner-own-practice"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	testdb.SeedNamedEngagement(t, db, practiceID, "Ada Lovelace", "ada@example.com")
-
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	e := newEnv(t, fixture.WithEngagement())
+	otherPractice := fixture.Practice(t, e.DB)
+	fixture.Client(t, e.DB, otherPractice, fixture.ClientName("Someone Else"), fixture.ClientEmail("else@example.com"))
+	otherOwner := fixture.Staff(t, e.DB, otherPractice, fixture.Owner())
 
 	// The other Practice's Owner cannot reach this Practice's export at all.
-	otherSrv, otherSession := newServer(t, db, otherUID)
-	defer otherSrv.Close()
-	resp := authedGet(t, otherSession, otherSrv.URL+"/api/practices/"+practiceID+"/export")
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("cross-practice status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	reqtest.ExpectStatus(t, http.MethodGet, e.exportURL(), http.StatusForbidden, e.As(otherOwner))
 
 	// This Practice's own export names only her own Client, never the
 	// other Practice's.
-	resp2 := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/export")
-	defer resp2.Body.Close()
-	files := readZIP(t, resp2)
-	if strings.Contains(files["client.csv"], "Someone Else") || strings.Contains(files["client.csv"], "else@example.com") {
-		t.Fatalf("client.csv leaked another Practice's Client: %s", files["client.csv"])
+	clientCSV := e.archive()["client.csv"]
+	if strings.Contains(clientCSV, "Someone Else") || strings.Contains(clientCSV, "else@example.com") {
+		t.Fatalf("client.csv leaked another Practice's Client: %s", clientCSV)
 	}
-}
-
-func keys(m map[string]string) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
-}
-
-func parseCSV(t *testing.T, s string) [][]string {
-	t.Helper()
-	rows, err := csv.NewReader(strings.NewReader(s)).ReadAll()
-	if err != nil {
-		t.Fatalf("parse csv: %v", err)
-	}
-	return rows
-}
-
-func indexOf(t *testing.T, header []string, col string) int {
-	t.Helper()
-	for i, h := range header {
-		if h == col {
-			return i
-		}
-	}
-	t.Fatalf("header %v has no column %q", header, col)
-	return -1
 }

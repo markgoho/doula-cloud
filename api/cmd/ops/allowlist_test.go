@@ -21,11 +21,7 @@ func pilotBody(address any) map[string]any {
 
 func (s *opsStack) addPilotAddress(cookie, key string, body any) *httptest.ResponseRecorder {
 	s.t.Helper()
-	header := http.Header{}
-	if key != "" {
-		header.Set(headerIdempotencyKey, key)
-	}
-	return s.send(http.MethodPost, pilotPath, cookie, header, body)
+	return s.postKeyed(pilotPath, cookie, key, body)
 }
 
 func (s *opsStack) pilotRows() int {
@@ -53,27 +49,9 @@ func TestPilotAddressAdd_AddsTheAddressAndRecordsWhoAddedIt(t *testing.T) {
 		t.Errorf("body = %s\nwant %s", got, want)
 	}
 
-	var actID string
-	var subjectKind *string
-	var details []byte
-	var stepUpAt *time.Time
-	var createdAt time.Time
-	if err := s.db.Admin.QueryRowContext(t.Context(),
-		`SELECT a.id, a.subject_kind, a.details, a.step_up_at, a.created_at
-		   FROM operator_acts a JOIN operators o ON o.id = a.operator_id
-		  WHERE o.identity_uid = $1 AND a.action = 'pilot_address_added'`, opUID,
-	).Scan(&actID, &subjectKind, &details, &stepUpAt, &createdAt); err != nil {
-		t.Fatalf("read the act: %v", err)
-	}
-	if subjectKind != nil || stepUpAt != nil || !createdAt.Equal(s.now) {
-		t.Errorf("act = (subject %v, step_up_at %v, created_at %s), want no subject, no step-up, taken at %s",
-			subjectKind, stepUpAt, createdAt, s.now)
-	}
-	if string(details) != `{"address": "ana@example.com", "requestKey": "pilot-key-1"}` {
-		t.Errorf("act details = %s", details)
-	}
+	act := s.requireAct("pilot_address_added", wantAct{at: s.now, details: `{"address": "ana@example.com", "requestKey": "pilot-key-1"}`})
 	if n := s.count(`SELECT count(*) FROM pilot_allowlist WHERE address = $1 AND operator_act_id = $2 AND added_at = $3`,
-		pilotAddress, actID, s.now); n != 1 {
+		pilotAddress, act.ID, s.now); n != 1 {
 		t.Errorf("allowlist rows keyed to the act = %d, want 1", n)
 	}
 }

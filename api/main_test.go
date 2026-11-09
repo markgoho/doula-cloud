@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -18,6 +17,7 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/engagementrequest"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/mailsuppress"
@@ -28,6 +28,7 @@ import (
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/push"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/session"
 	"doula-cloud/api/internal/sessionnotice"
 	"doula-cloud/api/internal/staffauth"
@@ -125,6 +126,8 @@ const testWorkerSecret = "worker-secret-test"
 // second literal for the identical value.
 const testExpectedOrigin = "https://app.example.test"
 
+const signupPath = "/api/staff/signup"
+
 // testDeps is the dependency set every routes() test starts from: fakes
 // throughout, no database, and the fixture workers declared above.
 //
@@ -187,22 +190,27 @@ func TestHelloHandler(t *testing.T) {
 // has to be registered on the same /api prefix the browser uses. Body shape is
 // TestHelloHandler's job; this one only pins where the route hangs.
 func TestRoutes_HelloUnderAPIPrefix(t *testing.T) {
-	mux, _, _ := routes(testDeps())
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
+	srv := routedServer(t, nil)
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/hello", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
+	reqtest.ExpectStatus(t, http.MethodGet, srv.URL+"/api/hello", http.StatusOK)
+}
+
+// routedServer serves routes() over testDeps on a server that closes with
+// the test. With a db the routes read it as the app role; with none they
+// have no database. A test that varies a dependency names it in vary.
+func routedServer(t *testing.T, db *testdb.DB, vary ...func(*Deps)) *httptest.Server {
+	t.Helper()
+	deps := testDeps()
+	if db != nil {
+		deps.DB = db.App
 	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
+	for _, v := range vary {
+		v(&deps)
 	}
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("GET /api/hello status = %d, want 200", resp.StatusCode)
-	}
+	mux, _, _ := routes(deps)
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
 }
 
 // TestRoutes_CreateAndEndSession drives #144's two new endpoints through
@@ -212,49 +220,16 @@ func TestRoutes_HelloUnderAPIPrefix(t *testing.T) {
 // path.
 func TestRoutes_CreateAndEndSession(t *testing.T) {
 	db := testdb.New(t)
-	deps := testDeps()
-	deps.Verifier = authntest.Verifier{UID: "uid-1"}
-	deps.DB = db.App
-	mux, _, _ := routes(deps)
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
+	srv := routedServer(t, db, func(d *Deps) { d.Verifier = authntest.Verifier{UID: "uid-1"} })
 
-	createReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/session", nil)
-	if err != nil {
-		t.Fatalf("build create request: %v", err)
-	}
-	createReq.Header.Set("Authorization", "Bearer good-token")
-	createResp, err := http.DefaultClient.Do(createReq)
-	if err != nil {
-		t.Fatalf("create request: %v", err)
-	}
+	createResp := reqtest.Post(t, srv.URL+"/api/session", reqtest.Header("Authorization", "Bearer good-token"))
 	defer createResp.Body.Close()
-	if createResp.StatusCode != http.StatusOK {
-		t.Fatalf("POST /api/session status = %d, want %d", createResp.StatusCode, http.StatusOK)
-	}
-	var createdCookie *http.Cookie
-	for _, c := range createResp.Cookies() {
-		if c.Name == session.CookieName {
-			createdCookie = c
-		}
-	}
-	if createdCookie == nil {
-		t.Fatal("no __session cookie set by POST /api/session")
-	}
+	reqtest.RequireStatus(t, createResp, http.StatusOK)
+	createdToken := sessionCookieValue(t, createResp)
 
-	endReq, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, srv.URL+"/api/session", nil)
-	if err != nil {
-		t.Fatalf("build end request: %v", err)
-	}
-	authntest.AddSessionCookie(endReq, createdCookie.Value)
-	endResp, err := http.DefaultClient.Do(endReq)
-	if err != nil {
-		t.Fatalf("end request: %v", err)
-	}
+	endResp := reqtest.Delete(t, srv.URL+"/api/session", reqtest.Session(createdToken))
 	defer endResp.Body.Close()
-	if endResp.StatusCode != http.StatusOK {
-		t.Fatalf("DELETE /api/session status = %d, want %d", endResp.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, endResp, http.StatusOK)
 	var clearedCookie *http.Cookie
 	for _, c := range endResp.Cookies() {
 		if c.Name == session.CookieName {
@@ -298,34 +273,18 @@ func TestResolvePort(t *testing.T) {
 }
 
 func TestRoutes_MissingTokenPaths(t *testing.T) {
-	db := testdb.New(t)
-	deps := testDeps()
-	deps.DB = db.App
-	mux, _, _ := routes(deps)
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
+	srv := routedServer(t, testdb.New(t))
 
 	cases := []struct {
 		method string
 		path   string
 	}{
-		{http.MethodPost, "/api/staff/signup"},
+		{http.MethodPost, signupPath},
 		{http.MethodGet, "/api/staff/session"},
 		{http.MethodGet, "/api/practices/00000000-0000-0000-0000-000000000000/session"},
 	}
 	for _, c := range cases {
-		req, err := http.NewRequestWithContext(t.Context(), c.method, srv.URL+c.path, nil)
-		if err != nil {
-			t.Fatalf("build request: %v", err)
-		}
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("request %s %s: %v", c.method, c.path, err)
-		}
-		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusUnauthorized {
-			t.Fatalf("%s %s status = %d, want %d", c.method, c.path, resp.StatusCode, http.StatusUnauthorized)
-		}
+		reqtest.ExpectStatus(t, c.method, srv.URL+c.path, http.StatusUnauthorized)
 	}
 }
 
@@ -336,31 +295,23 @@ func TestRoutes_MissingTokenPaths(t *testing.T) {
 func TestRoutes_SignupLoginLanding(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "e2e-owner-uid"
-	deps := testDeps()
 	// SecondFactor: true -- #606 requires MFA for an Owner at the
 	// Practice-scoped boundary this test's landing request crosses.
 	// That gate itself is staffauth's own TestMiddleware_MFAGate; this
 	// test is about signup/session/landing wiring, so its fixture
 	// stands in for an already-enrolled Owner rather than exercising
 	// the gate a second time.
-	deps.Verifier = authntest.Verifier{UID: identityUID, Email: "jamie@example.com", SecondFactor: true}
-	deps.DB = db.App
-	mux, _, _ := routes(deps)
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-
-	signupBody, _ := json.Marshal(staffauth.SignupRequest{
-		WorkState:    "NY",
-		PracticeName: "Riverside Doulas",
-		FirstName:    "Jamie", LastName: "Owner",
-		Timezone: "America/New_York",
+	srv := routedServer(t, db, func(d *Deps) {
+		d.Verifier = authntest.Verifier{UID: identityUID, Email: "jamie@example.com", SecondFactor: true}
 	})
-	signupReq, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/signup", bytes.NewReader(signupBody))
-	signupReq.Header.Set("Authorization", "Bearer tok")
-	signupResp, err := http.DefaultClient.Do(signupReq)
-	if err != nil {
-		t.Fatalf("signup request: %v", err)
-	}
+
+	signupResp := reqtest.Post(t, srv.URL+signupPath, reqtest.Header("Authorization", "Bearer tok"),
+		reqtest.JSON(staffauth.SignupRequest{
+			WorkState:    "NY",
+			PracticeName: "Riverside Doulas",
+			FirstName:    "Jamie", LastName: "Owner",
+			Timezone: "America/New_York",
+		}))
 	defer signupResp.Body.Close()
 	if signupResp.StatusCode != http.StatusCreated {
 		t.Fatalf("signup status = %d, want %d", signupResp.StatusCode, http.StatusCreated)
@@ -378,35 +329,13 @@ func TestRoutes_SignupLoginLanding(t *testing.T) {
 	// flow.
 	sessionCookie := sessionCookieValue(t, signupResp)
 
-	sessionReq, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/staff/session", nil)
-	authntest.AddSessionCookie(sessionReq, sessionCookie)
-	sessionResp, err := http.DefaultClient.Do(sessionReq)
-	if err != nil {
-		t.Fatalf("session request: %v", err)
-	}
-	defer sessionResp.Body.Close()
-	var session staffauth.SessionResponse
-	if err := json.UnmarshalRead(sessionResp.Body, &session); err != nil {
-		t.Fatalf("decode session response: %v", err)
-	}
+	as := reqtest.Session(sessionCookie)
+	session := reqtest.Expect[staffauth.SessionResponse](t, http.MethodGet, srv.URL+"/api/staff/session", http.StatusOK, as)
 	if len(session.Memberships) != 1 || session.Memberships[0].PracticeID != signedUp.PracticeID {
 		t.Fatalf("memberships = %+v, want single membership at %q", session.Memberships, signedUp.PracticeID)
 	}
 
-	landingReq, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/practices/"+signedUp.PracticeID+"/session", nil)
-	authntest.AddSessionCookie(landingReq, sessionCookie)
-	landingResp, err := http.DefaultClient.Do(landingReq)
-	if err != nil {
-		t.Fatalf("landing request: %v", err)
-	}
-	defer landingResp.Body.Close()
-	if landingResp.StatusCode != http.StatusOK {
-		t.Fatalf("landing status = %d, want %d", landingResp.StatusCode, http.StatusOK)
-	}
-	var landing staffauth.PracticeSessionResponse
-	if err := json.UnmarshalRead(landingResp.Body, &landing); err != nil {
-		t.Fatalf("decode landing response: %v", err)
-	}
+	landing := reqtest.Expect[staffauth.PracticeSessionResponse](t, http.MethodGet, srv.URL+"/api/practices/"+signedUp.PracticeID+"/session", http.StatusOK, as)
 	if landing.PracticeName != "Riverside Doulas" {
 		t.Fatalf("practiceName = %q, want %q", landing.PracticeName, "Riverside Doulas")
 	}
@@ -431,31 +360,12 @@ func TestRoutes_SignupLoginLanding(t *testing.T) {
 // type axis is under test here.
 func TestRoutes_PracticeSessionContractorFlag(t *testing.T) {
 	db := testdb.New(t)
-	deps := testDeps()
-	deps.DB = db.App
-	mux, _, _ := routes(deps)
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
+	srv := routedServer(t, db)
+	practice := fixture.Practice(t, db)
+	contractor := fixture.Staff(t, db, practice, fixture.Doula(), fixture.Contractor())
 
-	const identityUID = "e2e-contractor-uid"
-	practiceID := testdb.SeedPractice(t, db, "Contractor's Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{roleDoula}, "contractor")
-	sessionCookie := authntest.SeedSession(t, db.App, identityUID)
-
-	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/session", nil)
-	authntest.AddSessionCookie(req, sessionCookie)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("session request: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var landing staffauth.PracticeSessionResponse
-	if err := json.UnmarshalRead(resp.Body, &landing); err != nil {
-		t.Fatalf("decode landing response: %v", err)
-	}
+	landing := reqtest.Expect[staffauth.PracticeSessionResponse](t, http.MethodGet, srv.URL+"/api/practices/"+practice.ID+"/session", http.StatusOK,
+		reqtest.Session(fixture.Session(t, db, contractor)))
 	if !landing.IsContractor {
 		t.Fatalf("isContractor = %v, want true for a contractor Doula", landing.IsContractor)
 	}
@@ -472,41 +382,19 @@ func TestRoutes_PracticeSessionContractorFlag(t *testing.T) {
 // back (mailsuppress.Mount already takes a *staffauth.GatedRouter).
 func TestRoutes_StaffInviteSuppressedAddressRefused(t *testing.T) {
 	db := testdb.New(t)
-	deps := testDeps()
-	deps.DB = db.App
-	mux, _, _ := routes(deps)
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-
-	const identityUID = "e2e-owner-invites-suppressed"
-	practiceID := testdb.SeedPractice(t, db, "Suppressing Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{roleOwner}, "employee")
-	sessionCookie := authntest.SeedSession(t, db.App, identityUID)
+	srv := routedServer(t, db)
+	practice := fixture.Practice(t, db)
+	owner := fixture.Staff(t, db, practice, fixture.Owner())
 	const email = "blocked@example.com"
 	if err := mailsuppress.Record(t.Context(), db.App, email, mailsuppress.CauseBounce, "evt-e2e-861"); err != nil {
 		t.Fatalf("seed suppression: %v", err)
 	}
 
-	body, err := json.Marshal(staffauth.InviteRequest{Email: email, Roles: []string{roleDoula}, EmploymentType: "employee"})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		srv.URL+"/api/practices/"+practiceID+"/staff/invitations", bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, sessionCookie)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("invite request: %v", err)
-	}
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practice.ID+"/staff/invitations", reqtest.Session(fixture.Session(t, db, owner)),
+		reqtest.JSON(staffauth.InviteRequest{Email: email, Roles: []string{roleDoula}, EmploymentType: "employee"}))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	refusal := apierrtest.Decode(t, resp)
 	if refusal.Details["email"] != staffauth.MsgAddressBlocked {
 		t.Fatalf("details = %v, want an email entry naming Blocked email addresses", refusal.Details)
@@ -569,76 +457,34 @@ func TestInternalGuard_AcceptsNothingWhenNothingIsConfigured(t *testing.T) {
 // Origin header that isn't the configured one is rejected before it
 // reaches the handler -- proven by getting 403 rather than the 401 a
 // missing bearer token would otherwise produce.
-func TestRoutes_CrossOriginStateChangeRejected(t *testing.T) {
-	mux, _, _ := routes(testDeps())
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
+//
+// The client search (#1829) moved from GET to POST to sit behind the same
+// origin check, so a cross-site search is refused before it reaches
+// staffauth. A matching Origin is not caught by the check: the request
+// still reaches the handler, which rejects it for its own reason (401, no
+// bearer token).
+func TestRoutes_OriginCheck(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		path   string
+		origin string
+		withDB bool
+		want   int
+	}{
+		{name: "a cross-origin state change is rejected", path: signupPath, origin: "https://evil.example", want: http.StatusForbidden},
+		{name: "a cross-origin Client search is rejected", path: "/api/practices/00000000-0000-0000-0000-000000000001/clients/search", origin: "https://evil.example", want: http.StatusForbidden},
+		{name: "a matching origin reaches the handler", path: signupPath, origin: testExpectedOrigin, withDB: true, want: http.StatusUnauthorized},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var db *testdb.DB
+			if tc.withDB {
+				db = testdb.New(t)
+			}
+			srv := routedServer(t, db)
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/signup", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Origin", "https://evil.example")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
-}
-
-// TestRoutes_CrossOriginClientSearchRejected proves #1829's move of the
-// Client search from GET to POST put it behind the same origin check:
-// a cross-site search is refused before it reaches staffauth, so the
-// answer is the check's 403 rather than the 401 a missing session gives.
-func TestRoutes_CrossOriginClientSearchRejected(t *testing.T) {
-	mux, _, _ := routes(testDeps())
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		srv.URL+"/api/practices/00000000-0000-0000-0000-000000000001/clients/search", bytes.NewReader([]byte(`{"name":"Ana"}`)))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Origin", "https://evil.example")
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
-}
-
-// TestRoutes_MatchingOriginAllowed proves a matching Origin header
-// doesn't get caught by the check -- the request still reaches the
-// handler, which rejects it for its own reason (401, no bearer token),
-// not the origin check's 403.
-func TestRoutes_MatchingOriginAllowed(t *testing.T) {
-	db := testdb.New(t)
-	deps := testDeps()
-	deps.DB = db.App
-	mux, _, _ := routes(deps)
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/signup", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Origin", testExpectedOrigin)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
+			reqtest.ExpectStatus(t, http.MethodPost, srv.URL+tc.path, tc.want,
+				reqtest.Header("Origin", tc.origin), reqtest.RawJSON([]byte(`{"name":"Ana"}`)))
+		})
 	}
 }
 
@@ -652,12 +498,7 @@ func TestRoutes_MatchingOriginAllowed(t *testing.T) {
 func TestRoutes_StripeWebhooksSucceedWithNoOrigin(t *testing.T) {
 	const stripeWebhookSecret = "whsec_test"
 	db := testdb.New(t)
-	deps := testDeps()
-	deps.DB = db.App
-	deps.StripeWebhookSecret = stripeWebhookSecret
-	mux, _, _ := routes(deps)
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
+	srv := routedServer(t, db, func(d *Deps) { d.StripeWebhookSecret = stripeWebhookSecret })
 
 	// An event type PostPurchaseWebhookHandler doesn't act on: proves the
 	// request reached the handler and was acknowledged, with no database
@@ -674,53 +515,20 @@ func TestRoutes_StripeWebhooksSucceedWithNoOrigin(t *testing.T) {
 	}
 	signed := stripe.GenerateTestSignedPayload(&stripe.UnsignedPayload{Payload: payload, Secret: stripeWebhookSecret})
 
-	billingReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/stripe/webhook", bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	billingReq.Header.Set("Stripe-Signature", signed.Header)
-	billingResp, err := http.DefaultClient.Do(billingReq)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer billingResp.Body.Close()
-	if billingResp.StatusCode != http.StatusOK {
-		t.Fatalf("POST /api/stripe/webhook status = %d, want %d", billingResp.StatusCode, http.StatusOK)
-	}
+	reqtest.ExpectStatus(t, http.MethodPost, srv.URL+"/api/stripe/webhook", http.StatusOK,
+		reqtest.Header("Stripe-Signature", signed.Header), reqtest.Body("", payload))
 
 	// payments.NewFakeClient's VerifyWebhookSignature accepts anything and
 	// reports an unrecognized event type, which PostConnectWebhookHandler
 	// also just acknowledges -- no signature header needed to prove the
 	// route is reachable with no Origin header.
-	connectReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/stripe/connect-webhook", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	connectResp, err := http.DefaultClient.Do(connectReq)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer connectResp.Body.Close()
-	if connectResp.StatusCode != http.StatusOK {
-		t.Fatalf("POST /api/stripe/connect-webhook status = %d, want %d", connectResp.StatusCode, http.StatusOK)
-	}
+	reqtest.ExpectStatus(t, http.MethodPost, srv.URL+"/api/stripe/connect-webhook", http.StatusOK)
 
 	// Same shape for the thin-event route: the fake's ParseAccountEvent
 	// accepts anything and reports an unrecognized event type, which
 	// PostAccountWebhookHandler acknowledges without touching the
 	// database.
-	accountReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/stripe/account-webhook", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	accountResp, err := http.DefaultClient.Do(accountReq)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer accountResp.Body.Close()
-	if accountResp.StatusCode != http.StatusOK {
-		t.Fatalf("POST /api/stripe/account-webhook status = %d, want %d", accountResp.StatusCode, http.StatusOK)
-	}
+	reqtest.ExpectStatus(t, http.MethodPost, srv.URL+"/api/stripe/account-webhook", http.StatusOK)
 
 	// Same shape for the Mailgun webhook (#340): an event type
 	// PostBounceWebhookHandler doesn't act on, signed with the same key
@@ -740,18 +548,7 @@ func TestRoutes_StripeWebhooksSucceedWithNoOrigin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)
 	}
-	mailgunReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/mailgun/webhook", bytes.NewReader(mailgunPayload))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	mailgunResp, err := http.DefaultClient.Do(mailgunReq)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer mailgunResp.Body.Close()
-	if mailgunResp.StatusCode != http.StatusOK {
-		t.Fatalf("POST /api/mailgun/webhook status = %d, want %d", mailgunResp.StatusCode, http.StatusOK)
-	}
+	reqtest.ExpectStatus(t, http.MethodPost, srv.URL+"/api/mailgun/webhook", http.StatusOK, reqtest.Body("", mailgunPayload))
 
 	var routesRecorded []string
 	for _, a := range testdb.WebhookArrivals(t, db) {

@@ -32,14 +32,8 @@ type secondFactorStack struct {
 
 func newSecondFactorStack(t *testing.T) *secondFactorStack {
 	t.Helper()
-	s := &secondFactorStack{opsStack: &opsStack{t: t, db: newOpsDB(t), now: opsStart}, accounts: authntest.NewFakeAccountManager()}
-	s.handler, _ = routes(Deps{
-		DB:       s.db.Ops,
-		Now:      func() time.Time { return s.now },
-		Verifier: tokens,
-		Origins:  []string{testOrigin},
-		Accounts: s.accounts,
-	})
+	accounts := authntest.NewFakeAccountManager()
+	s := &secondFactorStack{opsStack: stackWith(t, Deps{Accounts: accounts}), accounts: accounts}
 	s.practiceA = testdb.SeedPractice(t, s.db, clearPracticeOne)
 	s.practiceB = testdb.SeedPractice(t, s.db, clearPracticeTwo)
 	s.staffID = testdb.SeedNamedStaffAtPractice(t, s.db, s.practiceA, clearStaffUID, clearStaffName, []string{doulaRole}, "employee")
@@ -70,11 +64,7 @@ func (s *secondFactorStack) clear(cookie, key string, body any) *httptest.Respon
 
 func (s *secondFactorStack) clearStaff(cookie, staffID, key string, body any) *httptest.ResponseRecorder {
 	s.t.Helper()
-	header := http.Header{}
-	if key != "" {
-		header.Set(headerIdempotencyKey, key)
-	}
-	return s.send(http.MethodPost, "/api/staff/"+staffID+"/second-factor-clears", cookie, header, body)
+	return s.postKeyed("/api/staff/"+staffID+"/second-factor-clears", cookie, key, body)
 }
 
 func (s *secondFactorStack) acts() int {
@@ -147,19 +137,7 @@ func TestSecondFactorClear_ClearsTheFactorAndRecordsWhoDidIt(t *testing.T) {
 		t.Error("the Staff member still holds a second factor")
 	}
 
-	var actID, subjectKind, subjectID string
-	var stepUpAt, createdAt time.Time
-	if err := s.db.Admin.QueryRowContext(t.Context(),
-		`SELECT a.id, a.subject_kind, a.subject_id, a.step_up_at, a.created_at
-		   FROM operator_acts a JOIN operators o ON o.id = a.operator_id
-		  WHERE o.identity_uid = $1 AND a.action = 'second_factor_cleared'`, opUID,
-	).Scan(&actID, &subjectKind, &subjectID, &stepUpAt, &createdAt); err != nil {
-		t.Fatalf("read the act: %v", err)
-	}
-	if subjectKind != "staff" || subjectID != s.staffID || !stepUpAt.Equal(steppedUp) || !createdAt.Equal(s.now) {
-		t.Errorf("act = (%s/%s, step_up_at %s, created_at %s), want staff/%s stepped up at %s, taken at %s",
-			subjectKind, subjectID, stepUpAt, createdAt, s.staffID, steppedUp, s.now)
-	}
+	actID := s.requireAct("second_factor_cleared", wantAct{subjectKind: "staff", subjectID: s.staffID, steppedUp: steppedUp, at: s.now}).ID
 
 	if n := s.count(`SELECT count(*) FROM staff_auth_events
 		WHERE staff_id = $1 AND reason = 'support' AND actor_operator_act_id = $2 AND actor_staff_id IS NULL AND created_at = $3`,

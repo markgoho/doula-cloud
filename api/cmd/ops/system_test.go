@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/stripemode"
@@ -21,17 +20,9 @@ type systemStack struct {
 
 func newSystemStack(t *testing.T) *systemStack {
 	t.Helper()
-	s := &systemStack{opsStack: newOpsStack(t, false), stripe: billing.NewFakeStripeClient()}
-	s.stripe.PlatformAccount = "acct_platform_1"
-	s.handler, _ = routes(Deps{
-		DB:         s.db.Ops,
-		Now:        func() time.Time { return s.now },
-		Verifier:   tokens,
-		Origins:    []string{testOrigin},
-		Stripe:     s.stripe,
-		StripeMode: stripemode.Test,
-	})
-	return s
+	stripe := billing.NewFakeStripeClient()
+	stripe.PlatformAccount = "acct_platform_1"
+	return &systemStack{opsStack: stackWith(t, Deps{Stripe: stripe, StripeMode: stripemode.Test}), stripe: stripe}
 }
 
 func (s *systemStack) read(cookie string) *httptest.ResponseRecorder {

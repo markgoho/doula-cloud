@@ -1,8 +1,6 @@
 package export_test
 
 import (
-	"bytes"
-	"encoding/json/v2"
 	"go/parser"
 	"go/token"
 	"net/http"
@@ -14,7 +12,8 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/client"
-	"doula-cloud/api/internal/testdb"
+	"doula-cloud/api/internal/fixture"
+	"doula-cloud/api/internal/reqtest"
 )
 
 // TestExportPackageNeverImportsTheDecryptionCapability is the structural
@@ -58,71 +57,22 @@ func TestExportPackageNeverImportsTheDecryptionCapability(t *testing.T) {
 	}
 }
 
-func authedPUT(t *testing.T, session, url string, body any) *http.Response {
-	t.Helper()
-	b, err := json.Marshal(body)
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, url, bytes.NewReader(b))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
-}
-
-func authedPOST(t *testing.T, session, url string) *http.Response {
-	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
-}
-
 // TestHandler_ErasedClientExportsRedactedWithSealedDiff is the erasure
 // acceptance criterion: an erased Client appears in her redacted state,
 // with the fact and date of erasure, and her sealed Activity diffs
 // appear unreadable rather than decrypted.
 func TestHandler_ErasedClientExportsRedactedWithSealedDiff(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-erasure-export"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Ada Lovelace", "ada@example.com")
-
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	e := newEnv(t, fixture.WithClient(fixture.ClientName("Ada Lovelace"), fixture.ClientEmail("ada@example.com")))
+	clientURL := e.PracticeURL("/clients/" + e.Engagement.Client.ID)
 
 	// A real edit through the endpoint, so its Activity row is genuinely
 	// sealed under her key, holding her phone number in the diff.
-	editResp := authedPUT(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID,
-		client.EditRequest{
-			GivenName: "Ada", FamilyName: "Lovelace", Email: "ada@example.com", Phone: "585-555-0199", Override: true})
-	defer editResp.Body.Close()
-	if editResp.StatusCode != http.StatusOK {
-		t.Fatalf("edit status = %d, want %d", editResp.StatusCode, http.StatusOK)
-	}
+	reqtest.ExpectStatus(t, http.MethodPut, clientURL, http.StatusOK, e.SignedIn, reqtest.JSON(client.EditRequest{
+		GivenName: "Ada", FamilyName: "Lovelace", Email: "ada@example.com", Phone: "585-555-0199", Override: true,
+	}))
+	reqtest.ExpectStatus(t, http.MethodPost, clientURL+"/erasure", http.StatusOK, e.SignedIn)
 
-	eraseResp := authedPOST(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID+"/erasure")
-	defer eraseResp.Body.Close()
-	if eraseResp.StatusCode != http.StatusOK {
-		t.Fatalf("erase status = %d, want %d", eraseResp.StatusCode, http.StatusOK)
-	}
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/export")
-	defer resp.Body.Close()
-	files := readZIP(t, resp)
+	files := e.archive()
 
 	clientCSV := files["client.csv"]
 	if !strings.Contains(clientCSV, "Erased Client") {
@@ -131,9 +81,7 @@ func TestHandler_ErasedClientExportsRedactedWithSealedDiff(t *testing.T) {
 	if strings.Contains(clientCSV, "Ada") || strings.Contains(clientCSV, "Lovelace") || strings.Contains(clientCSV, "585-555") {
 		t.Fatalf("client.csv still carries erased personal data: %s", clientCSV)
 	}
-	rows := parseCSV(t, clientCSV)
-	erasedAtCol := indexOf(t, rows[0], "erased_at")
-	if rows[1][erasedAtCol] == "" {
+	if onlyRow(t, "client.csv", parseCSV(t, clientCSV)).get("erased_at") == "" {
 		t.Fatalf("client.csv erased_at is blank, want the erasure timestamp")
 	}
 
@@ -146,31 +94,20 @@ func TestHandler_ErasedClientExportsRedactedWithSealedDiff(t *testing.T) {
 	}
 }
 
-// TestHandler_ManyClientsAndEngagementsStreamsRather_ThanBuffers proves
+// TestHandler_ManyClientsAndEngagementsStreamsRatherThanBuffers proves
 // the "streamed, not assembled in memory" acceptance criterion against a
 // real dataset, not a two-row fixture: a Practice with enough Clients and
 // Engagements that a buffered implementation would still work, but only
 // a streamed one would flush its ResponseWriter more than once.
 func TestHandler_ManyClientsAndEngagementsStreamsRatherThanBuffers(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-many-clients"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	e := newEnv(t)
 	const count = 60
 	for range count {
-		testdb.SeedEngagement(t, db, practiceID)
+		e.AnotherEngagement()
 	}
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/export")
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	files := readZIP(t, resp)
-	rows := parseCSV(t, files["client.csv"])
-	if len(rows) != count+1 {
+	files := e.archive()
+	if rows := parseCSV(t, files["client.csv"]); len(rows) != count+1 {
 		t.Fatalf("client.csv rows = %d, want %d (header + %d Clients)", len(rows), count+1, count)
 	}
 
@@ -181,10 +118,10 @@ func TestHandler_ManyClientsAndEngagementsStreamsRatherThanBuffers(t *testing.T)
 	// very end: call the mux directly (no real TCP hop) with a
 	// Flush-counting ResponseWriter and require more flushes than one
 	// entity alone could produce.
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/practices/"+practiceID+"/export", nil)
-	authntest.AddSessionCookie(req, session)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/practices/"+e.Practice.ID+"/export", nil)
+	authntest.AddSessionCookie(req, fixture.Session(t, e.DB, e.Staff))
 	fw := &flushCountingWriter{ResponseRecorder: httptest.NewRecorder()}
-	newMux(db).ServeHTTP(fw, req)
+	e.Srv.Config.Handler.ServeHTTP(fw, req)
 	if fw.Code != http.StatusOK {
 		t.Fatalf("direct-mux status = %d, want %d", fw.Code, http.StatusOK)
 	}
@@ -212,22 +149,8 @@ func (f *flushCountingWriter) Flush() {
 // Practice this caller belongs to (403, indistinguishable from a real
 // Practice she isn't a member of -- ADR-0008 never leaks which).
 func TestHandler_RefusesAnUnknownOrMalformedPractice(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-unknown-practice"
-	testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	e := newEnv(t)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/not-a-uuid/export")
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("malformed id status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-
-	resp2 := authedGet(t, session, srv.URL+"/api/practices/00000000-0000-0000-0000-000000000000/export")
-	defer resp2.Body.Close()
-	if resp2.StatusCode != http.StatusForbidden {
-		t.Fatalf("unknown id status = %d, want %d", resp2.StatusCode, http.StatusForbidden)
-	}
+	reqtest.ExpectStatus(t, http.MethodGet, e.URL("/api/practices/not-a-uuid/export"), http.StatusBadRequest, e.SignedIn)
+	reqtest.ExpectStatus(t, http.MethodGet, e.URL("/api/practices/00000000-0000-0000-0000-000000000000/export"), http.StatusForbidden, e.SignedIn)
 }

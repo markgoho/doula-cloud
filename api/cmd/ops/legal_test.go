@@ -45,16 +45,8 @@ type legalStack struct {
 
 func newLegalStack(t *testing.T) *legalStack {
 	t.Helper()
-	s := &legalStack{opsStack: &opsStack{t: t, db: newOpsDB(t), now: opsStart}, stripe: billing.NewFakeStripeClient()}
-	s.handler, _ = routes(Deps{
-		DB:       s.db.Ops,
-		Now:      func() time.Time { return s.now },
-		Verifier: tokens,
-		Origins:  []string{testOrigin},
-		Stripe:   s.stripe,
-		Legal:    legalFixture,
-	})
-	return s
+	stripe := billing.NewFakeStripeClient()
+	return &legalStack{opsStack: stackWith(t, Deps{Stripe: stripe, Legal: legalFixture}), stripe: stripe}
 }
 
 // seedOwners is four Owners to email: Ana and Bea at Harbor, Ana and Dee
@@ -90,11 +82,7 @@ func legalVersionPath(document, version string) string {
 
 func (s *legalStack) publish(cookie, key, document, version string, body any) *httptest.ResponseRecorder {
 	s.t.Helper()
-	header := http.Header{}
-	if key != "" {
-		header.Set(headerIdempotencyKey, key)
-	}
-	return s.send(http.MethodPost, legalVersionPath(document, version)+"/publications", cookie, header, body)
+	return s.postKeyed(legalVersionPath(document, version)+"/publications", cookie, key, body)
 }
 
 func (s *legalStack) publications() int {
@@ -146,24 +134,10 @@ func TestLegalPublish_EmailsTheOwnersTheCheckPageCounted(t *testing.T) {
 	if s.queued() != 4 {
 		t.Errorf("outbox rows = %d, want the 4 the check page counted", s.queued())
 	}
-	var actID, details string
-	var subjectKind *string
-	var stepUpAt *time.Time
-	var createdAt time.Time
-	if err := s.db.Admin.QueryRowContext(t.Context(),
-		`SELECT a.id, a.subject_kind, a.details::text, a.step_up_at, a.created_at
-		   FROM operator_acts a JOIN operators o ON o.id = a.operator_id
-		  WHERE o.identity_uid = $1 AND a.action = 'legal_version_published'`, opUID,
-	).Scan(&actID, &subjectKind, &details, &stepUpAt, &createdAt); err != nil {
-		t.Fatalf("read the act: %v", err)
-	}
-	if subjectKind != nil || stepUpAt == nil || !stepUpAt.Equal(steppedUp) || !createdAt.Equal(s.now) {
-		t.Errorf("act = (subject %v, step_up_at %v, created_at %s), want no subject, stepped up at %s, taken at %s",
-			subjectKind, stepUpAt, createdAt, steppedUp, s.now)
-	}
-	if want := `{"version": "2026-12-15", "document": "privacy", "material": true, "requestKey": "legal-key-1"}`; details != want {
-		t.Errorf("act details = %s\nwant %s", details, want)
-	}
+	actID := s.requireAct("legal_version_published", wantAct{
+		steppedUp: steppedUp, at: s.now,
+		details: `{"version": "2026-12-15", "document": "privacy", "material": true, "requestKey": "legal-key-1"}`,
+	}).ID
 	if n := s.count(`SELECT count(*) FROM legal_version_publications
 	                  WHERE operator_act_id = $1 AND document = 'privacy' AND version = '2026-12-15' AND material AND published_at = $2`,
 		actID, s.now); n != 1 {

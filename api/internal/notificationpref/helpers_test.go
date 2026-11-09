@@ -1,25 +1,46 @@
 package notificationpref_test
 
 import (
+	"net/http"
 	"testing"
 
+	"doula-cloud/api/internal/fixture"
+	"doula-cloud/api/internal/notificationpref"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
-// seedSecondEngagement inserts one more Engagement for an already-seeded
-// clientID -- used to prove muting one Engagement leaves a sibling
-// Engagement's own push preference untouched. Stays local under this
-// name rather than testdb: adding a second Engagement to an existing
-// Client is a shape only this package's sibling-isolation tests need.
-func seedSecondEngagement(t *testing.T, db *testdb.DB, practiceID, clientID string) (engagementID string) {
+// env is what a test in this package starts from: a Practice with one
+// Engagement whose Client has a Portal Account and a live session, and this
+// package's whole surface mounted through notificationpref.Mount, the same
+// call main.go makes.
+type env struct {
+	*fixture.Scene
+}
+
+func newEnv(t *testing.T) *env {
 	t.Helper()
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, status, kind) VALUES ($1, $2, 'intake', 'birth') RETURNING id`,
-		clientID, practiceID,
-	).Scan(&engagementID); err != nil {
-		t.Fatalf("seed engagement: %v", err)
-	}
-	return engagementID
+	return &env{Scene: fixture.NewScene(t, notificationpref.Mount, fixture.WithClient(fixture.WithPortalLogin()))}
+}
+
+// preferenceURL is the route for one Engagement's push preference.
+func (e *env) preferenceURL(engagementID string) string {
+	return e.URL("/api/portal/engagements/" + engagementID + "/notification-preference")
+}
+
+// enabled reads whether push is on for the Engagement, as the Client the
+// session belongs to.
+func (e *env) enabled(engagementID string) bool {
+	e.T.Helper()
+	return reqtest.Expect[notificationpref.PreferenceResponse](e.T, http.MethodGet, e.preferenceURL(engagementID), http.StatusOK, e.AsClient).Enabled
+}
+
+// set turns push on or off for the Engagement, as the Client the session
+// belongs to, and returns what the route says is now on.
+func (e *env) set(engagementID string, enabled bool) bool {
+	e.T.Helper()
+	return reqtest.Expect[notificationpref.PreferenceResponse](e.T, http.MethodPut, e.preferenceURL(engagementID), http.StatusOK,
+		e.AsClient, reqtest.JSON(notificationpref.SetRequest{Enabled: enabled})).Enabled
 }
 
 // readPreferenceRow reads notification_preferences' ground truth for

@@ -27,11 +27,7 @@ func closedGateStack(t *testing.T) *opsStack {
 
 func (s *opsStack) openPilotGate(cookie, key string, body any) *httptest.ResponseRecorder {
 	s.t.Helper()
-	header := http.Header{}
-	if key != "" {
-		header.Set(headerIdempotencyKey, key)
-	}
-	return s.send(http.MethodPost, pilotGateOpenPath, cookie, header, body)
+	return s.postKeyed(pilotGateOpenPath, cookie, key, body)
 }
 
 func (s *opsStack) gateActs() int {
@@ -70,26 +66,8 @@ func TestPilotGateOpen_OpensTheGateForEveryoneAndRecordsWhoOpenedIt(t *testing.T
 	if want := `{"openedAt":"2026-11-02T09:01:00Z"}`; strings.TrimSpace(w.Body.String()) != want {
 		t.Errorf("body = %s\nwant %s", w.Body, want)
 	}
-	var actID string
-	var subjectKind *string
-	var details []byte
-	var stepUpAt *time.Time
-	var createdAt time.Time
-	if err := s.db.Admin.QueryRowContext(t.Context(),
-		`SELECT a.id, a.subject_kind, a.details, a.step_up_at, a.created_at
-		   FROM operator_acts a JOIN operators o ON o.id = a.operator_id
-		  WHERE o.identity_uid = $1 AND a.action = 'pilot_gate_opened'`, opUID,
-	).Scan(&actID, &subjectKind, &details, &stepUpAt, &createdAt); err != nil {
-		t.Fatalf("read the act: %v", err)
-	}
-	if subjectKind != nil || stepUpAt == nil || !stepUpAt.Equal(steppedUp) || !createdAt.Equal(s.now) {
-		t.Errorf("act = (subject %v, step_up_at %v, created_at %s), want no subject, stepped up at %s, taken at %s",
-			subjectKind, stepUpAt, createdAt, steppedUp, s.now)
-	}
-	if string(details) != `{"requestKey": "gate-key-1"}` {
-		t.Errorf("act details = %s", details)
-	}
-	if n := s.count(`SELECT count(*) FROM pilot_gate WHERE operator_act_id = $1 AND opened_at = $2`, actID, s.now); n != 1 {
+	act := s.requireAct("pilot_gate_opened", wantAct{steppedUp: steppedUp, at: s.now, details: `{"requestKey": "gate-key-1"}`})
+	if n := s.count(`SELECT count(*) FROM pilot_gate WHERE operator_act_id = $1 AND opened_at = $2`, act.ID, s.now); n != 1 {
 		t.Errorf("gate rows keyed to the act = %d, want 1", n)
 	}
 	if !s.admits("anyone@example.com") {

@@ -1,6 +1,7 @@
 package push_test
 
 import (
+	"database/sql"
 	"errors"
 	"os"
 	"testing"
@@ -18,19 +19,21 @@ type payload struct {
 	EngagementID string `json:"engagementId"`
 }
 
-func TestNotifyMessageRecipient_SendsToTheRecipientsSubscriptionsOnly(t *testing.T) {
-	db := testdb.New(t)
+// clientWithSubscription seeds an Engagement whose Client has one push
+// subscription, and opens the transaction a notification is sent inside.
+func clientWithSubscription(t *testing.T) (db *testdb.DB, engagement fixture.EngagementRecord, tx *sql.Tx) {
+	t.Helper()
+	db = testdb.New(t)
 	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
-	staff := fixture.Staff(t, db, p)
-	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
+	engagement = fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
 	testdb.SeedPushSubscription(t, db, "client", engagement.Client.ID, "https://push.example.com/client")
-	testdb.SeedPushSubscription(t, db, "staff", staff.ID, "https://push.example.com/staff")
+	return db, engagement, db.BeginAdmin(t)
+}
 
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
+func TestNotifyMessageRecipient_SendsToTheRecipientsSubscriptionsOnly(t *testing.T) {
+	db, engagement, tx := clientWithSubscription(t)
+	staff := fixture.Staff(t, db, fixture.PracticeRecord{ID: engagement.PracticeID})
+	testdb.SeedPushSubscription(t, db, "staff", staff.ID, "https://push.example.com/staff")
 
 	pusher := push.NewFakePusher()
 	push.NotifyMessageRecipient(t.Context(), tx, pusher, "test", engagement.ID, "client", payload{EngagementID: engagement.ID})
@@ -45,16 +48,7 @@ func TestNotifyMessageRecipient_SendsToTheRecipientsSubscriptionsOnly(t *testing
 }
 
 func TestNotifyMessageRecipient_ASendFailureIsSwallowed(t *testing.T) {
-	db := testdb.New(t)
-	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
-	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
-	testdb.SeedPushSubscription(t, db, "client", engagement.Client.ID, "https://push.example.com/client")
-
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
+	_, engagement, tx := clientWithSubscription(t)
 
 	pusher := push.NewFakePusher()
 	pusher.Err = errors.New("push service down")
