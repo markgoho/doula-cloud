@@ -32,26 +32,20 @@ func seedMappedCustomer(t *testing.T, db *testdb.DB, practiceID, clientID, accou
 // be deleted once. A Customer that is mapped but never billed is the
 // third shape, covered by the test below.
 func TestEraseHandler_ReachesEveryCustomerSheEverHad(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-erase-every-customer"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID := seedFullClient(t, db, practiceID, staffID)
+	e := newEraseEnv(t)
 
 	// Historical: one Invoice, from before the mapping existed.
-	seedInvoicedClient(t, db, practiceID, clientID, "cus_historical", "paid", 100*24*time.Hour)
+	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_historical", "paid", 100*24*time.Hour)
 	// Mapped and billed: recorded in both places, so it must not be
 	// deleted twice.
-	seedInvoicedClient(t, db, practiceID, clientID, "cus_mapped_and_billed", "paid", 100*24*time.Hour)
-	seedMappedCustomer(t, db, practiceID, clientID, testConnectAccount, "cus_mapped_and_billed", 120*24*time.Hour)
+	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_mapped_and_billed", "paid", 100*24*time.Hour)
+	seedMappedCustomer(t, e.db, e.Practice.ID, e.ClientID, testConnectAccount, "cus_mapped_and_billed", 120*24*time.Hour)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postErasure(t, session, srv, practiceID, clientID)
+	resp := postErasure(t, e.session, e.srv, e.Practice.ID, e.ClientID)
 	defer func() { _ = resp.Body.Close() }()
 	reqtest.RequireStatus(t, resp, http.StatusOK)
 
-	acts := readOutbox(t, db, clientID)
+	acts := readOutbox(t, e.db, e.ClientID)
 	for _, customerID := range []string{"cus_historical", "cus_mapped_and_billed"} {
 		if _, ok := acts["stripe_customer_delete|"+customerID]; !ok {
 			t.Fatalf("no customer-delete row queued for %s: %+v", customerID, acts)
@@ -73,25 +67,19 @@ func TestEraseHandler_ReachesEveryCustomerSheEverHad(t *testing.T) {
 // anything, and a Customer with no transactions must still become
 // redactable on a schedule rather than never.
 func TestEraseHandler_MappedCustomerWithNoInvoiceAgesFromItsOwnCreation(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-erase-mapped-only"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID := seedFullClient(t, db, practiceID, staffID)
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE practices SET stripe_connect_account_id = $2 WHERE id = $1`, practiceID, testConnectAccount,
+	e := newEraseEnv(t)
+	if _, err := e.db.Admin.ExecContext(t.Context(),
+		`UPDATE practices SET stripe_connect_account_id = $2 WHERE id = $1`, e.Practice.ID, testConnectAccount,
 	); err != nil {
 		t.Fatalf("seed connect account: %v", err)
 	}
-	seedMappedCustomer(t, db, practiceID, clientID, testConnectAccount, "cus_never_billed", 10*24*time.Hour)
+	seedMappedCustomer(t, e.db, e.Practice.ID, e.ClientID, testConnectAccount, "cus_never_billed", 10*24*time.Hour)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postErasure(t, session, srv, practiceID, clientID)
+	resp := postErasure(t, e.session, e.srv, e.Practice.ID, e.ClientID)
 	defer func() { _ = resp.Body.Close() }()
 	reqtest.RequireStatus(t, resp, http.StatusOK)
 
-	acts := readOutbox(t, db, clientID)
+	acts := readOutbox(t, e.db, e.ClientID)
 	redact, ok := acts["stripe_redaction_job|cus_never_billed"]
 	if !ok {
 		t.Fatalf("no redaction row queued: %+v", acts)

@@ -9,6 +9,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/contracts"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -22,28 +23,23 @@ func countContractEdited(t *testing.T, db *testdb.DB, engagementID string) int {
 	return count
 }
 
+func (e *env) countContractEdited() int {
+	e.t.Helper()
+	return countContractEdited(e.t, e.db, e.Engagement.ID)
+}
+
 // TestPutContractHandler_RecordsWhoChangedTheDraft proves #2520: a save
 // that moves a merge field records contract_edited against the Engagement
 // with the Staff actor, naming the fields it moved and never their values.
 func TestPutContractHandler_RecordsWhoChangedTheDraft(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-records-edit"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, statusDraft, scopeProse)
-
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+	e := newEnv(t)
+	seedContract(t, e.db, e.Engagement.ID, statusDraft, scopeProse)
 
 	const scope = "Two prenatal Visits, the birth, one postpartum Visit"
-	resp := putContract(t, srv, session, practiceID, engagementID,
-		contracts.MergeFieldValues{clientNameKey: testClientName, scopeKey: scope})
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("PUT status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), http.StatusOK, e.signedIn,
+		putting(contracts.MergeFieldValues{clientNameKey: testClientName, scopeKey: scope}))
 
-	diff := assertActivityActor(t, db, engagementID, activity.ActionContractEdited, staffID)
+	diff := assertActivityActor(t, e.db, e.Engagement.ID, activity.ActionContractEdited, e.Staff.ID)
 	var parsed struct {
 		Fields []string `json:"fields"`
 	}
@@ -62,21 +58,13 @@ func TestPutContractHandler_RecordsWhoChangedTheDraft(t *testing.T) {
 // recorded on #2520: a save whose values match what is stored, including
 // a field cleared that was already empty, leaves no Activity row.
 func TestPutContractHandler_UnchangedSaveRecordsNothing(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-unchanged-edit"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContractWithValues(t, db, engagementID, contracts.MergeFieldValues{clientNameKey: testClientName, scopeKey: ""})
+	e := newEnv(t)
+	seedContractWithValues(t, e.db, e.Engagement.ID, contracts.MergeFieldValues{clientNameKey: testClientName, scopeKey: ""})
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+	reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), http.StatusOK, e.signedIn,
+		putting(contracts.MergeFieldValues{clientNameKey: testClientName}))
 
-	resp := putContract(t, srv, session, practiceID, engagementID, contracts.MergeFieldValues{clientNameKey: testClientName})
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("PUT status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	if got := countContractEdited(t, db, engagementID); got != 0 {
+	if got := e.countContractEdited(); got != 0 {
 		t.Fatalf("contract_edited rows = %d, want 0", got)
 	}
 }
@@ -84,21 +72,12 @@ func TestPutContractHandler_UnchangedSaveRecordsNothing(t *testing.T) {
 // TestPutContractHandler_ClearingAFieldIsAChange proves a value removed
 // from the save counts as a change to that field.
 func TestPutContractHandler_ClearingAFieldIsAChange(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-cleared-edit"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContractWithValues(t, db, engagementID, contracts.MergeFieldValues{clientNameKey: testClientName})
+	e := newEnv(t)
+	seedContractWithValues(t, e.db, e.Engagement.ID, contracts.MergeFieldValues{clientNameKey: testClientName})
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+	reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), http.StatusOK, e.signedIn, putting(contracts.MergeFieldValues{}))
 
-	resp := putContract(t, srv, session, practiceID, engagementID, contracts.MergeFieldValues{})
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("PUT status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	if got := countContractEdited(t, db, engagementID); got != 1 {
+	if got := e.countContractEdited(); got != 1 {
 		t.Fatalf("contract_edited rows = %d, want 1", got)
 	}
 }

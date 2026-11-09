@@ -3,13 +3,12 @@ package contracts_test
 import (
 	"encoding/json/v2"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/contracts"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/testdb"
 )
 
 const mergeFieldProse = "Agreement for {{client_name}} at {{price}}."
@@ -37,93 +36,18 @@ const (
 	testRateAmountDollars = "$150.00"
 )
 
-func contractURL(srv *httptest.Server, practiceID, engagementID string) string {
-	return srv.URL + "/api/practices/" + practiceID + "/engagements/" + engagementID + "/contract"
-}
-
-func postContract(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string) *http.Response {
-	t.Helper()
-	return reqtest.Post(t, contractURL(srv, practiceID, engagementID), reqtest.Session(session))
-}
-
-func getContract(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string) *http.Response {
-	t.Helper()
-	return reqtest.Get(t, contractURL(srv, practiceID, engagementID), reqtest.Session(session))
-}
-
-func getContractPDFRaw(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string) *http.Response {
-	t.Helper()
-	return reqtest.Get(t, contractURL(srv, practiceID, engagementID)+"/pdf", reqtest.Session(session))
-}
-
-func getContractPDF(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string) *http.Response {
-	t.Helper()
-	return getContractPDFRaw(t, srv, session, practiceID, engagementID)
-}
-
-func putContractRaw(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string, body []byte) *http.Response {
-	t.Helper()
-	return reqtest.Put(t, contractURL(srv, practiceID, engagementID), reqtest.Session(session), reqtest.RawJSON(body))
-}
-
-func putContract(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string, values contracts.MergeFieldValues) *http.Response {
-	t.Helper()
-	payload, err := json.Marshal(contracts.PutContractRequest{Values: values})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	return putContractRaw(t, srv, session, practiceID, engagementID, payload)
-}
-
-func TestPostContractHandler_InvalidEngagementID(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "post-invalid-engagement-id"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postContract(t, srv, session, practiceID, "not-a-uuid")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-// TestPostContractHandler_EngagementNotFound proves an Engagement id from
-// a different Practice (or one that doesn't exist) 404s rather than
-// creating a Contract under it.
-func TestPostContractHandler_EngagementNotFound(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "post-no-engagement"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
-	_, otherEngagementID := testdb.SeedEngagement(t, db, otherPracticeID)
-
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postContract(t, srv, session, practiceID, otherEngagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
+func TestPostContractHandler_RefusesAnEngagementItCannotReach(t *testing.T) {
+	e := newEnv(t)
+	e.refusesEngagementsItCannotReach(http.MethodPost, "")
 }
 
 // TestPostContractHandler_NoTemplate proves the "should not happen
 // post-#67" missing-template case fails predictably with 404, not a
 // crash.
 func TestPostContractHandler_NoTemplate(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "post-no-template"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	e := newEnv(t)
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
+	reqtest.ExpectStatus(t, http.MethodPost, e.contractURL(""), http.StatusNotFound, e.signedIn)
 }
 
 // TestPostContractHandler_Success proves a Contract is created as a
@@ -132,24 +56,13 @@ func TestPostContractHandler_NoTemplate(t *testing.T) {
 // Engagement's Client (ADR-0017), every other merge field left blank --
 // and that any Staff member (not just an Owner) can create one.
 func TestPostContractHandler_Success(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "post-success"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContractTemplate(t, db, practiceID, mergeFieldProse)
-	testdb.SeedPracticeRate(t, db, practiceID, "birth", testRateAmountCents)
+	e := newEnv(t)
+	e.readyToDraft(mergeFieldProse)
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.contractURL(""), http.StatusCreated, e.signedIn)
 
-	resp := postContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusCreated)
-
-	out := reqtest.Decode[contracts.ContractResponse](t, resp)
-	if out.EngagementID != engagementID {
-		t.Fatalf("engagementId = %q, want %q", out.EngagementID, engagementID)
+	if out.EngagementID != e.Engagement.ID {
+		t.Fatalf("engagementId = %q, want %q", out.EngagementID, e.Engagement.ID)
 	}
 	if out.Status != statusDraft {
 		t.Fatalf("status = %q, want draft", out.Status)
@@ -176,26 +89,17 @@ func TestPostContractHandler_Success(t *testing.T) {
 // amount as amountCentsAfter, with amountCentsBefore 0 since nothing
 // existed to have carried a price before this Contract did.
 func TestPostContractHandler_RecordsCreatedAndPricedSeparately(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "post-created-and-priced"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContractTemplate(t, db, practiceID, mergeFieldProse)
-	testdb.SeedPracticeRate(t, db, practiceID, "birth", testRateAmountCents)
+	e := newEnv(t)
+	e.readyToDraft(mergeFieldProse)
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+	reqtest.ExpectStatus(t, http.MethodPost, e.contractURL(""), http.StatusCreated, e.signedIn)
 
-	resp := postContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusCreated)
-
-	createdDiff := assertActivityActor(t, db, engagementID, activity.ActionContractCreated, staffID)
+	createdDiff := assertActivityActor(t, e.db, e.Engagement.ID, activity.ActionContractCreated, e.Staff.ID)
 	if string(createdDiff) != "{}" {
 		t.Fatalf("contract_created diff = %q, want no price carried -- it left the money set (#972)", createdDiff)
 	}
 
-	pricedDiff := assertActivityActor(t, db, engagementID, activity.ActionContractPriced, staffID)
+	pricedDiff := assertActivityActor(t, e.db, e.Engagement.ID, activity.ActionContractPriced, e.Staff.ID)
 	var parsedDiff activity.AmountDiff
 	if err := json.Unmarshal(pricedDiff, &parsedDiff); err != nil {
 		t.Fatalf("unmarshal contract_priced diff: %v", err)
@@ -205,57 +109,44 @@ func TestPostContractHandler_RecordsCreatedAndPricedSeparately(t *testing.T) {
 	}
 }
 
-// TestPostContractHandler_NoClientNameFieldLeavesValuesEmpty proves
-// resolveMergeFieldValues's other branch: a Template whose prose never
-// asks for client_name or practice_name gets no prefill at all. Prose
-// uses a plain scope field rather than {{price}} -- price is no longer
-// resolved by resolveMergeFieldValues at all (#967: it is resolved
-// separately, from a real column, never stored in merge_field_values),
-// so a prose that only asks for it would prove nothing about this
-// function's own empty branch.
-func TestPostContractHandler_NoClientNameFieldLeavesValuesEmpty(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "post-no-client-name-field"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContractTemplate(t, db, practiceID, "Agreement for {{scope_of_service}}.")
-	testdb.SeedPracticeRate(t, db, practiceID, "birth", testRateAmountCents)
-
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	out := reqtest.Decode[contracts.ContractResponse](t, resp)
-	if len(out.Values) != 0 {
-		t.Fatalf("values = %+v, want empty -- no client_name field to prefill", out.Values)
+// TestPostContractHandler_ResolvesMergeFields proves what
+// resolveMergeFieldValues prefills from the prose a Template asks for:
+// the Practice's own name for its placeholder (#258's AC), alongside the
+// Client's name, and nothing at all for a Template that asks for neither.
+// The last row's prose uses a plain scope field rather than {{price}} --
+// price is no longer resolved by resolveMergeFieldValues at all (#967: it
+// is resolved separately, from a real column, never stored in
+// merge_field_values), so a prose that only asks for it would prove
+// nothing about the empty branch.
+func TestPostContractHandler_ResolvesMergeFields(t *testing.T) {
+	cases := []struct {
+		name  string
+		prose string
+		want  contracts.MergeFieldValues
+	}{
+		{
+			"the Practice's name beside the Client's",
+			"This agreement is between {{practice_name}} and {{client_name}} for doula services.",
+			contracts.MergeFieldValues{"practice_name": "Test Practice", clientNameKey: testClientName},
+		},
+		{"no field to prefill", "Agreement for {{scope_of_service}}.", contracts.MergeFieldValues{}},
 	}
-}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e := newEnv(t)
+			e.readyToDraft(c.prose)
 
-// TestPostContractHandler_ResolvesPracticeName proves #258's AC: prose
-// containing the Practice-name placeholder returns that placeholder
-// already filled with the Practice's own name.
-func TestPostContractHandler_ResolvesPracticeName(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "post-resolves-practice-name"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContractTemplate(t, db, practiceID, "This agreement is between {{practice_name}} and {{client_name}} for doula services.")
-	testdb.SeedPracticeRate(t, db, practiceID, "birth", testRateAmountCents)
+			out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.contractURL(""), http.StatusCreated, e.signedIn)
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	out := reqtest.Decode[contracts.ContractResponse](t, resp)
-	if out.Values["practice_name"] != "Test Practice" {
-		t.Fatalf("values[practice_name] = %q, want %q", out.Values["practice_name"], "Test Practice")
-	}
-	if out.Values[clientNameKey] != testClientName {
-		t.Fatalf("values[client_name] = %q, want %q -- still resolved alongside practice_name", out.Values[clientNameKey], testClientName)
+			if len(out.Values) != len(c.want) {
+				t.Fatalf("values = %+v, want %+v", out.Values, c.want)
+			}
+			for key, want := range c.want {
+				if out.Values[key] != want {
+					t.Fatalf("values[%s] = %q, want %q", key, out.Values[key], want)
+				}
+			}
+		})
 	}
 }
 
@@ -264,35 +155,16 @@ func TestPostContractHandler_ResolvesPracticeName(t *testing.T) {
 // the existing full-replacement update, and the overwritten value
 // survives a reload rather than reverting to the resolved one.
 func TestPutContractHandler_OverwrittenResolvedValueSurvivesReload(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-overwrite-resolved"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContractTemplate(t, db, practiceID, "This agreement is between {{practice_name}} and {{client_name}} for doula services.")
-	testdb.SeedPracticeRate(t, db, practiceID, "birth", testRateAmountCents)
-
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	createResp := postContract(t, srv, session, practiceID, engagementID)
-	defer createResp.Body.Close()
-	if createResp.StatusCode != http.StatusCreated {
-		t.Fatalf("create status = %d, want %d", createResp.StatusCode, http.StatusCreated)
-	}
+	e := newEnv(t)
+	e.readyToDraft("This agreement is between {{practice_name}} and {{client_name}} for doula services.")
+	reqtest.ExpectStatus(t, http.MethodPost, e.contractURL(""), http.StatusCreated, e.signedIn)
 
 	const overwrittenPracticeName = "Overwritten Practice Name"
-	putResp := putContract(t, srv, session, practiceID, engagementID,
-		contracts.MergeFieldValues{"practice_name": overwrittenPracticeName, clientNameKey: testClientName})
-	defer putResp.Body.Close()
-	if putResp.StatusCode != http.StatusOK {
-		t.Fatalf("PUT status = %d, want %d", putResp.StatusCode, http.StatusOK)
-	}
+	reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), http.StatusOK, e.signedIn,
+		putting(contracts.MergeFieldValues{"practice_name": overwrittenPracticeName, clientNameKey: testClientName}))
 
-	getResp := getContract(t, srv, session, practiceID, engagementID)
-	defer getResp.Body.Close()
-	getOut := reqtest.Decode[contracts.ContractResponse](t, getResp)
-	if getOut.Values["practice_name"] != overwrittenPracticeName {
-		t.Fatalf("values[practice_name] after reload = %q, want %q", getOut.Values["practice_name"], overwrittenPracticeName)
+	if got := e.contract().Values["practice_name"]; got != overwrittenPracticeName {
+		t.Fatalf("values[practice_name] after reload = %q, want %q", got, overwrittenPracticeName)
 	}
 }
 
@@ -300,20 +172,11 @@ func TestPutContractHandler_OverwrittenResolvedValueSurvivesReload(t *testing.T)
 // placeholder repeated in prose appears once in MergeFields, not once
 // per occurrence.
 func TestPostContractHandler_DedupesRepeatedMergeField(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "post-dedup"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContractTemplate(t, db, practiceID, "Hello {{client_name}}, this agreement is for {{client_name}}.")
-	testdb.SeedPracticeRate(t, db, practiceID, "birth", testRateAmountCents)
+	e := newEnv(t)
+	e.readyToDraft("Hello {{client_name}}, this agreement is for {{client_name}}.")
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.contractURL(""), http.StatusCreated, e.signedIn)
 
-	resp := postContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	out := reqtest.Decode[contracts.ContractResponse](t, resp)
 	if len(out.MergeFields) != 1 || out.MergeFields[0] != clientNameKey {
 		t.Fatalf("mergeFields = %v, want [client_name] deduped", out.MergeFields)
 	}
@@ -322,27 +185,11 @@ func TestPostContractHandler_DedupesRepeatedMergeField(t *testing.T) {
 // TestPostContractHandler_Duplicate proves a second POST for the same
 // Engagement 409s -- POST creates, PUT edits.
 func TestPostContractHandler_Duplicate(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "post-duplicate"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContractTemplate(t, db, practiceID, mergeFieldProse)
-	testdb.SeedPracticeRate(t, db, practiceID, "birth", testRateAmountCents)
+	e := newEnv(t)
+	e.readyToDraft(mergeFieldProse)
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	first := postContract(t, srv, session, practiceID, engagementID)
-	defer first.Body.Close()
-	if first.StatusCode != http.StatusCreated {
-		t.Fatalf("first POST status = %d, want %d", first.StatusCode, http.StatusCreated)
-	}
-
-	second := postContract(t, srv, session, practiceID, engagementID)
-	defer second.Body.Close()
-	if second.StatusCode != http.StatusConflict {
-		t.Fatalf("second POST status = %d, want %d", second.StatusCode, http.StatusConflict)
-	}
+	reqtest.ExpectStatus(t, http.MethodPost, e.contractURL(""), http.StatusCreated, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodPost, e.contractURL(""), http.StatusConflict, e.signedIn)
 }
 
 // TestPostContractHandler_ContractorWithoutAttachmentNotFound proves #970's
@@ -352,48 +199,21 @@ func TestPostContractHandler_Duplicate(t *testing.T) {
 // still gets 404, the same reach refusal GetContractHandler's own
 // contractor test proves on the read side.
 func TestPostContractHandler_ContractorWithoutAttachmentNotFound(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "post-contractor-unattached"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContractTemplate(t, db, practiceID, mergeFieldProse)
+	e := newEnv(t, signedInAs(fixture.Contractor()))
+	e.seedTemplate(mergeFieldProse)
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
+	reqtest.ExpectStatus(t, http.MethodPost, e.contractURL(""), http.StatusNotFound, e.signedIn)
 }
 
-func TestGetContractHandler_InvalidEngagementID(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-invalid-engagement-id"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getContract(t, srv, session, practiceID, "not-a-uuid")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+func TestGetContractHandler_RefusesAnEngagementItCannotReach(t *testing.T) {
+	e := newEnv(t)
+	e.refusesEngagementsItCannotReach(http.MethodGet, "")
 }
 
 func TestGetContractHandler_NotFound(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-not-found"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	e := newEnv(t)
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
+	reqtest.ExpectStatus(t, http.MethodGet, e.contractURL(""), http.StatusNotFound, e.signedIn)
 }
 
 // TestGetContractHandler_ContractorWithoutAttachmentForbidden proves
@@ -401,19 +221,10 @@ func TestGetContractHandler_NotFound(t *testing.T) {
 // no engagement_attachments row gets the same "not found" response an
 // out-of-practice engagementId gets -- no partly-open state (#230).
 func TestGetContractHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-contractor-unattached"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
+	e := newEnv(t, signedInAs(fixture.Contractor()))
+	e.seedDraft()
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
+	reqtest.ExpectStatus(t, http.MethodGet, e.contractURL(""), http.StatusNotFound, e.signedIn)
 }
 
 // TestGetContractHandler_ContractorWithGrantedAttachmentSeesScope proves
@@ -427,23 +238,13 @@ func TestGetContractHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 // proving the guarantee is "no price key reachable", not "an unresolved
 // one".
 func TestGetContractHandler_ContractorWithGrantedAttachmentSeesScope(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-contractor-attached"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContractWithValues(t, db, engagementID, contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: testPriceValue})
-	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
+	e := newEnv(t, signedInAs(fixture.Contractor()), attachedToEngagement())
+	seedContractWithValues(t, e.db, e.Engagement.ID, contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: testPriceValue})
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+	out := e.contract()
 
-	resp := getContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	out := reqtest.Decode[contracts.ContractResponse](t, resp)
-	if out.EngagementID != engagementID {
-		t.Fatalf("engagementId = %q, want %q", out.EngagementID, engagementID)
+	if out.EngagementID != e.Engagement.ID {
+		t.Fatalf("engagementId = %q, want %q", out.EngagementID, e.Engagement.ID)
 	}
 	if out.Values[clientNameKey] != jamieName {
 		t.Fatalf("Values[client_name] = %q, want %q -- scope still reaches a granted-attachment contractor", out.Values[clientNameKey], jamieName)
@@ -453,63 +254,35 @@ func TestGetContractHandler_ContractorWithGrantedAttachmentSeesScope(t *testing.
 	}
 }
 
-// TestGetContractHandler_AmountChangedAtHiddenFromContractor proves
-// #968's AC ("whoever opens a re-derived Contract can see that its price
-// changed") stays inside ADR-0008's money tier: a contractor never sees
-// amountChangedAt, the same "no price key reachable at all" guarantee
-// priceForReader already gives the "price" merge field value itself --
-// otherwise she would learn "the price changed" with the value redacted,
-// which is still a fact about the Practice's money.
-func TestGetContractHandler_AmountChangedAtHiddenFromContractor(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-contractor-amount-changed"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
-	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE contracts SET amount_changed_at = now() WHERE engagement_id = $1`, engagementID,
-	); err != nil {
-		t.Fatalf("set amount_changed_at: %v", err)
+// TestGetContractHandler_AmountChangedAt proves #968's AC ("whoever opens
+// a re-derived Contract can see that its price changed") stays inside
+// ADR-0008's money tier: a contractor never sees amountChangedAt, the
+// same "no price key reachable at all" guarantee priceForReader already
+// gives the "price" merge field value itself -- otherwise she would
+// learn "the price changed" with the value redacted, which is still a
+// fact about the Practice's money. An employed Doula reads Contract money
+// (#282), so amountChangedAt round-trips for her once amount_changed_at
+// is set on the row, and she can see the price changed and when without
+// hunting the activity ledger for it.
+func TestGetContractHandler_AmountChangedAt(t *testing.T) {
+	cases := []struct {
+		name        string
+		staff       fixture.StaffOption
+		wantVisible bool
+	}{
+		{"hidden from a contractor", fixture.Contractor(), false},
+		{"visible to an employee", fixture.Doula(), true},
 	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(c.staff), attachedToEngagement())
+			e.seedDraft()
+			e.exec(`UPDATE contracts SET amount_changed_at = now() WHERE engagement_id = $1`, e.Engagement.ID)
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	out := reqtest.Decode[contracts.ContractResponse](t, resp)
-	if out.AmountChangedAt != nil {
-		t.Fatalf("amountChangedAt = %v, want nil for an ambient contractor (#968, ADR-0008)", out.AmountChangedAt)
-	}
-}
-
-// TestGetContractHandler_AmountChangedAtVisibleToEmployee proves the
-// same read's Owner/Admin/employee side: amountChangedAt round-trips
-// once amount_changed_at is set on the row, so a reader can see the
-// price changed and when without hunting the activity ledger for it.
-func TestGetContractHandler_AmountChangedAtVisibleToEmployee(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-employee-amount-changed"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE contracts SET amount_changed_at = now() WHERE engagement_id = $1`, engagementID,
-	); err != nil {
-		t.Fatalf("set amount_changed_at: %v", err)
-	}
-
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	out := reqtest.Decode[contracts.ContractResponse](t, resp)
-	if out.AmountChangedAt == nil {
-		t.Fatalf("amountChangedAt = nil, want set -- an employed Doula reads Contract money now (#282)")
+			if got := e.contract().AmountChangedAt != nil; got != c.wantVisible {
+				t.Fatalf("amountChangedAt visible = %v, want %v (#968, #282, ADR-0008)", got, c.wantVisible)
+			}
+		})
 	}
 }
 
@@ -518,20 +291,11 @@ func TestGetContractHandler_AmountChangedAtVisibleToEmployee(t *testing.T) {
 // resolved from amount_cents (#967), the same as an Owner or Admin --
 // previously withheld entirely.
 func TestGetContractHandler_EmployedDoulaSeesMoney(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-employee-money"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContractWithValues(t, db, engagementID, contracts.MergeFieldValues{clientNameKey: jamieName})
+	e := newEnv(t)
+	seedContractWithValues(t, e.db, e.Engagement.ID, contracts.MergeFieldValues{clientNameKey: jamieName})
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+	out := e.contract()
 
-	resp := getContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	out := reqtest.Decode[contracts.ContractResponse](t, resp)
 	if out.Values[priceKey] != testRateAmountDollars {
 		t.Fatalf("Values[price] = %q, want %q -- an employed Doula reads Contract money now, resolved from amount_cents", out.Values[priceKey], testRateAmountDollars)
 	}
@@ -545,53 +309,26 @@ func TestGetContractHandler_EmployedDoulaSeesMoney(t *testing.T) {
 // delete path TestGetContractHandler_ContractorWithGrantedAttachmentSeesScope
 // exercises -- both must leave no price key reachable.
 func TestGetContractHandler_ContractorWithGrantedAttachmentNoRawPriceStored(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-contractor-no-raw-price"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
-	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
+	e := newEnv(t, signedInAs(fixture.Contractor()), attachedToEngagement())
+	e.seedDraft()
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+	out := e.contract()
 
-	resp := getContract(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	out := reqtest.Decode[contracts.ContractResponse](t, resp)
 	if _, present := out.Values[priceKey]; present {
 		t.Fatalf("Values = %+v, want no price key reachable for a contractor", out.Values)
 	}
 }
 
-func TestPutContractHandler_InvalidEngagementID(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-invalid-engagement-id"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := putContract(t, srv, session, practiceID, "not-a-uuid", contracts.MergeFieldValues{})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+func TestPutContractHandler_RefusesAnEngagementItCannotReach(t *testing.T) {
+	e := newEnv(t)
+	e.refusesEngagementsItCannotReach(http.MethodPut, "", putting(contracts.MergeFieldValues{}))
 }
 
 func TestPutContractHandler_NotFound(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-not-found"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	e := newEnv(t)
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := putContract(t, srv, session, practiceID, engagementID, contracts.MergeFieldValues{clientNameKey: jamieName})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
+	reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), http.StatusNotFound, e.signedIn,
+		putting(contracts.MergeFieldValues{clientNameKey: jamieName}))
 }
 
 // TestPutContractHandler_ContractorWithoutAttachmentNotFound is #970's AC
@@ -601,92 +338,53 @@ func TestPutContractHandler_NotFound(t *testing.T) {
 // same 404 TestPutContractHandler_NotFound gets, but for reach rather
 // than for having no Contract at all.
 func TestPutContractHandler_ContractorWithoutAttachmentNotFound(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-contractor-unattached"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
+	e := newEnv(t, signedInAs(fixture.Contractor()))
+	e.seedDraft()
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := putContract(t, srv, session, practiceID, engagementID, contracts.MergeFieldValues{clientNameKey: jamieName})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
+	reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), http.StatusNotFound, e.signedIn,
+		putting(contracts.MergeFieldValues{clientNameKey: jamieName}))
 }
 
-// TestPutContractHandler_NonDraftRejected proves PUT 409s once a Contract
-// has moved past 'draft' -- no endpoint in this ticket can drive a
-// Contract to that state itself, so the row is seeded directly.
-func TestPutContractHandler_NonDraftRejected(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-non-draft"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, "sent", mergeFieldProse)
+// TestPutContractHandler_Refusals proves what a PUT refuses: a Contract
+// that has moved past 'draft' (409 -- no endpoint in this ticket can
+// drive a Contract to that state itself, so the row is seeded directly),
+// a body that is not JSON, a merge field key the prose does not ask for,
+// and a price. Price is a reserved merge field resolved by the product
+// (#967), never a value a person fills in on the Contract form, so a PUT
+// that tries anyway is a 400, not a silent overwrite the way
+// client_name/practice_name allow.
+func TestPutContractHandler_Refusals(t *testing.T) {
+	cases := []struct {
+		name   string
+		status string
+		body   reqtest.Option
+		want   int
+	}{
+		{"contract already sent", statusSent, putting(contracts.MergeFieldValues{clientNameKey: jamieName}), http.StatusConflict},
+		{caseBodyNotJSON, statusDraft, reqtest.RawJSON([]byte("not json")), http.StatusBadRequest},
+		{"unknown merge field key", statusDraft, putting(contracts.MergeFieldValues{"not_a_field": "x"}), http.StatusBadRequest},
+		{"price", statusDraft, putting(contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: "$1"}), http.StatusBadRequest},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e := newEnv(t)
+			e.seedContract(c.status)
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := putContract(t, srv, session, practiceID, engagementID, contracts.MergeFieldValues{clientNameKey: jamieName})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusConflict)
-}
-
-func TestPutContractHandler_InvalidBody(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-invalid-body"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
-
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := putContractRaw(t, srv, session, practiceID, engagementID, []byte("not json"))
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-func TestPutContractHandler_UnknownMergeFieldKeyRejected(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-unknown-key"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
-
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := putContract(t, srv, session, practiceID, engagementID, contracts.MergeFieldValues{"not_a_field": "x"})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+			reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), c.want, e.signedIn, c.body)
+		})
+	}
 }
 
 // TestPutContractHandler_StatusFieldIgnored proves no request body field
 // can move a Contract's status -- PutContractRequest has no Status field
 // at all, so an incoming "status" key is silently dropped by the decoder.
 func TestPutContractHandler_StatusFieldIgnored(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-status-ignored"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
+	e := newEnv(t)
+	e.seedDraft()
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPut, e.contractURL(""), http.StatusOK, e.signedIn,
+		reqtest.RawJSON([]byte(`{"status":"signed","values":{"client_name":"Jamie"}}`)))
 
-	resp := putContractRaw(t, srv, session, practiceID, engagementID,
-		[]byte(`{"status":"signed","values":{"client_name":"Jamie"}}`))
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-
-	out := reqtest.Decode[contracts.ContractResponse](t, resp)
 	if out.Status != statusDraft {
 		t.Fatalf("status = %q, want draft (unaffected by the request body)", out.Status)
 	}
@@ -697,21 +395,12 @@ func TestPutContractHandler_StatusFieldIgnored(t *testing.T) {
 // map) is normalized to an empty map rather than crashing or storing
 // JSON null.
 func TestPutContractHandler_EmptyBodyDefaultsToEmptyValues(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-empty-body"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
+	e := newEnv(t)
+	e.seedDraft()
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPut, e.contractURL(""), http.StatusOK, e.signedIn,
+		reqtest.RawJSON([]byte(`{}`)))
 
-	resp := putContractRaw(t, srv, session, practiceID, engagementID, []byte(`{}`))
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-
-	out := reqtest.Decode[contracts.ContractResponse](t, resp)
 	// price still resolves even against an otherwise-empty Values map --
 	// it is never sourced from what Staff PUTs (#967).
 	if len(out.Values) != 1 || out.Values[priceKey] != testRateAmountDollars {
@@ -719,50 +408,16 @@ func TestPutContractHandler_EmptyBodyDefaultsToEmptyValues(t *testing.T) {
 	}
 }
 
-// TestPutContractHandler_PriceRejected proves #967's AC directly: price
-// is a reserved merge field resolved by the product, never a value a
-// person fills in on the Contract form -- a PUT that tries anyway is a
-// 400, not a silent overwrite the way client_name/practice_name allow.
-func TestPutContractHandler_PriceRejected(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-price-rejected"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
-
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := putContract(t, srv, session, practiceID, engagementID,
-		contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: "$1"})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
 // TestPutContractHandler_Success proves a full Values replace round-trips
 // through GET.
 func TestPutContractHandler_Success(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-success"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
+	e := newEnv(t)
+	e.seedDraft()
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+	reqtest.ExpectStatus(t, http.MethodPut, e.contractURL(""), http.StatusOK, e.signedIn,
+		putting(contracts.MergeFieldValues{clientNameKey: jamieName}))
 
-	putResp := putContract(t, srv, session, practiceID, engagementID,
-		contracts.MergeFieldValues{clientNameKey: jamieName})
-	defer putResp.Body.Close()
-
-	if putResp.StatusCode != http.StatusOK {
-		t.Fatalf("PUT status = %d, want %d", putResp.StatusCode, http.StatusOK)
-	}
-
-	getResp := getContract(t, srv, session, practiceID, engagementID)
-	defer getResp.Body.Close()
-	out := reqtest.Decode[contracts.ContractResponse](t, getResp)
+	out := e.contract()
 	// price is resolved from amount_cents, never from what was PUT (#967);
 	// seedContract's own hardcoded amount_cents (template_test.go) is
 	// what this renders as.
@@ -776,32 +431,14 @@ func TestPutContractHandler_Success(t *testing.T) {
 // not change that instance's stored (and derived-merge-field) snapshot --
 // the AC's explicit coverage requirement.
 func TestContract_TemplateEditDoesNotAlterExistingSnapshot(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "snapshot-immutable"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContractTemplate(t, db, practiceID, mergeFieldProse)
-	testdb.SeedPracticeRate(t, db, practiceID, "birth", testRateAmountCents)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	e.readyToDraft(mergeFieldProse)
+	reqtest.ExpectStatus(t, http.MethodPost, e.contractURL(""), http.StatusCreated, e.signedIn)
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+	reqtest.ExpectStatus(t, http.MethodPut, e.templateURL(), http.StatusOK, e.signedIn,
+		reqtest.JSON(contracts.TemplateResponse{Prose: "Totally different agreement for {{scope_of_service}}."}))
 
-	postResp := postContract(t, srv, session, practiceID, engagementID)
-	defer postResp.Body.Close()
-	if postResp.StatusCode != http.StatusCreated {
-		t.Fatalf("POST status = %d, want %d", postResp.StatusCode, http.StatusCreated)
-	}
-
-	putTemplateResp := putTemplate(t, srv, session, practiceID,
-		contracts.TemplateResponse{Prose: "Totally different agreement for {{scope_of_service}}."})
-	defer putTemplateResp.Body.Close()
-	if putTemplateResp.StatusCode != http.StatusOK {
-		t.Fatalf("PUT template status = %d, want %d", putTemplateResp.StatusCode, http.StatusOK)
-	}
-
-	getResp := getContract(t, srv, session, practiceID, engagementID)
-	defer getResp.Body.Close()
-	out := reqtest.Decode[contracts.ContractResponse](t, getResp)
+	out := e.contract()
 	if out.Prose != mergeFieldProse {
 		t.Fatalf("prose = %q, want the original snapshot unaffected by the template edit", out.Prose)
 	}

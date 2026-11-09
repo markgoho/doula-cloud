@@ -1,13 +1,16 @@
 package client_test
 
 import (
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -271,4 +274,75 @@ func outboxStatus(t *testing.T, db *testdb.DB, outboxID string) (status, lastErr
 		lastError, _ = le.(string)
 	}
 	return status, lastError
+}
+
+// eraseEnv is what an erasure test starts from: a Practice with this
+// package's whole surface mounted on a server, its Owner signed in, and one
+// Client with every identifying column filled in -- the state an erasure
+// has something to do to.
+type eraseEnv struct {
+	t   *testing.T
+	db  *testdb.DB
+	srv *httptest.Server
+
+	Practice fixture.PracticeRecord
+	Owner    fixture.StaffRecord
+	ClientID string
+
+	session  string
+	signedIn reqtest.Option
+}
+
+func newEraseEnv(t *testing.T) *eraseEnv {
+	t.Helper()
+	db := testdb.New(t)
+	e := &eraseEnv{t: t, db: db, Practice: fixture.Practice(t, db)}
+	e.Owner = fixture.Staff(t, db, e.Practice, fixture.Owner())
+	e.ClientID = seedFullClient(t, db, e.Practice.ID, e.Owner.ID)
+	srv, session := newServer(t, db, e.Owner.UID)
+	t.Cleanup(srv.Close)
+	e.srv = srv
+	e.session = session
+	e.signedIn = reqtest.Session(session)
+	return e
+}
+
+// erasureURL is the route that erases the Client.
+func (e *eraseEnv) erasureURL() string {
+	return e.srv.URL + "/api/practices/" + e.Practice.ID + "/clients/" + e.ClientID + "/erasure"
+}
+
+// activeEngagement is an active birth for the Client.
+func (e *eraseEnv) activeEngagement() (engagementID string) {
+	e.t.Helper()
+	return seedEngagementForClient(e.t, e.db, e.ClientID, e.Practice.ID, "active", "birth")
+}
+
+// paidInvoice is a paid Invoice on a signed Contract on an active birth for
+// the Client.
+func (e *eraseEnv) paidInvoice() (invoiceID string) {
+	e.t.Helper()
+	contractID := seedClientContract(e.t, e.db, e.activeEngagement(), "signed")
+	return seedClientInvoice(e.t, e.db, e.Practice.ID, contractID, "paid", 15000)
+}
+
+// readErasureScope decodes what the erasure's activity row says it swept
+// into scope.
+func (e *eraseEnv) readErasureScope(scope any) {
+	e.t.Helper()
+	var diff []byte
+	if err := e.db.Admin.QueryRowContext(e.t.Context(),
+		`SELECT diff FROM activity WHERE subject_kind = 'client' AND subject_id = $1 AND action = 'erased'`, e.ClientID,
+	).Scan(&diff); err != nil {
+		e.t.Fatalf("query erased activity row: %v", err)
+	}
+	if err := json.Unmarshal(diff, scope); err != nil {
+		e.t.Fatalf("decode erasure scope: %v", err)
+	}
+}
+
+// detail reads the Client as the Owner.
+func (e *eraseEnv) detail() client.DetailResponse {
+	e.t.Helper()
+	return reqtest.Expect[client.DetailResponse](e.t, http.MethodGet, e.srv.URL+"/api/practices/"+e.Practice.ID+"/clients/"+e.ClientID, http.StatusOK, e.signedIn)
 }

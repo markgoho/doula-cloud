@@ -3,16 +3,13 @@ package contracts_test
 import (
 	"bytes"
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
 	"doula-cloud/api/internal/contracts"
-	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
@@ -29,29 +26,6 @@ func (failingStore) Put(_ context.Context, _, _ string, _ io.Reader) error {
 
 func (failingStore) Get(_ context.Context, _ string) (io.ReadCloser, error) {
 	return nil, errors.New("simulated store failure")
-}
-
-func signContractURL(srv *httptest.Server, engagementID string) string {
-	return srv.URL + "/api/portal/engagements/" + engagementID + "/contract/sign"
-}
-
-func postSignContractRaw(t *testing.T, srv *httptest.Server, session string, engagementID string, body []byte) *http.Response {
-	t.Helper()
-	return reqtest.Post(t, signContractURL(srv, engagementID), reqtest.Session(session), reqtest.RawJSON(body))
-}
-
-func postSignContractRawWithXFF(t *testing.T, srv *httptest.Server, session string, engagementID string, body []byte, xff string) *http.Response {
-	t.Helper()
-	return reqtest.Post(t, signContractURL(srv, engagementID), reqtest.Session(session), reqtest.RawJSON(body), reqtest.Header("X-Forwarded-For", xff))
-}
-
-func postSignContract(t *testing.T, srv *httptest.Server, session string, engagementID, fullLegalName string, attestation bool) *http.Response {
-	t.Helper()
-	payload, err := json.Marshal(contracts.SignContractRequest{FullLegalName: fullLegalName, Attestation: attestation})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	return postSignContractRaw(t, srv, session, engagementID, payload)
 }
 
 // signedRow is the row shape sign_test.go reads back via db.Admin to
@@ -96,27 +70,28 @@ func fetchSignedRow(t *testing.T, db *testdb.DB, engagementID string) signedRow 
 	return row
 }
 
+// signing is the body of a Sign request.
+func signing(fullLegalName string, attestation bool) reqtest.Option {
+	return reqtest.JSON(contracts.SignContractRequest{FullLegalName: fullLegalName, Attestation: attestation})
+}
+
+// signRow reads back what Sign persisted on the Engagement's Contract.
+func (e *env) signRow() signedRow {
+	e.t.Helper()
+	return fetchSignedRow(e.t, e.db, e.Engagement.ID)
+}
+
 // TestClientPostSignContractHandler_Success proves the sent -> signed
 // transition, that the typed full legal name and attestation checkbox
 // state persist, and that the response reflects the new status while
 // keeping the Contract's prose/mergeFields/values intact.
 func TestClientPostSignContractHandler_Success(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "client-signing-sent-contract"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
-	seedContract(t, db, engagementID, "sent", mergeFieldProse)
-
-	srv, session := newPortalServer(t, db, identityUID)
-	defer srv.Close()
+	e := newEnv(t, withPortalLogin())
+	e.seedContract(statusSent)
 
 	before := time.Now().Add(-time.Minute)
-	resp := postSignContract(t, srv, session, engagementID, "Jordan Client", true)
-	defer resp.Body.Close()
+	out := reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.portalURL("/sign"), http.StatusOK, e.asClient, signing("Jordan Client", true))
 
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	out := reqtest.Decode[contracts.ContractResponse](t, resp)
 	if out.Status != statusSigned {
 		t.Fatalf("status = %q, want signed", out.Status)
 	}
@@ -124,7 +99,7 @@ func TestClientPostSignContractHandler_Success(t *testing.T) {
 		t.Fatalf("prose = %q, want the original snapshot unchanged", out.Prose)
 	}
 
-	row := fetchSignedRow(t, db, engagementID)
+	row := e.signRow()
 	if row.status != statusSigned {
 		t.Fatalf("persisted status = %q, want signed", row.status)
 	}
@@ -150,24 +125,15 @@ func TestClientPostSignContractHandler_Success(t *testing.T) {
 // body's "signerIp"/"ip" keys nor a first entry the caller wrote into
 // the header itself (#1865).
 func TestClientPostSignContractHandler_ClientSuppliedSignedAtAndIPIgnored(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "client-spoofing-signed-at"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
-	seedContract(t, db, engagementID, "sent", mergeFieldProse)
-
-	srv, session := newPortalServer(t, db, identityUID)
-	defer srv.Close()
+	e := newEnv(t, withPortalLogin())
+	e.seedContract(statusSent)
 
 	spoofed := `{"fullLegalName":"Jordan Client","attestation":true,"signedAt":"1999-01-01T00:00:00Z","signerIp":"10.0.0.1","ip":"10.0.0.1"}`
 	before := time.Now().Add(-time.Minute)
-	resp := postSignContractRawWithXFF(t, srv, session, engagementID, []byte(spoofed), "10.0.0.2, 203.0.113.7, 74.125.210.71")
-	defer resp.Body.Close()
+	reqtest.ExpectStatus(t, http.MethodPost, e.portalURL("/sign"), http.StatusOK, e.asClient,
+		reqtest.RawJSON([]byte(spoofed)), reqtest.Header("X-Forwarded-For", "10.0.0.2, 203.0.113.7, 74.125.210.71"))
 
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-
-	row := fetchSignedRow(t, db, engagementID)
+	row := e.signRow()
 	if row.signedAt == nil || row.signedAt.Before(before) {
 		t.Fatalf("persisted signed_at = %v, want a server-derived timestamp, not the spoofed 1999 value", row.signedAt)
 	}
@@ -181,22 +147,12 @@ func TestClientPostSignContractHandler_ClientSuppliedSignedAtAndIPIgnored(t *tes
 // header -- the local-dev/test path, with no Cloud Run GFE in front of
 // the process.
 func TestClientPostSignContractHandler_NoXFFFallsBackToRemoteAddr(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "client-signing-no-xff"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
-	seedContract(t, db, engagementID, "sent", mergeFieldProse)
+	e := newEnv(t, withPortalLogin())
+	e.seedContract(statusSent)
 
-	srv, session := newPortalServer(t, db, identityUID)
-	defer srv.Close()
+	reqtest.ExpectStatus(t, http.MethodPost, e.portalURL("/sign"), http.StatusOK, e.asClient, signing("Jordan Client", true))
 
-	resp := postSignContract(t, srv, session, engagementID, "Jordan Client", true)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-
-	row := fetchSignedRow(t, db, engagementID)
+	row := e.signRow()
 	if !row.signerIP.Valid || row.signerIP.String != "127.0.0.1" {
 		t.Fatalf("persisted signer_ip = %+v, want the httptest RemoteAddr fallback 127.0.0.1", row.signerIP)
 	}
@@ -207,24 +163,13 @@ func TestClientPostSignContractHandler_NoXFFFallsBackToRemoteAddr(t *testing.T) 
 // clientauth.Middleware's ownership check rejects a foreign Engagement id
 // before this handler ever runs.
 func TestClientPostSignContractHandler_OtherClientsEngagementRejected(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "client-not-linked-sign"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	_, otherEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Other Client", "other@example.com")
-	seedContract(t, db, otherEngagementID, "sent", mergeFieldProse)
-	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
+	e := newEnv(t, withPortalLogin())
+	other := e.anotherEngagement()
+	seedContract(t, e.db, other.ID, statusSent, mergeFieldProse)
 
-	srv, session := newPortalServer(t, db, identityUID)
-	defer srv.Close()
+	reqtest.ExpectStatus(t, http.MethodPost, e.portalURLOf(other.ID, "/sign"), http.StatusForbidden, e.asClient, signing("Jordan Client", true))
 
-	resp := postSignContract(t, srv, session, otherEngagementID, "Jordan Client", true)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
-
-	row := fetchSignedRow(t, db, otherEngagementID)
-	if row.status != statusSent {
+	if row := fetchSignedRow(t, e.db, other.ID); row.status != statusSent {
 		t.Fatalf("other client's contract status = %q, want unchanged sent", row.status)
 	}
 }
@@ -243,20 +188,10 @@ func TestClientPostSignContractHandler_NonSentRejected(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.status, func(t *testing.T) {
-			db := testdb.New(t)
-			identityUID := "client-sign-non-sent-" + testCase.status
-			practiceID := testdb.SeedPractice(t, db, "Practice")
-			clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-			testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
-			seedContract(t, db, engagementID, testCase.status, mergeFieldProse)
+			e := newEnv(t, withPortalLogin())
+			e.seedContract(testCase.status)
 
-			srv, session := newPortalServer(t, db, identityUID)
-			defer srv.Close()
-
-			resp := postSignContract(t, srv, session, engagementID, "Jordan Client", true)
-			defer resp.Body.Close()
-
-			reqtest.RequireStatus(t, resp, testCase.want)
+			reqtest.ExpectStatus(t, http.MethodPost, e.portalURL("/sign"), testCase.want, e.asClient, signing("Jordan Client", true))
 		})
 	}
 }
@@ -264,73 +199,33 @@ func TestClientPostSignContractHandler_NonSentRejected(t *testing.T) {
 // TestClientPostSignContractHandler_NoContractYet404 proves an Engagement
 // with no Contract row at all 404s, not a crash.
 func TestClientPostSignContractHandler_NoContractYet404(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "client-sign-no-contract"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
+	e := newEnv(t, withPortalLogin())
 
-	srv, session := newPortalServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := postSignContract(t, srv, session, engagementID, "Jordan Client", true)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
+	reqtest.ExpectStatus(t, http.MethodPost, e.portalURL("/sign"), http.StatusNotFound, e.asClient, signing("Jordan Client", true))
 }
 
-// TestClientPostSignContractHandler_InvalidBody proves malformed JSON
-// 400s.
-func TestClientPostSignContractHandler_InvalidBody(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "client-sign-invalid-body"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
-	seedContract(t, db, engagementID, "sent", mergeFieldProse)
-
-	srv, session := newPortalServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := postSignContractRaw(t, srv, session, engagementID, []byte("not json"))
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-// TestClientPostSignContractHandler_MissingFieldsRejected proves both a
-// blank/whitespace-only typed name and an unchecked attestation are
-// individually rejected with 400, and that neither leaves the Contract
-// transitioned.
-func TestClientPostSignContractHandler_MissingFieldsRejected(t *testing.T) {
+// TestClientPostSignContractHandler_RefusesAnUnsignableRequest proves what
+// a Sign request is refused for with 400, none of which leaves the
+// Contract transitioned: a body that is not JSON, a blank or
+// whitespace-only typed name, and an unchecked attestation.
+func TestClientPostSignContractHandler_RefusesAnUnsignableRequest(t *testing.T) {
 	cases := []struct {
-		name          string
-		fullLegalName string
-		attestation   bool
+		name string
+		body reqtest.Option
 	}{
-		{"blank name", "", true},
-		{"whitespace-only name", "   ", true},
-		{"unchecked attestation", "Jordan Client", false},
+		{"malformed JSON", reqtest.RawJSON([]byte("not json"))},
+		{"blank name", signing("", true)},
+		{"whitespace-only name", signing("   ", true)},
+		{"unchecked attestation", signing("Jordan Client", false)},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			db := testdb.New(t)
-			identityUID := "client-sign-missing-" + testCase.name
-			practiceID := testdb.SeedPractice(t, db, "Practice")
-			clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-			testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
-			seedContract(t, db, engagementID, "sent", mergeFieldProse)
+			e := newEnv(t, withPortalLogin())
+			e.seedContract(statusSent)
 
-			srv, session := newPortalServer(t, db, identityUID)
-			defer srv.Close()
+			reqtest.ExpectStatus(t, http.MethodPost, e.portalURL("/sign"), http.StatusBadRequest, e.asClient, testCase.body)
 
-			resp := postSignContract(t, srv, session, engagementID, testCase.fullLegalName, testCase.attestation)
-			defer resp.Body.Close()
-
-			reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-
-			row := fetchSignedRow(t, db, engagementID)
-			if row.status != statusSent {
+			if row := e.signRow(); row.status != statusSent {
 				t.Fatalf("contract status = %q, want unchanged sent", row.status)
 			}
 		})
@@ -345,29 +240,18 @@ func TestClientPostSignContractHandler_MissingFieldsRejected(t *testing.T) {
 // content-shape (the "%PDF" magic bytes) rather than byte-for-byte
 // content.
 func TestClientPostSignContractHandler_RendersAndStoresSignedPDF(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "client-signing-stores-pdf"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
-	seedContract(t, db, engagementID, "sent", mergeFieldProse)
+	e := newEnv(t, withPortalLogin())
+	e.seedContract(statusSent)
 
-	store := objectstore.NewMemoryStore()
-	srv, session := newPortalServerWithStore(t, db, identityUID, store)
-	defer srv.Close()
+	reqtest.ExpectStatus(t, http.MethodPost, e.portalURL("/sign"), http.StatusOK, e.asClient, signing("Jordan Client", true))
 
-	resp := postSignContract(t, srv, session, engagementID, "Jordan Client", true)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-
-	row := fetchSignedRow(t, db, engagementID)
-	wantKey := contracts.SignedPDFObjectPath(engagementID, row.id)
+	row := e.signRow()
+	wantKey := contracts.SignedPDFObjectPath(e.Engagement.ID, row.id)
 	if !row.signedPDFObjectPath.Valid || row.signedPDFObjectPath.String != wantKey {
 		t.Fatalf("persisted signed_pdf_object_path = %+v, want %q", row.signedPDFObjectPath, wantKey)
 	}
 
-	obj, err := store.Get(t.Context(), wantKey)
+	obj, err := e.store.Get(t.Context(), wantKey)
 	if err != nil {
 		t.Fatalf("get stored pdf at %q: %v", wantKey, err)
 	}
@@ -387,23 +271,12 @@ func TestClientPostSignContractHandler_RendersAndStoresSignedPDF(t *testing.T) {
 // status UPDATE, so a store failure never leaves a 'signed' row with no
 // PDF behind it.
 func TestClientPostSignContractHandler_PDFStoreFailureRejected(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "client-signing-store-failure"
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
-	seedContract(t, db, engagementID, "sent", mergeFieldProse)
+	e := newEnv(t, withPortalLogin(), withStore(failingStore{}))
+	e.seedContract(statusSent)
 
-	srv, session := newPortalServerWithStore(t, db, identityUID, failingStore{})
-	defer srv.Close()
+	reqtest.ExpectStatus(t, http.MethodPost, e.portalURL("/sign"), http.StatusInternalServerError, e.asClient, signing("Jordan Client", true))
 
-	resp := postSignContract(t, srv, session, engagementID, "Jordan Client", true)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusInternalServerError)
-
-	row := fetchSignedRow(t, db, engagementID)
-	if row.status != "sent" {
+	if row := e.signRow(); row.status != statusSent {
 		t.Fatalf("contract status = %q, want unchanged sent after a store failure", row.status)
 	}
 }

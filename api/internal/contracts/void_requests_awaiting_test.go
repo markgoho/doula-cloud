@@ -2,21 +2,23 @@ package contracts_test
 
 import (
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/contracts"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
-func voidRequestsAwaitingURL(srv *httptest.Server, practiceID string) string {
-	return srv.URL + "/api/practices/" + practiceID + "/contracts/void-requests"
+func (e *env) voidRequestsAwaitingURL() string {
+	return e.srv.URL + "/api/practices/" + e.Practice.ID + "/contracts/void-requests"
 }
 
-func getVoidRequestsAwaiting(t *testing.T, srv *httptest.Server, session, practiceID string) *http.Response {
-	t.Helper()
-	return reqtest.Get(t, voidRequestsAwaitingURL(srv, practiceID), reqtest.Session(session))
+// voidRequestsAwaiting fetches one page of the roll-up, with query
+// appended to its route.
+func (e *env) voidRequestsAwaiting(query string) contracts.VoidRequestsAwaitingResponse {
+	e.t.Helper()
+	return reqtest.Expect[contracts.VoidRequestsAwaitingResponse](e.t, http.MethodGet, e.voidRequestsAwaitingURL()+query, http.StatusOK, e.signedIn)
 }
 
 // TestVoidRequestsAwaitingHandler_RefusedByRole proves the roll-up is
@@ -24,17 +26,9 @@ func getVoidRequestsAwaiting(t *testing.T, srv *httptest.Server, session, practi
 // void itself is Owner/Admin-only, so nobody else has anything to act on
 // here.
 func TestVoidRequestsAwaitingHandler_RefusedByRole(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "void-requests-awaiting-role"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	e := newEnv(t)
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getVoidRequestsAwaiting(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
+	reqtest.ExpectStatus(t, http.MethodGet, e.voidRequestsAwaitingURL(), http.StatusForbidden, e.signedIn)
 }
 
 // TestVoidRequestsAwaitingHandler_ListsOnlyOpenRequests proves the
@@ -43,35 +37,22 @@ func TestVoidRequestsAwaitingHandler_RefusedByRole(t *testing.T) {
 // #971's own "sees the void requests waiting on them", not the ones
 // already decided.
 func TestVoidRequestsAwaitingHandler_ListsOnlyOpenRequests(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "void-requests-awaiting-list"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, uid+"-doula", []string{doulaRole}, "employee")
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	doula := e.staff(fixture.Doula())
 
-	openClientID, openEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Waiting Client", "waiting@example.com")
+	openClientID, openEngagementID := testdb.SeedNamedEngagement(t, e.db, e.Practice.ID, "Waiting Client", "waiting@example.com")
 	// #2114: the list names each Client in full.
-	testdb.NameClient(t, db, openClientID, "Wren", "Okafor")
-	seedContract(t, db, openEngagementID, statusSigned, mergeFieldProse)
-	seedVoidRequest(t, db, openEngagementID, doulaID, "the client's plan changed")
+	testdb.NameClient(t, e.db, openClientID, "Wren", "Okafor")
+	seedContract(t, e.db, openEngagementID, statusSigned, mergeFieldProse)
+	seedVoidRequest(t, e.db, openEngagementID, doula.ID, "the client's plan changed")
 
-	_, declinedEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Decided Client", "decided@example.com")
-	seedContract(t, db, declinedEngagementID, statusSigned, mergeFieldProse)
-	requestID := seedVoidRequest(t, db, declinedEngagementID, doulaID, "already handled")
+	_, declinedEngagementID := testdb.SeedNamedEngagement(t, e.db, e.Practice.ID, "Decided Client", "decided@example.com")
+	seedContract(t, e.db, declinedEngagementID, statusSigned, mergeFieldProse)
+	requestID := seedVoidRequest(t, e.db, declinedEngagementID, doula.ID, "already handled")
+	reqtest.ExpectStatus(t, http.MethodPost, e.contractURLOf(declinedEngagementID, "/void-request/"+requestID+"/decline"), http.StatusOK, e.signedIn, reasoned("not needed"))
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+	out := e.voidRequestsAwaiting("")
 
-	declineResp := postVoidRequestDecline(t, srv, session, practiceID, declinedEngagementID, requestID, "not needed")
-	_ = declineResp.Body.Close()
-	if declineResp.StatusCode != http.StatusOK {
-		t.Fatalf("decline setup status = %d, want %d", declineResp.StatusCode, http.StatusOK)
-	}
-
-	resp := getVoidRequestsAwaiting(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	out := reqtest.Decode[contracts.VoidRequestsAwaitingResponse](t, resp)
 	if len(out.Items) != 1 {
 		t.Fatalf("items = %+v, want exactly the one still-open request", out.Items)
 	}
@@ -86,47 +67,30 @@ func TestVoidRequestsAwaitingHandler_ListsOnlyOpenRequests(t *testing.T) {
 // a cursor that doesn't decode is refused with the shared MsgInvalidCursor
 // message, not a 500.
 func TestVoidRequestsAwaitingHandler_RejectsAMalformedCursor(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "void-requests-awaiting-bad-cursor"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	e := newEnv(t, signedInAs(fixture.Owner()))
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	resp := reqtest.Get(t, voidRequestsAwaitingURL(srv, practiceID)+"?cursor=not!valid!base64!", reqtest.Session(session))
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+	reqtest.ExpectStatus(t, http.MethodGet, e.voidRequestsAwaitingURL()+"?cursor=not!valid!base64!", http.StatusBadRequest, e.signedIn)
 }
 
 // TestVoidRequestsAwaitingHandler_WalksTheCursor mirrors
 // TestAwaitingSignatureHandler_WalksTheCursor: a full first page carries
 // a cursor, and that cursor resumes at the row after the last one.
 func TestVoidRequestsAwaitingHandler_WalksTheCursor(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "void-requests-awaiting-cursor"
-	practiceID, doulaID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	e := newEnv(t, signedInAs(fixture.Owner()))
 	const total = 31 // voidRequestsAwaitingPageSize (30) + 1, to force a second page
 	for range total {
-		_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-		seedContract(t, db, engagementID, statusSigned, mergeFieldProse)
-		seedVoidRequest(t, db, engagementID, doulaID, "asking")
+		engagement := e.anotherEngagement()
+		seedContract(t, e.db, engagement.ID, statusSigned, mergeFieldProse)
+		seedVoidRequest(t, e.db, engagement.ID, e.Staff.ID, "asking")
 	}
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
-
-	first := getVoidRequestsAwaiting(t, srv, session, practiceID)
-	defer first.Body.Close()
-	firstPage := reqtest.Decode[contracts.VoidRequestsAwaitingResponse](t, first)
+	firstPage := e.voidRequestsAwaiting("")
 	if len(firstPage.Items) != 30 || !firstPage.HasMore || firstPage.NextCursor == nil {
 		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
 			len(firstPage.Items), firstPage.HasMore, firstPage.NextCursor)
 	}
 
-	second := reqtest.Get(t, voidRequestsAwaitingURL(srv, practiceID)+"?cursor="+*firstPage.NextCursor, reqtest.Session(session))
-	defer second.Body.Close()
-	secondPage := reqtest.Decode[contracts.VoidRequestsAwaitingResponse](t, second)
+	secondPage := e.voidRequestsAwaiting("?cursor=" + *firstPage.NextCursor)
 	if len(secondPage.Items) != 1 || secondPage.HasMore || secondPage.NextCursor != nil {
 		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
 			len(secondPage.Items), secondPage.HasMore, secondPage.NextCursor)
