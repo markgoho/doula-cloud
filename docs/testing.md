@@ -42,6 +42,6 @@ A run that goes red because GitHub Releases, a registry or a runner had a bad mi
 
 **Not healed.** A test, lint, format, build or coverage step, whatever its log says: it is not on the allowlist. A run on its second attempt. A run with one real failure among transient ones. A setup step whose log has no signature. Those go to a person: a flaky test is fixed (#2682), not hidden.
 
-**The alarm.** `scripts/trunk-red.ts` runs the same classifier and opens no issue for a first-attempt run that is being rerun. The rerun's own completion is what it acts on: red on attempt 2 opens the alarm, green closes an open one of the same commit. If the classifier cannot read the logs, the alarm opens.
+**The alarm.** `scripts/trunk-red.ts` runs the same classifier and opens no issue for a first-attempt run that is being rerun. The rerun's own completion is what it acts on: red on attempt 2 opens the alarm, green closes an open one of the same commit. If the classifier cannot read the logs, the alarm opens. If the rerun itself is refused (a token problem, an API 5xx) on a trunk run, `ci-heal.ts` runs `trunk-red.ts` with `TRUNK_RED_FORCE=1` and the alarm opens for the original run (#2822); a pull request run has no alarm.
 
 **Replay.** `workflow_run` runs from trunk only, so a pull request cannot prove it. `gh workflow run ci-heal.yml -f run_id=<id>` reads that run's first attempt and prints the verdict and the rerun it would make, without making it.

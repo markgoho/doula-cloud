@@ -46,6 +46,8 @@ permissions:
   contents: read
   # Reads the jobs and logs of the failed run, and reruns its failed jobs.
   actions: write
+  # Opens the trunk alarm when the rerun of a trunk run is refused (#2822).
+  issues: write
 
 concurrency:
   group: ci-heal-${{ github.event.workflow_run.id || inputs.run_id }}
