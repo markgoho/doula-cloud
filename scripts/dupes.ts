@@ -20,8 +20,8 @@ export type Summary = Record<Kind, Record<Column | 'total', Cell>>;
 export type Clone = {
   format: string;
   lines: number;
-  firstFile: { name: string };
-  secondFile: { name: string };
+  firstFile: { name: string; start: number; end: number };
+  secondFile: { name: string; start: number; end: number };
 };
 
 const TEST_SUFFIX =
@@ -123,31 +123,49 @@ export function renderTable(summary: Summary): string {
   return [line(head ?? []), rule, ...body.map(line)].join('\n');
 }
 
-function main(): number {
-  const root = path.resolve(import.meta.dir, '..');
-  const configPath = path.join(root, '.jscpd.json');
-  const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as {
-    path: string[];
-    output: string;
-  };
+export type Config = { path: string[]; output: string; ignore: string[] };
+
+export const repoRoot = path.resolve(import.meta.dir, '..');
+
+export function loadConfig(root: string): Config {
+  return JSON.parse(
+    fs.readFileSync(path.join(root, '.jscpd.json'), 'utf8')
+  ) as Config;
+}
+
+/** Runs jscpd with the committed config; throws when it does not exit 0. */
+export function scan(root: string): Clone[] {
+  const config = loadConfig(root);
   const jscpd = path.join(root, 'node_modules', '.bin', 'jscpd');
   // jscpd 4.3 ignores `path` in the config file, so the paths go on the
   // command line from the same file.
-  const run = spawnSync(jscpd, ['--config', configPath, ...config.path], {
-    cwd: root,
-    stdio: ['ignore', 'ignore', 'inherit'],
-  });
+  const run = spawnSync(
+    jscpd,
+    ['--config', path.join(root, '.jscpd.json'), ...config.path],
+    { cwd: root, stdio: ['ignore', 'ignore', 'inherit'] }
+  );
   if (run.status !== 0) {
-    console.error(`jscpd exited ${run.status ?? run.signal}`);
-    return 1;
+    throw new Error(`jscpd exited ${run.status ?? run.signal}`);
   }
   const report = JSON.parse(
     fs.readFileSync(path.join(root, config.output, 'jscpd-report.json'), 'utf8')
   ) as { duplicates: Clone[] };
-  const summary = summarize(report.duplicates);
+  return report.duplicates;
+}
+
+function main(): number {
+  let clones: Clone[];
+  try {
+    clones = scan(repoRoot);
+  } catch (error) {
+    console.error((error as Error).message);
+    return 1;
+  }
+  const summary = summarize(clones);
   fs.writeFileSync(
-    path.join(root, config.output, 'dupes.json'),
-    `${JSON.stringify(summary, null, 2)}\n`
+    path.join(repoRoot, loadConfig(repoRoot).output, 'dupes.json'),
+    `${JSON.stringify(summary, null, 2)}
+`
   );
   console.log(renderTable(summary));
   return 0;

@@ -11,8 +11,8 @@ import {
 const clone = (format: string, lines: number, a: string, b: string): Clone => ({
   format,
   lines,
-  firstFile: { name: a },
-  secondFile: { name: b },
+  firstFile: { name: a, start: 1, end: lines },
+  secondFile: { name: b, start: 1, end: lines },
 });
 
 describe('isTestFile', () => {
