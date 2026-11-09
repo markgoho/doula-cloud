@@ -48,6 +48,13 @@ func (e *env) call(method string, confirmed bool) *http.Response {
 		reqtest.Header("Content-Type", "application/json"), reqtest.HeaderIf(confirmed, "X-Confirmed", "true"))
 }
 
+// callJSON issues method, requires want and decodes the body.
+func callJSON[T any](e *env, method string, confirmed bool, want int) T {
+	e.T.Helper()
+	resp := e.call(method, confirmed) //nolint:bodyclose // reqtest.DecodeStatus closes the body
+	return reqtest.DecodeStatus[T](e.T, resp, want)
+}
+
 // expect issues method and requires want.
 func (e *env) expect(method string, confirmed bool, want int) {
 	e.T.Helper()

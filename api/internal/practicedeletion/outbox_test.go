@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/mail"
-	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/practicedeletion"
 	"doula-cloud/api/internal/testdb"
 )
@@ -56,13 +55,7 @@ func markPendingDeletion(t *testing.T, db *testdb.DB, practiceID string, finaliz
 
 func runWorker(t *testing.T, db *testdb.DB, w practicedeletion.Worker) {
 	t.Helper()
-	tx := db.BeginAs(t, testdb.SessionVar{Name: outbox.NotificationDoor, Value: "true"})
-	if err := w.ProcessPending(t.Context(), tx); err != nil {
-		t.Fatalf("ProcessPending: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+	db.RunAsWorker(t, w.ProcessPending)
 }
 
 func seedOwnerEmail(t *testing.T, db *testdb.DB, staffID, email string) {

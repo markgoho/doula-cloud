@@ -25,6 +25,18 @@ func TestBeginAs_ScopesTheTransactionToTheVars(t *testing.T) {
 	}
 }
 
+func TestRunAsWorker_OpensTheTrustedDoorForThePass(t *testing.T) {
+	db := testdb.New(t)
+	var door string
+	db.RunAsWorker(t, func(ctx context.Context, tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, `SELECT current_setting('app.notification_worker_trusted')`).Scan(&door)
+	})
+
+	if door != "true" {
+		t.Fatalf("door inside the pass = %q, want true", door)
+	}
+}
+
 func TestSessionVars_NameTheirSettings(t *testing.T) {
 	cases := map[string]testdb.SessionVar{
 		"app.current_practice_id":  testdb.Practice("p"),

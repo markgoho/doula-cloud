@@ -83,7 +83,7 @@ func do(t *testing.T, method, url, session string, body any) response {
 	if body != nil {
 		opts = append(opts, reqtest.JSON(body))
 	}
-	return finish(t, reqtest.Do(t, method, url, opts...))
+	return finish(t, reqtest.Do(t, method, url, opts...)) //nolint:bodyclose // finish closes the body
 }
 
 // finish reads resp's whole body and closes it.

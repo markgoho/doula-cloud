@@ -23,9 +23,7 @@ func TestInitiateHandler_StartsThirtyDayWindow(t *testing.T) {
 	e := newEnv(t, fixture.Owner())
 
 	before := time.Now().UTC()
-	resp := e.call(http.MethodPost, true)
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	out := reqtest.Decode[practicedeletion.InitiateResponse](t, resp)
+	out := callJSON[practicedeletion.InitiateResponse](e, http.MethodPost, true, http.StatusOK)
 
 	wantFinalize := before.Add(practicedeletion.RestoreWindow)
 	if diff := out.FinalizeAt.Sub(wantFinalize); diff < -time.Minute || diff > time.Minute {
@@ -175,9 +173,7 @@ func TestStatusHandler_ReadsPendingAndUnsettledState(t *testing.T) {
 	e := newEnv(t, fixture.Owner())
 	seedUnsettledInvoice(t, e.DB, e.Practice.ID)
 
-	resp := e.call(http.MethodGet, false)
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	out := reqtest.Decode[practicedeletion.StatusResponse](t, resp)
+	out := callJSON[practicedeletion.StatusResponse](e, http.MethodGet, false, http.StatusOK)
 	if out.Pending {
 		t.Fatal("Pending = true before any initiation")
 	}
@@ -192,9 +188,7 @@ func TestStatusHandler_ReadsPendingState(t *testing.T) {
 	e := newEnv(t, fixture.Owner())
 	e.initiate()
 
-	resp := e.call(http.MethodGet, false)
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	out := reqtest.Decode[practicedeletion.StatusResponse](t, resp)
+	out := callJSON[practicedeletion.StatusResponse](e, http.MethodGet, false, http.StatusOK)
 	if !out.Pending || out.DeletionRequestedAt == nil || out.FinalizeAt == nil {
 		t.Fatalf("status = %+v, want Pending true with both timestamps set", out)
 	}

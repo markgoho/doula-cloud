@@ -17,6 +17,8 @@ import (
 const (
 	testStatusSent = "sent"
 	kindNewSignIn  = "new_signin"
+
+	kindSessionRevoked = "session_revoked"
 )
 
 // newTestWorker builds a sessionnotice.Worker around sender with this
@@ -44,13 +46,7 @@ func seedSessionNoticeOutboxRow(t *testing.T, db *testdb.DB, identityUID, kind s
 // runs ProcessPending, and commits.
 func runWorker(t *testing.T, db *testdb.DB, w sessionnotice.Worker) {
 	t.Helper()
-	tx := db.BeginAs(t, testdb.SessionVar{Name: outbox.NotificationDoor, Value: "true"})
-	if err := w.ProcessPending(t.Context(), tx); err != nil {
-		t.Fatalf("ProcessPending: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+	db.RunAsWorker(t, w.ProcessPending)
 }
 
 // runPending seeds a due row of kind for uid, runs the worker once and
@@ -141,11 +137,11 @@ var queuers = []struct {
 	kind  string
 	queue func(context.Context, *sql.Tx, string) error
 }{
-	{"session_revoked", sessionnotice.QueueSessionRevoked},
+	{kindSessionRevoked, sessionnotice.QueueSessionRevoked},
 	{"mfa_recovery_cleared", sessionnotice.QueueMFARecoveryCleared},
 	{"session_evicted", func(ctx context.Context, tx *sql.Tx, uid string) error {
 		_, err := sessionnotice.QueueSessionEvicted(ctx, tx, authn.Eviction{IdentityUID: uid, Tier: authn.TierStaff})
-		return err
+		return err //nolint:wrapcheck // test table entry, the caller only reports it
 	}},
 }
 
@@ -161,26 +157,17 @@ func TestQueue_InsertsOnePendingRowAndALaterCallIsANoop(t *testing.T) {
 			db := testdb.New(t)
 			const uid = "staff-queued-twice"
 
-			tx := db.BeginAs(t)
-			if err := q.queue(t.Context(), tx, uid); err != nil {
-				t.Fatalf("queue (first): %v", err)
-			}
-			if err := tx.Commit(); err != nil {
-				t.Fatalf("commit: %v", err)
-			}
-			if got := countOutboxRows(t, db, uid, q.kind); got != 1 {
-				t.Fatalf("outbox rows = %d, want 1", got)
-			}
-
-			tx = db.BeginAs(t)
-			if err := q.queue(t.Context(), tx, uid); err != nil {
-				t.Fatalf("queue (second): %v", err)
-			}
-			if err := tx.Commit(); err != nil {
-				t.Fatalf("commit: %v", err)
-			}
-			if got := countOutboxRows(t, db, uid, q.kind); got != 1 {
-				t.Fatalf("outbox rows after a second call = %d, want 1", got)
+			for _, stage := range []string{"first", "second"} {
+				tx := db.BeginAs(t)
+				if err := q.queue(t.Context(), tx, uid); err != nil {
+					t.Fatalf("queue (%s): %v", stage, err)
+				}
+				if err := tx.Commit(); err != nil {
+					t.Fatalf("commit: %v", err)
+				}
+				if got := countOutboxRows(t, db, uid, q.kind); got != 1 {
+					t.Fatalf("outbox rows after the %s call = %d, want 1", stage, got)
+				}
 			}
 		})
 	}
@@ -193,7 +180,7 @@ func TestQueue_InsertsOnePendingRowAndALaterCallIsANoop(t *testing.T) {
 func TestWorker_ProcessPending_MailsEachNoticeAndMarksItSent(t *testing.T) {
 	cases := []struct{ kind, subject string }{
 		{kindNewSignIn, "DoulaCloud: new sign-in to your account"},
-		{"session_revoked", "DoulaCloud: your sessions were signed out"},
+		{kindSessionRevoked, "DoulaCloud: your sessions were signed out"},
 		{"mfa_recovery_cleared", "DoulaCloud: your two-factor authentication was reset"},
 		{"session_evicted", "DoulaCloud: you were signed out in one browser"},
 	}
@@ -234,7 +221,7 @@ func TestWorker_ProcessPending_MarksSentWithNoMailWhenThereIsNobodyToNotify(t *t
 		seed       func(*testing.T, *testdb.DB, string)
 	}{
 		{"no staff row", kindNewSignIn, func(*testing.T, *testdb.DB, string) {}},
-		{"deleted login", "session_revoked", func(t *testing.T, db *testdb.DB, uid string) {
+		{"deleted login", kindSessionRevoked, func(t *testing.T, db *testdb.DB, uid string) {
 			testdb.RedactDeletedLogin(t, db, testdb.SeedStaff(t, db, uid))
 		}},
 	}

@@ -45,7 +45,7 @@ func runWorker(t *testing.T, db *testdb.DB, worker offer.Worker) response {
 // header, closing the response.
 func postWithSecret(t *testing.T, url, secret string) response {
 	t.Helper()
-	return finish(t, reqtest.Do(t, http.MethodPost, url, reqtest.HeaderIf(secret != "", "X-Internal-Secret", secret)))
+	return finish(t, reqtest.Do(t, http.MethodPost, url, reqtest.HeaderIf(secret != "", "X-Internal-Secret", secret))) //nolint:bodyclose // finish closes the body
 }
 
 // outboxRow is one engagement_offer_outbox row as these tests read it.
