@@ -30,9 +30,7 @@ func TestHandler_HandsOverWhatMiddlewareResolved(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	resp := reqtest.Get(t, pingURL(srv, engagementID), reqtest.Session(authntest.SeedSession(t, db.App, identityUID)))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusNoContent)
+	reqtest.ExpectStatus(t, http.MethodGet, pingURL(srv, engagementID), http.StatusNoContent, reqtest.Session(authntest.SeedSession(t, db.App, identityUID)))
 }
 
 func TestHandler_AnswersInternalErrorWhenMiddlewareNeverRan(t *testing.T) {

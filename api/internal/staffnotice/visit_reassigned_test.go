@@ -51,10 +51,7 @@ func TestWorker_MailsBothEndsOfAMovedVisit(t *testing.T) {
 	f.queue(t, f.notice(f.employeeID, staffnotice.KindVisitReassignedTo))
 	f.queue(t, f.notice(f.doulaID, staffnotice.KindVisitReassignedFrom))
 
-	sent := f.run(t, putOnNow).Sent()
-	if len(sent) != 2 {
-		t.Fatalf("sent %d messages, want 2", len(sent))
-	}
+	sent := requireMails(t, f.run(t, putOnNow), 2)
 	link := appBaseURL + "/practices/" + f.practiceID + "/engagements/" + f.engagementID
 	want := map[string]string{
 		employeeUID + "@example.com": "You've been put on a visit on DoulaCloud",
@@ -119,9 +116,7 @@ func TestWorker_MailsNothingOnceTheMoveIsNoLongerTrue(t *testing.T) {
 			f.queue(t, f.notice(tc.recipient(f), tc.kind))
 			tc.change(t, f)
 
-			if sent := f.run(t, putOnNow).Sent(); len(sent) != 0 {
-				t.Fatalf("sent %d messages, want none", len(sent))
-			}
+			requireMails(t, f.run(t, putOnNow), 0)
 			var status string
 			if err := f.db.Admin.QueryRowContext(t.Context(),
 				`SELECT status::text FROM staff_notice_outbox WHERE subject_id = $1`, f.visitID,
@@ -170,10 +165,7 @@ func TestWorker_AVisitMovedOffAContractorSaysWhereTheLinkGoes(t *testing.T) {
 			}
 			f.queue(t, f.notice(f.doulaID, staffnotice.KindVisitReassignedFrom))
 
-			sent := f.run(t, putOnNow).Sent()
-			if len(sent) != 1 {
-				t.Fatalf("sent %d messages, want 1", len(sent))
-			}
+			sent := requireMails(t, f.run(t, putOnNow), 1)
 			text := sent[0].Text
 			if !strings.Contains(text, tc.want) || strings.Contains(text, tc.notWant) {
 				t.Fatalf("text = %q, want %q and not %q", text, tc.want, tc.notWant)

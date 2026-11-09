@@ -34,10 +34,7 @@ func TestWorker_MailsHerTheEngagementSomeoneTookHerOff(t *testing.T) {
 	f.endAttachment(t)
 	f.queue(t, f.takenOffNotice())
 
-	sent := f.run(t, putOnNow).Sent()
-	if len(sent) != 1 {
-		t.Fatalf("sent %d messages, want 1", len(sent))
-	}
+	sent := requireMails(t, f.run(t, putOnNow), 1)
 	msg := sent[0]
 	if msg.To != employeeUID+"@example.com" || msg.Subject != "You've been taken off a client on DoulaCloud" {
 		t.Fatalf("to = %q subject = %q", msg.To, msg.Subject)
@@ -68,39 +65,12 @@ func TestWorker_AContractorTakenOffIsToldWhereHerFeeIs(t *testing.T) {
 	f.endAttachment(t)
 	f.queue(t, f.takenOffNotice())
 
-	sent := f.run(t, putOnNow).Sent()
-	if len(sent) != 1 {
-		t.Fatalf("sent %d messages, want 1", len(sent))
-	}
+	sent := requireMails(t, f.run(t, putOnNow), 1)
 	text := sent[0].Text
 	if !strings.Contains(text, "This link shows the day your work ended:") ||
 		!strings.Contains(text, "Your fee, the terms and what you were paid stay on Your offers.") ||
 		!strings.Contains(text, "that haven't happened yet stay yours until your practice moves them to someone else.") ||
 		strings.Contains(text, "client's page") {
 		t.Fatalf("text = %q, want the contractor's wording", text)
-	}
-}
-
-func TestWorker_MailsNothingOnceSheIsBackOnItOrGone(t *testing.T) {
-	cases := map[string]func(f putOnFixture) (string, []any){
-		"she is on it again": func(_ putOnFixture) (string, []any) {
-			return `SELECT 1`, nil
-		},
-		"she has left the Practice": func(f putOnFixture) (string, []any) {
-			return `DELETE FROM practice_memberships WHERE staff_id = $1`, []any{f.employeeID}
-		},
-	}
-	for name, change := range cases {
-		t.Run(name, func(t *testing.T) {
-			f := newPutOnFixture(t)
-			f.queue(t, f.takenOffNotice())
-			query, args := change(f)
-			if _, err := f.db.Admin.ExecContext(t.Context(), query, args...); err != nil {
-				t.Fatalf("change: %v", err)
-			}
-			if sent := f.run(t, putOnNow).Sent(); len(sent) != 0 {
-				t.Fatalf("sent %d messages, want none", len(sent))
-			}
-		})
 	}
 }

@@ -1,7 +1,6 @@
 package mfarecoverymail
 
 import (
-	"context"
 	"database/sql"
 	"errors"
 	"testing"
@@ -11,26 +10,6 @@ import (
 	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/testdb"
 )
-
-// composeTx opens the transaction compose reads `staff` in, with the
-// same app.notification_worker_trusted flag outbox.ProcessHandler sets
-// for the real worker -- staff_notification_worker (00033) is what lets
-// these plain `staff` SELECTs past RLS at all. compose is no longer a
-// pure function of its row: #892's recheck reads the recipient's and the
-// subject's live rows before anything else happens, so every case below
-// needs a real database rather than a nil tx.
-func composeTx(t *testing.T, db *testdb.DB) *sql.Tx {
-	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	t.Cleanup(func() { _ = tx.Rollback() })
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
-		t.Fatalf("set trusted flag: %v", err)
-	}
-	return tx
-}
 
 // seedLiveStaff inserts one live staff row and returns its id.
 func seedLiveStaff(t *testing.T, db *testdb.DB, identityUID, name string) string {
@@ -45,76 +24,79 @@ func seedLiveStaff(t *testing.T, db *testdb.DB, identityUID, name string) string
 	return id
 }
 
-func runCompose(ctx context.Context, tx *sql.Tx, accounts *authntest.FakeAccountManager, r pendingRow) (to, subject, text string, err error) {
-	return compose(accounts)(ctx, tx, r, time.Now())
-}
-
-func TestComposeCode_UnknownRecipientDeadLetters(t *testing.T) {
-	db := testdb.New(t)
-	subjectID := seedLiveStaff(t, db, "subject-unknown-recipient", "Priya Raman")
-	// A live staff row whose Identity Platform account is missing -- the
-	// recheck passes and the Admin SDK is what refuses.
-	seedLiveStaff(t, db, "owner-uid-gone", "Renata Alves")
-	accounts := authntest.NewFakeAccountManager() // no account seeded
-	r := pendingRow{recipientIdentityUID: "owner-uid-gone", subjectStaffID: subjectID, token: sql.NullString{String: "55556666", Valid: true}}
-
-	_, _, _, err := runCompose(t.Context(), composeTx(t, db), accounts, r)
-	if _, ok := errors.AsType[*outbox.DeadLetterError](err); !ok {
-		t.Fatalf("err = %v, want a *outbox.DeadLetterError", err)
-	}
-}
-
-func TestComposeCode_AccountManagerErrorRetries(t *testing.T) {
-	db := testdb.New(t)
-	subjectID := seedLiveStaff(t, db, "subject-sdk-down", "Priya Raman")
-	seedLiveStaff(t, db, "owner-uid-5", "Renata Alves")
-	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed("owner-uid-5", "owner5@example.com", true)
-	accounts.Err = errors.New("admin sdk unreachable")
-	r := pendingRow{recipientIdentityUID: "owner-uid-5", subjectStaffID: subjectID, token: sql.NullString{String: "77778888", Valid: true}}
-
-	_, _, _, err := runCompose(t.Context(), composeTx(t, db), accounts, r)
-	var dl *outbox.DeadLetterError
-	if errors.As(err, &dl) || err == nil {
-		t.Fatalf("err = %v, want a plain retryable error, not a DeadLetterError or nil", err)
-	}
-}
-
-// TestComposeCode_DeletedRecipientSkipsSend is #892's recheck on the
-// vouching Owner: she approved a colleague's recovery request and then
-// deleted her own login before the code went out. Her Identity Platform
-// account is gone with it, so without the recheck this row would
-// dead-letter on ErrAccountNotFound; with it, the row is simply done.
-func TestComposeCode_DeletedRecipientSkipsSend(t *testing.T) {
-	db := testdb.New(t)
-	subjectID := seedLiveStaff(t, db, "subject-live", "Priya Raman")
-	ownerID := seedLiveStaff(t, db, "owner-uid-deleted", "Renata Alves")
-	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed("owner-uid-deleted", "owner@example.com", true)
-	testdb.RedactDeletedLogin(t, db, ownerID)
-	r := pendingRow{recipientIdentityUID: "owner-uid-deleted", subjectStaffID: subjectID, token: sql.NullString{String: "11112222", Valid: true}}
-
-	_, _, _, err := runCompose(t.Context(), composeTx(t, db), accounts, r)
-	if !errors.Is(err, outbox.ErrAlreadyDone) {
-		t.Fatalf("err = %v, want outbox.ErrAlreadyDone", err)
-	}
-}
-
-// TestComposeCode_DeletedSubjectSkipsSend is the same recheck on the
-// other person the row names: the locked-out colleague deleted her login
-// rather than waiting for the code. Mailing the Owner a code for her
+// TestComposeCode_Refusals runs compose against a vouching Owner and the
+// locked-out colleague a code is for. compose is not a pure function of its
+// row: #892's recheck reads the recipient's and the subject's live rows
+// before anything else happens, so every case needs a real database, and
+// reads them in a transaction with the same trust outbox.ProcessHandler
+// gives the real worker -- staff_notification_worker (00033) is what lets
+// these plain `staff` SELECTs past RLS at all.
+//
+// A recipient with a live staff row but no Identity Platform account
+// dead-letters, because the Admin SDK is what refuses; an Admin SDK that is
+// down is a plain retryable error. #892's recheck on the vouching Owner:
+// she approved a colleague's request and then deleted her own login, so her
+// account is gone and without the recheck the row would dead-letter; with
+// it the row is simply done. The same recheck holds on the other person the
+// row names: mailing the Owner a code for a colleague who deleted her login
 // would name a person who cannot use it.
-func TestComposeCode_DeletedSubjectSkipsSend(t *testing.T) {
-	db := testdb.New(t)
-	subjectID := seedLiveStaff(t, db, "subject-deleted", "Priya Raman")
-	seedLiveStaff(t, db, "owner-uid-live", "Renata Alves")
-	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed("owner-uid-live", "owner@example.com", true)
-	testdb.RedactDeletedLogin(t, db, subjectID)
-	r := pendingRow{recipientIdentityUID: "owner-uid-live", subjectStaffID: subjectID, token: sql.NullString{String: "33334444", Valid: true}}
+func TestComposeCode_Refusals(t *testing.T) {
+	deadLetters := func(t *testing.T, err error) {
+		t.Helper()
+		if _, ok := errors.AsType[*outbox.DeadLetterError](err); !ok {
+			t.Fatalf("err = %v, want a *outbox.DeadLetterError", err)
+		}
+	}
+	alreadyDone := func(t *testing.T, err error) {
+		t.Helper()
+		if !errors.Is(err, outbox.ErrAlreadyDone) {
+			t.Fatalf("err = %v, want outbox.ErrAlreadyDone", err)
+		}
+	}
+	retries := func(t *testing.T, err error) {
+		t.Helper()
+		var dl *outbox.DeadLetterError
+		if errors.As(err, &dl) || err == nil {
+			t.Fatalf("err = %v, want a plain retryable error, not a DeadLetterError or nil", err)
+		}
+	}
 
-	_, _, _, err := runCompose(t.Context(), composeTx(t, db), accounts, r)
-	if !errors.Is(err, outbox.ErrAlreadyDone) {
-		t.Fatalf("err = %v, want outbox.ErrAlreadyDone", err)
+	tests := []struct {
+		name             string
+		noAccount        bool
+		accountsDown     bool
+		recipientDeleted bool
+		subjectDeleted   bool
+		check            func(*testing.T, error)
+	}{
+		{name: "an unknown recipient dead-letters", noAccount: true, check: deadLetters},
+		{name: "an Admin SDK error retries", accountsDown: true, check: retries},
+		{name: "a deleted recipient skips the send", recipientDeleted: true, check: alreadyDone},
+		{name: "a deleted subject skips the send", subjectDeleted: true, check: alreadyDone},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := testdb.New(t)
+			subjectID := seedLiveStaff(t, db, "subject", "Priya Raman")
+			ownerID := seedLiveStaff(t, db, "owner-uid", "Renata Alves")
+			accounts := authntest.NewFakeAccountManager()
+			if !tt.noAccount {
+				accounts.Seed("owner-uid", "owner@example.com", true)
+			}
+			if tt.accountsDown {
+				accounts.Err = errors.New("admin sdk unreachable")
+			}
+			if tt.recipientDeleted {
+				testdb.RedactDeletedLogin(t, db, ownerID)
+			}
+			if tt.subjectDeleted {
+				testdb.RedactDeletedLogin(t, db, subjectID)
+			}
+			r := pendingRow{recipientIdentityUID: "owner-uid", subjectStaffID: subjectID, token: sql.NullString{String: "55556666", Valid: true}}
+
+			tx := db.BeginAs(t, testdb.NotificationWorker())
+			_, _, _, err := compose(accounts)(t.Context(), tx, r, time.Now())
+			tt.check(t, err)
+		})
 	}
 }

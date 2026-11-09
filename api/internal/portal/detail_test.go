@@ -1,101 +1,24 @@
 package portal_test
 
 import (
-	"encoding/json/jsontext"
-	"encoding/json/v2"
-	"io"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/portal"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/testdb"
 )
 
-// newServer mounts this package's whole surface through portal.Mount, the
-// same call main.go makes on the real GatedRouter.
-func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
-	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	portal.Mount(g, db.App)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, testdb.PortalUID(uid))
-}
-
-// seedClientAtPracticeWithDueDate inserts a Practice, a Client with an
-// Engagement at it, and a client_portal_users row linking identityUID to
-// that Client, using the superuser Admin connection. dueDate is passed
-// straight to the insert, so "" leaves the nullable column
-// (ADR-0017: "nullable because a postpartum-only Engagement has none")
-// unset -- the null-due-date branch #505 asks for. Stays local rather
-// than moving to testdb: due_date is a fact only this package's own
-// detail-view tests care about, and no other package's fixture needs it.
-func seedClientAtPracticeWithDueDate(t *testing.T, db *testdb.DB, identityUID, practiceName, dueDate string) (engagementID, status string) {
-	t.Helper()
-	return seedClientAtPracticeWithDueDateAndKind(t, db, identityUID, practiceName, dueDate, "birth")
-}
-
-// seedClientAtPracticeWithDueDateAndKind is
-// seedClientAtPracticeWithDueDate with an explicit kind, for #311's own
-// offersBirthPlan assertions -- every other call in this file wants the
-// 'birth' default, so that one stays the short form.
-func seedClientAtPracticeWithDueDateAndKind(t *testing.T, db *testdb.DB, identityUID, practiceName, dueDate, kind string) (engagementID, status string) {
-	t.Helper()
-
-	var practiceID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO practices (name, timezone) VALUES ($1, 'America/New_York') RETURNING id`, practiceName,
-	).Scan(&practiceID); err != nil {
-		t.Fatalf("seed practice: %v", err)
-	}
-
-	var clientID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, 'Test Client', 'client@example.com') RETURNING id`,
-		practiceID,
-	).Scan(&clientID); err != nil {
-		t.Fatalf("seed client: %v", err)
-	}
-
-	status = "intake"
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, status, kind, due_date) VALUES ($1, $2, $3, $5, nullif($4, '')::date) RETURNING id`,
-		clientID, practiceID, status, dueDate, kind,
-	).Scan(&engagementID); err != nil {
-		t.Fatalf("seed engagement: %v", err)
-	}
-
-	portalUID := testdb.PortalUID(identityUID)
-	testdb.SeedPortalAccount(t, db, portalUID, portalUID+"@example.com")
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO client_portal_users (identity_uid, client_id) VALUES ($1, $2)`,
-		portalUID, clientID,
-	); err != nil {
-		t.Fatalf("seed client_portal_users: %v", err)
-	}
-
-	return engagementID, status
-}
-
 func TestDetailHandler_Success(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "portal-detail-uid"
-	engagementID, _ := seedClientAtPracticeWithDueDate(t, db, identityUID, "Riverside Doulas", "2027-06-15")
+	e := newEnv(t,
+		fixture.InPractice(fixture.PracticeName("Riverside Doulas")),
+		fixture.WithEngagement(fixture.DueDate("2027-06-15")),
+	)
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
+	out := e.detail()
 
-	resp := reqtest.Get(t, srv.URL+"/api/portal/engagements/"+engagementID, reqtest.Session(session))
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-
-	out := reqtest.Decode[portal.Detail](t, resp)
-	if out.EngagementID != engagementID {
-		t.Fatalf("engagementId = %q, want %q", out.EngagementID, engagementID)
+	if out.EngagementID != e.Engagement.ID {
+		t.Fatalf("engagementId = %q, want %q", out.EngagementID, e.Engagement.ID)
 	}
 	// The portal bar's avatar needs a name of the Client's own (#452), and
 	// after ADR-0017 that is a display name rather than a column.
@@ -126,19 +49,9 @@ func TestDetailHandler_Success(t *testing.T) {
 // must be absent from the JSON entirely -- `omitempty` is what the page
 // relies on to distinguish "nothing to show" from a fetch that broke.
 func TestDetailHandler_NullDueDate(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "portal-detail-null-due-date-uid"
-	engagementID, _ := seedClientAtPracticeWithDueDate(t, db, identityUID, "Postpartum Only Doulas", "")
+	e := newEnv(t)
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := reqtest.Get(t, srv.URL+"/api/portal/engagements/"+engagementID, reqtest.Session(session))
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-
-	raw := reqtest.Decode[map[string]jsontext.Value](t, resp)
+	raw := e.detailFields()
 	if _, present := raw["dueDate"]; present {
 		t.Fatalf("dueDate key present in response, want omitted: %v", raw["dueDate"])
 	}
@@ -150,68 +63,33 @@ func TestDetailHandler_NullDueDate(t *testing.T) {
 // never appears in the response at all -- GLOSSARY.md's Engagement entry
 // gives kind no Client word, so no key on this DTO may carry it.
 func TestDetailHandler_PostpartumEngagementDoesNotOfferBirthPlan(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "portal-detail-postpartum-uid"
-	engagementID, _ := seedClientAtPracticeWithDueDateAndKind(t, db, identityUID, "Postpartum Only Doulas", "", "postpartum")
+	e := newEnv(t, fixture.WithEngagement(fixture.Kind(fixture.KindPostpartum)))
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := reqtest.Get(t, srv.URL+"/api/portal/engagements/"+engagementID, reqtest.Session(session))
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read body: %v", err)
+	if e.detail().OffersBirthPlan {
+		t.Fatalf("offersBirthPlan = true, want false for a postpartum Engagement")
 	}
-
-	var out portal.Detail
-	if err := json.Unmarshal(body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if out.OffersBirthPlan {
-		t.Fatalf("offersBirthPlan = %v, want false for a postpartum Engagement", out.OffersBirthPlan)
-	}
-
-	var raw map[string]jsontext.Value
-	if err := json.Unmarshal(body, &raw); err != nil {
-		t.Fatalf("decode raw response: %v", err)
-	}
-	if _, present := raw["kind"]; present {
-		t.Fatalf("kind key present in response, want omitted entirely: %v", raw["kind"])
+	if raw := e.detailFields(); raw["kind"] != nil {
+		t.Fatalf("kind key present in response, want omitted entirely: %s", raw["kind"])
 	}
 }
 
 func TestDetailHandler_NotLinkedToClient(t *testing.T) {
-	db := testdb.New(t)
-	_, _ = seedClientAtPracticeWithDueDate(t, db, "other-portal-uid", "Other Practice", "")
+	e := newEnv(t)
+	stranger := fixture.Client(t, e.DB, e.Practice, fixture.WithPortalLogin())
 
-	srv, session := newServer(t, db, "unrelated-uid")
-	defer srv.Close()
-
-	resp := reqtest.Get(t, srv.URL+"/api/portal/engagements/00000000-0000-0000-0000-000000000000", reqtest.Session(session))
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
+	reqtest.ExpectStatus(t, http.MethodGet, e.engagementURL(""), http.StatusForbidden, e.As(stranger))
 }
 
 // TestDetailHandler_TotalToPayCents proves the hub's one line (#1011): the
 // sum of the Engagement's open Invoices, and nothing else -- not a paid,
 // void or draft one.
 func TestDetailHandler_TotalToPayCents(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "portal-detail-owes"
-	engagementID, _ := seedClientAtPracticeWithDueDate(t, db, identityUID, "Riverside Doulas", "2027-06-15")
+	e := newEnv(t, fixture.WithEngagement(fixture.DueDate("2027-06-15")))
 
-	var practiceID, contractID string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT practice_id FROM engagements WHERE id = $1`, engagementID).Scan(&practiceID); err != nil {
-		t.Fatalf("read practice: %v", err)
-	}
-	if err := db.Admin.QueryRowContext(t.Context(),
+	var contractID string
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
 		`INSERT INTO contracts (engagement_id, status, prose, amount_cents) VALUES ($1, 'signed', 'Test prose', 15000) RETURNING id`,
-		engagementID).Scan(&contractID); err != nil {
+		e.Engagement.ID).Scan(&contractID); err != nil {
 		t.Fatalf("seed contract: %v", err)
 	}
 	for i, inv := range []struct {
@@ -219,24 +97,12 @@ func TestDetailHandler_TotalToPayCents(t *testing.T) {
 		amount int64
 	}{{"open", 4000}, {"open", 5000}, {"paid", 7000}, {"void", 8000}, {"draft", 9000}} {
 		ref := "in_detail_" + string(rune('a'+i))
-		if _, err := db.Admin.ExecContext(t.Context(),
-			`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents, currency, reference, due_at)
+		e.Exec(`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents, currency, reference, due_at)
 			 VALUES ($1, $2, $3, $4::invoice_status, $5, 'usd', $3, now())`,
-			practiceID, contractID, ref, inv.status, inv.amount); err != nil {
-			t.Fatalf("seed invoice: %v", err)
-		}
-	}
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-	read := func() portal.Detail {
-		t.Helper()
-		resp := reqtest.Get(t, srv.URL+"/api/portal/engagements/"+engagementID, reqtest.Session(session))
-		defer resp.Body.Close()
-		out := reqtest.Decode[portal.Detail](t, resp)
-		return out
+			e.Practice.ID, contractID, ref, inv.status, inv.amount)
 	}
 
-	out := read()
+	out := e.detail()
 	if out.TotalToPayCents != 9000 {
 		t.Fatalf("totalToPayCents = %d, want 9000", out.TotalToPayCents)
 	}
@@ -244,16 +110,13 @@ func TestDetailHandler_TotalToPayCents(t *testing.T) {
 		t.Fatalf("open invoices = %d, only = %v, want 2 and none", out.OpenInvoiceCount, out.OnlyOpenInvoiceID)
 	}
 
+	e.Exec(`UPDATE invoices SET status = 'paid' WHERE stripe_invoice_id = 'in_detail_b'`)
 	var onlyID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`UPDATE invoices SET status = 'paid' WHERE stripe_invoice_id = 'in_detail_b' RETURNING id`).Scan(new(string)); err != nil {
-		t.Fatalf("pay one: %v", err)
-	}
-	if err := db.Admin.QueryRowContext(t.Context(),
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
 		`SELECT id FROM invoices WHERE stripe_invoice_id = 'in_detail_a'`).Scan(&onlyID); err != nil {
 		t.Fatalf("read id: %v", err)
 	}
-	out = read()
+	out = e.detail()
 	if out.OpenInvoiceCount != 1 || out.OnlyOpenInvoiceID == nil || *out.OnlyOpenInvoiceID != onlyID {
 		t.Fatalf("open invoices = %d, only = %v, want 1 and %s", out.OpenInvoiceCount, out.OnlyOpenInvoiceID, onlyID)
 	}
@@ -263,33 +126,20 @@ func TestDetailHandler_TotalToPayCents(t *testing.T) {
 // Client record holds one Engagement, true on each of two once a second
 // is added at the same Practice.
 func TestDetailHandler_IsOneOfSeveral(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "portal-detail-several"
-	first, _ := seedClientAtPracticeWithDueDate(t, db, identityUID, "Riverside Doulas", "")
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-	read := func(engagementID string) portal.Detail {
+	e := newEnv(t)
+	read := func(engagementID string) bool {
 		t.Helper()
-		resp := reqtest.Get(t, srv.URL+"/api/portal/engagements/"+engagementID, reqtest.Session(session))
-		defer resp.Body.Close()
-		out := reqtest.Decode[portal.Detail](t, resp)
-		return out
+		url := e.URL("/api/portal/engagements/" + engagementID)
+		return reqtest.Expect[portal.Detail](t, http.MethodGet, url, http.StatusOK, e.AsClient).IsOneOfSeveral
 	}
 
-	if read(first).IsOneOfSeveral {
+	if read(e.Engagement.ID) {
 		t.Fatalf("isOneOfSeveral = true with one Engagement, want false")
 	}
 
-	var second string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, status, kind)
-		 SELECT client_id, practice_id, 'intake', 'postpartum' FROM engagements WHERE id = $1 RETURNING id`,
-		first).Scan(&second); err != nil {
-		t.Fatalf("seed second engagement: %v", err)
-	}
-	for _, id := range []string{first, second} {
-		if !read(id).IsOneOfSeveral {
+	second := e.AnotherEngagement(fixture.ForClient(e.Engagement.Client), fixture.Kind(fixture.KindPostpartum))
+	for _, id := range []string{e.Engagement.ID, second.ID} {
+		if !read(id) {
 			t.Fatalf("isOneOfSeveral = false on %s with two Engagements, want true", id)
 		}
 	}

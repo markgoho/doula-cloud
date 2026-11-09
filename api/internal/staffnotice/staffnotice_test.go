@@ -105,6 +105,15 @@ func (f fixture) run(t *testing.T, now time.Time) *mail.FakeSender {
 	return sender
 }
 
+func requireMails(t *testing.T, sender *mail.FakeSender, want int) []mail.Message {
+	t.Helper()
+	sent := sender.Sent()
+	if len(sent) != want {
+		t.Fatalf("sent %d messages, want %d", len(sent), want)
+	}
+	return sent
+}
+
 type row struct {
 	status  string
 	address *string
@@ -127,10 +136,7 @@ func TestWorker_MailsAnOfferToHerWithTheLinkToThatPractice(t *testing.T) {
 	f := newFixture(t)
 	f.queue(t, f.notice())
 
-	sent := f.run(t, time.Date(2030, time.March, 1, 12, 0, 0, 0, time.UTC)).Sent()
-	if len(sent) != 1 {
-		t.Fatalf("sent %d messages, want 1", len(sent))
-	}
+	sent := requireMails(t, f.run(t, time.Date(2030, time.March, 1, 12, 0, 0, 0, time.UTC)), 1)
 	msg := sent[0]
 	if msg.To != doulaAddress {
 		t.Fatalf("to = %q, want %q", msg.To, doulaAddress)
@@ -195,9 +201,7 @@ func TestWorker_MailsNothingOnceTheOfferIsNoLongerOpen(t *testing.T) {
 			f.queue(t, f.notice())
 			now := prepare(t, f)
 
-			if sent := f.run(t, now).Sent(); len(sent) != 0 {
-				t.Fatalf("sent %d messages, want none", len(sent))
-			}
+			requireMails(t, f.run(t, now), 0)
 			if r := f.read(t); r.status != statusSent || r.address != nil {
 				t.Fatalf("row = (%s, %v), want sent with no address", r.status, r.address)
 			}
@@ -211,7 +215,5 @@ func TestWorker_MailsNothingForAnOfferThatDoesNotExist(t *testing.T) {
 	n.SubjectID = "00000000-0000-0000-0000-000000000001"
 	f.queue(t, n)
 
-	if sent := f.run(t, time.Date(2030, time.March, 1, 12, 0, 0, 0, time.UTC)).Sent(); len(sent) != 0 {
-		t.Fatalf("sent %d messages, want none", len(sent))
-	}
+	requireMails(t, f.run(t, time.Date(2030, time.March, 1, 12, 0, 0, 0, time.UTC)), 0)
 }

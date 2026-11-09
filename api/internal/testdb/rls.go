@@ -21,6 +21,13 @@ func Staff(id string) SessionVar { return SessionVar{"app.current_staff_id", id}
 // Identity names the signed-in identity.
 func Identity(uid string) SessionVar { return SessionVar{"app.current_identity_uid", uid} }
 
+// NotificationWorker opens a transaction the way outbox.ProcessHandler does
+// for a worker, once its secret check has passed: the trust 00033 reads to
+// let a worker see rows across Practices.
+func NotificationWorker() SessionVar {
+	return SessionVar{"app.notification_worker_trusted", "true"}
+}
+
 // Querier is what *sql.DB and *sql.Tx share.
 type Querier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)

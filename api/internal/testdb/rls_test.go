@@ -43,14 +43,18 @@ func TestSessionVars_NameTheirSettings(t *testing.T) {
 		"app.current_client_id":    testdb.Client("p"),
 		"app.current_staff_id":     testdb.Staff("p"),
 		"app.current_identity_uid": testdb.Identity("p"),
+
+		"app.notification_worker_trusted": testdb.NotificationWorker(),
 	}
 	db := testdb.New(t)
-	tx := db.BeginAs(t, testdb.Practice("p"), testdb.Client("c"), testdb.Staff("s"), testdb.Identity("u"))
+	tx := db.BeginAs(t, testdb.Practice("p"), testdb.Client("c"), testdb.Staff("s"), testdb.Identity("u"), testdb.NotificationWorker())
 	want := map[string]string{
 		"app.current_practice_id":  "p",
 		"app.current_client_id":    "c",
 		"app.current_staff_id":     "s",
 		"app.current_identity_uid": "u",
+
+		"app.notification_worker_trusted": "true",
 	}
 	for name, v := range cases {
 		if v.Name != name {

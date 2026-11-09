@@ -43,20 +43,20 @@ func TestCompose_PendingUnexpiredInvitationSendsWithLink(t *testing.T) {
 	}
 }
 
-func TestCompose_ExpiredInvitationSkipsSend(t *testing.T) {
+func TestCompose_SkipsSendOnceTheInvitationIsNoLongerLive(t *testing.T) {
 	now := time.Now()
-	r := pendingRow{status: invitationStatusPending, expiresAt: now.Add(-time.Minute)}
-	_, _, _, err := runCompose(r, now)
-	if !errors.Is(err, outbox.ErrAlreadyDone) {
-		t.Fatalf("err = %v, want outbox.ErrAlreadyDone", err)
+	tests := []struct {
+		name string
+		row  pendingRow
+	}{
+		{"expired", pendingRow{status: invitationStatusPending, expiresAt: now.Add(-time.Minute)}},
+		{"not pending", pendingRow{status: "accepted", expiresAt: now.Add(time.Hour)}},
 	}
-}
-
-func TestCompose_NonPendingInvitationSkipsSend(t *testing.T) {
-	now := time.Now()
-	r := pendingRow{status: "accepted", expiresAt: now.Add(time.Hour)}
-	_, _, _, err := runCompose(r, now)
-	if !errors.Is(err, outbox.ErrAlreadyDone) {
-		t.Fatalf("err = %v, want outbox.ErrAlreadyDone", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, _, _, err := runCompose(tt.row, now); !errors.Is(err, outbox.ErrAlreadyDone) {
+				t.Fatalf("err = %v, want outbox.ErrAlreadyDone", err)
+			}
+		})
 	}
 }

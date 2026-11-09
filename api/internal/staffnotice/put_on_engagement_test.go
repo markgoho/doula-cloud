@@ -64,10 +64,7 @@ func TestWorker_MailsHerTheEngagementSomeoneElsePutHerOn(t *testing.T) {
 	f := newPutOnFixture(t)
 	f.queue(t, f.putOnNotice())
 
-	sent := f.run(t, putOnNow).Sent()
-	if len(sent) != 1 {
-		t.Fatalf("sent %d messages, want 1", len(sent))
-	}
+	sent := requireMails(t, f.run(t, putOnNow), 1)
 	msg := sent[0]
 	if msg.To != employeeUID+"@example.com" {
 		t.Fatalf("to = %q", msg.To)
@@ -89,28 +86,31 @@ func TestWorker_MailsHerTheEngagementSomeoneElsePutHerOn(t *testing.T) {
 	}
 }
 
-func TestWorker_MailsNothingOnceSheIsNoLongerOnIt(t *testing.T) {
-	cases := map[string]func(f putOnFixture) (string, []any){
-		"her Attachment ended": func(f putOnFixture) (string, []any) {
-			return `UPDATE engagement_attachments SET ended_at = now(), ended_by = $2 WHERE engagement_id = $1`,
-				[]any{f.engagementID, f.ownerID}
-		},
-		"she left the Practice": func(f putOnFixture) (string, []any) {
-			return `DELETE FROM practice_memberships WHERE staff_id = $1`, []any{f.employeeID}
-		},
+func (f putOnFixture) leavePractice(t *testing.T) {
+	t.Helper()
+	if _, err := f.db.Admin.ExecContext(t.Context(),
+		`DELETE FROM practice_memberships WHERE staff_id = $1`, f.employeeID); err != nil {
+		t.Fatalf("remove membership: %v", err)
 	}
-	for name, change := range cases {
+}
+
+func TestWorker_MailsNothingOnceSheIsNoLongerOnIt(t *testing.T) {
+	cases := map[string]struct {
+		notice func(putOnFixture) staffnotice.Notice
+		change func(putOnFixture, *testing.T)
+	}{
+		"put on, and her Attachment ended":     {putOnFixture.putOnNotice, putOnFixture.endAttachment},
+		"put on, and she left the Practice":    {putOnFixture.putOnNotice, putOnFixture.leavePractice},
+		"taken off, and she is on it again":    {putOnFixture.takenOffNotice, func(putOnFixture, *testing.T) {}},
+		"taken off, and she left the Practice": {putOnFixture.takenOffNotice, putOnFixture.leavePractice},
+	}
+	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			f := newPutOnFixture(t)
-			f.queue(t, f.putOnNotice())
-			query, args := change(f)
-			if _, err := f.db.Admin.ExecContext(t.Context(), query, args...); err != nil {
-				t.Fatalf("change: %v", err)
-			}
+			f.queue(t, tc.notice(f))
+			tc.change(f, t)
 
-			if sent := f.run(t, putOnNow).Sent(); len(sent) != 0 {
-				t.Fatalf("sent %d messages, want none", len(sent))
-			}
+			requireMails(t, f.run(t, putOnNow), 0)
 			if status, address := f.readPutOn(t); status != statusSent || address != nil {
 				t.Fatalf("row = (%s, %v), want sent with no address", status, address)
 			}

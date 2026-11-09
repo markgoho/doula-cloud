@@ -1,15 +1,9 @@
 package portal_test
 
 import (
-	"encoding/json/jsontext"
-	"encoding/json/v2"
-	"io"
-	"net/http"
 	"testing"
 
-	"doula-cloud/api/internal/portal"
-	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/testdb"
+	"doula-cloud/api/internal/fixture"
 )
 
 // TestDetailHandler_NeverShowsTheBirthOutcome is ADR-0015's "staff-only,
@@ -19,30 +13,10 @@ import (
 // are recorded on her Engagement and reach no portal response at all,
 // not even as a null field.
 func TestDetailHandler_NeverShowsTheBirthOutcome(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "portal-birth-outcome-uid"
-	engagementID, _ := seedClientAtPracticeWithDueDate(t, db, identityUID, "Riverside Doulas", "2027-06-15")
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE engagements SET birth_outcome = 'loss', pregnancy_ended_on = '2027-03-04'::date WHERE id = $1`,
-		engagementID); err != nil {
-		t.Fatalf("record the birth outcome: %v", err)
-	}
+	e := newEnv(t, fixture.WithEngagement(fixture.DueDate("2027-06-15")))
+	e.recordOutcome(outcomeLoss, "2027-03-04")
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := reqtest.Get(t, srv.URL+"/api/portal/engagements/"+engagementID, reqtest.Session(session))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read body: %v", err)
-	}
-	var fields map[string]jsontext.Value
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	fields := e.detailFields()
 	for _, key := range []string{"birthOutcome", "pregnancyEndedOn"} {
 		if _, present := fields[key]; present {
 			t.Fatalf("portal detail carries %q; ADR-0015 keeps the birth outcome staff-only", key)
@@ -50,106 +24,50 @@ func TestDetailHandler_NeverShowsTheBirthOutcome(t *testing.T) {
 	}
 }
 
-// TestDetailHandler_NoDueDateOnceAnOutcomeIsRecorded is #2003 and
-// #2211: a due date forecasts a birth still to come, so once a Practice
-// records any birth outcome -- a live birth, a loss or unknown -- "Your
-// care" says nothing about it. The BFF leaves the key out, so no screen
-// can show it, and it is absent alike after every outcome, so its
+// TestDetailHandler_ByBirthOutcome holds two things the Practice's
+// recorded outcome decides.
+//
+// #2003 and #2211: a due date forecasts a birth still to come, so once a
+// Practice records any birth outcome -- a live birth, a loss or unknown --
+// "Your care" says nothing about it. The BFF leaves the key out, so no
+// screen can show it, and it is absent alike after every outcome, so its
 // absence tells the Client nothing about the staff-only outcome
 // (ADR-0015). No care phase crosses on any Engagement (#2007).
-func TestDetailHandler_NoDueDateOnceAnOutcomeIsRecorded(t *testing.T) {
+//
+// ADR-0015's standing rule as the portal sees it (#294): the Engagement
+// read resolves "does this Engagement have a living or expected baby?"
+// and hands the portal that answer alone. A loss and an 'unknown' both
+// stop the Birth Plan being offered -- no nav item, no hub link, no empty
+// state -- while a live birth and an Engagement with nothing recorded yet
+// are offered one exactly as before.
+func TestDetailHandler_ByBirthOutcome(t *testing.T) {
 	tests := []struct {
-		name     string
-		uid      string
-		outcome  string
-		endedOn  string
-		wantKeys bool
+		name          string
+		outcome       string
+		endedOn       string
+		wantDueDate   bool
+		wantBirthPlan bool
 	}{
-		{"nothing recorded yet", "portal-phase-none-uid", "", "", true},
-		{"a live birth", "portal-phase-live-uid", outcomeLiveBirth, "2027-06-10", false},
-		{"a loss", "portal-phase-loss-uid", outcomeLoss, "2027-03-04", false},
-		{"an unknown outcome", "portal-phase-unknown-uid", "unknown", "", false},
+		{"nothing recorded yet -- the pregnancy is still expected", "", "", true, true},
+		{"a live birth", outcomeLiveBirth, "2027-06-10", false, true},
+		{"a loss", outcomeLoss, "2027-03-04", false, false},
+		{"an unknown outcome", "unknown", "", false, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db := testdb.New(t)
-			engagementID, _ := seedClientAtPracticeWithDueDate(t, db, tt.uid, "Riverside Doulas", "2027-06-15")
-			if tt.outcome != "" {
-				var endedOn *string
-				if tt.endedOn != "" {
-					endedOn = &tt.endedOn
-				}
-				if _, err := db.Admin.ExecContext(t.Context(),
-					`UPDATE engagements SET birth_outcome = $2::birth_outcome, pregnancy_ended_on = $3::date WHERE id = $1`,
-					engagementID, tt.outcome, endedOn); err != nil {
-					t.Fatalf("record the birth outcome: %v", err)
-				}
-			}
+			e := newEnv(t, fixture.WithEngagement(fixture.DueDate("2027-06-15")))
+			e.recordOutcome(tt.outcome, tt.endedOn)
 
-			srv, session := newServer(t, db, tt.uid)
-			defer srv.Close()
-
-			resp := reqtest.Get(t, srv.URL+"/api/portal/engagements/"+engagementID, reqtest.Session(session))
-			defer resp.Body.Close()
-			reqtest.RequireStatus(t, resp, http.StatusOK)
-			fields := reqtest.Decode[map[string]jsontext.Value](t, resp)
-			if _, present := fields["dueDate"]; present != tt.wantKeys {
-				t.Fatalf("dueDate present = %v, want %v with birth outcome %q", present, tt.wantKeys, tt.outcome)
+			fields := e.detailFields()
+			if _, present := fields["dueDate"]; present != tt.wantDueDate {
+				t.Fatalf("dueDate present = %v, want %v with birth outcome %q", present, tt.wantDueDate, tt.outcome)
 			}
 			// #2007: no care phase crosses on any Engagement, whatever its outcome.
 			if _, present := fields["status"]; present {
 				t.Fatalf("status present with birth outcome %q, want it absent on every Engagement", tt.outcome)
 			}
-		})
-	}
-}
-
-// TestDetailHandler_BirthPlanFollowsTheOutcome is ADR-0015's standing
-// rule as the portal sees it (#294): the Engagement read resolves
-// "does this Engagement have a living or expected baby?" and hands the
-// portal that answer alone. A loss and an 'unknown' both stop the Birth
-// Plan being offered -- no nav item, no hub link, no empty state --
-// while a live birth and an Engagement with nothing recorded yet are
-// offered one exactly as before.
-func TestDetailHandler_BirthPlanFollowsTheOutcome(t *testing.T) {
-	tests := []struct {
-		name    string
-		uid     string
-		outcome string
-		endedOn string
-		want    bool
-	}{
-		{"nothing recorded yet -- the pregnancy is still expected", "portal-bp-none-uid", "", "", true},
-		{"a live birth", "portal-bp-live-uid", outcomeLiveBirth, "2027-06-10", true},
-		{"a loss", "portal-bp-loss-uid", outcomeLoss, "2027-03-04", false},
-		{"an unknown outcome", "portal-bp-unknown-uid", "unknown", "", false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			db := testdb.New(t)
-			engagementID, _ := seedClientAtPracticeWithDueDate(t, db, tt.uid, "Riverside Doulas", "2027-06-15")
-			if tt.outcome != "" {
-				var endedOn *string
-				if tt.endedOn != "" {
-					endedOn = &tt.endedOn
-				}
-				if _, err := db.Admin.ExecContext(t.Context(),
-					`UPDATE engagements SET birth_outcome = $2::birth_outcome, pregnancy_ended_on = $3::date WHERE id = $1`,
-					engagementID, tt.outcome, endedOn); err != nil {
-					t.Fatalf("record the birth outcome: %v", err)
-				}
-			}
-
-			srv, session := newServer(t, db, tt.uid)
-			defer srv.Close()
-
-			resp := reqtest.Get(t, srv.URL+"/api/portal/engagements/"+engagementID, reqtest.Session(session))
-			defer resp.Body.Close()
-			reqtest.RequireStatus(t, resp, http.StatusOK)
-
-			out := reqtest.Decode[portal.Detail](t, resp)
-			if out.OffersBirthPlan != tt.want {
-				t.Fatalf("offersBirthPlan = %v, want %v with birth outcome %q", out.OffersBirthPlan, tt.want, tt.outcome)
+			if got := e.detail().OffersBirthPlan; got != tt.wantBirthPlan {
+				t.Fatalf("offersBirthPlan = %v, want %v with birth outcome %q", got, tt.wantBirthPlan, tt.outcome)
 			}
 		})
 	}

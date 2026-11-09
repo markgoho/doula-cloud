@@ -34,6 +34,11 @@ func postJSON(t *testing.T, srv *httptest.Server, path, body string) *http.Respo
 	return reqtest.Post(t, srv.URL+path, reqtest.RawJSON([]byte(body)))
 }
 
+func expectPostJSON(t *testing.T, srv *httptest.Server, path, body string, want int) {
+	t.Helper()
+	reqtest.ExpectStatus(t, http.MethodPost, srv.URL+path, want, reqtest.RawJSON([]byte(body)))
+}
+
 func countLiveMagicLinkTokens(t *testing.T, db *testdb.DB, identifier string) int {
 	t.Helper()
 	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM auth_tokens WHERE identity_uid = $1 AND purpose = 'client_magic_link' AND used_at IS NULL`, identifier)
@@ -74,9 +79,7 @@ func TestRequestMagicLinkHandler_UnknownAddressStillAccepted(t *testing.T) {
 	srv := newMagicLinkRequestServer(db)
 	defer srv.Close()
 
-	resp := postJSON(t, srv, "/api/portal/magic-link/request", `{"email":"nobody@example.com"}`)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusAccepted)
+	expectPostJSON(t, srv, "/api/portal/magic-link/request", `{"email":"nobody@example.com"}`, http.StatusAccepted)
 
 	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM auth_tokens`)
 	if count != 0 {
@@ -92,9 +95,7 @@ func TestRequestMagicLinkHandler_KnownAddressQueuesLinkMail(t *testing.T) {
 	defer srv.Close()
 
 	// Case and whitespace should not matter -- the lookup normalizes both.
-	resp := postJSON(t, srv, "/api/portal/magic-link/request", `{"email":"  Known@Example.com  "}`)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusAccepted)
+	expectPostJSON(t, srv, "/api/portal/magic-link/request", `{"email":"  Known@Example.com  "}`, http.StatusAccepted)
 
 	if countLiveMagicLinkTokens(t, db, identifier) != 1 {
 		t.Fatal("expected exactly one live magic-link token")
@@ -219,7 +220,5 @@ func TestRedeemMagicLinkHandler_SessionStoreFailureRollsBackTheSpend(t *testing.
 		t.Fatalf("drop sessions: %v", err)
 	}
 
-	resp := postJSON(t, srv, "/api/portal/magic-link", `{"token":"`+token+`"}`)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusInternalServerError)
+	expectPostJSON(t, srv, "/api/portal/magic-link", `{"token":"`+token+`"}`, http.StatusInternalServerError)
 }

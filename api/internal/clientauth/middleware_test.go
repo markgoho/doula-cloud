@@ -182,7 +182,5 @@ func TestMiddleware_PendingDeletionLockout(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := reqtest.Get(t, pingURL(srv, engagementID), reqtest.Session(session))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
+	reqtest.ExpectStatus(t, http.MethodGet, pingURL(srv, engagementID), http.StatusForbidden, reqtest.Session(session))
 }
